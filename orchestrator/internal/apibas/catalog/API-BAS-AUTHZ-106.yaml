@@ -1,0 +1,60 @@
+id: "API-BAS-AUTHZ-106"
+name: "NBFC-admin: borrower reads another borrower's loan through the administrative route"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "Borrower A reads Borrower B's loan through the administrative loan route, which needs the administrator role and the loans:read grant."
+threat_model:
+  attacker: "authenticated borrower A"
+  identity: borrower-a
+  access_level: "standard borrower, valid token, owns LOAN-A-001 only"
+  objective: "Borrower A reads Borrower B's loan through the administrative loan route, which needs the administrator role and the loans:read grant."
+preconditions:
+  fixture: nbfc-two-borrower
+  identities: [borrower-a, borrower-b, loan-officer]
+  object: LOAN-B-001
+steps:
+  - id: "baseline-owner-loan"
+    role: baseline
+    identity: borrower-b
+    auth: valid
+    method: GET
+    path: "/api/nbfc/loans/LOAN-B-001"
+    hypothesis: "Borrower B, the owner, reads their own loan. If this fails, the scenario is not testable."
+  - id: "attack-admin-read-loan"
+    role: attack
+    identity: borrower-a
+    auth: valid
+    method: GET
+    path: "/api/nbfc/admin/loans/LOAN-B-001"
+    hypothesis: "The administrative route refuses a borrower, and returns no protected value of LOAN-B-001."
+denied_statuses: [403]
+forbidden_values: ["BAS-SIM-LOAN-B-ACC"]
+expected_control: "An administrative route serves a record only to the administrator role holding the route's grant. A borrower's attempt is refused, and no protected value of another borrower's loan is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to the borrower's administrative read carries no protected value of another borrower's loan.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-019
+  min_severity: high
+additional_detections:
+  - source: elastic-security
+    expect_rule: APIBAS-REL-007
+    min_severity: high
+  - source: elastic-security
+    expect_rule: APIBAS-REL-004
+    min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The administrative attempt is graded against the access event: a privileged route called without the administrator role (REL-019), the privileged call itself (REL-007), and the cross-owner object (REL-004). Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "NBFC: administrative access is explicit, least-privilege, and audited (access management, RBI para 19(a))"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-106 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-106 against the vulnerable build must FAIL (exploited)"

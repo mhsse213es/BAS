@@ -43,6 +43,9 @@ type Event struct {
 	Action        string   `json:"action"`
 	Outcome       string   `json:"outcome"`
 	Identity      string   `json:"identity"`
+	// ActorRole is the role the lab's fixture gives the identity ("borrower", "officer", "administrator", or "customer" for an
+	// authenticated identity the fixture does not name). Empty means the request was not authenticated.
+	ActorRole string `json:"actor_role,omitempty"`
 	Status        int      `json:"status"`
 	// Signature lists the injection-pattern classes the request carried (see Signature* below). It holds
 	// classes only, never the text that matched, so a body is never stored through this field.
@@ -299,6 +302,29 @@ var ElasticRules = []Rule{
 			return e.Status >= 200 && e.Status < 300 && strings.HasSuffix(e.Action, "/authorize-payment") && hasDependency(e.Degraded, "fraud-check")
 		},
 	},
+	{
+		// REL-018 fires when a repayment record is changed by an identity that is not lender staff. Repayments are maintained by
+		// the officer or the administrator; a borrower, or any other non-staff caller, changing one is the unauthorized change
+		// the NBFC pack tests (NBFC-006). The attempt is the signal, whatever the outcome, as with REL-004.
+		ID: "APIBAS-REL-018", Name: "Repayment changed by a non-staff identity", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.ActorRole != "" && !staffRole(e.ActorRole) && strings.HasPrefix(e.Action, "PATCH /api/nbfc/repayments/")
+		},
+	},
+	{
+		// REL-019 fires when a privileged route is called by an identity whose role is known and is not the administrator. The
+		// route is the policy and the caller lacked the role, so the attempt is the signal, whatever the outcome. REL-007 reports
+		// the same call as privileged activity; REL-019 reports it as a call outside the policy.
+		ID: "APIBAS-REL-019", Name: "Privileged route called without the administrator role", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return (isPrivilegedClass(e.ActionClass) || privilegedFunction(e.Action)) && e.ActorRole != "" && e.ActorRole != "administrator"
+		},
+	},
+}
+
+// staffRole reports whether a role belongs to lender staff.
+func staffRole(role string) bool {
+	return role == "officer" || role == "administrator"
 }
 
 // BurstThreshold is the number of requests in one run that REL-005 treats as a counted-request burst.
@@ -380,8 +406,11 @@ func ActionClass(action string) string {
 		action == "POST /api/keys/rotate",
 		strings.HasPrefix(action, "PATCH /api/keys/orders/") && strings.HasSuffix(action, "/status"):
 		return ClassSecurityControlChange
-	case strings.HasPrefix(path, "/api/admin/"), action == "PATCH /api/me/role":
+	case strings.HasPrefix(path, "/api/admin/"), strings.HasPrefix(path, "/api/nbfc/admin/"), action == "PATCH /api/me/role":
 		return ClassPrivilegeChange
+	case method == "POST" && strings.HasSuffix(path, "/decision"):
+		// A loan decision is an approval: it commits the lender to the loan (NBFC pack).
+		return ClassFinancialApproval
 	case method == "POST" && (strings.HasSuffix(path, "/approve-payout") || strings.HasSuffix(path, "/refund")):
 		return ClassFinancialApproval
 	case method == "GET" && strings.HasSuffix(path, "/export"):

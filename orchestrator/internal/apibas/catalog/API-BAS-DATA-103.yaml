@@ -1,0 +1,53 @@
+id: "API-BAS-DATA-103"
+name: "NBFC-008: loan lookup reveals another borrower's loans"
+category: DATA
+claim: cross_identity
+attack_objective: "Borrower A lists loans and receives Borrower B's loan records."
+threat_model:
+  attacker: "authenticated borrower A"
+  identity: borrower-a
+  access_level: "standard borrower, valid token, owns LOAN-A-001"
+  objective: "Borrower A lists loans and receives Borrower B's loan records."
+preconditions:
+  fixture: nbfc-two-borrower
+  identities: [borrower-a, borrower-b, loan-officer]
+  object: LOAN-B-001
+steps:
+  - id: "baseline-owner-loan"
+    role: baseline
+    identity: borrower-b
+    auth: valid
+    method: GET
+    path: "/api/nbfc/loans/LOAN-B-001"
+    hypothesis: "Borrower B, the owner, reads their own loan. If this fails, the scenario is not testable."
+  - id: "attack-list-loans"
+    role: attack
+    identity: borrower-a
+    auth: valid
+    method: GET
+    path: "/api/nbfc/loans"
+    hypothesis: "The loan list returns only loans borrower A owns or is assigned, so LOAN-B-001 is not listed."
+clean_is_enforcement: true
+forbidden_values: ["LOAN-B-001"]
+expected_control: "The loan list returns only the caller's own loans. A list that reveals another borrower's loan identifier fails."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to the loan list carries no identifier of another borrower's loan.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The loan list names the owner of every loan it returns, so REL-004 fires when the list discloses another owner's record. The fixed build returns only the caller's loans. Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "NBFC: loan lookup and enumeration do not reveal other borrowers' applications"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DATA-103 against the fixed build must PASS"
+  - "API-BAS-DATA-103 against the vulnerable build must FAIL (exploited)"

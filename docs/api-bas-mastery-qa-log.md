@@ -2977,3 +2977,60 @@ Reviewer: Zain (human approval given in chat, 21 October 2026).
 - Unmapped obligations (CERT-In paragraph (ii), CBUAE 6.1.2.6 and 6.1.7.2) are unchanged and not verified.
 
 Verification is the scoped human decision recorded here. It does not change scenario results. The scenarios remain lab validation only; no live regulatory channel is validated.
+
+## NBFC sector pack (21 October 2026)
+
+Fixture: `fixture.NBFCTwoBorrower()` (`nbfc-two-borrower`). Two borrowers, one loan officer and one administrator. All identities, amounts and KYC details are synthetic; every protected value carries the `BAS-SIM` tag. Scenarios use the existing AUTHZ and DATA categories; the pack adds no taxonomy category.
+
+### Scenario mapping
+
+| Pack item | API-BAS ID | Claim | Denied statuses | Detection assertion |
+|---|---|---|---|---|
+| NBFC-001 borrower reads another's loan | AUTHZ-101 | cross_identity | 403, 404 | fixture_validated (REL-004) |
+| NBFC-002 borrower retrieves another's KYC | DATA-101 | cross_identity | 404 | fixture_validated (REL-004) |
+| NBFC-003 borrower changes another's application | AUTHZ-102 | cross_identity | 404 | fixture_validated (REL-004) |
+| NBFC-004 officer approves unassigned loan | AUTHZ-103 | cross_identity | 403, 404 | fixture_validated (REL-007, REL-004) |
+| NBFC-005 officer approves own prepared decision | AUTHZ-104 | cross_identity | 403 | fixture_validated (REL-007, REL-004) |
+| NBFC-006 borrower alters repayment | AUTHZ-105 | property_level | 403 | fixture_validated (REL-018) |
+| NBFC-007 loan read exposes KYC fields | DATA-102 | property_level | clean_is_enforcement | **not_evaluated (gap, see below)** |
+| NBFC-008 loan list reveals other loans | DATA-103 | cross_identity | clean_is_enforcement | fixture_validated (REL-004, response-owner attribution) |
+| Statement with debit mandates | DATA-104 | cross_identity | 404 | fixture_validated (REL-008, REL-004) |
+| Administrative access policy | AUTHZ-106 | cross_identity | 403 | fixture_validated (REL-019, REL-007, REL-004) |
+
+### Administrative access and audit
+
+- `GET /api/nbfc/admin/loans/{id}` requires the administrator role and the `loans:read` grant. `GET /api/nbfc/admin/kyc/{id}` requires `kyc:read`, which the fixture does not grant to the administrator. A role alone is not a grant.
+- The fixed build refuses a borrower (403) and an administrator without the grant (403). The vulnerable build skips both checks.
+- Every attempt is audited in both builds: identity, role, action, target, grant, outcome (`allowed` or `denied`) and reason. `GET /lab/nbfc/audit` is admin-only and cleared on reseed.
+- Tests (`runner/phase7_admin_test.go`): authorized administrator succeeds with 200 and public fields only; administrator without grant denied; borrower denied with audit role `borrower`; vulnerable build serves the protected value and audits it as `allowed`; audit order and content for a two-attempt run.
+
+### Detection
+
+- Event model: `ActorRole` is recorded on each access event (fixture role, `customer` for other authenticated identities, empty when anonymous).
+- New rules: REL-018 (repayment changed by a non-staff identity) and REL-019 (privileged route called without the administrator role). Both are judged on the attempt, so they fire in both builds.
+- New action classes: `/api/nbfc/admin/` is `privilege_change`; POST `/decision` is `financial_approval`.
+- Response-owner attribution: the loan list names the owners of the records it returns, so REL-004 can judge a list that discloses another owner's loan (NBFC-008). The fixed build returns only the caller's loans and does not fire.
+- Detection expectations are fixture-derived in `runner/phase34_detection_test.go`. Unit tests in `detect/nbfc_test.go`.
+
+**Detection gap, stated:** NBFC-007 (DATA-102) stays `not_evaluated`. The loan read carries KYC identity evidence through a projection. REL-008 covers foreign-owned projections only, and the access event does not record which fields a response returned, so no rule can grade it. It is not claimed as detected.
+
+### Results
+
+- `TestPhase7_NBFCScenariosBothBuilds`: all ten NBFC scenarios FAIL exploited on the vulnerable build and PASS on the fixed build.
+- Admin and audit tests (`TestPhase7_Admin*`, `TestPhase7_Borrower*`, `TestPhase7_AuditRecordsEveryAttempt`): pass.
+- Detection unit tests (`go test ./internal/apibas/detect/`): pass.
+- Full apibas suite (`go test ./internal/apibas/... -count=1 -timeout 60m`): EXIT 0. Runner package took about 9 minutes.
+- Scenario count after this pack: 120 catalogue scenarios (AUTHZ 18, DATA 17, others unchanged).
+
+### Regulatory
+
+- RBI AUTHZ-001 is **not** extended to any NBFC scenario. The pack needs a fresh applicability review first.
+- The NBFC scenarios carry `regulatory_mapping: []`. Industry references in each YAML are descriptive only.
+- No mapping was verified or proposed for the pack. Human reviewer approval is required for each mapping.
+- Reconfirmation needed: the coverage-gap text for UAE-PDPL-A15-2 / DATA-011 changed to point at DATA-012 and DATA-013 (see `registry.yaml`). Reviewer Zain should reconfirm that wording; the verification itself was not altered.
+
+### Stated gaps
+
+- Field validation against a live NBFC deployment has not been done.
+- NBFC-007 detection is not implemented (see above).
+- The Executive Regulation for PDPL is not in the source set (carried over).

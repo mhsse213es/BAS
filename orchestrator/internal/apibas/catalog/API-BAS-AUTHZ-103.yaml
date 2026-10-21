@@ -1,0 +1,60 @@
+id: "API-BAS-AUTHZ-103"
+name: "NBFC-004: loan officer approves a loan not assigned to them"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "The loan officer approves LOAN-B-001, which is not assigned to them."
+threat_model:
+  attacker: "authenticated loan officer"
+  identity: loan-officer
+  access_level: "loan officer, valid token, assigned LOAN-A-001 only"
+  objective: "The loan officer approves LOAN-B-001, which is not assigned to them."
+preconditions:
+  fixture: nbfc-two-borrower
+  identities: [borrower-a, borrower-b, loan-officer]
+  object: LOAN-B-001
+steps:
+  - id: "baseline-owner-loan"
+    role: baseline
+    identity: borrower-b
+    auth: valid
+    method: GET
+    path: "/api/nbfc/loans/LOAN-B-001"
+    hypothesis: "Borrower B, the owner, reads their own loan. If this fails, the scenario is not testable."
+  - id: "attack-approve-unassigned"
+    role: attack
+    identity: loan-officer
+    auth: valid
+    method: POST
+    path: "/api/nbfc/loans/LOAN-B-001/decision"
+    body: '{"decision":"approved"}'
+    hypothesis: "An approval of LOAN-B-001 by an officer it is not assigned to is refused, and its status does not change."
+denied_statuses: [403, 404]
+expected_control: "A loan officer cannot approve a loan not assigned to them. The approval is refused and the loan status is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows LOAN-B-001's status unchanged after the unassigned officer's approval.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-007
+  min_severity: high
+additional_detections:
+  - source: elastic-security
+    expect_rule: APIBAS-REL-004
+    min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The approval is a financial-approval call (REL-007) on another owner's loan (REL-004). Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "NBFC: loan approval is limited to the officer assigned to the application (maker-checker authorization)"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-103 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-103 against the vulnerable build must FAIL (exploited)"

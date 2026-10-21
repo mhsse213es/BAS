@@ -22,6 +22,8 @@ type accessEvent struct {
 	// ActionClass is the detection class of the action (privileged operations only). It is set from the same
 	// definition the detection rules read, so the lab and the rules cannot disagree.
 	ActionClass string `json:"action_class,omitempty"`
+	// ActorRole is the caller's role from the fixture (see actorRole). Empty for an unauthenticated request.
+	ActorRole string `json:"actor_role,omitempty"`
 	// Destination is the normalised destination a handler acted on (scheme://host:port), and DestinationPolicy is its
 	// verdict under DestinationPolicy in destination.go. Both are empty when the route records no destination.
 	Destination       string `json:"destination,omitempty"`
@@ -107,6 +109,9 @@ func (s *Server) ownersOfPath(path string) []string {
 			out = appendOwner(out, o.OwnerID)
 		}
 	}
+	for _, owner := range s.nbfc.owners(path) {
+		out = appendOwner(out, owner)
+	}
 	return out
 }
 
@@ -164,6 +169,7 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		r, dest := withDestinationHolder(r)
+		r, ro := withResponseOwners(r)
 		next.ServeHTTP(rec, r)
 		if strings.HasPrefix(r.URL.Path, "/lab/") {
 			return
@@ -178,6 +184,9 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 		}
 		owners := s.ownersOfRequest(r)
 		for _, o := range bodyOwnersFromContext(r.Context()) {
+			owners = appendOwner(owners, o)
+		}
+		for _, o := range ro.owners {
 			owners = appendOwner(owners, o)
 		}
 		owner := ""
@@ -199,6 +208,7 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 			DestinationPolicy: dest.policy,
 			Outcome:       outcomeFor(rec.status),
 			Identity:      identity,
+			ActorRole:     s.actorRole(identity),
 			Status:        rec.status,
 			Degraded:      s.degradedDependencies(),
 			ObjectOwner:   owner,

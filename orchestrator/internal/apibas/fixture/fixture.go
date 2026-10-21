@@ -16,6 +16,10 @@ type Identity struct {
 	// RevokedTokenRef names a credential that the lab has revoked. It exists
 	// so authentication scenarios can prove a revoked credential is refused.
 	RevokedTokenRef string
+	// Role is the identity's role in a domain pack (for example "borrower", "officer", "administrator"). Empty means an
+	// ordinary customer. Permissions are the explicit grants an administrative route checks, beyond the role.
+	Role        string
+	Permissions []string
 }
 
 // Object is a synthetic resource owned by one identity. Public fields may be
@@ -28,6 +32,13 @@ type Object struct {
 	Public    map[string]string
 	Protected map[string]string
 	Items     []Item
+	// Kind names the record type for a domain pack (for example "loan", "kyc", "repayment"). Empty means an order, which
+	// the orders routes serve. A domain record is served only by its pack's routes.
+	Kind string
+	// Parent is the record this one belongs to (a repayment's loan, a KYC record's borrower).
+	Parent string
+	// Assignee is the staff identity a record is assigned to, for pack routes that grant staff access by assignment.
+	Assignee string
 }
 
 // Item is a child line of an order. It belongs to exactly one parent.

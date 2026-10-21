@@ -102,6 +102,7 @@ func fixtures() map[string]fixture.Fixture {
 		"orders-two-tenant":   fixture.OrdersTwoTenant(),
 		"orders-no-protected": fixture.OrdersNoProtected(),
 		"orders-paged":        fixture.OrdersPaged(),
+		"nbfc-two-borrower":   fixture.NBFCTwoBorrower(),
 	}
 }
 
@@ -113,6 +114,17 @@ func configFromEnv(mode lab.Mode, fx fixture.Fixture) (lab.Config, error) {
 		return lab.Config{}, fmt.Errorf("set APIBAS_CUSTOMER_A_TOKEN, APIBAS_CUSTOMER_B_TOKEN and APIBAS_LAB_ADMIN_TOKEN")
 	}
 	tokens := map[string]string{a: "cust-a", b: "cust-b"}
+	// NBFC pack identities are optional. Each set variable names one caller, as the fixture names it.
+	for env, caller := range map[string]string{
+		"APIBAS_NBFC_BORROWER_A_TOKEN": "borrower-a",
+		"APIBAS_NBFC_BORROWER_B_TOKEN": "borrower-b",
+		"APIBAS_NBFC_OFFICER_TOKEN":    "loan-officer",
+		"APIBAS_NBFC_ADMIN_TOKEN":      "nbfc-admin",
+	} {
+		if v := os.Getenv(env); v != "" {
+			tokens[v] = caller
+		}
+	}
 	var revoked []string
 	// The revoked token must be known to the lab, or the vulnerable build would
 	// refuse it as invalid and AUTHN-002 would pass for the wrong reason.

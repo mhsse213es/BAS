@@ -1,0 +1,53 @@
+id: "API-BAS-AUTHZ-101"
+name: "NBFC-001: borrower reads another borrower's loan"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "Borrower A reads Borrower B's loan LOAN-B-001."
+threat_model:
+  attacker: "authenticated borrower A"
+  identity: borrower-a
+  access_level: "standard borrower, valid token, owns LOAN-A-001 only"
+  objective: "Borrower A reads Borrower B's loan LOAN-B-001."
+preconditions:
+  fixture: nbfc-two-borrower
+  identities: [borrower-a, borrower-b, loan-officer]
+  object: LOAN-B-001
+steps:
+  - id: "baseline-owner-loan"
+    role: baseline
+    identity: borrower-b
+    auth: valid
+    method: GET
+    path: "/api/nbfc/loans/LOAN-B-001"
+    hypothesis: "Borrower B, the owner, reads their own loan. If this fails, the scenario is not testable."
+  - id: "attack-read-other-loan"
+    role: attack
+    identity: borrower-a
+    auth: valid
+    method: GET
+    path: "/api/nbfc/loans/LOAN-B-001"
+    hypothesis: "Borrower A's read of LOAN-B-001 is refused, and no protected value of that loan comes back."
+denied_statuses: [403, 404]
+forbidden_values: ["BAS-SIM-LOAN-B-ACC"]
+expected_control: "Borrower A cannot read Borrower B's loan. The read is refused and no protected value of LOAN-B-001 is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to borrower A's read of LOAN-B-001 carries no protected value of that loan.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The cross-owner read is an access event naming another owner's loan (REL-004). Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "NBFC: a borrower sees only their own loan records (RBI access controls, para 19(a))"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-101 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-101 against the vulnerable build must FAIL (exploited)"

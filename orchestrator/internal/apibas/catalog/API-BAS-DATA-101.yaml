@@ -1,0 +1,53 @@
+id: "API-BAS-DATA-101"
+name: "NBFC-002: borrower retrieves another borrower's KYC record"
+category: DATA
+claim: cross_identity
+attack_objective: "Borrower A retrieves Borrower B's KYC record KYC-B-001."
+threat_model:
+  attacker: "authenticated borrower A"
+  identity: borrower-a
+  access_level: "standard borrower, valid token, owns KYC-A-001 only"
+  objective: "Borrower A retrieves Borrower B's KYC record KYC-B-001."
+preconditions:
+  fixture: nbfc-two-borrower
+  identities: [borrower-a, borrower-b, loan-officer]
+  object: KYC-B-001
+steps:
+  - id: "baseline-owner-kyc"
+    role: baseline
+    identity: borrower-b
+    auth: valid
+    method: GET
+    path: "/api/nbfc/kyc/KYC-B-001"
+    hypothesis: "Borrower B, the owner, reads their own KYC record. If this fails, the scenario is not testable."
+  - id: "attack-read-other-kyc"
+    role: attack
+    identity: borrower-a
+    auth: valid
+    method: GET
+    path: "/api/nbfc/kyc/KYC-B-001"
+    hypothesis: "Borrower A's read of KYC-B-001 is refused, and no identity evidence of Borrower B comes back."
+denied_statuses: [404]
+forbidden_values: ["BAS-SIM-PAN-B", "BAS-SIM-AADHAAR-B"]
+expected_control: "Borrower A cannot retrieve Borrower B's KYC record. The read is refused and no identity evidence of Borrower B is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to borrower A's read of KYC-B-001 carries no identity evidence of Borrower B.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The cross-owner KYC read is an access event naming another owner's KYC record (REL-004). Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "NBFC: KYC identity evidence (PAN, Aadhaar reference) reaches its owner only"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DATA-101 against the fixed build must PASS"
+  - "API-BAS-DATA-101 against the vulnerable build must FAIL (exploited)"

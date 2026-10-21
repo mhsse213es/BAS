@@ -1,0 +1,49 @@
+id: "API-BAS-DATA-102"
+name: "NBFC-007: loan read exposes KYC fields beyond the authorized projection"
+category: DATA
+claim: property_level
+attack_objective: "Borrower A reads their own loan with the KYC expansion, and the response carries identity evidence the loan read must not return."
+threat_model:
+  attacker: "authenticated borrower A"
+  identity: borrower-a
+  access_level: "standard borrower, valid token, owns LOAN-A-001 and KYC-A-001"
+  objective: "Borrower A reads their own loan with the KYC expansion, and the response carries identity evidence the loan read must not return."
+preconditions:
+  fixture: nbfc-two-borrower
+  identities: [borrower-a, borrower-b, loan-officer]
+  object: KYC-A-001
+steps:
+  - id: "baseline-owner-loan"
+    role: baseline
+    identity: borrower-a
+    auth: valid
+    method: GET
+    path: "/api/nbfc/loans/LOAN-A-001"
+    hypothesis: "Borrower A, the owner, reads their own loan. If this fails, the scenario is not testable."
+  - id: "attack-expand-kyc"
+    role: attack
+    identity: borrower-a
+    auth: valid
+    method: GET
+    path: "/api/nbfc/loans/LOAN-A-001?expand=kyc"
+    hypothesis: "The loan read does not return KYC identity evidence, even on request."
+clean_is_enforcement: true
+forbidden_values: ["BAS-SIM-PAN-A", "BAS-SIM-AADHAAR-A"]
+expected_control: "The loan read never returns KYC identity evidence, even when asked to expand the KYC record. A 2xx response with that evidence fails."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to the expanded loan read carries no PAN or Aadhaar reference of the borrower.
+detection_assertion:
+  status: not_evaluated
+  reason: "Detection gap. The loan read returns the borrower's own KYC identity evidence through a projection. No current rule grades it: REL-008 covers foreign-owned projections only, and the access event does not record which fields a response returned. Not claimed as detected."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "NBFC: identity evidence is released only through the KYC resource, not through a loan projection"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DATA-102 against the fixed build must PASS"
+  - "API-BAS-DATA-102 against the vulnerable build must FAIL (exploited)"

@@ -1,0 +1,57 @@
+id: "API-BAS-DATA-104"
+name: "NBFC-statement: borrower reads another borrower's loan statement with debit mandates"
+category: DATA
+claim: cross_identity
+attack_objective: "Borrower A reads Borrower B's loan statement, which carries the debit mandate of each repayment."
+threat_model:
+  attacker: "authenticated borrower A"
+  identity: borrower-a
+  access_level: "standard borrower, valid token, owns LOAN-A-001 only"
+  objective: "Borrower A reads Borrower B's loan statement, which carries the debit mandate of each repayment."
+preconditions:
+  fixture: nbfc-two-borrower
+  identities: [borrower-a, borrower-b, loan-officer]
+  object: REP-B-001
+steps:
+  - id: "baseline-owner-statement"
+    role: baseline
+    identity: borrower-b
+    auth: valid
+    method: GET
+    path: "/api/nbfc/loans/LOAN-B-001/statement"
+    hypothesis: "Borrower B, the owner, reads their own loan statement. If this fails, the scenario is not testable."
+  - id: "attack-read-other-statement"
+    role: attack
+    identity: borrower-a
+    auth: valid
+    method: GET
+    path: "/api/nbfc/loans/LOAN-B-001/statement"
+    hypothesis: "Borrower A's read of Borrower B's statement is refused, and no debit mandate comes back."
+denied_statuses: [404]
+forbidden_values: ["BAS-SIM-MANDATE-B"]
+expected_control: "A loan statement is served only to its owner or assigned officer. A borrower's read of another borrower's statement is refused, and no debit mandate is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to borrower A's statement read carries no debit mandate of another borrower's repayment.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-008
+  min_severity: high
+additional_detections:
+  - source: elastic-security
+    expect_rule: APIBAS-REL-004
+    min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The statement read is graded against the access event: a sensitive projection of another owner's object (REL-008), and the cross-owner object (REL-004). Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "NBFC: a repayment debit mandate is a payment credential and is disclosed to its owner only"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DATA-104 against the fixed build must PASS"
+  - "API-BAS-DATA-104 against the vulnerable build must FAIL (exploited)"

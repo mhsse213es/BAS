@@ -86,6 +86,13 @@ func (a LabAdmin) SetReportingFaults(ctx context.Context, faults map[string]any)
 	return a.send(ctx, http.MethodPost, "/lab/reporting/faults", faults, nil)
 }
 
+// NBFCAudit returns the administrative audit trail of the NBFC pack for the run.
+func (a LabAdmin) NBFCAudit(ctx context.Context) ([]map[string]any, error) {
+	var out []map[string]any
+	err := a.do(ctx, http.MethodGet, "/lab/nbfc/audit", &out)
+	return out, err
+}
+
 // ReportingEvidence returns the reporting adapter's record of every incident and dispatch in the run.
 func (a LabAdmin) ReportingEvidence(ctx context.Context) (reporting.Evidence, error) {
 	var ev reporting.Evidence

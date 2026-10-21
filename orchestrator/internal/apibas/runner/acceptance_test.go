@@ -54,12 +54,15 @@ func newEnvFaults(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []stri
 func newEnvWith(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string, extract bool) *env {
 	t.Helper()
 	tokA, tokB, adminTok := randomToken(t), randomToken(t), randomToken(t)
+	// NBFC pack identities (fixture.NBFCTwoBorrower). Each caller ID is the identity name.
+	tokBorrowerA, tokBorrowerB, tokOfficer, tokNBFCAdmin := randomToken(t), randomToken(t), randomToken(t), randomToken(t)
 	revokedA := randomToken(t) // issued to customer-a, then revoked in the lab
 	l, err := lab.New(lab.Config{
 		Mode:    mode,
 		Fixture: fx,
 		Tokens: map[string]string{
 			tokA: "cust-a", tokB: "cust-b", revokedA: "cust-a",
+			tokBorrowerA: "borrower-a", tokBorrowerB: "borrower-b", tokOfficer: "loan-officer", tokNBFCAdmin: "nbfc-admin",
 		},
 		Revoked:        []string{revokedA},
 		AdminToken:     adminTok,
@@ -84,6 +87,10 @@ func newEnvWith(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string
 		"apibas/lab/customer-a":         tokA,
 		"apibas/lab/customer-b":         tokB,
 		"apibas/lab/customer-a-revoked": revokedA,
+		"apibas/lab/borrower-a":         tokBorrowerA,
+		"apibas/lab/borrower-b":         tokBorrowerB,
+		"apibas/lab/loan-officer":       tokOfficer,
+		"apibas/lab/nbfc-admin":         tokNBFCAdmin,
 	}
 	return &env{
 		url: srv.URL, apiHits: hits, srv: srv, admin: admin, secrets: secrets, fx: fx,

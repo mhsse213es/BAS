@@ -1,0 +1,56 @@
+id: "API-BAS-AUTHZ-105"
+name: "NBFC-006: borrower alters a repayment status or amount"
+category: AUTHZ
+claim: property_level
+attack_objective: "Borrower A changes the status of their own repayment REP-A-001."
+threat_model:
+  attacker: "authenticated borrower A"
+  identity: borrower-a
+  access_level: "standard borrower, valid token, owns LOAN-A-001 and REP-A-001"
+  objective: "Borrower A changes the status of their own repayment REP-A-001."
+preconditions:
+  fixture: nbfc-two-borrower
+  identities: [borrower-a, borrower-b, loan-officer]
+  object: REP-A-001
+steps:
+  - id: "baseline-owner-loan"
+    role: baseline
+    identity: borrower-a
+    auth: valid
+    method: GET
+    path: "/api/nbfc/loans/LOAN-A-001"
+    hypothesis: "Borrower A, the owner, reads their own loan. If this fails, the scenario is not testable."
+  - id: "attack-alter-repayment"
+    role: attack
+    identity: borrower-a
+    auth: valid
+    method: PATCH
+    path: "/api/nbfc/repayments/REP-A-001"
+    body: '{"status":"waived"}'
+    hypothesis: "A borrower's change to a repayment is refused, and the repayment status is unchanged."
+denied_statuses: [403]
+expected_control: "A borrower cannot change a repayment's status or amount. The change is refused and the repayment is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows REP-A-001's status unchanged after the borrower's change.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-018
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "A repayment change by a caller who is not lender staff (REL-018). Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "NBFC: repayment records are maintained by the lender, not the borrower"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-105 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-105 against the vulnerable build must FAIL (exploited)"

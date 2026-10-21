@@ -40,7 +40,7 @@ mappings:
         gaps:
           - the prescribed request manner under the rules is not tested
           - the retention exceptions in section 12(3) (specified purpose, compliance with law) are not tested
-          - only the order read path is tested; the export, status and statement paths are not
+          - only the order read path is tested by this scenario; the summary and export read paths are API-BAS-DATA-012 and API-BAS-DATA-013 (not mapped); a status read carries no protected value, so it is not a leak scenario; the lab has no statement resource
           - erasure from backups, logs or third parties is not tested
           - the timeframe for erasure is not tested
           - commencement of section 12 is not verified against a notification
@@ -124,7 +124,7 @@ mappings:
         gaps:
           - the Article 15(3) exceptions are not tested
           - the Executive Regulation's rules on the erasure process are not in the source set and are not tested
-          - only the order read path is tested; the export, status and statement paths are not
+          - only the order read path is tested by this scenario; the summary and export read paths are API-BAS-DATA-012 and API-BAS-DATA-013 (not mapped); a status read carries no protected value, so it is not a leak scenario; the lab has no statement resource
           - the time within which the Controller must erase is not tested
           - erasure from backups or third parties is not tested
 

@@ -116,7 +116,24 @@ func expectedDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, ru
 	}
 	switch rule {
 	case "APIBAS-REL-004":
+		if isCollectionRequest(s) {
+			return listDisclosureDetection(t, fx, s, mode)
+		}
 		return ownershipDetection(t, fx, s, mode, extract)
+	case "APIBAS-REL-018":
+		// A repayment change by a caller who is not lender staff. The attempt is the signal, in either build.
+		attack := s.Steps[len(s.Steps)-1]
+		if attack.Method == "PATCH" && strings.HasPrefix(attack.Path, "/api/nbfc/repayments/") && !staffRoleOf(t, fx, attack.Identity) {
+			return detect.Detected
+		}
+		return detect.NotDetected
+	case "APIBAS-REL-019":
+		// A privileged route called by a caller whose role is not the administrator. The attempt is the signal, in either build.
+		attack := s.Steps[len(s.Steps)-1]
+		if detect.ActionClass(attack.Method+" "+attack.Path) == detect.ClassPrivilegeChange && roleOf(t, fx, attack.Identity) != "administrator" {
+			return detect.Detected
+		}
+		return detect.NotDetected
 	case "APIBAS-REL-001":
 		// REL-001 fires on three authentication failures. The scenario's attack repeats a wrong credential
 		// and the product refuses each with 401, so three attack requests are enough. The vulnerable build accepts a
@@ -397,4 +414,51 @@ func modeName(m lab.Mode) string {
 		return "vulnerable"
 	}
 	return "fixed"
+}
+
+// isCollectionRequest reports whether the attack reads a collection (a list route) rather than naming one object.
+func isCollectionRequest(s contract.Scenario) bool {
+	attack := s.Steps[len(s.Steps)-1]
+	path, _, _ := strings.Cut(attack.Path, "?")
+	return strings.HasSuffix(path, "/loans")
+}
+
+// listDisclosureDetection is the expectation for a collection read. The list returns the records it discloses, and REL-004
+// reads the owners the response names. The vulnerable build's loan list returns every loan, so it names other owners. The
+// fixed build returns only the caller's loans.
+func listDisclosureDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, mode lab.Mode) string {
+	t.Helper()
+	attack := s.Steps[len(s.Steps)-1]
+	id, ok := fx.Identity(attack.Identity)
+	if !ok {
+		t.Fatalf("%s: attack identity %s is not in the fixture", s.ID, attack.Identity)
+	}
+	if mode != lab.ModeVulnerable {
+		return detect.NotDetected
+	}
+	for _, o := range fx.Objects {
+		if o.Kind == "loan" && o.OwnerID != id.CustomerID {
+			return detect.Detected
+		}
+	}
+	return detect.NotDetected
+}
+
+// roleOf is the fixture role of a named identity, or "customer" for an identity the fixture does not give a role.
+func roleOf(t *testing.T, fx fixture.Fixture, name string) string {
+	t.Helper()
+	id, ok := fx.Identity(name)
+	if !ok {
+		t.Fatalf("identity %s is not in the fixture", name)
+	}
+	if id.Role == "" {
+		return "customer"
+	}
+	return id.Role
+}
+
+// staffRoleOf reports whether a named identity is lender staff.
+func staffRoleOf(t *testing.T, fx fixture.Fixture, name string) bool {
+	r := roleOf(t, fx, name)
+	return r == "officer" || r == "administrator"
 }

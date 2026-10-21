@@ -362,6 +362,8 @@ type Server struct {
 	sharedCache map[string]map[string]any
 	// rpt is the fixture-backed reporting receiver (reporting.go). Reset clears it.
 	rpt reportingState
+	// nbfc holds the NBFC pack's records (nbfc.go). Reseed loads them from the fixture.
+	nbfc nbfcStore
 }
 
 // New validates the configuration, seeds the store from the fixture and
@@ -394,13 +396,20 @@ func (s *Server) reseed() {
 	s.itemParent = make(map[string]string)
 	s.itemSKU = make(map[string]string)
 	s.orders = make(map[string]*Order, len(s.cfg.Fixture.Objects))
+	s.nbfc.seed(s.cfg.Fixture.Objects)
 	for _, o := range s.cfg.Fixture.Objects {
+		if o.Kind != "" {
+			continue
+		}
 		for _, it := range o.Items {
 			s.itemParent[it.ID] = o.ID
 			s.itemSKU[it.ID] = it.SKU
 		}
 	}
 	for _, o := range s.cfg.Fixture.Objects {
+		if o.Kind != "" {
+			continue
+		}
 		s.orders[o.ID] = &Order{
 			ID:        o.ID,
 			OwnerID:   o.OwnerID,
@@ -445,6 +454,7 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET /debug/orders/{id}", s.debugOrder)
 	}
 	mux.HandleFunc("GET /lab/state", s.adminOnly(s.getState))
+	s.registerNBFC(mux)
 	mux.HandleFunc("POST /lab/orders", s.adminOnly(s.createTagged))
 	mux.HandleFunc("DELETE /lab/runs/{tag}", s.adminOnly(s.cleanupRun))
 	mux.HandleFunc("POST /lab/reset", s.adminOnly(s.resetFixture))
@@ -705,6 +715,7 @@ func (s *Server) getState(w http.ResponseWriter, _ *http.Request) {
 		states = append(states, OrderState{ID: o.ID, OwnerID: o.OwnerID, Status: o.Status, Tag: o.Tag, Quantity: o.Public["quantity"], BeneficiaryRef: o.Beneficiary})
 	}
 	s.mu.Unlock()
+	states = append(states, s.nbfc.stateRecords()...)
 	sort.Slice(states, func(i, j int) bool { return states[i].ID < states[j].ID })
 	writeJSON(w, http.StatusOK, states)
 }

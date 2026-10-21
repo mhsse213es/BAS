@@ -1,0 +1,56 @@
+id: "API-BAS-AUTHZ-102"
+name: "NBFC-003: borrower changes another borrower's loan application"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "Borrower A changes the amount of Borrower B's loan application LOAN-B-001."
+threat_model:
+  attacker: "authenticated borrower A"
+  identity: borrower-a
+  access_level: "standard borrower, valid token, owns LOAN-A-001 only"
+  objective: "Borrower A changes the amount of Borrower B's loan application LOAN-B-001."
+preconditions:
+  fixture: nbfc-two-borrower
+  identities: [borrower-a, borrower-b, loan-officer]
+  object: LOAN-B-001
+steps:
+  - id: "baseline-owner-loan"
+    role: baseline
+    identity: borrower-b
+    auth: valid
+    method: GET
+    path: "/api/nbfc/loans/LOAN-B-001"
+    hypothesis: "Borrower B, the owner, reads their own loan. If this fails, the scenario is not testable."
+  - id: "attack-change-other-loan"
+    role: attack
+    identity: borrower-a
+    auth: valid
+    method: PATCH
+    path: "/api/nbfc/loans/LOAN-B-001"
+    body: '{"amount":"1"}'
+    hypothesis: "Borrower A's change to LOAN-B-001 is refused, and the amount of that loan is not changed."
+denied_statuses: [404]
+expected_control: "Borrower A cannot change Borrower B's loan application. The change is refused and the loan amount is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows LOAN-B-001's amount unchanged after borrower A's change.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The cross-owner change is an access event naming another owner's loan (REL-004). Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "NBFC: a loan application is changed only by its applicant (RBI access controls, para 19(a))"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-102 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-102 against the vulnerable build must FAIL (exploited)"

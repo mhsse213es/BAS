@@ -22,6 +22,8 @@ func fixtureFor(t *testing.T, name string) fixture.Fixture {
 		return fixture.OrdersNoProtected()
 	case "orders-paged":
 		return fixture.OrdersPaged()
+	case "nbfc-two-borrower":
+		return fixture.NBFCTwoBorrower()
 	}
 	t.Fatalf("unknown fixture %q", name)
 	return fixture.Fixture{}
