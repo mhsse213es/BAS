@@ -2252,3 +2252,44 @@ Correction: an earlier note listed DISC-006 as Phase 2 scope. The blueprint tabl
 - Ten P3 scenarios remain: eight buildable in the HTTP lab (INTEG-001, 002, 006, 007, 009, 011; DISC-006, 010) and
   two blocked (AUTHN-007 client-certificate validation and GWAY-012 TLS). The lab has no TLS listener.
 - DATA-005 and DATA-010 cross-tenant grading depends on the precondition-object scope above.
+
+
+## Grader: forbidden values across tenants (closes the batch 2 leak-scope limit)
+
+### What changed
+
+- A scenario may declare `forbidden_values`: exact values that must not appear in an attack response. Each is
+  searched at any depth of a JSON body, in keys and in strings and numbers, so nested arrays and JSON escapes are
+  covered. A non-JSON body is searched as text.
+- Any hit is `FAIL / exploited`, whatever the status.
+- A response that cannot be fully searched (compressed body, invalid UTF-8) is `SKIPPED / EVIDENCE_INCONCLUSIVE`. It
+  never passes. The grader has no separate INCONCLUSIVE result, so this is the existing inconclusive outcome.
+- A forbidden value that the attacker also sent (in the path, query or body) is not counted. The product echoing the
+  attacker's own input is not a disclosure. Scenarios therefore pick values the attacker did not send.
+- `forbidden_values` entries must be at least 4 characters. Shorter values are rejected by the contract.
+- The existing precondition-object leak check is unchanged and still runs.
+
+### Limits, as stated in the design
+
+- Only exact, distinctive values are caught. Masked, hashed, base64-encoded or partly redacted data is not.
+- Only the attack response is searched. A leak in a later read is not caught.
+- Common values give false positives. Scenario authors choose values that belong to another identity.
+
+### Used by
+
+- DATA-005: forbidden `BAS-SIM-1001` and `BAS-SIM-WHSEC-1001`, the other tenant's card and webhook reference. The
+  attacker's filter value `BAS-SIM-ACC-A` is sent, so it is deliberately not a forbidden value.
+- DATA-010: forbidden `BAS-SIM-ACC-A` and `BAS-SIM-1001`, the other tenant's account and card reference.
+- DATA-005 and DATA-010 are back to single-identity scenarios on the attacker's own object. The two-identity
+  modelling from batch 2 is no longer needed.
+
+### Evidence
+
+- Regression tests (`runner/forbidden_test.go`): foreign ID at top level, nested in an array, absent. Also JSON
+  escapes, key names, non-JSON text, echoed request values, compressed body, invalid UTF-8, no values declared.
+- Grader tests (`grade/forbidden_test.go`): hit is FAIL/exploited; uninspectable never passes; hit outranks
+  uninspectable; denied and inspectable still passes.
+- `TestPhase3_Batch2Acceptance`, `TestPhase3_BIZScopeAcceptance`, `TestPhase3_Batch1Acceptance` and
+  `TestPhase2_ScopeAcceptance` pass. The short suite is clean.
+- For DATA-005 the filter matches only the other tenant's order, so the FAIL cannot come from the precondition
+  check. It comes from the forbidden value.

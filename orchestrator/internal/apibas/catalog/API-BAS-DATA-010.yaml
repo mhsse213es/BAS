@@ -1,7 +1,7 @@
 id: "API-BAS-DATA-010"
 name: "Signed file URL not bound to its key"
 category: DATA
-claim: function_level
+claim: property_level
 attack_objective: "The customer uses the signature for their own statement to open another tenant's statement."
 threat_model:
   attacker: "authenticated customer who owns the order"
@@ -10,16 +10,16 @@ threat_model:
   objective: "open another tenant's file with a signature issued for a different key"
 preconditions:
   fixture: orders-two-tenant
-  identities: [customer-a, customer-b]
-  object: ORD-1001
+  identities: [customer-b]
+  object: ORD-2001
 steps:
-  - id: "baseline-owner-file"
+  - id: "baseline-own-file"
     role: baseline
-    identity: customer-a
+    identity: customer-b
     auth: valid
     method: GET
-    path: "/api/files/ORD-1001-statement?sig=fec9b57b1a22a8c0"
-    hypothesis: "The owner of ORD-1001 opens their statement with the matching signature. If it fails, the scenario is not testable."
+    path: "/api/files/ORD-2001-statement?sig=28cd5822696fd34e"
+    hypothesis: "The customer opens their own statement with the matching signature. If it fails, the scenario is not testable."
   - id: "attack-other-tenant-file"
     role: attack
     identity: customer-b
@@ -27,6 +27,7 @@ steps:
     method: GET
     path: "/api/files/ORD-1001-statement?sig=28cd5822696fd34e"
     hypothesis: "A signature is bound to its key and owner. The signature for another key is refused with 403."
+forbidden_values: ["BAS-SIM-ACC-A", "BAS-SIM-1001"]
 denied_statuses: [403]
 expected_control: "A signature issued for another key is refused with 403, and no other tenant's file content is returned."
 ground_truth:

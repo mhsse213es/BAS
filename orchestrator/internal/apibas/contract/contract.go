@@ -76,6 +76,10 @@ type Scenario struct {
 	Preconditions   Preconditions `yaml:"preconditions"`
 	Steps           []Step        `yaml:"steps"`
 	DeniedStatuses  []int         `yaml:"denied_statuses"`
+	// ForbiddenValues are exact values that must not appear in an attack response, for example another tenant's
+	// protected reference. Each is searched at any depth of a JSON body. Keep them distinctive: a common value
+	// gives false positives.
+	ForbiddenValues []string `yaml:"forbidden_values"`
 	CleanIsEnforced bool          `yaml:"clean_is_enforcement"`
 	// BaselineStatus is the status a legitimate baseline returns: 200 by default, or 101 for a
 	// WebSocket handshake. Only a websocket scenario may declare 101.
@@ -239,6 +243,11 @@ func (s Scenario) Validate() error {
 	}
 	if s.MaxGrantedPageSize < 0 {
 		return fmt.Errorf("contract: %s: max_granted_page_size cannot be negative", s.ID)
+	}
+	for _, v := range s.ForbiddenValues {
+		if len(v) < 4 {
+			return fmt.Errorf("contract: %s: forbidden value %q is too short to be distinctive", s.ID, v)
+		}
 	}
 	if len(s.DeniedStatuses) == 0 && !s.CleanIsEnforced {
 		return fmt.Errorf("contract: %s: denied_statuses must list the enforcement codes, or set clean_is_enforcement", s.ID)

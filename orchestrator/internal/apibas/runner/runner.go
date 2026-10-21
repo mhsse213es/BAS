@@ -138,6 +138,8 @@ type Exchange struct {
 	Leaked   int
 	headers  http.Header
 	raw      []byte
+	// request is the path and body sent, used to skip forbidden values the attacker sent.
+	request string
 }
 
 // Report is the complete output of one scenario execution.
@@ -412,6 +414,7 @@ func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj f
 	// {lab_url} lets a body name the target itself, for the SSRF scenario.
 	payload := strings.ReplaceAll(step.Body, "{lab_url}", r.cfg.BaseURL)
 	payload = expandFiller(payload)
+	ex.request = path + " " + payload
 	var body io.Reader
 	if payload != "" {
 		body = bytes.NewReader([]byte(payload))
@@ -550,6 +553,11 @@ func (r *Runner) runAttack(ctx context.Context, rep *Report, step contract.Step,
 		rep.Exchanges = append(rep.Exchanges, exch)
 		if transport {
 			return agg, true
+		}
+		hits, inspectable := forbiddenScan(exch.raw, exch.headers.Get("Content-Encoding"), s.ForbiddenValues, exch.request)
+		agg.ForbiddenValues += hits
+		if !inspectable {
+			agg.Uninspectable++
 		}
 		if agg.Status < 500 {
 			agg.Status = exch.Status
@@ -1007,6 +1015,11 @@ func (r *Runner) runAttackParallel(ctx context.Context, rep *Report, step contra
 		rep.Exchanges = append(rep.Exchanges, res.exch)
 		if res.transport {
 			return agg, true
+		}
+		hits, inspectable := forbiddenScan(res.exch.raw, res.exch.headers.Get("Content-Encoding"), s.ForbiddenValues, res.exch.request)
+		agg.ForbiddenValues += hits
+		if !inspectable {
+			agg.Uninspectable++
 		}
 		if agg.Status < 500 {
 			agg.Status = res.exch.Status

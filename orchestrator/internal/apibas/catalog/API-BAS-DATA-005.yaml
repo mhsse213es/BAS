@@ -1,7 +1,7 @@
 id: "API-BAS-DATA-005"
 name: "Filter on a protected field exposes other tenants' values"
 category: DATA
-claim: function_level
+claim: property_level
 attack_objective: "The customer filters orders on a protected field to reach another tenant's protected value."
 threat_model:
   attacker: "authenticated customer who owns the order"
@@ -10,16 +10,16 @@ threat_model:
   objective: "learn or read another tenant's protected reference through a filter"
 preconditions:
   fixture: orders-two-tenant
-  identities: [customer-a, customer-b]
-  object: ORD-1001
+  identities: [customer-b]
+  object: ORD-2001
 steps:
   - id: "baseline-owner-read"
     role: baseline
-    identity: customer-a
+    identity: customer-b
     auth: valid
     method: GET
-    path: "/api/orders/ORD-1001"
-    hypothesis: "The owner of ORD-1001 reads it. If this fails, the scenario is not testable."
+    path: "/api/orders/{object}"
+    hypothesis: "The owner can read their order. If this fails, the scenario is not testable."
   - id: "attack-filter-protected"
     role: attack
     identity: customer-b
@@ -27,6 +27,7 @@ steps:
     method: GET
     path: "/api/search/orders/filter?field=account_ref&value=BAS-SIM-ACC-A"
     hypothesis: "Filters run on public fields over the caller's own orders. A filter on a protected field is refused with 400."
+forbidden_values: ["BAS-SIM-1001", "BAS-SIM-WHSEC-1001"]
 denied_statuses: [400]
 expected_control: "A filter on a protected field is refused with 400, and no other tenant's protected value appears."
 ground_truth:
