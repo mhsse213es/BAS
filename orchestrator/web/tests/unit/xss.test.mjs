@@ -241,19 +241,6 @@ test('findings: loadFindings keeps payloads inside data-args', async () => {
   }
 });
 
-test('endpoint-mastery: loadEmTab keeps payloads inside data-args', async () => {
-  for (const p of PAYLOADS) {
-    globalThis.fetch = async (url) => ({ status: 200, json: async () => (String(url).includes('/api/agents') ? [{ agentId: p }] : [{ id: p, scenarioId: 'em-01-control-validation', name: p, status: 'completed', results: [{ result: 'pass' }] }]) });
-    loadEmTab();
-    await tick(); await tick();
-    const div = document.getElementById('em-grid');
-    assertInert(div, 'loadEmTab');
-    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
-    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
-    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
-  }
-});
-
 test('campaigns: loadCampaigns keeps payloads inside data-args', async () => {
   for (const p of PAYLOADS) {
     globalThis.fetch = async () => ({ status: 200, json: async () => ([{ id: p, name: p, summary: { status: 'completed' }, targetType: 'agent' }]) });

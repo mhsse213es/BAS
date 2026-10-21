@@ -1,4 +1,5 @@
 id: linux-audit-logging-posture
+product_line: common
 name: Linux Audit and Authentication Logging Posture
 description: >
   Read-only posture audit of whether the host keeps the records that investigation and

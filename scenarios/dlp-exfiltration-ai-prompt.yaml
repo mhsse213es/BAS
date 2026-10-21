@@ -1,4 +1,5 @@
 id: dlp-exfiltration-ai-prompt
+product_line: dlp
 name: DLP Exfiltration Validation — Generative-AI Channels
 description: >
   Attempts to exfiltrate synthetic sensitive records through two

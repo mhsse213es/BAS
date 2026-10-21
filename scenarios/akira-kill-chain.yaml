@@ -1,4 +1,5 @@
 id: akira-kill-chain
+product_line: ransomware
 name: Akira Kill Chain — Ransomware Emulation
 description: >
   Nine-stage telemetry-safe emulation of the Akira ransomware kill chain

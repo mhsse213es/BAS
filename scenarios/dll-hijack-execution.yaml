@@ -1,4 +1,5 @@
 id: dll-hijack-execution
+product_line: common
 name: DLL Hijack Execution  -  Search-Order, Phantom-DLL, PATH-Order, COR_PROFILER
 description: >
   Executes real Hijack Execution Flow (T1574) techniques -- DLL search-order

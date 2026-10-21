@@ -1,4 +1,5 @@
 id: collection-staging-exfil
+product_line: dlp
 name: Collection → Staging → Exfiltration Chain
 description: >
   Ten-stage telemetry-safe emulation of the post-compromise data-theft lifecycle

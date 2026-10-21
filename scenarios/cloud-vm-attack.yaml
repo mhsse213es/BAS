@@ -1,4 +1,5 @@
 id: cloud-vm-attack
+product_line: cloud
 name: Cloud VM Attack  -  Azure/AWS Instance Metadata Token Theft & IAM Discovery
 description: >
   Five-stage, environment-conditional emulation of cloud-VM identity attacks

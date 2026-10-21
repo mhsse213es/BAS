@@ -1,4 +1,5 @@
 ﻿id: em-02-attack-behavioral-depth
+product_line: av
 name: "Endpoint Mastery 02 — ATT&CK Behavioral Validation (variant depth)"
 description: >
   ENDPOINT MASTERY — Layer 2. Most BAS tools test one PowerShell technique once.

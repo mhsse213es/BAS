@@ -1,4 +1,5 @@
 id: linux-patch-posture
+product_line: common
 name: Linux Patch Currency Check
 local_check: true
 description: >

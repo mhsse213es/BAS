@@ -1,4 +1,5 @@
 id: linux-persistence
+product_line: common
 name: Linux Persistence  -  Cron, Bashrc, Systemd, SUID
 description: >
   Linux persistence mechanism validation using Atomic Red Team atomics.

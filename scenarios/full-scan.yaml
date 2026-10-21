@@ -1,4 +1,5 @@
 ﻿id: full-scan
+product_line: common
 name: Full Security Posture Scan
 description: >
   Comprehensive security posture assessment across all MITRE ATT&CK control domains.

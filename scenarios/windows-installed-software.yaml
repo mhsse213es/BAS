@@ -1,4 +1,5 @@
 id: windows-installed-software
+product_line: common
 name: Windows Installed Software Inventory
 local_check: true
 description: >

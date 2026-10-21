@@ -14,7 +14,7 @@ import (
 
 func TestLicenseGate_AllowlistPassesThroughWhenLocked(t *testing.T) {
 	license.SetInitial(license.Info{State: license.StateLocked})
-	defer license.SetInitial(license.Info{}) // reset for other tests in this package
+	defer license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise}) // reset for other tests in this package
 
 	allowlisted := []string{"/health", "/api/license/status"}
 	for _, path := range allowlisted {
@@ -37,7 +37,7 @@ func TestLicenseGate_AllowlistPassesThroughWhenLocked(t *testing.T) {
 
 func TestLicenseGate_StaticShellPassesThroughWhenLocked(t *testing.T) {
 	license.SetInitial(license.Info{State: license.StateLocked})
-	defer license.SetInitial(license.Info{})
+	defer license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise})
 
 	called := false
 	gated := LicenseGate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +54,7 @@ func TestLicenseGate_StaticShellPassesThroughWhenLocked(t *testing.T) {
 
 func TestLicenseGate_BlocksAPIRoutesWhenLocked(t *testing.T) {
 	license.SetInitial(license.Info{State: license.StateLocked})
-	defer license.SetInitial(license.Info{})
+	defer license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise})
 
 	blocked := []string{"/api/auth/login", "/api/agents", "/ws/agent", "/scim/v2/Users"}
 	for _, path := range blocked {
@@ -76,7 +76,7 @@ func TestLicenseGate_BlocksAPIRoutesWhenLocked(t *testing.T) {
 
 func TestLicenseGate_BlocksAPIRoutesWhenInvalid(t *testing.T) {
 	license.SetInitial(license.Info{State: license.StateInvalid})
-	defer license.SetInitial(license.Info{})
+	defer license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise})
 
 	blocked := []string{"/api/auth/login", "/api/agents", "/ws/agent", "/scim/v2/Users"}
 	for _, path := range blocked {
@@ -111,7 +111,7 @@ func TestLicenseGate_PassesThroughWhenValidOrGrace(t *testing.T) {
 			t.Errorf("state %q: handler was not called, want normal pass-through", state)
 		}
 	}
-	license.SetInitial(license.Info{}) // reset
+	license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise}) // reset
 }
 
 func TestWSUpgrade_RejectedWhenLocked(t *testing.T) {
@@ -120,7 +120,7 @@ func TestWSUpgrade_RejectedWhenLocked(t *testing.T) {
 		router := Mount(h, ws.NewHub(), testJWTSecret, "", http.NotFoundHandler(), 0, 0)
 
 		license.SetInitial(license.Info{State: license.StateLocked})
-		defer license.SetInitial(license.Info{})
+		defer license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise})
 
 		req := httptest.NewRequest(http.MethodGet, "/ws/agent?agentId=test-agent", nil)
 		rec := httptest.NewRecorder()
@@ -141,7 +141,7 @@ func TestWSUpgrade_RejectedWhenInvalid(t *testing.T) {
 		router := Mount(h, ws.NewHub(), testJWTSecret, "", http.NotFoundHandler(), 0, 0)
 
 		license.SetInitial(license.Info{State: license.StateInvalid})
-		defer license.SetInitial(license.Info{})
+		defer license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise})
 
 		req := httptest.NewRequest(http.MethodGet, "/ws/agent?agentId=test-agent", nil)
 		rec := httptest.NewRecorder()

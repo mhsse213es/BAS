@@ -1,4 +1,5 @@
 id: lolbin-execution-coverage
+product_line: common
 name: LOLBin Execution Coverage  -  Full Three-Tier Orchestration
 description: >
   Campaign-grade Living-off-the-Land Binary (LOLBin) adversary emulation.

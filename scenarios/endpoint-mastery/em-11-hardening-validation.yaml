@@ -1,4 +1,5 @@
 ﻿id: em-11-hardening-validation
+product_line: common
 name: "Endpoint Mastery 11 — Endpoint Hardening Validation"
 description: >
   ENDPOINT MASTERY — Layer 11. Configuration posture assurance verification. Evaluates the

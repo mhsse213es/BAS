@@ -272,6 +272,9 @@ type Scenario struct {
 	Description string   `yaml:"description"                    json:"description"`
 	Author      string   `yaml:"author,omitempty"               json:"author,omitempty"`
 	Tags        []string `yaml:"tags"                           json:"tags"`
+	// ProductLine is the licensed product area this scenario belongs to. The loader refuses any scenario
+	// whose value is not a valid product line, and the run paths check it against the licence.
+	ProductLine string `yaml:"product_line" json:"productLine"`
 	MITREPhases []string `yaml:"mitre_phases"                   json:"mitrePhases"`
 	// Emulates declares which real-world threat actors/groups this
 	// scenario emulates (spec §9.2). Signature-covered on builtin

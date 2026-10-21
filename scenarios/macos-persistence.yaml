@@ -1,4 +1,5 @@
 id: macos-persistence
+product_line: common
 name: macOS Persistence  -  Launch Agents, Cron, Login Items
 description: >
   macOS persistence mechanism validation using Atomic Red Team atomics.

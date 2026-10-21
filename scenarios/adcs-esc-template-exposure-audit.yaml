@@ -1,4 +1,5 @@
 id: adcs-esc-template-exposure-audit
+product_line: common
 name: ADCS ESC Template Exposure Audit
 description: >
   Single-stage, read-only Active Directory Certificate Services audit: reads

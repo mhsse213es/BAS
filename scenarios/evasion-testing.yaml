@@ -1,4 +1,5 @@
 id: evasion-testing
+product_line: av
 name: Evasion Testing — Obfuscation, PPID Spoof, AMSI Bypass (Phase 3)
 description: >
   Phase 3 — Defense Evasion validation. Five production-safe telemetry-tier steps

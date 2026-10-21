@@ -1,4 +1,5 @@
 id: medusa-kill-chain
+product_line: ransomware
 name: Medusa Kill Chain — Ransomware Emulation
 description: >
   Ten-stage telemetry-safe emulation of the Medusa ransomware kill chain

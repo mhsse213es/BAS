@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -86,7 +87,18 @@ func TestReindexAll_PopulatesScenarioRunFindingDocuments(t *testing.T) {
 		}
 
 		tmpDir := t.TempDir()
+		// scn-1 must be loaded and licensed for its run to be indexed (search drops unlicensed runs).
+		// Custom scenarios live under custom/; an unsigned file at the top level is a refused builtin.
+		if err := os.MkdirAll(filepath.Join(tmpDir, "custom"), 0o755); err != nil {
+			t.Fatalf("mkdir custom: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(tmpDir, "custom", "scn-1.yaml"), []byte("id: scn-1\nname: Scn One\nlocal_check: true\nproduct_line: common\n"), 0o644); err != nil {
+			t.Fatalf("write scenario: %v", err)
+		}
 		engine := scenario.NewEngine(tmpDir)
+		if err := engine.Load(); err != nil {
+			t.Fatalf("load scenarios: %v", err)
+		}
 
 		if err := ReindexAll(ctx, pool, engine, rulelib.NewEngine(), nil); err != nil {
 			t.Fatalf("ReindexAll: %v", err)

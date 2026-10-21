@@ -43,7 +43,7 @@ func TestGetLicenseInfo_ReturnsRealStateAndGraceFields(t *testing.T) {
 			DaysRemaining: 3,
 			LockoutAt:     time.Date(2026, 8, 19, 23, 59, 59, 0, time.UTC),
 		})
-		defer license.SetInitial(license.Info{})
+		defer license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/license", nil)
 		rec := httptest.NewRecorder()
@@ -104,7 +104,7 @@ func TestGetLicenseInfo_TamperedFile_ReportsVerificationFailure_NeverDisplaysFor
 		// has not ticked since the file was tampered with. GetLicenseInfo
 		// must not rely on this being accurate.
 		license.SetInitial(license.Info{State: license.StateValid})
-		defer license.SetInitial(license.Info{})
+		defer license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/license", nil)
 		rec := httptest.NewRecorder()
@@ -118,6 +118,54 @@ func TestGetLicenseInfo_TamperedFile_ReportsVerificationFailure_NeverDisplaysFor
 		}
 		if strings.Contains(rec.Body.String(), "2099-12-31") {
 			t.Error("response body echoes the tampered expires_at — a forged field must never be displayed as authentic")
+		}
+	})
+}
+
+// The licence endpoint reports the tier and product lines of the verified (signed) licence. A Core
+// licence says Core, lists the Core lines, and does not list an Advanced one.
+func TestGetLicenseInfo_ReportsSignedTier(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		priv, pubPEM := license.GenerateTestKeypair()
+		origKey := license.PublicKeyPEM
+		license.PublicKeyPEM = pubPEM
+		defer func() { license.PublicKeyPEM = origKey }()
+
+		licPath := filepath.Join(t.TempDir(), "bas.lic")
+		lic := license.SignForTest(priv, license.License{
+			Customer:   "Acme Corp",
+			CustomerID: "acme-core",
+			IssuedAt:   "2026-01-01",
+			ExpiresAt:  "2099-01-01",
+			Features:   []string{"Core"},
+			Tier:       string(license.TierCore),
+		})
+		data, _ := json.Marshal(lic)
+		if err := os.WriteFile(licPath, data, 0644); err != nil {
+			t.Fatalf("write license: %v", err)
+		}
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithLicensePath(licPath)
+		license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierCore})
+		defer license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise})
+
+		rec := httptest.NewRecorder()
+		h.GetLicenseInfo(rec, httptest.NewRequest(http.MethodGet, "/api/license", nil))
+		var body struct {
+			Tier         string   `json:"tier"`
+			ProductLines []string `json:"productLines"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("bad JSON: %v", err)
+		}
+		if body.Tier != "Core" {
+			t.Fatalf("tier = %q, want Core", body.Tier)
+		}
+		has := map[string]bool{}
+		for _, p := range body.ProductLines {
+			has[p] = true
+		}
+		if !has["av"] || !has["common"] || has["dlp"] || has["apibas"] {
+			t.Fatalf("product lines = %v: Core lines expected, Advanced lines not", body.ProductLines)
 		}
 	})
 }

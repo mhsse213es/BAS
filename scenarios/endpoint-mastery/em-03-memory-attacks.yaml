@@ -1,4 +1,5 @@
 ﻿id: em-03-memory-attacks
+product_line: av
 name: "Endpoint Mastery 03 — Memory-Based Attacks"
 description: >
   ENDPOINT MASTERY — Layer 3. Most endpoint products claim memory protection;

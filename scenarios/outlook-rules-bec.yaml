@@ -1,4 +1,5 @@
 id: outlook-rules-bec
+product_line: email
 name: Outlook Rules / BEC  -  Malicious Inbox Rule & Business Email Compromise Simulation
 description: >
   Five-stage emulation of T1137.005 (Office Application Startup: Outlook

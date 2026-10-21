@@ -1,4 +1,5 @@
 id: clop-kill-chain
+product_line: ransomware
 name: Cl0p Kill Chain — Ransomware Emulation
 description: >
   Five-stage telemetry-safe emulation of the Cl0p (TA505-lineage) ransomware

@@ -1,4 +1,5 @@
 id: ubuntu-hardening-validation
+product_line: common
 name: Ubuntu Hardening Validation — Attack Resistance Check
 description: >
   Attempts real attack techniques that Ubuntu hardening baselines (CIS

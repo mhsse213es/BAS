@@ -1,4 +1,5 @@
 id: dlp-exfiltration-db-export
+product_line: dlp
 name: DLP Exfiltration Validation — Database, BI and ERP Export Channels
 description: >
   Attempts to exfiltrate synthetic data shaped as the 4 specific export

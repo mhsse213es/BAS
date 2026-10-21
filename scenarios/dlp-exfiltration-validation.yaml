@@ -1,4 +1,5 @@
 id: dlp-exfiltration-validation
+product_line: dlp
 name: DLP Exfiltration Validation — Regulated Data Channel Coverage
 description: >
   Attempts to exfiltrate a single synthetic multi-type sensitive record

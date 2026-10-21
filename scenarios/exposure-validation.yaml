@@ -1,4 +1,5 @@
 ﻿id: exposure-validation
+product_line: common
 name: Exposure Validation — Endpoint Hardening Gap Assessment (Phase 8)
 description: >
   Five-stage read-only exposure validation that surfaces the configuration

@@ -1,4 +1,5 @@
 id: lolbin-execution
+product_line: common
 name: LOLBin Execution Coverage (Hybrid)
 description: >
   Validates Living-off-the-Land Binary (LOLBin) abuse across distinct execution

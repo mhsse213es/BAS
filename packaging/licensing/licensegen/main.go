@@ -34,16 +34,21 @@ type License struct {
 	IssuedAt   string   `json:"issued_at"`
 	ExpiresAt  string   `json:"expires_at"`
 	Features   []string `json:"features"`
+	Tier       string   `json:"tier,omitempty"`
 	Signature  string   `json:"signature"`
 }
 
 func (l *License) payload() string {
-	return fmt.Sprintf("%s|%s|%s|%s",
+	p := fmt.Sprintf("%s|%s|%s|%s",
 		l.CustomerID,
 		l.IssuedAt,
 		l.ExpiresAt,
 		strings.Join(l.Features, ","),
 	)
+	if l.Tier != "" {
+		p += "|tier=" + l.Tier
+	}
+	return p
 }
 
 func main() {
@@ -51,6 +56,7 @@ func main() {
 	customerID := flag.String("id", "", "Customer ID slug (e.g. 'hdfc-001') — used in signature")
 	days := flag.Int("days", 365, "License validity in days from today")
 	features := flag.String("features", "full", "Comma-separated feature list (e.g. 'full')")
+	tier := flag.String("tier", "", "Licence tier: Core, Advanced or Enterprise. Empty issues a pre-tier licence, which keeps everything (Enterprise)")
 	keyFile := flag.String("key", "packaging/licensing/keys/private.pem", "Path to RSA private key PEM")
 	outFile := flag.String("out", "", "Output file path (default: <customer_id>.lic)")
 	flag.Parse()
@@ -67,6 +73,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	switch *tier {
+	case "", "Core", "Advanced", "Enterprise":
+	default:
+		fmt.Fprintf(os.Stderr, "unknown tier %q: use Core, Advanced or Enterprise\n", *tier)
+		os.Exit(1)
+	}
 	now := time.Now().UTC()
 	lic := License{
 		Customer:   *customer,
@@ -74,6 +86,7 @@ func main() {
 		IssuedAt:   now.Format("2006-01-02"),
 		ExpiresAt:  now.AddDate(0, 0, *days).Format("2006-01-02"),
 		Features:   strings.Split(*features, ","),
+		Tier:       *tier,
 	}
 
 	hash := sha256.Sum256([]byte(lic.payload()))

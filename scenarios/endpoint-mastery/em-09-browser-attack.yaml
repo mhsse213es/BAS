@@ -1,4 +1,5 @@
 ﻿id: em-09-browser-attack
+product_line: av
 name: "Endpoint Mastery 09 — Browser Attack Simulation"
 description: >
   ENDPOINT MASTERY — Layer 9. Analyzes boundary exposure surrounding local web browser footprints.

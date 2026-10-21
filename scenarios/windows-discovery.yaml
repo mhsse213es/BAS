@@ -1,4 +1,5 @@
 id: windows-discovery
+product_line: common
 name: Windows Discovery  -  Host, Network, User, Process Enumeration
 description: >
   Windows post-compromise discovery simulation using Atomic Red Team atomics.

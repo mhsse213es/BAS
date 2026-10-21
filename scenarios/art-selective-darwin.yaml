@@ -1,4 +1,5 @@
 id: art-selective-darwin
+product_line: common
 name: Atomic Red Team  -  Selective macOS Capabilities
 description: >
   Same full-depth ATT&CK sweep as "Full macOS Sweep"  -  every macOS atomic

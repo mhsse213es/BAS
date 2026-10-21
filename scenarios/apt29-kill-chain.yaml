@@ -1,4 +1,5 @@
 ﻿id: apt29-kill-chain
+product_line: killchain
 name: APT29 Kill Chain — Cozy Bear Tradecraft (Phase 7)
 description: >
   Five-stage telemetry-safe emulation of APT29 (Cozy Bear / NOBELIUM) post-

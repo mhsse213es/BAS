@@ -1,4 +1,5 @@
 id: gpo-writable-linked-exposure-audit
+product_line: common
 name: GPO Writable-Linked Exposure Audit
 description: >
   Single-stage, read-only Active Directory audit: reads groupPolicyContainer

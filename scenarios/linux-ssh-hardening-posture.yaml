@@ -1,4 +1,5 @@
 id: linux-ssh-hardening-posture
+product_line: common
 name: Linux SSH Hardening Posture
 description: >
   Read-only posture audit of the effective OpenSSH server configuration: root login,

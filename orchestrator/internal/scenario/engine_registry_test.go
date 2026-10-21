@@ -80,9 +80,9 @@ func write(t *testing.T, dir, rel, body string) {
 
 func TestLoad_IntakesBuiltinBeforeCustomBeforeIntel(t *testing.T) { // plan amendment 6 / A12 ordering
 	dir := t.TempDir()
-	write(t, dir, "zzz-builtin.yaml", "id: lolbin\nname: B\nlocal_check: true\n")
-	write(t, dir, "custom/lolbin.yaml", "id: lolbin-c\nname: C\nlocal_check: true\n")
-	write(t, dir, "intel/intel-1.yaml", "id: intel-1\nname: I\nart_techniques: [T1082]\n")
+	write(t, dir, "zzz-builtin.yaml", "id: lolbin\nname: B\nproduct_line: common\nlocal_check: true\n")
+	write(t, dir, "custom/lolbin.yaml", "id: lolbin-c\nname: C\nproduct_line: common\nlocal_check: true\n")
+	write(t, dir, "intel/intel-1.yaml", "id: intel-1\nname: I\nproduct_line: common\nart_techniques: [T1082]\n")
 	e := NewEngine(dir)
 	e.SetVerifier(devV{})
 	f := newFake()
@@ -98,8 +98,8 @@ func TestLoad_IntakesBuiltinBeforeCustomBeforeIntel(t *testing.T) { // plan amen
 
 func TestLoad_RefusedFileNotInMap(t *testing.T) { // A12 engine half
 	dir := t.TempDir()
-	write(t, dir, "apt.yaml", "id: apt\nname: B\nlocal_check: true\n")
-	write(t, dir, "custom/apt.yaml", "id: apt\nname: shadow\nlocal_check: true\n")
+	write(t, dir, "apt.yaml", "id: apt\nname: B\nproduct_line: common\nlocal_check: true\n")
+	write(t, dir, "custom/apt.yaml", "id: apt\nname: shadow\nproduct_line: common\nlocal_check: true\n")
 	e := NewEngine(dir)
 	e.SetVerifier(devV{})
 	f := newFake()
@@ -132,8 +132,8 @@ func (c *countingRefuser) Intake(ctx context.Context, in IntakeFile) (IntakeDeci
 
 func TestLoad_IntakeErrorKeepsLoadingAndDoesNotExecute(t *testing.T) { // Review Focus 4
 	dir := t.TempDir()
-	write(t, dir, "custom/a.yaml", "id: a\nname: A\nlocal_check: true\n")
-	write(t, dir, "custom/b.yaml", "id: b\nname: B\nlocal_check: true\n")
+	write(t, dir, "custom/a.yaml", "id: a\nname: A\nproduct_line: common\nlocal_check: true\n")
+	write(t, dir, "custom/b.yaml", "id: b\nname: B\nproduct_line: common\nlocal_check: true\n")
 	e := NewEngine(dir)
 	e.SetVerifier(devV{})
 	f := newFake()
@@ -216,8 +216,8 @@ func TestDeleteAs_RetiresBeforeRemovingFile(t *testing.T) {
 // may accept both; the engine map must still keep the higher-precedence file.
 func TestLoad_CustomKeepsSlotOverIntelDuplicate(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "custom/x.yaml", "id: x\nname: C\nlocal_check: true\n")
-	write(t, dir, "intel/x.yaml", "id: x\nname: I\nart_techniques: [T1082]\n")
+	write(t, dir, "custom/x.yaml", "id: x\nname: C\nproduct_line: common\nlocal_check: true\n")
+	write(t, dir, "intel/x.yaml", "id: x\nname: I\nproduct_line: common\nart_techniques: [T1082]\n")
 	e := NewEngine(dir)
 	e.SetVerifier(devV{})
 	f := newFake()
@@ -240,10 +240,10 @@ func TestLoad_NoRegistryBuiltinBeatsCustomDuplicate(t *testing.T) {
 	// zzz.yaml walks after custom/ and aaa.yaml before it: under the old
 	// last-write-wins the winner depended on the file name. Builtin must win
 	// both ways.
-	write(t, dir, "zzz.yaml", "id: dup\nname: Builtin\nlocal_check: true\n")
-	write(t, dir, "custom/dup.yaml", "id: dup\nname: Custom\nlocal_check: true\n")
-	write(t, dir, "aaa.yaml", "id: dup2\nname: Builtin2\nlocal_check: true\n")
-	write(t, dir, "custom/dup2.yaml", "id: dup2\nname: Custom2\nlocal_check: true\n")
+	write(t, dir, "zzz.yaml", "id: dup\nname: Builtin\nproduct_line: common\nlocal_check: true\n")
+	write(t, dir, "custom/dup.yaml", "id: dup\nname: Custom\nproduct_line: common\nlocal_check: true\n")
+	write(t, dir, "aaa.yaml", "id: dup2\nname: Builtin2\nproduct_line: common\nlocal_check: true\n")
+	write(t, dir, "custom/dup2.yaml", "id: dup2\nname: Custom2\nproduct_line: common\nlocal_check: true\n")
 	e := NewEngine(dir)
 	e.SetVerifier(devV{})
 	if err := e.Load(); err != nil {
@@ -265,7 +265,7 @@ func (badSigV) SigningEnabled() bool                { return true }
 
 func TestLoad_TamperedBuiltinNotedAndNeverIntaken(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "tampered.yaml", "id: tampered\nname: T\nlocal_check: true\n")
+	write(t, dir, "tampered.yaml", "id: tampered\nname: T\nproduct_line: common\nlocal_check: true\n")
 	write(t, dir, "tampered.yaml.sig", "AAAA")
 	e := NewEngine(dir)
 	e.SetVerifier(badSigV{})
@@ -332,7 +332,7 @@ func TestDeleteAs_RetireErrorLeavesFileAndMap(t *testing.T) {
 func TestLoad_ConcurrentWithReaders(t *testing.T) {
 	dir := t.TempDir()
 	for i := 0; i < 150; i++ {
-		write(t, dir, fmt.Sprintf("s%03d.yaml", i), fmt.Sprintf("id: s%03d\nname: S\nlocal_check: true\n", i))
+		write(t, dir, fmt.Sprintf("s%03d.yaml", i), fmt.Sprintf("id: s%03d\nname: S\nproduct_line: common\nlocal_check: true\n", i))
 	}
 	e := NewEngine(dir)
 	e.SetVerifier(devV{})
@@ -375,7 +375,7 @@ func TestLoad_ConcurrentWithReaders(t *testing.T) {
 // claim it and lock the vendor builtin out forever.
 func TestSaveAs_RefusesIDOfRefusedBuiltin(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "vendor.yaml", "id: vendor\nname: V\nlocal_check: true\n")
+	write(t, dir, "vendor.yaml", "id: vendor\nname: V\nproduct_line: common\nlocal_check: true\n")
 	write(t, dir, "vendor.yaml.sig", "AAAA")
 	e := NewEngine(dir)
 	e.SetVerifier(badSigV{})
@@ -402,13 +402,13 @@ func TestSaveAs_RefusesIDOfRefusedBuiltin(t *testing.T) {
 
 func TestLoad_LocalIntakeOfReservedBuiltinIDRefused(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "vendor.yaml", "id: vendor\nname: V\nlocal_check: true\n")
+	write(t, dir, "vendor.yaml", "id: vendor\nname: V\nproduct_line: common\nlocal_check: true\n")
 	write(t, dir, "vendor.yaml.sig", "AAAA")
 	// Unparseable as a Scenario but its id is readable: still reserved.
 	write(t, dir, "broken.yaml", "id: broken\nname: B\nsteps: not-a-list\n")
-	write(t, dir, "custom/vendor.yaml", "id: vendor\nname: Shadow\nlocal_check: true\n")
-	write(t, dir, "intel/broken.yaml", "id: broken\nname: Shadow\nart_techniques: [T1082]\n")
-	write(t, dir, "custom/mine.yaml", "id: mine\nname: Mine\nlocal_check: true\n")
+	write(t, dir, "custom/vendor.yaml", "id: vendor\nname: Shadow\nproduct_line: common\nlocal_check: true\n")
+	write(t, dir, "intel/broken.yaml", "id: broken\nname: Shadow\nproduct_line: common\nart_techniques: [T1082]\n")
+	write(t, dir, "custom/mine.yaml", "id: mine\nname: Mine\nproduct_line: common\nlocal_check: true\n")
 	e := NewEngine(dir)
 	e.SetVerifier(badSigV{})
 	f := newFake()

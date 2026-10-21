@@ -685,12 +685,16 @@ func (h *Handler) GetLicenseInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	info := license.Current()
+	// The tier and its product lines come from the verified licence, never from the UI.
+	productLines, _ := license.ProductLinesFor(lic.EffectiveTier())
 	respond(w, map[string]any{
 		"customer":      lic.Customer,
 		"customerId":    lic.CustomerID,
 		"issuedAt":      lic.IssuedAt,
 		"expiresAt":     lic.ExpiresAt,
 		"features":      lic.Features,
+		"tier":          string(lic.EffectiveTier()),
+		"productLines":  productLines,
 		"status":        string(info.State),
 		"daysRemaining": info.DaysRemaining,
 		"lockoutAt":     info.LockoutAt.Format("2006-01-02"),
@@ -2498,6 +2502,14 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ev, gerr := h.engine.ResolveExecutable(r.Context(), scenarioID)
+	if errors.Is(gerr, scenario.ErrNotLicensed) {
+		if !h.engine.Loaded(scenarioID) {
+			jsonError(w, "scenario not found", http.StatusNotFound)
+			return
+		}
+		jsonError(w, "scenario is not included in this licence", http.StatusForbidden)
+		return
+	}
 	if gerr != nil {
 		var ne *contentregistry.ErrNotExecutable
 		if errors.As(gerr, &ne) && ne.Reason == "not registered" {

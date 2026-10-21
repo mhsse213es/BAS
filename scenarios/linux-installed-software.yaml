@@ -1,4 +1,5 @@
 id: linux-installed-software
+product_line: common
 name: Linux Installed Software Inventory
 local_check: true
 description: >

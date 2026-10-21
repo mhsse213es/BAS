@@ -1,4 +1,5 @@
 ﻿id: em-07-ransomware-readiness
+product_line: ransomware
 name: "Endpoint Mastery 07 — Ransomware Readiness (Full Kill Chain)"
 description: >
   ENDPOINT MASTERY — Layer 7. Full ransomware kill chain simulation using canary files

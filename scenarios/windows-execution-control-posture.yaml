@@ -1,4 +1,5 @@
 id: windows-execution-control-posture
+product_line: common
 name: Windows Execution Control Posture (Application Control, Tamper Protection, ASR)
 description: >
   Read-only posture audit of the execution controls on a Windows host: whether an

@@ -1,4 +1,5 @@
 id: hunters-international-kill-chain
+product_line: ransomware
 name: "Hunters International Kill Chain — Oracle WebLogic to Ransomware"
 description: >
   Nine-stage emulation of the Hunters International RaaS attack chain

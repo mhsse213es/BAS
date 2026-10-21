@@ -1,4 +1,5 @@
 ﻿id: em-14-continuous-validation
+product_line: common
 name: "Endpoint Mastery 14 — Posture Drift Metric Engine"
 description: >
   ENDPOINT MASTERY — Layer 14. Programmatic configuration assurance scoring. Runs continuous

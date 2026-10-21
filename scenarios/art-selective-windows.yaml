@@ -1,4 +1,5 @@
 id: art-selective-windows
+product_line: common
 name: Atomic Red Team  -  Selective Windows Capabilities
 description: >
   Same full-depth ATT&CK sweep as "Full Windows Sweep"  -  every Windows

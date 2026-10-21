@@ -1,4 +1,5 @@
 ﻿id: em-13-product-validation
+product_line: common
 name: "Endpoint Mastery 13 — Security Product Health Validation"
 description: >
   ENDPOINT MASTERY — Layer 13. Systematically audits active security endpoint product processes,

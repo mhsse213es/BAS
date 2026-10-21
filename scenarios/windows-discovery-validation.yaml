@@ -1,4 +1,5 @@
 id: windows-discovery-validation
+product_line: common
 name: Windows Discovery Validation - Slow Enumeration Techniques
 description: >
   Dedicated validation scenario for discovery techniques that legitimately

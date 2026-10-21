@@ -1,4 +1,5 @@
 id: play-kill-chain
+product_line: ransomware
 name: Play Kill Chain — Ransomware Emulation
 description: >
   Eight-stage telemetry-safe emulation of the Play (Playcrypt) ransomware

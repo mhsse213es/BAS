@@ -1,4 +1,5 @@
 id: linux-defense-evasion
+product_line: common
 name: Linux Defense Evasion  -  Log Clearing, Timestomping, History Wipe
 description: >
   Linux defense evasion simulation using Atomic Red Team atomics.

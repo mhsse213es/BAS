@@ -1,4 +1,5 @@
 id: linux-privilege-escalation
+product_line: common
 name: Linux Privilege Escalation  -  SUDO, SUID, ptrace, Capabilities
 description: >
   Linux privilege escalation validation using Atomic Red Team atomics.

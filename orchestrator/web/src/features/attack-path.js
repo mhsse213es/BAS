@@ -1985,6 +1985,22 @@ var SCENARIO_CATEGORIES = {
 // Threat-Intel sub-group. EM still takes priority for the rare case a
 // scenario is somehow both (Endpoint Mastery has its own dedicated
 // dashboard elsewhere).
+// Scenario section grouping by licensed product line. The server sends each scenario's productLine
+// (from its signed YAML). Threat-intel scenarios keep their own group, since they are split by source.
+export var PRODUCT_LINE_ORDER = ['av', 'waf', 'network', 'email', 'dlp', 'apibas', 'ransomware', 'killchain', 'webgw', 'cloud', 'common'];
+var PRODUCT_LINE_LABELS = {
+  av: 'AV / NGAV', waf: 'WAF', network: 'Network', email: 'Email', dlp: 'DLP', apibas: 'API BAS',
+  ransomware: 'Ransomware', killchain: 'Full Kill Chain', webgw: 'Web Gateway', cloud: 'Cloud', common: 'Standard & Custom'
+};
+PRODUCT_LINE_ORDER.forEach(function(p) {
+  SCENARIO_CATEGORIES[p] = { label: PRODUCT_LINE_LABELS[p], icon: SCENARIO_CATEGORIES.other.icon };
+});
+
+export function scenarioProductOf(s) {
+  if (scenarioSourceOf(s) === 'intel') return 'intel';
+  return PRODUCT_LINE_ORDER.indexOf(s.productLine) !== -1 ? s.productLine : 'common';
+}
+
 export function scenarioCategoryOf(s) {
   if ((s.id || '').indexOf('em-') === 0 || (s.tags || []).indexOf('endpoint-mastery') !== -1) return 'em';
   if (scenarioSourceOf(s) === 'intel') return 'intel';
@@ -1992,7 +2008,7 @@ export function scenarioCategoryOf(s) {
 }
 
 function scenarioCategoryCounts(list, key) {
-  var inCat = list.filter(function(s) { return scenarioCategoryOf(s) === key; });
+  var inCat = list.filter(function(s) { return scenarioProductOf(s) === key; });
   var counts = { total: inCat.length, builtin: 0, custom: 0, intel: 0 };
   inCat.forEach(function(s) { counts[scenarioSourceOf(s)]++; });
   return counts;
@@ -2023,7 +2039,7 @@ function renderScenarioLanding(list, src) {
   var el = document.getElementById('sc-landing');
   if (!el) return;
   _lastLanding = { list: list, src: src };
-  var html = ['em', 'intel', 'other'].map(function(key) {
+  var html = PRODUCT_LINE_ORDER.concat(['intel']).map(function(key) {
     var cat = SCENARIO_CATEGORIES[key];
     var c = scenarioCategoryCounts(list, key);
     if (c.total === 0) return '';
@@ -2123,9 +2139,6 @@ export function renderScenarios() {
   var osFilter = osEl ? osEl.value : 'all';
 
   var filtered = state.scenarios.filter(function(s) {
-    // Endpoint Mastery scenarios live exclusively on the Endpoint Mastery
-    // dashboard (its own section below the 14 layer cards) now, not here.
-    if (scenarioCategoryOf(s) === 'em') return false;
     if (osFilter !== 'all' && (s.supportedOs || []).indexOf(osFilter) === -1) return false;
     if (src !== 'all' && scenarioSourceOf(s) !== src) return false;
     return true;
@@ -2194,7 +2207,7 @@ export function renderScenarios() {
   setDisplay(landingEl, 'none');
   setDisplay(catEl, 'block');
   var cat = SCENARIO_CATEGORIES[state.scenarioView];
-  var inCat = filtered.filter(function(s) { return scenarioCategoryOf(s) === state.scenarioView; });
+  var inCat = filtered.filter(function(s) { return scenarioProductOf(s) === state.scenarioView; });
   document.getElementById('sc-backbar-title').textContent = cat.label + ' (' + inCat.length + ')';
   var grid = document.getElementById('sc-tile-grid');
   grid.innerHTML = inCat.length

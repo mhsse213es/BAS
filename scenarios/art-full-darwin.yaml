@@ -1,4 +1,5 @@
 id: art-full-darwin
+product_line: common
 name: Atomic Red Team  -  Full macOS Sweep
 description: >
   Full-depth ATT&CK sweep for macOS endpoints  -  runs EVERY macOS atomic

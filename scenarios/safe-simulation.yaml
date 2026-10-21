@@ -1,4 +1,5 @@
 id: safe-simulation
+product_line: common
 name: "Safe Security Simulation (Read-Only)"
 description: >
   Cross-platform read-only security posture simulation. Reads configuration  - 

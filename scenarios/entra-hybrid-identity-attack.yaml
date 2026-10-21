@@ -1,4 +1,5 @@
 id: entra-hybrid-identity-attack
+product_line: cloud
 name: Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure
 description: >
   Six-stage emulation of identity-attack tradecraft against Entra ID (Azure

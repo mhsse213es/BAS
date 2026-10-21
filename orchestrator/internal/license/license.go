@@ -22,17 +22,25 @@ type License struct {
 	IssuedAt   string   `json:"issued_at"`
 	ExpiresAt  string   `json:"expires_at"`
 	Features   []string `json:"features"`
-	Signature  string   `json:"signature"`
+	// Tier is the signed commercial tier. Empty means a pre-tier licence, read as Enterprise.
+	Tier      string `json:"tier,omitempty"`
+	Signature string `json:"signature"`
 }
 
-// payload is the canonical string that is signed — order and format must not change.
+// payload is the canonical string that is signed. The format must not change for licences that
+// have no tier: those keep the original four fields, so they still verify. A tier is appended only
+// when set, so it is covered by the signature.
 func (l *License) payload() string {
-	return fmt.Sprintf("%s|%s|%s|%s",
+	p := fmt.Sprintf("%s|%s|%s|%s",
 		l.CustomerID,
 		l.IssuedAt,
 		l.ExpiresAt,
 		strings.Join(l.Features, ","),
 	)
+	if l.Tier != "" {
+		p += "|tier=" + l.Tier
+	}
+	return p
 }
 
 // Check performs the one-time startup verification gate.

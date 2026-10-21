@@ -208,7 +208,7 @@ func TestLoad_SourceClassification(t *testing.T) {
 	if err := os.MkdirAll(intelDir, 0o755); err != nil {
 		t.Fatalf("mkdir intel: %v", err)
 	}
-	intelYAML := []byte("id: intel-src-sc\nname: Intel\nlocal_check: true\n")
+	intelYAML := []byte("id: intel-src-sc\nname: Intel\nproduct_line: common\nlocal_check: true\n")
 	if err := os.WriteFile(filepath.Join(intelDir, "intel-src-sc.yaml"), intelYAML, 0o644); err != nil {
 		t.Fatalf("write intel file: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestLoad_UnsignedBuiltinRefused(t *testing.T) {
 	// A file placed directly under the engine root (not custom/ or intel/) is
 	// classified "builtin" by sourceForPath and therefore requires a valid
 	// .sig file. This one has none, so Load must skip it rather than trust it.
-	unsigned := []byte("id: unsigned-builtin-sc\nname: Unsigned\nlocal_check: true\n")
+	unsigned := []byte("id: unsigned-builtin-sc\nname: Unsigned\nproduct_line: common\nlocal_check: true\n")
 	if err := os.WriteFile(filepath.Join(dir, "unsigned-builtin-sc.yaml"), unsigned, 0o644); err != nil {
 		t.Fatalf("write unsigned builtin file: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestDelete_CustomRescan(t *testing.T) {
 		t.Fatalf("mkdir custom: %v", err)
 	}
 	filePath := filepath.Join(customDir, "custom-delete-sc.yaml")
-	customYAML := []byte("id: custom-delete-sc\nname: Custom Delete\nlocal_check: true\n")
+	customYAML := []byte("id: custom-delete-sc\nname: Custom Delete\nproduct_line: common\nlocal_check: true\n")
 	if err := os.WriteFile(filePath, customYAML, 0o644); err != nil {
 		t.Fatalf("write custom file: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestLoad_SkipsMalformedFileWithoutBlockingOthers(t *testing.T) {
 		t.Fatalf("write broken file: %v", err)
 	}
 	// Parses fine but has no id — explicitly skipped by Load().
-	if err := os.WriteFile(filepath.Join(dir, "no-id.yaml"), []byte("name: No ID\nlocal_check: true\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "no-id.yaml"), []byte("name: No ID\nproduct_line: common\nlocal_check: true\n"), 0o644); err != nil {
 		t.Fatalf("write no-id file: %v", err)
 	}
 

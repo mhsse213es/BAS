@@ -227,7 +227,8 @@ func main() {
 		// Dev-mode bypass, mirroring Check()'s own condition above — no
 		// bas.lic is expected to exist yet, so skip Get/Evaluate entirely
 		// rather than fatal on a file that was never meant to be there.
-		license.SetInitial(license.Info{State: license.StateValid})
+		// Dev builds have no licence file, so they get the full product set, as before tiers existed.
+		license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise})
 	} else {
 		lic, licErr := license.VerifiedRead(cfg.LicensePath)
 		if licErr != nil {
@@ -432,6 +433,9 @@ func main() {
 
 	// ── Scenario Engine ───────────────────────────────────────────────────
 	engine := scenario.NewEngine(cfg.ScenariosDir)
+	// Every scenario lookup and listing goes through this gate, so the licensed tier decides what
+	// the server can run, whichever route asked for it.
+	engine.SetLicence(license.PermitsNow)
 	contentRegistry := contentregistry.New(pool, integrity.CompiledVerifier{})
 	if !(integrity.CompiledVerifier{}).SigningEnabled() {
 		// Spec §6.3: make the dev-build trust downgrade impossible to miss.

@@ -1,4 +1,5 @@
 id: dlp-exfiltration-coderepo
+product_line: dlp
 name: DLP Exfiltration Validation — Code Repository API Channels
 description: >
   Attempts to exfiltrate the same synthetic multi-type sensitive record

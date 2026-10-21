@@ -1,4 +1,5 @@
 ﻿id: scattered-spider-kill-chain
+product_line: killchain
 name: Scattered Spider Kill Chain — Social Engineering + Insider Escalation (Phase 7)
 description: >
   Five-stage telemetry-safe emulation of Scattered Spider (UNC3944 / Muddled

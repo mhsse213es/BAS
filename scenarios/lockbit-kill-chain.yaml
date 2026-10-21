@@ -1,4 +1,5 @@
 ﻿id: lockbit-kill-chain
+product_line: ransomware
 name: LockBit Kill Chain — Ransomware Emulation (Phase 7)
 description: >
   Five-stage telemetry-safe emulation of the LockBit 3.0 ransomware kill chain

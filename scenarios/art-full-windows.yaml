@@ -1,4 +1,5 @@
 id: art-full-windows
+product_line: common
 name: Atomic Red Team  -  Full Windows Sweep
 description: >
   Full-depth ATT&CK sweep  -  runs EVERY Windows atomic test for every

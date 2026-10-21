@@ -1,4 +1,5 @@
 id: av-ngav-assessment
+product_line: av
 name: AV/NGAV Assessment
 description: 'Antivirus and next-gen AV assessment: concretely dispatchable file-based, script/fileless, behavioral, network-delivered, persistence, and false-positive-resilience vectors from internal/avcatalog''s seed catalog. Every step is a harmless, disposable, purpose-built simulation with its own cleanup -- never a real attack payload.'
 author: Audspect Research

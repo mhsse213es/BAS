@@ -1,4 +1,5 @@
 id: linux-account-privilege-posture
+product_line: common
 name: Linux Account and Privilege Exposure Posture
 description: >
   Read-only posture audit of local account and privilege exposure: UID 0 accounts other

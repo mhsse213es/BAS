@@ -22,6 +22,11 @@ param(
     [string] $Customer   = "",
     [string] $CustomerID = "",
     [int]    $Days       = 365,
+    # Licence tier. Core, Advanced or Enterprise decides which product lines are licensed AND which
+    # scenario files are packaged. Empty issues a pre-tier licence, which keeps every product
+    # (Enterprise), as before tiers existed.
+    [ValidateSet("", "Core", "Advanced", "Enterprise")]
+    [string] $LicenseType = "",
     [switch] $SkipBuild,         # pass -SkipBuild to repackage without rebuilding image
 
     # -- D1 release signing (docs/superpowers/specs/2026-09-30-d1-release-signing-architecture-design.md) --
@@ -896,6 +901,31 @@ if (Test-Path $ScenariosDir) {
     New-Item -ItemType Directory -Force -Path "$OutDir\scenarios" | Out-Null
     Copy-Item "$ScenariosDir\*" "$OutDir\scenarios\" -Recurse -Force
     Log "  Copied scenarios"
+    if ($LicenseType -ne "") {
+        # Package only the scenarios this tier is licensed for. The server also refuses the rest at
+        # runtime, so this is packaging, not the enforcement itself.
+        Push-Location $OrchestratorDir
+        $allowed = @(& go run ./cmd/tierlist $LicenseType 2>$null)
+        $tierExit = $LASTEXITCODE
+        Pop-Location
+        if ($tierExit -ne 0 -or $allowed.Count -eq 0) {
+            Err "Could not read the $LicenseType product lines from the licence package."
+        }
+        $removed = 0
+        Get-ChildItem -Path "$OutDir\scenarios" -Filter "*.yaml" -Recurse -File | Where-Object {
+            $_.FullName -notmatch "[\\/]detection-profiles[\\/]"
+        } | ForEach-Object {
+            $line = (Select-String -Path $_.FullName -Pattern '^product_line:\s*(\S+)' | Select-Object -First 1)
+            $pl = if ($line) { $line.Matches[0].Groups[1].Value } else { "" }
+            if ($allowed -notcontains $pl) {
+                Remove-Item -LiteralPath $_.FullName -Force
+                $sig = "$($_.FullName).sig"
+                if (Test-Path -LiteralPath $sig) { Remove-Item -LiteralPath $sig -Force }
+                $removed++
+            }
+        }
+        Log "  ${LicenseType}: packaged scenarios for the licensed product lines ($removed excluded)"
+    }
 }
 
 $WwwrootDir = Join-Path $RepoRoot "orchestrator\wwwroot"
@@ -1012,6 +1042,7 @@ if ($Customer -ne "" -and $CustomerID -ne "") {
             -customer $Customer `
             -id       $CustomerID `
             -days     $Days `
+            -tier     $LicenseType `
             -key      $LicPrivKey `
             -out      "$CustomerID.lic"
         Pop-Location

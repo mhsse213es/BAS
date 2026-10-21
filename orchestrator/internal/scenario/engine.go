@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/audspect/bas/internal/license"
 	"io/fs"
 	"log"
 	"os"
@@ -42,6 +43,10 @@ type Engine struct {
 	// LOCAL save or intake may claim one: a refused builtin has no registry
 	// row, so a LOCAL claim would lock the vendor builtin out forever.
 	reservedBuiltin map[string]struct{}
+	// permits is the licence gate. Get and List refuse any scenario whose product line it rejects,
+	// so an unlicensed scenario is simply not found on every path that goes through the engine. nil
+	// means ungated, and only tests run that way: the server always sets it at startup.
+	permits func(license.ProductLine) bool
 	// registry is the TCF Content Registry. nil => nothing is executable
 	// (ResolveExecutable fails closed); the disk map still serves authoring.
 	registry ContentRegistry
@@ -77,6 +82,9 @@ func (e *Engine) SetVerifier(v integrity.Verifier) { e.verifier = v }
 
 // ResolveExecutable is the only way callers may obtain a scenario to run.
 func (e *Engine) ResolveExecutable(ctx context.Context, id string) (ExecutableVersion, error) {
+	if err := e.requireLicensed(id); err != nil {
+		return ExecutableVersion{}, err
+	}
 	if e.registry == nil {
 		return ExecutableVersion{}, ErrNoRegistry
 	}
@@ -143,6 +151,17 @@ func (e *Engine) Load() error {
 					reserved[idOnly.ID] = struct{}{}
 				}
 			}
+			return nil
+		}
+		if s.ProductLine == "" && source != "builtin" {
+			// Custom and intel scenarios were written before product lines existed. They are general
+			// content, so they default to the common line, which every tier includes.
+			s.ProductLine = string(license.ProductCommon)
+		}
+		if !license.ValidProductLine(s.ProductLine) {
+			// Fail closed: a built-in with a missing or unknown product line is never loaded, and any
+			// other unknown value is refused the same way, so no run path can reach it.
+			log.Printf("[!] scenario: %s has no valid product_line (%q) — refusing to load", path, s.ProductLine)
 			return nil
 		}
 		if s.ID == "" {
@@ -262,12 +281,29 @@ func (e *Engine) sourceForPath(path string) string {
 }
 
 // List returns all loaded scenarios sorted by ID.
+// SetLicence installs the licence gate. The server calls it once at startup with license.PermitsNow.
+func (e *Engine) SetLicence(permits func(license.ProductLine) bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.permits = permits
+}
+
+// licensedLocked reports whether the gate lets s through. The caller holds e.mu.
+func (e *Engine) licensedLocked(s *Scenario) bool {
+	if e.permits == nil {
+		return true
+	}
+	return e.permits(license.ProductLine(s.ProductLine))
+}
+
 func (e *Engine) List() []*Scenario {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	out := make([]*Scenario, 0, len(e.scenarios))
 	for _, s := range e.scenarios {
-		out = append(out, s)
+		if e.licensedLocked(s) {
+			out = append(out, s)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
@@ -278,7 +314,10 @@ func (e *Engine) Get(id string) (*Scenario, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	s, ok := e.scenarios[id]
-	return s, ok
+	if !ok || !e.licensedLocked(s) {
+		return nil, false
+	}
+	return s, true
 }
 
 // Count returns the number of loaded scenarios.
@@ -334,6 +373,9 @@ func (s *Scenario) Validate() error {
 // (spec §5.1 "UI save path"); if registration fails the previous file is
 // restored and the map is unchanged.
 func (e *Engine) SaveAs(ctx context.Context, s *Scenario, actor string) error {
+	if s.ProductLine == "" {
+		s.ProductLine = string(license.ProductCommon)
+	}
 	if err := s.Validate(); err != nil {
 		return err
 	}
@@ -462,3 +504,29 @@ func (e *Engine) DeleteAs(ctx context.Context, id, actor string) error {
 }
 
 func yamlUnmarshal(b []byte, v any) error { return yaml.Unmarshal(b, v) }
+
+// Loaded reports whether a scenario with this ID is on disk and loaded, licensed or not. A refused
+// execution uses it to tell "unknown" (404) from "not licensed" (403) without leaking more than that.
+func (e *Engine) Loaded(id string) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	_, ok := e.scenarios[id]
+	return ok
+}
+
+// ErrNotLicensed is returned when a scenario exists but the licence does not permit its product line,
+// or when the scenario is not loaded at all. Execution paths fail closed on both.
+var ErrNotLicensed = errors.New("scenario is not included in this licence")
+
+// requireLicensed is the execution-path gate. It refuses a scenario that is not loaded or whose
+// product line the licence does not permit, so a route that resolves a scenario by ID cannot start
+// an unlicensed one.
+func (e *Engine) requireLicensed(id string) error {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	sc, ok := e.scenarios[id]
+	if !ok || !e.licensedLocked(sc) {
+		return ErrNotLicensed
+	}
+	return nil
+}

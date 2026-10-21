@@ -1,4 +1,5 @@
 id: rhysida-kill-chain
+product_line: ransomware
 name: "Rhysida Kill Chain — Ransomware Emulation"
 description: >
   Eleven-stage emulation of the Rhysida ransomware kill chain targeting

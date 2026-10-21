@@ -1,4 +1,5 @@
 id: cis-ubuntu-l1
+product_line: common
 name: CIS Ubuntu 26.04 L1 Baseline Hardening Check
 local_check: true
 description: >

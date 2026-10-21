@@ -1,4 +1,5 @@
 id: insider-threat-kill-chain
+product_line: killchain
 name: Insider Threat Kill Chain — Data Theft & Sabotage Emulation
 description: >
   Three-stage telemetry-safe emulation of a departing/disgruntled insider

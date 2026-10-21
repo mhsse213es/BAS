@@ -1,4 +1,5 @@
 id: cscrf-mii-drill
+product_line: common
 name: SEBI CSCRF-MII Continuous Control Validation (Three-Tier)
 description: >
   Continuous compliance validation for SEBI's Cyber Security and Cyber Resilience

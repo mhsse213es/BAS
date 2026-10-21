@@ -1,4 +1,5 @@
 id: black-basta-kill-chain
+product_line: ransomware
 name: Black Basta Kill Chain — Ransomware Emulation
 description: >
   Ten-stage telemetry-safe emulation of the Black Basta ransomware kill

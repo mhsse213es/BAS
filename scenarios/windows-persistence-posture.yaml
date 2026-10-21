@@ -1,4 +1,5 @@
 id: windows-persistence-posture
+product_line: common
 name: Windows Persistence Exposure Posture Audit
 description: >
   Read-only posture audit of the Windows locations an attacker commonly uses for

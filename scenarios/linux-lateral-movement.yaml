@@ -1,4 +1,5 @@
 id: linux-lateral-movement
+product_line: network
 name: Linux Lateral Movement  -  SSH, SCP, Remote Execution
 description: >
   Linux lateral movement simulation using Atomic Red Team atomics.

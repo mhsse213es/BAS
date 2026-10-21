@@ -1,4 +1,5 @@
 ﻿id: em-10-endpoint-exfiltration
+product_line: dlp
 name: "Endpoint Mastery 10 — Endpoint Data Exfiltration Channels"
 description: >
   ENDPOINT MASTERY — Layer 10. Assesses out-of-band communication monitoring and protocol

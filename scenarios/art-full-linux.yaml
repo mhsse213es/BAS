@@ -1,4 +1,5 @@
 id: art-full-linux
+product_line: common
 name: Atomic Red Team  -  Full Linux Sweep
 description: >
   Full-depth ATT&CK sweep for Linux endpoints  -  runs EVERY Linux atomic

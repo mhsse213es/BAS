@@ -1,4 +1,5 @@
 id: windows-east-west-host-firewall-posture
+product_line: common
 name: Windows Host Firewall Exposure Posture (Lateral Management Ports)
 description: >
   Read-only posture audit of enabled inbound allow rules that expose lateral-movement

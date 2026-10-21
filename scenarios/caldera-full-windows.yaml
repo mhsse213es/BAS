@@ -1,4 +1,5 @@
 id: caldera-full-windows
+product_line: common
 name: Caldera Full Windows Library Sweep
 description: >
   Runs EVERY ability in the Caldera library that has a Windows

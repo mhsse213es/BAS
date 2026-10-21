@@ -33,7 +33,7 @@ func scenariosFrom(engine *scenario.Engine) []Document {
 // runsFrom maps every scenario_runs row into a Document. Title falls back
 // to scenario_id when name is empty, matching the existing UI convention
 // (e.g. cmd/server/wwwroot/index.html's `r.name || r.scenarioId`).
-func runsFrom(ctx context.Context, pool *pgxpool.Pool) ([]Document, error) {
+func runsFrom(ctx context.Context, pool *pgxpool.Pool, allowed func(scenarioID string) bool) ([]Document, error) {
 	rows, err := pool.Query(ctx, `SELECT id, scenario_id, name, status FROM scenario_runs`)
 	if err != nil {
 		return nil, err
@@ -44,6 +44,9 @@ func runsFrom(ctx context.Context, pool *pgxpool.Pool) ([]Document, error) {
 		var id, scenarioID, name, status string
 		if err := rows.Scan(&id, &scenarioID, &name, &status); err != nil {
 			return nil, err
+		}
+		if !keepRunRow(allowed, scenarioID) {
+			continue
 		}
 		title := name
 		if title == "" {
@@ -271,4 +274,10 @@ func actionConnectorsFrom(ctx context.Context, pool *pgxpool.Pool) ([]Document, 
 		})
 	}
 	return out, rows.Err()
+}
+
+// keepRunRow reports whether a run belongs in search: its scenario must be loaded and licensed now.
+// Anything else is left out, so search never names a scenario the licence does not include.
+func keepRunRow(allowed func(scenarioID string) bool, scenarioID string) bool {
+	return allowed != nil && allowed(scenarioID)
 }

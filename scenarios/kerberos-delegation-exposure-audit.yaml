@@ -1,4 +1,5 @@
 id: kerberos-delegation-exposure-audit
+product_line: common
 name: Kerberos Delegation Exposure Audit
 description: >
   Single-stage, read-only Active Directory audit: reads the directory for

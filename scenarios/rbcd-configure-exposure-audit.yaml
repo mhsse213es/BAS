@@ -1,4 +1,5 @@
 id: rbcd-configure-exposure-audit
+product_line: common
 name: RBCD Configure-Surface Exposure Audit
 description: >
   Single-stage, read-only Active Directory audit: reports the precondition

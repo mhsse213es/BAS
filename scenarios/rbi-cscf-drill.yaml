@@ -1,4 +1,5 @@
 id: rbi-cscf-drill
+product_line: common
 name: RBI Cyber Security Framework in Banks — Baseline Controls Posture Drill
 local_check: true
 description: >

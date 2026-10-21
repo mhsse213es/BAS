@@ -58,6 +58,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.StripSlashes)
 	r.Use(LicenseGate)
+	r.Use(ProductGate(license.PermitsNow))
 
 	// API rate limiting (opt-in) — a single global token-bucket limit shared
 	// by the SCIM and JWT-authenticated groups below, protecting against a

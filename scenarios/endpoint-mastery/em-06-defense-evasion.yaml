@@ -1,4 +1,5 @@
 ﻿id: em-06-defense-evasion
+product_line: av
 name: "Endpoint Mastery 06 — Defense Evasion & LOLBin Execution"
 description: >
   ENDPOINT MASTERY — Layer 6. Tests structural bypasses and proxy binary abuse patterns.

@@ -64,7 +64,7 @@ func TestDispatchRun_SkipsWhenLicenseLocked(t *testing.T) {
 		}
 
 		license.SetInitial(license.Info{State: license.StateLocked})
-		defer license.SetInitial(license.Info{})
+		defer license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise})
 
 		runID, skip, err := h.dispatchRun(context.Background(), sc, agentID, dispatchOpts{Mode: "posture"})
 		if err != nil {

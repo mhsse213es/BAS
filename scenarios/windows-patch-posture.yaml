@@ -1,4 +1,5 @@
 id: windows-patch-posture
+product_line: common
 name: Windows Patch Currency Check
 local_check: true
 description: >

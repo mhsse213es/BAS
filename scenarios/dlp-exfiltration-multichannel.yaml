@@ -1,4 +1,5 @@
 id: dlp-exfiltration-multichannel
+product_line: dlp
 name: DLP Exfiltration Validation — All Channels
 description: >
   Combines every DLP exfiltration channel built so far into one scenario:

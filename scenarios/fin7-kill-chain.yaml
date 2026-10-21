@@ -1,4 +1,5 @@
 ﻿id: fin7-kill-chain
+product_line: killchain
 name: FIN7 Kill Chain — BFSI Financial Sector Targeting (Phase 7)
 description: >
   Five-stage telemetry-safe emulation of FIN7 (Carbanak / Navigator Group)

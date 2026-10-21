@@ -46,6 +46,9 @@ type Info struct {
 	ExpiresAt     time.Time
 	LockoutAt     time.Time
 	DaysRemaining int // 0 unless State == StateGrace
+	// Tier is the licence tier the state grants. Empty grants nothing, so a state built without a
+	// tier fails closed in PermitsNow.
+	Tier Tier
 }
 
 // Evaluate computes the enforcement state of lic as of now. now is an
@@ -70,6 +73,7 @@ func Evaluate(lic *License, now time.Time) (Info, error) {
 
 	info := Info{
 		Customer:  lic.Customer,
+		Tier:      lic.EffectiveTier(),
 		ExpiresAt: expiresAt,
 		LockoutAt: lockoutAt,
 	}

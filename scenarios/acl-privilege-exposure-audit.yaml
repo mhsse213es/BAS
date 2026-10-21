@@ -1,4 +1,5 @@
 id: acl-privilege-exposure-audit
+product_line: common
 name: ACL Privilege Exposure Audit
 description: >
   Single-stage, read-only Active Directory configuration audit: reads the

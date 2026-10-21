@@ -1,4 +1,5 @@
 id: art-selective-linux
+product_line: common
 name: Atomic Red Team  -  Selective Linux Capabilities
 description: >
   Same full-depth ATT&CK sweep as "Full Linux Sweep"  -  every Linux atomic

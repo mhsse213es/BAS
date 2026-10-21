@@ -1,4 +1,5 @@
 id: windows-detection-prerequisites-posture
+product_line: common
 name: Windows Detection Source Prerequisites Posture
 description: >
   Read-only posture audit of whether the host produces the Windows event records that

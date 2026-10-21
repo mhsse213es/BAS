@@ -88,6 +88,14 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 	// the pinned bytes that will actually run, never a newer on-disk DRAFT, and
 	// the whole fan-out executes this one version (one signature verification).
 	ev, gerr := h.engine.ResolveExecutable(r.Context(), req.ScenarioID)
+	if errors.Is(gerr, scenario.ErrNotLicensed) {
+		if !h.engine.Loaded(req.ScenarioID) {
+			jsonError(w, "scenario not found", http.StatusNotFound)
+			return
+		}
+		jsonError(w, "scenario is not included in this licence", http.StatusForbidden)
+		return
+	}
 	if gerr != nil {
 		var ne *contentregistry.ErrNotExecutable
 		if errors.As(gerr, &ne) && ne.Reason == "not registered" {

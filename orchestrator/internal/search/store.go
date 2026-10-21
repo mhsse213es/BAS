@@ -106,7 +106,9 @@ func ReindexAll(ctx context.Context, pool *pgxpool.Pool, engine *scenario.Engine
 		build   func() ([]Document, error)
 	}{
 		{"scenario", func() ([]Document, error) { return scenariosFrom(engine), nil }},
-		{"run", func() ([]Document, error) { return runsFrom(ctx, pool) }},
+		{"run", func() ([]Document, error) {
+			return runsFrom(ctx, pool, func(id string) bool { _, ok := engine.Get(id); return ok })
+		}},
 		{"finding", func() ([]Document, error) { return findingsFrom(ctx, pool) }},
 		{"actor", func() ([]Document, error) { return actorsFrom(ctx, pool) }},
 		{"campaign", func() ([]Document, error) { return campaignsFrom(ctx, pool) }},

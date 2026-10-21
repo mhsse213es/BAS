@@ -1,4 +1,5 @@
 id: upi-fraud-killchain
+product_line: killchain
 name: UPI Fraud Kill Chain  -  BFSI Financial Fraud Simulation (Three-Tier)
 description: >
   Financial-fraud-focused adversary emulation of UPI (Unified Payments Interface)

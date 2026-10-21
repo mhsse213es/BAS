@@ -1,4 +1,5 @@
 id: lazarus-swift-heist
+product_line: killchain
 name: Lazarus / APT38 — SWIFT Banking Heist Kill Chain
 description: >
   Nine-stage telemetry-safe emulation of Lazarus Group / APT38 (Bureau 121,

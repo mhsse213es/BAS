@@ -1,4 +1,5 @@
 ﻿id: em-12-adversary-emulation
+product_line: killchain
 name: "Endpoint Mastery 12 — Adversary Emulation Pack (APT29 Profile)"
 description: >
   ENDPOINT MASTERY — Layer 12. Models structural step sequences matching specific real-world

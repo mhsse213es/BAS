@@ -1,4 +1,5 @@
 id: apt36-kill-chain
+product_line: killchain
 name: APT36 Kill Chain (Three-Tier)
 description: >
   Campaign-grade adversary emulation of APT36 (Transparent Tribe / PROJECTM)  - 

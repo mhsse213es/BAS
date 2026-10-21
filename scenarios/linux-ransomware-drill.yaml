@@ -1,4 +1,5 @@
 id: linux-ransomware-drill
+product_line: ransomware
 name: Linux Ransomware Drill — LVM Snapshot and File-Encryption Validation
 description: >
   Linux analog of ransomware-drill.yaml's T1490/T1486 validation. MITRE's own

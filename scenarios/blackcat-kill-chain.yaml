@@ -1,4 +1,5 @@
 id: blackcat-kill-chain
+product_line: ransomware
 name: BlackCat/ALPHV Kill Chain — Ransomware Emulation
 description: >
   Eight-stage telemetry-safe emulation of the BlackCat/ALPHV ransomware kill

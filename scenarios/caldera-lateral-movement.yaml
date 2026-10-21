@@ -1,4 +1,5 @@
 ﻿id: caldera-lateral-movement
+product_line: common
 name: Caldera Lateral Movement Scenario
 description: >
   Executes Caldera adversary abilities to test lateral movement controls

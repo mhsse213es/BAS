@@ -1,4 +1,5 @@
 id: windows-security-config
+product_line: common
 name: Windows Security Configuration & Identity Baseline
 local_check: true
 description: >
