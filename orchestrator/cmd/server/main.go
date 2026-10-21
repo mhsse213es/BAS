@@ -307,6 +307,9 @@ func main() {
 	if err := db.EnsureCloudCampaignSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] cloud campaign schema: %v", err)
 	}
+	if err := db.EnsureAPIBASRunSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] apibas run schema: %v", err)
+	}
 	if err := db.EnsureEmailGWRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] email gw run schema: %v", err)
 	}

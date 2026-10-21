@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -78,7 +79,28 @@ func SaveAPIBASRun(ctx context.Context, pool *pgxpool.Pool, r APIBASRun) (string
 	return id, nil
 }
 
-// ListAPIBASRuns returns the stored runs of one scenario, newest first, without the report body.
+// ErrAPIBASRunNotFound means no stored run has the id.
+var ErrAPIBASRunNotFound = errors.New("apibas run not found")
+
+// GetAPIBASRun returns one stored run, including its report.
+func GetAPIBASRun(ctx context.Context, pool *pgxpool.Pool, id string) (APIBASRun, error) {
+	var r APIBASRun
+	err := pool.QueryRow(ctx, `
+		SELECT id, run_tag, scenario_id, build, protocol, result, exploitability, control, detection, reason,
+		       report::text, started_at, created_at
+		FROM apibas_runs WHERE id = $1`, id).Scan(&r.ID, &r.RunTag, &r.ScenarioID, &r.Build, &r.Protocol,
+		&r.Result, &r.Exploitability, &r.Control, &r.Detection, &r.Reason, &r.Report, &r.StartedAt, &r.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return APIBASRun{}, ErrAPIBASRunNotFound
+	}
+	if err != nil {
+		return APIBASRun{}, fmt.Errorf("get apibas run: %w", err)
+	}
+	return r, nil
+}
+
+// ListAPIBASRuns returns stored runs newest first, without the report body. An empty scenarioID lists every
+// scenario.
 func ListAPIBASRuns(ctx context.Context, pool *pgxpool.Pool, scenarioID string, limit int) ([]APIBASRun, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
@@ -86,7 +108,7 @@ func ListAPIBASRuns(ctx context.Context, pool *pgxpool.Pool, scenarioID string, 
 	rows, err := pool.Query(ctx, `
 		SELECT id, run_tag, scenario_id, build, protocol, result, exploitability, control, detection, reason,
 		       started_at, created_at
-		FROM apibas_runs WHERE scenario_id = $1
+		FROM apibas_runs WHERE ($1 = '' OR scenario_id = $1)
 		ORDER BY created_at DESC, id DESC LIMIT $2`, scenarioID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list apibas runs: %w", err)

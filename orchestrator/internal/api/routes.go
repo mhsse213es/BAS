@@ -610,6 +610,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanRunVariants)).Post("/api/variants/run", h.RunVariants)
 		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/variants/run/{id}", h.GetVariantRun)
 		r.With(auth.RequirePermission(auth.CanViewVariantCoverage)).Get("/api/variants/coverage", h.GetVariantCoverage)
+
+		// API BAS stored results (read-only). Authorization is the permission; installs are isolated by database.
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/runs", h.ListAPIBASRuns)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/runs/{id}", h.GetAPIBASRun)
 		r.With(auth.RequirePermission(auth.CanViewVariantStats)).Get("/api/variants/stats", h.GetVariantStats)
 
 		// Full Variant Sweep — server-owned orchestration

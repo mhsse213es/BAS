@@ -76,6 +76,7 @@ const (
 	CanViewVariantRun      Permission = "variants:run:view"
 	CanViewVariantCoverage Permission = "variants:coverage:view"
 	CanViewVariantStats    Permission = "variants:stats:view"
+	CanViewAPIBASRuns      Permission = "apibas:runs:view"
 
 	// Payload families — read is Analyst+Admin (write is Admin only, below).
 	CanListPayloadFamilies Permission = "payload-families:list"
@@ -316,7 +317,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 
 		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true, CanManageComponents: true,
 
-		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true,
+		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
@@ -383,7 +384,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 
 		CanViewContentArtifact: true,
 
-		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true,
+		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
