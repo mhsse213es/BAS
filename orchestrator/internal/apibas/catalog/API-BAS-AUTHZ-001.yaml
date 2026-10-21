@@ -48,7 +48,8 @@ cleanup:
   - none; the scenario creates no records. Run-tagged cleanup is still available for runs that seed data.
 industry_mapping:
   - "BFSI: cross-customer order and statement access"
-regulatory_mapping: []
+regulatory_mapping:
+  - IN-RBI-ITGRC-19A
 negative_tests:
   - API-BAS-AUTHZ-001 against the fixed build must PASS
   - API-BAS-AUTHZ-001 with the attacker identical to the owner must be SKIPPED NOT_CROSS_IDENTITY

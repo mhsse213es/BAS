@@ -1,0 +1,168 @@
+# Regulatory registry for API BAS. Every mapping is a candidate until a named reviewer confirms it. Source files are committed
+# under sources/ and source_sha256 is the hash of those exact bytes. Mapping status is separate from scenario execution status.
+#
+# Every mapping names the clause it maps, the scenarios that test it, and for each scenario what it does not test. An
+# obligation no scenario tests goes under unmapped, with the reason and the scenario that would be needed.
+
+mappings:
+  - control_ref: IN-DPDP-S12-3
+    framework: Digital Personal Data Protection Act, 2023 (India)
+    issuing_authority: Government of India, Ministry of Electronics and Information Technology
+    document_title: The Digital Personal Data Protection Act, 2023 (No. 22 of 2023)
+    document_date: "2023-08-11"
+    version: Act No. 22 of 2023, as published in The Gazette of India Extraordinary, Part II, 11 August 2023
+    source_url: https://www.meity.gov.in/static/uploads/2024/02/Digital-Personal-Data-Protection-Act-2023.pdf
+    source_file: sources/in-dpdp-act-2023.pdf
+    source_sha256: 4deb23981d3010c8225a2ff6149e7243dc2268455b299e283afebdd7b72a7d15
+    retrieved_on: "2026-10-21"
+    source_provision: Section 12(3)
+    clause_text: "A Data Principal shall make a request in such manner as may be prescribed to the Data Fiduciary for erasure of her personal data, and upon receipt of such a request, the Data Fiduciary shall erase her personal data unless retention of the same is necessary for the specified purpose or for compliance with any law for the time being in force."
+    entity_category: Data Fiduciary, for the processing of digital personal data
+    jurisdiction: India
+    applicability_conditions:
+      - the tested processing is of digital personal data within the Act's scope (section 3)
+      - the tested system's operator is the Data Fiduciary for that processing
+      - the erasure request is one the Data Principal made in the manner prescribed under the Act's rules
+    exclusions:
+      - retention needed for the specified purpose is an exception to erasure (section 12(3))
+      - retention needed for compliance with any law in force is an exception to erasure (section 12(3))
+    commencement: not_verified
+    commencement_evidence: ""
+    effective_date: ""
+    mapped_scenarios:
+      - API-BAS-DATA-011
+    scenario_coverage:
+      - scenario_id: API-BAS-DATA-011
+        scenario_state: implemented_validated
+        control_requirement: after an erasure request the Data Fiduciary's record is not retrievable through the order read path
+        expected_behaviour: the erased order is removed from the record store and the owner's later read returns 404 with no protected value
+        evidence: persisted state after the erasure request (record present or absent) and the owner's later read status and body
+        gaps:
+          - the prescribed request manner under the rules is not tested
+          - the retention exceptions in section 12(3) (specified purpose, compliance with law) are not tested
+          - only the order read path is tested; the export, status and statement paths are not
+          - erasure from backups, logs or third parties is not tested
+          - the timeframe for erasure is not tested
+          - commencement of section 12 is not verified against a notification
+    status: unverified
+    reviewer: ""
+    reviewed_on: ""
+    reviewed_hash: ""
+
+  - control_ref: IN-RBI-ITGRC-19A
+    framework: Reserve Bank of India, Master Direction on Information Technology Governance, Risk, Controls and Assurance Practices, 2023
+    issuing_authority: Reserve Bank of India
+    document_title: Master Direction on Information Technology Governance, Risk, Controls and Assurance Practices
+    document_date: "2023-11-07"
+    version: RBI/2023-24/107, DoS.CO.CSITEG/SEC.7/31.01.015/2023-24, dated 7 November 2023
+    source_url: https://website.rbi.org.in/web/rbi/-/notifications/master-direction-on-information-technology-governance-risk-controls-and-assurance-practices
+    source_file: sources/in-rbi-it-governance-directions-2023.pdf
+    source_sha256: 8ad6286676b298038b2dda8f6a6bc4014c2a3fe6f0b5c59b1b02fcaf77cb5f81
+    retrieved_on: "2026-10-21"
+    source_provision: Paragraph 19(a), Access Controls
+    clause_text: "Access to information assets shall be allowed only where a valid business need exists. REs shall have documented standards and procedures, which are approved by the ITSC and kept up to date for administering need-based access to an information system."
+    entity_category: Regulated entities listed in paragraph 2 (scheduled commercial banks, small finance banks, payments banks, NBFCs, credit information companies and specified all-India financial institutions)
+    jurisdiction: India
+    applicability_conditions:
+      - the tested system is operated by a regulated entity listed in the directions' applicability paragraph
+      - the tested system holds information assets of that regulated entity
+    exclusions:
+      - entities excluded by the applicability paragraph are not bound; read paragraph 2 before applying
+    commencement: verified
+    commencement_evidence: "source file sources/in-rbi-it-governance-directions-2023.pdf, paragraph 1(c): These Directions shall come into effect from April 1, 2024."
+    effective_date: "2024-04-01"
+    mapped_scenarios:
+      - API-BAS-AUTHZ-001
+    scenario_coverage:
+      - scenario_id: API-BAS-AUTHZ-001
+        scenario_state: implemented_validated
+        control_requirement: access to a customer's order is allowed only on a valid business need, so a customer cannot read another customer's order
+        expected_behaviour: a customer reading another customer's order is refused, and no protected value of that order is returned
+        evidence: the response status and the absence of protected values in the response, checked against the state
+        gaps:
+          - the documented, ITSC-approved access standards and procedures required by 19(a) are not tested
+          - supervision and logging of elevated access required by 19(b) is not tested
+          - multi-factor authentication for privileged users required by 19(c) is not tested
+          - the scenario tests customer-to-customer access, not staff or administrator access
+    status: unverified
+    reviewer: ""
+    reviewed_on: ""
+    reviewed_hash: ""
+
+  - control_ref: UAE-PDPL-A15-2
+    framework: Federal Decree-Law No. 45 of 2021 Concerning the Protection of Personal Data (UAE)
+    issuing_authority: United Arab Emirates, Federal Government (official legislation)
+    document_title: Federal Decree by Law No. (45) of 2021 Concerning the Protection of Personal Data
+    document_date: "2021-09-20"
+    version: Federal Decree by Law No. (45) of 2021, issued 20 September 2021, in force 2 January 2022 (Article 31)
+    source_url: https://www.uaelegislation.gov.ae/en/legislations/1972/download
+    source_file: sources/ae-pdpl-decree-law-45-2021.pdf
+    source_sha256: d5d5f9e93bd6c0dc2afe79776f3101bcd599e4400a67309bc0b378b2812bcf3a
+    retrieved_on: "2026-10-21"
+    source_provision: Article 15(2) and 15(3), right to request erasure
+    clause_text: "Without prejudice to the legislations in force in the State and what is required for the public interest, the Data Subject shall have the right to request erasure of his/ her Personal Data held by the Controller in any of the following cases: a. His/her Personal Data is no longer necessary for the purposes for which it is collected or processed. b. Withdrawal of the consent of Data Subject on which the processing is based. c. The Data Subject's objection to the processing, or the absence of legitimate reasons for the Controller to continue the processing. d. The Personal Data is processed in violation of the provisions of this Decree by Law and the applicable legislations, and the erasure process is necessary to comply with the legislations and approved standards in force in this regard."
+    entity_category: Controller holding the Personal Data of a Data Subject
+    jurisdiction: United Arab Emirates
+    applicability_conditions:
+      - the tested system processes personal data of a Data Subject held by the Controller
+      - the erasure request falls within one of the cases in Article 15(2)
+      - the processing is not one of the exceptions in Article 15(3)
+    exclusions:
+      - Article 15(3) excludes erasure of public-health data in private facilities, data relevant to investigations or defence of rights, data whose erasure contradicts other legislation, and cases set by the Executive Regulation
+      - the Executive Regulation referred to in Articles 15(3)(d) and elsewhere is not in the source set; its status is unverified
+    commencement: verified
+    commencement_evidence: "source file sources/ae-pdpl-decree-law-45-2021.pdf, Article 31: This Decree by Law shall come into force as of 02 January 2022."
+    effective_date: "2022-01-02"
+    mapped_scenarios:
+      - API-BAS-DATA-011
+    scenario_coverage:
+      - scenario_id: API-BAS-DATA-011
+        scenario_state: implemented_validated
+        control_requirement: after an erasure request the Controller's record is not retrievable through the order read path
+        expected_behaviour: the erased order is removed from the record store and the owner's later read returns 404 with no protected value
+        evidence: persisted state after the erasure request and the owner's later read status and body
+        gaps:
+          - the Article 15(3) exceptions are not tested
+          - the Executive Regulation's rules on the erasure process are not in the source set and are not tested
+          - only the order read path is tested; the export, status and statement paths are not
+          - the time within which the Controller must erase is not tested
+          - erasure from backups or third parties is not tested
+
+    status: unverified
+    reviewer: ""
+    reviewed_on: ""
+    reviewed_hash: ""
+
+unmapped:
+  - obligation_ref: IN-CERTIN-70B-II
+    status: unverified
+    scenario_state: not_implemented
+    framework: CERT-In Directions under section 70B(6) of the Information Technology Act, 2000, 28 April 2022
+    source_file: sources/in-certin-directions-70b-2022-04-28.pdf
+    source_sha256: 202c2f3953d792dcfb3ecb3634fc82ab75437ee596de89b8d59a211e8e42431f
+    source_provision: Directions, paragraph (ii)
+    clause_text: "Any service provider, intermediary, data centre, body corporate and Government organisation shall mandatorily report cyber incidents as mentioned in Annexure I to CERT-In within 6 hours of noticing such incidents or being brought to notice about such incidents."
+    reason: No scenario measures when the incident was noticed, when the report was created and dispatched, or whether a durable receipt exists. A generic incident-detection scenario does not show timely reporting. The FAQ (question 30) allows partial information at the time of reporting, which a single timestamp cannot show either.
+    required_scenario: a reporting-workflow scenario that records the time the incident was noticed, the report's creation and dispatch times, the applicable reportable-incident category, and a durable receipt or dispatch record
+
+  - obligation_ref: AE-CBUAE-6-1-2-6
+    status: unverified
+    scenario_state: not_implemented
+    framework: CBUAE Consumer Protection Standards, Article 6
+    source_file: sources/ae-cbuae-consumer-protection-standards.pdf
+    source_sha256: b9899e547acca33d117e55b219852a633820b28ee57b0a0dd47644dcdca54987
+    source_provision: Clause 6.1.2.6
+    clause_text: "Licensed Financial Institutions must notify the Central Bank immediately of all significant breaches of Personal Data."
+    reason: No scenario exercises a breach notification to the Central Bank. Erasure and access scenarios do not produce a breach event or a notification. The trigger condition (significant breach) and the recipient are not tested by any current scenario.
+    required_scenario: a breach-notification scenario that induces a significant personal-data breach, then records the trigger, the recipient, the notification time and the dispatch evidence
+
+  - obligation_ref: AE-CBUAE-6-1-7-2
+    status: unverified
+    scenario_state: not_implemented
+    framework: CBUAE Consumer Protection Standards, Article 6
+    source_file: sources/ae-cbuae-consumer-protection-standards.pdf
+    source_sha256: b9899e547acca33d117e55b219852a633820b28ee57b0a0dd47644dcdca54987
+    source_provision: Clause 6.1.7.2
+    clause_text: "Licensed Financial Institutions must notify the Central Bank of any material Data breaches, losses, destruction or alteration when they occur, in a manner, as may be prescribed by the Central Bank."
+    reason: No scenario exercises a notification of material data breaches, losses, destruction or alteration. The prescribed manner of notification is not in the source set. A scenario needs the manner specified before it can test it.
+    required_scenario: a material-breach scenario that records the event, the notification time, and the notification in the manner the Central Bank prescribes, once that manner is captured from an official source

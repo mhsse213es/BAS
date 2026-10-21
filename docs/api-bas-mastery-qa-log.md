@@ -2893,3 +2893,43 @@ Verdict comparison, old runner against new runner over the same catalogue and la
 - **Review:** no mapping has a reviewer. A named reviewer is needed before any mapping can be `verified`.
 - **Sector packs:** NBFC, manufacturing, healthcare, and retail/logistics/telecom are not built. Each needs reusable domain objects in the lab first (loan applications, production orders, patient records, subscriber usage).
 - **Statement:** a passing scenario demonstrates a control outcome. It does not certify compliance.
+
+
+## Blueprint Phase 5: source capture and candidate mappings (update)
+
+This update replaces the "no regulatory mapping added" statement above. It is a candidate record, not a legal approval.
+
+### Sources captured
+
+Seven official documents, provided in `API_Phase5/`, copied byte-for-byte to `orchestrator/internal/apibas/regulatory/sources/`. The registry test recomputes each SHA-256 from the committed bytes and fails on any change. Retrieval date for the research: 21 October 2026. Hashes are of the exact file bytes.
+
+| File | SHA-256 |
+|---|---|
+| in-dpdp-act-2023.pdf | 4deb23981d3010c8225a2ff6149e7243dc2268455b299e283afebdd7b72a7d15 |
+| in-rbi-it-governance-directions-2023.pdf | 8ad6286676b298038b2dda8f6a6bc4014c2a3fe6f0b5c59b1b02fcaf77cb5f81 |
+| in-certin-directions-70b-2022-04-28.pdf | 202c2f3953d792dcfb3ecb3634fc82ab75437ee596de89b8d59a211e8e42431f |
+| in-certin-faq-2022-05.pdf | 7c4ae9eab453db32a5feece63987f7606373d689755b5b2869bb367b5682d6af |
+| in-certin-extension-2022-06-27.pdf | f0a2805f2a3bd0745560d417ffb6d41bf2cfe9920a5fd8a45b806ff10d61979f |
+| ae-pdpl-decree-law-45-2021.pdf | d5d5f9e93bd6c0dc2afe79776f3101bcd599e4400a67309bc0b378b2812bcf3a |
+| ae-cbuae-consumer-protection-standards.pdf | b9899e547acca33d117e55b219852a633820b28ee57b0a0dd47644dcdca54987 |
+
+### Clause checks against the captured text
+
+- **DPDP Section 12(3)** is the erasure duty. The earlier mapping said Section 12, and the Act's text confirms 12(3). Enactment is 11 August 2023 per the Act. Commencement is not verified: Section 1(2) makes each provision come into force on a date notified in the Official Gazette, and no notification is in the source set.
+- **UAE PDPL Article 15(2)** is the erasure right, with exceptions in 15(3). The earlier mapping of Article 13 was wrong: Article 13 is the information right, and its erasure reference is only a description of the procedure. Article 31 gives entry into force on 2 January 2022, which is verified from the text. The Executive Regulation is not in the source set.
+- **RBI paragraph 19(a)** (access controls) is mapped as a candidate to AUTHZ-001. Commencement is verified from paragraph 1(c): 1 April 2024.
+- **CERT-In six-hour reporting** is paragraph (ii) of the Directions, not "3(i)" as the research draft said. Paragraph (i) is the NTP clock requirement. The MSME extension sets 25 September 2022 for covered MSMEs.
+- **CBUAE** clauses 6.1.2.6 and 6.1.7.2 are confirmed. The document is titled "Consumer Protection Standards", not a regulation.
+
+### Mapping status and coverage
+
+- Candidate mappings, all `unverified`: DPDP 12(3) to DATA-011; UAE PDPL 15(2) to DATA-011; RBI 19(a) to AUTHZ-001.
+- Each mapped scenario has a coverage entry stating what it tests and what it does not. Examples: DATA-011 does not test the Article 15(3) exceptions, the prescribed request manner, or the export, status and statement paths. AUTHZ-001 does not test the ITSC-approved procedures, supervision of elevated access, or multi-factor authentication.
+- Unmapped, with reason and required scenario: CERT-In paragraph (ii) reporting timing; CBUAE 6.1.2.6 significant breach notification; CBUAE 6.1.7.2 material breach notification.
+
+### Not done
+
+- No mapping has a reviewer, a review date, or a reviewed hash. None is verified.
+- DATA-011 is not yet checked against every owner read path.
+- Scenario-level behaviour for the unmapped obligations is not built: a breach-notification scenario, and a reporting-timeline scenario.
+- The source URLs were taken from search results and have not been fetched. The committed PDFs are the bytes the registry tests.
