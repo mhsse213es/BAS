@@ -1,0 +1,49 @@
+id: "API-BAS-DATA-009"
+name: "Staging copy with protected values reachable by customers"
+category: DATA
+claim: property_level
+attack_objective: "The customer reads an order from the staging environment, which holds an unmasked copy."
+threat_model:
+  attacker: "authenticated customer who owns the order"
+  identity: customer-b
+  access_level: "standard customer, valid token, owner of the order"
+  objective: "read protected values from a non-production copy"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: "baseline-owner-read"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/orders/{object}"
+    hypothesis: "The owner can read their order. If this fails, the scenario is not testable."
+  - id: "attack-staging-read"
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/env/staging/orders/{object}"
+    hypothesis: "Staging is not exposed to customers; the request is refused with 404."
+denied_statuses: [404]
+expected_control: "A customer request to the staging environment is refused with 404 and no protected value is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: "No protected value appears in the staging response."
+detection_assertion:
+  status: not_evaluated
+  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+industry_mapping:
+  - "BFSI / GDPR: production data copied to non-production must be masked and not reachable by customers"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DATA-009 against the fixed build must PASS"

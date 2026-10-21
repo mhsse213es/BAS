@@ -1,0 +1,53 @@
+id: "API-BAS-AUTHN-009"
+name: "Workload token issued without the client secret"
+category: AUTHN
+claim: function_level
+attack_objective: "A workload asks for a service token without its client secret."
+threat_model:
+  attacker: "authenticated customer who owns the order"
+  identity: customer-b
+  access_level: "standard customer, valid token, owner of the order"
+  objective: "obtain a service token for a workload without its secret, more than once"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: "baseline-with-secret"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: "/api/service/token"
+    body: "{\"client_id\":\"svc-billing\",\"client_secret\":\"BAS-SVC-SECRET\"}"
+    hypothesis: "The workload with its secret gets a token. If it fails, the scenario is not testable."
+  - id: "attack-no-secret"
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: "/api/service/token"
+    body: "{\"client_id\":\"svc-billing\"}"
+    repeat: 2
+    hypothesis: "A workload token needs the client secret. Without it the request is refused with 401."
+max_accepted_attempts: 1
+denied_statuses: [401]
+expected_control: "A service token request without the client secret is refused with 401."
+ground_truth:
+  adapters: ["state", "response"]
+  check: "The number of service tokens issued without the client secret does not exceed zero, within the declared maximum of one."
+detection_assertion:
+  status: not_evaluated
+  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+industry_mapping:
+  - "BFSI / cloud: workload identity requires its client secret"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHN-009 against the fixed build must PASS"

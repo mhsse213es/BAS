@@ -1,0 +1,52 @@
+id: "API-BAS-AUTHN-005"
+name: "Token exchange without PKCE verifier and with a reused code"
+category: AUTHN
+claim: function_level
+attack_objective: "The client exchanges an authorization code without the PKCE verifier, and reuses the code."
+threat_model:
+  attacker: "authenticated customer who owns the order"
+  identity: customer-b
+  access_level: "standard customer, valid token, owner of the order"
+  objective: "exchange an authorization code without its verifier, more than once"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: "baseline-authorize"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/oauth/authorize?client_id=bas-app&redirect_uri=https%3A%2F%2Fapp.example%2Fcallback&code_challenge=957S3L5qTd-cieBzKYF4XUuLub-X40jC7vrrxut4bEc&code_challenge_method=S256&response_type=code"
+    hypothesis: "The authorize step issues the code. If it fails, the scenario is not testable."
+  - id: "attack-exchange-no-verifier"
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: "/api/oauth/token"
+    body: "{\"code\":\"authcode-cust-b\"}"
+    repeat: 2
+    hypothesis: "The exchange needs the PKCE verifier and the code is single use, so no exchange without the verifier succeeds."
+max_accepted_attempts: 1
+denied_statuses: [400]
+expected_control: "A code exchange without the PKCE verifier is refused with 400, and the code is not accepted more than once."
+ground_truth:
+  adapters: ["state", "response"]
+  check: "The number of token exchanges accepted for one authorization code does not exceed one per run."
+detection_assertion:
+  status: not_evaluated
+  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+industry_mapping:
+  - "BFSI / open banking: PKCE and single-use authorization codes"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHN-005 against the fixed build must PASS"

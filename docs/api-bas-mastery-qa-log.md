@@ -2199,3 +2199,56 @@ Correction: an earlier note listed DISC-006 as Phase 2 scope. The blueprint tabl
   007; INTEG-005, 010; BIZ-002) were not re-run under a Phase 3 acceptance test. They run in the catalog-wide tests.
 - The blueprint's replay acceptance for webhooks needs INTEG-002, which is not built.
 - BIZ and batch 1 make no timing claim and no detection claim (`detection_assertion: not_evaluated`).
+
+
+## Blueprint Phase 3, batch 2: AUTHN-004, 005, 009 and DATA-005, 009, 010
+
+### Built
+
+- AUTHN-004: the authorize endpoint accepts any redirect URI in the vulnerable build (LAB-AUTHN-REDIRECT-001). The
+  fixed build requires the registered URI and a PKCE challenge. Graded by a forbidden `Location` header.
+- AUTHN-005: the token endpoint exchanges a code without the PKCE verifier and accepts a reused code in the
+  vulnerable build (LAB-AUTHN-PKCE-001). The fixed build checks the verifier and consumes the code. Graded by the
+  accepted-attempts oracle (2 exchanges, maximum 1).
+- AUTHN-009: the service-token endpoint issues a workload token without the client secret in the vulnerable build
+  (LAB-AUTHN-SVC-001). Graded by the accepted-attempts oracle (2 requests, maximum 1).
+- DATA-005: a filter on a protected field returns other tenants' protected values in the vulnerable build
+  (LAB-DATA-FILTER-001). The fixed build refuses non-public filters with 400.
+- DATA-009: a staging route returns protected values to customers in the vulnerable build (LAB-DATA-STAGING-001).
+  The fixed build returns 404.
+- DATA-010: the file endpoint accepts a signature issued for the caller's own file on any key in the vulnerable
+  build (LAB-DATA-SIGNEDURL-001). The fixed build binds the signature to its key and checks the owner.
+
+### Two modelling choices, and a grader limit they expose
+
+- **The leak oracle is scoped to the precondition object.** `runner.go` counts a leak only when a response contains
+  a protected value of the scenario's precondition object. A leak of any other object is not graded. DATA-005 and
+  DATA-010 first named the attacker's own object, which made them miss the cross-tenant leak. The scenarios now
+  name the other tenant's object (ORD-1001) and model two identities: customer-a owns it and reads it in the
+  baseline, customer-b attacks. Both are `function_level` because the property-level rule requires the attacker to
+  own the object.
+- **The grader cannot see a cross-tenant leak of an object that is not the precondition object.** This also affects
+  any other scenario whose attacker reads a third party's data. Widening the oracle to every fixture object would
+  change verdicts across the catalog, so it is not done here. It needs its own review before a change.
+
+### Other notes
+
+- AUTHN-004, DATA-005, DATA-009 and DATA-010 are `READ_ONLY`, because the contract requires a mutating step for
+  `STATE_CHANGE_SANDBOX`. AUTHN-004's authorize step records an issued code in the lab's bookkeeping. That record is
+  not graded, so `READ_ONLY` is accurate for the oracle, not for the lab internals.
+- DATA-005's inference side channel (a count or an existence check) is not graded. The scenario grades a direct
+  protected-value disclosure through the filter. Pure inference is not claimed.
+
+### Evidence
+
+- `TestPhase3_Batch2Acceptance`: 6 of 6 pass in both builds, three consecutive runs.
+- `TestPhase3_BIZScopeAcceptance`, `TestPhase3_Batch1Acceptance`, the Phase 2 scope test, the flaw-registry test and
+  the timing-claim rules pass with 90 catalog entries.
+- Short `internal/apibas/...` suite: clean.
+- Full `internal/apibas/runner` package (non-short, detection and ABUSE-002 suites included): passed, exit 0, about 610 s.
+
+### Still open (blueprint P3)
+
+- Ten P3 scenarios remain: eight buildable in the HTTP lab (INTEG-001, 002, 006, 007, 009, 011; DISC-006, 010) and
+  two blocked (AUTHN-007 client-certificate validation and GWAY-012 TLS). The lab has no TLS listener.
+- DATA-005 and DATA-010 cross-tenant grading depends on the precondition-object scope above.

@@ -344,6 +344,8 @@ type Server struct {
 	gwCounts map[string]int
 	// bizKeys holds the body each idempotency key was first used with, in the fixed build (biz.go). Guarded by gwMu.
 	bizKeys map[string]string
+	// b2Codes holds authorization codes issued in a run (batch2.go). Guarded by gwMu.
+	b2Codes map[string]bool
 	// rotated holds the API tokens retired by POST /api/keys/rotate in the fixed build.
 	rotated map[string]bool
 	// brokerCounts counts accepted publishes per publisher and topic in the fixed build (broker.go).
@@ -451,6 +453,7 @@ func (s *Server) Handler() http.Handler {
 	s.registerPaid(mux)
 	s.registerBiz(mux)
 	s.registerBatch1(mux)
+	s.registerBatch2(mux)
 	mux.HandleFunc("GET /lab/faults", s.adminOnly(s.listFaults))
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-GWAY-OVERRIDE-001: the vulnerable build honours a method-override header.
