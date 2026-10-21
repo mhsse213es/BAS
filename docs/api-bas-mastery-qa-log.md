@@ -2698,3 +2698,53 @@ This update corrects the DET-001 section above. The earlier count and the DATA-0
 - DET-001 rule coverage added this pass: 14 of the 66 scenarios that were not_evaluated before the DET-001 analysis.
 - not_evaluated across the catalogue: 52. Each has a reason; none has a detection result. not_evaluated is never counted as not_detected.
 - Full ./internal/apibas/... run on this tree: all packages ok, the runner package 486.7 s, exit 0.
+
+
+## Blueprint Phase 4: policy-driven rule groups (anonymous attribution, privileged class)
+
+### Anonymous attribution (REL-011)
+
+- **Rule.** REL-011 fires when a request with no identity succeeds (2xx) on an object that has an owner. It correlates on
+  the request (run), the target (the owner the request reached) and the behaviour (the 2xx outcome).
+- **Not correlated: source address.** The access event carries no source address, so no source-based anonymous rule
+  exists. This is stated in the rule and is not claimed.
+- **Declared (7, all validated in both builds):** AUTHN-001, DISC-002, DISC-004, DISC-006, GWAY-002, GWAY-010, INTEG-009.
+  In the vulnerable build each serves the anonymous attack and REL-011 fires; in the fixed build the attack is refused and
+  REL-011 does not fire.
+- **Insufficient telemetry, kept `not_evaluated` with that reason (3):** DISC-005, DISC-007, INTEG-002. Each anonymous
+  request names no owned object, so REL-011 has no owner to match.
+- **Tests.** `TestRel011AnonymousSuccessOnOwnedObject` covers the positive case (anonymous 200 on an owned order), a refused
+  anonymous request, an anonymous success with no owned object, and an authenticated owner success.
+
+### Privileged action class (REL-007)
+
+- **Class.** `detect.ActionClass` defines the explicit class. Privileged: any route under `/api/admin/`, the self-assigned
+  role change (`PATCH /api/me/role`), payout approval and refund (`POST .../approve-payout`, `POST .../refund`), key rotation,
+  the key status change, and the authorization audit and delete routes. Ownership alone never makes an action privileged.
+- **Event field.** The lab sets `action_class` on every access event from the same definition the rule reads, so the lab
+  and the rule cannot disagree.
+- **Declared (3):** BIZ-001 (customer refund), BIZ-007 (payout approval by the maker), AUTHZ-004 (self-assigned role change).
+  REL-007 fires on the attempt in both builds. The privileged call is made whatever the outcome; this is the same design as
+  REL-005.
+- **Negative tests.** `TestActionClassOrdinaryOwnedObjectAccessIsNotPrivileged` checks that ordinary owned-object reads,
+  updates, exports, closes, withdrawals and status changes carry no class. It also checks that a prefix look-alike such as
+  `/api/admin-notes` is not administrative.
+- **Not classed as privileged, by policy:** sensitive exports (DATA-007). The lab serves export to the owner as an ordinary
+  action, so it is not modelled as privileged. It stays `not_evaluated`.
+
+### Counts after this round
+
+- Declared scenarios with a detection block (fixture_validated): 63. All 63 match the detection table in both builds.
+- not_evaluated across the catalogue: 42. Each has a reason in `docs/api-bas-det001-tracker.md`.
+- Groups still `not_evaluated`, pending the telemetry work: injection-shaped with no signature class (5), destination-based
+  with no destination field (4); not telemetry the access event carries (9); own-object actions with no privileged class by
+  policy (10); the identity-forged blind spot (2: AUTHN-003, AUTHN-007); below the burst threshold (9).
+
+### External gaps (visible; none counted as validated)
+
+These are printed in every coverage report (`coverage.KnownGaps`).
+
+1. Native gRPC over HTTP/2 with protobuf descriptors: UNSUPPORTED.
+2. WebSocket frame behaviour: UNSUPPORTED.
+3. Certificate revocation: no revocation source; not tested and not claimed.
+4. Live SIEM validation: not done. Every detection result is fixture-validated.

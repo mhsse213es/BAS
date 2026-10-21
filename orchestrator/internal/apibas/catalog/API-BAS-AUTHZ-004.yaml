@@ -48,8 +48,12 @@ ground_truth:
     The order status is identical before and after the chain, and no response in
     the chain discloses protected values.
 detection_assertion:
-  status: not_evaluated
-  reason: "the self-assigned role change is refused in the fixed build, so the chain stops before the foreign object is reached and the fixed build produces no object-access event for REL-004 to grade. No detection claim is made."
+  status: fixture_validated
+  reason: "The self-assigned role change is a privileged permission change under the policy. REL-007 fires on the setup attempt in both builds, before the fixed build refuses it. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-007
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

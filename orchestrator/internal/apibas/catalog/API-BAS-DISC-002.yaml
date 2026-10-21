@@ -38,8 +38,12 @@ ground_truth:
     The state is unchanged by the attack and the attack response contains none
     of the owner's protected values.
 detection_assertion:
-  status: not_evaluated
-  reason: "anonymous request to a retired version; no identity to attribute. No detection claim is made."
+  status: fixture_validated
+  reason: "The anonymous request to the retired version reaches an owned order and is served by the vulnerable build. REL-011 fires on it. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-011
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

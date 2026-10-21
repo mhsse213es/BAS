@@ -39,8 +39,12 @@ ground_truth:
     The state is unchanged by the attack and the attack response contains none
     of the owner's protected values.
 detection_assertion:
-  status: not_evaluated
-  reason: "anonymous request has no attributable identity; REL-004 is an identity rule; a single refusal is below the REL-001 threshold. No detection claim is made."
+  status: fixture_validated
+  reason: "The anonymous read of an owned order is served by the vulnerable build. REL-011 fires on a successful request with no identity that reaches an owned object. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-011
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

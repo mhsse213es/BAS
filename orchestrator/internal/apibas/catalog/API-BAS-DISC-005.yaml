@@ -45,7 +45,7 @@ ground_truth:
     untrusted origin read access.
 detection_assertion:
   status: not_evaluated
-  reason: "anonymous CORS request; origin is not a rule class. No detection claim is made."
+  reason: "the anonymous CORS request names no owned object; REL-011 needs an owned object, so no rule applies. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

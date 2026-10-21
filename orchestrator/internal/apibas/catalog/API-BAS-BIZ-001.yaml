@@ -34,8 +34,12 @@ ground_truth:
   adapters: ["state", "response"]
   check: "The order status is identical before and after the attack."
 detection_assertion:
-  status: not_evaluated
-  reason: "refund on the attacker own order; no foreign owner. No detection claim is made."
+  status: fixture_validated
+  reason: "A customer refund is a privileged financial operation under the policy. REL-007 fires on the attempt in both builds, because the privileged call is made whatever the outcome. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-007
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

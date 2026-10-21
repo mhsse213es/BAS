@@ -36,8 +36,12 @@ ground_truth:
   adapters: ["state", "response"]
   check: "No protected value of another tenant appears in the partner response."
 detection_assertion:
-  status: not_evaluated
-  reason: "anonymous partner request has no attributable identity. No detection claim is made."
+  status: fixture_validated
+  reason: "The anonymous partner request names an owned order. REL-011 fires when the vulnerable build serves it. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-011
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

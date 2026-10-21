@@ -37,7 +37,7 @@ ground_truth:
     The attack response contains none of the owner's protected values, and the state is unchanged by the attack.
 detection_assertion:
   status: not_evaluated
-  reason: "anonymous documentation request; no identity to attribute. No detection claim is made."
+  reason: "the anonymous documentation request names no owned object; REL-011 needs an owned object, so no rule applies. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

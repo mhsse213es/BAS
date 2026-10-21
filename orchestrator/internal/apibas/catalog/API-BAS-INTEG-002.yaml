@@ -40,7 +40,7 @@ ground_truth:
   check: "The number of deliveries accepted for one event ID does not exceed one per run."
 detection_assertion:
   status: not_evaluated
-  reason: "anonymous webhook replay has no identity to attribute; two requests are below the thresholds. No detection claim is made."
+  reason: "the anonymous webhook replay names no owned object; REL-011 needs an owned object, so no rule applies. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

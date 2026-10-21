@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/audspect/bas/internal/apibas/detect"
 )
 
 // accessEvent is one request as the lab observed it. It carries the run tag, the
@@ -16,6 +18,9 @@ type accessEvent struct {
 	Seq           int    `json:"seq"`
 	CorrelationID string `json:"correlation_id"`
 	Action        string `json:"action"`
+	// ActionClass is the detection class of the action (privileged operations only). It is set from the same
+	// definition the detection rules read, so the lab and the rules cannot disagree.
+	ActionClass string `json:"action_class,omitempty"`
 	Outcome       string `json:"outcome"`
 	Identity      string `json:"identity"`
 	Status        int    `json:"status"`
@@ -171,6 +176,7 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 			Seq:           s.eventSeq,
 			CorrelationID: r.Header.Get("X-BAS-Run"),
 			Action:        r.Method + " " + r.URL.Path,
+			ActionClass:   detect.ActionClass(r.Method + " " + r.URL.Path),
 			Outcome:       outcomeFor(rec.status),
 			Identity:      identity,
 			Status:        rec.status,

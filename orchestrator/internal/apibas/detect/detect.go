@@ -46,6 +46,8 @@ type Event struct {
 	Status        int      `json:"status"`
 	// Signature lists the injection-pattern classes the request carried (see Signature* below). It holds
 	// classes only, never the text that matched, so a body is never stored through this field.
+	// ActionClass is the class of the action (ClassPrivileged for privileged operations). Empty means no class.
+	ActionClass string `json:"action_class,omitempty"`
 	// Degraded names the controls the lab ran degraded when it served the request (see lab access events).
 	Degraded []string `json:"degraded,omitempty"`
 	Signature []string `json:"signature,omitempty"`
@@ -201,7 +203,8 @@ var ElasticRules = []Rule{
 		// REL-007 fires on a call to a function the fixture classes as privileged, by any identity. The list
 		// is fixed here and does not depend on the lab's responses.
 		ID: "APIBAS-REL-007", Name: "Privileged function invoked", Severity: SeverityHigh, Threshold: 1,
-		Match: func(e Event) bool { return privilegedFunction(e.Action) },
+		// The lab classes each event. A class-less event is classed from its action, so the rule reads one definition.
+		Match: func(e Event) bool { return e.ActionClass == ClassPrivileged || privilegedFunction(e.Action) },
 	},
 	{
 		// REL-008 fires on access to a sensitive projection (a statement, card, audit or view) of an object
@@ -218,6 +221,16 @@ var ElasticRules = []Rule{
 		ID: "APIBAS-REL-010", Name: "Correlated foreign-object access across identities", Severity: SeverityHigh, Threshold: 2,
 		Match:    foreignOwned,
 		Distinct: func(e Event) string { return e.Identity },
+	},
+	{
+		// REL-011 fires when a request with no identity succeeds on an object that has an owner. It correlates on the
+		// request (the run), the target (the owner the request reached) and the behaviour (a 2xx outcome). It does not
+		// correlate on source address: the access event carries none, so no source-based anonymous rule exists. A refused
+		// anonymous request fires nothing, and an anonymous request that reaches no owned object is not evaluated.
+		ID: "APIBAS-REL-011", Name: "Owned object returned to an unauthenticated request", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.Identity == "anonymous" && e.Status >= 200 && e.Status < 300 && len(e.owners()) > 0
+		},
 	},
 	{
 		// REL-009 fires when a payment authorization completes (2xx) while the fraud check is degraded. The fixed
@@ -261,7 +274,24 @@ func hasDependency(degraded []string, name string) bool {
 	return false
 }
 
+// ClassPrivileged marks an action that is privileged by its own semantics: an administrative route, a permission change,
+// a financial approval or refund, or a security-control change. Ownership alone never makes an action privileged, so
+// ordinary access to an owned object carries no class.
+const ClassPrivileged = "privileged"
+
+// ActionClass returns the class of an action given as "METHOD path", or "" when the action has no class.
+func ActionClass(action string) string {
+	if privilegedFunction(action) {
+		return ClassPrivileged
+	}
+	return ""
+}
+
 func privilegedFunction(action string) bool {
+	method, path, ok := strings.Cut(action, " ")
+	if !ok {
+		return false
+	}
 	switch {
 	case strings.HasPrefix(action, "DELETE /api/authz/orders/"):
 		return true
@@ -270,6 +300,15 @@ func privilegedFunction(action string) bool {
 	case action == "POST /api/keys/rotate":
 		return true
 	case strings.HasPrefix(action, "PATCH /api/keys/orders/") && strings.HasSuffix(action, "/status"):
+		return true
+	// Administrative routes: every method under /api/admin/ is an administrative action.
+	case strings.HasPrefix(path, "/api/admin/"):
+		return true
+	// A permission change: the caller changes its own role.
+	case action == "PATCH /api/me/role":
+		return true
+	// Financial approvals and refunds are privileged operations of the order's financial flow.
+	case method == "POST" && (strings.HasSuffix(path, "/approve-payout") || strings.HasSuffix(path, "/refund")):
 		return true
 	}
 	return false

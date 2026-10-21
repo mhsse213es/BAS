@@ -149,6 +149,11 @@ func expectedDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, ru
 			return detect.Detected
 		}
 		return detect.NotDetected
+	case "APIBAS-REL-011":
+		// REL-011 fires when an anonymous request succeeds on an object that has an owner. The vulnerable build serves the
+		// anonymous attack; the fixed build refuses it. A scenario whose anonymous attack names no owned object is not
+		// declared with this rule, so the expectation here holds only for scenarios that name one.
+		return anonymousOwnedDetection(t, fx, s, mode)
 	case "APIBAS-REL-009":
 		// REL-009 fires when an authorization completes while the fraud check is degraded. Only the vulnerable build
 		// completes it under the fault; the fixed build fails closed, so there is nothing to alert on.
@@ -233,6 +238,24 @@ func ownershipDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, m
 	for _, o := range fx.Objects {
 		inBody := extract && strings.Contains(attack.Body, o.ID)
 		if (named(o.ID) || inBody || protectedValueNamed(target, o)) && o.OwnerID != attacker {
+			return detect.Detected
+		}
+	}
+	return detect.NotDetected
+}
+
+// anonymousOwnedDetection expects REL-011: in the vulnerable build an anonymous attack that names an owned object is
+// served (detected); in the fixed build it is refused (not detected).
+func anonymousOwnedDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, mode lab.Mode) string {
+	t.Helper()
+	attack := s.Steps[len(s.Steps)-1]
+	if attack.Auth != "none" || mode != lab.ModeVulnerable {
+		return detect.NotDetected
+	}
+	target := strings.ReplaceAll(attack.Path, "{object}", s.Preconditions.Object)
+	named := namedInRequest(target)
+	for _, o := range fx.Objects {
+		if named(o.ID) || protectedValueNamed(target, o) {
 			return detect.Detected
 		}
 	}
