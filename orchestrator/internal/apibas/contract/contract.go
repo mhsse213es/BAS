@@ -80,7 +80,7 @@ type Scenario struct {
 	// protected reference. Each is searched at any depth of a JSON body. Keep them distinctive: a common value
 	// gives false positives.
 	ForbiddenValues []string `yaml:"forbidden_values"`
-	CleanIsEnforced bool          `yaml:"clean_is_enforcement"`
+	CleanIsEnforced bool     `yaml:"clean_is_enforcement"`
 	// BaselineStatus is the status a legitimate baseline returns: 200 by default, or 101 for a
 	// WebSocket handshake. Only a websocket scenario may declare 101.
 	BaselineStatus int `yaml:"baseline_status"`
@@ -183,6 +183,9 @@ type Step struct {
 	// attack step may set it. The exchanges are recorded in send order, so the grade stays deterministic.
 	Parallel bool `yaml:"parallel"`
 	// ForgeAs names the identity whose subject an alg_none token carries.
+	// ClientCert names a client certificate the runner presents on this step, for example a trusted or forged
+	// certificate for mTLS. The names are configured by the caller of the runner (Config.ClientCerts).
+	ClientCert string `yaml:"client_cert"`
 	ForgeAs    string `yaml:"forge_as"`
 	Hypothesis string `yaml:"hypothesis"`
 }

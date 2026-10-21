@@ -16,6 +16,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -95,6 +97,12 @@ type Config struct {
 	// that name lab_faults in their preconditions.
 	Faults FaultReader
 	HTTP   *http.Client
+	// RootCAs is the trust for the lab's TLS certificate in the clients the runner builds. Nil means the system roots.
+	RootCAs *x509.CertPool
+	// ClientCerts names the client certificates a step may present (Step.ClientCert).
+	ClientCerts map[string]tls.Certificate
+	// RogueURL fills the {rogue_url} placeholder: an upstream whose certificate the runner does not trust (GWAY-012).
+	RogueURL string
 	// DetectionWindow is how long the detection stage waits for the SIEM to deliver the run's events.
 	// Zero means DefaultDetectionWindow. Events delivered after the window are not seen.
 	DetectionWindow time.Duration
@@ -167,6 +175,9 @@ type Report struct {
 // Runner executes scenarios against one target.
 type Runner struct {
 	cfg Config
+
+	certMu      sync.Mutex
+	certClients map[string]*http.Client
 }
 
 // New validates the configuration and returns a runner.
@@ -413,6 +424,7 @@ func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj f
 
 	// {lab_url} lets a body name the target itself, for the SSRF scenario.
 	payload := strings.ReplaceAll(step.Body, "{lab_url}", r.cfg.BaseURL)
+	payload = strings.ReplaceAll(payload, "{rogue_url}", r.cfg.RogueURL)
 	payload = expandFiller(payload)
 	ex.request = path + " " + payload
 	var body io.Reader
@@ -438,7 +450,15 @@ func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj f
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := r.cfg.HTTP.Do(req)
+	client := r.cfg.HTTP
+	if step.ClientCert != "" {
+		c, err := r.certClient(step.ClientCert)
+		if err != nil {
+			return ex, true
+		}
+		client = c
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return ex, true
 	}
@@ -1040,4 +1060,29 @@ func (r *Runner) runAttackParallel(ctx context.Context, rep *Report, step contra
 		agg.Status = denied
 	}
 	return agg, false
+}
+
+// certClient returns an HTTP client that presents the named client certificate and trusts the lab's TLS roots. A
+// certificate name the runner was not given is an error, so the step is a transport failure and never a result.
+func (r *Runner) certClient(name string) (*http.Client, error) {
+	r.certMu.Lock()
+	defer r.certMu.Unlock()
+	if c, ok := r.certClients[name]; ok {
+		return c, nil
+	}
+	cert, ok := r.cfg.ClientCerts[name]
+	if !ok {
+		return nil, fmt.Errorf("runner: client certificate %q is not configured", name)
+	}
+	if r.certClients == nil {
+		r.certClients = map[string]*http.Client{}
+	}
+	c := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{RootCAs: r.cfg.RootCAs, Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12},
+		},
+	}
+	r.certClients[name] = c
+	return c, nil
 }

@@ -9,6 +9,7 @@
 package main
 
 import (
+	"encoding/pem"
 	"errors"
 	"flag"
 	"fmt"
@@ -26,6 +27,8 @@ func main() {
 	mode := flag.String("mode", "vulnerable", "vulnerable | fixed")
 	fixtureName := flag.String("fixture", "orders-two-tenant", "fixture to seed")
 	faults := flag.String("fault", "", "comma-separated dependency faults to hold active, for example authz-store-down")
+	useTLS := flag.Bool("tls", false, "serve HTTPS with a generated lab CA and server certificate")
+	caOut := flag.String("tls-ca", "", "with -tls, write the lab CA certificate (PEM) to this path, for issuing client certificates")
 	flag.Parse()
 
 	fx, ok := fixtures()[*fixtureName]
@@ -41,12 +44,32 @@ func main() {
 			cfg.Faults = append(cfg.Faults, f)
 		}
 	}
+	var pki *lab.PKI
+	if *useTLS {
+		if pki, err = lab.NewPKI(); err != nil {
+			log.Fatal(err)
+		}
+		cfg.ClientCAs = pki.CAPool
+		if *caOut != "" {
+			if err := os.WriteFile(*caOut, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: pki.CA.Raw}), 0o644); err != nil {
+				log.Fatal(err)
+			}
+		}
+	}
 	l, err := lab.New(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("apibas-lab mode=%s fixture=%s listening on %s", *mode, fx.Name, *addr)
-	if err := http.ListenAndServe(*addr, l.Handler()); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if !*useTLS {
+		log.Printf("apibas-lab mode=%s fixture=%s listening on %s", *mode, fx.Name, *addr)
+		if err := http.ListenAndServe(*addr, l.Handler()); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+		return
+	}
+	srv := &http.Server{Addr: *addr, Handler: l.Handler(), TLSConfig: l.TLSConfig(pki.Server)}
+	log.Printf("apibas-lab mode=%s fixture=%s listening on %s (TLS)", *mode, fx.Name, *addr)
+	if err := srv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
 }

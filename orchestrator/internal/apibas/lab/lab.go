@@ -14,6 +14,7 @@
 package lab
 
 import (
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -60,6 +61,11 @@ type Config struct {
 	// (events reach the SIEM only after a three-second hold). A scenario that needs one declares it as a
 	// lab_faults precondition.
 	Faults []string
+	// ClientCAs verifies client certificates in the fixed build of the mTLS route (AUTHN-007). Nil refuses every
+	// client certificate there.
+	ClientCAs *x509.CertPool
+	// UpstreamRoots are the roots the fixed build trusts for upstream TLS (GWAY-012). Nil means the system roots.
+	UpstreamRoots *x509.CertPool
 	// ExtractBodyIDs turns on selective extraction of known order IDs from request bodies, for detection of
 	// body-carried object references (see extract.go). It is off by default: bodies are not read.
 	ExtractBodyIDs bool
@@ -455,6 +461,7 @@ func (s *Server) Handler() http.Handler {
 	s.registerBatch1(mux)
 	s.registerBatch2(mux)
 	s.registerBatch3(mux)
+	s.registerBatch4(mux)
 	mux.HandleFunc("GET /lab/faults", s.adminOnly(s.listFaults))
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-GWAY-OVERRIDE-001: the vulnerable build honours a method-override header.

@@ -2345,3 +2345,65 @@ Correction: an earlier note listed DISC-006 as Phase 2 scope. The blueprint tabl
   listener. Both need one, with a real handshake. A TLS-level refusal is a transport failure, which grades as
   ERROR, so the fixed build must complete the handshake and refuse at the application layer, or the grader needs a
   rule for TLS-level refusal.
+
+
+## Blueprint Phase 3: TLS listener, AUTHN-007 and GWAY-012 (the last two P3 scenarios)
+
+### Decision (owner: user)
+
+- Both builds complete the TLS handshake. The fixed build then refuses at the application layer, with the status the
+  scenario declares.
+- A TLS handshake failure grades ERROR, never PASS or FAIL, because the control under test was never reached.
+
+### Built
+
+- `lab/pki.go`: a lab CA, a server certificate for 127.0.0.1, ::1 and localhost, CA-signed client certificates, and
+  self-signed client certificates for a forged identity.
+- `lab/tls.go`: `Server.TLSConfig`. TLS 1.2 minimum in both builds. The server requests a client certificate but does
+  not verify it during the handshake, in either build. Verification happens in the application.
+- AUTHN-007 (`GET /api/mtls/orders/{id}`): the vulnerable build takes the identity from the certificate subject without
+  checking the chain. The fixed build verifies the chain to the lab CA and refuses with 401. The attacker presents a
+  self-signed certificate naming cust-a. Forbidden values are the other tenant's account and card references.
+- GWAY-012 (`POST /api/gateway/upstream-fetch`): the gateway fetches a URL over TLS and relays the body. The vulnerable
+  build skips certificate verification. The fixed build verifies against the lab roots and refuses with 422. The
+  attacker points the gateway at a rogue upstream with an untrusted certificate, via the `{rogue_url}` placeholder.
+  Forbidden value: the rogue upstream's probe marker.
+- Runner: `Step.client_cert` names a certificate from `Config.ClientCerts`. A name the runner was not given is a
+  transport error (ERROR). `Config.RootCAs` is the trust for the lab certificate. `Config.RogueURL` fills the
+  `{rogue_url}` placeholder.
+- Standalone binary: `apibas-lab -tls` serves HTTPS with a generated CA and server certificate. `-tls-ca PATH` writes
+  the CA certificate so an operator can issue client certificates. Built and vetted; not exercised against a real
+  client.
+
+### Regression tests (`runner/phase3_tls_test.go`)
+
+- Both builds complete the TLS handshake, including with a forged client certificate.
+- The fixed build refuses a forged client certificate with 401 at the application layer, not as a transport failure.
+- The fixed build refuses an untrusted upstream with 422 after a completed handshake.
+- A runner that does not trust the lab CA grades ERROR for both builds, never PASS.
+- A client certificate the runner was not given grades ERROR or SKIPPED, never a control result.
+
+### Evidence
+
+- `TestPhase3_TLSAcceptance`: both scenarios, both builds, pass. Three consecutive repeats of the TLS tests pass.
+- The Phase 2 scope test, the earlier Phase 3 tests, the flaw-registry test and the timing-claim rules pass with 100
+  catalog entries. The short suite is clean.
+
+### Limits (stated, not hidden)
+
+- GWAY-012 covers upstream certificate verification. TLS protocol-version and cipher policy is not graded. A
+  version refusal is a handshake failure, which grades ERROR under the decision, so it cannot be a control result
+  without a new rule.
+- AUTHN-007 covers a self-signed certificate naming another tenant. Certificates issued by another CA, expired
+  certificates, and revocation are not tested.
+- Client certificates reach the runner through `Config.ClientCerts`. Nothing in the product provisions or stores
+  real mTLS identities. The harness supplies them.
+- The standalone `-tls` mode is built but has no end-to-end test.
+
+### Blueprint P3 status
+
+- All 39 P3 IDs in the blueprint table are now in the catalog (100 entries in total, including the earlier phases).
+- Phase 3 is not closed in the blueprint sense. Its remaining work is the full runner re-verification, the QA open
+  items, and the limits above. Protocol-level P3 items that are not in the table (async, SOAP, gRPC, WebSocket) are
+  unchanged from the earlier QA log.
+- Full `internal/apibas/runner` package (non-short, all suites): passed, exit 0, about 566 s.

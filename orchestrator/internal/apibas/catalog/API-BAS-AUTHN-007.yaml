@@ -1,0 +1,52 @@
+id: "API-BAS-AUTHN-007"
+name: "Client certificate subject trusted without chain validation"
+category: AUTHN
+claim: function_level
+attack_objective: "The attacker presents a self-signed client certificate whose subject names another tenant."
+threat_model:
+  attacker: "authenticated customer who owns the order"
+  identity: customer-b
+  access_level: "standard customer, valid token, owner of the order"
+  objective: "read another tenant's protected values with a certificate the lab CA did not issue"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: "baseline-trusted-cert"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/mtls/orders/ORD-2001"
+    client_cert: "trusted-cust-b"
+    hypothesis: "The owner presents a certificate the lab CA issued. If this fails, the scenario is not testable."
+  - id: "attack-forged-client-cert"
+    role: attack
+    identity: anonymous
+    auth: none
+    method: GET
+    path: "/api/mtls/orders/ORD-1001"
+    client_cert: "forged-cust-a"
+    hypothesis: "A client certificate must chain to the lab CA. A self-signed certificate is refused with 401."
+forbidden_values: ["BAS-SIM-ACC-A", "BAS-SIM-1001"]
+denied_statuses: [401]
+expected_control: "A client certificate that does not chain to the lab CA is refused with 401, and no other tenant's value is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: "No protected value of another tenant appears in the response."
+detection_assertion:
+  status: not_evaluated
+  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+industry_mapping:
+  - "BFSI / open banking: mutual TLS client identity must be verified against the trust anchor"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHN-007 against the fixed build must PASS"
