@@ -2407,3 +2407,51 @@ Correction: an earlier note listed DISC-006 as Phase 2 scope. The blueprint tabl
   items, and the limits above. Protocol-level P3 items that are not in the table (async, SOAP, gRPC, WebSocket) are
   unchanged from the earlier QA log.
 - Full `internal/apibas/runner` package (non-short, all suites): passed, exit 0, about 566 s.
+
+
+## Blueprint Phase 3 close-out
+
+### Closed
+
+- All 39 blueprint P3 IDs are in the catalog and validated in both builds (`TestPhase3_CloseoutAllP3Validated`):
+  vulnerable FAIL/exploited, fixed PASS/enforced. AUTHN-007 and GWAY-012 run on the TLS listener.
+- Full runner package: `ok`, 512.6 s, exit 0. This run was on the close-out code, before batch 4a and 4b edits.
+
+### Race spread (BIZ-005)
+
+- Goroutine scheduling cannot be seeded, so there is no fixed seed. The race was measured over 100 runs per build
+  (`TestPhase3_RaceFlakinessReport`):
+  - vulnerable: 100 of 100 runs FAIL/exploited, with 5 accepted withdrawals in every run.
+  - fixed: 100 of 100 runs PASS/enforced, with 1 accepted withdrawal in every run.
+- Spread in this measurement: none in either build. Unexpected verdicts: 0.
+
+### Protocol items
+
+The blueprint rule: a protocol without an executable adapter and fixture is `UNSUPPORTED` and is never counted as
+covered. `go test ./internal/apibas/protocol/` passes.
+
+- GraphQL: adapter built. Used by ABUSE-004 and INJ-007.
+- SOAP: adapter built. Used by INJ-005.
+- Async: publish-form adapter built. Used by ABUSE-010 and INTEG-010. The consumer side is not modelled.
+- gRPC: JSON-transcoding adapter only. DISC-009 claims that form. Native gRPC over HTTP/2 with protobuf descriptors
+  is not built and is `UNSUPPORTED`.
+- WebSocket: handshake adapter only. AUTHN-011 uses it. Frame-level behaviour is not built and is `UNSUPPORTED`.
+
+### Correction
+
+- Detection assertions are not a Phase 3 gap. The blueprint places them in Phase 4 (DET IDs, and the detection
+  assertion on every P2/P3 scenario). An earlier entry listed them as a Phase 3 gap. That entry is corrected here.
+  Batch 4c covers them.
+
+### Limits
+
+- TLS version and cipher policy is not graded (GWAY-012). A handshake refusal grades ERROR under the TLS decision.
+- AUTHN-007 does not test another CA, expiry or revocation.
+- Client certificates come from the harness (`Config.ClientCerts`). No real mTLS identity is provisioned.
+- The standalone `apibas-lab -tls` mode is built but has no end-to-end test.
+- Native gRPC and WebSocket frame adapters are not built (see protocol items).
+
+### Status
+
+Phase 3 is closed for the 39 blueprint P3 IDs against the lab fixtures. Nothing is claimed against live services.
+
