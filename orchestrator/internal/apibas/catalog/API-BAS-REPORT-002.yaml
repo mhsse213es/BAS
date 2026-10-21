@@ -1,0 +1,64 @@
+id: "API-BAS-REPORT-002"
+name: "Personal-data breach notified to the Central Bank"
+category: REPORT
+claim: property_level
+attack_objective: "A qualifying personal-data breach at a licensed financial institution is notified to the Central Bank. The workflow must notify the required recipient with complete evidence."
+threat_model:
+  attacker: "authenticated operator of the breach-notification workflow"
+  identity: customer-b
+  access_level: "standard operator, valid token"
+  objective: "the workflow omits the notification, sends it to the wrong recipient, or records no evidence of dispatch and receipt"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: "baseline-read-breach"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/incidents/BRE-2026-0001"
+    hypothesis: "The breach exists in the intake record with its awareness time. If this fails, there is no notification clock and the scenario is not testable."
+  - id: "attack-notify-central-bank"
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: "/api/incidents/BRE-2026-0001/report"
+    body: '{"recipients":["cbuae-central-bank"]}'
+    hypothesis: "The breach is notified to the Central Bank, with a payload hash and a receipt. The grade comes from the reporting adapter, not from this response."
+denied_statuses: [404]
+expected_control: "The qualifying breach is notified to the Central Bank with a dispatch timestamp, a payload hash and a receipt. An omitted, misrouted or undocumented notification fails."
+ground_truth:
+  adapters: ["state", "reporting"]
+  check: >
+    The reporting adapter records one dispatch to the Central Bank with a payload hash and a receipt. Timeliness is not
+    graded here, because the provision states no numeric deadline.
+detection_assertion:
+  status: not_evaluated
+  reason: "No SIEM rule covers breach notification. The grade rests on the reporting adapter's record, so no detection claim is made."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run, which clears the breach and dispatch records"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - reporting_evidence
+industry_mapping:
+  - "Financial-sector breach notification: a qualifying personal-data breach must reach the regulator, with evidence of notification"
+regulatory_mapping: []
+reporting:
+  incident: BRE-2026-0001
+  obligations:
+    - id: CBUAE-6-1-2-6
+      recipient: cbuae-central-bank
+      deadline: ""
+      provision_ref: AE-CBUAE-6-1-2-6
+    - id: CBUAE-6-1-7-2
+      recipient: cbuae-central-bank
+      deadline: ""
+      provision_ref: AE-CBUAE-6-1-7-2
+negative_tests:
+  - "A dispatch with no deadline defined by the provision is SKIPPED with deadline_not_defined_by_provision, never PASS"
+  - "An omitted, misrouted or undocumented notification must FAIL, with the reason the grade names"

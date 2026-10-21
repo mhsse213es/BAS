@@ -2933,3 +2933,36 @@ Seven official documents, provided in `API_Phase5/`, copied byte-for-byte to `or
 - DATA-011 is not yet checked against every owner read path.
 - Scenario-level behaviour for the unmapped obligations is not built: a breach-notification scenario, and a reporting-timeline scenario.
 - The source URLs were taken from search results and have not been fetched. The committed PDFs are the bytes the registry tests.
+
+## Blueprint Phase 6: reporting-workflow engine extension and notification scenarios
+
+### Inspection (before building)
+
+The grader (`grade.Assess`) grades HTTP exchanges and a state diff only. Steps cannot pass a value from one response to the next, and nothing graded deadlines, recipients or receipts. The lab had no reporting route. The smallest compatible extension was therefore a separate evaluator, not a change to `Assess`, so existing scenario verdicts cannot move.
+
+### What was built
+
+- `internal/apibas/reporting`: pure evaluator. Each obligation has its own recipient, deadline (from the scenario, which cites the provision), and provision reference. An empty deadline means the provision states no number, so the obligation is SKIPPED, not graded against an invented value. A dispatch missing its timestamp, payload hash, receipt or mode fails. A simulated dispatch never yields a genuine receipt. 16 unit tests.
+- `internal/apibas/lab/reporting.go`: fixture receiver, identical in both builds. Seeded incidents with fixed awareness times. Admin fault injection (delay, failed recipient, omitted receipt, misroute). Dispatches never leave the lab.
+- Contract: `REPORT` category (a taxonomy addition), `reporting` block (incident, obligations, validated), ground-truth adapter `reporting`.
+- Runner: `gradeReporting` replaces the HTTP grade only where that grade is not already ERROR or FAIL. The grade reads the lab's dispatch record, not the HTTP reply.
+- Scenarios: `API-BAS-REPORT-001` (CERT-In, 6h from IN-CERTIN-70B-II), `API-BAS-REPORT-002` (CBUAE 6.1.2.6 and 6.1.7.2, no numeric deadline).
+
+### Results
+
+- Unit tests: `go test ./internal/apibas/reporting/` passes.
+- Runner cases (`TestPhase6_*`), both builds: REPORT-001 on time PASS; exactly at deadline PASS; late by one second FAIL `deadline_missed`; failed dispatch FAIL `dispatch_failed`; receipt missing FAIL `evidence_missing`; misrouted FAIL `wrong_recipient`. REPORT-002 dispatched with no numeric deadline SKIPPED `deadline_not_defined_by_provision`; failed, misrouted and receipt-missing FAIL. Unreachable target ERROR; no reporting adapter ERROR.
+- Every simulated run is labelled `simulated` and reports `genuine_receipt=false`.
+- Full apibas suite (`go test ./internal/apibas/... -count=1`): EXIT 0.
+
+### Decisions
+
+- Faults are harness configuration; the pre-run lab reset keeps them. Harness clears them with an empty set.
+- The CBUAE scenario never PASSes on timeliness until a provision-derived deadline is recorded and reviewed.
+- The registry's CERT-In and CBUAE unmapped records moved from `not_implemented` to `implemented_not_validated`. They remain unmapped and unverified.
+
+### Not done (stated gaps)
+
+- No live reporting channel. A simulated PASS is a workflow check only; it does not prove submission to CERT-In or the Central Bank.
+- No provision-derived deadline for CBUAE clauses 6.1.2.6 and 6.1.7.2.
+- No human reviewer has approved any mapping.

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/audspect/bas/internal/apibas/detect"
+	"github.com/audspect/bas/internal/apibas/reporting"
 	"io"
 	"net/http"
 	"net/url"
@@ -78,6 +79,18 @@ func (a LabAdmin) Cleanup(ctx context.Context, runTag string) (int, error) {
 		return 0, err
 	}
 	return res.Removed, nil
+}
+
+// SetReportingFaults sets the reporting receiver's faults for the next run. The lab reset clears them.
+func (a LabAdmin) SetReportingFaults(ctx context.Context, faults map[string]any) error {
+	return a.send(ctx, http.MethodPost, "/lab/reporting/faults", faults, nil)
+}
+
+// ReportingEvidence returns the reporting adapter's record of every incident and dispatch in the run.
+func (a LabAdmin) ReportingEvidence(ctx context.Context) (reporting.Evidence, error) {
+	var ev reporting.Evidence
+	err := a.do(ctx, http.MethodGet, "/lab/reporting", &ev)
+	return ev, err
 }
 
 // Reset restores the lab to its fixture seed. The audit log is kept. It

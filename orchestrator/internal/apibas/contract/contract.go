@@ -8,6 +8,9 @@
 package contract
 
 import (
+	"time"
+
+	"github.com/audspect/bas/internal/apibas/reporting"
 	"fmt"
 	protocolpkg "github.com/audspect/bas/internal/apibas/protocol"
 	"regexp"
@@ -22,6 +25,7 @@ import (
 var categories = map[string]bool{
 	"AUTHN": true, "AUTHZ": true, "GWAY": true, "INJ": true, "BIZ": true,
 	"DATA": true, "ABUSE": true, "INTEG": true, "DISC": true, "DET": true,
+	"REPORT": true,
 }
 
 // Side-effect classes from blueprint section 6. Phase 2 supports READ_ONLY and
@@ -57,7 +61,7 @@ var claims = map[string]bool{
 }
 
 // Ground-truth adapters defined so far. Every scenario requires "state".
-var groundTruthAdapters = map[string]bool{"state": true, "response": true}
+var groundTruthAdapters = map[string]bool{"state": true, "response": true, "reporting": true}
 
 // alg_none sends an unsigned JWT whose subject is the forge_as identity.
 var authModes = map[string]bool{"valid": true, "none": true, "revoked": true, "alg_none": true}
@@ -137,6 +141,8 @@ type Scenario struct {
 	IndustryMapping   []string           `yaml:"industry_mapping"`
 	RegulatoryMapping []string           `yaml:"regulatory_mapping"`
 	NegativeTests     []string           `yaml:"negative_tests"`
+	// Reporting declares the regulatory reporting obligations a REPORT scenario grades (package reporting).
+	Reporting *reporting.Policy `yaml:"reporting"`
 }
 
 // ThreatModel is the simulated attacker (api.txt section 7, item 1).
@@ -348,6 +354,9 @@ func (s Scenario) Validate() error {
 	}
 	// regulatory_mapping lists control references. Each must name a record in the regulatory registry, which the
 	// regulatory package checks (every mapping there has a source_url and a version, and defaults to unverified).
+	if err := s.validateReporting(); err != nil {
+		return err
+	}
 	for _, ref := range s.RegulatoryMapping {
 		if !controlRefPattern.MatchString(ref) {
 			return fmt.Errorf("contract: %s: regulatory_mapping %q is not a control reference", s.ID, ref)
@@ -597,4 +606,44 @@ type CalibrationPolicy struct {
 	MinSeparationRatio float64 `yaml:"min_separation_ratio"`
 	// MinPooledSamples is the fewest attack samples per build, pooled over rounds, the test needs.
 	MinPooledSamples int `yaml:"min_pooled_samples"`
+}
+
+// validateReporting checks a reporting block. The deadline is declared per obligation from its provision. An empty deadline
+// is allowed: the provision states no number, and the grader reports that obligation as SKIPPED rather than inventing one.
+func (s Scenario) validateReporting() error {
+	if s.Reporting == nil {
+		return nil
+	}
+	if s.SideEffectClass != "STATE_CHANGE_SANDBOX" {
+		return fmt.Errorf("contract: %s: a reporting scenario must be STATE_CHANGE_SANDBOX (the dispatch is recorded in the lab)", s.ID)
+	}
+	if !slices.Contains(s.GroundTruth.Adapters, "reporting") {
+		return fmt.Errorf("contract: %s: a reporting scenario must grade on the reporting adapter", s.ID)
+	}
+	if s.Reporting.Incident == "" {
+		return fmt.Errorf("contract: %s: reporting must name the incident it grades", s.ID)
+	}
+	if len(s.Reporting.Obligations) == 0 {
+		return fmt.Errorf("contract: %s: reporting needs at least one obligation", s.ID)
+	}
+	ids := map[string]bool{}
+	for _, o := range s.Reporting.Obligations {
+		if o.ID == "" || o.Recipient == "" || o.ProvisionRef == "" {
+			return fmt.Errorf("contract: %s: each reporting obligation needs id, recipient and provision_ref", s.ID)
+		}
+		if ids[o.ID] {
+			return fmt.Errorf("contract: %s: duplicate reporting obligation %s", s.ID, o.ID)
+		}
+		ids[o.ID] = true
+		if !controlRefPattern.MatchString(o.ProvisionRef) {
+			return fmt.Errorf("contract: %s: obligation %s provision_ref %q is not a control reference", s.ID, o.ID, o.ProvisionRef)
+		}
+		if o.Deadline != "" {
+			d, err := time.ParseDuration(o.Deadline)
+			if err != nil || d <= 0 {
+				return fmt.Errorf("contract: %s: obligation %s deadline %q must be a positive duration", s.ID, o.ID, o.Deadline)
+			}
+		}
+	}
+	return nil
 }

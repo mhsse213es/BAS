@@ -360,6 +360,8 @@ type Server struct {
 	validatorCalls map[string]int
 	// sharedCache is the response cache of the vulnerable build (LAB-AUTHZ-CACHE-001), keyed by path.
 	sharedCache map[string]map[string]any
+	// rpt is the fixture-backed reporting receiver (reporting.go). Reset clears it.
+	rpt reportingState
 }
 
 // New validates the configuration, seeds the store from the fixture and
@@ -383,6 +385,7 @@ func New(cfg Config) (*Server, error) {
 // reseed restores the store to the fixture's seed state. Callers must hold
 // s.mu, except during New where the server is not yet shared.
 func (s *Server) reseed() {
+	s.rpt.reset()
 	s.sharedCache = nil
 	s.rotated = nil
 	s.brokerCounts = nil
@@ -448,6 +451,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /lab/audit", s.adminOnly(s.getAudit))
 	mux.HandleFunc("GET /lab/access-events", s.adminOnly(s.getAccessEvents))
 	s.registerInjection(mux)
+	s.registerReporting(mux)
 	s.registerGateway(mux)
 	s.registerAuthz(mux)
 	s.registerDiscovery(mux)

@@ -117,6 +117,7 @@ func (e *env) run(t *testing.T, s contract.Scenario, state runner.StateReader) r
 		Reset:           e.admin,
 		Events:          e.admin,
 		Faults:          e.admin,
+		Reporting:       e.admin,
 		DetectionWindow: e.window,
 	})
 	if err != nil {

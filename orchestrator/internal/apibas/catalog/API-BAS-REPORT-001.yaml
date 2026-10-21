@@ -1,0 +1,60 @@
+id: "API-BAS-REPORT-001"
+name: "Cybersecurity incident reported to CERT-In within the declared deadline"
+category: REPORT
+claim: property_level
+attack_objective: "An incident the organisation became aware of is reported to CERT-In. The workflow must dispatch the report on time, to the required recipient, with complete evidence."
+threat_model:
+  attacker: "authenticated operator of the reporting workflow"
+  identity: customer-b
+  access_level: "standard operator, valid token"
+  objective: "the workflow reports late, to the wrong recipient, or without evidence of dispatch and receipt"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: "baseline-read-incident"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/incidents/INC-2026-0001"
+    hypothesis: "The incident exists in the intake record with its awareness time. If this fails, there is no deadline clock and the scenario is not testable."
+  - id: "attack-report-to-cert-in"
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: "/api/incidents/INC-2026-0001/report"
+    body: '{"recipients":["cert-in-receiver"]}'
+    hypothesis: "The report is dispatched to CERT-In within six hours of awareness, with a payload hash and a receipt. The grade comes from the reporting adapter, not from this response."
+denied_statuses: [404]
+expected_control: "The incident is reported to CERT-In within the declared deadline, with a dispatch timestamp, a payload hash and a receipt. A late, failed, misrouted or undocumented dispatch fails."
+ground_truth:
+  adapters: ["state", "reporting"]
+  check: >
+    The reporting adapter records one dispatch to the required recipient, at or before the deadline measured from the
+    recorded awareness time, with a payload hash and a receipt.
+detection_assertion:
+  status: not_evaluated
+  reason: "No SIEM rule covers reporting timeliness. The grade rests on the reporting adapter's record, so no detection claim is made."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run, which clears the incident and dispatch records"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - reporting_evidence
+industry_mapping:
+  - "Cyber incident reporting: an incident must reach the national CERT on time, with evidence of submission"
+regulatory_mapping: []
+reporting:
+  incident: INC-2026-0001
+  obligations:
+    - id: CERT-IN-6H
+      recipient: cert-in-receiver
+      deadline: 6h
+      provision_ref: IN-CERTIN-70B-II
+negative_tests:
+  - "API-BAS-REPORT-001 must PASS on the simulated receiver only as a workflow check; a simulated PASS is not proof of regulatory submission"
+  - "Late, failed, misrouted and missing-evidence dispatches must each FAIL, with the reason the grade names"

@@ -36,6 +36,7 @@ import (
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/grade"
 	"github.com/audspect/bas/internal/apibas/latency"
+	"github.com/audspect/bas/internal/apibas/reporting"
 	"strconv"
 )
 
@@ -106,6 +107,8 @@ type Config struct {
 	// DetectionWindow is how long the detection stage waits for the SIEM to deliver the run's events.
 	// Zero means DefaultDetectionWindow. Events delivered after the window are not seen.
 	DetectionWindow time.Duration
+	// Reporting reads the reporting adapter's evidence after a REPORT scenario's attack step (package reporting).
+	Reporting ReportingReader
 	// Machine is the operator's label for this hardware. Calibration records are bound to it.
 	Machine string
 }
@@ -152,6 +155,8 @@ type Exchange struct {
 
 // Report is the complete output of one scenario execution.
 type Report struct {
+	// Reporting is the reporting grade for a REPORT scenario: mode, receipts and each obligation.
+	Reporting *reporting.Result `json:"reporting,omitempty"`
 	// DetectionProvenance labels every detection result from the fixture.
 	DetectionProvenance string `json:"detection_provenance,omitempty"`
 	// DetectionResults holds the result of each additional rule, keyed by rule ID. The primary rule is in Outcome.
@@ -381,7 +386,42 @@ func (r *Runner) run(ctx context.Context, s contract.Scenario, tag string) (Repo
 		ev.StateChanged = !sameState(mid, after)
 	}
 	rep.Outcome = grade.Assess(ev)
+	if s.Reporting != nil {
+		rep = r.gradeReporting(ctx, s, ev, rep)
+	}
 	return r.finish(ctx, sandbox, rep), nil
+}
+
+// ReportingReader returns the reporting adapter's evidence: every incident and every dispatch the lab recorded in the run.
+type ReportingReader interface {
+	ReportingEvidence(ctx context.Context) (reporting.Evidence, error)
+}
+
+// gradeReporting replaces the HTTP grade with the reporting grade, but only where the HTTP grade does not already show an error
+// or a failure. The HTTP response is never the evidence of dispatch: the reporting adapter is.
+func (r *Runner) gradeReporting(ctx context.Context, s contract.Scenario, ev grade.Evidence, rep Report) Report {
+	if rep.Outcome.Result == grade.ERROR || rep.Outcome.Result == grade.FAIL {
+		return rep
+	}
+	if rep.Outcome.Result == grade.SKIPPED && rep.Outcome.Reason == grade.ReasonPreconditionMissing {
+		return rep
+	}
+	if r.cfg.Reporting == nil {
+		rep.Outcome = grade.Error(grade.ReasonAdapterReadFailed)
+		rep.Detail = "reporting scenario run without a reporting adapter"
+		return rep
+	}
+	evidence, err := r.cfg.Reporting.ReportingEvidence(ctx)
+	if err != nil {
+		rep.Outcome = grade.Error(grade.ReasonAdapterReadFailed)
+		rep.Detail = "reporting adapter read failed: " + err.Error()
+		return rep
+	}
+	res := reporting.Evaluate(*s.Reporting, evidence)
+	rep.Reporting = &res
+	rep.Outcome = res.Outcome
+	rep.Detail = res.String()
+	return rep
 }
 
 // finish runs sandbox cleanup and folds a cleanup failure into the outcome. A

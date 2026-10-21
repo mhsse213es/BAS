@@ -71,7 +71,8 @@ func main() {
 		BaseURL: *target,
 		Fixture: fx,
 		Secrets: secrets,
-		State:   admin,
+		State:     admin,
+		Reporting: admin,
 		Reset:   admin,
 		Events:  admin,
 		HTTP:    &http.Client{Timeout: 10 * time.Second},
@@ -84,7 +85,7 @@ func main() {
 		if err := checkTarget(*fixedTarget, *allow); err != nil {
 			log.Fatal(err)
 		}
-		fixed, err := runner.New(runner.Config{BaseURL: *fixedTarget, Fixture: fx, Secrets: secrets, State: admin, Reset: admin, Events: admin, HTTP: &http.Client{Timeout: 10 * time.Second}})
+		fixed, err := runner.New(runner.Config{BaseURL: *fixedTarget, Fixture: fx, Secrets: secrets, State: admin, Reporting: admin, Reset: admin, Events: admin, HTTP: &http.Client{Timeout: 10 * time.Second}})
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -136,33 +136,33 @@ mappings:
 unmapped:
   - obligation_ref: IN-CERTIN-70B-II
     status: unverified
-    scenario_state: not_implemented
+    scenario_state: implemented_not_validated
     framework: CERT-In Directions under section 70B(6) of the Information Technology Act, 2000, 28 April 2022
     source_file: sources/in-certin-directions-70b-2022-04-28.pdf
     source_sha256: 202c2f3953d792dcfb3ecb3634fc82ab75437ee596de89b8d59a211e8e42431f
     source_provision: Directions, paragraph (ii)
     clause_text: "Any service provider, intermediary, data centre, body corporate and Government organisation shall mandatorily report cyber incidents as mentioned in Annexure I to CERT-In within 6 hours of noticing such incidents or being brought to notice about such incidents."
-    reason: No scenario measures when the incident was noticed, when the report was created and dispatched, or whether a durable receipt exists. A generic incident-detection scenario does not show timely reporting. The FAQ (question 30) allows partial information at the time of reporting, which a single timestamp cannot show either.
+    reason: API-BAS-REPORT-001 grades the six-hour deadline against the recorded awareness time, the dispatch timestamp, the payload hash and the receipt, on a fixture receiver only. It has not been validated against a live reporting channel, and no reviewer has approved a mapping. The FAQ (question 30) allows partial information at the time of reporting, which the single-deadline check does not model.
     required_scenario: a reporting-workflow scenario that records the time the incident was noticed, the report's creation and dispatch times, the applicable reportable-incident category, and a durable receipt or dispatch record
 
   - obligation_ref: AE-CBUAE-6-1-2-6
     status: unverified
-    scenario_state: not_implemented
+    scenario_state: implemented_not_validated
     framework: CBUAE Consumer Protection Standards, Article 6
     source_file: sources/ae-cbuae-consumer-protection-standards.pdf
     source_sha256: b9899e547acca33d117e55b219852a633820b28ee57b0a0dd47644dcdca54987
     source_provision: Clause 6.1.2.6
     clause_text: "Licensed Financial Institutions must notify the Central Bank immediately of all significant breaches of Personal Data."
-    reason: No scenario exercises a breach notification to the Central Bank. Erasure and access scenarios do not produce a breach event or a notification. The trigger condition (significant breach) and the recipient are not tested by any current scenario.
+    reason: API-BAS-REPORT-002 grades the recipient, the dispatch, the payload hash and the receipt on a fixture receiver. Clause 6.1.2.6 states "immediately", which is not a numeric deadline, so the scenario reports timeliness as SKIPPED. The trigger condition (significant breach) is set by the fixture, not by a rule from the clause. Not validated live; no reviewer has approved a mapping.
     required_scenario: a breach-notification scenario that induces a significant personal-data breach, then records the trigger, the recipient, the notification time and the dispatch evidence
 
   - obligation_ref: AE-CBUAE-6-1-7-2
     status: unverified
-    scenario_state: not_implemented
+    scenario_state: implemented_not_validated
     framework: CBUAE Consumer Protection Standards, Article 6
     source_file: sources/ae-cbuae-consumer-protection-standards.pdf
     source_sha256: b9899e547acca33d117e55b219852a633820b28ee57b0a0dd47644dcdca54987
     source_provision: Clause 6.1.7.2
     clause_text: "Licensed Financial Institutions must notify the Central Bank of any material Data breaches, losses, destruction or alteration when they occur, in a manner, as may be prescribed by the Central Bank."
-    reason: No scenario exercises a notification of material data breaches, losses, destruction or alteration. The prescribed manner of notification is not in the source set. A scenario needs the manner specified before it can test it.
+    reason: API-BAS-REPORT-002 covers the notification dispatch for the same Central Bank recipient. Clause 6.1.7.2 says "when they occur" and "in a manner as may be prescribed", and neither the prescribed manner nor a numeric deadline is in the source set, so timeliness and manner are not graded. Not validated live; no reviewer has approved a mapping.
     required_scenario: a material-breach scenario that records the event, the notification time, and the notification in the manner the Central Bank prescribes, once that manner is captured from an official source
