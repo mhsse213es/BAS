@@ -19,7 +19,7 @@ From this graph, it computes attack path risk: blast radius, choke points, crown
 ## What Collection Does (and Doesn't Do)
 
 **What collection does:**
-- Probes TCP reachability to target hosts you specify (selected ports only: SMB 445, WinRM 5985/5986, RDP 3389, SSH 22)
+- Probes TCP reachability to target hosts you specify (selected ports only: SMB 445, WinRM 5985, RDP 3389)
 - Reads the local Administrators group on Windows (no escalation — reads via WinAPI as the agent user)
 - Reads active logon sessions on Windows (no credential extraction)
 - Optionally runs SharpHound against an Active Directory domain (domain-joined hosts only, requires explicit enable)
@@ -88,7 +88,7 @@ POST /api/attackpath/jobs
 | **running** | Agent is actively collecting |
 | **completed** | Collection finished; graph uploaded and processed |
 | **failed** | Collection aborted due to an error (see `error` field) |
-| **timed_out** | Collection exceeded the 30-minute timeout |
+| **timed_out** | Collection exceeded its timeout (30 seconds plus 3 seconds per target, clamped to 2–15 minutes) |
 | **delivery_failed** | Agent did not ACK dispatch within 30 seconds |
 | **cancelled** | Cancelled by an admin before completion |
 
@@ -138,11 +138,11 @@ Body:
 {
   "agentId": "agt-abc123",
   "targets": ["192.168.1.0/24", "10.0.0.50", "dc01.company.local"],
-  "enableSharpHound": false,
-  "label": "Weekly scan - Finance subnet"
+  "segment": "finance",
+  "runSharpHound": false
 }
 
-Response: { "jobId": "ap-job-xyz", "status": "queued" }
+Response: the created job object, including "id" and "status": "queued"
 ```
 
 ### Target pre-population
@@ -153,20 +153,21 @@ The dashboard pre-fills the target list with the agent's detected /24 subnet. Th
 
 ## Scheduling
 
-Attack Path collection can be scheduled on a recurring basis per agent:
+Attack Path collection can be scheduled on a recurring interval. The schedule is a single platform-wide setting, not one schedule per agent:
 
 ```
 POST /api/attackpath/schedule
 Body:
 {
-  "agentId": "agt-abc123",
-  "cronExpression": "0 2 * * 1",   // Every Monday at 02:00
+  "enabled": true,
+  "intervalMinutes": 10080,
   "targets": ["192.168.1.0/24"],
-  "label": "Weekly finance subnet scan"
+  "segment": "finance",
+  "runSharpHound": false
 }
 ```
 
-Scheduled jobs appear in the schedule list and create tracked jobs at the configured time.
+`intervalMinutes` defaults to 1440 (once a day) when omitted or zero. Scheduled jobs appear in the schedule list and create tracked jobs at the configured time.
 
 ---
 
@@ -186,7 +187,7 @@ SharpHound is the BloodHound data collector for Active Directory. It enumerates:
 3. The orchestrator pushes SharpHound to the agent as part of the job payload during AP dispatch
 4. The agent executes SharpHound in collection-only mode, compresses results, and uploads
 
-**Important:** SharpHound collection only runs if `enableSharpHound: true` is set in the job and if `BAS_SHARPHOUND_PATH` is configured. Without this, the platform still performs TCP probe + local admin/session enumeration, which provides a useful but less complete graph.
+**Important:** SharpHound collection only runs if `runSharpHound: true` is set in the job and if `BAS_SHARPHOUND_PATH` is configured. Without this, the platform still performs TCP probe + local admin/session enumeration, which provides a useful but less complete graph.
 
 ---
 
@@ -199,11 +200,12 @@ After a completed collection, the orchestrator processes the uploaded data and b
 - User identity nodes (domain users, local accounts observed in sessions)
 
 **Edges (relationship types):**
-- `tcp_reachable` — Source agent can reach target on tested ports
-- `local_admin` — User identity is a local administrator on target host
-- `active_session` — User identity has an active logon session on target host
-- `ad_group_member` — (SharpHound) Domain group membership relationship
-- `ad_gpo` — (SharpHound) Group Policy applied to host
+- `smb`, `winrm`, `rdp` — Source host can reach target over SMB (445), WinRM (5985) or RDP (3389)
+- `admin-to` — User or group is a local administrator on target host
+- `has-session` — Host has an interactive session for a user (credentials may be harvestable)
+- `member-of` — User or group is a member of a group
+- `credential` — Reusable credential relationship (e.g. shared local-admin password)
+- Active Directory relationships from SharpHound (e.g. `generic-all`, `write-dacl`, `allowed-to-delegate`)
 
 **Derived metrics (computed from the graph):**
 
@@ -223,15 +225,14 @@ Hosts in the attack path graph can be tagged with a criticality tier:
 
 | Tag | Meaning |
 |---|---|
-| **crown-jewel** | Highest value asset; exposure to this asset is always Critical severity |
-| **high** | Important asset; exposure weighted heavily in scoring |
-| **medium** | Standard business asset |
-| **low** | Low-value or non-sensitive host |
+| **crownJewel** (flag) | Highest value asset; exposure to this asset is always Critical severity |
+| **highValue** (flag) | Important asset; exposure weighted heavily in scoring |
+| **segment** (label) | Network segment the host belongs to; used for segmentation analysis |
 
 **Setting asset tags:**
 ```
-POST /api/attackpath/assets/{hostId}/tag
-Body: { "tier": "crown-jewel", "label": "Domain Controller", "notes": "DC01 - primary AD controller" }
+POST /api/attackpath/assets
+Body: { "hostKey": "dc01", "label": "Domain Controller", "crownJewel": true, "segment": "corp-dc", "highValue": true }
 ```
 
 Asset tags persist across collection runs. Once tagged, a host retains its tier in all future graphs.
@@ -251,28 +252,14 @@ The Attack Path section in the dashboard provides an interactive graph view:
 
 ## Risk Calculation
 
-The **Attack Path Score** is a scalar (0–100, higher = safer) computed from the inverse of exposure:
-
-```
-Attack Path Score = 100 - (normalized_exposure × 100)
-```
-
-Where `normalized_exposure` accounts for:
-- Proportion of tested hosts reachable by the collection source
-- Crown jewel reachability (heavily penalized)
-- Choke point concentration (high choke point count → more fragile topology)
-- SharpHound-derived privilege path depth (if available)
+The **Attack Path Score** is an integer from 0 to 100 (higher = less exposed). It starts at 100 and subtracts weighted exposure deficits from four categories, clamped to 0–100:
+- Domain compromise reachable from any host (weight 30)
+- Lateral movement, based on average blast radius (weight 35)
+- Crown jewels reachable from the fleet (weight 20)
+- Segment-crossing lateral edges (weight 15)
 
 ---
 
-## Finding Creation from Attack Paths
-
-When a collection completes and the graph contains high-severity paths, the platform creates **Attack Path Findings**:
-- One finding per identified high-severity path type (not per path instance — deduped by category)
-- Finding is linked to the collection job for evidence
-- Remediation guidance suggests the highest-impact choke point to harden
-
-Attack Path Findings appear in the **Findings** section alongside BAS simulation findings and follow the same lifecycle (Open → In Progress → Validated → Resolved).
 
 ---
 

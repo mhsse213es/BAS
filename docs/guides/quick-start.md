@@ -8,8 +8,8 @@
 ## Prerequisites
 
 - Ubuntu 20.04/22.04/24.04 LTS, or Rocky Linux / RHEL 9
-- Docker 24.0+, Docker Compose v2.20+ (the installer can install Docker itself if missing, with confirmation)
-- 4 GB RAM minimum, 40 GB disk
+- Docker Engine with the daemon running, Docker Compose v2.8.0+ (the installer checks both and can install them with your confirmation)
+- 3.8 GB RAM and 2 CPU cores minimum, 10 GB free disk (the installer's checks)
 - At least one Windows or Linux endpoint to test on
 - Delivery ZIP from Audspect (`bas-install-<version>.zip`)
 
@@ -35,14 +35,15 @@ sudo bash install.sh --install --config setup.conf --yes
 
 | `setup.conf` field | Description |
 |---|---|
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Initial admin login (you will be forced to change the password on first login) |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Initial admin login. The installer creates this account without a forced password change. Change the password from the dashboard after first login. |
 | `DB_PASSWORD` | Postgres password |
 | `LIC_PATH` | Path to the customer license file |
 | `BAS_PORT` | Listening port (defaults to `9443` if omitted) |
+| `BAS_DASHBOARD_PORT` | Dashboard port (defaults to `9543` if omitted) |
 
 This one command loads the Docker images, writes secrets, creates and starts the systemd service, waits for the health check, and creates the admin user — typically well under a couple of minutes.
 
-When it reports success, open the dashboard at `http://<server-ip>:9443` and complete the first-login password change.
+When it reports success, open the dashboard at the URL the installer prints (`https://<server-ip>:9543` by default) and complete the first-login password change.
 
 ---
 
@@ -54,12 +55,12 @@ Log in to the dashboard. Navigate to **Agents** → **Download Installer** → s
 
 ### Deploy and enroll (Windows)
 
-Run the downloaded `BASAgent-Setup-<version>.exe` on the target machine as Administrator and follow its prompts for the server URL and agent secret (found under **Settings → Connection Config** in the dashboard). It installs the agent as a Windows service and enrolls automatically.
+Run the downloaded `BASAgent-Setup-<version>.exe` on the target machine as Administrator and follow its prompts for the server URL and agent secret (found under **Agents → Connection Config** in the dashboard). It installs the agent as a Windows service and enrolls automatically.
 
 For a manual/scripted install instead of the GUI installer, use the standalone agent binary directly:
 ```powershell
 # Replace <server-url> and <secret> with values from Settings -> Connection Config
-.\bas-agent-windows-amd64.exe -server http://192.168.1.50:9443 -secret <agent-secret> -install
+.\bas-agent-windows-amd64.exe -server https://192.168.1.50:9443 -secret <agent-secret> -install
 ```
 
 Refresh the dashboard — the agent appears in the **Agents** list within 30 seconds.
@@ -68,7 +69,7 @@ Refresh the dashboard — the agent appears in the **Agents** list within 30 sec
 
 ```bash
 chmod +x bas-agent-linux-amd64
-sudo ./bas-agent-linux-amd64 -server http://192.168.1.50:9443 -secret <agent-secret> -install
+sudo ./bas-agent-linux-amd64 -server https://192.168.1.50:9443 -secret <agent-secret> -install
 sudo systemctl status bas-agent
 ```
 
@@ -77,7 +78,7 @@ sudo systemctl status bas-agent
 ## Step 3 — Run Your First Simulation (5 minutes)
 
 1. In the dashboard, go to **Scenarios**
-2. Find **"Safe Simulation"** (the safest built-in scenario — read-only OS queries, no modification)
+2. Find **"Safe Security Simulation (Read-Only)"** (the safest built-in scenario — read-only OS queries, no modification)
 3. Click **Run** → select your enrolled agent → click **Confirm**
 4. Navigate to **Live Runs** — watch steps execute in real time
 
@@ -107,11 +108,11 @@ After fixing the control, click **Re-validate** to dispatch a targeted single-te
 
 | Task | Where to go |
 |---|---|
-| Run a full endpoint assessment | Scenarios → ART Full Windows |
+| Run a full endpoint assessment | Scenarios → Atomic Red Team - Full Windows Sweep |
 | Create a Campaign (multi-agent, or target an Agent Group / all agents) | Campaigns → New Campaign |
 | Set up a recurring assessment | Scheduled Assessments → New Schedule |
 | Run attack path collection | Attack Path → Run Collection |
-| Invite another analyst | Settings → Users → Add User |
+| Invite another analyst | Settings → Users & roles |
 | Organize endpoints into groups | Agents → Group tree panel |
 | Download an audit pack | Agents → [agent] → Reports → Audit Pack |
 | Configure MISP / OpenCTI / OTX | Settings → Threat Intel Connector — enter URL/API key, Test Connection, Save (no restart needed) |

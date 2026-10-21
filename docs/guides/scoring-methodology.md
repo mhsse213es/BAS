@@ -27,8 +27,9 @@ Scoring begins with step-level verdicts:
 | **FAIL** | Yes | The technique succeeded (attacker advantage) |
 | **ERROR** | **No** | Execution failed on the BAS side; not a control result |
 | **SKIPPED** | **No** | Step not applicable to this OS/config |
+| **VETOED** | **No** | Agent refused to execute the step under its destructive-action policy |
 
-ERROR and SKIPPED are excluded entirely from scoring. The denominator in all score calculations uses only PASS + FAIL steps.
+ERROR, SKIPPED and VETOED are excluded entirely from scoring. BLOCKED results (the control stopped the technique) are scored as PASS. The denominator in all score calculations uses only PASS + FAIL steps.
 
 ---
 
@@ -50,7 +51,7 @@ Where `step_weight` is derived from the step's severity:
 | High | 3 |
 | Medium | 2 |
 | Low | 1 |
-| Informational | 0.5 |
+| Informational (and any other value) | 1 |
 
 ### Example
 
@@ -78,46 +79,52 @@ The Exposure Score measures how far an attacker can progress through the kill ch
 
 ### Kill Chain Phase Order
 
+Kill Chain Amplifier evaluation follows this ordered sequence of ATT&CK tactics:
+
 ```
-1. Reconnaissance
-2. Resource Development
-3. Initial Access
-4. Execution
-5. Persistence
-6. Privilege Escalation
-7. Defense Evasion
-8. Credential Access
-9. Discovery
-10. Lateral Movement
-11. Collection
-12. Command and Control
-13. Exfiltration
-14. Impact
+1. Initial Access
+2. Execution
+3. Persistence
+4. Privilege Escalation
+5. Defense Evasion
+6. Credential Access
+7. Lateral Movement
+8. Collection
+9. Exfiltration
 ```
 
 ### Kill Chain Amplifier
 
-The Kill Chain Amplifier multiplies the base Exposure Score when an attacker achieves consecutive failures (techniques succeeding) across advancing kill-chain phases:
+The Kill Chain Amplifier multiplies the Risk Score when an attacker achieves consecutive failures (techniques succeeding) across advancing kill-chain phases:
 
 | Consecutive phase failures | Amplifier |
 |---|---|
 | 0–1 phases | 1.0× |
-| 2 consecutive phases | 1.2× |
-| 3 consecutive phases | 1.5× |
-| 4 consecutive phases | 1.8× |
+| 2 consecutive phases | 1.3× |
+| 3–4 consecutive phases | 1.8× |
 | 5+ consecutive phases | 2.5× |
 
 ### Base Exposure Formula
 
 ```
-Base Exposure = Σ(tactic_weight × fail_rate_in_tactic) / Σ(tactic_weight) × 100
+Base Exposure = Σ(tactic_weight of each FAIL step) / Σ(tactic_weight of each scored step) × 100
 ```
 
-Tactic weights increase toward later kill-chain phases (Impact > Exfiltration > Lateral Movement > ... > Reconnaissance).
+Each scored (PASS or FAIL) step contributes its tactic weight to the denominator, and each FAIL step adds its weight to the numerator.
+
+| Tactic weight | Tactics |
+|---|---|
+| 4 | Credential Access, Lateral Movement, Privilege Escalation |
+| 3 | Persistence, Defense Evasion, Execution, Command and Control, Impact, Exfiltration, Collection |
+| 2 | Initial Access |
+| 1 | All other tactics (for example Reconnaissance, Resource Development, Discovery) |
 
 ```
-Exposure Score = min(Base Exposure × Kill Chain Amplifier, 100)
+Exposure Score (stored value) = Base Exposure
+Risk Score = min(round(Base Exposure × Kill Chain Amplifier), 100)
 ```
+
+The Risk Score drives the Risk Classification. The Kill Chain Amplifier is applied to the Risk Score, not to the stored Exposure Score.
 
 ---
 
@@ -125,13 +132,13 @@ Exposure Score = min(Base Exposure × Kill Chain Amplifier, 100)
 
 **Range:** 0–100 (higher = broader defense)
 
-Coverage Score measures what percentage of tested MITRE ATT&CK tactics achieved a perfect pass rate (all steps in that tactic passed).
+Coverage Score measures what percentage of tested MITRE ATT&CK tactics had no FAIL verdicts.
 
 ```
 Coverage Score = (tactics_fully_passed / tactics_tested) × 100
 ```
 
-A tactic is "fully passed" when every step mapped to that tactic in the run produced a PASS verdict.
+A tactic is counted as "fully passed" when no step mapped to that tactic in the run produced a FAIL verdict (ERROR, SKIPPED and VETOED steps are not counted).
 
 ### Distinction from Prevention Score
 
@@ -144,15 +151,15 @@ A Prevention Score of 85 with a Coverage Score of 40 means controls are generall
 
 ## Risk Classification
 
-The Risk Classification bands a run into one of five risk levels based on Prevention Score:
+The Risk Classification bands a run into one of five risk levels based on its Risk Score (the Base Exposure with the Kill Chain Amplifier applied, see Exposure Score above):
 
-| Band | Prevention Score Range | Meaning |
+| Band | Risk Score Range | Meaning |
 |---|---|---|
-| **Protected** | 90–100 | Controls are comprehensive; minor gaps only |
-| **Low Risk** | 75–89 | Controls are generally effective; targeted gaps |
-| **Medium Risk** | 50–74 | Significant gaps; attacker has partial advantage |
-| **High Risk** | 25–49 | Controls are failing on critical techniques |
-| **Critical Risk** | 0–24 | Severe control failure; immediate remediation required |
+| **Protected** | 0–20 | Controls are comprehensive; minor gaps only |
+| **Low Risk** | 21–40 | Controls are generally effective; targeted gaps |
+| **Medium Risk** | 41–60 | Significant gaps; attacker has partial advantage |
+| **High Risk** | 61–80 | Controls are failing on critical techniques |
+| **Critical** | 81–100 | Severe control failure; immediate remediation required |
 
 The band is displayed as a colored badge on every run and in all reports.
 
@@ -165,17 +172,17 @@ Trend compares the current run's Prevention Score to the most recent previous ru
 | Trend | Condition |
 |---|---|
 | **Baseline** | No prior run exists for this agent + scenario combination |
-| **Improving** | Prevention Score increased by more than 3 points |
-| **Stable** | Score changed by 3 points or fewer in either direction |
-| **Degrading** | Prevention Score decreased by more than 3 points |
+| **Improving** | Prevention Score increased by 5 points or more |
+| **Stable** | Score changed by less than 5 points in either direction |
+| **Degrading** | Prevention Score decreased by 5 points or more |
 
-The 3-point threshold avoids marking noise (a single borderline step verdict) as a trend change.
+The 5-point threshold avoids marking noise (a single borderline step verdict) as a trend change.
 
 ---
 
 ## Confidence
 
-Score confidence is affected by sample size. A run with 3 tested steps (2 scorable) produces a less reliable score than a run with 40 steps. The platform displays a **Low Confidence** badge when fewer than 5 steps contributed to a score.
+Each run carries a Confidence value from 0 to 100. It is the average of two percentages: the share of steps that actually executed (ERROR, SKIPPED and VETOED steps are not counted), and the share of the nine main kill-chain tactics (initial access through exfiltration) that the run exercised. A run that skips many steps or covers few tactics therefore shows lower confidence.
 
 ---
 
@@ -194,15 +201,11 @@ The first run of a new scenario on an agent establishes the **Baseline**. All su
 
 ### Agent-Level Score
 
-When viewing the full agent report (across all scenarios and runs), the platform aggregates by taking the weighted average of the most-recent completed run per scenario for that agent. Scenarios with more steps are weighted proportionally higher.
+The agent report scores the agent from its most recent completed or partial scenario run: the Prevention, Exposure and Risk values shown are those of that run. The report's run history lists the score of each of the 20 most recent runs.
 
 ### Campaign Score
 
-Campaign scores aggregate across all agents and scenarios in the campaign. Each agent's contribution is weighted by the number of scorable steps across all scenarios run against that agent.
-
-### Business Unit Score
-
-If agents are tagged with a business unit label, the platform computes a Business Unit Score as the unweighted average of the most-recent Prevention Score per agent in that unit.
+Campaign scores are computed over the pooled step results of every agent and scenario in the campaign, so each scorable step counts once, with its severity weight.
 
 ---
 
@@ -223,8 +226,8 @@ Asset Exposure Score is independent of the BAS Prevention Score and appears excl
 All scoring data is available via API:
 
 ```
-GET /api/scenarios/runs/{id}           — Single run: full score breakdown
-GET /api/agents/{id}/score             — Current agent-level aggregated score
+GET /api/scenarios/runs                — Run list, including each run's score
+GET /api/report/full/json?agentId={id} — Agent-level report with scores (JSON)
 GET /api/campaigns/{id}/summary        — Campaign aggregate score
 GET /api/compliance/scores             — Framework coverage scores
 ```

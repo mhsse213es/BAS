@@ -48,9 +48,9 @@ If Docker isn't already installed, the installer can install Docker CE from its 
 
 ### Network
 
-- Agents must reach the server on the configured port (default **9443**, TCP outbound from each endpoint)
-- Browser must reach the same port
-- That port must not be blocked by endpoint firewalls for agent connectivity
+- Agents must reach the server on the agent port (`BAS_PORT`, default **9443**, TCP outbound from each endpoint)
+- Browsers must reach the dashboard port (`BAS_DASHBOARD_PORT`, default **9543**)
+- The agent port must not be blocked by endpoint firewalls for agent connectivity
 
 ---
 
@@ -59,7 +59,7 @@ If Docker isn't already installed, the installer can install Docker CE from its 
 - [ ] Ubuntu or Rocky/RHEL server provisioned and SSH accessible
 - [ ] Delivery ZIP (`bas-install-<version>.zip`) transferred to the server
 - [ ] Static IP or DNS name assigned to the server
-- [ ] Firewall allows the chosen port (default 9443) from the agent subnet and analyst workstations
+- [ ] Firewall allows the agent port (`BAS_PORT`, default 9443) from the agent subnet, and the dashboard port (`BAS_DASHBOARD_PORT`, default 9543) from analyst workstations
 - [ ] At least 40 GB free disk space confirmed
 - [ ] Customer license file on hand (`.lic`)
 - [ ] TLS certificate and key on hand, if enabling `BAS_TLS`
@@ -95,12 +95,13 @@ nano setup.conf
 | Key | Required | Default | Notes |
 |---|---|---|---|
 | `DATA_DIR` | | `/opt/audspect` | Installation directory |
-| `BAS_PORT` | | `9443` | Dashboard/API listening port |
-| `BAS_TLS` | | `false` | Enable built-in TLS termination |
+| `BAS_PORT` | | `9443` | Agent (mTLS) listening port |
+| `BAS_DASHBOARD_PORT` | | `9543` | Dashboard/API listening port (HTTPS) |
+| `BAS_TLS` | | `false` | Enable built-in TLS termination with your own certificate. When `false`, the dashboard uses a self-signed certificate |
 | `TLS_CERT` / `TLS_KEY` | if `BAS_TLS=true` | | Certificate/key paths |
 | `DB_PASSWORD` | **yes** | | Postgres password |
 | `ADMIN_EMAIL` | **yes** | | Initial admin account email |
-| `ADMIN_PASSWORD` | **yes** | | Initial admin account password (forced change on first login) |
+| `ADMIN_PASSWORD` | **yes** | | Initial admin account password (minimum 10 characters) |
 | `LOG_RETENTION_DAYS` | | `90` | Log retention window |
 | `JWT_SECRET` | | auto-generated | JWT signing key |
 | `AGENT_SECRET` | | auto-generated | Agent MAC secret |
@@ -115,7 +116,7 @@ sudo bash install.sh --install --config setup.conf --yes
 
 This single command loads the Docker images, writes `${DATA_DIR}/.env` (secrets not supplied in `setup.conf` are auto-generated), stages `docker-compose.yml` and the license, creates and enables a systemd unit, starts the stack, waits for the health check, and creates the initial admin user — a full 10-step process with no separate "web wizard" step.
 
-When it completes, the dashboard is available at `http://<server-ip>:9443` (or `https://` if `BAS_TLS=true`).
+When it completes, the dashboard is available at `https://<server-ip>:9543` (self-signed certificate unless `BAS_TLS=true`).
 
 **There is no interactive web-based setup wizard in the current release.** An older `setup.sh` (`--web`, port 9001) exists in the repository history but is not included in the current delivery bundle — `install.sh` is the sole supported installer.
 
@@ -151,7 +152,8 @@ server {
     add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
 
     location / {
-        proxy_pass         http://127.0.0.1:9443;
+        # The dashboard listener is always TLS (self-signed unless BAS_TLS=true).
+        proxy_pass         https://127.0.0.1:9543;
         proxy_http_version 1.1;
         proxy_set_header   Upgrade $http_upgrade;
         proxy_set_header   Connection "upgrade";
@@ -179,17 +181,22 @@ Agents must be re-enrolled with the HTTPS URL if they were previously enrolled w
 
 ```
 bas.company.com {
-    reverse_proxy localhost:9443
+    reverse_proxy https://localhost:9543 {
+        transport http {
+            # The dashboard listener is always TLS; skip upstream verification only for the self-signed default certificate.
+            tls_insecure_skip_verify
+        }
+    }
 }
 ```
 
-Caddy handles TLS automatically with Let's Encrypt. For an internal/air-gapped CA, see [Certificate Replacement](#9-certificate-replacement).
+Caddy handles TLS for the public hostname automatically with Let's Encrypt. For an internal/air-gapped CA, see [Certificate Replacement](#9-certificate-replacement).
 
 ---
 
 ## 5. Systemd Service
 
-`install.sh --install` creates and enables `/etc/systemd/system/audspect.service` automatically — there is nothing to hand-write. It runs `docker compose -p audspect up -d --remove-orphans` on start (and `down` on stop), with `Restart=on-failure`.
+`install.sh --install` creates and enables `/etc/systemd/system/audspect.service` automatically — there is nothing to hand-write. It runs `docker compose -p audspect up -d --pull never --remove-orphans` on start (and `down` on stop), with `Restart=on-failure`.
 
 ```bash
 sudo systemctl status audspect
@@ -369,16 +376,17 @@ Contact Audspect support for a reviewed HA configuration.
 
 | Port | Protocol | Direction | Purpose |
 |---|---|---|---|
-| 9443 (default, configurable via `BAS_PORT`) | TCP | Inbound to server | Dashboard, API, agent connections |
+| 9443 (default, configurable via `BAS_PORT`) | TCP | Inbound to server | Agent connections (mTLS) |
+| 9543 (default, configurable via `BAS_DASHBOARD_PORT`) | TCP | Inbound to server | Dashboard and API (browsers) |
 | 5432 | TCP | Internal only | PostgreSQL (never expose externally) |
 | 8888 | TCP | Internal only | Caldera API (optional, never expose externally) |
-| 443 | TCP | Inbound to server | HTTPS (if using a reverse proxy) |
+| 443 | TCP | Inbound to server | HTTPS to the dashboard, if you use the reverse proxy in section 4.2 |
 | 80 | TCP | Inbound to server | HTTP → HTTPS redirect (if using a reverse proxy) |
 
 There is no separate temporary setup-wizard port — installation runs entirely from the CLI (`install.sh`), nothing to expose or close afterward.
 
 **Agent subnet rules:**
-- Agents must be allowed to make outbound TCP connections to the server on the configured port (9443 by default, or 443 if fronted by a TLS reverse proxy)
+- Agents must be allowed to make outbound TCP connections to the agent port (`BAS_PORT`, 9443 by default). Agents connect directly to this port with a client certificate. They do not use the reverse proxy in section 4.2, which covers the dashboard only.
 - No inbound ports are required on agent endpoints
 
 ---
@@ -391,22 +399,22 @@ sudo bash install.sh --status
 
 Or manually:
 ```bash
-# Server health
-curl -s http://<server-ip>:9443/health | python3 -m json.tool
+# Server health (-k: default self-signed certificate)
+curl -sk https://<server-ip>:9543/health
 
 # PostgreSQL connectivity
 docker exec audspect-postgres psql -U bas_user -d bas_platform -c "SELECT count(*) FROM users;"
 
 # Dashboard reachable
-curl -sI http://<server-ip>:9443 | head -5
+curl -skI https://<server-ip>:9543 | head -5
 
 # Scenario integrity
 docker logs audspect-orchestrator | grep -i "scenario\|sign\|load"
 ```
 
-Expected `/health` response shape:
+Expected `/health` response:
 ```json
-{"status": "ok", "db": "ok", "version": "<current version>"}
+{"status":"ok"}
 ```
 
 ---

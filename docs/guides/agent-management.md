@@ -16,8 +16,8 @@ An Audspect BAS agent is a lightweight Go binary deployed on a target endpoint. 
 
 | State | Meaning | Who Sets It |
 |---|---|---|
-| **enrolling** | Agent first connected; awaiting initial heartbeat confirmation | Automatic |
-| **active** | Normal operating state | Automatic (on first healthy heartbeat) |
+| **enrolling** | Defined in the state model but not assigned by current releases; newly enrolled agents start as `active` | Not used |
+| **active** | Normal operating state; the default state on enrollment | Automatic |
 | **restricted** | Agent can connect and report results, but cannot receive new scenario dispatches | Admin |
 | **quarantined** | Agent fully isolated; no dispatches accepted | Admin |
 | **retired** | Agent decommissioned; historical data preserved; no new connections | Admin |
@@ -112,7 +112,7 @@ Config is written to `/etc/bas-agent/config`, same format as Linux. The agent in
 
 ### Verify enrollment
 
-Within 30–60 seconds, the agent appears in the dashboard under **Agents** with state **enrolling**, moving to **active** on its first healthy heartbeat. The agent table shows:
+Within 30–60 seconds, the agent appears in the dashboard under **Agents** with state **active**. The agent table shows:
 - Hostname
 - OS version
 - Last heartbeat timestamp
@@ -180,7 +180,7 @@ if (-not (Get-Service "Audspect Agent" -ErrorAction SilentlyContinue)) {
 }
 ```
 
-Install is idempotent — running it a second time on an already-installed agent is safe.
+Running `-install` on an endpoint that already has the agent installed fails with an "already installed" error and changes nothing; the snippet above checks for the service first so it is safe to run on every endpoint.
 
 ### Linux — Ansible
 

@@ -8,8 +8,8 @@
 
 **Reporting Suite (Cymulate-style)**
 - Full HTML/PDF/CSV reporting for per-run, full-agent, campaign, audit-pack, compliance, and exercise types
-- PDF generation via headless Chromium sidecar (replaces Go-native PDF)
-- Audit pack ZIP: HTML + PDF + CSV + raw JSON + SHA-256 manifest per agent
+- PDF generation via headless Chromium sidecar; the built-in Go (fpdf) renderer is the fallback when the sidecar is unavailable
+- Audit pack ZIP per agent: executive HTML and PDF, summary and per-run JSON, per-framework compliance CSVs, agent inventory, SHA-256 manifest (`MANIFEST.sha256`) and signed attestation
 - MITRE ATT&CK Navigator export (JSON attack flow) per run
 
 **Attack Path Validation — Job Lifecycle**
@@ -17,7 +17,7 @@
 - Full job lifecycle visible in dashboard: Attack Path section + new Attack Path tab in agent detail drawer
 - Real-time progress streaming via WebSocket: stages, percentage, targets-completed/total
 - Auto-retry on agent reconnect for queued jobs
-- AP job scheduling: recurring collections per agent with cron expressions
+- AP job scheduling: recurring collections on a fixed interval in minutes (`intervalMinutes`), with targets and optional SharpHound run
 
 **Findings and Remediation**
 - Structured finding lifecycle: Created → Open → In Progress → Validated → Resolved / False Positive / Suppressed / Archived
@@ -59,7 +59,7 @@
 ### Breaking Changes
 
 - Passwords stored with bcrypt are transparently upgraded to PBKDF2 on next login. There is no fallback to bcrypt for writing new hashes.
-- `GET /api/attackpath/collect` (fire-and-forget) is deprecated in favor of `POST /api/attackpath/jobs`. The old endpoint is retained for backward compatibility.
+- `POST /api/attackpath/collect/{agentId}` (fire-and-forget dispatch) is deprecated in favor of `POST /api/attackpath/jobs`. The old endpoint is retained for backward compatibility.
 - Report MIME type for audit pack changed from `application/zip` with filename suffix to explicit `Content-Disposition: attachment; filename="bas-audit-pack-*.zip"`.
 
 ---

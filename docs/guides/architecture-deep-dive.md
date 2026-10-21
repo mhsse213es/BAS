@@ -8,7 +8,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  ORCHESTRATOR (Go, port 9000)                                │
+│  ORCHESTRATOR (Go, port 9443)                                │
 │                                                              │
 │  ┌─────────────┐  ┌──────────────┐  ┌────────────────────┐  │
 │  │  HTTP Router │  │ WebSocket Hub│  │  Background Workers│  │
@@ -28,7 +28,7 @@
 │  └────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
           │                        │
-          │ pgx pool (max 25)       │ HTTP /print
+          │ pgx pool                │ CDP (CHROME_WS_URL)
           ▼                        ▼
     ┌──────────┐            ┌───────────────┐
     │PostgreSQL│            │Chromium sidecar│
@@ -50,20 +50,16 @@
 Browser → POST /api/scenarios/{id}/run
               │
               ▼
-         CreateRun() in api/handlers.go
+         RunScenario() in api/handlers.go
               │ validates scenario (signature check)
               │ validates agent (state = active)
               │ resolves scenario steps server-side:
-              │   ART: reads art_atomics + art_atomic_tests from Postgres
+              │   ART: reads art_atomic_tests from Postgres
               │   Caldera: fetches ability from Caldera REST API
               │   Custom: step command verbatim
               │
               ▼
          Inserts `scenario_runs` row (status=dispatched)
-         Inserts `run_steps` rows
-              │
-              ▼
-         BroadcastJSON(MsgRunDispatched) → all WS sessions
               │
               ▼
          HubSend(agentId, RunCommand{...}) → agent WS session
@@ -72,35 +68,32 @@ Browser → POST /api/scenarios/{id}/run
          Agent receives RunCommand
          Agent executes steps in sequence
          Agent POSTs each step result to:
-           POST /api/agents/result
+           POST /api/scenarios/result
               │
               ▼
-         HandleAgentResult() in api/handlers.go
-              │ verifies HMAC-SHA256 MAC on request body
-              │ upserts run_step row with verdict + output
+         SubmitScenarioResult() in api/handlers.go
+              │ verifies X-Result-MAC (HMAC-SHA256) on request body
+              │ records the step verdict and output
               │ calls scoring engine on final step
               │ creates/updates findings for FAIL verdicts
               │
               ▼
-         BroadcastJSON(MsgRunStepResult) → WS sessions
-              │
-              ▼
-         Browser receives WS event → updates live run view
 ```
 
 ---
 
 ## WebSocket Hub
 
-The WebSocket hub is a single goroutine managing all connected browser sessions. All broadcasts go through a channel to avoid lock contention:
+The WebSocket hub (`internal/ws/hub.go`) tracks agent and browser connections. Its session maps are guarded by a read/write mutex, and it holds separate records for agent and browser connections:
 
 ```go
-// Simplified hub structure
+// Structure (abridged)
 type Hub struct {
-    sessions  map[string]*Session   // sessionId → session
-    broadcast chan WSMessage
-    register  chan *Session
-    unregister chan *Session
+    mu            sync.RWMutex
+    agents        map[string]*conn  // agentID → connection
+    browsers      []*conn
+    signer        *rsa.PrivateKey   // deployment command-signing key
+    allowedOrigin string            // host a browser WS Origin must match
 }
 ```
 
@@ -108,14 +101,15 @@ Message types (all defined in `internal/models/schema.go`):
 
 | Constant | Value | Purpose |
 |---|---|---|
-| `MsgRunDispatched` | `"run_dispatched"` | Run created and sent to agent |
-| `MsgRunStepResult` | `"run_step_result"` | Step verdict received |
-| `MsgRunCompleted` | `"run_completed"` | Run fully complete with scores |
-| `MsgAgentStateChange` | `"agent_state_change"` | Agent lifecycle state changed |
 | `MsgHeartbeat` | `"heartbeat"` | Agent heartbeat received (updates Last Seen) |
+| `MsgScenarioResult` | `"scenario_result"` | Scenario result received from an agent |
+| `MsgRunEvent` | `"run_event"` | Run progress event |
 | `MsgAPJobUpdate` | `"ap_job_update"` | AP job status change |
-| `MsgAPJobProgress` | `"ap_job_progress"` | AP job stage/percentage update |
+| `MsgAPJobProgress` | `"ap_job_progress"` | AP job progress update |
 | `MsgAttackPathCollected` | `"attackpath_collected"` | AP collection complete |
+| `MsgAgentReconnected` | `"agent_reconnected"` | Agent came back online |
+| `MsgAgentDisconnected` | `"agent_disconnected"` | Agent WebSocket dropped |
+| `MsgTamperAlert` | `"tamper_alert"` | Filesystem tamper detected |
 
 ---
 
@@ -136,7 +130,7 @@ Scenario YAML declares: art_technique="T1003.001" art_test_index=0
          AND executor_os LIKE '%windows%'   -- matches agent OS
            │
            ▼
-       Substitutes InputArguments from art_atomics YAML defaults
+       Substitutes InputArguments
            │
            ▼
        Returns complete RunStepCommand{executor, command, cleanup}
@@ -146,7 +140,6 @@ Scenario YAML declares: art_technique="T1003.001" art_test_index=0
 ```
 
 The ART library (YAML) is seeded into PostgreSQL on first startup. Tables:
-- `art_atomics` — raw YAML metadata per technique
 - `art_atomic_tests` — parsed individual test definitions
 - `art_atomic_raw` — original YAML text per technique (for reseed)
 - `art_payloads` — metadata for external payload files
@@ -155,30 +148,30 @@ The ART library (YAML) is seeded into PostgreSQL on first startup. Tables:
 
 ## Scoring Engine
 
-`internal/scoring/scoring.go` is called after the final step result arrives for a run.
+`ComputeScore` in `internal/models/score.go` builds the run score from the run's technique results.
 
 ```go
-type RunScore struct {
-    PreventionScore float64
-    ExposureScore   float64
-    CoverageScore   float64
-    KillChainAmp    float64
-    RiskBand        string
-    Trend           string
+type Score struct {
+    PreventionScore         float64  // 0–100, weighted pass rate
+    ExposureScore           float64  // 0–100, tactic-weighted fail rate
+    CoverageScore           float64  // 0–100, % of tested tactics with zero failures
+    KillChainCoverage       float64  // 0–100, % of ATT&CK enterprise tactics exercised
+    KillChainAmplifier      float64  // 1.0–2.5, consecutive kill-chain failures
+    Trend                   string   // Improving | Degrading | Stable | Baseline
+    PreviousPreventionScore float64
+    CriticalFailures        []CriticalFailure
 }
 ```
 
-Input: `[]RunStep` with verdicts and severity tags.
+Input: the run's technique results, each with a result type and a severity.
 
 Algorithm:
-1. Filter to scorable steps: verdict IN (PASS, FAIL)
-2. Compute `PreventionScore`: Σ(weight × isPass) / Σ(weight) × 100
-3. Compute per-tactic fail rates → `base_exposure`
-4. Compute `KillChainAmp` from consecutive failing phases
-5. `ExposureScore` = min(base_exposure × amp, 100)
-6. `CoverageScore` = (tactics where all steps passed / tactics tested) × 100
-7. `RiskBand` = risk band from Prevention Score threshold table
-8. `Trend` = compare PreventionScore to most recent previous run for same agent+scenario
+1. Results with type Skipped, Error or Vetoed are excluded from scoring and counted separately.
+2. `PreventionScore`: severity-weighted share of Pass and Blocked results × 100.
+3. `ExposureScore`: tactic-weighted fail rate, amplified by kill-chain depth.
+4. `KillChainAmplifier`: multiplier from consecutive kill-chain phase failures.
+5. `CoverageScore`: % of tested tactics where no step failed.
+6. `Trend`: compare PreventionScore to the previous run for the same agent and scenario.
 
 ---
 
@@ -189,23 +182,15 @@ Algorithm:
 | `users` | User accounts (email, password hash, role, must_change_pw) |
 | `agents` | Agent records (id, hostname, ip, os, state, last_heartbeat) |
 | `scenario_runs` | Run instances (id, scenario_id, agent_id, status, scores) |
-| `run_steps` | Individual step results (run_id, step_id, verdict, output) |
-| `run_reports` | Generated reports (run_id, format, data BYTEA) |
 | `findings` | Control gap findings (technique_id, agent_id, severity, status) |
 | `remediations` | Grouped by technique across agents |
 | `campaigns` | Campaign definitions and schedules |
-| `campaign_runs` | Individual campaign execution instances |
-| `exercises` | Purple team exercise plans |
 | `exercise_executions` | Exercise execution records with evidence chain |
 | `attackpath_jobs` | AP collection job lifecycle tracking |
-| `attackpath_results` | Processed graph data per job |
-| `attackpath_assets` | Asset criticality tags |
-| `art_atomics` | ART technique metadata |
 | `art_atomic_tests` | ART individual test definitions |
 | `art_atomic_raw` | Raw YAML (for reseed) |
 | `art_payloads` | ART payload metadata |
-| `events` | Audit log entries |
-| `schema_migrations` | Applied migration tracking |
+| `audit_logs` | Audit log entries |
 
 ---
 
@@ -223,7 +208,7 @@ LoadScenarios(dir)
        │       │     │
        │       │     ├── not found → mark unsigned (cannot dispatch)
        │       │     │
-       │       │     └── found → gpg --verify <sig> <yaml>
+       │       │     └── found → RSA-SHA256 check (integrity.VerifyScenarioFile)
        │       │             │
        │       │             ├── invalid → mark "signature_invalid" (cannot dispatch)
        │       │             │
@@ -248,7 +233,7 @@ Agent result submission is designed for reliability over exactly-once:
 4. Duplicate is safe: same verdict written twice = same outcome
 
 Late submission healing:
-- Run status = `partial` if no result received for 90 seconds
+- A run whose agent has been silent for more than 90 seconds (the agent offline threshold) can be marked `partial`
 - Agent reconnects, submits buffered results
 - Server processes results → if all steps now have results → run moves to `completed`
 - Finding creation re-runs on final completion
@@ -261,13 +246,14 @@ Late submission healing:
 // attackpath_jobs.go
 // State transitions enforced in the database via status column checks
 
-Queued → Dispatched  (on agent ACK)
-Queued → DeliveryFailed  (30s timeout: no ACK)
-Dispatched → Running  (on agent progress update)
-Running → Completed  (on result submission via SubmitAttackPathCollection)
-Running → Failed  (on agent error report)
-Running → TimedOut  (30 min timeout via StartAPJobMonitor ticker)
-Any → Cancelled  (admin action)
+queued → dispatched        (job sent to agent over WebSocket)
+dispatched → running      (agent ACK via AckAttackPathJob)
+dispatched → delivery_failed  (no ACK within 30 seconds)
+running → completed       (results submitted via SubmitAttackPathCollection)
+running → failed          (agent reported an error)
+running → timed_out       (per-job timeout: 30 s + 3 s per target, clamped to 2–15 minutes;
+                           enforced by the StartAPJobMonitor loop, which runs every 15 seconds)
+any active state → cancelled  (operator action)
 ```
 
 ---

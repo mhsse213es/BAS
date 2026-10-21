@@ -33,15 +33,15 @@ Audspect BAS uses role-based access control (RBAC) with three roles. User accoun
 | Set finding status, add notes | | ✓ | ✓ |
 | Create tickets from findings | | ✓ | ✓ |
 | Create/manage campaigns | | ✓ | ✓ |
-| Create/manage exercises | | ✓ | ✓ |
+| Launch, abort and approve exercise executions | | ✓ | ✓ |
+| Create/manage exercise plans | | | ✓ |
 | Re-validate findings | | ✓ | ✓ |
-| Trigger threat intel sync | | ✓ | ✓ |
+| Trigger threat intel sync | | | ✓ |
 | View agent secret (Connection Config) | | | ✓ |
 | Manage users (create/edit/delete) | | | ✓ |
 | Reset passwords | | | ✓ |
 | Set agent lifecycle state | | | ✓ |
 | Configure AP schedule | | | ✓ |
-| Delete runs, findings | | | ✓ |
 | Access audit log | | | ✓ |
 
 ---
@@ -51,11 +51,11 @@ Audspect BAS uses role-based access control (RBAC) with three roles. User accoun
 **Dashboard:** Settings → Users → Add User
 
 **Required fields:**
-- Email address (used as username)
-- Role (Viewer / Analyst / Admin)
-- Initial password
+- Username (use the user's email address by convention)
+- Initial password (at least 8 characters)
+- Role (Viewer / Analyst / Admin; defaults to Analyst if omitted)
 
-New users receive the `must_change_pw` flag — they are forced to change their password on first login before accessing any platform feature.
+New users receive the `must_change_pw` flag — the dashboard requires a password change at first login before the user can continue.
 
 **API:**
 ```
@@ -63,7 +63,7 @@ POST /api/users
 Authorization: Bearer <admin-jwt>
 Body:
 {
-  "email": "analyst@company.com",
+  "username": "analyst@company.com",
   "role": "analyst",
   "password": "TemporaryP@ss1!"
 }
@@ -75,8 +75,8 @@ Body:
 
 | Requirement | Value |
 |---|---|
-| Minimum length | 12 characters |
-| Must contain | Uppercase, lowercase, digit, special character |
+| Minimum length | 8 characters (enforced by the API on create, change and reset) |
+| Must contain | Not enforced by the API (length check only) |
 | Algorithm | PBKDF2-HMAC-SHA256, 310,000 iterations (NIST SP 800-132) |
 | Hash format | `$pbkdf2-sha256$<iter>$<salt>$<dk>` |
 | Iteration count | Configurable via `BAS_PBKDF2_ITERATIONS` (minimum 310,000 enforced) |
@@ -115,13 +115,15 @@ On every login that has `must_change_pw = true`:
 1. User submits credentials at the login form
 2. Login succeeds → JWT issued
 3. Dashboard redirects to a mandatory password-change form
-4. All API requests until password is changed return `403 Password change required`
+4. The login response includes `mustChangePw`; the dashboard shows the mandatory change form. The API does not block other endpoints while the flag is set.
 5. After password change → `must_change_pw` cleared → full dashboard access granted
 
 This applies to:
 - New accounts created by admin
 - Any account after an admin password reset
-- The initial admin account on fresh deployment
+- The fallback admin account, when `BAS_ADMIN_PASSWORD` is not set (see Initial Admin Account)
+
+The admin account created by `install.sh` does not have the flag set.
 
 ---
 
@@ -137,6 +139,8 @@ PUT /api/users/{id}
 Body: { "role": "admin" }
 ```
 
+The same endpoint accepts `"isActive": true|false` (see Deactivation). Admins cannot change their own role.
+
 Role changes take effect immediately. Active sessions (JWTs) already issued retain the old role until they expire (24-hour TTL) or until the user logs out and back in.
 
 ---
@@ -145,7 +149,15 @@ Role changes take effect immediately. Active sessions (JWTs) already issued reta
 
 ### Deactivation
 
-There is no soft-deactivation toggle. To prevent a user from logging in, reset their password to a random string (which they don't have).
+Set `isActive` to `false` to block a user from logging in. A deactivated user receives `403 account is disabled` at login. Set it back to `true` to re-enable the account.
+
+**API:**
+```
+PUT /api/users/{id}
+Body: { "isActive": false }
+```
+
+You cannot deactivate your own account.
 
 ### Deletion
 
@@ -158,7 +170,7 @@ Permanently removes the user account. Runs, findings, and notes created by this 
 DELETE /api/users/{id}
 ```
 
-You cannot delete your own account. You cannot delete the last admin account.
+You cannot delete your own account. The server does not block deleting the last remaining admin account, so keep at least one other admin before deleting one.
 
 ---
 
@@ -170,30 +182,26 @@ All user management actions are written to the **Audit Log**:
 |---|---|
 | User created | Creator email, new user email, role |
 | Password changed | User email, timestamp (password itself never logged) |
-| Password reset | Admin email, target user email |
-| Role changed | Admin email, target user, old role, new role |
-| User deleted | Admin email, deleted user email |
+| Password reset | Admin email, target user ID |
+| Role changed | Admin email, target user ID (old and new role are not recorded) |
+| User deleted | Admin email, deleted user ID |
 | Login success | User email, IP address, timestamp |
 | Login failure | Attempted email, IP address, timestamp |
 
-The audit log is accessible to Admin users: **Audit Logs** in the sidebar, or `GET /api/events?category=user`.
+The audit log is accessible to Admin users: **Audit Logs** in the sidebar, or `GET /api/audit-logs` (filters: `action`, `actor`, `limit`, `offset`; for example `GET /api/audit-logs?action=user.create`).
 
 ---
 
 ## Initial Admin Account
 
-On first deployment, the orchestrator seeds one admin account using:
-- Username: value of `BAS_ADMIN_EMAIL` environment variable
-- Password: value of `BAS_ADMIN_PASSWORD` environment variable
-- `must_change_pw = true`
+`install.sh --install` creates the first admin account from `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `setup.conf`. The account is created without `must_change_pw`.
 
-If `BAS_ADMIN_EMAIL` is not set, the orchestrator uses `admin` as the username. If `BAS_ADMIN_PASSWORD` is not set, a random password is generated and printed once to the orchestrator container log:
+The orchestrator also syncs the primary admin account to `BAS_ADMIN_EMAIL` and `BAS_ADMIN_PASSWORD` on every start, not only on first run. Because of this, a password changed in the dashboard is overwritten by the value in `BAS_ADMIN_PASSWORD` at the next restart.
 
-```bash
-docker compose logs orchestrator | grep "admin password"
-```
+> **Known issue (current release):** the re-apply on every start described above is a defect, not intended behaviour. Until it is fixed, change the admin password in `setup.conf` and run `install.sh --upgrade` so the value persists, or use a separate admin account.
 
-This is a one-time operation on first run. The seed is skipped if any user already exists in the database.
+
+If `BAS_ADMIN_EMAIL` is not set, the username is `admin`. If `BAS_ADMIN_PASSWORD` is not set, the orchestrator falls back to a built-in default password and sets `must_change_pw`. Always set `BAS_ADMIN_PASSWORD`.
 
 ---
 

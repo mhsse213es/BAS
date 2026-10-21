@@ -12,55 +12,20 @@ Every technique that produces a **FAIL** verdict in a simulation run automatical
 
 ## Finding Lifecycle
 
-```
-FAIL verdict produced
-        │
-        ▼
-   ┌─────────┐
-   │ Created │  ← Finding created automatically; unassigned
-   └────┬────┘
-        │ (analyst opens finding)
-        ▼
-   ┌──────┐
-   │ Open │  ← Analyst confirms it is a real finding
-   └──┬───┘
-      │ (assigned for remediation)
-      ▼
-   ┌─────────────┐
-   │ In Progress │  ← Engineer is actively working on the control gap
-   └──────┬──────┘
-          │
-     ┌────┴──────────────────────────┐
-     │                               │
-     ▼                               ▼
-┌──────────┐                  ┌──────────────────┐
-│ Validated │                  │ False Positive   │
-│           │                  │ / Suppressed     │
-└─────┬─────┘                  └──────────────────┘
-      │ (re-validate run passes)         │
-      ▼                                  │
-┌──────────┐                             │
-│ Resolved │ ◄───────────────────────────┘
-└────┬─────┘
-     │ (30-day retention window)
-     ▼
-┌──────────┐
-│ Archived │
-└──────────┘
-```
+A FAIL verdict creates a finding with status `open`. Findings move between four statuses:
 
-### State definitions
+### Status definitions
 
-| State | Who Sets It | Meaning |
+| Status | Who Sets It | Meaning |
 |---|---|---|
-| **Created** | Automatic | Finding exists; no analyst action yet |
-| **Open** | Analyst | Confirmed real finding; queued for work |
-| **In Progress** | Analyst | Engineer assigned; remediation underway |
-| **Validated** | Automatic or Analyst | Re-validate run passed; fix confirmed |
-| **Resolved** | Analyst or Automatic | Control gap closed |
-| **False Positive** | Analyst | Technique is intentionally permitted in this environment |
-| **Suppressed** | Analyst | Finding acknowledged; not being remediated (risk accepted) |
-| **Archived** | Automatic | Resolved finding past the 30-day retention window; read-only |
+| **open** | Automatic (new finding, or reopened) | Control gap is live and not yet triaged or remediated |
+| **triaged** | Analyst | Analyst has reviewed the finding |
+| **remediated** | Automatic or Analyst | A newer run shows the technique blocked, or an analyst marked it fixed. Sets the resolved time |
+| **risk_accepted** | Analyst | Risk accepted. Sticky: later recurrences are counted, but the status is never changed automatically |
+
+Automatic transitions:
+- An **open** or **triaged** finding becomes **remediated** when a newer run shows the technique prevented.
+- A **remediated** finding is reopened to **open** when the technique fails again, and its reopened count increases.
 
 ---
 
@@ -93,7 +58,7 @@ Each finding carries:
 
 Findings are deduplicated by the combination of `(agent_id, technique_id, control_class)`. If the same technique fails on the same agent in a subsequent run, the existing finding is updated (Last Seen, Recurrence Count) rather than creating a duplicate.
 
-This means one finding per technique per agent. If a technique fails across 10 agents, there are 10 findings — one per agent.
+This means one finding per technique, agent and control class. If a technique fails across 10 agents, there are 10 findings — one per agent.
 
 ---
 
@@ -142,9 +107,8 @@ Recommendation:
 3. A run is created with `revalidation=true` and dispatched only to the affected agent(s)
 4. The run targets the specific technique ID rather than a named scenario
 5. When the run completes:
-   - **PASS** → Finding status automatically moves to **Validated**
-   - **FAIL** → Finding status remains unchanged; Last Seen updated
-   - **ERROR** → Finding unchanged; analyst is notified of the execution failure
+   - **PASS** (technique prevented) → Finding status automatically moves to **remediated**
+   - **FAIL** → Last Seen and Recurrence Count are updated; a remediated finding is reopened to **open**; a risk_accepted finding stays as it is
 
 The Re-validate action is visible on every finding and on each remediation card.
 
@@ -156,13 +120,9 @@ The finding detail view shows the full re-validate history: when each re-validat
 
 ## Automatic Closure
 
-If a technique previously failing starts consistently passing across multiple runs without manual intervention, the platform applies **Automatic Closure** logic:
+If a previously failing technique is prevented in a newer run without manual intervention (for example, after an AV signature update or a patch), the platform moves an **open** or **triaged** finding to **remediated**. A **risk_accepted** finding is never changed automatically. Analysts can review the status change and reopen the finding if the control regresses.
 
-- If the same `(agent, technique)` combination produces PASS in 3 consecutive runs after a FAIL finding
-- AND the finding has been in Created or Open state (not actively In Progress)
-- THEN the finding is automatically moved to **Resolved** with a note: "Automatically resolved — 3 consecutive passes"
-
-This prevents stale findings from accumulating when controls are updated via other channels (e.g., AV signature update, patch applied).
+This prevents stale findings from accumulating when controls are updated via other channels.
 
 ---
 
@@ -192,14 +152,14 @@ The ticket payload includes:
 - Link to the finding in the Audspect dashboard
 - Evidence (first 2,000 characters)
 
-On ticket creation, the ticket ID is stored in `linked_ticket` on the finding. The finding status does not change automatically based on ticket status — status must be updated in Audspect directly.
+On ticket creation, the ticket ID is stored against the finding in the finding-tickets record. The finding status does not change automatically based on ticket status — status must be updated in Audspect directly.
 
 ---
 
 ## Bulk Operations
 
 From the **Findings** list view, analysts can select multiple findings and:
-- Set status (bulk mark as Suppressed, In Progress, etc.)
+- Set status (open, triaged, remediated, risk_accepted)
 - Assign to a user
 - Create tickets (one per finding)
 - Export selected findings to CSV
@@ -209,16 +169,17 @@ From the **Findings** list view, analysts can select multiple findings and:
 ## Findings API
 
 ```
-GET /api/findings                     — List findings (filter by status, severity, agent, tactic)
+GET /api/findings                     — List findings (query filters: status, severity, agentId)
 GET /api/findings/{id}               — Get single finding detail
-POST /api/findings/{id}/status       — Update status, add note
-GET /api/remediations                 — List grouped remediations by technique
-POST /api/remediations/{techniqueId}/revalidate — Dispatch re-validate run
+POST /api/findings/{id}/status       — Body {"status": "open|triaged|remediated|risk_accepted", "reason": "..."}
+GET /api/remediations                — List grouped remediations by technique
 ```
+
+Re-validate is started from the **Re-validate** button on a finding or remediation card in the dashboard; it has no separate public API route in this release.
 
 **Example: list critical open findings**
 ```
-GET /api/findings?severity=critical&status=open&limit=50
+GET /api/findings?severity=critical&status=open
 
 Response:
 [

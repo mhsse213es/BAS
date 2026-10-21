@@ -6,9 +6,9 @@
 
 ## Overview
 
-Audspect BAS v1.7.3 ships a comprehensive Cymulate-style reporting suite. Every report is rendered from a live HTML template and converted to PDF via a headless Chromium sidecar. Reports can be generated on demand or scheduled.
+Audspect BAS v1.7.3 ships a comprehensive Cymulate-style reporting suite. Reports are rendered from HTML templates and converted to PDF via a headless Chromium sidecar; if the sidecar is unavailable, the built-in renderer is used instead. Reports can be generated on demand or scheduled.
 
-All generated reports embed a SHA-256 integrity hash in the file header, allowing verification that report content has not been altered after generation.
+Audit packs carry a SHA-256 manifest and a signed attestation, so their contents can be verified after generation. See Report Integrity Verification below.
 
 ---
 
@@ -30,9 +30,10 @@ A detailed report for a single scenario execution on a single agent.
 
 **Access:**
 - Dashboard: Scenarios → Runs → [run] → Download Report
-- API: `GET /api/scenarios/runs/{runId}/report?format=html`
-- API: `GET /api/scenarios/runs/{runId}/report?format=pdf`
-- API: `GET /api/scenarios/runs/{runId}/report?format=csv`
+- API: `GET /api/scenarios/runs/{runId}/report` (HTML)
+- API: `GET /api/scenarios/runs/{runId}/pdf` (PDF)
+- API: `GET /api/scenarios/runs/{runId}/forensic.csv` (CSV)
+- API: `GET /api/scenarios/runs/{runId}/export` (JSON)
 
 ---
 
@@ -53,7 +54,7 @@ An aggregated report covering all runs for a single agent, across all scenarios.
 
 **Access:**
 - Dashboard: Agents → [agent] → Reports → Full Agent Report
-- API: `GET /api/report/agent/{agentId}?format=pdf`
+- API: `GET /api/report/full/{html|pdf|csv|json}?agentId={agentId}`
 
 ---
 
@@ -62,16 +63,19 @@ An aggregated report covering all runs for a single agent, across all scenarios.
 A ZIP archive containing a complete assessment record for one agent. Intended for compliance, audit, and management review.
 
 **Contents:**
-- `report.html` — Full agent HTML report
-- `report.pdf` — Full agent PDF report
-- `data.csv` — Run-level CSV export
+- `executive-report.html` — Executive HTML report
+- `executive-report.pdf` — Executive PDF report
+- `summary.json` — Full machine-readable report
 - `runs/*.json` — Raw structured JSON for each run (machine-readable, suitable for SIEM/SOAR)
-- `manifest.json` — SHA-256 hashes of all files in the ZIP
+- `compliance/*.csv` — One CSV per compliance framework
+- `agent-inventory.json` — Agent metadata, security tools, and detection categories
+- `MANIFEST.sha256` — SHA-256 checksum of every file in the ZIP
+- `SIGNATURE.txt` and `attestation.json` — Signed digest of the manifest (tamper evidence)
 - `README.txt` — What the pack contains and how to verify integrity
 
 **Access:**
 - Dashboard: Agents → [agent] → Reports → Download Audit Pack
-- API: `GET /api/report/agent/{agentId}/auditpack`
+- API: `GET /api/report/audit-pack?agentId={agentId}` (the agent needs at least one completed or partial run)
 
 ---
 
@@ -91,7 +95,7 @@ A unified report across all agents and scenarios in a Campaign.
 
 **Access:**
 - Dashboard: Campaigns → [campaign] → Report
-- API: `GET /api/campaigns/{id}/report?format=pdf`
+- API: `GET /api/campaigns/{id}/report` (HTML), `GET /api/campaigns/{id}/pdf` (PDF), `GET /api/campaigns/{id}/forensic.csv` (CSV)
 
 ---
 
@@ -100,12 +104,13 @@ A unified report across all agents and scenarios in a Campaign.
 A framework-mapped control gap report. Shows which ATT&CK techniques are tested, which are failing, and which controls map to specific framework requirements.
 
 **Supported frameworks:**
-- MITRE ATT&CK v14
-- RBI Cyber Security Framework
-- SEBI Cybersecurity Circular (MII)
-- CIS Benchmarks (L1)
-- NIST SP 800-53 (mapped via technique coverage)
-- ISO 27001 (mapped via control families)
+- NIST Cybersecurity Framework 2.0 (`NIST_CSF_2`)
+- ISO/IEC 27001:2022 (`ISO_27001_2022`)
+- PCI DSS v4.0 (`PCI_DSS_V4`)
+- RBI Cybersecurity, Technology Risk, Resilience and Assurance Framework (`RBI_CSF`)
+- SEBI Cyber Security and Cyber Resilience Framework (`SEBI_CSCRF`)
+- CERT-In Directions on Information Security Practices (`CERT_IN`)
+- IRDAI Cyber Security Guidelines (`IRDAI_CSF`)
 
 **Contents:**
 - Framework summary: tested controls, failing controls, compliance score
@@ -113,11 +118,11 @@ A framework-mapped control gap report. Shows which ATT&CK techniques are tested,
 - Gap analysis: which framework controls have no test coverage
 - Remediation priority list: ordered by compliance impact
 
-**Formats:** HTML, PDF
+**Formats:** JSON, CSV
 
 **Access:**
 - Dashboard: Compliance → [framework] → Download Report
-- API: `GET /api/compliance/report/{framework}?format=pdf`
+- API: `GET /api/compliance/report?framework={frameworkId}&agentId={agentId}` (add `format=csv` for CSV)
 
 ---
 
@@ -137,7 +142,7 @@ A structured report for a Purple Team exercise execution.
 
 **Access:**
 - Dashboard: Exercises → [execution] → Report
-- API: `GET /api/exercises/executions/{id}/report?format=pdf`
+- API: `GET /api/exercises/executions/{id}/report.{json|html|pdf|csv}`
 
 ---
 
@@ -163,7 +168,7 @@ PDFs are generated by a headless Chromium sidecar container included in the depl
 4. PDF returned to the requesting client
 
 **Troubleshooting PDF generation:**
-- Blank PDF → Chromium container not running: `docker ps | grep chromium`
+- Chromium sidecar not running → PDFs fall back to the built-in renderer; check the container with `docker ps | grep chrome`
 - Slow PDF generation (>30 seconds) → Chromium resource limits; increase container memory to 1 GB
 - Missing fonts → Fonts are embedded in the HTML; no external requests are made
 
@@ -171,20 +176,29 @@ PDFs are generated by a headless Chromium sidecar container included in the depl
 
 ## Report Scheduling
 
-Reports can be scheduled using the Campaign scheduling system:
+Scheduled reports are managed by an administrator at `/api/report/schedules` (list, create, update, delete, and run now at `POST /api/report/schedules/{id}/run`). Each schedule sets:
 
-1. Create a Campaign with the desired scenarios and agents
-2. Set a schedule: daily, weekly, monthly, or custom cron expression
-3. When the campaign runs automatically, a Campaign Report is generated and stored
-4. Optional: configure SMTP to email the PDF report to specified addresses on completion
+- `reportType`: `board`, `compliance`, or `audit_pack`
+- `scopeKind` and `scopeId`: an agent or a campaign
+- `framework`: for compliance schedules
+- `format`: `pdf` or `html` (audit packs are always ZIP)
+- `frequency`: `daily`, `weekly`, or `monthly`, with `hourUtc`, and `dayOfWeek` (0 = Sunday) for weekly or `dayOfMonth` (1–28) for monthly
+- `recipients`, `name`, and `enabled`
 
 ```
-POST /api/campaigns/{id}/schedule
+POST /api/report/schedules
 Body:
 {
-  "cronExpression": "0 6 * * 1",    // Every Monday at 06:00
-  "reportFormats": ["pdf", "csv"],
-  "emailRecipients": ["ciso@company.com", "secops@company.com"]
+  "name": "Weekly board report",
+  "reportType": "board",
+  "scopeKind": "campaign",
+  "scopeId": "<campaignId>",
+  "format": "pdf",
+  "recipients": "ciso@company.com,secops@company.com",
+  "frequency": "weekly",
+  "hourUtc": 6,
+  "dayOfWeek": 1,
+  "enabled": true
 }
 ```
 
@@ -209,44 +223,15 @@ Generated report files are stored in PostgreSQL as binary blobs (BYTEA columns).
 
 **Report filename conventions (when downloaded):**
 
-| Report Type | Filename Pattern |
-|---|---|
-| Per-run | `bas-report-{scenario-slug}-{agentId}-{YYYYMMDD}.{ext}` |
-| Full agent | `bas-agent-{hostname}-{YYYYMMDD}.{ext}` |
-| Audit pack | `bas-audit-pack-{hostname}-{YYYYMMDD}.zip` |
-| Campaign | `bas-campaign-{name}-{YYYYMMDD}.{ext}` |
-| Compliance | `bas-compliance-{framework}-{YYYYMMDD}.{ext}` |
-| Exercise | `bas-exercise-{name}-{YYYYMMDD}.{ext}` |
+Downloaded report files are named `Audspect_<ReportType>_<scope>_<YYYY-MM-DD_HH-MM-SS>.<ext>` (UTC timestamp), for example `Audspect_Audit_Pack_<scope>_<timestamp>.zip` for an audit pack. The scope is truncated to 80 characters, and any character other than a letter, digit, `-` or `_` is replaced with `_`.
 
 ---
 
 ## Report Integrity Verification
 
-Every generated report includes an integrity header:
+**Audit pack:** `MANIFEST.sha256` in the ZIP lists the SHA-256 digest and path of every file, one per line. Verify it from inside the extracted folder with `sha256sum -c MANIFEST.sha256`. `SIGNATURE.txt` and `attestation.json` bind a digest of the manifest to the generator identity and time. The attestation is an HMAC-SHA256 signature when the deployment has a signing secret configured; otherwise it carries a SHA-256 digest only (`Algorithm: SHA-256 (unsigned)`).
 
-**HTML reports:** An HTML comment near the top:
-```html
-<!-- Audspect Report
-     Generated: 2026-07-01T09:00:00Z
-     Run ID: run-abc123
-     SHA-256: a4b5c6d7e8...
--->
-```
-
-**PDF reports:** Document metadata field `Subject` contains the SHA-256 hash.
-
-**Audit pack:** `manifest.json` in the ZIP root contains SHA-256 hashes for every file:
-```json
-{
-  "generatedAt": "2026-07-01T09:00:00Z",
-  "agentId": "agt-xyz",
-  "files": {
-    "report.html": "sha256:a4b5c6...",
-    "report.pdf": "sha256:b5c6d7...",
-    "data.csv": "sha256:c6d7e8..."
-  }
-}
-```
+**Compliance and board reports:** each carries an attestation footer with its SHA-256 digest and algorithm.
 
 ---
 
@@ -278,9 +263,7 @@ The HTML and PDF reports include a **Technical Summary** section for security op
 
 ## Watermarking
 
-PDF reports include a **CONFIDENTIAL** watermark on every page. This is applied as a CSS background layer during HTML-to-PDF rendering and cannot be removed without re-generating the report.
-
-Reports generated for specific named users include the requesting user's email in the footer of every page.
+Reports carry a **CONFIDENTIAL** classification label in the page header of each section. It is printed as text in the report, not as a background watermark.
 
 ---
 

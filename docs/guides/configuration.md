@@ -9,7 +9,7 @@
 Configuration is loaded in this order, with later sources overriding earlier ones:
 
 ```
-Built-in defaults  →  /etc/bas/config.json  →  Environment variables
+Built-in defaults  →  config.json (working directory, or the path passed as the first argument)  →  Environment variables
 ```
 
 Environment variables always win. In Docker Compose deployments, all configuration is done via environment variables in the `.env` file — the JSON config file is optional.
@@ -22,8 +22,10 @@ These must be set before the orchestrator will start:
 
 | Variable | Description |
 |---|---|
-| `DATABASE_URL` | PostgreSQL connection string. Format: `postgres://user:password@host:5432/dbname?sslmode=disable` |
-| `JWT_SECRET` | JWT signing key. Minimum 32 characters. Treat as a credential — rotate on schedule. |
+| `DATABASE_URL` | PostgreSQL connection string for the runtime role. Format: `postgres://user:password@host:5432/dbname?sslmode=disable` |
+| `DATABASE_ADMIN_URL` | PostgreSQL connection string for the admin role, used only at startup for schema bootstrap and runtime-role provisioning. |
+| `BAS_APP_DB_PASSWORD` | Password of the runtime database role (`bas_app`). Read from the environment only; it is not a JSON config key. |
+| `JWT_SECRET` | JWT signing key. Minimum 32 bytes; known placeholder values are rejected at startup. Treat as a credential — rotate on schedule. |
 
 ---
 
@@ -31,21 +33,23 @@ These must be set before the orchestrator will start:
 
 | Variable | Default | Description |
 |---|---|---|
-| `HTTP_PORT` | `9000` | Port the orchestrator listens on |
-| `AGENT_SECRET` | (none) | Shared secret used for HMAC-SHA256 verification of agent-submitted results. Required if result integrity checking is enabled. |
-| `BAS_LICENSE_PATH` | (none) | Absolute path to the customer license file (`.lic`). If not set, the platform runs in unlicensed mode with limited functionality. |
-| `PUBLIC_BASE_URL` | (none) | Public URL of the platform. Used in email links (exercise engine) and report deep-links. Example: `https://bas.company.com` |
+| `HTTP_PORT` | `9443` | Port of the agent mTLS listener (the installer maps this to `BAS_PORT`). The dashboard listener is `HTTP_PORT_DASHBOARD` (default `9543`). |
+| `AGENT_SECRET` | (none) | Shared secret used for HMAC-SHA256 verification of agent-submitted results (`X-Result-MAC`). When unset, result MAC verification is disabled. |
+| `BAS_LICENSE_PATH` | `/etc/bas/bas.lic` | Path to the customer license file (`.lic`). If the path is empty, the orchestrator reads `/etc/bas/bas.lic`. Startup fails if the file is missing or its signature does not verify. |
+| `PUBLIC_BASE_URL` | (none) | Public URL of the platform. Used for phishing tracker and DLP sink URLs, and as the allowed WebSocket origin. Example: `https://bas.company.com` |
 
 ---
 
 ## Admin Bootstrap Variables
 
-Used only on the first startup to seed the initial admin account. Ignored after any user exists in the database.
+Applied on every startup. The orchestrator sets the oldest admin user's username and password to these values (inserting the admin if none exists).
+
+> **Known issue (current release):** because the password is re-applied on every startup, a password changed in the dashboard is overwritten at the next restart. Do not rely on a dashboard password change persisting across restarts until this is fixed. A fix is planned; this note will be updated when it ships.
 
 | Variable | Default | Description |
 |---|---|---|
 | `BAS_ADMIN_EMAIL` | `admin` | Admin account username. Use a valid email format. |
-| `BAS_ADMIN_PASSWORD` | (auto-generated) | Admin initial password. If not set, a random password is printed once to the container log. |
+| `BAS_ADMIN_PASSWORD` | (built-in default) | Admin password. If not set, a built-in default is used and the account is flagged to change its password at first login. Always set this explicitly; the installer does (minimum 10 characters). |
 
 ---
 
@@ -138,14 +142,16 @@ Prefer installing the appliance's CA certificate on the orchestrator host over d
 
 ```dotenv
 # Required
-DATABASE_URL=postgres://bas:securepassword@postgres:5432/bas?sslmode=disable
+DATABASE_URL=postgres://bas_app:<BAS_APP_DB_PASSWORD>@postgres:5432/bas_platform?sslmode=prefer
+DATABASE_ADMIN_URL=postgres://bas:securepassword@postgres:5432/bas?sslmode=disable
+BAS_APP_DB_PASSWORD=change-this-runtime-db-password
 JWT_SECRET=change-this-to-a-random-64-character-string-before-production
 
 # Core
-HTTP_PORT=9000
+HTTP_PORT=9443
 AGENT_SECRET=change-this-to-a-random-agent-secret
 BAS_LICENSE_PATH=/etc/bas/audspect.lic
-PUBLIC_BASE_URL=http://192.168.1.50:9000
+PUBLIC_BASE_URL=https://192.168.1.50:9543
 
 # Admin bootstrap (first run only)
 BAS_ADMIN_EMAIL=admin@company.com
@@ -180,13 +186,13 @@ BAS_PBKDF2_ITERATIONS=310000
 
 ## Config File Format (JSON)
 
-If using a JSON config file alongside environment variables (e.g., for local development), place it at `/etc/bas/config.json`:
+If using a JSON config file alongside environment variables (e.g., for local development), place it as `config.json` in the orchestrator's working directory, or pass its path as the first argument to the orchestrator binary. The file cannot supply `BAS_APP_DB_PASSWORD`, which is read from the environment only:
 
 ```json
 {
   "database_url": "postgres://bas:password@localhost:5432/bas?sslmode=disable",
   "jwt_secret": "your-jwt-secret",
-  "http_port": 9000,
+  "http_port": 9443,
   "agent_secret": "your-agent-secret",
   "scenarios_dir": "/opt/bas/scenarios",
   "caldera_url": "http://localhost:8888",
@@ -204,11 +210,11 @@ If using a JSON config file alongside environment variables (e.g., for local dev
 Most configuration changes require restarting the orchestrator:
 
 ```bash
-# Edit .env
-nano /opt/audspect-bas-v1.7.3/.env
+# Edit .env (default install directory; DATA_DIR in setup.conf)
+nano /opt/audspect/.env
 
 # Restart orchestrator (not full stack)
-cd /opt/audspect-bas-v1.7.3
+cd /opt/audspect
 docker compose restart orchestrator
 ```
 
@@ -222,28 +228,16 @@ docker compose restart orchestrator
 
 ## Verifying Configuration
 
-After startup, the running configuration (excluding secrets) is visible at:
+To confirm the active password-hashing settings and crypto profile:
 
 ```
-GET /api/config
-Authorization: Bearer <admin-jwt>
+GET /api/crypto/info
+Authorization: Bearer <jwt>
 ```
 
-Response includes:
-```json
-{
-  "httpPort": 9000,
-  "calderaConfigured": true,
-  "mispConfigured": false,
-  "openCTIConfigured": false,
-  "smtpConfigured": true,
-  "sharphoundConfigured": false,
-  "licenseStatus": "valid",
-  "licenseExpiry": "2027-06-30"
-}
-```
+Response includes `password_algorithm`, `pbkdf2_iterations`, `jwt`, `scenario_signing` and `fips_ready`. License details are available at `GET /api/license` (Settings → License).
 
-Secret values (JWT secret, agent secret, passwords) are never returned by any API endpoint.
+The JWT secret and passwords are never returned by any API endpoint. The agent bootstrap secret is returned only by `GET /api/config/connection`, to users with the `config:view-connection` permission, so the Deploy Agent page can build an install package.
 
 ---
 

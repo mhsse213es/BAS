@@ -7,8 +7,8 @@
 ## Diagnostic Quick Reference
 
 ```bash
-# Platform health
-curl http://localhost:9443/health
+# Platform health (enrollment listener; port 9443 requires a client certificate)
+curl -sfk https://localhost:9444/health
 
 # Container status
 docker compose ps
@@ -43,8 +43,8 @@ docker compose logs orchestrator 2>&1 | tail -30
 | `database_url required` | `DATABASE_URL` not set in `.env` | Set `DATABASE_URL` in `.env` |
 | `jwt_secret required` | `JWT_SECRET` not set | Set `JWT_SECRET` (min 32 chars) |
 | `dial tcp: connection refused` | PostgreSQL not up yet | Wait 10s, `docker compose restart orchestrator` |
-| `failed to load license` | `BAS_LICENSE_PATH` points to non-existent file | Verify file path and container volume mount |
-| `CRYPTO SELF-TEST FAILED` | Binary corruption or environment issue | Re-pull/re-load the orchestrator image |
+| `license: file not found at` | `BAS_LICENSE_PATH` points to non-existent file | Verify file path and container volume mount |
+| `[FATAL] crypto self-test` | Binary corruption or environment issue | Re-pull/re-load the orchestrator image |
 
 ---
 
@@ -57,10 +57,10 @@ There is no separate web-based setup wizard to troubleshoot — `install.sh` doe
 **Checks:**
 1. Which numbered step (`1/10`–`10/10`) did it stop at? The step label tells you which phase failed.
 2. `docker logs audspect-orchestrator --tail=30` — look for startup errors (see 1.1)
-3. `curl http://localhost:9443/health` — if this times out, the orchestrator isn't bound to the configured port yet, or isn't up
+3. `curl -sfk https://localhost:9444/health` — if this times out, the orchestrator isn't bound to the configured port yet, or isn't up
 4. `docker ps | grep audspect-orchestrator` — confirm the container is actually running
 
-If the container is running but `/health` times out: confirm `BAS_PORT` in `setup.conf` matches what you're checking, and that the port isn't already in use (`ss -tlnp | grep 9443`).
+If the container is running but `/health` times out: confirm `BAS_ENROLL_PORT` in `setup.conf` matches what you're checking, and that the port isn't already in use (`ss -tlnp | grep 9444`).
 
 ---
 
@@ -109,7 +109,7 @@ Unlike an older `.env`-based flow, the admin account is **not** auto-generated �
 | `connection refused` | Wrong IP or port | Correct the server URL (Windows: registry `BAS_SERVER_URL`; Linux: `/etc/bas-agent/config`) |
 | `401 Unauthorized` | Wrong agent secret | Copy secret from Settings → Connection Config |
 | `dial tcp: i/o timeout` | Firewall blocking | Open the configured port (default 9443) on server firewall |
-| `certificate verify failed` | Self-signed cert, agent doesn't trust CA | Install CA cert on endpoint or use HTTP for agents |
+| `certificate verify failed` | Self-signed cert, agent doesn't trust CA | Install CA cert on endpoint |
 
 ---
 
@@ -283,7 +283,7 @@ If the sidecar is unreachable, the orchestrator degrades to a built-in fallback 
 
 **Fix:** Verify orchestrator version:
 ```bash
-curl -s http://localhost:9443/health | python3 -m json.tool
+curl -sfk https://localhost:9444/health | python3 -m json.tool
 ```
 
 If the reported version is older than expected, follow the [Upgrade Guide](upgrade-guide.md).
@@ -386,7 +386,7 @@ If still no findings after 60 seconds:
 **Cause:** WebSocket connection not established between browser and orchestrator.
 
 **Checks:**
-1. Browser DevTools → Network → WS — look for a WebSocket connection to `/ws`
+1. Browser DevTools → Network → WS — look for a WebSocket connection to `/ws/browser`
 2. If connection is shown but no messages: check for proxy stripping `Upgrade` header
 
 **For nginx reverse proxy:** Ensure these headers are forwarded:

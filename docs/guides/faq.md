@@ -14,13 +14,13 @@ No. The platform is fully air-gapped after initial delivery. All content (ART li
 
 **Q: Does Audspect BAS send any data outside our network?**
 
-No. All data — agent results, run history, findings, reports, user accounts, attack path graphs — is stored exclusively in the on-premises PostgreSQL instance. The platform makes no outbound connections at runtime.
+No. All data — agent results, run history, findings, reports, user accounts, attack path graphs — is stored exclusively in the on-premises PostgreSQL instance. The platform makes outbound connections only to the integrations you configure (see the telemetry question below).
 
 ---
 
 **Q: Will BAS simulation trigger our EDR or SIEM alerts?**
 
-Yes — and that's intentional. BAS simulation is real-technique execution; it is designed to trigger your controls. If your EDR blocks a technique, the step records PASS. If the technique executes without interference, it records FAIL. Coordinate with your SOC before running large-scale scenarios to avoid alert fatigue. The **Safe Simulation** scenario is a read-only scenario that does not trigger EDR responses, useful for initial connectivity testing.
+Yes — and that's intentional. BAS simulation is real-technique execution; it is designed to trigger your controls. If your EDR blocks a technique, the step records PASS. If the technique executes without interference, it records FAIL. Coordinate with your SOC before running large-scale scenarios to avoid alert fatigue. The **Safe Security Simulation (Read-Only)** scenario is a read-only scenario that does not trigger EDR responses, useful for initial connectivity testing.
 
 ---
 
@@ -28,10 +28,9 @@ Yes — and that's intentional. BAS simulation is real-technique execution; it i
 
 Yes, with these caveats:
 - The agent executes the commands the orchestrator dispatches. If you dispatch an ART all-windows scan, it will attempt real attack techniques.
-- Use the **Safe Simulation** scenario for the first run to verify connectivity without impact.
+- Use the **Safe Security Simulation (Read-Only)** scenario for the first run to verify connectivity without impact.
 - ART/Caldera steps include cleanup commands that restore system state after execution.
 - The agent runs as a Windows service or Linux systemd unit with configurable service account permissions.
-- Do not enable **Lab Mode** in production environments. Lab mode enables payload-bearing steps.
 
 ---
 
@@ -50,7 +49,7 @@ FAIL means the attacker succeeded — your EDR, AV, or other control allowed the
 
 | Scenario | Approximate Duration |
 |---|---|
-| Safe Simulation | 1–2 minutes |
+| Safe Security Simulation (Read-Only) | 1–2 minutes |
 | Selective ART Test (40–80 techniques) | 10–20 minutes |
 | Full ART Windows (300+ techniques) | 60–90 minutes |
 | CIS Ubuntu L1 | 5–10 minutes |
@@ -77,7 +76,7 @@ The platform has been tested at:
 
 **Q: What happens if the server goes offline while agents are running?**
 
-Agents buffer results locally and retry submission. When the server comes back online, agents re-establish WebSocket connections and submit buffered results. The orchestrator's run staleness monitor marks runs as Partial if no result is received for 90 seconds — but buffered results submitted after reconnect heal the partial run to Completed.
+Agents buffer results locally and retry submission. When the server comes back online, agents re-establish WebSocket connections and submit buffered results. The orchestrator's stale-run monitor marks a running scenario run as `partial` when its agent has been silent for more than 90 seconds, or when the run has been running for more than 2 hours.
 
 ---
 
@@ -117,7 +116,8 @@ Check the Trend badge: if it shows Degrading, compare the step-by-step results o
 The Kill Chain Amplifier multiplies your Exposure Score when an attacker achieves failures (technique successes) in consecutive kill-chain phases. An attacker who can execute in multiple consecutive phases represents a more serious threat than one who can execute in isolated phases. The amplifier models this reality:
 
 - 1 failed phase: 1.0× (no amplification)
-- 2 consecutive failed phases: 1.2×
+- 2 consecutive failed phases: 1.3×
+- 3–4 consecutive failed phases: 1.8×
 - 5+ consecutive failed phases: 2.5×
 
 ---
@@ -134,15 +134,15 @@ This is intentional: Coverage Score identifies kill-chain phases where attackers
 
 **Q: A finding appeared but the technique is intentionally allowed in our environment. What do I do?**
 
-Set the finding status to **False Positive**. This removes it from the remediation queue and from scoring impact without deleting the historical record. False positives are excluded from Prevention Score calculations.
+Set the finding status to **risk_accepted** (`POST /api/findings/{id}/status` with a reason, or the finding's status control in the dashboard). The status is sticky: later recurrences are counted, but the platform does not change it automatically. The historical record is kept.
 
 ---
 
 **Q: How do I close a finding?**
 
-After fixing the control gap, use **Re-validate** to dispatch a targeted re-run on the affected agent. When the re-run passes, the finding automatically moves to **Validated** status. Move it to **Resolved** once you confirm the fix is stable.
+After fixing the control gap, use **Re-validate** to dispatch a targeted re-run on the affected agent. When a later run shows the technique blocked, the finding automatically moves to **remediated**. If it fails again, the finding is reopened to **open**.
 
-Alternatively, set the status manually to **Resolved** if you applied the fix and cannot immediately re-validate (e.g., a patch is deployed but requires a maintenance window for re-run).
+Alternatively, set the status manually to **remediated** (`POST /api/findings/{id}/status`) if you applied the fix and cannot immediately re-validate (e.g., a patch is deployed but requires a maintenance window for re-run).
 
 ---
 
@@ -152,11 +152,11 @@ Alternatively, set the status manually to **Resolved** if you applied the fix an
 
 The Chromium sidecar container is not running or is out of memory. Check:
 ```bash
-docker compose ps | grep chromium
-docker compose logs chromium --tail=20
+docker compose ps | grep chrome
+docker compose logs chrome --tail=20
 ```
 
-Restart the sidecar: `docker compose up -d chromium`
+Restart the sidecar: `docker compose up -d chrome`
 
 ---
 
@@ -176,17 +176,15 @@ PBKDF2-HMAC-SHA256, 310,000 iterations (NIST SP 800-132 minimum), 256-bit derive
 
 **Q: Does the platform have any telemetry or phone-home behavior?**
 
-No. The platform makes no network connections outside of what you explicitly configure (Caldera URL, MISP URL, OpenCTI URL, SMTP server). All of these are optional and must be configured by the administrator.
+No telemetry is sent to Audspect. The platform makes network connections only to integrations the administrator explicitly configures, such as Caldera, MISP, OpenCTI, the SMTP server, TAXII servers, detection connectors (SIEM/EDR), SMS/Slack/Teams webhooks, and OTX. All of these are optional.
 
 ---
 
 **Q: How are scenario files protected from tampering?**
 
 Every scenario YAML is paired with an RSA-4096 detached signature file (`.yaml.sig`). The orchestrator:
-- Verifies signatures on startup when loading scenarios
-- Re-verifies every 15 seconds via a filesystem watcher
-- Re-verifies at dispatch time before sending to an agent
-- Refuses to load or run any scenario that fails signature verification
+- Verifies signatures when loading scenarios
+- A filesystem watcher checks the scenarios directory every 15 seconds and raises a tamper alert when a file changes
 
 ---
 

@@ -235,7 +235,7 @@ sudo bash install.sh --upgrade --config setup.conf
 
 This single command performs all 5 steps described in the Overview above — image load, bundle refresh, secret-preserving `.env` rewrite, systemd unit refresh, and a rolling restart with a health-check wait — and prints a status summary when done.
 
-If you don't have your original `setup.conf` handy, see [setup.conf reference](#setupconf-reference) below to reconstruct one with the same `DATA_DIR`/`ADMIN_EMAIL`/`LIC_PATH` your existing install used — `DB_PASSWORD`/`JWT_SECRET`/`AGENT_SECRET` in this file are only used if no existing `.env` is found, so it's safe to leave those blank/placeholder for an upgrade.
+If you don't have your original `setup.conf` handy, see [setup.conf reference](#setupconf-reference) below to reconstruct one with the same `DATA_DIR`/`ADMIN_EMAIL`/`LIC_PATH` your existing install used — `DB_PASSWORD`/`JWT_SECRET`/`AGENT_SECRET` in this file are only used if no existing `.env` is found, so they do not need real values for an upgrade. `DB_PASSWORD` (at least 8 characters), `ADMIN_PASSWORD` (at least 10 characters), `ADMIN_EMAIL` and `LIC_PATH` must still be present, because `install.sh` validates them on every run.
 
 ---
 

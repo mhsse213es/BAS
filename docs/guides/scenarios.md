@@ -12,11 +12,11 @@ A **scenario** is a named, versioned collection of simulation steps that tests o
 
 ## Built-in Scenario Library
 
-Audspect BAS ships with 14+ signed built-in scenarios covering the full ATT&CK kill chain:
+Audspect BAS ships with 107 signed built-in scenarios. Every one is signature-checked when the platform loads it, and any scenario with a failed signature is not loaded. The table below lists the main categories. The kill chain library, which covers named ransomware and threat-actor attack chains, is listed separately under [Kill Chain Library](#kill-chain-library).
 
 | Scenario | Framework | Techniques | Description |
 |---|---|---|---|
-| Safe Simulation | Custom | 5 | Read-only OS queries; safest baseline |
+| Safe Security Simulation (Read-Only) | Custom | 5 | Read-only OS queries; safest baseline |
 | Full Posture Scan | ART (All Windows) | 300+ | Comprehensive endpoint security posture |
 | Selective ART Test | ART (Selective) | 40–80 | Focused technique subset; faster runtime |
 | Endpoint Mastery | ART | 60+ | Deep endpoint control validation |
@@ -30,6 +30,33 @@ Audspect BAS ships with 14+ signed built-in scenarios covering the full ATT&CK k
 | RBI CSCRF / SEBI MII Drill | Custom | 15+ | Regulatory compliance scenario |
 | CIS Ubuntu L1 | Custom | 25+ | CIS Benchmark Level 1 hardening checks |
 | Attack Path Collection | Native | N/A | Network topology + privilege graph collection |
+
+---
+
+## Kill Chain Library
+
+The library contains 16 kill chain scenarios. Each emulates the post-access tradecraft of a named threat actor or ransomware family, in ordered stages. Each stage maps to one or more MITRE ATT&CK tactics. The scenarios are telemetry-safe: they are built to show whether your controls detect and block the behaviour, and they do not deliver real malware.
+
+| Scenario ID | Threat | Stages |
+|---|---|---|
+| `akira-kill-chain` | Akira ransomware | 9 |
+| `apt29-kill-chain` | APT29 (Cozy Bear / NOBELIUM) | 5 |
+| `apt36-kill-chain` | APT36 (Transparent Tribe) | 10 |
+| `black-basta-kill-chain` | Black Basta ransomware | 10 |
+| `blackcat-kill-chain` | BlackCat / ALPHV ransomware | 8 |
+| `clop-kill-chain` | Cl0p ransomware | 5 |
+| `fin7-kill-chain` | FIN7 (Carbanak) | 5 |
+| `hunters-international-kill-chain` | Hunters International RaaS | 9 |
+| `insider-threat-kill-chain` | Departing or disgruntled insider | 3 |
+| `lockbit-kill-chain` | LockBit 3.0 ransomware | 5 |
+| `medusa-kill-chain` | Medusa ransomware | 10 |
+| `play-kill-chain` | Play ransomware | 8 |
+| `ransomhub-kill-chain` | RansomHub ransomware | 8 |
+| `rhysida-kill-chain` | Rhysida ransomware | 11 |
+| `scattered-spider-kill-chain` | Scattered Spider (UNC3944) | 5 |
+| `upi-fraud-killchain` | UPI payment fraud (BFSI) | 9 |
+
+Kill chain scenarios are run the same way as the other scenarios in this guide. For how the results are scored, see [Scoring Methodology](scoring-methodology.md).
 
 ---
 
@@ -74,9 +101,6 @@ Scenarios can mix frameworks within a single run using three execution modes:
 |---|---|---|
 | **Posture** | Custom/posture steps only | Fast configuration checks; no live attack tooling |
 | **Telemetry** | Live execution; SIEM/EDR monitoring | Test whether controls generate alerts |
-| **Lab** | Payload-bearing steps included | Full payload delivery (lab environments only; requires explicit enable) |
-
-Lab mode is disabled by default and requires the `lab_mode: true` flag both in the scenario YAML and in the agent's enrollment config.
 
 ---
 
@@ -222,7 +246,7 @@ Every scenario must have a valid RSA-4096 signature. The orchestrator:
 | `credential-access` / `lateral-movement` / etc. | MITRE tactic tags |
 | `rbi` / `sebi` / `cis` / `pci` | Compliance framework |
 | `safe` | Marks scenario as non-destructive (no live payload) |
-| `lab-only` | Marks scenario as requiring lab mode |
+| `lab-only` | Fidelity label the scenario builder sets on Caldera steps whose executors ship real payloads. It does not gate execution. |
 
 ---
 

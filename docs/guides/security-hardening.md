@@ -14,7 +14,9 @@ Audspect BAS is designed for on-premises deployment in regulated environments. T
 
 ### Recommended: nginx TLS termination
 
-The orchestrator speaks plain HTTP on port 9000. Terminate TLS at an nginx reverse proxy:
+The dashboard is served over TLS on port 9543 (`BAS_DASHBOARD_PORT`). To publish it through nginx, proxy to that port over TLS. The example below covers the dashboard only. Agents do not go through a proxy: they connect directly to the mTLS agent port (9443), which requires a client certificate. See [Network Segmentation](#network-segmentation).
+
+The example's dashboard certificate is self-signed unless you set `BAS_TLS=true` with your own certificate. Configure nginx to trust that certificate before using this example.
 
 ```nginx
 server {
@@ -41,7 +43,7 @@ server {
     add_header Referrer-Policy no-referrer always;
 
     location / {
-        proxy_pass         http://127.0.0.1:9000;
+        proxy_pass         https://127.0.0.1:9543;
         proxy_http_version 1.1;
         proxy_set_header   Upgrade $http_upgrade;
         proxy_set_header   Connection "upgrade";
@@ -75,7 +77,7 @@ server {
 | Key length | 256-bit (32 bytes) derived key |
 | Salt | 256-bit (32 bytes) cryptographically random per hash |
 | Format | `$pbkdf2-sha256$<iter>$<b64salt>$<b64dk>` |
-| Self-test | Runs at startup via `RunCryptoSelfTests()`; startup aborts on failure |
+| Self-test | Runs at startup via `CryptoSelfTest()`; startup aborts on failure |
 | Legacy migration | bcrypt hashes from prior versions verified read-only; re-hashed on next login |
 
 **Recommendation:** Increase `BAS_PBKDF2_ITERATIONS` to 600,000 on deployments where login latency of ~200ms is acceptable. Higher iterations provide better brute-force resistance.
@@ -89,7 +91,7 @@ server {
 | Token type | JWT HS256 |
 | Token TTL | 24 hours |
 | Storage | HttpOnly cookie |
-| Cookie flags | `SameSite=Strict; HttpOnly; Secure` (Secure flag only when TLS is active) |
+| Cookie flags | `SameSite=Strict; HttpOnly`; `Secure` only when `COOKIE_SECURE=true` |
 | CSRF protection | SameSite=Strict prevents cross-origin form submission |
 | Revocation | Rotate `JWT_SECRET` to invalidate all active sessions |
 
@@ -104,14 +106,9 @@ On every heartbeat, the agent submits the SHA-256 hash of its own binary. The or
 To update the trust manifest after releasing a new agent binary:
 - Re-run `windows-build.ps1` — it re-generates and re-signs `BINARIES.sha256` automatically
 
-### Result Integrity (HMAC-SHA256)
+### Agent Authentication (AGENT_SECRET)
 
-Every result POST from an agent includes a MAC header:
-```
-X-BAS-MAC: sha256=<hmac-sha256-hex>
-```
-
-The MAC is computed over the full request body using `AGENT_SECRET` as the key. The orchestrator rejects any result where the MAC does not match. This prevents replay attacks and result injection.
+When `AGENT_SECRET` is configured, agent requests must carry it in the `X-Agent-Token` header, and the orchestrator compares it in constant time. Individual results are not signed with a per-message MAC in this release, so protection of result submissions relies on the agent connection itself (mTLS on the agent port, 9443).
 
 **Requirements:**
 - `AGENT_SECRET` must be set and match between server and agent
@@ -125,13 +122,13 @@ The MAC is computed over the full request body using `AGENT_SECRET` as the key. 
 Every scenario YAML ships with a detached RSA-4096 signature (`.yaml.sig`). The orchestrator verifies each signature on load and rejects unsigned or tampered scenarios.
 
 **Verification:**
-- On startup: all scenarios in `SCENARIOS_DIR` are verified
+- On startup: built-in scenarios in `SCENARIOS_DIR` are verified
 - On filesystem change: the 15-second watcher detects in-place tampering
 - On scenario run dispatch: signature is re-verified before dispatch
 
-A scenario that fails signature verification cannot be run — it appears in the dashboard with a red "Signature Invalid" badge.
+A built-in scenario that fails signature verification is refused at load and is not added to the scenario catalog.
 
-**For custom scenarios:** Custom scenarios authored in the dashboard are automatically signed by the orchestrator using the platform's signing key.
+**For custom scenarios:** Scenarios authored in the dashboard are not signed. They are trusted through authenticated dashboard access (see the Troubleshooting Guide, section 3.4).
 
 **For externally authored YAML:** Must be signed using the platform signing tool before placement in `SCENARIOS_DIR`. Contact Audspect for the signing tool and key material.
 
@@ -147,11 +144,11 @@ The orchestrator container uses the following hardening defaults:
 | Run user | `nonroot` (UID 65532) |
 | Shell | None (distroless has no shell) |
 | Package manager | None |
-| Writeable filesystem | No (read-only root, explicit volume mounts only) |
+| Writeable filesystem | Yes by default; set `read_only: true` as shown below |
 | Network mode | Bridge (not host) |
 | Privileged | No |
-| Capabilities | None added |
-| Port exposure | `9000` only |
+| Capabilities | `NET_BIND_SERVICE` added in the shipped `docker-compose.yml` |
+| Port exposure | `9000`, `9443`, `9444`, `9543` (declared by the image) |
 
 ### docker-compose.yml hardening additions
 
@@ -185,8 +182,8 @@ services:
 **Recommended network architecture:**
 
 ```
-[Analyst Workstations]  →  port 443 → [nginx reverse proxy]  →  port 9000 → [Orchestrator]
-[Target Endpoints]      →  port 443 → [nginx reverse proxy]  →  port 9000 → [Orchestrator]
+[Analyst Workstations]  →  port 443 → [nginx reverse proxy]  →  TLS port 9543 → [Orchestrator dashboard]
+[Target Endpoints]      →  port 9443 (mTLS, client certificate, direct) → [Orchestrator agent listener]
 [Orchestrator]          →  port 5432 → [PostgreSQL] (internal only)
 [Orchestrator]          →  port 8888 → [Caldera] (internal only, optional)
 ```
@@ -194,7 +191,8 @@ services:
 **Rules:**
 - PostgreSQL port 5432 must NOT be accessible from outside the Docker network
 - Caldera port 8888 must NOT be accessible from outside the Docker network
-- The setup wizard port (9001) must be closed after initial setup
+- Port 9000 is a plaintext legacy listener for agents that predate mTLS. It is enabled by default. After the fleet is migrated, set `BAS_LEGACY_LISTENER_ENABLED=false` and restart the orchestrator so port 9000 is not bound.
+- Port 9444 is the enrollment listener (TLS, no client certificate). It serves enrollment and `/health` only.
 - AGENT_SECRET and JWT_SECRET must never traverse unencrypted network links
 
 ---
@@ -218,11 +216,11 @@ Rotation of `JWT_SECRET` or `AGENT_SECRET` requires:
 
 ## Audit Logging
 
-All security-relevant events are written to the `events` table and exposed via the Audit Log UI:
+All security-relevant events are written to the `audit_logs` table and shown in the Audit Log UI:
 
 | Event Category | Events Logged |
 |---|---|
-| Authentication | Login success/failure, password change, password reset, logout |
+| Authentication | Login success/failure, password change, password reset |
 | User management | Create, edit, delete user; role change |
 | Agent management | State change (quarantine, retire, restrict) |
 | Scenario execution | Run started, cancelled, completed |
@@ -231,14 +229,9 @@ All security-relevant events are written to the `events` table and exposed via t
 
 Audit log entries include: event type, timestamp, actor (user email or agent ID), affected resource ID, source IP.
 
-**Log access:**
+**Log access (Admin role):**
 ```
-GET /api/events?category=auth&from=2026-07-01&limit=100
-```
-
-**Log export:**
-```
-GET /api/events/export?format=csv&from=2026-07-01&to=2026-07-31
+GET /api/audit-logs?action=user.login&limit=100
 ```
 
 ---
@@ -247,7 +240,7 @@ GET /api/events/export?format=csv&from=2026-07-01&to=2026-07-31
 
 | Component | User Account |
 |---|---|
-| Orchestrator container | `nonroot` (UID 65532) — cannot write to root filesystem |
+| Orchestrator container | `nonroot` (UID 65532); the root filesystem is writable unless `read_only: true` is set (see Docker Hardening) |
 | PostgreSQL container | `postgres` user — owns only the `bas` database |
 | Agent (Windows service) | `LOCAL SERVICE` or a dedicated service account with minimum OS permissions |
 | Agent (Linux service) | Dedicated `bas-agent` user with no sudo |
@@ -258,7 +251,7 @@ GET /api/events/export?format=csv&from=2026-07-01&to=2026-07-31
 
 ## FIPS Considerations
 
-The orchestrator uses standard Go `crypto/sha256` and `golang.org/x/crypto/pbkdf2` — both compatible with FIPS 140-2 approved algorithms. Go itself is not a FIPS-validated cryptographic module.
+The orchestrator uses standard Go `crypto/sha256` and `crypto/hmac`, and implements PBKDF2 on top of them (`internal/auth/password.go`). These are FIPS 140-2 approved algorithms. Go itself is not a FIPS-validated cryptographic module.
 
 For deployments with formal FIPS 140-2 requirements:
 - The orchestrator algorithms (PBKDF2-HMAC-SHA256, HMAC-SHA256, RSA-4096) are FIPS-approved algorithm families

@@ -7,7 +7,7 @@
 
 ## Authentication
 
-All API endpoints (except `/health`, `POST /api/auth/login`, `POST /api/auth/setup`, and SSO callback) require a valid JWT.
+Dashboard and management API endpoints require a valid JWT, except the public endpoints: `/health`, `POST /api/auth/login`, `POST /api/auth/logout`, `POST /api/auth/setup`, the SSO login and callback endpoints, `GET /api/license/status`, `GET /api/config/ca-root`, and `POST /api/csp-report`. Agent-facing endpoints (enrollment, heartbeat, result submission) and the generic event ingestion endpoint (`POST /api/ingest/v1/events`) are authenticated by their own credentials, not by a user JWT.
 
 **Obtaining a token:**
 ```
@@ -61,7 +61,7 @@ Set agent lifecycle state. Admin only (`CanSetAgentState`).
 ```
 Request: { "state": "quarantined" }
 ```
-Valid `state` values: `enrolling`, `active`, `restricted`, `quarantined`, `retired`, `uninstalling`, `uninstalled`. See `agent-management.md` for the full lifecycle model — there is no generic `DELETE /api/agents/{id}`; decommissioning an agent is one of three distinct actions:
+Valid `state` values: `active`, `restricted`, `quarantined`, `retired`. The `enrolling`, `uninstalling` and `uninstalled` states are set by the platform during enrollment and uninstall, not through this endpoint. See `agent-management.md` for the full lifecycle model — there is no generic `DELETE /api/agents/{id}`; decommissioning an agent is one of three distinct actions:
 
 ### POST /api/agents/{agentId}/stop
 
@@ -81,7 +81,7 @@ Assign the agent to an Agent Group (or clear its group).
 
 ### GET /api/agents/download/{platform}
 
-Download the agent binary or installer package. `{platform}` is one exact value, not separate query params — one of: `linux-amd64`, `linux-arm64`, `linux-amd64-deb`, `linux-arm64-deb`, `linux-amd64-rpm`, `windows-amd64-setup`, `windows-amd64`, `darwin-amd64`, `darwin-arm64`.
+Download the agent binary or installer package. `{platform}` is one exact value, not separate query params — one of: `linux-amd64`, `linux-arm64`, `linux-amd64-deb`, `linux-arm64-deb`, `linux-amd64-rpm`, `windows-amd64-setup`, `windows-amd64`, `windows-legacy-amd64-setup`, `windows-legacy-amd64`, `darwin-amd64`, `darwin-arm64`, `darwin-amd64-installer`, `darwin-arm64-installer`.
 
 ---
 
@@ -217,7 +217,7 @@ Compliance report. Framework, target, and format are **query parameters**, not p
 ```
 GET /api/compliance/report?framework=SEBI_CSCRF&agentId=<id>&format=csv
 ```
-`framework` values are uppercase-with-underscores (e.g. `SEBI_CSCRF`) — confirm the exact supported set via `GET /api/compliance/frameworks` rather than assuming a fixed list. Either `agentId` (aggregates that agent's runs) or `runId` (single run) scopes the report; `format` is `csv`/`json`, defaulting to HTML; `filter` narrows by control status (e.g. `prevented`).
+`framework` values are uppercase-with-underscores (e.g. `SEBI_CSCRF`) — confirm the exact supported set via `GET /api/compliance/frameworks` rather than assuming a fixed list. Either `agentId` (aggregates that agent's runs) or `runId` (single run) scopes the report; `format` is `csv`, `json` or `pdf`, defaulting to HTML; `filter` narrows by control status (e.g. `prevented`).
 
 ### GET /api/compliance/scores
 

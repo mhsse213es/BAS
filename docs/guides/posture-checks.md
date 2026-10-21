@@ -8,7 +8,7 @@
 
 Posture checks are lightweight, non-destructive configuration verification steps that run on the agent endpoint. Unlike ART or Caldera simulation steps, posture checks do not attempt to emulate attacker behavior — they verify whether OS or application configuration meets a defined security baseline.
 
-Posture checks are the foundation of the **Custom** framework and appear in scenarios like the Safe Simulation, CIS Ubuntu L1, and the RBI/SEBI compliance drills.
+Posture checks are the foundation of the **Custom** framework and appear in scenarios like the Safe Security Simulation (Read-Only), CIS Ubuntu L1, and the RBI/SEBI compliance drills.
 
 ---
 
@@ -26,29 +26,22 @@ Posture checks are read-only by design. They query configuration state; they do 
 
 ## Posture Catalog
 
-The posture catalog is a per-agent inventory of all available posture checks for that agent's OS. It is populated automatically at enrollment time by querying the agent for its OS, version, and installed software.
+The posture catalog is a per-agent inventory of all available posture checks for that agent's OS. It is populated automatically at enrollment time from the agent's built-in check set.
 
 **Viewing the catalog:**
 - Dashboard: Agents → [agent] → Overview tab → Posture Checks section
-- API: `GET /api/agents/{id}/posture-catalog`
+- API: `GET /api/posture/catalog?agentId={agentId}&scenario={scenarioId}`
+
+Each catalog entry has these fields:
 
 ```json
 [
   {
-    "id": "windows-defender-realtime",
-    "name": "Windows Defender Real-Time Protection",
-    "description": "Verifies Windows Defender real-time scanning is enabled",
-    "os": "windows",
-    "category": "antivirus",
-    "severity": "high"
-  },
-  {
-    "id": "powershell-logging",
-    "name": "PowerShell Script Block Logging",
-    "description": "Verifies PowerShell script block logging is enabled in Group Policy",
-    "os": "windows",
-    "category": "logging",
-    "severity": "medium"
+    "id": "<check-id>",
+    "phase": "<phase>",
+    "techniqueId": "<ATT&CK technique ID>",
+    "name": "<check name>",
+    "severity": "<critical | high | medium | low>"
   }
 ]
 ```
@@ -58,38 +51,15 @@ The posture catalog is a per-agent inventory of all available posture checks for
 ```bash
 # On Linux
 sudo systemctl stop bas-agent
-sudo ./bas-agent -url http://<server>:9000 -secret <secret> -label <name> -install
+sudo ./bas-agent-linux-amd64 -server https://<server>:9443 -secret <secret> -install
 sudo systemctl start bas-agent
 ```
 
 For Windows, uninstall and reinstall the agent service:
 ```powershell
-.\bas-agent.exe -uninstall
-.\bas-agent.exe -url http://<server>:9000 -secret <secret> -label <name> -install
+.\bas-agent-windows-amd64.exe -uninstall
+.\bas-agent-windows-amd64.exe -server https://<server>:9443 -secret <secret> -install
 ```
-
----
-
-## Posture Check Execution (Deferred Execution)
-
-Posture checks support **deferred execution**: they are dispatched with the scenario step but the agent may hold the execution until a configured time window (e.g., after business hours) to avoid performance impact on production systems.
-
-Deferred execution is configured in the scenario YAML:
-
-```yaml
-steps:
-  - id: step-001
-    framework: custom
-    executor: powershell
-    deferred: true
-    defer_until: "02:00"       # Run after 02:00 local time on the agent
-    defer_window_minutes: 60   # Execute within this window after defer_until
-    command: |
-      $status = (Get-MpComputerStatus).AntivirusEnabled
-      if ($status) { exit 0 } else { exit 1 }
-```
-
-If the agent restarts within the defer window, the deferred check re-queues and runs at the next opportunity.
 
 ---
 

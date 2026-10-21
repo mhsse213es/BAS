@@ -15,8 +15,8 @@
 | PostgreSQL database | Docker volume `audspect-postgres-data` | Critical |
 | Environment config | `<DATA_DIR>/.env` (default `/opt/audspect/.env`) — also auto-backed-up by every `install.sh --upgrade` | Critical |
 | Deployment CA keypair | `<DATA_DIR>/pki/` (`ca-key.pem` + `ca-cert.pem`; bind-mounted to `/etc/audspect/pki` in the container) — also auto-backed-up by every `install.sh --upgrade` | Critical |
-| License file | `<DATA_DIR>/bas.lic` | Critical |
-| Custom scenarios | Created via the dashboard, stored in the database — covered by the database backup, not a separate file backup | High |
+| License file | `<DATA_DIR>/bas.lic` (or the file name set by `LICENSE_FILE` in `.env`) | Critical |
+| Custom scenarios | Created via the dashboard and saved as YAML files under `<DATA_DIR>/scenarios/custom/` — not included in the database dump, so back up this directory too | High |
 | Generated reports | Rendered on-demand from HTML at request time — nothing to back up | N/A |
 
 **What does NOT need a separate backup:**
@@ -136,8 +136,8 @@ The orchestrator applies its full idempotent schema on every startup (`CREATE TA
 docker compose exec postgres psql -U bas_user -d bas_platform \
   -c "SELECT schemaname, tablename, n_live_tup FROM pg_stat_user_tables ORDER BY n_live_tup DESC LIMIT 10;"
 
-# Check dashboard loads
-curl -sf http://localhost:9443/health
+# Check platform health (enrollment listener, TLS)
+curl -sfk https://localhost:9444/health
 ```
 
 ---

@@ -8,9 +8,9 @@
 
 | Standard | Title | Relevance |
 |---|---|---|
-| MITRE ATT&CK v14 | Adversary Tactics, Techniques, and Common Knowledge | Primary taxonomy for all scenario step mapping |
+| MITRE ATT&CK v16.1 | Adversary Tactics, Techniques, and Common Knowledge (Enterprise) | Primary taxonomy for all scenario step mapping |
 | NIST SP 800-132 | Recommendation for Password-Based Key Derivation | PBKDF2-HMAC-SHA256 iteration count guidance |
-| NIST SP 800-53 Rev 5 | Security and Privacy Controls for Federal Information Systems | Compliance mapping framework |
+| NIST SP 800-53 Rev 5 | Security and Privacy Controls for Federal Information Systems | Reference only; no NIST SP 800-53 control mapping is shipped |
 | NIST SP 800-115 | Technical Guide to Information Security Testing | BAS methodology foundations |
 | CISA KEV Catalog | Known Exploited Vulnerabilities Catalog | Technique enrichment data source |
 | FIRST EPSS | Exploit Prediction Scoring System | CVE exploit probability enrichment |
@@ -18,7 +18,7 @@
 | CIS Benchmarks v8 | Center for Internet Security Controls and Benchmarks | Posture check framework |
 | RFC 7519 | JSON Web Token (JWT) | Session authentication standard |
 | RFC 2898 | PKCS #5: Password-Based Cryptography Specification | PBKDF2 standard |
-| RFC 4880 | OpenPGP Message Format | Scenario signing (GPG/OpenPGP) |
+| RFC 8017 | PKCS #1: RSA Cryptography Specifications | RSA-4096 scenario signing (PKCS #1 v1.5 with SHA-256) |
 | STIX 2.1 | Structured Threat Information Expression | ATT&CK data format; OpenCTI connector format |
 | OWASP Top 10 | Top Web Application Security Risks | Platform security guidance |
 
@@ -29,7 +29,7 @@
 | Framework | Issuer | Coverage in Audspect BAS |
 |---|---|---|
 | RBI Cyber Security Framework | Reserve Bank of India | Dedicated scenario + compliance report |
-| SEBI Cybersecurity Circular for MII | Securities and Exchange Board of India | Dedicated scenario + compliance report |
+| SEBI Cyber Security and Cyber Resilience Framework (CSCRF) | Securities and Exchange Board of India | Dedicated scenario + compliance report |
 | RBI Cloud Framework | Reserve Bank of India | Referenced in architecture guidance |
 
 ---

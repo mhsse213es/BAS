@@ -60,7 +60,7 @@ Content-Type: application/json
 | `events[].source` | yes | Free text identifying your tool, e.g. `"splunk"`, `"sentinel"`, `"your_soar"`. Not validated against a fixed vendor list — this is the generic path, not a named connector. |
 | `events[].external_event_id` | yes | Your own event/alert ID. Combined with `source`, this is the idempotency key — see below. |
 | `events[].event_type` | no | Free text, e.g. `"detection"` or `"evidence"`. Not enforced; carried through into the IOC's metadata for your own later filtering. |
-| `events[].timestamp` | no | RFC 3339. Not currently validated or used in matching — reserved for future windowed correlation. |
+| `events[].timestamp` | no | RFC 3339. A value that does not parse fails the whole request with `400`. Not used in matching — reserved for future windowed correlation. |
 | `events[].severity` | no | Free text, carried through into metadata. |
 | `events[].technique_id` | no | An ATT&CK technique ID, if known. Carried through into metadata; not currently cross-referenced against a running BAS step (see "What this does not do" below). |
 | `events[].ioc` | no | `{type, value}`. `type` must be one of the indicator types Audspect already uses internally (`ip`, `domain`, `url`, `file_hash`, `filename`, `registry_key`, `mutex`, `service`, `process`, `command_line`, `ja3`, `user_agent`, `email`, `dns_record`, `certificate`). An event with no `ioc` is still recorded (see idempotency below) but produces no indicator row — useful for a pure "we saw nothing" evidence record. |

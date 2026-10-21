@@ -26,7 +26,6 @@
 | **Campaign** | A grouped execution of multiple scenarios across multiple agents, run simultaneously, producing a unified campaign report and a single campaign-level score. |
 | **Capability** | A MITRE Caldera ability's specific action type (execute command, upload file, run shellcode, etc.). |
 | **CBOM** | Cryptography Bill of Materials — an inventory of cryptographic algorithms, keys, and protocols in use within the platform. See `docs/SBOM-CBOM-v1.7.3.md`. |
-| **CEF** | Common Event Format — a standard log format used in SIEM systems. BAS simulation logs can be exported in CEF for SIEM ingestion. |
 | **Choke Point** | A host in the attack path graph that appears in the highest number of paths. Hardening a choke point reduces the blast radius more than hardening any other single host. |
 | **CIS Benchmarks** | Center for Internet Security hardening guidelines. Audspect includes a CIS Ubuntu L1 scenario for automated benchmark validation. |
 | **Command and Control (C2)** | MITRE ATT&CK tactic: technique for adversary communication with compromised hosts. T1071, T1095, T1571, etc. |
@@ -46,7 +45,7 @@
 | **Exercise** | A structured Purple Team engagement: a defined plan with multiple steps, blue team detection evidence capture, step-by-step approval, and a formal report with evidence chain. |
 | **Exposure Score** | A BAS metric (0–100, higher = worse) measuring how far an attacker can progress through the kill chain, amplified by consecutive failures across phases. |
 | **FAIL** | BAS step verdict meaning the technique succeeded (the attacker wins). A failed technique is the primary source of Findings. |
-| **Finding** | A structured record created when a technique produces a FAIL verdict, tracking the control gap through a lifecycle from Created to Resolved. |
+| **Finding** | A structured record created when a technique produces a FAIL verdict, tracking the control gap through its status (open, triaged, remediated, risk_accepted). |
 | **Garble** | A Go source code obfuscation tool used in the Audspect orchestrator build pipeline. Obfuscates symbol names and string literals. |
 | **Graph** | The data structure built from attack path collection: nodes (hosts/users) and edges (relationships). Used for blast radius and path analysis. |
 | **HMAC** | Hash-based Message Authentication Code. Used to authenticate agent-submitted results: HMAC-SHA256 over the full result payload using `AGENT_SECRET`. |
@@ -55,7 +54,6 @@
 | **KEV** | CISA Known Exploited Vulnerabilities catalog. Audspect bundles this for technique enrichment. Only curated mappings are used — never auto-generated. |
 | **Kill Chain** | An ordered sequence of MITRE ATT&CK tactics representing the phases of an attack: Reconnaissance → Resource Development → Initial Access → Execution → Persistence → Privilege Escalation → Defense Evasion → Credential Access → Discovery → Lateral Movement → Collection → C2 → Exfiltration → Impact. |
 | **Kill Chain Amplifier** | A multiplier (1.0×–2.5×) applied to the Exposure Score when an attacker achieves consecutive FAIL results across advancing kill-chain phases. |
-| **Lab Mode** | An execution mode that enables payload-bearing simulation steps. Disabled by default; requires explicit enable in both scenario YAML and agent enrollment config. |
 | **License** | Node-locked, time-limited license file (`.lic`) required for full platform functionality. Path configured via `BAS_LICENSE_PATH`. |
 | **LOLBin** | Living-Off-the-Land Binary — a legitimate OS binary (e.g., `certutil.exe`, `mshta.exe`, `wmic.exe`) abused by attackers to execute malicious actions while evading detection. |
 | **Manifest** | `BINARIES.sha256` — a file listing SHA-256 hashes of all known-good agent binaries, used for binary trust verification on each heartbeat. |
@@ -72,7 +70,7 @@
 | **RBAC** | Role-Based Access Control. Audspect uses three roles: Viewer, Analyst, Admin. |
 | **Re-validate** | A targeted single-technique re-run dispatched to a specific agent to verify that a remediated control now blocks the technique. |
 | **Remediation** | The Audspect view that groups Findings by technique across all agents, showing aggregate impact and recommended fixes. |
-| **Risk Classification** | The risk band derived from a Prevention Score: Protected (90–100), Low (75–89), Medium (50–74), High (25–49), Critical (0–24). |
+| **Risk Classification** | The risk band derived from the Exposure Score: Protected (0–20), Low Risk (21–40), Medium Risk (41–60), High Risk (61–80), Critical (81–100). |
 | **RSA-4096** | The asymmetric cryptography used for scenario YAML signing. 4096-bit keys provide strong long-term signing security. |
 | **Run** | A single execution of a scenario on a specific agent at a specific time. The fundamental unit of BAS simulation history. |
 | **SBOM** | Software Bill of Materials — inventory of software components. See `docs/SBOM-CBOM-v1.7.3.md`. |
@@ -85,7 +83,7 @@
 | **Tactic** | A MITRE ATT&CK kill-chain phase (e.g., credential-access, lateral-movement). Techniques are categorized under one or more tactics. |
 | **Technique** | A specific MITRE ATT&CK method (e.g., T1003.001 — LSASS Memory). The fundamental unit of adversary behavior in the framework. |
 | **Telemetry** | Real security events (EDR alerts, SIEM events) generated when a live simulation step executes on an endpoint. BAS provides the known input; telemetry validation verifies the expected output. |
-| **Trend** | The direction of Prevention Score change: Improving, Degrading, Stable, or Baseline (first run). Threshold: >3 points change to register Improving or Degrading. |
+| **Trend** | The direction of Prevention Score change: Improving, Degrading, Stable, or Baseline (first run). Threshold: a change of 5 points or more registers Improving or Degrading. |
 | **TTP** | Tactics, Techniques, and Procedures — the vocabulary of adversary behavior. Audspect BAS tests TTPs continuously. |
 | **Variant** | A family of similar techniques or payloads tested together to validate that controls block the technique across its known variants, not just one specific implementation. |
 | **Verdict** | The outcome of a single simulation step: PASS, FAIL, ERROR, or SKIPPED. |
