@@ -42,8 +42,12 @@ ground_truth:
     The order status is identical before and after the attack, and the response
     discloses no protected values.
 detection_assertion:
-  status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  status: fixture_validated
+  reason: "The forwarded-host request targets an order owned by another customer. The access event names that owner. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

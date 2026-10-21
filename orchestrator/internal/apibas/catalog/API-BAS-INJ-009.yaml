@@ -46,7 +46,7 @@ ground_truth:
     state is unchanged by the attack.
 detection_assertion:
   status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  reason: "CRLF and cookie-attribute injection in a note: no injection class covers header attributes. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

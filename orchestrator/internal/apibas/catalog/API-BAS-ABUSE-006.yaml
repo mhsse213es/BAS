@@ -42,8 +42,12 @@ ground_truth:
     The number of accepted validations stays within the declared limit, and the state is unchanged by the
     attack beyond the sandbox reset.
 detection_assertion:
-  status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  status: fixture_validated
+  reason: "Ten validation calls in one run reach the burst threshold. The attack is a volume of counted requests, which is what the rule sees. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-005
+  min_severity: medium
 evidence:
   - sanitized_request
   - sanitized_response

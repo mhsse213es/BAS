@@ -84,8 +84,10 @@ func (s *Server) ownersOfPath(path string) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []string
-	for _, seg := range strings.Split(path, "/") {
-		if o, ok := s.orders[seg]; ok {
+	// An object ID named inside a path segment (for example ORD-1001-statement) names that object, the same way a query
+	// value does. Matching is by containment, so a file or filter that carries an order ID is attributed to its owner.
+	for _, o := range sortedOrders(s.orders) {
+		if strings.Contains(path, o.ID) {
 			out = appendOwner(out, o.OwnerID)
 		}
 	}
@@ -102,13 +104,25 @@ func (s *Server) ownersOfRequest(r *http.Request) []string {
 	for _, o := range sortedOrders(s.orders) {
 		for _, vals := range q {
 			for _, v := range vals {
-				if strings.Contains(v, o.ID) {
+				// A query that names the order ID, or one of its protected values (a filter on account_ref, for
+				// example), names that order's owner.
+				if strings.Contains(v, o.ID) || namesProtectedValue(v, o) {
 					out = appendOwner(out, o.OwnerID)
 				}
 			}
 		}
 	}
 	return out
+}
+
+// namesProtectedValue reports whether a query value contains one of the order's protected values.
+func namesProtectedValue(v string, o *Order) bool {
+	for _, pv := range o.Protected {
+		if pv != "" && strings.Contains(v, pv) {
+			return true
+		}
+	}
+	return false
 }
 
 // maxObjectOwners bounds the owners one event carries. The fixture has few owners, so the bound is a

@@ -60,7 +60,7 @@ ground_truth:
     every round, and the attack is denied.
 detection_assertion:
   status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  reason: "single report request; no volume or owner signal; no rule for expensive-query cost. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

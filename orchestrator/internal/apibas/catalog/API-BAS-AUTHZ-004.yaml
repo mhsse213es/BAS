@@ -49,7 +49,7 @@ ground_truth:
     the chain discloses protected values.
 detection_assertion:
   status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  reason: "the self-assigned role change is refused in the fixed build, so the chain stops before the foreign object is reached and the fixed build produces no object-access event for REL-004 to grade. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

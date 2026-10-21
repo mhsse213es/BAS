@@ -34,8 +34,12 @@ ground_truth:
   adapters: ["state", "response"]
   check: "No protected value of another tenant appears in the file response."
 detection_assertion:
-  status: not_evaluated
-  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+  status: fixture_validated
+  reason: "The signed file path names an order owned by another customer. The lab now attributes an order ID embedded in a path segment to its owner, so the access event names that owner. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

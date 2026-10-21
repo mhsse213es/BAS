@@ -40,7 +40,7 @@ ground_truth:
     of the owner's protected values.
 detection_assertion:
   status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  reason: "anonymous request has no attributable identity; REL-004 is an identity rule; a single refusal is below the REL-001 threshold. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

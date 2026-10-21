@@ -40,7 +40,7 @@ ground_truth:
     of the owner's protected values.
 detection_assertion:
   status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  reason: "forged alg_none identity is the owner identity in the vulnerable build: the blind spot documented for DET-007; no claim is made. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

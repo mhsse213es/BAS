@@ -38,7 +38,7 @@ ground_truth:
   check: "No response Location header points at the attacker host."
 detection_assertion:
   status: not_evaluated
-  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+  reason: "redirect URI validation produces no owner or volume signal; no rule. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

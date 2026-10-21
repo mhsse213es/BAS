@@ -41,8 +41,12 @@ ground_truth:
     The number of accepted creations stays within the declared limit, and the state is
     unchanged by the attack beyond the sandbox reset.
 detection_assertion:
-  status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  status: fixture_validated
+  reason: "Ten anonymous signups in one run reach the burst threshold. REL-005 counts requests regardless of identity, so the anonymous attack is visible. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-005
+  min_severity: medium
 evidence:
   - sanitized_request
   - sanitized_response

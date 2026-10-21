@@ -37,7 +37,7 @@ ground_truth:
   check: "No protected value of another tenant appears in the response."
 detection_assertion:
   status: not_evaluated
-  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+  reason: "forged certificate subject is the owner identity: the same blind spot as DET-007; the attacker has no identity of its own. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

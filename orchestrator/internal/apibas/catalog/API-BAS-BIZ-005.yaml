@@ -38,7 +38,7 @@ ground_truth:
   check: "The number of withdrawals accepted from concurrent requests does not exceed one per run."
 detection_assertion:
   status: not_evaluated
-  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+  reason: "five parallel withdrawals on the attacker own order are below the volume threshold; the race outcome is graded by the scenario itself. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

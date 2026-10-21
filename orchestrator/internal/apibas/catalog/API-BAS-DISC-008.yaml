@@ -41,7 +41,7 @@ ground_truth:
     The attack response carries no internal backend host header.
 detection_assertion:
   status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  reason: "not-found on a nonexistent object: no owner exists for REL-004 to match. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

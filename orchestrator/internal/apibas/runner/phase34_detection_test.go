@@ -232,11 +232,30 @@ func ownershipDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, m
 	named := namedInRequest(target)
 	for _, o := range fx.Objects {
 		inBody := extract && strings.Contains(attack.Body, o.ID)
-		if (named(o.ID) || inBody) && o.OwnerID != attacker {
+		if (named(o.ID) || inBody || protectedValueNamed(target, o)) && o.OwnerID != attacker {
 			return detect.Detected
 		}
 	}
 	return detect.NotDetected
+}
+
+// protectedValueNamed reports whether a decoded query value of the request target contains one of the object's
+// protected values. It mirrors the lab's attribution of a query that names a protected value.
+func protectedValueNamed(target string, o fixture.Object) bool {
+	u, err := url.Parse(target)
+	if err != nil {
+		return false
+	}
+	for _, vals := range u.Query() {
+		for _, v := range vals {
+			for _, pv := range o.Protected {
+				if pv != "" && strings.Contains(v, pv) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // namedInRequest reports whether an object ID appears in the request target's path or in a decoded query

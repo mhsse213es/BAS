@@ -40,7 +40,7 @@ ground_truth:
     unchanged by the attack.
 detection_assertion:
   status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  reason: "card display on the attacker own order; masking is a response property. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

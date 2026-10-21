@@ -172,6 +172,16 @@ func (r Report) Consistent() bool {
 
 // Format renders the report with numerators, denominators and exclusions. Every ratio is shown
 // as numerator/denominator, so none of them can be read without its exclusions.
+// KnownGaps are the open limits of API BAS coverage. None of them is counted as validated, and each is printed with every
+// report so it stays visible. Remove an entry only when a test demonstrates the behaviour it names.
+var KnownGaps = []string{
+	"Native gRPC over HTTP/2 with protobuf descriptors: UNSUPPORTED. Only the JSON-transcoding form has an adapter.",
+	"WebSocket frame behaviour: UNSUPPORTED. Only the handshake has an adapter.",
+	"Certificate revocation (CRL/OCSP): not tested and not claimed. The lab has no revocation source.",
+	"Live SIEM validation: every detection result is fixture-validated, not live-validated. Live validation needs a real SIEM integration and a controlled environment.",
+	"Detection for the not_evaluated scenarios: each has a per-scenario reason in docs/api-bas-det001-tracker.md. Detection is claimed only where the telemetry supports it.",
+}
+
 func Format(r Report) string {
 	var b strings.Builder
 	pct := func(n, d int) string {
@@ -193,6 +203,10 @@ func Format(r Report) string {
 	fmt.Fprintf(&b, "  unevaluated (implemented, no valid verdict): %d\n", r.Unevaluated)
 	if !r.Consistent() {
 		fmt.Fprintf(&b, "WARNING: classes do not sum to the catalog size\n")
+	}
+	b.WriteString("Known gaps (open; none counted as validated):\n")
+	for _, g := range KnownGaps {
+		fmt.Fprintf(&b, "  - %s\n", g)
 	}
 	b.WriteString("Scenarios not validated (evaluated-only, or excluded from evaluation):\n")
 	rows := make([]Entry, 0)

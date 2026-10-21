@@ -44,7 +44,7 @@ ground_truth:
     caching directive.
 detection_assertion:
   status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  reason: "cache headers are response properties the access event does not carry. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

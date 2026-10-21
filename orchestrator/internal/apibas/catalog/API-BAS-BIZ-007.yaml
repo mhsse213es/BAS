@@ -35,7 +35,7 @@ ground_truth:
   check: "The order status is identical before and after the attack."
 detection_assertion:
   status: not_evaluated
-  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+  reason: "maker approves own payout on the attacker own order; approval separation is not a rule class. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

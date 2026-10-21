@@ -35,7 +35,7 @@ ground_truth:
   check: "The beneficiary reference is identical before and after the attack."
 detection_assertion:
   status: not_evaluated
-  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+  reason: "beneficiary change on the attacker own order; not a foreign-owner or privileged class. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

@@ -37,7 +37,7 @@ ground_truth:
   check: "The relayed upstream content does not contain the upstream's probe value."
 detection_assertion:
   status: not_evaluated
-  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+  reason: "upstream certificate trust is not in the access event; no owner or volume signal. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

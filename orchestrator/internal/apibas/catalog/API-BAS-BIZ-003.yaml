@@ -37,7 +37,7 @@ ground_truth:
   check: "The number of credits accepted for one transaction id does not exceed one per run."
 detection_assertion:
   status: not_evaluated
-  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+  reason: "two credit requests are below the volume threshold; no owner signal. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

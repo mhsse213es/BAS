@@ -35,8 +35,12 @@ ground_truth:
   adapters: ["state", "response"]
   check: "The order status is identical before and after the attack."
 detection_assertion:
-  status: not_evaluated
-  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+  status: fixture_validated
+  reason: "The same payment authorization during the fraud-check outage as BIZ-012. Graded separately; it does not change the DET-003 mapping on BIZ-012. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-009
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

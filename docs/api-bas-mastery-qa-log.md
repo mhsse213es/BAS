@@ -2600,3 +2600,101 @@ assertion on BIZ-012 and is recorded there with `detection_covers`, so it is cou
 - Targeted: `TestPhase4_DET*`, `TestPhase4_DetectionStatusSweep`, `TestPhase34_DetectionMatchesDeclaredExpectations`
   (39/39), `TestTLS_Gap*`: passing.
 - Full `./internal/apibas/...` run on the final tree: see the result line recorded below.
+
+
+## Blueprint Phase 4: DET-001 per-scenario analysis, standalone TLS, and the open gaps
+
+### DET-001: per-scenario analysis of the not_evaluated scenarios
+
+- Analysed individually: 66 scenarios (the scenarios that were `not_evaluated` before this pass). Each has a row in
+  `docs/api-bas-det001-tracker.md` with its decision and justification.
+- A detection rule was added only where the attack and the access-event telemetry justify it:
+  - REL-005 (counted-request burst, threshold ten requests in one run): ABUSE-006, ABUSE-007, ABUSE-008, ABUSE-009,
+    GWAY-009. Each repeats its attack ten times, so the volume is what the rule counts.
+  - REL-004 (object owned by another identity): AUTHZ-002, DISC-010, GWAY-003, GWAY-004, GWAY-006, INTEG-006. Each names
+    an order owned by another customer in the access event.
+  - REL-009 (completed authorization while the fraud check is degraded): INTEG-007. The same flow as BIZ-012, graded
+    separately. It does not change the DET-003 mapping on BIZ-012.
+- 54 scenarios remain `not_evaluated`, each with its own reason. Examples: an anonymous request has no identity to
+  attribute; a burst below the threshold of ten; a duplicate-key, prototype-key or header-injection attack that no
+  injection class in the fixture covers.
+- Two candidates were declared, validated, and reverted, because the evidence did not support them:
+  - AUTHZ-004: the fixed build refuses the role change in setup, so the chain stops before the foreign object is
+    reached. The fixed build produces no object-access event.
+  - DATA-010: the signed file path does not name the order owner in the access event, so REL-004 cannot see the owner.
+- **Defect found and fixed in the declarations.** The first REL-005 declarations used `min_severity: high`. REL-005 is
+  medium, so the grade never counted it, even though the rule fired on 11 events. The declarations now use `medium`.
+  The rule was not changed.
+- Result: 51 scenarios are `fixture_validated` (each with a detection block). All 51 match the detection table in both
+  builds (`TestPhase34_DetectionMatchesDeclaredExpectations`, with extraction off and on).
+
+### Standalone TLS end to end
+
+- `apibas-lab -tls` is now tested as a separate process. The test builds the binary, starts it, and drives the real
+  handshake over TCP (`TestTLS_StandaloneLabEndToEnd`, both builds).
+  - The server certificate verifies against the CA the binary writes. An empty root pool fails the handshake.
+  - A client with the cust-b certificate the binary issues reads cust-b's order (200) in both builds.
+  - A self-signed cust-b certificate is trusted in the vulnerable build (200) and refused by the fixed build with 401.
+    The handshake completes in both.
+  - No client certificate: 401 from the application, after the handshake completes.
+  - TLS 1.1 is refused at the handshake.
+- New flags on the binary: `-tls-client-cert` and `-tls-client-key` write a cust-b client certificate and its key, so the
+  trusted path can be exercised. Without them the test could not present a trusted certificate.
+
+### Open gaps (kept visible; none counted as validated)
+
+These are printed by every coverage report (`coverage.KnownGaps`, `TestKnownGapsAlwaysPrinted`).
+
+1. **Native gRPC over HTTP/2 with protobuf descriptors: UNSUPPORTED.** The adapter covers the JSON-transcoding form only.
+   DISC-009 claims that form. It does not imply full gRPC coverage.
+2. **WebSocket frame behaviour: UNSUPPORTED.** The adapter covers the handshake only. AUTHN-011 claims the handshake.
+3. **Certificate revocation (CRL/OCSP): not tested and not claimed.** The lab has no revocation source. A successful
+   handshake does not prove revocation checking, so no revocation result is recorded.
+4. **Live SIEM validation: not done.** Every detection result is fixture-validated, labelled `fixture_validated` in
+   the catalogue. Live validation needs a real SIEM integration and a controlled environment, and will be planned
+   separately.
+5. **Detection for the 54 not_evaluated scenarios.** Each has a reason in the tracker. Detection is claimed only where
+   the telemetry supports it.
+
+
+### Update: owner attribution for DATA-005 and DATA-010
+
+This update corrects the DET-001 section above. The earlier count and the DATA-010 revert are superseded.
+
+- **Lab change (attribution).** The lab named an owner only when an order ID was a whole path segment, or a query value
+  contained the order ID. Two cases were missed:
+  - an order ID embedded in a path segment (`ORD-1001-statement`): the owner is now attributed;
+  - a query value that contains a protected value of an order (`account_ref=BAS-SIM-ACC-A`): the value's owner is now
+    attributed.
+  The detection table mirrors both rules (`ownershipDetection`, `protectedValueNamed`).
+- **Now declared (REL-004):** DATA-005 (filter names another customer's protected account value) and DATA-010 (signed
+  file path names another customer's order). DATA-010 was reverted earlier only because the lab did not attribute the
+  owner. That is now fixed, so the declaration stands.
+- **Corrected counts:** 66 scenarios analysed. 14 have a detection rule, all validated in both builds with extraction
+  off and on, and the table has 53 declared scenarios with none mismatched. 52 remain `not_evaluated`, each with a reason
+  in `docs/api-bas-det001-tracker.md`.
+- **Defect in the declaration step, not the rule.** The first DATA-005 expectation was wrong: the table derived the owner
+  only from the order ID, so it expected not_detected. The lab's attribution was right. The table now mirrors it.
+- **Still open for DET-001 (52 scenarios, grouped by what is missing; the groups add up to 52):**
+  - **Anonymous, no identity to attribute (9):** AUTHN-001, DISC-002, DISC-004, DISC-005, DISC-006, DISC-007, GWAY-002,
+    GWAY-010, INTEG-009. Needs a policy decision on attributing anonymous access. INTEG-002 is in the burst group instead.
+  - **Identity-forged blind spot (3):** AUTHN-003, AUTHN-007 (the forged subject is the owner's, the DET-007 blind spot)
+    and AUTHZ-004 (the fixed build refuses in setup, so no object access is made).
+  - **Own-object actions with no privileged class (12):** AUTHN-010, AUTHZ-003, BIZ-001, BIZ-002, BIZ-006, BIZ-007,
+    BIZ-009, DATA-007, DATA-008, DATA-009, GWAY-008, INTEG-001. Needs a decision on which actions are privileged.
+  - **Not telemetry the access event carries (9):** ABUSE-002, ABUSE-003, ABUSE-004, ABUSE-005 (single requests, size or
+    depth), AUTHN-004 (redirect URI), AUTHN-011 (WebSocket origin), DATA-006 (cache headers), DISC-008 (backend host in a
+    not-found body), INTEG-010 (async consumer). These need new fields or are response properties.
+  - **Injection-shaped with no signature class (5):** GWAY-005, INJ-006, INJ-009, INJ-011, INJ-012. Needs new classes with
+    true-positive and false-positive tests.
+  - **Destination-based, no destination field (4):** GWAY-012 (upstream TLS trust), INTEG-003 (SSRF), INTEG-004 (open
+    redirect), INTEG-011 (callback host). Needs new fields and new classes.
+  - **Below the burst threshold (9):** AUTHN-002, AUTHN-005, AUTHN-009, BIZ-003, BIZ-004, BIZ-005, BIZ-008, BIZ-010,
+    BIZ-011. Kept `not_evaluated` by design: lowering the threshold would raise false positives.
+
+### Counts, kept distinct
+
+- Declared scenarios in the catalogue with a detection block (fixture_validated): 53. All 53 match the detection table.
+- DET-001 rule coverage added this pass: 14 of the 66 scenarios that were not_evaluated before the DET-001 analysis.
+- not_evaluated across the catalogue: 52. Each has a reason; none has a detection result. not_evaluated is never counted as not_detected.
+- Full ./internal/apibas/... run on this tree: all packages ok, the runner package 486.7 s, exit 0.

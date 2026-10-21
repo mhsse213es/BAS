@@ -42,7 +42,7 @@ ground_truth:
     of the internal record's protected values.
 detection_assertion:
   status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  reason: "SSRF through the webhook test has no owner and no SSRF injection class. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

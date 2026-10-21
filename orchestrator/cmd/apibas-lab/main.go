@@ -9,6 +9,7 @@
 package main
 
 import (
+	"crypto/x509"
 	"encoding/pem"
 	"errors"
 	"flag"
@@ -29,6 +30,8 @@ func main() {
 	faults := flag.String("fault", "", "comma-separated dependency faults to hold active, for example authz-store-down")
 	useTLS := flag.Bool("tls", false, "serve HTTPS with a generated lab CA and server certificate")
 	caOut := flag.String("tls-ca", "", "with -tls, write the lab CA certificate (PEM) to this path, for issuing client certificates")
+	clientOut := flag.String("tls-client-cert", "", "with -tls, write a client certificate for cust-b (PEM) to this path, signed by the lab CA")
+	clientKeyOut := flag.String("tls-client-key", "", "with -tls and -tls-client-cert, write the client certificate key (PKCS#8 PEM) to this path")
 	flag.Parse()
 
 	fx, ok := fixtures()[*fixtureName]
@@ -52,6 +55,25 @@ func main() {
 		cfg.ClientCAs = pki.CAPool
 		if *caOut != "" {
 			if err := os.WriteFile(*caOut, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: pki.CA.Raw}), 0o644); err != nil {
+				log.Fatal(err)
+			}
+		}
+		if *clientOut != "" {
+			if *clientKeyOut == "" {
+				log.Fatal("-tls-client-cert needs -tls-client-key")
+			}
+			cert, err := pki.IssueClientCert("cust-b")
+			if err != nil {
+				log.Fatal(err)
+			}
+			key, err := x509.MarshalPKCS8PrivateKey(cert.PrivateKey)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if err := os.WriteFile(*clientOut, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Certificate[0]}), 0o600); err != nil {
+				log.Fatal(err)
+			}
+			if err := os.WriteFile(*clientKeyOut, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: key}), 0o600); err != nil {
 				log.Fatal(err)
 			}
 		}

@@ -41,7 +41,7 @@ ground_truth:
     response discloses no protected values.
 detection_assertion:
   status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  reason: "mass assignment on the attacker own order; REL-004 needs a foreign object. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

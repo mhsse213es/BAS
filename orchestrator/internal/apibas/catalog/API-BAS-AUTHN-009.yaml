@@ -38,7 +38,7 @@ ground_truth:
   check: "The number of service tokens issued without the client secret does not exceed zero, within the declared maximum of one."
 detection_assertion:
   status: not_evaluated
-  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+  reason: "workload token request without the secret has no owner; two requests are below the thresholds. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

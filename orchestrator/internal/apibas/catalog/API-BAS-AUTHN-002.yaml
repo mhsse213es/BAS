@@ -39,7 +39,7 @@ ground_truth:
     of the owner's protected values.
 detection_assertion:
   status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  reason: "single revoked-token attempt is below the REL-001 threshold of three; one refusal alerts nothing. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

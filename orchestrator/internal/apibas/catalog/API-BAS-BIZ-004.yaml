@@ -40,7 +40,7 @@ ground_truth:
   check: "The number of payments accepted for one idempotency key does not exceed one per run."
 detection_assertion:
   status: not_evaluated
-  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+  reason: "two payment requests are below the volume threshold; no owner signal. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

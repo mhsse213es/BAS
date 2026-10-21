@@ -38,7 +38,7 @@ ground_truth:
   check: "The number of callbacks registered to a non-allowlisted host does not exceed the declared maximum of zero per run."
 detection_assertion:
   status: not_evaluated
-  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+  reason: "callback registration has no object; no allowlist rule. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response
