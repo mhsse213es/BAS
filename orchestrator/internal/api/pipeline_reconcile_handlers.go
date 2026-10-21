@@ -10,6 +10,9 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/injectionapproval"
+	"github.com/audspect/bas/internal/pipelinecheck"
 )
 
 // unresolvedCleanup is a cleanup execution that started and has no closing record. Its deletion may or
@@ -143,4 +146,50 @@ func (h *Handler) unresolvedApprovalFor(ctx context.Context, execID string) (str
 		return "", err
 	}
 	return deref(approvalID), nil
+}
+
+// CheckCleanupExecution reports which of an unresolved execution's approved records are still in the
+// index. It reads only, and suggests a resolution from the count. The person still records the
+// resolution through the reconcile endpoint.
+// GET /api/pipeline-approvals/unresolved-cleanups/{executionId}/check
+func (h *Handler) CheckCleanupExecution(w http.ResponseWriter, r *http.Request) {
+	execID := chi.URLParam(r, "executionId")
+	ctx := context.WithoutCancel(r.Context())
+	approvalID, err := h.unresolvedApprovalFor(ctx, execID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if approvalID == "" {
+		jsonError(w, "no unresolved execution with that id", http.StatusNotFound)
+		return
+	}
+	v, err := db.KillChainStore{Pool: h.db}.GetApproval(ctx, approvalID)
+	if err != nil {
+		writeApprovalError(w, err)
+		return
+	}
+	if v.Kind != string(injectionapproval.KindCleanup) {
+		jsonError(w, "only cleanup executions can be checked", http.StatusBadRequest)
+		return
+	}
+	var pl cleanupPayload
+	if err := json.Unmarshal([]byte(v.Scope.Payload), &pl); err != nil {
+		jsonError(w, "stored approval payload is unreadable", http.StatusInternalServerError)
+		return
+	}
+	ids := make([]string, 0, len(pl.Records))
+	for _, rec := range pl.Records {
+		ids = append(ids, rec.ID)
+	}
+	cfg, client, err := h.elasticFor(ctx, v.Scope.ConnectorID)
+	if err != nil {
+		respond(w, map[string]any{"executionId": execID, "approvalId": approvalID, "status": "error", "reason": err.Error()})
+		return
+	}
+	res := pipelinecheck.CheckRemainingElastic(ctx, client, cfg, pl.Index, pl.RunID, ids)
+	respond(w, map[string]any{
+		"executionId": execID, "approvalId": approvalID, "status": res.Status, "reason": res.Reason,
+		"requested": res.Requested, "remaining": res.Remaining, "suggested": res.Suggested,
+	})
 }

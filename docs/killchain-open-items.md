@@ -381,3 +381,36 @@ Still open:
 3. Retention is the 30-day default only. Customer-configurable windows are not built.
 4. Cleanup on a customer system. Blocked until the audit and approval rules are confirmed on staging.
 5. Other connectors (Splunk, QRadar, Sentinel, CrowdStrike, Defender, Trellix) remain unsupported.
+
+### Update: 2026-10-21 (what changed since 2026-10-20)
+
+Built and tested in this session:
+
+- **Reconciliation check (item 2 of the approval work):** `GET /api/pipeline-approvals/unresolved-cleanups/{executionId}/check`
+  reads Elasticsearch for the approved record IDs and reports which are still present. It writes
+  nothing. It counts only approved IDs, even if the search returns others. An unmapped index is an
+  error, never "deleted". It suggests `deleted`, `not_deleted` or `partial`; the person still records
+  the resolution through the reconcile endpoint. Tested against the stand-in and the endpoint flow.
+- **Live injection, lab only:** `execute-injection` writes one create-only tagged record, approver-only,
+  with the durable start and finish records, and never retries. Passed the full API suite (1282s) and
+  the injector test against the lab Elasticsearch. Customer deployments still need a distinct approver
+  and a staging run before live use.
+- **Retention:** fixed at 30 days, no customer override (decision recorded in
+  `docs/killchain-pipeline-cleanup-policy.md`).
+
+Item 9 (lateral scenario has no `id:` field) is **not changed**. The scenario is signed, so editing it
+means re-signing with the project key. The engine already loads it by filename, so the change buys
+nothing functional. Make it when a scenario is re-signed for another reason.
+
+Still open, as before: items 1 to 8 and 10 to 11 in the tables above need staging, a lab run, or a
+decision; live injection beyond the lab needs a real SIEM; other connectors need test instances.
+
+### Update: API BAS definitions listed (2026-10-21)
+
+- The 120 API BAS definitions are listed at `GET /api/scenarios/api-bas`, tagged `source: apibas`
+  and `runnableHere: false`. They are **not** added to the engine's scenario list. That list feeds
+  revalidation, remediation dispatch and coverage, which dispatch steps to agents. HTTP attack
+  definitions must not reach those paths.
+- The listing checks every API BAS ID against the loaded engine scenarios. On any collision it lists
+  nothing and returns 409 with the colliding IDs. The current catalog has no collisions.
+- Running API BAS scenarios stays with `apibas-runner`. No run path is added to the engine.
