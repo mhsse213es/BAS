@@ -335,6 +335,20 @@ func (r *Runner) run(ctx context.Context, s contract.Scenario, tag string) (Repo
 				}
 				break
 			}
+			if step.CoActor {
+				// A second identity acts in the same run. Its exchange is recorded for correlation and never ends the chain.
+				coToken, err := r.coActorCredential(step)
+				if err != nil {
+					return r.finish(ctx, sandbox, r.errorOut(rep, "co-actor credential unavailable", err.Error())), nil
+				}
+				coExch, transport := r.do(ctx, step, coToken, obj, &obj)
+				rep.Exchanges = append(rep.Exchanges, coExch)
+				if transport {
+					ev.Transport = true
+					break
+				}
+				continue
+			}
 			exch, transport := r.do(ctx, step, attackToken, obj, &obj)
 			rep.Exchanges = append(rep.Exchanges, exch)
 			if transport {
@@ -406,6 +420,15 @@ func (r *Runner) attackCredential(attack contract.Step, attacker fixture.Identit
 		}
 		return tok, nil
 	}
+}
+
+// coActorCredential resolves the valid credential of a co-actor step's identity from the fixture.
+func (r *Runner) coActorCredential(step contract.Step) (string, error) {
+	id, ok := r.cfg.Fixture.Identity(step.Identity)
+	if !ok {
+		return "", errors.New("co-actor identity not in fixture")
+	}
+	return r.cfg.Secrets.Resolve(id.TokenRef)
 }
 
 func attackAuth(st contract.Step) string {

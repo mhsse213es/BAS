@@ -2455,3 +2455,148 @@ covered. `go test ./internal/apibas/protocol/` passes.
 
 Phase 3 is closed for the 39 blueprint P3 IDs against the lab fixtures. Nothing is claimed against live services.
 
+## Blueprint Phase 4, batch 4a: DET-002, DET-005, DET-007 (existing rules)
+
+### Built
+
+- DET-002: three attempts with a revoked credential, repeated so REL-001 (repeated authentication failures) can fire.
+  Graded `FAIL/exploited` in the vulnerable build and `PASS/enforced` in the fixed build.
+- DET-005: the cross-customer order read, with its detection graded against the Elastic fixture. The test checks the
+  detection report's provenance is the Elastic fixture label.
+- DET-007: the forged identity header attack (the same request as AUTHN-008), graded for attribution. REL-004 is
+  detected in the fixed build. It is not detected in the vulnerable build, where the header makes the request look
+  like the owner's.
+
+### Findings
+
+- **Silent acceptance (DET-002).** The vulnerable build accepts a revoked credential with `200`. It logs no failure,
+  so REL-001 cannot fire. The detection gap follows from the exploit: a control that accepts the credential produces
+  no signal. The fixed build refuses it and REL-001 fires. This is the planted revoked-credential flaw, now seen from
+  the detection side.
+- **Forged-identity blind spot (DET-007).** The vulnerable build attributes the request to the header identity. REL-004
+  does not fire there. This is the forged-identity blind spot the detection design already recorded.
+- **REL-001 expectation now depends on the build.** It returns not_detected for a revoked credential in the vulnerable
+  build, because no failure is produced. Other REL-001 scenarios are unchanged.
+
+### Limits
+
+- DET-005 checks routing against the single fixture SIEM only. The lab has one sink, so routing to a second SOC is not
+  modelled. The check is provenance, not delivery to a SOC.
+- DET-002 and DET-007 reuse the attacks of AUTHN-008 and the revoked-credential check. Each adds a distinct detection
+  question on the same request.
+- DET-008 is not built. The alert record has no object reference, so responders cannot be shown the affected object.
+  It needs a change to the alert model, which is planned for a later batch.
+
+### Evidence
+
+- `TestPhase4_Batch4aDetectionAndVerdicts`: passes.
+- The detection expectation table (`TestPhase34_DetectionMatchesDeclaredExpectations`) covers the three new blocks.
+  Its full run is recorded below.
+
+### Still open (Phase 4)
+
+- Not built: DET-001, DET-003, DET-004, DET-006, DET-008, DET-010 and BIZ-012.
+- The detection assertion on every P2 and P3 scenario is a Phase 4 criterion. Batch 4c covers it.
+
+
+## Blueprint Phase 4, batch 4b: BIZ-012 and DET-003 (new rule REL-009)
+
+### Built
+
+- REL-009 (high-risk flow completed while a fraud control is degraded). It fires on a 2xx payment authorization while
+  the lab reports the fraud check as degraded. Elastic fixture only.
+- The lab access event now carries `degraded` (`lab/access.go`, `degradedDependencies`). The fraud check is the only
+  dependency modelled. The detection event carries the same field (`detect/detect.go`).
+- BIZ-012 (`API-BAS-BIZ-012`): the owner authorizes payment with the fraud check down.
+  - vulnerable: FAIL/exploited, and REL-009 detected.
+  - fixed: PASS/enforced (424, fails closed), and REL-009 not detected.
+- Healthy control: with the fraud check up, an authorization completes in both builds and REL-009 stays silent.
+  This is the first false-positive check for the rule (DET-006 is not complete; see limits).
+- Detection expectation table: REL-009 added. Declared detection blocks are now 35, all matching.
+  (`TestPhase34_DetectionMatchesDeclaredExpectations`.)
+- `TestPhase4_Batch4bFraudControlAlert`: passes.
+
+### DET-003 decision
+
+- DET-003 (high-risk business-flow violations alert) is graded by BIZ-012's detection assertion. It is not a separate
+  catalog scenario, because it would repeat the same request. Both IDs test one alert on one flow.
+
+### Findings
+
+- The rule has no event field for the fraud decision. The lab reports a dependency as degraded, not the decision
+  itself. A rule that matches the completion of an authorization while a dependency is degraded is a proxy for the
+  violation, not the violation. A completed authorization is only a violation when the fraud check was down.
+
+### Limits
+
+- REL-009 is not wired to the Sentinel fixture. The Sentinel record does not carry `degraded`. Sentinel routing is not
+  graded for this rule.
+- DET-006 (false positives) is only partly covered by the healthy control. Its full measurement is not done.
+- The degraded flag is instance-wide, not per run. The lab's fault configuration is set for the whole scenario, so
+  this is correct for these scenarios. It would not be correct if two runs shared one lab with different faults.
+- DET-001, DET-004, DET-006, DET-008 and DET-010 are not built.
+
+### Evidence
+
+- `TestPhase4_Batch4bFraudControlAlert` and `TestPhase34_DetectionMatchesDeclaredExpectations`: passing.
+- Full runner package for batch 4b: not yet run. Batch 4a and 4b are uncommitted.
+
+### Still open (Phase 4)
+
+- Not built: DET-001, DET-004, DET-006, DET-008, DET-010.
+- The detection assertion on every P2 and P3 scenario (batch 4c).
+
+
+## Blueprint Phase 4 closure: the gaps from batches 4a and 4b
+
+Supersedes the "still open" lists of batches 4a and 4b. Decisions taken with the user: DET-003 stays a detection
+assertion on BIZ-012 and is recorded there with `detection_covers`, so it is counted once. Coverage is checked by
+`TestPhase4_DetectionStatusSweep`.
+
+### Closed
+
+- **DET-004, cross-identity correlation.** New scenario. Two identities make foreign-object reads in one run. The
+  second identity's read is a `co_actor` setup step, and REL-010 (distinct identities reaching foreign objects, threshold
+  two) fires in both builds. The attack is graded on its own: vulnerable FAIL/exploited, fixed PASS/enforced.
+  - Contract extension: `co_actor` on a setup step allows a second identity from the preconditions to act, with its own
+    token. The runner records that exchange and does not let its refusal end the chain. Only the final attack is graded.
+  - `TestPhase4_DET004CrossIdentityCorrelation`.
+- **DET-006, healthy and unhealthy controls.** Healthy owner reads, kept under the burst threshold, raise no alert. An
+  unhealthy foreign read must raise REL-004, so the detector is shown to work. `TestPhase4_DET006HealthyAndUnhealthyControls`.
+  - **Finding (false positive).** Twenty benign owner reads raise REL-005 (burst threshold ten). The rule counts requests
+    regardless of their outcome, so ordinary volume alerts. The test records this; it is not tuned away. Whether the burst
+    rule should exclude successful owner reads is a rule-design decision, not decided here.
+- **DET-008, alerts name the affected resource.** `Alert` now carries the triggering action, the requesting identity and
+  the owners named. The test checks the alert names `/api/orders/ORD-2001`, owner `cust-b`, identity `cust-a` (the verified
+  customer identity, not the fixture name).
+- **DET-010, investigable from retained evidence.** The alert's trigger event is among the run's retained access events,
+  and it matches the alert's action and run tag. `TestPhase4_DET008DET010AlertsTraceToEvidence`.
+- **DET-001, detection on attacks.** Every scenario that declares a detection block is graded against the rule's expectation.
+  `TestPhase34_DetectionMatchesDeclaredExpectations`: 39 declared, 39 matching.
+  - **Residual.** 66 scenarios are `not_evaluated`. Only three more were given REL-004 this round (DATA-001, DISC-003,
+    INTEG-005), because they are single-identity foreign reads. The rest are multi-step, write, or protocol attacks
+    that need their own rule analysis. DET-001 is therefore closed for the declared attacks and open for the 66.
+- **DET-003 mapping.** `detection_covers: [API-BAS-DET-003]` on BIZ-012. The contract rejects an unknown or self-referencing
+  DET ID, and a DET ID claimed by a catalogued DET scenario. The sweep fails if a DET ID is covered twice.
+- **P2/P3 detection status sweep.** Every catalogued scenario has an explicit status: 39 `fixture_validated` (each with a
+  detection block), 66 `not_evaluated` (each with a reason and no detection block). The two never mix. `not_evaluated` is
+  not `not_detected`: a not_evaluated scenario has no detection result at all.
+- **TLS gaps (Phase 3 close-out list).** `TestTLS_GapOtherCAAndExpiredClientCert`: a cust-a certificate from another CA,
+  and an expired one. The fixed build refuses both at the application layer. The vulnerable build trusts the subject.
+  `TestTLS_GapVersionBelowTLS12Refused`: a TLS 1.1 handshake is refused by both builds. The client may refuse TLS 1.1
+  itself; the refusal is not proven to come from the server.
+
+### Still open (named, not closed here)
+
+- **DET-001 for the 66 undeclared attacks.** Needs per-scenario rule analysis (see above).
+- **Certificate revocation (CRL/OCSP).** The lab has no revocation source. No revocation result is claimed.
+- **Native gRPC over HTTP/2 and WebSocket frames.** Adapters cover the JSON-transcoding gRPC form and the WebSocket
+  handshake only. These forms stay `UNSUPPORTED` until their adapters exist.
+- **Standalone `apibas-lab -tls` end to end.** The binary has no end-to-end test.
+- **Live SIEM validation.** Every detection result is fixture-validated. Nothing is claimed against a live SIEM.
+
+### Evidence
+
+- Targeted: `TestPhase4_DET*`, `TestPhase4_DetectionStatusSweep`, `TestPhase34_DetectionMatchesDeclaredExpectations`
+  (39/39), `TestTLS_Gap*`: passing.
+- Full `./internal/apibas/...` run on the final tree: see the result line recorded below.

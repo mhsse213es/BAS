@@ -1,0 +1,56 @@
+id: "API-BAS-BIZ-012"
+name: "Payment authorized while the fraud control is down, and the alert fires"
+category: BIZ
+claim: property_level
+attack_objective: "The fraud check is unavailable. The customer asks for payment authorization anyway, and the high-risk flow must produce an actionable alert."
+threat_model:
+  attacker: "authenticated customer who owns the order"
+  identity: customer-b
+  access_level: "standard customer, valid token, owner of the order"
+  objective: "complete a high-risk payment authorization while the fraud control cannot run, without the flow being alerted"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+  lab_faults: ["fraud-check-down"]
+steps:
+  - id: "baseline-owner-read"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/orders/{object}"
+    hypothesis: "The owner can read their order. If this fails, the scenario is not testable."
+  - id: "attack-authorize-during-outage"
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: "/api/orders/{object}/authorize-payment"
+    body: "{}"
+    hypothesis: "With the fraud check down, the fixed build fails closed with 424 and the order is not authorized. The vulnerable build authorizes and the high-risk flow must alert."
+denied_statuses: [424]
+expected_control: "With the fraud check down, payment authorization fails closed with 424, the order status is unchanged, and no high-risk completion is recorded."
+ground_truth:
+  adapters: ["state", "response"]
+  check: "The order status is identical before and after the attack."
+detection_assertion:
+  status: fixture_validated
+  reason: "The fixture alerts REL-009 when an authorization completes while the fraud check is degraded. It is fixture-validated, not validated against a live SIEM. DET-003 (high-risk business-flow violations alert) is graded by this same run: DET-003 is not a separate catalog scenario because it would repeat this request."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-009
+  min_severity: high
+detection_covers: ["API-BAS-DET-003"]
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+industry_mapping:
+  - "BFSI / payments: fail closed when a fraud control is unavailable, and alert on the attempt"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-BIZ-012 against the fixed build must PASS with REL-009 not detected"

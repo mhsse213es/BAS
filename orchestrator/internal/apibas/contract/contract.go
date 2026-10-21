@@ -128,6 +128,9 @@ type Scenario struct {
 	ExpectedControl   string             `yaml:"expected_control"`
 	GroundTruth       GroundTruth        `yaml:"ground_truth"`
 	DetectionAssert   DetectionAssertion `yaml:"detection_assertion"`
+	// DetectionCovers names the blueprint DET IDs whose detection assertion this scenario's detection block grades.
+	// Each DET ID is covered by at most one scenario, so coverage is never counted twice (DET-003 on BIZ-012).
+	DetectionCovers []string `yaml:"detection_covers"`
 	Evidence          []string           `yaml:"evidence"`
 	SideEffectClass   string             `yaml:"side_effect_class"`
 	Cleanup           []string           `yaml:"cleanup"`
@@ -182,6 +185,9 @@ type Step struct {
 	// Parallel sends the repeats concurrently, so a check-then-act race can be exercised. Only a repeated
 	// attack step may set it. The exchanges are recorded in send order, so the grade stays deterministic.
 	Parallel bool `yaml:"parallel"`
+	// CoActor marks a setup step that a second identity from the preconditions sends, with its own token, in the same
+	// run (DET-004). Its exchange is recorded and its denial does not end the chain. Only the final attack is graded.
+	CoActor bool `yaml:"co_actor"`
 	// ForgeAs names the identity whose subject an alg_none token carries.
 	// ClientCert names a client certificate the runner presents on this step, for example a trusted or forged
 	// certificate for mTLS. The names are configured by the caller of the runner (Config.ClientCerts).
@@ -203,6 +209,8 @@ type DetectionAssertion struct {
 	Status string `yaml:"status"`
 	Reason string `yaml:"reason"`
 }
+
+var detCoverPattern = regexp.MustCompile(`^API-BAS-DET-[0-9]{3}$`)
 
 // Parse decodes and validates one scenario document.
 func Parse(data []byte) (Scenario, error) {
@@ -323,6 +331,16 @@ func (s Scenario) Validate() error {
 			}
 		}
 	}
+	for _, id := range s.DetectionCovers {
+		switch {
+		case s.Detection == nil:
+			return fmt.Errorf("contract: %s: detection_covers needs a detection block", s.ID)
+		case !detCoverPattern.MatchString(id):
+			return fmt.Errorf("contract: %s: detection_covers %q is not a DET ID", s.ID, id)
+		case id == s.ID:
+			return fmt.Errorf("contract: %s: detection_covers names the scenario itself", s.ID)
+		}
+	}
 	if len(s.AdditionalDetections) > 0 && s.Detection == nil {
 		return fmt.Errorf("contract: %s: additional_detections needs a primary detection", s.ID)
 	}
@@ -386,7 +404,14 @@ func (s Scenario) validateSteps() error {
 		case auth != "none" && st.Identity == "":
 			return fmt.Errorf("contract: %s: step %s has no identity", s.ID, st.ID)
 		}
-		if want == "setup" {
+		if st.CoActor && want != "setup" {
+			return fmt.Errorf("contract: %s: co_actor is only valid on a setup step (%s)", s.ID, st.ID)
+		}
+		if st.CoActor {
+			if st.Identity == final.Identity || auth != "valid" || !slices.Contains(s.Preconditions.Identities, st.Identity) {
+				return fmt.Errorf("contract: %s: co_actor step %s needs another identity from preconditions with a valid token", s.ID, st.ID)
+			}
+		} else if want == "setup" {
 			// A setup step is part of the same actor's chain: same identity, valid token.
 			if st.Identity != final.Identity || auth != "valid" {
 				return fmt.Errorf("contract: %s: setup step %s must use the attacker identity %s with a valid token", s.ID, st.ID, final.Identity)

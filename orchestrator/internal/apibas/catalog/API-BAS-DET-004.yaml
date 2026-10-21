@@ -1,0 +1,65 @@
+id: "API-BAS-DET-004"
+name: "Distributed foreign-object access correlated across identities"
+category: DET
+claim: cross_identity
+attack_objective: >
+  Two customers each read an order that belongs to the other, in one run. Each read is a separate access event under
+  a different identity. The detection question is whether the SIEM correlates the pattern across identities, not only
+  reports each identity's attempt on its own.
+threat_model:
+  attacker: "two authenticated customers in different tenants acting together"
+  identity: customer-a
+  access_level: "standard customers, valid tokens, no elevated role"
+  objective: "read other tenants' orders and leave a pattern that a correlated rule can see"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-a, customer-b]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their own order. If this fails, the scenario is not testable.
+  - id: setup-b-reads-a-order
+    role: setup
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/ORD-1001
+    co_actor: true
+    hypothesis: Customer B reads customer A's order first. This is the second identity's foreign access in the run. It is not graded as the attack.
+  - id: attack-a-reads-b-order
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: Customer A reads customer B's order, which the owner check should refuse.
+denied_statuses: [401, 403, 404]
+forbidden_values: ["BAS-SIM-2001", "BAS-SIM-ACC-B"]
+expected_control: "Each cross-identity read is refused. No protected value of either order reaches either caller."
+ground_truth:
+  adapters: ["state", "response"]
+  check: "Neither order changes state, and no protected value of either order appears in any attack response."
+detection_assertion:
+  status: fixture_validated
+  reason: "REL-010 fires when two distinct identities in one run each reach an object owned by another identity. Fixture-validated, not validated against a live SIEM. The cross-identity correlation is a fixture rule; live SIEM correlation is not claimed."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-010
+  min_severity: high
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+industry_mapping:
+  - "BFSI / SOC: the same foreign-object pattern from several identities is one campaign, not separate incidents"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DET-004 against the fixed build must PASS with REL-010 detected (the attempts are still observed)"

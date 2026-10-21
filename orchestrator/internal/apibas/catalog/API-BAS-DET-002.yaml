@@ -1,0 +1,55 @@
+id: "API-BAS-DET-002"
+name: "Repeated invalid credentials are logged and alerted"
+category: DET
+claim: function_level
+attack_objective: "An attacker repeats a revoked credential. The product refuses each attempt, and the failures must reach the SIEM."
+threat_model:
+  attacker: "authenticated customer who owns the order"
+  identity: customer-b
+  access_level: "standard customer, valid token, owner of the order"
+  objective: "generate repeated authentication failures that the SIEM must record"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: "baseline-owner-read"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/orders/{object}"
+    hypothesis: "The owner reads their order with a valid credential. If this fails, the scenario is not testable."
+  - id: "attack-revoked-credential"
+    role: attack
+    identity: customer-a
+    auth: revoked
+    method: GET
+    path: "/api/orders/{object}"
+    repeat: 3
+    hypothesis: "Every attempt is refused with 401 and each failure is logged for the SIEM."
+max_accepted_attempts: 1
+denied_statuses: [401]
+expected_control: "Each revoked-credential attempt is refused with 401. The failures are logged and the repeated failure alert fires."
+ground_truth:
+  adapters: ["state", "response"]
+  check: "No order data is returned to a revoked credential."
+detection_assertion:
+  status: fixture_validated
+  reason: "Detection-only scenario. Both builds refuse a revoked credential, so this scenario grades the detection of repeated failures, not exploitability."
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+industry_mapping:
+  - "BFSI / SOC: repeated authentication failures are a detection signal"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DET-002 against the fixed build must PASS"
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-001
+  min_severity: high

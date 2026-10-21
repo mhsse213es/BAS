@@ -24,6 +24,9 @@ type accessEvent struct {
 	// the body, in that order. ObjectOwner is always ObjectOwners[0] when the latter is set.
 	ObjectOwner  string   `json:"object_owner,omitempty"`
 	ObjectOwners []string `json:"object_owners,omitempty"`
+	// Degraded names the dependencies the lab ran degraded when the request was served, so a detection rule can tell a
+	// completed request that passed a failing control from one that did not (BIZ-012, REL-009).
+	Degraded []string `json:"degraded,omitempty"`
 	// At is when the lab recorded the event. It is not part of the event contract: telemetry faults use
 	// it to decide when the SIEM is allowed to receive the event.
 	At time.Time `json:"-"`
@@ -157,6 +160,7 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 			Outcome:       outcomeFor(rec.status),
 			Identity:      identity,
 			Status:        rec.status,
+			Degraded:      s.degradedDependencies(),
 			ObjectOwner:   owner,
 			ObjectOwners:  owners,
 			At:            time.Now(),
@@ -197,4 +201,13 @@ func (s *Server) delivered(e accessEvent) bool {
 		return true
 	}
 	return time.Since(e.At) >= telemetryDelayed
+}
+
+// degradedDependencies names the dependencies the lab is running degraded. The fraud check is the only one modelled.
+func (s *Server) degradedDependencies() []string {
+	var out []string
+	if s.faultOn(b3FraudFault) {
+		out = append(out, "fraud-check")
+	}
+	return out
 }

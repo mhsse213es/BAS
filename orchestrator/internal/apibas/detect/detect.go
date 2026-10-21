@@ -46,6 +46,8 @@ type Event struct {
 	Status        int      `json:"status"`
 	// Signature lists the injection-pattern classes the request carried (see Signature* below). It holds
 	// classes only, never the text that matched, so a body is never stored through this field.
+	// Degraded names the controls the lab ran degraded when it served the request (see lab access events).
+	Degraded []string `json:"degraded,omitempty"`
 	Signature []string `json:"signature,omitempty"`
 }
 
@@ -110,6 +112,11 @@ type Alert struct {
 	CorrelationID string
 	TriggerSeq    int
 	Source        string
+	// Action, Identity and Owners describe the affected resource from the triggering event (DET-008): the
+	// method and path that was requested, the identity that requested it, and the owners it named.
+	Action   string
+	Identity string
+	Owners   []string
 }
 
 // maxEventOwners bounds the owners one event may name. It matches the lab's cap.
@@ -156,6 +163,9 @@ type Rule struct {
 	Severity  Severity
 	Threshold int
 	Match     func(Event) bool
+	// Distinct, when set, counts distinct values of this key among matching events instead of counting events.
+	// The rule fires on the event that reaches Threshold distinct values (REL-010 counts identities).
+	Distinct func(Event) string
 }
 
 // ElasticRules are the fixture's rules, in evaluation order.
@@ -201,6 +211,22 @@ var ElasticRules = []Rule{
 			return sensitiveProjection(e.Action) && foreignOwned(e)
 		},
 	},
+	{
+		// REL-010 fires when two or more distinct identities in one run each reach an object owned by another
+		// identity. One identity's foreign access is REL-004; the same pattern from several identities is a
+		// correlated campaign across identities (DET-004).
+		ID: "APIBAS-REL-010", Name: "Correlated foreign-object access across identities", Severity: SeverityHigh, Threshold: 2,
+		Match:    foreignOwned,
+		Distinct: func(e Event) string { return e.Identity },
+	},
+	{
+		// REL-009 fires when a payment authorization completes (2xx) while the fraud check is degraded. The fixed
+		// build fails closed with 424, so it produces no alert. Elastic-only: the Sentinel record does not carry Degraded.
+		ID: "APIBAS-REL-009", Name: "High-risk flow completed while a fraud control is degraded", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.Status >= 200 && e.Status < 300 && strings.HasSuffix(e.Action, "/authorize-payment") && hasDependency(e.Degraded, "fraud-check")
+		},
+	},
 }
 
 // BurstThreshold is the number of requests in one run that REL-005 treats as a counted-request burst.
@@ -226,6 +252,15 @@ func hasInjectionSignature(classes []string) bool {
 
 // privilegedFunction reports whether a request action (METHOD path) names a function the fixture classes
 // as privileged: deleting an order, reading its audit trail, rotating a key, or changing a key's status.
+func hasDependency(degraded []string, name string) bool {
+	for _, d := range degraded {
+		if d == name {
+			return true
+		}
+	}
+	return false
+}
+
 func privilegedFunction(action string) bool {
 	switch {
 	case strings.HasPrefix(action, "DELETE /api/authz/orders/"):
@@ -316,15 +351,24 @@ func evaluate(events []Event, rules []Rule, correlationID, source string) []Aler
 	var out []Alert
 	for _, rule := range rules {
 		count := 0
+		seen := map[string]bool{}
 		for _, e := range events {
 			if e.CorrelationID != correlationID || !rule.Match(e) {
 				continue
+			}
+			if rule.Distinct != nil {
+				key := rule.Distinct(e)
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
 			}
 			count++
 			if count == rule.Threshold {
 				out = append(out, Alert{
 					RuleID: rule.ID, RuleName: rule.Name, Severity: rule.Severity,
 					CorrelationID: correlationID, TriggerSeq: e.Seq, Source: source,
+					Action: e.Action, Identity: e.Identity, Owners: e.owners(),
 				})
 			}
 		}

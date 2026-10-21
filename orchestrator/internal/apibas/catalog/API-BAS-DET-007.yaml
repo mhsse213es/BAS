@@ -1,0 +1,54 @@
+id: "API-BAS-DET-007"
+name: "Forged identity header attributed to the verified identity"
+category: DET
+claim: function_level
+attack_objective: "A customer sends another customer's identity in a header while presenting their own token."
+threat_model:
+  attacker: "authenticated customer who owns the order"
+  identity: customer-a
+  access_level: "standard customer, valid token, owner of the order"
+  objective: "make the access event attribute the request to another customer"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: "baseline-owner-read"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/orders/{object}"
+    hypothesis: "The owner reads their order with their own token. If this fails, the scenario is not testable."
+  - id: "attack-identity-header"
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: "/api/orders/{object}"
+    headers: {"X-Customer-Id": "cust-b"}
+    hypothesis: "Identity comes only from the verified token. The event names the verified identity, and the request is refused with 403."
+denied_statuses: [403]
+expected_control: "A forged identity header is ignored. The request is refused with 403 and the event names the verified identity."
+ground_truth:
+  adapters: ["state", "response"]
+  check: "No order data of another customer is returned."
+detection_assertion:
+  status: fixture_validated
+  reason: "Attribution under a forged identity header. The vulnerable build attributes the request to the header identity, so REL-004 does not fire there. That blind spot is the expected vulnerable result."
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+industry_mapping:
+  - "BFSI / SOC: events must attribute activity to the authenticated user"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DET-007 against the fixed build must PASS"
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high

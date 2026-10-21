@@ -116,8 +116,13 @@ func expectedDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, ru
 		return ownershipDetection(t, fx, s, mode, extract)
 	case "APIBAS-REL-001":
 		// REL-001 fires on three authentication failures. The scenario's attack repeats a wrong credential
-		// and the product refuses each with 401, so three attack requests are enough.
-		if s.Steps[len(s.Steps)-1].Repeat >= 3 {
+		// and the product refuses each with 401, so three attack requests are enough. The vulnerable build accepts a
+		// revoked credential instead of refusing it, so it logs no failure: REL-001 cannot fire there.
+		attack := s.Steps[len(s.Steps)-1]
+		if mode == lab.ModeVulnerable && attack.Auth == "revoked" {
+			return detect.NotDetected
+		}
+		if attack.Repeat >= 3 {
 			return detect.Detected
 		}
 		return detect.NotDetected
@@ -132,6 +137,25 @@ func expectedDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, ru
 		return detect.Detected // each scenario that declares it calls a privileged function as a customer
 	case "APIBAS-REL-008":
 		return projectionDetection(t, fx, s)
+	case "APIBAS-REL-010":
+		// REL-010 fires when two or more distinct identities in one run each reach a foreign-owned object (DET-004).
+		identities := map[string]bool{}
+		for _, st := range s.Steps {
+			if st.Role == "attack" || st.CoActor {
+				identities[st.Identity] = true
+			}
+		}
+		if len(identities) >= 2 {
+			return detect.Detected
+		}
+		return detect.NotDetected
+	case "APIBAS-REL-009":
+		// REL-009 fires when an authorization completes while the fraud check is degraded. Only the vulnerable build
+		// completes it under the fault; the fixed build fails closed, so there is nothing to alert on.
+		if mode == lab.ModeVulnerable && slices.Contains(s.Preconditions.LabFaults, "fraud-check-down") {
+			return detect.Detected
+		}
+		return detect.NotDetected
 	}
 	t.Fatalf("%s: no expectation is written for rule %s", s.ID, rule)
 	return ""

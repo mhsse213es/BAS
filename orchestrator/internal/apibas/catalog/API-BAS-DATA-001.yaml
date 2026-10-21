@@ -41,8 +41,12 @@ ground_truth:
     of the owner's protected values. A 200 with none of them is the correct
     behaviour for this projection control.
 detection_assertion:
-  status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  status: fixture_validated
+  reason: "REL-004 fires when an identity reaches an object owned by another identity. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

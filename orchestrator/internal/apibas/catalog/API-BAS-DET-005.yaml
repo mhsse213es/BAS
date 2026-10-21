@@ -1,0 +1,53 @@
+id: "API-BAS-DET-005"
+name: "Object-ownership attack alert reaches the declared SIEM source"
+category: DET
+claim: function_level
+attack_objective: "A customer reads another customer's order by substituting its identifier. The alert must reach the declared SIEM source."
+threat_model:
+  attacker: "authenticated customer who owns the order"
+  identity: customer-a
+  access_level: "standard customer, valid token, owner of the order"
+  objective: "read another customer's order and have the alert routed to the declared SOC source"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: "baseline-owner-read"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/orders/{object}"
+    hypothesis: "The owner reads their order. If this fails, the scenario is not testable."
+  - id: "attack-cross-customer-read"
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: "/api/orders/{object}"
+    hypothesis: "The owner check refuses the cross-customer read with 403, and the object-ownership alert reaches the declared SIEM source."
+denied_statuses: [403]
+expected_control: "A cross-customer order read is refused with 403. The alert names the declared SIEM source."
+ground_truth:
+  adapters: ["state", "response"]
+  check: "No order data of another customer is returned."
+detection_assertion:
+  status: fixture_validated
+  reason: "Routing is checked against the detection report's provenance. The lab has one fixture SIEM, so routing to a second SOC sink is not modelled."
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+industry_mapping:
+  - "BFSI / SOC: attack alerts go to the SOC source the detection is configured for"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DET-005 against the fixed build must PASS"
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
