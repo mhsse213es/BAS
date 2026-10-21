@@ -801,13 +801,8 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "email and password are required", http.StatusBadRequest)
 		return
 	}
-
-	var count int
-	h.db.QueryRow(r.Context(), `SELECT COUNT(*) FROM users`).Scan(&count)
-	if count > 0 {
-		// Already configured — installer treats 409 as success.
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]string{"error": "already configured"})
+	if len(req.Password) < 10 {
+		jsonError(w, "password must be at least 10 characters", http.StatusBadRequest)
 		return
 	}
 
@@ -816,12 +811,21 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	_, err = h.db.Exec(r.Context(),
-		`INSERT INTO users (username, password_hash, role, must_change_pw) VALUES ($1, $2, 'admin', false)`,
+	// The guard is in the INSERT itself, so two concurrent setup calls cannot both create a user.
+	tag, err := h.db.Exec(r.Context(),
+		`INSERT INTO users (username, password_hash, role, must_change_pw)
+		 SELECT $1, $2, 'admin', false
+		 WHERE NOT EXISTS (SELECT 1 FROM users)`,
 		req.Email, hash,
 	)
 	if err != nil {
 		jsonError(w, "failed to create admin user", http.StatusInternalServerError)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		// Already configured — installer treats 409 as success.
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]string{"error": "already configured"})
 		return
 	}
 	log.Printf("[+] Admin user created via setup endpoint (username: %s)", req.Email)
