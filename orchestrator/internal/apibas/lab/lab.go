@@ -286,6 +286,9 @@ type Order struct {
 	Tag       string // run tag; empty for seed data, which cleanup never removes
 	Public    map[string]string
 	Protected map[string]string
+	// Beneficiary is a reference to the account the order pays out to. It is a reference, not account data,
+	// so the admin state snapshot may carry it (BIZ-009).
+	Beneficiary string
 }
 
 // OrderState is the admin-visible snapshot used as ground truth. It carries no
@@ -296,6 +299,8 @@ type OrderState struct {
 	Status   string `json:"status"`
 	Tag      string `json:"tag"`
 	Quantity string `json:"quantity"`
+	// BeneficiaryRef is the payout beneficiary reference (see Order.Beneficiary).
+	BeneficiaryRef string `json:"beneficiary_ref"`
 }
 
 // AuditEntry records every admin and mutating action. Cleanup and reset never
@@ -337,6 +342,8 @@ type Server struct {
 	// gwMu guards gwCounts, the gateway rate-limit counters (see gateway.go).
 	gwMu     sync.Mutex
 	gwCounts map[string]int
+	// bizKeys holds the body each idempotency key was first used with, in the fixed build (biz.go). Guarded by gwMu.
+	bizKeys map[string]string
 	// rotated holds the API tokens retired by POST /api/keys/rotate in the fixed build.
 	rotated map[string]bool
 	// brokerCounts counts accepted publishes per publisher and topic in the fixed build (broker.go).
@@ -442,6 +449,8 @@ func (s *Server) Handler() http.Handler {
 	s.registerWebSocket(mux)
 	s.registerBroker(mux)
 	s.registerPaid(mux)
+	s.registerBiz(mux)
+	s.registerBatch1(mux)
 	mux.HandleFunc("GET /lab/faults", s.adminOnly(s.listFaults))
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-GWAY-OVERRIDE-001: the vulnerable build honours a method-override header.
@@ -656,7 +665,7 @@ func (s *Server) getState(w http.ResponseWriter, _ *http.Request) {
 	s.mu.Lock()
 	states := make([]OrderState, 0, len(s.orders))
 	for _, o := range s.orders {
-		states = append(states, OrderState{ID: o.ID, OwnerID: o.OwnerID, Status: o.Status, Tag: o.Tag, Quantity: o.Public["quantity"]})
+		states = append(states, OrderState{ID: o.ID, OwnerID: o.OwnerID, Status: o.Status, Tag: o.Tag, Quantity: o.Public["quantity"], BeneficiaryRef: o.Beneficiary})
 	}
 	s.mu.Unlock()
 	sort.Slice(states, func(i, j int) bool { return states[i].ID < states[j].ID })

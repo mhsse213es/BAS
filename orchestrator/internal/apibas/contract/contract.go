@@ -8,8 +8,8 @@
 package contract
 
 import (
-	protocolpkg "github.com/audspect/bas/internal/apibas/protocol"
 	"fmt"
+	protocolpkg "github.com/audspect/bas/internal/apibas/protocol"
 	"regexp"
 	"slices"
 	"strings"
@@ -175,6 +175,9 @@ type Step struct {
 	ExtraHeaders []HeaderPair `yaml:"extra_headers"`
 	// Repeat sends the step this many times. Only the attack step may repeat.
 	Repeat int `yaml:"repeat"`
+	// Parallel sends the repeats concurrently, so a check-then-act race can be exercised. Only a repeated
+	// attack step may set it. The exchanges are recorded in send order, so the grade stays deterministic.
+	Parallel bool `yaml:"parallel"`
 	// ForgeAs names the identity whose subject an alg_none token carries.
 	ForgeAs    string `yaml:"forge_as"`
 	Hypothesis string `yaml:"hypothesis"`
@@ -343,6 +346,9 @@ func (s Scenario) validateSteps() error {
 			if n, err := strconv.Atoi(m[1]); err != nil || n > MaxFillerBytes {
 				return fmt.Errorf("contract: %s: step %s filler %s must be at most %d bytes", s.ID, st.ID, m[0], MaxFillerBytes)
 			}
+		}
+		if st.Parallel && (st.Repeat < 2 || want != "attack") {
+			return fmt.Errorf("contract: %s: step %s parallel needs a repeated attack step", s.ID, st.ID)
 		}
 		if st.Repeat < 0 || st.Repeat > maxRepeat {
 			return fmt.Errorf("contract: %s: step %s repeat must be between 0 and %d", s.ID, st.ID, maxRepeat)

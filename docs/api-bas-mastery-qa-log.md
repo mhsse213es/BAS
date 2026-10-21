@@ -2111,3 +2111,91 @@ claimed for them.
 - **Database choice.** Persistence uses the orchestrator's existing Postgres (`pgxpool`, `EnsureSchema`-style
   idempotent creation). That was the stated default, and it needs confirming.
 - Results are not yet visible in any UI or API. Reads are only through `ListAPIBASRuns`.
+
+## Phase 39: read-only results API (implementation order step 1)
+
+### Built
+
+- `GET /api/apibas/runs` (optional `scenario`, `limit` 1 to 500, newest first) and
+  `GET /api/apibas/runs/{id}` (verdicts, detection outcome and reason, timing verdict, detail, evidence references).
+- Authorization: `auth.CanViewAPIBASRuns` (`apibas:runs:view`), granted to Admin and Analyst. Viewer and unauthenticated
+  requests get 403. Installations are separate databases, so the permission is the authorization boundary. No tenant
+  column is needed, and none was added.
+- The detail view returns evidence references, one per stored exchange, as `<run_tag>#<index>` with step, method, path,
+  status and redacted-leak count. **Response bodies are not returned.** Exposing bodies is a separate decision.
+- The RBAC matrix (`rbac_matrix_test.go`) lists both routes, and the drift test passes.
+
+### Tests
+
+- Authorization matrix: no identity and Viewer get 403; Analyst and Admin get 200.
+- Invalid `limit` gets 400; unknown run gets 404.
+- Detail lists two evidence references for a two-exchange run, with the leaked-value count.
+- A planted body value does not appear in any list or detail response.
+- `TestRBACMatrix_NoDrift`, `go build ./...`, and the API BAS and auth short suites pass.
+
+### Still open (implementation order steps 2 to 4)
+
+- **Step 2, orchestrator integration.** Scheduling and dispatch are not built. Trigger, authorization for triggering,
+  cancellation, timeouts, concurrency limits, and failure handling are all undecided. Lifecycle transitions are not persisted.
+- **Step 3, production secrets.** Not built. Environment variables are still the only source.
+- **Step 4, end-to-end tests.** The scheduled-execution, timeout, cancellation and secret-redaction tests depend on steps 2
+  and 3 and are not written.
+- The results API has no UI. Its list is capped at 500 rows, with no paging cursor yet.
+
+
+## Blueprint Phase 2: core security vectors (acceptance)
+
+Scope is the 58 P2 IDs from the blueprint's phase column (not the text list). All 58 are catalogued.
+
+Correction: an earlier note listed DISC-006 as Phase 2 scope. The blueprint table marks it P3, so it is not Phase 2.
+
+### Evidence
+
+- `TestPhase2_ScopeAcceptance` (commit `d97bf19b`, on main). Every P2 scenario gives FAIL/exploited on the
+  vulnerable build and PASS/enforced on the fixed build. Passed in one run, about 82 s.
+- Fixture missing gives SKIPPED and is not counted. Covered by `TestPhase2_MissingRevokedCredentialIsPreconditionSkip`
+  and `TestMissingCredential_IsPreconditionSkip`.
+- Injection, "payload blocked" versus "exploit proven": the outcome separates FAIL/exploited from PASS/enforced. It
+  does not record whether a blocked payload was refused (denied status) or accepted without harm. Both are
+  enforced. Recorded as a limit of the outcome model, not a failure of the criterion as written.
+
+**Phase 2 status: closed** on the criteria above.
+
+## Blueprint Phase 3: business logic (in progress, not closed)
+
+### Built
+
+- BIZ-001, 003, 004, 005, 006, 007, 008, 009, 010, 011 (10 of the 10 BIZ P3 scenarios; BIZ-012 is P4). Lab routes
+  in `lab/biz.go`; flaws LAB-BIZ-*; catalog entries in `catalog/`.
+- Batch 1: AUTHN-010 (step-up for a sensitive action) and DATA-007 (export carries protected fields). Routes in
+  `lab/batch1.go`; flaws LAB-AUTHN-STEPUP-001 and LAB-DATA-EXPORT-001.
+- Engine: the contract has a `parallel` field for repeated attack steps. The runner sends the repeats concurrently
+  and folds results in send order. When the race mixes accepts and refusals, the reported status is the refusal,
+  because which concurrent request wins is not fixed.
+- State adapter: `StateRecord` carries `BeneficiaryRef`, so BIZ-009's change is visible to the state oracle.
+
+### Defects found while building, fixed
+
+- Vulnerable withdrawal wrote to a nil counter map and panicked; the lab returned errors and the grader reported
+  TARGET_UNREACHABLE. Fixed with `bizBump`, which creates the map on first use.
+- Parallel aggregate status took the last accept in send order, which is not deterministic. BIZ-005 fixed build
+  graded SKIPPED/EVIDENCE_INCONCLUSIVE on that ordering. Fixed as above.
+
+### Evidence
+
+- `TestPhase3_BIZScopeAcceptance`: 10 of 10 pass in both builds. Run 20 times in one process: 20 of 20 pass.
+  The race window is 100 ms on this machine. Repeatability on the qualified timing machine is not claimed.
+- `TestPhase3_Batch1Acceptance`: 2 of 2 pass in both builds, three consecutive runs.
+- `TestFlawRegistryLinksToCatalog`, `TestTimingClaimRules` and the Phase 2 scope test pass with 84 catalog entries.
+- Full `internal/apibas/runner` package (non-short, detection and ABUSE-002 suites included): passed, exit 0, about
+  470 s. That run was compiled before batch 1, so batch 1 is covered only by its own test and the short suite.
+
+### Still open (blueprint P3, 16 of 18 remaining)
+
+- Not built: AUTHN-004, 005, 009; DATA-005, 009, 010; DISC-006, 010; INTEG-001, 002, 006, 007, 009, 011.
+- Blocked: AUTHN-007 (client-certificate validation) and GWAY-012 (TLS and upstream trust). The lab has no TLS
+  listener. Both need one before they can be built honestly.
+- P3 scenarios already in the catalog before this phase (ABUSE-004, 006, 007, 010; AUTHZ-012; DISC-009; INJ-005,
+  007; INTEG-005, 010; BIZ-002) were not re-run under a Phase 3 acceptance test. They run in the catalog-wide tests.
+- The blueprint's replay acceptance for webhooks needs INTEG-002, which is not built.
+- BIZ and batch 1 make no timing claim and no detection claim (`detection_assertion: not_evaluated`).

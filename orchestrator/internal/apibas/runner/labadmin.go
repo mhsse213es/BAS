@@ -52,13 +52,15 @@ func (a LabAdmin) Snapshot(ctx context.Context) (map[string]StateRecord, error) 
 		Quantity string `json:"quantity"`
 		Status   string `json:"status"`
 		Tag      string `json:"tag"`
+		// BeneficiaryRef is the payout beneficiary reference the order carries.
+		BeneficiaryRef string `json:"beneficiary_ref"`
 	}
 	if err := a.do(ctx, http.MethodGet, "/lab/state", &rows); err != nil {
 		return nil, err
 	}
 	out := make(map[string]StateRecord, len(rows))
 	for _, r := range rows {
-		out[r.ID] = StateRecord{ID: r.ID, OwnerID: r.OwnerID, Status: r.Status, Tag: r.Tag, Quantity: r.Quantity}
+		out[r.ID] = StateRecord{ID: r.ID, OwnerID: r.OwnerID, Status: r.Status, Tag: r.Tag, Quantity: r.Quantity, BeneficiaryRef: r.BeneficiaryRef}
 	}
 	return out, nil
 }

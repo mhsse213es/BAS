@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"encoding/json"
@@ -50,6 +51,8 @@ type StateRecord struct {
 	Status   string
 	Tag      string
 	Quantity string
+	// BeneficiaryRef is the payout beneficiary reference. A change to it is a state change (BIZ-009).
+	BeneficiaryRef string
 }
 
 // StateReader is the ground-truth state adapter. A nil StateReader means the
@@ -538,6 +541,9 @@ func attemptStep(step contract.Step, n int) contract.Step {
 // attack record. It counts accepted attempts and stops early on a server fault.
 func (r *Runner) runAttack(ctx context.Context, rep *Report, step contract.Step, s contract.Scenario, token string, obj fixture.Object) (grade.Exchange, bool) {
 	reps := max(step.Repeat, 1)
+	if step.Parallel {
+		return r.runAttackParallel(ctx, rep, step, s, token, obj, reps)
+	}
 	var agg grade.Exchange
 	for k := 0; k < reps; k++ {
 		exch, transport := r.do(ctx, attemptStep(step, k+1), token, obj, &obj)
@@ -974,4 +980,51 @@ func newRunTag() string {
 		return fmt.Sprintf("apibas-%d", time.Now().UnixNano())
 	}
 	return "apibas-" + hex.EncodeToString(b[:])
+}
+
+// runAttackParallel sends the attack's repeats concurrently. The requests race on the server, so the server's
+// check-then-act window decides how many are accepted. Exchanges are folded in send order, so the verdict does
+// not depend on the order in which responses arrive.
+func (r *Runner) runAttackParallel(ctx context.Context, rep *Report, step contract.Step, s contract.Scenario, token string, obj fixture.Object, reps int) (grade.Exchange, bool) {
+	type result struct {
+		exch      Exchange
+		transport bool
+	}
+	results := make([]result, reps)
+	var wg sync.WaitGroup
+	for k := 0; k < reps; k++ {
+		wg.Add(1)
+		go func(k int) {
+			defer wg.Done()
+			exch, transport := r.do(ctx, attemptStep(step, k+1), token, obj, &obj)
+			results[k] = result{exch: exch, transport: transport}
+		}(k)
+	}
+	wg.Wait()
+	var agg grade.Exchange
+	denied := 0
+	for _, res := range results {
+		rep.Exchanges = append(rep.Exchanges, res.exch)
+		if res.transport {
+			return agg, true
+		}
+		if agg.Status < 500 {
+			agg.Status = res.exch.Status
+		}
+		if slices.Contains(s.DeniedStatuses, res.exch.Status) {
+			denied = res.exch.Status
+		}
+		agg.LeakedProtected += res.exch.Leaked
+		agg.ForbiddenHeaders += forbiddenHeaderHits(res.exch, s.ForbiddenResponseHeaders)
+		agg.Oversized += oversizedHits(s, res.exch.raw)
+		if res.exch.Status < 500 && !slices.Contains(s.DeniedStatuses, res.exch.Status) {
+			agg.Accepted++
+		}
+	}
+	// Which concurrent request the server accepts is not fixed, so the last status in send order is not
+	// meaningful. A refusal is the control's answer to the race; report it rather than whichever accept came last.
+	if denied != 0 {
+		agg.Status = denied
+	}
+	return agg, false
 }

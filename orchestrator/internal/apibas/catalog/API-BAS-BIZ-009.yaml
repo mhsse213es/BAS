@@ -1,0 +1,50 @@
+id: "API-BAS-BIZ-009"
+name: "Beneficiary changed without verification"
+category: BIZ
+claim: property_level
+attack_objective: "The customer changes the payout beneficiary of an order without the verification step."
+threat_model:
+  attacker: "authenticated customer who owns the order"
+  identity: customer-b
+  access_level: "standard customer, valid token, owner of the order"
+  objective: "redirect a payout to a new beneficiary without verification"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: "baseline-owner-read"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/orders/{object}"
+    hypothesis: "The owner can read their order. If this fails, the scenario is not testable."
+  - id: "attack-change-beneficiary"
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: PATCH
+    path: "/api/biz/orders/{object}/beneficiary"
+    body: "{\"beneficiary_ref\":\"BAS-BENEF-NEW\"}"
+    hypothesis: "A beneficiary change needs verification, so the request without it is refused with 403."
+denied_statuses: [403]
+expected_control: "A beneficiary change without the verification code is refused with 403 and the beneficiary is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: "The beneficiary reference is identical before and after the attack."
+detection_assertion:
+  status: not_evaluated
+  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+industry_mapping:
+  - "BFSI: business-logic validation of payment and order workflows"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-BIZ-009 against the fixed build must PASS"
