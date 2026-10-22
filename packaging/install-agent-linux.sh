@@ -1,21 +1,58 @@
 #!/bin/bash
-# install-agent-linux.sh: installs the BAS agent on this Linux host and fetches the deployment CA
-# from the orchestrator's dashboard first (the same URL the Deploy Agent page uses), so no manual
-# certificate copy is needed.
+# install-agent-linux.sh: installs or upgrades the BAS agent on this Linux host.
 #
 #   sudo ./install-agent-linux.sh --agent ./bas-agent-linux-amd64 \
 #     --server-host 192.168.10.78 --enroll-port 9445 --secret <agent-secret> \
 #     [--env Production] [--ca-fingerprint <SHA-256 fingerprint>] [--dashboard-port 9543]
 #
+# What it does:
+#   1. Fetches the deployment CA from the orchestrator's dashboard (the URL the Deploy Agent page uses).
+#   2. If the agent already holds an identity (certificate, key, enrollment state) issued under a
+#      different CA, moves that identity aside. A certificate from another CA is never accepted, so
+#      keeping it only blocks enrollment. Same CA: the identity is kept (normal upgrade).
+#   3. Removes a previously installed agent service, then installs the new binary.
+#
 # The agent secret comes from the orchestrator's Deploy Agent page (or GET /api/config/connection).
-# --ca-fingerprint is strongly recommended: the CA is fetched over TLS that cannot yet be verified
-# against that same CA, so without it the first contact is trusted as-is (the fingerprint is printed).
+# --ca-fingerprint is strongly recommended: without it the first contact is trusted as-is.
 set -euo pipefail
 
 AGENT=""; HOST=""; PORT=""; SECRET=""; ENV="Production"; FINGERPRINT=""; DASH_PORT="9543"
+CERT_DIR="${BAS_CERT_DIR:-/etc/audspect/certs}"
 CA_FILE="/etc/audspect-agent/deployment-ca.pem"
+IDENTITY_FILES="agent-cert.pem agent-key.pem enrollment-state"
 
 usage() { echo "usage: sudo $0 --agent <binary> --server-host <host> --enroll-port <port> --secret <secret> [--env <label>] [--ca-fingerprint <sha256>] [--dashboard-port <port>]" >&2; exit 2; }
+
+# clear_stale_identity <new-ca-pem>: moves the agent's identity aside when it was issued under a different CA.
+clear_stale_identity() {
+  local new_ca="$1" f have=0 backup
+  for f in $IDENTITY_FILES; do
+    if [ -e "$CERT_DIR/$f" ]; then have=1; fi
+  done
+  if [ "$have" -eq 0 ]; then
+    return 0
+  fi
+  local new_fp old_fp=""
+  new_fp="$(openssl x509 -in "$new_ca" -noout -fingerprint -sha256)"
+  if [ -f "$CERT_DIR/deployment-ca.pem" ]; then
+    old_fp="$(openssl x509 -in "$CERT_DIR/deployment-ca.pem" -noout -fingerprint -sha256 2>/dev/null || true)"
+  fi
+  if [ -n "$old_fp" ] && [ "$old_fp" = "$new_fp" ]; then
+    echo "    agent identity matches the current CA; keeping it"
+    return 0
+  fi
+  backup="${CERT_DIR}.replaced-$(date -u +%Y%m%dT%H%M%SZ)"
+  echo "==> The deployment CA differs from the one this agent enrolled with."
+  echo "    moving the old identity to ${backup} so the agent can enroll again"
+  systemctl stop bas-agent 2>/dev/null || true
+  install -d -m 0700 "$backup"
+  for f in $IDENTITY_FILES; do
+    if [ -e "$CERT_DIR/$f" ]; then
+      mv "$CERT_DIR/$f" "$backup/"
+    fi
+  done
+}
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --agent) AGENT="${2:-}"; shift 2 ;;
@@ -33,7 +70,6 @@ done
 [ -f "$AGENT" ] || { echo "agent binary not found: $AGENT" >&2; exit 1; }
 command -v openssl >/dev/null || { echo "openssl is required" >&2; exit 1; }
 
-install -d -m 0755 "$(dirname "$CA_FILE")"
 TMP_CA="$(mktemp)"
 trap 'rm -f "$TMP_CA"' EXIT
 
@@ -45,11 +81,25 @@ grep -q "BEGIN CERTIFICATE" "$TMP_CA" || { echo "the response is not a PEM certi
 ACTUAL="$(openssl x509 -in "$TMP_CA" -noout -fingerprint -sha256 | cut -d= -f2)"
 echo "    CA SHA-256 fingerprint: ${ACTUAL}"
 if [ -n "$FINGERPRINT" ]; then
-  [ "${ACTUAL^^}" = "${FINGERPRINT^^}" ] || { echo "fingerprint mismatch: expected ${FINGERPRINT}; nothing installed" >&2; exit 1; }
+  if [ "${ACTUAL^^}" != "${FINGERPRINT^^}" ]; then
+    echo "fingerprint mismatch: expected ${FINGERPRINT}; nothing installed" >&2
+    exit 1
+  fi
   echo "    fingerprint matches --ca-fingerprint"
 else
   echo "    warning: no --ca-fingerprint given; trusting this CA on first contact" >&2
 fi
+
+echo "==> Checking the existing agent identity"
+clear_stale_identity "$TMP_CA"
+
+if systemctl cat bas-agent >/dev/null 2>&1 || [ -x /usr/local/bin/bas-agent ]; then
+  echo "==> Removing the previously installed agent service"
+  chmod +x "$AGENT"
+  "$AGENT" -uninstall || echo "    warning: previous uninstall reported errors; continuing"
+fi
+
+install -d -m 0755 "$(dirname "$CA_FILE")"
 install -m 0644 "$TMP_CA" "$CA_FILE"
 
 echo "==> Installing the agent"
