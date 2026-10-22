@@ -113,6 +113,9 @@ type Capabilities struct {
 	MarkerInAppName     bool     `json:"markerInAppName"`
 	MarkerInQueryText   bool     `json:"markerInQueryText"`
 	MarkerInAuditRecord bool     `json:"markerInAuditRecord"`
+	// Notes states engine-specific limits and unverified assumptions that a
+	// consumer must not read as guarantees.
+	Notes []string `json:"notes,omitempty"`
 }
 
 // FixtureSpec requests a synthetic fixture (no real PANs/customer data).
