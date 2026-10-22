@@ -145,8 +145,18 @@ write_env() { # file, then KEY=VALUE lines on stdin
   chmod 0600 "$1"
 }
 
+# MISP image tags come from the template shipped in the package; the compose file requires them.
+misp_tag() {
+  local v
+  v=$(tr -d '' < "${PKG_SHARE}/stacks/misp/template.env" | sed -n "s/^$1=//p" | head -1)
+  [ -n "$v" ] || die "$1 missing from ${PKG_SHARE}/stacks/misp/template.env"
+  printf '%s' "$v"
+}
 write_env "${STACK_DIR}/misp.env" <<EOF
 COMPOSE_PROJECT_NAME=misp
+CORE_TAG=$(misp_tag CORE_TAG)
+MODULES_TAG=$(misp_tag MODULES_TAG)
+GUARD_TAG=$(misp_tag GUARD_TAG)
 BASE_URL=http://${HOST}:${MISP_HTTP}
 NGINX_HTTP_PORT=${MISP_HTTP}
 NGINX_HTTPS_PORT=${MISP_HTTPS}
