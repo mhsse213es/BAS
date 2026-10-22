@@ -70,6 +70,13 @@ func main() {
 				fmt.Fprintf(os.Stderr, "error: read --ca-root file: %v\n", err)
 				os.Exit(1)
 			}
+			// A stale identity (issued by another CA) can never enroll; move it aside first.
+			if moved, err := clearStaleIdentity(pemBytes); err != nil {
+				fmt.Fprintf(os.Stderr, "error: reset old agent identity: %v\n", err)
+				os.Exit(1)
+			} else if moved {
+				fmt.Println("[*] old agent identity was issued by a different CA; moved aside so the agent can enroll again")
+			}
 			// saveDeploymentCARoot validates that pemBytes parses as an
 			// X.509 certificate before writing anything.
 			if err := saveDeploymentCARoot(pemBytes); err != nil {

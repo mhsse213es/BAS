@@ -1682,6 +1682,8 @@ export function buildAgentInstallCommands(origin, host, data) {
   var caURL = origin + '/api/config/ca-root';
   var common = ' --install --server ' + serverURL + ' --enroll-port ' + enrollPort;
   var caRootPem = (data.caRootPem || '').trim();
+  var dashPort = (origin.match(/:([0-9]+)$/) || [null, '9543'])[1];
+  var linuxEnv = 'BAS_SERVER_HOST=' + host + ' BAS_ENROLL_PORT=' + enrollPort + ' BAS_MTLS_PORT=' + mtlsPort + ' BAS_DASHBOARD_PORT=' + dashPort;
 
   var posixCaCmd = caRootPem
     ? "cat > deployment-ca.pem <<'BASCAEOF'\n" + caRootPem + "\nBASCAEOF"
@@ -1699,8 +1701,9 @@ export function buildAgentInstallCommands(origin, host, data) {
     // listing.
     windows: winCaCmd + '\n' +
       '.\\bas-agent-windows-amd64.exe' + common + ' --ca-root .\\deployment-ca.pem --env Production',
-    linux: 'chmod +x bas-agent-linux-*\n' + posixCaCmd + '\n' +
-      'sudo ./bas-agent-linux-*' + common + ' --ca-root ./deployment-ca.pem --env Production',
+    linux: 'curl -fsSk -o install-agent-linux.sh ' + origin + '/api/agent/install-script\n' +
+      posixCaCmd + '\n' +
+      'sudo env ' + linuxEnv + ' bash install-agent-linux.sh --ca-file ./deployment-ca.pem',
     mac: 'xattr -d com.apple.quarantine bas-agent-darwin-* && chmod +x bas-agent-darwin-*\n' + posixCaCmd + '\n' +
       'sudo ./bas-agent-darwin-*' + common + ' --ca-root ./deployment-ca.pem --env Production',
   };

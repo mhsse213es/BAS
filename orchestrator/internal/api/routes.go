@@ -77,6 +77,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	r.Get("/login/{tenantSlug}/sso", h.InitiateSSOLogin)
 	r.Get("/api/auth/sso/callback", h.SSOCallback)
 	r.Get("/api/config/ca-root", h.GetCARoot)
+	r.Get("/api/agent/install-script", h.GetAgentInstallScript)
 	r.Post("/api/csp-report", h.CSPReport) // CSP violation reports; browsers send them without credentials (G1d)
 
 	// Generic inbound security-event ingestion -- authenticated by its own

@@ -578,6 +578,7 @@ var publicRoutes = map[string]bool{
 	"GET /login/{tenantSlug}/sso":                 true,
 	"GET /api/auth/sso/callback":                  true,
 	"GET /api/config/ca-root":                     true, // public CA certificate (never the key), fetched by install commands before enrollment
+	"GET /api/agent/install-script":                true, // public Linux agent installer (no secret), downloaded by the install command
 	"POST /api/csp-report":                        true, // CSP violation reports (G1d); browsers send them unauthenticated
 	"POST /api/ingest/v1/events":                  true, // authenticated by its own shared secret (validateIngestAuth), not JWT -- outside the JWT group (added by af56e351, omitted from this list)
 	"GET /scim/v2/ServiceProviderConfig":          true,

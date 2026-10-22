@@ -1,11 +1,15 @@
 #!/bin/bash
 # install-agent-linux.sh: installs or upgrades the BAS agent on this Linux host.
 #
-#   sudo ./install-agent-linux.sh <agent-secret>
+#   sudo ./install-agent-linux.sh [<agent-secret>] [--ca-file ./deployment-ca.pem]
+#
+# Without a secret argument it asks for the secret. --ca-file uses a CA the console already embedded
+# in the install command, so the CA is not fetched over the network at all.
 #
 # Only the agent secret is needed. The server address, ports and agent binary default to this
 # server's values and can be overridden with environment variables or options:
 #   BAS_SERVER_HOST (default 192.168.10.78), BAS_ENROLL_PORT (9445), BAS_DASHBOARD_PORT (9543),
+#   BAS_MTLS_PORT (9443),
 #   BAS_ENV_LABEL (Production), --agent <path>, --ca-fingerprint <SHA-256>.
 # The agent binary is looked for as bas-agent-linux-<arch> in the current folder or the script's folder.
 #
@@ -19,10 +23,11 @@
 # --ca-fingerprint is strongly recommended: without it the first contact is trusted as-is.
 set -euo pipefail
 
-AGENT=""; SECRET=""; FINGERPRINT=""
+AGENT=""; SECRET=""; FINGERPRINT=""; CA_SRC=""
 HOST="${BAS_SERVER_HOST:-192.168.10.78}"
 PORT="${BAS_ENROLL_PORT:-9445}"
 DASH_PORT="${BAS_DASHBOARD_PORT:-9543}"
+MTLS_PORT="${BAS_MTLS_PORT:-9443}"
 ENV="${BAS_ENV_LABEL:-Production}"
 CERT_DIR="${BAS_CERT_DIR:-/etc/audspect/certs}"
 CA_FILE="/etc/audspect-agent/deployment-ca.pem"
@@ -61,12 +66,19 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --agent) AGENT="${2:-}"; shift 2 ;;
     --ca-fingerprint) FINGERPRINT="${2:-}"; shift 2 ;;
+    --ca-file) CA_SRC="${2:-}"; shift 2 ;;
     -h|--help) usage ;;
     -*) echo "unknown option: $1" >&2; usage ;;
     *) if [ -z "$SECRET" ]; then SECRET="$1"; shift; else echo "unexpected argument: $1" >&2; usage; fi ;;
   esac
 done
-[ -n "$SECRET" ] || usage
+if [ -z "$SECRET" ]; then
+  if [ -t 0 ]; then
+    read -r -s -p "Agent secret (from the Deploy Agent page): " SECRET
+    echo
+  fi
+  [ -n "$SECRET" ] || usage
+fi
 
 if [ -z "$AGENT" ]; then
   case "$(uname -m)" in
@@ -90,7 +102,12 @@ trap 'rm -f "$TMP_CA"' EXIT
 
 CA_URL="https://${HOST}:${DASH_PORT}/api/config/ca-root"
 echo "==> Fetching deployment CA from ${CA_URL}"
-curl -sS -k --fail -o "$TMP_CA" "$CA_URL" || { echo "could not fetch the CA from ${CA_URL}" >&2; exit 1; }
+if [ -n "$CA_SRC" ]; then
+  [ -f "$CA_SRC" ] || { echo "CA file not found: $CA_SRC" >&2; exit 1; }
+  cp "$CA_SRC" "$TMP_CA"
+else
+  curl -sS -k --fail -o "$TMP_CA" "$CA_URL" || { echo "could not fetch the CA from ${CA_URL}" >&2; exit 1; }
+fi
 grep -q "BEGIN CERTIFICATE" "$TMP_CA" || { echo "the response is not a PEM certificate" >&2; exit 1; }
 
 ACTUAL="$(openssl x509 -in "$TMP_CA" -noout -fingerprint -sha256 | cut -d= -f2)"
@@ -119,5 +136,5 @@ install -m 0644 "$TMP_CA" "$CA_FILE"
 
 echo "==> Installing the agent"
 chmod +x "$AGENT"
-"$AGENT" -install -server "https://${HOST}:9443" -enroll-port "$PORT" \
+"$AGENT" -install -server "https://${HOST}:${MTLS_PORT}" -enroll-port "$PORT" \
   -secret "$SECRET" -ca-root "$CA_FILE" -env "$ENV"
