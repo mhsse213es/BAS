@@ -266,6 +266,9 @@ EOF
 sysctl -q -p /etc/sysctl.d/99-threat-intel-package.conf || true
 
 # ---- copy stacks into place ------------------------------------------------
+# write_env sets umask 077 in this shell; without this reset, copied stack files are 0600 and
+# the containers (e.g. RabbitMQ, which runs as its own user) cannot read their config.
+umask 022
 for s in misp opencti openaev; do
   install -d -m 0755 "${STACK_DIR}/${s}"
   cp -r "${PKG_SHARE}/stacks/${s}/." "${STACK_DIR}/${s}/"
