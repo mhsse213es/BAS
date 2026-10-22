@@ -126,6 +126,7 @@ EOF
 
 install -m 0755 "$PKG_ROOT/bin/tip-install" "$STAGE/usr/bin/tip-install"
 install -m 0755 "$PKG_ROOT/bin/tip-show-credentials" "$STAGE/usr/bin/tip-show-credentials"
+install -m 0755 "$PKG_ROOT/bin/tip-uninstall" "$STAGE/usr/bin/tip-uninstall"
 install -m 0644 "$PKG_ROOT/README.md" "$STAGE/usr/share/doc/threat-intelligence-package/README.md"
 install -m 0644 "$PKG_ROOT/vendor/misp-docker/SHA256SUMS" "$PAYLOAD/stacks/misp/SHA256SUMS"
 
