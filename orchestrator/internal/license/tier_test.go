@@ -11,7 +11,7 @@ import (
 // lower ones.
 func TestTierProducts_ExactSets(t *testing.T) {
 	core := []ProductLine{ProductAV, ProductWAF, ProductNetwork, ProductEmail}
-	advanced := append(append([]ProductLine{}, core...), ProductDLP, ProductPhishing, ProductAPIBAS)
+	advanced := append(append([]ProductLine{}, core...), ProductDLP, ProductPhishing, ProductAPIBAS, ProductAD)
 	enterprise := append(append([]ProductLine{}, advanced...), ProductKillChain, ProductRansomware, ProductWebGW, ProductCloud)
 
 	for _, c := range []struct {
@@ -52,7 +52,7 @@ func TestPermits_CoreRefusesHigherTiers(t *testing.T) {
 			t.Fatalf("Core refused %s", p)
 		}
 	}
-	for _, p := range []ProductLine{ProductDLP, ProductPhishing, ProductKillChain, ProductRansomware, ProductWebGW, ProductCloud} {
+	for _, p := range []ProductLine{ProductDLP, ProductPhishing, ProductKillChain, ProductRansomware, ProductWebGW, ProductCloud, ProductAD} {
 		if lic.Permits(p) {
 			t.Fatalf("Core permitted %s", p)
 		}

@@ -34,6 +34,8 @@ const (
 	ProductCloud      ProductLine = "cloud"
 	// ProductAPIBAS is the API BAS testing product. It is sold with Advanced.
 	ProductAPIBAS ProductLine = "apibas"
+	// ProductAD is the Active Directory BAS product line. It is sold with Advanced.
+	ProductAD ProductLine = "ad"
 )
 
 // tierProductLines is the one authoritative mapping. The server derives permissions only from this
@@ -42,11 +44,11 @@ var tierProductLines = map[Tier][]ProductLine{
 	TierCore: {ProductAV, ProductWAF, ProductNetwork, ProductEmail},
 	TierAdvanced: {
 		ProductAV, ProductWAF, ProductNetwork, ProductEmail,
-		ProductDLP, ProductPhishing, ProductAPIBAS,
+		ProductDLP, ProductPhishing, ProductAPIBAS, ProductAD,
 	},
 	TierEnterprise: {
 		ProductAV, ProductWAF, ProductNetwork, ProductEmail,
-		ProductDLP, ProductPhishing, ProductAPIBAS,
+		ProductDLP, ProductPhishing, ProductAPIBAS, ProductAD,
 		ProductKillChain, ProductRansomware, ProductWebGW, ProductCloud,
 	},
 }
