@@ -12,8 +12,10 @@ package cloudgraph
 //   escalate-clusterroles     escalate verb on ClusterRoles -> a ClusterRole that lists secrets
 //   impersonate-serviceaccounts  impersonate verb on serviceaccounts -> a service account that lists secrets
 //   create-pods               create pods in a namespace -> a service account in that namespace that lists secrets
+//   request-serviceaccount-token  create serviceaccounts/token -> a same-namespace service account that lists secrets
+//   exec-into-pods            create pods/exec -> a pod in that namespace running a service account that lists secrets
 //
-// Not modelled: token requests, node proxy, exec into existing pods, admission policy (see QA log O-14).
+// Not modelled: node proxy (kubelet access), admission policy (see QA log O-14).
 
 // K8sAttackPath is one configured path from a workload to a secret-reaching target.
 type K8sAttackPath struct {
@@ -90,6 +92,8 @@ func K8sAttackPaths(inv *K8sInventory, rep *K8sDiscoveryReport) []K8sAttackPath 
 		add("escalate-clusterroles", RBACRequest{APIGroup: rbac, Resource: "clusterroles", Verb: "escalate"}, "", roleTargets)
 		add("impersonate-serviceaccounts", RBACRequest{Resource: "serviceaccounts", Verb: "impersonate"}, "", saIDs(saTargets, ""))
 		add("create-pods", RBACRequest{Resource: "pods", Verb: "create"}, ns, saIDs(saTargets, ns))
+		add("request-serviceaccount-token", RBACRequest{Resource: "serviceaccounts/token", Verb: "create"}, ns, saIDs(saTargets, ns))
+		add("exec-into-pods", RBACRequest{Resource: "pods/exec", Verb: "create"}, ns, podIDs(inv, rep.ClusterName, saTargets, ns))
 	}
 	return out
 }
@@ -100,6 +104,25 @@ func saIDs(targets []k8sSATarget, ns string) []string {
 	for _, t := range targets {
 		if ns == "" || t.Namespace == ns {
 			ids = append(ids, t.ID)
+		}
+	}
+	return ids
+}
+
+// podIDs returns the pods in a namespace that run a service account which can list secrets.
+func podIDs(inv *K8sInventory, cluster string, targets []k8sSATarget, ns string) []string {
+	saSet := map[string]bool{}
+	for _, t := range targets {
+		saSet[t.ID] = true
+	}
+	var ids []string
+	for _, r := range inv.Resources {
+		if r.Kind != "k8s:pod" || r.Attributes["namespace"] != ns {
+			continue
+		}
+		sa := k8sCanonicalID(cluster, ns, "serviceaccount", r.Attributes["serviceAccount"])
+		if saSet[sa] {
+			ids = append(ids, r.CanonicalID)
 		}
 	}
 	return ids
