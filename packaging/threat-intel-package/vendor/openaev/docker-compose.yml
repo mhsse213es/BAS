@@ -212,6 +212,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 20
+      start_period: 600s
 
   ###########################
   # OPENAEV COLLECTORS      #
