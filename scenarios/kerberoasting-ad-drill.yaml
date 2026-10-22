@@ -1,5 +1,5 @@
 id: kerberoasting-ad-drill
-product_line: common
+product_line: ad
 name: Kerberoasting & Active Directory Credential Theft Drill
 description: >
   Eight-stage telemetry-safe Active Directory credential-access drill for

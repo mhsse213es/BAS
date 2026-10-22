@@ -1,5 +1,5 @@
 id: purplesharp-ad-drill
-product_line: common
+product_line: ad
 name: PurpleSharp AD Credential Drill (Three-Tier)
 description: >
   Active Directory credential-access drill based on PurpleSharp methodology with
