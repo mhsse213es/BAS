@@ -32,17 +32,14 @@ clear_stale_identity() {
   if [ "$have" -eq 0 ]; then
     return 0
   fi
-  local new_fp old_fp=""
-  new_fp="$(openssl x509 -in "$new_ca" -noout -fingerprint -sha256)"
-  if [ -f "$CERT_DIR/deployment-ca.pem" ]; then
-    old_fp="$(openssl x509 -in "$CERT_DIR/deployment-ca.pem" -noout -fingerprint -sha256 2>/dev/null || true)"
-  fi
-  if [ -n "$old_fp" ] && [ "$old_fp" = "$new_fp" ]; then
-    echo "    agent identity matches the current CA; keeping it"
+  # The identity is valid only if the agent's certificate chains to the CA we are installing now.
+  # (Do not compare with the stored deployment-ca.pem: a previous install overwrites that file.)
+  if [ -f "$CERT_DIR/agent-cert.pem" ] && openssl verify -CAfile "$new_ca" "$CERT_DIR/agent-cert.pem" >/dev/null 2>&1; then
+    echo "    agent certificate verifies against the current CA; keeping the identity"
     return 0
   fi
   backup="${CERT_DIR}.replaced-$(date -u +%Y%m%dT%H%M%SZ)"
-  echo "==> The deployment CA differs from the one this agent enrolled with."
+  echo "==> The agent's certificate was not issued by the current deployment CA."
   echo "    moving the old identity to ${backup} so the agent can enroll again"
   systemctl stop bas-agent 2>/dev/null || true
   install -d -m 0700 "$backup"
