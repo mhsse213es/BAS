@@ -14,7 +14,7 @@
 
 - Probes run **in the agent**; the agent never scores. (spec §2, §4)
 - Reuse `dlpreport.Record` (`Enforcement/Classification/Telemetry/Response`) — **no new verdict taxonomy**; call `Record.Validate()` on every record. (§7)
-- Reuse `detectverify` connectors **unchanged** (no `Marker` field added to `VerifyRequest`); marker filtering lives in `dbsim/correlation`. (§6, §11)
+- Reuse `detectverify` connectors with **no `Marker` field added to `VerifyRequest`** and no change to `Verify` semantics or other connectors; the only connector change is the additive Elastic one in spec A1 (Task 12). Marker filtering lives in `orchestrator/internal/dbsim/correlation`. dbsim never uses `VerifyResult.Verdict`. (§6, A1, A2)
 - Probes are **named operations in agent code**; signature covers probe id + parameter schema + limits; no free-form SQL from the server. (R3)
 - Client mode: read-only DB role **and** `READ ONLY` transaction **and** probe-id allowlist; hard-refused unless Admin-enabled (default off). (R4, R8)
 - Target identity = PG `system_identifier` / MySQL `server_uuid`, pre-registered; client mode never trust-on-first-use. (R6)
@@ -24,6 +24,16 @@
 - Pure-Go drivers only (no cgo); agent builds for Windows/Linux/macOS must still pass; garble `-literals` impact checked. (§10 B5)
 - Re-sign every edited scenario `.sig`. Commit and push after each task (repo convention).
 - Cleanup failure is a safety incident that blocks normal completion. (§8 gate 4)
+
+## Amendments after Task 1 (binding; spec §10b A1–A10 and `docs/dbsim-discovery.md`)
+
+These override any task text that differs:
+- **Packages (A3):** agent-side code is `agent/dbprobe/` (+ `postgres/`, `mysql/`, `fixtures/`); wire types `DBProbeSpec`/result live in `agent/protocol`. The orchestrator never imports agent code; `orchestrator/internal/dbsim/` holds mirror wire structs, a probe registry as data, policy, correlation, report. Task 2 and Task 3 therefore produce **two** sets: agent types/gates and orchestrator mirrors, tied by a golden JSON vector test (precedent `agent/protocol/golden_vector_test.go`). Task 3's orchestrator `Authorize` takes the mirror registry's probe entry, not an agent `ProbeDef`.
+- **Task 6 (A4, A6, A7):** dispatch via a `dbprobe` branch in `agent/executor.go` `execStep` before `buildCmd`; copy the new field in `decodeStep` (`agent/agent.go`); add the dbsim gate before `evaluateB5Gate` without weakening B5; credential resolver per A7 (env `BAS_DBCRED_<NAME>`, else local protected store; unresolvable ⇒ SKIPPED); result as a typed optional field on `protocol.ExecResult`. "Tampered scenario" test = tampered/unsigned/replayed `CommandEnvelope`.
+- **Task 7 (A6, A10):** also add the `dbsim` `license.ProductLine` const + `tierProductLines` + `api/product_gate.go` prefixes, extend `scenario.Step` and the validator for executor `dbprobe`, register execclass entries (`read_only→non_destructive`, `bounded_synthetic→potentially_destructive`, `mutation→destructive`), sign YAMLs with `orchestrator/scripts/signer.go`.
+- **Task 8 (A5):** persistence is a new `dbsim_runs` table + `EnsureDBSimRunSchema` + store under `orchestrator/internal/db/`; graded `PASS|FAIL|ERROR|SKIPPED` copied out; `dlpreport.Record` JSON stored in full.
+- **Task 12 (A1) gets a new first step:** write the failing test, then make the additive Elastic change (widen `_source`, add one `source` key to `RawJSON` with the extra fields, e.g. `message`, `kibana.alert.reason`, `event.original`, `user.name`); update `TestContractElasticRawJSONIsNormalizedSubset` to the new pinned shape; all existing `detectverify` tests must still pass. Other connectors stay untouched and are Unverifiable for marker matching.
+- **Task 11/13 build note (A8):** the real garble build and the lab run on staging.
 
 ## Review Focus
 
@@ -38,12 +48,12 @@
 ## File Structure
 
 Agent module (`agent/`):
-- `agent/dbsim/types.go` — Probe, ProbeResult, Role, Grant, AuditEvent, Capabilities, Fixture, CleanupResult.
-- `agent/dbsim/adapter.go` — `Adapter` interface + `Register/Lookup`.
-- `agent/dbsim/gate.go` — scope/identity, exec-class, budget checks.
-- `agent/dbsim/probes.go` — named-operation catalog (id → handler, class, param schema).
-- `agent/dbsim/postgres/`, `agent/dbsim/mysql/` — adapters (`adapter.go`, `grants.go`, `audit.go`).
-- `agent/dbsim/fixtures/` — synthetic datasets + cleanup manifests.
+- `agent/dbprobe/types.go` — Probe, ProbeResult, Role, Grant, AuditEvent, Capabilities, Fixture, CleanupResult.
+- `agent/dbprobe/adapter.go` — `Adapter` interface + `Register/Lookup`.
+- `agent/dbprobe/gate.go` — scope/identity, exec-class, budget checks.
+- `agent/dbprobe/probes.go` — named-operation catalog (id → handler, class, param schema).
+- `agent/dbprobe/postgres/`, `agent/dbprobe/mysql/` — adapters (`adapter.go`, `grants.go`, `audit.go`).
+- `agent/dbprobe/fixtures/` — synthetic datasets + cleanup manifests.
 - `agent/exec_dbprobe.go` — `dbprobe` executor glue (signature check, credential resolve, cancel).
 - `agent/protocol/messages.go` — add `DBProbeSpec` to `ScenarioStep`.
 
@@ -72,23 +82,23 @@ Docs: `docs/dbsim-discovery.md` (Task 1), `docs/dbsim-mastery-qa-log.md` (Task 1
 ### Task 2: Wire contract and probe catalog types
 
 **Files:**
-- Create: `agent/dbsim/types.go`, `agent/dbsim/probes.go`
+- Create: `agent/dbprobe/types.go`, `agent/dbprobe/probes.go`
 - Modify: `agent/protocol/messages.go` (`ScenarioStep` gains `DBProbe *DBProbeSpec`)
-- Test: `agent/dbsim/probes_test.go`, `agent/protocol/messages_test.go`
+- Test: `agent/dbprobe/probes_test.go`, `agent/protocol/messages_test.go`
 
 **Interfaces:**
 - Produces: `type DBProbeSpec struct { Engine, ProbeID, TargetID, CredentialRef, RunID, Marker, FixtureID string; Mode ExecMode; Limits Limits; Params map[string]string }`; `type ExecMode string` (`ModeLab`, `ModeClient`); `type ProbeClass string` (`ClassReadOnly`, `ClassBoundedSynthetic`, `ClassMutation`); `type Limits struct { MaxRows, TimeoutSec, MaxConns int }`; `type ProbeDef struct { ID string; Class ProbeClass; ParamSchema map[string]ParamKind; Engines []string }`; `func LookupProbe(id string) (ProbeDef, bool)`; `type ProbeResult struct { Denied bool; RowsRead int; ErrorClass string; DBTime time.Time; AgentTime time.Time; Notes []string }`.
 
 - [ ] **Step 1: Write failing tests:** `TestDBProbeSpecRoundTripsJSON`; `TestLookupProbeUnknownIDNotFound`; `TestEveryProbeDeclaresClassAndEngines`; `TestParamSchemaRejectsUndeclaredParam` (a `Params` key not in schema ⇒ validation error).
-- [ ] **Step 2: Run** `cd agent && go test ./dbsim/ ./protocol/ -v` — expect FAIL (undefined).
+- [ ] **Step 2: Run** `cd agent && go test ./dbprobe/ ./protocol/ -v` — expect FAIL (undefined).
 - [ ] **Step 3: Implement** types + `ValidateSpec(DBProbeSpec) error` (checks probe exists, params ⊆ schema, limits > 0). Initial probe ids: `read_roles`, `read_grants`, `auth_check`, `read_restricted_table`.
 - [ ] **Step 4: Run tests** — expect PASS. **Step 5: Commit and push.**
 
 ### Task 3: Safety gates (scope, execution class, budgets)
 
 **Files:**
-- Create: `agent/dbsim/gate.go`; orchestrator side `orchestrator/internal/dbsim/targets.go`
-- Test: `agent/dbsim/gate_test.go`, `orchestrator/internal/dbsim/targets_test.go`
+- Create: `agent/dbprobe/gate.go`; orchestrator side `orchestrator/internal/dbsim/targets.go`
+- Test: `agent/dbprobe/gate_test.go`, `orchestrator/internal/dbsim/targets_test.go`
 
 **Interfaces:**
 - Consumes: Task 2 types.
@@ -100,9 +110,9 @@ Docs: `docs/dbsim-discovery.md` (Task 1), `docs/dbsim-mastery-qa-log.md` (Task 1
 ### Task 4: PostgreSQL adapter (read-only core)
 
 **Files:**
-- Create: `agent/dbsim/adapter.go`, `agent/dbsim/postgres/adapter.go`, `grants.go`
+- Create: `agent/dbprobe/adapter.go`, `agent/dbprobe/postgres/adapter.go`, `grants.go`
 - Modify: `agent/go.mod` (add `github.com/jackc/pgx/v5`)
-- Test: `agent/dbsim/postgres/adapter_test.go` (integration, build tag `dbsim_integration`, uses lab compose PG)
+- Test: `agent/dbprobe/postgres/adapter_test.go` (integration, build tag `dbsim_integration`, uses lab compose PG)
 
 **Interfaces:**
 - Produces: `type Adapter interface { Connect(ctx, ConnectionConfig) error; Identity(ctx) (string, error); EnumerateRoles(ctx) ([]Role, error); ReadGrants(ctx) ([]Grant, error); RunProbe(ctx, ProbeDef, DBProbeSpec) (ProbeResult, error); CollectAudit(ctx, AuditQuery) ([]AuditEvent, error); Cleanup(ctx, Fixture) (CleanupResult, error); Capabilities() Capabilities; Close() error }`; `func Register(engine string, f func() Adapter)`; `func New(engine string) (Adapter, bool)`.
@@ -112,7 +122,7 @@ Docs: `docs/dbsim-discovery.md` (Task 1), `docs/dbsim-mastery-qa-log.md` (Task 1
 
 ### Task 5: MySQL adapter (read-only core)
 
-**Files:** Create `agent/dbsim/mysql/adapter.go`, `grants.go`; Modify `agent/go.mod` (add `github.com/go-sql-driver/mysql`); Test `agent/dbsim/mysql/adapter_test.go`.
+**Files:** Create `agent/dbprobe/mysql/adapter.go`, `grants.go`; Modify `agent/go.mod` (add `github.com/go-sql-driver/mysql`); Test `agent/dbprobe/mysql/adapter_test.go`.
 
 **Interfaces:** Consumes Task 4 `Adapter`. Same method set; `Identity` returns `@@server_uuid`.
 
@@ -148,7 +158,7 @@ Docs: `docs/dbsim-discovery.md` (Task 1), `docs/dbsim-mastery-qa-log.md` (Task 1
 
 ### Task 9: Audit collectors and DB-04
 
-**Files:** Create `agent/dbsim/postgres/audit.go`, `agent/dbsim/mysql/audit.go`, scenario `db04_audit_coverage.*`; tests alongside (integration tag).
+**Files:** Create `agent/dbprobe/postgres/audit.go`, `agent/dbprobe/mysql/audit.go`, scenario `db04_audit_coverage.*`; tests alongside (integration tag).
 
 **Interfaces:** Produces `CollectAudit(ctx, AuditQuery{Marker, Principal string; Since, Until time.Time}) ([]AuditEvent, error)`; `AuditEvent{Time time.Time; Principal, Statement, Source string}`. PG source: pgaudit/`log_statement` via the log file or a view the lab exposes; MySQL: the audit plugin chosen in Task 11. Anything else ⇒ `Capabilities().AuditSources` empty ⇒ SKIPPED.
 
@@ -157,7 +167,7 @@ Docs: `docs/dbsim-discovery.md` (Task 1), `docs/dbsim-mastery-qa-log.md` (Task 1
 
 ### Task 10: Synthetic fixtures with verified cleanup
 
-**Files:** Create `agent/dbsim/fixtures/catalog.go`, `cleanup.go`; tests alongside.
+**Files:** Create `agent/dbprobe/fixtures/catalog.go`, `cleanup.go`; tests alongside.
 
 **Interfaces:** Produces `func Seed(ctx, Adapter, FixtureSpec) (Fixture, error)` (dedicated schema, unique id, records pre-test state), `func VerifyClean(ctx, Adapter, Fixture) (CleanupResult, error)`; values drawn from `dlpfixture` patterns, unmistakably synthetic.
 
@@ -184,7 +194,7 @@ Docs: `docs/dbsim-discovery.md` (Task 1), `docs/dbsim-mastery-qa-log.md` (Task 1
 
 ### Task 13: DB-05, DB-09 and the end-to-end proof (**milestone — stop for review after this task**)
 
-**Files:** Create scenarios `db05_suspicious_read.*`, `db09_bounded_bulk_read.*`; probe ids `suspicious_read`, `bounded_synthetic_read` in `agent/dbsim/probes.go`; end-to-end test `orchestrator/internal/dbsim/e2e_test.go` (build tag `dbsim_e2e`).
+**Files:** Create scenarios `db05_suspicious_read.*`, `db09_bounded_bulk_read.*`; probe ids `suspicious_read`, `bounded_synthetic_read` in `agent/dbprobe/probes.go`; end-to-end test `orchestrator/internal/dbsim/e2e_test.go` (build tag `dbsim_e2e`).
 
 **Interfaces:** Consumes everything above; wires orchestrator `Correlate` output into Task 8 `ToRecord`.
 
