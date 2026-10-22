@@ -1,27 +1,34 @@
 #!/bin/bash
 # install-agent-linux.sh: installs or upgrades the BAS agent on this Linux host.
 #
-#   sudo ./install-agent-linux.sh --agent ./bas-agent-linux-amd64 \
-#     --server-host 192.168.10.78 --enroll-port 9445 --secret <agent-secret> \
-#     [--env Production] [--ca-fingerprint <SHA-256 fingerprint>] [--dashboard-port 9543]
+#   sudo ./install-agent-linux.sh <agent-secret>
+#
+# Only the agent secret is needed. The server address, ports and agent binary default to this
+# server's values and can be overridden with environment variables or options:
+#   BAS_SERVER_HOST (default 192.168.10.78), BAS_ENROLL_PORT (9445), BAS_DASHBOARD_PORT (9543),
+#   BAS_ENV_LABEL (Production), --agent <path>, --ca-fingerprint <SHA-256>.
+# The agent binary is looked for as bas-agent-linux-<arch> in the current folder or the script's folder.
 #
 # What it does:
 #   1. Fetches the deployment CA from the orchestrator's dashboard (the URL the Deploy Agent page uses).
-#   2. If the agent already holds an identity (certificate, key, enrollment state) issued under a
-#      different CA, moves that identity aside. A certificate from another CA is never accepted, so
-#      keeping it only blocks enrollment. Same CA: the identity is kept (normal upgrade).
+#   2. If the agent's certificate was not issued by that CA, moves the old identity aside. A
+#      certificate from another CA is never accepted, so keeping it only blocks enrollment.
+#      Same CA: the identity is kept (normal upgrade).
 #   3. Removes a previously installed agent service, then installs the new binary.
 #
-# The agent secret comes from the orchestrator's Deploy Agent page (or GET /api/config/connection).
 # --ca-fingerprint is strongly recommended: without it the first contact is trusted as-is.
 set -euo pipefail
 
-AGENT=""; HOST=""; PORT=""; SECRET=""; ENV="Production"; FINGERPRINT=""; DASH_PORT="9543"
+AGENT=""; SECRET=""; FINGERPRINT=""
+HOST="${BAS_SERVER_HOST:-192.168.10.78}"
+PORT="${BAS_ENROLL_PORT:-9445}"
+DASH_PORT="${BAS_DASHBOARD_PORT:-9543}"
+ENV="${BAS_ENV_LABEL:-Production}"
 CERT_DIR="${BAS_CERT_DIR:-/etc/audspect/certs}"
 CA_FILE="/etc/audspect-agent/deployment-ca.pem"
 IDENTITY_FILES="agent-cert.pem agent-key.pem enrollment-state"
 
-usage() { echo "usage: sudo $0 --agent <binary> --server-host <host> --enroll-port <port> --secret <secret> [--env <label>] [--ca-fingerprint <sha256>] [--dashboard-port <port>]" >&2; exit 2; }
+usage() { echo "usage: sudo $0 <agent-secret> [--agent <binary>] [--ca-fingerprint <sha256>]" >&2; exit 2; }
 
 # clear_stale_identity <new-ca-pem>: moves the agent's identity aside when it was issued under a different CA.
 clear_stale_identity() {
@@ -53,16 +60,27 @@ clear_stale_identity() {
 while [ $# -gt 0 ]; do
   case "$1" in
     --agent) AGENT="${2:-}"; shift 2 ;;
-    --server-host) HOST="${2:-}"; shift 2 ;;
-    --enroll-port) PORT="${2:-}"; shift 2 ;;
-    --secret) SECRET="${2:-}"; shift 2 ;;
-    --env) ENV="${2:-}"; shift 2 ;;
     --ca-fingerprint) FINGERPRINT="${2:-}"; shift 2 ;;
-    --dashboard-port) DASH_PORT="${2:-}"; shift 2 ;;
-    *) echo "unknown option: $1" >&2; usage ;;
+    -h|--help) usage ;;
+    -*) echo "unknown option: $1" >&2; usage ;;
+    *) if [ -z "$SECRET" ]; then SECRET="$1"; shift; else echo "unexpected argument: $1" >&2; usage; fi ;;
   esac
 done
-[ -n "$AGENT" ] && [ -n "$HOST" ] && [ -n "$PORT" ] && [ -n "$SECRET" ] || usage
+[ -n "$SECRET" ] || usage
+
+if [ -z "$AGENT" ]; then
+  case "$(uname -m)" in
+    x86_64) ARCH=amd64 ;;
+    aarch64) ARCH=arm64 ;;
+    *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+  esac
+  for dir in "$PWD" "$(cd "$(dirname "$0")" && pwd)"; do
+    if [ -z "$AGENT" ] && [ -f "$dir/bas-agent-linux-${ARCH}" ]; then
+      AGENT="$dir/bas-agent-linux-${ARCH}"
+    fi
+  done
+  [ -n "$AGENT" ] || { echo "bas-agent-linux-${ARCH} not found in $PWD or the script's folder; use --agent" >&2; exit 1; }
+fi
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo" >&2; exit 1; }
 [ -f "$AGENT" ] || { echo "agent binary not found: $AGENT" >&2; exit 1; }
 command -v openssl >/dev/null || { echo "openssl is required" >&2; exit 1; }
