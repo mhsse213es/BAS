@@ -16,7 +16,7 @@ ghcr.io/misp/misp-docker/misp-modules:latest
 alpine/openssl:latest
 docker.elastic.co/elasticsearch/elasticsearch:8.19.16
 filigran/xtm-composer:latest
-minio/minio:latest
+pgsty/silo:latest
 opencti/connector-export-file-csv:latest
 opencti/connector-export-file-stix:latest
 opencti/connector-export-file-txt:latest
