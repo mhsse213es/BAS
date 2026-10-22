@@ -231,7 +231,8 @@ COPY --from=agent-legacy-builder /agents-legacy/bas-agent-windows-legacy-amd64.e
 COPY --from=agent-legacy-builder /agents-legacy/bas-agent-windows-legacy-amd64-setup.zip /agents/bas-agent-windows-legacy-amd64-setup.zip
 COPY --from=packager /packages/ /agents/
 COPY --from=web /web/dist /wwwroot
-COPY scenarios /scenarios
+ARG SCENARIOS_DIR=scenarios
+COPY ${SCENARIOS_DIR} /scenarios
 COPY --from=art-fetcher /art-atomics /art-atomics
 # Empty by default — mount a volume here (or bake binaries in) to enable ART
 # atomics that need external payloads (gsecdump, etc.). Absent payloads → the

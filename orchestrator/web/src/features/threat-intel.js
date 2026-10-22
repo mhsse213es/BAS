@@ -394,13 +394,19 @@ export function loadSimCoverage() {
     apicall('/api/caldera/abilities').catch(function() { return []; }),
     apicall('/api/scenarios').catch(function() { return []; }),
     apicall('/api/techniques/unified').catch(function() { return []; }),
-    apicall('/api/variants/stats').catch(function() { return {}; })
+    apicall('/api/variants/stats').catch(function() { return {}; }),
+    // API BAS and phishing are counted only when the licence includes them. A licence without
+    // them gets an error here, which is read as zero.
+    apicall('/api/scenarios/api-bas').catch(function() { return []; }),
+    apicall('/api/scenarios/library').catch(function() { return []; })
   ]).then(function(res) {
     var art     = res[0] || {};
     var cal     = Array.isArray(res[1]) ? res[1] : [];
     var scen    = Array.isArray(res[2]) ? res[2] : [];
     var unified = Array.isArray(res[3]) ? res[3] : [];
     var vstats  = res[4] || {};
+    var apibasScen = Array.isArray(res[5]) ? res[5].length : 0;
+    var phishScen  = Array.isArray(res[6]) ? res[6].filter(function(e) { return e.type === 'phishing'; }).length : 0;
 
     var artTechniques = art.techniqueCount  || 0;
     var artTests      = art.testCount       || 0;
@@ -444,7 +450,7 @@ export function loadSimCoverage() {
     var unifiedTotal   = unified.length;
 
     // Base = all executable units before variant expansion
-    var baseTotal = artTests + calCount + customScen + intelScen + builtinScen;
+    var baseTotal = artTests + calCount + customScen + intelScen + builtinScen + apibasScen + phishScen;
 
     totalEl.textContent = baseTotal.toLocaleString();
     if (variantEl) variantEl.textContent = combinedVariants > 0 ? combinedVariants.toLocaleString() + '+' : '--';

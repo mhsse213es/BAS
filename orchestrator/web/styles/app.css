@@ -643,7 +643,8 @@ code {
 .sc-src-hdr { display:flex; align-items:center; gap:0.5rem; cursor:pointer; user-select:none; margin-bottom:0.7rem; font-size:0.85rem; font-weight:600; color:var(--muted); }
 .sc-src-hdr .chev { transition:transform 0.15s; display:inline-block; }
 .sc-src-hdr.collapsed .chev { transform:rotate(-90deg); }
-.sc-src-body { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:0.7rem; }
+.sc-tile-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:0.85rem; }
+.sc-src-body { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:0.85rem; }
 .sc-src-body.collapsed { display:none; }
 
 .sc-tile {
@@ -653,6 +654,11 @@ code {
   transition:border-color 0.15s;
 }
 .sc-tile:hover, .sc-tile:focus-visible { border-color:rgba(47,129,247,0.4); outline:none; }
+/* A <button> does not inherit text colour, and a disabled one falls back to the browser's grey, which
+   is unreadable on the dark theme. Give tiles and class-less buttons the theme text colour explicitly. */
+.sc-tile { color:var(--text); }
+.sc-tile:disabled { color:var(--muted); opacity:0.85; cursor:not-allowed; }
+button:not([class]) { color:var(--text); }
 .sc-tile.pinned { border-color:var(--accent); }
 .sc-tile-stripe { position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:var(--radius) 0 0 var(--radius); }
 .sc-tile-name { font-size:0.82rem; font-weight:600; line-height:1.3; }

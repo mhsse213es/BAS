@@ -2300,8 +2300,10 @@ function renderScenarioTileGroup(viewKey, list) {
   // same thing -- render those tiles flat instead. Mixed-source views
   // (search results, or a category that legitimately spans sources) keep
   // the per-source grouping.
+  // Cards sit in the same grid as Adversary Templates, not as stacked rows.
   if (activeSources.length <= 1) {
-    return list.map(scenarioTileHTML).join('');
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:0.85rem">' +
+      list.map(scenarioTileHTML).join('') + '</div>';
   }
   return activeSources.map(function(k) {
     var collapsed = !!(scenarioSrcCollapsed[viewKey] && scenarioSrcCollapsed[viewKey][k]);

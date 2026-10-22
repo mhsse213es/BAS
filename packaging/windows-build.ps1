@@ -73,6 +73,34 @@ function Log  { param($msg) Write-Host "[+] $msg" -ForegroundColor Green  }
 function Warn { param($msg) Write-Host "[!] $msg" -ForegroundColor Yellow }
 function Err  { param($msg) Write-Host "[x] $msg" -ForegroundColor Red; exit 1 }
 
+# Removes every scenario that is outside the tier's licensed product lines, from the given folder
+# (the YAML and its .sig). Returns how many scenarios were removed. Used for both the package and
+# the image's scenario copy, so the two cannot disagree.
+function Keep-TierScenarios {
+    param([string] $Dir, [string] $Tier)
+    Push-Location $OrchestratorDir
+    $allowed = @(& go run ./cmd/tierlist $Tier 2>$null)
+    $tierExit = $LASTEXITCODE
+    Pop-Location
+    if ($tierExit -ne 0 -or $allowed.Count -eq 0) {
+        Err "Could not read the $Tier product lines from the licence package."
+    }
+    $removed = 0
+    Get-ChildItem -Path $Dir -Filter "*.yaml" -Recurse -File | Where-Object {
+        $_.FullName -notmatch "[\\/]detection-profiles[\\/]"
+    } | ForEach-Object {
+        $line = (Select-String -Path $_.FullName -Pattern '^product_line:\s*(\S+)' | Select-Object -First 1)
+        $pl = if ($line) { $line.Matches[0].Groups[1].Value } else { "" }
+        if ($allowed -notcontains $pl) {
+            Remove-Item -LiteralPath $_.FullName -Force
+            $sig = "$($_.FullName).sig"
+            if (Test-Path -LiteralPath $sig) { Remove-Item -LiteralPath $sig -Force }
+            $removed++
+        }
+    }
+    return $removed
+}
+
 # ConvertToLF rewrites a file with Unix (LF) line endings, no BOM. The build
 # host may check shell/config files out as CRLF (core.autocrlf); these run on
 # the client's Linux box, where a CRLF is fatal (bash reads `set -o pipefail\r`
@@ -180,6 +208,17 @@ if (-not $SkipBuild) {
     # was already compiled into signing.go by step 0b-i above.
     Log "Building $OrchestratorTag (garble -literals -tiny - this takes 5-10 min)..."
     $buildExtraArgs = @("--build-arg", "BAS_VERSION=$Version")
+    # A tiered build must not put other tiers' scenarios in the image. The image is built from the
+    # repo root, so give it a filtered copy of the scenarios inside the build context.
+    $scenarioStage = $null
+    if ($LicenseType -ne "") {
+        $scenarioStage = Join-Path $RepoRoot ".build-scenarios"
+        Remove-Item -Recurse -Force $scenarioStage -ErrorAction SilentlyContinue
+        Copy-Item $ScenariosDir $scenarioStage -Recurse -Force
+        $imageRemoved = Keep-TierScenarios $scenarioStage $LicenseType
+        Log "  ${LicenseType}: image scenarios filtered ($imageRemoved excluded)"
+        $buildExtraArgs += @("--build-arg", "SCENARIOS_DIR=.build-scenarios")
+    }
     # docker build (BuildKit) writes routine progress to stderr; with
     # $ErrorActionPreference='Stop' (set above) PowerShell turns that into a
     # terminating NativeCommandError before the build even finishes, well
@@ -193,6 +232,7 @@ if (-not $SkipBuild) {
         docker build -t $OrchestratorTag @buildExtraArgs -f "$RepoRoot\orchestrator\Dockerfile" $RepoRoot
     } finally {
         $ErrorActionPreference = $prevEAP
+        if ($scenarioStage) { Remove-Item -Recurse -Force $scenarioStage -ErrorAction SilentlyContinue }
     }
     if ($LASTEXITCODE -ne 0) { Err "Docker build failed." }
     Log "Image built: $OrchestratorTag"
@@ -904,26 +944,7 @@ if (Test-Path $ScenariosDir) {
     if ($LicenseType -ne "") {
         # Package only the scenarios this tier is licensed for. The server also refuses the rest at
         # runtime, so this is packaging, not the enforcement itself.
-        Push-Location $OrchestratorDir
-        $allowed = @(& go run ./cmd/tierlist $LicenseType 2>$null)
-        $tierExit = $LASTEXITCODE
-        Pop-Location
-        if ($tierExit -ne 0 -or $allowed.Count -eq 0) {
-            Err "Could not read the $LicenseType product lines from the licence package."
-        }
-        $removed = 0
-        Get-ChildItem -Path "$OutDir\scenarios" -Filter "*.yaml" -Recurse -File | Where-Object {
-            $_.FullName -notmatch "[\\/]detection-profiles[\\/]"
-        } | ForEach-Object {
-            $line = (Select-String -Path $_.FullName -Pattern '^product_line:\s*(\S+)' | Select-Object -First 1)
-            $pl = if ($line) { $line.Matches[0].Groups[1].Value } else { "" }
-            if ($allowed -notcontains $pl) {
-                Remove-Item -LiteralPath $_.FullName -Force
-                $sig = "$($_.FullName).sig"
-                if (Test-Path -LiteralPath $sig) { Remove-Item -LiteralPath $sig -Force }
-                $removed++
-            }
-        }
+        $removed = Keep-TierScenarios "$OutDir\scenarios" $LicenseType
         Log "  ${LicenseType}: packaged scenarios for the licensed product lines ($removed excluded)"
     }
 }

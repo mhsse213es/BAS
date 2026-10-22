@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/phishcatalog"
 )
 
@@ -60,11 +61,15 @@ func (h *Handler) ListScenarioLibrary(w http.ResponseWriter, r *http.Request) {
 			Type: LibraryTypeAgent, ID: sc.ID, Name: sc.Name, Status: CapAvailable,
 		})
 	}
-	catalog, err := phishcatalog.AudspectPhishingCatalog()
-	if err != nil {
-		jsonError(w, "phishing catalog unavailable", http.StatusInternalServerError)
-		return
+	// Phishing is an Advanced product. A licence without it gets no phishing entries, and the
+	// catalogue is not read at all.
+	if license.PermitsNow(license.ProductPhishing) {
+		catalog, err := phishcatalog.AudspectPhishingCatalog()
+		if err != nil {
+			jsonError(w, "phishing catalog unavailable", http.StatusInternalServerError)
+			return
+		}
+		entries = append(entries, phishingLibraryEntries(catalog, h.phishingRunEnv())...)
 	}
-	entries = append(entries, phishingLibraryEntries(catalog, h.phishingRunEnv())...)
 	respond(w, entries)
 }
