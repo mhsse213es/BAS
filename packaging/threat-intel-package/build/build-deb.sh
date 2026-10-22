@@ -50,7 +50,18 @@ for s in opencti openaev; do
   # on the internal compose network.
   n=$(tr -d '\r' < "$src" | grep -c '"9000:9000"' || true)
   [ "$n" -eq 1 ] || die "expected exactly one 9000:9000 mapping in $src, found $n"
-  tr -d '\r' < "$src" | grep -v '^\s*- "9000:9000"\s*$' > "$dst"
+  # Also drop the 'ports:' key when the mapping was its only entry: an empty ports key is invalid.
+  tr -d '\r' < "$src" | awk '
+    BEGIN { held = "" }
+    {
+      if (held != "") {
+        if ($0 ~ /^[[:space:]]*- "9000:9000"[[:space:]]*$/) { held = ""; next }
+        print held; held = ""
+      }
+      if ($0 ~ /^[[:space:]]*ports:[[:space:]]*$/) { held = $0; next }
+      print
+    }
+    END { if (held != "") print held }' > "$dst"
   cp "$PKG_ROOT/vendor/$s/rabbitmq.conf" "$PAYLOAD/stacks/$s/rabbitmq.conf"
 done
 
