@@ -41,6 +41,13 @@ done
 case "$BASE_PORT" in ''|*[!0-9]*) die "--port must be a number" ;; esac
 [ "$BASE_PORT" -ge 1024 ] && [ "$BASE_PORT" -le 65530 ] || die "--port must be between 1024 and 65530"
 
+# Every run is logged in real time to a file that survives a dropped SSH session.
+LOG_DIR=/var/log/threat-intelligence-package
+LOG_FILE="${LOG_DIR}/tip-install.log"
+install -d -m 0755 "$LOG_DIR"
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "==> tip-install started $(date -u '+%Y-%m-%dT%H:%M:%SZ') (log: $LOG_FILE)"
+
 # ---- platform checks --------------------------------------------------------
 [ -r /etc/os-release ] || die "cannot read /etc/os-release"
 . /etc/os-release
