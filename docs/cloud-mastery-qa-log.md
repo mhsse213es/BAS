@@ -202,6 +202,9 @@ Every item here is open, unbuilt, or a documented limit. Nothing is hidden in a 
 | O-9 | Metrics and tracing; per-tenant quotas; RBAC on which account a server may target; Azure secret policy check | Open | Operational design and a secret-policy decision |
 | O-10 | Console UI | Open | UI build, not started |
 | O-11 | State-changing cloud actions are not executed | Deferred by decision | Approval, rollback, verification and recovery design (R-19) |
+| O-12 | Kubernetes validation on managed platforms (EKS, AKS, GKE, OpenShift) | Open | Cloud accounts and managed clusters; the operator has neither |
+| O-13 | Kubernetes validation on multi-node K3s and on K3s beyond a single-node k3d cluster | Open | A multi-node K3s environment |
+| O-14 | Kubernetes attack-path routes beyond bind, escalate, impersonate and create-pods (for example token requests, node proxy, exec into existing pods) | Open | Modelling decision; not started |
 | R-19a | Sandbox provider integration test for read-only probes | Open | A dedicated sandbox account |
 | R-19b | Probes for GCP and Azure are not registered | Open | Decision on which probes to add |
 | R-19c | `CLOUD_PROBE_ALLOWED_ACCOUNTS` is unset, so no probe can run against a real account | Operational | Sandbox test passing first |
