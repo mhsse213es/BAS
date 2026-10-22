@@ -2,40 +2,59 @@ package cloudgraph
 
 // Phase 3 (first increment): read-only attack-path modelling over the configured RBAC graph.
 //
-// A path is: workload -> service account -> prerequisite capability -> target role. It says that the
-// collected policy would let the workload's service account bind a ClusterRole that grants secret reads.
-// It is configured permission only. Nothing is executed. The path is not evidence that the escalation
-// works, that admission or other authorizers allow it, or that the workload can reach the cluster.
+// A path is: workload -> service account -> prerequisite capability -> target. It says that the collected
+// policy would let the workload's service account reach a target that can read secrets. It is configured
+// permission only. Nothing is executed. A path is not evidence that the route works, that admission or other
+// authorizers allow it, or that the workload can reach the cluster.
 //
-// The model checks the bind verb on ClusterRoles. A subject with that verb can bind any ClusterRole it names.
-// Other escalation routes (creating bindings to roles whose rules the subject already holds, or the
-// escalate verb) are not modelled. Unknown prerequisites produce no path, so no path is inferred from absence.
+// Routes modelled (each needs the prerequisite to be granted; an unknown prerequisite yields no path):
+//   bind-clusterroles         bind verb on ClusterRoles -> a ClusterRole that lists secrets
+//   escalate-clusterroles     escalate verb on ClusterRoles -> a ClusterRole that lists secrets
+//   impersonate-serviceaccounts  impersonate verb on serviceaccounts -> a service account that lists secrets
+//   create-pods               create pods in a namespace -> a service account in that namespace that lists secrets
+//
+// Not modelled: token requests, node proxy, exec into existing pods, admission policy (see QA log O-14).
 
-// K8sAttackPath is one configured path from a workload to a secret-reading ClusterRole.
+// K8sAttackPath is one configured path from a workload to a secret-reaching target.
 type K8sAttackPath struct {
 	Workload       string
 	Subject        string
-	Prerequisite   string   // capability the subject is configured to have
-	Target         string   // canonical ID of the ClusterRole the path reaches
+	Prerequisite   string   // route, e.g. "bind-clusterroles"
+	Target         string   // canonical ID of the ClusterRole or service account the path reaches
 	Evidence       []string // bindings that grant the prerequisite
 	PolicyComplete bool     // false when discovery was incomplete, so the path may be incomplete too
 	Class          string
 }
 
+// k8sSATarget is a service account whose configured rules list secrets in its own namespace.
+type k8sSATarget struct {
+	ID        string
+	Namespace string
+}
+
 // K8sAttackPaths returns the configured paths for every pod's service account.
 func K8sAttackPaths(inv *K8sInventory, rep *K8sDiscoveryReport) []K8sAttackPath {
-	// Targets: every ClusterRole whose rules list secrets cluster-wide.
-	var targets []string
+	// Role targets: ClusterRoles whose rules list secrets cluster-wide.
+	var roleTargets []string
 	for _, r := range inv.Resources {
 		if r.Kind != "k8s:clusterrole" {
 			continue
 		}
 		if EvaluateRBAC(inv.Roles[r.CanonicalID], RBACRequest{Resource: "secrets", Verb: "list"}, true, 0) == RBACGranted {
-			targets = append(targets, r.CanonicalID)
+			roleTargets = append(roleTargets, r.CanonicalID)
 		}
 	}
-	if len(targets) == 0 {
-		return nil
+
+	// Service-account targets: accounts that can list secrets in their own namespace.
+	var saTargets []k8sSATarget
+	for _, id := range inv.Identities {
+		if id.Kind != "k8s:serviceaccount" {
+			continue
+		}
+		ns := id.Attributes["namespace"]
+		if AnalyseK8sAccess(inv, rep, K8sAccessQuery{Subject: id.CanonicalID, Namespace: ns, Request: RBACRequest{Resource: "secrets", Verb: "list"}}).Decision == RBACGranted {
+			saTargets = append(saTargets, k8sSATarget{ID: id.CanonicalID, Namespace: ns})
+		}
 	}
 
 	var out []K8sAttackPath
@@ -46,25 +65,42 @@ func K8sAttackPaths(inv *K8sInventory, rep *K8sDiscoveryReport) []K8sAttackPath 
 		ns := r.Attributes["namespace"]
 		subject := k8sCanonicalID(rep.ClusterName, ns, "serviceaccount", r.Attributes["serviceAccount"])
 
-		prereq := AnalyseK8sAccess(inv, rep, K8sAccessQuery{
-			Subject:   subject,
-			Namespace: "",
-			Request:   RBACRequest{APIGroup: "rbac.authorization.k8s.io", Resource: "clusterroles", Verb: "bind"},
-		})
-		if prereq.Decision != RBACGranted {
-			continue
+		add := func(route string, req RBACRequest, reqNS string, targets []string) {
+			pre := AnalyseK8sAccess(inv, rep, K8sAccessQuery{Subject: subject, Namespace: reqNS, Request: req})
+			if pre.Decision != RBACGranted {
+				return
+			}
+			for _, target := range targets {
+				if target == subject {
+					continue
+				}
+				out = append(out, K8sAttackPath{
+					Workload:       r.CanonicalID,
+					Subject:        subject,
+					Prerequisite:   route,
+					Target:         target,
+					Evidence:       pre.Evidence,
+					PolicyComplete: rep.Complete,
+					Class:          k8sClassConfigured,
+				})
+			}
 		}
-		for _, target := range targets {
-			out = append(out, K8sAttackPath{
-				Workload:       r.CanonicalID,
-				Subject:        subject,
-				Prerequisite:   "bind-clusterroles",
-				Target:         target,
-				Evidence:       prereq.Evidence,
-				PolicyComplete: rep.Complete,
-				Class:          k8sClassConfigured,
-			})
-		}
+		rbac := "rbac.authorization.k8s.io"
+		add("bind-clusterroles", RBACRequest{APIGroup: rbac, Resource: "clusterroles", Verb: "bind"}, "", roleTargets)
+		add("escalate-clusterroles", RBACRequest{APIGroup: rbac, Resource: "clusterroles", Verb: "escalate"}, "", roleTargets)
+		add("impersonate-serviceaccounts", RBACRequest{Resource: "serviceaccounts", Verb: "impersonate"}, "", saIDs(saTargets, ""))
+		add("create-pods", RBACRequest{Resource: "pods", Verb: "create"}, ns, saIDs(saTargets, ns))
 	}
 	return out
+}
+
+// saIDs returns the IDs of service-account targets. An empty namespace selects every target.
+func saIDs(targets []k8sSATarget, ns string) []string {
+	var ids []string
+	for _, t := range targets {
+		if ns == "" || t.Namespace == ns {
+			ids = append(ids, t.ID)
+		}
+	}
+	return ids
 }

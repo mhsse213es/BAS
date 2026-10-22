@@ -69,6 +69,8 @@ func TestK8sAccess_LiveLab_MatchesKubectlAuthCanI(t *testing.T) {
 		{"list", "secrets", "kube-system"},
 		{"get", "pods", "kube-system"},
 		{"bind", "clusterroles", ""},
+		{"escalate", "clusterroles", ""},
+		{"impersonate", "serviceaccounts", ""},
 	}
 	rbacResources := map[string]bool{"roles": true, "clusterroles": true, "rolebindings": true, "clusterrolebindings": true}
 

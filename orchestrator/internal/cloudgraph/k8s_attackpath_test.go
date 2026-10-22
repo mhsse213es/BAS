@@ -66,3 +66,64 @@ func TestK8sAttackPath_IncompleteDiscoveryIsMarked(t *testing.T) {
 		}
 	}
 }
+
+const (
+	// opsServiceAccounts lists the web and ops service accounts in the default namespace.
+	opsServiceAccounts = `{"items":[{"metadata":{"name":"web","namespace":"default"}},{"metadata":{"name":"ops","namespace":"default"}}]}`
+	// escalatorRoles adds the escalate and impersonate verbs as ClusterRoles, alongside the secret reader.
+	escalatorRoles = `{"items":[{"metadata":{"name":"secret-reader"},"rules":[{"apiGroups":[""],"resources":["secrets"],"verbs":["get","list"]}]},{"metadata":{"name":"escalator"},"rules":[{"apiGroups":["rbac.authorization.k8s.io"],"resources":["clusterroles"],"verbs":["escalate"]}]},{"metadata":{"name":"impersonator"},"rules":[{"apiGroups":[""],"resources":["serviceaccounts"],"verbs":["impersonate"]}]}]}`
+)
+
+func TestK8sEscalation_EscalateVerbReachesSecretReadingRole(t *testing.T) {
+	inv, rep := analysisFor(t, map[string]string{
+		"/apis/rbac.authorization.k8s.io/v1/clusterroles":        escalatorRoles,
+		"/apis/rbac.authorization.k8s.io/v1/clusterrolebindings": `{"items":[{"metadata":{"name":"web-escalates"},"subjects":[{"kind":"ServiceAccount","name":"web","namespace":"default"}],"roleRef":{"kind":"ClusterRole","name":"escalator"}}]}`,
+	})
+	var found bool
+	for _, p := range K8sAttackPaths(inv, rep) {
+		if p.Prerequisite == "escalate-clusterroles" && p.Target == "k8s://kind-bas-lab/_cluster/clusterrole/secret-reader" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("escalate on ClusterRoles should reach the secret-reading ClusterRole")
+	}
+}
+
+func TestK8sEscalation_ImpersonateReachesSecretReadingServiceAccount(t *testing.T) {
+	inv, rep := analysisFor(t, map[string]string{
+		"/apis/rbac.authorization.k8s.io/v1/clusterroles": escalatorRoles,
+		"/apis/rbac.authorization.k8s.io/v1/clusterrolebindings": `{"items":[` +
+			`{"metadata":{"name":"web-impersonates"},"subjects":[{"kind":"ServiceAccount","name":"web","namespace":"default"}],"roleRef":{"kind":"ClusterRole","name":"impersonator"}},` +
+			`{"metadata":{"name":"ops-secrets"},"subjects":[{"kind":"ServiceAccount","name":"ops","namespace":"default"}],"roleRef":{"kind":"ClusterRole","name":"secret-reader"}}]}`,
+		"/api/v1/serviceaccounts": opsServiceAccounts,
+	})
+	var found bool
+	for _, p := range K8sAttackPaths(inv, rep) {
+		if p.Prerequisite == "impersonate-serviceaccounts" && p.Target == "k8s://kind-bas-lab/default/serviceaccount/ops" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("impersonation should reach a service account that can read secrets")
+	}
+}
+
+func TestK8sEscalation_CreatePodsReachesSameNamespaceServiceAccount(t *testing.T) {
+	inv, rep := analysisFor(t, map[string]string{
+		"/apis/rbac.authorization.k8s.io/v1/clusterroles":        escalatorRoles,
+		"/apis/rbac.authorization.k8s.io/v1/clusterrolebindings": `{"items":[{"metadata":{"name":"ops-secrets"},"subjects":[{"kind":"ServiceAccount","name":"ops","namespace":"default"}],"roleRef":{"kind":"ClusterRole","name":"secret-reader"}}]}`,
+		"/api/v1/serviceaccounts":                                opsServiceAccounts,
+		"/apis/rbac.authorization.k8s.io/v1/roles":               `{"items":[{"metadata":{"name":"reader","namespace":"default"},"rules":[{"apiGroups":[""],"resources":["pods"],"verbs":["get","list"]}]},{"metadata":{"name":"maker","namespace":"default"},"rules":[{"apiGroups":[""],"resources":["pods"],"verbs":["create"]}]}]}`,
+		"/apis/rbac.authorization.k8s.io/v1/rolebindings":        `{"items":[{"metadata":{"name":"web-makes","namespace":"default"},"subjects":[{"kind":"ServiceAccount","name":"web","namespace":"default"}],"roleRef":{"kind":"Role","name":"maker"}}]}`,
+	})
+	var found bool
+	for _, p := range K8sAttackPaths(inv, rep) {
+		if p.Prerequisite == "create-pods" && p.Target == "k8s://kind-bas-lab/default/serviceaccount/ops" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("pod creation in a namespace should reach a same-namespace service account that reads secrets")
+	}
+}
