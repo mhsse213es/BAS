@@ -92,8 +92,15 @@ if [ -f "$CREDS_FILE" ]; then
 fi
 # A stack from an earlier install whose credentials file is gone must not be reinstalled: new
 # secrets would not match the databases that already exist, and the stacks would not start.
-if ls "${STACK_DIR}"/*.env >/dev/null 2>&1 \n  || docker volume ls -q 2>/dev/null | grep -Eq '^(misp|opencti|openaev)_' \n  || docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Eq '^(misp|opencti|openaev)'; then
-  die "MISP/OpenCTI/OpenAEV stack files, containers or volumes already exist on this host; refusing to install over them"
+# A manual install from before this package (/opt/misp, /opt/opencti/docker, /opt/openaev/docker)
+# uses Compose's default project names ("docker", "misp"), so match those names too.
+if ls "${STACK_DIR}"/*.env >/dev/null 2>&1 \
+  || [ -d /opt/misp/MISP ] \
+  || [ -d /opt/opencti/docker ] \
+  || [ -d /opt/openaev/docker ] \
+  || docker volume ls -q 2>/dev/null | grep -Eq '^(misp|opencti|openaev|docker)_' \
+  || docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Eq '(misp|opencti|openaev)'; then
+  die "an existing MISP/OpenCTI/OpenAEV install was found (stack folders, containers or volumes, including a manual install in /opt/misp, /opt/opencti or /opt/openaev); refusing to install over it. Remove it first with tip-uninstall, or remove it by hand."
 fi
 
 MISP_ADMIN_EMAIL="admin@misp.local"
