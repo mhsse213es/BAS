@@ -74,23 +74,23 @@ type ScenarioCommand struct {
 // ScenarioCommand; loadgen has no reason to decode them at all (it never
 // schedules real execution).
 type ScenarioStep struct {
-	TaskID               string            `json:"taskId"`
-	TechniqueID          string            `json:"techniqueId"`
-	Name                 string            `json:"name"`
-	Executor             string            `json:"executor"`
-	Command              string            `json:"command"`
-	TimeoutSec           int               `json:"timeoutSec"`
-	Payloads             []Payload         `json:"payloads,omitempty"`
-	Cleanup              string            `json:"cleanup,omitempty"`
-	PayloadDir           string            `json:"-"`
-	Resource             json.RawMessage   `json:"resource,omitempty"`
-	Timeout              json.RawMessage   `json:"timeout,omitempty"`
-	ActionKey            string            `json:"actionKey,omitempty"`
-	ExecutionClass       string            `json:"executionClass,omitempty"`
-	DestructiveAction    string            `json:"destructiveAction,omitempty"`
-	BlastRadius          string            `json:"blastRadius,omitempty"`
-	Env                  map[string]string `json:"-"`
-	RequiresPriv         string            `json:"requiresPriv,omitempty"`
+	TaskID            string            `json:"taskId"`
+	TechniqueID       string            `json:"techniqueId"`
+	Name              string            `json:"name"`
+	Executor          string            `json:"executor"`
+	Command           string            `json:"command"`
+	TimeoutSec        int               `json:"timeoutSec"`
+	Payloads          []Payload         `json:"payloads,omitempty"`
+	Cleanup           string            `json:"cleanup,omitempty"`
+	PayloadDir        string            `json:"-"`
+	Resource          json.RawMessage   `json:"resource,omitempty"`
+	Timeout           json.RawMessage   `json:"timeout,omitempty"`
+	ActionKey         string            `json:"actionKey,omitempty"`
+	ExecutionClass    string            `json:"executionClass,omitempty"`
+	DestructiveAction string            `json:"destructiveAction,omitempty"`
+	BlastRadius       string            `json:"blastRadius,omitempty"`
+	Env               map[string]string `json:"-"`
+	RequiresPriv      string            `json:"requiresPriv,omitempty"`
 	// DBProbe is set when Executor is "dbprobe"; see DBProbeSpec.
 	DBProbe *DBProbeSpec `json:"dbProbe,omitempty"`
 }
@@ -101,40 +101,38 @@ type Payload struct {
 }
 
 type ExecResult struct {
-	TaskID          string    `json:"taskId"`
-	PID             int       `json:"pid,omitempty"`
-	StartedAt       time.Time `json:"startedAt,omitempty"`
-	ExitCode        int       `json:"exitCode"`
-	Stdout          string    `json:"stdout"`
-	Stderr          string    `json:"stderr"`
-	// DBProbe is the typed result of a dbprobe step (nil otherwise).
-	DBProbe    *DBProbeResult `json:"dbProbe,omitempty"`
-	DurationMs     int64     `json:"durationMs"`
-	ExecutedAt      time.Time `json:"executedAt"`
-	Events          []string  `json:"events,omitempty"`
-	Blocked         bool      `json:"blocked,omitempty"`
-	BlockedReason   string    `json:"blockedReason,omitempty"`
-	TimedOut        bool      `json:"timedOut,omitempty"`
+	TaskID        string    `json:"taskId"`
+	PID           int       `json:"pid,omitempty"`
+	StartedAt     time.Time `json:"startedAt,omitempty"`
+	ExitCode      int       `json:"exitCode"`
+	Stdout        string    `json:"stdout"`
+	Stderr        string    `json:"stderr"`
+	DurationMs    int64     `json:"durationMs"`
+	ExecutedAt    time.Time `json:"executedAt"`
+	Events        []string  `json:"events,omitempty"`
+	Blocked       bool      `json:"blocked,omitempty"`
+	BlockedReason string    `json:"blockedReason,omitempty"`
+	TimedOut      bool      `json:"timedOut,omitempty"`
 	// Vetoed/VetoedActionKey/VetoedExecutionClass/VetoedBlockSource are
 	// B5's destructive-action veto -- deliberately distinct fields from
 	// Blocked/BlockedReason above, which mean the CUSTOMER's own EDR/AV
 	// quarantined something (see agent.go's payload-quarantine block).
 	// Reusing those fields for B5 would silently conflate an Audspect-
 	// side refusal with a customer-defense event.
-	Vetoed               bool   `json:"vetoed,omitempty"`
-	VetoedActionKey      string `json:"vetoedActionKey,omitempty"`
-	VetoedExecutionClass string `json:"vetoedExecutionClass,omitempty"`
-	VetoedBlockSource    string `json:"vetoedBlockSource,omitempty"`
-	CleanupVerdict  string    `json:"cleanupVerdict,omitempty"`
-	CleanupResidual []string  `json:"cleanupResidual,omitempty"`
+	Vetoed               bool     `json:"vetoed,omitempty"`
+	VetoedActionKey      string   `json:"vetoedActionKey,omitempty"`
+	VetoedExecutionClass string   `json:"vetoedExecutionClass,omitempty"`
+	VetoedBlockSource    string   `json:"vetoedBlockSource,omitempty"`
+	CleanupVerdict       string   `json:"cleanupVerdict,omitempty"`
+	CleanupResidual      []string `json:"cleanupResidual,omitempty"`
 	// CleanupError captures the cleanup command's own stderr and exit code
 	// when CleanupVerdict is "partial" or "leaked" -- empty on "reverted".
 	// Without this, a failed cleanup had no diagnostic trail anywhere: only
 	// the post-hoc snapshot-diff residual (what's still there), never why
 	// the cleanup script itself didn't remove it.
-	CleanupError string `json:"cleanupError,omitempty"`
-	RequestedPriv   string    `json:"requestedPriv,omitempty"`
-	ExecutedAs      string    `json:"executedAs,omitempty"`
+	CleanupError  string `json:"cleanupError,omitempty"`
+	RequestedPriv string `json:"requestedPriv,omitempty"`
+	ExecutedAs    string `json:"executedAs,omitempty"`
 	// Termination records HOW a step ended when the agent itself ended it, and
 	// what it was doing at that instant. Nil for a step that exited on its own,
 	// and nil from agents predating the field -- readers must treat nil as "not
@@ -145,6 +143,8 @@ type ExecResult struct {
 	// pooled termination's OutputBytes==0/SilenceMs==0 as "produced no output"
 	// or "fully silent"; it means "not measurable here", same spirit as nil.
 	Termination *StepTermination `json:"termination,omitempty"`
+	// DBProbe is the typed result of a dbprobe step (nil otherwise).
+	DBProbe *DBProbeResult `json:"dbProbe,omitempty"`
 }
 
 // Termination reasons. Single-valued, in this precedence order: the execute
