@@ -184,6 +184,7 @@ RUN npm run build && sha256sum dist/MANIFEST.sha256 | cut -d' ' -f1 > /web-manif
 
 # ── Go Orchestrator ───────────────────────────────────────────────────────────
 FROM golang:1.26-alpine AS builder
+ARG BAS_VERSION=dev
 # Pinned, not @latest: garble v0.18.0 (2026-09-19) bumped its go.mod
 # requirement to go >= 1.27, which this golang:1.26-alpine base image
 # (go 1.26.7) can't satisfy under GOTOOLCHAIN=local, breaking the build
@@ -220,7 +221,7 @@ COPY --from=web /web-manifest.sha256 /web-manifest.sha256
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOGARBLE='github.com/audspect/*' \
     garble -literals build \
-    -ldflags="-s -w -X main.expectedWWWManifestHash=$(cat /web-manifest.sha256) -X github.com/audspect/bas/internal/integrity.orchestratorManifestExpected=true" \
+    -ldflags="-s -w -X main.Version=${BAS_VERSION} -X main.expectedWWWManifestHash=$(cat /web-manifest.sha256) -X github.com/audspect/bas/internal/integrity.orchestratorManifestExpected=true" \
     -o /bin/orchestrator ./cmd/server
 
 FROM gcr.io/distroless/static-debian12

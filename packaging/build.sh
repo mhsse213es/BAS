@@ -251,6 +251,7 @@ fi
 log "Building Docker image bas-orchestrator:${VERSION}..."
 docker build \
   --build-arg VERSION="${VERSION}" \
+  --build-arg BAS_VERSION="${VERSION}" \
   -t "bas-orchestrator:${VERSION}" \
   -f "${REPO_ROOT}/orchestrator/Dockerfile" \
   "${REPO_ROOT}"
