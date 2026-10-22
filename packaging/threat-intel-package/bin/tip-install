@@ -18,7 +18,7 @@ STACK_DIR=/opt/threat-intelligence
 SECRET_DIR=/etc/threat-intelligence-package
 CREDS_FILE="${SECRET_DIR}/credentials.txt"
 MIN_RAM_MB=14000
-MIN_FREE_GB=150
+MIN_FREE_GB=100   # unmeasured; set from a measured install (see commit history)
 
 die()  { echo "tip-install: error: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
