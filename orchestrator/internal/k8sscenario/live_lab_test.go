@@ -2,7 +2,9 @@ package k8sscenario
 
 import (
 	"context"
+	"errors"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -131,4 +133,112 @@ func TestLive_KindLab(t *testing.T) {
 	if n := len(audit.events); n == 0 {
 		t.Fatal("no audit events were written")
 	}
+}
+
+// revokeBeforeDelete is a Client wrapper. Just before the engine's rollback delete, it removes the delete verb
+// from the scenario Role using the lab admin context. The delete is then sent for real and refused by the server.
+type revokeBeforeDelete struct {
+	Client
+	revoke func() error
+}
+
+func (r revokeBeforeDelete) Delete(ctx context.Context, ref ObjectRef) error {
+	if err := r.revoke(); err != nil {
+		return err
+	}
+	return r.Client.Delete(ctx, ref)
+}
+
+// TestLive_RollbackFailure removes the scenario's delete permission during a run, so the real rollback is refused
+// by the API server. The engine must end in CLEANUP_FAILED, alert, keep the evidence, and leave the pod in place
+// until the operator removes it. The Role is restored and the pod removed afterwards.
+func TestLive_RollbackFailure(t *testing.T) {
+	api := os.Getenv("KUBE_LAB_API")
+	tokenFile := os.Getenv("SCENARIO_TOKEN_FILE")
+	caFile := os.Getenv("KUBE_LAB_CA_FILE")
+	if api == "" || tokenFile == "" || caFile == "" {
+		t.Skip("lab not configured")
+	}
+	adminCtx := os.Getenv("KUBE_LAB_KUBECTL_CONTEXT")
+	if adminCtx == "" {
+		adminCtx = "kind-bas-lab"
+	}
+	tokenBytes, err := os.ReadFile(tokenFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca, err := os.ReadFile(caFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewAPIClient(ClientConfig{APIServer: api, Token: strings.TrimSpace(string(tokenBytes)), CAPEM: ca})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	const cluster = "kind-bas-lab"
+	const pod = "bas-sbx-lab-rbf-1"
+
+	admin := func(args ...string) (string, error) {
+		out, err := exec.Command("kubectl", append([]string{"--context", adminCtx}, args...)...).CombinedOutput()
+		return strings.TrimSpace(string(out)), err
+	}
+	setVerbs := func(verbs string) error {
+		patch := `[{"op":"replace","path":"/rules/0/verbs","value":` + verbs + `}]`
+		out, err := admin("patch", "role", "bas-scenario-sandbox", "-n", "bas-sandbox", "--type=json", "-p", patch)
+		if err != nil {
+			return errors.New("admin patch failed: " + out)
+		}
+		return nil
+	}
+	restoreRole := func() {
+		if err := setVerbs(`["create","get","delete"]`); err != nil {
+			t.Errorf("restoring the scenario Role failed: %v", err)
+		}
+	}
+	// The Role's rules[0] holds pod verbs. Restore it regardless of outcome.
+	if err := setVerbs(`["create","get","delete"]`); err != nil {
+		t.Fatalf("precondition: %v", err)
+	}
+	t.Cleanup(func() {
+		restoreRole()
+		_, _ = admin("delete", "pod", pod, "-n", "bas-sandbox", "--ignore-not-found")
+	})
+
+	store := newMemApprovals()
+	alert := &recordAlert{}
+	params := map[string]string{"name": pod}
+	req := RunRequest{RunID: "rbf-1", Requester: "operator-1", Cluster: ClusterRef{Name: cluster, Server: api},
+		Namespace: "bas-sandbox", ActionID: "pod-create-unprivileged", Params: params, Live: true, ApprovalID: "appr-rbf-1"}
+	_ = store.Put(Approval{ID: "appr-rbf-1", ApproverID: "operator-2", RequesterID: "operator-1", RunID: req.RunID, Cluster: cluster,
+		Namespace: "bas-sandbox", ActionID: req.ActionID, ParamsHash: HashParams(params), ExpiresAt: time.Now().Add(15 * time.Minute)})
+
+	wrapped := revokeBeforeDelete{Client: client, revoke: func() error { return setVerbs(`["create","get"]`) }}
+	cfg := Config{
+		AllowedClusters:   map[string]string{cluster: api},
+		AllowedNamespaces: []string{"bas-sandbox"},
+		Client:            wrapped,
+		Audit:             &recordAudit{},
+		Alert:             alert,
+		Approvals:         store,
+		ApproverPermitted: func(id string) bool { return id == "operator-2" },
+		Now:               time.Now,
+	}
+	res := NewEngine(cfg).Run(ctx, req)
+
+	if res.State != StateCleanupFailed {
+		t.Fatalf("state = %s (%q), want %s: a refused rollback must not be reported as cleaned up", res.State, res.Error, StateCleanupFailed)
+	}
+	if len(alert.msgs) == 0 {
+		t.Fatal("the operator was not alerted")
+	}
+	// The pod must still exist: the rollback really was refused by the server, not skipped.
+	obj, exists, err := client.Get(ctx, ObjectRef{Kind: "Pod", Namespace: "bas-sandbox", Name: pod})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exists {
+		t.Fatalf("pod is gone, but the rollback was refused; object=%+v", obj)
+	}
+	t.Logf("CLEANUP_FAILED as expected; pod %s left in place; alert: %s", pod, alert.msgs[0])
 }
