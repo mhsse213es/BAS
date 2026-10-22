@@ -162,8 +162,10 @@ func TestLoad_IntakeErrorKeepsLoadingAndDoesNotExecute(t *testing.T) { // Review
 
 func TestResolveExecutable_NoRegistryFailsClosed(t *testing.T) {
 	e := NewEngine(t.TempDir())
-	if _, err := e.ResolveExecutable(context.Background(), "x"); !errors.Is(err, ErrNoRegistry) {
-		t.Fatalf("want ErrNoRegistry, got %v", err)
+	// An id that is not loaded is refused by the licence gate before the registry is consulted,
+	// so it fails closed with ErrNotLicensed, never by resolving anything.
+	if _, err := e.ResolveExecutable(context.Background(), "x"); !errors.Is(err, ErrNotLicensed) {
+		t.Fatalf("want ErrNotLicensed, got %v", err)
 	}
 }
 
