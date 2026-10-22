@@ -5,6 +5,13 @@ import (
 	"sort"
 )
 
+// Upper bounds on Limits so MaxRows+1 and TimeoutSec*1000 can never overflow.
+const (
+	MaxRowsCap       = 1_000_000
+	MaxTimeoutSecCap = 3600
+	MaxConnsCap      = 64
+)
+
 var bothEngines = []string{"postgresql", "mysql"}
 
 var catalog = map[string]ProbeDef{
@@ -60,6 +67,10 @@ func ValidateSpec(s DBProbeSpec) error {
 	}
 	if s.Limits.MaxRows <= 0 || s.Limits.TimeoutSec <= 0 || s.Limits.MaxConns <= 0 {
 		return fmt.Errorf("dbprobe: limits must all be > 0")
+	}
+	if s.Limits.MaxRows > MaxRowsCap || s.Limits.TimeoutSec > MaxTimeoutSecCap || s.Limits.MaxConns > MaxConnsCap {
+		return fmt.Errorf("dbprobe: limits exceed sane maximums (rows %d, timeout %ds, conns %d)",
+			MaxRowsCap, MaxTimeoutSecCap, MaxConnsCap)
 	}
 	return nil
 }

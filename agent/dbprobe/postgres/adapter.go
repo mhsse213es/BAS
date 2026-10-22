@@ -69,81 +69,220 @@ func (p *pgxSession) Close(ctx context.Context) error { return p.c.Close(ctx) }
 type Adapter struct {
 	s       session
 	mode    dbprobe.ExecMode
-	secrets []string
+	secrets []string // literals to scrub from any error text (password, long user/host)
 	notes   []string
+	broken  bool // connection closed after a timeout/cancel; reconnect required
 }
+
+// String and GoString never print connection details or secrets.
+func (a Adapter) String() string {
+	return fmt.Sprintf("postgres.Adapter{connected=%t mode=%s broken=%t}", a.s != nil, a.mode, a.broken)
+}
+
+// GoString is the %#v form; same redaction as String.
+func (a Adapter) GoString() string { return a.String() }
 
 // New returns an unconnected adapter.
 func New() *Adapter { return &Adapter{} }
 
-// Connect opens one connection. TLS verification is on unless TLSMode is the
-// explicit opt-out "insecure-skip-verify" or "disable"; either is reported in
-// every ProbeResult's Notes.
-func (a *Adapter) Connect(ctx context.Context, cfg dbprobe.ConnectionConfig) error {
-	a.mode = cfg.Mode
-	a.secrets = []string{cfg.Password}
-	a.notes = nil
+// tlsFor maps a TLSMode to a TLS config. Empty / "verify-full" verifies the
+// server certificate and name with TLS >= 1.2 and no plaintext fallback.
+// "insecure-skip-verify" and "disable" are explicit opt-outs and return a note
+// that must be reported. Anything else fails closed.
+func tlsFor(mode, host string) (*tls.Config, string, error) {
+	switch mode {
+	case "", "verify-full":
+		return &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}, "", nil
+	case "insecure-skip-verify":
+		return &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12, InsecureSkipVerify: true}, //nolint:gosec // explicit, reported opt-out
+			"tls: certificate verification DISABLED by explicit opt-out", nil
+	case "disable":
+		return nil, "tls: DISABLED by explicit opt-out", nil
+	}
+	return nil, "", fmt.Errorf("dbprobe/postgres: unknown tlsMode %q", mode)
+}
+
+// secretsFor lists literals to scrub from error text. The password is always
+// scrubbed; user and host only when long enough not to mangle ordinary text.
+func secretsFor(cfg dbprobe.ConnectionConfig) []string {
+	var out []string
+	if cfg.Password != "" {
+		out = append(out, cfg.Password)
+	}
+	for _, v := range []string{cfg.User, cfg.Host} {
+		if len(v) >= 4 {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// buildConnConfig builds a pgx config from an explicit, isolated base: nothing
+// ambient (PG* env vars, .pgpass, service files) may influence the result.
+// ParseConfig still consults the environment, so every field it can touch is
+// overwritten or reset here.
+func buildConnConfig(cfg dbprobe.ConnectionConfig) (*pgx.ConnConfig, []string, error) {
+	port := cfg.Port
+	if port == 0 {
+		port = 5432
+	}
+	if port < 1 || port > 65535 {
+		return nil, nil, fmt.Errorf("dbprobe/postgres: port %d out of range", cfg.Port)
+	}
+	tlsCfg, note, err := tlsFor(cfg.TLSMode, cfg.Host)
+	if err != nil {
+		return nil, nil, err
+	}
 	cc, err := pgx.ParseConfig("connect_timeout=10")
 	if err != nil {
-		return wrapErr("config", err, cfg.Password)
+		return nil, nil, wrapErr("config", err, secretsFor(cfg)...)
 	}
 	cc.Host = cfg.Host
-	if cfg.Port > 0 {
-		cc.Port = uint16(cfg.Port)
-	}
+	cc.Port = uint16(port)
 	cc.Database = cfg.Database
 	cc.User = cfg.User
 	cc.Password = cfg.Password
+	cc.TLSConfig = tlsCfg
 	cc.Fallbacks = nil
+	cc.ValidateConnect = nil
+	cc.AfterConnect = nil
+	cc.ConnectTimeout = 10 * time.Second
+	cc.RuntimeParams = map[string]string{"application_name": "dbsim"}
 	cc.DefaultQueryExecMode = pgx.QueryExecModeExec
-	cc.RuntimeParams["application_name"] = "dbsim"
-	switch cfg.TLSMode {
-	case "", "verify-full":
-		cc.TLSConfig = &tls.Config{ServerName: cfg.Host, MinVersion: tls.VersionTLS12}
-	case "insecure-skip-verify":
-		cc.TLSConfig = &tls.Config{ServerName: cfg.Host, MinVersion: tls.VersionTLS12, InsecureSkipVerify: true} //nolint:gosec // explicit, reported opt-out
-		a.notes = append(a.notes, "tls: certificate verification DISABLED by explicit opt-out")
-	case "disable":
-		cc.TLSConfig = nil
-		a.notes = append(a.notes, "tls: DISABLED by explicit opt-out")
-	default:
-		return fmt.Errorf("dbprobe/postgres: unknown tlsMode %q", cfg.TLSMode)
+	var notes []string
+	if note != "" {
+		notes = append(notes, note)
 	}
+	return cc, notes, nil
+}
+
+// Connect opens one connection. Any previous connection is closed first. TLS
+// verification is on unless the explicit opt-outs in tlsFor are chosen; those
+// are reported in every ProbeResult's Notes. State (mode, notes, secrets) only
+// changes when the new connection succeeds.
+func (a *Adapter) Connect(ctx context.Context, cfg dbprobe.ConnectionConfig) error {
+	cc, notes, err := buildConnConfig(cfg)
+	if err != nil {
+		return err
+	}
+	a.closeConn()
 	conn, err := pgx.ConnectConfig(ctx, cc)
 	if err != nil {
-		return wrapErr("connect", err, cfg.Password)
+		return wrapErr("connect", err, secretsFor(cfg)...)
 	}
 	a.s = &pgxSession{c: conn}
+	a.broken = false
+	a.mode = cfg.Mode
+	a.secrets = secretsFor(cfg)
+	a.notes = notes
 	return nil
+}
+
+func (a *Adapter) closeConn() {
+	if a.s == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = a.s.Close(ctx)
+	a.s = nil
 }
 
 // Close closes the connection.
 func (a *Adapter) Close() error {
-	if a.s == nil {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	err := a.s.Close(ctx)
-	a.s = nil
-	return err
+	a.closeConn()
+	return nil
+}
+
+// markBroken closes a connection that hit a timeout or cancellation: its
+// protocol state is unknown, so it must not be reused.
+func (a *Adapter) markBroken() {
+	a.closeConn()
+	a.broken = true
+}
+
+func isCtxErr(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
 func (a *Adapter) require() error {
+	if a.broken {
+		return errors.New("dbprobe/postgres: connection closed after a timeout or cancellation; reconnect")
+	}
 	if a.s == nil {
 		return errors.New("dbprobe/postgres: not connected")
 	}
 	return nil
 }
 
+// Default limits for metadata reads (identity, roles, grants).
+var metaLimits = dbprobe.Limits{MaxRows: 10000, TimeoutSec: 30, MaxConns: 1}
+
+const metaMarker = "dbsim-meta"
+
+// inTxn runs fn inside BEGIN READ ONLY (always, for read-only work) with the
+// statement timeout and marker-derived application_name applied, then
+// ROLLBACK. fn gets the leading marker comment to prefix to its SQL and its
+// error is returned unwrapped so callers can classify it. A timeout or
+// cancellation marks the adapter broken and skips ROLLBACK.
+func (a *Adapter) inTxn(ctx context.Context, mode dbprobe.ExecMode, class dbprobe.ProbeClass,
+	lim dbprobe.Limits, marker string, fn func(ctx context.Context, comment string) error) error {
+	if err := a.require(); err != nil {
+		return err
+	}
+	ctx, cancel := dbprobe.WithDeadline(ctx, lim)
+	defer cancel()
+	step := func(op string, err error) error {
+		if err == nil {
+			return nil
+		}
+		if isCtxErr(err) || ctx.Err() != nil {
+			a.markBroken()
+		}
+		return wrapErr(op, err, a.secrets...)
+	}
+	if err := step("begin", a.s.Exec(ctx, beginStmt(mode, class))); err != nil {
+		return err
+	}
+	defer func() {
+		if a.broken || a.s == nil {
+			return
+		}
+		rb, c := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer c()
+		_ = a.s.Exec(rb, "ROLLBACK")
+	}()
+	if err := step("settings", a.applyTxnSettings(ctx, dbprobe.DBProbeSpec{Marker: marker, Limits: lim})); err != nil {
+		return err
+	}
+	err := fn(ctx, markerComment(marker)+" ")
+	if err != nil && (isCtxErr(err) || ctx.Err() != nil) {
+		a.markBroken()
+	}
+	return err
+}
+
+func (a *Adapter) metaQuery(ctx context.Context, op, sql string, maxRows int) ([][]any, error) {
+	var rows [][]any
+	err := a.inTxn(ctx, a.mode, dbprobe.ClassReadOnly, metaLimits, metaMarker, func(ctx context.Context, comment string) error {
+		var qerr error
+		rows, qerr = a.s.Query(ctx, comment+sql, maxRows)
+		return qerr
+	})
+	if err != nil {
+		if strings.HasPrefix(err.Error(), "dbprobe/postgres:") {
+			return nil, err
+		}
+		return nil, wrapErr(op, err, a.secrets...)
+	}
+	return rows, nil
+}
+
 // Identity returns pg_control_system().system_identifier as a string.
 func (a *Adapter) Identity(ctx context.Context) (string, error) {
-	if err := a.require(); err != nil {
-		return "", err
-	}
-	rows, err := a.s.Query(ctx, sqlIdentity, 2)
+	rows, err := a.metaQuery(ctx, "identity", sqlIdentity, 2)
 	if err != nil {
-		return "", wrapErr("identity", err, a.secrets...)
+		return "", err
 	}
 	if len(rows) != 1 || len(rows[0]) != 1 {
 		return "", errors.New("dbprobe/postgres: identity query returned no row")
@@ -153,24 +292,18 @@ func (a *Adapter) Identity(ctx context.Context) (string, error) {
 
 // EnumerateRoles lists non-system roles.
 func (a *Adapter) EnumerateRoles(ctx context.Context) ([]Role, error) {
-	if err := a.require(); err != nil {
-		return nil, err
-	}
-	rows, err := a.s.Query(ctx, sqlRoles, 10000)
+	rows, err := a.metaQuery(ctx, "roles", sqlRoles, 10000)
 	if err != nil {
-		return nil, wrapErr("roles", err, a.secrets...)
+		return nil, err
 	}
 	return toRoles(rows), nil
 }
 
 // ReadGrants lists table grants outside the system schemas.
 func (a *Adapter) ReadGrants(ctx context.Context) ([]Grant, error) {
-	if err := a.require(); err != nil {
-		return nil, err
-	}
-	rows, err := a.s.Query(ctx, sqlAllGrants, 10000)
+	rows, err := a.metaQuery(ctx, "grants", sqlAllGrants, 10000)
 	if err != nil {
-		return nil, wrapErr("grants", err, a.secrets...)
+		return nil, err
 	}
 	return toGrants(rows), nil
 }
@@ -312,41 +445,40 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 		return res, err
 	}
 	mode := a.effectiveMode(spec)
-	ctx, cancel := dbprobe.WithDeadline(ctx, spec.Limits)
-	defer cancel()
 
 	res.AgentTime = time.Now().UTC()
 	res.Notes = append(res.Notes, a.notes...)
-	if err := a.s.Exec(ctx, beginStmt(mode, real.Class)); err != nil {
-		return res, wrapErr("begin", err, a.secrets...)
+	var rows [][]any
+	err = a.inTxn(ctx, mode, real.Class, spec.Limits, spec.Marker, func(ctx context.Context, comment string) error {
+		clk, err := a.s.Query(ctx, comment+sqlClock, 1)
+		if err != nil {
+			return err
+		}
+		if len(clk) != 1 || len(clk[0]) != 1 {
+			return errors.New("no clock row")
+		}
+		if t, ok := clk[0][0].(time.Time); ok {
+			res.DBTime = t.UTC()
+		}
+		rows, err = a.s.Query(ctx, comment+sql, spec.Limits.MaxRows+1, args...)
+		return err
+	})
+	if a.broken {
+		res.ErrorClass = "timeout"
+		if err != nil && errors.Is(err, context.Canceled) {
+			res.ErrorClass = "canceled"
+		}
+		res.Notes = append(res.Notes, "connection closed after timeout or cancellation; reconnect required")
+		return res, nil
 	}
-	defer func() {
-		rb, c := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer c()
-		_ = a.s.Exec(rb, "ROLLBACK")
-	}()
-	if err := a.applyTxnSettings(ctx, spec); err != nil {
-		return res, wrapErr("settings", err, a.secrets...)
-	}
-	comment := markerComment(spec.Marker) + " "
-	clk, err := a.s.Query(ctx, comment+sqlClock, 1)
-	if err != nil || len(clk) != 1 || len(clk[0]) != 1 {
-		return res, wrapErr("clock", errOr(err, "no clock row"), a.secrets...)
-	}
-	if t, ok := clk[0][0].(time.Time); ok {
-		res.DBTime = t.UTC()
-	}
-
-	rows, err := a.s.Query(ctx, comment+sql, spec.Limits.MaxRows+1, args...)
 	if err != nil {
 		var pe *pgconn.PgError
 		if errors.As(err, &pe) {
 			classify(&res, pe)
 			return res, nil
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			res.ErrorClass = "timeout"
-			return res, nil
+		if strings.HasPrefix(err.Error(), "dbprobe/postgres:") {
+			return res, err
 		}
 		return res, wrapErr("probe", err, a.secrets...)
 	}
@@ -386,6 +518,8 @@ func errOr(err error, msg string) error {
 	return errors.New(msg)
 }
 
+const labOpTimeout = 30 * time.Second
+
 // Seed creates a small synthetic fixture (schema, table, NOLOGIN role and a
 // SELECT grant). Lab mode only; no real data.
 func (a *Adapter) Seed(ctx context.Context, f dbprobe.Fixture) error {
@@ -399,6 +533,8 @@ func (a *Adapter) Seed(ctx context.Context, f dbprobe.Fixture) error {
 	if err != nil {
 		return err
 	}
+	ctx, cancel := context.WithTimeout(ctx, labOpTimeout)
+	defer cancel()
 	tbl := pgx.Identifier{schema, "restricted"}.Sanitize()
 	stmts := []string{
 		"CREATE SCHEMA " + pgx.Identifier{schema}.Sanitize(),
@@ -408,17 +544,26 @@ func (a *Adapter) Seed(ctx context.Context, f dbprobe.Fixture) error {
 		"GRANT USAGE ON SCHEMA " + pgx.Identifier{schema}.Sanitize() + " TO " + pgx.Identifier{role}.Sanitize(),
 		"GRANT SELECT ON " + tbl + " TO " + pgx.Identifier{role}.Sanitize(),
 	}
-	if err := a.s.Exec(ctx, "BEGIN"); err != nil {
+	fail := func(err error) error {
+		if isCtxErr(err) || ctx.Err() != nil {
+			a.markBroken()
+		} else {
+			rb, c := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			_ = a.s.Exec(rb, "ROLLBACK")
+			c()
+		}
 		return wrapErr("seed", err, a.secrets...)
+	}
+	if err := a.s.Exec(ctx, "BEGIN"); err != nil {
+		return fail(err)
 	}
 	for _, s := range stmts {
 		if err := a.s.Exec(ctx, s); err != nil {
-			_ = a.s.Exec(context.WithoutCancel(ctx), "ROLLBACK")
-			return wrapErr("seed", err, a.secrets...)
+			return fail(err)
 		}
 	}
 	if err := a.s.Exec(ctx, "COMMIT"); err != nil {
-		return wrapErr("seed", err, a.secrets...)
+		return fail(err)
 	}
 	return nil
 }
@@ -432,7 +577,7 @@ func fixtureNames(id string) (schema, role string, err error) {
 }
 
 // Cleanup drops the fixture schema and role (lab mode only) and verifies
-// nothing is left behind.
+// nothing is left behind. All statements run under a bounded context.
 func (a *Adapter) Cleanup(ctx context.Context, f dbprobe.Fixture) (dbprobe.CleanupResult, error) {
 	var out dbprobe.CleanupResult
 	if err := a.require(); err != nil {
@@ -445,6 +590,8 @@ func (a *Adapter) Cleanup(ctx context.Context, f dbprobe.Fixture) (dbprobe.Clean
 	if err != nil {
 		return out, err
 	}
+	ctx, cancel := context.WithTimeout(ctx, labOpTimeout)
+	defer cancel()
 	var errs []string
 	for _, s := range []string{
 		"DROP SCHEMA IF EXISTS " + pgx.Identifier{schema}.Sanitize() + " CASCADE",
@@ -464,19 +611,25 @@ func (a *Adapter) Cleanup(ctx context.Context, f dbprobe.Fixture) (dbprobe.Clean
 	} else {
 		out.Removed = append(out.Removed, "role:"+role)
 	}
+	if ctx.Err() != nil {
+		a.markBroken()
+		errs = append(errs, "cleanup timed out; connection closed")
+	}
 	out.Error = strings.Join(errs, "; ")
 	return out, nil
 }
 
 var (
-	reURLCreds = regexp.MustCompile(`://[^/\s:@]+:[^@\s]*@`)
-	rePassKV   = regexp.MustCompile(`(?i)password\s*=\s*\S+`)
+	reDSN    = regexp.MustCompile(`(?i)postgres(?:ql)?://\S+`)
+	rePassKV = regexp.MustCompile(`(?i)password\s*=\s*\S+`)
+	reConnKV = regexp.MustCompile("(?i)\\b(host|user|dbname|database)=[^\\s`']+")
 )
 
-// redact removes passwords and DSN credentials from driver text.
+// redact removes passwords, DSNs and connection key/values from driver text.
 func redact(s string, secrets ...string) string {
-	s = reURLCreds.ReplaceAllString(s, "://[redacted]@")
+	s = reDSN.ReplaceAllString(s, "[redacted-dsn]")
 	s = rePassKV.ReplaceAllString(s, "password=[redacted]")
+	s = reConnKV.ReplaceAllString(s, "$1=[redacted]")
 	for _, sec := range secrets {
 		if sec != "" {
 			s = strings.ReplaceAll(s, sec, "[redacted]")

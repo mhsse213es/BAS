@@ -2,6 +2,7 @@ package dbprobe
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 )
 
@@ -73,6 +74,11 @@ func TestValidateSpecRejectsBadInputs(t *testing.T) {
 		"zero timeout":  func(s *DBProbeSpec) { s.Limits.TimeoutSec = 0 },
 		"zero conns":    func(s *DBProbeSpec) { s.Limits.MaxConns = 0 },
 		"bad mode":      func(s *DBProbeSpec) { s.Mode = "weird" },
+		"huge rows":     func(s *DBProbeSpec) { s.Limits.MaxRows = math.MaxInt },
+		"rows over cap": func(s *DBProbeSpec) { s.Limits.MaxRows = MaxRowsCap + 1 },
+		"huge timeout":  func(s *DBProbeSpec) { s.Limits.TimeoutSec = math.MaxInt },
+		"timeout cap":   func(s *DBProbeSpec) { s.Limits.TimeoutSec = MaxTimeoutSecCap + 1 },
+		"conns cap":     func(s *DBProbeSpec) { s.Limits.MaxConns = MaxConnsCap + 1 },
 	}
 	for name, mut := range cases {
 		s := validSpec()

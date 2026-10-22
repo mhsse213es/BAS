@@ -13,22 +13,30 @@ import (
 )
 
 type fakeCall struct {
-	sql  string
-	args []any
+	sql         string
+	args        []any
+	hasDeadline bool
 }
 
 type fakeSession struct {
 	calls   []fakeCall
 	queryFn func(sql string, args []any) ([][]any, error)
+	execFn  func(sql string) error
+	closed  bool
 }
 
 func (f *fakeSession) Exec(ctx context.Context, sql string, args ...any) error {
-	f.calls = append(f.calls, fakeCall{sql, args})
+	_, dl := ctx.Deadline()
+	f.calls = append(f.calls, fakeCall{sql, args, dl})
+	if f.execFn != nil {
+		return f.execFn(sql)
+	}
 	return nil
 }
 
 func (f *fakeSession) Query(ctx context.Context, sql string, maxRows int, args ...any) ([][]any, error) {
-	f.calls = append(f.calls, fakeCall{sql, args})
+	_, dl := ctx.Deadline()
+	f.calls = append(f.calls, fakeCall{sql, args, dl})
 	if f.queryFn != nil {
 		return f.queryFn(sql, args)
 	}
@@ -38,7 +46,7 @@ func (f *fakeSession) Query(ctx context.Context, sql string, maxRows int, args .
 	return nil, nil
 }
 
-func (f *fakeSession) Close(ctx context.Context) error { return nil }
+func (f *fakeSession) Close(ctx context.Context) error { f.closed = true; return nil }
 
 func spec(id string, mode dbprobe.ExecMode, params map[string]string) dbprobe.DBProbeSpec {
 	return dbprobe.DBProbeSpec{Engine: "postgresql", ProbeID: id, TargetID: "t", Mode: mode,
@@ -190,6 +198,9 @@ func TestParamEnforcement(t *testing.T) {
 func TestBeginStatement(t *testing.T) {
 	if beginStmt(dbprobe.ModeClient, dbprobe.ClassReadOnly) != "BEGIN READ ONLY" {
 		t.Error("client must be READ ONLY")
+	}
+	if beginStmt(dbprobe.ModeClient, dbprobe.ClassMutation) != "BEGIN READ ONLY" {
+		t.Error("client mode must be READ ONLY even for a non-read-only class")
 	}
 	if beginStmt(dbprobe.ModeLab, dbprobe.ClassReadOnly) != "BEGIN READ ONLY" {
 		t.Error("read_only probes are always READ ONLY")
