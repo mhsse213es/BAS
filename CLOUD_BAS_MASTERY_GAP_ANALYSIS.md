@@ -3,7 +3,7 @@
 **Date:** 2026-10-12  
 **Focus:** Architectural reuse of Audspect's existing AD/ransomware mastery work for cloud attack-path validation (AWS/Azure/GCP/Kubernetes/Microsoft 365).
 
-**Kubernetes status:** in product scope (`docs/superpowers/specs/2026-10-12-cloud-bas-architecture-design.md`), platforms EKS, AKS, GKE and OpenShift. **Not yet implemented.** Phase 1 (read-only discovery of pods, service accounts, Roles, ClusterRoles, RoleBindings and ClusterRoleBindings) is the next increment. Implemented so far: `orchestrator/internal/cloudgraph/k8s_discovery.go`, validated against a local kind cluster only. Managed-cluster compatibility is not claimed until each platform is validated. Attack scenarios come after discovery and identity analysis.
+**Kubernetes status:** in product scope (`docs/superpowers/specs/2026-10-12-cloud-bas-architecture-design.md`). Platforms: EKS, AKS, GKE, OpenShift and K3s (K3s added by user decision, 2026-10-22). Not validated yet on any managed platform or K3s. Implemented and validated on a local kind cluster only: read-only discovery (namespaces, pods, workload ownership through ReplicaSet/Deployment, StatefulSet, DaemonSet, Job and CronJob, service accounts, Roles, ClusterRoles, bindings, unresolved and incomplete paths reported as gaps) and configured-permission analysis (namespace scope, implicit groups, resourceNames, wildcards, aggregated ClusterRoles; cross-checked with kubectl auth can-i). Evidence boundaries: configured permission is not effective authorization (other authorizers and admission are not modelled) and not exploitability. Not built yet: attack scenarios and any state-changing test.
 
 ---
 

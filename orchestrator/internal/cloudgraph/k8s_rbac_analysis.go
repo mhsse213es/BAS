@@ -99,6 +99,7 @@ func AnalyseK8sAccess(inv *K8sInventory, rep *K8sDiscoveryReport, q K8sAccessQue
 // K8sPrivilegeFinding is one capability a workload's service account is configured to have.
 type K8sPrivilegeFinding struct {
 	Workload   string
+	Owner      string // top-level workload of the pod, from discovery
 	Subject    string
 	Capability string
 	Namespace  string
@@ -139,6 +140,7 @@ func K8sPrivilegeFindings(inv *K8sInventory, rep *K8sDiscoveryReport) []K8sPrivi
 			}
 			out = append(out, K8sPrivilegeFinding{
 				Workload:   r.CanonicalID,
+				Owner:      r.Attributes["workload"],
 				Subject:    subject,
 				Capability: c.Capability,
 				Namespace:  ns,

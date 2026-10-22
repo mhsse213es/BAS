@@ -200,6 +200,12 @@ func (c *K8sDiscoveryClient) scopedPath(group, version, resource string, namespa
 	return base + "/" + resource
 }
 
+// k8sOwnerRef is one owner reference on a workload object.
+type k8sOwnerRef struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+}
+
 // k8sPolicyRule is one RBAC rule. The JSON tags match the API, so the stored attribute keeps its shape.
 type k8sPolicyRule struct {
 	APIGroups       []string `json:"apiGroups"`
@@ -221,12 +227,9 @@ func toRBACRules(in []k8sPolicyRule) []RBACRule {
 // k8sObject is the subset of Kubernetes objects discovery reads.
 type k8sObject struct {
 	Metadata struct {
-		Name            string `json:"name"`
-		Namespace       string `json:"namespace"`
-		OwnerReferences []struct {
-			Kind string `json:"kind"`
-			Name string `json:"name"`
-		} `json:"ownerReferences"`
+		Name            string        `json:"name"`
+		Namespace       string        `json:"namespace"`
+		OwnerReferences []k8sOwnerRef `json:"ownerReferences"`
 	} `json:"metadata"`
 	Spec struct {
 		ServiceAccountName string `json:"serviceAccountName"`
@@ -291,6 +294,12 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 		{"clusterroles", c.scopedPath(rbac, "v1", "clusterroles", false)},
 		{"rolebindings", c.scopedPath(rbac, "v1", "rolebindings", true)},
 		{"clusterrolebindings", c.scopedPath(rbac, "v1", "clusterrolebindings", false)},
+		{"replicasets", c.scopedPath("apps", "v1", "replicasets", true)},
+		{"deployments", c.scopedPath("apps", "v1", "deployments", true)},
+		{"statefulsets", c.scopedPath("apps", "v1", "statefulsets", true)},
+		{"daemonsets", c.scopedPath("apps", "v1", "daemonsets", true)},
+		{"jobs", c.scopedPath("batch", "v1", "jobs", true)},
+		{"cronjobs", c.scopedPath("batch", "v1", "cronjobs", true)},
 	}
 	raw := map[string][]json.RawMessage{}
 	for _, s := range specs {
@@ -359,6 +368,61 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 		return out
 	}
 
+	// Workloads: index every listed workload and its owner, so each pod resolves to its top-level workload.
+	workloadLists := []struct{ list, kind string }{
+		{"replicasets", "ReplicaSet"}, {"deployments", "Deployment"}, {"statefulsets", "StatefulSet"},
+		{"daemonsets", "DaemonSet"}, {"jobs", "Job"}, {"cronjobs", "CronJob"},
+	}
+	listedWorkloads := map[string]bool{}
+	ownerIndex := map[string]k8sOwnerRef{}
+	for _, w := range workloadLists {
+		for _, o := range parse(w.list) {
+			ns, name := o.Metadata.Namespace, o.Metadata.Name
+			listedWorkloads[ns+"/"+w.kind+"/"+name] = true
+			if len(o.Metadata.OwnerReferences) > 0 {
+				ownerIndex[ns+"/"+w.kind+"/"+name] = o.Metadata.OwnerReferences[0]
+			}
+			kl := strings.ToLower(w.kind)
+			addResource(k8sCanonicalID(cluster, ns, kl, name), "k8s:"+kl, ns, name, map[string]string{}, w.list)
+		}
+	}
+	gapSeen := map[string]bool{}
+	// resolveWorkload follows owner references to the top of the chain. It returns "" when an owner was not
+	// listed; that is recorded as a gap, so an unknown owner is never shown as a workload.
+	resolveWorkload := func(pod k8sObject) (string, string) {
+		ns := pod.Metadata.Namespace
+		if len(pod.Metadata.OwnerReferences) == 0 {
+			return k8sCanonicalID(cluster, ns, "pod", pod.Metadata.Name), "k8s:pod"
+		}
+		cur := pod.Metadata.OwnerReferences[0]
+		// A Node owns static pods. A Node is not a workload, so the pod stands alone.
+		if cur.Kind == "Node" {
+			return k8sCanonicalID(cluster, ns, "pod", pod.Metadata.Name), "k8s:pod"
+		}
+		for hop := 0; hop < 4; hop++ {
+			key := ns + "/" + cur.Kind + "/" + cur.Name
+			if !listedWorkloads[key] {
+				gap := fmt.Sprintf("pod %s: owner %s %s was not listed", pod.Metadata.Name, cur.Kind, cur.Name)
+				if !gapSeen[gap] {
+					gapSeen[gap] = true
+					rep.Gaps = append(rep.Gaps, gap)
+				}
+				return "", ""
+			}
+			up, ok := ownerIndex[key]
+			if !ok {
+				kl := strings.ToLower(cur.Kind)
+				return k8sCanonicalID(cluster, ns, kl, cur.Name), "k8s:" + kl
+			}
+			cur = up
+		}
+		gap := fmt.Sprintf("pod %s: owner chain deeper than 4 levels", pod.Metadata.Name)
+		if !gapSeen[gap] {
+			gapSeen[gap] = true
+			rep.Gaps = append(rep.Gaps, gap)
+		}
+		return "", ""
+	}
 	for _, n := range parse("namespaces") {
 		addResource(k8sCanonicalID(cluster, "", "namespace", n.Metadata.Name), "k8s:namespace", "", n.Metadata.Name, map[string]string{}, "namespaces")
 	}
@@ -374,6 +438,10 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 		if len(p.Metadata.OwnerReferences) > 0 {
 			attrs["ownerKind"] = p.Metadata.OwnerReferences[0].Kind
 			attrs["ownerName"] = p.Metadata.OwnerReferences[0].Name
+		}
+		if id, kind := resolveWorkload(p); id != "" {
+			attrs["workload"] = id
+			attrs["workloadKind"] = kind
 		}
 		addResource(k8sCanonicalID(cluster, p.Metadata.Namespace, "pod", p.Metadata.Name), "k8s:pod", p.Metadata.Namespace, p.Metadata.Name, attrs, "pods")
 		addIdentity(k8sCanonicalID(cluster, p.Metadata.Namespace, "serviceaccount", sa), "k8s:serviceaccount", p.Metadata.Namespace, sa, "pods")
