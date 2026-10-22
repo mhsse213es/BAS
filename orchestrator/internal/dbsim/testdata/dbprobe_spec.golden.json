@@ -1,0 +1,1 @@
+{"engine":"postgresql","probeId":"read_restricted_table","targetId":"tgt-pg-01","credentialRef":"cred-ro-pg","runId":"run-123","marker":"BAS-DBSIM-abc123","fixtureId":"fx-1","mode":"lab","limits":{"maxRows":100,"timeoutSec":30,"maxConns":1},"params":{"table":"bas_fixture_cards"}}
