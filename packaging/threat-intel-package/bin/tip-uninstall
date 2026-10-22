@@ -47,6 +47,18 @@ for s in misp opencti openaev; do
   fi
 done
 
+# 1b. The manual install from before this package: one Compose project named "xtm" started from
+# the OpenCTI and OpenAEV files. Bring it down with those exact files so its volumes go too.
+# The "audspect" project (the BAS platform) is deliberately not touched here or anywhere below.
+legacy=()
+for f in /opt/openaev/docker/docker-compose.yml /opt/opencti/docker/docker-compose.yml; do
+  [ -f "$f" ] && legacy+=(-f "$f")
+done
+if [ "${#legacy[@]}" -gt 0 ]; then
+  echo "==> Stopping the manual xtm stack (OpenCTI/OpenAEV) and its data"
+  (cd /opt/opencti/docker 2>/dev/null || cd /opt/openaev/docker; docker compose -p xtm "${legacy[@]}" down -v --remove-orphans)     || echo "    warning: compose down failed for xtm; check 'docker compose ls -a'"
+fi
+
 # 2. Fallback: remove any leftover containers and volumes from these stacks.
 docker ps -aq --filter "name=^misp" --filter "name=^opencti" --filter "name=^openaev" 2>/dev/null \
   | xargs -r docker rm -f >/dev/null 2>&1
