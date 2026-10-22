@@ -300,12 +300,19 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 		{"daemonsets", c.scopedPath("apps", "v1", "daemonsets", true)},
 		{"jobs", c.scopedPath("batch", "v1", "jobs", true)},
 		{"cronjobs", c.scopedPath("batch", "v1", "cronjobs", true)},
+		{"helmcharts", c.scopedPath("helm.cattle.io", "v1", "helmcharts", true)},
 	}
 	raw := map[string][]json.RawMessage{}
+	optionalLists := map[string]bool{"helmcharts": true}
 	for _, s := range specs {
 		items, gap, err := c.list(ctx, s.path)
 		if err != nil {
 			return nil, nil, err
+		}
+		// An optional list is a CRD that may not be installed. Its absence (404) means there are no such
+		// objects, not that they are unknown. Any other failure is still a gap.
+		if optionalLists[s.key] && strings.HasSuffix(gap, ": HTTP 404") {
+			gap = ""
 		}
 		raw[s.key] = items
 		rep.Counts[s.key] = len(items)
@@ -371,7 +378,7 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 	// Workloads: index every listed workload and its owner, so each pod resolves to its top-level workload.
 	workloadLists := []struct{ list, kind string }{
 		{"replicasets", "ReplicaSet"}, {"deployments", "Deployment"}, {"statefulsets", "StatefulSet"},
-		{"daemonsets", "DaemonSet"}, {"jobs", "Job"}, {"cronjobs", "CronJob"},
+		{"daemonsets", "DaemonSet"}, {"jobs", "Job"}, {"cronjobs", "CronJob"}, {"helmcharts", "HelmChart"},
 	}
 	listedWorkloads := map[string]bool{}
 	ownerIndex := map[string]k8sOwnerRef{}

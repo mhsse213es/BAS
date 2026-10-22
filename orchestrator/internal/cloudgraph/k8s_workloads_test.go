@@ -91,3 +91,27 @@ func TestK8sWorkloads_StaticPodOwnedByNodeIsStandalone(t *testing.T) {
 		t.Fatalf("static pod workload = %q, want itself", got)
 	}
 }
+
+// K3s's Helm controller owns pods through HelmChart custom resources. A HelmChart owner that was listed
+// resolves to that HelmChart, and a cluster without the CRD (404) is complete, not a gap.
+func TestK8sWorkloads_HelmChartOwnedPodResolvesToHelmChart(t *testing.T) {
+	inv, rep := analysisFor(t, map[string]string{
+		"/apis/helm.cattle.io/v1/helmcharts": `{"items":[{"metadata":{"name":"traefik","namespace":"kube-system"}}]}`,
+		"/api/v1/pods":                       `{"items":[{"metadata":{"name":"helm-install-traefik-x","namespace":"kube-system","ownerReferences":[{"kind":"HelmChart","name":"traefik"}]},"spec":{"serviceAccountName":"web"}}]}`,
+	})
+	if !rep.Complete {
+		t.Fatalf("gaps=%v", rep.Gaps)
+	}
+	pod := findRes(inv.Resources, "k8s://kind-bas-lab/kube-system/pod/helm-install-traefik-x")
+	if pod == nil || pod.Attributes["workload"] != "k8s://kind-bas-lab/kube-system/helmchart/traefik" {
+		t.Fatalf("pod workload = %+v, want the HelmChart", pod)
+	}
+}
+
+func TestK8sWorkloads_MissingHelmChartCRDIsNotAGap(t *testing.T) {
+	// The fixture serves no helmcharts route, so the list returns 404: the CRD is not installed.
+	_, rep := analysisFor(t, nil)
+	if !rep.Complete {
+		t.Fatalf("a cluster without the HelmChart CRD must not be incomplete; gaps=%v", rep.Gaps)
+	}
+}

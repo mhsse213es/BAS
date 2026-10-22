@@ -36,7 +36,7 @@ func TestK8sDiscovery_LiveLab(t *testing.T) {
 	}
 	token := strings.TrimSpace(string(tokenBytes))
 	c, err := NewK8sDiscoveryClient(K8sDiscoveryConfig{
-		ClusterName: "kind-bas-lab",
+		ClusterName: labClusterName(),
 		APIServer:   api,
 		Token:       token,
 		CAPEM:       ca,
@@ -54,20 +54,20 @@ func TestK8sDiscovery_LiveLab(t *testing.T) {
 		t.Fatalf("the lab inventory must be complete with the read-only account; gaps=%v", rep.Gaps)
 	}
 	for _, id := range []string{
-		"k8s://kind-bas-lab/default/pod/web-1",
-		"k8s://kind-bas-lab/default/role/reader",
-		"k8s://kind-bas-lab/_cluster/clusterrole/cluster-admin",
+		"k8s://" + labClusterName() + "/default/pod/web-1",
+		"k8s://" + labClusterName() + "/default/role/reader",
+		"k8s://" + labClusterName() + "/_cluster/clusterrole/cluster-admin",
 	} {
 		if findRes(inv.Resources, id) == nil {
 			t.Fatalf("lab object missing from inventory: %s", id)
 		}
 	}
-	if findIdent(inv.Identities, "k8s://kind-bas-lab/default/serviceaccount/web") == nil {
+	if findIdent(inv.Identities, "k8s://"+labClusterName()+"/default/serviceaccount/web") == nil {
 		t.Fatal("lab service account web missing from inventory")
 	}
 	found := false
 	for _, p := range inv.Permissions {
-		if p.Source != nil && p.Source.CanonicalID == "k8s://kind-bas-lab/default/serviceaccount/web" && p.Target != nil && p.Target.CanonicalID == "k8s://kind-bas-lab/default/role/reader" {
+		if p.Source != nil && p.Source.CanonicalID == "k8s://"+labClusterName()+"/default/serviceaccount/web" && p.Target != nil && p.Target.CanonicalID == "k8s://"+labClusterName()+"/default/role/reader" {
 			found = true
 		}
 	}
@@ -93,7 +93,7 @@ func TestK8sDiscovery_LiveLab_ReadOnlyCredentialCannotWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := NewK8sDiscoveryClient(K8sDiscoveryConfig{ClusterName: "kind-bas-lab", APIServer: api, Token: strings.TrimSpace(string(tokenBytes)), CAPEM: ca})
+	c, err := NewK8sDiscoveryClient(K8sDiscoveryConfig{ClusterName: labClusterName(), APIServer: api, Token: strings.TrimSpace(string(tokenBytes)), CAPEM: ca})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestK8sDiscovery_LiveLab_PatchAndDeleteAreDenied(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := NewK8sDiscoveryClient(K8sDiscoveryConfig{ClusterName: "kind-bas-lab", APIServer: api, Token: strings.TrimSpace(string(tokenBytes)), CAPEM: ca})
+	c, err := NewK8sDiscoveryClient(K8sDiscoveryConfig{ClusterName: labClusterName(), APIServer: api, Token: strings.TrimSpace(string(tokenBytes)), CAPEM: ca})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,4 +208,13 @@ func labObjectStateAdmin(t *testing.T) labObjectState {
 		t.Fatal(err)
 	}
 	return labObjectState{Data: obj.Data, ResourceVersion: obj.Metadata.ResourceVersion}
+}
+
+// labClusterName is the cluster label used in canonical IDs. It defaults to the kind lab; set
+// KUBE_LAB_CLUSTER_NAME to run the same checks against another cluster (for example k3d-bas-k3s).
+func labClusterName() string {
+	if n := os.Getenv("KUBE_LAB_CLUSTER_NAME"); n != "" {
+		return n
+	}
+	return "kind-bas-lab"
 }
