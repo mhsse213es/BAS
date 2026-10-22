@@ -302,9 +302,12 @@ wait_http() { # label url
   local label="$1" url="$2"
   info "Waiting for ${label} at ${url}"
   for _ in $(seq 1 180); do
-    if curl -fsS -o /dev/null --max-time 5 "$url" 2>/dev/null; then
-      echo "    ${label} is up"; return 0
-    fi
+    # Any HTTP answer below 500 means the app is running. 401/403 mean it is up and requires a login
+    # (OpenCTI /health does), so they count as up. 5xx and no answer (000) do not.
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$url" 2>/dev/null || true)
+    case "$code" in
+      [234][0-9][0-9]) echo "    ${label} is up (HTTP ${code})"; return 0 ;;
+    esac
     sleep 10
   done
   die "${label} did not answer at ${url} within 30 minutes. Check: docker compose -p <stack> logs (in ${STACK_DIR})"
