@@ -74,3 +74,9 @@ Actions that bind roles, escalate roles, or touch `nodes/proxy` are excluded fro
 3. **First milestone:** the three labelled, non-privileged actions in section 7 only. No binding, privilege-escalation or node-proxy actions. Each action's rollback and verification are reviewed before it is allowed. Note: the token-request action mints a credential, so it needs a redaction design before it is built; it is deferred from the first build.
 4. **Order:** build the scenario engine and safety gates first, then the console UI. The engine enforces dry-run by default, allow-lists, the fixed action registry, approval, short-lived credentials, fail-closed audit, and cleanup, independently of the UI.
 5. **Rollback failure:** a failed rollback ends in an explicit `CLEANUP_FAILED` terminal state, keeps the audit evidence, and alerts the operator. A run is reported as cleaned up only after restoration is verified.
+
+## 11. Validation record
+
+- **2026-10-23, engine and write client:** `orchestrator/internal/k8sscenario`. Unit tests cover each gate, approval rejection, approval reuse, audit fail-closed, verification failure, rollback failure to `CLEANUP_FAILED`, rollback-verification catching a surviving object, and outcome-audit withholding. The HTTP client tests cover registry refusals sending no request, the token not appearing in errors, and an end-to-end run over HTTP.
+- **Lab run on kind-bas-lab, with the scenario ServiceAccount `bas-scenario/bas-scenario-runner` and its narrow RBAC:** dry run wrote nothing; approved pod run was verified and cleaned up; unapproved and self-approved runs were refused with no pod created; the ConfigMap patch was verified and restored to `original`. The sandbox was left with no pods and the fixture at its prior value.
+- **Not yet done:** rollback-failure against the real cluster (only the fake client exercises it), the console approval UI, and any production approval. This is still not approved for production use.
