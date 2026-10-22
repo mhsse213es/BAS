@@ -1990,14 +1990,21 @@ var SCENARIO_CATEGORIES = {
 // dashboard elsewhere).
 // Scenario section grouping by licensed product line. The server sends each scenario's productLine
 // (from its signed YAML). Threat-intel scenarios keep their own group, since they are split by source.
-export var PRODUCT_LINE_ORDER = ['av', 'waf', 'network', 'email', 'dlp', 'apibas', 'ransomware', 'killchain', 'webgw', 'cloud', 'common'];
+export var PRODUCT_LINE_ORDER = ['av', 'waf', 'network', 'email', 'dlp', 'killchain', 'ransomware', 'webgw', 'cloud', 'apibas', 'ad', 'common'];
 var PRODUCT_LINE_LABELS = {
-  av: 'AV / NGAV', waf: 'WAF', network: 'Network', email: 'Email', dlp: 'DLP', apibas: 'API BAS',
-  ransomware: 'Ransomware', killchain: 'Full Kill Chain', webgw: 'Web Gateway', cloud: 'Cloud', common: 'Standard & Custom'
+  av: 'Antivirus', waf: 'WAF', network: 'Network', email: 'Email', dlp: 'DLP', apibas: 'API BAS', ad: 'AD BAS',
+  ransomware: 'Ransomware', killchain: 'Kill Chain', webgw: 'Web Gateway', cloud: 'Cloud', common: 'Common'
 };
 PRODUCT_LINE_ORDER.forEach(function(p) {
   SCENARIO_CATEGORIES[p] = { label: PRODUCT_LINE_LABELS[p], icon: SCENARIO_CATEGORIES.other.icon };
 });
+
+// scenarioSectionOrder is the order the Scenarios landing shows its sections. Phishing is not a
+// scenario product line (its entries come from the phishing library), so it is placed here by key.
+export function scenarioSectionOrder() {
+  var keys = ['av', 'waf', 'network', 'email', 'dlp', 'phishing', 'killchain', 'ransomware', 'webgw', 'cloud', 'apibas', 'ad', 'common', 'intel'];
+  return keys.map(function(key) { return { key: key, label: SCENARIO_CATEGORIES[key].label }; });
+}
 
 export function scenarioProductOf(s) {
   if (scenarioSourceOf(s) === 'intel') return 'intel';
@@ -2042,7 +2049,9 @@ function renderScenarioLanding(list, src) {
   var el = document.getElementById('sc-landing');
   if (!el) return;
   _lastLanding = { list: list, src: src };
-  var html = PRODUCT_LINE_ORDER.concat(['intel']).map(function(key) {
+  var html = scenarioSectionOrder().map(function(sec) {
+    var key = sec.key;
+    if (key === 'phishing') return phishingLandingCardHTML();
     var cat = SCENARIO_CATEGORIES[key];
     var c = scenarioCategoryCounts(list, key);
     if (c.total === 0) return '';
@@ -2070,7 +2079,6 @@ function renderScenarioLanding(list, src) {
     var emptySrcLabel = { builtin: 'Built-in', custom: 'Custom', intel: 'Threat Intel' }[src] || src;
     html = '<div class="tiny muted" style="width:100%;padding:0.5rem 0.1rem">There is no Scenarios for ' + x(emptySrcLabel) + ' yet</div>' + html;
   }
-  html += phishingLandingCardHTML();
   if (_templates.length) {
     html += '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
       on('click', 'openScenarioCategory', 'templates') + on('keydown', 'scenarioCategoryKeydown', 'templates') + '>' +
