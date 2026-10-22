@@ -1,6 +1,6 @@
 # Kubernetes state-changing scenarios — design (not approved, no code)
 
-**Status:** design draft. Nothing in this document is implemented or approved for execution.
+**Status:** design direction approved by the owner (decisions in section 10). Not approved for production use. No live execution until the engine, negative tests, rollback-failure tests and lab validation pass.
 **Scope:** the state-changing Kubernetes scenarios deferred by QA log O-11 and R-19 in `docs/cloud-mastery-qa-log.md`.
 **Related:** `docs/superpowers/specs/2026-10-12-cloud-bas-architecture-design.md`; `orchestrator/internal/cloudgraph/probe.go` (R-19 gates).
 
@@ -66,3 +66,11 @@ Actions that bind roles, escalate roles, or touch `nodes/proxy` are excluded fro
 - Dry-run output matches the plan for each action.
 - Each gate has a failing test (wrong cluster, unlabelled namespace, missing approval, wrong credential, audit write failure).
 - A live run on the kind lab shows apply, verify and rollback, with the audit trail, and the lab returns to its prior state.
+
+## 10. Owner decisions (recorded)
+
+1. **Clusters:** only the dedicated kind lab cluster initially. Cluster and namespace allow-lists are enforced server-side. Other clusters need separate validation and explicit approval.
+2. **Approval:** an authenticated operator holding an explicit approval permission, separate from the requester. Approval is given in the console UI. The server binds each approval to the exact run, cluster, namespace, action and parameters. No self-approval. CLI approval may be considered later.
+3. **First milestone:** the three labelled, non-privileged actions in section 7 only. No binding, privilege-escalation or node-proxy actions. Each action's rollback and verification are reviewed before it is allowed. Note: the token-request action mints a credential, so it needs a redaction design before it is built; it is deferred from the first build.
+4. **Order:** build the scenario engine and safety gates first, then the console UI. The engine enforces dry-run by default, allow-lists, the fixed action registry, approval, short-lived credentials, fail-closed audit, and cleanup, independently of the UI.
+5. **Rollback failure:** a failed rollback ends in an explicit `CLEANUP_FAILED` terminal state, keeps the audit evidence, and alerts the operator. A run is reported as cleaned up only after restoration is verified.
