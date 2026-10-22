@@ -64,10 +64,24 @@ export function loadLicenseInfo() {
         _licRow('Issued',      x(lic.issuedAt   || '-')) +
         _licRow('Expires',     '<span class="g1-s-6e8bcfac"' + cssVars(['g1-v-7d75dfc9', statusColor]) + '>' + x(lic.expiresAt || '-') + '</span>') +
         (lic.status === 'grace' ? _licRow('Grace Period', '<span class="g1-s-adc02b25">' + lic.daysRemaining + ' day(s) remaining — access disabled on ' + x(lic.lockoutAt) + '</span>') : '') +
-        (lic.tier ? _licRow('Tier', '<span class="g1-s-6e8bcfac">' + x(lic.tier) + '</span> <span class="tiny muted">' + x((lic.productLines || []).join(', ')) + '</span>') : '') +
+        (lic.tier ? _licRow('Tier', '<span class="g1-s-6e8bcfac">' + x(lic.tier) + '</span>') : '') +
+        (lic.tier ? _licRow('Products', '<div>' + licenseProductChips(lic.productLines) + '</div>') : '') +
         (features ? '<div class="g1-display-flex g1-s-17f7ed50"><span class="g1-s-39e35912">Features</span><div>' + features + '</div></div>' : '') +
       '</div>';
   }).catch(function(e) { wrap.innerHTML = '<div class="empty g1-s-8e56e4c3">' + x(e.message) + '</div>'; });
+}
+
+// licenseProductChips renders each licensed product as a badge with its readable name. An unknown
+// code is shown as-is (escaped), so a new product is never hidden.
+export function licenseProductChips(lines) {
+  var names = {
+    av: 'Antivirus', waf: 'WAF', network: 'Network', email: 'Email', dlp: 'DLP', phishing: 'Phishing',
+    killchain: 'Kill Chain', ransomware: 'Ransomware', webgw: 'Web Gateway', cloud: 'Cloud',
+    apibas: 'API BAS', common: 'Common'
+  };
+  return (lines || []).map(function(p) {
+    return '<span class="sbadge g1-display-inline-block g1-s-221fcf42">' + x(names[p] || p) + '</span>';
+  }).join('');
 }
 
 function _licRow(label, val) {
