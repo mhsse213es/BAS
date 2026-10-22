@@ -647,6 +647,8 @@ type ScenarioStep struct {
 	ActionKey      string
 	ExecutionClass string
 	BlastRadius    string
+	// DBProbe is the wire dbprobe spec (Executor "dbprobe"); copied in decodeStep.
+	DBProbe *protocol.DBProbeSpec
 }
 
 // decodeStep converts one wire-format protocol.ScenarioStep into the
@@ -661,7 +663,7 @@ func decodeStep(w protocol.ScenarioStep) ScenarioStep {
 		Executor: w.Executor, Command: w.Command, TimeoutSec: w.TimeoutSec,
 		Payloads: w.Payloads, Cleanup: w.Cleanup, RequiresPriv: w.RequiresPriv,
 		ActionKey: w.ActionKey, ExecutionClass: w.ExecutionClass,
-		BlastRadius: w.BlastRadius,
+		BlastRadius: w.BlastRadius, DBProbe: w.DBProbe,
 	}
 	if len(w.Resource) > 0 {
 		var rp sched.ResourceProfile

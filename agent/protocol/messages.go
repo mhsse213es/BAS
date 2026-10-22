@@ -91,6 +91,8 @@ type ScenarioStep struct {
 	BlastRadius          string            `json:"blastRadius,omitempty"`
 	Env                  map[string]string `json:"-"`
 	RequiresPriv         string            `json:"requiresPriv,omitempty"`
+	// DBProbe is set when Executor is "dbprobe"; see DBProbeSpec.
+	DBProbe *DBProbeSpec `json:"dbProbe,omitempty"`
 }
 
 type Payload struct {
@@ -105,7 +107,9 @@ type ExecResult struct {
 	ExitCode        int       `json:"exitCode"`
 	Stdout          string    `json:"stdout"`
 	Stderr          string    `json:"stderr"`
-	DurationMs      int64     `json:"durationMs"`
+	// DBProbe is the typed result of a dbprobe step (nil otherwise).
+	DBProbe    *DBProbeResult `json:"dbProbe,omitempty"`
+	DurationMs     int64     `json:"durationMs"`
 	ExecutedAt      time.Time `json:"executedAt"`
 	Events          []string  `json:"events,omitempty"`
 	Blocked         bool      `json:"blocked,omitempty"`
