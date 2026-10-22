@@ -166,3 +166,24 @@ func TestK8sEscalation_ExecReachesPodRunningSecretReadingServiceAccount(t *testi
 		t.Fatal("exec into a pod running a secret-reading service account should be a path")
 	}
 }
+
+func TestK8sEscalation_NodeProxyReachesPodRunningSecretReadingServiceAccount(t *testing.T) {
+	inv, rep := analysisFor(t, map[string]string{
+		"/apis/rbac.authorization.k8s.io/v1/clusterroles": `{"items":[{"metadata":{"name":"secret-reader"},"rules":[{"apiGroups":[""],"resources":["secrets"],"verbs":["get","list"]}]},{"metadata":{"name":"node-proxier"},"rules":[{"apiGroups":[""],"resources":["nodes/proxy"],"verbs":["get"]}]}]}`,
+		"/api/v1/serviceaccounts": opsServiceAccounts,
+		"/api/v1/pods": `{"items":[{"metadata":{"name":"web-1","namespace":"default"},"spec":{"serviceAccountName":"web","nodeName":"n1"}},{"metadata":{"name":"ops-1","namespace":"default"},"spec":{"serviceAccountName":"ops","nodeName":"n1"}}]}`,
+		"/apis/rbac.authorization.k8s.io/v1/clusterrolebindings": `{"items":[{"metadata":{"name":"web-proxies"},"subjects":[{"kind":"ServiceAccount","name":"web","namespace":"default"}],"roleRef":{"kind":"ClusterRole","name":"node-proxier"}},{"metadata":{"name":"ops-secrets"},"subjects":[{"kind":"ServiceAccount","name":"ops","namespace":"default"}],"roleRef":{"kind":"ClusterRole","name":"secret-reader"}}]}`,
+	})
+	var found bool
+	for _, p := range K8sAttackPaths(inv, rep) {
+		if p.Prerequisite == "proxy-nodes" && p.Target == "k8s://kind-bas-lab/default/pod/ops-1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("node proxy should reach a pod running a secret-reading service account")
+	}
+	if got := findRes(inv.Resources, "k8s://kind-bas-lab/default/pod/ops-1").Attributes["node"]; got != "n1" {
+		t.Fatalf("pod node = %q, want n1", got)
+	}
+}

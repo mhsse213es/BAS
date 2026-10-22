@@ -233,6 +233,7 @@ type k8sObject struct {
 	} `json:"metadata"`
 	Spec struct {
 		ServiceAccountName string `json:"serviceAccountName"`
+		NodeName           string `json:"nodeName"`
 	} `json:"spec"`
 	Rules    []k8sPolicyRule `json:"rules"`
 	Subjects []struct {
@@ -442,6 +443,9 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 			sa = "default"
 		}
 		attrs := map[string]string{"serviceAccount": sa}
+		if p.Spec.NodeName != "" {
+			attrs["node"] = p.Spec.NodeName
+		}
 		if len(p.Metadata.OwnerReferences) > 0 {
 			attrs["ownerKind"] = p.Metadata.OwnerReferences[0].Kind
 			attrs["ownerName"] = p.Metadata.OwnerReferences[0].Name

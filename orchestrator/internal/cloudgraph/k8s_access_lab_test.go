@@ -72,6 +72,7 @@ func TestK8sAccess_LiveLab_MatchesKubectlAuthCanI(t *testing.T) {
 		{"escalate", "clusterroles", ""},
 		{"impersonate", "serviceaccounts", ""},
 		{"create", "serviceaccounts/token", "default"},
+		{"get", "nodes/proxy", ""},
 	}
 	rbacResources := map[string]bool{"roles": true, "clusterroles": true, "rolebindings": true, "clusterrolebindings": true}
 

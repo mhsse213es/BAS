@@ -14,8 +14,9 @@ package cloudgraph
 //   create-pods               create pods in a namespace -> a service account in that namespace that lists secrets
 //   request-serviceaccount-token  create serviceaccounts/token -> a same-namespace service account that lists secrets
 //   exec-into-pods            create pods/exec -> a pod in that namespace running a service account that lists secrets
+//   proxy-nodes               get nodes/proxy -> a pod on any node running a service account that lists secrets (kubelet access)
 //
-// Not modelled: node proxy (kubelet access), admission policy (see QA log O-14).
+// Not modelled: admission policy (see QA log O-14).
 
 // K8sAttackPath is one configured path from a workload to a secret-reaching target.
 type K8sAttackPath struct {
@@ -94,6 +95,7 @@ func K8sAttackPaths(inv *K8sInventory, rep *K8sDiscoveryReport) []K8sAttackPath 
 		add("create-pods", RBACRequest{Resource: "pods", Verb: "create"}, ns, saIDs(saTargets, ns))
 		add("request-serviceaccount-token", RBACRequest{Resource: "serviceaccounts/token", Verb: "create"}, ns, saIDs(saTargets, ns))
 		add("exec-into-pods", RBACRequest{Resource: "pods/exec", Verb: "create"}, ns, podIDs(inv, rep.ClusterName, saTargets, ns))
+		add("proxy-nodes", RBACRequest{Resource: "nodes/proxy", Verb: "get"}, "", podIDs(inv, rep.ClusterName, saTargets, ""))
 	}
 	return out
 }
@@ -109,7 +111,7 @@ func saIDs(targets []k8sSATarget, ns string) []string {
 	return ids
 }
 
-// podIDs returns the pods in a namespace that run a service account which can list secrets.
+// podIDs returns the pods in a namespace (all namespaces when ns is empty) that run a service account which can list secrets.
 func podIDs(inv *K8sInventory, cluster string, targets []k8sSATarget, ns string) []string {
 	saSet := map[string]bool{}
 	for _, t := range targets {
@@ -117,10 +119,10 @@ func podIDs(inv *K8sInventory, cluster string, targets []k8sSATarget, ns string)
 	}
 	var ids []string
 	for _, r := range inv.Resources {
-		if r.Kind != "k8s:pod" || r.Attributes["namespace"] != ns {
+		if r.Kind != "k8s:pod" || (ns != "" && r.Attributes["namespace"] != ns) {
 			continue
 		}
-		sa := k8sCanonicalID(cluster, ns, "serviceaccount", r.Attributes["serviceAccount"])
+		sa := k8sCanonicalID(cluster, r.Attributes["namespace"], "serviceaccount", r.Attributes["serviceAccount"])
 		if saSet[sa] {
 			ids = append(ids, r.CanonicalID)
 		}
