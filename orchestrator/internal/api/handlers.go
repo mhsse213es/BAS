@@ -1340,6 +1340,12 @@ var agentFiles = map[string]struct {
 func (h *Handler) DownloadAgent(w http.ResponseWriter, r *http.Request) {
 	platform := chi.URLParam(r, "platform")
 
+	// The Linux setup file is built per request (CA, server details and the verified agent).
+	if platform == "linux-amd64-setup" {
+		h.serveLinuxSetup(w, r)
+		return
+	}
+
 	entry, ok := agentFiles[platform]
 	if !ok {
 		jsonError(w, "unknown platform: "+platform, http.StatusNotFound)
