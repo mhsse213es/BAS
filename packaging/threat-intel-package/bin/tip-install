@@ -88,7 +88,12 @@ install -d -m 0700 "$SECRET_DIR"
 install -d -m 0755 "$STACK_DIR"
 
 if [ -f "$CREDS_FILE" ]; then
-  die "credentials already exist at $CREDS_FILE; this host was already installed. Use tip-show-credentials, or uninstall first."
+  die "credentials already exist at $CREDS_FILE; this host was already installed. Run tip-show-credentials to see the existing logins."
+fi
+# A stack from an earlier install whose credentials file is gone must not be reinstalled: new
+# secrets would not match the databases that already exist, and the stacks would not start.
+if ls "${STACK_DIR}"/*.env >/dev/null 2>&1 \n  || docker volume ls -q 2>/dev/null | grep -Eq '^(misp|opencti|openaev)_' \n  || docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Eq '^(misp|opencti|openaev)'; then
+  die "MISP/OpenCTI/OpenAEV stack files, containers or volumes already exist on this host; refusing to install over them"
 fi
 
 MISP_ADMIN_EMAIL="admin@misp.local"
