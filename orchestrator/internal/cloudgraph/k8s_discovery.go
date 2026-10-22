@@ -103,6 +103,21 @@ type K8sInventory struct {
 	Resources   []*CloudResource
 	Identities  []*CloudIdentity
 	Permissions []*CloudPermission
+	// Unresolved lists bindings whose role was not listed. The access their subjects get through them is
+	// unknown, not absent, so the analysis must not treat those subjects as denied.
+	Unresolved []K8sUnresolvedBinding
+	// Roles holds the rules of each listed Role and ClusterRole, keyed by canonical ID.
+	Roles map[string][]RBACRule
+}
+
+// K8sUnresolvedBinding is a binding whose role was not in the inventory.
+type K8sUnresolvedBinding struct {
+	Binding     string
+	BindingKind string
+	Namespace   string
+	RoleKind    string
+	RoleName    string
+	SubjectIDs  []string
 }
 
 // get performs one GET. It is the only request method the client has.
@@ -185,6 +200,24 @@ func (c *K8sDiscoveryClient) scopedPath(group, version, resource string, namespa
 	return base + "/" + resource
 }
 
+// k8sPolicyRule is one RBAC rule. The JSON tags match the API, so the stored attribute keeps its shape.
+type k8sPolicyRule struct {
+	APIGroups       []string `json:"apiGroups"`
+	Resources       []string `json:"resources"`
+	ResourceNames   []string `json:"resourceNames"`
+	Verbs           []string `json:"verbs"`
+	NonResourceURLs []string `json:"nonResourceURLs"`
+}
+
+// toRBACRules converts API rules into evaluator rules.
+func toRBACRules(in []k8sPolicyRule) []RBACRule {
+	out := make([]RBACRule, 0, len(in))
+	for _, r := range in {
+		out = append(out, RBACRule{APIGroups: r.APIGroups, Resources: r.Resources, ResourceNames: r.ResourceNames, Verbs: r.Verbs, NonResourceURLs: r.NonResourceURLs})
+	}
+	return out
+}
+
 // k8sObject is the subset of Kubernetes objects discovery reads.
 type k8sObject struct {
 	Metadata struct {
@@ -198,11 +231,7 @@ type k8sObject struct {
 	Spec struct {
 		ServiceAccountName string `json:"serviceAccountName"`
 	} `json:"spec"`
-	Rules []struct {
-		APIGroups []string `json:"apiGroups"`
-		Resources []string `json:"resources"`
-		Verbs     []string `json:"verbs"`
-	} `json:"rules"`
+	Rules    []k8sPolicyRule `json:"rules"`
 	Subjects []struct {
 		Kind      string `json:"kind"`
 		Name      string `json:"name"`
@@ -212,6 +241,22 @@ type k8sObject struct {
 		Kind string `json:"kind"`
 		Name string `json:"name"`
 	} `json:"roleRef"`
+}
+
+// k8sSubjectID returns the canonical identity of a binding subject, or false for a kind discovery does not model.
+func k8sSubjectID(cluster, kind, name, namespace, bindingNS string) (string, bool) {
+	switch kind {
+	case "ServiceAccount":
+		if namespace == "" {
+			namespace = bindingNS
+		}
+		return k8sCanonicalID(cluster, namespace, "serviceaccount", name), true
+	case "User":
+		return k8sCanonicalID(cluster, "", "user", name), true
+	case "Group":
+		return k8sCanonicalID(cluster, "", "group", name), true
+	}
+	return "", false
 }
 
 // k8sCanonicalID builds a stable identifier. Cluster-scoped objects use the _cluster namespace segment.
@@ -260,7 +305,7 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 		}
 	}
 
-	inv := &K8sInventory{}
+	inv := &K8sInventory{Roles: map[string][]RBACRule{}}
 	resources := map[string]*CloudResource{}
 	identities := map[string]*CloudIdentity{}
 	addResource := func(id, kind, namespace, name string, attrs map[string]string, list string) *CloudResource {
@@ -341,10 +386,14 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 		return map[string]string{"rules": string(b)}
 	}
 	for _, r := range parse("roles") {
-		addResource(k8sCanonicalID(cluster, r.Metadata.Namespace, "role", r.Metadata.Name), "k8s:role", r.Metadata.Namespace, r.Metadata.Name, rulesAttr(r), "roles")
+		roleID := k8sCanonicalID(cluster, r.Metadata.Namespace, "role", r.Metadata.Name)
+		addResource(roleID, "k8s:role", r.Metadata.Namespace, r.Metadata.Name, rulesAttr(r), "roles")
+		inv.Roles[roleID] = toRBACRules(r.Rules)
 	}
 	for _, r := range parse("clusterroles") {
-		addResource(k8sCanonicalID(cluster, "", "clusterrole", r.Metadata.Name), "k8s:clusterrole", "", r.Metadata.Name, rulesAttr(r), "clusterroles")
+		roleID := k8sCanonicalID(cluster, "", "clusterrole", r.Metadata.Name)
+		addResource(roleID, "k8s:clusterrole", "", r.Metadata.Name, rulesAttr(r), "clusterroles")
+		inv.Roles[roleID] = toRBACRules(r.Rules)
 	}
 
 	// unlisted tracks role references whose target was not in any list, so each is reported once.
@@ -364,6 +413,13 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 					unlisted[roleID] = true
 					rep.Gaps = append(rep.Gaps, fmt.Sprintf("%s %s references %s %q, which was not listed", bindingKind, b.Metadata.Name, b.RoleRef.Kind, b.RoleRef.Name))
 				}
+				u := K8sUnresolvedBinding{Binding: b.Metadata.Name, BindingKind: bindingKind, Namespace: b.Metadata.Namespace, RoleKind: b.RoleRef.Kind, RoleName: b.RoleRef.Name}
+				for _, s := range b.Subjects {
+					if sid, ok := k8sSubjectID(cluster, s.Kind, s.Name, s.Namespace, b.Metadata.Namespace); ok {
+						u.SubjectIDs = append(u.SubjectIDs, sid)
+					}
+				}
+				inv.Unresolved = append(inv.Unresolved, u)
 				continue
 			}
 			for _, s := range b.Subjects {
