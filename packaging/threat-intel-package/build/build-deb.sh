@@ -29,8 +29,8 @@ if [ "$SKIP_IMAGES" != "1" ]; then
   docker info >/dev/null 2>&1 || die "docker daemon is not reachable"
 fi
 
-[ -f "$REPO_ROOT/opencti/docker/docker-compose.yml" ] || die "opencti compose not found in repo"
-[ -f "$REPO_ROOT/openaev/docker/docker-compose.yml" ] || die "openaev compose not found in repo"
+[ -f "$PKG_ROOT/vendor/opencti/docker-compose.yml" ] || die "opencti compose not found in vendor/"
+[ -f "$PKG_ROOT/vendor/openaev/docker-compose.yml" ] || die "openaev compose not found in vendor/"
 
 rm -rf "$STAGE"
 PAYLOAD="$STAGE/usr/share/threat-intelligence-package"
@@ -43,7 +43,7 @@ cp "$PKG_ROOT/vendor/misp-docker/docker-compose.yml" "$PAYLOAD/stacks/misp/docke
 cp "$PKG_ROOT/vendor/misp-docker/template.env" "$PAYLOAD/stacks/misp/template.env"
 
 for s in opencti openaev; do
-  src="$REPO_ROOT/$s/docker/docker-compose.yml"
+  src="$PKG_ROOT/vendor/$s/docker-compose.yml"
   dst="$PAYLOAD/stacks/$s/docker-compose.yml"
   # MinIO publishes host port 9000 in both vendor stacks. Both stacks cannot run
   # on one host while that mapping exists, so remove it. MinIO stays reachable
@@ -51,7 +51,7 @@ for s in opencti openaev; do
   n=$(tr -d '\r' < "$src" | grep -c '"9000:9000"' || true)
   [ "$n" -eq 1 ] || die "expected exactly one 9000:9000 mapping in $src, found $n"
   tr -d '\r' < "$src" | grep -v '^\s*- "9000:9000"\s*$' > "$dst"
-  cp "$REPO_ROOT/$s/docker/rabbitmq.conf" "$PAYLOAD/stacks/$s/rabbitmq.conf"
+  cp "$PKG_ROOT/vendor/$s/rabbitmq.conf" "$PAYLOAD/stacks/$s/rabbitmq.conf"
 done
 
 MANIFEST="$PAYLOAD/MANIFEST.txt"
