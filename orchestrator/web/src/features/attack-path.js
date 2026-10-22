@@ -1688,6 +1688,10 @@ export function buildAgentInstallCommands(origin, host, data) {
   var posixCaCmd = caRootPem
     ? "cat > deployment-ca.pem <<'BASCAEOF'\n" + caRootPem + "\nBASCAEOF"
     : 'curl -fsSk -o deployment-ca.pem ' + caURL;
+  // Linux is one line: the CA is base64 on the same line, so nothing multi-line is pasted into a shell.
+  var linuxCaCmd = caRootPem
+    ? 'echo ' + btoa(caRootPem) + ' | base64 -d > deployment-ca.pem'
+    : 'curl -fsSk -o deployment-ca.pem ' + caURL;
   var winCaCmd = caRootPem
     ? "@'\n" + caRootPem + "\n'@ | Out-File -Encoding ascii deployment-ca.pem"
     : 'curl.exe -fsSk -o deployment-ca.pem ' + caURL;
@@ -1701,9 +1705,8 @@ export function buildAgentInstallCommands(origin, host, data) {
     // listing.
     windows: winCaCmd + '\n' +
       '.\\bas-agent-windows-amd64.exe' + common + ' --ca-root .\\deployment-ca.pem --env Production',
-    linux: 'curl -fsSk -o install-agent-linux.sh ' + origin + '/api/agent/install-script\n' +
-      posixCaCmd + '\n' +
-      'sudo env ' + linuxEnv + ' bash install-agent-linux.sh --ca-file ./deployment-ca.pem',
+    linux: linuxCaCmd + ' && curl -fsSk -o install-agent-linux.sh ' + origin + '/api/agent/install-script' +
+      ' && sudo env ' + linuxEnv + ' bash install-agent-linux.sh --ca-file ./deployment-ca.pem',
     mac: 'xattr -d com.apple.quarantine bas-agent-darwin-* && chmod +x bas-agent-darwin-*\n' + posixCaCmd + '\n' +
       'sudo ./bas-agent-darwin-*' + common + ' --ca-root ./deployment-ca.pem --env Production',
   };
