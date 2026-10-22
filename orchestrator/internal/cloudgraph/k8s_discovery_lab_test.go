@@ -3,8 +3,10 @@ package cloudgraph
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -110,4 +112,100 @@ func TestK8sDiscovery_LiveLab_ReadOnlyCredentialCannotWrite(t *testing.T) {
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("create with the read-only credential returned HTTP %d, want 403", resp.StatusCode)
 	}
+}
+
+// labDisposable is a lab-only ConfigMap created for the denied-write checks. It is not a workload.
+const labDisposableNS = "default"
+const labDisposableName = "bas-disposable"
+
+// TestK8sDiscovery_LiveLab_PatchAndDeleteAreDenied sends a PATCH and a DELETE to a disposable ConfigMap
+// with the read-only credential. The API server must refuse both (403), and the object must be unchanged
+// afterwards: same data and same resourceVersion. This checks server-side enforcement; the GET-only test
+// checks the client's own request methods.
+func TestK8sDiscovery_LiveLab_PatchAndDeleteAreDenied(t *testing.T) {
+	api := os.Getenv("KUBE_LAB_API")
+	tokenFile := os.Getenv("KUBE_LAB_TOKEN_FILE")
+	caFile := os.Getenv("KUBE_LAB_CA_FILE")
+	if api == "" || tokenFile == "" || caFile == "" {
+		t.Skip("lab not configured")
+	}
+	tokenBytes, err := os.ReadFile(tokenFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca, err := os.ReadFile(caFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := NewK8sDiscoveryClient(K8sDiscoveryConfig{ClusterName: "kind-bas-lab", APIServer: api, Token: strings.TrimSpace(string(tokenBytes)), CAPEM: ca})
+	if err != nil {
+		t.Fatal(err)
+	}
+	objPath := "/api/v1/namespaces/" + labDisposableNS + "/configmaps/" + labDisposableName
+
+	before := labObjectStateAdmin(t)
+	if before.Data["state"] != "original" {
+		t.Fatalf("disposable object is not in the expected state before the test: %v", before.Data)
+	}
+
+	send := func(method, contentType, body string) int {
+		req, err := http.NewRequestWithContext(context.Background(), method, c.cfg.APIServer+objPath, strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+c.cfg.Token)
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
+		resp, err := c.http.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	if code := send(http.MethodGet, "", ""); code != http.StatusForbidden {
+		t.Fatalf("GET returned HTTP %d with the read-only credential, want 403", code)
+	}
+	if code := send(http.MethodPatch, "application/merge-patch+json", `{"data":{"state":"changed-by-bas"}}`); code != http.StatusForbidden {
+		t.Fatalf("PATCH returned HTTP %d, want 403", code)
+	}
+	if code := send(http.MethodDelete, "", ""); code != http.StatusForbidden {
+		t.Fatalf("DELETE returned HTTP %d, want 403", code)
+	}
+
+	after := labObjectStateAdmin(t)
+	if after.Data["state"] != before.Data["state"] || after.ResourceVersion != before.ResourceVersion {
+		t.Fatalf("the object changed despite the denied requests: before=%+v after=%+v", before, after)
+	}
+}
+
+// labObjectState reads the disposable ConfigMap with the lab admin context, so the check does not depend
+// on the read-only credential's permissions. The context defaults to kind-bas-lab.
+type labObjectState struct {
+	Data            map[string]string
+	ResourceVersion string
+}
+
+func labObjectStateAdmin(t *testing.T) labObjectState {
+	t.Helper()
+	kctx := os.Getenv("KUBE_LAB_KUBECTL_CONTEXT")
+	if kctx == "" {
+		kctx = "kind-bas-lab"
+	}
+	out, err := exec.Command("kubectl", "--context", kctx, "get", "configmap", labDisposableName, "-n", labDisposableNS, "-o", "json").Output()
+	if err != nil {
+		t.Fatalf("admin read of the disposable object failed: %v", err)
+	}
+	var obj struct {
+		Data     map[string]string `json:"data"`
+		Metadata struct {
+			ResourceVersion string `json:"resourceVersion"`
+		} `json:"metadata"`
+	}
+	if err := json.Unmarshal(out, &obj); err != nil {
+		t.Fatal(err)
+	}
+	return labObjectState{Data: obj.Data, ResourceVersion: obj.Metadata.ResourceVersion}
 }
