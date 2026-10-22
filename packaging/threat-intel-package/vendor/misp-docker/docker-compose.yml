@@ -123,7 +123,6 @@ services:
       timeout: 1s
       retries: 3
       start_period: 600s
-      start_period: 60s
       start_interval: 5s
     expose:
       - 9002
