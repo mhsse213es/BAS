@@ -15,36 +15,48 @@ type Target struct {
 	Mode                     ExecMode
 	ExpectedIdentity         string
 	ReadOnlyIdentityVerified bool
+	LabConfirmed             bool // operator confirmed this is a lab target
 }
 
-// now is overridable in tests.
-var now = time.Now
+// AuthInput carries the per-dispatch inputs to Authorize.
+type AuthInput struct {
+	ClientEnabled    bool      // Admin-enabled client mode (default off)
+	MutationApproved bool      // scenario-level approval for non-read_only probes
+	RunExpiry        time.Time // required; zero is refused
+	Now              time.Time // zero means time.Now()
+}
 
 // Authorize is the orchestrator-side gate (spec section 8, R4, R6, R8). It
 // runs before a probe is dispatched.
 //
-// The probe's class is taken from the registry for def.ID, never from the
-// scenario label; an entry that disagrees with the registry is refused. Client
-// mode requires clientEnabled, a pre-registered identity (no trust on first
-// use), a verified read-only identity, and a read_only probe. A run with no
-// expiry, or an expired one, is refused.
-func Authorize(t Target, def ProbeRegistryEntry, clientEnabled bool, runExpiry time.Time) error {
-	if runExpiry.IsZero() {
+// The probe must exist in the registry (the only source of a probe's class)
+// and the entry must agree with it. A run with no expiry, or one expiring at
+// or before now, is refused. Every target needs a registered identity. Client
+// mode needs ClientEnabled, a verified read-only identity and a read_only
+// probe. Lab mode runs read_only probes on identity alone; any other class
+// also needs Target.LabConfirmed and AuthInput.MutationApproved.
+func Authorize(t Target, def ProbeRegistryEntry, in AuthInput) error {
+	if in.RunExpiry.IsZero() {
 		return fmt.Errorf("dbsim: authorize: run has no expiry")
 	}
-	if !now().Before(runExpiry) {
+	now := in.Now
+	if now.IsZero() {
+		now = time.Now()
+	}
+	if !now.Before(in.RunExpiry) {
 		return fmt.Errorf("dbsim: authorize: run expired")
 	}
-	class := def.Class
-	if real, ok := LookupProbeEntry(def.ID); ok {
-		if real.Class != def.Class {
-			return fmt.Errorf("dbsim: authorize: probe %q entry class %q disagrees with registry class %q",
-				def.ID, def.Class, real.Class)
-		}
-		class = real.Class
+	real, ok := LookupProbeEntry(def.ID)
+	if !ok {
+		return fmt.Errorf("dbsim: authorize: unknown probe %q", def.ID)
 	}
+	if real.Class != def.Class {
+		return fmt.Errorf("dbsim: authorize: probe %q entry class %q disagrees with registry class %q",
+			def.ID, def.Class, real.Class)
+	}
+	class := real.Class
 	supported := false
-	for _, e := range def.Engines {
+	for _, e := range real.Engines {
 		if e == t.Engine {
 			supported = true
 		}
@@ -52,14 +64,22 @@ func Authorize(t Target, def ProbeRegistryEntry, clientEnabled bool, runExpiry t
 	if !supported {
 		return fmt.Errorf("dbsim: authorize: probe %q does not support engine %q", def.ID, t.Engine)
 	}
+	if t.ExpectedIdentity == "" {
+		return fmt.Errorf("dbsim: authorize: target %q has no pre-registered identity", t.ID)
+	}
 	switch t.Mode {
 	case ModeLab:
-	case ModeClient:
-		if !clientEnabled {
-			return fmt.Errorf("dbsim: authorize: client mode is disabled")
+		if class != ClassReadOnly {
+			if !t.LabConfirmed {
+				return fmt.Errorf("dbsim: authorize: %s probe %q requires a confirmed lab target", class, def.ID)
+			}
+			if !in.MutationApproved {
+				return fmt.Errorf("dbsim: authorize: %s probe %q requires scenario mutation approval", class, def.ID)
+			}
 		}
-		if t.ExpectedIdentity == "" {
-			return fmt.Errorf("dbsim: authorize: client target %q has no pre-registered identity", t.ID)
+	case ModeClient:
+		if !in.ClientEnabled {
+			return fmt.Errorf("dbsim: authorize: client mode is disabled")
 		}
 		if !t.ReadOnlyIdentityVerified {
 			return fmt.Errorf("dbsim: authorize: client target %q read-only identity not verified", t.ID)
