@@ -5,6 +5,9 @@ import { setupDom, load } from './dom.mjs';
 setupDom();
 const { buildAgentInstallCommands } = await load(['buildAgentInstallCommands']);
 
+const PEM = '-----BEGIN CERTIFICATE-----\nFAKEFAKEFAKE\n-----END CERTIFICATE-----';
+const B64 = Buffer.from(PEM).toString('base64');
+
 test('defaults to mTLS 9443 and enroll 9444 when the server advertises nothing', () => {
   const c = buildAgentInstallCommands('https://10.0.0.5:9543', '10.0.0.5', {});
   assert.equal(c.serverURL, 'https://10.0.0.5:9443');
@@ -34,16 +37,14 @@ test('linux downloads the installer from the dashboard and runs it with the serv
 test('falls back to fetching the CA root over an unverified connection when caRootPem is unavailable', () => {
   const c = buildAgentInstallCommands('https://192.168.10.78:9543', '192.168.10.78', { mtlsPort: '9443', enrollPort: '9445' });
   assert.match(c.linux, /^curl -fsSk -o deployment-ca\.pem https:\/\/192\.168\.10\.78:9543\/api\/config\/ca-root &&/);
-  assert.match(c.mac, /curl -fsSk -o deployment-ca\.pem https:\/\/192\.168\.10\.78:9543\/api\/config\/ca-root/);
-  assert.match(c.windows, /curl\.exe -fsSk -o deployment-ca\.pem https:\/\/192\.168\.10\.78:9543\/api\/config\/ca-root/);
-  for (const cmd of [c.windows, c.mac]) assert.match(cmd, /--ca-root /);
-  assert.match(c.linux, /--ca-file \.\/deployment-ca\.pem/);
+  assert.match(c.mac, /^curl -fsSk -o deployment-ca\.pem https:\/\/192\.168\.10\.78:9543\/api\/config\/ca-root &&/);
+  assert.match(c.windows, /^curl\.exe -fsSk -o deployment-ca\.pem https:\/\/192\.168\.10\.78:9543\/api\/config\/ca-root; /);
+  for (const cmd of [c.windows, c.mac, c.linux]) assert.match(cmd, /--ca-(root|file) /);
 });
 
-test('writes an already-available caRootPem directly into the command instead of fetching it again', () => {
-  const pem = '-----BEGIN CERTIFICATE-----\nFAKEFAKEFAKE\n-----END CERTIFICATE-----';
+test('writes an already-available caRootPem into the command instead of fetching it again', () => {
   const c = buildAgentInstallCommands('https://192.168.10.78:9543', '192.168.10.78', {
-    mtlsPort: '9443', enrollPort: '9445', caRootPem: pem,
+    mtlsPort: '9443', enrollPort: '9445', caRootPem: PEM,
   });
   // Must never fetch the CA root from serverURL at all once it's already
   // in hand -- a serverURL that got redirected to a rogue host can no
@@ -51,21 +52,29 @@ test('writes an already-available caRootPem directly into the command instead of
   for (const cmd of [c.windows, c.linux, c.mac]) {
     assert.doesNotMatch(cmd, /curl.*ca-root/);
     assert.doesNotMatch(cmd, /\/api\/config\/ca-root/);
+    assert.ok(cmd.includes(B64), 'command should embed the CA as base64');
   }
-  for (const cmd of [c.windows, c.mac]) assert.ok(cmd.includes(pem), 'command should embed the CA PEM bytes directly');
-  // Linux embeds the PEM as base64 on the same line, so no heredoc is pasted into the terminal.
-  assert.ok(c.linux.includes(Buffer.from(pem).toString('base64')));
   assert.match(c.linux, /^echo [A-Za-z0-9+/=]+ \| base64 -d > deployment-ca\.pem && /);
-  assert.match(c.mac, /cat > deployment-ca\.pem <<'BASCAEOF'/);
-  assert.match(c.windows, /@'[\s\S]*'@ \| Out-File -Encoding ascii deployment-ca\.pem/);
+  assert.match(c.mac, /^echo [A-Za-z0-9+/=]+ \| openssl base64 -d -A > deployment-ca\.pem && /);
+  assert.match(c.windows, /^\[IO\.File\]::WriteAllBytes\('deployment-ca\.pem', \[Convert\]::FromBase64String\('[A-Za-z0-9+/=]+'\)\); /);
 });
 
-test('embedded CA PEM is written before the agent installer runs, on bash and PowerShell', () => {
-  const pem = '-----BEGIN CERTIFICATE-----\nFAKEFAKEFAKE\n-----END CERTIFICATE-----';
-  const c = buildAgentInstallCommands('https://h:9543', 'h', { caRootPem: pem });
-  assert.ok(c.linux.indexOf(Buffer.from(pem).toString('base64')) < c.linux.indexOf('bash install-agent-linux.sh'));
-  assert.ok(c.mac.indexOf(pem) < c.mac.indexOf('--install'));
-  assert.ok(c.windows.indexOf(pem) < c.windows.indexOf('--install'));
+test('the CA is written before the agent installer runs, on every OS', () => {
+  const c = buildAgentInstallCommands('https://h:9543', 'h', { caRootPem: PEM });
+  assert.ok(c.linux.indexOf(B64) < c.linux.indexOf('bash install-agent-linux.sh'));
+  assert.ok(c.mac.indexOf(B64) < c.mac.indexOf('--install'));
+  assert.ok(c.windows.indexOf(B64) < c.windows.indexOf('--install'));
+});
+
+test('every OS command is a single line, with or without an embedded CA', () => {
+  for (const data of [{}, { caRootPem: PEM }]) {
+    const c = buildAgentInstallCommands('https://h:9543', 'h', data);
+    for (const cmd of [c.windows, c.linux, c.mac]) {
+      assert.doesNotMatch(cmd, /\n/);
+      assert.doesNotMatch(cmd, /<</);
+      assert.doesNotMatch(cmd, /@'/);
+    }
+  }
 });
 
 test('mac command strips the browser quarantine flag before chmod/install, since Gatekeeper blocks an unsigned binary otherwise', () => {
@@ -80,15 +89,6 @@ test('install commands never contain the secret, since the installer asks for it
   const c = buildAgentInstallCommands('https://h:9543', 'h');
   for (const cmd of [c.windows, c.linux, c.mac]) {
     assert.doesNotMatch(cmd, /--secret\b/);
-  }
-});
-
-test('the Linux command is a single line with no heredoc, with or without an embedded CA', () => {
-  const pem = '-----BEGIN CERTIFICATE-----\nFAKEFAKEFAKE\n-----END CERTIFICATE-----';
-  for (const data of [{}, { caRootPem: pem }]) {
-    const c = buildAgentInstallCommands('https://h:9543', 'h', data);
-    assert.doesNotMatch(c.linux, /\n/);
-    assert.doesNotMatch(c.linux, /<</);
   }
 });
 
