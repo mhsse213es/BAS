@@ -4,6 +4,7 @@
 package dbprobe
 
 import (
+	"fmt"
 	"time"
 
 	"audspect/agent/protocol"
@@ -58,7 +59,21 @@ type ConnectionConfig struct {
 	CredentialRef string `json:"credentialRef"`
 	TLSMode       string `json:"tlsMode,omitempty"`
 	TargetID      string `json:"targetId,omitempty"` // pre-registered system_identifier / server_uuid
+	// User and Password are resolved by the caller from CredentialRef (Task 6,
+	// A7). Password is never serialised and String/GoString redact it.
+	User     string   `json:"user,omitempty"`
+	Password string   `json:"-"`
+	Mode     ExecMode `json:"mode,omitempty"` // lab or client; Seed/Cleanup are lab only
 }
+
+// String redacts the secret so %v / %+v never leak it.
+func (c ConnectionConfig) String() string {
+	return fmt.Sprintf("ConnectionConfig{engine=%s host=%s port=%d db=%s user=%s mode=%s password=[redacted]}",
+		c.Engine, c.Host, c.Port, c.Database, c.User, c.Mode)
+}
+
+// GoString redacts the secret for %#v.
+func (c ConnectionConfig) GoString() string { return c.String() }
 
 // Role is a database role/user as observed or created by a fixture.
 type Role struct {
@@ -95,6 +110,7 @@ type AuditEvent struct {
 type Capabilities struct {
 	ProbeIDs            []string `json:"probeIds"`
 	AuditSources        []string `json:"auditSources,omitempty"`
+	MarkerInAppName     bool     `json:"markerInAppName"`
 	MarkerInQueryText   bool     `json:"markerInQueryText"`
 	MarkerInAuditRecord bool     `json:"markerInAuditRecord"`
 }
