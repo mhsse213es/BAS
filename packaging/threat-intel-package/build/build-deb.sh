@@ -79,7 +79,7 @@ else
   # Check the staged compose files parse with the variables the installer sets.
   # Placeholder values, so this checks syntax and references only.
   info "Checking compose syntax"
-  CHECK_ENV="$STAGE/check.env"
+  CHECK_ENV="$PKG_ROOT/build/check.env"
   {
     for v in $(cat "$PAYLOAD"/stacks/*/docker-compose.yml | grep -o '\${[A-Z_][A-Z0-9_]*' | tr -d '${' | sort -u); do
       # Port variables must be numbers: compose rejects "x" as a host port.
@@ -134,5 +134,5 @@ install -m 0644 "$PKG_ROOT/vendor/misp-docker/SHA256SUMS" "$PAYLOAD/stacks/misp/
 install -d "$OUT_DIR"
 info "Building $OUT_DIR/$DEB_NAME"
 dpkg-deb --root-owner-group -Zgzip --build "$STAGE" "$OUT_DIR/$DEB_NAME"
-rm -f "$STAGE/check.env"
+rm -f "$PKG_ROOT/build/check.env"
 info "Done: $OUT_DIR/$DEB_NAME ($(du -h "$OUT_DIR/$DEB_NAME" | cut -f1))"
