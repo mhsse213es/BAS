@@ -71,7 +71,8 @@ else
   CHECK_ENV="$STAGE/check.env"
   {
     for v in $(cat "$PAYLOAD"/stacks/*/docker-compose.yml | grep -o '\${[A-Z_][A-Z0-9_]*' | tr -d '${' | sort -u); do
-      echo "$v=x"
+      # Port variables must be numbers: compose rejects "x" as a host port.
+      case "$v" in *PORT*) echo "$v=18080" ;; *) echo "$v=x" ;; esac
     done
   } > "$CHECK_ENV"
   for s in misp opencti openaev; do
