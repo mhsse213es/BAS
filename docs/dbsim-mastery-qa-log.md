@@ -12,7 +12,41 @@ with **no Docker, no MySQL and no reachable PostgreSQL credential**.
 
 ## Milestone entry: Tasks 1-13 (Phase 4 gate)
 
-### Bottom line
+### Staging results 2026-10-23 (supersedes the "Bottom line" below where they differ)
+
+Run by the user on staging against the lab stack (`docker compose -p dbsim-lab`:
+PostgreSQL 16.4 + pgaudit, MySQL 8.0.40 general_log TABLE+FILE, Elasticsearch/
+Kibana/Filebeat 8.15.3), commit `04078f86` (branch `dbsim-lab-staging`), harness
+run from a Windows dev host through an SSH tunnel with a Windows-built agent test
+binary (`go test -c -tags dbsim_e2e`), not a Linux agent near the database.
+
+* **Marker survival: VERIFIED on both engines.** `smoke.sh` PASS for postgresql
+  (simple), postgresql-extended (psql `\bind`) and mysql: the leading
+  `/* dbsim:<marker> */` reached the audit log, Filebeat extracted it, the rule
+  fired and the alert's raw data carried it. The Go drivers' prepared path is
+  covered by the `dbsim_integration` tests, which PASSED (postgres 86.7 s,
+  mysql 130.1 s) incl. live audit-source reads, fixture lifecycle, DB-05/DB-09
+  read probes at caps 1/5/1000, and edge data (counts 5/4/4096).
+* **End-to-end: PASSED on PostgreSQL (126.9 s) and MySQL (115.2 s)** via
+  `TestE2E_*_SignedScenarioToCorrelatedRecord`: DB-01, DB-02 `read_roles`,
+  DB-03 (Enforcement Blocked), DB-04 (`read_audit_config`; tagged `read_roles`
+  with audit `found` + alert), DB-05 and DB-09 all PASS with Telemetry Present,
+  Response Alerted, match `exact_marker`. Alerts carrying other runs' markers
+  were correctly NOT credited (records say so). DB-02 `read_grants` is ERROR by
+  design (R-AJ, no policy diff): DB-02 excessive-grant detection is still NOT
+  produced end to end.
+* **Still unverified:** independent post-run cleanup check (`E2E.md` §8);
+  negative case (marker quoted mid-statement must not alert; unit-tested only);
+  Linux agent next to the DB; WebSocket/enrollment/run API/`dbsim_runs` store
+  (Task 16); PostgreSQL `dbsim_audit.pg_log` layout was exercised by the passing
+  live audit tests but README checklist items 4, 9a, 10-12 outputs were not
+  collected item by item.
+* Setup problems hit (runbook gaps, not product defects): `sudo` drops exported
+  env (run `setup.sh` without sudo); staging Go toolchain too old for the agent
+  module (build elsewhere); placeholder `<...>` values pasted literally; PowerShell
+  5.1 `Tee-Object` writes UTF-16 output files.
+
+### Bottom line (written before the staging run; read with the results above)
 
 **The end-to-end proof is NOT DEMONSTRATED on PostgreSQL and NOT DEMONSTRATED
 on MySQL (including DB-05 and DB-09).** No signed scenario has ever been run
@@ -272,5 +306,6 @@ the agent-local `BAS_DBPROBE_LAB_MUTATION_ALLOWED`.
 
 ### Next step
 
-Run `lab/dbsim/E2E.md` on staging and send back the outputs it lists. Do not
-start Tasks 14-16 until this entry is updated with real results.
+E2E.md ran on staging 2026-10-23 (see "Staging results" above). Remaining before
+Tasks 14-16 are accepted as built on solid ground: the independent cleanup check
+(`E2E.md` §8). The user directed work to continue with Task 14 on 2026-10-23.
