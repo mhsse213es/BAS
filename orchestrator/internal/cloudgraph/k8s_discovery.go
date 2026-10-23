@@ -231,12 +231,11 @@ type k8sObject struct {
 		Namespace       string        `json:"namespace"`
 		OwnerReferences []k8sOwnerRef `json:"ownerReferences"`
 	} `json:"metadata"`
-	Spec struct {
-		ServiceAccountName string `json:"serviceAccountName"`
-		NodeName           string `json:"nodeName"`
-	} `json:"spec"`
-	Rules    []k8sPolicyRule `json:"rules"`
-	Subjects []struct {
+	Spec k8sPodSpec `json:"spec"`
+	// AutomountServiceAccountToken is set on a ServiceAccount object, not on a pod.
+	AutomountServiceAccountToken *bool           `json:"automountServiceAccountToken"`
+	Rules                        []k8sPolicyRule `json:"rules"`
+	Subjects                     []struct {
 		Kind      string `json:"kind"`
 		Name      string `json:"name"`
 		Namespace string `json:"namespace"`
@@ -245,6 +244,67 @@ type k8sObject struct {
 		Kind string `json:"kind"`
 		Name string `json:"name"`
 	} `json:"roleRef"`
+}
+
+// k8sPodSpec is the part of a pod spec discovery reads.
+type k8sPodSpec struct {
+	ServiceAccountName           string         `json:"serviceAccountName"`
+	NodeName                     string         `json:"nodeName"`
+	HostPID                      bool           `json:"hostPID"`
+	HostIPC                      bool           `json:"hostIPC"`
+	HostNetwork                  bool           `json:"hostNetwork"`
+	AutomountServiceAccountToken *bool          `json:"automountServiceAccountToken"`
+	Containers                   []k8sContainer `json:"containers"`
+	Volumes                      []k8sVolume    `json:"volumes"`
+}
+
+// automountValue renders an automountServiceAccountToken setting: "true", "false", or "unset" (the platform default,
+// which mounts the token).
+func automountValue(v *bool) string {
+	if v == nil {
+		return "unset"
+	}
+	return strconv.FormatBool(*v)
+}
+
+// k8sContainer keeps only the security setting the pod analysis reads.
+type k8sContainer struct {
+	Name            string `json:"name"`
+	SecurityContext struct {
+		Privileged *bool `json:"privileged"`
+	} `json:"securityContext"`
+}
+
+// k8sVolume keeps only the host path a volume mounts, if it is a hostPath volume.
+type k8sVolume struct {
+	Name     string `json:"name"`
+	HostPath *struct {
+		Path string `json:"path"`
+	} `json:"hostPath"`
+}
+
+// podSecurityAttrs records the pod settings the security analysis reads. The token-automount setting is "true",
+// "false", or "unset" (the platform default, which mounts the token).
+func podSecurityAttrs(spec k8sPodSpec) map[string]string {
+	var priv, paths []string
+	for _, c := range spec.Containers {
+		if c.SecurityContext.Privileged != nil && *c.SecurityContext.Privileged {
+			priv = append(priv, c.Name)
+		}
+	}
+	for _, v := range spec.Volumes {
+		if v.HostPath != nil {
+			paths = append(paths, v.HostPath.Path)
+		}
+	}
+	return map[string]string{
+		"hostPID":              strconv.FormatBool(spec.HostPID),
+		"hostIPC":              strconv.FormatBool(spec.HostIPC),
+		"hostNetwork":          strconv.FormatBool(spec.HostNetwork),
+		"privilegedContainers": strings.Join(priv, ","),
+		"hostPaths":            strings.Join(paths, ","),
+		"automountToken":       automountValue(spec.AutomountServiceAccountToken),
+	}
 }
 
 // k8sSubjectID returns the canonical identity of a binding subject, or false for a kind discovery does not model.
@@ -435,7 +495,8 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 		addResource(k8sCanonicalID(cluster, "", "namespace", n.Metadata.Name), "k8s:namespace", "", n.Metadata.Name, map[string]string{}, "namespaces")
 	}
 	for _, sa := range parse("serviceaccounts") {
-		addIdentity(k8sCanonicalID(cluster, sa.Metadata.Namespace, "serviceaccount", sa.Metadata.Name), "k8s:serviceaccount", sa.Metadata.Namespace, sa.Metadata.Name, "serviceaccounts")
+		id := addIdentity(k8sCanonicalID(cluster, sa.Metadata.Namespace, "serviceaccount", sa.Metadata.Name), "k8s:serviceaccount", sa.Metadata.Namespace, sa.Metadata.Name, "serviceaccounts")
+		id.Attributes["automountToken"] = automountValue(sa.AutomountServiceAccountToken)
 	}
 	for _, p := range parse("pods") {
 		sa := p.Spec.ServiceAccountName
@@ -443,6 +504,9 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 			sa = "default"
 		}
 		attrs := map[string]string{"serviceAccount": sa}
+		for k, v := range podSecurityAttrs(p.Spec) {
+			attrs[k] = v
+		}
 		if p.Spec.NodeName != "" {
 			attrs["node"] = p.Spec.NodeName
 		}
