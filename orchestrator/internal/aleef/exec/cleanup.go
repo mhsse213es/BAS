@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/audspect/bas/internal/aleef/model"
+	"github.com/audspect/bas/internal/aleef/safety"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/runner"
 )
@@ -151,7 +152,7 @@ func (c *CompensatingReset) compensate(ctx context.Context, o model.CreatedObjec
 	if err != nil {
 		return err
 	}
-	status, _, err := call(ctx, c.doer, op.Method, c.base+path, tok)
+	status, _, err := call(safety.WithCleanup(ctx), c.doer, op.Method, c.base+path, tok)
 	if err != nil {
 		return err
 	}

@@ -10,10 +10,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/audspect/bas/internal/aleef/exec"
 	"github.com/audspect/bas/internal/aleef/generate"
 	"github.com/audspect/bas/internal/aleef/model"
+	"github.com/audspect/bas/internal/aleef/safety"
 	"github.com/audspect/bas/internal/aleef/store"
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/fixture"
@@ -236,7 +238,15 @@ func newEnv(t *testing.T, ty *toy) *fakeEnv {
 func (e *fakeEnv) Fresh(ctx context.Context) (*exec.Executor, func(context.Context) ([]model.CreatedObject, error), error) {
 	e.fresh.Add(1)
 	e.ty.reset()
+	now := time.Now()
+	g, err := safety.NewGuard(safety.Engagement{ID: "toy", Customer: "toy", Environment: "lab", Hosts: []string{e.srv.URL}, Approver: "test",
+		NotBefore: now.Add(-time.Hour), NotAfter: now.Add(time.Hour), MaxRequests: 1 << 20, MaxConcurrent: 64, RPS: 1e6,
+	}, nil, toyModel(), safety.GuardOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
 	ex, err := exec.New(exec.Config{
+		Guard:   g,
 		BaseURL: e.srv.URL, Fixture: toyFixture(), Model: toyModel(), Created: toyCreated(), StateExtra: e.ty,
 		Secrets: secretMap{"tok-alice": "tok-alice", "tok-bob": "tok-bob", "tok-dave": "tok-dave"},
 	})

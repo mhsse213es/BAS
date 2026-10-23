@@ -11,8 +11,9 @@
 // Track it does nothing, and sandbox mutations of fixture objects are not
 // undone, so fixtures must be rebuilt between such tests. Call Cleanup at the
 // end of a campaign to compensate everything ALEEF created. No client built or
-// wrapped by this package follows redirects; a custom Config.Doer is used as
-// given and must apply its own policy.
+// wrapped by this package follows redirects, and every request passes the
+// safety.Guard in Config (New fails without one); a custom Config.Doer is
+// wrapped by it.
 //
 // The package is on the executing side: it must not import the benchmark
 // bank, its sealed data or the bench harness.
@@ -22,16 +23,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
-	"net/url"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/audspect/bas/internal/aleef/generate"
 	"github.com/audspect/bas/internal/aleef/model"
 	"github.com/audspect/bas/internal/aleef/property"
+	"github.com/audspect/bas/internal/aleef/safety"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/runner"
 )
@@ -67,11 +66,15 @@ type Config struct {
 	// Created are the objects BuildFixture made; they are known to UATState
 	// and compensated by Cleanup.
 	Created []model.CreatedObject
-	// Doer sends the state-reader and cleanup requests. Nil uses HTTP.
+	// Doer sends the state-reader and cleanup requests. Nil uses HTTP. A
+	// supplied Doer is wrapped by Guard.
 	Doer  model.Doer
 	Model model.Model
 	// HTTP is the runner's client. Nil uses a client with a 10 second timeout.
+	// Its Transport is wrapped by Guard.
 	HTTP *http.Client
+	// Guard enforces the engagement on every request. Required.
+	Guard *safety.Guard
 	// ReadOperation optionally names the Read operation UATState uses.
 	ReadOperation string
 	// StateExtra optionally adds an enumerating state adapter whose records
@@ -89,27 +92,13 @@ type Executor struct {
 	mu sync.Mutex // one run at a time: the state recorder is per run
 }
 
-// checkBaseURL is the interim target guard: only loopback targets are
-// allowed. The engagement gate replaces this function.
-func checkBaseURL(raw string) error {
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
-		return errors.New("exec: BaseURL must be an absolute http or https URL")
-	}
-	host := u.Hostname()
-	if strings.EqualFold(host, "localhost") {
-		return nil
-	}
-	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
-		return nil
-	}
-	return fmt.Errorf("exec: target host %q is not loopback; non-loopback targets need the engagement gate", host)
-}
-
 // New validates the configuration and returns an executor.
 func New(cfg Config) (*Executor, error) {
-	if err := checkBaseURL(cfg.BaseURL); err != nil {
-		return nil, err
+	if cfg.Guard == nil {
+		return nil, errors.New("exec: Guard is required: no request is sent without an engagement")
+	}
+	if err := cfg.Guard.CheckOrigin(cfg.BaseURL); err != nil {
+		return nil, fmt.Errorf("exec: BaseURL refused: %w", err)
 	}
 	if cfg.Secrets == nil {
 		return nil, errors.New("exec: Secrets is required")
@@ -123,9 +112,15 @@ func New(cfg Config) (*Executor, error) {
 	// No redirect is ever followed: a redirect could carry a bearer token to
 	// another host. A caller-supplied client has its CheckRedirect replaced.
 	cfg.HTTP.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	// Every request the executor makes passes the guard: origin, window and
+	// operation class on all of them; budget, rate, concurrency, breaker and
+	// kill switch on all but compensation requests.
+	cfg.HTTP.Transport = cfg.Guard.Transport(cfg.HTTP.Transport)
 	doer := cfg.Doer
 	if doer == nil {
 		doer = cfg.HTTP
+	} else {
+		doer = cfg.Guard.WrapDoer(doer)
 	}
 	state, err := newUATState(cfg, doer)
 	if err != nil {

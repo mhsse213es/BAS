@@ -41,6 +41,7 @@ func newExec(t *testing.T, ty *toy, srv *httptest.Server) *Executor {
 	t.Helper()
 	e, err := New(Config{
 		BaseURL: srv.URL, Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel(),
+		Guard:   testGuard(t, srv.URL, toyModel()),
 		Created: toyCreated(), StateExtra: ty,
 	})
 	if err != nil {
@@ -201,6 +202,7 @@ func TestResetFailureSurfacesOrphansAndReasonCleanupFailed(t *testing.T) {
 	defer srv.Close()
 	e, err := New(Config{
 		BaseURL: srv.URL, Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel(),
+		Guard: testGuard(t, srv.URL, toyModel()),
 		Created: []model.CreatedObject{
 			{Operation: "seed", ID: "item-a1", Owner: "cust-a", Compensate: "deleteV2"},
 			{Operation: "seed", ID: "item-b1", Owner: "cust-b"},                         // no Compensate
@@ -234,7 +236,7 @@ func TestResetFailureSurfacesOrphansAndReasonCleanupFailed(t *testing.T) {
 		return http.DefaultTransport.RoundTrip(r)
 	})}
 	e2, err = New(Config{BaseURL: srv.URL, Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel(),
-		Created: toyCreated(), HTTP: hc})
+		Guard: testGuard(t, srv.URL, toyModel()), Created: toyCreated(), HTTP: hc})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,16 +253,81 @@ type roundTrip func(*http.Request) (*http.Response, error)
 
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-func TestNewRefusesNonLoopbackBaseURL(t *testing.T) {
-	for _, u := range []string{"http://example.com", "https://10.1.2.3:8443", "http://192.168.0.5", "ftp://127.0.0.1", "127.0.0.1", ""} {
-		if _, err := New(Config{BaseURL: u, Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel()}); err == nil {
+func TestNewRefusesBaseURLOutsideEngagement(t *testing.T) {
+	g := testGuard(t, "http://127.0.0.1:8080", toyModel())
+	for _, u := range []string{"http://example.com", "https://10.1.2.3:8443", "http://192.168.0.5", "ftp://127.0.0.1", "127.0.0.1", "",
+		"http://127.0.0.1:8081", "https://127.0.0.1:8080", "http://u@127.0.0.1:8080", "http://localhost:8080"} {
+		if _, err := New(Config{BaseURL: u, Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel(), Guard: g}); err == nil {
 			t.Errorf("%q must be refused", u)
 		}
 	}
-	for _, u := range []string{"http://127.0.0.1:8080", "http://localhost:9", "https://[::1]:443", "http://127.5.5.5"} {
-		if _, err := New(Config{BaseURL: u, Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel()}); err != nil {
-			t.Errorf("%q: %v", u, err)
-		}
+	if _, err := New(Config{BaseURL: "http://127.0.0.1:8080", Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel(), Guard: g}); err != nil {
+		t.Errorf("engagement host refused: %v", err)
+	}
+}
+
+func TestExecRequiresGuard(t *testing.T) {
+	_, err := New(Config{BaseURL: "http://127.0.0.1:8080", Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel()})
+	if err == nil || !strings.Contains(err.Error(), "Guard") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+type doerFn func(*http.Request) (*http.Response, error)
+
+func (f doerFn) Do(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestExecWrapsCustomDoer(t *testing.T) {
+	var reached atomic.Int32
+	d := doerFn(func(r *http.Request) (*http.Response, error) {
+		reached.Add(1)
+		return &http.Response{StatusCode: 200, Body: http.NoBody, Header: http.Header{}}, nil
+	})
+	g := testGuard(t, "http://127.0.0.1:8080", toyModel())
+	created := []model.CreatedObject{{Operation: "seed", ID: "item-a1", Owner: "cust-a", Compensate: "deleteV2"}}
+	e, err := New(Config{BaseURL: "http://127.0.0.1:8080", Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel(),
+		Guard: g, Doer: d, Created: created})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Cleanup sends through the custom doer, and the guard saw it.
+	if err := e.Cleanup(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if reached.Load() != 1 || g.Stats().CleanupRequests != 1 {
+		t.Fatalf("reached=%d stats=%+v", reached.Load(), g.Stats())
+	}
+	// A Doer request to a non-engagement origin never reaches the custom doer.
+	g.Stop() // state reads are budgeted requests: refused once stopped
+	reached.Store(0)
+	e2, err := New(Config{BaseURL: "http://127.0.0.1:8080", Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel(),
+		Guard: g, Doer: d, Created: created})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e2.State().Snapshot(context.Background()); err == nil {
+		t.Fatal("snapshot succeeded through a stopped guard")
+	}
+	if reached.Load() != 0 {
+		t.Fatalf("custom doer reached %d times after stop", reached.Load())
+	}
+}
+
+func TestExecGuardRefusalsAreEnforcedOnRunnerPath(t *testing.T) {
+	ty, srv := newToy()
+	defer srv.Close()
+	var hits atomic.Int32
+	counting := httptest.NewServer(http_counter(&hits, srv.Config.Handler))
+	defer counting.Close()
+	e := newExec(t, ty, counting)
+	e.cfg.Guard.Stop()
+	hits.Store(0)
+	res, err := e.Run(context.Background(), pick(t, "P-OWN-1", "getV2"))
+	if hits.Load() != 0 {
+		t.Fatalf("%d requests reached the target after Stop (err=%v res=%+v)", hits.Load(), err, res.Verdict)
+	}
+	if err == nil && res.Verdict.Finding == FindingYes {
+		t.Fatal("a stopped run produced a finding")
 	}
 }
 
@@ -435,7 +502,8 @@ func TestCompensationClassAndMethodAreChecked(t *testing.T) {
 	for i, c := range []string{"cMoney", "cNotify", "cUnknown", "getV2"} {
 		created = append(created, model.CreatedObject{Operation: "seed", ID: ids[i], Owner: owners[i], Compensate: c})
 	}
-	e, err := New(Config{BaseURL: counting.URL, Fixture: toyFixture(), Secrets: toySecrets(), Model: m, Created: created})
+	e, err := New(Config{BaseURL: counting.URL, Fixture: toyFixture(), Secrets: toySecrets(), Model: m, Created: created,
+		Guard: testGuard(t, counting.URL, m)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -467,7 +535,7 @@ func TestRedirectsAreNeverFollowed(t *testing.T) {
 	defer redir.Close()
 	// A caller-supplied client that would follow redirects is overridden.
 	e, err := New(Config{BaseURL: redir.URL, Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel(),
-		Created: toyCreated(), HTTP: &http.Client{}})
+		Guard: testGuard(t, redir.URL, toyModel()), Created: toyCreated(), HTTP: &http.Client{}})
 	if err != nil {
 		t.Fatal(err)
 	}

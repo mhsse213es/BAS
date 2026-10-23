@@ -20,7 +20,7 @@ import (
 
 const modulePath = "github.com/audspect/bas"
 
-var generatorPkgs = []string{"model", "property", "generate", "novelty", "verify", "export", "exec"}
+var generatorPkgs = []string{"model", "property", "generate", "novelty", "verify", "export", "exec", "safety"}
 
 var forbiddenImports = []string{
 	modulePath + "/internal/aleef/bank",
