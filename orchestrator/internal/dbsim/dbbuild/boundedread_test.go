@@ -71,7 +71,7 @@ func TestFixtureReadStepsMatchAgentShape(t *testing.T) {
 		wantClass scenario.ExecutionClass
 		wantKey   string
 	}{
-		{"suspicious_read", "classified-pii", "customers_pii", scenario.ClassNonDestructive, "dbprobe_read_only"},
+		{"suspicious_read", "classified-pii", "customers_pii", scenario.ClassPotentiallyDestructive, "dbprobe_bounded_synthetic"},
 		{"bounded_synthetic_read", "accounts", "accounts", scenario.ClassPotentiallyDestructive, "dbprobe_bounded_synthetic"},
 	}
 	for _, c := range cases {
@@ -134,9 +134,27 @@ func TestBoundedSyntheticReadNeedsApprovalAndConfirmedLab(t *testing.T) {
 	if _, err := BuildSteps(context.Background(), sc, approved(opts(unconfirmed))); err == nil {
 		t.Fatal("built against an unconfirmed lab target")
 	}
-	// suspicious_read is read_only: no approval needed.
-	if _, err := BuildSteps(context.Background(), fixtureScenario("suspicious_read", "classified-pii", "customers_pii"), opts(labTarget())); err != nil {
-		t.Fatalf("suspicious_read on a lab target: %v", err)
+	// R-AI: suspicious_read seeds a fixture and is gated identically.
+	sr := fixtureScenario("suspicious_read", "classified-pii", "customers_pii")
+	if _, err := BuildSteps(context.Background(), sr, opts(labTarget())); err == nil {
+		t.Fatal("suspicious_read built without scenario mutation approval")
+	}
+	if _, err := BuildSteps(context.Background(), sr, approved(opts(unconfirmed))); err == nil {
+		t.Fatal("suspicious_read built against an unconfirmed lab target")
+	}
+	if _, err := BuildSteps(context.Background(), sr, approved(opts(labTarget()))); err != nil {
+		t.Fatalf("suspicious_read on an approved lab target: %v", err)
+	}
+}
+
+// R-AI: even a read_only probe given a db_fixture is refused without the
+// controls (the builder never emits a fixture step ungated).
+func TestFixtureStepOfReadOnlyProbeNeedsApproval(t *testing.T) {
+	sc := oneStepScenario("auth_check", nil)
+	sc.Steps[0].DBFixture = "accounts"
+	// checkFixture already refuses a fixture on a non fixture-aware probe.
+	if _, err := BuildSteps(context.Background(), sc, approved(opts(labTarget()))); err == nil {
+		t.Fatal("db_fixture on a read_only probe built")
 	}
 }
 
@@ -168,7 +186,7 @@ func TestShippedDB05DB09ScenariosBuild(t *testing.T) {
 		probe string
 		class scenario.ExecutionClass
 	}{
-		"dbsim-db05-suspicious-read":   {"suspicious_read", scenario.ClassNonDestructive},
+		"dbsim-db05-suspicious-read":   {"suspicious_read", scenario.ClassPotentiallyDestructive},
 		"dbsim-db09-bounded-bulk-read": {"bounded_synthetic_read", scenario.ClassPotentiallyDestructive},
 	}
 	for id, w := range want {
@@ -193,10 +211,9 @@ func TestShippedDB05DB09ScenariosBuild(t *testing.T) {
 		if strings.Contains(spec.Params["table"], ".") {
 			t.Errorf("%s: table param must be a bare table name: %q", id, spec.Params["table"])
 		}
-		// The DB-09 scenario is refused without the scenario approval, DB-05 is not.
-		_, err = BuildSteps(context.Background(), sc, opts(labTarget()))
-		if (err == nil) != (w.class == scenario.ClassNonDestructive) {
-			t.Errorf("%s: without approval err=%v", id, err)
+		// Both scenarios are refused without the scenario approval.
+		if _, err = BuildSteps(context.Background(), sc, opts(labTarget())); err == nil {
+			t.Errorf("%s: built without approval", id)
 		}
 	}
 }

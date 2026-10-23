@@ -6,8 +6,11 @@ description: >
   of obviously fake personal data, with published test card numbers) in a
   dedicated per-run schema, then runs ONE unfiltered all-column SELECT of its
   customers_pii table with the named probe suspicious_read. That is the read
-  pattern a database activity monitor or SIEM rule is expected to flag. The
-  probe is a SELECT inside a READ ONLY transaction, tagged with the per-dispatch
+  pattern a database activity monitor or SIEM rule is expected to flag. Because
+  the run seeds a fixture it mutates the lab database, so it is classed
+  bounded_synthetic and needs a confirmed lab target, the scenario's mutation
+  approval and the agent-local lab-mutation allowance; it is refused for client
+  targets. The read itself is a SELECT inside a READ ONLY transaction, tagged with the per-dispatch
   marker, and reads at most 10 rows (the probe itself never reads more than 25,
   whatever the limit says). The fixture is dropped and its removal verified
   before the run completes; a cleanup failure is a safety incident, never a pass.
@@ -49,6 +52,6 @@ steps:
       max_rows: 10
       timeout_sec: 30
       max_conns: 1
-    risk: low
-    blast_radius: "one unfiltered SELECT inside a READ ONLY transaction against a per-run synthetic fixture schema (dbsim_<id>); at most 10 rows; the fixture is created and removed by the agent with verified cleanup"
+    risk: medium
+    blast_radius: "creates and drops a per-run synthetic fixture schema (dbsim_<id>) in the lab database with verified cleanup; one unfiltered SELECT inside a READ ONLY transaction against it; at most 10 rows"
     reversible: true

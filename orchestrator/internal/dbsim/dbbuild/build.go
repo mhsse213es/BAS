@@ -136,7 +136,7 @@ func BuildSteps(ctx context.Context, sc *scenario.Scenario, opt Options) ([]scen
 			return nil, fmt.Errorf("dbbuild: step %d (%q): resolve target %q: %w", i+1, st.Name, st.DBTarget, err)
 		}
 		if err := dbsim.Authorize(target, entry, dbsim.AuthInput{
-			ClientEnabled: opt.ClientEnabled, MutationApproved: opt.MutationApproved,
+			ClientEnabled: opt.ClientEnabled, MutationApproved: opt.MutationApproved, Fixture: st.DBFixture != "",
 			RunExpiry: opt.RunExpiry, Now: now(),
 		}); err != nil {
 			return nil, fmt.Errorf("dbbuild: step %d (%q): %w", i+1, st.Name, err)

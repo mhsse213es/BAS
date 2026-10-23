@@ -64,10 +64,14 @@ type Target struct {
 
 // AuthInput carries the per-dispatch inputs to Authorize.
 type AuthInput struct {
-	ClientEnabled    bool      // Admin-enabled client mode (default off)
-	MutationApproved bool      // scenario-level approval for non-read_only probes
-	RunExpiry        time.Time // required; zero is refused
-	Now              time.Time // zero means time.Now()
+	ClientEnabled    bool // Admin-enabled client mode (default off)
+	MutationApproved bool // scenario-level approval for non-read_only probes
+	// Fixture is true when the step names a fixture. A run that seeds a fixture
+	// mutates the lab database, so it is gated as a mutation whatever the
+	// probe's class is (R-AI).
+	Fixture   bool
+	RunExpiry time.Time // required; zero is refused
+	Now       time.Time // zero means time.Now()
 }
 
 // Authorize is the orchestrator-side gate (spec section 8, R4, R6, R8). It
@@ -118,7 +122,7 @@ func Authorize(t Target, def ProbeRegistryEntry, in AuthInput) error {
 	}
 	switch t.Mode {
 	case ModeLab:
-		if class != ClassReadOnly {
+		if class != ClassReadOnly || in.Fixture || real.FixtureParam != "" {
 			if !t.LabConfirmed {
 				return fmt.Errorf("dbsim: authorize: %s probe %q requires a confirmed lab target", class, def.ID)
 			}
@@ -133,7 +137,7 @@ func Authorize(t Target, def ProbeRegistryEntry, in AuthInput) error {
 		if !t.ReadOnlyIdentityVerified {
 			return fmt.Errorf("dbsim: authorize: client target %q read-only identity not verified", t.ID)
 		}
-		if class != ClassReadOnly {
+		if class != ClassReadOnly || in.Fixture {
 			return fmt.Errorf("dbsim: authorize: client mode refuses %s probe %q", class, def.ID)
 		}
 	default:

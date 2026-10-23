@@ -4,7 +4,7 @@ import "testing"
 
 func TestFixtureReadProbesAreRegistered(t *testing.T) {
 	sr, ok := LookupProbeEntry("suspicious_read")
-	if !ok || sr.Class != ClassReadOnly || sr.FixtureParam != "table" || sr.ParamSchema["table"] != "string" {
+	if !ok || sr.Class != ClassBoundedSynthetic || sr.FixtureParam != "table" || sr.ParamSchema["table"] != "string" {
 		t.Fatalf("suspicious_read: %+v ok=%v", sr, ok)
 	}
 	bb, ok := LookupProbeEntry("bounded_synthetic_read")
@@ -40,8 +40,42 @@ func TestBoundedSyntheticReadRefusedInClientMode(t *testing.T) {
 	if err := Authorize(goodTarget(ModeLab), bb, in(false, true)); err != nil {
 		t.Errorf("confirmed lab target with approval must pass: %v", err)
 	}
-	if err := Authorize(goodTarget(ModeLab), sr, in(false, false)); err != nil {
-		t.Errorf("suspicious_read on a lab target needs no mutation approval: %v", err)
+	// R-AI: suspicious_read seeds a fixture too and is gated identically.
+	if err := Authorize(goodTarget(ModeLab), sr, in(false, false)); err == nil {
+		t.Error("suspicious_read without scenario mutation approval must be refused")
+	}
+	if err := Authorize(unconfirmed, sr, in(false, true)); err == nil {
+		t.Error("suspicious_read against an unconfirmed lab target must be refused")
+	}
+	if err := Authorize(goodTarget(ModeLab), sr, in(false, true)); err != nil {
+		t.Errorf("confirmed lab target with approval must pass: %v", err)
+	}
+}
+
+// R-AI: a step that names a fixture is a mutation for gating, whatever the
+// probe's class, so a read_only probe with a fixture needs the same controls.
+func TestAuthorizeAnyFixtureStepNeedsLabConfirmedAndApproval(t *testing.T) {
+	ro := roEntry()
+	withFx := func(approved bool) AuthInput { i := in(false, approved); i.Fixture = true; return i }
+	if err := Authorize(goodTarget(ModeLab), ro, withFx(false)); err == nil {
+		t.Error("read_only probe + fixture without approval accepted")
+	}
+	unconfirmed := goodTarget(ModeLab)
+	unconfirmed.LabConfirmed = false
+	if err := Authorize(unconfirmed, ro, withFx(true)); err == nil {
+		t.Error("read_only probe + fixture on an unconfirmed lab target accepted")
+	}
+	if err := Authorize(goodTarget(ModeLab), ro, withFx(true)); err != nil {
+		t.Errorf("confirmed + approved must pass: %v", err)
+	}
+	ci := withFx(true)
+	ci.ClientEnabled = true
+	if err := Authorize(goodTarget(ModeClient), ro, ci); err == nil {
+		t.Error("client mode with a fixture must stay refused")
+	}
+	// No fixture: read-only probes are unchanged.
+	if err := Authorize(goodTarget(ModeLab), ro, in(false, false)); err != nil {
+		t.Errorf("read_only without fixture must be unchanged: %v", err)
 	}
 }
 
@@ -53,7 +87,10 @@ func TestAuthorizeFixtureAwareProbeIsLabOnlyWhateverTheClass(t *testing.T) {
 	if err := Authorize(goodTarget(ModeClient), real, in(true, true)); err == nil {
 		t.Fatal("fixture-aware read_only probe must be refused in client mode")
 	}
-	if err := Authorize(goodTarget(ModeLab), real, in(false, false)); err != nil {
-		t.Fatalf("lab mode must pass: %v", err)
+	if err := Authorize(goodTarget(ModeLab), real, in(false, false)); err == nil {
+		t.Fatal("a fixture-aware entry needs approval even when labelled read_only")
+	}
+	if err := Authorize(goodTarget(ModeLab), real, in(false, true)); err != nil {
+		t.Fatalf("lab mode with approval must pass: %v", err)
 	}
 }

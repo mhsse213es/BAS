@@ -114,8 +114,9 @@ var probeRegistry = map[string]ProbeRegistryEntry{
 	"auth_check":            {ID: "auth_check", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
 	"read_audit_config":     {ID: "read_audit_config", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
 	"read_restricted_table": {ID: "read_restricted_table", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}},
-	// DB-05: one unfiltered all-column SELECT of a seeded fixture table (read_only, small hard row cap).
-	"suspicious_read": {ID: "suspicious_read", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}, FixtureParam: "table"},
+	// Rule (R-AI): a run that seeds a fixture mutates the lab database and is gated as bounded_synthetic regardless of what the probe itself reads.
+	// DB-05: one unfiltered all-column SELECT of a seeded fixture table (small hard row cap).
+	"suspicious_read": {ID: "suspicious_read", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}, FixtureParam: "table"},
 	// DB-09: the same SELECT as a row-capped bulk read (bounded_synthetic: lab only, needs mutation approval).
 	"bounded_synthetic_read": {ID: "bounded_synthetic_read", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}, FixtureParam: "table"},
 }
