@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // elasticAlertsPath is the search path for Elastic Security detection alerts.
@@ -177,6 +178,8 @@ func (e *elasticConnector) buildQuery(req VerifyRequest, searchAfter []any) map[
 			"@timestamp", "kibana.alert.uuid", "kibana.alert.rule.name", "kibana.alert.severity",
 			"kibana.alert.rule.threat", "kibana.alert.workflow_status", "kibana.alert.original_time",
 			"threat", "host.name", "host.hostname",
+			// A1: fields in which an in-band marker can appear.
+			"message", "event.original", "host.ip", "kibana.alert.reason",
 		},
 	}
 	if len(searchAfter) > 0 {
@@ -300,13 +303,38 @@ func normalizeElasticHit(h elasticHit) (normalizedAlert, error) {
 			}
 		}
 	}
-	raw, _ := json.Marshal(map[string]any{
+	rawDoc := map[string]any{
 		"alertId": a.AlertID, "ruleName": a.RuleName, "timestamp": a.Timestamp,
 		"severity": a.Severity, "techniques": a.Techniques,
 		"workflowStatus": elasticString(src, "kibana.alert.workflow_status"),
-	})
+	}
+	// Amendment A1: expose the (whitelisted) alert source so callers can look
+	// for an in-band marker. Bounded; never logged.
+	if sb, err := json.Marshal(src); err == nil {
+		if len(sb) <= elasticRawSourceMax {
+			rawDoc["source"] = json.RawMessage(sb)
+		} else {
+			rawDoc["source"] = cutUTF8(string(sb), elasticRawSourceMax)
+			rawDoc["sourceTruncated"] = true
+		}
+	}
+	raw, _ := json.Marshal(rawDoc)
 	a.RawJSON = raw
 	return a, nil
+}
+
+// elasticRawSourceMax caps the alert source copied into MatchedAlert.RawJSON.
+const elasticRawSourceMax = 16 << 10
+
+// cutUTF8 returns at most n bytes of s, never splitting a UTF-8 sequence.
+func cutUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 // elasticLookup resolves a dotted path against either a flattened key or a
