@@ -36,6 +36,11 @@ const (
 	ProductAPIBAS ProductLine = "apibas"
 	// ProductAD is the Active Directory BAS product line. It is sold with Advanced.
 	ProductAD ProductLine = "ad"
+	// ProductDBSim is the database security simulation product line (DB-01..DB-03: auth policy,
+	// excessive grants, unauthorized access). It follows the AD line: sold with Advanced, because it
+	// is a credentialed, read-only assessment of customer infrastructure. To move it, change only the
+	// tierProductLines table below.
+	ProductDBSim ProductLine = "dbsim"
 )
 
 // tierProductLines is the one authoritative mapping. The server derives permissions only from this
@@ -44,11 +49,11 @@ var tierProductLines = map[Tier][]ProductLine{
 	TierCore: {ProductAV, ProductWAF, ProductNetwork, ProductEmail},
 	TierAdvanced: {
 		ProductAV, ProductWAF, ProductNetwork, ProductEmail,
-		ProductDLP, ProductPhishing, ProductAPIBAS, ProductAD,
+		ProductDLP, ProductPhishing, ProductAPIBAS, ProductAD, ProductDBSim,
 	},
 	TierEnterprise: {
 		ProductAV, ProductWAF, ProductNetwork, ProductEmail,
-		ProductDLP, ProductPhishing, ProductAPIBAS, ProductAD,
+		ProductDLP, ProductPhishing, ProductAPIBAS, ProductAD, ProductDBSim,
 		ProductKillChain, ProductRansomware, ProductWebGW, ProductCloud,
 	},
 }

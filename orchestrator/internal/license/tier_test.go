@@ -11,7 +11,7 @@ import (
 // lower ones.
 func TestTierProducts_ExactSets(t *testing.T) {
 	core := []ProductLine{ProductAV, ProductWAF, ProductNetwork, ProductEmail}
-	advanced := append(append([]ProductLine{}, core...), ProductDLP, ProductPhishing, ProductAPIBAS, ProductAD)
+	advanced := append(append([]ProductLine{}, core...), ProductDLP, ProductPhishing, ProductAPIBAS, ProductAD, ProductDBSim)
 	enterprise := append(append([]ProductLine{}, advanced...), ProductKillChain, ProductRansomware, ProductWebGW, ProductCloud)
 
 	for _, c := range []struct {
@@ -52,7 +52,7 @@ func TestPermits_CoreRefusesHigherTiers(t *testing.T) {
 			t.Fatalf("Core refused %s", p)
 		}
 	}
-	for _, p := range []ProductLine{ProductDLP, ProductPhishing, ProductKillChain, ProductRansomware, ProductWebGW, ProductCloud, ProductAD} {
+	for _, p := range []ProductLine{ProductDLP, ProductPhishing, ProductKillChain, ProductRansomware, ProductWebGW, ProductCloud, ProductAD, ProductDBSim} {
 		if lic.Permits(p) {
 			t.Fatalf("Core permitted %s", p)
 		}
@@ -186,5 +186,21 @@ func TestProductLinesFor_SortedAndCommonIncluded(t *testing.T) {
 	}
 	if _, err := ProductLinesFor(Tier("Platinum")); err == nil {
 		t.Fatal("unknown tier accepted")
+	}
+}
+
+// The dbsim line is sold with Advanced (same tier set as the AD line), is refused on Core, and is a
+// valid product line so its scenarios load.
+func TestDBSimProductLineTiers(t *testing.T) {
+	if string(ProductDBSim) != "dbsim" {
+		t.Fatalf("ProductDBSim = %q", ProductDBSim)
+	}
+	if !ValidProductLine("dbsim") {
+		t.Fatal("dbsim is not a valid product line")
+	}
+	for tier, want := range map[Tier]bool{TierCore: false, TierAdvanced: true, TierEnterprise: true} {
+		if got := (&License{Tier: string(tier)}).Permits(ProductDBSim); got != want {
+			t.Fatalf("%s permits dbsim = %v, want %v", tier, got, want)
+		}
 	}
 }
