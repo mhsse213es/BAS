@@ -17,7 +17,7 @@ import (
 )
 
 func toySecrets() secretMap {
-	return secretMap{"tok-alice": "tok-alice", "tok-bob": "tok-bob", "tok-carol": "tok-carol", "tok-dave": "tok-dave"}
+	return secretMap{"tok-alice": "tok-alice", "tok-bob": "tok-bob", "tok-carol": "tok-carol", "tok-dave": "tok-dave", "tok-erin": "tok-erin"}
 }
 
 func toyCreated() []model.CreatedObject {
@@ -159,7 +159,7 @@ func TestCompensatingResetDeletesOnlyTaggedObjects(t *testing.T) {
 	if err := e.Resetter().Reset(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if len(ty.items) != 4 {
+	if len(ty.items) != 5 {
 		t.Fatalf("Reset removed fixture objects: %d left", len(ty.items))
 	}
 	// A tracked run-created object is removed by Reset.
@@ -450,7 +450,7 @@ func TestCompensationClassAndMethodAreChecked(t *testing.T) {
 	if len(e.Orphans()) != 4 {
 		t.Fatalf("orphans: %v", e.Orphans())
 	}
-	if len(ty.items) != 4 {
+	if len(ty.items) != 5 {
 		t.Fatal("toy state changed")
 	}
 }

@@ -38,6 +38,18 @@ type Test struct {
 	// Covered is true when the existing catalogue already tests the same
 	// thing (see package novelty).
 	Covered bool
+	// OwnerControl and NegativeControl are the verifier's controls (see the
+	// "Controls" section of package property), assembled as full tests with
+	// ids <ID>-OC and <ID>-NC. They are never top-level tests, never counted
+	// toward MaxTests and never carry controls themselves. Variation tests
+	// reuse the controls of the base template they were derived from: a
+	// variation changes only the violating element of the attack, and the
+	// controls prove the environment and the oracle against that same base.
+	OwnerControl, NegativeControl *Test
+	// ControlsBlocked is true when a control step is blocked by the safety
+	// filter (or a control does not validate): the test carries no controls
+	// and so can never be verified.
+	ControlsBlocked bool
 }
 
 // Options controls generation.
@@ -80,6 +92,9 @@ type Report struct {
 	// SkippedStepUnknown counts tests dropped because a step matches no
 	// operation of the model. Such tests are never emitted.
 	SkippedStepClass, SkippedStepUnknown int
+	// ControlsBlocked counts emitted tests left without controls (see
+	// Test.ControlsBlocked). Controls do not count toward MaxTests.
+	ControlsBlocked int
 	// Truncated counts tests cut by MaxTests.
 	Truncated int
 }
@@ -157,6 +172,7 @@ func GenerateWithReport(m model.Model, fx fixture.Fixture, accts []model.Account
 					continue
 				}
 				seen[t.ID] = true
+				attachControls(&t, m, tpl)
 				base = append(base, t)
 				produced = true
 				for _, v := range vars {
@@ -175,6 +191,7 @@ func GenerateWithReport(m model.Model, fx fixture.Fixture, accts []model.Account
 							continue
 						}
 						seen[t.ID] = true
+						attachControls(&t, m, vt)
 						variants = append(variants, t)
 					}
 				}
@@ -196,6 +213,11 @@ func GenerateWithReport(m model.Model, fx fixture.Fixture, accts []model.Account
 	if opt.MaxTests > 0 && len(out) > opt.MaxTests {
 		rep.Truncated = len(out) - opt.MaxTests
 		out = out[:opt.MaxTests]
+	}
+	for _, t := range out {
+		if t.ControlsBlocked {
+			rep.ControlsBlocked++
+		}
 	}
 	return out, rep, nil
 }
@@ -266,9 +288,49 @@ func testID(prop, op string, params map[string]string) string {
 	return "ALEEF-GEN-" + prop + "-" + hex.EncodeToString(h.Sum(nil))[:8]
 }
 
+// attachControls assembles the template's controls onto t. If either control
+// is missing, is blocked by the safety filter or does not validate, t carries
+// no controls and is marked ControlsBlocked (Report.ControlsBlocked counts them
+// among the tests finally emitted).
+func attachControls(t *Test, m model.Model, tpl property.Template) {
+	build := func(c *property.Template, suffix string) *Test {
+		if c == nil || stepBlock(m, c.Steps) != "" {
+			return nil
+		}
+		ct, err := assembleControl(*c, t.ID+suffix)
+		if err != nil {
+			return nil
+		}
+		return &ct
+	}
+	oc, nc := build(tpl.OwnerControl, "-OC"), build(tpl.NegativeControl, "-NC")
+	if oc == nil || nc == nil {
+		t.ControlsBlocked = true
+		return
+	}
+	t.OwnerControl, t.NegativeControl = oc, nc
+}
+
+// assembleControl turns a control template into a validated test with the
+// given id. The control's own controls (none) are not carried.
+func assembleControl(tpl property.Template, id string) (Test, error) {
+	t, err := assembleID(tpl, id, nil, false)
+	if err != nil {
+		return Test{}, err
+	}
+	t.Scenario.ExpectedControl = "The legitimate request succeeds and the control's oracle does not fire (" + tpl.Property + " " + tpl.Params["control"] + " control)."
+	if err := t.Scenario.Validate(); err != nil {
+		return Test{}, fmt.Errorf("generate: %s: %w", id, err)
+	}
+	return t, nil
+}
+
 // assemble turns a template into a validated test.
 func assemble(tpl property.Template, opID string, cat []contract.Scenario) (Test, error) {
-	id := testID(tpl.Property, opID, tpl.Params)
+	return assembleID(tpl, testID(tpl.Property, opID, tpl.Params), cat, true)
+}
+
+func assembleID(tpl property.Template, id string, cat []contract.Scenario, novel bool) (Test, error) {
 	if len(tpl.Steps) == 0 {
 		return Test{}, fmt.Errorf("generate: %s: template has no steps", id)
 	}
@@ -300,7 +362,7 @@ func assemble(tpl property.Template, opID string, cat []contract.Scenario) (Test
 	return Test{
 		ID: id, Scenario: s, Template: tpl, Property: tpl.Property,
 		Params:  copyMap(tpl.Params),
-		Covered: novelty.Covered(s, cat),
+		Covered: novel && novelty.Covered(s, cat),
 	}, nil
 }
 

@@ -72,7 +72,7 @@ var idPattern = regexp.MustCompile(`^API-BAS-([A-Z]+)-(\d{3})$`)
 
 // ALEEF ids: generated tests carry a content hash, registered ones a serial.
 var (
-	aleefGenPattern = regexp.MustCompile(`^ALEEF-GEN-[A-Z0-9-]+-[0-9a-f]{8}$`)
+	aleefGenPattern = regexp.MustCompile(`^ALEEF-GEN-[A-Z0-9-]+-[0-9a-f]{8}(-OC|-NC)?$`)
 	aleefRegPattern = regexp.MustCompile(`^ALEEF-REG-\d{4}$`)
 )
 
