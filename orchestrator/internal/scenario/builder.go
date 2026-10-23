@@ -272,6 +272,9 @@ func buildStepsRaw(sc *Scenario, calderaURL, calderaKey string, artStore *ARTSto
 }
 
 func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore, agentOS string) (ScenarioStep, error) {
+	if isDBProbeExecutor(s.Executor) || s.DBTarget != "" || s.DBProbe != "" {
+		return ScenarioStep{}, fmt.Errorf("dbprobe steps need a target resolver and are built only by internal/dbsim/dbbuild")
+	}
 	executor := s.Executor
 	if executor == "" {
 		if agentOS == "linux" || agentOS == "darwin" {

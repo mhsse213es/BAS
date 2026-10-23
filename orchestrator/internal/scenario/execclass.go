@@ -351,6 +351,9 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1078": {
+		"dbprobe_read_only":         dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1078"),
+		"dbprobe_bounded_synthetic": dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (writes only fixture-tagged synthetic rows/roles) -- T1078"),
+		"dbprobe_mutation":          dbprobeClass(ClassDestructive, "dbprobe_mutation", "mutation database probe (changes real database state) -- T1078"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -989,6 +992,11 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			BlastRadius:       "Exfiltration over file transfer protocol — synthetic data sent to .invalid/monitored sink destinations (network-only)",
 		},
 	},
+	"T1213": {
+		"dbprobe_read_only":         dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1213"),
+		"dbprobe_bounded_synthetic": dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (writes only fixture-tagged synthetic rows/roles) -- T1213"),
+		"dbprobe_mutation":          dbprobeClass(ClassDestructive, "dbprobe_mutation", "mutation database probe (changes real database state) -- T1213"),
+	},
 	"T1567.004": {
 		"enumerate": {
 			Class:             ClassNonDestructive,
@@ -1022,7 +1030,12 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 	"T1033": {"enumerate": discoveryDefaultClassification},
 	"T1124": {"enumerate": discoveryDefaultClassification},
 	"T1049": {"enumerate": discoveryDefaultClassification},
-	"T1087": {"enumerate": discoveryDefaultClassification},
+	"T1087": {
+		"enumerate":                 discoveryDefaultClassification,
+		"dbprobe_read_only":         dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1087"),
+		"dbprobe_bounded_synthetic": dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (writes only fixture-tagged synthetic rows/roles) -- T1087"),
+		"dbprobe_mutation":          dbprobeClass(ClassDestructive, "dbprobe_mutation", "mutation database probe (changes real database state) -- T1087"),
+	},
 	"T1069": {"enumerate": discoveryDefaultClassification},
 	"T1652": {"enumerate": discoveryDefaultClassification},
 }
@@ -1117,4 +1130,11 @@ func AttachExecutionClassifications(steps []ScenarioStep) {
 		steps[i].DestructiveAction = c.DestructiveAction
 		steps[i].BlastRadius = c.BlastRadius
 	}
+}
+
+// dbprobeClass builds a catalog entry for a dbsim probe class (spec A6). The
+// action keys are issued by the dbsim builder from the probe registry class
+// ("dbprobe_" + class), never chosen by a scenario author.
+func dbprobeClass(c ExecutionClass, action, blast string) *ExecutionClassification {
+	return &ExecutionClassification{Class: c, DestructiveAction: action, BlastRadius: blast}
 }

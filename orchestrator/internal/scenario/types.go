@@ -216,6 +216,25 @@ type Step struct {
 	// some ransomware family exhibits it generally. One of the
 	// FamilyAttribution* constants below.
 	FamilyAttributionConfidence string `yaml:"family_attribution_confidence,omitempty" json:"familyAttributionConfidence,omitempty"`
+
+	// ── Database security simulation (executor "dbprobe") ───────────────────
+	// A dbprobe step names a registered target and a named probe; it carries no
+	// command, payloads, cleanup or host-event marker. Everything about the
+	// target (host, port, identity, credential reference, mode) is resolved
+	// server-side at build time from the target registry and is never read from
+	// here. See ValidateDBProbeSteps and internal/dbsim/dbbuild.
+	DBTarget string            `yaml:"db_target,omitempty" json:"dbTarget,omitempty"` // registered target id
+	DBProbe  string            `yaml:"db_probe,omitempty"  json:"dbProbe,omitempty"`  // named probe id; becomes the step Command
+	DBParams map[string]string `yaml:"db_params,omitempty" json:"dbParams,omitempty"` // probe parameters (schema-checked at build)
+	DBLimits *StepDBLimits     `yaml:"db_limits,omitempty" json:"dbLimits,omitempty"` // optional; defaults applied at build
+}
+
+// StepDBLimits are the optional per-step probe bounds a dbprobe step may
+// request. Defaults are applied and caps enforced at build time.
+type StepDBLimits struct {
+	MaxRows    int `yaml:"max_rows"    json:"maxRows"`
+	TimeoutSec int `yaml:"timeout_sec" json:"timeoutSec"`
+	MaxConns   int `yaml:"max_conns"   json:"maxConns"`
 }
 
 // ThreatIntelSource is one citation backing a step's claimed behavior: an
@@ -274,7 +293,7 @@ type Scenario struct {
 	Tags        []string `yaml:"tags"                           json:"tags"`
 	// ProductLine is the licensed product area this scenario belongs to. The loader refuses any scenario
 	// whose value is not a valid product line, and the run paths check it against the licence.
-	ProductLine string `yaml:"product_line" json:"productLine"`
+	ProductLine string   `yaml:"product_line" json:"productLine"`
 	MITREPhases []string `yaml:"mitre_phases"                   json:"mitrePhases"`
 	// Emulates declares which real-world threat actors/groups this
 	// scenario emulates (spec §9.2). Signature-covered on builtin
@@ -380,6 +399,11 @@ type ScenarioStep struct {
 	TimeoutSec       int       `json:"timeoutSec"`
 	Payloads         []Payload `json:"payloads,omitempty"` // files to stage before executing
 	Cleanup          string    `json:"cleanup,omitempty"`  // cleanup command run after step (pass or fail)
+	// DBProbe is the resolved database probe spec for Executor "dbprobe" (nil
+	// otherwise). It is raw JSON so this package stays independent of
+	// internal/dbsim; the wire shape is dbsim.DBProbeSpec, tied to the agent's
+	// protocol.DBProbeSpec by golden vectors. Built only by dbsim/dbbuild.
+	DBProbe json.RawMessage `json:"dbProbe,omitempty"`
 	// Resource is the step's curated lock profile. nil → the agent runs the step
 	// serially (always safe). Set centrally by AttachProfiles at dispatch.
 	Resource *ResourceProfile `json:"resource,omitempty"`

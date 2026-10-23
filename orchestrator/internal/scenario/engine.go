@@ -172,6 +172,17 @@ func (e *Engine) Load() error {
 			log.Printf("[!] scenario: %s has an invalid step marker: %v — skipping", path, err)
 			return nil
 		}
+		if s.hasDBProbeSteps() || stepsUseDBFields(s.Steps) {
+			// dbprobe steps reach customer databases; only signed vendor content may carry them.
+			if source != "builtin" {
+				log.Printf("[!] scenario: %s uses dbprobe steps but is not built-in — refusing to load", path)
+				return nil
+			}
+			if err := s.ValidateDBProbeSteps(); err != nil {
+				log.Printf("[!] scenario: %s has invalid dbprobe steps: %v — skipping", path, err)
+				return nil
+			}
+		}
 		s.Source = source
 		if source == "builtin" {
 			reserved[s.ID] = struct{}{}
@@ -355,6 +366,10 @@ func (s *Scenario) Validate() error {
 		len(s.ARTTechniques) > 0 || len(s.Steps) > 0
 	if !hasMode {
 		return fmt.Errorf("scenario has no execution mode: add steps, ART techniques, Caldera abilities, or set local_check")
+	}
+	// dbprobe steps are vendor-signed content only; an operator-authored scenario may not carry them.
+	if s.hasDBProbeSteps() || stepsUseDBFields(s.Steps) {
+		return fmt.Errorf("dbprobe steps are only allowed in signed built-in scenarios")
 	}
 	// Custom steps must each name a technique.
 	for i, st := range s.Steps {
