@@ -173,3 +173,150 @@ document.addEventListener('click', function(e) {
 document.addEventListener('change', function(e) {
   if (e.target && e.target.id === 'k8s-action') syncActionFields();
 });
+
+// ── Read-only analysis ───────────────────────────────────────────────────────
+// Runs the server's discovery-and-analysis report. Every value is configured state; nothing here writes to the cluster.
+// The server serialises nested fields under their Go names (for example Role, Subject), so this code uses those names.
+
+var k8sAnalysisLast = null;
+
+// shortId turns a canonical ID into "namespace/name" (or "kind/name" for cluster-scoped objects) for display.
+function shortId(id) {
+  var p = String(id || '').replace(/^k8s:\/\/[^/]+\//, '').split('/');
+  if (p.length < 3) return String(id || '');
+  return p[0] === '_cluster' ? p[1] + '/' + p[2] : p[0] + '/' + p[2];
+}
+
+// isBuiltIn marks objects that belong to the Kubernetes platform itself (system:* roles and identities).
+function isBuiltIn(v) {
+  return JSON.stringify(v || {}).indexOf('/system:') !== -1;
+}
+
+function idCell(id) {
+  return '<span title="' + x(id) + '">' + x(shortId(id)) + '</span>';
+}
+
+function listOrNone(items, render) {
+  if (!items.length) return '<div class="empty">None.</div>';
+  return '<div class="tbl-wrap"><table><thead><tr>' + render.head + '</tr></thead><tbody>' +
+    items.map(render.row).join('') + '</tbody></table></div>';
+}
+
+function section(title, count, html) {
+  return '<h3 class="k8s-an-h">' + x(title) + ' <span class="cnt">' + count + '</span></h3>' + html;
+}
+
+function renderK8sAnalysis() {
+  var a = k8sAnalysisLast;
+  var body = document.getElementById('k8s-an-body');
+  var kpis = document.getElementById('k8s-an-kpis');
+  var meta = document.getElementById('k8s-an-meta');
+  if (!a || !body) return;
+  var showSystem = !!(document.getElementById('k8s-an-system') || {}).checked;
+  var hidden = 0;
+  function keep(list) {
+    return list.filter(function(v) {
+      if (showSystem || !isBuiltIn(v)) return true;
+      hidden++;
+      return false;
+    });
+  }
+  var wild = keep(a.wildcards || []);
+  var breadth = keep((a.breadth || []).filter(function(b) { return b.Broad; }));
+  var cross = keep(a.crossNamespace || []);
+  var create = keep(a.workloadCreation || []);
+  var esc = keep(a.escalation || []);
+  var paths = keep(a.attackPaths || []);
+  var pods = keep(a.podConfig || []);
+  var tokens = keep((a.tokenExposure || []).filter(function(t) { return t.Unneeded; }));
+
+  var completeNote = a.complete ? 'discovery complete' : 'discovery INCOMPLETE: ' + ((a.gaps || []).length) + ' gap(s)';
+  meta.innerHTML = x(a.cluster || '') + ' · observed ' + x(a.observedAt ? new Date(a.observedAt).toLocaleString() : '') +
+    ' · ' + x(completeNote) + (hidden ? ' · ' + hidden + ' built-in hidden' : '');
+
+  function kpi(label, n) {
+    return '<div class="kpi-card"><div class="kpi-label">' + x(label) + '</div><div class="kpi-value">' + n + '</div></div>';
+  }
+  kpis.innerHTML = kpi('Wildcard grants', wild.length) + kpi('Broad ServiceAccounts', breadth.length) +
+    kpi('Cross-namespace grants', cross.length) + kpi('Escalation actions', esc.length) +
+    kpi('Pods with host access', pods.length) + kpi('Unused mounted tokens', tokens.length);
+
+  body.innerHTML =
+    section('Wildcard RBAC', wild.length, listOrNone(wild, {
+      head: '<th>Role</th><th>Kind</th><th>Rule</th><th>Verbs</th><th>Resources</th><th>Bound to</th>',
+      row: function(f) {
+        return '<tr><td>' + idCell(f.Role) + '</td><td>' + x(f.RoleKind) + '</td><td>' + f.Rule + '</td><td>' +
+          x((f.Verbs || []).join(', ')) + '</td><td>' + x((f.Resources || []).join(', ')) + '</td><td>' +
+          x((f.Subjects || []).map(shortId).join(', ') || 'no bindings') + '</td></tr>';
+      }})) +
+    section('Service accounts with broad grants', breadth.length, listOrNone(breadth, {
+      head: '<th>ServiceAccount</th><th>Namespaces</th><th>Reasons</th>',
+      row: function(b) {
+        return '<tr><td>' + idCell(b.Subject) + '</td><td>' + x((b.Namespaces || []).join(', ') || '—') + '</td><td>' +
+          x((b.Reasons || []).join(', ')) + '</td></tr>';
+      }})) +
+    section('Grants outside the home namespace', cross.length, listOrNone(cross, {
+      head: '<th>ServiceAccount</th><th>Home</th><th>Scope</th><th>Binding</th><th>Rules</th>',
+      row: function(f) {
+        return '<tr><td>' + idCell(f.Subject) + '</td><td>' + x(f.Home) + '</td><td>' + x(f.Scope) + '</td><td>' +
+          x(f.Binding) + '</td><td>' + x((f.Rules || []).join(', ')) + '</td></tr>';
+      }})) +
+    section('Workload creation outside the home namespace', create.length, listOrNone(create, {
+      head: '<th>ServiceAccount</th><th>Namespace</th><th>Creates</th><th>Granted by</th>',
+      row: function(f) {
+        return '<tr><td>' + idCell(f.Subject) + '</td><td>' + x(f.Namespace) + '</td><td>' + x(f.Resource) +
+          '</td><td>' + x((f.Evidence || []).join(', ')) + '</td></tr>';
+      }})) +
+    section('Escalation actions', esc.length, listOrNone(esc, {
+      head: '<th>Subject</th><th>Action</th><th>Namespace</th><th>Granted by</th>',
+      row: function(f) {
+        return '<tr><td>' + idCell(f.Subject) + '</td><td>' + x(f.Capability) + '</td><td>' + x(f.Namespace || 'cluster') +
+          '</td><td>' + x((f.Evidence || []).join(', ')) + '</td></tr>';
+      }})) +
+    section('Configured attack paths to secret-reading targets', paths.length, listOrNone(paths, {
+      head: '<th>Workload</th><th>Route</th><th>Reaches</th>',
+      row: function(p) {
+        return '<tr><td>' + idCell(p.Workload) + '</td><td>' + x(p.Prerequisite) + '</td><td>' + idCell(p.Target) + '</td></tr>';
+      }})) +
+    section('Pods with host access or privileged settings', pods.length, listOrNone(pods, {
+      head: '<th>Pod</th><th>Namespace</th><th>Settings</th>',
+      row: function(p) {
+        return '<tr><td>' + idCell(p.Workload) + '</td><td>' + x(p.Namespace) + '</td><td>' + x((p.Reasons || []).join(', ')) + '</td></tr>';
+      }})) +
+    section('Mounted tokens with no bindings (unused)', tokens.length, listOrNone(tokens, {
+      head: '<th>Pod</th><th>ServiceAccount</th>',
+      row: function(t) {
+        return '<tr><td>' + idCell(t.Workload) + '</td><td>' + idCell(t.Subject) + '</td></tr>';
+      }}));
+}
+
+// renderK8sAnalysisReport shows one report from the server. Exported so the rendering can be tested without a request.
+export function renderK8sAnalysisReport(report) {
+  k8sAnalysisLast = report;
+  renderK8sAnalysis();
+}
+
+export function runK8sAnalysis() {
+  var meta = document.getElementById('k8s-an-meta');
+  if (meta) meta.textContent = 'Running read-only analysis…';
+  apicall('/api/k8s-discovery/analysis').then(function(body) {
+    if (body.error) throw new Error(body.error);
+    renderK8sAnalysisReport(body);
+  }).catch(function(err) {
+    k8sAnalysisLast = null;
+    if (meta) meta.textContent = 'Analysis unavailable: ' + (err.message || 'request failed');
+    var body = document.getElementById('k8s-an-body');
+    if (body) body.innerHTML = '';
+    var kpis = document.getElementById('k8s-an-kpis');
+    if (kpis) kpis.innerHTML = '';
+  });
+}
+
+document.addEventListener('click', function(e) {
+  var t = e.target;
+  if (t && t.getAttribute && t.getAttribute('data-k8s-analysis-run')) runK8sAnalysis();
+});
+
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.id === 'k8s-an-system') renderK8sAnalysis();
+});

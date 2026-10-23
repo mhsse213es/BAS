@@ -1503,6 +1503,18 @@
         </div>
 
         <div id="k8s-runs" class="tbl-wrap"></div>
+
+        <div class="card k8s-card">
+          <div class="card-title">Read-only analysis</div>
+          <p class="k8s-note">Reads the cluster and reports configured permissions and settings. It writes nothing and proves no attack works.</p>
+          <div class="k8s-analysis-bar">
+            <span id="k8s-an-meta" class="tiny muted">Not run yet.</span>
+            <label class="tiny muted k8s-an-toggle"><input type="checkbox" id="k8s-an-system"> Show built-in system: roles</label>
+            <button class="btn btn-primary btn-sm" data-k8s-analysis-run="1">Run analysis</button>
+          </div>
+          <div id="k8s-an-kpis" class="kpi-row"></div>
+          <div id="k8s-an-body"></div>
+        </div>
       </div>
 
       <div id="tab-scheduled-assessments" class="is-hidden">

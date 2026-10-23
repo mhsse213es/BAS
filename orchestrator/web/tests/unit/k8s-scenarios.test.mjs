@@ -3,13 +3,15 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 
 // The feature module touches document at import time, so give it a document first.
-const dom = new JSDOM('<!DOCTYPE html><body><div id="k8s-runs"></div></body>', { url: 'http://127.0.0.1/' });
+const dom = new JSDOM('<!DOCTYPE html><body><div id="k8s-runs"></div>' +
+  '<span id="k8s-an-meta"></span><input type="checkbox" id="k8s-an-system"><div id="k8s-an-kpis"></div><div id="k8s-an-body"></div>' +
+  '</body>', { url: 'http://127.0.0.1/' });
 globalThis.window = dom.window;
 globalThis.document = dom.window.document;
 globalThis.localStorage = dom.window.localStorage;
 globalThis.sessionStorage = dom.window.sessionStorage;
 globalThis.location = dom.window.location;
-const { renderK8sRuns } = await import('../../src/features/k8s-scenarios.js');
+const { renderK8sRuns, renderK8sAnalysisReport } = await import('../../src/features/k8s-scenarios.js');
 
 // Sets the signed-in user the panel reads from local storage.
 function asUser(role, userId) {
@@ -93,4 +95,47 @@ test('someone other than the requester sees no Execute', () => {
   const html = document.getElementById('k8s-runs').innerHTML;
   assert.doesNotMatch(html, /data-k8s-execute/);
   assert.match(html, /Only the requester can execute/);
+});
+
+// ── Read-only analysis ────────────────────────────────────────────────────────
+
+function analysisReport(over) {
+  return Object.assign({
+    cluster: 'kind-bas-lab', observedAt: '2026-10-23T08:00:00Z', complete: true, gaps: [],
+    wildcards: [
+      { Role: 'k8s://kind-bas-lab/_cluster/clusterrole/system:controller:gc', RoleKind: 'ClusterRole', Rule: 0,
+        Verbs: ['*'], Resources: ['*'], Subjects: [] },
+      { Role: 'k8s://kind-bas-lab/default/role/wild', RoleKind: 'Role', Rule: 0,
+        Verbs: ['*'], Resources: ['pods'], Subjects: ['k8s://kind-bas-lab/default/serviceaccount/app'] },
+    ],
+    breadth: [], crossNamespace: [], workloadCreation: [], escalation: [], attackPaths: [], podConfig: [], tokenExposure: [],
+  }, over || {});
+}
+
+test('built-in system roles are hidden by default, with a count of what is hidden', () => {
+  renderK8sAnalysisReport(analysisReport());
+  const body = document.getElementById('k8s-an-body').innerHTML;
+  assert.doesNotMatch(body, /system:controller/);
+  assert.match(body, /default\/wild/);
+  assert.match(document.getElementById('k8s-an-meta').textContent, /1 built-in hidden/);
+});
+
+test('ticking the toggle shows the built-in roles', () => {
+  document.getElementById('k8s-an-system').checked = true;
+  renderK8sAnalysisReport(analysisReport());
+  assert.match(document.getElementById('k8s-an-body').innerHTML, /system:controller/);
+  document.getElementById('k8s-an-system').checked = false;
+});
+
+test('an incomplete discovery is labelled as incomplete, with its gap count', () => {
+  renderK8sAnalysisReport(analysisReport({ complete: false, gaps: ['pods: forbidden'] }));
+  assert.match(document.getElementById('k8s-an-meta').textContent, /INCOMPLETE: 1 gap/);
+});
+
+test('server text in the analysis is escaped, not rendered as markup', () => {
+  renderK8sAnalysisReport(analysisReport({ wildcards: [
+    { Role: 'k8s://kind-bas-lab/default/role/<img src=x onerror=bad()>', RoleKind: 'Role', Rule: 0,
+      Verbs: ['*'], Resources: ['pods'], Subjects: [] }] }));
+  const body = document.getElementById('k8s-an-body');
+  assert.equal(body.querySelector('img'), null);
 });
