@@ -19,6 +19,9 @@ type catalogRow struct {
 	// fixed table it reads (Task 14); omitted otherwise.
 	RequiredFixture string `json:"requiredFixture,omitempty"`
 	FixedTable      string `json:"fixedTable,omitempty"`
+	// LabOnly: refused outside lab mode and needs lab approvals though read_only
+	// (Task 15); omitted otherwise.
+	LabOnly bool `json:"labOnly,omitempty"`
 }
 
 func TestCatalogMatchesGolden(t *testing.T) {
@@ -30,7 +33,7 @@ func TestCatalogMatchesGolden(t *testing.T) {
 			p[k] = string(v)
 		}
 		rows = append(rows, catalogRow{ID: d.ID, Class: string(d.Class), Engines: d.Engines, Params: p, FixtureParam: d.FixtureParam,
-			RequiredFixture: d.RequiredFixture, FixedTable: d.FixedTable})
+			RequiredFixture: d.RequiredFixture, FixedTable: d.FixedTable, LabOnly: d.LabOnly})
 	}
 	got, err := json.Marshal(rows)
 	if err != nil {

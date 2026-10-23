@@ -61,6 +61,10 @@ type ProbeDef struct {
 	// FixedTable, when non-empty, is the fixture table a RequiredFixture read
 	// probe reads. It is fixed in agent code, so no param can address a table.
 	FixedTable string
+	// LabOnly marks a probe that is refused outside lab mode and, even when it is
+	// read_only, needs the same lab approvals as a fixture-aware probe (DB-11
+	// check_export_privileges). It takes no fixture.
+	LabOnly bool
 }
 
 // ConnectionConfig describes how to reach a target. Secrets are resolved

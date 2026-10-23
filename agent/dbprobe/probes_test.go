@@ -40,8 +40,8 @@ func TestLookupProbeUnknownIDNotFound(t *testing.T) {
 
 func TestEveryProbeDeclaresClassAndEngines(t *testing.T) {
 	ids := ProbeIDs()
-	if len(ids) != 9 {
-		t.Fatalf("want 7 probes, got %v", ids)
+	if len(ids) != 12 {
+		t.Fatalf("want 12 probes, got %v", ids)
 	}
 	for _, id := range ids {
 		d, ok := LookupProbe(id)

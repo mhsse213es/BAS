@@ -53,6 +53,23 @@ var catalog = map[string]ProbeDef{
 	// approval path. Lab-only and mutation-approved via RequiredFixture (R-AI), not class.
 	ProbeAuthAfterRevoke: {ID: ProbeAuthAfterRevoke, Class: ClassBoundedSynthetic, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{}, RequiredFixture: RevokeFixtureKind},
+	// try_disable_audit (DB-08): a throwaway NO-privilege account opens a new
+	// connection and attempts ONLY a session-scoped audit change (see
+	// auditTamperSQL). bounded_synthetic (user decision, option A: never
+	// mutation, B5 vetoes destructive); no parameter, mode or code path performs
+	// a global or persistent audit change. Lab only via its required fixture.
+	ProbeTryDisableAudit: {ID: ProbeTryDisableAudit, Class: ClassBoundedSynthetic, Engines: bothEngines,
+		ParamSchema: map[string]ParamKind{}, RequiredFixture: AuditTamperFixtureKind},
+	// try_write_fixture (DB-10): a throwaway SELECT-only account attempts one
+	// INSERT, UPDATE and DELETE against the fixture's accounts table; the table
+	// state is fingerprinted before and after through the lab connection.
+	ProbeTryWriteFixture: {ID: ProbeTryWriteFixture, Class: ClassBoundedSynthetic, Engines: bothEngines,
+		ParamSchema: map[string]ParamKind{}, RequiredFixture: WriteFixtureKind},
+	// check_export_privileges (DB-11): fixed read-only catalog queries about
+	// what the CONNECTED account may do regarding export/backup. No export is
+	// ever performed. Read-only by class, lab-only by LabOnly.
+	ProbeCheckExportPrivileges: {ID: ProbeCheckExportPrivileges, Class: ClassReadOnly, Engines: bothEngines,
+		ParamSchema: map[string]ParamKind{}, LabOnly: true},
 }
 
 // LookupProbe returns the catalog entry for id.
@@ -119,6 +136,14 @@ func ValidateSpec(s DBProbeSpec) error {
 		}
 		if s.Mode != ModeLab {
 			return fmt.Errorf("dbprobe: probe %q needs a seeded fixture and runs only in lab mode", s.ProbeID)
+		}
+	}
+	if def.LabOnly {
+		if s.Mode != ModeLab {
+			return fmt.Errorf("dbprobe: probe %q runs only in lab mode", s.ProbeID)
+		}
+		if s.FixtureID != "" {
+			return fmt.Errorf("dbprobe: probe %q reads no fixture", s.ProbeID)
 		}
 	}
 	if s.Limits.MaxRows <= 0 || s.Limits.TimeoutSec <= 0 || s.Limits.MaxConns <= 0 {
