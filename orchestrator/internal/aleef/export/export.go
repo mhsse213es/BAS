@@ -134,9 +134,8 @@ func scenarioYAML(b Bundle) ([]byte, error) {
 	s := b.Test.Scenario
 	s.NegativeTests = []string{"The fixed build must PASS this scenario: " + s.ExpectedControl}
 	s.IndustryMapping, s.RegulatoryMapping = []string{}, []string{}
-	if s.SideEffectClass == "STATE_CHANGE_SANDBOX" && len(s.Cleanup) == 0 {
-		s.Cleanup = []string{"reset"}
-	}
+	// validateBundle (run before this) guarantees a STATE_CHANGE_SANDBOX scenario
+	// already carries its cleanup list, so it is copied as is.
 	if err := s.Validate(); err != nil {
 		return nil, fmt.Errorf("export: scenario %s: %w", s.ID, err)
 	}
@@ -183,6 +182,13 @@ func validateBundle(b Bundle) error {
 	if b.FindingID == "" || b.EvidenceHash == "" {
 		return errors.New("export: bundle lacks a finding id or evidence hash")
 	}
+	for _, v := range []string{b.RegressionID, b.FindingID, b.EvidenceHash, b.Property} {
+		for _, r := range v {
+			if r < 0x20 || r == 0x7f {
+				return errors.New("export: bundle header field contains a control character")
+			}
+		}
+	}
 	t := b.Test
 	if t.ID != b.RegressionID || t.Scenario.ID != b.RegressionID {
 		return fmt.Errorf("export: bundle test ids do not match %s", b.RegressionID)
@@ -208,43 +214,66 @@ func validateBundle(b Bundle) error {
 type Outcome string
 
 const (
-	// FixedConfirmed: the test no longer finds the flaw and the owner control
-	// proves the environment sound.
+	// FixedConfirmed means Runs consecutive clean test runs, each on its own
+	// fresh environment, followed by a passing owner control and a passing
+	// negative control. It is evidence, not proof: a flaw that fires rarely can
+	// still survive Runs clean runs.
 	FixedConfirmed Outcome = "fixed_confirmed"
-	// StillVulnerable: the test still finds the flaw.
+	// StillVulnerable: a test run found the flaw.
 	StillVulnerable Outcome = "still_vulnerable"
 	// Inconclusive: nothing can be concluded (environment, control, cleanup
 	// or execution problem).
 	Inconclusive Outcome = "inconclusive"
 )
 
-// Check replays the regression. The test runs on one fresh environment; only
-// when it finds nothing does the owner control run, on a second fresh
-// environment, to prove that a No means the flaw is gone and not that the
-// environment is broken. Every environment is cleaned up and a cleanup failure
-// makes the outcome Inconclusive. Check never writes to the store.
-func Check(ctx context.Context, env verify.Env, b Bundle) (Outcome, error) {
+// CheckOptions configures Check.
+type CheckOptions struct {
+	// Runs is the number of consecutive clean test runs needed. It defaults to
+	// and is floored at verify.MinReproductions.
+	Runs int
+}
+
+// Check replays the regression. The test runs on Runs fresh environments (one
+// each): the first Yes is StillVulnerable, any other non-No verdict or error
+// is Inconclusive. Only when every run is No do the owner control and then the
+// negative control run, each on its own fresh environment, to prove that the
+// No means the flaw is gone and not that the environment is broken or the
+// oracle blind. Every environment is cleaned up and a cleanup failure makes the
+// outcome Inconclusive. Check never writes to the store.
+func Check(ctx context.Context, env verify.Env, b Bundle, opts ...CheckOptions) (Outcome, error) {
 	if err := validateBundle(b); err != nil {
 		return Inconclusive, err
 	}
-	res, err := runFresh(ctx, env, b.Test, "test")
-	if err != nil {
-		return Inconclusive, err
+	runs := verify.MinReproductions
+	if len(opts) > 0 && opts[0].Runs > runs {
+		runs = opts[0].Runs
 	}
-	switch res.Verdict.Finding {
-	case exec.FindingYes:
-		return StillVulnerable, nil
-	case exec.FindingNo:
-	default:
-		return Inconclusive, nil
+	for i := 0; i < runs; i++ {
+		res, err := runFresh(ctx, env, b.Test, "test")
+		if err != nil {
+			return Inconclusive, err
+		}
+		switch res.Verdict.Finding {
+		case exec.FindingYes:
+			return StillVulnerable, nil
+		case exec.FindingNo:
+		default:
+			return Inconclusive, nil
+		}
 	}
-	oc := *b.Test.OwnerControl
-	cres, err := runFresh(ctx, env, oc, "owner control")
-	if err != nil {
-		return Inconclusive, err
-	}
-	if cres.Verdict.Finding != exec.FindingNo || !property.GradedSuccess(finalResponses(oc, cres)) {
-		return Inconclusive, nil
+	for _, c := range []struct {
+		t    generate.Test
+		what string
+	}{{*b.Test.OwnerControl, "owner control"}, {*b.Test.NegativeControl, "negative control"}} {
+		res, err := runFresh(ctx, env, c.t, c.what)
+		if err != nil {
+			return Inconclusive, err
+		}
+		// Same rule as verify.judgeControl (unexported): the verdict must be No
+		// and the final step's responses must all be real successes.
+		if res.Verdict.Finding != exec.FindingNo || !property.GradedSuccess(finalResponses(c.t, res)) {
+			return Inconclusive, nil
+		}
 	}
 	return FixedConfirmed, nil
 }

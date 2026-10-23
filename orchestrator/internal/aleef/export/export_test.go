@@ -42,6 +42,7 @@ type toy struct {
 	roleFlaw       bool
 	adminNoArchive bool
 	delFails       bool
+	denyAll        bool
 	tokens         map[string][2]string
 }
 
@@ -86,6 +87,10 @@ func (t *toy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cust, role := who[0], who[1]
+	if t.denyAll {
+		reply(w, 403, map[string]any{"error": "forbidden"})
+		return
+	}
 	p := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(p) < 4 || p[0] != "api" || p[2] != "items" {
 		reply(w, 404, map[string]any{"error": "no route"})
@@ -203,6 +208,9 @@ type fakeEnv struct {
 	fresh  int
 	clean  int
 	orphan *model.CreatedObject
+	// onFresh, when set, runs after the toy is reset on every Fresh call
+	// (n counts from 1) so a test can change the toy per call.
+	onFresh func(n int, ty *toy)
 }
 
 func newEnv(t *testing.T, ty *toy) *fakeEnv {
@@ -214,6 +222,9 @@ func newEnv(t *testing.T, ty *toy) *fakeEnv {
 func (e *fakeEnv) Fresh(ctx context.Context) (*exec.Executor, func(context.Context) ([]model.CreatedObject, error), error) {
 	e.fresh++
 	e.ty.reset()
+	if e.onFresh != nil {
+		e.onFresh(e.fresh, e.ty)
+	}
 	now := time.Now()
 	g, err := safety.NewGuard(safety.Engagement{ID: "toy", Customer: "toy", Environment: "lab", Hosts: []string{e.srv.URL}, Approver: "test",
 		NotBefore: now.Add(-time.Hour), NotAfter: now.Add(time.Hour), MaxRequests: 1 << 20, MaxConcurrent: 64, RPS: 1e6,
@@ -374,32 +385,35 @@ func TestYAMLOnlyForRunnerGradeOracle(t *testing.T) {
 	if len(s.IndustryMapping) != 0 || len(s.RegulatoryMapping) != 0 {
 		t.Error("mappings must be empty")
 	}
-	for _, want := range []string{"f-1", "abc123"} {
-		head := string(r.ScenarioYAML[:bytes.IndexByte(r.ScenarioYAML, '\n')+1])
-		if !strings.HasPrefix(head, "#") || !strings.Contains(string(r.ScenarioYAML[:200]), want) {
-			t.Errorf("header comment lacks %q:\n%s", want, r.ScenarioYAML[:200])
-		}
+	head := string(r.ScenarioYAML)
+	if i := strings.Index(head, "\n# evidence:"); i < 0 || !strings.HasPrefix(head, "# ALEEF regression ALEEF-REG-0007\n# finding: f-1") || !strings.Contains(head[i:], "abc123") {
+		t.Errorf("header comment wrong:\n%s", head)
 	}
 
 	// a runner-grade state-changing template must carry cleanup in the yaml.
-	var sc *generate.Test
-	tests, err := generate.Generate(toyModel(), toyFixture(), toyAccounts(), generate.Options{Seed: 1, Catalogue: []contract.Scenario{}, ReservedRoles: map[string]string{"archive": "admin"}})
-	if err != nil {
-		t.Fatal(err)
+	// Build a runner-grade state-changing test directly from the role test,
+	// A scenario without its cleanup list is refused (the contract requires it),
+	// so the YAML cannot lose it; with the list present the YAML carries it.
+	sc := roleTest(t)
+	sc.Template.Oracle, sc.Template.RunnerLeakValid, sc.Template.RunnerStateValid = property.OracleRunnerGrade, true, true
+	if sc.Scenario.SideEffectClass != "STATE_CHANGE_SANDBOX" {
+		t.Fatalf("role test is %s, want STATE_CHANGE_SANDBOX", sc.Scenario.SideEffectClass)
 	}
-	for i, g := range tests {
-		if g.Template.Oracle == property.OracleRunnerGrade && g.Template.RunnerLeakValid && g.Template.RunnerStateValid &&
-			g.Scenario.SideEffectClass == "STATE_CHANGE_SANDBOX" && !g.ControlsBlocked {
-			sc = &tests[i]
-			break
-		}
+	if len(sc.Scenario.Cleanup) == 0 {
+		t.Fatal("generated state-change scenario has no cleanup")
 	}
-	if sc != nil {
-		rr := mustReg(t, *sc, 2)
-		ps, err := contract.Parse(rr.ScenarioYAML)
-		if err != nil || len(ps.Cleanup) == 0 {
-			t.Fatalf("state-change yaml: %v cleanup %v", err, ps.Cleanup)
-		}
+	noClean := sc
+	noClean.Scenario.Cleanup = nil
+	if _, err := ToRegression(verifiedFinding(noClean), noClean, 2); err == nil {
+		t.Fatal("state-change scenario without cleanup accepted")
+	}
+	rr := mustReg(t, sc, 2)
+	if rr.ScenarioYAML == nil {
+		t.Fatal("runner-grade state-change template got no yaml")
+	}
+	ps, err := contract.Parse(rr.ScenarioYAML)
+	if err != nil || len(ps.Cleanup) == 0 || ps.Cleanup[0] != sc.Scenario.Cleanup[0] {
+		t.Fatalf("state-change yaml: %v cleanup %v", err, ps.Cleanup)
 	}
 
 	// a state-change oracle (P-ROLE-1 write) gets no yaml, but a note.
@@ -495,8 +509,8 @@ func TestCheckConfirmsFixOnCorrectedToy(t *testing.T) {
 		if err != nil || out != FixedConfirmed {
 			t.Fatalf("%s: %v %v", x.Property, out, err)
 		}
-		if env.fresh != 2 || env.clean != 2 {
-			t.Fatalf("fresh %d cleaned %d, want 2 each", env.fresh, env.clean)
+		if env.fresh != 5 || env.clean != 5 {
+			t.Fatalf("fresh %d cleaned %d, want 5 each (3 runs, owner control, negative control)", env.fresh, env.clean)
 		}
 	}
 }
@@ -524,7 +538,7 @@ func TestCheckInconclusiveWhenOwnerControlFails(t *testing.T) {
 	if out != Inconclusive {
 		t.Fatalf("want inconclusive, got %v (%v)", out, err)
 	}
-	if env.fresh != 2 {
+	if env.fresh != 4 {
 		t.Fatalf("fresh %d", env.fresh)
 	}
 }
@@ -560,5 +574,94 @@ func TestCheckRefusesInvalidBundleAndCancelledContext(t *testing.T) {
 	b = mustReg(t, ownTest(t), 1).Bundle
 	if out, err := Check(ctx, newEnv(t, newToy()), b); out != Inconclusive || err == nil {
 		t.Fatalf("%v %v", out, err)
+	}
+}
+
+// flaw returns a hook that applies the property's flaw on the chosen calls.
+func flaw(x generate.Test, on func(n int) bool) func(int, *toy) {
+	return func(n int, ty *toy) {
+		if on(n) {
+			if x.Property == "P-OWN-1" {
+				ty.readFlaw = true
+			} else {
+				ty.roleFlaw = true
+			}
+		}
+	}
+}
+
+func TestCheckFlakyFlawIsNeverConfirmedFixed(t *testing.T) {
+	for _, x := range []generate.Test{ownTest(t), roleTest(t)} {
+		// flawed on every second call: the second test run fires.
+		env := newEnv(t, newToy())
+		env.onFresh = flaw(x, func(n int) bool { return n%2 == 0 })
+		out, err := check(t, env, x)
+		if err != nil || out != StillVulnerable {
+			t.Fatalf("%s every second call: %v %v", x.Property, out, err)
+		}
+		if env.fresh != 2 {
+			t.Fatalf("%s: fresh %d, want 2 (stop at first Yes)", x.Property, env.fresh)
+		}
+		// only the third call is flawed: a single clean run is not enough.
+		env = newEnv(t, newToy())
+		env.onFresh = flaw(x, func(n int) bool { return n == 3 })
+		out, err = check(t, env, x)
+		if err != nil || out != StillVulnerable || env.fresh != 3 {
+			t.Fatalf("%s third call: %v %v fresh %d", x.Property, out, err, env.fresh)
+		}
+	}
+	// more runs than the floor are honoured; fewer are raised to it.
+	x := ownTest(t)
+	env := newEnv(t, newToy())
+	env.onFresh = flaw(x, func(n int) bool { return n == 5 })
+	out, _ := Check(context.Background(), env, mustReg(t, x, 1).Bundle, CheckOptions{Runs: 6})
+	if out != StillVulnerable || env.fresh != 5 {
+		t.Fatalf("runs 6: %v fresh %d", out, env.fresh)
+	}
+	env = newEnv(t, newToy())
+	out, _ = Check(context.Background(), env, mustReg(t, x, 1).Bundle, CheckOptions{Runs: 1})
+	if out != FixedConfirmed || env.fresh != 5 {
+		t.Fatalf("runs 1 floored: %v fresh %d", out, env.fresh)
+	}
+}
+
+func TestCheckNegativeControlMustPass(t *testing.T) {
+	for _, x := range []generate.Test{ownTest(t), roleTest(t)} {
+		// calls 1-3 test, 4 owner control, 5 negative control. The application
+		// refuses everything on the negative control run: the verdict is No but
+		// the permitted request was not a success, so nothing may be concluded.
+		env := newEnv(t, newToy())
+		env.onFresh = func(n int, ty *toy) { ty.denyAll = n == 5 }
+		out, err := check(t, env, x)
+		if out != Inconclusive || env.fresh != 5 {
+			t.Fatalf("%s: %v %v fresh %d", x.Property, out, err, env.fresh)
+		}
+		// the corrected toy confirms.
+		if out, err := check(t, newEnv(t, newToy()), x); out != FixedConfirmed || err != nil {
+			t.Fatalf("%s corrected: %v %v", x.Property, out, err)
+		}
+	}
+}
+
+func TestBundleRejectsControlCharacters(t *testing.T) {
+	for _, field := range []string{"RegressionID", "FindingID", "EvidenceHash", "Property"} {
+		b := mustReg(t, ownTest(t), 1).Bundle
+		switch field {
+		case "RegressionID":
+			b.RegressionID += "\n"
+		case "FindingID":
+			b.FindingID = "f-1\n# injected"
+		case "EvidenceHash":
+			b.EvidenceHash = "abc\r\nx"
+		case "Property":
+			b.Property = "P-OWN-1\x01"
+		}
+		raw, err := MarshalBundle(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := UnmarshalBundle(raw); err == nil {
+			t.Errorf("%s with a control character accepted", field)
+		}
 	}
 }
