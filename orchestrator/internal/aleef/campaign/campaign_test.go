@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/audspect/bas/internal/aleef/exec"
+	"github.com/audspect/bas/internal/aleef/export"
 	"github.com/audspect/bas/internal/aleef/generate"
 	"github.com/audspect/bas/internal/aleef/model"
 	"github.com/audspect/bas/internal/aleef/safety"
@@ -434,5 +435,135 @@ func TestAliasFreshIdEqualToLiteralRouteFailsFresh(t *testing.T) {
 	}
 	if ty.leftover() != 0 {
 		t.Fatalf("%d objects left", ty.leftover())
+	}
+}
+
+// ---- regressions ----
+
+// checkEnvFor returns an environment on a fresh toy whose generation fixture
+// has the same ids as a campaign's (a new toy numbers its first fixture from 1).
+func checkEnvFor(t *testing.T, ty *toy) *env {
+	t.Helper()
+	cfg, _ := toyConfig(t, ty, newRec())
+	m, err := prepare(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := safety.NewGuard(cfg.Engagement, nil, m, safety.GuardOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := newEnv(cfg, m, g, runTag(cfg.Engagement, cfg.Options.Seed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanup, err := e.generationFixture(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if orphans, err := cleanup(context.Background()); err != nil || len(orphans) > 0 {
+		t.Fatalf("generation cleanup: %v %v", orphans, err)
+	}
+	return e
+}
+
+// assertRegressionExecutable replays a stored bundle against the corrected and
+// the flawed toy.
+func assertRegressionExecutable(t *testing.T, bundleJSON []byte) {
+	t.Helper()
+	b, err := export.UnmarshalBundle(bundleJSON)
+	if err != nil {
+		t.Fatalf("bundle does not round-trip: %v", err)
+	}
+	ctx := context.Background()
+	if out, err := export.Check(ctx, checkEnvFor(t, newToy()), b); err != nil || out != export.FixedConfirmed {
+		t.Fatalf("corrected toy: %v %v", out, err)
+	}
+	flawed := newToy()
+	flawed.readFlaw = true
+	if out, err := export.Check(ctx, checkEnvFor(t, flawed), b); err != nil || out != export.StillVulnerable {
+		t.Fatalf("flawed toy: %v %v", out, err)
+	}
+}
+
+func TestCampaignSavesExecutableRegressionForEveryVerifiedFinding(t *testing.T) {
+	ty := newToy()
+	ty.readFlaw = true
+	rec := newRec()
+	cfg, _ := toyConfig(t, ty, rec)
+	rep := mustRun(t, cfg)
+	if rep.Verified < 1 || rep.RegressionFailed != 0 {
+		t.Fatalf("verified=%d regression failures=%d", rep.Verified, rep.RegressionFailed)
+	}
+	if len(rec.regs) != rep.Verified {
+		t.Fatalf("%d regressions saved for %d verified findings", len(rec.regs), rep.Verified)
+	}
+	checked := 0
+	for _, f := range rep.Findings {
+		if f.State != verify.StateVerified {
+			continue
+		}
+		reg, ok := rec.regs[f.FindingID]
+		if !ok || reg.RegressionID == "" || reg.RegressionID != f.RegressionID {
+			t.Fatalf("finding %s: saved %+v report %q", f.FindingID, reg, f.RegressionID)
+		}
+		if checked < 2 {
+			assertRegressionExecutable(t, reg.BundleJSON)
+			checked++
+		}
+	}
+	// ids only in the report: no bundle, scenario or secret
+	raw, _ := json.Marshal(rep)
+	for _, bad := range []string{"\"version\"", "Scenario", "scenario", "bundle", "tok-", "ALEEF-CANARY"} {
+		if strings.Contains(string(raw), bad) {
+			t.Fatalf("report contains %q", bad)
+		}
+	}
+	if !strings.Contains(string(raw), "ALEEF-REG-") {
+		t.Fatal("report does not name the regression ids")
+	}
+}
+
+func TestCampaignDemotesFindingWhenRegressionCannotBeSaved(t *testing.T) {
+	for name, set := range map[string]func(*fakeRec){
+		"save fails":     func(r *fakeRec) { r.failSave = true },
+		"sequence fails": func(r *fakeRec) { r.failSeq = true },
+	} {
+		t.Run(name, func(t *testing.T) {
+			ty := newToy()
+			ty.readFlaw = true
+			rec := newRec()
+			set(rec)
+			cfg, _ := toyConfig(t, ty, rec)
+			rep := mustRun(t, cfg)
+			if rep.Verified != 0 || rep.RegressionFailed < 1 {
+				t.Fatalf("verified=%d regression failures=%d", rep.Verified, rep.RegressionFailed)
+			}
+			demoted := 0
+			for _, o := range rep.Tests {
+				if o.Reason == "regression could not be saved" {
+					if o.State != verify.StateUnconfirmed || o.EvidenceHash != "" || o.RegressionID != "" {
+						t.Fatalf("outcome %+v", o)
+					}
+					demoted++
+				}
+			}
+			if demoted != rep.RegressionFailed {
+				t.Fatalf("demoted %d, counted %d", demoted, rep.RegressionFailed)
+			}
+			for id, st := range rec.states {
+				if st == "verified" {
+					t.Fatalf("finding %s is still verified without a regression", id)
+				}
+			}
+			if len(rec.regs) != 0 {
+				t.Fatalf("%d regressions saved", len(rec.regs))
+			}
+			for _, f := range rep.Findings {
+				if f.State == verify.StateVerified || f.RegressionID != "" {
+					t.Fatalf("finding row %+v", f)
+				}
+			}
+		})
 	}
 }

@@ -39,6 +39,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/audspect/bas/internal/aleef/export"
 	"github.com/audspect/bas/internal/aleef/generate"
 	"github.com/audspect/bas/internal/aleef/model"
 	"github.com/audspect/bas/internal/aleef/property"
@@ -57,12 +58,11 @@ type Recorder interface {
 	verify.Recorder
 	SaveTest(ctx context.Context, runID string, t generate.Test) error
 	CreateRun(ctx context.Context, engagementID string) (string, error)
-}
-
-// findingLister is optionally implemented by the Recorder (*store.Store does)
-// so that finding ids can be reported.
-type findingLister interface {
-	ListFindings(ctx context.Context, runID string) (candidates, verified, others []store.Finding, err error)
+	// GetFinding, NextRegressionSeq and SaveRegression persist the regression
+	// of every verified finding (see saveRegression).
+	GetFinding(ctx context.Context, id string) (store.Finding, error)
+	NextRegressionSeq(ctx context.Context) (int, error)
+	SaveRegression(ctx context.Context, findingID, regressionID string, bundleJSON, scenarioYAML []byte, yamlNote string) error
 }
 
 // Options tune generation and verification.
@@ -136,6 +136,8 @@ type TestOutcome struct {
 	EvidenceHash  string
 	Reproductions int
 	Executed      bool
+	// RegressionID is the saved regression of a verified finding.
+	RegressionID string
 }
 
 // FindingSummary is one finding (a test that reproduced at least once).
@@ -147,6 +149,8 @@ type FindingSummary struct {
 	State        string
 	Reason       string
 	EvidenceHash string
+	// RegressionID is the id of the regression saved for a verified finding.
+	RegressionID string
 }
 
 // Report is the campaign result. It never contains tokens, request or response
@@ -156,7 +160,10 @@ type Report struct {
 	Model     Coverage
 	Generated generate.Report
 	// Total is the number of tests generated; Total == Executed + NotExecuted.
-	Total, Executed, NotExecuted                                           int
+	Total, Executed, NotExecuted int
+	// RegressionFailed counts findings demoted from verified to unconfirmed
+	// because their regression could not be saved.
+	RegressionFailed                                                       int
 	Clean, ReachedCandidate, Verified, Rejected, Unconfirmed, Inconclusive int
 	PerOperation                                                           map[string]OpCoverage
 	NotModelled                                                            []string
@@ -407,28 +414,34 @@ func Run(ctx context.Context, cfg Config) (rep Report, retErr error) {
 				rep.Halted = strings.TrimPrefix(verdict.Reason, "halted: ")
 			}
 		}
+		if verr == nil && verdict.State == verify.StateVerified {
+			// A verified finding without a saved regression is not allowed to
+			// stay verified: save it now or demote the finding.
+			detached := context.WithoutCancel(ctx)
+			rid, rerr := saveRegression(detached, cfg.Recorder, verdict.FindingID, t)
+			if rerr == nil {
+				out.RegressionID = rid
+			} else {
+				const reason = "regression could not be saved"
+				rep.RegressionFailed++
+				out.State, out.Reason, out.EvidenceHash = verify.StateUnconfirmed, reason, ""
+				if serr := cfg.Recorder.SetFindingState(detached, verdict.FindingID, verify.StateUnconfirmed, reason, "aleef-campaign"); serr != nil {
+					runErr = fmt.Errorf("campaign: demote finding %s after regression failure: %w", verdict.FindingID, serr)
+					rep.Halted = "recording error"
+				}
+			}
+		}
 		if !out.Executed {
 			out.State = StateNotExecuted
 		}
 		rep.Tests = append(rep.Tests, out)
 		if out.Reproductions > 0 || out.State == verify.StateVerified {
-			byID[t.ID] = FindingSummary{TestID: t.ID, Property: t.Property, Operation: op,
-				State: out.State, Reason: out.Reason, EvidenceHash: out.EvidenceHash}
+			byID[t.ID] = FindingSummary{FindingID: verdict.FindingID, TestID: t.ID, Property: t.Property, Operation: op,
+				State: out.State, Reason: out.Reason, EvidenceHash: out.EvidenceHash, RegressionID: out.RegressionID}
 		}
 	}
 
 	tally(&rep)
-	if fl, ok := cfg.Recorder.(findingLister); ok {
-		c, vf, o, err := fl.ListFindings(ctx, runID)
-		if err == nil {
-			for _, f := range append(append(c, vf...), o...) {
-				if s, ok := byID[f.TestID]; ok && s.FindingID == "" {
-					s.FindingID = f.ID
-					byID[f.TestID] = s
-				}
-			}
-		}
-	}
 	for _, o := range rep.Tests {
 		if s, ok := byID[o.TestID]; ok {
 			rep.Findings = append(rep.Findings, s)
@@ -472,4 +485,28 @@ func tally(rep *Report) {
 		}
 		rep.PerOperation[o.Operation] = oc
 	}
+}
+
+// saveRegression exports and stores the regression of a verified finding and
+// returns its id.
+func saveRegression(ctx context.Context, rec Recorder, findingID string, t generate.Test) (string, error) {
+	if findingID == "" {
+		return "", errors.New("campaign: verified finding has no id")
+	}
+	f, err := rec.GetFinding(ctx, findingID)
+	if err != nil {
+		return "", err
+	}
+	seq, err := rec.NextRegressionSeq(ctx)
+	if err != nil {
+		return "", err
+	}
+	reg, err := export.ToRegression(f, t, seq)
+	if err != nil {
+		return "", err
+	}
+	if err := rec.SaveRegression(ctx, findingID, reg.Bundle.RegressionID, reg.BundleJSON, reg.ScenarioYAML, reg.YAMLNote); err != nil {
+		return "", err
+	}
+	return reg.Bundle.RegressionID, nil
 }

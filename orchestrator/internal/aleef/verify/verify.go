@@ -71,6 +71,9 @@ type Verdict struct {
 	// Reason never contains tokens or response bodies.
 	Reason  string
 	Orphans []model.CreatedObject
+	// FindingID is the id of the finding the recorder created for the test, or
+	// empty when none was created.
+	FindingID string
 }
 
 // Env builds a FRESH fixture and a new executor on every call, and returns a
@@ -178,7 +181,7 @@ func (v *Verifier) Verify(ctx context.Context, t generate.Test) (Verdict, error)
 			if err != nil {
 				return out, fmt.Errorf("verify: create finding: %w", err)
 			}
-			fid = f.ID
+			fid, out.FindingID = f.ID, f.ID
 		}
 		if o.stop != nil {
 			return stopWith(o.stop)
@@ -201,7 +204,7 @@ func (v *Verifier) Verify(ctx context.Context, t generate.Test) (Verdict, error)
 			if err != nil {
 				return out, fmt.Errorf("verify: create finding: %w", err)
 			}
-			fid = f.ID
+			fid, out.FindingID = f.ID, f.ID
 		}
 
 		// ---- controls, each on its own fresh environment

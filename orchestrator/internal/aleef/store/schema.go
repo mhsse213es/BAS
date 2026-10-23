@@ -103,6 +103,17 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE TRIGGER aleef_findings_no_regress
 			BEFORE UPDATE ON aleef_findings
 			FOR EACH ROW EXECUTE FUNCTION aleef_no_verified_regress()`,
+		// One executable regression per verified finding, saved at verification
+		// time (see package export).
+		`CREATE TABLE IF NOT EXISTS aleef_regressions (
+			finding_id    text        PRIMARY KEY REFERENCES aleef_findings(id),
+			regression_id text        NOT NULL UNIQUE,
+			bundle        jsonb       NOT NULL,
+			scenario_yaml text,
+			yaml_note     text        NOT NULL DEFAULT '',
+			created_at    timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE SEQUENCE IF NOT EXISTS aleef_regression_seq MINVALUE 1 MAXVALUE 9999 NO CYCLE`,
 	}
 	for _, s := range stmts {
 		if _, err := pool.Exec(ctx, s); err != nil {

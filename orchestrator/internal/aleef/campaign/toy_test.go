@@ -225,10 +225,15 @@ type fakeRec struct {
 	hash     map[string]string
 	results  []string
 	fkMisses int
+	meta     map[string]store.Finding
+	regs     map[string]store.Regression
+	seq      int
+	failSave bool
+	failSeq  bool
 }
 
 func newRec() *fakeRec {
-	return &fakeRec{tests: map[string]bool{}, states: map[string]string{}, hash: map[string]string{}}
+	return &fakeRec{tests: map[string]bool{}, states: map[string]string{}, hash: map[string]string{}, meta: map[string]store.Finding{}, regs: map[string]store.Regression{}}
 }
 
 func (r *fakeRec) CreateRun(ctx context.Context, eng string) (string, error) {
@@ -254,6 +259,7 @@ func (r *fakeRec) CreateFinding(ctx context.Context, runID string, t generate.Te
 	id := fmt.Sprintf("f-%d", len(r.findings)+1)
 	r.findings = append(r.findings, id)
 	r.states[id] = "candidate"
+	r.meta[id] = store.Finding{ID: id, TestID: t.ID, Property: t.Property}
 	return store.Finding{ID: id, TestID: t.ID}, nil
 }
 
@@ -306,4 +312,38 @@ func toyConfig(t *testing.T, ty *toy, rec Recorder) (Config, *httptest.Server) {
 		Recorder:      rec,
 		Options:       Options{Seed: 1, Catalogue: []contract.Scenario{}},
 	}, srv
+}
+
+func (r *fakeRec) GetFinding(ctx context.Context, id string) (store.Finding, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	f, ok := r.meta[id]
+	if !ok {
+		return store.Finding{}, fmt.Errorf("no finding %s", id)
+	}
+	f.State, f.EvidenceHash = r.states[id], r.hash[id]
+	return f, nil
+}
+
+func (r *fakeRec) NextRegressionSeq(ctx context.Context) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.failSeq {
+		return 0, fmt.Errorf("sequence unavailable")
+	}
+	r.seq++
+	return r.seq, nil
+}
+
+func (r *fakeRec) SaveRegression(ctx context.Context, findingID, regID string, bundle, yaml []byte, note string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.failSave {
+		return fmt.Errorf("disk full")
+	}
+	if _, dup := r.regs[findingID]; dup {
+		return fmt.Errorf("already saved")
+	}
+	r.regs[findingID] = store.Regression{FindingID: findingID, RegressionID: regID, BundleJSON: bundle, ScenarioYAML: yaml, YAMLNote: note}
+	return nil
 }
