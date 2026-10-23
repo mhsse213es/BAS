@@ -347,3 +347,17 @@ func (r *fakeRec) SaveRegression(ctx context.Context, findingID, regID string, b
 	r.regs[findingID] = store.Regression{FindingID: findingID, RegressionID: regID, BundleJSON: bundle, ScenarioYAML: yaml, YAMLNote: note}
 	return nil
 }
+
+func (r *fakeRec) ListVerifiedWithoutRegression(ctx context.Context, runID string) ([]store.Finding, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []store.Finding
+	for id, st := range r.states {
+		if _, ok := r.regs[id]; st == "verified" && !ok {
+			f := r.meta[id]
+			f.ID, f.State = id, st
+			out = append(out, f)
+		}
+	}
+	return out, nil
+}

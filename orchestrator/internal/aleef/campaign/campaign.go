@@ -63,6 +63,9 @@ type Recorder interface {
 	GetFinding(ctx context.Context, id string) (store.Finding, error)
 	NextRegressionSeq(ctx context.Context) (int, error)
 	SaveRegression(ctx context.Context, findingID, regressionID string, bundleJSON, scenarioYAML []byte, yamlNote string) error
+	// ListVerifiedWithoutRegression finds verified findings a crash left
+	// without a regression (runID "" = all runs); Run demotes them first.
+	ListVerifiedWithoutRegression(ctx context.Context, runID string) ([]store.Finding, error)
 }
 
 // Options tune generation and verification.
@@ -128,11 +131,14 @@ type OpCoverage struct {
 
 // TestOutcome is one test's result. It carries no bodies and no tokens.
 type TestOutcome struct {
-	TestID        string
-	Property      string
-	Operation     string
-	State         string // clean, candidate, verified, rejected, unconfirmed, not_executed
-	Reason        string
+	TestID    string
+	Property  string
+	Operation string
+	State     string // clean, candidate, verified, rejected, unconfirmed, not_executed
+	Reason    string
+	// EvidenceHash is empty for anything not verified, including a finding
+	// demoted because its regression could not be saved; the stored finding
+	// row keeps the hash it was verified with.
 	EvidenceHash  string
 	Reproductions int
 	Executed      bool
@@ -161,6 +167,10 @@ type Report struct {
 	Generated generate.Report
 	// Total is the number of tests generated; Total == Executed + NotExecuted.
 	Total, Executed, NotExecuted int
+	// RepairedUnregressed counts verified findings from earlier campaigns that
+	// had no regression (the process died between verification and saving it)
+	// and were demoted to unconfirmed before this campaign started.
+	RepairedUnregressed int
 	// RegressionFailed counts findings demoted from verified to unconfirmed
 	// because their regression could not be saved.
 	RegressionFailed                                                       int
@@ -286,6 +296,18 @@ func Run(ctx context.Context, cfg Config) (rep Report, retErr error) {
 	e, err := newEnv(cfg, m, guard, runTag(cfg.Engagement, cfg.Options.Seed))
 	if err != nil {
 		return rep, err
+	}
+	// A crash between MarkVerified and SaveRegression leaves a verified finding
+	// with no regression. Demote those before doing anything else.
+	stale, err := cfg.Recorder.ListVerifiedWithoutRegression(ctx, "")
+	if err != nil {
+		return rep, fmt.Errorf("campaign: check earlier findings for missing regressions: %w", err)
+	}
+	for _, f := range stale {
+		if err := cfg.Recorder.SetFindingState(ctx, f.ID, verify.StateUnconfirmed, "regression missing (interrupted before save)", "aleef-campaign"); err != nil {
+			return rep, fmt.Errorf("campaign: demote finding %s with no regression: %w", f.ID, err)
+		}
+		rep.RepairedUnregressed++
 	}
 	rep.Model = coverage(m)
 	rep.NotModelled = append([]string(nil), m.NotModelled...)

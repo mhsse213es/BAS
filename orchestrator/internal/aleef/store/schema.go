@@ -1,7 +1,10 @@
 // Package store persists Aleef engagements, runs, generated tests, execution
 // results and findings. Findings move candidate -> verified only through
 // MarkVerified with an evidence hash; every state change is appended to an
-// append-only history table enforced by database triggers.
+// append-only history table enforced by database triggers. A verified finding
+// is only presented as verified once its regression is saved
+// (ListVerifiedWithRegression); ListVerifiedWithoutRegression finds the ones a
+// crash between MarkVerified and SaveRegression left behind.
 package store
 
 import (
@@ -57,7 +60,7 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			state           text        NOT NULL DEFAULT 'candidate'
 				CHECK (state IN ('candidate', 'verified', 'rejected', 'unconfirmed')),
 			prior_knowledge text        NOT NULL DEFAULT 'not_checked'
-				CHECK (prior_knowledge IN ('not_checked', 'checked_none_found', 'known_public', 'known_vendor')),
+				CHECK (prior_knowledge IN (` + priorKnowledgeSQL() + `)),
 			evidence_hash   text,
 			covered         boolean     NOT NULL DEFAULT false,
 			created_at      timestamptz NOT NULL DEFAULT NOW(),

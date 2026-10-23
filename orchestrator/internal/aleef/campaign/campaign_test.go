@@ -13,6 +13,7 @@ import (
 	"github.com/audspect/bas/internal/aleef/generate"
 	"github.com/audspect/bas/internal/aleef/model"
 	"github.com/audspect/bas/internal/aleef/safety"
+	"github.com/audspect/bas/internal/aleef/store"
 	"github.com/audspect/bas/internal/aleef/verify"
 	"github.com/audspect/bas/internal/apibas/contract"
 )
@@ -565,5 +566,28 @@ func TestCampaignDemotesFindingWhenRegressionCannotBeSaved(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCampaignRepairsVerifiedFindingsWithoutRegression(t *testing.T) {
+	ty := newToy()
+	rec := newRec()
+	// an earlier campaign died between verification and saving the regression
+	rec.states["old-1"], rec.hash["old-1"] = "verified", "h1"
+	rec.meta["old-1"] = store.Finding{ID: "old-1", TestID: "x"}
+	// and one that completed properly
+	rec.states["old-2"], rec.hash["old-2"] = "verified", "h2"
+	rec.meta["old-2"] = store.Finding{ID: "old-2", TestID: "y"}
+	rec.regs["old-2"] = store.Regression{FindingID: "old-2", RegressionID: "ALEEF-REG-0001"}
+	cfg, _ := toyConfig(t, ty, rec)
+	rep := mustRun(t, cfg)
+	if rep.RepairedUnregressed != 1 {
+		t.Fatalf("repaired %d", rep.RepairedUnregressed)
+	}
+	if rec.states["old-1"] != "unconfirmed" || rec.states["old-2"] != "verified" {
+		t.Fatalf("states %v", rec.states)
+	}
+	if left, _ := rec.ListVerifiedWithoutRegression(context.Background(), ""); len(left) != 0 {
+		t.Fatalf("still unregressed: %v", left)
 	}
 }

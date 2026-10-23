@@ -153,7 +153,9 @@ func (s *Store) GetFinding(ctx context.Context, id string) (Finding, error) {
 
 // ListFindings returns a run's findings split into candidates, verified and
 // everything else (rejected, unconfirmed). Candidates and verified are never
-// merged.
+// merged. The verified slice is raw state: it can include a finding whose
+// regression was never saved (see ListVerifiedWithoutRegression); use
+// ListVerifiedWithRegression for the list to present as verified.
 func (s *Store) ListFindings(ctx context.Context, runID string) (candidates, verified []Finding, others []Finding, err error) {
 	rows, err := s.pool.Query(ctx, `SELECT `+findingCols+` FROM aleef_findings WHERE run_id=$1 ORDER BY created_at, id`, runID)
 	if err != nil {
