@@ -965,58 +965,15 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 					return false
 				}
 
-				// dbsim step-shape pre-gate (runs BEFORE B5, never instead of it):
-				// a dbprobe step must carry a spec and no shell baggage. B5 below
-				// still applies its signed ExecutionClass rules to the step -- an
-				// empty/unknown class stays vetoed -- and executeDBProbe applies
-				// the remaining dbsim gates (policy, identity) before any probe SQL.
-				if msg := dbprobeStepShapeRefusal(step); msg != "" {
-					log.Printf("[!]   [%d/%d] %s VETOED -- dbsim gate: %s", i+1, total, step.TechniqueID, msg)
+				// Pre-execution gates: the dbsim step-shape pre-gate, then B5 (see
+				// gateStep). Both run BEFORE payload staging so nothing is written
+				// to disk for a step that is about to be vetoed.
+				if v := gateStep(step); v != nil {
+					log.Printf("[!]   [%d/%d] %s VETOED -- %s (class=%s, action=%s, source=%s)",
+						i+1, total, step.TechniqueID, v.reason, step.ExecutionClass, step.ActionKey, v.source)
 					a.logger.Sec("warn", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
-						"dbsim_veto", msg)
-					results[i] = protocol.ExecResult{
-						TaskID:               step.TaskID,
-						ExitCode:             -1,
-						Vetoed:               true,
-						VetoedActionKey:      step.ActionKey,
-						VetoedExecutionClass: step.ExecutionClass,
-						VetoedBlockSource:    "dbsim_gate",
-						Stderr:               "dbprobe refused: " + msg,
-						ExecutedAt:           time.Now(),
-					}
-					ran[i] = true
-					emit(RunEvent{Type: "completed", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name,
-						Payload: map[string]any{"verdict": "vetoed"}})
-					return false
-				}
-
-				// B5 gate runs BEFORE payload staging, not after -- no reason to
-				// write a potentially-destructive payload to disk for a step
-				// that's about to be vetoed anyway. Scans Command, Cleanup, and
-				// every payload's content (not just Command): a compromised
-				// orchestrator controls the signed ExecutionClass and could hide
-				// a destructive action in Cleanup (which runs unconditionally
-				// after any non-vetoed step) or in a payload's content instead
-				// (final whole-branch review, C3).
-				if vetoed, source := evaluateB5Gate(protocol.ScenarioStep{
-					ExecutionClass: step.ExecutionClass,
-					Command:        step.Command,
-					Cleanup:        step.Cleanup,
-					Payloads:       step.Payloads,
-				}); vetoed {
-					log.Printf("[!]   [%d/%d] %s VETOED — destructive-action policy (class=%s, action=%s, source=%s)",
-						i+1, total, step.TechniqueID, step.ExecutionClass, step.ActionKey, source)
-					a.logger.Sec("warn", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
-						"b5_veto", fmt.Sprintf("class=%s action=%s source=%s", step.ExecutionClass, step.ActionKey, source))
-					results[i] = protocol.ExecResult{
-						TaskID:               step.TaskID,
-						ExitCode:             -1,
-						Vetoed:               true,
-						VetoedActionKey:      step.ActionKey,
-						VetoedExecutionClass: step.ExecutionClass,
-						VetoedBlockSource:    source,
-						ExecutedAt:           time.Now(),
-					}
+						v.category, fmt.Sprintf("class=%s action=%s source=%s %s", step.ExecutionClass, step.ActionKey, v.source, v.reason))
+					results[i] = v.result
 					ran[i] = true
 					emit(RunEvent{Type: "completed", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name,
 						Payload: map[string]any{"verdict": "vetoed"}})
@@ -1517,13 +1474,7 @@ func (a *Agent) connectWS() {
 			gotMessage = true
 
 			if protocol.IsSignedCommandType(msg.Type) {
-				env, err := a.verifyCommandEnvelope(msg.Data, msg.Type)
-				if err != nil {
-					log.Printf("[!] WS: command envelope rejected (%s): %v", msg.Type, err)
-					a.logger.Op("warn", "security", fmt.Sprintf("rejected command envelope for %s: %v", msg.Type, err))
-					continue
-				}
-				a.dispatchVerifiedCommand(msg.Type, env.Payload)
+				a.verifyAndDispatch(msg.Type, msg.Data)
 			} else {
 				log.Printf("[~] WS: unhandled message type %q", msg.Type)
 			}
@@ -1533,6 +1484,75 @@ func (a *Agent) connectWS() {
 		attempt++
 		time.Sleep(delay)
 	}
+}
+
+// verifyAndDispatch is the single production decision point for a signed
+// command arriving on the WebSocket: the command is dispatched ONLY when
+// verifyCommandEnvelope accepts it. It returns false (and dispatches nothing)
+// for a rejected envelope. connectWS and the dbsim tests both call it, so
+// removing the verifier gate here is caught by tests.
+func (a *Agent) verifyAndDispatch(msgType string, data []byte) bool {
+	env, err := a.verifyCommandEnvelope(data, msgType)
+	if err != nil {
+		log.Printf("[!] WS: command envelope rejected (%s): %v", msgType, err)
+		a.logger.Op("warn", "security", fmt.Sprintf("rejected command envelope for %s: %v", msgType, err))
+		return false
+	}
+	a.dispatchVerifiedCommand(msgType, env.Payload)
+	return true
+}
+
+// stepVeto describes a step refused by a pre-execution gate.
+type stepVeto struct {
+	source   string // "dbsim_gate", or B5's "catalog" / "local_backstop" / "both"
+	category string // logger category
+	reason   string
+	result   protocol.ExecResult
+}
+
+// gateStep runs the pre-execution gates for a step: first the dbsim step-shape
+// pre-gate (a dbprobe step must carry a spec and no shell baggage), then B5
+// (signed ExecutionClass combined with the local destructiveguard backstop over
+// Command, Cleanup and every payload; an empty/unknown class is destructive).
+// The dbsim gate never replaces or weakens B5; executeDBProbe applies the
+// remaining dbsim gates (policy, identity) before any probe SQL. Returns nil
+// when the step may proceed.
+func gateStep(step ScenarioStep) *stepVeto {
+	if msg := dbprobeStepShapeRefusal(step); msg != "" {
+		return &stepVeto{source: "dbsim_gate", category: "dbsim_veto", reason: "dbsim gate: " + msg,
+			result: protocol.ExecResult{
+				TaskID:               step.TaskID,
+				ExitCode:             -1,
+				Vetoed:               true,
+				VetoedActionKey:      step.ActionKey,
+				VetoedExecutionClass: step.ExecutionClass,
+				VetoedBlockSource:    "dbsim_gate",
+				Stderr:               "dbprobe refused: " + msg,
+				ExecutedAt:           time.Now(),
+			}}
+	}
+	// B5 scans Command, Cleanup, AND every payload's content (not just
+	// Command): a compromised orchestrator controls the signed ExecutionClass
+	// and could hide a destructive action in Cleanup (which runs unconditionally
+	// after any non-vetoed step) or in a payload (final whole-branch review, C3).
+	if vetoed, source := evaluateB5Gate(protocol.ScenarioStep{
+		ExecutionClass: step.ExecutionClass,
+		Command:        step.Command,
+		Cleanup:        step.Cleanup,
+		Payloads:       step.Payloads,
+	}); vetoed {
+		return &stepVeto{source: source, category: "b5_veto", reason: "destructive-action policy",
+			result: protocol.ExecResult{
+				TaskID:               step.TaskID,
+				ExitCode:             -1,
+				Vetoed:               true,
+				VetoedActionKey:      step.ActionKey,
+				VetoedExecutionClass: step.ExecutionClass,
+				VetoedBlockSource:    source,
+				ExecutedAt:           time.Now(),
+			}}
+	}
+	return nil
 }
 
 // dispatchVerifiedCommand runs the command-type-specific handling that

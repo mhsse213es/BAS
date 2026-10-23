@@ -3,11 +3,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // dbcredStoreDir is the root-only credential directory next to the service
@@ -18,45 +19,66 @@ var dbcredStoreDir = "/etc/bas-agent/dbcred"
 
 const maxDBCredFileBytes = 16 << 10
 
-// readStoredDBCredentialPlatform reads <dbcredStoreDir>/<name>.json. It refuses
-// (returns an error, never a default) when the directory is group/world
-// writable, when the entry is not a regular file, when its mode is wider than
-// 0600, or when it is owned by someone other than root or the agent's own uid.
+// ownerOK reports whether uid may own the credential directory or file: root,
+// or (for an agent deliberately run as a non-root service account) the agent's
+// own effective uid. When the agent runs as root (euid 0) only root qualifies,
+// which is the spec's "root-only" rule.
+func ownerOK(uid uint32) bool { return uid == 0 || int(uid) == os.Geteuid() }
+
+// readStoredDBCredentialPlatform reads <dbcredStoreDir>/<name>.json with no
+// stat-then-open window: the directory and the file are opened with O_NOFOLLOW
+// (a symlink is refused), and every check is made with Fstat on the opened
+// descriptor, which is also the descriptor the content is read from.
+// It refuses (an error, never a default) when the directory is not a directory,
+// is group/world writable, or has an owner other than root/the agent euid; or
+// when the entry is not a regular file, has a mode wider than 0600, has an
+// owner other than root/the agent euid, or exceeds 16 KiB.
+// Not executed on the Windows build host: compile-checked for linux and darwin.
 func readStoredDBCredentialPlatform(name string) ([]byte, bool, error) {
-	di, err := os.Stat(dbcredStoreDir)
+	dfd, err := unix.Open(dbcredStoreDir, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, unix.ENOENT) {
 			return nil, false, nil
 		}
 		return nil, false, fmt.Errorf("credential directory: %w", err)
 	}
-	if !di.IsDir() || di.Mode().Perm()&0o022 != 0 {
-		return nil, false, fmt.Errorf("credential directory is not a directory or is writable by group/others (mode %04o)", di.Mode().Perm())
+	defer unix.Close(dfd)
+	var dst unix.Stat_t
+	if err := unix.Fstat(dfd, &dst); err != nil {
+		return nil, false, fmt.Errorf("credential directory: %w", err)
 	}
-	p := filepath.Join(dbcredStoreDir, name+".json")
-	fi, err := os.Lstat(p)
+	if uint32(dst.Mode)&unix.S_IFMT != unix.S_IFDIR {
+		return nil, false, fmt.Errorf("credential directory is not a directory")
+	}
+	if uint32(dst.Mode)&0o022 != 0 {
+		return nil, false, fmt.Errorf("credential directory is writable by group/others (mode %04o)", uint32(dst.Mode)&0o7777)
+	}
+	if !ownerOK(dst.Uid) {
+		return nil, false, fmt.Errorf("credential directory is owned by uid %d, not root or the agent", dst.Uid)
+	}
+
+	ffd, err := unix.Openat(dfd, name+".json", unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, unix.ENOENT) {
 			return nil, false, nil
 		}
 		return nil, false, fmt.Errorf("credential file: %w", err)
 	}
-	if !fi.Mode().IsRegular() {
-		return nil, false, fmt.Errorf("credential file is not a regular file")
-	}
-	if fi.Mode().Perm()&0o177 != 0 {
-		return nil, false, fmt.Errorf("credential file mode %04o is wider than 0600", fi.Mode().Perm())
-	}
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
-		if st.Uid != 0 && int(st.Uid) != os.Geteuid() {
-			return nil, false, fmt.Errorf("credential file is owned by uid %d, not root or the agent", st.Uid)
-		}
-	}
-	f, err := os.Open(p)
-	if err != nil {
+	f := os.NewFile(uintptr(ffd), name+".json") // owns ffd from here
+	defer f.Close()
+	var st unix.Stat_t
+	if err := unix.Fstat(ffd, &st); err != nil {
 		return nil, false, fmt.Errorf("credential file: %w", err)
 	}
-	defer f.Close()
+	if uint32(st.Mode)&unix.S_IFMT != unix.S_IFREG {
+		return nil, false, fmt.Errorf("credential file is not a regular file")
+	}
+	if uint32(st.Mode)&0o177 != 0 {
+		return nil, false, fmt.Errorf("credential file mode %04o is wider than 0600", uint32(st.Mode)&0o7777)
+	}
+	if !ownerOK(st.Uid) {
+		return nil, false, fmt.Errorf("credential file is owned by uid %d, not root or the agent", st.Uid)
+	}
 	b, err := io.ReadAll(io.LimitReader(f, maxDBCredFileBytes+1))
 	if err != nil {
 		return nil, false, fmt.Errorf("credential file: %w", err)

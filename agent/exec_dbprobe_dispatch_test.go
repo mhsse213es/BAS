@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -28,82 +27,115 @@ func scenarioEnvelopePayload(t *testing.T) json.RawMessage {
 	return b
 }
 
-// connectWSStyleDispatch mirrors connectWS's exact verify-then-dispatch rule:
-// the handler is reached ONLY when the real verifyCommandEnvelope accepts the
-// envelope. Dispatch itself is replaced by directly executing the decoded
-// dbprobe steps (the real dispatchVerifiedCommand needs a live server for
-// runScenario). The verifier is the real one, not a mock.
-func connectWSStyleDispatch(t *testing.T, a *Agent, raw []byte) (accepted bool) {
-	t.Helper()
-	env, err := a.verifyCommandEnvelope(raw, "command_scenario")
-	if err != nil {
-		return false
-	}
-	var cmd protocol.ScenarioCommand
-	if err := json.Unmarshal(env.Payload, &cmd); err != nil {
-		t.Fatalf("verified payload did not decode: %v", err)
-	}
-	for _, ws := range cmd.Steps {
-		execStep(context.Background(), decodeStep(ws), nil)
-	}
-	return true
-}
-
+// TestDBProbeTamperedScenarioRefusedBeforeConnect drives the REAL production
+// decision point connectWS uses (Agent.verifyAndDispatch -> real
+// verifyCommandEnvelope -> real dispatchVerifiedCommand) with a command_scenario
+// envelope carrying a dbprobe step. Every rejected envelope must (a) return
+// false, (b) never reach dispatchVerifiedCommand (observed through the
+// previous-scenario canceller that command_scenario dispatch always invokes),
+// and (c) never call the adapter's Connect.
 func TestDBProbeTamperedScenarioRefusedBeforeConnect(t *testing.T) {
 	key := setupSigningTrust(t)
 	fa := setupHappy(t)
-	a := &Agent{id: Identity{AgentID: "abc123deadbeef01"}}
+	const agentID = "abc123deadbeef01"
+	a := newAgent(Config{ServerURL: "http://orchestrator.local:9000"}, Identity{AgentID: agentID})
+
+	dispatched := false
+	a.scenarioMu.Lock()
+	a.cancelScenario = func() { dispatched = true }
+	a.scenarioMu.Unlock()
 
 	mk := func(id, nonce string) protocol.CommandEnvelope {
 		now := time.Now().UTC()
 		return protocol.CommandEnvelope{
 			Version: protocol.CommandEnvelopeVersion, CommandID: id, CommandType: "command_scenario",
-			AgentID: "abc123deadbeef01", IssuedAt: now, ExpiresAt: now.Add(60 * time.Second),
+			AgentID: agentID, IssuedAt: now, ExpiresAt: now.Add(60 * time.Second),
 			Nonce: nonce, Payload: scenarioEnvelopePayload(t),
 		}
 	}
-
-	t.Run("tampered payload after signing", func(t *testing.T) {
-		signed := signEnvelopeForDispatchTest(t, key, mk("cmd-tamper", "n1"))
-		// Change the host inside the signed payload without re-signing.
-		tampered := bytes.Replace(signed, []byte("db.lab.internal"), []byte("evil.example.org"), 1)
-		if bytes.Equal(tampered, signed) {
-			t.Fatal("test bug: tamper did not change the bytes")
+	reject := func(name string, raw []byte) {
+		t.Helper()
+		if a.verifyAndDispatch("command_scenario", raw) {
+			t.Errorf("%s: envelope was accepted", name)
 		}
-		if connectWSStyleDispatch(t, a, tampered) {
-			t.Fatal("tampered envelope was accepted")
+		if dispatched {
+			t.Errorf("%s: rejected envelope reached dispatchVerifiedCommand", name)
 		}
-	})
-	t.Run("unsigned", func(t *testing.T) {
-		raw, _ := json.Marshal(mk("cmd-unsigned", "n2")) // no Signature
-		if connectWSStyleDispatch(t, a, raw) {
-			t.Fatal("unsigned envelope was accepted")
+		if n := fa.count("Connect"); n != 0 {
+			t.Errorf("%s: adapter Connect called %d time(s)", name, n)
 		}
-	})
-	t.Run("signed by wrong key", func(t *testing.T) {
-		other, _ := signingTestKey(t)
-		raw := signEnvelopeForDispatchTest(t, other, mk("cmd-wrongkey", "n3"))
-		if connectWSStyleDispatch(t, a, raw) {
-			t.Fatal("envelope signed by an untrusted key was accepted")
-		}
-	})
-	if fa.count("Connect") != 0 {
-		t.Fatalf("adapter Connect called %d time(s) for rejected envelopes", fa.count("Connect"))
 	}
 
-	// Positive control + replay: the same properly signed envelope is accepted
-	// once (and only then reaches the adapter), the replay is refused.
-	good := signEnvelopeForDispatchTest(t, key, mk("cmd-good", "n4"))
-	if !connectWSStyleDispatch(t, a, good) {
-		t.Fatal("control: a valid signed envelope must be accepted")
+	signed := signEnvelopeForDispatchTest(t, key, mk("cmd-tamper", "n1"))
+	tampered := bytes.Replace(signed, []byte("db.lab.internal"), []byte("evil.example.org"), 1)
+	if bytes.Equal(tampered, signed) {
+		t.Fatal("test bug: tamper did not change the bytes")
 	}
-	if fa.count("Connect") != 1 {
-		t.Fatalf("control: expected exactly one Connect, got %d", fa.count("Connect"))
+	reject("tampered payload", tampered)
+
+	unsigned, _ := json.Marshal(mk("cmd-unsigned", "n2"))
+	reject("unsigned", unsigned)
+
+	other, _ := signingTestKey(t)
+	reject("wrong key", signEnvelopeForDispatchTest(t, other, mk("cmd-wrongkey", "n3")))
+
+	wrongAgent := mk("cmd-wrongagent", "n4")
+	wrongAgent.AgentID = "ffffffffffffffff"
+	reject("wrong agentId", signEnvelopeForDispatchTest(t, key, wrongAgent))
+
+	expired := mk("cmd-expired", "n5")
+	expired.IssuedAt = time.Now().UTC().Add(-2 * time.Hour)
+	expired.ExpiresAt = time.Now().UTC().Add(-time.Hour)
+	reject("expired", signEnvelopeForDispatchTest(t, key, expired))
+
+	// Replay: a validly signed envelope is accepted by the verifier once
+	// (consuming its command id); the identical bytes are then refused by the
+	// real dispatch path. (Dispatching the accepted scenario itself would start
+	// a real runScenario, so the first acceptance is made via the verifier.)
+	good := signEnvelopeForDispatchTest(t, key, mk("cmd-replay", "n6"))
+	if _, err := a.verifyCommandEnvelope(good, "command_scenario"); err != nil {
+		t.Fatalf("control: valid envelope must verify: %v", err)
 	}
-	if connectWSStyleDispatch(t, a, good) {
-		t.Fatal("replayed envelope was accepted")
+	reject("replayed", good)
+}
+
+// --- step-loop pre-execution gates (gateStep is what the step loop calls) ---
+
+func TestDBProbeGateStepWiring(t *testing.T) {
+	ok := testDBProbeStep(nil)
+	if v := gateStep(ok); v != nil {
+		t.Fatalf("clean non_destructive dbprobe step vetoed: %+v", v)
 	}
-	if fa.count("Connect") != 1 {
-		t.Fatalf("replay reached the adapter: %d Connects", fa.count("Connect"))
+
+	// dbsim pre-gate: baggage / missing spec.
+	bad := testDBProbeStep(nil)
+	bad.Cleanup = "rm -rf /tmp/x"
+	if v := gateStep(bad); v == nil || v.source != "dbsim_gate" || !v.result.Vetoed {
+		t.Fatalf("cleanup baggage must be vetoed by the dbsim gate: %+v", v)
+	}
+	nospec := testDBProbeStep(nil)
+	nospec.DBProbe = nil
+	if v := gateStep(nospec); v == nil || v.source != "dbsim_gate" {
+		t.Fatalf("missing spec must be vetoed by the dbsim gate: %+v", v)
+	}
+
+	// B5 still applies to dbprobe steps: unknown / missing / destructive class.
+	for _, class := range []string{"", "bogus", "destructive"} {
+		s := testDBProbeStep(nil)
+		s.ExecutionClass = class
+		v := gateStep(s)
+		if v == nil || v.source == "dbsim_gate" || !v.result.Vetoed || v.result.VetoedBlockSource != v.source {
+			t.Errorf("class %q: expected a B5 veto, got %+v", class, v)
+		}
+	}
+
+	// A non-dbprobe destructive shell step is still vetoed exactly as before.
+	sh := ScenarioStep{TaskID: "s", Executor: "cmd", Command: "vssadmin delete shadows /all /quiet", ExecutionClass: "non_destructive"}
+	if v := gateStep(sh); v == nil || v.source != "local_backstop" {
+		t.Fatalf("local backstop must still veto destructive shell text: %+v", v)
+	}
+	// A benign shell step with a good class passes both gates.
+	if v := gateStep(ScenarioStep{TaskID: "s", Executor: "bash", Command: "echo hi", ExecutionClass: "non_destructive"}); v != nil {
+		t.Fatalf("benign shell step vetoed: %+v", v)
 	}
 }

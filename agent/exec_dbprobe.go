@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"audspect/agent/dbprobe"
 	_ "audspect/agent/dbprobe/mysql"    // registers the "mysql" adapter
@@ -79,14 +81,40 @@ func refusal(class, reason string) DBProbeOutcome {
 
 // scrub removes the secret and bounds the length of text derived from driver
 // errors before it reaches a log, a result or an error value.
-func scrub(msg, secret string) string {
-	if secret != "" {
-		msg = strings.ReplaceAll(msg, secret, "[redacted]")
+func scrubAll(msg string, secrets ...string) string {
+	// Longest first so a short value cannot break a longer one apart.
+	sorted := make([]string, 0, len(secrets))
+	for _, s := range secrets {
+		if s != "" {
+			sorted = append(sorted, s)
+		}
+	}
+	sort.Slice(sorted, func(i, j int) bool { return len(sorted[i]) > len(sorted[j]) })
+	for _, s := range sorted {
+		msg = strings.ReplaceAll(msg, s, "[redacted]")
 	}
 	if len(msg) > 300 {
-		msg = msg[:300] + "..."
+		cut := 300
+		for cut > 0 && !utf8.RuneStart(msg[cut]) {
+			cut--
+		}
+		msg = msg[:cut] + "..."
 	}
 	return msg
+}
+
+// expectedExecClass maps a catalog probe class to the signed ExecutionClass the
+// orchestrator must have attached (spec A6). Unknown classes map to the most
+// restrictive value.
+func expectedExecClass(c dbprobe.ProbeClass) string {
+	switch c {
+	case dbprobe.ClassReadOnly:
+		return "non_destructive"
+	case dbprobe.ClassBoundedSynthetic:
+		return "potentially_destructive"
+	default:
+		return "destructive"
+	}
 }
 
 func classifyDBErr(ctx context.Context, err error, fallback string) string {
@@ -154,6 +182,13 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 	if !ok {
 		return fail(dbErrGateRefused, fmt.Sprintf("unknown probe %q", spec.ProbeID))
 	}
+	// 2b. The signed ExecutionClass must equal the mapping of the catalog class
+	// (spec A6); a mismatch means the orchestrator and agent disagree about the
+	// probe's blast radius, so refuse before any connection.
+	if want := expectedExecClass(def.Class); step.ExecutionClass != want {
+		return fail(dbErrGateRefused, fmt.Sprintf("signed execution class %q does not match catalog class %q (want %q)",
+			step.ExecutionClass, def.Class, want))
+	}
 	// 3. Probe supports this engine.
 	engineOK := false
 	for _, e := range def.Engines {
@@ -203,7 +238,7 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 
 	runtimeErr := func(class, what string, err error) (DBProbeOutcome, error) {
 		class = classifyDBErr(cctx, err, class)
-		msg := scrub(err.Error(), cred.Password)
+		msg := scrubAll(err.Error(), cred.Password, cred.User, spec.Host, spec.ExpectedIdentity)
 		log.Printf("[dbprobe] %s %s failed (%s): %s", step.TaskID, what, class, msg)
 		return DBProbeOutcome{
 			Result: protocol.DBProbeResult{ErrorClass: class, Notes: []string{what + ": " + msg}, AgentTime: time.Now()},
