@@ -1,0 +1,72 @@
+id: dbsim-db10-write-delete-prevention
+product_line: dbsim
+name: Database Security Simulation DB-10 - Write and Delete Prevention
+description: >
+  Lab-only. Checks that an account holding SELECT only cannot change data. The
+  agent seeds the synthetic accounts fixture (ten obviously fake rows) in a
+  dedicated per-run schema, creates a THROWAWAY login account for this run only
+  (named dbsim_<fixture id>_acct, random password never logged or reported) and
+  grants it SELECT on the fixture and nothing else. It fingerprints the fixture
+  table through the lab connection (a row count and a checksum computed on the
+  database server, so no row content leaves it), proves the account can log in
+  and read the table (baseline), and then, as that account, attempts exactly one
+  INSERT, one UPDATE and one DELETE against the fixture table, in that order,
+  each a fixed statement tagged with the per-dispatch marker. It fingerprints the
+  table again.
+
+  A refusal is recognised ONLY by PostgreSQL SQLSTATE 42501, or MySQL error 1142,
+  1143 or 1044 (access denied for the table, column or database). The run PASSES
+  only when all three statements are refused, the table fingerprint is unchanged,
+  the throwaway account and the fixture are dropped and verified gone, and the
+  SIEM shows an alert correlated to this run's marker (detection and response are
+  graded like DB-03: a denied statement is expected to be recorded by the audit
+  source with the marker). If any statement SUCCEEDS the control failed: the run
+  is FAIL, the account could write, and the fixture is reported changed
+  (fixture_changed=true; it is a synthetic fixture and is dropped by the verified
+  cleanup). If all statements are reported refused but the fingerprint differs,
+  or any statement fails for another reason, or the fingerprint cannot be read,
+  the evidence is inconsistent and the run is ERROR, never a pass.
+
+  The statements address only the fixture's accounts table, resolved by the
+  agent; no table, statement or mode can be supplied. The run creates and drops
+  DDL objects on the lab database (only its own throwaway account and the
+  per-run fixture schema), so it is classed bounded_synthetic like the other
+  fixture probes and requires a confirmed lab target, the scenario's mutation
+  approval and the agent-local lab-mutation allowance; it is refused for client
+  targets. It never alters, writes to or deletes anything it did not create in
+  this run.
+
+  ATT&CK mapping: T1565.001 Stored Data Manipulation (an attempt to modify
+  stored data with an under-privileged account).
+
+  UNVERIFIED until run in the lab: the exact refusal codes for the SELECT-only
+  account on each engine, the server-side fingerprint queries, and that the
+  denied statements reach the audit log with the marker intact. This scenario
+  names its target by id only; host, port, identity, credential reference and
+  mode come from the server-side target registry.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - access-control
+  - write-prevention
+  - lab-only
+  - mitre-attack
+mitre_phases:
+  - impact
+
+steps:
+  - name: "DB-10 SELECT-only account must not write or delete (T1565.001)"
+    technique_id: T1565.001
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: try_write_fixture
+    db_fixture: accounts
+    db_limits:
+      max_rows: 1
+      timeout_sec: 60
+      max_conns: 1
+    risk: medium
+    blast_radius: "creates and drops a per-run synthetic accounts fixture schema (dbsim_<id>) and one throwaway SELECT-only login account (dbsim_<id>_acct) in the lab database; attempts one INSERT, one UPDATE and one DELETE against the fixture table only, expected to be refused; if one is not, only the synthetic fixture changes and it is dropped by the verified cleanup; no other object is touched"
+    reversible: true

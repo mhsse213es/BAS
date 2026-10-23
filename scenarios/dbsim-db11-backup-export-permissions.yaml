@@ -1,0 +1,70 @@
+id: dbsim-db11-backup-export-permissions
+product_line: dbsim
+name: Database Security Simulation DB-11 - Backup and Export Permissions
+description: >
+  Lab-only. Reads, with fixed catalog queries, what the CONNECTED probe account
+  is allowed to do regarding data export and backup, and grades it against a
+  default-safe policy: a restricted account must NOT hold file-write,
+  program-execution or server-file-read privileges.
+
+  PostgreSQL: superuser, or membership of pg_write_server_files,
+  pg_execute_server_program or pg_read_server_files (membership is tested
+  conservatively, including non-inherited membership the account could SET ROLE
+  into), plus whether the account is superuser, replication-capable or a member
+  of pg_read_all_data (bulk_select) and a count of the non-system tables it may
+  SELECT. MySQL: the global FILE privilege (it covers both reading and writing
+  server files, so it sets file_write and file_read; MySQL has no server-side
+  program-execution grant, reported "na"), whether SELECT is held on *.*, the
+  RELOAD and LOCK TABLES privileges and the secure_file_priv class (empty, NULL
+  or a path) as context, and a count of the non-system tables visible to the
+  account (an approximation of what it could dump). The result is a typed set of
+  yes/no/unknown values and one count; the run PASSES only when none of the
+  three forbidden privileges is held AND every check was observed. A held
+  privilege is a FAIL. A check that cannot be observed (a denied catalog read,
+  an error, privileges that arrive through an active database role and are not
+  visible, an unmatched account) is unknown and the run is ERROR, never a pass.
+
+  No export, backup, file or program operation is ever performed: only catalog
+  privileges are read. The specification's "controlled operation if authorized"
+  mode is NOT built. No SIEM expectation applies (a catalog read), so telemetry
+  is not assessed. The probe is read_only by class, but it is lab-only: it
+  requires a confirmed lab target, the scenario's mutation approval and the
+  agent-local lab-mutation allowance, and is refused for client targets (relaxing
+  that for client pilots is a later decision). The lab probe account is usually
+  privileged, so FAIL is a legitimate, expected answer for it; the scenario is
+  meant to be pointed at the account whose posture is being assessed.
+
+  ATT&CK mapping: T1213 Data from Information Repositories (capability to
+  extract data from a database server).
+
+  UNVERIFIED until run in the lab: the catalog queries on each engine version
+  (PostgreSQL pg_has_role/to_regrole, MySQL USER_PRIVILEGES and CURRENT_ROLE).
+  This scenario names its target by id only; host, port, identity, credential
+  reference and mode come from the server-side target registry.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - export
+  - backup
+  - least-privilege
+  - read-only
+  - lab-only
+  - mitre-attack
+mitre_phases:
+  - collection
+
+steps:
+  - name: "DB-11 Probe account must not hold export or file privileges (T1213)"
+    technique_id: T1213
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: check_export_privileges
+    db_limits:
+      max_rows: 10
+      timeout_sec: 60
+      max_conns: 1
+    risk: low
+    blast_radius: "fixed read-only catalog queries about the connected account inside READ ONLY transactions; no export, backup or file operation; no state changed"
+    reversible: true

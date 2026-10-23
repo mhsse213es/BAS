@@ -1,0 +1,68 @@
+id: dbsim-db08-audit-tamper-resistance
+product_line: dbsim
+name: Database Security Simulation DB-08 - Audit Tamper Resistance (session scope)
+description: >
+  Lab-only. Checks that a database account with NO privileges cannot switch off
+  the server's auditing for its own session. The agent creates a THROWAWAY login
+  account for this run only (named dbsim_<fixture id>_acct, with a random
+  password generated in the agent process and never logged, returned or
+  reported, and no privileges granted beyond defaults), opens a NEW connection as
+  it and runs one trivial statement tagged with the per-dispatch marker (the
+  baseline login check), and then attempts exactly ONE fixed, session-scoped
+  statement, also tagged with the marker: PostgreSQL SET log_statement = 'none',
+  MySQL SET SESSION sql_log_off = 1. The connection is closed right after. A
+  permission refusal recognised ONLY by PostgreSQL SQLSTATE 42501 or MySQL error
+  1227 is graded as Blocked. A statement that SUCCEEDS is graded as Allowed (a
+  finding: the account can suppress audit logging for its own session) and the
+  run is FAIL. Anything else (an unknown parameter, a syntax error, a timeout, a
+  failed baseline login, a failed account creation) is reported as unverifiable
+  and the run is graded ERROR, never as a pass. A PASS also needs the baseline to
+  work, the throwaway account to be dropped and verified gone, and the SIEM to
+  show an alert correlated to this run's marker (detection and response are
+  graded like DB-03: a denied statement is expected to be recorded by the audit
+  source with the marker).
+
+  What this scenario does NOT do, deliberately: it never runs ALTER SYSTEM,
+  SET GLOBAL, SET PERSIST, any plugin or configuration-file change, or anything
+  that outlives its own connection, and it has no parameter, mode or recovery
+  plan that could make it do so. Actual (global or persistent) audit
+  disablement is not tested by this product. The run creates and drops DDL
+  objects on the lab database (only its own throwaway account and a per-run empty
+  fixture schema), so it is classed bounded_synthetic like the other fixture
+  probes and, because it needs a per-run fixture, requires a confirmed lab
+  target, the scenario's mutation approval and the agent-local lab-mutation
+  allowance; it is refused for client targets.
+
+  ATT&CK mapping: T1562 Impair Defenses (an attempt to disable audit logging).
+
+  UNVERIFIED until run in the lab: the exact refusal codes (42501 / 1227) for an
+  unprivileged account, and that the denied statement reaches the audit log with
+  the marker intact. This scenario names its target by id only; host, port,
+  identity, credential reference and mode come from the server-side target
+  registry.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - audit
+  - tamper-resistance
+  - lab-only
+  - mitre-attack
+mitre_phases:
+  - defense-evasion
+
+steps:
+  - name: "DB-08 Unprivileged account must not disable session auditing (T1562)"
+    technique_id: T1562
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: try_disable_audit
+    db_fixture: empty
+    db_limits:
+      max_rows: 1
+      timeout_sec: 60
+      max_conns: 1
+    risk: medium
+    blast_radius: "creates, logs in as and drops one throwaway login account (dbsim_<id>_acct) plus a per-run empty fixture schema in the lab database; the only audit-related statement is one SESSION-scoped SET on the throwaway connection, closed immediately; no global, persistent or configuration change; cleanup is verified and a leftover is a safety incident"
+    reversible: true

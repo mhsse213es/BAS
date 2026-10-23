@@ -93,7 +93,7 @@ func TestBuildStepsRefusesDBProbeWithoutResolver(t *testing.T) {
 }
 
 func TestDBProbeCatalogClasses(t *testing.T) {
-	for _, tech := range []string{"T1078", "T1087", "T1213", "T1562"} {
+	for _, tech := range []string{"T1078", "T1087", "T1213", "T1562", "T1565.001"} {
 		for key, want := range map[string]ExecutionClass{
 			"dbprobe_read_only":         ClassNonDestructive,
 			"dbprobe_bounded_synthetic": ClassPotentiallyDestructive,
