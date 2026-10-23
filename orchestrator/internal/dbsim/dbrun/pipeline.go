@@ -242,6 +242,17 @@ func Evaluate(ctx context.Context, conn detectverify.Connector, in StepInput) (E
 	if classifyProbe {
 		in.Scenario.ExpectClassification = true
 	}
+	// Task 15, forced like R-AK so a mis-set scenario cannot weaken the control: the
+	// expectation of DB-08, DB-10 and DB-11 is intrinsic (the attempt must be
+	// denied / the privileges must not be held), and DB-11 reads the catalog, so
+	// it never carries a SIEM expectation.
+	switch in.Spec.ProbeID {
+	case dbsim.ProbeTryDisableAudit, dbsim.ProbeTryWriteFixture, dbsim.ProbeCheckExportPrivileges:
+		in.Scenario.ExpectedPrevention = "deny"
+	}
+	if in.Spec.ProbeID == dbsim.ProbeCheckExportPrivileges {
+		in.Scenario.ExpectDetection, in.Scenario.ExpectResponse = false, false
+	}
 	now := time.Now
 	if in.Now != nil {
 		now = in.Now
@@ -282,7 +293,7 @@ func Evaluate(ctx context.Context, conn detectverify.Connector, in StepInput) (E
 	if o.ProbeID == dbsim.ProbeAuthAfterRevoke {
 		in.Scenario.ExpectDetection, in.Scenario.ExpectResponse = false, false
 	}
-	if (in.Scenario.ExpectDetection || classifyProbe) && dbsim.ProbeCompleted(o) && !incident {
+	if (in.Scenario.ExpectDetection || classifyProbe) && dbsim.ProbeCompleted(o) && !incident && dbsim.Task15EvidenceGap(o) == "" {
 		switch {
 		case conn == nil:
 			o.Limitations = append(o.Limitations, "No detection connector is configured: detection telemetry is unverifiable.")

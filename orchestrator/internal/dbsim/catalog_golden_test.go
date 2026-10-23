@@ -22,6 +22,9 @@ type catalogRow struct {
 	// fixed table it reads (Task 14); omitted otherwise.
 	RequiredFixture string `json:"requiredFixture,omitempty"`
 	FixedTable      string `json:"fixedTable,omitempty"`
+	// LabOnly: refused for client targets and needs lab approvals though read_only
+	// (Task 15); omitted otherwise.
+	LabOnly bool `json:"labOnly,omitempty"`
 }
 
 func marshalRegistry() ([]byte, error) {
@@ -38,7 +41,7 @@ func marshalRegistry() ([]byte, error) {
 			p[k] = v
 		}
 		rows = append(rows, catalogRow{ID: e.ID, Class: string(e.Class), Engines: e.Engines, Params: p, FixtureParam: e.FixtureParam,
-			RequiredFixture: e.RequiredFixture, FixedTable: e.FixedTable})
+			RequiredFixture: e.RequiredFixture, FixedTable: e.FixedTable, LabOnly: e.LabOnly})
 	}
 	return json.Marshal(rows)
 }

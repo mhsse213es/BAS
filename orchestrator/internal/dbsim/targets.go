@@ -118,12 +118,13 @@ func Authorize(t Target, def ProbeRegistryEntry, in AuthInput) error {
 	// A fixture-aware probe reads a per-run seeded fixture, which exists only in
 	// lab mode: refused for any other mode whatever its class says.
 	fixtureAware := real.FixtureParam != "" || real.RequiredFixture != ""
-	if fixtureAware && t.Mode != ModeLab {
-		return fmt.Errorf("dbsim: authorize: fixture-aware probe %q is lab-only (target mode %q)", def.ID, t.Mode)
+	if (fixtureAware || real.LabOnly) && t.Mode != ModeLab {
+		return fmt.Errorf("dbsim: authorize: probe %q is lab-only (target mode %q)", def.ID, t.Mode)
 	}
 	switch t.Mode {
 	case ModeLab:
-		if class != ClassReadOnly || in.Fixture || fixtureAware {
+		// A LabOnly probe (DB-11) is read_only but needs the same lab approvals.
+		if class != ClassReadOnly || in.Fixture || fixtureAware || real.LabOnly {
 			if !t.LabConfirmed {
 				return fmt.Errorf("dbsim: authorize: %s probe %q requires a confirmed lab target", class, def.ID)
 			}

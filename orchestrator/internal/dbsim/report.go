@@ -309,6 +309,8 @@ func enforcementOf(o Outcome) dlpreport.EnforcementOutcome {
 		return dlpreport.EnforcementUnknown
 	case revocationGap(o) != "":
 		return dlpreport.EnforcementUnknown
+	case task15Gap(o) != "":
+		return dlpreport.EnforcementUnknown
 	case o.Probe.Denied:
 		return dlpreport.EnforcementBlocked
 	default:
@@ -547,6 +549,15 @@ func ToRecord(s ScenarioMeta, o Outcome) (dlpreport.Record, error) {
 		lims = append(lims, revokeTelemetryLimitation)
 		if gap := revocationGap(o); gap != "" {
 			lims = append(lims, "DB-06 evidence incomplete, so Enforcement is Unknown: "+gap+".")
+		}
+	}
+	if l := task15Limitation(o.ProbeID); l != "" {
+		lims = append(lims, l)
+		if gap := task15Gap(o); gap != "" {
+			lims = append(lims, "Evidence incomplete, so Enforcement is Unknown: "+gap+".")
+		}
+		if writeDirty(o) {
+			lims = append(lims, "A write was accepted: the fixture was changed (fixture_changed=true) and is dropped by the verified cleanup.")
 		}
 	}
 	_, auditLims := auditGrade(s, o)

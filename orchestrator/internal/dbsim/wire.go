@@ -115,6 +115,10 @@ type ProbeRegistryEntry struct {
 	// FixedTable, when set, is the fixture table a RequiredFixture read probe
 	// reads. It is fixed in the agent, so no param can address a table.
 	FixedTable string
+	// LabOnly marks a probe refused for client targets and, even when it is
+	// read_only, requiring a confirmed lab target and the scenario's mutation
+	// approval (DB-11). It takes no fixture.
+	LabOnly bool
 }
 
 var probeRegistry = map[string]ProbeRegistryEntry{
@@ -132,12 +136,25 @@ var probeRegistry = map[string]ProbeRegistryEntry{
 	"read_classified_fixture": {ID: "read_classified_fixture", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "classified-pii", FixedTable: "customers_pii"},
 	// DB-06: creates a throwaway login account for the run, proves it can log in, revokes its login and proves a NEW connection is refused (bounded_synthetic, ruling R-AO: only touches its own throwaway account; lab only and mutation-approved through its required fixture, R-AI).
 	"auth_after_revoke": {ID: "auth_after_revoke", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "empty"},
+	// DB-08: a throwaway NO-privilege account attempts ONLY a session-scoped audit change (bounded_synthetic, user decision option A: never mutation). No parameter selects a statement; no global or persistent change exists.
+	"try_disable_audit": {ID: "try_disable_audit", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "empty"},
+	// DB-10: a throwaway SELECT-only account attempts one INSERT, UPDATE and DELETE on the accounts fixture table; the table is fingerprinted before and after.
+	"try_write_fixture": {ID: "try_write_fixture", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "accounts"},
+	// DB-11: fixed read-only catalog queries about the connected account's export/backup privileges. Read-only by class, lab-only by LabOnly. No export is performed.
+	"check_export_privileges": {ID: "check_export_privileges", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, LabOnly: true},
 }
 
 // Task 14 probe ids.
 const (
 	ProbeReadClassifiedFixture = "read_classified_fixture"
 	ProbeAuthAfterRevoke       = "auth_after_revoke"
+)
+
+// Task 15 probe ids.
+const (
+	ProbeTryDisableAudit       = "try_disable_audit"
+	ProbeTryWriteFixture       = "try_write_fixture"
+	ProbeCheckExportPrivileges = "check_export_privileges"
 )
 
 // ProbeReadGrants is the grant-enumeration probe (DB-02); its result is only

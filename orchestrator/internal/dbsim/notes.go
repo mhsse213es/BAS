@@ -176,3 +176,177 @@ func (n Notes) AuditConfig() (string, bool) {
 	}
 	return "", false
 }
+
+// strictKV parses "k=v,k=v,..." into a map. It is strict: every part must be
+// k=v, keys must be exactly the allowed set, each exactly once, and every value
+// must be accepted by that key's validator. Anything else is reported as absent.
+func strictKV(v string, allowed map[string]func(string) bool) (map[string]string, bool) {
+	out := map[string]string{}
+	for _, part := range strings.Split(v, ",") {
+		k, val, ok := strings.Cut(part, "=")
+		if !ok {
+			return nil, false
+		}
+		check, known := allowed[k]
+		if !known || !check(val) {
+			return nil, false
+		}
+		if _, dup := out[k]; dup {
+			return nil, false
+		}
+		out[k] = val
+	}
+	if len(out) != len(allowed) {
+		return nil, false
+	}
+	return out, true
+}
+
+func oneOf(vals ...string) func(string) bool {
+	return func(s string) bool {
+		for _, v := range vals {
+			if s == v {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// Values of the try_disable_audit step note
+// "audit_tamper_steps=create=<v>,baseline=<v>,attempt=<v>" (same strings as the
+// agent's dbprobe.Tamper* constants).
+const (
+	AuditTamperStepsKey = "audit_tamper_steps"
+
+	TamperStepOK      = "ok"
+	TamperStepFailed  = "failed"
+	TamperStepSkipped = "skipped"
+
+	TamperAttemptDenied  = "denied"
+	TamperAttemptAllowed = "allowed"
+	TamperAttemptError   = "error"
+)
+
+// AuditTamperSteps says which step of try_disable_audit produced which outcome.
+type AuditTamperSteps struct{ Create, Baseline, Attempt string }
+
+// AuditTamper returns the parsed try_disable_audit step note. It is strict: all
+// three steps present exactly once with a known value, else absent.
+func (n Notes) AuditTamper() (AuditTamperSteps, bool) {
+	v, ok := n.kv[AuditTamperStepsKey]
+	if !ok {
+		return AuditTamperSteps{}, false
+	}
+	step := oneOf(TamperStepOK, TamperStepFailed, TamperStepSkipped)
+	m, ok := strictKV(v, map[string]func(string) bool{
+		"create": step, "baseline": step,
+		"attempt": oneOf(TamperAttemptDenied, TamperAttemptAllowed, TamperAttemptError, TamperStepSkipped),
+	})
+	if !ok {
+		return AuditTamperSteps{}, false
+	}
+	return AuditTamperSteps{Create: m["create"], Baseline: m["baseline"], Attempt: m["attempt"]}, true
+}
+
+// Values of the try_write_fixture step note
+// "write_attempt_steps=insert=<v>,update=<v>,delete=<v>,fingerprint=<v>".
+const (
+	WriteAttemptStepsKey = "write_attempt_steps"
+
+	WriteDenied  = "denied"
+	WriteAllowed = "allowed"
+	WriteError   = "error"
+	WriteSkipped = "skipped"
+
+	FingerprintUnchanged = "unchanged"
+	FingerprintChanged   = "changed"
+	FingerprintError     = "error"
+	FingerprintSkipped   = "skipped"
+
+	// WriteFixtureChangedKey is "fixture_changed=true" when a write was accepted.
+	WriteFixtureChangedKey = "fixture_changed"
+)
+
+// WriteAttemptSteps is the parsed try_write_fixture step note.
+type WriteAttemptSteps struct{ Insert, Update, Delete, Fingerprint string }
+
+// Outcomes lists the three statement outcomes in order.
+func (w WriteAttemptSteps) Outcomes() [3]string { return [3]string{w.Insert, w.Update, w.Delete} }
+
+// WriteAttempts returns the parsed try_write_fixture step note (strict).
+func (n Notes) WriteAttempts() (WriteAttemptSteps, bool) {
+	v, ok := n.kv[WriteAttemptStepsKey]
+	if !ok {
+		return WriteAttemptSteps{}, false
+	}
+	st := oneOf(WriteDenied, WriteAllowed, WriteError, WriteSkipped)
+	m, ok := strictKV(v, map[string]func(string) bool{
+		"insert": st, "update": st, "delete": st,
+		"fingerprint": oneOf(FingerprintUnchanged, FingerprintChanged, FingerprintError, FingerprintSkipped),
+	})
+	if !ok {
+		return WriteAttemptSteps{}, false
+	}
+	return WriteAttemptSteps{Insert: m["insert"], Update: m["update"], Delete: m["delete"], Fingerprint: m["fingerprint"]}, true
+}
+
+// Values of the check_export_privileges note
+// "export_checks=file_write=<v>,program_exec=<v>,file_read=<v>,bulk_select=<v>,dump_privs=<v>".
+const (
+	ExportChecksKey = "export_checks"
+
+	ExportYes     = "yes"
+	ExportNo      = "no"
+	ExportUnknown = "unknown"
+	ExportNA      = "na"
+)
+
+// ExportChecks is the parsed check_export_privileges note. DumpKnown is false
+// when dump_privs was "unknown"; otherwise DumpPrivs holds the count.
+type ExportChecks struct {
+	FileWrite, ProgramExec, FileRead, BulkSelect string
+	DumpPrivs                                    string
+	DumpKnown                                    bool
+}
+
+// Held reports whether any server-file or program capability is held.
+func (e ExportChecks) Held() bool {
+	return e.FileWrite == ExportYes || e.ProgramExec == ExportYes || e.FileRead == ExportYes
+}
+
+// Complete reports whether every check was observed (no "unknown").
+func (e ExportChecks) Complete() bool {
+	for _, v := range []string{e.FileWrite, e.ProgramExec, e.FileRead, e.BulkSelect} {
+		if v == ExportUnknown {
+			return false
+		}
+	}
+	return e.DumpKnown
+}
+
+// ExportChecks returns the parsed check_export_privileges note (strict).
+func (n Notes) ExportChecks() (ExportChecks, bool) {
+	v, ok := n.kv[ExportChecksKey]
+	if !ok {
+		return ExportChecks{}, false
+	}
+	yn := oneOf(ExportYes, ExportNo, ExportUnknown)
+	m, ok := strictKV(v, map[string]func(string) bool{
+		"file_write": yn, "file_read": yn, "bulk_select": yn,
+		"program_exec": oneOf(ExportYes, ExportNo, ExportUnknown, ExportNA),
+		"dump_privs": func(s string) bool {
+			if s == ExportUnknown {
+				return true
+			}
+			x, err := strconv.ParseInt(s, 10, 64)
+			return err == nil && x >= 0 && x <= maxNoteCount
+		},
+	})
+	if !ok {
+		return ExportChecks{}, false
+	}
+	// "na" is only meaningful for program_exec (MySQL has no such privilege).
+	return ExportChecks{FileWrite: m["file_write"], ProgramExec: m["program_exec"], FileRead: m["file_read"],
+		BulkSelect: m["bulk_select"], DumpPrivs: m["dump_privs"], DumpKnown: m["dump_privs"] != ExportUnknown}, true
+}

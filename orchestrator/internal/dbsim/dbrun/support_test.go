@@ -35,6 +35,13 @@ func labExpectationFor(scenarioID, probeID string) labExpectation {
 		e.prevention = "deny"
 	case "read_grants":
 		e.requireObs = true
+	case "try_disable_audit", "try_write_fixture":
+		// DB-08 / DB-10: the denied statements carry the marker, so detection and
+		// response are graded like DB-03.
+		e.prevention = "deny"
+	case "check_export_privileges":
+		// DB-11: a catalog read; no SIEM expectation.
+		e.prevention, e.detection = "deny", false
 	case "auth_after_revoke":
 		// DB-06: the NEW login after the revoke must be refused. Telemetry is not
 		// assessed (a failed login carries no marker), so no detection expectation.
