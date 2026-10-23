@@ -714,6 +714,9 @@ func (h *Handler) GetLicenseStatus(w http.ResponseWriter, r *http.Request) {
 		"expiresAt":     info.ExpiresAt.Format("2006-01-02"),
 		"lockoutAt":     info.LockoutAt.Format("2006-01-02"),
 		"daysRemaining": info.DaysRemaining,
+		// Whether the licence grants the Kubernetes scenarios (Enterprise cloud product). The API enforces
+		// this too; the flag only decides what the console shows.
+		"kubernetesScenarios": license.PermitsNow(license.ProductCloud),
 	})
 }
 

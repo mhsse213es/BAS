@@ -85,7 +85,10 @@
           Live Runs
         </div>
         <div class="nav-item is-hidden" id="nav-k8s-scenarios" data-tab="k8s-scenarios" title="Kubernetes Scenarios" data-on-click="showTab" data-args="[&quot;k8s-scenarios&quot;]">
-          <span>Kubernetes Scenarios</span>
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+            <circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.4"/><path d="M8.0 5.6L8.0 2.0 M9.88 6.5L12.69 4.26 M10.34 8.53L13.85 9.34 M9.04 10.16L10.6 13.41 M6.96 10.16L5.4 13.41 M5.66 8.53L2.15 9.34 M6.12 6.5L3.31 4.26"/>
+          </svg>
+          Kubernetes Scenarios
         </div>
         <div class="nav-item is-hidden" id="nav-scheduled-assessments" data-tab="scheduled-assessments" title="Scheduled Assessments" data-on-click="showTab" data-args="[&quot;scheduled-assessments&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
@@ -1460,18 +1463,48 @@
 
       <!-- Scheduled Assessments -->
       <div id="tab-k8s-scenarios" class="is-hidden">
-        <div class="sec-hdr"><h2>Kubernetes Scenarios</h2></div>
-        <p class="muted">Kind lab only. Planning writes nothing. A run changes the cluster only after a different operator approves it, and only the requester can execute it.</p>
-        <div class="g1-display-flex">
-          <select id="k8s-action"><option value="pod-create-unprivileged">Create unprivileged pod (sandbox)</option><option value="configmap-patch-labelled">Patch labelled ConfigMap (sandbox)</option><option value="sa-token-probe">Mint and discard a probe token (sandbox)</option></select>
-          <input id="k8s-cluster" value="kind-bas-lab" aria-label="Cluster" />
-          <input id="k8s-namespace" value="bas-sandbox" aria-label="Namespace" />
-          <input id="k8s-param-name" placeholder="name" aria-label="Object name" />
-          <input id="k8s-param-value" placeholder="value (ConfigMap only)" aria-label="ConfigMap value" />
-          <button class="btn primary" data-k8s-plan="1">Plan run</button>
+        <div class="sec-hdr">
+          <h2>Kubernetes Scenarios <span id="k8s-cnt" class="cnt">0</span></h2>
+          <button class="btn btn-outline btn-sm" data-k8s-refresh="1">Refresh</button>
         </div>
-        <div id="k8s-runs"></div>
+
+        <div class="card k8s-card">
+          <div class="card-title">New run</div>
+          <p class="k8s-note">Lab only. Planning writes nothing. A run changes the cluster only after a different operator approves it, and only the requester can execute it.</p>
+          <div class="k8s-form">
+            <div class="form-group">
+              <label for="k8s-action">Action</label>
+              <select id="k8s-action">
+                <option value="pod-create-unprivileged">Create unprivileged pod</option>
+                <option value="configmap-patch-labelled">Patch labelled ConfigMap</option>
+                <option value="sa-token-probe">Mint and discard a probe token</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="k8s-cluster">Cluster</label>
+              <input id="k8s-cluster" value="kind-bas-lab" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="k8s-namespace">Namespace</label>
+              <input id="k8s-namespace" value="bas-sandbox" autocomplete="off">
+            </div>
+            <div class="form-group" id="k8s-field-name">
+              <label for="k8s-param-name">Object name</label>
+              <input id="k8s-param-name" placeholder="bas-sbx-example" autocomplete="off">
+            </div>
+            <div class="form-group" id="k8s-field-value">
+              <label for="k8s-param-value">ConfigMap value</label>
+              <input id="k8s-param-value" placeholder="value to set" autocomplete="off">
+            </div>
+          </div>
+          <div class="k8s-actions">
+            <button class="btn btn-primary btn-sm" data-k8s-plan="1">Plan run</button>
+          </div>
+        </div>
+
+        <div id="k8s-runs" class="tbl-wrap"></div>
       </div>
+
       <div id="tab-scheduled-assessments" class="is-hidden">
         <div class="sec-hdr">
           <h2>Scheduled Assessments <span id="sched-cnt" class="cnt">0</span></h2>

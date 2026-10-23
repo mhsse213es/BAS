@@ -1355,3 +1355,14 @@ body.theme-slate {
 .email-detail-shaded { background: var(--elevated); }
 .email-launch-buttons { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .email-hdr-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+
+/* ── Kubernetes Scenarios panel ─────────────────────────────────────────── */
+.k8s-card { margin-bottom: 1rem; }
+.k8s-note { font-size: 0.78rem; color: var(--muted); margin: 0.25rem 0 0; line-height: 1.5; }
+.k8s-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem 1rem; margin: 1rem 0 0.75rem; }
+.k8s-form .form-group { margin-bottom: 0; }
+.k8s-form .is-hidden { display: none; }
+.k8s-actions { display: flex; justify-content: flex-end; }
+.k8s-target { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.78rem; white-space: nowrap; }
+.k8s-plan { font-size: 0.74rem; color: var(--muted); line-height: 1.5; min-width: 220px; }
+.k8s-row-actions { white-space: nowrap; text-align: right; }

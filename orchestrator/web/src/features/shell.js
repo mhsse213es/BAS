@@ -274,7 +274,9 @@ function bootApp() {
   var navSched = document.getElementById('nav-scheduled-assessments');
   if (navSched) setDisplay(navSched, (ROLE === 'admin' || ROLE === 'analyst') ? '' : 'none');
   var navK8s = document.getElementById('nav-k8s-scenarios');
-  if (navK8s) setDisplay(navK8s, (ROLE === 'admin' || ROLE === 'analyst') ? '' : 'none');
+  // Kubernetes scenarios belong to the Enterprise cloud product: hidden unless the licence grants it.
+  var k8sLicensed = !!(LICENSE_INFO && LICENSE_INFO.kubernetesScenarios);
+  if (navK8s) setDisplay(navK8s, (k8sLicensed && (ROLE === 'admin' || ROLE === 'analyst')) ? '' : 'none');
   if (ROLE === 'admin') {
     document.querySelectorAll('.settings-nav a').forEach(function(el) {
       if (el.getAttribute('data-set') !== 'theme') setDisplay(el, '');

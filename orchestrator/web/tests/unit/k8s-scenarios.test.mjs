@@ -41,7 +41,7 @@ test('a finished run offers no action button', () => {
 test('a failed cleanup is labelled as failed, not as cleaned', () => {
   renderK8sRuns([run({ state: 'CLEANUP_FAILED' })]);
   const html = document.getElementById('k8s-runs').innerHTML;
-  assert.match(html, /Cleanup FAILED/);
+  assert.match(html, /Cleanup failed/);
   assert.doesNotMatch(html, /Ran, verified, cleaned up/);
 });
 
@@ -61,7 +61,7 @@ test('an empty list says nothing has been written', () => {
 test('a discarded token is labelled as not revoked, never as cleaned', () => {
   renderK8sRuns([run({ state: 'DISCARDED_NOT_REVOKED', detail: 'valid until 2026-10-23T06:31:38Z' })]);
   const html = document.getElementById('k8s-runs').innerHTML;
-  assert.match(html, /NOT revoked/);
+  assert.match(html, /not revoked/);
   assert.doesNotMatch(html, /cleaned up/);
   assert.doesNotMatch(html, /data-k8s-(approve|execute)/);
 });
