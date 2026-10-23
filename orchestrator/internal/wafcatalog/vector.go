@@ -10,7 +10,8 @@ var cweIDPattern = regexp.MustCompile(`^CWE-\d+$`)
 func validFamily(f AttackFamily) bool {
 	switch f {
 	case FamilySQLInjection, FamilyXSS, FamilyPathTraversal, FamilySSRF, FamilyFileUpload,
-		FamilyHTTPParser, FamilyAPIAbuse, FamilyAuthAbuse, FamilyRateLimit, FamilyCacheWeakness, FamilyPolicyMisconfig:
+		FamilyHTTPParser, FamilyAPIAbuse, FamilyAuthAbuse, FamilyRateLimit, FamilyCacheWeakness, FamilyPolicyMisconfig,
+		FamilyCommandInjection, FamilyFileInclusion, FamilyXXE, FamilyNoSQLInjection, FamilyLDAPInjection, FamilyXPathInjection:
 		return true
 	default:
 		return false

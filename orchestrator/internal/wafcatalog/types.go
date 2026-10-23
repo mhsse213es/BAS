@@ -5,21 +5,27 @@
 // against a controlled lab is a separate, deferred package.
 package wafcatalog
 
-// AttackFamily is one of the eleven breadth categories this catalog covers.
+// AttackFamily is one of the breadth categories this catalog covers.
 type AttackFamily string
 
 const (
-	FamilySQLInjection    AttackFamily = "sql_injection"
-	FamilyXSS             AttackFamily = "xss"
-	FamilyPathTraversal   AttackFamily = "path_traversal"
-	FamilySSRF            AttackFamily = "ssrf"
-	FamilyFileUpload      AttackFamily = "file_upload"
-	FamilyHTTPParser      AttackFamily = "http_parser_discrepancy"
-	FamilyAPIAbuse        AttackFamily = "api_abuse"
-	FamilyAuthAbuse       AttackFamily = "auth_abuse"
-	FamilyRateLimit       AttackFamily = "rate_limit"
-	FamilyCacheWeakness   AttackFamily = "cache_weakness"
-	FamilyPolicyMisconfig AttackFamily = "policy_misconfig"
+	FamilySQLInjection     AttackFamily = "sql_injection"
+	FamilyXSS              AttackFamily = "xss"
+	FamilyPathTraversal    AttackFamily = "path_traversal"
+	FamilySSRF             AttackFamily = "ssrf"
+	FamilyFileUpload       AttackFamily = "file_upload"
+	FamilyHTTPParser       AttackFamily = "http_parser_discrepancy"
+	FamilyAPIAbuse         AttackFamily = "api_abuse"
+	FamilyAuthAbuse        AttackFamily = "auth_abuse"
+	FamilyRateLimit        AttackFamily = "rate_limit"
+	FamilyCacheWeakness    AttackFamily = "cache_weakness"
+	FamilyPolicyMisconfig  AttackFamily = "policy_misconfig"
+	FamilyCommandInjection AttackFamily = "command_injection"
+	FamilyFileInclusion    AttackFamily = "file_inclusion"
+	FamilyXXE              AttackFamily = "xml_external_entity"
+	FamilyNoSQLInjection   AttackFamily = "nosql_injection"
+	FamilyLDAPInjection    AttackFamily = "ldap_injection"
+	FamilyXPathInjection   AttackFamily = "xpath_injection"
 )
 
 // Severity is the catalog entry's declared risk level.

@@ -7,15 +7,15 @@ func TestAudspectWAFAttackCatalog_ReturnsValidatedCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AudspectWAFAttackCatalog: %v", err)
 	}
-	if len(vectors) != 26 {
-		t.Fatalf("len(vectors) = %d, want 26", len(vectors))
+	if len(vectors) != 37 {
+		t.Fatalf("len(vectors) = %d, want 37", len(vectors))
 	}
 	if err := ValidateCatalog(vectors); err != nil {
 		t.Errorf("returned catalog fails ValidateCatalog: %v", err)
 	}
 }
 
-func TestAudspectWAFAttackCatalog_CoversAllElevenFamilies(t *testing.T) {
+func TestAudspectWAFAttackCatalog_CoversAllFamilies(t *testing.T) {
 	vectors, err := AudspectWAFAttackCatalog()
 	if err != nil {
 		t.Fatalf("AudspectWAFAttackCatalog: %v", err)
@@ -23,6 +23,7 @@ func TestAudspectWAFAttackCatalog_CoversAllElevenFamilies(t *testing.T) {
 	want := []AttackFamily{
 		FamilySQLInjection, FamilyXSS, FamilyPathTraversal, FamilySSRF, FamilyFileUpload,
 		FamilyHTTPParser, FamilyAPIAbuse, FamilyAuthAbuse, FamilyRateLimit, FamilyCacheWeakness, FamilyPolicyMisconfig,
+		FamilyCommandInjection, FamilyFileInclusion, FamilyXXE, FamilyNoSQLInjection, FamilyLDAPInjection, FamilyXPathInjection,
 	}
 	seen := make(map[AttackFamily]bool)
 	for _, v := range vectors {
@@ -36,8 +37,8 @@ func TestAudspectWAFAttackCatalog_CoversAllElevenFamilies(t *testing.T) {
 }
 
 // Review Focus: AudspectWAFAttackCatalog must actually call ValidateCatalog
-// and propagate its error -- with 26 hand-authored entries across 4 files,
-// an accidental duplicate ID is an easy slip, and the aggregator must fail
+// and propagate its error -- with 34 hand-authored entries across several
+// files, an accidental duplicate ID is an easy slip, and the aggregator must fail
 // loudly rather than silently return a catalog containing one. This test
 // cannot inject a real duplicate into the production seed data without
 // breaking it, so it proves the wiring the same way Task 2 proved

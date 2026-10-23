@@ -3,7 +3,7 @@ package wafcatalog
 import "fmt"
 
 // AudspectWAFAttackCatalog returns Audspect's real, current seed attack-test
-// catalog: roughly 25-30 hand-authored vectors across all eleven AttackFamily
+// catalog: roughly 35-40 hand-authored vectors across all AttackFamily
 // constants, validated before being returned. A seed-data error (a bad
 // construction call, or a duplicate ID introduced while hand-authoring
 // across family files) returns an error here rather than a silently
@@ -16,6 +16,8 @@ func AudspectWAFAttackCatalog() ([]AttackVector, error) {
 		ssrfVectors, fileUploadVectors, httpParserVectors,
 		apiAbuseVectors, authAbuseVectors,
 		rateLimitVectors, cacheWeaknessVectors, policyMisconfigVectors,
+		commandInjectionVectors, fileInclusionVectors, xxeVectors,
+		noSQLInjectionVectors, ldapInjectionVectors, xpathInjectionVectors,
 	}
 	for _, f := range families {
 		vectors, err := f()
