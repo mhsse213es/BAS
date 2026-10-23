@@ -18,7 +18,7 @@ Status at the end of Task 16 (read before promising anything to a customer):
   which is ERROR by design (section 8).
 * **Client mode (customer databases) has never been run against any real database.**
   Its gates are unit-tested only, and no operator can complete the read-only identity
-  check from the product yet (section 6).
+  check from the product yet (section 4).
 * There is **no product run API**: nothing in the product starts a dbsim run, builds
   steps from a registered target or stores a result. Runs today come from the test
   harness (`lab/dbsim/E2E.md`).
@@ -76,7 +76,11 @@ Client mode is refused unless ALL are true:
 3. The target's latest read-only identity check PASSED. The check passes only if the
    account positively cannot write data, change the schema, administer accounts or
    change audit settings; anything unknown fails. A later failed check withdraws an
-   earlier pass.
+   earlier pass. A pass also **expires**: it verifies the target only while it is
+   younger than the maximum pass age (default 24 hours; exactly that age fails). It is
+   recorded against the exact target registration it was run for, so deleting and
+   re-registering the same id does not inherit it. **Open user decision: the validity
+   period.** 24 hours is a placeholder default chosen to fail closed, not a policy.
 4. The agent host has `BAS_DBPROBE_CLIENT_ENABLED=1` (agent-local, never taken from
    the server).
 
@@ -85,12 +89,33 @@ Client mode is refused unless ALL are true:
 agent exists (open item). Until then no target becomes client-eligible, so client mode
 is unreachable. That is the safe failure.
 
-What the identity check inspects: table/column write privileges, schema CREATE and
-ownership, superuser/CREATEROLE/CREATEDB/BYPASSRLS/REPLICATION membership (PostgreSQL),
-global/schema/table privileges (MySQL, with `*_ADMIN`, SUPER, FILE, GRANT OPTION), and
-audit-parameter control. It does not inspect sequence/function/large-object privileges
-or privileges through roles not active in the session (an active MySQL role makes the
-result unknown, so it fails). SQL not yet run against a live server.
+What the identity check inspects (SQL has NOT been run against any live server; the
+staging integration tests for the cases below are written and unexecuted):
+
+* PostgreSQL, for the account and every role it is a MEMBER of (a NOINHERIT membership
+  can still be entered with SET ROLE): superuser or `pg_write_all_data`; INSERT, UPDATE,
+  DELETE, TRUNCATE (and column INSERT/UPDATE) on any non-system table, partitioned
+  table, view or foreign table; CREATE on the database or any non-system schema;
+  ownership of any non-system relation; superuser, CREATEROLE, CREATEDB, BYPASSRLS or
+  REPLICATION; any predefined `pg_*` role not on the read-only allow-list
+  (`pg_read_all_data`, `pg_read_all_settings`, `pg_read_all_stats`,
+  `pg_stat_scan_tables`, `pg_monitor`, `pg_database_owner`), so roles added by future
+  versions fail closed; and SET on audit parameters (PostgreSQL 15+).
+* MySQL: global/schema/table/column privileges of the exact account, `*_ADMIN`, SUPER,
+  FILE, and GRANT OPTION (seen as `IS_GRANTABLE=YES` on any row). Roles active in the
+  session, or merely granted (`information_schema.APPLICABLE_ROLES`, activatable with
+  SET ROLE), make the answers unknown. EXECUTE makes can_write unknown, because a
+  SECURITY DEFINER routine can write.
+
+**Not inspected (remaining gaps)**: PostgreSQL sequences, functions and procedures
+(including SECURITY DEFINER), large objects, foreign data wrappers/servers, event
+triggers, row-level security effects, default privileges; MySQL PROXY grants
+(`mysql.proxies_priv`), PROCESS, and routine bodies. A pass is therefore strong
+evidence, not proof, of a read-only account.
+
+**Conservative false FAILs**: on PostgreSQL 14 and earlier the default `public` schema
+lets everyone CREATE, and in MySQL schema names containing `_` or `%` are wildcards in
+`SCHEMA_PRIVILEGES`; in both cases can_ddl/can_audit report yes and the check fails.
 
 ## 5. Targets, credentials, API
 
