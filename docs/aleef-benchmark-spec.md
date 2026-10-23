@@ -57,3 +57,22 @@ Ground-truth labels are held only by the owner and are never committed to this r
 ## Implementer knowledge statement
 
 The implementer has seen the property list above (it is in the visible spec) but has not seen the trigger conditions of any defect.
+
+## Addendum: bank policy hook (Task 2)
+
+Package `orchestrator/internal/aleef/bank` serves the clean bank (`/v1` reads, `/v2` full set, `GET /openapi.json`). Every decision point is a field of `bank.Policy`; handlers call these and never repeat the rule inline. `bank.FixedPolicy()` implements all of them correctly.
+
+`Policy` fields (argument types documented in `bank/policy.go`):
+
+| Field | Signature |
+|---|---|
+| `CanReadAccount` | `func(p Principal, ownerID string) bool` |
+| `CanModifyBeneficiary` | `func(p Principal, ownerID string) bool` |
+| `ApprovalStillValid` | `func(pay Payment, newAmount int64, newBeneficiaryID string) bool` |
+| `DedupeIdempotency` | `func(p Principal, key string, prior *Transaction) bool` |
+| `CanSettle` | `func(pay Payment) bool` |
+| `CanApprove` | `func(p Principal, pay Payment) bool` |
+| `CanReadDocument` | `func(p Principal, ownerID string) bool` |
+| `LegacyAuthorize` | `func(p Principal, kind, ownerID string) bool` |
+
+Sealed-defect hook: package `bank/sealed` exposes `Policy(id string) (bank.Policy, bool)`. The committed stub `sealed/sealed_stub.go` carries `//go:build !aleefsealed` and returns `(bank.FixedPolicy(), false)`. The owner supplies `sealed/sealed_defects.go` with `//go:build aleefsealed`, defining `Policy(id)` that returns the defective policy for H1-H8 keyed by id. The two files are mutually exclusive by build tag, so they never collide. The implementer does not write or read that file.
