@@ -60,19 +60,25 @@ The implementer has seen the property list above (it is in the visible spec) but
 
 ## Addendum: bank policy hook (Task 2)
 
-Package `orchestrator/internal/aleef/bank` serves the clean bank (`/v1` reads, `/v2` full set, `GET /openapi.json`). Every decision point is a field of `bank.Policy`; handlers call these and never repeat the rule inline. `bank.FixedPolicy()` implements all of them correctly.
+Package `orchestrator/internal/aleef/bank` serves the clean bank (`/v1` reads, `/v2` full set, `GET /openapi.json`). Every decision point is a field of `bank.Policy`; handlers call these and never repeat the rule inline. `bank.FixedPolicy()` implements all of them correctly. Each hook owns exactly one decision, so a replaced hook changes only the operations listed for it (checked by `TestEachHookIsIndependent`). Argument types are documented in `bank/policy.go`.
 
-`Policy` fields (argument types documented in `bank/policy.go`):
+| Hook | Signature | Owns | Property |
+|---|---|---|---|
+| `CanReadAccount` | `(p Principal, ownerID string) bool` | v2 account and transaction reads | H1 |
+| `CanModifyBeneficiary` | `(p Principal, ownerID string) bool` | beneficiary PATCH | H2 (beneficiary) |
+| `CanModifyPayment` | `(p Principal, ownerID string) bool` | payment PATCH | H2 (payment) |
+| `ApprovalStillValid` | `(pay Payment, newAmount int64, newBeneficiaryID string) bool` | approvals surviving a payment change | H3 |
+| `DedupeIdempotency` | `(p Principal, key string, prior *Transaction) bool` | transaction replay by key | H4 |
+| `CanSettle` | `(pay Payment) bool` | settlement preconditions | H5 |
+| `CanApprove` | `(p Principal, pay Payment) bool` | payment approval | H6 |
+| `CanReadDocument` | `(p Principal, d Document, route DocRoute) bool` | v2 KYC document, primary and alternate route (`DocRoutePrimary`, `DocRouteAlternate`) | H7 |
+| `LegacyAuthorize` | `(p Principal, kind, ownerID string) bool` | all /v1 reads | H8 |
+| `CanReadBeneficiary` | `(p Principal, ownerID string) bool` | beneficiary read | not a benchmark target |
+| `CanReadPayment` | `(p Principal, ownerID string) bool` | payment read | not a benchmark target |
+| `CanUseAccount` | `(p Principal, ownerID string) bool` | naming an account when creating a transaction or payment | not a benchmark target |
+| `CanReferenceBeneficiary` | `(p Principal, ownerID string) bool` | naming a beneficiary on payment create or patch | not a benchmark target |
+| `CanRequestSettle` | `(p Principal, ownerID string) bool` | who may call settle | not a benchmark target |
 
-| Field | Signature |
-|---|---|
-| `CanReadAccount` | `func(p Principal, ownerID string) bool` |
-| `CanModifyBeneficiary` | `func(p Principal, ownerID string) bool` |
-| `ApprovalStillValid` | `func(pay Payment, newAmount int64, newBeneficiaryID string) bool` |
-| `DedupeIdempotency` | `func(p Principal, key string, prior *Transaction) bool` |
-| `CanSettle` | `func(pay Payment) bool` |
-| `CanApprove` | `func(p Principal, pay Payment) bool` |
-| `CanReadDocument` | `func(p Principal, ownerID string) bool` |
-| `LegacyAuthorize` | `func(p Principal, kind, ownerID string) bool` |
+The alternate document endpoint does not check the customer id in its path in the handler; the fixed `CanReadDocument` authorizes on the document owner for both routes.
 
 Sealed-defect hook: package `bank/sealed` exposes `Policy(id string) (bank.Policy, bool)`. The committed stub `sealed/sealed_stub.go` carries `//go:build !aleefsealed` and returns `(bank.FixedPolicy(), false)`. The owner supplies `sealed/sealed_defects.go` with `//go:build aleefsealed`, defining `Policy(id)` that returns the defective policy for H1-H8 keyed by id. The two files are mutually exclusive by build tag, so they never collide. The implementer does not write or read that file.

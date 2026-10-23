@@ -1,49 +1,72 @@
 package bank
 
+// DocRoute identifies which KYC document endpoint is being served.
+type DocRoute string
+
+const (
+	DocRoutePrimary   DocRoute = "primary"
+	DocRouteAlternate DocRoute = "alternate"
+)
+
 // Policy holds every authorization and state-transition decision the bank
 // makes. Handlers call these functions at each decision point and do not
-// repeat the rules inline. FixedPolicy supplies the correct behaviour for all
-// of them.
+// repeat the rules inline. Each hook owns exactly one decision, so that
+// replacing one hook changes only the operations listed for it below.
+// FixedPolicy supplies the correct behaviour for all of them.
 //
-// Argument conventions:
+// Hook                      Owns (property)                          Arguments
 //
-//	CanReadAccount(p, ownerID)         p may read an account, transaction, payment or
-//	                                   beneficiary owned by ownerID. Also used to scope
-//	                                   which accounts a transaction may be created on.
-//	CanModifyBeneficiary(p, ownerID)   p may modify (or reference in a payment, or settle)
-//	                                   a beneficiary or payment owned by ownerID.
-//	ApprovalStillValid(pay, amt, ben)  a payment that already holds approvals is being
-//	                                   changed to amount amt and beneficiary ben (equal to
-//	                                   the current values when a field is not being
-//	                                   changed). Reports whether the approvals survive.
-//	DedupeIdempotency(p, key, prior)   prior is the transaction previously stored under
-//	                                   key (nil when none). Reports whether the request
-//	                                   must be answered with prior instead of creating a
-//	                                   new transaction.
-//	CanSettle(pay)                     the payment has satisfied every step required
-//	                                   before settlement.
-//	CanApprove(p, pay)                 p may add an approval to pay.
-//	CanReadDocument(p, ownerID)        p may read a KYC document owned by ownerID, on
-//	                                   both the primary and the alternate endpoint.
-//	LegacyAuthorize(p, kind, ownerID)  authorization for /v1 reads. kind is one of
-//	                                   "account", "transaction", "document".
+//	CanReadAccount            account and transaction reads (H1)       p, ownerID
+//	CanModifyBeneficiary      beneficiary PATCH (H2, beneficiary)      p, ownerID
+//	CanModifyPayment          payment PATCH (H2, payment)              p, ownerID
+//	ApprovalStillValid        approval after a payment change (H3)     pay, newAmount, newBeneficiaryID
+//	DedupeIdempotency         transaction replay by key (H4)           p, key, prior (nil when none)
+//	CanSettle                 settlement preconditions (H5)            pay
+//	CanApprove                payment approval, maker-checker (H6)     p, pay
+//	CanReadDocument           KYC document read, both routes (H7)      p, document, route
+//	LegacyAuthorize           /v1 reads (H8)                           p, kind, ownerID
+//	CanReadBeneficiary        beneficiary read (not a benchmark target)  p, ownerID
+//	CanReadPayment            payment read (not a benchmark target)      p, ownerID
+//	CanUseAccount             naming an account when creating a
+//	                          transaction or payment (not a target)      p, ownerID
+//	CanReferenceBeneficiary   naming a beneficiary on a payment
+//	                          create or patch (not a target)             p, ownerID
+//	CanRequestSettle          who may call settle (not a target)         p, ownerID
+//
+// ownerID is the owner of the object being touched. For ApprovalStillValid,
+// the new values equal the current ones when a field is not being changed.
+// LegacyAuthorize kind is "account", "transaction" or "document". For
+// CanReadDocument the fixed policy authorizes on the document's owner on both
+// routes, whatever customer id the alternate path carries.
 type Policy struct {
-	CanReadAccount       func(p Principal, ownerID string) bool
-	CanModifyBeneficiary func(p Principal, ownerID string) bool
-	ApprovalStillValid   func(pay Payment, newAmount int64, newBeneficiaryID string) bool
-	DedupeIdempotency    func(p Principal, key string, prior *Transaction) bool
-	CanSettle            func(pay Payment) bool
-	CanApprove           func(p Principal, pay Payment) bool
-	CanReadDocument      func(p Principal, ownerID string) bool
-	LegacyAuthorize      func(p Principal, kind, ownerID string) bool
+	CanReadAccount          func(p Principal, ownerID string) bool
+	CanReadBeneficiary      func(p Principal, ownerID string) bool
+	CanReadPayment          func(p Principal, ownerID string) bool
+	CanUseAccount           func(p Principal, ownerID string) bool
+	CanReferenceBeneficiary func(p Principal, ownerID string) bool
+	CanModifyBeneficiary    func(p Principal, ownerID string) bool
+	CanModifyPayment        func(p Principal, ownerID string) bool
+	CanRequestSettle        func(p Principal, ownerID string) bool
+	ApprovalStillValid      func(pay Payment, newAmount int64, newBeneficiaryID string) bool
+	DedupeIdempotency       func(p Principal, key string, prior *Transaction) bool
+	CanSettle               func(pay Payment) bool
+	CanApprove              func(p Principal, pay Payment) bool
+	CanReadDocument         func(p Principal, d Document, route DocRoute) bool
+	LegacyAuthorize         func(p Principal, kind, ownerID string) bool
 }
 
 // FixedPolicy returns the correct rule for every decision point.
 func FixedPolicy() Policy {
 	owner := func(p Principal, ownerID string) bool { return p.ID != "" && p.ID == ownerID }
 	return Policy{
-		CanReadAccount:       owner,
-		CanModifyBeneficiary: owner,
+		CanReadAccount:          owner,
+		CanReadBeneficiary:      owner,
+		CanReadPayment:          owner,
+		CanUseAccount:           owner,
+		CanReferenceBeneficiary: owner,
+		CanModifyBeneficiary:    owner,
+		CanModifyPayment:        owner,
+		CanRequestSettle:        owner,
 		ApprovalStillValid: func(pay Payment, newAmount int64, newBeneficiaryID string) bool {
 			return newAmount == pay.Amount && newBeneficiaryID == pay.BeneficiaryID
 		},
@@ -64,7 +87,7 @@ func FixedPolicy() Policy {
 			}
 			return !pay.DualControl && p.ID == pay.OwnerID
 		},
-		CanReadDocument: owner,
+		CanReadDocument: func(p Principal, d Document, _ DocRoute) bool { return owner(p, d.OwnerID) },
 		LegacyAuthorize: func(p Principal, kind, ownerID string) bool { return owner(p, ownerID) },
 	}
 }

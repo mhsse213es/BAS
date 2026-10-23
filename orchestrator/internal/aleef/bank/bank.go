@@ -94,7 +94,9 @@ type Server struct {
 // New validates cfg and returns a Server.
 func New(cfg Config) (*Server, error) {
 	p := cfg.Policy
-	if p.CanReadAccount == nil || p.CanModifyBeneficiary == nil || p.ApprovalStillValid == nil ||
+	if p.CanReadAccount == nil || p.CanReadBeneficiary == nil || p.CanReadPayment == nil ||
+		p.CanUseAccount == nil || p.CanReferenceBeneficiary == nil || p.CanModifyBeneficiary == nil ||
+		p.CanModifyPayment == nil || p.CanRequestSettle == nil || p.ApprovalStillValid == nil ||
 		p.DedupeIdempotency == nil || p.CanSettle == nil || p.CanApprove == nil ||
 		p.CanReadDocument == nil || p.LegacyAuthorize == nil {
 		return nil, errors.New("bank: every Policy function must be set")
@@ -148,13 +150,14 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.HandleFunc("GET /v1/accounts/{id}", s.auth(s.getAccount(legacy("account"))))
 	mux.HandleFunc("GET /v1/transactions/{id}", s.auth(s.getTransaction(legacy("transaction"))))
-	mux.HandleFunc("GET /v1/kyc/documents/{id}", s.auth(s.getDocument(legacy("document"), false)))
-	mux.HandleFunc("GET /v1/customers/{cid}/documents/{id}", s.auth(s.getDocument(legacy("document"), true)))
+	legacyDoc := func(p Principal, d Document, _ DocRoute) bool { return s.pol.LegacyAuthorize(p, "document", d.OwnerID) }
+	mux.HandleFunc("GET /v1/kyc/documents/{id}", s.auth(s.getDocument(legacyDoc, DocRoutePrimary)))
+	mux.HandleFunc("GET /v1/customers/{cid}/documents/{id}", s.auth(s.getDocument(legacyDoc, DocRouteAlternate)))
 
-	mux.HandleFunc("GET /v2/accounts/{id}", s.auth(s.getAccount(s.pol.CanReadAccount)))
-	mux.HandleFunc("GET /v2/transactions/{id}", s.auth(s.getTransaction(s.pol.CanReadAccount)))
-	mux.HandleFunc("GET /v2/kyc/documents/{id}", s.auth(s.getDocument(s.pol.CanReadDocument, false)))
-	mux.HandleFunc("GET /v2/customers/{cid}/documents/{id}", s.auth(s.getDocument(s.pol.CanReadDocument, true)))
+	mux.HandleFunc("GET /v2/accounts/{id}", s.auth(s.getAccount(func(p Principal, o string) bool { return s.pol.CanReadAccount(p, o) })))
+	mux.HandleFunc("GET /v2/transactions/{id}", s.auth(s.getTransaction(func(p Principal, o string) bool { return s.pol.CanReadAccount(p, o) })))
+	mux.HandleFunc("GET /v2/kyc/documents/{id}", s.auth(s.getDocument(func(p Principal, d Document, r DocRoute) bool { return s.pol.CanReadDocument(p, d, r) }, DocRoutePrimary)))
+	mux.HandleFunc("GET /v2/customers/{cid}/documents/{id}", s.auth(s.getDocument(func(p Principal, d Document, r DocRoute) bool { return s.pol.CanReadDocument(p, d, r) }, DocRouteAlternate)))
 	mux.HandleFunc("POST /v2/transactions", s.auth(s.createTransaction))
 	mux.HandleFunc("POST /v2/beneficiaries", s.auth(s.createBeneficiary))
 	mux.HandleFunc("GET /v2/beneficiaries/{id}", s.auth(s.getBeneficiary))
@@ -228,16 +231,17 @@ func (s *Server) getTransaction(read func(Principal, string) bool) handler {
 	}
 }
 
-// getDocument serves the primary endpoint and, when alt is set, the alternate
-// endpoint that addresses the document through its customer.
-func (s *Server) getDocument(read func(Principal, string) bool, alt bool) handler {
+// getDocument serves the primary endpoint and the alternate endpoint that
+// addresses the document through its customer. The handler resolves the
+// document by id only; the policy decides access for the given route.
+func (s *Server) getDocument(read func(Principal, Document, DocRoute) bool, route DocRoute) handler {
 	return func(w http.ResponseWriter, r *http.Request, p Principal) {
 		d, ok := s.docs[r.PathValue("id")]
-		if !ok || (alt && r.PathValue("cid") != d.OwnerID) {
+		if !ok {
 			writeErr(w, http.StatusNotFound, "not found")
 			return
 		}
-		if !read(p, d.OwnerID) {
+		if !read(p, *d, route) {
 			writeErr(w, http.StatusForbidden, "forbidden")
 			return
 		}
@@ -260,7 +264,7 @@ func (s *Server) createTransaction(w http.ResponseWriter, r *http.Request, p Pri
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
-	if !s.pol.CanReadAccount(p, acct.OwnerID) {
+	if !s.pol.CanUseAccount(p, acct.OwnerID) {
 		writeErr(w, http.StatusForbidden, "forbidden")
 		return
 	}
@@ -301,7 +305,7 @@ func (s *Server) getBeneficiary(w http.ResponseWriter, r *http.Request, p Princi
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
-	if !s.pol.CanReadAccount(p, b.OwnerID) {
+	if !s.pol.CanReadBeneficiary(p, b.OwnerID) {
 		writeErr(w, http.StatusForbidden, "forbidden")
 		return
 	}
@@ -352,7 +356,7 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, p Princip
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
-	if !s.pol.CanReadAccount(p, acct.OwnerID) || !s.pol.CanModifyBeneficiary(p, ben.OwnerID) {
+	if !s.pol.CanUseAccount(p, acct.OwnerID) || !s.pol.CanReferenceBeneficiary(p, ben.OwnerID) {
 		writeErr(w, http.StatusForbidden, "forbidden")
 		return
 	}
@@ -373,7 +377,7 @@ func (s *Server) getPayment(w http.ResponseWriter, r *http.Request, p Principal)
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
-	if !s.pol.CanReadAccount(p, pay.OwnerID) {
+	if !s.pol.CanReadPayment(p, pay.OwnerID) {
 		writeErr(w, http.StatusForbidden, "forbidden")
 		return
 	}
@@ -386,7 +390,7 @@ func (s *Server) patchPayment(w http.ResponseWriter, r *http.Request, p Principa
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
-	if !s.pol.CanModifyBeneficiary(p, pay.OwnerID) {
+	if !s.pol.CanModifyPayment(p, pay.OwnerID) {
 		writeErr(w, http.StatusForbidden, "forbidden")
 		return
 	}
@@ -412,7 +416,7 @@ func (s *Server) patchPayment(w http.ResponseWriter, r *http.Request, p Principa
 			writeErr(w, http.StatusNotFound, "not found")
 			return
 		}
-		if !s.pol.CanModifyBeneficiary(p, nb.OwnerID) {
+		if !s.pol.CanReferenceBeneficiary(p, nb.OwnerID) {
 			writeErr(w, http.StatusForbidden, "forbidden")
 			return
 		}
@@ -459,7 +463,7 @@ func (s *Server) settlePayment(w http.ResponseWriter, r *http.Request, p Princip
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
-	if !s.pol.CanModifyBeneficiary(p, pay.OwnerID) {
+	if !s.pol.CanRequestSettle(p, pay.OwnerID) {
 		writeErr(w, http.StatusForbidden, "forbidden")
 		return
 	}

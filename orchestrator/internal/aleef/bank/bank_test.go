@@ -101,6 +101,7 @@ func TestFixedBankEnforcesAllProperties(t *testing.T) {
 		"/v2/transactions/" + txn, "/v1/transactions/" + txn,
 		"/v2/kyc/documents/" + doc.ID, "/v1/kyc/documents/" + doc.ID,
 		"/v2/customers/alice/documents/" + doc.ID, "/v1/customers/alice/documents/" + doc.ID,
+		"/v2/customers/bob/documents/" + doc.ID, "/v1/customers/bob/documents/" + doc.ID,
 	} {
 		if c, _ := e.do("GET", p, "tok-b", nil, nil); !denied(c) {
 			t.Fatalf("cross-customer GET %s got %d", p, c)
