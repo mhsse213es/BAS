@@ -44,6 +44,33 @@ filebeat.inputs:
       - drop_fields:
           fields: ["ts_date", "ts_time", "ts_tz", "pid", "level"]
           ignore_missing: true
+      # Keyword fields so the rule never depends on text analysis.
+      #   dbsim.marker          set ONLY when the logged statement BEGINS with the
+      #                         marker comment "/* dbsim:bas-dbsim:<id> */" after the
+      #                         PG log prefix ("statement: ", "execute <name>: ",
+      #                         or pgaudit's 'AUDIT: SESSION,..,"'). Mirrors
+      #                         agent/dbprobe/audit.go ownStatement.
+      #   dbsim.is_meta         record contains the agent's meta tag (dbsim:dbsim-meta)
+      #   dbsim.is_audit_lookup record mentions one of the audit-source words
+      # A lab alert is a HINT, never proof of origin: any DB user can write the
+      # marker as the first thing in their own statement.
+      - script:
+          lang: javascript
+          id: dbsim_pg_fields
+          source: |
+            var posRe = /^\S+ \S+ \S+ \[\d+\] (?:\S+@\S+ )?(?:LOG|STATEMENT):  (?:statement: |execute [^:\s]+: |AUDIT: [A-Z]+,\d+,\d+,[A-Z]+,[A-Z ]*,[^,]*,[^,]*,")\s*\/\* dbsim:(bas-dbsim:[A-Za-z0-9._:-]+) \*\//;
+            var words = ["general_log", "events_statements_history_long", "pg_log", "dbsim_audit"];
+            function process(evt) {
+              var m = evt.Get("message");
+              if (typeof m !== "string") { return; }
+              var low = m.toLowerCase();
+              var hit = posRe.exec(m);
+              if (hit) { evt.Put("dbsim.marker", hit[1]); }
+              evt.Put("dbsim.is_meta", low.indexOf("/* dbsim:dbsim-meta */") >= 0);
+              var al = false;
+              for (var i = 0; i < words.length; i++) { if (low.indexOf(words[i]) >= 0) { al = true; } }
+              evt.Put("dbsim.is_audit_lookup", al);
+            }
 
   - type: filestream
     id: dbsim-mysql-general
@@ -70,6 +97,25 @@ filebeat.inputs:
           target: dbsim
           fields:
             engine: mysql
+      # General-log line: "<iso ts>\t<thread id> <Command>\t<argument>".
+      # Same keyword-field contract as the PostgreSQL input above.
+      - script:
+          lang: javascript
+          id: dbsim_mysql_fields
+          source: |
+            var posRe = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s+\d+ (?:Query|Prepare|Execute)\s+\/\* dbsim:(bas-dbsim:[A-Za-z0-9._:-]+) \*\//;
+            var words = ["general_log", "events_statements_history_long", "pg_log", "dbsim_audit"];
+            function process(evt) {
+              var m = evt.Get("message");
+              if (typeof m !== "string") { return; }
+              var low = m.toLowerCase();
+              var hit = posRe.exec(m);
+              if (hit) { evt.Put("dbsim.marker", hit[1]); }
+              evt.Put("dbsim.is_meta", low.indexOf("/* dbsim:dbsim-meta */") >= 0);
+              var al = false;
+              for (var i = 0; i < words.length; i++) { if (low.indexOf(words[i]) >= 0) { al = true; } }
+              evt.Put("dbsim.is_audit_lookup", al);
+            }
 
 processors:
   # Keep the original line in an ECS field too, so the alert document carries

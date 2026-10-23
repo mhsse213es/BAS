@@ -16,6 +16,7 @@ set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
 cd "$here"
+# .env is SOURCED AS SHELL: keep values [A-Za-z0-9] only, no quotes or spaces.
 if [ -f .env ]; then set -a; . ./.env; set +a; fi
 : "${DBSIM_TEST_PASSWORD:?set in .env}" "${ALERTS_READER_PASSWORD:?set in .env}"
 TIMEOUT=${SMOKE_TIMEOUT:-90}

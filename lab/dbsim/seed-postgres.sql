@@ -27,6 +27,12 @@ CREATE ROLE bas_dbsim_app NOLOGIN;
 GRANT EXECUTE ON FUNCTION pg_control_system() TO dbsim_test, dbsim_lab;
 
 -- ----------------------------------------------------------- lab objects ----
+-- Created AS dbsim_lab so dbsim_lab is owner AND grantor of the bas_dbsim
+-- grants. information_schema.role_table_grants only lists grants whose
+-- grantor or grantee is a role enabled for the CURRENT user, so this is what
+-- lets DB-02 (run with the dbsim_lab credential) see them. dbsim_test sees
+-- none of them (UNVERIFIED).
+SET ROLE dbsim_lab;
 CREATE SCHEMA bas_dbsim;
 
 CREATE TABLE bas_dbsim.app_data (id int PRIMARY KEY, label text NOT NULL);
@@ -45,6 +51,7 @@ GRANT USAGE ON SCHEMA bas_dbsim TO bas_dbsim_app;
 GRANT SELECT ON bas_dbsim.app_data TO bas_dbsim_app;
 REVOKE ALL ON SCHEMA bas_dbsim FROM PUBLIC;
 REVOKE ALL ON bas_dbsim.restricted FROM PUBLIC;
+RESET ROLE;
 
 -- ------------------------------------------------------- audit view (fdw) ---
 -- The agent reads dbsim_audit.pg_log(log_time, user_name, database_name,

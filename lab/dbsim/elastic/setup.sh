@@ -21,11 +21,20 @@ ES_URL=${ES_URL:-http://127.0.0.1:59200}
 KIBANA_URL=${KIBANA_URL:-http://127.0.0.1:55601}
 : "${ELASTIC_PASSWORD:?ELASTIC_PASSWORD is required}"
 
+# Passwords are placed into JSON bodies unescaped: enforce [A-Za-z0-9] only.
+for v in ELASTIC_PASSWORD KIBANA_SYSTEM_PASSWORD FILEBEAT_PASSWORD ALERTS_READER_PASSWORD; do
+  eval "val=\${$v:-}"
+  # Only the ES phase needs the last three; empty is caught by its own :? check.
+  case $val in *[!A-Za-z0-9]*) echo "$v must be [A-Za-z0-9] only" >&2; exit 1;; esac
+done
+
 # api METHOD URL [curl args...] -> prints body, then a final line "HTTP <code>".
+# The elastic credential goes to curl on stdin (-K -), never on argv.
 api() {
   m=$1; u=$2; shift 2
-  curl -s -X "$m" -u "elastic:$ELASTIC_PASSWORD" -H 'Content-Type: application/json' \
-    -H 'kbn-xsrf: true' -w '\nHTTP %{http_code}\n' "$@" "$u"
+  printf 'user = "elastic:%s"\n' "$ELASTIC_PASSWORD" |
+    curl -s -K - -X "$m" -H 'Content-Type: application/json' \
+      -H 'kbn-xsrf: true' -w '\nHTTP %{http_code}\n' "$@" "$u"
 }
 # must METHOD URL [curl args...]: fail unless HTTP 2xx.
 must() {

@@ -6,7 +6,10 @@
     "mappings": {
       "properties": {
         "@timestamp": { "type": "date" },
-        "message": { "type": "text" },
+        "message": {
+          "type": "text",
+          "fields": { "raw": { "type": "wildcard" } }
+        },
         "event": {
           "properties": {
             "original": { "type": "text" },
@@ -24,6 +27,9 @@
         "dbsim": {
           "properties": {
             "engine": { "type": "keyword" },
+            "marker": { "type": "keyword" },
+            "is_meta": { "type": "boolean" },
+            "is_audit_lookup": { "type": "boolean" },
             "database": { "type": "keyword" }
           }
         }

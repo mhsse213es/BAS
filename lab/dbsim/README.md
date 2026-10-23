@@ -57,7 +57,9 @@ a seed, `docker compose down -v`.
 Expected result of `./smoke.sh` **before** the stack is up: `FAIL: the lab
 'agent' container is not running`, exit 2. After `up` but **before**
 `setup.sh kibana` (no rule yet): all three checks FAIL with "no alert within
-90 s", exit 1. Only a full PASS means the path works.
+90 s", exit 1. Only a full PASS means the path works. Worst-case runtime is about **270 s**
+(three checks, each polling up to `SMOKE_TIMEOUT`=90 s); `.env` is sourced as
+shell by `smoke.sh`, so keep values `[A-Za-z0-9]` with no quotes or spaces.
 
 ## MySQL-family choice and its limits
 
@@ -115,13 +117,29 @@ agent container --SQL--> postgres (pgaudit, log_statement=all, logging_collector
   only grows. The foreign table lists all 26 PG16 csvlog columns; another major
   version needs a different column list.
 * **Detection rule** (`elastic/rule.json`): KQL
-  `message : "bas-dbsim:" and not message : ("dbsim-meta" or "general_log" or "pg_log" or "dbsim_audit" or "events_statements_history_long")`
-  over `dbsim-audit-*`, every 10 s, lookback 70 s. The exclusions matter: the
-  agent's own audit lookup contains the probe marker in its `LIKE` argument
-  (tagged `/* dbsim:dbsim-meta */`), and must not alert as if it were the probe.
-  `message` is a `text` field, so the phrase `"bas-dbsim:"` matches the token
-  sequence `bas dbsim`; it is a prefix filter only. **Task 12's post-filter must do
-  an exact substring match on the original message**, not rely on the rule.
+  `dbsim.marker : * and not dbsim.is_meta : true and not dbsim.is_audit_lookup : true`
+  over `dbsim-audit-*`, every 10 s, lookback 70 s. The rule does **not** depend on
+  text analysis of `message`. Filebeat (a JavaScript `script` processor per
+  input, `filebeat.yml`) extracts keyword fields:
+  * `dbsim.marker` is set only when the logged statement **begins** with the
+    marker comment `/* dbsim:bas-dbsim:<id> */` right after the log prefix
+    (PostgreSQL `statement: `, `execute <name>: `, or pgaudit's
+    `AUDIT: SESSION,..,"`; MySQL general-log `Query`/`Prepare`/`Execute`). This
+    mirrors `ownStatement` in `agent/dbprobe/audit.go`; a foreign statement that
+    merely quotes the marker mid-statement gets no `dbsim.marker`.
+  * `dbsim.is_meta` is true when the record contains the agent's own meta tag
+    `/* dbsim:dbsim-meta */`; `dbsim.is_audit_lookup` when it mentions
+    `general_log`, `events_statements_history_long`, `pg_log` or `dbsim_audit`.
+    These are exactly the agent's own meta/lookup exclusions (its lookup carries
+    the probe marker in a `LIKE` argument and must not alert as the probe).
+  `message` also gets a `message.raw` `wildcard` sub-field in the index template
+  for ad-hoc hunting only; the rule does not use it.
+  **A lab alert is a HINT, not proof of origin**: any database user can start
+  their own statement with the marker comment. The Task 12 exact-match
+  post-filter over the alert's original message (plus principal/target/run id) is
+  the authority. Whether the regexes match the real log lines, and whether the
+  script processor behaves as written, is UNVERIFIED (nothing was run; no Elastic
+  or Filebeat docs were fetched for this revision).
 * **Alert document**: a Kibana custom query rule copies the source event's
   fields into the alert (`message`, `event.original`, `host.name`, `host.ip`,
   `user.name`, `dbsim.*`) -- UNVERIFIED. `host.name` is `dbsim-pg` /
@@ -158,11 +176,26 @@ agent container --SQL--> postgres (pgaudit, log_statement=all, logging_collector
 
 Lab objects: schema/database `bas_dbsim` with `app_data` and `restricted`
 (synthetic `BAS-SIM-*` rows only; no one but the owner can read `restricted`).
-Known visibility limit: `information_schema.role_table_grants` (PG) and
-`TABLE_PRIVILEGES` (MySQL) only show grants the connecting account may see, so
-DB-02 as `dbsim_test` may see **no** `bas_dbsim_app` grants even though they
-exist (UNVERIFIED). The orchestrator reports an empty grant set as such, not as
-a pass. Use `dbsim_lab` (or add visibility) if the lab needs them listed.
+**DB-02 and DB-03 use different credentials in the lab.** The grant probe reads
+`information_schema.role_table_grants` (PG) / `TABLE_PRIVILEGES` (MySQL), which
+only show grants the connecting account may see. As `dbsim_test` DB-02 would
+observe **no** `bas_dbsim_app` grants and would look clean; that is blindness,
+not a pass. So in the lab:
+
+* DB-02 target: credential ref `dbcred:lab-pg-lab` / `dbcred:lab-my-lab`
+  (`dbsim_lab`). `seed-postgres.sql` creates the `bas_dbsim` objects while
+  `SET ROLE dbsim_lab`, so `dbsim_lab` is owner and grantor and PG lists the
+  grants for it; MySQL's `dbsim_lab` holds global `SELECT`, so it should see all
+  `TABLE_PRIVILEGES`. Both are UNVERIFIED (checklist 14).
+* DB-03 target: credential ref `dbcred:lab-pg-ro` / `dbcred:lab-my-ro`
+  (`dbsim_test`) on purpose, so the read of `bas_dbsim.restricted` is denied.
+* I did not add catalog-visibility grants to `dbsim_test`: PG `relacl`
+  readability is a different query from the one `grants.go` runs, and MySQL
+  `mysql.tables_priv` would need a new grant for no benefit once DB-02 runs as
+  `dbsim_lab`.
+* Empty observation = unobservable. Grading must **not** PASS DB-02 on zero
+  grants observed. No such guard exists in the orchestrator yet; it is tracked
+  for Task 12/13 grading, and nothing in this lab asserts it.
 
 ## Agent connection (BAS_DBCRED / Target registry / tests)
 
@@ -232,18 +265,21 @@ Record each result in `docs/dbsim-mastery-qa-log.md` (or the initiative QA log).
 
 1. Images and tags exist and pull; `postgresql-16-pgaudit` installs from the PGDG apt repo in the official image; `default-mysql-client` installs in `agent-sim`.
 2. ES security bootstrap: single-node with security on and transport SSL off starts (no bootstrap-check failure); `ELASTIC_PASSWORD` works; `bootstrap` sets `kibana_system`; Kibana connects; `${ENV}` substitution in `kibana.yml` works; `xpack.alerting.rules.minimumScheduleInterval.{value,enforce}` accepted (10 s rule interval allowed).
-3. Postgres init: `10-seed.sh` runs (non-executable `.sh` is sourced by the entrypoint; mark it executable in git); `SET pgaudit.log='none'` before the library is loaded does not fail; the seed password statements do not appear in logs; `file_fdw` extension available; `GRANT EXECUTE ON FUNCTION pg_control_system()` valid.
+3. Postgres init: `10-seed.sh` runs (the init scripts are committed with mode 100755 via `git update-index --chmod=+x`; git on Windows may drop the bit on a fresh checkout, in which case the entrypoint sources them instead of executing them, or run `chmod +x lab/dbsim/*/10-seed.sh`); `SET pgaudit.log='none'` before the library is loaded does not fail; the seed password statements do not appear in logs; `file_fdw` extension available; `GRANT EXECUTE ON FUNCTION pg_control_system()` valid.
 4. `dbsim_audit.pg_log` readable by `dbsim_test`: file exists at `/var/log/postgresql/dbsim-pg.csv` (collector `.log`->`.csv` rename), 26-column layout matches, `log_time` parses, the view reflects new rows immediately (no caching), and the file is created before the agent first connects. Agent `Capabilities().AuditSources` is non-empty.
 5. **Leading-comment survival** for the marker `/* dbsim:bas-dbsim:... */` in each of: PostgreSQL `statement:` log line (simple protocol), `execute <name>:` line (extended protocol, pgx prepares by default), csvlog `message`, pgaudit `AUDIT:` row; MySQL `general_log` TABLE and FILE for `COM_QUERY` (text protocol) and for server-side prepared statements (go-sql-driver uses them when args are present: both the `Prepare` and `Execute` rows), and `performance_schema.events_statements_history_long.SQL_TEXT`. The agent identifies a statement only if its text BEGINS with the comment (`ownStatement`), so any stripping gives absent/incomplete.
 6. MySQL: `general_log=ON`, `log_output=TABLE,FILE`, and the four statement consumers are on after start; `SELECT` grants on `mysql.general_log` and the performance_schema tables work; column grant on `mysql.user` suffices for `read_roles`; `NOW(6) - Uptime + TIMER_START` timing is close enough (history_long path); `mysql_native_password` accepted by the Go driver; `sql_log_off` keeps the seed out of the log.
 7. File ownership: the named volumes `pg-log` / `mysql-log` inherit `postgres`/`mysql` ownership from the images; Filebeat (root) can read both files.
 8. Filebeat: multiline patterns match the real `%m` / ISO line starts; `dissect` extracts `user.name` (ignore_failure on, so failures are silent); `host.name`/`host.ip` end up as `dbsim-pg`/`172.28.50.10` and `dbsim-mysql`/`172.28.50.11` (i.e. `add_fields` overrides the beat's own `host.name`); `copy_fields` fills `event.original`; documents land in `dbsim-audit-<date>` with the template applied (`host.ip` is type `ip`).
-9. Rule: created through `POST /api/detection_engine/rules` (and the `/index` call or its absence is harmless); the KQL phrase match on `bas-dbsim:` fires and the exclusion list suppresses the agent's own `dbsim-meta` lookups; both log-line and AUDIT-row events produce alerts; rule status healthy (not "no indices").
+9. Rule: created through `POST /api/detection_engine/rules` (and the `/index` call or its absence is harmless); a tagged probe fires it; both log-line and AUDIT-row events produce alerts; rule status healthy (not "no indices").
+9a. Field extraction / tokenization: for real PG (`statement:`, `execute <name>:`, AUDIT row) and MySQL (`Query`, `Prepare`, `Execute`) records, the Filebeat `script` processors set `dbsim.marker` to the exact marker id, `dbsim.is_meta` and `dbsim.is_audit_lookup` as intended, and the fields are mapped `keyword`/`boolean` (not dynamically as text). No reliance on how `message` is analyzed.
+9b. Negative test (forgery/quoting): a statement that merely contains the marker mid-statement (e.g. `SELECT 'bas-dbsim:x'` or `/* other */ SELECT '/* dbsim:bas-dbsim:x */'`) gets no `dbsim.marker` and raises no alert. Also confirm a statement that DOES start with the comment from another user alerts (expected: it is a hint, the post-filter must reject it by principal/run id).
+9c. Exclusion set: `dbsim.is_meta` / `dbsim.is_audit_lookup` are true for exactly the agent's own meta and audit-lookup statements (compare against `MetaStatementTag` and `auditSourceWords` in `agent/dbprobe/audit.go`) and for nothing else a probe could produce; no real probe statement is suppressed.
 10. Alert content: `.alerts-security.alerts-default` documents contain `message`, `event.original`, `host.name`, `host.ip` in `_source` (needed by Task 12). If not, the fix is on the rule/alert side, not a different index.
 11. **Latency**: time from statement to alert document. The agent's 5 s wait covers only the PG csvlog sync, not the rule; with a 10 s rule interval and Filebeat/refresh delays expect up to about 20-30 s. Task 13's detection window and `smoke.sh`'s 90 s budget must be checked against the measured value.
 12. detectverify against the live lab: `TestConnection` passes with `dbsim_alerts_reader`; `Verify` for `host.name=dbsim-pg` and for `host.ip=172.28.50.10` returns the alerts; hidden-index expansion and `allow_no_indices=false` behave (the alerts index must exist: run one smoke first); `.internal.alerts-*` privileges are sufficient.
 13. `smoke.sh` end-to-end PASS for all three checks, including `psql \bind` (psql 16 extended protocol) and the mariadb client's `--comments` (client-side comment preservation) and `MYSQL_PWD`.
-14. DB-02/DB-03 behaviour of `dbsim_test`: DB-03 is denied on `bas_dbsim.restricted`; DB-02 grant visibility (see Accounts).
+14. DB-03 as `dbsim_test` is denied on `bas_dbsim.restricted`. **DB-02 as `dbsim_lab` actually sees the expected `bas_dbsim_app` grants** (`USAGE`/`SELECT` on `bas_dbsim.app_data`; PG after the `SET ROLE dbsim_lab` seed, MySQL via global SELECT), and DB-02 as `dbsim_test` sees none (confirming why the lab must not use it).
 15. Fixture lifecycle as `dbsim_lab` on both engines (CREATE SCHEMA/ROLE/USER, GRANT, verified teardown), and no collision between a fixture id and the lab's `dbsim_audit` schema.
 
 ## Known risk: marker comment may not survive (MySQL especially)
