@@ -29,6 +29,9 @@ type RunEvent struct {
 // "error", never "fail" -- a step whose process never even launched is not
 // evidence a control failed to block anything. Otherwise pass/fail by exit.
 func eventForResult(r protocol.ExecResult) (typ, verdict string) {
+	if r.Vetoed {
+		return "completed", "vetoed"
+	}
 	if r.TimedOut {
 		return "timeout", ""
 	}
@@ -51,6 +54,12 @@ func eventForResult(r protocol.ExecResult) (typ, verdict string) {
 // retryable), any other nonzero exit (fail or the -1 error sentinel) ->
 // retryable.
 func isRetryableResult(r protocol.ExecResult) bool {
+	// A dbprobe result (observation, gate refusal or DB error) is never
+	// retried: re-sending bad credentials can lock out a customer account, and
+	// a gate refusal cannot change on retry.
+	if r.DBProbe != nil || r.Vetoed {
+		return false
+	}
 	if r.Blocked {
 		return false
 	}

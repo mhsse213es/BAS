@@ -965,6 +965,31 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 					return false
 				}
 
+				// dbsim step-shape pre-gate (runs BEFORE B5, never instead of it):
+				// a dbprobe step must carry a spec and no shell baggage. B5 below
+				// still applies its signed ExecutionClass rules to the step -- an
+				// empty/unknown class stays vetoed -- and executeDBProbe applies
+				// the remaining dbsim gates (policy, identity) before any probe SQL.
+				if msg := dbprobeStepShapeRefusal(step); msg != "" {
+					log.Printf("[!]   [%d/%d] %s VETOED -- dbsim gate: %s", i+1, total, step.TechniqueID, msg)
+					a.logger.Sec("warn", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
+						"dbsim_veto", msg)
+					results[i] = protocol.ExecResult{
+						TaskID:               step.TaskID,
+						ExitCode:             -1,
+						Vetoed:               true,
+						VetoedActionKey:      step.ActionKey,
+						VetoedExecutionClass: step.ExecutionClass,
+						VetoedBlockSource:    "dbsim_gate",
+						Stderr:               "dbprobe refused: " + msg,
+						ExecutedAt:           time.Now(),
+					}
+					ran[i] = true
+					emit(RunEvent{Type: "completed", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name,
+						Payload: map[string]any{"verdict": "vetoed"}})
+					return false
+				}
+
 				// B5 gate runs BEFORE payload staging, not after -- no reason to
 				// write a potentially-destructive payload to disk for a step
 				// that's about to be vetoed anyway. Scans Command, Cleanup, and

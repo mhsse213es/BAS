@@ -171,6 +171,12 @@ func humanBytes(n int64) string {
 }
 
 func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) protocol.ExecResult {
+	// dbprobe steps never touch a shell, payload staging, snapshots or cleanup
+	// scripts: they run a named, catalog-bound database probe (exec_dbprobe.go).
+	// Branch BEFORE any of that (and before buildCmd / the warm pool).
+	if strings.EqualFold(step.Executor, "dbprobe") {
+		return execDBProbeStep(parentCtx, step)
+	}
 	timeout := executeSeconds(step)
 	grace := graceSeconds(step)
 
