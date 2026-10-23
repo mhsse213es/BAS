@@ -54,6 +54,9 @@ func writeOutcome(err error) string {
 // is hex (safe in a quoted literal; the statement cannot take parameters), joins
 // the scrubber and is never returned, noted or logged.
 func (a *Adapter) createThrowaway(ctx context.Context, lit, name, pw string) error {
+	if err := a.refuseSecondAccount(); err != nil {
+		return err
+	}
 	a.addSecret(pw)
 	a.acct = acctState{name: name, mayExist: true}
 	err := a.s.Exec(ctx, "CREATE USER "+lit+" IDENTIFIED BY '"+pw+"'")
@@ -67,6 +70,16 @@ func (a *Adapter) createThrowaway(ctx context.Context, lit, name, pw string) err
 		a.markBroken()
 	}
 	return err
+}
+
+// refuseSecondAccount stops a second throwaway-account probe on an adapter that
+// still tracks one: overwriting the undo record (and clearing it when the second
+// CREATE is refused as "exists") would orphan the first account. Nothing is sent.
+func (a *Adapter) refuseSecondAccount() error {
+	if a.acct.mayExist {
+		return errors.New("dbprobe/mysql: the adapter already tracks a throwaway account; refusing a second create")
+	}
+	return nil
 }
 
 // labFixture checks the lab-mode and required-fixture preconditions shared by the
@@ -93,6 +106,9 @@ func (a *Adapter) runTryDisableAudit(ctx context.Context, def dbprobe.ProbeDef, 
 	var res dbprobe.ProbeResult
 	fx, err := a.labFixture(def, spec, mode)
 	if err != nil {
+		return res, err
+	}
+	if err := a.refuseSecondAccount(); err != nil {
 		return res, err
 	}
 	stmt, ok := dbprobe.AuditTamperStatement(engineName)
@@ -137,7 +153,8 @@ func (a *Adapter) runTryDisableAudit(ctx context.Context, def dbprobe.ProbeDef, 
 	sess, err := a.dialAs(ctx, name, pw)
 	if err == nil {
 		var rows [][]any
-		rows, err = sess.Query(ctx, markerComment(spec.Marker)+" "+sqlClock, 1)
+		// F1: the baseline carries the meta tag, never the per-dispatch marker.
+		rows, err = sess.Query(ctx, markerComment(metaMarker)+" "+sqlClock, 1)
 		if err == nil && len(rows) == 1 && len(rows[0]) == 1 {
 			res.DBTime = toTime(rows[0][0])
 		}
@@ -175,6 +192,9 @@ const fingerprintSQL = "SELECT COUNT(*), COALESCE(SUM(CRC32(CONCAT_WS('|', id, s
 func (a *Adapter) fingerprint(ctx context.Context, table string) (string, error) {
 	rows, err := a.s.Query(ctx, markerComment(metaMarker)+" "+fmt.Sprintf(fingerprintSQL, table), 1)
 	if err != nil {
+		if isCtxErr(err) || ctx.Err() != nil {
+			a.markBroken() // uniform with create/grant: the connection is in an unknown state
+		}
 		return "", err
 	}
 	if len(rows) != 1 || len(rows[0]) != 2 {
@@ -192,6 +212,9 @@ func (a *Adapter) runTryWriteFixture(ctx context.Context, def dbprobe.ProbeDef, 
 	var res dbprobe.ProbeResult
 	fx, err := a.labFixture(def, spec, mode)
 	if err != nil {
+		return res, err
+	}
+	if err := a.refuseSecondAccount(); err != nil {
 		return res, err
 	}
 	_, tbl, err := a.Resolve(dbprobe.WriteFixtureTable)
@@ -242,7 +265,11 @@ func (a *Adapter) runTryWriteFixture(ctx context.Context, def dbprobe.ProbeDef, 
 		detail("create", err)
 		return finish("account_create_failed")
 	}
-	if err := a.s.Exec(ctx, "GRANT SELECT ON "+qschema+".* TO "+lit); err != nil {
+	// F2: _ and % are wildcards in a database-level GRANT even inside backticks, so
+	// they are escaped here only (the schema name is otherwise validated by
+	// fixtureNames/quoteIdent and is dbsim_<hex id>).
+	gschema := strings.NewReplacer("_", `\_`, "%", `\%`).Replace(qschema)
+	if err := a.s.Exec(ctx, "GRANT SELECT ON "+gschema+".* TO "+lit); err != nil {
 		if isCtxErr(err) || ctx.Err() != nil {
 			a.markBroken()
 		}
@@ -260,7 +287,7 @@ func (a *Adapter) runTryWriteFixture(ctx context.Context, def dbprobe.ProbeDef, 
 	sess, err := a.dialAs(ctx, name, pw)
 	if err == nil {
 		var rows [][]any
-		rows, err = sess.Query(ctx, markerComment(spec.Marker)+" SELECT UTC_TIMESTAMP(6), COUNT(*) FROM "+qtbl, 1)
+		rows, err = sess.Query(ctx, markerComment(metaMarker)+" SELECT UTC_TIMESTAMP(6), COUNT(*) FROM "+qtbl, 1)
 		if err == nil && len(rows) == 1 && len(rows[0]) >= 1 {
 			res.DBTime = toTime(rows[0][0])
 		}

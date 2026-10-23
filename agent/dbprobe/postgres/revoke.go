@@ -94,6 +94,9 @@ func (a *Adapter) runAuthAfterRevoke(ctx context.Context, def dbprobe.ProbeDef, 
 		return res, err
 	}
 	qn := pgx.Identifier{name}.Sanitize()
+	if err := a.refuseSecondAccount(); err != nil {
+		return res, err // never orphan the account an earlier probe still tracks
+	}
 
 	ctx, cancel := dbprobe.WithDeadline(ctx, spec.Limits)
 	defer cancel()

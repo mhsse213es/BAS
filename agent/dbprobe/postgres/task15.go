@@ -40,6 +40,9 @@ func writeOutcome(err error) string {
 // out; the statement cannot take bound parameters. The password joins the
 // redaction set and is never returned, noted or logged.
 func (a *Adapter) createThrowaway(ctx context.Context, name, pw string) error {
+	if err := a.refuseSecondAccount(); err != nil {
+		return err
+	}
 	a.secrets = append(a.secrets, pw)
 	a.acct = acctState{name: name, mayExist: true}
 	err := a.s.Exec(ctx, "CREATE ROLE "+pgx.Identifier{name}.Sanitize()+" LOGIN PASSWORD '"+pw+"'")
@@ -54,6 +57,16 @@ func (a *Adapter) createThrowaway(ctx context.Context, name, pw string) error {
 		a.markBroken()
 	}
 	return err
+}
+
+// refuseSecondAccount stops a second throwaway-account probe on an adapter that
+// still tracks one: overwriting the undo record (and clearing it when the second
+// CREATE is refused as "exists") would orphan the first account. Nothing is sent.
+func (a *Adapter) refuseSecondAccount() error {
+	if a.acct.mayExist {
+		return errors.New("dbprobe/postgres: the adapter already tracks a throwaway account; refusing a second create")
+	}
+	return nil
 }
 
 // labFixture checks the lab-mode and required-fixture preconditions shared by the
@@ -83,6 +96,9 @@ func (a *Adapter) runTryDisableAudit(ctx context.Context, def dbprobe.ProbeDef, 
 	var res dbprobe.ProbeResult
 	fx, err := a.labFixture(def, spec, mode)
 	if err != nil {
+		return res, err
+	}
+	if err := a.refuseSecondAccount(); err != nil {
 		return res, err
 	}
 	stmt, ok := dbprobe.AuditTamperStatement(engineName)
@@ -125,7 +141,9 @@ func (a *Adapter) runTryDisableAudit(ctx context.Context, def dbprobe.ProbeDef, 
 	sess, err := a.dialAs(ctx, name, pw)
 	if err == nil {
 		var rows [][]any
-		rows, err = sess.Query(ctx, markerComment(spec.Marker)+" "+sqlClock, 1)
+		// F1: the baseline carries the meta tag, never the per-dispatch marker, so
+		// only the attempt statement can be credited as detected.
+		rows, err = sess.Query(ctx, markerComment(metaMarker)+" "+sqlClock, 1)
 		if err == nil && len(rows) == 1 && len(rows[0]) == 1 {
 			if t, ok := rows[0][0].(time.Time); ok {
 				res.DBTime = t.UTC()
@@ -167,6 +185,9 @@ const fingerprintSQL = "SELECT count(*)::text, COALESCE(md5(string_agg(t::text, 
 func (a *Adapter) fingerprint(ctx context.Context, table string) (string, error) {
 	rows, err := a.s.Query(ctx, markerComment(metaMarker)+" "+fmt.Sprintf(fingerprintSQL, table), 1)
 	if err != nil {
+		if isCtxErr(err) || ctx.Err() != nil {
+			a.markBroken() // uniform with create/grant: the connection is in an unknown state
+		}
 		return "", err
 	}
 	if len(rows) != 1 || len(rows[0]) != 2 {
@@ -183,6 +204,9 @@ func (a *Adapter) runTryWriteFixture(ctx context.Context, def dbprobe.ProbeDef, 
 	var res dbprobe.ProbeResult
 	fx, err := a.labFixture(def, spec, mode)
 	if err != nil {
+		return res, err
+	}
+	if err := a.refuseSecondAccount(); err != nil {
 		return res, err
 	}
 	_, tbl, err := a.Resolve(dbprobe.WriteFixtureTable)
@@ -254,7 +278,7 @@ func (a *Adapter) runTryWriteFixture(ctx context.Context, def dbprobe.ProbeDef, 
 	sess, err := a.dialAs(ctx, name, pw)
 	if err == nil {
 		var rows [][]any
-		rows, err = sess.Query(ctx, markerComment(spec.Marker)+" SELECT clock_timestamp(), count(*) FROM "+qtbl, 1)
+		rows, err = sess.Query(ctx, markerComment(metaMarker)+" SELECT clock_timestamp(), count(*) FROM "+qtbl, 1)
 		if err == nil && len(rows) == 1 && len(rows[0]) >= 1 {
 			if t, ok := rows[0][0].(time.Time); ok {
 				res.DBTime = t.UTC()

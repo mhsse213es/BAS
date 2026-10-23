@@ -529,3 +529,18 @@ func TestAuthAfterRevokeBaseline1044IsBaselineFailedNeverDenied(t *testing.T) {
 		t.Fatal("1044 is not a login denial")
 	}
 }
+
+// F3: DB-06 shares the throwaway-account tracking; a second run on an adapter
+// that still tracks an account is refused before anything is sent.
+func TestAuthAfterRevokeSecondRunRefusedWhileTracked(t *testing.T) {
+	d := &dialScript{}
+	a, admin := revokeAdapter(t, d)
+	a.acct = acctState{name: "dbsim_x_acct", mayExist: true}
+	_, err := a.RunProbe(context.Background(), def(dbprobe.ProbeAuthAfterRevoke), revokeSpec())
+	if err == nil || !strings.Contains(err.Error(), "already tracks") {
+		t.Fatalf("want refusal, got %v", err)
+	}
+	if len(admin.calls) != 0 || a.acct.name != "dbsim_x_acct" || !a.acct.mayExist {
+		t.Fatalf("nothing sent, tracking kept: %v %+v", execSQL(admin), a.acct)
+	}
+}

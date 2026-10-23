@@ -303,7 +303,7 @@ func TestWriteDeniedLeavesFixtureUnchanged(t *testing.T) {
 			grants = append(grants, s)
 		}
 	}
-	if len(grants) != 1 || grants[0] != "GRANT SELECT ON `dbsim_"+testFixtureID+"`.* TO "+revokeLit {
+	if len(grants) != 1 || grants[0] != "GRANT SELECT ON `dbsim\\_"+testFixtureID+"`.* TO "+revokeLit {
 		t.Fatalf("grants (SELECT only on the fixture schema): %q", grants)
 	}
 	if d.dbs[0] != "" {
@@ -639,5 +639,90 @@ func TestCapabilitiesOfferTask15Probes(t *testing.T) {
 		if !offered[id] {
 			t.Errorf("adapter does not offer catalog probe %q", id)
 		}
+	}
+}
+
+func TestOnlyAttemptStatementsCarryTheSpecMarker(t *testing.T) {
+	spec := "/* dbsim:dbsim-abc123 */"
+	meta := "/* dbsim:dbsim-meta */"
+	d := &dialScript{}
+	d.steps = []func() (session, error){execSession(d, clockQuery, func(sql string) error {
+		if strings.Contains(sql, "sql_log_off") {
+			return myErr(1227, "denied")
+		}
+		return nil
+	})}
+	a, admin := revokeAdapter(t, d)
+	if _, err := a.RunProbe(context.Background(), def(dbprobe.ProbeTryDisableAudit), tamperSpec()); err != nil {
+		t.Fatal(err)
+	}
+	var tagged []string
+	for _, f := range append([]*fakeSession{admin}, d.sess...) {
+		for _, c := range f.calls {
+			if strings.Contains(c.sql, spec) {
+				tagged = append(tagged, c.sql)
+			}
+		}
+	}
+	if len(tagged) != 1 || !strings.HasSuffix(tagged[0], "SET SESSION sql_log_off = 1") {
+		t.Fatalf("DB-08: exactly the one SET may carry the marker: %q", tagged)
+	}
+	if !strings.HasPrefix(d.sess[0].calls[0].sql, meta) {
+		t.Fatalf("DB-08 baseline must carry the meta tag: %q", d.sess[0].calls[0].sql)
+	}
+	wa, wadmin, wd := writeAdapter(t, sameFP, denyAllWrites)
+	if _, err := wa.RunProbe(context.Background(), def(dbprobe.ProbeTryWriteFixture), writeSpec()); err != nil {
+		t.Fatal(err)
+	}
+	tagged = nil
+	for _, f := range append([]*fakeSession{wadmin}, wd.sess...) {
+		for _, c := range f.calls {
+			if strings.Contains(c.sql, spec) {
+				tagged = append(tagged, c.sql)
+			}
+		}
+	}
+	if len(tagged) != 3 || !strings.Contains(tagged[0], "INSERT INTO") || !strings.Contains(tagged[1], "UPDATE ") || !strings.Contains(tagged[2], "DELETE FROM") {
+		t.Fatalf("DB-10: exactly INSERT, UPDATE, DELETE may carry the marker: %q", tagged)
+	}
+}
+
+// F2: _ and % are wildcards in a database-level GRANT, so the schema name is
+// escaped in that statement only.
+func TestWriteGrantEscapesSchemaWildcards(t *testing.T) {
+	a, admin, _ := writeAdapter(t, sameFP, denyAllWrites)
+	if _, err := a.RunProbe(context.Background(), def(dbprobe.ProbeTryWriteFixture), writeSpec()); err != nil {
+		t.Fatal(err)
+	}
+	g, ok := findPrefix(admin, "GRANT SELECT")
+	want := "GRANT SELECT ON `dbsim\\_" + testFixtureID + "`.* TO " + revokeLit
+	if !ok || g != want {
+		t.Fatalf("grant %q want %q", g, want)
+	}
+}
+
+func TestSecondThrowawayCreateIsRefusedWhileTracked(t *testing.T) {
+	d := &dialScript{}
+	a, admin := revokeAdapter(t, d)
+	a.acct = acctState{name: revokeAcct, mayExist: true}
+	_, err := a.RunProbe(context.Background(), def(dbprobe.ProbeTryDisableAudit), tamperSpec())
+	if err == nil || !strings.Contains(err.Error(), "already tracks") {
+		t.Fatalf("want a clear refusal, got %v", err)
+	}
+	if len(admin.calls) != 0 || !a.acct.mayExist {
+		t.Fatalf("nothing may be sent and tracking must survive: %v", execSQL(admin))
+	}
+}
+
+func TestFingerprintContextExpiryMarksAdapterBroken(t *testing.T) {
+	a, _, _ := writeAdapter(t, func(n int) ([][]any, error) {
+		if n == 1 {
+			return [][]any{{int64(10), []byte("1")}}, nil
+		}
+		return nil, context.DeadlineExceeded
+	}, denyAllWrites)
+	res, _ := a.RunProbe(context.Background(), def(dbprobe.ProbeTryWriteFixture), writeSpec())
+	if res.ErrorClass != "fingerprint_failed" || !a.broken {
+		t.Fatalf("%+v broken=%v", res, a.broken)
 	}
 }

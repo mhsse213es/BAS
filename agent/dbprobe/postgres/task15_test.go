@@ -712,3 +712,81 @@ func TestCapabilitiesOfferTask15Probes(t *testing.T) {
 		}
 	}
 }
+
+// F1: only the attempt statements may carry the per-dispatch marker; baseline,
+// fingerprint and every other statement carry the meta tag, so a baseline that is
+// audit-logged can never be credited as the attempt's detection.
+func TestOnlyAttemptStatementsCarryTheSpecMarker(t *testing.T) {
+	spec := "/* dbsim:dbsim-abc123 */"
+	meta := "/* dbsim:dbsim-meta */"
+	d := &dialScript{}
+	d.steps = []func() (session, error){execSession(d, clockQuery, func(sql string) error {
+		if strings.Contains(sql, "SET log_statement") {
+			return pgPerm("42501")
+		}
+		return nil
+	})}
+	a, admin := tamperAdapter(t, d)
+	if _, err := a.RunProbe(context.Background(), def(dbprobe.ProbeTryDisableAudit), tamperSpec()); err != nil {
+		t.Fatal(err)
+	}
+	var tagged []string
+	for _, f := range append([]*fakeSession{admin}, d.sess...) {
+		for _, c := range f.calls {
+			if strings.Contains(c.sql, spec) {
+				tagged = append(tagged, c.sql)
+			}
+		}
+	}
+	if len(tagged) != 1 || !strings.HasSuffix(tagged[0], "SET log_statement = 'none'") {
+		t.Fatalf("DB-08: exactly the one SET may carry the marker: %q", tagged)
+	}
+	if !strings.HasPrefix(d.sess[0].calls[0].sql, meta) {
+		t.Fatalf("DB-08 baseline must carry the meta tag: %q", d.sess[0].calls[0].sql)
+	}
+
+	wa, wadmin, wd := writeAdapter(t, sameFP, denyAllWrites)
+	if _, err := wa.RunProbe(context.Background(), def(dbprobe.ProbeTryWriteFixture), writeSpec()); err != nil {
+		t.Fatal(err)
+	}
+	tagged = nil
+	for _, f := range append([]*fakeSession{wadmin}, wd.sess...) {
+		for _, c := range f.calls {
+			if strings.Contains(c.sql, spec) {
+				tagged = append(tagged, c.sql)
+			}
+		}
+	}
+	if len(tagged) != 3 || !strings.Contains(tagged[0], "INSERT INTO") || !strings.Contains(tagged[1], "UPDATE ") || !strings.Contains(tagged[2], "DELETE FROM") {
+		t.Fatalf("DB-10: exactly INSERT, UPDATE, DELETE may carry the marker: %q", tagged)
+	}
+}
+
+// F3: a second create on an adapter that still tracks an account is refused
+// before anything reaches the server, so the first account is never orphaned.
+func TestSecondThrowawayCreateIsRefusedWhileTracked(t *testing.T) {
+	d := &dialScript{}
+	a, admin := tamperAdapter(t, d)
+	a.acct = acctState{name: revokeAcct, mayExist: true}
+	_, err := a.RunProbe(context.Background(), def(dbprobe.ProbeTryDisableAudit), tamperSpec())
+	if err == nil || !strings.Contains(err.Error(), "already tracks") {
+		t.Fatalf("want a clear refusal, got %v", err)
+	}
+	if len(admin.calls) != 0 || !a.acct.mayExist || a.acct.name != revokeAcct {
+		t.Fatalf("nothing may be sent and tracking must survive: %v %+v", execSQL(admin), a.acct)
+	}
+}
+
+// F4: a context expiry in the lab-connection fingerprint marks the adapter broken.
+func TestFingerprintContextExpiryMarksAdapterBroken(t *testing.T) {
+	a, _, _ := writeAdapter(t, func(n int) ([][]any, error) {
+		if n == 1 {
+			return [][]any{{"10", "abc"}}, nil
+		}
+		return nil, context.DeadlineExceeded
+	}, denyAllWrites)
+	res, _ := a.RunProbe(context.Background(), def(dbprobe.ProbeTryWriteFixture), writeSpec())
+	if res.ErrorClass != "fingerprint_failed" || !a.broken {
+		t.Fatalf("%+v broken=%v", res, a.broken)
+	}
+}
