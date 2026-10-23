@@ -48,6 +48,7 @@ func crossIdentity(ctx TemplateCtx, prop string, op model.Operation, p pair, val
 	// attacker has no negative control and the template is not emitted.
 	own, hasOwn := firstOwned(ctx, p.attacker)
 	if !hasOwn {
+		ctx.missing(primaryType(ctx, ctx.Op))
 		return Template{}, false
 	}
 	oc := actControl(ctx, t, op, "owner", "The owner performs "+op.ID+" on its own object.", p.victim, p.obj, nil, true)

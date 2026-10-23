@@ -118,11 +118,16 @@ func (e *env) build(ctx context.Context, aliasing bool) (*exec.Executor, func(co
 	}
 	// exec guards this client's transport itself; it must not be guarded twice
 	// or every request would be counted twice against the budget.
-	ecfg.HTTP = &http.Client{Transport: rt, Timeout: e.timeout}
+	tracker := newTrackRT(rt, e.cfg, e.m)
+	if al, ok := rt.(aliasRT); ok {
+		tracker.learn = al.learn
+	}
+	ecfg.HTTP = &http.Client{Transport: tracker, Timeout: e.timeout}
 	ex, xerr := exec.New(ecfg)
 	if xerr != nil {
 		return nil, nil, fx, created, xerr
 	}
+	tracker.setTrack(ex.Track)
 	r := &run{}
 	r.cleanup = func(cctx context.Context) ([]model.CreatedObject, error) {
 		err := ex.Cleanup(cctx)

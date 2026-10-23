@@ -179,6 +179,7 @@ func GenerateWithReport(m model.Model, fx fixture.Fixture, accts []model.Account
 			ctx := property.TemplateCtx{
 				Op: op, Model: m, Fixture: fx, Identities: accts,
 				Workflow: opt.Workflow, ReservedRoles: opt.ReservedRoles, Limits: opt.Limits,
+				OnMissing: func(t string) { rep.NoFixture[t]++ },
 			}
 			for _, tpl := range p.Templates(ctx) {
 				tpl = clone(tpl)

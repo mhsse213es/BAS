@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/audspect/bas/internal/aleef/model"
 )
@@ -64,6 +65,51 @@ type aliasRT struct {
 	next    http.RoundTripper
 	toFresh map[string]string
 	toOld   map[string]string
+	// known holds ids of objects created during the run (fresh namespace).
+	// They are stable, so they map to themselves; recognising them keeps a
+	// created id that merely contains a generation id (for example pay_113
+	// versus pay_11) from being refused as untranslatable.
+	known    *knownIDs
+	literals map[string]bool
+}
+
+type knownIDs struct {
+	mu  sync.Mutex
+	ids map[string]bool
+}
+
+// learn records a created object's id as an identity mapping. Ids that are not
+// plain single path segments, or that equal a literal route segment, are
+// ignored (they stay subject to the normal refusal).
+func (a aliasRT) learn(id string) {
+	if a.known == nil || id == "." || id == ".." || !plainID.MatchString(id) || a.literals[strings.ToLower(id)] {
+		return
+	}
+	a.known.mu.Lock()
+	a.known.ids[id] = true
+	a.known.mu.Unlock()
+}
+
+// withKnown returns toFresh extended with the identity mappings.
+func (a aliasRT) withKnown() map[string]string {
+	if a.known == nil {
+		return a.toFresh
+	}
+	a.known.mu.Lock()
+	defer a.known.mu.Unlock()
+	if len(a.known.ids) == 0 {
+		return a.toFresh
+	}
+	m := make(map[string]string, len(a.toFresh)+len(a.known.ids))
+	for k, v := range a.toFresh {
+		m[k] = v
+	}
+	for id := range a.known.ids {
+		if _, taken := m[id]; !taken {
+			m[id] = id
+		}
+	}
+	return m
 }
 
 var plainID = regexp.MustCompile(`^[A-Za-z0-9._~:@!$'()*+,-]+$`)
@@ -103,7 +149,7 @@ func newAlias(next http.RoundTripper, gen, fresh []string, m model.Model) (http.
 	if len(toFresh) == 0 {
 		return next, nil
 	}
-	return aliasRT{next: next, toFresh: toFresh, toOld: toOld}, nil
+	return aliasRT{next: next, toFresh: toFresh, toOld: toOld, known: &knownIDs{ids: map[string]bool{}}, literals: literals}, nil
 }
 
 var jsonString = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
@@ -127,7 +173,7 @@ func maskOf(m map[string]string) map[string]string {
 }
 
 func (a aliasRT) leftover(s string) bool {
-	for k := range a.toFresh {
+	for k := range a.toFresh { // generation ids only: known ids are masked before the scan
 		if strings.Contains(s, k) {
 			return true
 		}
@@ -152,7 +198,8 @@ func skipHeader(k string) bool {
 }
 
 func (a aliasRT) RoundTrip(r *http.Request) (*http.Response, error) {
-	masked := maskOf(a.toFresh)
+	fresh := a.withKnown()
+	masked := maskOf(fresh)
 	r2 := r.Clone(r.Context())
 	u := *r.URL
 
@@ -160,7 +207,7 @@ func (a aliasRT) RoundTrip(r *http.Request) (*http.Response, error) {
 	segs := strings.Split(u.Path, "/")
 	msegs := append([]string(nil), segs...)
 	for i, s := range segs {
-		if v, ok := a.toFresh[s]; ok {
+		if v, ok := fresh[s]; ok {
 			segs[i], msegs[i] = v, mask
 		}
 	}
@@ -176,7 +223,7 @@ func (a aliasRT) RoundTrip(r *http.Request) (*http.Response, error) {
 		mv := make([]string, len(vs))
 		for i, v := range vs {
 			nv[i], mv[i] = v, v
-			if f, ok := a.toFresh[v]; ok {
+			if f, ok := fresh[v]; ok {
 				nv[i], mv[i], changed = f, mask, true
 			}
 		}
@@ -201,7 +248,7 @@ func (a aliasRT) RoundTrip(r *http.Request) (*http.Response, error) {
 			continue
 		}
 		for i, v := range vs {
-			if f, ok := a.toFresh[v]; ok {
+			if f, ok := fresh[v]; ok {
 				vs[i] = f
 				continue
 			}
@@ -219,7 +266,7 @@ func (a aliasRT) RoundTrip(r *http.Request) (*http.Response, error) {
 			return nil, err
 		}
 		scan = append(scan, string(rewriteJSON(raw, masked)))
-		raw = rewriteJSON(raw, a.toFresh)
+		raw = rewriteJSON(raw, fresh)
 		r2.Body = io.NopCloser(bytes.NewReader(raw))
 		r2.ContentLength = int64(len(raw))
 		r2.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(raw)), nil }

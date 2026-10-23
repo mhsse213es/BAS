@@ -279,6 +279,16 @@ type TemplateCtx struct {
 	// Limits maps an operation id to how many concurrent requests may
 	// legitimately succeed. The default is one (a once-only action).
 	Limits map[string]int
+	// OnMissing, when set, is called once for every candidate test that is
+	// not produced because an account has no fixture object of the given
+	// resource type.
+	OnMissing func(resourceType string)
+}
+
+func (c TemplateCtx) missing(t string) {
+	if c.OnMissing != nil && t != "" {
+		c.OnMissing(t)
+	}
 }
 
 // All returns every property in specification order.
@@ -371,6 +381,11 @@ func pairs(ctx TemplateCtx) []pair {
 	for _, v := range accts {
 		objs := ownedOfType(ctx.Fixture, v, primaryType(ctx, ctx.Op))
 		if len(objs) == 0 {
+			for _, a := range accts {
+				if a.CustomerID != v.CustomerID {
+					ctx.missing(primaryType(ctx, ctx.Op))
+				}
+			}
 			continue
 		}
 		for _, a := range accts {
@@ -392,6 +407,8 @@ func ownersWithObject(ctx TemplateCtx, role string) []pair {
 		}
 		if objs := ownedOfType(ctx.Fixture, a, primaryType(ctx, ctx.Op)); len(objs) > 0 {
 			out = append(out, pair{victim: a, attacker: a, obj: objs[0]})
+		} else {
+			ctx.missing(primaryType(ctx, ctx.Op))
 		}
 	}
 	return out
@@ -628,6 +645,17 @@ func victimVals(ctx TemplateCtx, op model.Operation, obj fixture.Object) map[str
 	return vals
 }
 
+// literalVals is victimVals with every identifier written literally. A
+// baseline names the owner's object of ITS operation's type, which need not be
+// the test's "{object}", so it never uses the token.
+func literalVals(ctx TemplateCtx, op model.Operation, obj fixture.Object) map[string]string {
+	vals := map[string]string{}
+	for _, r := range idRefsOf(op) {
+		vals[r.key()] = resolveRef(ctx, op, r, obj, false)
+	}
+	return vals
+}
+
 // ---- steps and baselines ----
 
 func mkStep(id, role, identity, method, path, body, hypothesis string) contract.Step {
@@ -656,7 +684,7 @@ func sideEffectOf(steps []contract.Step) string {
 func baselineStep(ctx TemplateCtx, target model.Operation, owner model.Account, selfOK bool) (contract.Step, bool) {
 	hyp := "The owner can read their own object. If this fails, the test is not applicable."
 	if selfOK && target.Method == "GET" && requiredQueryOnlyIDs(target) {
-		p, _ := buildRequest(target, victimVals(ctx, target, objectFor(ctx, owner, target)), 0)
+		p, _ := buildRequest(target, literalVals(ctx, target, objectFor(ctx, owner, target)), 0)
 		return mkStep("baseline-owner-read", "baseline", owner.Name, "GET", p, "", hyp), true
 	}
 	var best *model.Operation
@@ -677,7 +705,7 @@ func baselineStep(ctx TemplateCtx, target model.Operation, owner model.Account, 
 	if best == nil {
 		return contract.Step{}, false
 	}
-	p, _ := buildRequest(*best, victimVals(ctx, *best, objectFor(ctx, owner, *best)), 0)
+	p, _ := buildRequest(*best, literalVals(ctx, *best, objectFor(ctx, owner, *best)), 0)
 	return mkStep("baseline-owner-read", "baseline", owner.Name, "GET", p, "", hyp), true
 }
 
