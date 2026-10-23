@@ -75,6 +75,11 @@ type Report struct {
 	Variants    int
 	// InvalidVariants counts variants dropped because they did not validate.
 	InvalidVariants int
+	// SkippedStepClass counts tests dropped because a step (baseline, setup or
+	// attack) calls an operation that is not read, setup_safe or reversible;
+	// SkippedStepUnknown counts tests dropped because a step matches no
+	// operation of the model. Such tests are never emitted.
+	SkippedStepClass, SkippedStepUnknown int
 	// Truncated counts tests cut by MaxTests.
 	Truncated int
 }
@@ -138,6 +143,11 @@ func GenerateWithReport(m model.Model, fx fixture.Fixture, accts []model.Account
 				if tpl.Params["operation"] == "" {
 					tpl.Params["operation"] = op.ID
 				}
+				if blocked := stepBlock(m, tpl.Steps); blocked != "" {
+					rep.countBlocked(blocked)
+					produced = true
+					continue
+				}
 				t, err := assemble(tpl, op.ID, cat)
 				if err != nil {
 					return nil, rep, err
@@ -152,6 +162,10 @@ func GenerateWithReport(m model.Model, fx fixture.Fixture, accts []model.Account
 				for _, v := range vars {
 					for _, vt := range v.fn(vc, tpl) {
 						vt.Params["variation"] = v.name
+						if blocked := stepBlock(m, vt.Steps); blocked != "" {
+							rep.countBlocked(blocked)
+							continue
+						}
 						t, err := assemble(vt, op.ID, cat)
 						if err != nil {
 							rep.InvalidVariants++
@@ -184,6 +198,52 @@ func GenerateWithReport(m model.Model, fx fixture.Fixture, accts []model.Account
 		out = out[:opt.MaxTests]
 	}
 	return out, rep, nil
+}
+
+func (r *Report) countBlocked(kind string) {
+	if kind == blockedUnknown {
+		r.SkippedStepUnknown++
+	} else {
+		r.SkippedStepClass++
+	}
+}
+
+const (
+	blockedClass   = "class"
+	blockedUnknown = "unknown"
+)
+
+// stepBlock maps every step of a scenario back to the model's operations by
+// effective method and path shape. It returns blockedUnknown when a step
+// matches no operation, blockedClass when a step matches an operation that is
+// not runnable, and "" when every step is safe to emit. A method-override
+// header changes the effective method. A baseline that the property picked
+// from a non-runnable operation therefore drops the test (it is not re-picked).
+func stepBlock(m model.Model, steps []contract.Step) string {
+	result := ""
+	for _, st := range steps {
+		method := strings.ToUpper(st.Method)
+		for k, v := range st.Headers {
+			if strings.EqualFold(k, "X-HTTP-Method-Override") && v != "" {
+				method = strings.ToUpper(v)
+			}
+		}
+		path := trimQuery(st.Path)
+		matched := false
+		for _, op := range m.Operations {
+			if op.Method != method || !pathMatches(op.Path, path) {
+				continue
+			}
+			matched = true
+			if !runnable(op.Class) {
+				result = blockedClass
+			}
+		}
+		if !matched {
+			return blockedUnknown
+		}
+	}
+	return result
 }
 
 // testID is ALEEF-GEN-<property>-<hash8> where hash8 is the first 8 hex

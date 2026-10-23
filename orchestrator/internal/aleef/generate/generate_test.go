@@ -231,7 +231,10 @@ func TestIDHashCoversPropertyOpAndParams(t *testing.T) {
 func TestGenerateMarksCoveredAgainstCatalogue(t *testing.T) {
 	cat := []contract.Scenario{{
 		ID: "API-BAS-AUTHZ-001", Claim: "cross_identity",
-		Steps: []contract.Step{{Method: "GET", Path: "/api/v2/items/{object}"}},
+		Steps: []contract.Step{
+			{Identity: "owner", Method: "GET", Path: "/api/v2/items/{object}"},
+			{Identity: "other", Method: "GET", Path: "/api/v2/items/{object}"},
+		},
 	}}
 	out := gen(t, Options{Catalogue: cat})
 	var covered, fresh int
@@ -468,5 +471,97 @@ func TestGenerateLoadsEmbeddedCatalogueByDefault(t *testing.T) {
 	out, err := Generate(toyModel(), toyFixture(), toyAccounts(), Options{})
 	if err != nil || len(out) == 0 {
 		t.Fatalf("%d tests, err %v", len(out), err)
+	}
+}
+
+// ---- step safety ----
+
+func flowModel(authzClass model.OpClass) model.Model {
+	m := toyModel()
+	m.Operations = append(m.Operations, mkOp("authz", "POST", "/api/v2/items/{id}/authorize", idP(),
+		&model.Schema{Type: "object", Properties: map[string]*model.Schema{"comment": strS()}}, authzClass))
+	return m
+}
+
+func flowOpts() Options {
+	return Options{Catalogue: emptyCat, Workflow: &property.Workflow{Name: "approval", Steps: []property.WorkflowStep{
+		{Op: "authz", Kind: property.StepAuthorize},
+		{Op: "patchV2", Kind: property.StepModify},
+	}}}
+}
+
+func hasProp(ts []Test, prop string) bool {
+	for _, x := range ts {
+		if x.Property == prop {
+			return true
+		}
+	}
+	return false
+}
+
+func TestGenerateDropsTestWhoseCoActorStepIsMoney(t *testing.T) {
+	out, rep, err := GenerateWithReport(flowModel(model.ClassMoney), toyFixture(), toyAccounts(), flowOpts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasProp(out, "P-AUTH-2") {
+		t.Fatal("a flow whose approval step is a money operation must not be emitted")
+	}
+	if rep.SkippedStepClass == 0 {
+		t.Fatalf("report = %+v", rep)
+	}
+}
+
+func TestGenerateCleanWorkflowStillEmits(t *testing.T) {
+	out, rep, err := GenerateWithReport(flowModel(model.ClassReversible), toyFixture(), toyAccounts(), flowOpts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasProp(out, "P-AUTH-2") {
+		t.Fatalf("clean workflow produced no P-AUTH-2 test (report %+v)", rep)
+	}
+}
+
+func TestGenerateDropsTestWhoseBaselineIsUnknownClass(t *testing.T) {
+	m := model.Model{Operations: []model.Operation{
+		mkOp("patchW", "PATCH", "/api/v3/widgets/{id}", idP(),
+			&model.Schema{Type: "object", Properties: map[string]*model.Schema{"title": strS()}}, model.ClassReversible),
+		mkOp("peekW", "GET", "/api/v3/widgets/{id}", idP(), nil, model.ClassUnknown),
+	}}
+	out, rep, err := GenerateWithReport(m, toyFixture(), toyAccounts(), Options{Catalogue: emptyCat})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 0 {
+		t.Fatalf("baseline on an unknown-class operation must drop the test, got %d tests", len(out))
+	}
+	if rep.SkippedStepClass == 0 {
+		t.Fatalf("report = %+v", rep)
+	}
+}
+
+func TestStepBlock(t *testing.T) {
+	m := toyModel()
+	step := func(method, path string, hdr map[string]string) contract.Step {
+		return contract.Step{Method: method, Path: path, Headers: hdr}
+	}
+	cases := []struct {
+		name string
+		st   contract.Step
+		want string
+	}{
+		{"runnable", step("GET", "/api/v2/items/item-a1?x=1", nil), ""},
+		{"token placeholder", step("PATCH", "/api/v2/items/{object}", nil), ""},
+		{"unknown class", step("GET", "/api/v2/mystery/{object}", nil), blockedClass},
+		{"money", step("PATCH", "/api/v2/payouts/p1", nil), blockedClass},
+		{"no such path", step("GET", "/nowhere/{object}", nil), blockedUnknown},
+		{"no such method", step("DELETE", "/api/v2/mystery/x", nil), blockedUnknown},
+		{"override to runnable", step("POST", "/api/v2/items/i1", map[string]string{"X-HTTP-Method-Override": "PATCH"}), ""},
+		{"override to money", step("POST", "/api/v2/payouts/i1", map[string]string{"X-HTTP-Method-Override": "PATCH"}), blockedClass},
+	}
+	for _, c := range cases {
+		if got := stepBlock(m, []contract.Step{c.st}); got != c.want {
+			t.Errorf("%s: stepBlock = %q, want %q", c.name, got, c.want)
+		}
 	}
 }
