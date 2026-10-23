@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/config"
+	aleefstore "github.com/audspect/bas/internal/aleef/store"
 	"github.com/audspect/bas/internal/api"
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/cmdsigning"
@@ -313,6 +314,9 @@ func main() {
 	}
 	if err := db.EnsureAPIBASRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] apibas run schema: %v", err)
+	}
+	if err := aleefstore.EnsureSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] aleef schema: %v", err)
 	}
 	if err := db.EnsureEmailGWRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] email gw run schema: %v", err)
