@@ -129,3 +129,20 @@ func ExportCount(n int64) string {
 	}
 	return strconv.FormatInt(n, 10)
 }
+
+// ExportVerdict grades the five export checks into the result fields. Any of the
+// three server-file/program capabilities held is Allowed (Denied=false, no error
+// class: a definite finding even if another check was unobservable). Otherwise
+// every check must have been observed; one that was not makes the result an
+// incomplete observation (error class set), never a clear one.
+func ExportVerdict(fileWrite, programExec, fileRead, bulkSelect, dumpPrivs string) (errorClass string, denied bool) {
+	if fileWrite == ExportYes || programExec == ExportYes || fileRead == ExportYes {
+		return "", false
+	}
+	for _, v := range []string{fileWrite, programExec, fileRead, bulkSelect, dumpPrivs} {
+		if v == ExportUnknown || v == "" {
+			return "export_check_incomplete", false
+		}
+	}
+	return "", true
+}

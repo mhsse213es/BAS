@@ -304,7 +304,7 @@ func TestMySQLCapabilitiesReflectDiscoveryAndCacheIt(t *testing.T) {
 	n := len(af.calls)
 	for i := 0; i < 3; i++ {
 		c := a.Capabilities()
-		if len(c.AuditSources) != 2 || !c.MarkerInAuditRecord || len(c.ProbeIDs) != 9 {
+		if len(c.AuditSources) != 2 || !c.MarkerInAuditRecord || len(c.ProbeIDs) != 12 {
 			t.Fatalf("caps %+v", c)
 		}
 	}

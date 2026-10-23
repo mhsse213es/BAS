@@ -381,8 +381,8 @@ func str(v any) string {
 // (SKIPPED), never as a pass. It answers from the cache; it issues no SQL.
 func (a *Adapter) Capabilities() dbprobe.Capabilities {
 	c := dbprobe.Capabilities{
-		ProbeIDs: []string{"auth_after_revoke", "auth_check", "bounded_synthetic_read", "read_audit_config", "read_classified_fixture",
-			"read_grants", "read_restricted_table", "read_roles", "suspicious_read"},
+		ProbeIDs: []string{"auth_after_revoke", "auth_check", "bounded_synthetic_read", "check_export_privileges", "read_audit_config", "read_classified_fixture",
+			"read_grants", "read_restricted_table", "read_roles", "suspicious_read", "try_disable_audit", "try_write_fixture"},
 		MarkerInAppName:   true,
 		MarkerInQueryText: true,
 		// The marker can only reach an audit record through the statement
@@ -461,6 +461,14 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 	mode := a.effectiveMode(spec)
 	if spec.ProbeID == dbprobe.ProbeAuthAfterRevoke {
 		return a.runAuthAfterRevoke(ctx, real, spec, mode)
+	}
+	switch spec.ProbeID {
+	case dbprobe.ProbeTryDisableAudit:
+		return a.runTryDisableAudit(ctx, real, spec, mode)
+	case dbprobe.ProbeTryWriteFixture:
+		return a.runTryWriteFixture(ctx, real, spec, mode)
+	case dbprobe.ProbeCheckExportPrivileges:
+		return a.runCheckExportPrivileges(ctx, spec, mode)
 	}
 	var (
 		sql    string
