@@ -89,6 +89,34 @@ Applied only at first run: the orchestrator creates an admin account from these 
 
 ---
 
+## Kubernetes
+
+Both settings groups are off by default. Changes take effect when the orchestrator starts (see [Applying Configuration Changes](#applying-configuration-changes)).
+
+**Read-only analysis.** Set in the installer's `setup.conf`. Setting `KUBE_DISCOVERY_ENABLED=true` requires every other key below. The installer then checks the token with a pod list and fails the install if the cluster refuses it. The token is staged into `DATA_DIR/k8s-discovery`, readable only by the orchestrator, and is never written to `.env`.
+
+| `setup.conf` key | Default | Description |
+|---|---|---|
+| `KUBE_DISCOVERY_ENABLED` | `false` | Turns the analysis on. Must be `true` or `false`. |
+| `KUBE_DISCOVERY_API` | (none) | `https://` URL of the cluster's API server |
+| `KUBE_DISCOVERY_CLUSTER` | `kind-bas-lab` | Cluster name shown in results |
+| `KUBE_DISCOVERY_TOKEN` | (none) | Read-only token, pasted once. Only token characters are accepted. |
+| `KUBE_DISCOVERY_CA_FILE` | (none) | Path on the server to the cluster CA (PEM) |
+
+The orchestrator reads the analysis settings from `KUBE_DISCOVERY_API`, `KUBE_DISCOVERY_CLUSTER`, `KUBE_DISCOVERY_TOKEN_FILE` and `KUBE_DISCOVERY_CA_FILE`.
+
+**Scenario checks (lab only).** These are environment variables only. The installer does not set them. Setting `KUBE_SCENARIO_API` enables the state-changing checks, so leave it unset on anything except the dedicated lab cluster.
+
+| Variable | Default | Description |
+|---|---|---|
+| `KUBE_SCENARIO_API` | (none) | `https://` URL of the lab API server. Required to enable the checks. |
+| `KUBE_SCENARIO_CLUSTER` | `kind-bas-lab` | Cluster name the allow-list accepts |
+| `KUBE_SCENARIO_NAMESPACE` | `bas-sandbox` | The only namespace the checks may write to |
+| `KUBE_SCENARIO_TOKEN_FILE` | (none) | File holding the scenario ServiceAccount token. Read at startup, never logged. |
+| `KUBE_SCENARIO_CA_FILE` | (none) | Path to the cluster CA (PEM) |
+
+---
+
 ## SMTP (Exercise Engine / Phishing Simulation)
 
 All SMTP variables are optional. Required only if the Purple Team Exercise Engine's phishing injection feature is used.

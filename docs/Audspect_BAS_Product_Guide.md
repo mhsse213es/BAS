@@ -30,6 +30,7 @@
    - 5.9 Executive Dashboard and Threat Prioritization
    - 5.10 Detection Validation and Automated Response
    - 5.11 Global Search
+   - 5.12 Kubernetes Validation (Enterprise)
 6. [Deployment Models](#6-deployment-models)
 7. [Security Model](#7-security-model)
 8. [Operations Overview](#8-operations-overview)
@@ -333,6 +334,16 @@ The **Executive Dashboard** gives a fleet-wide, at-a-glance view: Risk Score, Ex
 ### 5.11 Global Search
 
 A single search bar (accessible fleet-wide, not per-tab) across agents, scenarios, findings, and other long-tail entities, with a `type:` operator to scope results (e.g. `type:agent hostname`) and results filtered to what the current user's role can actually see.
+
+
+### 5.12 Kubernetes Validation (Enterprise)
+
+Kubernetes checks look at a cluster's RBAC and pod configuration. They come in two kinds:
+
+- **Read-only analysis.** Reads RBAC and pod settings from the cluster the installer is pointed at. It reports wildcard permissions, service-account breadth, cross-namespace access, workload creation outside the intended namespace, risky pod settings, token exposure, and escalation paths. It changes nothing in the cluster. Built-in `system:` roles are hidden by default, with a count of what is hidden. An incomplete read is labelled as incomplete, with the number of gaps.
+- **Scenario checks (lab only).** These change state on a dedicated lab cluster, in one sandbox namespace. Each run is planned first, which writes nothing. A second admin then approves that exact run, and only the requester can execute it. The result records what was observed and what was cleaned up. A failed cleanup is labelled as failed. The checks are pod creation (unprivileged and labelled), a ConfigMap change (restored afterwards), a probe token request (the token cannot be revoked, so the run ends as *not revoked*), and a synthetic secret read (a random value is written to a secret that holds no real data, and access is granted and then removed).
+
+Read-only analysis is configured with the installer. The scenario checks are configured only by environment variables, as described in the [Configuration Guide](guides/configuration.md#kubernetes). Kubernetes panels are shown only on Enterprise licences.
 
 ---
 

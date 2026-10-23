@@ -188,7 +188,7 @@ Scope: lab only (kind-bas-lab, bas-sandbox), three labelled non-privileged actio
 - The HTTP endpoints have not been exercised against the live cluster through a running server. Only the engine and client were run live.
 - Live rollback-failure covers the delete verb only, not a failed snapshot restore.
 
-**Open:** token-request action (deferred: mints a credential, needs a redaction design). EKS/AKS/GKE/OpenShift (O-12) and multi-node K3s (O-13) remain blocked on environments. Design stays unapproved for production.
+**Open:** EKS/AKS/GKE/OpenShift (O-12) and multi-node K3s (O-13) remain blocked on environments. Design stays unapproved for production.
 
 ## Validation record
 
@@ -286,3 +286,25 @@ Lab changes made for this: ServiceAccount `bas-sbx-token-probe` created in `bas-
 Unit tests: no token text in result or audit; token bytes zeroed after rollback; parameters refused; dry run mints nothing; identity mismatch reported unverified and not cleaned; mint failure ends FAILED; invalid lifetimes and names send no request; errors never contain the token.
 
 Not verified: the token's real expiry on the server side, and whether revocation or early expiry is available in the cluster's version.
+
+### Synthetic secret read (synthetic-secret-read), 2026-10-23
+
+Design: `docs/superpowers/specs/2026-10-23-k8s-synthetic-secret-read-design.md`. Built in `6822a691`. Lab fixtures and runner RBAC in `8f9d85e5`.
+
+Live on kind-bas-lab, namespace `bas-sandbox`, through the local server, with two admins:
+- Run `k8sr-42187e1f268ee7c0`. One admin planned it, a second admin approved that exact run (`appr-2590ddb13372ee91`), and the requester executed it. Result `DISCARDED_NOT_REVOKED`, observation `READ_SUCCEEDED`, verified. The minted token is valid until 2026-10-23T09:09:10Z (10 minutes) and cannot be revoked.
+- Checked directly on the cluster afterwards with kubectl. The probe binding has no subjects. `kubectl auth can-i get secret/bas-synthetic-secret` as the probe returns `no`. The secret's resourceVersion changed to 29653, which shows the value was rotated.
+- The audit log holds `k8s.scenario.requested` and `k8s.scenario.outcome` for the run, both `ok`.
+
+Setup leftover, fixed: `kubectl apply` had stored the original secret value in the `last-applied-configuration` annotation. The annotation was removed. The run had already rotated the value.
+
+Left as it was: pod-create run `k8sr-87d0d688b693f80e` is still `PLANNED`. It was not approved or executed. The second admin account used for the approval is a local test account on the local database only.
+
+Owner reviewed the console screens on 2026-10-23 and asked for no changes.
+
+Unit tests: 9 engine tests and 5 client tests. The client tests cover allowed, denied and inconclusive reads, refusal of any other name without a request, and the metadata-only label read.
+
+Not verified:
+- Token expiry on the cluster side. The run's expiry comes from the minted token's own field, and the cluster-side behaviour is not checked here.
+- A failed revoke on the live API (the `CLEANUP_FAILED` path). It is covered by a unit test only.
+- Managed platforms (O-12).
