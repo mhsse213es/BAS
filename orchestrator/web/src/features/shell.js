@@ -238,6 +238,7 @@ export function doLogin() {
     if (!res.ok) throw new Error(res.d.error || 'Login failed');
     TOKEN = res.d.token; ROLE = res.d.role;
     localStorage.setItem('bas_role', ROLE); // role only — token is in HttpOnly cookie
+    try { localStorage.setItem('bas_user_id', res.d.userId || ''); } catch (e) {} // the id runs record as requester
     bootApp();
     if (res.d.mustChangePw) {
       state._pwForced = true;
@@ -253,6 +254,7 @@ export function doLogin() {
 export function doLogout() {
   TOKEN = ''; ROLE = '';
   localStorage.removeItem('bas_role');
+  try { localStorage.removeItem('bas_user_id'); } catch (e) {}
   if (state.socket) state.socket.close();
   fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
   setDisplay(document.getElementById('app'), 'none');

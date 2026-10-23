@@ -30,6 +30,39 @@ function stateBadge(state) {
   return '<span class="sbadge ' + s.badge + '">' + x(s.label) + '</span>';
 }
 
+// The signed-in user, from the values stored at login. Used only to decide which controls to show; the
+// server enforces every rule again on each request.
+function currentUser() {
+  var role = '', userId = '';
+  try {
+    role = localStorage.getItem('bas_role') || '';
+    userId = localStorage.getItem('bas_user_id') || '';
+  } catch (e) {}
+  return { role: role, userId: userId };
+}
+
+// Shows only the control the signed-in user can use for this run. Approval belongs to an admin who did not
+// plan the run; execution belongs to the person who planned it, if their role may execute.
+function runActions(r) {
+  var me = currentUser();
+  var mine = r.requester === me.userId;
+  if (r.state === 'PLANNED') {
+    if (me.role === 'admin' && !mine) {
+      return '<button class="btn btn-outline btn-sm" data-k8s-approve="' + x(r.id) + '">Approve</button>';
+    }
+    return mine
+      ? '<span class="tiny muted">Waiting for a different admin to approve</span>'
+      : '<span class="tiny muted">Awaiting approval by an admin</span>';
+  }
+  if (r.state === 'APPROVED') {
+    if (mine && (me.role === 'admin' || me.role === 'analyst')) {
+      return '<button class="btn btn-primary btn-sm" data-k8s-execute="' + x(r.id) + '">Execute</button>';
+    }
+    return '<span class="tiny muted">Only the requester can execute</span>';
+  }
+  return '';
+}
+
 function setCount(n) {
   var c = document.getElementById('k8s-cnt');
   if (c) c.textContent = String(n);
@@ -71,12 +104,7 @@ export function renderK8sRuns(runs) {
   }
   var rows = runs.map(function(r) {
     var target = x(r.cluster) + ' / ' + x(r.namespace);
-    var btn = '';
-    if (r.state === 'PLANNED') {
-      btn = '<button class="btn btn-outline btn-sm" data-k8s-approve="' + x(r.id) + '">Approve</button>';
-    } else if (r.state === 'APPROVED') {
-      btn = '<button class="btn btn-primary btn-sm" data-k8s-execute="' + x(r.id) + '">Execute</button>';
-    }
+    var btn = runActions(r);
     var action = K8S_ACTIONS[r.action] ? K8S_ACTIONS[r.action].label : r.action;
     var plan = (r.detail || '').split('\n').filter(Boolean).map(x).join('<br>');
     return '<tr>' +

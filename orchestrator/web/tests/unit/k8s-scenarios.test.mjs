@@ -11,6 +11,12 @@ globalThis.sessionStorage = dom.window.sessionStorage;
 globalThis.location = dom.window.location;
 const { renderK8sRuns } = await import('../../src/features/k8s-scenarios.js');
 
+// Sets the signed-in user the panel reads from local storage.
+function asUser(role, userId) {
+  localStorage.setItem('bas_role', role);
+  localStorage.setItem('bas_user_id', userId);
+}
+
 function run(over) {
   return Object.assign({
     id: 'k8sr-1', requester: 'alice', cluster: 'kind-bas-lab', namespace: 'bas-sandbox',
@@ -18,14 +24,16 @@ function run(over) {
   }, over);
 }
 
-test('a planned run offers Approve, and never Execute', () => {
+test('a planned run offers Approve to an admin who did not plan it, and never Execute', () => {
+  asUser('admin', 'admin-1');
   renderK8sRuns([run({ state: 'PLANNED' })]);
   const html = document.getElementById('k8s-runs').innerHTML;
   assert.match(html, /data-k8s-approve="k8sr-1"/);
   assert.doesNotMatch(html, /data-k8s-execute/);
 });
 
-test('an approved run offers Execute, and never Approve', () => {
+test('an approved run offers Execute only to its requester, and never Approve', () => {
+  asUser('analyst', 'alice');
   renderK8sRuns([run({ state: 'APPROVED' })]);
   const html = document.getElementById('k8s-runs').innerHTML;
   assert.match(html, /data-k8s-execute="k8sr-1"/);
@@ -64,4 +72,25 @@ test('a discarded token is labelled as not revoked, never as cleaned', () => {
   assert.match(html, /not revoked/);
   assert.doesNotMatch(html, /cleaned up/);
   assert.doesNotMatch(html, /data-k8s-(approve|execute)/);
+});
+
+test('the planner cannot approve their own run', () => {
+  asUser('admin', 'alice');
+  renderK8sRuns([run({ state: 'PLANNED' })]);
+  assert.doesNotMatch(document.getElementById('k8s-runs').innerHTML, /data-k8s-approve/);
+  assert.match(document.getElementById('k8s-runs').innerHTML, /Waiting for a different admin/);
+});
+
+test("an analyst never sees Approve, even on another user's run", () => {
+  asUser('analyst', 'analyst-1');
+  renderK8sRuns([run({ state: 'PLANNED' })]);
+  assert.doesNotMatch(document.getElementById('k8s-runs').innerHTML, /data-k8s-approve/);
+});
+
+test('someone other than the requester sees no Execute', () => {
+  asUser('admin', 'admin-1');
+  renderK8sRuns([run({ state: 'APPROVED' })]);
+  const html = document.getElementById('k8s-runs').innerHTML;
+  assert.doesNotMatch(html, /data-k8s-execute/);
+  assert.match(html, /Only the requester can execute/);
 });
