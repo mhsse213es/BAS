@@ -1355,3 +1355,18 @@ body.theme-slate {
 .email-detail-shaded { background: var(--elevated); }
 .email-launch-buttons { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .email-hdr-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+
+/* Aleef console (special add-on) */
+.aleef-banner { border: 1px solid var(--warning-border); background: var(--warning-dim); color: var(--text); padding: 0.6rem 0.9rem; border-radius: var(--radius); margin-bottom: 0.75rem; font-weight: 600; }
+.aleef-addon-badge { display: inline-block; margin-left: 0.4rem; padding: 0 0.4rem; font-size: 0.65rem; border: 1px solid var(--accent-border); background: var(--accent-dim); border-radius: var(--radius); vertical-align: middle; }
+.aleef-status { min-height: 1.2rem; margin: 0.4rem 0; font-size: 0.85rem; }
+.aleef-error { color: var(--danger); }
+.aleef-ok { color: var(--success); }
+.aleef-warn { color: var(--warning); border: 1px solid var(--warning-border); background: var(--warning-dim); padding: 0.4rem 0.6rem; border-radius: var(--radius); margin: 0.4rem 0; }
+.aleef-card { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-lg); padding: 0.8rem 1rem; margin-bottom: 1rem; }
+.aleef-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.6rem; }
+.aleef-grid label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.78rem; color: var(--muted-hi); }
+.aleef-account-row { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
+.aleef-confirm { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.5rem; padding: 0.5rem; border: 1px solid var(--danger-border); background: var(--danger-dim); border-radius: var(--radius); }
+.aleef-findings-section { margin-bottom: 1.2rem; }
+.aleef-textarea { width: 100%; min-height: 8rem; font-family: var(--font-mono); font-size: 0.75rem; }

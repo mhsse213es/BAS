@@ -87,6 +87,9 @@
         <div class="nav-item is-hidden" id="nav-k8s-scenarios" data-tab="k8s-scenarios" title="Kubernetes Scenarios" data-on-click="showTab" data-args="[&quot;k8s-scenarios&quot;]">
           <span>Kubernetes Scenarios</span>
         </div>
+        <div class="nav-item is-hidden" id="nav-aleef" data-tab="aleef" title="Aleef API discovery (special add-on)" data-on-click="showTab" data-args="[&quot;aleef&quot;]">
+          <span>Aleef</span><span class="aleef-addon-badge">Special add-on</span>
+        </div>
         <div class="nav-item is-hidden" id="nav-scheduled-assessments" data-tab="scheduled-assessments" title="Scheduled Assessments" data-on-click="showTab" data-args="[&quot;scheduled-assessments&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/>
@@ -1471,6 +1474,63 @@
           <button class="btn primary" data-k8s-plan="1">Plan run</button>
         </div>
         <div id="k8s-runs"></div>
+      </div>
+      <div id="tab-aleef" class="is-hidden">
+        <div class="sec-hdr"><h2>Aleef API discovery <span class="aleef-addon-badge">Special add-on</span></h2></div>
+        <p class="aleef-banner" id="aleef-banner">Lab/UAT only. Production testing is prohibited. Findings are NEW TO AUDSPECT candidates/verified results, not zero-day claims.</p>
+        <p class="aleef-status" id="aleef-status" role="status" aria-live="polite"></p>
+
+        <div class="aleef-card" id="aleef-eng-section">
+          <h3>New engagement</h3>
+          <p class="muted">The approver recorded is you, set by the server. Environment must be lab or uat. A window is at most 30 days.</p>
+          <div class="aleef-grid">
+            <label>Customer<input id="aleef-eng-customer" maxlength="128" /></label>
+            <label>Environment<select id="aleef-eng-env"><option value="lab">lab</option><option value="uat">uat</option></select></label>
+            <label>Window start<input id="aleef-eng-start" type="datetime-local" /></label>
+            <label>Window end<input id="aleef-eng-end" type="datetime-local" /></label>
+            <label>Max requests<input id="aleef-eng-maxreq" type="number" min="1" value="5000" /></label>
+            <label>Max concurrent<input id="aleef-eng-maxconc" type="number" min="1" value="2" /></label>
+            <label>Requests per second<input id="aleef-eng-rps" type="number" min="0.1" step="0.1" value="5" /></label>
+            <label>Target scope import id (optional)<input id="aleef-eng-scope" maxlength="64" /></label>
+          </div>
+          <label class="muted">Approved host origins (one per line, e.g. https://uat.example:8443)<textarea id="aleef-eng-hosts" class="aleef-textarea"></textarea></label>
+          <label class="muted">Operation allow-list (optional, one operation id per line; money and notifying operations must be listed)<textarea id="aleef-eng-ops" class="aleef-textarea"></textarea></label>
+          <button class="btn btn-primary" type="button" data-aleef-action="create-engagement">Create engagement</button>
+        </div>
+
+        <div class="aleef-card" id="aleef-run-section">
+          <h3>Start a run</h3>
+          <div class="aleef-grid">
+            <label>Engagement id<input id="aleef-run-eng" list="aleef-eng-list" maxlength="64" /></label>
+            <label>Base URL<input id="aleef-run-base" placeholder="https://uat.example:8443" /></label>
+            <label>Seed (optional)<input id="aleef-run-seed" type="number" /></label>
+            <label>Max tests (optional)<input id="aleef-run-max" type="number" min="0" /></label>
+            <label>Reproductions (optional, max 10)<input id="aleef-run-repro" type="number" min="0" max="10" /></label>
+          </div>
+          <datalist id="aleef-eng-list"></datalist>
+          <label class="muted">OpenAPI document (JSON). Paste it, or choose a file <input id="aleef-run-file" type="file" accept=".json,application/json" aria-label="OpenAPI file" /></label>
+          <p class="aleef-warn">Large documents slow parsing and the request. The server accepts about 5 MiB per run request.</p>
+          <p class="aleef-error" id="aleef-openapi-warn"></p>
+          <textarea id="aleef-run-openapi" class="aleef-textarea" aria-label="OpenAPI document"></textarea>
+          <h4>Accounts</h4>
+          <p class="muted">Enter a secret reference (the name of a secret the server holds), never a token value. A pasted token is refused.</p>
+          <div id="aleef-accounts"></div>
+          <button class="btn btn-outline btn-sm" type="button" data-aleef-action="add-account">Add account</button>
+          <h4>Operation classification</h4>
+          <p class="muted">Classes: unknown (default, never executed), read, setup_safe, reversible, money, notifying.</p>
+          <div id="aleef-classes"></div>
+          <label class="muted">Setup operations (optional JSON array of {operation_id, body, compensate})<textarea id="aleef-run-setup" class="aleef-textarea"></textarea></label>
+          <button class="btn btn-primary" type="button" data-aleef-action="start-run">Start run</button>
+        </div>
+
+        <div class="aleef-card">
+          <label class="muted">Track a run by id <input id="aleef-load-run" maxlength="64" /></label>
+          <button class="btn btn-outline btn-sm" type="button" data-aleef-action="load-run">Load</button>
+          <div id="aleef-run-card"></div>
+        </div>
+
+        <div class="sec-hdr"><h3>Findings</h3><button class="btn btn-outline btn-sm" type="button" data-aleef-action="refresh-findings">Refresh</button></div>
+        <div id="aleef-findings"></div>
       </div>
       <div id="tab-scheduled-assessments" class="is-hidden">
         <div class="sec-hdr">
