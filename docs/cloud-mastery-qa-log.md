@@ -165,6 +165,30 @@ SCPs, permission boundaries, S3 bucket policies, management-group inheritance, a
 
 ### R-8 — Credentials never come from a request — RESOLVED `28304ead`, `7ae44b57`
 - AWS uses the SDK default chain, GCP uses Application Default Credentials, Azure reads service-principal variables. Each discoverer proves the credentials resolve to the account the run names before it reads inventory. Error text names a missing variable, never its value.
+
+## Kubernetes state-changing scenarios (2026-10-23)
+
+Scope: lab only (kind-bas-lab, bas-sandbox), three labelled non-privileged actions. Design: `docs/superpowers/specs/2026-10-23-k8s-state-changing-scenarios-design.md`.
+
+**Verified on kind-bas-lab with the scenario ServiceAccount (narrow RBAC):**
+- Dry run writes nothing. Approved pod run is verified and cleaned up. Unapproved and self-approved runs are refused, creating nothing. ConfigMap patch verified then restored to `original`. Sandbox left empty, fixture at prior value.
+- Rollback failure on the live API: the scenario Role's delete verb was removed mid-run, so the real rollback delete was refused by the server. Run ended `CLEANUP_FAILED`, operator alerted, pod left in place. Role restored and pod removed afterwards.
+
+**Verified against a real Postgres (test container, not the shared DB):**
+- Approval single use under 8 concurrent consumers: exactly one succeeds.
+- Database refuses approver equal to requester.
+- Run store round trip (params, approval link, state). Audit writer records refusals as `denied`, and returns an error when the write fails (engine stops before any write).
+
+**Verified in code/unit tests (not on a live server):**
+- Plan/approve/execute HTTP flow: planning writes nothing; self-approval forbidden; only requester executes; execute without approval conflicts; approval cannot be reused.
+- Console panel: per-state buttons, failed cleanup labelled failed, server text escaped. Lint clean (warnings only, existing innerHTML rule).
+
+**Not verified:**
+- The console has not been opened in a browser.
+- The HTTP endpoints have not been exercised against the live cluster through a running server. Only the engine and client were run live.
+- Live rollback-failure covers the delete verb only, not a failed snapshot restore.
+
+**Open:** EKS/AKS/GKE/OpenShift (O-12) and multi-node K3s (O-13) remain blocked on environments. Design stays unapproved for production.
 
 ## Validation record
 
@@ -202,6 +226,9 @@ Every item here is open, unbuilt, or a documented limit. Nothing is hidden in a 
 | O-9 | Metrics and tracing; per-tenant quotas; RBAC on which account a server may target; Azure secret policy check | Open | Operational design and a secret-policy decision |
 | O-10 | Console UI | Open | UI build, not started |
 | O-11 | State-changing cloud actions are not executed | Deferred by decision | Approval, rollback, verification and recovery design (R-19) |
+| O-12 | Kubernetes validation on managed platforms (EKS, AKS, GKE, OpenShift) | Open | Cloud accounts and managed clusters; the operator has neither |
+| O-13 | Kubernetes validation on multi-node K3s and on K3s beyond a single-node k3d cluster | Open | A multi-node K3s environment |
+| O-14 | Kubernetes attack-path routes (bind, escalate, impersonate, create-pods, token request, exec, node proxy) | Done as configured-permission modelling | Node proxy is modelled from RBAC grants only; kubelet behaviour is not validated live |
 | R-19a | Sandbox provider integration test for read-only probes | Open | A dedicated sandbox account |
 | R-19b | Probes for GCP and Azure are not registered | Open | Decision on which probes to add |
 | R-19c | `CLOUD_PROBE_ALLOWED_ACCOUNTS` is unset, so no probe can run against a real account | Operational | Sandbox test passing first |
@@ -244,3 +271,40 @@ Most recent first, all on `origin/main`:
 - `0d5a70d2` bucket policy grants: cross-account, public, same-account (R-15)
 - `f46c5b6e` session policies; resource-aware gates (R-14)
 - `b222b80e` S3 bucket policies narrow discovered grants (R-13)
+
+### Token-request action (sa-token-probe), 2026-10-23
+
+Design: spec section 12. Built: `TokenRequest` client call, identity check, the probe action with redaction and clearing, and the new terminal state `DISCARDED_NOT_REVOKED`. Console action and label added.
+
+Live on kind-bas-lab, scenario ServiceAccount with narrow RBAC:
+- Minting for `default` in `bas-sandbox` refused by the server.
+- Probe run: minted token verified as `system:serviceaccount:bas-sandbox:bas-sbx-token-probe`, discarded, ends `DISCARDED_NOT_REVOKED`. Detail states the expiry and that it cannot be revoked.
+- Probe account cannot list pods or read configmaps; no binding references it.
+
+Lab changes made for this: ServiceAccount `bas-sbx-token-probe` created in `bas-sandbox`; Role `bas-scenario-sandbox` given `serviceaccounts/token` `create`, restricted to that name.
+
+Unit tests: no token text in result or audit; token bytes zeroed after rollback; parameters refused; dry run mints nothing; identity mismatch reported unverified and not cleaned; mint failure ends FAILED; invalid lifetimes and names send no request; errors never contain the token.
+
+Not verified: the token's real expiry on the server side, and whether revocation or early expiry is available in the cluster's version.
+
+### Synthetic secret read (synthetic-secret-read), 2026-10-23
+
+Design: `docs/superpowers/specs/2026-10-23-k8s-synthetic-secret-read-design.md`. Built in `6822a691`. Lab fixtures and runner RBAC in `8f9d85e5`.
+
+Live on kind-bas-lab, namespace `bas-sandbox`, through the local server, with two admins:
+- Run `k8sr-42187e1f268ee7c0`. One admin planned it, a second admin approved that exact run (`appr-2590ddb13372ee91`), and the requester executed it. Result `DISCARDED_NOT_REVOKED`, observation `READ_SUCCEEDED`, verified. The minted token is valid until 2026-10-23T09:09:10Z (10 minutes) and cannot be revoked.
+- Checked directly on the cluster afterwards with kubectl. The probe binding has no subjects. `kubectl auth can-i get secret/bas-synthetic-secret` as the probe returns `no`. The secret's resourceVersion changed to 29653, which shows the value was rotated.
+- The audit log holds `k8s.scenario.requested` and `k8s.scenario.outcome` for the run, both `ok`.
+
+Setup leftover, fixed: `kubectl apply` had stored the original secret value in the `last-applied-configuration` annotation. The annotation was removed. The run had already rotated the value.
+
+Left as it was: pod-create run `k8sr-87d0d688b693f80e` is still `PLANNED`. It was not approved or executed. The second admin account used for the approval is a local test account on the local database only.
+
+Owner reviewed the console screens on 2026-10-23 and asked for no changes.
+
+Unit tests: 9 engine tests and 5 client tests. The client tests cover allowed, denied and inconclusive reads, refusal of any other name without a request, and the metadata-only label read.
+
+Not verified:
+- Token expiry on the cluster side. The run's expiry comes from the minted token's own field, and the cluster-side behaviour is not checked here.
+- A failed revoke on the live API (the `CLEANUP_FAILED` path). It is covered by a unit test only.
+- Managed platforms (O-12).

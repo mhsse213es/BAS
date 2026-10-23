@@ -1,6 +1,8 @@
 package cloudgraph
 
 import (
+	"context"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -89,5 +91,96 @@ func TestK8sWorkloads_StaticPodOwnedByNodeIsStandalone(t *testing.T) {
 	pod := "k8s://kind-bas-lab/default/pod/etcd-x"
 	if got := findRes(inv.Resources, pod).Attributes["workload"]; got != pod {
 		t.Fatalf("static pod workload = %q, want itself", got)
+	}
+}
+
+// K3s's Helm controller owns pods through HelmChart custom resources. A HelmChart owner that was listed
+// resolves to that HelmChart, and a cluster without the CRD (404) is complete, not a gap.
+func TestK8sWorkloads_HelmChartOwnedPodResolvesToHelmChart(t *testing.T) {
+	inv, rep := analysisFor(t, map[string]string{
+		"/apis/helm.cattle.io/v1/helmcharts": `{"items":[{"metadata":{"name":"traefik","namespace":"kube-system"}}]}`,
+		"/api/v1/pods":                       `{"items":[{"metadata":{"name":"helm-install-traefik-x","namespace":"kube-system","ownerReferences":[{"kind":"HelmChart","name":"traefik"}]},"spec":{"serviceAccountName":"web"}}]}`,
+	})
+	if !rep.Complete {
+		t.Fatalf("gaps=%v", rep.Gaps)
+	}
+	pod := findRes(inv.Resources, "k8s://kind-bas-lab/kube-system/pod/helm-install-traefik-x")
+	if pod == nil || pod.Attributes["workload"] != "k8s://kind-bas-lab/kube-system/helmchart/traefik" {
+		t.Fatalf("pod workload = %+v, want the HelmChart", pod)
+	}
+}
+
+func TestK8sWorkloads_MissingHelmChartCRDIsNotAGap(t *testing.T) {
+	// The fixture serves no helmcharts route, so the list returns 404: the CRD is not installed.
+	_, rep := analysisFor(t, nil)
+	if !rep.Complete {
+		t.Fatalf("a cluster without the HelmChart CRD must not be incomplete; gaps=%v", rep.Gaps)
+	}
+}
+
+// An unlisted Deployment makes the pod's workload unknown. The gap is reported, no workload is assigned, and
+// access that depends on the incomplete policy is unknown, not denied.
+func TestK8sWorkloads_UnlistedDeploymentLeavesChainUnresolved(t *testing.T) {
+	inv, rep := analysisFor(t, map[string]string{
+		"/apis/apps/v1/deployments": `{"items":[]}`,
+	})
+	if rep.Complete {
+		t.Fatal("a ReplicaSet owned by an unlisted Deployment must make discovery incomplete")
+	}
+	if !containsGap(rep.Gaps, "owner Deployment web was not listed") {
+		t.Fatalf("gaps %v do not name the unlisted Deployment", rep.Gaps)
+	}
+	if got := findRes(inv.Resources, testWebPod).Attributes["workload"]; got != "" {
+		t.Fatalf("an unresolved chain must not yield a workload, got %q", got)
+	}
+	// The Deployment's absence hides nothing we can claim. Access the policy does not show is unknown.
+	got := AnalyseK8sAccess(inv, rep, K8sAccessQuery{Subject: testWebSA, Namespace: "default", Request: RBACRequest{Resource: "secrets", Verb: "get"}})
+	if got.Decision != RBACUnknown {
+		t.Fatalf("access under an incomplete chain = %s, want unknown", got.Decision)
+	}
+}
+
+// A chain deeper than the four hops discovery follows is reported as a gap, never as a workload.
+func TestK8sWorkloads_OwnerChainTooDeepIsAGap(t *testing.T) {
+	// r1 -> r2 -> r3 -> r4 -> r5 -> (no owner): five hops from the pod, one more than the limit.
+	inv, rep := analysisFor(t, map[string]string{
+		"/apis/apps/v1/replicasets": `{"items":[` +
+			`{"metadata":{"name":"web-7d","namespace":"default","ownerReferences":[{"kind":"ReplicaSet","name":"r2"}]}},` +
+			`{"metadata":{"name":"r2","namespace":"default","ownerReferences":[{"kind":"ReplicaSet","name":"r3"}]}},` +
+			`{"metadata":{"name":"r3","namespace":"default","ownerReferences":[{"kind":"ReplicaSet","name":"r4"}]}},` +
+			`{"metadata":{"name":"r4","namespace":"default","ownerReferences":[{"kind":"ReplicaSet","name":"r5"}]}},` +
+			`{"metadata":{"name":"r5","namespace":"default"}}]}`,
+		"/apis/apps/v1/deployments": `{"items":[]}`,
+	})
+	if rep.Complete {
+		t.Fatal("an owner chain deeper than the limit must make discovery incomplete")
+	}
+	if !containsGap(rep.Gaps, "deeper than 4 levels") {
+		t.Fatalf("gaps %v do not report the depth limit", rep.Gaps)
+	}
+	if got := findRes(inv.Resources, testWebPod).Attributes["workload"]; got != "" {
+		t.Fatalf("a chain too deep to resolve must not yield a workload, got %q", got)
+	}
+}
+
+// A forbidden workload list (here Deployments) is a gap, and the report names the list, so the reason is visible.
+func TestK8sWorkloads_ForbiddenWorkloadListIsReported(t *testing.T) {
+	serve := serveRoutes(nil)
+	srv, _ := newK8sTestServer(t, func(w http.ResponseWriter, r *http.Request, rec *k8sRecorder) {
+		if r.URL.Path == "/apis/apps/v1/deployments" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		serve(w, r, rec)
+	})
+	_, rep, err := k8sClient(t, srv, nil).Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Complete {
+		t.Fatal("a forbidden Deployment list must make discovery incomplete")
+	}
+	if !containsGap(rep.Gaps, "forbidden: /apis/apps/v1/deployments") {
+		t.Fatalf("gaps %v do not name the forbidden list", rep.Gaps)
 	}
 }

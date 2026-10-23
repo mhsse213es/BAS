@@ -41,6 +41,8 @@ var productPrefixes = map[string]license.ProductLine{
 	"/api/cloud-scenario-runs":              license.ProductCloud,
 	"/api/cloud-scenarios":                  license.ProductCloud,
 	"/api/cloud-topology-imports":           license.ProductCloud,
+	"/api/k8s-scenarios":                    license.ProductCloud,
+	"/api/k8s-discovery":                    license.ProductCloud,
 	"/api/network-control-expectations":     license.ProductNetwork,
 	"/api/network-control-verifications":    license.ProductNetwork,
 	"/api/network-discovery-runs":           license.ProductNetwork,

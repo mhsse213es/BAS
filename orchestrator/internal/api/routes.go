@@ -658,6 +658,13 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanLaunchExerciseExecution)).Post("/api/exercises/executions/{id}/launch", h.LaunchExerciseExecution)
 		r.With(auth.RequirePermission(auth.CanAbortExerciseExecution)).Post("/api/exercises/executions/{id}/abort", h.AbortExerciseExecution)
 		r.With(auth.RequirePermission(auth.CanApproveExerciseStep)).Post("/api/exercises/executions/{id}/steps/{stepId}/approve", h.ApproveExerciseStep)
+		// Kubernetes state-changing scenarios: request and execute for analysts and admins; approve for admins only.
+		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Get("/api/k8s-scenarios/runs", h.ListK8sRuns)
+		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Post("/api/k8s-scenarios/runs", h.CreateK8sRun)
+		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/approve", h.ApproveK8sRun)
+		r.With(auth.RequirePermission(auth.CanExecuteK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/execute", h.ExecuteK8sRun)
+		// Read-only Kubernetes analysis: discovery and configured-permission checks. It writes nothing to the cluster.
+		r.With(auth.RequirePermission(auth.CanViewK8sDiscovery)).Get("/api/k8s-discovery/analysis", h.GetK8sAnalysis)
 		r.With(auth.RequirePermission(auth.CanInjectExerciseEvidence)).Post("/api/exercises/executions/{id}/evidence", h.InjectEvidence)
 
 		// Exercise — read access for all authenticated roles.

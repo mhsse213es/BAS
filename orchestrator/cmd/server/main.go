@@ -284,6 +284,9 @@ func main() {
 	if err := db.EnsureExerciseSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] exercise schema: %v", err)
 	}
+	if err := db.EnsureK8sScenarioSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] k8s scenario schema: %v", err)
+	}
 	if err := db.EnsureContentRegistrySchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] content registry schema: %v", err)
 	}
@@ -962,6 +965,8 @@ func main() {
 		WithLicensePath(cfg.LicensePath).
 		WithPublicBaseURL(cfg.PublicBaseURL).
 		WithExercise(exStore, exExecutor, exChain).
+		WithK8sScenario(buildK8sScenarioService(pool)).
+		WithK8sAnalysis(buildK8sAnalysisRunner()).
 		WithVerificationStore(verificationStore).
 		WithRelationshipStore(relationshipStore).
 		WithRuleLibrary(rulesEngine).

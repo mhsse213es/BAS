@@ -206,6 +206,20 @@ RESTORE_ARCHIVE=""
 # TCF Phase 6 validation lab (optional). Empty agent ID keeps the lab disabled.
 VALIDATION_LAB_AGENT_ID=""
 VALIDATION_LAB_POLL_MINUTES=""
+# Kubernetes state-changing scenarios (lab only). Off unless KUBE_SCENARIO_ENABLED=true.
+KUBE_SCENARIO_ENABLED=""
+KUBE_SCENARIO_API=""
+KUBE_SCENARIO_CLUSTER=""
+KUBE_SCENARIO_NAMESPACE=""
+KUBE_SCENARIO_TOKEN=""
+KUBE_SCENARIO_CA_FILE=""
+# Read-only Kubernetes analysis (cloud product). Off unless KUBE_DISCOVERY_ENABLED=true. The token must belong to a
+# read-only account: discovery lists pods, ServiceAccounts, namespaces and RBAC, and cannot write or read secrets.
+KUBE_DISCOVERY_ENABLED=""
+KUBE_DISCOVERY_API=""
+KUBE_DISCOVERY_CLUSTER=""
+KUBE_DISCOVERY_TOKEN=""
+KUBE_DISCOVERY_CA_FILE=""
 
 # ── Config loader -safe key=value parser (no source / eval) ─────────────────
 # Validates the install-wide phishing target allowlists. They must match the
@@ -235,6 +249,32 @@ validate_phish_scope() {
 # (cmd/server/main.go). The three Defender values are all-or-none: the orchestrator
 # enables EmailGW only when all three are set, so a partial set is refused here,
 # not silently left disabled. The client secret is never echoed in an error.
+# Kubernetes scenarios: validated only when enabled. Disabled means nothing is staged and the
+# orchestrator stays off. Enabled means every value must be present and the cluster must answer
+# with this token, so a bad configuration fails the install instead of enabling a broken feature.
+validate_k8s_scenario_config() {
+  KUBE_SCENARIO_ENABLED="${KUBE_SCENARIO_ENABLED:-false}"
+  case "$KUBE_SCENARIO_ENABLED" in
+    true|false) ;;
+    *) err "setup.conf: KUBE_SCENARIO_ENABLED must be true or false."; exit 1 ;;
+  esac
+  # Disabled: no API address, so the orchestrator never builds the scenario client.
+  if [[ "$KUBE_SCENARIO_ENABLED" != "true" ]]; then KUBE_SCENARIO_API=""; return 0; fi
+  KUBE_SCENARIO_CLUSTER="${KUBE_SCENARIO_CLUSTER:-kind-bas-lab}"
+  KUBE_SCENARIO_NAMESPACE="${KUBE_SCENARIO_NAMESPACE:-bas-sandbox}"
+  [[ "$KUBE_SCENARIO_API" =~ ^https://[^[:space:]]+$ ]] || { err "setup.conf: KUBE_SCENARIO_API must be an https:// URL."; exit 1; }
+  [[ -n "$KUBE_SCENARIO_TOKEN" ]] || { err "setup.conf: KUBE_SCENARIO_TOKEN is required when KUBE_SCENARIO_ENABLED=true."; exit 1; }
+  [[ "$KUBE_SCENARIO_TOKEN" =~ ^[A-Za-z0-9._~+/=-]+$ ]] || { err "setup.conf: KUBE_SCENARIO_TOKEN contains characters a token cannot have. Paste the token only."; exit 1; }
+  [[ -r "$KUBE_SCENARIO_CA_FILE" ]] || { err "setup.conf: KUBE_SCENARIO_CA_FILE must point to a readable PEM file on this server."; exit 1; }
+  grep -q -- "-----BEGIN CERTIFICATE-----" "$KUBE_SCENARIO_CA_FILE" || { err "setup.conf: KUBE_SCENARIO_CA_FILE is not a PEM certificate."; exit 1; }
+  command -v curl >/dev/null 2>&1 || { err "curl is required to check the Kubernetes connection."; exit 1; }
+  # Permission probe: the scenario account must be able to read its sandbox namespace. Token is not echoed.
+  local code
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 --cacert "$KUBE_SCENARIO_CA_FILE"     -H "Authorization: Bearer ${KUBE_SCENARIO_TOKEN}" "${KUBE_SCENARIO_API}/api/v1/namespaces/${KUBE_SCENARIO_NAMESPACE}" || true)
+  [[ "$code" == "200" ]] || { err "Kubernetes check failed (HTTP ${code:-none}): the API did not accept the scenario token for namespace ${KUBE_SCENARIO_NAMESPACE}."; exit 1; }
+  log "Kubernetes scenario connection verified (${KUBE_SCENARIO_CLUSTER}/${KUBE_SCENARIO_NAMESPACE})"
+}
+
 validate_emailgw_config() {
   local guid_re='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
   local host_re='^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$'
@@ -327,6 +367,17 @@ load_config() {
       REMOTE_BACKUP_RETENTION)  REMOTE_BACKUP_RETENTION="$val"  ;;
       VALIDATION_LAB_AGENT_ID)     VALIDATION_LAB_AGENT_ID="$val"     ;;
       VALIDATION_LAB_POLL_MINUTES) VALIDATION_LAB_POLL_MINUTES="$val" ;;
+      KUBE_SCENARIO_ENABLED)   KUBE_SCENARIO_ENABLED="$val"   ;;
+      KUBE_SCENARIO_API)       KUBE_SCENARIO_API="$val"       ;;
+      KUBE_SCENARIO_CLUSTER)   KUBE_SCENARIO_CLUSTER="$val"   ;;
+      KUBE_SCENARIO_NAMESPACE) KUBE_SCENARIO_NAMESPACE="$val" ;;
+      KUBE_SCENARIO_TOKEN)     KUBE_SCENARIO_TOKEN="$val"     ;;
+      KUBE_SCENARIO_CA_FILE)   KUBE_SCENARIO_CA_FILE="$val"   ;;
+      KUBE_DISCOVERY_ENABLED)  KUBE_DISCOVERY_ENABLED="$val"  ;;
+      KUBE_DISCOVERY_API)      KUBE_DISCOVERY_API="$val"      ;;
+      KUBE_DISCOVERY_CLUSTER)  KUBE_DISCOVERY_CLUSTER="$val"  ;;
+      KUBE_DISCOVERY_TOKEN)    KUBE_DISCOVERY_TOKEN="$val"    ;;
+      KUBE_DISCOVERY_CA_FILE)  KUBE_DISCOVERY_CA_FILE="$val"  ;;
     esac
   done < "$cfg"
 
@@ -364,6 +415,8 @@ load_config() {
   esac
   validate_phish_scope
   validate_emailgw_config
+  validate_k8s_scenario_config
+  validate_k8s_discovery_config
   [[ -z "$LOG_RETENTION_DAYS" ]] && LOG_RETENTION_DAYS="90"
   [[ -z "$BACKUP_RETENTION_DAILY"   ]] && BACKUP_RETENTION_DAILY="7"
   [[ -z "$BACKUP_RETENTION_WEEKLY"  ]] && BACKUP_RETENTION_WEEKLY="4"
@@ -1564,7 +1617,70 @@ _resolve_license_file() {
   LICENSE_FILE="${LICENSE_FILE:-bas.lic}"
 }
 
+# Read-only Kubernetes analysis. Enabled means every value is present and the cluster accepts this token for a list
+# of pods, so a bad value fails the install instead of enabling a broken analysis.
+validate_k8s_discovery_config() {
+  KUBE_DISCOVERY_ENABLED="${KUBE_DISCOVERY_ENABLED:-false}"
+  case "$KUBE_DISCOVERY_ENABLED" in
+    true|false) ;;
+    *) err "setup.conf: KUBE_DISCOVERY_ENABLED must be true or false."; exit 1 ;;
+  esac
+  if [[ "$KUBE_DISCOVERY_ENABLED" != "true" ]]; then KUBE_DISCOVERY_API=""; return 0; fi
+  KUBE_DISCOVERY_CLUSTER="${KUBE_DISCOVERY_CLUSTER:-kind-bas-lab}"
+  [[ "$KUBE_DISCOVERY_API" =~ ^https://[^[:space:]]+$ ]] || { err "setup.conf: KUBE_DISCOVERY_API must be an https:// URL."; exit 1; }
+  [[ -n "$KUBE_DISCOVERY_TOKEN" ]] || { err "setup.conf: KUBE_DISCOVERY_TOKEN is required when KUBE_DISCOVERY_ENABLED=true."; exit 1; }
+  [[ "$KUBE_DISCOVERY_TOKEN" =~ ^[A-Za-z0-9._~+/=-]+$ ]] || { err "setup.conf: KUBE_DISCOVERY_TOKEN contains characters a token cannot have. Paste the token only."; exit 1; }
+  [[ -r "$KUBE_DISCOVERY_CA_FILE" ]] || { err "setup.conf: KUBE_DISCOVERY_CA_FILE must point to a readable PEM file on this server."; exit 1; }
+  grep -q -- "-----BEGIN CERTIFICATE-----" "$KUBE_DISCOVERY_CA_FILE" || { err "setup.conf: KUBE_DISCOVERY_CA_FILE is not a PEM certificate."; exit 1; }
+  command -v curl >/dev/null 2>&1 || { err "curl is required to check the Kubernetes connection."; exit 1; }
+  # Permission probe: the account must be able to list pods across namespaces, which discovery needs. Token is not echoed.
+  local code
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 --cacert "$KUBE_DISCOVERY_CA_FILE" -H "Authorization: Bearer ${KUBE_DISCOVERY_TOKEN}" "${KUBE_DISCOVERY_API}/api/v1/pods?limit=1" || true)
+  [[ "$code" == "200" ]] || { err "Kubernetes check failed (HTTP ${code:-none}): the API did not accept the discovery token to list pods."; exit 1; }
+  log "Kubernetes analysis connection verified (${KUBE_DISCOVERY_CLUSTER}, read-only)"
+}
+
+# Stages the scenario token and CA into ${DATA_DIR}/k8s-scenario, readable only by the orchestrator.
+# When disabled, any staged token is removed so no credential is left on disk.
+_stage_k8s_scenario() {
+  local dir="${DATA_DIR}/k8s-scenario"
+  mkdir -p "$dir"
+  if [[ "$KUBE_SCENARIO_ENABLED" == "true" ]]; then
+    umask 077
+    printf '%s' "$KUBE_SCENARIO_TOKEN" > "${dir}/token"
+    cp "$KUBE_SCENARIO_CA_FILE" "${dir}/ca.pem"
+    chown 65532:65532 "${dir}/token" "${dir}/ca.pem"
+    chmod 600 "${dir}/token"
+    chmod 644 "${dir}/ca.pem"
+    umask 022
+    log "Kubernetes scenario credentials staged (owner: orchestrator, mode 600)"
+  else
+    rm -f "${dir}/token" "${dir}/ca.pem"
+  fi
+}
+
+# Stages the discovery token and CA into ${DATA_DIR}/k8s-discovery, readable only by the orchestrator.
+# When disabled, any staged token is removed.
+_stage_k8s_discovery() {
+  local dir="${DATA_DIR}/k8s-discovery"
+  mkdir -p "$dir"
+  if [[ "$KUBE_DISCOVERY_ENABLED" == "true" ]]; then
+    umask 077
+    printf '%s' "$KUBE_DISCOVERY_TOKEN" > "${dir}/token"
+    cp "$KUBE_DISCOVERY_CA_FILE" "${dir}/ca.pem"
+    chown 65532:65532 "${dir}/token" "${dir}/ca.pem"
+    chmod 600 "${dir}/token"
+    chmod 644 "${dir}/ca.pem"
+    umask 022
+    log "Kubernetes analysis credentials staged (owner: orchestrator, mode 600)"
+  else
+    rm -f "${dir}/token" "${dir}/ca.pem"
+  fi
+}
+
 _write_env() {
+  _stage_k8s_scenario
+  _stage_k8s_discovery
   local env_file="${DATA_DIR}/.env"
   # In-container paths for the operator-supplied dashboard TLS cert -- only
   # set when BAS_TLS=true, so docker-compose.yml's TLS_CERT/TLS_KEY env vars
@@ -1617,6 +1733,12 @@ AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET=${AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRE
 AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN=${AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN}
 AUDSPECT_EMAILGW_INJECTION_TARGET_MX=${AUDSPECT_EMAILGW_INJECTION_TARGET_MX}
 AUDSPECT_EMAILGW_INJECTION_RELAY_HOST=${AUDSPECT_EMAILGW_INJECTION_RELAY_HOST}
+KUBE_SCENARIO_ENABLED=${KUBE_SCENARIO_ENABLED:-false}
+KUBE_SCENARIO_API=${KUBE_SCENARIO_API:-}
+KUBE_SCENARIO_CLUSTER=${KUBE_SCENARIO_CLUSTER:-kind-bas-lab}
+KUBE_SCENARIO_NAMESPACE=${KUBE_SCENARIO_NAMESPACE:-bas-sandbox}
+KUBE_DISCOVERY_API=${KUBE_DISCOVERY_API:-}
+KUBE_DISCOVERY_CLUSTER=${KUBE_DISCOVERY_CLUSTER:-kind-bas-lab}
 TLS_CERT=${TLS_CERT:-}
 TLS_KEY=${TLS_KEY:-}
 TLS_CERT_CONTAINER_PATH=${tls_cert_container_path}

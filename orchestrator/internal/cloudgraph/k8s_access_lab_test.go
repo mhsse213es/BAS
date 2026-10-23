@@ -37,7 +37,7 @@ func TestK8sAccess_LiveLab_MatchesKubectlAuthCanI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := NewK8sDiscoveryClient(K8sDiscoveryConfig{ClusterName: "kind-bas-lab", APIServer: api, Token: strings.TrimSpace(string(tokenBytes)), CAPEM: ca})
+	c, err := NewK8sDiscoveryClient(K8sDiscoveryConfig{ClusterName: labClusterName(), APIServer: api, Token: strings.TrimSpace(string(tokenBytes)), CAPEM: ca})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,8 +51,8 @@ func TestK8sAccess_LiveLab_MatchesKubectlAuthCanI(t *testing.T) {
 
 	type subject struct{ canonical, asUser string }
 	subjects := []subject{
-		{"k8s://kind-bas-lab/default/serviceaccount/web", "system:serviceaccount:default:web"},
-		{"k8s://kind-bas-lab/kube-system/serviceaccount/bas-discovery", "system:serviceaccount:kube-system:bas-discovery"},
+		{"k8s://" + labClusterName() + "/default/serviceaccount/web", "system:serviceaccount:default:web"},
+		{"k8s://" + labClusterName() + "/kube-system/serviceaccount/bas-discovery", "system:serviceaccount:kube-system:bas-discovery"},
 	}
 	type request struct{ verb, resource, ns string }
 	requests := []request{
@@ -68,6 +68,11 @@ func TestK8sAccess_LiveLab_MatchesKubectlAuthCanI(t *testing.T) {
 		{"get", "clusterroles", ""},
 		{"list", "secrets", "kube-system"},
 		{"get", "pods", "kube-system"},
+		{"bind", "clusterroles", ""},
+		{"escalate", "clusterroles", ""},
+		{"impersonate", "serviceaccounts", ""},
+		{"create", "serviceaccounts/token", "default"},
+		{"get", "nodes/proxy", ""},
 	}
 	rbacResources := map[string]bool{"roles": true, "clusterroles": true, "rolebindings": true, "clusterrolebindings": true}
 

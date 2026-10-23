@@ -145,6 +145,8 @@ type Handler struct {
 	publicBaseURL        string                 // orchestrator's externally-reachable base URL; used for {{SINK_URL}} substitution and exercise tracker links
 	exerciseStore        *exercise.Store
 	exerciseExecutor     *exercise.Executor
+	k8sScenario *K8sScenarioService
+	k8sAnalysis K8sAnalysisRunner
 	exerciseChain        *exercise.EvidenceChain
 	verification         *verification.Store    // nil when not loaded — SP2 verification store
 	relationships        *relationships.Store   // nil when not loaded — CVE-ATT&CK Relationship Store
@@ -718,6 +720,9 @@ func (h *Handler) GetLicenseStatus(w http.ResponseWriter, r *http.Request) {
 		"expiresAt":     info.ExpiresAt.Format("2006-01-02"),
 		"lockoutAt":     info.LockoutAt.Format("2006-01-02"),
 		"daysRemaining": info.DaysRemaining,
+		// Whether the licence grants the Kubernetes scenarios (Enterprise cloud product). The API enforces
+		// this too; the flag only decides what the console shows.
+		"kubernetesScenarios": license.PermitsNow(license.ProductCloud),
 	})
 }
 

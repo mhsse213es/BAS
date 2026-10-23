@@ -103,7 +103,7 @@ func TestK8sAccess_LiveLab_AggregatedClusterRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := NewK8sDiscoveryClient(K8sDiscoveryConfig{ClusterName: "kind-bas-lab", APIServer: api, Token: strings.TrimSpace(string(tokenBytes)), CAPEM: ca})
+	c, err := NewK8sDiscoveryClient(K8sDiscoveryConfig{ClusterName: labClusterName(), APIServer: api, Token: strings.TrimSpace(string(tokenBytes)), CAPEM: ca})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestK8sAccess_LiveLab_AggregatedClusterRole(t *testing.T) {
 		t.Fatalf("the lab policy must be complete; gaps=%v", rep.Gaps)
 	}
 
-	probe := findRes(inv.Resources, "k8s://kind-bas-lab/_cluster/clusterrole/bas-agg-probe")
+	probe := findRes(inv.Resources, "k8s://"+labClusterName()+"/_cluster/clusterrole/bas-agg-probe")
 	if probe == nil {
 		t.Fatal("the aggregating ClusterRole is missing from discovery")
 	}
@@ -124,7 +124,7 @@ func TestK8sAccess_LiveLab_AggregatedClusterRole(t *testing.T) {
 	}
 
 	req := RBACRequest{Resource: "configmaps", Verb: "get"}
-	res := AnalyseK8sAccess(inv, rep, K8sAccessQuery{Subject: "k8s://kind-bas-lab/default/serviceaccount/web", Request: req})
+	res := AnalyseK8sAccess(inv, rep, K8sAccessQuery{Subject: "k8s://" + labClusterName() + "/default/serviceaccount/web", Request: req})
 	if res.Decision != RBACGranted || len(res.Evidence) != 1 || res.Evidence[0] != "bas-agg-probe-web" {
 		t.Fatalf("analysis = %+v, want granted via bas-agg-probe-web", res)
 	}

@@ -25,6 +25,7 @@ import { loadReports, loadRuns } from './reports.js';
 import { loadScheduledAssessments } from './scheduled.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { loadExecutionPolicyDefault } from './execution-policy.js';
+import { loadK8sRuns } from './k8s-scenarios.js';
 import { loadVariantTab } from './variant-executor.js';
 import { displayOf, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
@@ -49,7 +50,7 @@ export function toggleSidebarCollapsed() {
   try { localStorage.setItem('bas_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
   document.getElementById('sidebar-collapse-btn').title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
 }
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', 'ad-coverage':'AD Coverage', email:'Email', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'k8s-scenarios':'Kubernetes Scenarios', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', 'ad-coverage':'AD Coverage', email:'Email', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance' };
 export var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -237,6 +238,7 @@ export function doLogin() {
     if (!res.ok) throw new Error(res.d.error || 'Login failed');
     TOKEN = res.d.token; ROLE = res.d.role;
     localStorage.setItem('bas_role', ROLE); // role only — token is in HttpOnly cookie
+    try { localStorage.setItem('bas_user_id', res.d.userId || ''); } catch (e) {} // the id runs record as requester
     bootApp();
     if (res.d.mustChangePw) {
       state._pwForced = true;
@@ -252,6 +254,7 @@ export function doLogin() {
 export function doLogout() {
   TOKEN = ''; ROLE = '';
   localStorage.removeItem('bas_role');
+  try { localStorage.removeItem('bas_user_id'); } catch (e) {}
   if (state.socket) state.socket.close();
   fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
   setDisplay(document.getElementById('app'), 'none');
@@ -272,6 +275,10 @@ function bootApp() {
   // Scheduled Assessments nav — Analyst+Admin (same tier the API itself requires)
   var navSched = document.getElementById('nav-scheduled-assessments');
   if (navSched) setDisplay(navSched, (ROLE === 'admin' || ROLE === 'analyst') ? '' : 'none');
+  var navK8s = document.getElementById('nav-k8s-scenarios');
+  // Kubernetes scenarios belong to the Enterprise cloud product: hidden unless the licence grants it.
+  var k8sLicensed = !!(LICENSE_INFO && LICENSE_INFO.kubernetesScenarios);
+  if (navK8s) setDisplay(navK8s, (k8sLicensed && (ROLE === 'admin' || ROLE === 'analyst')) ? '' : 'none');
   if (ROLE === 'admin') {
     document.querySelectorAll('.settings-nav a').forEach(function(el) {
       if (el.getAttribute('data-set') !== 'theme') setDisplay(el, '');
@@ -422,7 +429,7 @@ export function doLogoutFromMenu() { closeUserMenu(); doLogout(); }
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 export function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','scheduled-assessments','initiatives','campaigns','factory-health','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','ad-coverage','email','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','k8s-scenarios','scheduled-assessments','initiatives','campaigns','factory-health','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','ad-coverage','email','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) setDisplay(el, t === name ? '' : 'none');
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -537,6 +544,7 @@ export function showTab(name) {
   if (name === 'runs') loadRuns();
   if (name === 'campaigns') closeCampaignDetail();
   if (name === 'scheduled-assessments') loadScheduledAssessments();
+  if (name === 'k8s-scenarios') loadK8sRuns();
   if (name === 'initiatives') loadInitiatives();
   if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); loadThreatExposure(); }
   if (name === 'attack-coverage') { loadCoverageActors(); loadCoverageMatrix(); }
