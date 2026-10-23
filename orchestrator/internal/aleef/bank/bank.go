@@ -150,14 +150,16 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.HandleFunc("GET /v1/accounts/{id}", s.auth(s.getAccount(legacy("account"))))
 	mux.HandleFunc("GET /v1/transactions/{id}", s.auth(s.getTransaction(legacy("transaction"))))
-	legacyDoc := func(p Principal, d Document, _ DocRoute) bool { return s.pol.LegacyAuthorize(p, "document", d.OwnerID) }
+	legacyDoc := func(p Principal, d Document, _ DocRoute, _ string) bool {
+		return s.pol.LegacyAuthorize(p, "document", d.OwnerID)
+	}
 	mux.HandleFunc("GET /v1/kyc/documents/{id}", s.auth(s.getDocument(legacyDoc, DocRoutePrimary)))
 	mux.HandleFunc("GET /v1/customers/{cid}/documents/{id}", s.auth(s.getDocument(legacyDoc, DocRouteAlternate)))
 
 	mux.HandleFunc("GET /v2/accounts/{id}", s.auth(s.getAccount(func(p Principal, o string) bool { return s.pol.CanReadAccount(p, o) })))
 	mux.HandleFunc("GET /v2/transactions/{id}", s.auth(s.getTransaction(func(p Principal, o string) bool { return s.pol.CanReadAccount(p, o) })))
-	mux.HandleFunc("GET /v2/kyc/documents/{id}", s.auth(s.getDocument(func(p Principal, d Document, r DocRoute) bool { return s.pol.CanReadDocument(p, d, r) }, DocRoutePrimary)))
-	mux.HandleFunc("GET /v2/customers/{cid}/documents/{id}", s.auth(s.getDocument(func(p Principal, d Document, r DocRoute) bool { return s.pol.CanReadDocument(p, d, r) }, DocRouteAlternate)))
+	mux.HandleFunc("GET /v2/kyc/documents/{id}", s.auth(s.getDocument(func(p Principal, d Document, r DocRoute, cid string) bool { return s.pol.CanReadDocument(p, d, r, cid) }, DocRoutePrimary)))
+	mux.HandleFunc("GET /v2/customers/{cid}/documents/{id}", s.auth(s.getDocument(func(p Principal, d Document, r DocRoute, cid string) bool { return s.pol.CanReadDocument(p, d, r, cid) }, DocRouteAlternate)))
 	mux.HandleFunc("POST /v2/transactions", s.auth(s.createTransaction))
 	mux.HandleFunc("POST /v2/beneficiaries", s.auth(s.createBeneficiary))
 	mux.HandleFunc("GET /v2/beneficiaries/{id}", s.auth(s.getBeneficiary))
@@ -234,14 +236,14 @@ func (s *Server) getTransaction(read func(Principal, string) bool) handler {
 // getDocument serves the primary endpoint and the alternate endpoint that
 // addresses the document through its customer. The handler resolves the
 // document by id only; the policy decides access for the given route.
-func (s *Server) getDocument(read func(Principal, Document, DocRoute) bool, route DocRoute) handler {
+func (s *Server) getDocument(read func(Principal, Document, DocRoute, string) bool, route DocRoute) handler {
 	return func(w http.ResponseWriter, r *http.Request, p Principal) {
 		d, ok := s.docs[r.PathValue("id")]
 		if !ok {
 			writeErr(w, http.StatusNotFound, "not found")
 			return
 		}
-		if !read(p, *d, route) {
+		if !read(p, *d, route, r.PathValue("cid")) {
 			writeErr(w, http.StatusForbidden, "forbidden")
 			return
 		}

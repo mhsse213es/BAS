@@ -23,7 +23,7 @@ const (
 //	DedupeIdempotency         transaction replay by key (H4)           p, key, prior (nil when none)
 //	CanSettle                 settlement preconditions (H5)            pay
 //	CanApprove                payment approval, maker-checker (H6)     p, pay
-//	CanReadDocument           KYC document read, both routes (H7)      p, document, route
+//	CanReadDocument           KYC document read, both routes (H7)      p, document, route, path customer id
 //	LegacyAuthorize           /v1 reads (H8)                           p, kind, ownerID
 //	CanReadBeneficiary        beneficiary read (not a benchmark target)  p, ownerID
 //	CanReadPayment            payment read (not a benchmark target)      p, ownerID
@@ -36,8 +36,9 @@ const (
 // ownerID is the owner of the object being touched. For ApprovalStillValid,
 // the new values equal the current ones when a field is not being changed.
 // LegacyAuthorize kind is "account", "transaction" or "document". For
-// CanReadDocument the fixed policy authorizes on the document's owner on both
-// routes, whatever customer id the alternate path carries.
+// CanReadDocument, pathCustomerID is the customer id from the request path
+// (empty on the primary route); the fixed policy authorizes on the owner of
+// the document.
 type Policy struct {
 	CanReadAccount          func(p Principal, ownerID string) bool
 	CanReadBeneficiary      func(p Principal, ownerID string) bool
@@ -51,7 +52,7 @@ type Policy struct {
 	DedupeIdempotency       func(p Principal, key string, prior *Transaction) bool
 	CanSettle               func(pay Payment) bool
 	CanApprove              func(p Principal, pay Payment) bool
-	CanReadDocument         func(p Principal, d Document, route DocRoute) bool
+	CanReadDocument         func(p Principal, d Document, route DocRoute, pathCustomerID string) bool
 	LegacyAuthorize         func(p Principal, kind, ownerID string) bool
 }
 
@@ -87,7 +88,7 @@ func FixedPolicy() Policy {
 			}
 			return !pay.DualControl && p.ID == pay.OwnerID
 		},
-		CanReadDocument: func(p Principal, d Document, _ DocRoute) bool { return owner(p, d.OwnerID) },
+		CanReadDocument: func(p Principal, d Document, _ DocRoute, _ string) bool { return owner(p, d.OwnerID) },
 		LegacyAuthorize: func(p Principal, kind, ownerID string) bool { return owner(p, ownerID) },
 	}
 }

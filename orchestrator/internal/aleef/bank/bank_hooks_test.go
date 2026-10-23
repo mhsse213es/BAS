@@ -33,7 +33,7 @@ func permissiveIn(hook string) Policy {
 	case "CanApprove":
 		p.CanApprove = func(Principal, Payment) bool { return true }
 	case "CanReadDocument":
-		p.CanReadDocument = func(Principal, Document, DocRoute) bool { return true }
+		p.CanReadDocument = func(Principal, Document, DocRoute, string) bool { return true }
 	case "LegacyAuthorize":
 		p.LegacyAuthorize = func(Principal, string, string) bool { return true }
 	default:
