@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -62,9 +63,43 @@ type Target struct {
 	LabConfirmed             bool // operator confirmed this is a lab target
 }
 
+// ClientModeGate answers the one question the release gate (spec R8) asks of
+// the platform settings: is the Admin "DB client mode" setting enabled? The
+// implementation lives outside this package (the API layer reads the settings
+// store) so internal/dbsim imports no API or database code. An implementation
+// must answer false when the setting is missing or cannot be read.
+type ClientModeGate interface {
+	ClientModeEnabled() bool
+}
+
+// ClientGateFunc adapts a function to ClientModeGate.
+type ClientGateFunc func() bool
+
+// ClientModeEnabled implements ClientModeGate.
+func (f ClientGateFunc) ClientModeEnabled() bool { return f() }
+
+// StaticClientGate is a fixed gate (tests and fixed configuration).
+func StaticClientGate(on bool) ClientModeGate { return ClientGateFunc(func() bool { return on }) }
+
+// clientModeOn reads the gate fail closed: nil gate, or a gate that panics,
+// is OFF.
+func clientModeOn(g ClientModeGate) (on bool) {
+	if g == nil {
+		return false
+	}
+	defer func() {
+		if recover() != nil {
+			on = false
+		}
+	}()
+	return g.ClientModeEnabled()
+}
+
 // AuthInput carries the per-dispatch inputs to Authorize.
 type AuthInput struct {
-	ClientEnabled    bool // Admin-enabled client mode (default off)
+	// ClientGate reports the Admin-enabled client mode setting (default off).
+	// Nil means off: client mode is refused (fail closed).
+	ClientGate       ClientModeGate
 	MutationApproved bool // scenario-level approval for non-read_only probes
 	// Fixture is true when the step names a fixture. A run that seeds a fixture
 	// mutates the lab database, so it is gated as a mutation whatever the
@@ -80,7 +115,9 @@ type AuthInput struct {
 // The probe must exist in the registry (the only source of a probe's class)
 // and the entry must agree with it. A run with no expiry, or one expiring at
 // or before now, is refused. Every target needs a registered identity. Client
-// mode needs ClientEnabled, a verified read-only identity and a read_only
+// mode (release gate R8) needs all of: the ClientGate setting on, a target
+// registered with a PASSED read-only identity check, an expected identity
+// supplied at registration (R6, never trust on first use) and a read_only
 // probe. Lab mode runs read_only probes on identity alone; any other class
 // also needs Target.LabConfirmed and AuthInput.MutationApproved.
 func Authorize(t Target, def ProbeRegistryEntry, in AuthInput) error {
@@ -112,7 +149,7 @@ func Authorize(t Target, def ProbeRegistryEntry, in AuthInput) error {
 	if !supported {
 		return fmt.Errorf("dbsim: authorize: probe %q does not support engine %q", def.ID, t.Engine)
 	}
-	if t.ExpectedIdentity == "" {
+	if strings.TrimSpace(t.ExpectedIdentity) == "" {
 		return fmt.Errorf("dbsim: authorize: target %q has no pre-registered identity", t.ID)
 	}
 	// A fixture-aware probe reads a per-run seeded fixture, which exists only in
@@ -133,7 +170,7 @@ func Authorize(t Target, def ProbeRegistryEntry, in AuthInput) error {
 			}
 		}
 	case ModeClient:
-		if !in.ClientEnabled {
+		if !clientModeOn(in.ClientGate) {
 			return fmt.Errorf("dbsim: authorize: client mode is disabled")
 		}
 		if !t.ReadOnlyIdentityVerified {

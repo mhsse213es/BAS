@@ -47,9 +47,9 @@ var DefaultLimits = dbsim.Limits{MaxRows: 100, TimeoutSec: 30, MaxConns: 1}
 // Options carries the per-dispatch inputs.
 type Options struct {
 	Resolver dbsim.TargetResolver
-	// ClientEnabled mirrors the Admin setting that permits client-mode runs
-	// (default off). It is a server setting, never request input.
-	ClientEnabled bool
+	// ClientGate reports the Admin setting that permits client-mode runs
+	// (default off; nil is off). It is a server setting, never request input.
+	ClientGate dbsim.ClientModeGate
 	// MutationApproved is the scenario record's approval for non-read_only
 	// probes. Never request input.
 	MutationApproved bool
@@ -136,7 +136,7 @@ func BuildSteps(ctx context.Context, sc *scenario.Scenario, opt Options) ([]scen
 			return nil, fmt.Errorf("dbbuild: step %d (%q): resolve target %q: %w", i+1, st.Name, st.DBTarget, err)
 		}
 		if err := dbsim.Authorize(target, entry, dbsim.AuthInput{
-			ClientEnabled: opt.ClientEnabled, MutationApproved: opt.MutationApproved, Fixture: st.DBFixture != "",
+			ClientGate: opt.ClientGate, MutationApproved: opt.MutationApproved, Fixture: st.DBFixture != "",
 			RunExpiry: opt.RunExpiry, Now: now(),
 		}); err != nil {
 			return nil, fmt.Errorf("dbbuild: step %d (%q): %w", i+1, st.Name, err)

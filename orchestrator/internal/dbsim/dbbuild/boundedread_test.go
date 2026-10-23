@@ -116,7 +116,7 @@ func TestBoundedSyntheticReadRefusedInClientMode(t *testing.T) {
 	tgt := labTarget()
 	tgt.Mode, tgt.LabConfirmed, tgt.ReadOnlyIdentityVerified = dbsim.ModeClient, false, true
 	o := approved(opts(tgt))
-	o.ClientEnabled = true
+	o.ClientGate = dbsim.StaticClientGate(true)
 	for _, probe := range []string{"bounded_synthetic_read", "suspicious_read"} {
 		if _, err := BuildSteps(context.Background(), fixtureScenario(probe, "accounts", "accounts"), o); err == nil {
 			t.Errorf("%s was built for a client target", probe)

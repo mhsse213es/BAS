@@ -91,7 +91,7 @@ func TestRequiredFixtureProbesAreStrict(t *testing.T) {
 		client := labTarget()
 		client.Mode, client.LabConfirmed, client.ReadOnlyIdentityVerified = dbsim.ModeClient, false, true
 		o := approved(opts(client))
-		o.ClientEnabled = true
+		o.ClientGate = dbsim.StaticClientGate(true)
 		if build(requiredFixtureScenario(c.probe, c.tech, c.fixture, nil), o) == nil {
 			t.Errorf("%s: built for a client target", c.probe)
 		}

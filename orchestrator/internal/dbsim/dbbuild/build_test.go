@@ -150,16 +150,16 @@ func TestBuildClientModeNeedsEnableAndVerifiedReadOnlyIdentity(t *testing.T) {
 	c.LabConfirmed = false
 	c.ReadOnlyIdentityVerified = false
 	o := opts(c)
-	o.ClientEnabled = true
+	o.ClientGate = dbsim.StaticClientGate(true)
 	if _, err := BuildSteps(context.Background(), oneStepScenario("auth_check", nil), o); err == nil {
 		t.Fatal("client target without verified read-only identity built")
 	}
 	c.ReadOnlyIdentityVerified = true
-	o = opts(c) // ClientEnabled false (default)
+	o = opts(c) // ClientGate nil (default off)
 	if _, err := BuildSteps(context.Background(), oneStepScenario("auth_check", nil), o); err == nil {
 		t.Fatal("client mode built while disabled")
 	}
-	o.ClientEnabled = true
+	o.ClientGate = dbsim.StaticClientGate(true)
 	if _, err := BuildSteps(context.Background(), oneStepScenario("auth_check", nil), o); err != nil {
 		t.Fatalf("fully authorised client target refused: %v", err)
 	}

@@ -94,7 +94,7 @@ func TestTask15ProbesAreStrict(t *testing.T) {
 		client := labTarget()
 		client.Mode, client.LabConfirmed, client.ReadOnlyIdentityVerified = dbsim.ModeClient, false, true
 		o := approved(opts(client))
-		o.ClientEnabled = true
+		o.ClientGate = dbsim.StaticClientGate(true)
 		if build(requiredFixtureScenario(c.probe, c.tech, c.fixture, nil), o) == nil {
 			t.Errorf("%s: built for a client target", c.probe)
 		}
@@ -141,7 +141,7 @@ func TestShippedTask15ScenariosBuild(t *testing.T) {
 		client := labTarget()
 		client.Mode, client.LabConfirmed, client.ReadOnlyIdentityVerified = dbsim.ModeClient, false, true
 		o := approved(opts(client))
-		o.ClientEnabled = true
+		o.ClientGate = dbsim.StaticClientGate(true)
 		if _, err := BuildSteps(context.Background(), sc, o); err == nil {
 			t.Errorf("%s: built for a client target", id)
 		}

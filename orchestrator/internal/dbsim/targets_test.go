@@ -32,7 +32,7 @@ func roEntry() ProbeRegistryEntry {
 var fixedNow = time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
 
 func in(clientEnabled, mutationApproved bool) AuthInput {
-	return AuthInput{ClientEnabled: clientEnabled, MutationApproved: mutationApproved,
+	return AuthInput{ClientGate: StaticClientGate(clientEnabled), MutationApproved: mutationApproved,
 		RunExpiry: fixedNow.Add(time.Hour), Now: fixedNow}
 }
 

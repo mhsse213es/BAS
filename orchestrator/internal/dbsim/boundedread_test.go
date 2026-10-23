@@ -69,7 +69,7 @@ func TestAuthorizeAnyFixtureStepNeedsLabConfirmedAndApproval(t *testing.T) {
 		t.Errorf("confirmed + approved must pass: %v", err)
 	}
 	ci := withFx(true)
-	ci.ClientEnabled = true
+	ci.ClientGate = StaticClientGate(true)
 	if err := Authorize(goodTarget(ModeClient), ro, ci); err == nil {
 		t.Error("client mode with a fixture must stay refused")
 	}
