@@ -189,3 +189,17 @@ LIC_PATH=                         # ← REQUIRED  e.g. /home/ubuntu/hdfc-prod-00
 
 VALIDATION_LAB_AGENT_ID=          # Blank = lab disabled (default)
 VALIDATION_LAB_POLL_MINUTES=5     # Default: 5
+
+# ── [kubernetes-scenarios] (lab only, optional) ─────────────────────────────────
+# Off by default. Set KUBE_SCENARIO_ENABLED=true only for the kind lab cluster.
+# Enabling runs an install-time check: the cluster must accept the token for the
+# sandbox namespace, or the install fails. The token is written to
+# ${DATA_DIR}/k8s-scenario/token (owner orchestrator, mode 600). It is removed when
+# the feature is disabled. Create the token in the cluster, not on this server:
+#   kubectl create token bas-scenario-runner -n bas-scenario --duration 24h
+KUBE_SCENARIO_ENABLED=false       # true | false
+KUBE_SCENARIO_API=                # e.g. https://127.0.0.1:61567 (must be reachable from this server)
+KUBE_SCENARIO_CLUSTER=kind-bas-lab
+KUBE_SCENARIO_NAMESPACE=bas-sandbox
+KUBE_SCENARIO_TOKEN=              # paste the token only
+KUBE_SCENARIO_CA_FILE=            # path on this server to the cluster CA (PEM)

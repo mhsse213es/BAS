@@ -158,6 +158,14 @@ services:
       # compose variable (sourced from the one .env value install.sh
       # writes), so they cannot diverge.
       BAS_APP_DB_PASSWORD: ${BAS_APP_DB_PASSWORD}
+      # Kubernetes state-changing scenarios (lab only). API is empty unless the operator enabled it in
+      # setup.conf and the install-time connection check passed; empty API keeps the feature off.
+      # The token and CA are staged by install.sh into ${DATA_DIR}/k8s-scenario, never in .env.
+      KUBE_SCENARIO_API: ${KUBE_SCENARIO_API:-}
+      KUBE_SCENARIO_CLUSTER: ${KUBE_SCENARIO_CLUSTER:-kind-bas-lab}
+      KUBE_SCENARIO_NAMESPACE: ${KUBE_SCENARIO_NAMESPACE:-bas-sandbox}
+      KUBE_SCENARIO_TOKEN_FILE: /run/k8s-scenario/token
+      KUBE_SCENARIO_CA_FILE: /run/k8s-scenario/ca.pem
       JWT_SECRET:       ${JWT_SECRET}
       AGENT_SECRET:     ${AGENT_SECRET:-}
       HTTP_PORT:        "9443"
@@ -292,6 +300,7 @@ services:
       # TLS_KEY here (${DATA_DIR}/certs/bas.crt|bas.key); read-only, the
       # orchestrator only ever reads this certificate, never writes it.
       - ./certs:/etc/bas/certs:ro
+      - ${DATA_DIR}/k8s-scenario:/run/k8s-scenario:ro
       # scenarios is read-write: the threat-intel connector writes generated
       # YAMLs into scenarios/intel/. Keep writable even if connector is unused.
       - ./scenarios:/scenarios
