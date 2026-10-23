@@ -1,9 +1,11 @@
 package model
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func load(t *testing.T, name string) Model {
@@ -209,5 +211,149 @@ func TestImportDuplicateOperationIDsAreMadeUnique(t *testing.T) {
 	}
 	if len(m.NotModelled) == 0 {
 		t.Error("duplicate id should be noted")
+	}
+}
+
+func importWithin(t *testing.T, doc string, d time.Duration) Model {
+	t.Helper()
+	type res struct {
+		m   Model
+		err error
+	}
+	ch := make(chan res, 1)
+	go func() {
+		m, err := Import([]byte(doc))
+		ch <- res{m, err}
+	}()
+	select {
+	case r := <-ch:
+		if r.err != nil {
+			t.Fatalf("Import: %v", r.err)
+		}
+		return r.m
+	case <-time.After(d):
+		t.Fatal("Import did not finish in time")
+	}
+	return Model{}
+}
+
+func bodyDoc(schemas, body string) string {
+	return `{"openapi":"3.0.0","paths":{"/a":{"post":{"operationId":"p","requestBody":{"content":{"application/json":{"schema":` +
+		body + `}}}}}},"components":{"schemas":{` + schemas + `}}}`
+}
+
+func TestImportRefDAGDoesNotExplode(t *testing.T) {
+	var parts []string
+	for i := 0; i < 22; i++ {
+		next := fmt.Sprintf("S%d", i+1)
+		parts = append(parts, fmt.Sprintf(`"S%d":{"type":"object","properties":{"a":{"$ref":"#/components/schemas/%s"},"b":{"$ref":"#/components/schemas/%s"}}}`, i, next, next))
+	}
+	parts = append(parts, `"S22":{"type":"string"}`)
+	m := importWithin(t, bodyDoc(strings.Join(parts, ","), `{"$ref":"#/components/schemas/S0"}`), 5*time.Second)
+	if find(t, m, "p").Body == nil {
+		t.Fatal("body should be modelled")
+	}
+}
+
+func TestImportDeeplyNestedInlineSchema(t *testing.T) {
+	const depth = 5000
+	nested := strings.Repeat(`{"type":"array","items":`, depth) + `{"type":"string"}` + strings.Repeat(`}`, depth)
+	m := importWithin(t, bodyDoc("", nested), 10*time.Second)
+	_ = find(t, m, "p")
+	if !strings.Contains(strings.Join(m.NotModelled, "\n"), "deeper than") {
+		t.Errorf("depth truncation not reported: %v", m.NotModelled)
+	}
+}
+
+func TestImportNodeBudgetTruncates(t *testing.T) {
+	var props []string
+	for i := 0; i < maxSchemaNodes+10; i++ {
+		props = append(props, fmt.Sprintf(`"p%d":{"type":"string"}`, i))
+	}
+	m := importWithin(t, bodyDoc("", `{"type":"object","properties":{`+strings.Join(props, ",")+`}}`), 10*time.Second)
+	if !strings.Contains(strings.Join(m.NotModelled, "\n"), "budget") {
+		t.Error("budget exhaustion not reported")
+	}
+}
+
+func TestImportReportsUndeclaredPathTemplateParam(t *testing.T) {
+	m, err := Import([]byte(`{"openapi":"3.0.0","paths":{"/a/{x}/b/{y}":{"get":{"operationId":"g","parameters":[{"name":"y","in":"path","required":true}]}}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := strings.Join(m.NotModelled, "\n")
+	if !strings.Contains(j, `"x"`) || strings.Contains(j, `"y" has no declaration`) {
+		t.Errorf("notes = %s", j)
+	}
+}
+
+func TestImportReportsUnsupportedPathItemKeys(t *testing.T) {
+	m, err := Import([]byte(`{"openapi":"3.0.0","paths":{"/a":{"summary":"s","description":"d","servers":[],"parameters":[],"x-foo":1,"GET":{},"connect":{},"query":{},"get":{"operationId":"g"}}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := strings.Join(m.NotModelled, "\n")
+	for _, k := range []string{`"GET"`, `"connect"`, `"query"`} {
+		if !strings.Contains(j, k) {
+			t.Errorf("missing note for %s: %s", k, j)
+		}
+	}
+	for _, k := range []string{`"summary"`, `"description"`, `"servers"`, `"parameters"`, `"x-foo"`} {
+		if strings.Contains(j, k) {
+			t.Errorf("legit key %s reported: %s", k, j)
+		}
+	}
+	if len(m.Operations) != 1 {
+		t.Errorf("ops = %v", ids(m))
+	}
+}
+
+func TestImportAllOfConflictsAreReportedNotGuessed(t *testing.T) {
+	cases := map[string]string{
+		"enum disjoint": `{"allOf":[{"type":"string","enum":["a"]},{"type":"string","enum":["b"]}]}`,
+		"format":        `{"allOf":[{"type":"string","format":"date"},{"type":"string","format":"uuid"}]}`,
+		"pattern":       `{"allOf":[{"type":"string","pattern":"^a"},{"type":"string","pattern":"^b"}]}`,
+		"property":      `{"allOf":[{"type":"object","properties":{"x":{"type":"string"}}},{"type":"object","properties":{"x":{"type":"integer"}}}]}`,
+		"type":          `{"allOf":[{"type":"string"},{"type":"integer"}]}`,
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			m, err := Import([]byte(bodyDoc("", body)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if find(t, m, "p").Body != nil {
+				t.Error("conflicting allOf must not be modelled")
+			}
+			if !strings.Contains(strings.Join(m.NotModelled, "\n"), "allOf conflict") {
+				t.Errorf("not reported: %v", m.NotModelled)
+			}
+		})
+	}
+}
+
+func TestImportAllOfMergesExactly(t *testing.T) {
+	body := `{"allOf":[{"type":"integer","minimum":1,"maximum":100,"enum":[1,2,3]},{"type":"integer","minimum":5,"maximum":50,"enum":[3,4]}]}`
+	m, err := Import([]byte(bodyDoc("", body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := find(t, m, "p").Body
+	if b == nil || *b.Minimum != 5 || *b.Maximum != 50 || len(b.Enum) != 1 {
+		t.Fatalf("merge = %+v", b)
+	}
+}
+
+func TestImportReportsIgnoredSchemaKeywords(t *testing.T) {
+	body := `{"type":"object","additionalProperties":false,"discriminator":{"propertyName":"k"},"properties":{"a":{"type":"string","readOnly":true,"writeOnly":false,"default":"x"}}}`
+	m, err := Import([]byte(bodyDoc("", body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := strings.Join(m.NotModelled, "\n")
+	for _, w := range []string{`"additionalProperties"`, `"discriminator"`, `"readOnly"`, `"writeOnly"`, `"default"`, "requestBody.properties.a"} {
+		if !strings.Contains(j, w) {
+			t.Errorf("missing %s in:\n%s", w, j)
+		}
 	}
 }

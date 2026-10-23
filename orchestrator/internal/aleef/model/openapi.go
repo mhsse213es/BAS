@@ -54,31 +54,17 @@ type rawBody struct {
 	} `json:"content"`
 }
 
-type rawSchema struct {
-	Ref        string                     `json:"$ref"`
-	Type       json.RawMessage            `json:"type"`
-	Format     string                     `json:"format"`
-	Enum       []any                      `json:"enum"`
-	Nullable   bool                       `json:"nullable"`
-	Pattern    string                     `json:"pattern"`
-	Minimum    *float64                   `json:"minimum"`
-	Maximum    *float64                   `json:"maximum"`
-	MinLength  *int                       `json:"minLength"`
-	MaxLength  *int                       `json:"maxLength"`
-	Required   []string                   `json:"required"`
-	Properties map[string]json.RawMessage `json:"properties"`
-	Items      json.RawMessage            `json:"items"`
-	AllOf      []json.RawMessage          `json:"allOf"`
-	OneOf      []json.RawMessage          `json:"oneOf"`
-	AnyOf      []json.RawMessage          `json:"anyOf"`
-	Not        json.RawMessage            `json:"not"`
-}
-
 type importer struct {
 	doc   rawDoc
 	notes []string
 	seen  map[string]bool
 	ctx   string // "METHOD /path" of the operation being imported, for messages
+
+	// Schema conversion state: each component schema is converted once.
+	comp       map[string]*compResult
+	nodes      int
+	budgetNote bool
+	depthNote  bool
 }
 
 func (im *importer) note(format string, a ...any) {
@@ -103,7 +89,7 @@ func Import(doc []byte) (m Model, err error) {
 			m, err = Model{}, fmt.Errorf("openapi import: internal error: %v", r)
 		}
 	}()
-	im := &importer{seen: map[string]bool{}}
+	im := &importer{seen: map[string]bool{}, comp: map[string]*compResult{}}
 	if err := json.Unmarshal(doc, &im.doc); err != nil {
 		return Model{}, fmt.Errorf("openapi import: %w", err)
 	}
@@ -153,6 +139,7 @@ func (im *importer) importPath(path string, raw json.RawMessage, rootSec []strin
 		}
 	}
 
+	im.checkPathItemKeys(path, item)
 	var out []Operation
 	for _, method := range methodOrder {
 		opRaw, ok := item[method]
@@ -320,7 +307,38 @@ func (im *importer) importParams(path string, pathLevel, opLevel []json.RawMessa
 			im.note("path parameter %q is not in the path template", p.Name)
 		}
 	}
+	declared := map[string]bool{}
+	for _, p := range pp {
+		declared[p.Name] = true
+	}
+	for _, m := range templateVar.FindAllStringSubmatch(path, -1) {
+		if !declared[m[1]] {
+			im.note("path template parameter %q has no declaration; not modelled", m[1])
+		}
+	}
 	return pp, qp
+}
+
+var templateVar = regexp.MustCompile(`\{([^{}]*)\}`)
+
+// checkPathItemKeys reports path-item keys that are neither supported methods
+// nor known non-method fields, so GET, connect, query ... are not lost silently.
+func (im *importer) checkPathItemKeys(path string, item map[string]json.RawMessage) {
+	known := map[string]bool{"summary": true, "description": true, "parameters": true, "servers": true, "$ref": true}
+	for _, m := range methodOrder {
+		known[m] = true
+	}
+	keys := make([]string, 0, len(item))
+	for k := range item {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if known[k] || strings.HasPrefix(k, "x-") {
+			continue
+		}
+		im.note("path item key %q is not a supported method; not modelled", k)
+	}
 }
 
 // precedingCollection returns the literal path segment right before {name},
@@ -358,7 +376,7 @@ func (im *importer) resolveParam(raw json.RawMessage) (Param, bool) {
 		}
 		p := Param{Name: rp.Name, In: rp.In, Required: rp.Required}
 		if len(rp.Schema) > 0 {
-			p.Schema = im.schema(rp.Schema, nil)
+			p.Schema = im.schemaFromRaw(rp.Schema, "parameter "+rp.Name)
 		}
 		return p, true
 	}
@@ -396,7 +414,7 @@ func (im *importer) importBody(raw json.RawMessage) *Schema {
 					im.note("JSON request body has no schema")
 					return nil
 				}
-				return im.schema(rb.Content[ct].Schema, nil)
+				return im.schemaFromRaw(rb.Content[ct].Schema, "requestBody")
 			}
 		}
 		if len(types) > 0 {
@@ -406,177 +424,4 @@ func (im *importer) importBody(raw json.RawMessage) *Schema {
 	}
 	im.note("requestBody $ref chain too deep; not modelled")
 	return nil
-}
-
-// schema converts a JSON Schema node. It returns nil (after recording why) when
-// the node cannot be represented faithfully. stack holds the schema names being
-// expanded, to cut recursive references.
-func (im *importer) schema(raw json.RawMessage, stack []string) *Schema {
-	var rs rawSchema
-	if err := json.Unmarshal(raw, &rs); err != nil {
-		im.note("schema malformed; not modelled")
-		return nil
-	}
-	if rs.Ref != "" {
-		target, name, ok := im.lookupRef(rs.Ref, "schemas")
-		if !ok {
-			return nil
-		}
-		for _, s := range stack {
-			if s == name {
-				im.note("recursive $ref %q cut; not modelled", rs.Ref)
-				return nil
-			}
-		}
-		return im.schema(target, append(append([]string(nil), stack...), name))
-	}
-	if len(rs.Not) > 0 && string(rs.Not) != "null" {
-		im.note("schema keyword \"not\" not modelled")
-		return nil
-	}
-
-	s := &Schema{
-		Format: rs.Format, Enum: rs.Enum, Nullable: rs.Nullable, Pattern: rs.Pattern,
-		Minimum: rs.Minimum, Maximum: rs.Maximum, MinLength: rs.MinLength, MaxLength: rs.MaxLength,
-		Required: append([]string(nil), rs.Required...),
-	}
-	if !im.schemaType(rs.Type, s) {
-		return nil
-	}
-	if len(rs.Properties) > 0 {
-		s.Properties = map[string]*Schema{}
-		names := make([]string, 0, len(rs.Properties))
-		for n := range rs.Properties {
-			names = append(names, n)
-		}
-		sort.Strings(names)
-		for _, n := range names {
-			if ps := im.schema(rs.Properties[n], stack); ps != nil {
-				s.Properties[n] = ps
-			} else {
-				im.note("property %q dropped from schema", n)
-			}
-		}
-	}
-	if len(rs.Items) > 0 && string(rs.Items) != "null" {
-		s.Items = im.schema(rs.Items, stack)
-		if s.Items == nil {
-			im.note("array items not modelled")
-		}
-	}
-
-	for _, part := range rs.AllOf {
-		ps := im.schema(part, stack)
-		if ps == nil {
-			im.note("allOf member not modelled; whole schema not modelled")
-			return nil
-		}
-		if !mergeInto(s, ps) {
-			im.note("allOf members conflict (type); whole schema not modelled")
-			return nil
-		}
-	}
-	for _, alt := range []struct {
-		name  string
-		parts []json.RawMessage
-	}{{"oneOf", rs.OneOf}, {"anyOf", rs.AnyOf}} {
-		switch len(alt.parts) {
-		case 0:
-		case 1:
-			ps := im.schema(alt.parts[0], stack)
-			if ps == nil || !mergeInto(s, ps) {
-				return nil
-			}
-		default:
-			im.note("%s with %d alternatives cannot be flattened; not modelled", alt.name, len(alt.parts))
-			return nil
-		}
-	}
-	return s
-}
-
-// schemaType reads "type", which is a string in 3.0 and may be an array in 3.1.
-func (im *importer) schemaType(raw json.RawMessage, s *Schema) bool {
-	if len(raw) == 0 || string(raw) == "null" {
-		return true
-	}
-	var one string
-	if json.Unmarshal(raw, &one) == nil {
-		s.Type = one
-		return true
-	}
-	var many []string
-	if json.Unmarshal(raw, &many) != nil {
-		im.note("schema type malformed; not modelled")
-		return false
-	}
-	var concrete []string
-	for _, t := range many {
-		if t == "null" {
-			s.Nullable = true
-		} else {
-			concrete = append(concrete, t)
-		}
-	}
-	if len(concrete) > 1 {
-		im.note("multi-type schema %v not modelled", many)
-		return false
-	}
-	if len(concrete) == 1 {
-		s.Type = concrete[0]
-	}
-	return true
-}
-
-// mergeInto folds src into dst (allOf semantics). It fails on a type conflict.
-func mergeInto(dst, src *Schema) bool {
-	if src.Type != "" {
-		if dst.Type != "" && dst.Type != src.Type {
-			return false
-		}
-		dst.Type = src.Type
-	}
-	if dst.Format == "" {
-		dst.Format = src.Format
-	}
-	if dst.Items == nil {
-		dst.Items = src.Items
-	}
-	if dst.Pattern == "" {
-		dst.Pattern = src.Pattern
-	}
-	if dst.Enum == nil {
-		dst.Enum = src.Enum
-	}
-	if dst.Minimum == nil {
-		dst.Minimum = src.Minimum
-	}
-	if dst.Maximum == nil {
-		dst.Maximum = src.Maximum
-	}
-	if dst.MinLength == nil {
-		dst.MinLength = src.MinLength
-	}
-	if dst.MaxLength == nil {
-		dst.MaxLength = src.MaxLength
-	}
-	dst.Nullable = dst.Nullable || src.Nullable
-	for n, p := range src.Properties {
-		if dst.Properties == nil {
-			dst.Properties = map[string]*Schema{}
-		}
-		if _, exists := dst.Properties[n]; !exists {
-			dst.Properties[n] = p
-		}
-	}
-	have := map[string]bool{}
-	for _, r := range dst.Required {
-		have[r] = true
-	}
-	for _, r := range src.Required {
-		if !have[r] {
-			dst.Required = append(dst.Required, r)
-		}
-	}
-	return true
 }
