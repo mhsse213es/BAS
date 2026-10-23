@@ -682,15 +682,15 @@ func (h *Handler) buildAleefConfig(ctx context.Context, req aleefRunReq) (campai
 }
 
 type aleefRunView struct {
-	RunID        string           `json:"run_id"`
-	EngagementID string           `json:"engagement_id,omitempty"`
-	Status       string           `json:"status"`
-	StartedAt    *time.Time       `json:"started_at,omitempty"`
-	FinishedAt   *time.Time       `json:"finished_at,omitempty"`
-	Error        string           `json:"error,omitempty"`
-	HaltedReason string           `json:"halted_reason,omitempty"`
-	Orphans      any              `json:"orphans,omitempty"`
-	Report       any              `json:"report,omitempty"`
+	RunID        string     `json:"run_id"`
+	EngagementID string     `json:"engagement_id,omitempty"`
+	Status       string     `json:"status"`
+	StartedAt    *time.Time `json:"started_at,omitempty"`
+	FinishedAt   *time.Time `json:"finished_at,omitempty"`
+	Error        string     `json:"error,omitempty"`
+	HaltedReason string     `json:"halted_reason,omitempty"`
+	Orphans      any        `json:"orphans,omitempty"`
+	Report       any        `json:"report,omitempty"`
 }
 
 func (st *aleefState) view(id string) (aleefRunView, bool) {

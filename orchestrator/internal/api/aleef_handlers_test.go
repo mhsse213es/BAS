@@ -40,7 +40,7 @@ type aleefToy struct {
 	requests atomic.Int64
 	// settleHits counts calls to the money-like operation POST /items/{id}/settle.
 	settleHits atomic.Int64
-	tokens   map[string][2]string
+	tokens     map[string][2]string
 }
 
 func newAleefToy() *aleefToy {
@@ -231,7 +231,7 @@ func aleefEngagementBody(host string, env string, notBefore, notAfter time.Time)
 		"customer": "toy", "environment": env, "hosts": []string{host},
 		"classes":    map[string]string{"createItem": "setup_safe", "getItem": "read", "deleteItem": "reversible", "settleItem": "money"},
 		"token_refs": []string{"tok-alice", "tok-bob", "tok-ghost"}, // tok-ghost is declared but resolves to nothing
-		"notBefore": notBefore, "notAfter": notAfter, "maxRequests": 100000, "maxConcurrent": 64, "rps": 1e6,
+		"notBefore":  notBefore, "notAfter": notAfter, "maxRequests": 100000, "maxConcurrent": 64, "rps": 1e6,
 	}
 }
 
@@ -406,7 +406,10 @@ func TestRunRefusedWithoutValidEngagement(t *testing.T) {
 			{"production record", func(m map[string]any) { m["engagement_id"] = prod }, http.StatusBadRequest},
 			{"unreadable record", func(m map[string]any) { m["engagement_id"] = garbage }, http.StatusBadRequest},
 			{"foreign base url", func(m map[string]any) { m["engagement_id"] = valid; m["base_url"] = "http://127.0.0.1:1" }, http.StatusBadRequest},
-			{"url with credentials", func(m map[string]any) { m["engagement_id"] = valid; m["base_url"] = "http://u:p@" + strings.TrimPrefix(srv.URL, "http://") }, http.StatusBadRequest},
+			{"url with credentials", func(m map[string]any) {
+				m["engagement_id"] = valid
+				m["base_url"] = "http://u:p@" + strings.TrimPrefix(srv.URL, "http://")
+			}, http.StatusBadRequest},
 			{"pasted credential as token_ref", func(m map[string]any) {
 				m["engagement_id"] = valid
 				m["accounts"] = []map[string]string{{"name": "a", "customer_id": "c", "token_ref": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig-sig-sig-sig-sig-sig-sig-sig-sig", "role": "member"}}
@@ -419,7 +422,10 @@ func TestRunRefusedWithoutValidEngagement(t *testing.T) {
 				m["engagement_id"] = valid
 				m["accounts"] = []map[string]string{{"name": "a", "customer_id": "c", "token_ref": "no-such-ref", "role": "member"}}
 			}, http.StatusBadRequest},
-			{"bad class", func(m map[string]any) { m["engagement_id"] = valid; m["classes"] = map[string]string{"getItem": "nuclear"} }, http.StatusBadRequest},
+			{"bad class", func(m map[string]any) {
+				m["engagement_id"] = valid
+				m["classes"] = map[string]string{"getItem": "nuclear"}
+			}, http.StatusBadRequest},
 		}
 		for _, c := range cases {
 			body := aleefRunBody(valid, srv.URL)

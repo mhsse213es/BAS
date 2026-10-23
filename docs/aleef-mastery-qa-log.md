@@ -109,7 +109,7 @@ None so far. Any property added after seeing benchmark results must be recorded 
 1. Author `orchestrator/internal/aleef/bank/sealed/sealed_defects.go` (`//go:build aleefsealed`) and `labels.json`
    outside version control (both are git-ignored).
 2. Build and run the held-out evaluation on the vulnerable and the fixed bank with the `aleefsealed` tag
-   (see `cmd/aleef-bench` usage); keep the labels away from the generator.
+   (`go run -tags aleefsealed ./cmd/aleef-bench -labels PATH`); keep the labels away from the generator.
 3. Record the results in the Evaluation table above, with the per-flaw property and test ids.
 4. Review each verified finding, record the prior-knowledge check (`checked_none_found`, `known_public`, `known_vendor`).
 5. Decide the merge and the next milestone (UAT needs a design partner, DNS-rebinding hardening and a secret store).

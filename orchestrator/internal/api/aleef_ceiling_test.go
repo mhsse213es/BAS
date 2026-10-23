@@ -109,10 +109,10 @@ func TestTokenRefsAreEngagementScopedAndNoOracle(t *testing.T) {
 			rec := e.do(http.MethodPost, "/api/aleef/runs", auth.RoleAnalyst, body)
 			return rec.Code, rec.Body.String()
 		}
-		c1, b1 := try("tok-carol")  // exists nowhere
-		c2, b2 := try("tok-ghost")  // declared, but resolves to nothing
-		c3, b3 := try("tok-dave")   // a (hypothetical) other account's reference, not declared
-		c4, b4 := try("a b")        // not even a valid reference name
+		c1, b1 := try("tok-carol") // exists nowhere
+		c2, b2 := try("tok-ghost") // declared, but resolves to nothing
+		c3, b3 := try("tok-dave")  // a (hypothetical) other account's reference, not declared
+		c4, b4 := try("a b")       // not even a valid reference name
 		if c1 != 400 || c1 != c2 || c2 != c3 || c3 != c4 || b1 != b2 || b2 != b3 || b3 != b4 {
 			t.Fatalf("responses differ: %d %s | %d %s | %d %s | %d %s", c1, b1, c2, b2, c3, b3, c4, b4)
 		}
