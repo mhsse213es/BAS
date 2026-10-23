@@ -1,0 +1,328 @@
+package campaign
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/audspect/bas/internal/aleef/exec"
+	"github.com/audspect/bas/internal/aleef/generate"
+	"github.com/audspect/bas/internal/aleef/model"
+	"github.com/audspect/bas/internal/aleef/verify"
+)
+
+func mustRun(t *testing.T, cfg Config) Report {
+	t.Helper()
+	rep, err := Run(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	return rep
+}
+
+func TestCampaignFindsAndVerifiesToyFlaw(t *testing.T) {
+	ty := newToy()
+	ty.readFlaw = true
+	rec := newRec()
+	cfg, _ := toyConfig(t, ty, rec)
+	rep := mustRun(t, cfg)
+	if rep.Verified < 1 {
+		t.Fatalf("no verified finding (executed %d, unconfirmed %d, rejected %d): %v", rep.Executed, rep.Unconfirmed, rep.Rejected, firstReasons(rep))
+	}
+	var withHash int
+	for _, f := range rep.Findings {
+		if f.State == verify.StateVerified && f.EvidenceHash != "" {
+			withHash++
+		}
+	}
+	if withHash < 1 || withHash != rep.Verified {
+		t.Fatalf("verified=%d findings with hash=%d", rep.Verified, withHash)
+	}
+	if rep.RunID == "" || rep.Halted != "" || len(rep.Orphans) != 0 {
+		t.Fatalf("run=%q halted=%q orphans=%v", rep.RunID, rep.Halted, rep.Orphans)
+	}
+	if rec.fkMisses != 0 {
+		t.Fatalf("%d results/findings recorded for tests that were not saved first", rec.fkMisses)
+	}
+	if got := ty.leftover(); got != 0 {
+		t.Fatalf("%d objects left on the toy", got)
+	}
+
+	// the corrected application: nothing to report
+	clean := newToy()
+	rec2 := newRec()
+	cfg2, _ := toyConfig(t, clean, rec2)
+	rep2 := mustRun(t, cfg2)
+	if rep2.Verified != 0 || rep2.Candidates != 0 || len(rep2.Findings) != 0 || rep2.Executed == 0 {
+		t.Fatalf("corrected toy: %+v", rep2)
+	}
+	if clean.leftover() != 0 {
+		t.Fatalf("%d objects left on the corrected toy", clean.leftover())
+	}
+}
+
+func TestCampaignRefusesProductionEngagementBeforeAnyRequest(t *testing.T) {
+	ty := newToy()
+	cfg, _ := toyConfig(t, ty, newRec())
+	cfg.Engagement.Environment = "production"
+	if _, err := Run(context.Background(), cfg); err == nil {
+		t.Fatal("production engagement accepted")
+	}
+	// host outside the engagement
+	cfg2, _ := toyConfig(t, ty, newRec())
+	cfg2.BaseURL = "http://127.0.0.1:1"
+	if _, err := Run(context.Background(), cfg2); err == nil {
+		t.Fatal("BaseURL outside the engagement accepted")
+	}
+	// an unknown operation class is a configuration error
+	cfg3, _ := toyConfig(t, ty, newRec())
+	cfg3.Classes["nope"] = model.ClassRead
+	if _, err := Run(context.Background(), cfg3); err == nil {
+		t.Fatal("class for an unknown operation accepted")
+	}
+	if n := ty.total(); n != 0 {
+		t.Fatalf("toy received %d requests, want 0", n)
+	}
+}
+
+func TestCampaignUnclassifiedOperationsAreNeverExecuted(t *testing.T) {
+	ty := newToy()
+	ty.readFlaw = true
+	cfg, _ := toyConfig(t, ty, newRec())
+	rep := mustRun(t, cfg)
+	if rep.Model.Unclassified < 2 {
+		t.Fatalf("coverage %+v", rep.Model)
+	}
+	if n := ty.hitCount("POST /api/v2/items/{id}/archive"); n != 0 {
+		t.Fatalf("archiveItem (unclassified) received %d requests", n)
+	}
+	if n := ty.hitCount("GET /api/v2/items"); n != 0 {
+		t.Fatalf("listItems (unclassified) received %d requests", n)
+	}
+	if oc := rep.PerOperation["archiveItem"]; oc.Generated != 0 || oc.Executed != 0 || oc.Skipped == "" {
+		t.Fatalf("archiveItem row %+v", oc)
+	}
+}
+
+func TestCampaignHaltsOnBreakerAndStillCleansUp(t *testing.T) {
+	ty := newToy()
+	ty.readFlaw = true
+	ty.tooMany = 40 // 429 after 40 non-delete requests
+	cfg, _ := toyConfig(t, ty, newRec())
+	rep := mustRun(t, cfg)
+	if rep.Halted == "" || !strings.Contains(rep.Halted, "429") {
+		t.Fatalf("Halted=%q", rep.Halted)
+	}
+	if rep.NotExecuted < 1 {
+		t.Fatalf("no test counted as not executed: executed=%d total=%d", rep.Executed, rep.Total)
+	}
+	if rep.Executed+rep.NotExecuted != rep.Total {
+		t.Fatalf("executed %d + not executed %d != total %d", rep.Executed, rep.NotExecuted, rep.Total)
+	}
+	if rep.CleanupRequests == 0 || ty.deletes == 0 {
+		t.Fatalf("no cleanup after the halt: cleanup requests %d deletes %d", rep.CleanupRequests, ty.deletes)
+	}
+	if got := ty.leftover(); got != 0 {
+		t.Fatalf("%d objects left on the toy after a halted campaign", got)
+	}
+	if len(rep.Orphans) != 0 {
+		t.Fatalf("orphans %v", rep.Orphans)
+	}
+	for _, o := range rep.Tests {
+		if o.State == verify.StateVerified {
+			t.Fatalf("verified despite the halt: %+v", o)
+		}
+	}
+}
+
+func TestCampaignBudgetExhaustion(t *testing.T) {
+	ty := newToy()
+	ty.readFlaw = true
+	cfg, _ := toyConfig(t, ty, newRec())
+	cfg.Engagement.MaxRequests = 60
+	rep := mustRun(t, cfg)
+	if rep.Halted == "" || !strings.Contains(rep.Halted, "budget") {
+		t.Fatalf("Halted=%q requests=%d", rep.Halted, rep.Requests)
+	}
+	if rep.Requests > 60 {
+		t.Fatalf("%d requests exceed the budget of 60", rep.Requests)
+	}
+	if rep.NotExecuted < 1 || rep.Executed+rep.NotExecuted != rep.Total {
+		t.Fatalf("executed=%d not=%d total=%d", rep.Executed, rep.NotExecuted, rep.Total)
+	}
+	if got := ty.leftover(); got != 0 {
+		t.Fatalf("%d objects left behind after budget exhaustion", got)
+	}
+}
+
+func TestCampaignContextCancel(t *testing.T) {
+	ty := newToy()
+	ty.readFlaw = true
+	cfg, _ := toyConfig(t, ty, newRec())
+	ctx, cancel := context.WithCancel(context.Background())
+	rec := cfg.Recorder.(*fakeRec)
+	// cancel as soon as the first result has been recorded
+	cfg.Recorder = cancelAfterResult{fakeRec: rec, cancel: cancel}
+	rep, err := Run(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if rep.Halted != "cancelled" {
+		t.Fatalf("Halted=%q", rep.Halted)
+	}
+	if rep.NotExecuted < 1 || rep.Executed+rep.NotExecuted != rep.Total {
+		t.Fatalf("executed=%d not=%d total=%d", rep.Executed, rep.NotExecuted, rep.Total)
+	}
+	if got := ty.leftover(); got != 0 {
+		t.Fatalf("%d objects left behind after cancel", got)
+	}
+}
+
+func TestCampaignReportHasNoSecrets(t *testing.T) {
+	ty := newToy()
+	ty.readFlaw = true
+	cfg, _ := toyConfig(t, ty, newRec())
+	rep := mustRun(t, cfg)
+	raw, err := json.Marshal(rep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(raw)
+	for _, bad := range []string{"tok-alice", "tok-bob", "tok-dave", "Bearer", "ALEEF-CANARY", "Authorization", "\"Exchanges\"", "\"Body\""} {
+		if strings.Contains(s, bad) {
+			t.Fatalf("report contains %q", bad)
+		}
+	}
+}
+
+func TestCampaignPerOperationCoverageAddsUp(t *testing.T) {
+	ty := newToy()
+	ty.readFlaw = true
+	cfg, _ := toyConfig(t, ty, newRec())
+	cfg.Options.Variations = nil
+	rep := mustRun(t, cfg)
+	g := rep.Generated
+	if rep.Total != g.BaseTests+g.Variants-g.Truncated {
+		t.Fatalf("total %d != base %d + variants %d - truncated %d", rep.Total, g.BaseTests, g.Variants, g.Truncated)
+	}
+	if rep.Total != rep.Executed+rep.NotExecuted || len(rep.Tests) != rep.Total {
+		t.Fatalf("total %d executed %d not %d tests %d", rep.Total, rep.Executed, rep.NotExecuted, len(rep.Tests))
+	}
+	var gen, exe, not, fnd, ver int
+	for id, oc := range rep.PerOperation {
+		if oc.Generated != oc.Executed+oc.NotExecuted {
+			t.Fatalf("%s: generated %d != executed %d + not executed %d", id, oc.Generated, oc.Executed, oc.NotExecuted)
+		}
+		if oc.Verified > oc.Findings || oc.Findings > oc.Executed {
+			t.Fatalf("%s row inconsistent: %+v", id, oc)
+		}
+		gen, exe, not, fnd, ver = gen+oc.Generated, exe+oc.Executed, not+oc.NotExecuted, fnd+oc.Findings, ver+oc.Verified
+	}
+	if gen != rep.Total || exe != rep.Executed || not != rep.NotExecuted || ver != rep.Verified || fnd != len(rep.Findings) {
+		t.Fatalf("rows (%d,%d,%d,%d,%d) vs totals (%d,%d,%d,%d,%d)", gen, exe, not, fnd, ver, rep.Total, rep.Executed, rep.NotExecuted, len(rep.Findings), rep.Verified)
+	}
+	if rep.Clean+rep.Verified+rep.Rejected+rep.Unconfirmed+rep.Inconclusive != rep.Executed {
+		t.Fatalf("outcome counts do not add up: %+v", rep)
+	}
+	for _, op := range []string{"getItem"} {
+		if rep.PerOperation[op].Generated == 0 {
+			t.Fatalf("no tests targeted %s", op)
+		}
+	}
+	if rep.Model.Operations != 5 || rep.Model.Runnable != 3 {
+		t.Fatalf("model coverage %+v", rep.Model)
+	}
+}
+
+func TestCampaignDeterministic(t *testing.T) {
+	type row struct{ ID, State, Hash string }
+	collect := func() []row {
+		ty := newToy()
+		ty.readFlaw = true
+		cfg, _ := toyConfig(t, ty, newRec())
+		cfg.Options.Variations = []string{"id-stale"}
+		rep := mustRun(t, cfg)
+		var out []row
+		for _, o := range rep.Tests {
+			out = append(out, row{o.TestID, o.State, o.EvidenceHash})
+		}
+		return out
+	}
+	a, b := collect(), collect()
+	if len(a) == 0 {
+		t.Fatal("no tests")
+	}
+	ja, _ := json.Marshal(a)
+	jb, _ := json.Marshal(b)
+	if string(ja) != string(jb) {
+		t.Fatalf("two campaigns with the same seed differ:\n%s\n%s", ja, jb)
+	}
+}
+
+func TestCampaignFreshIdsAreAliased(t *testing.T) {
+	// Every fixture gets new server-assigned ids; verification must still
+	// reach the objects the tests were generated for.
+	ty := newToy()
+	ty.readFlaw = true
+	cfg, _ := toyConfig(t, ty, newRec())
+	rep := mustRun(t, cfg)
+	if ty.seq < 20 {
+		t.Fatalf("toy only assigned %d ids: fixtures were not rebuilt", ty.seq)
+	}
+	if rep.Verified < 1 {
+		t.Fatalf("flaw not verified across fresh ids: %v", firstReasons(rep))
+	}
+}
+
+func TestCampaignCleanupFailureIsReported(t *testing.T) {
+	ty := newToy()
+	ty.readFlaw = true
+	cfg, _ := toyConfig(t, ty, newRec())
+	// compensation is refused: every created object stays behind
+	ty.noDelete = true
+	rep, err := Run(context.Background(), cfg)
+	if err != nil {
+		t.Logf("Run returned %v", err) // generation may fail first; the report is still returned
+	}
+	if len(rep.Orphans) == 0 || !strings.Contains(rep.Halted, "cleanup failed") {
+		t.Fatalf("orphans=%v halted=%q", rep.Orphans, rep.Halted)
+	}
+}
+
+func TestCampaignClockIsInjectable(t *testing.T) {
+	ty := newToy()
+	cfg, _ := toyConfig(t, ty, newRec())
+	cfg.Now = func() time.Time { return time.Now().Add(48 * time.Hour) } // outside the window
+	if _, err := Run(context.Background(), cfg); err == nil {
+		t.Fatal("run accepted outside the engagement window")
+	}
+	if n := ty.total(); n != 0 {
+		t.Fatalf("%d requests sent outside the window", n)
+	}
+}
+
+// cancelAfterResult cancels the campaign's context as soon as the first
+// execution has been recorded.
+type cancelAfterResult struct {
+	*fakeRec
+	cancel context.CancelFunc
+}
+
+func (c cancelAfterResult) SaveResult(ctx context.Context, runID string, t generate.Test, execNo int, res exec.Result) error {
+	err := c.fakeRec.SaveResult(ctx, runID, t, execNo, res)
+	c.cancel()
+	return err
+}
+
+func firstReasons(rep Report) []string {
+	var out []string
+	for i, o := range rep.Tests {
+		if i >= 3 {
+			break
+		}
+		out = append(out, o.TestID+": "+o.State+" "+o.Reason)
+	}
+	return out
+}
