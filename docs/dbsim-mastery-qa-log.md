@@ -325,7 +325,7 @@ only** unless it says VERIFIED, and the live tests are written, compile
 
 ### What was built
 
-* **DB-06 `auth_after_revoke`** (class `mutation`, fixture `empty`, both engines).
+* **DB-06 `auth_after_revoke`** (class `bounded_synthetic` since fix round 3 / R-AO, originally `mutation`; fixture `empty`, both engines).
   The adapter creates a throwaway LOGIN account `dbsim_<fixture id>_acct` (PG
   `CREATE ROLE ... LOGIN PASSWORD`, MySQL `CREATE USER ... IDENTIFIED BY`; a random
   password generated in the agent process, hex only, added to the redaction set
@@ -378,7 +378,7 @@ only** unless it says VERIFIED, and the live tests are written, compile
   no trailing newline); agent validation, gate, executor binding and orchestrator
   Authorize/builder (`checkFixture`) all enforce the one required fixture, lab
   only, no table param.
-* **Scenarios:** `dbsim-db06-account-revocation` (T1078, risk high, mutation) and
+* **Scenarios:** `dbsim-db06-account-revocation` (T1078, risk high; originally described as a mutation class, see Fix round 3) and
   `dbsim-db07-sensitive-classification` (T1213, risk medium), both signed with
   `orchestrator/scripts/signer.go` (the private key is gitignored and not
   committed). Scenario-count pin 113 -> 115.
@@ -479,3 +479,48 @@ comparison); MySQL comment survival for DB-07 (else Unknown/ERROR).
   ERROR grade. Non-fixture probes (DB-01..04) are unchanged.
 * **M2** The generic classification line is not duplicated when `Evaluate` already
   recorded one.
+
+### Fix round 3 (first live staging run)
+
+**What the live run showed.** DB-01..05 and DB-09 PASS on PostgreSQL and MySQL.
+DB-06 was SKIPPED on both engines: "gate refusal (policy/scope decision): agent
+veto (catalog): " with empty stderr, and the E2E harness then panicked (nil
+`ex.DBProbe` in `checkStep`), so DB-07 never ran.
+
+**Root cause (B5 finding).** `auth_after_revoke` was registered as class
+`mutation`, which the orchestrator signs as ExecutionClass `destructive`. The
+agent's pre-existing B5 gate (`evaluateB5Gate`, called by `gateStep`) vetoes every
+signed `destructive` step unconditionally (source `catalog`) and has no approval
+path, so no `mutation`-class dbprobe could ever run on a real agent. Our unit
+tests called the executor directly and never pushed a mutation-class step through
+`gateStep`. B5 was NOT weakened or bypassed.
+
+**R-AO.** `auth_after_revoke` is `bounded_synthetic` in both registries (signed
+`potentially_destructive`, action key `dbprobe_bounded_synthetic`): it only
+creates, locks and drops its own throwaway account, like the fixture lifecycle
+DB-05/09 already treat as bounded_synthetic. R-AI is independent of class and
+still holds: agent `CheckSpec` gates on `class != read_only || FixtureID != ""`
+and refuses fixture-aware probes outside lab mode; orchestrator `Authorize` gates
+on `class != read_only || Fixture || fixtureAware` (LabConfirmed and
+MutationApproved) and refuses client mode; `dbbuild.checkFixture` and the
+executor's fixture binding key on `RequiredFixture`. No gate depended only on the
+class being `mutation`. Tests prove it (agent `TestTask14StepsPassRealGateThenExecutor`
+for both probes through the real `gateStep`, plus the existing gate tests).
+
+**Regression guards.** Agent `TestEveryCatalogProbeIsRunnableThroughB5` fails for
+any registered probe the real `gateStep` vetoes (a future true `mutation` probe
+fails it with a message requiring a conscious B5/approval decision). Orchestrator
+`TestNoRegisteredProbeSignsDestructiveWithoutAllowlist` (allowlist currently empty).
+
+**Harness and reporting.** `checkStep` is nil-safe (agent veto reported as a normal
+error, later sub-tests run). The pipeline's veto text now includes the signed
+action key and ExecutionClass (`AgentExec` gained `VetoedActionKey` /
+`VetoedExecutionClass`), so "agent veto (catalog): " can no longer be empty.
+Scenario `dbsim-db06-account-revocation` reworded (no "mutation" class) and re-signed.
+
+**OPEN DESIGN QUESTION for the user (not decided here).** Task 15's DB-08, DB-10
+and DB-11 will hit the same B5 wall if they are true mutations (real state change
+on the target, signed `destructive`): B5 vetoes them with no grant path. Options
+include keeping them lab-fixture-scoped and bounded_synthetic like DB-06, adding
+an explicit approval/grant design to B5 (a security-relevant change), or dropping
+them. DB-06 itself has NOT been re-run live after this fix.

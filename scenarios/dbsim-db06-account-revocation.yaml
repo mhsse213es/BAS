@@ -22,9 +22,11 @@ description: >
   the throwaway account the agent creates, addressed by its exact name. The
   account is created inside the per-run fixture lifecycle, so it is dropped with
   the fixture and a leftover account is a safety incident, never a pass. The run
-  mutates the lab database, so it is classed mutation and needs a confirmed lab
-  target, the scenario's mutation approval and the agent-local lab-mutation
-  allowance; it is refused for client targets.
+  runs DDL on the lab database (on its own throwaway account only), so it is
+  classed bounded_synthetic like the other fixture probes and, because it needs a
+  per-run fixture, requires a confirmed lab target, the scenario's mutation
+  approval and the agent-local lab-mutation allowance; it is refused for client
+  targets.
 
   Telemetry is NOT assessed here. A failed login has no SQL statement to carry
   the marker, and the lab audit sources may not record failed connections with

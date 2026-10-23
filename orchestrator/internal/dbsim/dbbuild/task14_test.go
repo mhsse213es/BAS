@@ -27,7 +27,7 @@ func TestRequiredFixtureStepsMatchAgentShape(t *testing.T) {
 		wantClass            scenario.ExecutionClass
 		wantKey              string
 	}{
-		{"auth_after_revoke", "T1078", "empty", scenario.ClassDestructive, "dbprobe_mutation"},
+		{"auth_after_revoke", "T1078", "empty", scenario.ClassPotentiallyDestructive, "dbprobe_bounded_synthetic"},
 		{"read_classified_fixture", "T1213", "classified-pii", scenario.ClassPotentiallyDestructive, "dbprobe_bounded_synthetic"},
 	} {
 		for _, eng := range []struct {
@@ -107,7 +107,7 @@ func TestShippedDB06DB07ScenariosBuild(t *testing.T) {
 		probe, fixture string
 		class          scenario.ExecutionClass
 	}{
-		"dbsim-db06-account-revocation":       {"auth_after_revoke", "empty", scenario.ClassDestructive},
+		"dbsim-db06-account-revocation":       {"auth_after_revoke", "empty", scenario.ClassPotentiallyDestructive},
 		"dbsim-db07-sensitive-classification": {"read_classified_fixture", "classified-pii", scenario.ClassPotentiallyDestructive},
 	}
 	for id, w := range want {

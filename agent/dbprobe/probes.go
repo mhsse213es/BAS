@@ -47,8 +47,11 @@ var catalog = map[string]ProbeDef{
 		ParamSchema: map[string]ParamKind{}, RequiredFixture: ClassifiedFixtureKind, FixedTable: ClassifiedFixtureTable},
 	// auth_after_revoke (DB-06): creates a throwaway login account for this run,
 	// proves it can connect, revokes its login and proves a NEW connection is then
-	// refused. Class mutation: lab-only, mutation-approved, fixture-cleaned.
-	ProbeAuthAfterRevoke: {ID: ProbeAuthAfterRevoke, Class: ClassMutation, Engines: bothEngines,
+	// refused. Class bounded_synthetic (ruling R-AO): it only creates, locks and
+	// drops its own throwaway account, like the fixture lifecycle of DB-05/09. A true
+	// mutation class signs as destructive, which the agent's B5 gate vetoes with no
+	// approval path. Lab-only and mutation-approved via RequiredFixture (R-AI), not class.
+	ProbeAuthAfterRevoke: {ID: ProbeAuthAfterRevoke, Class: ClassBoundedSynthetic, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{}, RequiredFixture: RevokeFixtureKind},
 }
 

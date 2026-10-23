@@ -207,3 +207,18 @@ func TestEvaluateClassificationNotEvaluatedSentenceAppearsOnce(t *testing.T) {
 		}
 	}
 }
+
+// Live run 1: a B5 veto has empty stderr; the refusal text must still say which
+// signed class the agent refused, never "agent veto (catalog): ".
+func TestAgentVetoReasonNamesTheSignedExecutionClass(t *testing.T) {
+	ex := AgentExec{ExitCode: -1, Vetoed: true, VetoedBlockSource: "catalog", VetoedActionKey: "dbprobe_mutation", VetoedExecutionClass: "destructive"}
+	ev := mustEval(t, nil, input("dbsim-db06-account-revocation", "auth_after_revoke", ex))
+	for _, want := range []string{"agent veto (catalog)", `"destructive"`, `"dbprobe_mutation"`} {
+		if !strings.Contains(ev.Report.Reason, want) {
+			t.Errorf("reason %q lacks %s", ev.Report.Reason, want)
+		}
+	}
+	if ev.Result != dbsim.ResultSkipped {
+		t.Errorf("result %s", ev.Result)
+	}
+}

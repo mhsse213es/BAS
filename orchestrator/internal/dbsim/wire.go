@@ -4,7 +4,10 @@
 // golden JSON vector in each module (testdata/dbprobe_spec.golden.json).
 package dbsim
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 type ExecMode string
 
@@ -127,8 +130,8 @@ var probeRegistry = map[string]ProbeRegistryEntry{
 	"bounded_synthetic_read": {ID: "bounded_synthetic_read", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}, FixtureParam: "table"},
 	// DB-07: the same bounded unfiltered read, fixed to the customers_pii table of the classified-pii fixture (no table param).
 	"read_classified_fixture": {ID: "read_classified_fixture", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "classified-pii", FixedTable: "customers_pii"},
-	// DB-06: creates a throwaway login account for the run, proves it can log in, revokes its login and proves a NEW connection is refused (mutation: lab only, mutation-approved, fixture-cleaned).
-	"auth_after_revoke": {ID: "auth_after_revoke", Class: ClassMutation, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "empty"},
+	// DB-06: creates a throwaway login account for the run, proves it can log in, revokes its login and proves a NEW connection is refused (bounded_synthetic, ruling R-AO: only touches its own throwaway account; lab only and mutation-approved through its required fixture, R-AI).
+	"auth_after_revoke": {ID: "auth_after_revoke", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "empty"},
 }
 
 // Task 14 probe ids.
@@ -145,4 +148,14 @@ const ProbeReadGrants = "read_grants"
 func LookupProbeEntry(id string) (ProbeRegistryEntry, bool) {
 	e, ok := probeRegistry[id]
 	return e, ok
+}
+
+// ProbeIDs returns every registered probe id, sorted.
+func ProbeIDs() []string {
+	ids := make([]string, 0, len(probeRegistry))
+	for id := range probeRegistry {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }

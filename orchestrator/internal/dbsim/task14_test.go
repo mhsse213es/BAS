@@ -10,7 +10,7 @@ import (
 
 func TestTask14ProbesAreRegistered(t *testing.T) {
 	ar, ok := LookupProbeEntry(ProbeAuthAfterRevoke)
-	if !ok || ar.Class != ClassMutation || ar.RequiredFixture != "empty" || len(ar.ParamSchema) != 0 || ar.FixtureParam != "" {
+	if !ok || ar.Class != ClassBoundedSynthetic || ar.RequiredFixture != "empty" || len(ar.ParamSchema) != 0 || ar.FixtureParam != "" {
 		t.Fatalf("auth_after_revoke: %+v ok=%v", ar, ok)
 	}
 	rc, ok := LookupProbeEntry(ProbeReadClassifiedFixture)

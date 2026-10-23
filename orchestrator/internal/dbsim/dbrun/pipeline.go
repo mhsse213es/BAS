@@ -38,12 +38,15 @@ const (
 // AgentExec is the part of the agent's protocol.ExecResult that dbsim needs
 // (JSON tags match the agent wire). The orchestrator never imports agent code.
 type AgentExec struct {
-	ExitCode          int                  `json:"exitCode"`
-	Stderr            string               `json:"stderr"`
-	TimedOut          bool                 `json:"timedOut,omitempty"`
-	Vetoed            bool                 `json:"vetoed,omitempty"`
-	VetoedBlockSource string               `json:"vetoedBlockSource,omitempty"`
-	DBProbe           *dbsim.DBProbeResult `json:"dbProbe,omitempty"`
+	ExitCode          int    `json:"exitCode"`
+	Stderr            string `json:"stderr"`
+	TimedOut          bool   `json:"timedOut,omitempty"`
+	Vetoed            bool   `json:"vetoed,omitempty"`
+	VetoedBlockSource string `json:"vetoedBlockSource,omitempty"`
+	// VetoedActionKey / VetoedExecutionClass echo what the agent's gate saw.
+	VetoedActionKey      string               `json:"vetoedActionKey,omitempty"`
+	VetoedExecutionClass string               `json:"vetoedExecutionClass,omitempty"`
+	DBProbe              *dbsim.DBProbeResult `json:"dbProbe,omitempty"`
 }
 
 // StepInput is everything needed to evaluate one executed dbsim step.
@@ -160,12 +163,22 @@ func reasonOf(p dbsim.DBProbeResult, stderr string) string {
 	return dbsim.Redact(bound(r, maxReasonBytes))
 }
 
+// vetoDetail explains an agent veto. A B5 veto carries no stderr, so the signed
+// action key and ExecutionClass are always stated: the explanation is never empty.
+func vetoDetail(ex AgentExec) string {
+	d := fmt.Sprintf("signed action %q, execution class %q", dbsim.Redact(bound(ex.VetoedActionKey, 64)), dbsim.Redact(bound(ex.VetoedExecutionClass, 64)))
+	if s := dbsim.Redact(bound(ex.Stderr, maxReasonBytes)); s != "" {
+		d += "; " + s
+	}
+	return d
+}
+
 // classifyExec turns the agent's execution result into the Outcome's
 // ran/skipped/refused/error fields.
 func classifyExec(ex AgentExec, o *dbsim.Outcome) {
 	if ex.DBProbe == nil {
 		if ex.Vetoed {
-			o.GateRefusal = "agent veto (" + dbsim.Redact(bound(ex.VetoedBlockSource, 64)) + "): " + dbsim.Redact(bound(ex.Stderr, maxReasonBytes))
+			o.GateRefusal = "agent veto (" + dbsim.Redact(bound(ex.VetoedBlockSource, 64)) + "): " + vetoDetail(ex)
 			return
 		}
 		o.ExecutionError = fmt.Sprintf("agent returned no dbprobe result (exit code %d): %s", ex.ExitCode, dbsim.Redact(bound(ex.Stderr, maxReasonBytes)))

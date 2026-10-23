@@ -508,6 +508,13 @@ func runE2E(t *testing.T, cfg e2eConfig) {
 	}
 }
 
+// stepReporter is the part of *testing.T checkStep uses (a seam so the nil-result
+// path is unit-testable).
+type stepReporter interface {
+	Helper()
+	Errorf(format string, args ...any)
+}
+
 // checkStep asserts the expected end state for one step.
 //
 // Mapping of the plan's wording to the real dlpreport enums: "Telemetry=Present"
@@ -515,13 +522,20 @@ func runE2E(t *testing.T, cfg e2eConfig) {
 // (set only for a marker-correlated SIEM alert; no case or remediation is
 // assessed); "non-zero latency" is Outcome.Corr.Latency > 0 (alert timestamp
 // minus the database-reported probe time).
-func checkStep(t *testing.T, cfg e2eConfig, id string, spec dbsim.DBProbeSpec, ev Evaluation, ex AgentExec) {
+func checkStep(t stepReporter, cfg e2eConfig, id string, spec dbsim.DBProbeSpec, ev Evaluation, ex AgentExec) {
 	t.Helper()
 	fail := func(format string, a ...any) {
 		t.Errorf("%s/%s %s: "+format+"\n  reason: %s\n  limitations: %s", append([]any{cfg.engine, id, spec.ProbeID}, append(a, ev.Report.Reason, ev.Record.Limitations)...)...)
 	}
 	if err := ev.Record.Validate(); err != nil {
 		fail("Record.Validate: %v", err)
+	}
+	if ex.DBProbe == nil {
+		// The agent refused the step (veto) or returned no result: report it as a
+		// normal failure and let the next sub-test run.
+		t.Errorf("%s/%s %s: agent returned no dbprobe result (vetoed=%v, blockSource=%q, executionClass=%q, actionKey=%q, exit=%d): %s\n  reason: %s",
+			cfg.engine, id, spec.ProbeID, ex.Vetoed, ex.VetoedBlockSource, ex.VetoedExecutionClass, ex.VetoedActionKey, ex.ExitCode, ex.Stderr, ev.Report.Reason)
+		return
 	}
 	if ex.DBProbe != nil && ex.DBProbe.CleanupStatus != "" && ex.DBProbe.CleanupStatus != dbsim.CleanupNotApplicable {
 		if ex.DBProbe.CleanupStatus != dbsim.CleanupOK || ex.DBProbe.SafetyIncident {

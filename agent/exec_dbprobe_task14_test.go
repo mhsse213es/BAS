@@ -24,7 +24,7 @@ func task14Step(probe, fixture, class string) ScenarioStep {
 // cleanup, and run the usual verified teardown.
 func TestTask14ProbesBindTheirRequiredFixture(t *testing.T) {
 	for _, c := range []struct{ probe, fixture, class string }{
-		{dbprobe.ProbeAuthAfterRevoke, "empty", "destructive"},
+		{dbprobe.ProbeAuthAfterRevoke, "empty", "potentially_destructive"},
 		{dbprobe.ProbeReadClassifiedFixture, "classified-pii", "potentially_destructive"},
 	} {
 		t.Setenv(envDBProbeLabMutationAllows, "1")
@@ -48,7 +48,7 @@ func TestTask14ProbesBindTheirRequiredFixture(t *testing.T) {
 
 func TestTask14ProbesGatedBeforeConnect(t *testing.T) {
 	for _, c := range []struct{ probe, fixture, class string }{
-		{dbprobe.ProbeAuthAfterRevoke, "empty", "destructive"},
+		{dbprobe.ProbeAuthAfterRevoke, "empty", "potentially_destructive"},
 		{dbprobe.ProbeReadClassifiedFixture, "classified-pii", "potentially_destructive"},
 	} {
 		// No agent-local lab mutation allowance.
@@ -87,7 +87,7 @@ func TestTask14ProbesGatedBeforeConnect(t *testing.T) {
 func TestTask14ProbeNeedsAFixtureBindingAdapter(t *testing.T) {
 	t.Setenv(envDBProbeLabMutationAllows, "1")
 	ff := setupFixtureFake(t) // adapter without FixtureBinder
-	out, err := executeDBProbe(context.Background(), task14Step(dbprobe.ProbeAuthAfterRevoke, "empty", "destructive"))
+	out, err := executeDBProbe(context.Background(), task14Step(dbprobe.ProbeAuthAfterRevoke, "empty", "potentially_destructive"))
 	if err != nil || out.GateRefusal == "" || ff.count("Connect") != 0 || out.Result.ErrorClass != dbErrAdapterUnsupported {
 		t.Fatalf("err=%v out=%+v calls=%v", err, out, ff.calls)
 	}
@@ -99,7 +99,7 @@ func TestAuthAfterRevokeResidualIsASafetyIncident(t *testing.T) {
 	t.Setenv(envDBProbeLabMutationAllows, "1")
 	bf := setupBinderFake(t)
 	bf.leftover = []string{"role:dbsim_x_acct"}
-	out, err := executeDBProbe(context.Background(), task14Step(dbprobe.ProbeAuthAfterRevoke, "empty", "destructive"))
+	out, err := executeDBProbe(context.Background(), task14Step(dbprobe.ProbeAuthAfterRevoke, "empty", "potentially_destructive"))
 	if err == nil || !out.Result.SafetyIncident || out.Result.CleanupStatus != protocol.DBCleanupResidual {
 		t.Fatalf("a leftover account must be a safety incident: err=%v %+v", err, out.Result)
 	}
