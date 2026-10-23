@@ -73,7 +73,7 @@ var idPattern = regexp.MustCompile(`^API-BAS-([A-Z]+)-(\d{3})$`)
 // ALEEF ids: generated tests carry a content hash, registered ones a serial.
 var (
 	aleefGenPattern = regexp.MustCompile(`^ALEEF-GEN-[A-Z0-9-]+-[0-9a-f]{8}(-OC|-NC)?$`)
-	aleefRegPattern = regexp.MustCompile(`^ALEEF-REG-\d{4}$`)
+	aleefRegPattern = regexp.MustCompile(`^ALEEF-REG-\d{4}(-OC|-NC)?$`)
 )
 
 // idCategory returns the category segment an id implies. ALEEF ids always
@@ -86,7 +86,7 @@ func idCategory(id string) (string, error) {
 		return "ALEEF", nil
 	}
 	if strings.HasPrefix(id, "ALEEF-") {
-		return "", fmt.Errorf("contract: id %q must match ALEEF-GEN-<PROPERTY>-<8 hex> or ALEEF-REG-<NNNN>", id)
+		return "", fmt.Errorf("contract: id %q must match ALEEF-GEN-<PROPERTY>-<8 hex> or ALEEF-REG-<NNNN>[-OC|-NC]", id)
 	}
 	return "", fmt.Errorf("contract: id %q must match API-BAS-<CAT>-<NNN>", id)
 }

@@ -23,7 +23,7 @@ func aleefScenario(id, category string) Scenario {
 }
 
 func TestValidateAcceptsAleefIDs(t *testing.T) {
-	for _, id := range []string{"ALEEF-GEN-P-OWN-1-0123abcd", "ALEEF-GEN-P-ROLE-2-ffffffff", "ALEEF-REG-0001", "ALEEF-GEN-P-OWN-1-0123abcd-OC", "ALEEF-GEN-P-OWN-1-0123abcd-NC"} {
+	for _, id := range []string{"ALEEF-GEN-P-OWN-1-0123abcd", "ALEEF-GEN-P-ROLE-2-ffffffff", "ALEEF-REG-0001", "ALEEF-REG-0001-OC", "ALEEF-REG-0042-NC", "ALEEF-GEN-P-OWN-1-0123abcd-OC", "ALEEF-GEN-P-OWN-1-0123abcd-NC"} {
 		if err := aleefScenario(id, "ALEEF").Validate(); err != nil {
 			t.Errorf("%s: %v", id, err)
 		}
@@ -39,6 +39,8 @@ func TestValidateRejectsMalformedAleefIDs(t *testing.T) {
 		"ALEEF-REG-001",              // short serial
 		"ALEEF-REG-00001",            // long serial
 		"ALEEF-FOO-0001",
+		"ALEEF-REG-0001-x",
+		"ALEEF-REG-0001-OCNC",
 		"ALEEF-GEN-P-OWN-1-0123abcd-x",
 		"ALEEF-GEN-P-OWN-1-0123abcd-OCNC",
 		"ALEEF-GEN-P-OWN-1-0123abcd-oc",
