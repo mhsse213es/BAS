@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -19,6 +20,10 @@ type toyNotes struct {
 	bodies []map[string]any
 	auths  []string
 	hits   int
+	raw    []string
+	urls   []string
+	failAt int // 1-based request number that returns 500
+	noID   int // 1-based request number that returns 201 without an id
 }
 
 func (t *toyNotes) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +31,19 @@ func (t *toyNotes) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer t.mu.Unlock()
 	t.hits++
 	var b map[string]any
-	_ = json.NewDecoder(r.Body).Decode(&b)
+	rb, _ := io.ReadAll(r.Body)
+	_ = json.Unmarshal(rb, &b)
+	t.raw = append(t.raw, string(rb))
+	t.urls = append(t.urls, r.URL.String())
+	if t.hits == t.failAt {
+		w.WriteHeader(500)
+		return
+	}
+	if t.hits == t.noID {
+		w.WriteHeader(201)
+		_, _ = w.Write([]byte(`{"title":"x"}`))
+		return
+	}
 	t.bodies = append(t.bodies, b)
 	t.auths = append(t.auths, r.Header.Get("Authorization"))
 	t.n++
@@ -121,6 +138,14 @@ func TestBuildFixtureEmbedsCanaryInFreeTextField(t *testing.T) {
 	if toy.bodies[0]["count"] != float64(1) {
 		t.Fatalf("operator field lost: %v", toy.bodies[0])
 	}
+	if !strings.Contains(toy.raw[1], `"title":"ALEEF-CANARY-r1-bob"`) {
+		t.Fatalf("wire body: %s", toy.raw[1])
+	}
+	for i := range toy.raw {
+		if strings.Contains(toy.raw[i], "tok-secret") || strings.Contains(toy.urls[i], "tok-secret") {
+			t.Fatalf("token outside Authorization header in request %d", i)
+		}
+	}
 	if f.Objects[0].Protected["canary"] != want || f.Objects[1].Protected["canary"] != "ALEEF-CANARY-r1-bob" {
 		t.Fatalf("protected: %+v", f.Objects)
 	}
@@ -194,4 +219,40 @@ func TestBuildFixtureErrorsDoNotLeakToken(t *testing.T) {
 	if err == nil || strings.Contains(err.Error(), "tok-secret") {
 		t.Fatalf("err = %v", err)
 	}
+}
+
+func partialCase(t *testing.T, toy *toyNotes, d Doer, s SecretResolver) {
+	m := notesModel(freeTextBody(), ClassSetupSafe)
+	f, created, err := BuildFixture(context.Background(), m, testAccounts,
+		[]SetupOp{{OperationID: "createNote", Compensate: "deleteNote"}}, d, s, "r1")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if strings.Contains(err.Error(), "tok-secret") {
+		t.Fatalf("token leaked: %v", err)
+	}
+	want := CreatedObject{Operation: "createNote", ID: "note-1", Owner: "cust-a", Compensate: "deleteNote"}
+	if len(created) != 1 || created[0] != want {
+		t.Fatalf("created = %+v", created)
+	}
+	if len(f.Objects) != 1 || f.Objects[0].ID != "note-1" {
+		t.Fatalf("fixture objects = %+v", f.Objects)
+	}
+}
+
+func TestBuildFixturePartialOnSecondCreateFailure(t *testing.T) {
+	toy, d := newToy(t)
+	toy.failAt = 2
+	partialCase(t, toy, d, testSecrets)
+}
+
+func TestBuildFixturePartialOnSecondResolveFailure(t *testing.T) {
+	toy, d := newToy(t)
+	partialCase(t, toy, d, mapSecrets{"ref/a": "tok-secret-a"})
+}
+
+func TestBuildFixturePartialOnMissingID(t *testing.T) {
+	toy, d := newToy(t)
+	toy.noID = 2
+	partialCase(t, toy, d, testSecrets)
 }

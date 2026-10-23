@@ -49,7 +49,9 @@ const maxSetupResponse = 1 << 20
 // BuildFixture runs each setup operation once per account, in the order
 // given, and returns the resulting fixture and the created objects. Only
 // operations classified ClassSetupSafe may run. Each created body carries a
-// canary in its first free-text field when the schema has one.
+// canary in its first free-text field when the schema has one. Pre-flight
+// validation errors return nothing; any error after a request has been sent
+// returns the partial fixture and created list so callers can clean up.
 func BuildFixture(ctx context.Context, m Model, accounts []Account, setup []SetupOp, d Doer, secrets SecretResolver, runTag string) (fixture.Fixture, []CreatedObject, error) {
 	ops := make([]*Operation, len(setup))
 	for i, s := range setup {
@@ -81,7 +83,7 @@ func BuildFixture(ctx context.Context, m Model, accounts []Account, setup []Setu
 	for _, a := range accounts {
 		token, err := secrets.Resolve(a.TokenRef)
 		if err != nil {
-			return fixture.Fixture{}, nil, fmt.Errorf("resolve token for account %q: secret unavailable", a.Name)
+			return f, created, fmt.Errorf("resolve token for account %q: secret unavailable", a.Name)
 		}
 		for i, s := range setup {
 			op := ops[i]
@@ -96,7 +98,7 @@ func BuildFixture(ctx context.Context, m Model, accounts []Account, setup []Setu
 			}
 			id, err := send(ctx, d, op, body, token)
 			if err != nil {
-				return fixture.Fixture{}, nil, fmt.Errorf("setup %q for account %q: %w", op.ID, a.Name, err)
+				return f, created, fmt.Errorf("setup %q for account %q: %w", op.ID, a.Name, err)
 			}
 			obj := fixture.Object{ID: id, OwnerID: a.CustomerID, Public: map[string]string{}, Protected: map[string]string{"canary": canary}}
 			if canary == "" {
