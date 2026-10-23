@@ -62,9 +62,10 @@ func idemTemplate(ctx TemplateCtx, prop string, variant int, desc string) []Temp
 		Steps:           []contract.Step{base, first, replay},
 		DeniedStatuses:  deniedRule(),
 		CleanIsEnforced: true,
+		Oracle:          OracleStateChangeOnReplay,
 		Params: map[string]string{
 			"operation": op.ID, "account": p.victim.Name, "object": p.obj.ID,
-			"header": IdempotencyHeader, "oracle": "state_change_on_replay",
+			"header": IdempotencyHeader,
 		},
 	}
 	return []Template{finish(ctx, t, p.obj, prop, "property_level")}
@@ -156,10 +157,13 @@ func (r race1) Templates(ctx TemplateCtx) []Template {
 		DeniedStatuses: deniedRule(),
 		Params: map[string]string{
 			"operation": op.ID, "account": p.victim.Name, "object": p.obj.ID,
-			"limit": strconv.Itoa(limit), "repeat": strconv.Itoa(atk.Repeat), "oracle": "accepted_over_limit",
+			"limit": strconv.Itoa(limit), "repeat": strconv.Itoa(atk.Repeat),
 		},
 	}
-	return []Template{finish(ctx, t, p.obj, r.id, "property_level")}
+	t.Oracle = OracleAcceptedOverLimit
+	t = finish(ctx, t, p.obj, r.id, "property_level")
+	t.RunnerStateValid = false // the permitted success changes state too
+	return []Template{t}
 }
 
 // Response is the part of an exchange the soft-failure and limit helpers need.
@@ -189,7 +193,7 @@ func (t Template) AcceptedCount(rs []Response) int {
 // that effect the runner grade is FAIL even when the limit held. Callers of
 // P-RACE-1 templates must therefore either use a state adapter that does not
 // report the permitted effect, or decide the verdict with ExceedsLimit on the
-// recorded attack exchanges (Params["oracle"] is "accepted_over_limit").
+// recorded attack exchanges (Oracle is OracleAcceptedOverLimit).
 func (t Template) ExceedsLimit(rs []Response) bool {
 	return t.MaxAccepted > 0 && t.AcceptedCount(rs) > t.MaxAccepted
 }

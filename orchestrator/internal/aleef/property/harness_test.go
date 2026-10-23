@@ -156,7 +156,11 @@ func (t *toy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			t.mu.Unlock()
 			reply(w, 200, v)
 		case "PATCH", "DELETE":
-			if it.Owner != cust && !t.flaws["write"] {
+			actor := cust
+			if c, ok := body["owner_id"].(string); ok && c != "" && t.flaws["mass-owner"] {
+				actor = c // flawed: trusts a client-supplied owner id
+			}
+			if it.Owner != actor && !t.flaws["write"] {
 				t.deny(w)
 				return
 			}
@@ -404,7 +408,7 @@ func toyModel() model.Model {
 		Operations: []model.Operation{
 			op("getV1", "GET", "/api/v1/items/{id}", idp, nil, model.ClassRead),
 			op("getV2", "GET", "/api/v2/items/{id}", idp, nil, model.ClassRead),
-			op("patchV2", "PATCH", "/api/v2/items/{id}", idp, &model.Schema{Type: "object", Properties: map[string]*model.Schema{"title": str()}}, model.ClassReversible),
+			op("patchV2", "PATCH", "/api/v2/items/{id}", idp, &model.Schema{Type: "object", Properties: map[string]*model.Schema{"title": str(), "owner_id": str()}}, model.ClassReversible),
 			op("deleteV2", "DELETE", "/api/v2/items/{id}", idp, nil, model.ClassReversible),
 			{ID: "listQ", Method: "GET", Path: "/api/items", Class: model.ClassRead,
 				QueryParams: []model.Param{{Name: "owner_ref", In: "query", IsObjectID: true, Required: true, Schema: str()}}},

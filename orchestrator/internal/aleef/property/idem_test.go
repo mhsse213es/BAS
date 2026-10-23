@@ -108,7 +108,7 @@ func TestRaceTemplatesDetectToyLimitBreach(t *testing.T) {
 	if tpls[0].ExceedsLimit(attackResponses(rep)) {
 		t.Fatal("limit held: ExceedsLimit must be false")
 	}
-	if tpls[0].Params["oracle"] != "accepted_over_limit" {
+	if tpls[0].Oracle != OracleAcceptedOverLimit {
 		t.Fatal("template must name its decisive oracle")
 	}
 }

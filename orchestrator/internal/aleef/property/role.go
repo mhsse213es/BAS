@@ -67,7 +67,7 @@ func (r role1) Templates(ctx TemplateCtx) []Template {
 		path, body := buildRequest(op, victimVals(op, p.obj), 0)
 		atk := mkStep("attack-role", "attack", p.victim.Name, op.Method, path, body,
 			"The application refuses an operation reserved for role "+required+" to an account with role "+p.victim.Role+".")
-		oracle := "state_change"
+		oracle := OracleStateChange
 		t := Template{
 			Description:    "Account " + p.victim.Name + " (" + p.victim.Role + ") calls " + op.ID + ", reserved for " + required + ".",
 			Steps:          []contract.Step{base, atk},
@@ -76,12 +76,13 @@ func (r role1) Templates(ctx TemplateCtx) []Template {
 		if op.Method == "GET" {
 			t.Steps[1].Repeat = 2
 			t.MaxAccepted = 1
-			oracle = "repeat_accepted"
+			oracle = OracleRepeatAccepted
 		}
 		t.Params = map[string]string{
 			"operation": op.ID, "attacker": p.victim.Name, "role": p.victim.Role,
-			"required_role": required, "object": p.obj.ID, "oracle": oracle,
+			"required_role": required, "object": p.obj.ID,
 		}
+		t.Oracle = oracle
 		out = append(out, finish(ctx, t, p.obj, r.id, "function_level"))
 	}
 	return out

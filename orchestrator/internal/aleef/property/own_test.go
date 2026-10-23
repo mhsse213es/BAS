@@ -1,6 +1,8 @@
 package property
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/audspect/bas/internal/apibas/grade"
@@ -147,4 +149,36 @@ func TestSoftFailureRule(t *testing.T) {
 	if (Template{DeniedStatuses: []int{403}}).Denied(200, []byte(`{"error":"x"}`)) {
 		t.Fatal("soft failure must only count when the template opts in")
 	}
+}
+
+func TestOwn3MassAssignmentFillsPrincipalFieldsWithOwner(t *testing.T) {
+	tpls := templatesFor(t, "P-OWN-3", "patchV2", nil)
+	if len(tpls) == 0 {
+		t.Fatal("no templates")
+	}
+	for _, tp := range tpls {
+		atk := tp.Steps[len(tp.Steps)-1]
+		var body map[string]any
+		if err := json.Unmarshal([]byte(atk.Body), &body); err != nil {
+			t.Fatal(err)
+		}
+		// The principal field carries the victim's customer id (never an
+		// item id); the path carries the object token.
+		if body["owner_id"] != "cust-"+ownerSuffix(tp.Params["victim"]) {
+			t.Fatalf("owner_id = %v for victim %s", body["owner_id"], tp.Params["victim"])
+		}
+		if !strings.Contains(atk.Path, objToken) {
+			t.Fatalf("path must name the victim's object: %s", atk.Path)
+		}
+	}
+	ty, srv := newToy("mass-owner")
+	defer srv.Close()
+	expect(t, ty, srv, tpls, grade.FAIL)
+	ok, srvOK := newToy()
+	defer srvOK.Close()
+	expect(t, ok, srvOK, tpls, grade.PASS)
+}
+
+func ownerSuffix(victim string) string {
+	return map[string]string{"alice": "a", "bob": "b", "carol": "c", "dave": "d"}[victim]
 }

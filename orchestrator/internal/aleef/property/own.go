@@ -30,6 +30,7 @@ func crossIdentity(ctx TemplateCtx, prop string, op model.Operation, p pair, val
 		Steps:           []contract.Step{base, atk},
 		DeniedStatuses:  deniedAuthz(),
 		ForbiddenValues: leakValues(p.victim),
+		Oracle:          OracleRunnerGrade,
 		Params: map[string]string{
 			"operation": op.ID, "victim": p.victim.Name, "attacker": p.attacker.Name,
 			"object": p.obj.ID, "confidence": confidence(p.obj),
@@ -196,6 +197,9 @@ func literalFor(r idRef, o fixture.Object, have bool, victim bool) string {
 	}
 	if victim && r.loc != "body" {
 		return objToken
+	}
+	if principalRef(r) {
+		return o.OwnerID
 	}
 	return o.ID
 }

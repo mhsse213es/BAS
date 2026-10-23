@@ -22,22 +22,52 @@
 //   - Output is deterministic: accounts, objects, operations and fields are
 //     visited in sorted order.
 //
-// Known runner limitation. The runner counts any protected fixture value (the
-// canary) in an attack response as a leak, even when the caller is the
-// object's owner. Templates in which the owner acts on their own object
-// (property_level and function_level claims) therefore grade FAIL if the
-// operation's response echoes the object's free-text fields. Pick operations
-// whose responses omit them, or have the assembler account for it.
+// Verdicts, soft failures and operator declarations
 //
-// Soft failures. A 2xx response whose JSON body has an "error" key,
-// status "error" or success false is a refusal in practice (the application
-// answered 200 but did nothing). IsSoftFailure implements that rule and
-// Template.Denied applies it together with DeniedStatuses. The runner and
-// grader cannot express it: they treat every 2xx outside the denied list as
-// accepted and grade it inconclusive (SKIPPED) unless a state change or leak
-// proves exploitation. Templates therefore set SoftFailure so that Task 7/8
-// (or a verifier) can classify such exchanges as denied; the in-runner effect
-// of a soft failure is "no finding", never a false FAIL.
+// The runner and grader decide FAIL/PASS from three signals: a protected
+// value (the fixture canary) in an attack response, any change between the
+// state snapshot taken before and after the attack, and the count of attack
+// responses outside denied_statuses. They cannot express every property's
+// oracle, so each Template names the oracle that is authoritative for it
+// (Template.Oracle, OracleKind) and says which of the runner's own signals to
+// believe (RunnerLeakValid, RunnerStateValid). The documentation of each
+// OracleKind states exactly what Task 8 must do. Task 8 must not read the
+// runner's FAIL/PASS as the verdict unless Oracle is OracleRunnerGrade.
+//
+// Soft failures. A 2xx response whose JSON body has an "error" key, status
+// "error" or success false is a refusal in practice. IsSoftFailure
+// implements that rule and Template.Denied applies it with DeniedStatuses.
+// The runner cannot see response bodies when counting accepted attempts, so
+// under a soft failure: leak and state oracles are unaffected (a refusal
+// leaks nothing and changes nothing, so the grade is SKIPPED/inconclusive,
+// not FAIL); but the count-based oracles (OracleRepeatAccepted,
+// OracleAcceptedOverLimit) see the soft failure as accepted and the runner
+// grade can be a false FAIL. For those two kinds Task 8 must recount with
+// Template.AcceptedCount / Denied on the recorded exchanges, which is why
+// they are never decided by the runner grade.
+//
+// Owner-acting templates. The runner counts a protected value in an attack
+// response as a leak even when the caller owns the object. Every template in
+// which the actor is the owner of Preconditions.Object (all property_level and
+// function_level templates) has RunnerLeakValid false: a canary in that
+// response is not a finding and Task 8 must ignore the runner's leak signal.
+// Cross-identity templates have RunnerLeakValid true. In the OWN-3 variants
+// where the attacker names its own object in the path, the scanned canary is
+// still the victim's, so a leak there remains a finding.
+//
+// Operator declarations. Several properties need knowledge a description
+// cannot carry; without it they emit no templates:
+//
+//   - TemplateCtx.Workflow: the object lifecycle (P-AUTH-1/2, P-MC-1,
+//     P-STATE-1/2).
+//   - TemplateCtx.ReservedRoles (and Model.Roles, lowest first): which
+//     operations need which role (P-ROLE-1).
+//   - TemplateCtx.Limits: how many concurrent successes a reversible
+//     operation may have (P-RACE-1; operations classified money or notifying
+//     default to one).
+//
+// Method limitation. The contract supports GET, PATCH, POST and DELETE only;
+// operations with other methods (for example PUT) produce no templates.
 package property
 
 import (
@@ -89,7 +119,74 @@ type Template struct {
 	CleanIsEnforced bool
 	// SoftFailure is true when a 2xx soft-failure body counts as denied.
 	SoftFailure bool
+	// Oracle names the authoritative verdict rule (see OracleKind).
+	Oracle OracleKind
+	// RunnerLeakValid is false when the runner's protected-value (canary)
+	// finding must be ignored: the actor owns the object, so seeing its own
+	// canary is not a leak.
+	RunnerLeakValid bool
+	// RunnerStateValid is false when the runner's state-change finding must be
+	// ignored: a permitted success changes state too (P-RACE-1).
+	RunnerStateValid bool
 }
+
+// OracleKind says which rule decides a template's verdict, and so what the
+// consumer of the runner's report (Task 8) must do. Inputs for every kind:
+// the recorded runner exchanges of the attack step(s) (status, body), the
+// state diff between the snapshot before and after the attack, and the
+// Template fields. Output: finding yes / no / inconclusive.
+type OracleKind string
+
+const (
+	// OracleRunnerGrade: the runner/grade verdict is authoritative. FAIL with
+	// exploited = finding; PASS = no finding; SKIPPED/ERROR = inconclusive.
+	// Used by cross-identity templates (P-OWN-1/2/3, P-ROLE-2), where a
+	// canary or owner-id leak, or a state change, is exactly the finding.
+	// RunnerLeakValid and RunnerStateValid are both true.
+	OracleRunnerGrade OracleKind = "runner_grade"
+
+	// OracleStateChange: the finding is a state change caused by the attack
+	// step (P-ROLE-1 writes, P-AUTH-1/2, P-MC-1, P-STATE-1). Task 8: yes if
+	// the runner reports the state diff as non-empty (grade FAIL), ignoring
+	// any leak signal (RunnerLeakValid is false). A refusal (status in
+	// DeniedStatuses, or Template.Denied) with no state change is no finding.
+	// Anything else (2xx with no change, odd 4xx) is inconclusive.
+	OracleStateChange OracleKind = "state_change"
+
+	// OracleRepeatAccepted: the finding is two accepted responses to a
+	// repeated attack (P-ROLE-1 reads, which have no state to diff). Task 8:
+	// count attack exchanges with Template.AcceptedCount; yes if the count is
+	// greater than MaxAccepted (the runner grade is only a hint because it
+	// counts a 2xx soft failure as accepted); no if at most MaxAccepted;
+	// inconclusive on any 5xx or transport error. Ignore leak signals.
+	OracleRepeatAccepted OracleKind = "repeat_accepted"
+
+	// OracleStateChangeOnReplay: the finding is that the replayed request
+	// (last step) changed the state snapshot taken just before it
+	// (P-IDEM-1/2: a second record or change). Task 8: yes if the runner
+	// reports a state change on the attack; no if the attack was refused or
+	// returned 2xx with no state change (CleanIsEnforced); inconclusive
+	// otherwise. Ignore leak signals. The lab must be reset between runs
+	// because the idempotency key is fixed.
+	OracleStateChangeOnReplay OracleKind = "state_change_on_replay"
+
+	// OracleAcceptedOverLimit: the finding is more accepted attack responses
+	// than the limit (P-RACE-1). Task 8: ignore the runner's FAIL/PASS
+	// entirely (RunnerStateValid and RunnerLeakValid are false); compute
+	// Template.ExceedsLimit over the attack exchanges (all exchanges after the
+	// baseline): true = finding, false = no finding; inconclusive on any 5xx
+	// or transport error.
+	OracleAcceptedOverLimit OracleKind = "accepted_over_limit"
+
+	// OracleForbiddenValues: the finding is a forbidden value (for example a
+	// success status word) in the final attack response (P-STATE-2). Task 8:
+	// yes if any of ForbiddenValues appears at any depth of the attack
+	// response body (the runner reports this as forbidden-value exploitation,
+	// grade FAIL); no if the response is 2xx and contains none
+	// (CleanIsEnforced); a refusal of the setup step is no finding; ignore the
+	// runner's canary-leak signal (RunnerLeakValid is false).
+	OracleForbiddenValues OracleKind = "forbidden_values"
+)
 
 // TemplateCtx is everything a property may look at for one operation.
 type TemplateCtx struct {
@@ -445,11 +542,25 @@ func valueOr(p *float64, def float64) float64 {
 	return *p
 }
 
-// victimVals assigns the fixture object to every identifier field.
+// ownerHint matches identifier names that refer to a principal (owner,
+// customer, tenant, user, holder, member) rather than to a resource.
+var ownerHint = regexp.MustCompile(`(?i)(owner|customer|tenant|user|holder|member)`)
+
+// principalRef reports whether a body field names a principal. Such a field
+// (mass assignment of ownership) is filled with the victim's customer id; the
+// other identifier fields get the object id.
+func principalRef(r idRef) bool {
+	return r.loc == "body" && ownerHint.MatchString(r.name)
+}
+
+// victimVals assigns the fixture object to every identifier field, and the
+// object's owner to principal-naming body fields.
 func victimVals(op model.Operation, obj fixture.Object) map[string]string {
 	vals := map[string]string{}
 	for _, r := range idRefsOf(op) {
-		if r.loc == "body" {
+		if principalRef(r) {
+			vals[r.key()] = obj.OwnerID
+		} else if r.loc == "body" {
 			vals[r.key()] = obj.ID
 		} else {
 			vals[r.key()] = objToken
@@ -548,6 +659,10 @@ func baselineOrSelf(ctx TemplateCtx, op model.Operation, owner model.Account, ob
 // finish fills the fields every template shares.
 func finish(ctx TemplateCtx, t Template, obj fixture.Object, prop, claim string) Template {
 	t.Property, t.Claim, t.SoftFailure = prop, claim, true
+	// Defaults: the runner's leak signal is valid only when the actor is not
+	// the object's owner; the state signal is valid unless a property clears it.
+	t.RunnerLeakValid = claim == "cross_identity"
+	t.RunnerStateValid = true
 	var ids []string
 	seen := map[string]bool{}
 	for _, s := range t.Steps {

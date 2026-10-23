@@ -104,15 +104,16 @@ func approver(ctx TemplateCtx, owner model.Account, role string) (model.Account,
 	return model.Account{}, false
 }
 
-func flowTemplate(ctx TemplateCtx, prop, claim, desc string, p pair, steps []contract.Step, oracle string) Template {
+func flowTemplate(ctx TemplateCtx, prop, claim, desc string, p pair, steps []contract.Step, oracle OracleKind) Template {
 	t := Template{
 		Description:    desc,
 		Steps:          steps,
 		DeniedStatuses: deniedRule(),
 		Params: map[string]string{
 			"operation": ctx.Op.ID, "account": p.victim.Name, "object": p.obj.ID,
-			"workflow": ctx.Workflow.Name, "oracle": oracle,
+			"workflow": ctx.Workflow.Name,
 		},
+		Oracle: oracle,
 	}
 	return finish(ctx, t, p.obj, prop, claim)
 }
@@ -148,7 +149,7 @@ func (a auth1) Templates(ctx TemplateCtx) []Template {
 		"The action is refused until its required approval has been given.")
 	return []Template{flowTemplate(ctx, a.id, "property_level",
 		"Account "+p.victim.Name+" performs "+ctx.Op.ID+" without the required approval.", p,
-		[]contract.Step{base, atk}, "state_change")}
+		[]contract.Step{base, atk}, OracleStateChange)}
 }
 
 // ---- P-AUTH-2 ----
@@ -197,7 +198,7 @@ func (a auth2) Templates(ctx TemplateCtx) []Template {
 		"Values covered by an approval cannot be changed afterwards without voiding the approval.")
 	t := flowTemplate(ctx, a.id, "property_level",
 		"Account "+p.victim.Name+" changes the values of an approved object through "+ctx.Op.ID+".", p,
-		[]contract.Step{base, approve, atk}, "state_change")
+		[]contract.Step{base, approve, atk}, OracleStateChange)
 	t.Params["approver"] = checker.Name
 	return []Template{t}
 }
@@ -238,7 +239,7 @@ func (m mc1) Templates(ctx TemplateCtx) []Template {
 		"The account that made an object cannot approve it.")
 	return []Template{flowTemplate(ctx, m.id, "property_level",
 		"Account "+p.victim.Name+" approves its own object through "+ctx.Op.ID+".", p,
-		[]contract.Step{base, atk}, "state_change")}
+		[]contract.Step{base, atk}, OracleStateChange)}
 }
 
 // ---- P-STATE-1 ----
@@ -282,7 +283,7 @@ func (s state1) Templates(ctx TemplateCtx) []Template {
 		"A reversed object cannot be executed.")
 	return []Template{flowTemplate(ctx, s.id, "property_level",
 		"Account "+p.victim.Name+" executes an object after reversing it, through "+ctx.Op.ID+".", p,
-		[]contract.Step{base, reverse, atk}, "state_change")}
+		[]contract.Step{base, reverse, atk}, OracleStateChange)}
 }
 
 // ---- P-STATE-2 ----
@@ -337,7 +338,7 @@ func (s state2) Templates(ctx TemplateCtx) []Template {
 		"The status of a reversed object never reports success.")
 	t := flowTemplate(ctx, s.id, "property_level",
 		"The status read after reversing an object through "+ctx.Op.ID+" never reports success.", p,
-		[]contract.Step{base, reverse, atk}, "forbidden_values")
+		[]contract.Step{base, reverse, atk}, OracleForbiddenValues)
 	t.ForbiddenValues = forbidden
 	t.CleanIsEnforced = true
 	return []Template{t}
