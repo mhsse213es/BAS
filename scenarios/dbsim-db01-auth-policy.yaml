@@ -1,0 +1,49 @@
+id: dbsim-db01-auth-policy
+product_line: dbsim
+name: Database Security Simulation DB-01 - Authentication Policy Check
+description: >
+  Read-only check of how a registered database target authenticates the BAS
+  probe identity and which login roles it exposes. The agent runs the named
+  probes auth_check and read_roles inside a READ ONLY transaction against a
+  pre-registered target whose server identity (PostgreSQL system_identifier /
+  MySQL server_uuid) is verified before any probe runs.
+
+  ATT&CK mapping: T1078 Valid Accounts (the probe authenticates with a
+  provisioned credential reference and observes what that account is allowed
+  to be), T1087 Account Discovery (role/login enumeration).
+
+  This scenario names its target by id only. Host, port, identity, credential
+  reference and mode come from the server-side target registry, never from this
+  file. Credentials are references (dbcred:...) resolved on the agent host.
+  The agent reports observations; it never scores. Verdicts are produced by the
+  orchestrator.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - authentication
+  - read-only
+  - mitre-attack
+mitre_phases:
+  - initial-access
+  - discovery
+
+steps:
+  - name: "DB-01 Authentication check (T1078)"
+    technique_id: T1078
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: auth_check
+    risk: low
+    blast_radius: "read-only authentication and session-property query; no state changed"
+    reversible: true
+
+  - name: "DB-01 Role and login enumeration (T1087)"
+    technique_id: T1087
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_roles
+    risk: low
+    blast_radius: "read-only role catalog query; no state changed"
+    reversible: true

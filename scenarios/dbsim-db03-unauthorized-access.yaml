@@ -1,0 +1,45 @@
+id: dbsim-db03-unauthorized-access
+product_line: dbsim
+name: Database Security Simulation DB-03 - Unauthorized Table Access Attempt
+description: >
+  Attempts a bounded read of a table the BAS probe identity is expected NOT to
+  be allowed to read, then lets the orchestrator correlate the attempt with the
+  database audit trail and the customer's SIEM by the per-dispatch marker. A
+  denial is the expected, healthy outcome; a successful read is a finding.
+  Row count is capped by the step limits and the read runs inside a READ ONLY
+  transaction.
+
+  ATT&CK mapping: T1213 Data from Information Repositories (an attempt to read
+  data from a database that holds application data).
+
+  The probe reads the table bas_dbsim.restricted, which the lab fixture or
+  client onboarding runbook must provision with synthetic rows only (no real
+  customer data) and without granting the probe identity access. Target details
+  come from the server-side registry by id; the marker is issued by the
+  orchestrator per dispatch.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - access-control
+  - read-only
+  - mitre-attack
+mitre_phases:
+  - collection
+
+steps:
+  - name: "DB-03 Restricted table read attempt (T1213)"
+    technique_id: T1213
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_restricted_table
+    db_params:
+      table: bas_dbsim.restricted
+    db_limits:
+      max_rows: 10
+      timeout_sec: 30
+      max_conns: 1
+    risk: low
+    blast_radius: "bounded read-only SELECT inside a READ ONLY transaction; at most 10 rows; no state changed"
+    reversible: true
