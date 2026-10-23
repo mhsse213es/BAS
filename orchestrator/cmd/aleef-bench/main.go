@@ -398,7 +398,11 @@ func workflow(idOf map[string]string) *property.Workflow {
 	}
 }
 
-func toOutcome(ctx context.Context, st *store.Store, rep campaign.Report, rec *recorder, base string, eng safety.Engagement,
+type regGetter interface {
+	GetRegression(ctx context.Context, findingID string) (store.Regression, error)
+}
+
+func toOutcome(ctx context.Context, st regGetter, rep campaign.Report, rec *recorder, base string, eng safety.Engagement,
 	keyOf map[string]string, classes map[string]model.OpClass) bench.RunOutcome {
 	o := bench.RunOutcome{
 		TestsGenerated: rep.Total, TestsRun: rep.Executed,
@@ -439,9 +443,8 @@ func toOutcome(ctx context.Context, st *store.Store, rep campaign.Report, rec *r
 		bf := bench.Finding{Finding: store.Finding{ID: f.FindingID, TestID: f.TestID, Property: f.Property, State: f.State}, Operation: f.Operation}
 		if f.State == "verified" {
 			o.Findings = append(o.Findings, bf)
-			// A verified verdict requires the owner and negative controls to
-			// pass in every round (verify package contract).
-			o.ControlsOK[f.FindingID] = true
+			// The verifier's recorded results for both controls.
+			o.ControlsOK[f.FindingID] = f.OwnerControl && f.NegativeControl
 			o.Reproductions[f.FindingID] = repro[f.TestID]
 			if r, err := st.GetRegression(ctx, f.FindingID); err == nil && r.RegressionID != "" && len(r.BundleJSON) > 0 {
 				o.RegressionSaved[f.FindingID] = true

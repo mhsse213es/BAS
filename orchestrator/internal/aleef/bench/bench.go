@@ -97,6 +97,10 @@ type FlawResult struct {
 	ID, Operation, Note string
 	Verified            bool
 	FindingIDs          []string
+	// Properties and TestIDs are the property and test ids of the findings in
+	// FindingIDs (same order), so a reviewer can see why an operation-matched
+	// finding credited the flaw: matching is by operation only.
+	Properties, TestIDs []string
 	Reason              string
 	Detail              string
 	Controls            bool
@@ -144,6 +148,28 @@ type Report struct {
 
 	Pass        bool
 	PassReasons []string
+	// PendingAssessments names the checks the harness could not assess. Pass
+	// does not count them as true; the headline says they are pending.
+	PendingAssessments []string
+}
+
+// Headline is the one-line verdict. A pass with unassessed checks is never
+// rendered as a bare PASS.
+func (r Report) Headline() string {
+	if !r.Pass {
+		return "FAIL"
+	}
+	if len(r.PendingAssessments) > 0 {
+		return "PASS (pending owner assessment of: " + strings.Join(r.PendingAssessments, ", ") + ")"
+	}
+	return "PASS"
+}
+
+func checkName(note string) string {
+	if i := strings.Index(note, " ("); i >= 0 {
+		return note[:i]
+	}
+	return note
 }
 
 // RequiredDetections is the number of detected flaws needed to pass: the
@@ -260,6 +286,7 @@ func Evaluate(ctx context.Context, labels []Label, run func(build string) (RunOu
 			fr.Verified = true
 			fr.Reason = ReasonVerified
 			fr.FindingIDs = []string{f.ID}
+			fr.Properties, fr.TestIDs = []string{f.Property}, []string{f.TestID}
 			fr.Controls = vuln.ControlsOK[f.ID]
 			fr.Regression = vuln.RegressionSaved[f.ID]
 			fr.Reproductions = vuln.Reproductions[f.ID]
@@ -274,6 +301,7 @@ func Evaluate(ctx context.Context, labels []Label, run func(build string) (RunOu
 					if targets(l, c.Operation, vuln.OperationAliases) {
 						fr.Reason = ReasonCandidateOnly
 						fr.FindingIDs = append(fr.FindingIDs, c.ID)
+						fr.Properties, fr.TestIDs = append(fr.Properties, c.Property), append(fr.TestIDs, c.TestID)
 					}
 				}
 			}
@@ -310,6 +338,9 @@ func Evaluate(ctx context.Context, labels []Label, run func(build string) (RunOu
 		}
 	}
 	sort.Strings(rep.SafetyNotAssessed)
+	for _, n := range rep.SafetyNotAssessed {
+		rep.PendingAssessments = append(rep.PendingAssessments, checkName(n))
+	}
 
 	rep.score(fixed, vuln)
 	return rep, nil

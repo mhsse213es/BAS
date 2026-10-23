@@ -57,6 +57,9 @@ func TestCampaignIntegrationPostgres(t *testing.T) {
 			}
 		}
 		for _, f := range rep.Findings {
+			if f.State == "verified" && (!f.OwnerControl || !f.NegativeControl) {
+				t.Fatalf("verified finding %s without recorded passing controls", f.FindingID)
+			}
 			if f.State == "verified" && f.RegressionID == "" {
 				t.Fatalf("report finding %s has no regression id", f.FindingID)
 			}

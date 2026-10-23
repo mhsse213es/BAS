@@ -73,6 +73,9 @@ type Operation struct {
 	Body        *Schema
 	Security    []string // security scheme names required (sorted)
 	Class       OpClass  // set by the operator later; the importer leaves ClassUnknown
+	// Responses lists the status codes the document declares for the
+	// operation, sorted ("201", "default", ...).
+	Responses []string
 }
 
 // Model is the imported application model.

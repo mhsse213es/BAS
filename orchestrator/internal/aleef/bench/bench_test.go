@@ -371,3 +371,43 @@ func TestBenchLibraryDoesNotImportBank(t *testing.T) {
 		}
 	}
 }
+
+func TestPerFlawShowsPropertyAndTestIDs(t *testing.T) {
+	v := vulnOutcome(6)
+	for i := range v.Findings {
+		v.Findings[i].Property = fmt.Sprintf("P-X-%d", i+1)
+	}
+	rep, _ := Evaluate(context.Background(), synthLabels(8), stub(fixedOutcome(), v))
+	fr := rep.PerFlaw[0]
+	if len(fr.Properties) != 1 || fr.Properties[0] != "P-X-1" || len(fr.TestIDs) != 1 || fr.TestIDs[0] != "tt1" {
+		t.Fatalf("flaw 1: %+v", fr)
+	}
+	md := rep.Markdown()
+	if !strings.Contains(md, "| Property | Test |") || !strings.Contains(md, "P-X-1") || !strings.Contains(md, "tt1") {
+		t.Fatalf("markdown lacks property/test:\n%s", md)
+	}
+}
+
+func TestPassWithUnassessedChecksIsNeverABarePass(t *testing.T) {
+	v := vulnOutcome(6)
+	v.SafetyNotAssessed = []string{"no_unauthorized_money_movement (needs the owner)", "other_check"}
+	rep, _ := Evaluate(context.Background(), synthLabels(8), stub(fixedOutcome(), v))
+	if !rep.Pass {
+		t.Fatalf("Pass semantics must not change: %v", rep.PassReasons)
+	}
+	want := "PASS (pending owner assessment of: no_unauthorized_money_movement, other_check)"
+	if rep.Headline() != want || !strings.Contains(rep.Markdown(), "**"+want+"**") {
+		t.Fatalf("headline %q", rep.Headline())
+	}
+	if len(rep.PendingAssessments) != 2 {
+		t.Fatalf("pending %v", rep.PendingAssessments)
+	}
+	rep2, _ := Evaluate(context.Background(), synthLabels(8), stub(fixedOutcome(), vulnOutcome(6)))
+	if rep2.Headline() != "PASS" {
+		t.Fatalf("nothing pending should be a plain PASS: %q", rep2.Headline())
+	}
+	rep3, _ := Evaluate(context.Background(), synthLabels(8), stub(fixedOutcome(), vulnOutcome(5)))
+	if rep3.Headline() != "FAIL" {
+		t.Fatal("failure must read FAIL")
+	}
+}

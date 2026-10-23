@@ -1,7 +1,13 @@
 package main
 
 import (
+	"context"
+	"net/http"
+
 	"bytes"
+	"github.com/audspect/bas/internal/aleef/campaign"
+	"github.com/audspect/bas/internal/aleef/safety"
+	"github.com/audspect/bas/internal/aleef/store"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,5 +108,35 @@ func TestFixedOnlyRehearsalEndToEnd(t *testing.T) {
 	}
 	if strings.Contains(md, "unconfirmed: cleanup failed") {
 		t.Fatalf("cleanup failures:\n%s", md)
+	}
+}
+
+type stubRegs struct{}
+
+func (stubRegs) GetRegression(context.Context, string) (store.Regression, error) {
+	return store.Regression{RegressionID: "R1", BundleJSON: []byte("{}")}, nil
+}
+
+func TestControlsComeFromRecordedResultsNotInference(t *testing.T) {
+	rep := campaign.Report{
+		Tests: []campaign.TestOutcome{{TestID: "t1", Reproductions: 3, Executed: true, State: "verified"}, {TestID: "t2", Reproductions: 3, Executed: true, State: "verified"}},
+		Findings: []campaign.FindingSummary{
+			{FindingID: "f1", TestID: "t1", Operation: "op", State: "verified", OwnerControl: true, NegativeControl: true},
+			{FindingID: "f2", TestID: "t2", Operation: "op", State: "verified", OwnerControl: true, NegativeControl: false},
+		},
+	}
+	eng := safety.Engagement{Environment: "lab"}
+	o := toOutcome(context.Background(), stubRegs{}, rep, &recorder{base: http.DefaultTransport}, "http://127.0.0.1:1", eng, nil, nil)
+	if !o.ControlsOK["f1"] || o.ControlsOK["f2"] {
+		t.Fatalf("controls: %v", o.ControlsOK)
+	}
+	// a finding whose negative control did not pass is not credited by the evaluator
+	rr, err := bench.Evaluate(context.Background(), []bench.Label{{ID: "T1", Operation: "op"}}, func(string) (bench.RunOutcome, error) {
+		x := o
+		x.Findings = x.Findings[1:]
+		return x, nil
+	})
+	if err != nil || rr.Verified != 0 {
+		t.Fatalf("verified %d err %v", rr.Verified, err)
 	}
 }

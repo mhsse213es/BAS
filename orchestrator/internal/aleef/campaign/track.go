@@ -37,6 +37,12 @@ type trackRT struct {
 	// learn tells the id translator about a created object's id.
 	learn func(string)
 
+	// seen holds every id known before a request: fixture and existing
+	// objects, ids returned by earlier responses and ids already tracked. An
+	// object whose id was known is never compensated by this transport.
+	smu  sync.Mutex
+	seen map[string]bool
+
 	mu    sync.Mutex
 	track func(model.CreatedObject)
 }
@@ -48,7 +54,12 @@ func (t *trackRT) setTrack(f func(model.CreatedObject)) {
 }
 
 func newTrackRT(next http.RoundTripper, cfg Config, m model.Model) *trackRT {
-	t := &trackRT{next: next, m: m, comp: map[string]string{}, owners: map[string]string{}}
+	t := &trackRT{next: next, m: m, comp: map[string]string{}, owners: map[string]string{}, seen: map[string]bool{}}
+	for _, a := range cfg.Accounts {
+		for _, id := range a.Existing {
+			t.seen[id] = true
+		}
+	}
 	if u, err := url.Parse(cfg.BaseURL); err == nil {
 		t.prefix = strings.TrimRight(u.Path, "/")
 	}
@@ -72,36 +83,60 @@ func newTrackRT(next http.RoundTripper, cfg Config, m model.Model) *trackRT {
 	return t
 }
 
+// markKnown records ids as known before any request (fixture objects).
+func (t *trackRT) markKnown(ids ...string) {
+	t.smu.Lock()
+	for _, id := range ids {
+		t.seen[id] = true
+	}
+	t.smu.Unlock()
+}
+
+// firstSight records id and reports whether it had not been seen before.
+func (t *trackRT) firstSight(id string) bool {
+	t.smu.Lock()
+	defer t.smu.Unlock()
+	if t.seen[id] {
+		return false
+	}
+	t.seen[id] = true
+	return true
+}
+
 func (t *trackRT) RoundTrip(r *http.Request) (*http.Response, error) {
 	resp, err := t.next.RoundTrip(r)
-	if err != nil || resp == nil || r.Method != http.MethodPost || resp.StatusCode < 200 || resp.StatusCode > 299 || len(t.comp) == 0 {
+	if err != nil || resp == nil || resp.StatusCode < 200 || resp.StatusCode > 299 || len(t.comp) == 0 || resp.Body == nil {
 		return resp, err
 	}
-	path := strings.TrimPrefix(r.URL.Path, t.prefix)
+	// Every successful response teaches the transport which ids exist; only a
+	// creation response (exactly 201, declared for the operation) can name a
+	// new object, and only if its id was not known before.
+	creating := false
 	var op *model.Operation
-	for _, c := range t.m.Match(r.Method, path) {
-		c := c
-		if ct := c.CreatedType(); ct != "" && t.comp[ct] != "" && len(c.PathParams) == 0 {
-			op = &c
-			break
+	if r.Method == http.MethodPost && resp.StatusCode == http.StatusCreated {
+		path := strings.TrimPrefix(r.URL.Path, t.prefix)
+		for _, c := range t.m.Match(r.Method, path) {
+			c := c
+			if ct := c.CreatedType(); ct != "" && t.comp[ct] != "" && len(c.PathParams) == 0 && c.Declares("201") {
+				op, creating = &c, true
+				break
+			}
 		}
-	}
-	if op == nil || resp.Body == nil {
-		return resp, err
 	}
 	raw, rerr := io.ReadAll(io.LimitReader(resp.Body, maxTrackBody+1))
 	_ = resp.Body.Close()
+	resp.Body = io.NopCloser(bytes.NewReader(raw))
 	if rerr != nil || len(raw) > maxTrackBody {
-		// The caller still gets what was read; an unreadable or oversized body is
-		// not tracked and shows up as a leftover object.
-		resp.Body = io.NopCloser(bytes.NewReader(raw))
 		return resp, nil
 	}
-	resp.Body = io.NopCloser(bytes.NewReader(raw))
 	var out struct {
 		ID string `json:"id"`
 	}
 	if json.Unmarshal(raw, &out) != nil || out.ID == "" {
+		return resp, nil
+	}
+	fresh := t.firstSight(out.ID)
+	if !creating || !fresh {
 		return resp, nil
 	}
 	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")

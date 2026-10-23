@@ -141,3 +141,14 @@ func (m Model) HasResourceType(t string) bool {
 	}
 	return false
 }
+
+// Declares reports whether the document declares the status code for the
+// operation.
+func (o Operation) Declares(code string) bool {
+	for _, c := range o.Responses {
+		if c == code {
+			return true
+		}
+	}
+	return false
+}

@@ -91,10 +91,7 @@ func writeSafety(b *strings.Builder, checks map[string]bool, notAssessed []strin
 // Markdown renders the report for pasting into the QA log.
 func (r Report) Markdown() string {
 	var b strings.Builder
-	verdict := "FAIL"
-	if r.Pass {
-		verdict = "PASS"
-	}
+	verdict := r.Headline()
 	b.WriteString("## Summary\n\n")
 	fmt.Fprintf(&b, "- Milestone 1 evaluation: **%s**\n", verdict)
 	fmt.Fprintf(&b, "- Flaws detected: %d of %d (required %d), recall %.2f\n", r.Verified, r.Labels, r.Required, r.Recall)
@@ -112,14 +109,14 @@ func (r Report) Markdown() string {
 	}
 
 	b.WriteString("\n## Per flaw\n\n")
-	b.WriteString("| Flaw | Operation | Detected | Reason | Findings | Controls | Regression | Reproductions | Tests on operation |\n|---|---|---|---|---|---|---|---|---|\n")
+	b.WriteString("| Flaw | Operation | Detected | Reason | Findings | Property | Test | Controls | Regression | Reproductions | Tests on operation |\n|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, f := range r.PerFlaw {
 		reason := f.Reason
 		if f.Detail != "" {
 			reason += " (" + f.Detail + ")"
 		}
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %d | %d |\n", cell(f.ID), cell(f.Operation), yn(f.Verified), cell(reason),
-			cell(strings.Join(f.FindingIDs, ", ")), yn(f.Controls), yn(f.Regression), f.Reproductions, f.TestsOnOperation)
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %d | %d |\n", cell(f.ID), cell(f.Operation), yn(f.Verified), cell(reason),
+			cell(strings.Join(f.FindingIDs, ", ")), cell(strings.Join(f.Properties, ", ")), cell(strings.Join(f.TestIDs, ", ")), yn(f.Controls), yn(f.Regression), f.Reproductions, f.TestsOnOperation)
 	}
 
 	b.WriteString("\n## Coverage per operation (vulnerable build)\n\n")

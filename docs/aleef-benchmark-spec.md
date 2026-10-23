@@ -82,3 +82,7 @@ Package `orchestrator/internal/aleef/bank` serves the clean bank (`/v1` reads, `
 `CanReadDocument` receives the document, the route and the customer id from the request path (empty on the primary route); the fixed `CanReadDocument` authorizes on the document owner.
 
 Sealed-defect hook: package `bank/sealed` exposes `Policy(id string) (bank.Policy, bool)`. The committed stub `sealed/sealed_stub.go` carries `//go:build !aleefsealed` and returns `(bank.FixedPolicy(), false)`. The owner supplies `sealed/sealed_defects.go` with `//go:build aleefsealed`, defining `Policy(id)` that returns the defective policy for H1-H8 keyed by id. The two files are mutually exclusive by build tag, so they never collide. The implementer does not write or read that file.
+
+## Addendum: fixed-rule operations outside the hook table (Task 14a)
+
+The bank also serves owner-only `DELETE /v2/beneficiaries/{id}`, `DELETE /v2/transactions/{id}` and `DELETE /v2/payments/{id}` so a tester can remove the objects it created, and a read-only `Server.ObjectCounts()` accessor used by the harness for the cleanup check. These are fixed rules (only the object's owner may delete), not policy hooks: they do not appear in the hook table above, the sealed file neither replaces nor needs to know about them, and they are not benchmark targets.

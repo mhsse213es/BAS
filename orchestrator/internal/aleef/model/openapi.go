@@ -32,11 +32,12 @@ type rawDoc struct {
 }
 
 type rawOp struct {
-	OperationID string            `json:"operationId"`
-	Parameters  []json.RawMessage `json:"parameters"`
-	RequestBody json.RawMessage   `json:"requestBody"`
-	Security    json.RawMessage   `json:"security"`
-	Callbacks   json.RawMessage   `json:"callbacks"`
+	OperationID string                     `json:"operationId"`
+	Parameters  []json.RawMessage          `json:"parameters"`
+	RequestBody json.RawMessage            `json:"requestBody"`
+	Security    json.RawMessage            `json:"security"`
+	Callbacks   json.RawMessage            `json:"callbacks"`
+	Responses   map[string]json.RawMessage `json:"responses"`
 }
 
 type rawParam struct {
@@ -163,6 +164,10 @@ func (im *importer) importPath(path string, raw json.RawMessage, rootSec []strin
 		} else {
 			o.Security = append([]string(nil), rootSec...)
 		}
+		for code := range op.Responses {
+			o.Responses = append(o.Responses, code)
+		}
+		sort.Strings(o.Responses)
 		o.ID = uniqueID(im, opID(op.OperationID, method, path), used)
 		out = append(out, o)
 	}

@@ -142,6 +142,9 @@ type TestOutcome struct {
 	EvidenceHash  string
 	Reproductions int
 	Executed      bool
+	// OwnerControl and NegativeControl are the verifier's recorded control
+	// results: true only when that control ran and passed in every round.
+	OwnerControl, NegativeControl bool
 	// RegressionID is the saved regression of a verified finding.
 	RegressionID string
 }
@@ -157,6 +160,8 @@ type FindingSummary struct {
 	EvidenceHash string
 	// RegressionID is the id of the regression saved for a verified finding.
 	RegressionID string
+	// OwnerControl and NegativeControl: see TestOutcome.
+	OwnerControl, NegativeControl bool
 }
 
 // Report is the campaign result. It never contains tokens, request or response
@@ -433,6 +438,7 @@ func Run(ctx context.Context, cfg Config) (rep Report, retErr error) {
 		verdict, verr := v.Verify(ctx, t)
 		out.Executed = e.freshCount() > before
 		out.State, out.Reason, out.EvidenceHash, out.Reproductions = verdict.State, verdict.Reason, verdict.EvidenceHash, verdict.Reproductions
+		out.OwnerControl, out.NegativeControl = verdict.OwnerControl, verdict.NegativeControl
 		rep.Orphans = mergeOrphans(rep.Orphans, verdict.Orphans)
 		if verr != nil {
 			runErr = fmt.Errorf("campaign: verify %s: %w", t.ID, verr)
@@ -468,7 +474,8 @@ func Run(ctx context.Context, cfg Config) (rep Report, retErr error) {
 		rep.Tests = append(rep.Tests, out)
 		if out.Reproductions > 0 || out.State == verify.StateVerified {
 			byID[t.ID] = FindingSummary{FindingID: verdict.FindingID, TestID: t.ID, Property: t.Property, Operation: op,
-				State: out.State, Reason: out.Reason, EvidenceHash: out.EvidenceHash, RegressionID: out.RegressionID}
+				State: out.State, Reason: out.Reason, EvidenceHash: out.EvidenceHash, RegressionID: out.RegressionID,
+				OwnerControl: out.OwnerControl, NegativeControl: out.NegativeControl}
 		}
 	}
 

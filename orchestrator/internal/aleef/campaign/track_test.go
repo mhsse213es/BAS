@@ -108,3 +108,50 @@ func TestAliasLearnedIDsAreNotRefusedButOthersStillAre(t *testing.T) {
 		}
 	}
 }
+
+func TestTrackOnlyCreationStatusAndNeverKnownOrDuplicateIDs(t *testing.T) {
+	tr, got, nx := trackFixture(t, 201, `{"id":"item-77"}`)
+	set := func(status int, body string) {
+		nx.resp = func() *http.Response {
+			return &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body))}
+		}
+	}
+	// a replay answered 200 with a pre-existing id is never tracked
+	set(200, `{"id":"item-5"}`)
+	doTracked(t, tr, "POST", "http://h/api/v2/items", "tok-alice")
+	if len(*got) != 0 {
+		t.Fatalf("replay tracked: %+v", *got)
+	}
+	// a 201 is tracked, once, however often the id comes back
+	set(201, `{"id":"item-77"}`)
+	doTracked(t, tr, "POST", "http://h/api/v2/items", "tok-alice")
+	doTracked(t, tr, "POST", "http://h/api/v2/items", "tok-alice")
+	if len(*got) != 1 {
+		t.Fatalf("duplicates tracked %d times", len(*got))
+	}
+	// an id already seen in an earlier response (a read) is not ours to delete
+	set(200, `{"id":"item-90"}`)
+	doTracked(t, tr, "GET", "http://h/api/v2/items/item-90", "tok-alice")
+	set(201, `{"id":"item-90"}`)
+	doTracked(t, tr, "POST", "http://h/api/v2/items", "tok-alice")
+	// a fixture or existing object id is known from the start
+	tr.markKnown("item-fx")
+	set(201, `{"id":"item-fx"}`)
+	doTracked(t, tr, "POST", "http://h/api/v2/items", "tok-alice")
+	if len(*got) != 1 {
+		t.Fatalf("known ids tracked: %+v", *got)
+	}
+}
+
+func TestTrackIgnoresOperationsThatDoNotDeclareCreated(t *testing.T) {
+	tr, got, _ := trackFixture(t, 201, `{"id":"item-88"}`)
+	for i := range tr.m.Operations {
+		if tr.m.Operations[i].ID == "createItem" {
+			tr.m.Operations[i].Responses = []string{"200"}
+		}
+	}
+	doTracked(t, tr, "POST", "http://h/api/v2/items", "tok-alice")
+	if len(*got) != 0 {
+		t.Fatalf("tracked from an operation that does not declare 201: %+v", *got)
+	}
+}

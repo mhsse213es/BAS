@@ -122,6 +122,11 @@ func (e *env) build(ctx context.Context, aliasing bool) (*exec.Executor, func(co
 	if al, ok := rt.(aliasRT); ok {
 		tracker.learn = al.learn
 	}
+	for _, f := range []fixture.Fixture{fx, ecfg.Fixture} {
+		for _, o := range f.Objects {
+			tracker.markKnown(o.ID)
+		}
+	}
 	ecfg.HTTP = &http.Client{Transport: tracker, Timeout: e.timeout}
 	ex, xerr := exec.New(ecfg)
 	if xerr != nil {
