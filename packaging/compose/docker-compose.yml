@@ -166,6 +166,11 @@ services:
       KUBE_SCENARIO_NAMESPACE: ${KUBE_SCENARIO_NAMESPACE:-bas-sandbox}
       KUBE_SCENARIO_TOKEN_FILE: /run/k8s-scenario/token
       KUBE_SCENARIO_CA_FILE: /run/k8s-scenario/ca.pem
+      # Read-only Kubernetes analysis. Empty API keeps it off; the token and CA are staged by install.sh.
+      KUBE_DISCOVERY_API: ${KUBE_DISCOVERY_API:-}
+      KUBE_DISCOVERY_CLUSTER: ${KUBE_DISCOVERY_CLUSTER:-kind-bas-lab}
+      KUBE_DISCOVERY_TOKEN_FILE: /run/k8s-discovery/token
+      KUBE_DISCOVERY_CA_FILE: /run/k8s-discovery/ca.pem
       JWT_SECRET:       ${JWT_SECRET}
       AGENT_SECRET:     ${AGENT_SECRET:-}
       HTTP_PORT:        "9443"
@@ -301,6 +306,7 @@ services:
       # orchestrator only ever reads this certificate, never writes it.
       - ./certs:/etc/bas/certs:ro
       - ${DATA_DIR}/k8s-scenario:/run/k8s-scenario:ro
+      - ${DATA_DIR}/k8s-discovery:/run/k8s-discovery:ro
       # scenarios is read-write: the threat-intel connector writes generated
       # YAMLs into scenarios/intel/. Keep writable even if connector is unused.
       - ./scenarios:/scenarios

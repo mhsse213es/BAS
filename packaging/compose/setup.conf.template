@@ -203,3 +203,11 @@ KUBE_SCENARIO_CLUSTER=kind-bas-lab
 KUBE_SCENARIO_NAMESPACE=bas-sandbox
 KUBE_SCENARIO_TOKEN=              # paste the token only
 KUBE_SCENARIO_CA_FILE=            # path on this server to the cluster CA (PEM)
+
+# Read-only Kubernetes analysis (cloud product). Off by default. The token must belong to a read-only account
+# (kube-system/bas-discovery in the lab): it lists pods, ServiceAccounts, namespaces and RBAC, and cannot write or read secrets.
+KUBE_DISCOVERY_ENABLED=false      # true | false
+KUBE_DISCOVERY_API=               # e.g. https://127.0.0.1:61567 (must be reachable from this server)
+KUBE_DISCOVERY_CLUSTER=kind-bas-lab
+KUBE_DISCOVERY_TOKEN=             # paste the read-only token only
+KUBE_DISCOVERY_CA_FILE=           # path on this server to the cluster CA (PEM)
