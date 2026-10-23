@@ -81,7 +81,7 @@ func TestPGCapabilitiesDeclareAuditSource(t *testing.T) {
 	if c.MarkerInAuditRecord || !c.MarkerInQueryText || !c.MarkerInAppName {
 		t.Fatalf("marker facts wrong: %+v", c)
 	}
-	if len(c.ProbeIDs) != 7 {
+	if len(c.ProbeIDs) != 9 {
 		t.Fatalf("probe ids: %v", c.ProbeIDs)
 	}
 	ev, err := New().CollectAudit(context.Background(), dbprobe.AuditQuery{})
