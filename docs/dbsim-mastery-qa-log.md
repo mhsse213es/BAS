@@ -431,3 +431,33 @@ comparison); MySQL comment survival for DB-07 (else Unknown/ERROR).
   design (a broken pipeline looks identical to a silent rule).
 * A classification-rule alert is matched by rule NAME. If the connector reports
   another field, every run is Incorrect/Unknown, never a false Correct.
+
+### Fix round 1 (independent review: approved with fixes)
+
+* **F1** A fixture-gated probe (`auth_after_revoke`, any probe with a fixture
+  param or required fixture) is never a PASS without a POSITIVE cleanup status:
+  empty and `not_applicable` now grade ERROR "fixture cleanup unverified" (non-fixture
+  probes unchanged; DB-05/09 with `ok` still PASS).
+* **F2** `ClassifyByRule` returns Unknown, not Incorrect, when a correlated alert
+  has an empty rule name, when a name matches the configured rule only after
+  case-folding/trimming (misconfiguration), or when strong-contextual alerts were
+  set aside behind exact-marker ones (`dbcorrelate.Result.StrongDropped`).
+  Incorrect remains only for a clean case-exact miss with on-time Present,
+  exact/strong telemetry. Correct is a rule-identity verdict and is ALSO granted
+  when telemetry is Delayed (the rule did fire; latency is graded by detection).
+* **F3 Known limitation:** a timeout/cancel during the DB-06 CREATE or REVOKE can
+  leave the throwaway account on the lab database, because Cleanup cannot redial
+  as that account (its password is blanked after Connect) and the adapter is
+  marked broken. This is escalated as a safety incident (fail closed). Manual
+  drop: `DROP ROLE IF EXISTS dbsim_<id>_acct;` (PostgreSQL) or
+  `DROP USER IF EXISTS 'dbsim_<id>_acct'@'%';` (MySQL).
+* **F4** Wording corrected: the throwaway account is created with no privileges
+  granted beyond defaults (PUBLIC), not "no privileges beyond connect"
+  (scenario re-signed).
+* **F5** The throwaway password appears in server statement logs and, in the lab,
+  the `dbsim-audit-*` index (`CREATE ROLE/USER ... PASSWORD` cannot bind it). It is
+  a one-run random value for an account dropped in the same run; the statement
+  carries no marker, so no rule fires on it. Nothing more is claimed.
+* **F6** `ToRecord` states "Classification not evaluated: no classification rule
+  configured/applicable" whenever a classification was expected but not evaluated,
+  also outside `dbrun.Evaluate`.

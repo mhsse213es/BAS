@@ -142,3 +142,17 @@ func TestClassificationNotAttemptedForOtherProbesOrDeniedReads(t *testing.T) {
 		t.Fatalf("denied read: %s %s", ev.Record.Classification, ev.Result)
 	}
 }
+
+// F2: a classification alert that is only strong-contextual is set aside behind
+// the exact generic alert by the correlator; its silence must not read as Incorrect.
+func TestClassificationOutcomeUnknownWhenStrongAlertsWereSetAside(t *testing.T) {
+	strong := ruleAlert("s1", classRule, pT0.Add(11*time.Second), "dbsim_lab bas-dbsim-run:1111 read customers_pii")
+	c := &fakeConn{reply: alertsReply(genericAlert(pT0.Add(10*time.Second)), strong)}
+	ev := mustEval(t, c, db07Input(classRule))
+	if ev.Correlation == nil || ev.Correlation.StrongDropped != 1 {
+		t.Fatalf("correlator did not report the set-aside strong alert: %+v", ev.Correlation)
+	}
+	if ev.Record.Classification != dlpreport.ClassificationUnknown {
+		t.Fatalf("classification %s, want unknown", ev.Record.Classification)
+	}
+}

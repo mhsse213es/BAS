@@ -301,12 +301,14 @@ func Evaluate(ctx context.Context, conn detectverify.Connector, in StepInput) (E
 
 	if classifyProbe {
 		var rules []string
+		hidden := 0
 		if ev.Correlation != nil {
+			hidden = ev.Correlation.StrongDropped
 			for _, a := range ev.Correlation.Alerts {
 				rules = append(rules, a.RuleName)
 			}
 		}
-		cls, lim := dbsim.ClassifyByRule(in.ClassificationRuleName, o, rules)
+		cls, lim := dbsim.ClassifyByRule(in.ClassificationRuleName, o, rules, hidden)
 		o.Classification = cls
 		o.Limitations = append(o.Limitations, lim)
 	}

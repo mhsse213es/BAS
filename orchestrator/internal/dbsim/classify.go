@@ -31,8 +31,10 @@ const (
 //	NotEvaluated   no rule is configured (or it is the generic marker rule), the
 //	               read did not complete, or it was denied (nothing was read).
 //
-// The second return value is a limitation sentence for the report.
-func ClassifyByRule(rule string, o Outcome, correlatedRules []string) (dlpreport.ClassificationOutcome, string) {
+// hiddenStrong is the number of strong-contextual alerts the correlator set aside
+// because exact-marker alerts existed. The second return value is a limitation
+// sentence for the report.
+func ClassifyByRule(rule string, o Outcome, correlatedRules []string, hiddenStrong int) (dlpreport.ClassificationOutcome, string) {
 	rule = strings.TrimSpace(rule)
 	switch {
 	case rule == "":
@@ -44,12 +46,29 @@ func ClassifyByRule(rule string, o Outcome, correlatedRules []string) (dlpreport
 	case !o.Corr.Evaluated:
 		return dlpreport.ClassificationUnknown, "Classification unknown: no detection telemetry was correlated, so a silent classification rule cannot be told from a missing alert pipeline."
 	}
+	// Rule identity is compared case-exactly. A name that differs only in case or
+	// surrounding space is a misconfiguration, an empty name cannot be attributed,
+	// and strong-contextual alerts hidden behind exact ones may have held the
+	// classification alert: none of those is a control failure, so none is Incorrect.
+	exact, near, empty := false, false, false
 	for _, r := range correlatedRules {
-		if strings.TrimSpace(r) == rule {
-			if o.Corr.Match == MatchExactMarker || o.Corr.Match == MatchStrongContextual {
-				return dlpreport.ClassificationCorrect, "Classification correct: the classification rule raised an alert correlated to this probe's marker."
-			}
+		switch {
+		case r == rule:
+			exact = true
+		case strings.TrimSpace(r) == "":
+			empty = true
+		case strings.EqualFold(strings.TrimSpace(r), rule):
+			near = true
 		}
+	}
+	if exact && (o.Corr.Match == MatchExactMarker || o.Corr.Match == MatchStrongContextual) {
+		// A rule-identity verdict: also granted when telemetry is Delayed (the
+		// rule did fire for this marker; latency is graded by the detection
+		// dimension, not here).
+		return dlpreport.ClassificationCorrect, "Classification correct: the classification rule raised an alert correlated to this probe's marker."
+	}
+	if empty || near || hiddenStrong > 0 {
+		return dlpreport.ClassificationUnknown, "Classification unknown: the correlated alerts cannot rule out the classification rule (an alert without a rule name, a rule name differing only in case or spacing from the configured one, or strong-contextual alerts set aside behind exact-marker ones)."
 	}
 	if o.Corr.Telemetry == dlpreport.TelemetryPresent && (o.Corr.Match == MatchExactMarker || o.Corr.Match == MatchStrongContextual) {
 		return dlpreport.ClassificationIncorrect, "Classification incorrect: the read was allowed and the SIEM raised marker-correlated alerts for it, but none came from the classification rule."

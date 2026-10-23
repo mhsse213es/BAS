@@ -111,7 +111,7 @@ func (a *Adapter) runAuthAfterRevoke(ctx context.Context, def dbprobe.ProbeDef, 
 		res.Notes = append(res.Notes, "revoke_detail: "+step+": "+dbprobe.TruncateUTF8(redact(err.Error(), a.secrets...), 200))
 	}
 
-	// 1. CREATE the throwaway login account (no privileges beyond connect).
+	// 1. CREATE the throwaway login account (no privileges granted beyond defaults (PUBLIC)).
 	// The password is hex, so splicing it into the literal cannot break out; the
 	// statement cannot take bound parameters.
 	a.acct = acctState{name: name, mayExist: true}

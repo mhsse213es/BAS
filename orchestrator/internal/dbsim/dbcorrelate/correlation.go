@@ -59,6 +59,9 @@ type Result struct {
 	Limitations string
 	// TimingConfidence is "normal" or "low" (skew above MaxTrustedSkew).
 	TimingConfidence string
+	// StrongDropped counts strong-contextual alerts set aside because exact-marker
+	// alerts existed (Alerts then holds only the exact ones).
+	StrongDropped int
 }
 
 // ToCorrelation converts the result into the report layer's input.
@@ -365,6 +368,7 @@ func Correlate(ctx context.Context, c detectverify.Connector, in CorrelationInpu
 	switch {
 	case len(ours) > 0:
 		positive(ours, MatchExact)
+		res.StrongDropped = len(strong)
 		if len(errs) > 0 {
 			errs = nil // a positive observation stands despite a failed lookup
 		}

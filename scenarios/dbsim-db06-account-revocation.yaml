@@ -5,8 +5,8 @@ description: >
   Lab-only. Checks that revoking a database login actually stops it
   authenticating. The agent creates a THROWAWAY login account for this run only
   (named dbsim_<fixture id>_acct, with a random password generated in the agent
-  process and never logged, returned or reported, and no privileges beyond
-  connecting), opens a NEW connection as it and runs one trivial statement
+  process and never logged, returned or reported, and no privileges granted beyond
+  defaults (PUBLIC)), opens a NEW connection as it and runs one trivial statement
   tagged with the per-dispatch marker (the baseline), revokes the login
   (PostgreSQL ALTER ROLE ... NOLOGIN, MySQL ALTER USER ... ACCOUNT LOCK), and
   then tries a NEW connection as the same account. A refused authentication is

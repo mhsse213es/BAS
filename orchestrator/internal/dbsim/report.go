@@ -205,6 +205,27 @@ func unobservable(s ScenarioMeta, o Outcome) string {
 	return "no grants observed: account may lack catalog visibility"
 }
 
+// fixtureGatedProbe reports whether the probe runs against a per-run seeded
+// fixture (R-AI): auth_after_revoke, and any registry probe with a fixture param
+// or a required fixture.
+func fixtureGatedProbe(id string) bool {
+	if id == ProbeAuthAfterRevoke {
+		return true
+	}
+	e, ok := LookupProbeEntry(id)
+	return ok && (e.FixtureParam != "" || e.RequiredFixture != "")
+}
+
+// cleanupUnverified: a fixture-gated probe ran but its teardown was not
+// POSITIVELY verified ("ok"); an empty or not_applicable status is not proof.
+func cleanupUnverified(o Outcome) bool {
+	if !o.ProbeRan || !fixtureGatedProbe(o.ProbeID) {
+		return false
+	}
+	st, _ := cleanupState(o)
+	return st != CleanupOK
+}
+
 // cleanupState returns the effective cleanup status and whether the fixture
 // teardown is a safety incident. Either source (Outcome or the probe result)
 // can raise it; only an empty, "ok" or "not_applicable" status is benign, so
@@ -372,6 +393,8 @@ func grade(s ScenarioMeta, o Outcome) graded {
 		// Fixture cleanup failed or left residual objects (spec section 8, gate
 		// 4). Checked first: no other outcome, SKIPPED included, may hide it.
 		g.Result, g.Reason = ResultError, "fixture cleanup safety incident: the run cannot be graded as completed"
+	case cleanupUnverified(o):
+		g.Result, g.Reason = ResultError, "fixture cleanup unverified: a fixture-gated probe needs a positive cleanup status (ok)"
 	case o.ExecutionError != "":
 		g.Result, g.Reason = ResultError, "execution error: "+o.ExecutionError
 	case o.ProbeRan && (o.Skipped != "" || o.GateRefusal != ""):
@@ -489,6 +512,10 @@ func ToRecord(s ScenarioMeta, o Outcome) (dlpreport.Record, error) {
 		lims = append(lims, fmt.Sprintf("Fixture cleanup safety incident (cleanup status %q): synthetic fixture objects may remain in the target database; the run is graded ERROR and must be investigated.", redact(st)))
 	}
 
+	if cleanupUnverified(o) {
+		lims = append(lims, "Fixture cleanup was not verified (no positive cleanup status): the run is graded ERROR, never PASS.")
+	}
+
 	tel, resp := dlpreport.TelemetryUnverifiable, dlpreport.ResponseNotTested
 	conf := string(MatchNone)
 	if o.Corr.Evaluated {
@@ -535,8 +562,12 @@ func ToRecord(s ScenarioMeta, o Outcome) (dlpreport.Record, error) {
 	if cls == "" {
 		cls = dlpreport.ClassificationNotEvaluated
 	}
-	if cls == dlpreport.ClassificationNotEvaluated && !s.ExpectClassification {
-		lims = append(lims, "Classification not evaluated: this scenario does not classify data.")
+	if cls == dlpreport.ClassificationNotEvaluated {
+		if s.ExpectClassification {
+			lims = append(lims, "Classification not evaluated: no classification rule configured/applicable for this result.")
+		} else {
+			lims = append(lims, "Classification not evaluated: this scenario does not classify data.")
+		}
 	}
 
 	src := "dbsim-orchestrator"

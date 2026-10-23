@@ -24,7 +24,7 @@ func baseSpec(probe string) dbsim.DBProbeSpec {
 }
 
 func okExec(rows int, notes ...string) AgentExec {
-	return AgentExec{DBProbe: &dbsim.DBProbeResult{RowsRead: rows, DBTime: pT0, AgentTime: pT0, Notes: notes}}
+	return AgentExec{DBProbe: &dbsim.DBProbeResult{RowsRead: rows, DBTime: pT0, AgentTime: pT0, Notes: notes, CleanupStatus: dbsim.CleanupOK}}
 }
 
 func input(scenarioID, probe string, ex AgentExec) StepInput {
