@@ -76,17 +76,17 @@ func TestPGConnectErrorRedactsPassword(t *testing.T) {
 func TestPGCapabilitiesDeclareAuditSource(t *testing.T) {
 	c := New().Capabilities()
 	if len(c.AuditSources) != 0 {
-		t.Fatalf("audit sources must be empty until Task 9, got %v", c.AuditSources)
+		t.Fatalf("an unconnected adapter has discovered no audit source, got %v", c.AuditSources)
 	}
 	if c.MarkerInAuditRecord || !c.MarkerInQueryText || !c.MarkerInAppName {
 		t.Fatalf("marker facts wrong: %+v", c)
 	}
-	if len(c.ProbeIDs) != 4 {
+	if len(c.ProbeIDs) != 5 {
 		t.Fatalf("probe ids: %v", c.ProbeIDs)
 	}
 	ev, err := New().CollectAudit(context.Background(), dbprobe.AuditQuery{})
-	if err != nil || len(ev) != 0 {
-		t.Fatalf("stub audit must return nothing: %v %v", ev, err)
+	if !errors.Is(err, dbprobe.ErrAuditUnsupported) || len(ev) != 0 {
+		t.Fatalf("unconnected audit must be unsupported: %v %v", ev, err)
 	}
 }
 

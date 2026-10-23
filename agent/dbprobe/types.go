@@ -89,20 +89,25 @@ type Grant struct {
 	Privilege string `json:"privilege"`
 }
 
-// AuditQuery asks an adapter for audit events about a marker.
+// AuditQuery asks an adapter for audit events about a probe marker. Marker is
+// the probe's own (sanitised) token; only statements containing it are ever
+// returned. Principal, when set, drops events attributed to a different
+// account. Since/Until bound the window (in the database's clock domain).
 type AuditQuery struct {
-	Marker string    `json:"marker"`
-	Since  time.Time `json:"since"`
-	Until  time.Time `json:"until"`
+	Marker    string    `json:"marker"`
+	Principal string    `json:"principal,omitempty"`
+	Since     time.Time `json:"since"`
+	Until     time.Time `json:"until"`
 }
 
-// AuditEvent is one audit-log record read back from the database.
+// AuditEvent is one audit-source record read back from the database: the
+// time it was recorded, who ran it, the (redacted, truncated) statement text
+// and which source produced it.
 type AuditEvent struct {
-	Time    time.Time `json:"time"`
-	User    string    `json:"user,omitempty"`
-	Action  string    `json:"action,omitempty"`
-	Object  string    `json:"object,omitempty"`
-	Message string    `json:"message,omitempty"`
+	Time      time.Time `json:"time"`
+	Principal string    `json:"principal,omitempty"`
+	Statement string    `json:"statement"`
+	Source    string    `json:"source,omitempty"`
 }
 
 // Capabilities states what an adapter/target supports; anything missing

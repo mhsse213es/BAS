@@ -22,6 +22,10 @@ var catalog = map[string]ProbeDef{
 		ParamSchema: map[string]ParamKind{"role": ParamString}},
 	"auth_check": {ID: "auth_check", Class: ClassReadOnly, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{}},
+	// read_audit_config reports the audit-relevant settings through fixed
+	// read-only SQL (no parameters). It observes; it never changes a setting.
+	"read_audit_config": {ID: "read_audit_config", Class: ClassReadOnly, Engines: bothEngines,
+		ParamSchema: map[string]ParamKind{}},
 	"read_restricted_table": {ID: "read_restricted_table", Class: ClassReadOnly, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{"table": ParamString}},
 }

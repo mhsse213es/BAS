@@ -64,8 +64,8 @@ const (
 )
 
 // DBProbeOutcome is the result of executing one dbprobe step. GateRefusal is
-// non-empty when the step was refused before any probe SQL ran; Audit is
-// reserved for the audit-collection task and is empty here.
+// non-empty when the step was refused before any probe SQL ran; Audit holds the
+// marker-bearing audit events (the same ones copied into Result.AuditEvents).
 type DBProbeOutcome struct {
 	Result      protocol.DBProbeResult
 	GateRefusal string
@@ -263,14 +263,90 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 		return fail(dbErrGateRefused, err.Error())
 	}
 
+	probeStart := time.Now()
 	res, err := ad.RunProbe(cctx, def, spec)
 	if err != nil {
 		return runtimeErr(dbErrProbe, "probe", err)
 	}
+	probeEnd := time.Now()
 	if res.AgentTime.IsZero() {
 		res.AgentTime = time.Now()
 	}
-	return DBProbeOutcome{Result: res}, nil
+	out := DBProbeOutcome{Result: res}
+	// Audit readback runs after the probe, on the same connection, whenever
+	// the adapter reports a source (client mode included: it is read-only and
+	// bounded). Whatever happens here is recorded in AuditStatus; it can never
+	// fail the run or make an observation look better than it was.
+	out.Audit = collectDBAudit(ctx, ad, spec, cred.User, probeStart, probeEnd, &out.Result,
+		cred.Password, cred.User, spec.Host, spec.ExpectedIdentity)
+	return out, nil
+}
+
+// collectDBAudit fills res.AuditStatus / res.AuditEvents (and explanatory
+// Notes) from the adapter's audit source. The window is
+// [probe start - skew, probe end + skew]. It is anchored on the database's own
+// clock (res.DBTime, taken inside the probe transaction) when the probe
+// reported one, and on the agent clock otherwise; AuditWindowSkew absorbs the
+// remaining clock and log-writer lag, and the marker, not the window, ties an
+// event to this run. The collection runs under its own deadline, derived from
+// the caller's context and the spec's limits rather than the probe context
+// (which the probe may have mostly used up).
+func collectDBAudit(ctx context.Context, ad dbprobe.Adapter, spec protocol.DBProbeSpec, principal string,
+	probeStart, probeEnd time.Time, res *protocol.DBProbeResult, secrets ...string) []dbprobe.AuditEvent {
+	if len(ad.Capabilities().AuditSources) == 0 {
+		res.AuditStatus = protocol.DBAuditUnsupported
+		return nil
+	}
+	anchor := probeStart
+	if !res.DBTime.IsZero() {
+		anchor = res.DBTime
+	}
+	q := dbprobe.AuditQuery{
+		Marker: spec.Marker, Principal: principal,
+		Since: anchor.Add(-dbprobe.AuditWindowSkew),
+		Until: anchor.Add(probeEnd.Sub(probeStart) + dbprobe.AuditWindowSkew),
+	}
+	actx, cancel := dbprobe.WithDeadline(ctx, spec.Limits)
+	defer cancel()
+
+	events, err := func() (ev []dbprobe.AuditEvent, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				ev, err = nil, fmt.Errorf("audit collector panicked: %v", r)
+			}
+		}()
+		return ad.CollectAudit(actx, q)
+	}()
+
+	// Defence in depth: the adapters already minimise, but the wire result
+	// must never carry more than the bound even from a misbehaving adapter.
+	if len(events) > dbprobe.AuditMaxEvents {
+		events = events[:dbprobe.AuditMaxEvents]
+		if err == nil {
+			err = &dbprobe.AuditIncompleteError{Reason: "event cap reached"}
+		}
+	}
+	for i := range events {
+		events[i].Statement = dbprobe.TruncateUTF8(events[i].Statement, dbprobe.AuditMaxStatementBytes)
+	}
+	res.AuditStatus = dbprobe.AuditStatusOf(events, err)
+	for _, e := range events {
+		res.AuditEvents = append(res.AuditEvents, protocol.DBProbeAuditEvent{
+			Time: e.Time, Principal: e.Principal, Statement: e.Statement, Source: e.Source})
+	}
+	switch res.AuditStatus {
+	case protocol.DBAuditError:
+		msg := scrubAll(err.Error(), secrets...)
+		log.Printf("[dbprobe] %s audit collection failed: %s", spec.RunID, msg)
+		res.Notes = append(res.Notes, "audit: collection failed: "+msg)
+		res.AuditEvents = nil
+		events = nil
+	case protocol.DBAuditIncomplete:
+		res.Notes = append(res.Notes, "audit: "+scrubAll(err.Error(), secrets...))
+	case protocol.DBAuditUnsupported:
+		res.Notes = append(res.Notes, "audit: no usable audit source on this target")
+	}
+	return events
 }
 
 // execDBProbeStep adapts executeDBProbe to the executor's ExecResult. The typed

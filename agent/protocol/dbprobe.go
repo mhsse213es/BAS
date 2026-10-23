@@ -52,4 +52,29 @@ type DBProbeResult struct {
 	DBTime     time.Time `json:"dbTime"`
 	AgentTime  time.Time `json:"agentTime"`
 	Notes      []string  `json:"notes,omitempty"`
+	// AuditStatus says what the audit-source readback found for this probe's
+	// marker: one of the DBAudit* values. Empty means no audit attempt was
+	// recorded (older agents). "unsupported" and "error" are never a pass.
+	AuditStatus string `json:"auditStatus,omitempty"`
+	// AuditEvents are the marker-bearing audit records (minimised: at most 50,
+	// statements redacted and cut to 512 bytes).
+	AuditEvents []DBProbeAuditEvent `json:"auditEvents,omitempty"`
+}
+
+// Audit status values (DBProbeResult.AuditStatus). Mirrored by
+// orchestrator/internal/dbsim/wire.go.
+const (
+	DBAuditUnsupported = "unsupported" // no queryable audit source on this target
+	DBAuditAbsent      = "absent"      // source healthy, window covered, no marker event
+	DBAuditFound       = "found"       // at least one marker event, evidence complete
+	DBAuditIncomplete  = "incomplete"  // window rotated/evicted or cap hit; absence proves nothing
+	DBAuditError       = "error"       // collection failed; never absent
+)
+
+// DBProbeAuditEvent is one audit-source record that carried the probe marker.
+type DBProbeAuditEvent struct {
+	Time      time.Time `json:"time"`
+	Principal string    `json:"principal,omitempty"`
+	Statement string    `json:"statement"`
+	Source    string    `json:"source,omitempty"`
 }

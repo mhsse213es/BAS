@@ -30,6 +30,12 @@ type fakeDBAdapter struct {
 	caps        []string
 	capsSet     bool
 	closeCalled bool
+
+	// audit scripting (Task 9)
+	auditSources     []string
+	auditFn          func(ctx context.Context, q dbprobe.AuditQuery) ([]dbprobe.AuditEvent, error)
+	auditQueries     []dbprobe.AuditQuery
+	auditHadDeadline bool
 }
 
 func (f *fakeDBAdapter) rec(s string) {
@@ -68,8 +74,15 @@ func (f *fakeDBAdapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec
 	}
 	return dbprobe.ProbeResult{RowsRead: 3, DBTime: time.Now()}, nil
 }
-func (f *fakeDBAdapter) CollectAudit(context.Context, dbprobe.AuditQuery) ([]dbprobe.AuditEvent, error) {
+func (f *fakeDBAdapter) CollectAudit(ctx context.Context, q dbprobe.AuditQuery) ([]dbprobe.AuditEvent, error) {
 	f.rec("CollectAudit")
+	f.mu.Lock()
+	f.auditQueries = append(f.auditQueries, q)
+	f.auditHadDeadline = func() bool { _, ok := ctx.Deadline(); return ok }()
+	f.mu.Unlock()
+	if f.auditFn != nil {
+		return f.auditFn(ctx, q)
+	}
 	return nil, nil
 }
 func (f *fakeDBAdapter) Seed(context.Context, dbprobe.Fixture) error { f.rec("Seed"); return nil }
@@ -79,9 +92,9 @@ func (f *fakeDBAdapter) Cleanup(context.Context, dbprobe.Fixture) (dbprobe.Clean
 }
 func (f *fakeDBAdapter) Capabilities() dbprobe.Capabilities {
 	if f.capsSet {
-		return dbprobe.Capabilities{ProbeIDs: f.caps}
+		return dbprobe.Capabilities{ProbeIDs: f.caps, AuditSources: f.auditSources}
 	}
-	return dbprobe.Capabilities{ProbeIDs: dbprobe.ProbeIDs()}
+	return dbprobe.Capabilities{ProbeIDs: dbprobe.ProbeIDs(), AuditSources: f.auditSources}
 }
 func (f *fakeDBAdapter) Close() error { f.rec("Close"); f.closeCalled = true; return nil }
 

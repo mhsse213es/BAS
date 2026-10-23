@@ -72,6 +72,11 @@ type Adapter struct {
 	secrets []string // literals to scrub from any error text (password, long user/host)
 	notes   []string
 	broken  bool // connection closed after a timeout/cancel; reconnect required
+
+	// Audit sources discovered once at Connect (audit.go); Capabilities and
+	// CollectAudit read the cache and never query to answer.
+	auditSources []string
+	auditNotes   []string
 }
 
 // String and GoString never print connection details or secrets.
@@ -175,6 +180,12 @@ func (a *Adapter) Connect(ctx context.Context, cfg dbprobe.ConnectionConfig) err
 	a.mode = cfg.Mode
 	a.secrets = secretsFor(cfg)
 	a.notes = notes
+	// Find out what audit evidence this target can give us. A missing view is
+	// not a failure; a broken connection is.
+	if err := a.discoverAudit(ctx); err != nil {
+		a.closeConn()
+		return err
+	}
 	return nil
 }
 
@@ -347,22 +358,24 @@ func str(v any) string {
 	}
 }
 
-// Capabilities declares what this adapter supports. Audit is not supported
-// yet (Task 9), so callers must treat audit as unsupported (SKIPPED).
+// Capabilities declares what this adapter supports. AuditSources reflects what
+// Connect actually discovered (empty before Connect, and whenever the audit
+// view is absent/unreadable), so callers treat missing audit as unsupported
+// (SKIPPED), never as a pass. It answers from the cache; it issues no SQL.
 func (a *Adapter) Capabilities() dbprobe.Capabilities {
-	return dbprobe.Capabilities{
-		ProbeIDs:            []string{"auth_check", "read_grants", "read_restricted_table", "read_roles"},
-		AuditSources:        nil,
-		MarkerInAppName:     true,
-		MarkerInQueryText:   true,
-		MarkerInAuditRecord: false,
+	c := dbprobe.Capabilities{
+		ProbeIDs:          []string{"auth_check", "read_audit_config", "read_grants", "read_restricted_table", "read_roles"},
+		MarkerInAppName:   true,
+		MarkerInQueryText: true,
+		// The marker can only reach an audit record through the statement
+		// text, and only if the server logs it; true only with a source.
+		MarkerInAuditRecord: len(a.auditSources) > 0,
 	}
-}
-
-// CollectAudit is a stub until Task 9: no events, no error. Capabilities
-// reports no audit source so callers treat audit as unsupported.
-func (a *Adapter) CollectAudit(ctx context.Context, q dbprobe.AuditQuery) ([]dbprobe.AuditEvent, error) {
-	return nil, nil
+	if len(a.auditSources) > 0 {
+		c.AuditSources = append([]string(nil), a.auditSources...)
+	}
+	c.Notes = append(c.Notes, a.auditNotes...)
+	return c
 }
 
 // effectiveMode is lab only when both the connection and the spec say lab.
@@ -461,7 +474,19 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 			res.DBTime = t.UTC()
 		}
 		rows, err = a.s.Query(ctx, comment+sql, spec.Limits.MaxRows+1, args...)
-		return err
+		if err != nil || spec.ProbeID != probeAuditConfig {
+			return err
+		}
+		view, err := a.s.Query(ctx, comment+sqlAuditViewState, 1)
+		if err != nil {
+			return err
+		}
+		var vs []any
+		if len(view) == 1 {
+			vs = view[0]
+		}
+		res.Notes = append(res.Notes, auditConfigNotes(rows, vs)...)
+		return nil
 	})
 	if a.broken {
 		res.ErrorClass = "timeout"

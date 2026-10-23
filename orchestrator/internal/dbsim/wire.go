@@ -48,6 +48,29 @@ type DBProbeResult struct {
 	DBTime     time.Time `json:"dbTime"`
 	AgentTime  time.Time `json:"agentTime"`
 	Notes      []string  `json:"notes,omitempty"`
+	// AuditStatus and AuditEvents mirror the agent's audit readback
+	// (agent/protocol/dbprobe.go). Empty AuditStatus means no attempt was
+	// recorded; "unsupported" and "error" must never be graded as a pass.
+	AuditStatus string              `json:"auditStatus,omitempty"`
+	AuditEvents []DBProbeAuditEvent `json:"auditEvents,omitempty"`
+}
+
+// Audit status values (DBProbeResult.AuditStatus); same strings as the agent's
+// protocol.DBAudit* constants, tied by the result golden vector.
+const (
+	AuditUnsupported = "unsupported" // no queryable audit source on the target
+	AuditAbsent      = "absent"      // source healthy, window covered, no marker event
+	AuditFound       = "found"       // at least one marker event, evidence complete
+	AuditIncomplete  = "incomplete"  // window rotated/evicted or cap hit; absence proves nothing
+	AuditError       = "error"       // collection failed; never absent
+)
+
+// DBProbeAuditEvent is one marker-bearing audit record.
+type DBProbeAuditEvent struct {
+	Time      time.Time `json:"time"`
+	Principal string    `json:"principal,omitempty"`
+	Statement string    `json:"statement"`
+	Source    string    `json:"source,omitempty"`
 }
 
 type ProbeClass string
@@ -70,6 +93,7 @@ var probeRegistry = map[string]ProbeRegistryEntry{
 	"read_roles":            {ID: "read_roles", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
 	"read_grants":           {ID: "read_grants", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"role": "string"}},
 	"auth_check":            {ID: "auth_check", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
+	"read_audit_config":     {ID: "read_audit_config", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
 	"read_restricted_table": {ID: "read_restricted_table", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}},
 }
 

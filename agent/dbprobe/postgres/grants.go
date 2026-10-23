@@ -108,6 +108,8 @@ func probeSQL(probeID string, params map[string]string, maxRows int) (string, []
 		return sqlRoleGrants, []any{params["role"]}, nil
 	case "auth_check":
 		return sqlAuthCheck, nil, nil
+	case probeAuditConfig:
+		return sqlAuditSettings, nil, nil
 	case "read_restricted_table":
 		q, err := quoteTable(params["table"])
 		if err != nil {

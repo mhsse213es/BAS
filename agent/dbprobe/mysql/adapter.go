@@ -109,6 +109,11 @@ type Adapter struct {
 	scrub  func(string) string
 	notes  []string
 	broken bool // connection closed after a timeout/cancel; reconnect required
+
+	// Audit sources discovered once at Connect (audit.go); Capabilities and
+	// CollectAudit read the cache and never query to answer.
+	auditSources []string
+	auditNotes   []string
 }
 
 // String and GoString never print connection details or secrets.
@@ -227,6 +232,12 @@ func (a *Adapter) Connect(ctx context.Context, cfg dbprobe.ConnectionConfig) err
 	a.mode = cfg.Mode
 	a.scrub = scrub
 	a.notes = notes
+	// Find out what audit evidence this target can give us. No usable source
+	// is not a failure; a broken connection is.
+	if err := a.discoverAudit(ctx); err != nil {
+		a.closeConn()
+		return err
+	}
 	return nil
 }
 
@@ -472,15 +483,19 @@ func truthy(v any) bool {
 	return false
 }
 
-// Capabilities declares what this adapter supports. Audit is not supported
-// (ruling R-B), so callers must treat audit as unsupported (SKIPPED).
+// Capabilities declares what this adapter supports. AuditSources reflects what
+// Connect actually discovered (empty before Connect, and whenever neither
+// general_log TABLE nor performance_schema history is usable), so callers treat
+// missing audit as unsupported (SKIPPED), never as a pass. It answers from the
+// cache; it issues no SQL.
 func (a *Adapter) Capabilities() dbprobe.Capabilities {
-	return dbprobe.Capabilities{
-		ProbeIDs:            []string{"auth_check", "read_grants", "read_restricted_table", "read_roles"},
-		AuditSources:        nil,
-		MarkerInAppName:     false, // no per-probe session attribute: attributes are connect-time only
-		MarkerInQueryText:   true,
-		MarkerInAuditRecord: false,
+	c := dbprobe.Capabilities{
+		ProbeIDs:          []string{"auth_check", "read_audit_config", "read_grants", "read_restricted_table", "read_roles"},
+		MarkerInAppName:   false, // no per-probe session attribute: attributes are connect-time only
+		MarkerInQueryText: true,
+		// The marker can only reach an audit record through the statement
+		// text; true only when a source was discovered.
+		MarkerInAuditRecord: len(a.auditSources) > 0,
 		Notes: []string{
 			"MySQL has no application_name; the per-probe marker is a leading /* */ query comment only.",
 			"A static connection attribute program_name:dbsim is set (go-sql-driver ConnectionAttributes); it is connect-time, so it never carries the per-probe marker.",
@@ -489,12 +504,11 @@ func (a *Adapter) Capabilities() dbprobe.Capabilities {
 			"Identity is @@server_uuid; MariaDB lacks server_uuid and Identity returns an error there.",
 		},
 	}
-}
-
-// CollectAudit is a stub (ruling R-B): no events, no error. Capabilities
-// reports no audit source so callers treat audit as unsupported.
-func (a *Adapter) CollectAudit(ctx context.Context, q dbprobe.AuditQuery) ([]dbprobe.AuditEvent, error) {
-	return nil, nil
+	c.Notes = append(c.Notes, a.auditNotes...)
+	if len(a.auditSources) > 0 {
+		c.AuditSources = append([]string(nil), a.auditSources...)
+	}
+	return c
 }
 
 // effectiveMode is lab only when both the connection and the spec say lab.
@@ -580,7 +594,15 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 		}
 		res.DBTime = toTime(clk[0][0])
 		rows, err = a.s.Query(ctx, comment+sqlText, spec.Limits.MaxRows+1, args...)
-		return err
+		if err != nil || spec.ProbeID != probeAuditConfig {
+			return err
+		}
+		st, err := a.gatherAuditState(ctx, comment)
+		if err != nil {
+			return err
+		}
+		res.Notes = append(res.Notes, auditConfigNotes(st, rows)...)
+		return nil
 	})
 	if a.broken {
 		res.ErrorClass = "timeout"
