@@ -524,3 +524,34 @@ on the target, signed `destructive`): B5 vetoes them with no grant path. Options
 include keeping them lab-fixture-scoped and bounded_synthetic like DB-06, adding
 an explicit approval/grant design to B5 (a security-relevant change), or dropping
 them. DB-06 itself has NOT been re-run live after this fix.
+
+### Fix round 4 (second live staging run)
+
+**What the second live run showed (code 3aabb921, lab unchanged).**
+
+* PostgreSQL: all PASS, including DB-06 (Enforcement Blocked, Telemetry
+  Unverifiable, Response NotTested) and DB-07 (Classification Correct, exact_marker,
+  Present/Alerted). B5 fix (R-AO) confirmed live.
+* MySQL: all PASS including DB-07 (Correct), EXCEPT DB-06 `auth_after_revoke` =
+  ERROR (`baseline_failed`): `revoke_steps=create=ok,baseline=failed,revoke=skipped,
+  reconnect=skipped`, detail `Error 1044 (42000): Access denied for user ... to
+  database 'dbsim'`. The harness correctly reported ERROR, not a pass.
+
+**Root cause and fix.** The throwaway account is created with no privileges (by
+design, R-AL), but its baseline and post-lock connections named the target's
+default database `dbsim`. MySQL refuses (1044) a connection that names a default
+schema the account cannot use, whereas a USAGE-only account may connect with none;
+PostgreSQL has no such rule. `Adapter.dialAs` now dials the throwaway account with
+an empty `Database` (on a copy; `a.target` and the main connection keep theirs).
+No privilege is granted, so "no privileges granted beyond defaults (PUBLIC)" stays
+true. The baseline statement is the marker comment plus the UTC clock select, which
+needs no schema. Denial classification is unchanged (1045 and 3118 only); 1044 is
+`baseline_failed` => ERROR, never Blocked or PASS (unit-tested). The live
+integration test now asserts the live target names a default database, which is
+the condition that exposed the defect.
+
+**Scope check.** The only other restricted-account dial is PostgreSQL's `dialAs`,
+which passed live (connecting needs only CONNECT, granted to PUBLIC); nothing else
+dials with a restricted account.
+
+**Status:** MySQL DB-06 remains UNVERIFIED until re-run on staging.

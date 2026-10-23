@@ -39,12 +39,14 @@ func revokeSpec() dbprobe.DBProbeSpec {
 type dialScript struct {
 	steps []func() (session, error)
 	users []string
+	dbs   []string
 	pws   []string
 	sess  []*fakeSession
 }
 
 func (d *dialScript) dial(ctx context.Context, cfg dbprobe.ConnectionConfig) (session, error) {
 	d.users = append(d.users, cfg.User)
+	d.dbs = append(d.dbs, cfg.Database)
 	d.pws = append(d.pws, cfg.Password)
 	if len(d.steps) == 0 {
 		return nil, errors.New("unexpected extra dial")
@@ -480,5 +482,50 @@ func TestReadClassifiedFixtureRefusals(t *testing.T) {
 	_ = a3.BindFixture(fx)
 	if _, err := a3.RunProbe(context.Background(), def(dbprobe.ProbeReadClassifiedFixture), classifiedSpec(5)); err == nil {
 		t.Error("fixture kind mismatch accepted")
+	}
+}
+
+// Live run 2: MySQL refuses (1044) a connection that names a default schema the
+// account has no privilege on, and the throwaway account has none by design. Its
+// baseline and post-lock connections therefore carry NO default database, while
+// the adapter's own target keeps its database.
+func TestThrowawayAccountDialsWithoutDefaultDatabase(t *testing.T) {
+	d := &dialScript{}
+	d.steps = []func() (session, error){d.okSession(clockQuery), failWith(myErr(3118, "Account is locked."))}
+	a, _ := revokeAdapter(t, d)
+	if _, err := a.RunProbe(context.Background(), def(dbprobe.ProbeAuthAfterRevoke), revokeSpec()); err != nil {
+		t.Fatal(err)
+	}
+	if len(d.dbs) != 2 || d.dbs[0] != "" || d.dbs[1] != "" {
+		t.Fatalf("throwaway dials must have an empty Database, got %q", d.dbs)
+	}
+	if a.target.Database != "dbsim" {
+		t.Fatalf("the adapter target must keep its database, got %q", a.target.Database)
+	}
+}
+
+func TestBuildConfigEmptyDatabaseMeansNoDefaultSchema(t *testing.T) {
+	mc, _, err := buildConfig(dbprobe.ConnectionConfig{Host: "db.example", Port: 3306, Database: "", TLSMode: "disable", User: "u", Password: "p"})
+	if err != nil || mc.DBName != "" {
+		t.Fatalf("err=%v DBName=%q", err, mc.DBName)
+	}
+	mc, _, _ = buildConfig(dbprobe.ConnectionConfig{Host: "db.example", Port: 3306, Database: "dbsim", TLSMode: "disable"})
+	if mc.DBName != "dbsim" {
+		t.Fatalf("DBName=%q", mc.DBName)
+	}
+}
+
+// 1044 (no privilege on the default schema) on the baseline is a failed baseline
+// and an ERROR: it must never read as a denial, a Blocked or a pass.
+func TestAuthAfterRevokeBaseline1044IsBaselineFailedNeverDenied(t *testing.T) {
+	d := &dialScript{}
+	d.steps = []func() (session, error){failWith(myErr(1044, "Access denied for user to database 'dbsim'"))}
+	a, _ := revokeAdapter(t, d)
+	res, err := a.RunProbe(context.Background(), def(dbprobe.ProbeAuthAfterRevoke), revokeSpec())
+	if err != nil || res.Denied || res.ErrorClass != "baseline_failed" {
+		t.Fatalf("err=%v %+v", err, res)
+	}
+	if isLoginDenied(myErr(1044, "x")) {
+		t.Fatal("1044 is not a login denial")
 	}
 }

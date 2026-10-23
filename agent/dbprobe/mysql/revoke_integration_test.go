@@ -20,8 +20,15 @@ import (
 // which refusal number the server returns, whether an anonymous or host-specific
 // account shadows 'name'@'%', and the default authentication plugin over the
 // chosen TLS mode (a baseline failure is reported baseline_failed, never a pass).
+//
+// Regression (live run 2): the registered target names a default database, and the
+// privilege-less throwaway account must still get a working baseline login
+// (baseline=ok, not error 1044), so the account is dialled with no default schema.
 func TestMySQLAuthAfterRevokeLive(t *testing.T) {
 	a := liveAdapter(t, dbprobe.ModeLab)
+	if a.target.Database == "" {
+		t.Fatal("precondition: the live target must name a default database, which is what exposed error 1044")
+	}
 	spec0, _ := fixtures.Lookup(dbprobe.RevokeFixtureKind)
 	var got dbprobe.ProbeResult
 	res, err := fixtures.WithFixture(context.Background(), a, spec0, func(fx dbprobe.Fixture) error {

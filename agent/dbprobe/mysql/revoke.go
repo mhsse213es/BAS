@@ -30,10 +30,15 @@ func dialMySQL(ctx context.Context, cfg dbprobe.ConnectionConfig) (session, erro
 	return openSession(ctx, mc)
 }
 
-// dialAs opens a NEW connection to the registered target as user.
+// dialAs opens a NEW connection to the registered target as user. The throwaway
+// account has no privileges (R-AL), and MySQL refuses (error 1044) a connection
+// that names a default schema the account cannot use, whereas a USAGE-only
+// account may connect with none. So the connection carries NO default database;
+// the copy of the target config is changed, never a.target itself.
 func (a *Adapter) dialAs(ctx context.Context, user, password string) (session, error) {
 	cfg := a.target
 	cfg.User, cfg.Password = user, password
+	cfg.Database = ""
 	if a.dial != nil {
 		return a.dial(ctx, cfg)
 	}
