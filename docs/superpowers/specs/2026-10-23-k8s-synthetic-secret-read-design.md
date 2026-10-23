@@ -1,6 +1,6 @@
 # Synthetic secret read-access verification (scenario 1) — design
 
-Status: approved in principle by the owner on 2026-10-23. Not built. Each step below needs its own approval before
+Status: approved in principle by the owner on 2026-10-23. Lab fixtures and runner RBAC applied and verified on 2026-10-23 (step 1 of 3). Engine action not built; no live run yet. Each step below needs its own approval before
 it runs on the lab: the RBAC change, the first live run, and any later change to the design.
 
 ## 1. Intent
@@ -89,6 +89,6 @@ The secret value is never part of the result or the audit record. The test asser
 
 ## 9. Open items
 
-- Confirm `patch` on a RoleBinding's subjects is allowed by the API with names-restricted RBAC. Verify on the lab before
-  the first run.
+- Resolved for authorization and schema: a server-side dry-run patch of the binding's subjects, and of the secret value,
+  both succeeded as the runner on 2026-10-23. The live effect is confirmed only by the first real run.
 - The namespace label gate already in the engine (`bas.audspect.io/scenario-sandbox=true`) applies unchanged.
