@@ -77,8 +77,22 @@ func TestDB04AuditCoverageStepsBuildForBothEngines(t *testing.T) {
 // the shipped artifacts without depending on any other scenario's state.
 func stageDBScenarios(t *testing.T) string {
 	t.Helper()
+	return stageScenarios(t, allDBScenarioIDs()...)
+}
+
+// dbFixtureScenarioIDs are the fixture-reading scenarios (DB-05 read_only, DB-09
+// bounded_synthetic). They are kept out of dbScenarioIDs because that list is
+// asserted to be read_only/non_destructive end to end, which DB-09 is not.
+var dbFixtureScenarioIDs = []string{"dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read"}
+
+func allDBScenarioIDs() []string {
+	return append(append([]string(nil), dbScenarioIDs...), dbFixtureScenarioIDs...)
+}
+
+func stageScenarios(t *testing.T, ids ...string) string {
+	t.Helper()
 	dir := t.TempDir()
-	for _, id := range dbScenarioIDs {
+	for _, id := range ids {
 		for _, ext := range []string{".yaml", ".yaml.sig"} {
 			b, err := os.ReadFile(filepath.Join(repoScenarios, id+ext))
 			if err != nil {
@@ -100,7 +114,7 @@ func TestDBScenariosLoadAndVerifySignature(t *testing.T) {
 	if err := eng.Load(); err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range dbScenarioIDs {
+	for _, id := range allDBScenarioIDs() {
 		sc, ok := eng.Get(id)
 		if !ok {
 			t.Fatalf("%s did not load (signature or structure refused)", id)

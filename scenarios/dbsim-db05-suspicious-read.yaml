@@ -1,0 +1,54 @@
+id: dbsim-db05-suspicious-read
+product_line: dbsim
+name: Database Security Simulation DB-05 - Suspicious Read Detection
+description: >
+  Lab-only. The agent seeds a small synthetic fixture (classified-pii: six rows
+  of obviously fake personal data, with published test card numbers) in a
+  dedicated per-run schema, then runs ONE unfiltered all-column SELECT of its
+  customers_pii table with the named probe suspicious_read. That is the read
+  pattern a database activity monitor or SIEM rule is expected to flag. The
+  probe is a SELECT inside a READ ONLY transaction, tagged with the per-dispatch
+  marker, and reads at most 10 rows (the probe itself never reads more than 25,
+  whatever the limit says). The fixture is dropped and its removal verified
+  before the run completes; a cleanup failure is a safety incident, never a pass.
+
+  ATT&CK mapping: T1213 Data from Information Repositories (a read of a table
+  that holds application data).
+
+  The agent reports only counts and a shape category (rows read, bytes read,
+  truncated, duration, shape wide_select); it never returns row contents. Whether
+  the read produced a database audit event and a customer alert is decided by
+  the orchestrator, which correlates by the marker; an alert that cannot be
+  tied to this run by the marker is reported as unverifiable, never credited.
+  Fixture-aware probes run in lab mode only. This scenario names its target by
+  id only; host, port, identity, credential reference and mode come from the
+  server-side target registry. The fixture table is a bare name; the agent
+  resolves it to the schema it created for this run.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - detection
+  - suspicious-read
+  - lab-only
+  - mitre-attack
+mitre_phases:
+  - collection
+
+steps:
+  - name: "DB-05 Suspicious all-column read of a synthetic PII table (T1213)"
+    technique_id: T1213
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: suspicious_read
+    db_fixture: classified-pii
+    db_params:
+      table: customers_pii
+    db_limits:
+      max_rows: 10
+      timeout_sec: 30
+      max_conns: 1
+    risk: low
+    blast_radius: "one unfiltered SELECT inside a READ ONLY transaction against a per-run synthetic fixture schema (dbsim_<id>); at most 10 rows; the fixture is created and removed by the agent with verified cleanup"
+    reversible: true

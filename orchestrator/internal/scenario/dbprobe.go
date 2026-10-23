@@ -2,8 +2,13 @@ package scenario
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+// dbFixtureNamePat bounds a catalog fixture name (lower-case words joined by
+// hyphens). The agent owns the catalog and refuses names it does not have.
+var dbFixtureNamePat = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 
 // ExecutorDBProbe is the step executor for named database probes. The agent
 // runs these in-process (agent/exec_dbprobe.go); there is no shell involved.
@@ -34,7 +39,7 @@ func isDBProbeExecutor(e string) bool { return strings.EqualFold(e, ExecutorDBPr
 func (s *Scenario) ValidateDBProbeSteps() error {
 	for i, st := range s.Steps {
 		n := i + 1
-		hasDB := st.DBTarget != "" || st.DBProbe != "" || len(st.DBParams) > 0 || st.DBLimits != nil
+		hasDB := st.DBTarget != "" || st.DBProbe != "" || len(st.DBParams) > 0 || st.DBLimits != nil || st.DBFixture != ""
 		if !isDBProbeExecutor(st.Executor) {
 			if hasDB {
 				return fmt.Errorf("step %d (%q): db_* fields are only valid with executor %q", n, st.Name, ExecutorDBProbe)
@@ -56,6 +61,9 @@ func (s *Scenario) ValidateDBProbeSteps() error {
 			return fmt.Errorf("step %d (%q): dbprobe step must not carry a cleanup script", n, st.Name)
 		case st.Marker != "":
 			return fmt.Errorf("step %d (%q): dbprobe step must not set a host-event marker (the builder issues the probe marker)", n, st.Name)
+		}
+		if st.DBFixture != "" && !dbFixtureNamePat.MatchString(st.DBFixture) {
+			return fmt.Errorf("step %d (%q): db_fixture %q is not a valid fixture name", n, st.Name, st.DBFixture)
 		}
 		if l := st.DBLimits; l != nil {
 			if l.MaxRows <= 0 || l.TimeoutSec <= 0 || l.MaxConns <= 0 {
@@ -82,7 +90,7 @@ func (s *Scenario) hasDBProbeSteps() bool {
 // stepsUseDBFields reports whether any step sets a db_* field, whatever its executor.
 func stepsUseDBFields(steps []Step) bool {
 	for _, st := range steps {
-		if st.DBTarget != "" || st.DBProbe != "" || len(st.DBParams) > 0 || st.DBLimits != nil {
+		if st.DBTarget != "" || st.DBProbe != "" || len(st.DBParams) > 0 || st.DBLimits != nil || st.DBFixture != "" {
 			return true
 		}
 	}

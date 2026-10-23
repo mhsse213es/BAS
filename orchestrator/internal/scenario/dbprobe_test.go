@@ -57,6 +57,28 @@ func TestDBFieldsWithoutDBProbeExecutorRejected(t *testing.T) {
 	}
 }
 
+func TestDBFixtureFieldIsADBFieldAndShapeChecked(t *testing.T) {
+	ok := okDBStep()
+	ok.DBFixture = "classified-pii"
+	if err := okDBScenario(ok).ValidateDBProbeSteps(); err != nil {
+		t.Fatalf("db_fixture on a dbprobe step rejected: %v", err)
+	}
+	if !stepsUseDBFields([]Step{{DBFixture: "accounts"}}) {
+		t.Fatal("db_fixture must count as a db_* field (custom scenarios may not carry it)")
+	}
+	shell := Step{Name: "x", TechniqueID: "T1078", Executor: "bash", Command: "id", DBFixture: "accounts"}
+	if err := okDBScenario(shell).ValidateDBProbeSteps(); err == nil {
+		t.Fatal("db_fixture on a shell step accepted")
+	}
+	for _, bad := range []string{"Accounts", "a b", "../x", "a;b", "x'y", "-lead", strings.Repeat("a", 40), "a/b", "a.b"} {
+		st := okDBStep()
+		st.DBFixture = bad
+		if err := okDBScenario(st).ValidateDBProbeSteps(); err == nil {
+			t.Errorf("fixture name %q accepted", bad)
+		}
+	}
+}
+
 func TestCustomSaveRejectsDBProbeSteps(t *testing.T) {
 	sc := okDBScenario(okDBStep())
 	if err := sc.Validate(); err == nil || !strings.Contains(err.Error(), "dbprobe") {

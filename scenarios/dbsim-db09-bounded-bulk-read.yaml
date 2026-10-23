@@ -1,0 +1,55 @@
+id: dbsim-db09-bounded-bulk-read
+product_line: dbsim
+name: Database Security Simulation DB-09 - Bounded Bulk Read Detection
+description: >
+  Lab-only. The agent seeds a small synthetic fixture (accounts: ten rows of
+  obviously fake account data) in a dedicated per-run schema, then bulk-reads
+  its accounts table with the named probe bounded_synthetic_read, capped by a
+  row limit (5 here, below the table size so the cap is exercised) and by a
+  byte limit. The statement is a single SELECT inside a READ ONLY transaction
+  tagged with the per-dispatch marker. The fixture is dropped and its removal
+  verified before the run completes; a cleanup failure is a safety incident,
+  never a pass.
+
+  ATT&CK mapping: T1213 Data from Information Repositories (a volume read of a
+  table that holds application data, the pattern a bulk-read detection rule
+  targets).
+
+  The probe is classed bounded_synthetic because it runs against a fixture the
+  agent creates for the run. It therefore needs a confirmed lab target, the
+  scenario's mutation approval and the agent-local lab-mutation allowance, and
+  is refused for client targets at the orchestrator, at the agent gate and at
+  the adapter. The agent reports only counts (rows read, bytes read, truncated,
+  duration, shape bulk_select_capped); it never returns row contents. Detection
+  is decided by the orchestrator by correlating the marker; an alert that cannot
+  be tied to this run is reported as unverifiable, never credited. This scenario
+  names its target by id only; host, port, identity, credential reference and
+  mode come from the server-side target registry.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - detection
+  - bulk-read
+  - lab-only
+  - mitre-attack
+mitre_phases:
+  - collection
+
+steps:
+  - name: "DB-09 Row-capped bulk read of a synthetic table (T1213)"
+    technique_id: T1213
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: bounded_synthetic_read
+    db_fixture: accounts
+    db_params:
+      table: accounts
+    db_limits:
+      max_rows: 5
+      timeout_sec: 30
+      max_conns: 1
+    risk: medium
+    blast_radius: "one row-capped SELECT inside a READ ONLY transaction against a per-run synthetic fixture schema (dbsim_<id>); at most 5 rows and 1 MiB counted; the fixture is created and removed by the agent with verified cleanup"
+    reversible: true

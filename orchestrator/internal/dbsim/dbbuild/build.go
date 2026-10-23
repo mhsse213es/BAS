@@ -21,6 +21,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -127,6 +128,9 @@ func BuildSteps(ctx context.Context, sc *scenario.Scenario, opt Options) ([]scen
 		if err := checkParams(entry, st.DBParams); err != nil {
 			return nil, fmt.Errorf("dbbuild: step %d (%q): %w", i+1, st.Name, err)
 		}
+		if err := checkFixture(entry, st); err != nil {
+			return nil, fmt.Errorf("dbbuild: step %d (%q): %w", i+1, st.Name, err)
+		}
 		target, err := opt.Resolver.Resolve(ctx, st.DBTarget)
 		if err != nil {
 			return nil, fmt.Errorf("dbbuild: step %d (%q): resolve target %q: %w", i+1, st.Name, st.DBTarget, err)
@@ -155,7 +159,7 @@ func BuildSteps(ctx context.Context, sc *scenario.Scenario, opt Options) ([]scen
 			Engine: target.Engine, ProbeID: entry.ID, TargetID: target.ID,
 			Host: target.Host, Port: target.Port, Database: target.Database, TLSMode: target.TLSMode,
 			ExpectedIdentity: target.ExpectedIdentity, CredentialRef: target.CredentialRef,
-			RunID: runID, Marker: MarkerPrefix + mh,
+			RunID: runID, Marker: MarkerPrefix + mh, FixtureID: st.DBFixture,
 			Mode: target.Mode, Limits: limits, Params: copyParams(st.DBParams),
 		}
 		raw, err := json.Marshal(spec)
@@ -186,6 +190,30 @@ func BuildSteps(ctx context.Context, sc *scenario.Scenario, opt Options) ([]scen
 		}
 	}
 	return steps, nil
+}
+
+// fixtureTablePat is a bare fixture table name: it mirrors the agent's fixture
+// identifier shape, so a schema-qualified or quoted value can never be a param.
+var fixtureTablePat = regexp.MustCompile(`^[a-z][a-z0-9_]{0,30}$`)
+
+// checkFixture enforces the fixture rules of the registry entry: a
+// fixture-aware probe needs db_fixture and a bare table name in its fixture
+// param (the agent resolves it to the active fixture's schema, spec R-Z); a
+// probe that does not read a fixture must not carry one.
+func checkFixture(e dbsim.ProbeRegistryEntry, st scenario.Step) error {
+	if e.FixtureParam == "" {
+		if st.DBFixture != "" {
+			return fmt.Errorf("probe %q does not use a fixture; db_fixture must be empty", e.ID)
+		}
+		return nil
+	}
+	if st.DBFixture == "" {
+		return fmt.Errorf("probe %q reads a seeded fixture and requires db_fixture", e.ID)
+	}
+	if v := st.DBParams[e.FixtureParam]; !fixtureTablePat.MatchString(v) {
+		return fmt.Errorf("param %q must be a bare fixture table name", e.FixtureParam)
+	}
+	return nil
 }
 
 func copyParams(p map[string]string) map[string]string {
