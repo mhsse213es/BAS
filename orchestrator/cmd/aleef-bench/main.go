@@ -196,8 +196,11 @@ func composePolicy(labels []bench.Label, lookup func(string) (bank.Policy, bool)
 var opClass = map[string]model.OpClass{
 	"POST /v2/beneficiaries":         model.ClassSetupSafe,
 	"PATCH /v2/beneficiaries/{id}":   model.ClassReversible,
-	"POST /v2/transactions":          model.ClassReversible,
-	"POST /v2/payments":              model.ClassReversible,
+	"DELETE /v2/beneficiaries/{id}":  model.ClassReversible,
+	"DELETE /v2/transactions/{id}":   model.ClassReversible,
+	"DELETE /v2/payments/{id}":       model.ClassReversible,
+	"POST /v2/transactions":          model.ClassSetupSafe,
+	"POST /v2/payments":              model.ClassSetupSafe,
 	"PATCH /v2/payments/{id}":        model.ClassReversible,
 	"POST /v2/payments/{id}/approve": model.ClassReversible,
 	"POST /v2/payments/{id}/settle":  model.ClassMoney,
@@ -272,10 +275,11 @@ func runOne(ctx context.Context, st *store.Store, build string, pol bank.Policy,
 	if err != nil {
 		return o, err
 	}
-	srv.AddAccount("cust-a", 100000)
-	srv.AddAccount("cust-b", 100000)
-	srv.AddDocument("cust-a", "kyc-a")
-	srv.AddDocument("cust-b", "kyc-b")
+	// The bank's documented seed: one account per principal and one
+	// document per customer. These are the objects the API cannot create; the
+	// bench declares them as the accounts' Existing objects below.
+	accA, accB, accC := srv.AddAccount("cust-a", 100000), srv.AddAccount("cust-b", 100000), srv.AddAccount("appr-c", 100000)
+	docA, docB := srv.AddDocument("cust-a", "doc-a"), srv.AddDocument("cust-b", "doc-b")
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return o, err
@@ -305,40 +309,77 @@ func runOne(ctx context.Context, st *store.Store, build string, pol bank.Policy,
 	for id, k := range keyOf {
 		idOf[k] = id
 	}
-	setupOp, ok := idOf["POST /v2/beneficiaries"]
-	if !ok {
-		return o, errors.New("setup operation not found in the served OpenAPI document")
+	var setup []model.SetupOp
+	for _, s := range setupDecl {
+		id, ok := idOf[s.key]
+		if !ok {
+			return o, fmt.Errorf("setup operation %q not found in the served OpenAPI document", s.key)
+		}
+		comp, ok := idOf[s.compensate]
+		if !ok {
+			return o, fmt.Errorf("compensating operation %q not found in the served OpenAPI document", s.compensate)
+		}
+		setup = append(setup, model.SetupOp{OperationID: id, Body: s.body, Compensate: comp})
 	}
+	var listed []string
+	for id := range classes {
+		listed = append(listed, id)
+	}
+	sort.Strings(listed)
 
 	now := time.Now()
 	eng := safety.Engagement{
 		ID: "aleef-bench-" + build, Customer: "synthetic-bank-lab", Environment: "lab", Hosts: []string{base},
 		Approver: "bench-operator", NotBefore: now.Add(-time.Minute), NotAfter: now.Add(2 * time.Hour),
 		MaxRequests: 200000, MaxConcurrent: 8, RPS: 2000,
+		// Money operations run only here: lab engagement, loopback origin,
+		// synthetic bank, simulated rail, explicit operation list. The safety
+		// rules for UAT and production are unchanged.
+		SimulatedRail: true, SimulatorBeneficiaries: []string{"bench payee"}, Operations: listed,
 	}
 	rec := &recorder{base: http.DefaultTransport}
 	cfg := campaign.Config{
 		OpenAPI: spec, BaseURL: base, Engagement: eng,
 		Accounts: []model.Account{
-			{Name: "alice", CustomerID: "cust-a", TokenRef: "ref-alice", Role: bank.RoleCustomer},
-			{Name: "bob", CustomerID: "cust-b", TokenRef: "ref-bob", Role: bank.RoleCustomer},
-			{Name: "carol", CustomerID: "appr-c", TokenRef: "ref-carol", Role: bank.RoleApprover},
+			{Name: "alice", CustomerID: "cust-a", TokenRef: "ref-alice", Role: bank.RoleCustomer,
+				Existing: map[string]string{"account": accA.ID, "document": docA.ID, "customer": "cust-a"}},
+			{Name: "bob", CustomerID: "cust-b", TokenRef: "ref-bob", Role: bank.RoleCustomer,
+				Existing: map[string]string{"account": accB.ID, "document": docB.ID, "customer": "cust-b"}},
+			{Name: "carol", CustomerID: "appr-c", TokenRef: "ref-carol", Role: bank.RoleApprover,
+				Existing: map[string]string{"account": accC.ID, "customer": "appr-c"}},
 		},
-		Setup:         []model.SetupOp{{OperationID: setupOp, Body: map[string]any{"name": "bench payee", "account_number": "000111222"}}},
-		Classes:       classes,
-		Roles:         []string{bank.RoleCustomer, bank.RoleApprover},
-		Workflow:      workflow(idOf),
-		ReservedRoles: map[string]string{idOf["POST /v2/payments/{id}/approve"]: bank.RoleApprover},
-		Secrets:       secrets{"ref-alice": tAlice, "ref-bob": tBob, "ref-carol": tCarol},
-		Recorder:      st,
-		Options:       campaign.Options{Seed: seed, MaxTests: maxTests},
-		HTTP:          &http.Client{Transport: rec, Timeout: 30 * time.Second},
+		Setup:    setup,
+		Classes:  classes,
+		Roles:    []string{bank.RoleCustomer, bank.RoleApprover},
+		Workflow: workflow(idOf),
+		Secrets:  secrets{"ref-alice": tAlice, "ref-bob": tBob, "ref-carol": tCarol},
+		Recorder: st,
+		Options:  campaign.Options{Seed: seed, MaxTests: maxTests},
+		HTTP:     &http.Client{Transport: rec, Timeout: 30 * time.Second},
 	}
 	rep, err := campaign.Run(ctx, cfg)
 	if err != nil {
 		return o, fmt.Errorf("%s build: campaign: %w", build, err)
 	}
-	return toOutcome(ctx, st, rep, rec, base, eng, keyOf, classes), nil
+	out := toOutcome(ctx, st, rep, rec, base, eng, keyOf, classes)
+	// Cleanup is assessable now that the bank has delete operations: the
+	// campaign reports no orphans and the bank itself holds no test objects.
+	tx, bn, py := srv.ObjectCounts()
+	out.SafetyChecks["cleanup_left_no_objects"] = len(rep.Orphans) == 0 && tx+bn+py == 0
+	return out, nil
+}
+
+// setupDecl creates, per account and in order, the objects the API can create.
+// Later bodies reference earlier objects of the same account through the
+// {{self.<type>.id}} placeholder; the account's own seeded account is an
+// Existing object.
+var setupDecl = []struct {
+	key, compensate string
+	body            map[string]any
+}{
+	{"POST /v2/beneficiaries", "DELETE /v2/beneficiaries/{id}", map[string]any{"name": "bench payee", "account_number": "000111222"}},
+	{"POST /v2/transactions", "DELETE /v2/transactions/{id}", map[string]any{"account_id": "{{self.account.id}}", "amount": 100, "description": "bench entry"}},
+	{"POST /v2/payments", "DELETE /v2/payments/{id}", map[string]any{"account_id": "{{self.account.id}}", "beneficiary_id": "{{self.beneficiary.id}}", "amount": 100}},
 }
 
 // workflow is the operator's declaration of the payment lifecycle from the
@@ -367,8 +408,28 @@ func toOutcome(ctx context.Context, st *store.Store, rep campaign.Report, rec *r
 		SafetyChecks: map[string]bool{},
 		Halted:       rep.Halted,
 	}
+	o.SkipReasons, o.NoFixtureDropped = map[string]string{}, map[string]int{}
 	for id, c := range rep.PerOperation {
 		o.CoveragePerOperation[id] = c.Generated
+		if c.Skipped != "" {
+			o.SkipReasons[id] = c.Skipped
+		}
+	}
+	for t, n := range rep.Generated.NoFixture {
+		o.NoFixtureDropped[t] = n
+	}
+	o.StateCounts = map[string]int{}
+	for _, t := range rep.Tests {
+		if t.Executed && t.State != "clean" {
+			o.NotClean = append(o.NotClean, bench.TestNote{TestID: t.TestID, Property: t.Property, Operation: t.Operation, State: t.State, Reason: t.Reason})
+		}
+		if t.Executed {
+			k := t.State
+			if t.Reason != "" {
+				k += ": " + t.Reason
+			}
+			o.StateCounts[k]++
+		}
 	}
 	repro := map[string]int{}
 	for _, t := range rep.Tests {
@@ -428,10 +489,12 @@ func toOutcome(ctx context.Context, st *store.Store, rep campaign.Report, rec *r
 	o.SafetyChecks["requests_only_to_engaged_origin"] = onlyOrigin && len(reqs) > 0
 	o.SafetyChecks["requests_inside_engagement_window"] = inWindow
 	o.SafetyChecks["engagement_enforced"] = rep.Requests > 0 && rep.Requests <= eng.MaxRequests
-	o.SafetyChecks["no_money_class_request_sent"] = moneySent == 0
+	// Money requests are allowed only on the lab loopback bank under the
+	// declared simulated rail; the guard enforces the operation list.
+	o.SafetyChecks["money_requests_only_under_lab_simulated_rail"] = moneySent == 0 ||
+		(eng.Environment == "lab" && eng.SimulatedRail && len(eng.SimulatorBeneficiaries) > 0 && onlyOrigin && ip != nil && ip.IsLoopback())
 	o.SafetyNotAssessed = []string{
 		"no_unauthorized_money_movement (a settlement reached without authorization cannot be judged without defect knowledge; the owner assesses it from the bank's own logs)",
-		fmt.Sprintf("cleanup_left_no_objects (the bank exposes no delete operation, so created objects remain in the disposable in-process bank until it is discarded; campaign orphans: %d)", len(rep.Orphans)),
 	}
 	sort.Strings(o.SafetyNotAssessed)
 	return o

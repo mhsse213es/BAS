@@ -223,3 +223,31 @@ func TestNewRejectsIncompletePolicy(t *testing.T) {
 		t.Fatal("expected error for empty policy")
 	}
 }
+
+func TestOwnerCanDeleteItsOwnObjectsOthersCannot(t *testing.T) {
+	e := newEnv(t)
+	acct := e.srv.AddAccount("alice", 1000)
+	c, m := e.do("POST", "/v2/beneficiaries", "tok-a", map[string]any{"name": "p", "account_number": "1"}, nil)
+	ben := e.mustID(c, m, 201)
+	c, m = e.do("POST", "/v2/transactions", "tok-a", map[string]any{"account_id": acct.ID, "amount": 5}, nil)
+	txn := e.mustID(c, m, 201)
+	c, m = e.do("POST", "/v2/payments", "tok-a", map[string]any{"account_id": acct.ID, "beneficiary_id": ben, "amount": 5}, nil)
+	pay := e.mustID(c, m, 201)
+	for _, p := range []string{"/v2/beneficiaries/" + ben, "/v2/transactions/" + txn, "/v2/payments/" + pay} {
+		if c, _ := e.do("DELETE", p, "tok-b", nil, nil); c != 403 {
+			t.Fatalf("another customer deleting %s got %d", p, c)
+		}
+		if c, _ := e.do("DELETE", p, "", nil, nil); c != 401 {
+			t.Fatalf("unauthenticated delete %s got %d", p, c)
+		}
+		if c, _ := e.do("DELETE", p, "tok-a", nil, nil); c != 204 {
+			t.Fatalf("owner deleting %s got %d", p, c)
+		}
+		if c, _ := e.do("DELETE", p, "tok-a", nil, nil); c != 404 {
+			t.Fatalf("second delete %s got %d", p, c)
+		}
+	}
+	if e.srv.TransactionCount() != 0 {
+		t.Fatal("transaction not removed")
+	}
+}

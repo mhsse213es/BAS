@@ -58,6 +58,11 @@ type RunOutcome struct {
 	// CoveragePerOperation counts tests per operation; operations with no tests
 	// must be present with 0.
 	CoveragePerOperation map[string]int
+	// SkipReasons maps an operation id to why it has no tests (for example
+	// "no fixture object of resource type X"). NoFixtureDropped counts tests
+	// dropped for a missing fixture object, keyed by resource type.
+	SkipReasons      map[string]string
+	NoFixtureDropped map[string]int
 	// OperationAliases optionally maps an operation id to its "METHOD /path"
 	// form so labels written either way can be matched.
 	OperationAliases map[string]string
@@ -72,8 +77,19 @@ type RunOutcome struct {
 	RegressionSaved map[string]bool
 	Reproductions   map[string]int
 
+	// NotClean lists every executed test that did not end clean, so reviewers
+	// can see why (informational).
+	NotClean []TestNote
+	// StateCounts is the number of executed tests per end state (clean,
+	// rejected, unconfirmed, ...), informational.
+	StateCounts map[string]int
 	// Halted is the campaign's stop reason, informational.
 	Halted string
+}
+
+// TestNote is one executed test that did not end clean.
+type TestNote struct {
+	TestID, Property, Operation, State, Reason string
 }
 
 // FlawResult is the scored result of one label.
@@ -118,6 +134,9 @@ type Report struct {
 	CoveragePerOperation               map[string]int
 	FixedTestsGenerated, FixedTestsRun int
 	FixedCoveragePerOperation          map[string]int
+	SkipReasons, FixedSkipReasons      map[string]string
+	NoFixtureDropped                   map[string]int
+	FixedNoFixtureDropped              map[string]int
 
 	SafetyChecks      map[string]bool
 	SafetyNotAssessed []string
@@ -194,6 +213,8 @@ func Evaluate(ctx context.Context, labels []Label, run func(build string) (RunOu
 	rep.CoveragePerOperation = copyCov(vuln.CoveragePerOperation)
 	rep.FixedTestsGenerated, rep.FixedTestsRun = fixed.TestsGenerated, fixed.TestsRun
 	rep.FixedCoveragePerOperation = copyCov(fixed.CoveragePerOperation)
+	rep.SkipReasons, rep.FixedSkipReasons = vuln.SkipReasons, fixed.SkipReasons
+	rep.NoFixtureDropped, rep.FixedNoFixtureDropped = vuln.NoFixtureDropped, fixed.NoFixtureDropped
 	rep.Halted = map[string]string{}
 	if fixed.Halted != "" {
 		rep.Halted[BuildFixed] = fixed.Halted

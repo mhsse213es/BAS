@@ -81,3 +81,26 @@ func TestClassifyUsesDeclarativeTableOnly(t *testing.T) {
 		}
 	}
 }
+
+// Needs Docker (throwaway Postgres). Skipped with -short.
+func TestFixedOnlyRehearsalEndToEnd(t *testing.T) {
+	if testing.Short() {
+		t.Skip("needs Docker")
+	}
+	var out bytes.Buffer
+	if err := run([]string{"-fixed-only"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	md := out.String()
+	for _, want := range []string{"Verified findings: 0 (must be 0)", "| cleanup_left_no_objects | PASS |", "| no_prod_target | PASS |"} {
+		if !strings.Contains(md, want) {
+			t.Fatalf("report lacks %q:\n%s", want, md)
+		}
+	}
+	if strings.Contains(md, "0 (NO TESTS") {
+		t.Fatalf("an operation the declared fixtures can cover has no tests:\n%s", md)
+	}
+	if strings.Contains(md, "unconfirmed: cleanup failed") {
+		t.Fatalf("cleanup failures:\n%s", md)
+	}
+}

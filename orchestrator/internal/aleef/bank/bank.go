@@ -138,6 +138,15 @@ func (s *Server) TransactionCount() int {
 	return len(s.txns)
 }
 
+// ObjectCounts reports how many testable objects the bank holds (read-only):
+// transactions, beneficiaries and payments. Seeded accounts and documents are
+// not counted.
+func (s *Server) ObjectCounts() (transactions, beneficiaries, payments int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.txns), len(s.bens), len(s.pays)
+}
+
 // Handler returns the HTTP handler.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -167,6 +176,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v2/payments", s.auth(s.createPayment))
 	mux.HandleFunc("GET /v2/payments/{id}", s.auth(s.getPayment))
 	mux.HandleFunc("PATCH /v2/payments/{id}", s.auth(s.patchPayment))
+	mux.HandleFunc("DELETE /v2/transactions/{id}", s.auth(s.deleteTransaction))
+	mux.HandleFunc("DELETE /v2/beneficiaries/{id}", s.auth(s.deleteBeneficiary))
+	mux.HandleFunc("DELETE /v2/payments/{id}", s.auth(s.deletePayment))
 	mux.HandleFunc("POST /v2/payments/{id}/approve", s.auth(s.approvePayment))
 	mux.HandleFunc("POST /v2/payments/{id}/settle", s.auth(s.settlePayment))
 	return mux
@@ -299,6 +311,51 @@ func (s *Server) createBeneficiary(w http.ResponseWriter, r *http.Request, p Pri
 	b := &Beneficiary{ID: s.nextID("ben"), OwnerID: p.ID, Name: req.Name, AccountNumber: req.AccountNumber}
 	s.bens[b.ID] = b
 	writeJSON(w, http.StatusCreated, b)
+}
+
+// Deletion exists so a tester can remove the objects it created. It is a
+// fixed rule (only the owner may delete) and not a policy decision point.
+func (s *Server) deleteOwned(w http.ResponseWriter, p Principal, owner string, exists bool, remove func()) {
+	if !exists {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	if p.ID == "" || p.ID != owner {
+		writeErr(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	remove()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) deleteTransaction(w http.ResponseWriter, r *http.Request, p Principal) {
+	id := r.PathValue("id")
+	t, ok := s.txns[id]
+	owner := ""
+	if ok {
+		owner = t.OwnerID
+	}
+	s.deleteOwned(w, p, owner, ok, func() { delete(s.txns, id) })
+}
+
+func (s *Server) deleteBeneficiary(w http.ResponseWriter, r *http.Request, p Principal) {
+	id := r.PathValue("id")
+	b, ok := s.bens[id]
+	owner := ""
+	if ok {
+		owner = b.OwnerID
+	}
+	s.deleteOwned(w, p, owner, ok, func() { delete(s.bens, id) })
+}
+
+func (s *Server) deletePayment(w http.ResponseWriter, r *http.Request, p Principal) {
+	id := r.PathValue("id")
+	pay, ok := s.pays[id]
+	owner := ""
+	if ok {
+		owner = pay.OwnerID
+	}
+	s.deleteOwned(w, p, owner, ok, func() { delete(s.pays, id) })
 }
 
 func (s *Server) getBeneficiary(w http.ResponseWriter, r *http.Request, p Principal) {

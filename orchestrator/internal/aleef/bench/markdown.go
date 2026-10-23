@@ -23,7 +23,7 @@ func yn(b bool) string {
 	return "no"
 }
 
-func writeCoverage(b *strings.Builder, cov map[string]int) {
+func writeCoverage(b *strings.Builder, cov map[string]int, reasons map[string]string) {
 	ops := make([]string, 0, len(cov))
 	for op := range cov {
 		ops = append(ops, op)
@@ -32,10 +32,29 @@ func writeCoverage(b *strings.Builder, cov map[string]int) {
 	b.WriteString("| Operation | Tests generated |\n|---|---|\n")
 	for _, op := range ops {
 		if cov[op] == 0 {
-			fmt.Fprintf(b, "| %s | 0 (NO TESTS) |\n", cell(op))
+			why := ""
+			if r := reasons[op]; r != "" {
+				why = ": " + r
+			}
+			fmt.Fprintf(b, "| %s | 0 (NO TESTS%s) |\n", cell(op), cell(why))
 		} else {
 			fmt.Fprintf(b, "| %s | %d |\n", cell(op), cov[op])
 		}
+	}
+}
+
+func writeDropped(b *strings.Builder, label string, dropped map[string]int) {
+	if len(dropped) == 0 {
+		return
+	}
+	types := make([]string, 0, len(dropped))
+	for t := range dropped {
+		types = append(types, t)
+	}
+	sort.Strings(types)
+	fmt.Fprintf(b, "\nTests dropped for a missing fixture object (%s):\n\n", label)
+	for _, t := range types {
+		fmt.Fprintf(b, "- no fixture object of resource type %s: %d\n", cell(t), dropped[t])
 	}
 }
 
@@ -104,9 +123,11 @@ func (r Report) Markdown() string {
 	}
 
 	b.WriteString("\n## Coverage per operation (vulnerable build)\n\n")
-	writeCoverage(&b, r.CoveragePerOperation)
+	writeCoverage(&b, r.CoveragePerOperation, r.SkipReasons)
+	writeDropped(&b, "vulnerable build", r.NoFixtureDropped)
 	b.WriteString("\n### Coverage per operation (fixed build)\n\n")
-	writeCoverage(&b, r.FixedCoveragePerOperation)
+	writeCoverage(&b, r.FixedCoveragePerOperation, r.FixedSkipReasons)
+	writeDropped(&b, "fixed build", r.FixedNoFixtureDropped)
 
 	b.WriteString("\n## Safety checks\n\n")
 	writeSafety(&b, r.SafetyChecks, r.SafetyNotAssessed)
@@ -135,11 +156,30 @@ func FixedOnlyMarkdown(o RunOutcome) string {
 	fmt.Fprintf(&b, "- Tests generated: %d, run: %d\n", o.TestsGenerated, o.TestsRun)
 	fmt.Fprintf(&b, "- Verified findings: %d (must be 0)\n", len(o.Findings))
 	fmt.Fprintf(&b, "- Unverified candidates: %d\n", len(o.Candidates))
+	if len(o.StateCounts) > 0 {
+		states := make([]string, 0, len(o.StateCounts))
+		for s := range o.StateCounts {
+			states = append(states, s)
+		}
+		sort.Strings(states)
+		var parts []string
+		for _, s := range states {
+			parts = append(parts, fmt.Sprintf("%s %d", s, o.StateCounts[s]))
+		}
+		fmt.Fprintf(&b, "- End states: %s\n", strings.Join(parts, ", "))
+	}
 	if o.Halted != "" {
 		fmt.Fprintf(&b, "- Halted: %s\n", o.Halted)
 	}
 	b.WriteString("\n### Coverage per operation\n\n")
-	writeCoverage(&b, o.CoveragePerOperation)
+	writeCoverage(&b, o.CoveragePerOperation, o.SkipReasons)
+	writeDropped(&b, "this build", o.NoFixtureDropped)
+	if len(o.NotClean) > 0 {
+		b.WriteString("\n### Tests that did not end clean\n\n| Test | Property | Operation | State | Reason |\n|---|---|---|---|---|\n")
+		for _, n := range o.NotClean {
+			fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", cell(n.TestID), cell(n.Property), cell(n.Operation), cell(n.State), cell(n.Reason))
+		}
+	}
 	b.WriteString("\n### Verified findings\n\n")
 	writeRefs(&b, refsOf(o.Findings), "None.")
 	b.WriteString("\n### Candidates\n\n")
