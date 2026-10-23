@@ -1,0 +1,60 @@
+{
+  "openapi": "3.0.3",
+  "info": {"title": "Items", "version": "1"},
+  "security": [{"bearer": []}],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "parameters": [
+          {"$ref": "#/components/parameters/Limit"},
+          {"name": "owner_id", "in": "query", "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "ok"}}
+      },
+      "post": {
+        "operationId": "createItem",
+        "requestBody": {"$ref": "#/components/requestBodies/ItemBody"},
+        "responses": {"201": {"description": "created"}}
+      }
+    },
+    "/items/{id}": {
+      "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}],
+      "get": {
+        "responses": {"200": {"description": "ok"}}
+      },
+      "delete": {
+        "security": [],
+        "parameters": [{"name": "force", "in": "query", "schema": {"type": "boolean"}}],
+        "responses": {"204": {"description": "gone"}}
+      }
+    },
+    "/notes/{noteRef}/tags/{label}": {
+      "parameters": [
+        {"name": "label", "in": "path", "required": true, "schema": {"type": "string"}},
+        {"name": "noteRef", "in": "path", "required": true, "schema": {"type": "string"}}
+      ],
+      "get": {"responses": {"200": {"description": "ok"}}}
+    }
+  },
+  "components": {
+    "parameters": {
+      "Limit": {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
+    },
+    "requestBodies": {
+      "ItemBody": {
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Item"}}}
+      }
+    },
+    "schemas": {
+      "Base": {"type": "object", "properties": {"name": {"type": "string", "minLength": 1}}, "required": ["name"]},
+      "Item": {
+        "allOf": [
+          {"$ref": "#/components/schemas/Base"},
+          {"type": "object", "properties": {"qty": {"type": "integer"}, "tags": {"type": "array", "items": {"type": "string"}}}}
+        ]
+      }
+    },
+    "securitySchemes": {"bearer": {"type": "http", "scheme": "bearer"}}
+  }
+}
