@@ -39,7 +39,11 @@ type toy struct {
 	served   int
 	hits     map[string]int // "METHOD /path-shape" -> count
 	deletes  int
-	noDelete bool // compensation is refused
+	noDelete bool                 // compensation is refused
+	idFn     func(seq int) string // overrides the id assigned to the seq-th created item
+	probe    bool                 // an X-Probe header was received
+	sawRef   bool                 // a ref query parameter was received
+	paths    []string
 	tokens   map[string][2]string
 }
 
@@ -89,6 +93,13 @@ func (t *toy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		shape = r.Method + " /" + strings.Join(p2, "/")
 	}
 	t.hits[shape]++
+	t.paths = append(t.paths, r.Method+" "+r.URL.Path)
+	if r.Header.Get("X-Probe") != "" {
+		t.probe = true
+	}
+	if r.URL.Query().Get("ref") != "" {
+		t.sawRef = true
+	}
 	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	who, ok := t.tokens[tok]
 	if !ok {
@@ -114,6 +125,9 @@ func (t *toy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			t.seq++
 			it := &titem{ID: fmt.Sprintf("item-%d", t.seq), Owner: cust}
+			if t.idFn != nil {
+				it.ID = t.idFn(t.seq)
+			}
 			it.Title, _ = body["title"].(string)
 			t.items[it.ID] = it
 			reply(w, 201, map[string]any{"id": it.ID, "owner": it.Owner, "title": it.Title})

@@ -53,6 +53,9 @@ type env struct {
 	timeout time.Duration
 	setup   model.Doer
 
+	// genFx, genCreated, genIDs and haveGen are written once by
+	// generationFixture, before the first Fresh call and before any verifier
+	// runs, and are read-only afterwards; they need no lock.
 	genFx      fixture.Fixture
 	genCreated []model.CreatedObject
 	genIDs     []string
@@ -104,9 +107,13 @@ func (e *env) build(ctx context.Context, aliasing bool) (*exec.Executor, func(co
 	}
 	rt := e.base
 	if aliasing && berr == nil && len(created) == len(e.genCreated) {
-		rt = newAlias(e.base, e.genIDs, ids(created))
-		if _, ok := rt.(aliasRT); ok {
-			ecfg.Fixture, ecfg.Created = e.genFx, e.genCreated
+		var art http.RoundTripper
+		art, berr = newAlias(e.base, e.genIDs, ids(created), e.m)
+		if berr == nil {
+			rt = art
+			if _, ok := rt.(aliasRT); ok {
+				ecfg.Fixture, ecfg.Created = e.genFx, e.genCreated
+			}
 		}
 	}
 	// exec guards this client's transport itself; it must not be guarded twice

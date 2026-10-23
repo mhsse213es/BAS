@@ -156,11 +156,11 @@ type Report struct {
 	Model     Coverage
 	Generated generate.Report
 	// Total is the number of tests generated; Total == Executed + NotExecuted.
-	Total, Executed, NotExecuted                                     int
-	Clean, Candidates, Verified, Rejected, Unconfirmed, Inconclusive int
-	PerOperation                                                     map[string]OpCoverage
-	NotModelled                                                      []string
-	Orphans                                                          []model.CreatedObject
+	Total, Executed, NotExecuted                                           int
+	Clean, ReachedCandidate, Verified, Rejected, Unconfirmed, Inconclusive int
+	PerOperation                                                           map[string]OpCoverage
+	NotModelled                                                            []string
+	Orphans                                                                []model.CreatedObject
 	// Halted is the reason the campaign stopped early, and "cleanup failed"
 	// when any object could not be compensated.
 	Halted   string
@@ -468,7 +468,7 @@ func tally(rep *Report) {
 			}
 		}
 		if o.State == verify.StateCandidate || o.Reproductions > 0 {
-			rep.Candidates++
+			rep.ReachedCandidate++
 		}
 		rep.PerOperation[o.Operation] = oc
 	}

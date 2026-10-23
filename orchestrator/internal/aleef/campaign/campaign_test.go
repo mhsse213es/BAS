@@ -3,6 +3,7 @@ package campaign
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +11,9 @@ import (
 	"github.com/audspect/bas/internal/aleef/exec"
 	"github.com/audspect/bas/internal/aleef/generate"
 	"github.com/audspect/bas/internal/aleef/model"
+	"github.com/audspect/bas/internal/aleef/safety"
 	"github.com/audspect/bas/internal/aleef/verify"
+	"github.com/audspect/bas/internal/apibas/contract"
 )
 
 func mustRun(t *testing.T, cfg Config) Report {
@@ -55,7 +58,7 @@ func TestCampaignFindsAndVerifiesToyFlaw(t *testing.T) {
 	rec2 := newRec()
 	cfg2, _ := toyConfig(t, clean, rec2)
 	rep2 := mustRun(t, cfg2)
-	if rep2.Verified != 0 || rep2.Candidates != 0 || len(rep2.Findings) != 0 || rep2.Executed == 0 {
+	if rep2.Verified != 0 || rep2.ReachedCandidate != 0 || len(rep2.Findings) != 0 || rep2.Executed == 0 {
 		t.Fatalf("corrected toy: %+v", rep2)
 	}
 	if clean.leftover() != 0 {
@@ -325,4 +328,111 @@ func firstReasons(rep Report) []string {
 		out = append(out, o.TestID+": "+o.State+" "+o.Reason)
 	}
 	return out
+}
+
+// ---- alias safety, end to end ----
+
+// verifyMutated builds the campaign environment by hand, generates the
+// cross-identity read test, lets mutate change its last step, and verifies it.
+func verifyMutated(t *testing.T, ty *toy, mutate func(genID string, st *contract.Step)) verify.Verdict {
+	t.Helper()
+	rec := newRec()
+	cfg, _ := toyConfig(t, ty, rec)
+	m, err := prepare(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := safety.NewGuard(cfg.Engagement, nil, m, safety.GuardOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := newEnv(cfg, m, g, "tag")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	cleanup, err := e.generationFixture(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests, err := generate.Generate(m, e.genFx, cfg.Accounts, generate.Options{Seed: 1, Catalogue: []contract.Scenario{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = cleanup(ctx)
+	for _, x := range tests {
+		if x.Property != "P-OWN-1" || x.Params["operation"] != "getItem" || x.OwnerControl == nil {
+			continue
+		}
+		last := &x.Scenario.Steps[len(x.Scenario.Steps)-1]
+		mutate(e.genIDs[0], last)
+		for _, tt := range []generate.Test{x, *x.OwnerControl, *x.NegativeControl} {
+			_ = rec.SaveTest(ctx, "r", tt)
+		}
+		v, err := verify.New(e, rec, verify.Options{RunID: "r"}).Verify(ctx, x)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	t.Fatal("no P-OWN-1 test on getItem")
+	return verify.Verdict{}
+}
+
+func TestAliasUntranslatedHeaderIsNeverSentNorClean(t *testing.T) {
+	ty := newToy()
+	ty.readFlaw = true
+	v := verifyMutated(t, ty, func(id string, st *contract.Step) {
+		if st.Headers == nil {
+			st.Headers = map[string]string{}
+		}
+		st.Headers["X-Probe"] = "prefix-" + id
+	})
+	if v.State != verify.StateUnconfirmed {
+		t.Fatalf("State=%q reason=%q, want unconfirmed", v.State, v.Reason)
+	}
+	if ty.probe {
+		t.Fatal("the request carrying a dead generation id reached the server")
+	}
+	if ty.leftover() != 0 {
+		t.Fatalf("%d objects left", ty.leftover())
+	}
+}
+
+func TestAliasUntranslatedEncodedQueryIsNeverSentNorClean(t *testing.T) {
+	ty := newToy()
+	ty.readFlaw = true
+	v := verifyMutated(t, ty, func(id string, st *contract.Step) { st.Path += "?ref=a%2C" + id })
+	if v.State != verify.StateUnconfirmed {
+		t.Fatalf("State=%q reason=%q, want unconfirmed", v.State, v.Reason)
+	}
+	if ty.sawRef {
+		t.Fatal("the request carrying a dead generation id reached the server")
+	}
+}
+
+func TestAliasFreshIdEqualToLiteralRouteFailsFresh(t *testing.T) {
+	ty := newToy()
+	ty.readFlaw = true
+	// the generation fixture (ids 1-3) is normal; every later fixture's first
+	// object gets an id that is a literal segment of a sibling route
+	ty.idFn = func(seq int) string {
+		if seq > 3 && seq%3 == 1 {
+			return "archive"
+		}
+		return fmt.Sprintf("item-%d", seq)
+	}
+	cfg, _ := toyConfig(t, ty, newRec())
+	rep := mustRun(t, cfg)
+	if rep.Verified != 0 || rep.Executed != 0 {
+		t.Fatalf("verified=%d executed=%d, want none", rep.Verified, rep.Executed)
+	}
+	for _, p := range ty.paths {
+		if strings.HasPrefix(p, "GET ") && strings.HasSuffix(p, "/items/archive") {
+			t.Fatalf("a test request reached the literal route: %s", p)
+		}
+	}
+	if ty.leftover() != 0 {
+		t.Fatalf("%d objects left", ty.leftover())
+	}
 }
