@@ -6,6 +6,7 @@ package aleef_test
 // skipped and are covered automatically once their directory appears.
 
 import (
+	"fmt"
 	"go/parser"
 	"go/token"
 	"os"
@@ -37,42 +38,63 @@ func isForbidden(path string) bool {
 	return false
 }
 
-// goFiles returns non-test .go files under dir (recursive); nil if dir is absent.
-func goFiles(dir string) []string {
+// goFiles returns .go files under dir (recursive). A missing dir yields nil, nil;
+// any other walk error is returned (fail closed).
+func goFiles(dir string, includeTests bool) ([]string, error) {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return nil, nil
+	}
 	var out []string
-	_ = filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(p, ".go") {
 			return nil
 		}
-		if strings.HasSuffix(p, ".go") && !strings.HasSuffix(p, "_test.go") {
-			out = append(out, p)
+		if !includeTests && strings.HasSuffix(p, "_test.go") {
+			return nil
 		}
+		out = append(out, p)
 		return nil
 	})
-	return out
+	return out, err
 }
 
-// existingPkgDirs returns aleef/<pkg> dirs under root that exist and hold Go files.
-func existingPkgDirs(root string, pkgs []string) []string {
+// existingPkgDirs returns aleef/<pkg> dirs under root holding any .go file (tests included).
+func existingPkgDirs(root string, pkgs []string) ([]string, error) {
 	var out []string
 	for _, p := range pkgs {
 		d := filepath.Join(root, "internal", "aleef", p)
-		if len(goFiles(d)) > 0 {
+		fs, err := goFiles(d, true)
+		if err != nil {
+			return nil, err
+		}
+		if len(fs) > 0 {
 			out = append(out, d)
 		}
 	}
-	return out
+	return out, nil
 }
 
-// sourceImportViolations parses direct imports (used for fixtures).
-func sourceImportViolations(root string, pkgs []string) []string {
+// checkImports reports forbidden imports: direct imports of every .go file
+// (tests and external _test packages included) and the transitive closure via
+// `go list -deps -test` run from moduleRoot.
+func checkImports(moduleRoot string, pkgs []string) ([]string, error) {
+	dirs, err := existingPkgDirs(moduleRoot, pkgs)
+	if err != nil {
+		return nil, err
+	}
 	var v []string
-	for _, d := range existingPkgDirs(root, pkgs) {
-		for _, f := range goFiles(d) {
+	for _, d := range dirs {
+		files, err := goFiles(d, true)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
 			af, err := parser.ParseFile(token.NewFileSet(), f, nil, parser.ImportsOnly)
 			if err != nil {
-				v = append(v, f+": parse error: "+err.Error())
-				continue
+				return nil, err
 			}
 			for _, imp := range af.Imports {
 				p, _ := strconv.Unquote(imp.Path.Value)
@@ -81,39 +103,43 @@ func sourceImportViolations(root string, pkgs []string) []string {
 				}
 			}
 		}
-	}
-	return v
-}
-
-// depImportViolations uses `go list -deps` (transitive) from the module root.
-func depImportViolations(t *testing.T, root string, pkgs []string) []string {
-	var v []string
-	for _, d := range existingPkgDirs(root, pkgs) {
-		rel, _ := filepath.Rel(root, d)
-		cmd := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", "./"+filepath.ToSlash(rel)+"/...")
-		cmd.Dir = root
+		rel, _ := filepath.Rel(moduleRoot, d)
+		cmd := exec.Command("go", "list", "-deps", "-test", "-f", "{{.ImportPath}}", "./"+filepath.ToSlash(rel)+"/...")
+		cmd.Dir = moduleRoot
+		cmd.Env = append(os.Environ(), "GOFLAGS=", "GOWORK=off")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			t.Fatalf("go list %s: %v\n%s", rel, err, out)
+			return nil, fmt.Errorf("go list %s: %v\n%s", rel, err, out)
 		}
-		for _, line := range strings.Fields(string(out)) {
-			if isForbidden(line) {
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.TrimSpace(line)
+			if i := strings.Index(line, " ["); i >= 0 {
+				line = line[:i]
+			}
+			if line != "" && isForbidden(line) {
 				v = append(v, rel+" transitively imports "+line)
 			}
 		}
 	}
-	return v
+	return v, nil
 }
 
-// labelViolations scans non-test sources for labels.json and H1..H8.
-func labelViolations(root string, pkgs []string) []string {
+// checkLabels scans NON-TEST sources for labels.json and H1..H8.
+func checkLabels(moduleRoot string, pkgs []string) ([]string, error) {
+	dirs, err := existingPkgDirs(moduleRoot, pkgs)
+	if err != nil {
+		return nil, err
+	}
 	var v []string
-	for _, d := range existingPkgDirs(root, pkgs) {
-		for _, f := range goFiles(d) {
+	for _, d := range dirs {
+		files, err := goFiles(d, false)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
 			b, err := os.ReadFile(f)
 			if err != nil {
-				v = append(v, f+": "+err.Error())
-				continue
+				return nil, err
 			}
 			s := string(b)
 			if strings.Contains(s, "labels.json") {
@@ -124,7 +150,7 @@ func labelViolations(root string, pkgs []string) []string {
 			}
 		}
 	}
-	return v
+	return v, nil
 }
 
 func moduleRoot(t *testing.T) string {
@@ -140,43 +166,112 @@ func moduleRoot(t *testing.T) string {
 }
 
 func TestGeneratorSideNeverImportsBenchmark(t *testing.T) {
-	if v := depImportViolations(t, moduleRoot(t), generatorPkgs); len(v) > 0 {
+	v, err := checkImports(moduleRoot(t), generatorPkgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v) > 0 {
 		t.Fatalf("isolation violations:\n%s", strings.Join(v, "\n"))
 	}
 }
 
 func TestNoHiddenLabelReads(t *testing.T) {
-	if v := labelViolations(moduleRoot(t), generatorPkgs); len(v) > 0 {
+	v, err := checkLabels(moduleRoot(t), generatorPkgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v) > 0 {
 		t.Fatalf("hidden label reads:\n%s", strings.Join(v, "\n"))
 	}
 }
 
-func writeFixture(t *testing.T, root string) {
+func writeFile(t *testing.T, path, body string) {
 	t.Helper()
-	dir := filepath.Join(root, "internal", "aleef", "generate")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	imp := "package generate\n\nimport _ \"" + modulePath + "/internal/aleef/bank/sealed\"\n"
-	lbl := "package generate\n\nvar x = \"labels.json\"\nvar y = \"H3\"\n"
-	for name, body := range map[string]string{"imp.go": imp, "lbl.go": lbl} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestGuardDetectsViolation(t *testing.T) {
+// tempModule builds a stub module (same module path) with bank, bank/sealed,
+// bench stubs plus the given files under internal/aleef/generate.
+func tempModule(t *testing.T, files map[string]string) string {
+	t.Helper()
 	root := t.TempDir()
-	writeFixture(t, root)
-	if v := sourceImportViolations(root, generatorPkgs); len(v) == 0 {
-		t.Fatal("expected import violation")
+	writeFile(t, filepath.Join(root, "go.mod"), "module "+modulePath+"\n\ngo 1.21\n")
+	a := filepath.Join(root, "internal", "aleef")
+	writeFile(t, filepath.Join(a, "bank", "b.go"), "package bank\n")
+	writeFile(t, filepath.Join(a, "bank", "sealed", "s.go"), "package sealed\n")
+	writeFile(t, filepath.Join(a, "bench", "b.go"), "package bench\n")
+	for name, body := range files {
+		writeFile(t, filepath.Join(a, "generate", name), body)
 	}
-	if v := labelViolations(root, generatorPkgs); len(v) < 2 {
-		t.Fatalf("expected label violations, got %v", v)
+	return root
+}
+
+func TestGuardDetectsViolation(t *testing.T) {
+	imp := func(pkg, path string) string {
+		return "package " + pkg + "\n\nimport _ \"" + modulePath + "/internal/aleef/" + path + "\"\n"
 	}
-	// absent packages are skipped, not errors
-	if v := labelViolations(t.TempDir(), generatorPkgs); len(v) != 0 {
-		t.Fatalf("empty root should be clean: %v", v)
+	cases := []struct {
+		name  string
+		files map[string]string
+	}{
+		{"nontest imports bank", map[string]string{"g.go": imp("generate", "bank")}},
+		{"nontest imports bank/sealed", map[string]string{"g.go": imp("generate", "bank/sealed")}},
+		{"in-package test imports bank", map[string]string{"g.go": "package generate\n", "g_test.go": imp("generate", "bank")}},
+		{"external test imports bench", map[string]string{"g.go": "package generate\n", "g_test.go": imp("generate_test", "bench")}},
 	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := tempModule(t, c.files)
+			v, err := checkImports(root, generatorPkgs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(v) == 0 {
+				t.Fatal("expected violation, got none")
+			}
+			var transitive bool
+			for _, s := range v {
+				transitive = transitive || strings.Contains(s, "transitively")
+			}
+			if !transitive {
+				t.Fatalf("go list path did not report: %v", v)
+			}
+		})
+	}
+	t.Run("clean", func(t *testing.T) {
+		root := tempModule(t, map[string]string{"g.go": "package generate\n", "g_test.go": "package generate_test\n"})
+		v, err := checkImports(root, generatorPkgs)
+		if err != nil || len(v) != 0 {
+			t.Fatalf("expected clean, got %v / %v", v, err)
+		}
+	})
+	t.Run("test-only package counts as existing", func(t *testing.T) {
+		root := tempModule(t, map[string]string{"g_test.go": imp("generate", "bank")})
+		v, err := checkImports(root, generatorPkgs)
+		if err != nil || len(v) == 0 {
+			t.Fatalf("expected violation, got %v / %v", v, err)
+		}
+	})
+	t.Run("labels", func(t *testing.T) {
+		root := tempModule(t, map[string]string{"g.go": "package generate\n\nvar x = \"labels.json\"\nvar y = \"H3\"\n"})
+		v, err := checkLabels(root, generatorPkgs)
+		if err != nil || len(v) < 2 {
+			t.Fatalf("expected 2 label violations, got %v / %v", v, err)
+		}
+		root = tempModule(t, map[string]string{"g.go": "package generate\n", "g_test.go": "package generate\n\nvar y = \"H3\"\n"})
+		if v, err := checkLabels(root, generatorPkgs); err != nil || len(v) != 0 {
+			t.Fatalf("test files should be exempt: %v / %v", v, err)
+		}
+	})
+	t.Run("absent packages skipped", func(t *testing.T) {
+		v, err := checkImports(t.TempDir(), generatorPkgs)
+		if err != nil || len(v) != 0 {
+			t.Fatalf("%v / %v", v, err)
+		}
+	})
 }
