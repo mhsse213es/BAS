@@ -156,3 +156,54 @@ func TestClassificationOutcomeUnknownWhenStrongAlertsWereSetAside(t *testing.T) 
 		t.Fatalf("classification %s, want unknown", ev.Record.Classification)
 	}
 }
+
+// M1: a fixture-gated probe whose cleanup is not positively verified is
+// incident-equivalent in Evaluate: no correlation, no classification verdict.
+func TestEvaluateUnverifiedCleanupCarriesNoClassificationVerdict(t *testing.T) {
+	for _, st := range []string{"", dbsim.CleanupNotApplicable} {
+		ex := okExec(6, "shape=wide_select", "rows_read=6")
+		ex.DBProbe.CleanupStatus = st
+		in := db07Input(classRule)
+		in.Exec = ex
+		c := &fakeConn{reply: alertsReply(genericAlert(pT0.Add(10*time.Second)), classAlert(pT0.Add(12*time.Second)))}
+		ev := mustEval(t, c, in)
+		if ev.Correlation != nil {
+			t.Errorf("cleanup %q: SIEM correlation ran for an unverified-cleanup run", st)
+		}
+		if cl := ev.Record.Classification; cl == dlpreport.ClassificationCorrect || cl == dlpreport.ClassificationIncorrect {
+			t.Errorf("cleanup %q: classification verdict %s next to an ERROR grade", st, cl)
+		}
+		if ev.Result != dbsim.ResultError {
+			t.Errorf("cleanup %q: result %s", st, ev.Result)
+		}
+	}
+}
+
+func TestEvaluateOkCleanupAndNonFixtureProbesUnchanged(t *testing.T) {
+	c := &fakeConn{reply: alertsReply(genericAlert(pT0.Add(10*time.Second)), classAlert(pT0.Add(12*time.Second)))}
+	if ev := mustEval(t, c, db07Input(classRule)); ev.Result != dbsim.ResultPass {
+		t.Fatalf("DB-07 ok cleanup: %s", ev.Result)
+	}
+	ex := okExec(3)
+	ex.DBProbe.CleanupStatus = ""
+	ev := mustEval(t, &fakeConn{reply: alertsReply()}, input("dbsim-db01-role-enumeration", "read_roles", ex))
+	if ev.Result == dbsim.ResultError {
+		t.Fatalf("non-fixture probe with empty cleanup must not be ERROR: %s (%s)", ev.Result, ev.Report.Reason)
+	}
+}
+
+// M2: exactly one "Classification not evaluated" sentence through Evaluate.
+func TestEvaluateClassificationNotEvaluatedSentenceAppearsOnce(t *testing.T) {
+	denied := db07Input(classRule)
+	denied.Exec.DBProbe.Denied = true
+	for name, in := range map[string]StepInput{
+		"empty rule":   db07Input(""),
+		"generic rule": db07Input(dbsim.GenericMarkerRuleName),
+		"denied read":  denied,
+	} {
+		ev := mustEval(t, &fakeConn{reply: alertsReply(genericAlert(pT0.Add(10 * time.Second)))}, in)
+		if n := strings.Count(strings.ToLower(ev.Record.Limitations), "classification not evaluated"); n != 1 {
+			t.Errorf("%s: %d sentences in %q", name, n, ev.Record.Limitations)
+		}
+	}
+}

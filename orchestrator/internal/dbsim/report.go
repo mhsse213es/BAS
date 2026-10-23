@@ -216,9 +216,9 @@ func fixtureGatedProbe(id string) bool {
 	return ok && (e.FixtureParam != "" || e.RequiredFixture != "")
 }
 
-// cleanupUnverified: a fixture-gated probe ran but its teardown was not
+// CleanupUnverified: a fixture-gated probe ran but its teardown was not
 // POSITIVELY verified ("ok"); an empty or not_applicable status is not proof.
-func cleanupUnverified(o Outcome) bool {
+func CleanupUnverified(o Outcome) bool {
 	if !o.ProbeRan || !fixtureGatedProbe(o.ProbeID) {
 		return false
 	}
@@ -393,7 +393,7 @@ func grade(s ScenarioMeta, o Outcome) graded {
 		// Fixture cleanup failed or left residual objects (spec section 8, gate
 		// 4). Checked first: no other outcome, SKIPPED included, may hide it.
 		g.Result, g.Reason = ResultError, "fixture cleanup safety incident: the run cannot be graded as completed"
-	case cleanupUnverified(o):
+	case CleanupUnverified(o):
 		g.Result, g.Reason = ResultError, "fixture cleanup unverified: a fixture-gated probe needs a positive cleanup status (ok)"
 	case o.ExecutionError != "":
 		g.Result, g.Reason = ResultError, "execution error: "+o.ExecutionError
@@ -512,7 +512,7 @@ func ToRecord(s ScenarioMeta, o Outcome) (dlpreport.Record, error) {
 		lims = append(lims, fmt.Sprintf("Fixture cleanup safety incident (cleanup status %q): synthetic fixture objects may remain in the target database; the run is graded ERROR and must be investigated.", redact(st)))
 	}
 
-	if cleanupUnverified(o) {
+	if CleanupUnverified(o) {
 		lims = append(lims, "Fixture cleanup was not verified (no positive cleanup status): the run is graded ERROR, never PASS.")
 	}
 
@@ -562,7 +562,9 @@ func ToRecord(s ScenarioMeta, o Outcome) (dlpreport.Record, error) {
 	if cls == "" {
 		cls = dlpreport.ClassificationNotEvaluated
 	}
-	if cls == dlpreport.ClassificationNotEvaluated {
+	// Evaluate already records why via ClassifyByRule; add the generic line only
+	// when nothing said so (ToRecord called directly).
+	if cls == dlpreport.ClassificationNotEvaluated && !mentionsClassificationNotEvaluated(o.Limitations) {
 		if s.ExpectClassification {
 			lims = append(lims, "Classification not evaluated: no classification rule configured/applicable for this result.")
 		} else {
@@ -769,4 +771,13 @@ func redact(s string) string {
 	s = reBearer.ReplaceAllString(s, "Bearer [REDACTED]")
 	s = reKV.ReplaceAllString(s, "$1$2[REDACTED]")
 	return reCLI.ReplaceAllString(s, "$1$2[REDACTED]")
+}
+
+func mentionsClassificationNotEvaluated(lims []string) bool {
+	for _, l := range lims {
+		if strings.Contains(strings.ToLower(l), "classification not evaluated") {
+			return true
+		}
+	}
+	return false
 }

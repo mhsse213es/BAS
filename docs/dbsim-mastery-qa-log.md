@@ -459,5 +459,17 @@ comparison); MySQL comment survival for DB-07 (else Unknown/ERROR).
   a one-run random value for an account dropped in the same run; the statement
   carries no marker, so no rule fires on it. Nothing more is claimed.
 * **F6** `ToRecord` states "Classification not evaluated: no classification rule
-  configured/applicable" whenever a classification was expected but not evaluated,
-  also outside `dbrun.Evaluate`.
+  configured/applicable" when a classification was expected but not evaluated and
+  no "Classification not evaluated" sentence is already present, so a direct call
+  outside `dbrun.Evaluate` still explains itself and the Evaluate path carries
+  exactly one such sentence (fix round 2).
+
+### Fix round 2
+
+* **M1** `dbsim.CleanupUnverified` is now the single exported rule shared by
+  `grade()` and the pipeline's `cleanupIncident`. A fixture-gated probe without a
+  positive cleanup status is incident-equivalent in `Evaluate`: no SIEM correlation
+  and no classification verdict (Classification stays NotEvaluated), next to the
+  ERROR grade. Non-fixture probes (DB-01..04) are unchanged.
+* **M2** The generic classification line is not duplicated when `Evaluate` already
+  recorded one.

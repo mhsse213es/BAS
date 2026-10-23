@@ -299,7 +299,10 @@ func Evaluate(ctx context.Context, conn detectverify.Connector, in StepInput) (E
 		}
 	}
 
-	if classifyProbe {
+	if classifyProbe && incident {
+		o.Classification = dlpreport.ClassificationNotEvaluated
+		o.Limitations = append(o.Limitations, "Classification not evaluated: fixture cleanup was not verified, so the run is graded ERROR and no classification verdict is computed.")
+	} else if classifyProbe {
 		var rules []string
 		hidden := 0
 		if ev.Correlation != nil {
@@ -321,8 +324,10 @@ func Evaluate(ctx context.Context, conn detectverify.Connector, in StepInput) (E
 	return ev, nil
 }
 
-// cleanupIncident mirrors the grading rule: a flagged incident or any
-// non-benign cleanup status.
+// cleanupIncident is incident-equivalent for the pipeline: a flagged incident,
+// a non-benign cleanup status, or (via the shared dbsim.CleanupUnverified, the
+// same rule grade() uses) a fixture-gated probe whose cleanup is not positively
+// "ok". Such a run is graded ERROR, so it is neither correlated nor classified.
 func cleanupIncident(o dbsim.Outcome) (string, bool) {
 	st := o.CleanupStatus
 	if st == "" {
@@ -332,6 +337,9 @@ func cleanupIncident(o dbsim.Outcome) (string, bool) {
 	switch st {
 	case "", dbsim.CleanupOK, dbsim.CleanupNotApplicable:
 	default:
+		inc = true
+	}
+	if dbsim.CleanupUnverified(o) {
 		inc = true
 	}
 	return st, inc
