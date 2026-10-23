@@ -107,7 +107,7 @@ func TestShippedDB06DB07ScenariosBuild(t *testing.T) {
 		probe, fixture string
 		class          scenario.ExecutionClass
 	}{
-		"dbsim-db06-account-revocation":        {"auth_after_revoke", "empty", scenario.ClassDestructive},
+		"dbsim-db06-account-revocation":       {"auth_after_revoke", "empty", scenario.ClassDestructive},
 		"dbsim-db07-sensitive-classification": {"read_classified_fixture", "classified-pii", scenario.ClassPotentiallyDestructive},
 	}
 	for id, w := range want {

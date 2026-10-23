@@ -30,6 +30,7 @@
             "marker": { "type": "keyword" },
             "is_meta": { "type": "boolean" },
             "is_audit_lookup": { "type": "boolean" },
+            "touches_classified": { "type": "boolean" },
             "database": { "type": "keyword" }
           }
         }

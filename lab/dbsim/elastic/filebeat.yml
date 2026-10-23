@@ -70,6 +70,9 @@ filebeat.inputs:
               var al = false;
               for (var i = 0; i < words.length; i++) { if (low.indexOf(words[i]) >= 0) { al = true; } }
               evt.Put("dbsim.is_audit_lookup", al);
+              // DB-07: the record mentions the classified fixture table (the
+              // classification rule keys on this boolean, not on text analysis).
+              evt.Put("dbsim.touches_classified", low.indexOf("customers_pii") >= 0);
             }
 
   - type: filestream
@@ -115,6 +118,7 @@ filebeat.inputs:
               var al = false;
               for (var i = 0; i < words.length; i++) { if (low.indexOf(words[i]) >= 0) { al = true; } }
               evt.Put("dbsim.is_audit_lookup", al);
+              evt.Put("dbsim.touches_classified", low.indexOf("customers_pii") >= 0);
             }
 
 processors:

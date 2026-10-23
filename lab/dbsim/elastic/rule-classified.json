@@ -1,0 +1,22 @@
+{
+  "rule_id": "bas-dbsim-classified-fixture-read",
+  "name": "BAS dbsim classified-fixture read",
+  "description": "Lab classification rule for the Audspect dbsim simulation (DB-07). Fires when Filebeat extracted dbsim.marker AND dbsim.touches_classified, i.e. a marker-bearing audit or general-log record whose text mentions the classified fixture table customers_pii. Unlike the generic marker rule it fires only for statements touching that table, so its alert (not the generic one) is what a correct classification means. Matching is on keyword/boolean fields, not text analysis. A lab alert is a HINT, not proof of origin; the orchestrator's exact-match post-filter is the authority. UNVERIFIED until run on staging.",
+  "type": "query",
+  "language": "kuery",
+  "index": ["dbsim-audit-*"],
+  "query": "dbsim.marker : * and dbsim.touches_classified : true and not dbsim.is_meta : true and not dbsim.is_audit_lookup : true",
+  "interval": "10s",
+  "from": "now-70s",
+  "to": "now",
+  "max_signals": 1000,
+  "enabled": true,
+  "risk_score": 47,
+  "severity": "medium",
+  "author": ["Audspect"],
+  "tags": ["bas-dbsim", "lab", "classification"],
+  "false_positives": [],
+  "references": [],
+  "actions": [],
+  "version": 1
+}

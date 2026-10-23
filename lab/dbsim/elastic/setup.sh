@@ -95,17 +95,20 @@ phase_kibana() {
   code=$(api POST "$KIBANA_URL/api/detection_engine/index" | tail -n 1)
   echo "detection_engine/index: $code"
 
-  # Create the rule; if it already exists (409) update it in place.
-  out=$(api POST "$KIBANA_URL/api/detection_engine/rules" --data-binary "@$here/rule.json")
-  code=$(printf '%s\n' "$out" | tail -n 1 | sed 's/^HTTP //')
-  case $code in
-    2??) echo "rule created" ;;
-    409) must PUT "$KIBANA_URL/api/detection_engine/rules" --data-binary "@$here/rule.json"
-         echo "rule updated" ;;
-    *)   echo "rule create failed: HTTP $code" >&2
-         printf '%s\n' "$out" | sed '$d' | head -c 2000 >&2; echo >&2
-         exit 1 ;;
-  esac
+  # Create each rule (generic marker rule, then the DB-07 classification rule);
+  # if one already exists (409) update it in place.
+  for rf in rule.json rule-classified.json; do
+    out=$(api POST "$KIBANA_URL/api/detection_engine/rules" --data-binary "@$here/$rf")
+    code=$(printf '%s\n' "$out" | tail -n 1 | sed 's/^HTTP //')
+    case $code in
+      2??) echo "rule created: $rf" ;;
+      409) must PUT "$KIBANA_URL/api/detection_engine/rules" --data-binary "@$here/$rf"
+           echo "rule updated: $rf" ;;
+      *)   echo "rule create failed ($rf): HTTP $code" >&2
+           printf '%s\n' "$out" | sed '$d' | head -c 2000 >&2; echo >&2
+           exit 1 ;;
+    esac
+  done
   echo "kibana phase done"
 }
 

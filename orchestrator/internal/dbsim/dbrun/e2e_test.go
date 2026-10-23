@@ -393,6 +393,19 @@ func TestE2E_MySQL_SignedScenarioToCorrelatedRecord(t *testing.T) {
 var e2eScenarios = []string{
 	"dbsim-db01-auth-policy", "dbsim-db02-excessive-grants", "dbsim-db03-unauthorized-access",
 	"dbsim-db04-audit-coverage", "dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
+	"dbsim-db06-account-revocation", "dbsim-db07-sensitive-classification",
+}
+
+// isFixtureScenario: these seed a per-run fixture (R-AI), so they are mutations
+// of the lab database: they need the scenario approval and the agent-local
+// allowance.
+func isFixtureScenario(id string) bool {
+	switch id {
+	case "dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
+		"dbsim-db06-account-revocation", "dbsim-db07-sensitive-classification":
+		return true
+	}
+	return false
 }
 
 func runE2E(t *testing.T, cfg e2eConfig) {
@@ -421,7 +434,7 @@ func runE2E(t *testing.T, cfg e2eConfig) {
 			}
 			tgt := dbsim.Target{ID: "lab-db", Engine: cfg.engine, Host: cfg.host, Port: cfg.port, Database: cfg.db, TLSMode: "disable",
 				CredentialRef: "dbcred:" + cred, Mode: dbsim.ModeLab, ExpectedIdentity: cfg.identity, LabConfirmed: true}
-			fixture := id == "dbsim-db05-suspicious-read" || id == "dbsim-db09-bounded-bulk-read"
+			fixture := isFixtureScenario(id)
 			steps, err := dbbuild.BuildSteps(context.Background(), sc, dbbuild.Options{
 				Resolver: dbsim.NewMemoryResolver(tgt), MutationApproved: fixture, RunExpiry: time.Now().Add(20 * time.Minute)})
 			if err != nil {
@@ -453,6 +466,11 @@ func runE2E(t *testing.T, cfg e2eConfig) {
 					DBHost: cfg.dbHostName, DBIP: cfg.dbIP, AgentIP: cfg.agentIP,
 					Window: cfg.window, SkewAllowance: 5 * time.Second,
 				}
+				if spec.ProbeID == dbsim.ProbeReadClassifiedFixture {
+					// Policy data for DB-07: the lab's classification rule (UNVERIFIED
+					// until staging; see lab/dbsim/README.md checklist 16-17).
+					in.ClassificationRuleName = dbsim.LabClassificationRuleName
+				}
 				// The alert arrives some seconds after the statement (rule interval,
 				// Filebeat, refresh): re-ask the SIEM until Present or the wait is over.
 				// Only the SIEM query repeats; the probe is never re-run.
@@ -463,7 +481,12 @@ func runE2E(t *testing.T, cfg e2eConfig) {
 					if err != nil {
 						t.Fatalf("Evaluate: %v", err)
 					}
-					if !in.Scenario.ExpectDetection || ev.Record.Telemetry == dlpreport.TelemetryPresent || time.Now().After(deadline) {
+					done := ev.Record.Telemetry == dlpreport.TelemetryPresent
+					if spec.ProbeID == dbsim.ProbeReadClassifiedFixture {
+						// The classification rule's alert can trail the generic one.
+						done = done && ev.Record.Classification == dlpreport.ClassificationCorrect
+					}
+					if !in.Scenario.ExpectDetection || done || time.Now().After(deadline) {
 						break
 					}
 					time.Sleep(10 * time.Second)
@@ -515,6 +538,19 @@ func checkStep(t *testing.T, cfg e2eConfig, id string, spec dbsim.DBProbeSpec, e
 	} else if ev.Result != dbsim.ResultPass {
 		fail("result %s, want PASS", ev.Result)
 	}
+	if spec.ProbeID == dbsim.ProbeAuthAfterRevoke {
+		// DB-06 honest end state (no live DB here, so this is what the staging run
+		// must show): the post-revoke login is refused (Blocked) and the run PASSES;
+		// telemetry and response are NOT claimed for a failed login. A failure here
+		// is a product result or a lab/config problem: the step note names the step.
+		if ev.Record.Enforcement != dlpreport.EnforcementBlocked {
+			fail("Enforcement %s, want Blocked (step notes: %v)", ev.Record.Enforcement, ex.DBProbe.Notes)
+		}
+		if ev.Record.Telemetry != dlpreport.TelemetryUnverifiable || ev.Record.Response != dlpreport.ResponseNotTested {
+			fail("Telemetry %s Response %s, want Unverifiable / NotTested (a failed login carries no marker)", ev.Record.Telemetry, ev.Record.Response)
+		}
+		return
+	}
 	if !ev.Outcome.Corr.Evaluated {
 		if ev.Outcome.Corr.Telemetry == "" && labExpectationFor(id, spec.ProbeID).detection {
 			fail("no SIEM correlation was attempted")
@@ -532,5 +568,8 @@ func checkStep(t *testing.T, cfg e2eConfig, id string, spec dbsim.DBProbeSpec, e
 	}
 	if ev.Outcome.Corr.Match != dbsim.MatchExactMarker {
 		fail("match grade %s, want exact_marker", ev.Outcome.Corr.Match)
+	}
+	if spec.ProbeID == dbsim.ProbeReadClassifiedFixture && ev.Record.Classification != dlpreport.ClassificationCorrect {
+		fail("Classification %s, want Correct: the classification rule (%q) must raise an alert for this marker; if only the generic rule alerted, rule-classified.json is not installed or not firing (README checklist 16-17)", ev.Record.Classification, dbsim.LabClassificationRuleName)
 	}
 }
