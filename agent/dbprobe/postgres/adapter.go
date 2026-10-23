@@ -67,6 +67,11 @@ func (p *pgxSession) Close(ctx context.Context) error { return p.c.Close(ctx) }
 
 // Adapter implements dbprobe.Adapter for PostgreSQL.
 type Adapter struct {
+	// ActiveFixture is the run's seeded fixture, bound by the executor after
+	// Seed and cleared before Cleanup. Fixture-aware probes resolve their table
+	// against it (spec R-Z); without one they fail closed.
+	dbprobe.ActiveFixture
+
 	s       session
 	mode    dbprobe.ExecMode
 	secrets []string // literals to scrub from any error text (password, long user/host)
@@ -366,7 +371,8 @@ func str(v any) string {
 // (SKIPPED), never as a pass. It answers from the cache; it issues no SQL.
 func (a *Adapter) Capabilities() dbprobe.Capabilities {
 	c := dbprobe.Capabilities{
-		ProbeIDs:          []string{"auth_check", "read_audit_config", "read_grants", "read_restricted_table", "read_roles"},
+		ProbeIDs: []string{"auth_check", "bounded_synthetic_read", "read_audit_config", "read_grants", "read_restricted_table",
+			"read_roles", "suspicious_read"},
 		MarkerInAppName:   true,
 		MarkerInQueryText: true,
 		// The marker can only reach an audit record through the statement
@@ -442,16 +448,34 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 	if err := checkParams(real, spec.Params); err != nil {
 		return res, err
 	}
-	sql, args, err := probeSQL(spec.ProbeID, spec.Params, spec.Limits.MaxRows)
+	mode := a.effectiveMode(spec)
+	var (
+		sql    string
+		args   []any
+		err    error
+		rowCap int // fixture reads only
+	)
+	// A fixture-aware probe is resolved against the active fixture (never a
+	// param-supplied schema). Its SQL is a SELECT, so the transaction is always
+	// READ ONLY whatever the probe's class is; it asks for rowCap+1 rows so a
+	// truncation is observable, and keeps at most rowCap.
+	isFixtureRead := real.FixtureParam != ""
+	txClass, queryMax := real.Class, spec.Limits.MaxRows+1
+	if isFixtureRead {
+		sql, args, rowCap, err = a.fixtureReadStmt(real, spec, mode)
+		txClass, queryMax = dbprobe.ClassReadOnly, rowCap+1
+	} else {
+		sql, args, err = probeSQL(spec.ProbeID, spec.Params, spec.Limits.MaxRows)
+	}
 	if err != nil {
 		return res, err
 	}
-	mode := a.effectiveMode(spec)
 
 	res.AgentTime = time.Now().UTC()
 	res.Notes = append(res.Notes, a.notes...)
 	var rows [][]any
-	err = a.inTxn(ctx, mode, real.Class, spec.Limits, spec.Marker, func(ctx context.Context, comment string) error {
+	readStart := time.Now()
+	err = a.inTxn(ctx, mode, txClass, spec.Limits, spec.Marker, func(ctx context.Context, comment string) error {
 		clk, err := a.s.Query(ctx, comment+sqlClock, 1)
 		if err != nil {
 			return err
@@ -462,7 +486,7 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 		if t, ok := clk[0][0].(time.Time); ok {
 			res.DBTime = t.UTC()
 		}
-		rows, err = a.s.Query(ctx, comment+sql, spec.Limits.MaxRows+1, args...)
+		rows, err = a.s.Query(ctx, comment+sql, queryMax, args...)
 		if err != nil || spec.ProbeID != probeAuditConfig {
 			return err
 		}
@@ -497,6 +521,17 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 		return res, wrapErr("probe", err, a.secrets...)
 	}
 	b := dbprobe.NewBudget(spec.Limits)
+	if isFixtureRead {
+		// Counts only: the rows are measured and dropped, never reported.
+		sum := dbprobe.SummarizeBoundedRead(rows, rowCap, dbprobe.MaxReadBytes)
+		if err := b.Charge(sum.Rows); err != nil {
+			res.ErrorClass = "row_limit_exceeded"
+			return res, nil
+		}
+		res.RowsRead = b.Used()
+		res.Notes = append(res.Notes, sum.Notes(dbprobe.ReadShape(spec.ProbeID), time.Since(readStart))...)
+		return res, nil
+	}
 	if err := b.Charge(len(rows)); err != nil {
 		res.ErrorClass = "row_limit_exceeded"
 		res.Notes = append(res.Notes, fmt.Sprintf("row limit %d exceeded", spec.Limits.MaxRows))

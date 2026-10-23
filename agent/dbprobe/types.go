@@ -47,6 +47,12 @@ type ProbeDef struct {
 	Class       ProbeClass
 	ParamSchema map[string]ParamKind
 	Engines     []string
+	// FixtureParam, when non-empty, marks a fixture-aware probe and names the
+	// param that holds a fixture TABLE NAME (for example "accounts"). The
+	// adapter resolves that name against the run's active, seeded fixture and
+	// derives the schema itself (spec R-Z); the param never carries a schema.
+	// A fixture-aware probe is lab-only and needs spec.FixtureID.
+	FixtureParam string
 }
 
 // ConnectionConfig describes how to reach a target. Secrets are resolved

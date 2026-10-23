@@ -251,6 +251,15 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 		return fail(dbErrAdapterUnsupported, fmt.Sprintf("adapter for %q does not offer probe %q", spec.Engine, spec.ProbeID))
 	}
 
+	// 6b. A fixture-aware probe addresses the run's seeded fixture through the
+	// adapter (spec R-Z); an adapter that cannot hold an active fixture cannot
+	// run it, and that is known before any connection.
+	if def.FixtureParam != "" {
+		if _, ok := ad.(dbprobe.FixtureBinder); !ok {
+			return fail(dbErrAdapterUnsupported, fmt.Sprintf("adapter for %q cannot bind a fixture for probe %q", spec.Engine, spec.ProbeID))
+		}
+	}
+
 	// Everything from here on is bounded by the spec's own limits.
 	cctx, cancel := dbprobe.WithDeadline(ctx, spec.Limits)
 	defer cancel()
@@ -323,6 +332,23 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 		stray    any  // a panic that escaped WithFixture: no teardown result to attribute
 		strayHit bool
 	)
+	// runBound runs the probe with the seeded fixture active on the adapter when
+	// the probe is fixture-aware. The fixture is unbound before WithFixture's
+	// teardown on every path, including a panic, so no probe can address it once
+	// it is being dropped.
+	runBound := func(fx dbprobe.Fixture) (DBProbeOutcome, error) {
+		if def.FixtureParam != "" {
+			b, ok := ad.(dbprobe.FixtureBinder)
+			if !ok {
+				return runtimeErr(dbErrFixture, "fixture bind", errors.New("adapter cannot bind a fixture"))
+			}
+			if err := b.BindFixture(fx); err != nil {
+				return runtimeErr(dbErrFixture, "fixture bind", err)
+			}
+			defer b.UnbindFixture()
+		}
+		return runBody()
+	}
 	emptyBody := func(class, note string) DBProbeOutcome {
 		return DBProbeOutcome{Result: protocol.DBProbeResult{
 			AgentTime: time.Now(), ErrorClass: class,
@@ -352,7 +378,7 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 						fnPanic, hadPanic = r, true
 					}
 				}()
-				body, bodyErr = runBody()
+				body, bodyErr = runBound(fx)
 			}()
 			if hadPanic {
 				return nil

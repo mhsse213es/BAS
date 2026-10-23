@@ -12,6 +12,9 @@ type catalogRow struct {
 	Class   string            `json:"class"`
 	Engines []string          `json:"engines"`
 	Params  map[string]string `json:"params"`
+	// FixtureParam names the param holding a fixture table name; set only on
+	// fixture-aware probes (omitted otherwise so older rows are unchanged).
+	FixtureParam string `json:"fixtureParam,omitempty"`
 }
 
 func TestCatalogMatchesGolden(t *testing.T) {
@@ -22,7 +25,7 @@ func TestCatalogMatchesGolden(t *testing.T) {
 		for k, v := range d.ParamSchema {
 			p[k] = string(v)
 		}
-		rows = append(rows, catalogRow{ID: d.ID, Class: string(d.Class), Engines: d.Engines, Params: p})
+		rows = append(rows, catalogRow{ID: d.ID, Class: string(d.Class), Engines: d.Engines, Params: p, FixtureParam: d.FixtureParam})
 	}
 	got, err := json.Marshal(rows)
 	if err != nil {

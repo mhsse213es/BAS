@@ -122,7 +122,7 @@ func TestAuditStatusValuesMatchAgent(t *testing.T) {
 }
 
 func TestProbeRegistry(t *testing.T) {
-	ids := []string{"read_roles", "read_grants", "auth_check", "read_restricted_table", "read_audit_config"}
+	ids := []string{"read_roles", "read_grants", "auth_check", "read_restricted_table", "read_audit_config", "suspicious_read", "bounded_synthetic_read"}
 	for _, id := range ids {
 		e, ok := LookupProbeEntry(id)
 		if !ok || e.ID != id || e.Class == "" || len(e.Engines) == 0 {

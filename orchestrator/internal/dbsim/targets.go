@@ -111,6 +111,11 @@ func Authorize(t Target, def ProbeRegistryEntry, in AuthInput) error {
 	if t.ExpectedIdentity == "" {
 		return fmt.Errorf("dbsim: authorize: target %q has no pre-registered identity", t.ID)
 	}
+	// A fixture-aware probe reads a per-run seeded fixture, which exists only in
+	// lab mode: refused for any other mode whatever its class says.
+	if real.FixtureParam != "" && t.Mode != ModeLab {
+		return fmt.Errorf("dbsim: authorize: fixture-aware probe %q is lab-only (target mode %q)", def.ID, t.Mode)
+	}
 	switch t.Mode {
 	case ModeLab:
 		if class != ClassReadOnly {

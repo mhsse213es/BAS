@@ -102,6 +102,10 @@ type ProbeRegistryEntry struct {
 	Class       ProbeClass
 	Engines     []string
 	ParamSchema map[string]string // param name -> kind ("string"|"int"|"bool")
+	// FixtureParam, when set, marks a fixture-aware probe and names the param
+	// that carries a fixture TABLE NAME (never a schema). Such a probe reads the
+	// run's seeded fixture, so it needs a db_fixture on the step and is lab-only.
+	FixtureParam string
 }
 
 var probeRegistry = map[string]ProbeRegistryEntry{
@@ -110,6 +114,10 @@ var probeRegistry = map[string]ProbeRegistryEntry{
 	"auth_check":            {ID: "auth_check", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
 	"read_audit_config":     {ID: "read_audit_config", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
 	"read_restricted_table": {ID: "read_restricted_table", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}},
+	// DB-05: one unfiltered all-column SELECT of a seeded fixture table (read_only, small hard row cap).
+	"suspicious_read": {ID: "suspicious_read", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}, FixtureParam: "table"},
+	// DB-09: the same SELECT as a row-capped bulk read (bounded_synthetic: lab only, needs mutation approval).
+	"bounded_synthetic_read": {ID: "bounded_synthetic_read", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}, FixtureParam: "table"},
 }
 
 // LookupProbeEntry returns the registry entry for a probe id.

@@ -28,6 +28,20 @@ var catalog = map[string]ProbeDef{
 		ParamSchema: map[string]ParamKind{}},
 	"read_restricted_table": {ID: "read_restricted_table", Class: ClassReadOnly, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{"table": ParamString}},
+	// suspicious_read (DB-05): one unfiltered all-column SELECT of a seeded
+	// fixture table, a read pattern a DAM/SIEM rule is expected to flag. It only
+	// runs a SELECT inside a READ ONLY transaction (class read_only) and reads at
+	// most SuspiciousReadMaxRows rows whatever the spec limit says. It is
+	// fixture-aware, hence lab-only.
+	ProbeSuspiciousRead: {ID: ProbeSuspiciousRead, Class: ClassReadOnly, Engines: bothEngines,
+		ParamSchema: map[string]ParamKind{"table": ParamString}, FixtureParam: "table"},
+	// bounded_synthetic_read (DB-09): the same fixed SELECT as a row-capped BULK
+	// read (cap = Limits.MaxRows, plus a byte cap). Classified bounded_synthetic
+	// because it runs against a per-run seeded fixture, so it needs the
+	// lab-mutation allowance even though its own SQL is a SELECT in a READ ONLY
+	// transaction.
+	ProbeBoundedSyntheticRead: {ID: ProbeBoundedSyntheticRead, Class: ClassBoundedSynthetic, Engines: bothEngines,
+		ParamSchema: map[string]ParamKind{"table": ParamString}, FixtureParam: "table"},
 }
 
 // LookupProbe returns the catalog entry for id.
@@ -78,6 +92,14 @@ func ValidateSpec(s DBProbeSpec) error {
 	for k := range s.Params {
 		if _, ok := def.ParamSchema[k]; !ok {
 			return fmt.Errorf("dbprobe: param %q not declared for probe %q", k, s.ProbeID)
+		}
+	}
+	if def.FixtureParam != "" {
+		if s.FixtureID == "" {
+			return fmt.Errorf("dbprobe: probe %q reads a seeded fixture and requires a fixtureId", s.ProbeID)
+		}
+		if s.Mode != ModeLab {
+			return fmt.Errorf("dbprobe: probe %q is fixture-aware and runs only in lab mode", s.ProbeID)
 		}
 	}
 	if s.Limits.MaxRows <= 0 || s.Limits.TimeoutSec <= 0 || s.Limits.MaxConns <= 0 {
