@@ -104,3 +104,7 @@ Scope: one action, `sa-token-probe`, lab only, sandbox namespace only.
 **Stop conditions.** The ServiceAccount is missing, carries RBAC bindings, or lacks the sandbox label: refuse before minting. The minted identity does not match the expected username: fail verification and discard.
 
 **Acceptance (lab).** Plan writes nothing; live run mints, verifies the probe identity, discards, and ends `DISCARDED_NOT_REVOKED`; the audit record has no token text; the expiry is shown; the probe ServiceAccount still has no bindings afterwards.
+
+**Implementation limit (recorded).** The byte slice is cleared on rollback. The Go HTTP library still makes its own string copy of the token to build the Authorization header, and Go cannot clear that copy. The control is therefore: the token is short-lived, scoped to a no-permission account, never logged or returned, and cleared where the code controls the memory. It is not a guarantee against memory inspection by a process with full access to the server.
+
+**Built (2026-10-23).** Probe ServiceAccount `bas-sbx-token-probe` created in `bas-sandbox` with no bindings. Scenario Role gained `serviceaccounts/token` `create` restricted to that name. Live run: `DISCARDED_NOT_REVOKED`, identity verified, token refused for `default`.

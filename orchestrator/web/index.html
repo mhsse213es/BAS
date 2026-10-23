@@ -1463,7 +1463,7 @@
         <div class="sec-hdr"><h2>Kubernetes Scenarios</h2></div>
         <p class="muted">Kind lab only. Planning writes nothing. A run changes the cluster only after a different operator approves it, and only the requester can execute it.</p>
         <div class="g1-display-flex">
-          <select id="k8s-action"><option value="pod-create-unprivileged">Create unprivileged pod (sandbox)</option><option value="configmap-patch-labelled">Patch labelled ConfigMap (sandbox)</option></select>
+          <select id="k8s-action"><option value="pod-create-unprivileged">Create unprivileged pod (sandbox)</option><option value="configmap-patch-labelled">Patch labelled ConfigMap (sandbox)</option><option value="sa-token-probe">Mint and discard a probe token (sandbox)</option></select>
           <input id="k8s-cluster" value="kind-bas-lab" aria-label="Cluster" />
           <input id="k8s-namespace" value="bas-sandbox" aria-label="Namespace" />
           <input id="k8s-param-name" placeholder="name" aria-label="Object name" />

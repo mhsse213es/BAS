@@ -9,7 +9,8 @@ import { showToast } from '../core/util.js';
 
 var K8S_ACTIONS = {
   'pod-create-unprivileged': { label: 'Create unprivileged pod (sandbox)', params: ['name'] },
-  'configmap-patch-labelled': { label: 'Patch labelled ConfigMap (sandbox)', params: ['name', 'value'] }
+  'configmap-patch-labelled': { label: 'Patch labelled ConfigMap (sandbox)', params: ['name', 'value'] },
+  'sa-token-probe': { label: 'Mint and discard a probe token (sandbox)', params: [] }
 };
 
 var K8S_STATE_LABELS = {
@@ -17,6 +18,7 @@ var K8S_STATE_LABELS = {
   APPROVED: 'Approved, ready to run',
   CLEANED: 'Ran, verified, cleaned up',
   CLEANUP_FAILED: 'Cleanup FAILED: check the cluster',
+  DISCARDED_NOT_REVOKED: 'Token discarded, NOT revoked: valid until its expiry',
   FAILED: 'Failed',
   REFUSED: 'Refused',
   DRY_RUN_PLANNED: 'Planned (dry run)'

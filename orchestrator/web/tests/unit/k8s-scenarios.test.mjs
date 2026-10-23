@@ -57,3 +57,11 @@ test('an empty list says nothing has been written', () => {
   renderK8sRuns([]);
   assert.match(document.getElementById('k8s-runs').textContent, /Planning writes nothing|No runs yet/);
 });
+
+test('a discarded token is labelled as not revoked, never as cleaned', () => {
+  renderK8sRuns([run({ state: 'DISCARDED_NOT_REVOKED', detail: 'valid until 2026-10-23T06:31:38Z' })]);
+  const html = document.getElementById('k8s-runs').innerHTML;
+  assert.match(html, /NOT revoked/);
+  assert.doesNotMatch(html, /cleaned up/);
+  assert.doesNotMatch(html, /data-k8s-(approve|execute)/);
+});

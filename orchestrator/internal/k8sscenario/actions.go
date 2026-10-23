@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"time"
 )
 
 // Action is one entry in the fixed registry. Each function is part of the action's reviewed behaviour:
@@ -20,6 +21,10 @@ type Action struct {
 	verifyRolledBack func(ctx context.Context, c Client, req RunRequest, snap any) error
 	// forceVerifyFail is a test hook: it makes verification fail, so the rollback path can be exercised.
 	forceVerifyFail bool
+	// unrevocable marks an action whose effect rollback cannot undo (a minted credential). A successful run ends
+	// in StateDiscardedNotRevoked, never StateCleaned. summary describes that result for the operator.
+	unrevocable bool
+	summary     func(snap any) string
 }
 
 var (
@@ -32,6 +37,7 @@ var (
 var registry = map[string]*Action{
 	"pod-create-unprivileged":  podAction(),
 	"configmap-patch-labelled": configMapAction(),
+	"sa-token-probe":           tokenProbeAction(),
 }
 
 // Registry returns the fixed action registry.
@@ -225,6 +231,93 @@ func configMapAction() *Action {
 				return errors.New("key that was absent is still present")
 			}
 			return nil
+		},
+	}
+}
+
+// probeServiceAccount is the throwaway ServiceAccount a probe token is minted for. It has no RBAC bindings, so a
+// token for it authenticates but grants nothing. The scenario role may request tokens for this name only.
+const probeServiceAccount = "bas-sbx-token-probe"
+
+// probeTokenSeconds is the lifetime requested for the probe token.
+const probeTokenSeconds = 600
+
+// tokenSnap holds the minted credential for the verification step. The bytes are cleared on rollback.
+type tokenSnap struct {
+	token   []byte
+	expires time.Time
+}
+
+// wipe overwrites the token bytes and drops the reference.
+func (s *tokenSnap) wipe() {
+	for i := range s.token {
+		s.token[i] = 0
+	}
+	s.token = nil
+}
+
+// tokenProbeAction mints a short-lived token for the probe ServiceAccount, verifies it authenticates as that
+// account, and discards it. Nothing can be revoked, so the run ends in DISCARDED_NOT_REVOKED.
+func tokenProbeAction() *Action {
+	return &Action{
+		ID:          "sa-token-probe",
+		unrevocable: true,
+		validate: func(params map[string]string) error {
+			if len(params) != 0 {
+				return errors.New("this action takes no parameters")
+			}
+			return nil
+		},
+		plan: func(ns string, _ map[string]string) []string {
+			return []string{
+				"mint a " + fmt.Sprint(probeTokenSeconds) + "-second token for ServiceAccount " + ns + "/" + probeServiceAccount,
+				"verify the token authenticates as system:serviceaccount:" + ns + ":" + probeServiceAccount,
+				"discard the token; it stays valid until it expires and cannot be revoked",
+			}
+		},
+		snapshot: func(context.Context, Client, RunRequest) (any, error) {
+			return &tokenSnap{}, nil
+		},
+		apply: func(ctx context.Context, c Client, req RunRequest, snap any) error {
+			s := snap.(*tokenSnap)
+			iss, err := c.IssueToken(ctx, req.Namespace, probeServiceAccount, probeTokenSeconds)
+			if err != nil {
+				return err
+			}
+			s.token = iss.Token
+			s.expires = iss.Expires
+			return nil
+		},
+		verify: func(ctx context.Context, c Client, req RunRequest, snap any) error {
+			s := snap.(*tokenSnap)
+			if len(s.token) == 0 {
+				return errors.New("no token to verify")
+			}
+			id, err := c.IdentityWithToken(ctx, s.token)
+			if err != nil {
+				return err
+			}
+			want := "system:serviceaccount:" + req.Namespace + ":" + probeServiceAccount
+			if id != want {
+				return errors.New("token authenticated as an unexpected identity")
+			}
+			return nil
+		},
+		rollback: func(_ context.Context, _ Client, _ RunRequest, snap any) error {
+			snap.(*tokenSnap).wipe()
+			return nil
+		},
+		verifyRolledBack: func(_ context.Context, _ Client, _ RunRequest, snap any) error {
+			s := snap.(*tokenSnap)
+			if s.token != nil {
+				return errors.New("token is still held")
+			}
+			return nil
+		},
+		summary: func(snap any) string {
+			s := snap.(*tokenSnap)
+			return "token discarded; it remains valid until " + s.expires.UTC().Format(time.RFC3339) +
+				" and cannot be revoked"
 		},
 	}
 }

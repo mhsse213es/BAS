@@ -271,3 +271,18 @@ Most recent first, all on `origin/main`:
 - `0d5a70d2` bucket policy grants: cross-account, public, same-account (R-15)
 - `f46c5b6e` session policies; resource-aware gates (R-14)
 - `b222b80e` S3 bucket policies narrow discovered grants (R-13)
+
+### Token-request action (sa-token-probe), 2026-10-23
+
+Design: spec section 12. Built: `TokenRequest` client call, identity check, the probe action with redaction and clearing, and the new terminal state `DISCARDED_NOT_REVOKED`. Console action and label added.
+
+Live on kind-bas-lab, scenario ServiceAccount with narrow RBAC:
+- Minting for `default` in `bas-sandbox` refused by the server.
+- Probe run: minted token verified as `system:serviceaccount:bas-sandbox:bas-sbx-token-probe`, discarded, ends `DISCARDED_NOT_REVOKED`. Detail states the expiry and that it cannot be revoked.
+- Probe account cannot list pods or read configmaps; no binding references it.
+
+Lab changes made for this: ServiceAccount `bas-sbx-token-probe` created in `bas-sandbox`; Role `bas-scenario-sandbox` given `serviceaccounts/token` `create`, restricted to that name.
+
+Unit tests: no token text in result or audit; token bytes zeroed after rollback; parameters refused; dry run mints nothing; identity mismatch reported unverified and not cleaned; mint failure ends FAILED; invalid lifetimes and names send no request; errors never contain the token.
+
+Not verified: the token's real expiry on the server side, and whether revocation or early expiry is available in the cluster's version.

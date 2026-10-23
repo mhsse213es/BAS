@@ -53,6 +53,12 @@ func (f *fakeScenarioCluster) Delete(_ context.Context, ref k8sscenario.ObjectRe
 	delete(f.pods, ref.Name)
 	return nil
 }
+func (f *fakeScenarioCluster) IssueToken(context.Context, string, string, int64) (k8sscenario.IssuedToken, error) {
+	return k8sscenario.IssuedToken{}, errors.New("not used by pod actions")
+}
+func (f *fakeScenarioCluster) IdentityWithToken(context.Context, []byte) (string, error) {
+	return "", errors.New("not used by pod actions")
+}
 func (f *fakeScenarioCluster) writeCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()

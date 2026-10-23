@@ -42,6 +42,9 @@ const (
 	StateFailed        State = "FAILED"
 	StateCleaned       State = "CLEANED"
 	StateCleanupFailed State = "CLEANUP_FAILED"
+	// StateDiscardedNotRevoked: a credential was minted, verified and discarded locally. It stays valid until
+	// it expires because the TokenRequest API cannot revoke it. Never reported as CLEANED.
+	StateDiscardedNotRevoked State = "DISCARDED_NOT_REVOKED"
 )
 
 // Audit event types written by the engine.
@@ -101,6 +104,16 @@ type Client interface {
 	Create(ctx context.Context, obj Object) error
 	SetData(ctx context.Context, ref ObjectRef, data map[string]string) error
 	Delete(ctx context.Context, ref ObjectRef) error
+	// IssueToken mints a short-lived token for one ServiceAccount. The caller clears the bytes when done.
+	IssueToken(ctx context.Context, namespace, serviceAccount string, ttlSeconds int64) (IssuedToken, error)
+	// IdentityWithToken reports the username a token authenticates as.
+	IdentityWithToken(ctx context.Context, token []byte) (string, error)
+}
+
+// IssuedToken is a minted credential. Token is never logged, audited, returned or placed in an error.
+type IssuedToken struct {
+	Token   []byte
+	Expires time.Time
 }
 
 // Event is one audit record. It never carries credentials.
@@ -223,6 +236,16 @@ func (e *Engine) execute(ctx context.Context, req RunRequest, a *Action, plan []
 		msg = "apply: " + applyErr.Error()
 	} else if !verified {
 		msg = "verification failed; the change was rolled back and verified"
+	}
+	// An unrevocable effect (a minted credential) is never reported as cleaned up, even when rollback verified.
+	if a.unrevocable && applyErr == nil {
+		state = StateDiscardedNotRevoked
+		if a.summary != nil {
+			msg = a.summary(snap)
+		}
+		if !verified {
+			msg = "verification failed; " + msg
+		}
 	}
 	return e.finish(ctx, req, plan, state, verified, msg)
 }

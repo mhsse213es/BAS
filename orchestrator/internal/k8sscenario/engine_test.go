@@ -17,6 +17,10 @@ type fakeClient struct {
 	failCreate   bool
 	failDelete   bool
 	keepOnDelete bool // delete reports success but the object stays (rollback verification must catch this)
+	// token probe fakes: the token the fake mints, whether minting fails, and who the token authenticates as.
+	issued        []byte
+	issueErr      error
+	tokenIdentity string
 }
 
 func newFakeClient() *fakeClient {
@@ -104,7 +108,7 @@ const (
 	testNS      = "bas-sandbox"
 )
 
-func testConfig(c *fakeClient, au *recordAudit, al *recordAlert, store *memApprovals) Config {
+func testConfig(c *fakeClient, au Audit, al *recordAlert, store *memApprovals) Config {
 	return Config{
 		AllowedClusters:   map[string]string{testCluster: testServer},
 		AllowedNamespaces: []string{testNS},
@@ -393,4 +397,18 @@ func TestConfigMapPatch_RestoresPriorValue(t *testing.T) {
 	if got := fc.objects["ConfigMap/bas-sandbox/bas-fixture"].Data["state"]; got != "original" {
 		t.Fatalf("state after run = %q, want the prior value restored", got)
 	}
+}
+
+// IssueToken mints a fake token. The bytes are kept so tests can check they are cleared after rollback.
+func (f *fakeClient) IssueToken(_ context.Context, _ string, _ string, _ int64) (IssuedToken, error) {
+	if f.issueErr != nil {
+		return IssuedToken{}, f.issueErr
+	}
+	f.issued = []byte("SECRET-PROBE-TOKEN-VALUE")
+	return IssuedToken{Token: f.issued, Expires: time.Now().Add(10 * time.Minute)}, nil
+}
+
+// IdentityWithToken reports the identity the fake token authenticates as.
+func (f *fakeClient) IdentityWithToken(_ context.Context, _ []byte) (string, error) {
+	return f.tokenIdentity, nil
 }

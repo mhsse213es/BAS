@@ -66,6 +66,11 @@ func NewAPIClient(cfg ClientConfig) (*APIClient, error) {
 
 // do sends one request. The response body is limited in size, and errors carry only the status code.
 func (c *APIClient) do(ctx context.Context, method, path, contentType string, body any) (int, []byte, error) {
+	return c.doAs(ctx, c.token, method, path, contentType, body)
+}
+
+// doAs sends a request with the given bearer token. The token is used only in the Authorization header.
+func (c *APIClient) doAs(ctx context.Context, token, method, path, contentType string, body any) (int, []byte, error) {
 	var rdr io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -78,7 +83,7 @@ func (c *APIClient) do(ctx context.Context, method, path, contentType string, bo
 	if err != nil {
 		return 0, nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
@@ -275,4 +280,68 @@ func (c *APIClient) Delete(ctx context.Context, ref ObjectRef) error {
 		return nil
 	}
 	return statusErr(http.MethodDelete, path, status)
+}
+
+// tokenMinimumTTL and tokenMaximumTTL bound a requested token lifetime, in seconds.
+const (
+	tokenMinimumTTL = 60
+	tokenMaximumTTL = 3600
+)
+
+// IssueToken mints a short-lived token for one ServiceAccount through the TokenRequest API. The token is returned
+// only to the caller that needs it for verification. It is never logged or placed in an error.
+func (c *APIClient) IssueToken(ctx context.Context, namespace, serviceAccount string, ttlSeconds int64) (IssuedToken, error) {
+	if !reK8sName.MatchString(namespace) || !reK8sName.MatchString(serviceAccount) {
+		return IssuedToken{}, errors.New("a namespace and a ServiceAccount name are required")
+	}
+	if ttlSeconds < tokenMinimumTTL || ttlSeconds > tokenMaximumTTL {
+		return IssuedToken{}, fmt.Errorf("token lifetime must be between %d and %d seconds", tokenMinimumTTL, tokenMaximumTTL)
+	}
+	path := "/api/v1/namespaces/" + namespace + "/serviceaccounts/" + serviceAccount + "/token"
+	body := map[string]any{
+		"apiVersion": "authentication.k8s.io/v1",
+		"kind":       "TokenRequest",
+		"spec":       map[string]any{"expirationSeconds": ttlSeconds},
+	}
+	status, raw, err := c.do(ctx, http.MethodPost, path, "application/json", body)
+	if err != nil {
+		return IssuedToken{}, err
+	}
+	if status != http.StatusOK && status != http.StatusCreated {
+		return IssuedToken{}, statusErr(http.MethodPost, path, status)
+	}
+	var resp struct {
+		Status struct {
+			Token               string    `json:"token"`
+			ExpirationTimestamp time.Time `json:"expirationTimestamp"`
+		} `json:"status"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil || resp.Status.Token == "" {
+		return IssuedToken{}, errors.New("TokenRequest response did not contain a token")
+	}
+	return IssuedToken{Token: []byte(resp.Status.Token), Expires: resp.Status.ExpirationTimestamp}, nil
+}
+
+// IdentityWithToken returns the username a token authenticates as, using SelfSubjectReview with that token alone.
+func (c *APIClient) IdentityWithToken(ctx context.Context, token []byte) (string, error) {
+	const path = "/apis/authentication.k8s.io/v1/selfsubjectreviews"
+	body := map[string]string{"apiVersion": "authentication.k8s.io/v1", "kind": "SelfSubjectReview"}
+	status, raw, err := c.doAs(ctx, string(token), http.MethodPost, path, "application/json", body)
+	if err != nil {
+		return "", err
+	}
+	if status != http.StatusOK && status != http.StatusCreated {
+		return "", statusErr(http.MethodPost, path, status)
+	}
+	var review struct {
+		Status struct {
+			UserInfo struct {
+				Username string `json:"username"`
+			} `json:"userInfo"`
+		} `json:"status"`
+	}
+	if err := json.Unmarshal(raw, &review); err != nil {
+		return "", errors.New("SelfSubjectReview response is not valid JSON")
+	}
+	return review.Status.UserInfo.Username, nil
 }

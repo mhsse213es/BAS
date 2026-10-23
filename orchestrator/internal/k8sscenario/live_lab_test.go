@@ -242,3 +242,59 @@ func TestLive_RollbackFailure(t *testing.T) {
 	}
 	t.Logf("CLEANUP_FAILED as expected; pod %s left in place; alert: %s", pod, alert.msgs[0])
 }
+
+// TestLive_TokenProbe runs the token-request action on the lab. The scenario role may mint a token only for the
+// probe ServiceAccount, so the run must end DISCARDED_NOT_REVOKED, and a token for any other account must be refused.
+func TestLive_TokenProbe(t *testing.T) {
+	api := os.Getenv("KUBE_LAB_API")
+	tokenFile := os.Getenv("SCENARIO_TOKEN_FILE")
+	caFile := os.Getenv("KUBE_LAB_CA_FILE")
+	if api == "" || tokenFile == "" || caFile == "" {
+		t.Skip("lab not configured")
+	}
+	tokenBytes, err := os.ReadFile(tokenFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca, err := os.ReadFile(caFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewAPIClient(ClientConfig{APIServer: api, Token: strings.TrimSpace(string(tokenBytes)), CAPEM: ca})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	const cluster = "kind-bas-lab"
+
+	// Minting for any other ServiceAccount must be refused by the server.
+	if _, err := client.IssueToken(ctx, "bas-sandbox", "default", 600); err == nil {
+		t.Fatal("the scenario role minted a token for the default ServiceAccount; it must be refused")
+	}
+
+	store := newMemApprovals()
+	audit := &captureAudit{}
+	params := map[string]string{}
+	req := RunRequest{RunID: "tok-live-1", Requester: "operator-1", Cluster: ClusterRef{Name: cluster, Server: api},
+		Namespace: "bas-sandbox", ActionID: "sa-token-probe", Params: params, Live: true, ApprovalID: "appr-tok-live-1"}
+	_ = store.Put(Approval{ID: "appr-tok-live-1", ApproverID: "operator-2", RequesterID: "operator-1", RunID: req.RunID,
+		Cluster: cluster, Namespace: "bas-sandbox", ActionID: req.ActionID, ParamsHash: HashParams(params), ExpiresAt: time.Now().Add(15 * time.Minute)})
+	cfg := Config{
+		AllowedClusters:   map[string]string{cluster: api},
+		AllowedNamespaces: []string{"bas-sandbox"},
+		Client:            client,
+		Audit:             audit,
+		Alert:             &recordAlert{},
+		Approvals:         store,
+		ApproverPermitted: func(id string) bool { return id == "operator-2" },
+		Now:               time.Now,
+	}
+	res := NewEngine(cfg).Run(ctx, req)
+	if res.State != StateDiscardedNotRevoked || !res.Verified {
+		t.Fatalf("state = %s verified=%v (%q), want %s verified", res.State, res.Verified, res.Error, StateDiscardedNotRevoked)
+	}
+	if strings.Contains(res.Error, "SECRET") || strings.Contains(res.Error, strings.TrimSpace(string(tokenBytes))) {
+		t.Fatal("the run result contains credential text")
+	}
+	t.Logf("%s: %s", res.State, res.Error)
+}
