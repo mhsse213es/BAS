@@ -88,6 +88,8 @@ type aleefState struct {
 
 	// runFn runs a campaign; campaign.Run unless a test replaces it.
 	runFn func(context.Context, campaign.Config) (campaign.Report, error)
+	// afterCreateRun, when set (tests), is called between creating the run row and registering the run.
+	afterCreateRun func()
 
 	// rootCtx is the parent of every run's context; shutdown cancels it.
 	rootCtx    context.Context
@@ -113,7 +115,8 @@ func (h *Handler) WithAleef(st *aleefstore.Store, secrets model.SecretResolver) 
 }
 
 // RecoverAleefRuns marks runs still 'running' in the database as 'interrupted'. Call once at server
-// start: the process that was running them is gone, so their campaigns did not finish and objects they
+// start. It is global: it assumes a single orchestrator instance per database (the documented on-prem
+// model); with two instances it would mark the other's live runs interrupted. The process that was running them is gone, so their campaigns did not finish and objects they
 // created on the target may remain. It logs the run ids.
 func (h *Handler) RecoverAleefRuns(ctx context.Context) error {
 	if h.aleef == nil {
@@ -153,7 +156,25 @@ func (st *aleefState) shutdown(timeout time.Duration) {
 	select {
 	case <-done:
 	case <-time.After(timeout):
-		log.Printf("[aleef] shutdown: campaigns still cleaning up after %s; they stay 'running' and are marked interrupted at the next start", timeout)
+		log.Printf("[aleef] shutdown: campaigns still cleaning up after %s; marking them interrupted", timeout)
+		// Best effort. The cleanup sweep's partial orphan list lives inside campaign.Run and cannot be read
+		// without racing it, so only the status and a reason are recorded: objects may remain on the target.
+		st.mu.Lock()
+		var ids []string
+		for id, run := range st.runs {
+			if run.finishedAt.IsZero() {
+				ids = append(ids, id)
+			}
+		}
+		st.mu.Unlock()
+		pctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		for _, id := range ids {
+			if err := st.store.MarkRunFinished(pctx, id, aleefstore.RunInterrupted,
+				"server shutdown: cleanup did not finish in time; objects created on the target may remain", nil, nil); err != nil {
+				log.Printf("[aleef] shutdown: could not mark run %s interrupted: %v", id, err)
+			}
+		}
 	}
 }
 
@@ -248,9 +269,11 @@ func (h *Handler) CreateAleefEngagement(w http.ResponseWriter, r *http.Request) 
 	delete(raw, "id") // the engagement id is assigned by the server
 	// The approver is the authenticated user, never a value from the body: an operator cannot name
 	// someone else (or themselves under another name) as the approver of their own scope.
-	if _, ok := raw["approver"]; ok {
-		jsonError(w, "approver is set by the server from the authenticated user and must not be supplied", http.StatusBadRequest)
-		return
+	for k := range raw {
+		if strings.EqualFold(k, "approver") {
+			jsonError(w, "approver is set by the server from the authenticated user and must not be supplied", http.StatusBadRequest)
+			return
+		}
 	}
 	actor := aleefActor(r)
 	if actor == "" {
@@ -398,9 +421,26 @@ func (h *Handler) StartAleefRun(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "could not create run", http.StatusInternalServerError)
 		return
 	}
+	if st.afterCreateRun != nil {
+		st.afterCreateRun() // test hook: pause between CreateRun and registration
+	}
 	ctx, cancel := context.WithCancel(st.rootCtx)
 	run := &aleefRun{id: runID, engagementID: req.EngagementID, startedAt: time.Now().UTC(), cancel: cancel, status: aleefRunning}
 	st.mu.Lock()
+	if st.closed {
+		// shutdown began after the first check: nothing is registered, no goroutine starts, and the
+		// run row just created must not stay 'running'. wg.Add happens only below, under this lock
+		// and only when not closed, so it can never race shutdown's wg.Wait.
+		st.mu.Unlock()
+		cancel()
+		pctx, pcancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := st.store.MarkRunFinished(pctx, runID, aleefstore.RunHalted, "server shutdown", nil, nil); err != nil {
+			log.Printf("[aleef] run %s: could not mark the run halted: %v", runID, err)
+		}
+		pcancel()
+		jsonError(w, "the server is shutting down", http.StatusServiceUnavailable)
+		return
+	}
 	st.runs[runID] = run
 	st.active[req.EngagementID] = runID
 	st.wg.Add(1)
@@ -609,7 +649,12 @@ func (st *aleefState) view(id string) (aleefRunView, bool) {
 	if !ok {
 		return aleefRunView{}, false
 	}
-	v := aleefRunView{RunID: run.id, EngagementID: run.engagementID, Status: run.status, Error: run.errMsg}
+	// Same vocabulary as the database: an operator or shutdown stop reads 'halted'.
+	status := run.status
+	if status == aleefStopped || status == aleefHalted {
+		status = aleefstore.RunHalted
+	}
+	v := aleefRunView{RunID: run.id, EngagementID: run.engagementID, Status: status, Error: run.errMsg}
 	t := run.startedAt
 	v.StartedAt = &t
 	if !run.finishedAt.IsZero() {
@@ -622,6 +667,9 @@ func (st *aleefState) view(id string) (aleefRunView, bool) {
 		v.Orphans = rep.Orphans
 	}
 	v.HaltedReason = run.stopReason
+	if v.HaltedReason == "" && run.report != nil {
+		v.HaltedReason = run.report.Halted
+	}
 	return v, true
 }
 
@@ -655,6 +703,12 @@ func (h *Handler) GetAleefRun(w http.ResponseWriter, r *http.Request) {
 		FinishedAt: rec.FinishedAt, HaltedReason: rec.HaltedReason}
 	if len(rec.Report) > 0 {
 		v.Report = json.RawMessage(rec.Report)
+		if v.HaltedReason == "" {
+			var h struct{ Halted string }
+			if json.Unmarshal(rec.Report, &h) == nil {
+				v.HaltedReason = h.Halted
+			}
+		}
 	}
 	if len(rec.Orphans) > 0 && string(rec.Orphans) != "[]" {
 		v.Orphans = json.RawMessage(rec.Orphans)
@@ -686,6 +740,9 @@ func (h *Handler) StopAleefRun(w http.ResponseWriter, r *http.Request) {
 			run.status = aleefStopping
 			status = aleefStopping
 			run.cancel()
+		}
+		if status == aleefStopped {
+			status = aleefstore.RunHalted // database vocabulary
 		}
 		st.mu.Unlock()
 		h.auditLog(r, "aleef.run.stop", id, map[string]any{"status": status}, "ok")

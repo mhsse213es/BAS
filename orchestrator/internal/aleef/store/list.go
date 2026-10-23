@@ -93,7 +93,8 @@ func (s *Store) MarkRunFinished(ctx context.Context, id, status, haltedReason st
 }
 
 // MarkRunsInterrupted marks every run still 'running' as 'interrupted' (the process that was
-// running them is gone) and returns their ids. Call it once at server start, before runs can be
+// running them is gone) and returns their ids. It is global and assumes a single orchestrator instance
+// per database (the documented on-prem model). Call it once at server start, before runs can be
 // started.
 func (s *Store) MarkRunsInterrupted(ctx context.Context) ([]string, error) {
 	rows, err := s.pool.Query(ctx, `UPDATE aleef_runs SET status='interrupted', finished_at=NOW(),

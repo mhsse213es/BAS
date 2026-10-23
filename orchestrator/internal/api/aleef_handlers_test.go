@@ -654,15 +654,15 @@ func TestStopIsIdempotent(t *testing.T) {
 		for i := 0; i < 3; i++ {
 			rec := e.do(http.MethodPost, "/api/aleef/runs/"+runID+"/stop", auth.RoleAnalyst, nil)
 			m := decodeMap(t, rec)
-			if rec.Code != http.StatusOK || (m["status"] != "stopping" && m["status"] != "stopped") {
+			if rec.Code != http.StatusOK || (m["status"] != "stopping" && m["status"] != "halted") {
 				t.Fatalf("stop #%d: %d %s", i, rec.Code, rec.Body.String())
 			}
 		}
 		final := e.waitRun(runID, time.Minute)
-		if final["status"] != "stopped" {
+		if final["status"] != "halted" || final["halted_reason"] != "stopped by operator" {
 			t.Fatalf("final status %v", final["status"])
 		}
-		if rec := e.do(http.MethodPost, "/api/aleef/runs/"+runID+"/stop", auth.RoleAnalyst, nil); rec.Code != http.StatusOK || decodeMap(t, rec)["status"] != "stopped" {
+		if rec := e.do(http.MethodPost, "/api/aleef/runs/"+runID+"/stop", auth.RoleAnalyst, nil); rec.Code != http.StatusOK || decodeMap(t, rec)["status"] != "halted" {
 			t.Fatalf("stop after finish: %d %s", rec.Code, rec.Body.String())
 		}
 		if toy.leftover() != 0 {

@@ -153,3 +153,79 @@ func TestShutdownCancelsAndCleansUp(t *testing.T) {
 		}
 	})
 }
+
+// Shutdown begins between CreateRun and registration: the request is refused with 503, nothing is
+// registered, no goroutine starts, the run row is not left 'running' and wg stays usable.
+func TestShutdownBetweenCreateRunAndRegistration(t *testing.T) {
+	withAleefEnv(t, func(e *aleefEnv) {
+		toy := newAleefToy()
+		srv := httptest.NewServer(toy)
+		defer srv.Close()
+		engID := e.createEngagement(srv.URL)
+		started := false
+		e.state.runFn = func(context.Context, campaign.Config) (campaign.Report, error) {
+			started = true
+			return campaign.Report{}, nil
+		}
+		e.state.afterCreateRun = func() { e.state.shutdown(time.Minute) }
+		rec := e.do(http.MethodPost, "/api/aleef/runs", auth.RoleAnalyst, aleefRunBody(engID, srv.URL))
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("status %d %s", rec.Code, rec.Body.String())
+		}
+		e.state.mu.Lock()
+		nRuns, nActive := len(e.state.runs), len(e.state.active)
+		e.state.mu.Unlock()
+		if nRuns != 0 || nActive != 0 || started {
+			t.Fatalf("registered=%d active=%d started=%v", nRuns, nActive, started)
+		}
+		var status, reason string
+		if err := e.pool.QueryRow(context.Background(), `SELECT status, halted_reason FROM aleef_runs ORDER BY created_at DESC LIMIT 1`).Scan(&status, &reason); err != nil {
+			t.Fatal(err)
+		}
+		if status != "halted" || reason != "server shutdown" {
+			t.Fatalf("run row: %s %q", status, reason)
+		}
+		e.state.wg.Wait() // the counter is zero: no Add happened
+		if toy.requests.Load() != 0 {
+			t.Fatal("request reached the target")
+		}
+	})
+}
+
+// The approver key is refused in any letter case.
+func TestEngagementApproverRefusedCaseInsensitively(t *testing.T) {
+	withAleefEnv(t, func(e *aleefEnv) {
+		now := time.Now()
+		for _, k := range []string{"Approver", "APPROVER", "aPpRoVeR"} {
+			body := aleefEngagementBody("http://127.0.0.1:9", "lab", now.Add(-time.Hour), now.Add(time.Hour))
+			body[k] = "someone else"
+			if rec := e.do(http.MethodPost, "/api/aleef/engagements", auth.RoleAdmin, body); rec.Code != http.StatusBadRequest {
+				t.Fatalf("key %q: %d %s", k, rec.Code, rec.Body.String())
+			}
+		}
+	})
+}
+
+// GET reports the database vocabulary for a stopped run and fills halted_reason from the report.
+func TestRunStatusVocabularyAndHaltedReason(t *testing.T) {
+	withAleefEnv(t, func(e *aleefEnv) {
+		toy := newAleefToy()
+		srv := httptest.NewServer(toy)
+		defer srv.Close()
+		e.state.runFn = func(context.Context, campaign.Config) (campaign.Report, error) {
+			return campaign.Report{RunID: "x", Halted: "request budget exhausted"}, nil
+		}
+		runID := e.startRun(e.createEngagement(srv.URL), srv.URL)
+		final := e.waitRun(runID, time.Minute)
+		if final["status"] != "halted" || final["halted_reason"] != "request budget exhausted" {
+			t.Fatalf("in memory: %v", final)
+		}
+		e.state.mu.Lock()
+		e.state.runs = map[string]*aleefRun{}
+		e.state.mu.Unlock()
+		m := decodeMap(t, e.do(http.MethodGet, "/api/aleef/runs/"+runID, auth.RoleAnalyst, nil))
+		if m["status"] != "halted" || m["halted_reason"] != "request budget exhausted" {
+			t.Fatalf("from the database: %v", m)
+		}
+	})
+}
