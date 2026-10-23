@@ -140,6 +140,7 @@ func TestGradeTable(t *testing.T) {
 	execErr.ExecutionError = "dispatch failed"
 	gate := denied()
 	gate.GateRefusal = "target not in scope"
+	gate.ProbeRan = false
 	noRan := Outcome{CollectedAt: t0}
 	nocorr := denied()
 	nocorr.Corr = Correlation{}

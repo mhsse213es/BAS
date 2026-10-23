@@ -103,27 +103,44 @@ type Outcome struct {
 	// which is treated as NotEvaluated).
 	Classification dlpreport.ClassificationOutcome
 	CollectedAt    time.Time
-	Principal      string
-	Marker         string
-	RunID          string
+	// Principal is the DB role/account the probe ran as. It is stored and
+	// reported on purpose (spec section 9 requires it in results): it is a
+	// test-account name, not a secret. Credentials, passwords and DSNs are
+	// never stored; redact() is a defensive pass over every free-text field.
+	Principal string
+	Marker    string
+	RunID     string
 }
 
 // errorClassAllowedRead lists agent error classes that still mean the read
-// itself was permitted (the engine let rows flow until our own cap).
+// itself was permitted (the engine let rows flow until our own row cap).
+// row_limit_exceeded therefore maps to Enforcement Allowed: a "deny"
+// expectation FAILs and only an "allow" expectation passes.
 var errorClassAllowedRead = map[string]bool{"row_limit_exceeded": true}
 
+// errorClassDenial lists the agent error classes that are genuine denials.
+// Denied=true with any other class (timeout, canceled, connection errors,
+// engine-specific codes) is not a trustworthy denial: Enforcement is Unknown.
+var errorClassDenial = map[string]bool{"": true, "permission_denied": true, "auth_failed": true, "read_only_violation": true}
+
 func probeErrored(o Outcome) bool {
-	return o.ProbeRan && !o.Probe.Denied && o.Probe.ErrorClass != "" && !errorClassAllowedRead[o.Probe.ErrorClass]
+	if !o.ProbeRan {
+		return false
+	}
+	if o.Probe.Denied {
+		return !errorClassDenial[o.Probe.ErrorClass]
+	}
+	return o.Probe.ErrorClass != "" && !errorClassAllowedRead[o.Probe.ErrorClass]
 }
 
 func enforcementOf(o Outcome) dlpreport.EnforcementOutcome {
 	switch {
 	case !o.ProbeRan || o.ExecutionError != "":
 		return dlpreport.EnforcementUnknown
-	case o.Probe.Denied:
-		return dlpreport.EnforcementBlocked
 	case probeErrored(o):
 		return dlpreport.EnforcementUnknown
+	case o.Probe.Denied:
+		return dlpreport.EnforcementBlocked
 	default:
 		return dlpreport.EnforcementAllowed
 	}
@@ -156,6 +173,11 @@ func grade(s ScenarioMeta, o Outcome) graded {
 		g.Dims.Prevention = pick(enf, dlpreport.EnforcementBlocked, dlpreport.EnforcementAllowed)
 	case "allow":
 		g.Dims.Prevention = pick(enf, dlpreport.EnforcementAllowed, dlpreport.EnforcementBlocked)
+	case "":
+	default:
+		// Unrecognised expectation (e.g. "Deny", "block"): never silently
+		// treated as "no expectation".
+		g.Dims.Prevention = DimUnverifiable
 	}
 	if s.ExpectDetection {
 		g.Dims.Detection = detectionGrade(o.Corr)
@@ -175,6 +197,12 @@ func grade(s ScenarioMeta, o Outcome) graded {
 	switch {
 	case o.ExecutionError != "":
 		g.Result, g.Reason = ResultError, "execution error: "+o.ExecutionError
+	case o.ProbeRan && (o.Skipped != "" || o.GateRefusal != ""):
+		// Inconsistent evidence: a probe ran yet a skip/refusal is recorded.
+		// Never hide that a probe ran behind SKIPPED.
+		g.Result, g.Reason = ResultError, "probe ran but a skip/gate refusal was also recorded"
+	case s.ExpectedPrevention != "" && s.ExpectedPrevention != "deny" && s.ExpectedPrevention != "allow":
+		g.Result, g.Reason = ResultError, fmt.Sprintf("unrecognised ExpectedPrevention %q", s.ExpectedPrevention)
 	case o.Skipped != "":
 		g.Result, g.Reason = ResultSkipped, "skipped: "+o.Skipped
 	case o.GateRefusal != "":
@@ -226,17 +254,22 @@ func detectionGrade(c Correlation) DimensionGrade {
 	}
 	switch c.Telemetry {
 	case dlpreport.TelemetryPresent:
-		// A match that is ambiguous/none is not a positive observation.
-		if c.Match == MatchAmbiguous || c.Match == MatchNone {
-			return DimUnverifiable
+		// Only an exact or strong contextual marker match is a positive
+		// observation. Ambiguous, none, empty and unrecognised values
+		// (including case variants) are unverifiable.
+		if c.Match == MatchExactMarker || c.Match == MatchStrongContextual {
+			return DimPass
 		}
-		return DimPass
+		return DimUnverifiable
 	case dlpreport.TelemetryAbsent, dlpreport.TelemetryDelayed:
 		return DimFail
 	}
 	return DimUnverifiable
 }
 
+// responseGrade can only return pass or unverifiable: an expected-but-absent
+// response grades the run ERROR, never FAIL, because the dlpreport response
+// enum has no "no response" value (NotTested is not evidence of absence).
 func responseGrade(c Correlation) DimensionGrade {
 	if !c.Evaluated {
 		return DimUnverifiable
@@ -261,6 +294,10 @@ func ToRecord(s ScenarioMeta, o Outcome) (dlpreport.Record, error) {
 		lims = append(lims, "Enforcement unknown: the probe did not run or did not return a usable result.")
 	}
 
+	if o.ProbeRan && (o.Skipped != "" || o.GateRefusal != "") {
+		lims = append(lims, "Inconsistent outcome: the probe ran but a skip or gate refusal was also recorded.")
+	}
+
 	tel, resp := dlpreport.TelemetryUnverifiable, dlpreport.ResponseNotTested
 	conf := string(MatchNone)
 	if o.Corr.Evaluated {
@@ -268,7 +305,10 @@ func ToRecord(s ScenarioMeta, o Outcome) (dlpreport.Record, error) {
 			return dlpreport.Record{}, fmt.Errorf("dbsim: correlation marked evaluated but telemetry/response not set")
 		}
 		tel, resp = o.Corr.Telemetry, o.Corr.Response
-		if o.Corr.Match != "" {
+		// Confidence mirrors the grading: only the four known grades are
+		// reported; empty/unknown values are "none", never pass-looking.
+		switch o.Corr.Match {
+		case MatchExactMarker, MatchStrongContextual, MatchAmbiguous, MatchNone:
 			conf = string(o.Corr.Match)
 		}
 		if o.Corr.Limitations != "" {
@@ -411,18 +451,40 @@ func BuildReport(s ScenarioMeta, o Outcome) (StoredReport, error) {
 // JSON returns the report as JSON.
 func (r StoredReport) JSON() ([]byte, error) { return json.Marshal(r) }
 
+// Redaction patterns. Go regexp (RE2) is linear-time, so adversarial input
+// cannot cause catastrophic backtracking.
+//
+// Intentionally over-redacted: any "<name containing password/passwd/pwd/
+// secret/token/api key/credential> [:=] <value>" is redacted even when
+// benign (e.g. "token: bucket"), and any whitespace-preceded "-p<word>" is
+// treated as a CLI password flag (e.g. "-prod"). Plain prose without a
+// separator ("password policy enforced") is left alone.
 var (
-	reKV  = regexp.MustCompile(`(?i)\b(password|passwd|pwd|secret|token|api[_-]?key|credential)\s*[=:]\s*[^\s;,&"']+`)
-	reDSN = regexp.MustCompile(`(://[^/\s:@]+):[^@\s/]+@`)
+	// key (optional closing quote) separator value; values may be
+	// single/double quoted (spaces included) or a bare run. No leading word boundary:
+	// underscores are word characters (db_password, PGPASSWORD).
+	reKV = regexp.MustCompile(`(?i)([A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|credential)[A-Za-z0-9_.-]*)(["']?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s;,&"'}]+)`)
+	// URL userinfo password; may itself contain '@' (greedy to the last '@'
+	// before the first '/' or whitespace).
+	reDSN = regexp.MustCompile(`(://[^/\s:@]*):[^/\s]*@`)
+	// Authorization header value and bare bearer tokens.
+	reAuth   = regexp.MustCompile(`(?i)(authorization["']?\s*[:=]\s*)(?:(?:bearer|basic|token)\s+)?[^\s;,"']+`)
+	reBearer = regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+`)
+	// mysql-style -p'secret' / -psecret.
+	reCLI = regexp.MustCompile(`(^|\s)(-p)('[^']*'|"[^"]*"|[^\s'"-]\S*)`)
 )
 
 // redact is a defensive pass stripping credential-looking material; the
 // agent never sends secrets, so this only matters if one leaks into a note or
-// error string.
+// error string. It is applied to every free-text field that is stored or
+// placed in the Record.
 func redact(s string) string {
 	if s == "" {
 		return s
 	}
 	s = reDSN.ReplaceAllString(s, "$1:[REDACTED]@")
-	return reKV.ReplaceAllString(s, "$1=[REDACTED]")
+	s = reAuth.ReplaceAllString(s, "$1[REDACTED]")
+	s = reBearer.ReplaceAllString(s, "Bearer [REDACTED]")
+	s = reKV.ReplaceAllString(s, "$1$2[REDACTED]")
+	return reCLI.ReplaceAllString(s, "$1$2[REDACTED]")
 }
