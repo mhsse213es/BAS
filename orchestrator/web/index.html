@@ -1495,6 +1495,8 @@
           </div>
           <label class="muted">Approved host origins (one per line, e.g. https://uat.example:8443)<textarea id="aleef-eng-hosts" class="aleef-textarea"></textarea></label>
           <label class="muted">Operation allow-list (optional, one operation id per line; money and notifying operations must be listed)<textarea id="aleef-eng-ops" class="aleef-textarea"></textarea></label>
+          <label class="muted">Operation classes (JSON, operation id to class: read, setup_safe, reversible, notifying, money, unknown). This is the ceiling for every run: a run can keep or tighten a class, never loosen it, and an operation not listed here never runs.<textarea id="aleef-eng-classes" class="aleef-textarea" placeholder="{&quot;getAccount&quot;: &quot;read&quot;, &quot;createPayment&quot;: &quot;money&quot;}"></textarea></label>
+          <label class="muted">Allowed token references (one per line). Runs under this engagement may use only these server-side secret reference names; never paste a token value.<textarea id="aleef-eng-tokenrefs" class="aleef-textarea"></textarea></label>
           <button class="btn btn-primary" type="button" data-aleef-action="create-engagement">Create engagement</button>
         </div>
 

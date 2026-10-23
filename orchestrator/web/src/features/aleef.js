@@ -133,7 +133,8 @@ function submitEngagement() {
   var req = buildEngagementRequest({
     customer: val('aleef-eng-customer'), environment: val('aleef-eng-env'), notBefore: val('aleef-eng-start'), notAfter: val('aleef-eng-end'),
     hosts: val('aleef-eng-hosts'), operations: val('aleef-eng-ops'), targetScopeId: val('aleef-eng-scope'),
-    maxRequests: val('aleef-eng-maxreq'), maxConcurrent: val('aleef-eng-maxconc'), rps: val('aleef-eng-rps')
+    maxRequests: val('aleef-eng-maxreq'), maxConcurrent: val('aleef-eng-maxconc'), rps: val('aleef-eng-rps'),
+    classes: val('aleef-eng-classes'), tokenRefs: val('aleef-eng-tokenrefs')
   });
   if (req.error) { setStatus(req.error, 'error'); return Promise.resolve(); }
   return aleefApi('/api/aleef/engagements', { method: 'POST', body: JSON.stringify(req.body) }).then(function(r) {

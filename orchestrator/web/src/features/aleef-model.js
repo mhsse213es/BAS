@@ -132,10 +132,26 @@ export function buildEngagementRequest(f) {
   if (!hosts.length) return { error: 'At least one host origin is required (for example https://uat.example:8443).' };
   var maxRequests = parseInt(f.maxRequests, 10), maxConcurrent = parseInt(f.maxConcurrent, 10), rps = parseFloat(f.rps);
   if (!(maxRequests > 0) || !(maxConcurrent > 0) || !(rps > 0)) return { error: 'Max requests, max concurrent and requests per second must be positive.' };
+  // Classes: the administrator's classification (operation id -> class). It is the ceiling for every run.
+  var classes;
+  try { classes = JSON.parse(String(f.classes || '')); } catch (e) { classes = null; }
+  if (!classes || typeof classes !== 'object' || Array.isArray(classes) || !Object.keys(classes).length) {
+    return { error: 'Classes must be a JSON object of operation id to class, for example {"getItem":"read"}.' };
+  }
+  var classIds = Object.keys(classes);
+  for (var ci = 0; ci < classIds.length; ci++) {
+    if (ALEEF_CLASSES.indexOf(classes[classIds[ci]]) < 0) return { error: 'Classes: "' + classIds[ci] + '" needs one of ' + ALEEF_CLASSES.join(', ') + '.' };
+  }
+  var tokenRefs = lines(f.tokenRefs);
+  if (!tokenRefs.length || tokenRefs.length > 20) return { error: 'Token references: list 1 to 20 secret reference names the runs may use.' };
+  for (var ti = 0; ti < tokenRefs.length; ti++) {
+    if (!ALEEF_SECRET_REF_RE.test(tokenRefs[ti])) return { error: 'Token references must be secret reference names (letters, digits, . _ / -), never token values.' };
+  }
   var body = {
     customer: String(f.customer).trim(), environment: f.environment, hosts: hosts,
     notBefore: nb.toISOString(), notAfter: na.toISOString(),
-    maxRequests: maxRequests, maxConcurrent: maxConcurrent, rps: rps
+    maxRequests: maxRequests, maxConcurrent: maxConcurrent, rps: rps,
+    classes: classes, token_refs: tokenRefs
   };
   var ops = lines(f.operations);
   if (ops.length) body.operations = ops;
