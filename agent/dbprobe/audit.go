@@ -1,7 +1,12 @@
 package dbprobe
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -36,7 +41,71 @@ const AuditWindowSkew = 5 * time.Second
 // MetaStatementTag is the leading comment of the adapter's own metadata and
 // audit queries (markerComment of the "dbsim-meta" marker). Events whose text
 // carries it are the collector reading the log, never evidence about a probe.
-const MetaStatementTag = "/* dbsim:dbsim-meta */"
+var MetaStatementTag = MarkerComment(MetaMarker)
+
+// MetaMarker is the marker of the adapters' own metadata and audit queries.
+const MetaMarker = "dbsim-meta"
+
+// SyncMarkerPrefix prefixes the per-collection sentinel marker.
+const SyncMarkerPrefix = "dbsim-sync:"
+
+var unsafeMarker = regexp.MustCompile(`[^A-Za-z0-9._:-]`)
+
+// SanitizeMarker reduces a marker to [A-Za-z0-9._:-] and at most max bytes, so
+// it can neither terminate nor turn the leading SQL comment into an executable
+// /*! ... */ comment.
+func SanitizeMarker(m string, max int) string {
+	m = unsafeMarker.ReplaceAllString(m, "_")
+	if len(m) > max {
+		m = m[:max]
+	}
+	return m
+}
+
+// MarkerComment is the leading SQL comment carrying a marker. It is the single
+// definition used by the adapters (to tag the statements they run) and by the
+// audit matcher (to recognise them again), so the two can never drift.
+func MarkerComment(marker string) string {
+	m := SanitizeMarker(marker, 120)
+	if m == "" {
+		m = "none"
+	}
+	return "/* dbsim:" + m + " */"
+}
+
+// NewSentinelMarker returns a fresh random marker for one sync sentinel.
+func NewSentinelMarker() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		binary.BigEndian.PutUint64(b[:], uint64(time.Now().UnixNano()))
+	}
+	return SyncMarkerPrefix + hex.EncodeToString(b[:])
+}
+
+// auditSourceWords are fragments naming the audit sources themselves. A
+// statement mentioning any of them is an audit lookup or configuration read,
+// never evidence about a probe (defence in depth beside the tag checks).
+var auditSourceWords = []string{"general_log", "events_statements_history_long", "pg_log", "dbsim_audit"}
+
+// ownStatement reports whether stmt is the probe's own statement: its trimmed
+// text BEGINS with the probe's marker comment, and it is not the collector's
+// own meta/audit-lookup statement. A statement that merely contains the marker
+// (in a WHERE clause, in another run's statement) is not the probe's. If an
+// audit path strips or normalises the leading comment the statement is not
+// identified, which yields absent/incomplete, never found.
+func ownStatement(stmt, marker string) bool {
+	s := strings.TrimSpace(stmt)
+	if !strings.HasPrefix(s, MarkerComment(marker)) || strings.Contains(s, MetaStatementTag) {
+		return false
+	}
+	low := strings.ToLower(s)
+	for _, w := range auditSourceWords {
+		if strings.Contains(low, w) {
+			return false
+		}
+	}
+	return true
+}
 
 var (
 	// ErrAuditUnsupported means the adapter discovered no usable audit source.
@@ -116,9 +185,12 @@ func TruncateUTF8(s string, max int) string {
 func NormalizeAudit(q AuditQuery, raw []AuditEvent, redact func(string) string, sourceOverflow bool) ([]AuditEvent, error) {
 	out := make([]AuditEvent, 0, len(raw))
 	for _, e := range raw {
-		if !strings.Contains(e.Statement, q.Marker) || strings.Contains(e.Statement, MetaStatementTag) {
+		if !ownStatement(e.Statement, q.Marker) {
 			continue
 		}
+		// The Principal filter only narrows: an event with an EMPTY principal
+		// (history_long once the thread has ended) passes it, because the
+		// positive marker-comment match above already ties it to this run.
 		if q.Principal != "" && e.Principal != "" && e.Principal != q.Principal {
 			continue
 		}
@@ -132,4 +204,109 @@ func NormalizeAudit(q AuditQuery, raw []AuditEvent, redact func(string) string, 
 		return out, &AuditIncompleteError{Reason: "source returned more rows than the cap"}
 	}
 	return out, nil
+}
+
+// AuditFetch is one read of the audit source for a marker.
+type AuditFetch struct {
+	Raw      []AuditEvent // time-ordered rows matching the marker pattern (at most cap+1)
+	Covered  bool         // the retained log reaches back to the window start
+	Overflow bool         // the source had more rows than the cap
+}
+
+// AuditFetchFunc reads the audit source for marker within q's window.
+type AuditFetchFunc func(ctx context.Context, marker string, q AuditQuery) (AuditFetch, error)
+
+// AuditSync injects the clock and sleep used while waiting for the audit
+// source to catch up (zero values use the real ones; tests inject fakes).
+type AuditSync struct {
+	Now    func() time.Time
+	Sleep  func(ctx context.Context, d time.Duration) error
+	Budget time.Duration // total wait, default 5s
+}
+
+const (
+	syncPollStart = 250 * time.Millisecond
+	syncPollMax   = time.Second
+	syncBudget    = 5 * time.Second
+)
+
+func (s AuditSync) withDefaults() AuditSync {
+	if s.Now == nil {
+		s.Now = time.Now
+	}
+	if s.Sleep == nil {
+		s.Sleep = func(ctx context.Context, d time.Duration) error {
+			t := time.NewTimer(d)
+			defer t.Stop()
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-t.C:
+				return nil
+			}
+		}
+	}
+	if s.Budget <= 0 {
+		s.Budget = syncBudget
+	}
+	return s
+}
+
+// CollectWithSync reads marker evidence only once the audit source has proven
+// it caught up. Some sources (PostgreSQL csvlog) are written asynchronously, so
+// "no marker event yet" proves nothing at the instant the probe ends. It first
+// runs sentinel (the adapter issues one extra READ ONLY statement tagged with a
+// fresh random marker and returns that marker), then polls the source with
+// backoff (250ms doubling to 1s, bounded by the total budget, honouring ctx)
+// until the sentinel statement is visible. Only then does the lookup for q.Marker
+// run, and only then may it conclude absent. If the sentinel never appears the
+// result is incomplete ("audit source did not catch up"), never absent. A
+// sentinel or fetch failure is an error. Sentinel statements are never returned
+// as events.
+func CollectWithSync(ctx context.Context, q AuditQuery, sentinel func(context.Context) (string, error),
+	fetch AuditFetchFunc, redact func(string) string, s AuditSync) ([]AuditEvent, error) {
+	s = s.withDefaults()
+	sm, err := sentinel(ctx)
+	if err != nil {
+		return nil, err
+	}
+	win := q
+	win.Marker = sm
+	win.Until = q.Until.Add(time.Minute) // the sentinel runs after the probe window closes
+	deadline := s.Now().Add(s.Budget)
+	interval := syncPollStart
+	caught := false
+	for {
+		f, err := fetch(ctx, sm, win)
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range f.Raw {
+			if ownStatement(e.Statement, sm) {
+				caught = true
+				break
+			}
+		}
+		if caught || !s.Now().Before(deadline) {
+			break
+		}
+		if err := s.Sleep(ctx, interval); err != nil {
+			return nil, err
+		}
+		if interval *= 2; interval > syncPollMax {
+			interval = syncPollMax
+		}
+	}
+	f, err := fetch(ctx, q.Marker, q)
+	if err != nil {
+		return nil, err
+	}
+	events, nerr := NormalizeAudit(q, f.Raw, redact, f.Overflow)
+	if nerr == nil && !f.Covered {
+		nerr = &AuditIncompleteError{Reason: "audit source retains no entry at or before the window start (rotated, evicted or enabled mid-run)"}
+	}
+	if nerr == nil && !caught {
+		nerr = &AuditIncompleteError{Reason: "audit source did not catch up"}
+	}
+	return events, nerr
 }

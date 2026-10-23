@@ -41,10 +41,53 @@ type auditFake struct {
 	evErr             error
 	plugins           [][]any
 	glReadableForConf bool
+
+	// sync sentinel scripting (see the PostgreSQL fake)
+	lag, polls int
+	never      bool
+	now        time.Time
+	sleeps     []time.Duration
+	cancel     func()
+}
+
+func (af *auditFake) syncEnv() dbprobe.AuditSync {
+	return dbprobe.AuditSync{
+		Now: func() time.Time { return af.now },
+		Sleep: func(ctx context.Context, d time.Duration) error {
+			af.sleeps = append(af.sleeps, d)
+			af.now = af.now.Add(d)
+			if af.cancel != nil {
+				af.cancel()
+			}
+			return ctx.Err()
+		},
+	}
+}
+
+// sentinelRows answers an events query whose pattern names a sync sentinel.
+func (af *auditFake) sentinelRows(sql string, args []any) ([][]any, bool) {
+	var pat string
+	for _, a := range args {
+		if s, ok := a.(string); ok && strings.Contains(s, "dbsim-sync:") {
+			pat = s
+		}
+	}
+	if pat == "" {
+		return nil, false
+	}
+	af.polls++
+	if af.never || af.polls <= af.lag {
+		return nil, true
+	}
+	stmt := dbprobe.MarkerComment(strings.Trim(pat, "%")) + " SELECT 1"
+	if strings.Contains(sql, sqlHistEvents) {
+		return [][]any{{epoch(1), []byte("svc_dbsim_probe"), []byte(stmt)}}, true
+	}
+	return [][]any{glRow(1, "svc_dbsim_probe[svc_dbsim_probe] @ h [1.1.1.1]", stmt)}, true
 }
 
 func newAuditFake() *auditFake {
-	af := &auditFake{glOn: 1, psOn: 1, logOutput: "FILE,TABLE", consumersYes: true, covered: true}
+	af := &auditFake{glOn: 1, psOn: 1, logOutput: "FILE,TABLE", consumersYes: true, covered: true, now: time.Unix(1700000000, 0)}
 	af.fakeSession = &fakeSession{}
 	af.fakeSession.queryFn = func(sql string, args []any) ([][]any, error) {
 		switch {
@@ -78,6 +121,9 @@ func newAuditFake() *auditFake {
 			if af.evErr != nil {
 				return nil, af.evErr
 			}
+			if rows, ok := af.sentinelRows(sql, args); ok {
+				return rows, nil
+			}
 			return af.rows, nil
 		case strings.Contains(sql, sqlAuditPlugins):
 			return af.plugins, nil
@@ -93,7 +139,7 @@ func glRow(sec int, userHost, stmt string) []any {
 
 func discovered(t *testing.T, af *auditFake) *Adapter {
 	t.Helper()
-	a := &Adapter{s: af.fakeSession, mode: dbprobe.ModeClient, scrub: newScrubber([]string{"hunter2-secret"})}
+	a := &Adapter{s: af.fakeSession, mode: dbprobe.ModeClient, scrub: newScrubber([]string{"hunter2-secret"}), auditSync: af.syncEnv()}
 	if err := a.discoverAudit(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -391,6 +437,143 @@ func TestParseUserHostAndEpoch(t *testing.T) {
 	}
 	if !parseEpoch("garbage").IsZero() || !parseEpoch(nil).IsZero() {
 		t.Error("bad epoch must be zero")
+	}
+}
+
+func TestMySQLSelfLookupAndStrippedRowsAreNotFound(t *testing.T) {
+	for _, glOn := range []int64{1, 0} {
+		af := newAuditFake()
+		af.glOn = glOn
+		uh := "svc_dbsim_probe[svc_dbsim_probe] @ h [1.1.1.1]"
+		if glOn == 0 {
+			uh = "svc_dbsim_probe"
+		}
+		lookupSub := "SELECT UNIX_TIMESTAMP(event_time), user_host, argument FROM mysql.general_log WHERE argument LIKE '%" + auditMarker + "%'"
+		af.rows = [][]any{
+			// the collector's own prepared Execute with the marker substituted: meta-tagged
+			glRow(1, uh, dbprobe.MetaStatementTag+" "+lookupSub),
+			// the same lookup as seen through a path that stripped the leading comment
+			glRow(2, uh, lookupSub),
+			// the probe statement with its leading comment stripped by the log path
+			glRow(3, uh, "SELECT User FROM mysql.user -- "+auditMarker),
+			// marker only inside another run's WHERE clause
+			glRow(4, uh, dbprobe.MarkerComment("OTHER")+" SELECT 1 WHERE x = '"+dbprobe.MarkerComment(auditMarker)+"'"),
+		}
+		a := discovered(t, af)
+		ev, err := a.CollectAudit(context.Background(), auditQ())
+		if got := dbprobe.AuditStatusOf(ev, err); got != "absent" || len(ev) != 0 {
+			t.Fatalf("glOn=%d: self/stripped rows must never be found: %s %+v", glOn, got, ev)
+		}
+	}
+}
+
+func TestMySQLSentinelRunsReadOnlyBeforeTheLookup(t *testing.T) {
+	af := newAuditFake()
+	af.rows = [][]any{glRow(2, "svc_dbsim_probe[svc_dbsim_probe] @ h [1.1.1.1]", dbprobe.MarkerComment(auditMarker)+" SELECT 1")}
+	a := discovered(t, af)
+	af.calls = nil
+	ev, err := a.CollectAudit(context.Background(), auditQ())
+	if err != nil || len(ev) != 1 {
+		t.Fatalf("%v %v", err, ev)
+	}
+	sentinelIdx, firstPoll, lookupIdx := -1, -1, -1
+	for i, c := range af.calls {
+		switch {
+		case strings.Contains(c.sql, "/* dbsim:dbsim-sync:") && strings.HasSuffix(c.sql, " SELECT 1"):
+			sentinelIdx = i
+		case strings.Contains(c.sql, sqlGLEvents):
+			if firstPoll < 0 {
+				firstPoll = i
+			}
+			lookupIdx = i
+		}
+	}
+	if sentinelIdx < 0 || firstPoll < 0 || !(sentinelIdx < firstPoll && firstPoll < lookupIdx) {
+		t.Fatalf("order sentinel=%d poll=%d lookup=%d", sentinelIdx, firstPoll, lookupIdx)
+	}
+	if af.calls[0].sql != "START TRANSACTION READ ONLY" || af.calls[sentinelIdx-1].sql != "SET SESSION max_execution_time = 30000" ||
+		af.calls[sentinelIdx-2].sql != "START TRANSACTION READ ONLY" || af.calls[sentinelIdx+1].sql != "ROLLBACK" {
+		t.Fatalf("sentinel not read-only wrapped: %+v", af.calls[:sentinelIdx+2])
+	}
+	if len(af.sleeps) != 0 {
+		t.Fatalf("sentinel visible at once must not sleep: %v", af.sleeps)
+	}
+}
+
+func TestMySQLLagCatchUpNeverAndCancel(t *testing.T) {
+	af := newAuditFake()
+	af.lag = 3
+	af.rows = [][]any{glRow(2, "svc_dbsim_probe[svc_dbsim_probe] @ h [1.1.1.1]", dbprobe.MarkerComment(auditMarker)+" SELECT 1")}
+	a := discovered(t, af)
+	ev, err := a.CollectAudit(context.Background(), auditQ())
+	if err != nil || len(ev) != 1 || len(af.sleeps) != 3 {
+		t.Fatalf("lag: %v %v sleeps=%v", err, ev, af.sleeps)
+	}
+	af = newAuditFake()
+	af.never = true
+	a = discovered(t, af)
+	ev, err = a.CollectAudit(context.Background(), auditQ())
+	if dbprobe.AuditStatusOf(ev, err) != "incomplete" || !strings.Contains(err.Error(), "did not catch up") || af.polls > 10 {
+		t.Fatalf("never: %v %v polls=%d", ev, err, af.polls)
+	}
+	af = newAuditFake()
+	af.never = true
+	ctx, cancel := context.WithCancel(context.Background())
+	af.cancel = cancel
+	a = discovered(t, af)
+	ev, err = a.CollectAudit(ctx, auditQ())
+	if dbprobe.AuditStatusOf(ev, err) != "error" || !errors.Is(err, context.Canceled) || af.polls != 1 {
+		t.Fatalf("cancel: %v %v polls=%d", ev, err, af.polls)
+	}
+}
+
+func TestMySQLDiscoveryHasItsOwnFiveSecondBudget(t *testing.T) {
+	af := newAuditFake()
+	_ = discovered(t, af)
+	if af.calls[1].sql != "SET SESSION max_execution_time = 5000" {
+		t.Fatalf("discovery time limit %q, want 5000 ms", af.calls[1].sql)
+	}
+}
+
+func TestMySQLDiscoveryErrorClasses(t *testing.T) {
+	for _, no := range []uint16{3024, 1317, 1053, 2013} {
+		t.Run(fmt.Sprint("fatal ", no), func(t *testing.T) {
+			af := newAuditFake()
+			af.consumersErr = &drv.MySQLError{Number: no, Message: "Query execution was interrupted"}
+			b := discovered(t, af)
+			c := b.Capabilities()
+			if len(c.AuditSources) != 0 || c.AuditError == "" || !strings.Contains(c.AuditError, fmt.Sprint(no)) {
+				t.Fatalf("caps %+v", c)
+			}
+			if !strings.Contains(strings.Join(c.Notes, "|"), fmt.Sprint(no)) {
+				t.Fatalf("notes must carry the errno: %v", c.Notes)
+			}
+			ev, err := b.CollectAudit(context.Background(), auditQ())
+			if dbprobe.AuditStatusOf(ev, err) != "error" || errors.Is(err, dbprobe.ErrAuditUnsupported) {
+				t.Fatalf("must be error, not unsupported: %v", err)
+			}
+		})
+	}
+	// ordinary server errors degrade to no source; the errno is carried in Notes
+	af := newAuditFake()
+	af.glOn = 0
+	af.consumersErr = &drv.MySQLError{Number: 1142, Message: "denied"}
+	b := discovered(t, af)
+	if c := b.Capabilities(); c.AuditError != "" || len(c.AuditSources) != 0 || !strings.Contains(strings.Join(c.Notes, "|"), "1142") {
+		t.Fatalf("caps %+v", b.Capabilities())
+	}
+	// transport and context failures abort discovery
+	af = newAuditFake()
+	af.consumersErr = errors.New("driver: bad connection")
+	a := &Adapter{s: af.fakeSession, mode: dbprobe.ModeClient}
+	if err := a.discoverAudit(context.Background()); err == nil {
+		t.Fatal("transport failure must abort")
+	}
+	af = newAuditFake()
+	af.consumersErr = context.DeadlineExceeded
+	a = &Adapter{s: af.fakeSession, mode: dbprobe.ModeClient}
+	if err := a.discoverAudit(context.Background()); err == nil {
+		t.Fatal("context failure must abort")
 	}
 }
 

@@ -77,6 +77,8 @@ type Adapter struct {
 	// CollectAudit read the cache and never query to answer.
 	auditSources []string
 	auditNotes   []string
+	auditErr     string            // discovery hit a server timeout/shutdown: audit status is error
+	auditSync    dbprobe.AuditSync // injectable clock/sleep for the catch-up wait (zero = real)
 }
 
 // String and GoString never print connection details or secrets.
@@ -229,7 +231,7 @@ func (a *Adapter) require() error {
 // Default limits for metadata reads (identity, roles, grants).
 var metaLimits = dbprobe.Limits{MaxRows: 10000, TimeoutSec: 30, MaxConns: 1}
 
-const metaMarker = "dbsim-meta"
+const metaMarker = dbprobe.MetaMarker
 
 // inTxn runs fn inside BEGIN READ ONLY (always, for read-only work) with the
 // statement timeout and marker-derived application_name applied, then
@@ -374,6 +376,7 @@ func (a *Adapter) Capabilities() dbprobe.Capabilities {
 	if len(a.auditSources) > 0 {
 		c.AuditSources = append([]string(nil), a.auditSources...)
 	}
+	c.AuditError = a.auditErr
 	c.Notes = append(c.Notes, a.auditNotes...)
 	return c
 }
@@ -395,15 +398,7 @@ func beginStmt(mode dbprobe.ExecMode, class dbprobe.ProbeClass) string {
 	return "BEGIN"
 }
 
-var unsafeMarker = regexp.MustCompile(`[^A-Za-z0-9._:-]`)
-
-func sanitizeMarker(m string, max int) string {
-	m = unsafeMarker.ReplaceAllString(m, "_")
-	if len(m) > max {
-		m = m[:max]
-	}
-	return m
-}
+func sanitizeMarker(m string, max int) string { return dbprobe.SanitizeMarker(m, max) }
 
 // appNameFor derives a safe application_name (<= 63 bytes) from the marker.
 func appNameFor(marker string) string {
@@ -416,13 +411,7 @@ func appNameFor(marker string) string {
 
 // markerComment is the leading SQL comment carrying the marker. The marker is
 // sanitized so it cannot terminate the comment.
-func markerComment(marker string) string {
-	m := sanitizeMarker(marker, 120)
-	if m == "" {
-		m = "none"
-	}
-	return "/* dbsim:" + m + " */"
-}
+func markerComment(marker string) string { return dbprobe.MarkerComment(marker) }
 
 // applyTxnSettings sets the per-transaction statement timeout and the
 // marker-derived application_name. Must run inside the probe transaction.

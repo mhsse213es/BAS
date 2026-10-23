@@ -33,6 +33,7 @@ type fakeDBAdapter struct {
 
 	// audit scripting (Task 9)
 	auditSources     []string
+	auditError       string
 	auditFn          func(ctx context.Context, q dbprobe.AuditQuery) ([]dbprobe.AuditEvent, error)
 	auditQueries     []dbprobe.AuditQuery
 	auditHadDeadline bool
@@ -92,9 +93,9 @@ func (f *fakeDBAdapter) Cleanup(context.Context, dbprobe.Fixture) (dbprobe.Clean
 }
 func (f *fakeDBAdapter) Capabilities() dbprobe.Capabilities {
 	if f.capsSet {
-		return dbprobe.Capabilities{ProbeIDs: f.caps, AuditSources: f.auditSources}
+		return dbprobe.Capabilities{ProbeIDs: f.caps, AuditSources: f.auditSources, AuditError: f.auditError}
 	}
-	return dbprobe.Capabilities{ProbeIDs: dbprobe.ProbeIDs(), AuditSources: f.auditSources}
+	return dbprobe.Capabilities{ProbeIDs: dbprobe.ProbeIDs(), AuditSources: f.auditSources, AuditError: f.auditError}
 }
 func (f *fakeDBAdapter) Close() error { f.rec("Close"); f.closeCalled = true; return nil }
 

@@ -1,6 +1,7 @@
 package dbprobe
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -134,6 +135,230 @@ func TestAuditStatusOf(t *testing.T) {
 		if got := AuditStatusOf(c.evs, c.err); got != c.want {
 			t.Errorf("%s: got %q want %q", c.name, got, c.want)
 		}
+	}
+}
+
+func TestMarkerCommentIsTheSingleSourceOfTruth(t *testing.T) {
+	if got := MarkerComment("a b/c"); got != "/* dbsim:a_b_c */" {
+		t.Fatalf("got %q", got)
+	}
+	if MarkerComment("") != "/* dbsim:none */" {
+		t.Fatal("empty marker comment")
+	}
+	if MetaStatementTag != MarkerComment(MetaMarker) {
+		t.Fatalf("meta tag %q != MarkerComment(MetaMarker) %q", MetaStatementTag, MarkerComment(MetaMarker))
+	}
+}
+
+// Positive identification: an event is the probe's own statement only if its
+// text BEGINS with the probe's marker comment.
+func TestNormalizeAuditPositiveIdentification(t *testing.T) {
+	mk := func(s string) AuditEvent { return AuditEvent{Time: time.Now(), Principal: "u", Statement: s} }
+	own := MarkerComment("RUN-1")
+	cases := []struct {
+		name string
+		stmt string
+		want bool
+	}{
+		{"probe statement comment-led", own + " SELECT 1", true},
+		{"leading whitespace tolerated", "  \n" + own + " SELECT 1", true},
+		{"collector lookup with comment stripped (marker substituted into LIKE)", "SELECT UNIX_TIMESTAMP(event_time), user_host, argument FROM mysql.general_log WHERE argument LIKE '%RUN-1%'", false},
+		{"marker merely inside a WHERE clause", MarkerComment("OTHER") + " SELECT 1 WHERE x = '" + own + "'", false},
+		{"another run's marker comment", MarkerComment("RUN-2") + " SELECT 1", false},
+		{"prefix-sharing marker is another run", MarkerComment("RUN-10") + " SELECT 1", false},
+		{"meta tagged lookup", MetaStatementTag + " SELECT 1 WHERE m LIKE '%RUN-1%'", false},
+		{"probe-led but references general_log", own + " SELECT * FROM mysql.general_log", false},
+		{"probe-led but references history_long", own + " SELECT * FROM performance_schema.events_statements_history_long", false},
+		{"probe-led but references pg_log", own + " SELECT * FROM x.PG_LOG", false},
+		{"probe-led but references dbsim_audit", own + " SELECT to_regclass('dbsim_audit.v')", false},
+		{"unmarked", "select 1", false},
+	}
+	for _, c := range cases {
+		got, err := NormalizeAudit(AuditQuery{Marker: "RUN-1"}, []AuditEvent{mk(c.stmt)}, ident, false)
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if (len(got) == 1) != c.want {
+			t.Errorf("%s: counted=%v want %v", c.name, len(got) == 1, c.want)
+		}
+	}
+}
+
+// ---- sync sentinel ----
+
+type syncRig struct {
+	now        time.Time
+	sleeps     []time.Duration
+	fetches    []string
+	visibleAt  int // sentinel visible from this sentinel-poll number (1-based); 0 = never
+	polls      int
+	lookup     []AuditEvent
+	covered    bool
+	sentinelOK error
+	fetchErr   error
+	cancel     func()
+}
+
+const sentinelMarker = "dbsim-sync:abc"
+
+func (r *syncRig) sync() AuditSync {
+	return AuditSync{
+		Now: func() time.Time { return r.now },
+		Sleep: func(ctx context.Context, d time.Duration) error {
+			r.sleeps = append(r.sleeps, d)
+			r.now = r.now.Add(d)
+			if r.cancel != nil {
+				r.cancel()
+			}
+			return ctx.Err()
+		},
+	}
+}
+
+func (r *syncRig) sentinel(ctx context.Context) (string, error) { return sentinelMarker, r.sentinelOK }
+
+func (r *syncRig) fetch(ctx context.Context, marker string, q AuditQuery) (AuditFetch, error) {
+	r.fetches = append(r.fetches, marker)
+	if r.fetchErr != nil {
+		return AuditFetch{}, r.fetchErr
+	}
+	if marker == sentinelMarker {
+		r.polls++
+		if r.visibleAt > 0 && r.polls >= r.visibleAt {
+			return AuditFetch{Raw: []AuditEvent{{Time: r.now, Principal: "u", Statement: MarkerComment(sentinelMarker) + " SELECT 1"}}, Covered: true}, nil
+		}
+		return AuditFetch{Covered: true}, nil
+	}
+	// the lookup: only sees events once the source caught up
+	if r.visibleAt > 0 {
+		return AuditFetch{Raw: r.lookup, Covered: r.covered}, nil
+	}
+	return AuditFetch{Covered: r.covered}, nil
+}
+
+func newRig(visibleAt int) *syncRig {
+	return &syncRig{now: time.Unix(1700000000, 0), visibleAt: visibleAt, covered: true,
+		lookup: []AuditEvent{{Time: time.Unix(1700000000, 0), Principal: "u", Statement: MarkerComment("RUN-1") + " SELECT 1"}}}
+}
+
+func TestSyncSentinelVisibleAtOnceNeverSleeps(t *testing.T) {
+	r := newRig(1)
+	ev, err := CollectWithSync(context.Background(), AuditQuery{Marker: "RUN-1"}, r.sentinel, r.fetch, ident, r.sync())
+	if err != nil || len(ev) != 1 {
+		t.Fatalf("%v %+v", err, ev)
+	}
+	if len(r.sleeps) != 0 {
+		t.Fatalf("a synchronous source must not sleep: %v", r.sleeps)
+	}
+	if len(r.fetches) != 2 || r.fetches[0] != sentinelMarker || r.fetches[1] != "RUN-1" {
+		t.Fatalf("fetch order %v", r.fetches)
+	}
+}
+
+func TestSyncLagThenCatchUpFindsAndAbsentIsOnlyAfterCatchUp(t *testing.T) {
+	r := newRig(4) // visible on the 4th poll
+	ev, err := CollectWithSync(context.Background(), AuditQuery{Marker: "RUN-1"}, r.sentinel, r.fetch, ident, r.sync())
+	if err != nil || len(ev) != 1 {
+		t.Fatalf("found after lag: %v %+v", err, ev)
+	}
+	if len(r.sleeps) != 3 || r.sleeps[0] != 250*time.Millisecond || r.sleeps[1] != 500*time.Millisecond || r.sleeps[2] != time.Second {
+		t.Fatalf("poll backoff %v", r.sleeps)
+	}
+	r2 := newRig(2)
+	r2.lookup = nil
+	ev, err = CollectWithSync(context.Background(), AuditQuery{Marker: "RUN-1"}, r2.sentinel, r2.fetch, ident, r2.sync())
+	if AuditStatusOf(ev, err) != "absent" {
+		t.Fatalf("caught-up empty lookup must be absent: %v %v", ev, err)
+	}
+}
+
+func TestSyncNeverCatchesUpIsIncompleteNotAbsent(t *testing.T) {
+	r := newRig(0)
+	r.lookup = nil
+	ev, err := CollectWithSync(context.Background(), AuditQuery{Marker: "RUN-1"}, r.sentinel, r.fetch, ident, r.sync())
+	if got := AuditStatusOf(ev, err); got != "incomplete" {
+		t.Fatalf("got %s (%v)", got, err)
+	}
+	if !strings.Contains(err.Error(), "did not catch up") {
+		t.Fatalf("reason: %v", err)
+	}
+	var total time.Duration
+	for _, d := range r.sleeps {
+		total += d
+	}
+	if total < 5*time.Second || total > 6*time.Second || r.polls > 10 {
+		t.Fatalf("polling not bounded: total sleep %v polls %d", total, r.polls)
+	}
+}
+
+func TestSyncFoundButNotCaughtUpIsIncompleteWithEvents(t *testing.T) {
+	r := newRig(0)
+	fetch := func(ctx context.Context, marker string, q AuditQuery) (AuditFetch, error) {
+		if marker == sentinelMarker {
+			return AuditFetch{Covered: true}, nil
+		}
+		return AuditFetch{Raw: r.lookup, Covered: true}, nil
+	}
+	ev, err := CollectWithSync(context.Background(), AuditQuery{Marker: "RUN-1"}, r.sentinel, fetch, ident, r.sync())
+	if len(ev) != 1 || AuditStatusOf(ev, err) != "incomplete" {
+		t.Fatalf("%v %v", ev, err)
+	}
+}
+
+func TestSyncContextCancelStopsPolling(t *testing.T) {
+	r := newRig(0)
+	ctx, cancel := context.WithCancel(context.Background())
+	r.cancel = cancel
+	ev, err := CollectWithSync(ctx, AuditQuery{Marker: "RUN-1"}, r.sentinel, r.fetch, ident, r.sync())
+	if AuditStatusOf(ev, err) != "error" || !errors.Is(err, context.Canceled) {
+		t.Fatalf("%v %v", ev, err)
+	}
+	if len(r.sleeps) != 1 || r.polls != 1 {
+		t.Fatalf("polling must stop at cancel: sleeps %v polls %d", r.sleeps, r.polls)
+	}
+}
+
+func TestSyncErrorsAreErrorsNeverAbsent(t *testing.T) {
+	r := newRig(1)
+	r.sentinelOK = errors.New("sentinel failed")
+	ev, err := CollectWithSync(context.Background(), AuditQuery{Marker: "RUN-1"}, r.sentinel, r.fetch, ident, r.sync())
+	if AuditStatusOf(ev, err) != "error" {
+		t.Fatalf("sentinel failure: %v", err)
+	}
+	r = newRig(1)
+	r.fetchErr = errors.New("source unreadable")
+	ev, err = CollectWithSync(context.Background(), AuditQuery{Marker: "RUN-1"}, r.sentinel, r.fetch, ident, r.sync())
+	if AuditStatusOf(ev, err) != "error" {
+		t.Fatalf("poll failure: %v", err)
+	}
+}
+
+func TestSyncUncoveredWindowIsIncompleteAfterCatchUp(t *testing.T) {
+	r := newRig(1)
+	r.covered = false
+	r.lookup = nil
+	ev, err := CollectWithSync(context.Background(), AuditQuery{Marker: "RUN-1"}, r.sentinel, r.fetch, ident, r.sync())
+	if AuditStatusOf(ev, err) != "incomplete" {
+		t.Fatalf("%v %v", ev, err)
+	}
+}
+
+func TestSyncSentinelStatementsAreNeverReturnedAsEvents(t *testing.T) {
+	r := newRig(1)
+	r.lookup = []AuditEvent{
+		{Time: r.now, Principal: "u", Statement: MarkerComment(sentinelMarker) + " SELECT 1"},
+		{Time: r.now, Principal: "u", Statement: MarkerComment("RUN-1") + " SELECT 1"},
+	}
+	ev, err := CollectWithSync(context.Background(), AuditQuery{Marker: "RUN-1"}, r.sentinel, r.fetch, ident, r.sync())
+	if err != nil || len(ev) != 1 || strings.Contains(ev[0].Statement, "dbsim-sync") {
+		t.Fatalf("%v %+v", err, ev)
+	}
+}
+
+func TestNewSentinelMarkerIsRandomAndTagged(t *testing.T) {
+	a, b := NewSentinelMarker(), NewSentinelMarker()
+	if a == b || !strings.HasPrefix(a, SyncMarkerPrefix) || SanitizeMarker(a, 120) != a {
+		t.Fatalf("%q %q", a, b)
 	}
 }
 

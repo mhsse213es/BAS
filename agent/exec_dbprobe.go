@@ -293,7 +293,14 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 // (which the probe may have mostly used up).
 func collectDBAudit(ctx context.Context, ad dbprobe.Adapter, spec protocol.DBProbeSpec, principal string,
 	probeStart, probeEnd time.Time, res *protocol.DBProbeResult, secrets ...string) []dbprobe.AuditEvent {
-	if len(ad.Capabilities().AuditSources) == 0 {
+	if caps := ad.Capabilities(); len(caps.AuditSources) == 0 {
+		if caps.AuditError != "" {
+			// Discovery met a server timeout/shutdown: the audit state is
+			// unknown, which is an error, never "unsupported".
+			res.AuditStatus = protocol.DBAuditError
+			res.Notes = append(res.Notes, "audit: "+scrubAll(caps.AuditError, secrets...))
+			return nil
+		}
 		res.AuditStatus = protocol.DBAuditUnsupported
 		return nil
 	}

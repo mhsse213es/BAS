@@ -33,10 +33,32 @@ type auditFake struct {
 	covered  bool
 	rows     [][]any
 	evErr    error
+
+	// sync sentinel scripting: the sentinel statement becomes visible after
+	// `lag` polls (never when `never`); the clock and sleep are fake.
+	lag, polls int
+	never      bool
+	now        time.Time
+	sleeps     []time.Duration
+	cancel     func()
+}
+
+func (af *auditFake) syncEnv() dbprobe.AuditSync {
+	return dbprobe.AuditSync{
+		Now: func() time.Time { return af.now },
+		Sleep: func(ctx context.Context, d time.Duration) error {
+			af.sleeps = append(af.sleeps, d)
+			af.now = af.now.Add(d)
+			if af.cancel != nil {
+				af.cancel()
+			}
+			return ctx.Err()
+		},
+	}
 }
 
 func newAuditFake() *auditFake {
-	af := &auditFake{covered: true}
+	af := &auditFake{covered: true, now: time.Unix(1700000000, 0)}
 	af.fakeSession = &fakeSession{}
 	af.fakeSession.queryFn = func(sql string, args []any) ([][]any, error) {
 		switch {
@@ -51,6 +73,14 @@ func newAuditFake() *auditFake {
 			if af.evErr != nil {
 				return nil, af.evErr
 			}
+			if pat, _ := args[2].(string); strings.Contains(pat, "dbsim-sync:") {
+				af.polls++
+				if af.never || af.polls <= af.lag {
+					return nil, nil
+				}
+				m := strings.Trim(pat, "%")
+				return [][]any{{auditSince, "svc_dbsim_probe", "statement: " + dbprobe.MarkerComment(m) + " SELECT 1"}}, nil
+			}
 			return af.rows, nil
 		}
 		return nil, nil
@@ -64,7 +94,7 @@ func auditRow(sec int, user, stmt string) []any {
 
 func discovered(t *testing.T, af *auditFake) *Adapter {
 	t.Helper()
-	a := &Adapter{s: af.fakeSession, mode: dbprobe.ModeClient, secrets: []string{"hunter2-secret"}}
+	a := &Adapter{s: af.fakeSession, mode: dbprobe.ModeClient, secrets: []string{"hunter2-secret"}, auditSync: af.syncEnv()}
 	if err := a.discoverAudit(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -390,6 +420,172 @@ func TestReadAuditConfigReportsSettingsAndCoverage(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPGStatementTextStripsOnlyKnownLogPrefixes(t *testing.T) {
+	c := dbprobe.MarkerComment("M")
+	for in, want := range map[string]string{
+		"statement: " + c + " SELECT 1":           c + " SELECT 1",
+		"execute <unnamed>: " + c + " SELECT 1":   c + " SELECT 1",
+		"execute S_1: " + c + " SELECT 1":         c + " SELECT 1",
+		c + " SELECT 1":                           c + " SELECT 1",
+		"AUDIT: SESSION,1,1,READ,SELECT,,," + c:   "AUDIT: SESSION,1,1,READ,SELECT,,," + c, // pgaudit: not identifiable
+		"duration: 1.2 ms  statement: " + c + "x": "duration: 1.2 ms  statement: " + c + "x",
+	} {
+		if got := pgStatementText(in); got != want {
+			t.Errorf("pgStatementText(%q)=%q want %q", in, got, want)
+		}
+	}
+}
+
+func TestPGAuditSelfLookupAndStrippedRowsAreNotFound(t *testing.T) {
+	af := newAuditFake()
+	af.rows = [][]any{
+		// the collector's own lookup, comment-led with the meta tag, marker in the text
+		auditRow(1, "svc_dbsim_probe", dbprobe.MetaStatementTag+" SELECT log_time FROM dbsim_audit.pg_log WHERE message LIKE '%"+auditMarker+"%'"),
+		// a log path that stripped the leading comment from the probe statement
+		auditRow(2, "svc_dbsim_probe", "SELECT rolname FROM pg_roles -- "+auditMarker),
+		// the marker only inside a WHERE clause of another run's statement
+		auditRow(3, "svc_dbsim_probe", dbprobe.MarkerComment("OTHER")+" SELECT 1 WHERE x = '"+dbprobe.MarkerComment(auditMarker)+"'"),
+	}
+	a := discovered(t, af)
+	ev, err := a.CollectAudit(context.Background(), auditQ())
+	if got := dbprobe.AuditStatusOf(ev, err); got != "absent" || len(ev) != 0 {
+		t.Fatalf("self/stripped rows must never be found: %s %+v", got, ev)
+	}
+}
+
+func TestPGSentinelRunsReadOnlyBeforeTheLookup(t *testing.T) {
+	af := newAuditFake()
+	af.rows = [][]any{auditRow(2, "svc_dbsim_probe", dbprobe.MarkerComment(auditMarker)+" SELECT 1")}
+	a := discovered(t, af)
+	af.calls = nil
+	if _, err := a.CollectAudit(context.Background(), auditQ()); err != nil {
+		t.Fatal(err)
+	}
+	if af.calls[0].sql != "BEGIN READ ONLY" {
+		t.Fatalf("first %q", af.calls[0].sql)
+	}
+	sentinelIdx, firstPoll, lookupIdx := -1, -1, -1
+	for i, c := range af.calls {
+		switch {
+		case strings.Contains(c.sql, "/* dbsim:dbsim-sync:") && strings.HasSuffix(c.sql, " SELECT 1"):
+			sentinelIdx = i
+		case strings.Contains(c.sql, sqlAuditEvents):
+			if firstPoll < 0 {
+				firstPoll = i
+			}
+			lookupIdx = i
+		}
+	}
+	if sentinelIdx < 0 || firstPoll < 0 || !(sentinelIdx < firstPoll && firstPoll < lookupIdx) {
+		t.Fatalf("order sentinel=%d poll=%d lookup=%d: %+v", sentinelIdx, firstPoll, lookupIdx, af.calls)
+	}
+	// the sentinel sits inside its own BEGIN READ ONLY ... ROLLBACK
+	if af.calls[sentinelIdx-3].sql != "BEGIN READ ONLY" || af.calls[sentinelIdx+1].sql != "ROLLBACK" {
+		t.Fatalf("sentinel not read-only wrapped: %+v", af.calls[:sentinelIdx+2])
+	}
+	if !strings.Contains(af.calls[sentinelIdx-1].args[0].(string), "dbsim-sync:") {
+		t.Fatalf("application_name should carry the sentinel marker: %+v", af.calls[sentinelIdx-1])
+	}
+	for _, c := range af.calls {
+		if strings.Contains(c.sql, "dbsim-sync:") && strings.Contains(c.sql, "pg_log") {
+			t.Errorf("sentinel marker spliced into audit SQL: %q", c.sql)
+		}
+	}
+	if len(af.sleeps) != 0 {
+		t.Fatalf("sentinel visible at once must not sleep: %v", af.sleeps)
+	}
+}
+
+func TestPGLagThenCatchUpPollsWithBackoffNoRealSleep(t *testing.T) {
+	af := newAuditFake()
+	af.lag = 3
+	af.rows = [][]any{auditRow(2, "svc_dbsim_probe", dbprobe.MarkerComment(auditMarker)+" SELECT 1")}
+	a := discovered(t, af)
+	ev, err := a.CollectAudit(context.Background(), auditQ())
+	if err != nil || len(ev) != 1 {
+		t.Fatalf("%v %+v", err, ev)
+	}
+	if len(af.sleeps) != 3 || af.sleeps[0] != 250*time.Millisecond || af.sleeps[2] != time.Second {
+		t.Fatalf("sleeps %v", af.sleeps)
+	}
+}
+
+func TestPGNeverCatchesUpIsIncompleteAndBounded(t *testing.T) {
+	af := newAuditFake()
+	af.never = true
+	a := discovered(t, af)
+	ev, err := a.CollectAudit(context.Background(), auditQ())
+	if dbprobe.AuditStatusOf(ev, err) != "incomplete" || !strings.Contains(err.Error(), "did not catch up") {
+		t.Fatalf("%v %v", ev, err)
+	}
+	if af.polls > 10 {
+		t.Fatalf("unbounded polling: %d", af.polls)
+	}
+}
+
+func TestPGCancelDuringPollStopsAndIsError(t *testing.T) {
+	af := newAuditFake()
+	af.never = true
+	ctx, cancel := context.WithCancel(context.Background())
+	af.cancel = cancel
+	a := discovered(t, af)
+	ev, err := a.CollectAudit(ctx, auditQ())
+	if dbprobe.AuditStatusOf(ev, err) != "error" || !errors.Is(err, context.Canceled) || af.polls != 1 {
+		t.Fatalf("%v %v polls=%d", ev, err, af.polls)
+	}
+}
+
+func TestPGDiscoveryHasItsOwnFiveSecondBudget(t *testing.T) {
+	af := newAuditFake()
+	_ = discovered(t, af)
+	if af.calls[1].args[0] != "5000" {
+		t.Fatalf("discovery statement_timeout arg %v, want 5000", af.calls[1].args)
+	}
+}
+
+func TestPGDiscoveryErrorClasses(t *testing.T) {
+	// server-side timeout/shutdown => audit status error, recorded with the sqlstate
+	for _, code := range []string{"57014", "57P01", "57P02", "57P03"} {
+		t.Run("fatal "+code, func(t *testing.T) {
+			af := newAuditFake()
+			af.probeErr = &pgconn.PgError{Code: code, Message: "canceling statement due to statement timeout"}
+			b := discovered(t, af)
+			c := b.Capabilities()
+			if len(c.AuditSources) != 0 || c.AuditError == "" || !strings.Contains(c.AuditError, code) {
+				t.Fatalf("caps %+v", c)
+			}
+			if !strings.Contains(strings.Join(c.Notes, "|"), code) {
+				t.Fatalf("notes must carry the sqlstate: %v", c.Notes)
+			}
+			ev, err := b.CollectAudit(context.Background(), auditQ())
+			if dbprobe.AuditStatusOf(ev, err) != "error" || errors.Is(err, dbprobe.ErrAuditUnsupported) {
+				t.Fatalf("must be error, not unsupported: %v", err)
+			}
+		})
+	}
+	// ordinary server errors degrade to "no source", sqlstate carried in Notes
+	af := newAuditFake()
+	af.probeErr = &pgconn.PgError{Code: "42501", Message: "denied"}
+	b := discovered(t, af)
+	if c := b.Capabilities(); c.AuditError != "" || !strings.Contains(strings.Join(c.Notes, "|"), "42501") {
+		t.Fatalf("caps %+v", c)
+	}
+	// transport failure aborts discovery (connection state unknown)
+	af = newAuditFake()
+	af.probeErr = errors.New("connection reset by peer")
+	a := &Adapter{s: af.fakeSession, mode: dbprobe.ModeClient}
+	if err := a.discoverAudit(context.Background()); err == nil {
+		t.Fatal("transport failure must abort")
+	}
+	// context failure aborts discovery too
+	af = newAuditFake()
+	af.probeErr = context.DeadlineExceeded
+	a = &Adapter{s: af.fakeSession, mode: dbprobe.ModeClient}
+	if err := a.discoverAudit(context.Background()); err == nil {
+		t.Fatal("context failure must abort")
 	}
 }
 

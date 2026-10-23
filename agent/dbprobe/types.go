@@ -118,6 +118,10 @@ type Capabilities struct {
 	MarkerInAppName     bool     `json:"markerInAppName"`
 	MarkerInQueryText   bool     `json:"markerInQueryText"`
 	MarkerInAuditRecord bool     `json:"markerInAuditRecord"`
+	// AuditError is set when audit discovery itself failed in a way that must
+	// surface as audit status "error" (a server-side timeout or shutdown),
+	// as opposed to "no source" (unsupported). Empty otherwise.
+	AuditError string `json:"auditError,omitempty"`
 	// Notes states engine-specific limits and unverified assumptions that a
 	// consumer must not read as guarantees.
 	Notes []string `json:"notes,omitempty"`

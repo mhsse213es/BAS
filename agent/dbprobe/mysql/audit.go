@@ -67,6 +67,9 @@ const (
 
 var auditLimits = dbprobe.Limits{MaxRows: dbprobe.AuditMaxEvents + 1, TimeoutSec: 30, MaxConns: 1}
 
+// auditDiscoveryLimits is the Connect-time discovery budget: its own 5 seconds.
+var auditDiscoveryLimits = dbprobe.Limits{MaxRows: 16, TimeoutSec: 5, MaxConns: 1}
+
 var consumerNames = []string{"events_statements_current", "events_statements_history_long", "global_instrumentation", "thread_instrumentation"}
 
 // auditState is what discovery (and read_audit_config) observed.
@@ -76,6 +79,7 @@ type auditState struct {
 	consumers                map[string]string
 	consumersReadable        bool
 	glReadable, histReadable bool
+	serverErrs               []string // ordinary server errors met while probing, e.g. "general_log errno 1142"
 }
 
 func (s auditState) consumersOK() bool {
@@ -96,11 +100,6 @@ func (s auditState) glUsable() bool {
 
 func (s auditState) histUsable() bool { return s.psOn && s.consumersOK() && s.histReadable }
 
-func isMySQLErr(err error) bool {
-	var me *drv.MySQLError
-	return errors.As(err, &me)
-}
-
 // gatherAuditState runs the read-only detection queries. A server error
 // (privilege, missing table) means that surface is unreadable; any other
 // error is a real failure and is returned.
@@ -116,8 +115,7 @@ func (a *Adapter) gatherAuditState(ctx context.Context, comment string) (auditSt
 	st.glOn, st.logOutput, st.psOn = truthy(rows[0][0]), str(rows[0][1]), truthy(rows[0][2])
 	if st.psOn {
 		crow, err := a.s.Query(ctx, comment+sqlAuditConsumers, 16)
-		switch {
-		case err == nil:
+		if err == nil {
 			st.consumersReadable = true
 			st.consumers = map[string]string{}
 			for _, r := range crow {
@@ -125,39 +123,71 @@ func (a *Adapter) gatherAuditState(ctx context.Context, comment string) (auditSt
 					st.consumers[str(r[0])] = strings.ToUpper(str(r[1]))
 				}
 			}
-		case !isMySQLErr(err):
+		} else if err = st.soften("setup_consumers", err); err != nil {
 			return st, err
 		}
 	}
 	if _, err := a.s.Query(ctx, comment+sqlGLProbe, 1); err == nil {
 		st.glReadable = true
-	} else if !isMySQLErr(err) {
+	} else if err = st.soften("general_log", err); err != nil {
 		return st, err
 	}
 	if st.psOn {
 		if _, err := a.s.Query(ctx, comment+sqlHistProbe, 1); err == nil {
 			st.histReadable = true
-		} else if !isMySQLErr(err) {
+		} else if err = st.soften("events_statements_history_long", err); err != nil {
 			return st, err
 		}
 	}
 	return st, nil
 }
 
+// fatalAuditErrno reports server errors that mean a timeout, interruption or
+// shutdown (ER_QUERY_TIMEOUT, ER_SERVER_SHUTDOWN-family, ER_QUERY_INTERRUPTED
+// is 1317, 1053 server shutdown, 2013 lost connection): the audit state is
+// unknown, which is an error, not "no source".
+func fatalAuditErrno(n uint16) bool {
+	switch n {
+	case 3024, 1317, 1053, 2013:
+		return true
+	}
+	return false
+}
+
+// soften turns an ordinary server error (privilege, missing table) into a note
+// and nil, so that surface is simply unreadable. Fatal server errors and every
+// non-server (transport/context) error are returned unchanged.
+func (st *auditState) soften(surface string, err error) error {
+	var me *drv.MySQLError
+	if !errors.As(err, &me) || fatalAuditErrno(me.Number) {
+		return err
+	}
+	st.serverErrs = append(st.serverErrs, surface+" errno "+strconv.Itoa(int(me.Number)))
+	return nil
+}
+
 // discoverAudit finds the usable audit sources once per connection and caches
 // them for Capabilities. No usable source is not an error; a broken connection
 // is.
 func (a *Adapter) discoverAudit(ctx context.Context) error {
-	a.auditSources, a.auditNotes = nil, nil
+	a.auditSources, a.auditNotes, a.auditErr = nil, nil, ""
 	if err := a.require(); err != nil {
 		return err
 	}
 	var st auditState
-	err := a.inTxn(ctx, a.mode, dbprobe.ClassReadOnly, auditLimits, metaMarker, func(ctx context.Context, comment string) error {
+	err := a.inTxn(ctx, a.mode, dbprobe.ClassReadOnly, auditDiscoveryLimits, metaMarker, func(ctx context.Context, comment string) error {
 		var gerr error
 		st, gerr = a.gatherAuditState(ctx, comment)
 		return gerr
 	})
+	var me *drv.MySQLError
+	if errors.As(err, &me) && fatalAuditErrno(me.Number) {
+		// A server-side timeout/interruption/shutdown: the audit state is
+		// unknown. Recorded as an audit error, not as "no source".
+		a.auditErr = "audit discovery failed: server timeout or shutdown (errno " + strconv.Itoa(int(me.Number)) + ")"
+		a.auditNotes = []string{a.auditErr + ". Audit status is error, not unsupported."}
+		return nil
+	}
 	if err != nil {
 		var re *redactedError
 		if errors.As(err, &re) || strings.HasPrefix(err.Error(), "dbprobe/mysql:") {
@@ -175,9 +205,18 @@ func (a *Adapter) discoverAudit(ctx context.Context) error {
 		a.auditNotes = append(a.auditNotes,
 			"Audit source performance_schema.events_statements_history_long is a bounded ring buffer (performance_schema_events_statements_history_long_size): old events may already be evicted, which is reported as incomplete, never absent. It has no wall-clock column: event time is approximated as NOW() - Uptime + TIMER_START/1e12 (whole-second Uptime and the timer origin make it accurate to about a second or two, so the window is padded). The principal comes from performance_schema.threads and is unknown once the connection has ended. SQL_TEXT is cut at max_sql_text_length and comment preservation is unverified.")
 	}
-	if len(a.auditSources) == 0 {
+	if len(a.auditSources) > 0 {
 		a.auditNotes = append(a.auditNotes,
-			"No audit source: general_log is off or does not log to TABLE, and the performance_schema statement consumers are disabled or the tables are unreadable to this account. Audit status is unsupported (SKIPPED), never a pass.")
+			"The probe's own statement is identified ONLY by its leading marker comment. If the audit path strips or normalises that comment (some audit plugins and logs do), the statement is not identified and the status is absent/incomplete, never found.",
+			"Before concluding absent the collector runs a tagged sentinel statement and waits (up to 5 s, polling 250 ms rising to 1 s) until the sentinel is visible in the source; if it never appears the status is incomplete ('audit source did not catch up'). Both MySQL sources are synchronous, so the sentinel is normally visible at once.")
+	}
+	if len(a.auditSources) == 0 {
+		why := ""
+		if len(st.serverErrs) > 0 {
+			why = " (" + strings.Join(st.serverErrs, "; ") + ")"
+		}
+		a.auditNotes = append(a.auditNotes,
+			"No audit source: general_log is off or does not log to TABLE, and the performance_schema statement consumers are disabled or the tables are unreadable to this account"+why+". Audit status is unsupported (SKIPPED), never a pass.")
 	}
 	return nil
 }
@@ -193,6 +232,9 @@ func (a *Adapter) CollectAudit(ctx context.Context, q dbprobe.AuditQuery) ([]dbp
 		return nil, a.require()
 	}
 	if len(a.auditSources) == 0 {
+		if a.auditErr != "" {
+			return nil, errors.New("dbprobe/mysql: " + a.auditErr)
+		}
 		return nil, dbprobe.ErrAuditUnsupported
 	}
 	if err := a.require(); err != nil {
@@ -207,61 +249,74 @@ func (a *Adapter) CollectAudit(ctx context.Context, q dbprobe.AuditQuery) ([]dbp
 	}
 	q.Marker = marker
 	src := a.auditSources[0]
-	sinceSec := q.Since.UTC().Unix()
-	untilSec := q.Until.UTC().Unix()
-	if q.Until.UTC().Nanosecond() > 0 {
-		untilSec++
-	}
-	pattern := "%" + dbprobe.EscapeLike(marker) + "%"
-	limit := dbprobe.AuditMaxEvents + 1
-
-	coveredSQL, eventsSQL := sqlGLCovered, sqlGLEvents
-	eventArgs := []any{sinceSec, untilSec, pattern, limit}
-	if src == srcHistoryLong {
-		coveredSQL, eventsSQL = sqlHistCovered, sqlHistEvents
-		eventArgs = []any{pattern, sinceSec, untilSec, limit}
-	}
-	var covered bool
-	var rows [][]any
-	err := a.inTxn(ctx, a.mode, dbprobe.ClassReadOnly, auditLimits, metaMarker, func(ctx context.Context, comment string) error {
-		c, err := a.s.Query(ctx, comment+coveredSQL, 1, sinceSec)
-		if err != nil {
-			return err
-		}
-		if len(c) != 1 || len(c[0]) != 1 {
-			return errors.New("audit coverage query returned no row")
-		}
-		covered = truthy(c[0][0])
-		rows, err = a.s.Query(ctx, comment+eventsSQL, limit, eventArgs...)
-		return err
-	})
-	if err != nil {
+	wrap := func(err error) error {
 		var re *redactedError
 		if errors.As(err, &re) || strings.HasPrefix(err.Error(), "dbprobe/mysql:") {
-			return nil, err
+			return err
 		}
-		return nil, a.wrap("audit", err)
-	}
-	raw := make([]dbprobe.AuditEvent, 0, len(rows))
-	for _, r := range rows {
-		if len(r) < 3 {
-			continue
-		}
-		principal := str(r[1])
-		if src == srcGeneralLog {
-			principal = parseUserHost(principal)
-		}
-		raw = append(raw, dbprobe.AuditEvent{Time: parseEpoch(r[0]), Principal: principal, Statement: str(r[2]), Source: src})
+		return a.wrap("audit", err)
 	}
 	scrub := a.scrub
 	if scrub == nil {
 		scrub = newScrubber(nil)
 	}
-	events, nerr := dbprobe.NormalizeAudit(q, raw, scrub, len(rows) > dbprobe.AuditMaxEvents)
-	if !covered && nerr == nil {
-		nerr = &dbprobe.AuditIncompleteError{Reason: "audit source retains no entry at or before the window start (rotated, evicted or enabled mid-run)"}
+	// sentinel: one extra READ ONLY statement under its own random marker.
+	sentinel := func(ctx context.Context) (string, error) {
+		sm := dbprobe.NewSentinelMarker()
+		err := a.inTxn(ctx, a.mode, dbprobe.ClassReadOnly, auditLimits, sm, func(ctx context.Context, comment string) error {
+			_, qerr := a.s.Query(ctx, comment+"SELECT 1", 1)
+			return qerr
+		})
+		if err != nil {
+			return "", wrap(err)
+		}
+		return sm, nil
 	}
-	return events, nerr
+	fetch := func(ctx context.Context, m string, w dbprobe.AuditQuery) (dbprobe.AuditFetch, error) {
+		sinceSec := w.Since.UTC().Unix()
+		untilSec := w.Until.UTC().Unix()
+		if w.Until.UTC().Nanosecond() > 0 {
+			untilSec++
+		}
+		pattern := "%" + dbprobe.EscapeLike(m) + "%"
+		limit := dbprobe.AuditMaxEvents + 1
+		coveredSQL, eventsSQL := sqlGLCovered, sqlGLEvents
+		eventArgs := []any{sinceSec, untilSec, pattern, limit}
+		if src == srcHistoryLong {
+			coveredSQL, eventsSQL = sqlHistCovered, sqlHistEvents
+			eventArgs = []any{pattern, sinceSec, untilSec, limit}
+		}
+		var covered bool
+		var rows [][]any
+		err := a.inTxn(ctx, a.mode, dbprobe.ClassReadOnly, auditLimits, metaMarker, func(ctx context.Context, comment string) error {
+			c, err := a.s.Query(ctx, comment+coveredSQL, 1, sinceSec)
+			if err != nil {
+				return err
+			}
+			if len(c) != 1 || len(c[0]) != 1 {
+				return errors.New("audit coverage query returned no row")
+			}
+			covered = truthy(c[0][0])
+			rows, err = a.s.Query(ctx, comment+eventsSQL, limit, eventArgs...)
+			return err
+		})
+		if err != nil {
+			return dbprobe.AuditFetch{}, wrap(err)
+		}
+		raw := make([]dbprobe.AuditEvent, 0, len(rows))
+		for _, r := range rows {
+			if len(r) < 3 {
+				continue
+			}
+			principal := str(r[1])
+			if src == srcGeneralLog {
+				principal = parseUserHost(principal)
+			}
+			raw = append(raw, dbprobe.AuditEvent{Time: parseEpoch(r[0]), Principal: principal, Statement: str(r[2]), Source: src})
+		}
+		return dbprobe.AuditFetch{Raw: raw, Covered: covered, Overflow: len(rows) > dbprobe.AuditMaxEvents}, nil
+	}
+	return dbprobe.CollectWithSync(ctx, q, sentinel, fetch, scrub, a.auditSync)
 }
 
 // parseUserHost extracts the account from general_log.user_host, which has the

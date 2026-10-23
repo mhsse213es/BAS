@@ -57,20 +57,36 @@ const (
 // "absent" when pg_settings has no such row, e.g. pgaudit not loaded).
 var auditConfigKeys = []string{"log_destination", "log_statement", "logging_collector", "pgaudit.log", "shared_preload_libraries"}
 
-// auditLimits bounds discovery and collection (the executor's own deadline is
-// tighter or equal; the smaller one wins).
+// auditLimits bounds sentinel, polling and lookup transactions (the executor's
+// own deadline is tighter or equal; the smaller one wins).
 var auditLimits = dbprobe.Limits{MaxRows: dbprobe.AuditMaxEvents + 1, TimeoutSec: 30, MaxConns: 1}
 
+// auditDiscoveryLimits is the Connect-time discovery budget: its own 5 seconds,
+// so a slow or hung audit view cannot stall the connection.
+var auditDiscoveryLimits = dbprobe.Limits{MaxRows: 2, TimeoutSec: 5, MaxConns: 1}
+
+// fatalAuditSQLState reports SQLSTATEs that mean the server timed the
+// statement out or is shutting down: the audit state is unknown, which is an
+// error, not "no source".
+func fatalAuditSQLState(code string) bool {
+	switch code {
+	case "57014", "57P01", "57P02", "57P03":
+		return true
+	}
+	return false
+}
+
 // discoverAudit finds out, once per connection, whether the audit view is
-// usable, and caches the answer for Capabilities. A view that is missing or
-// unreadable is not an error (the target simply has no audit source); a broken
-// connection is.
+// usable, and caches the answer for Capabilities. Server-side errors degrade to
+// "no source" (sqlstate carried in the notes), except timeouts/shutdown which
+// are recorded as an audit error. Transport and context failures abort (the
+// connection state is unknown).
 func (a *Adapter) discoverAudit(ctx context.Context) error {
-	a.auditSources, a.auditNotes = nil, nil
+	a.auditSources, a.auditNotes, a.auditErr = nil, nil, ""
 	if err := a.require(); err != nil {
 		return err
 	}
-	err := a.inTxn(ctx, a.mode, dbprobe.ClassReadOnly, auditLimits, metaMarker, func(ctx context.Context, comment string) error {
+	err := a.inTxn(ctx, a.mode, dbprobe.ClassReadOnly, auditDiscoveryLimits, metaMarker, func(ctx context.Context, comment string) error {
 		_, qerr := a.s.Query(ctx, comment+sqlAuditProbe, 1)
 		return qerr
 	})
@@ -79,12 +95,18 @@ func (a *Adapter) discoverAudit(ctx context.Context) error {
 		a.auditNotes = []string{
 			"Audit source dbsim_audit.pg_log is an operator-provisioned view (the lab exposes the csvlog through file_fdw; documented columns log_time, user_name, database_name, command_tag, message), read with the test account's own privileges; its layout and refresh behaviour are unverified against a live server.",
 			"Marker evidence exists only if the server logs the statement text: log_statement='all' (or pgaudit with READ). With log_statement none/ddl/mod, reads are not logged and the collector reports absent; see read_audit_config.",
-			"csvlog is written asynchronously by the logging collector, so events can lag the statement; matching uses a padded time window and the marker, not the clock alone.",
+			"The probe's own statement is identified ONLY by its leading marker comment (after the log prefix 'statement: ' or 'execute <name>: '). If the log path strips or normalises that comment, or pgaudit AUDIT rows are the only record, the statement is not identified and the status is absent/incomplete, never found.",
+			"csvlog is written asynchronously by the logging collector: before concluding absent the collector runs a tagged sentinel statement and waits (up to 5 s, polling 250 ms rising to 1 s) until the sentinel is visible in the log; if it never appears the status is incomplete ('audit source did not catch up').",
 		}
 		return nil
 	}
 	var pe *pgconn.PgError
 	if errors.As(err, &pe) {
+		if fatalAuditSQLState(pe.Code) {
+			a.auditErr = fmt.Sprintf("audit discovery failed: server timeout or shutdown (sqlstate %s)", pe.Code)
+			a.auditNotes = []string{a.auditErr + ". Audit status is error, not unsupported."}
+			return nil
+		}
 		a.auditNotes = []string{fmt.Sprintf(
 			"No audit source: dbsim_audit.pg_log is absent, unreadable or has an unexpected layout (sqlstate %s). Audit status is unsupported (SKIPPED), never a pass.", pe.Code)}
 		return nil
@@ -107,6 +129,9 @@ func (a *Adapter) CollectAudit(ctx context.Context, q dbprobe.AuditQuery) ([]dbp
 		return nil, a.require()
 	}
 	if len(a.auditSources) == 0 {
+		if a.auditErr != "" {
+			return nil, errors.New("dbprobe/postgres: " + a.auditErr)
+		}
 		return nil, dbprobe.ErrAuditUnsupported
 	}
 	if err := a.require(); err != nil {
@@ -120,42 +145,72 @@ func (a *Adapter) CollectAudit(ctx context.Context, q dbprobe.AuditQuery) ([]dbp
 		return nil, errors.New("dbprobe/postgres: audit query needs a valid since/until window")
 	}
 	q.Marker = marker
-	since, until := q.Since.UTC().Format(time.RFC3339Nano), q.Until.UTC().Format(time.RFC3339Nano)
-	pattern := "%" + dbprobe.EscapeLike(marker) + "%"
-	limit := dbprobe.AuditMaxEvents + 1
-
-	var covered bool
-	var rows [][]any
-	err := a.inTxn(ctx, a.mode, dbprobe.ClassReadOnly, auditLimits, metaMarker, func(ctx context.Context, comment string) error {
-		c, err := a.s.Query(ctx, comment+sqlAuditCovered, 1, since)
-		if err != nil {
+	wrap := func(err error) error {
+		if strings.HasPrefix(err.Error(), "dbprobe/postgres:") {
 			return err
 		}
-		if len(c) != 1 || len(c[0]) != 1 {
-			return errors.New("audit coverage query returned no row")
-		}
-		covered, _ = c[0][0].(bool)
-		rows, err = a.s.Query(ctx, comment+sqlAuditEvents, limit, since, until, pattern, limit)
-		return err
-	})
-	if err != nil {
-		if strings.HasPrefix(err.Error(), "dbprobe/postgres:") {
-			return nil, err
-		}
-		return nil, wrapErr("audit", err, a.secrets...)
+		return wrapErr("audit", err, a.secrets...)
 	}
-	raw := make([]dbprobe.AuditEvent, 0, len(rows))
-	for _, r := range rows {
-		if len(r) < 3 {
-			continue
+	// sentinel: one extra READ ONLY statement under its own random marker.
+	sentinel := func(ctx context.Context) (string, error) {
+		sm := dbprobe.NewSentinelMarker()
+		err := a.inTxn(ctx, a.mode, dbprobe.ClassReadOnly, auditLimits, sm, func(ctx context.Context, comment string) error {
+			_, qerr := a.s.Query(ctx, comment+"SELECT 1", 1)
+			return qerr
+		})
+		if err != nil {
+			return "", wrap(err)
 		}
-		raw = append(raw, dbprobe.AuditEvent{Time: asTime(r[0]), Principal: str(r[1]), Statement: str(r[2]), Source: auditSourceName})
+		return sm, nil
 	}
-	events, nerr := dbprobe.NormalizeAudit(q, raw, func(s string) string { return redact(s, a.secrets...) }, len(rows) > dbprobe.AuditMaxEvents)
-	if !covered && nerr == nil {
-		nerr = &dbprobe.AuditIncompleteError{Reason: "audit log retains no entry at or before the window start (rotated, truncated or enabled mid-run)"}
+	fetch := func(ctx context.Context, m string, w dbprobe.AuditQuery) (dbprobe.AuditFetch, error) {
+		since, until := w.Since.UTC().Format(time.RFC3339Nano), w.Until.UTC().Format(time.RFC3339Nano)
+		pattern := "%" + dbprobe.EscapeLike(m) + "%"
+		limit := dbprobe.AuditMaxEvents + 1
+		var covered bool
+		var rows [][]any
+		err := a.inTxn(ctx, a.mode, dbprobe.ClassReadOnly, auditLimits, metaMarker, func(ctx context.Context, comment string) error {
+			c, err := a.s.Query(ctx, comment+sqlAuditCovered, 1, since)
+			if err != nil {
+				return err
+			}
+			if len(c) != 1 || len(c[0]) != 1 {
+				return errors.New("audit coverage query returned no row")
+			}
+			covered, _ = c[0][0].(bool)
+			rows, err = a.s.Query(ctx, comment+sqlAuditEvents, limit, since, until, pattern, limit)
+			return err
+		})
+		if err != nil {
+			return dbprobe.AuditFetch{}, wrap(err)
+		}
+		raw := make([]dbprobe.AuditEvent, 0, len(rows))
+		for _, r := range rows {
+			if len(r) < 3 {
+				continue
+			}
+			raw = append(raw, dbprobe.AuditEvent{Time: asTime(r[0]), Principal: str(r[1]), Statement: pgStatementText(str(r[2])), Source: auditSourceName})
+		}
+		return dbprobe.AuditFetch{Raw: raw, Covered: covered, Overflow: len(rows) > dbprobe.AuditMaxEvents}, nil
 	}
-	return events, nerr
+	return dbprobe.CollectWithSync(ctx, q, sentinel, fetch, func(s string) string { return redact(s, a.secrets...) }, a.auditSync)
+}
+
+// pgStatementText strips the server's log prefix from a csvlog message so the
+// statement text can be matched on its leading marker comment. Only the plain
+// prefixes "statement: " and "execute <name>: " are recognised; anything else
+// (duration lines, pgaudit AUDIT rows) is returned unchanged and therefore
+// never identified as a probe statement.
+func pgStatementText(msg string) string {
+	if s, ok := strings.CutPrefix(msg, "statement: "); ok {
+		return s
+	}
+	if rest, ok := strings.CutPrefix(msg, "execute "); ok {
+		if i := strings.Index(rest, ": "); i >= 0 && !strings.ContainsAny(rest[:i], "\n/") {
+			return rest[i+2:]
+		}
+	}
+	return msg
 }
 
 func asTime(v any) time.Time {

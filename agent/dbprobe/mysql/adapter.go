@@ -114,6 +114,8 @@ type Adapter struct {
 	// CollectAudit read the cache and never query to answer.
 	auditSources []string
 	auditNotes   []string
+	auditErr     string            // discovery hit a server timeout/shutdown: audit status is error
+	auditSync    dbprobe.AuditSync // injectable clock/sleep for the catch-up wait (zero = real)
 }
 
 // String and GoString never print connection details or secrets.
@@ -299,7 +301,7 @@ func (a *Adapter) wrap(op string, err error) error { return wrapErrWith(op, err,
 // Default limits for metadata reads (identity, roles, grants).
 var metaLimits = dbprobe.Limits{MaxRows: 10000, TimeoutSec: 30, MaxConns: 1}
 
-const metaMarker = "dbsim-meta"
+const metaMarker = dbprobe.MetaMarker
 
 // inTxn is the one place client-mode statements run. It issues
 // START TRANSACTION READ ONLY (always, for read-only work), sets the
@@ -504,6 +506,7 @@ func (a *Adapter) Capabilities() dbprobe.Capabilities {
 			"Identity is @@server_uuid; MariaDB lacks server_uuid and Identity returns an error there.",
 		},
 	}
+	c.AuditError = a.auditErr
 	c.Notes = append(c.Notes, a.auditNotes...)
 	if len(a.auditSources) > 0 {
 		c.AuditSources = append([]string(nil), a.auditSources...)
@@ -535,26 +538,12 @@ func timeLimitStmt(l dbprobe.Limits) string {
 	return "SET SESSION max_execution_time = " + strconv.Itoa(l.TimeoutSec*1000)
 }
 
-var unsafeMarker = regexp.MustCompile(`[^A-Za-z0-9._:-]`)
-
-func sanitizeMarker(m string, max int) string {
-	m = unsafeMarker.ReplaceAllString(m, "_")
-	if len(m) > max {
-		m = m[:max]
-	}
-	return m
-}
+func sanitizeMarker(m string, max int) string { return dbprobe.SanitizeMarker(m, max) }
 
 // markerComment is the leading SQL comment carrying the marker. The marker is
 // reduced to [A-Za-z0-9._:-] so it cannot terminate the comment or turn it
 // into an executable /*! ... */ comment (the "dbsim:" prefix always precedes it).
-func markerComment(marker string) string {
-	m := sanitizeMarker(marker, 120)
-	if m == "" {
-		m = "none"
-	}
-	return "/* dbsim:" + m + " */"
-}
+func markerComment(marker string) string { return dbprobe.MarkerComment(marker) }
 
 // RunProbe runs one named probe and returns observations only.
 func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbprobe.DBProbeSpec) (dbprobe.ProbeResult, error) {

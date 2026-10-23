@@ -93,6 +93,25 @@ func TestDBProbeAuditUnsupportedWhenAdapterHasNoSources(t *testing.T) {
 	}
 }
 
+// A discovery failure that is a server timeout/shutdown is an audit ERROR with
+// a Notes line, not "unsupported"; the probe observation is unaffected.
+func TestDBProbeAuditDiscoveryErrorIsErrorNotUnsupported(t *testing.T) {
+	fa := setupHappy(t)
+	fa.auditError = "audit discovery failed: server timeout or shutdown (sqlstate 57014) for " + testCredPassword
+	out, err := executeDBProbe(context.Background(), testDBProbeStep(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fa.count("CollectAudit") != 0 {
+		t.Fatal("no collection without a source")
+	}
+	r := out.Result
+	joined := strings.Join(r.Notes, "|")
+	if r.AuditStatus != protocol.DBAuditError || !strings.Contains(joined, "57014") || strings.Contains(joined, testCredPassword) || r.RowsRead != 3 {
+		t.Fatalf("result %+v", r)
+	}
+}
+
 func TestDBProbeAuditAbsentAndAdapterUnsupported(t *testing.T) {
 	fa := auditFake(t)
 	out, _ := executeDBProbe(context.Background(), testDBProbeStep(nil))
