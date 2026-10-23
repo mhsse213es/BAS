@@ -84,6 +84,9 @@
           </svg>
           Live Runs
         </div>
+        <div class="nav-item is-hidden" id="nav-k8s-scenarios" data-tab="k8s-scenarios" title="Kubernetes Scenarios" data-on-click="showTab" data-args="[&quot;k8s-scenarios&quot;]">
+          <span>Kubernetes Scenarios</span>
+        </div>
         <div class="nav-item is-hidden" id="nav-scheduled-assessments" data-tab="scheduled-assessments" title="Scheduled Assessments" data-on-click="showTab" data-args="[&quot;scheduled-assessments&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/>
@@ -1456,6 +1459,19 @@
       </div>
 
       <!-- Scheduled Assessments -->
+      <div id="tab-k8s-scenarios" class="is-hidden">
+        <div class="sec-hdr"><h2>Kubernetes Scenarios</h2></div>
+        <p class="muted">Kind lab only. Planning writes nothing. A run changes the cluster only after a different operator approves it, and only the requester can execute it.</p>
+        <div class="g1-display-flex">
+          <select id="k8s-action"><option value="pod-create-unprivileged">Create unprivileged pod (sandbox)</option><option value="configmap-patch-labelled">Patch labelled ConfigMap (sandbox)</option></select>
+          <input id="k8s-cluster" value="kind-bas-lab" aria-label="Cluster" />
+          <input id="k8s-namespace" value="bas-sandbox" aria-label="Namespace" />
+          <input id="k8s-param-name" placeholder="name" aria-label="Object name" />
+          <input id="k8s-param-value" placeholder="value (ConfigMap only)" aria-label="ConfigMap value" />
+          <button class="btn primary" data-k8s-plan="1">Plan run</button>
+        </div>
+        <div id="k8s-runs"></div>
+      </div>
       <div id="tab-scheduled-assessments" class="is-hidden">
         <div class="sec-hdr">
           <h2>Scheduled Assessments <span id="sched-cnt" class="cnt">0</span></h2>
