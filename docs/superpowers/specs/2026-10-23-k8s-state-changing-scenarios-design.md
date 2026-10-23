@@ -80,3 +80,27 @@ Actions that bind roles, escalate roles, or touch `nodes/proxy` are excluded fro
 - **2026-10-23, engine and write client:** `orchestrator/internal/k8sscenario`. Unit tests cover each gate, approval rejection, approval reuse, audit fail-closed, verification failure, rollback failure to `CLEANUP_FAILED`, rollback-verification catching a surviving object, and outcome-audit withholding. The HTTP client tests cover registry refusals sending no request, the token not appearing in errors, and an end-to-end run over HTTP.
 - **Lab run on kind-bas-lab, with the scenario ServiceAccount `bas-scenario/bas-scenario-runner` and its narrow RBAC:** dry run wrote nothing; approved pod run was verified and cleaned up; unapproved and self-approved runs were refused with no pod created; the ConfigMap patch was verified and restored to `original`. The sandbox was left with no pods and the fixture at its prior value.
 - **Not yet done:** rollback-failure against the real cluster (only the fake client exercises it), the console approval UI, and any production approval. This is still not approved for production use.
+
+## 12. Token-request action (design, built under owner instruction "go ahead")
+
+Scope: one action, `sa-token-probe`, lab only, sandbox namespace only.
+
+**What it does.** Mints a short-lived token (600 seconds) for the sandbox ServiceAccount `bas-sbx-token-probe` through the TokenRequest API, verifies the token authenticates as that ServiceAccount, then discards it. It proves the mint path works without granting any capability.
+
+**Why the target is a throwaway ServiceAccount.** `bas-sbx-token-probe` has no RBAC bindings. A token minted for it can authenticate but can do nothing. The alternative, minting for the scenario account itself, would let the scenario account mint credentials for its own permissions. That is refused.
+
+**Permissions added to the lab only.** The scenario Role gets `create` on `serviceaccounts/token`, restricted by `resourceNames: [bas-sbx-token-probe]`, in `bas-sandbox`. It can mint only for the probe ServiceAccount, and only there.
+
+**Redaction rules (binding).**
+1. The token is held in memory only, as a byte slice, for the verification step.
+2. It is never returned in an API response, a run record, the detail text, an audit field, a log line or an error string.
+3. The audit record holds the run ID, the ServiceAccount name, the expiry timestamp, and a SHA-256 fingerprint (first 16 hex characters) to link the event to the token without exposing it.
+4. Rollback overwrites the byte slice with zeros and drops the reference. The verify-rolled-back step confirms the reference is gone.
+
+**Revocation is not possible here.** The TokenRequest API cannot revoke a token. The token stays valid until `expirationSeconds` elapses, even after the engine discards it. The run therefore cannot report `CLEANED`. It ends in the new state `DISCARDED_NOT_REVOKED`, and the detail states the expiry time.
+
+**Parameters.** None. The action takes no parameters, so a run cannot choose a different target. A run that passes any parameter is refused.
+
+**Stop conditions.** The ServiceAccount is missing, carries RBAC bindings, or lacks the sandbox label: refuse before minting. The minted identity does not match the expected username: fail verification and discard.
+
+**Acceptance (lab).** Plan writes nothing; live run mints, verifies the probe identity, discards, and ends `DISCARDED_NOT_REVOKED`; the audit record has no token text; the expiry is shown; the probe ServiceAccount still has no bindings afterwards.
