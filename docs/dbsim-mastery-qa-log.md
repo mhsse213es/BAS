@@ -557,3 +557,146 @@ dials with a restricted account.
 **Status:** MySQL DB-06 remains UNVERIFIED until re-run on staging.
 
 **Independent cleanup check after the second live run (2026-10-23, run by the user on staging, `E2E.md` section 8): VERIFIED clean on both engines.** PostgreSQL: only `dbsim_audit` schema, roles `dbsim_lab` and `dbsim_test`. MySQL: databases `bas_dbsim`, `dbsim` and system databases only; accounts `dbsim_lab`, `dbsim_test` only. This includes the MySQL throwaway account that DB-06 created before its baseline failed (error 1044): the failure-mid-run cleanup path dropped it on a real database. DB-06 on PostgreSQL passed (Blocked, Telemetry Unverifiable, Response NotTested, cleanup ok); DB-07 passed on both engines (Classification Correct, exact_marker, second rule, `dbsim.touches_classified` field and the exact rule name verified live).
+
+## Task 15: DB-08 audit tamper resistance, DB-10 write/delete prevention, DB-11 backup/export permissions (lab only)
+
+**Status: built and unit-tested; NOTHING database- or SIEM-dependent is verified.**
+No live database or Docker was available; every behaviour that needs a real
+PostgreSQL/MySQL or the lab SIEM is UNVERIFIED and listed below. Do not quote
+these three scenarios as proven.
+
+**User decision (binding), option A for the B5 wall.** The agent's B5 gate vetoes
+every signed `destructive` step with no approval path, and B5 was not touched. So
+every Task 15 probe is `read_only` or `bounded_synthetic`, never `mutation`; it
+only ever creates/alters/drops objects it created itself in the run (fixture
+schema and throwaway accounts, tracked for undo, `VerifyClean`, `ErrSafetyIncident`
+on residue), and never changes persistent or global server state. Agent
+`TestEveryCatalogProbeIsRunnableThroughB5` and orchestrator
+`TestNoRegisteredProbeSignsDestructiveWithoutAllowlist` stay green with the new
+probes in the catalogs; `TestTask15StepsPassRealGateThenExecutor` pushes each
+signed step through the REAL `gateStep` and then `executeDBProbe`.
+
+### DB-08 `try_disable_audit` (bounded_synthetic, fixture `empty`; ruling R-AP)
+
+A throwaway NO-privilege account (Task 14 machinery: same naming, random in-memory
+password, redaction, undo tracking, dialled with no default database) logs in on a
+NEW connection (baseline: one marker-tagged clock query) and then attempts exactly
+ONE fixed SESSION-scoped statement, marker-tagged: PostgreSQL `SET log_statement =
+'none'`, MySQL `SET SESSION sql_log_off = 1`. The connection is closed right after
+(success is session-scoped, so there is nothing to restore, and nothing else is sent
+on it). A denial is recognised ONLY by PostgreSQL SQLSTATE 42501 and MySQL error
+1227; every other outcome, including timeouts, unknown parameter, syntax and login
+failures, is `attempt_error` (ERROR, never Blocked). A permitted statement is
+Enforcement Allowed => FAIL (a real finding). A failed login is `baseline_failed`
+=> ERROR. Typed note `audit_tamper_steps=create=..,baseline=..,attempt=denied|
+allowed|error|skipped`, parsed strictly (`Notes.AuditTamper`, first note wins).
+PASS also needs verified cleanup (`CleanupUnverified`) and a marker-correlated
+alert (detection/response graded like DB-03: a denied statement is expected to
+reach the audit log).
+
+**What is deliberately NOT built:** the plan's "actual disablement, lab only, with a
+recovery plan" mode. There is no `ALTER SYSTEM`, `SET GLOBAL`, `SET PERSIST`, plugin
+or configuration change, and no parameter, mode or code path that could perform
+one. `TestAuditProbeHasNoPersistentOrGlobalDisablePath` (replacing the plan's
+`TestRecoveryPlanRequiredForActualAuditDisablement`) asserts the fixed two-statement
+list, that none contains a global/persistent keyword and that no parameter name is
+accepted; each adapter test asserts nothing global/persistent is ever sent.
+
+### DB-10 `try_write_fixture` (bounded_synthetic, fixture `accounts`; ruling R-AQ)
+
+Seeds the `accounts` fixture with the lab connection (as DB-05), creates a throwaway
+account holding SELECT only (PostgreSQL: `GRANT USAGE ON SCHEMA` + `GRANT SELECT ON`
+the table; MySQL: `GRANT SELECT ON <fixture schema>.*`), fingerprints the table
+through the LAB connection (row count plus a checksum computed on the server: PG
+`md5(string_agg(t::text, '|' ORDER BY t.id))`, MySQL `SUM(CRC32(CONCAT_WS(...)))`, so
+no row content is on the wire), runs a baseline login that also reads the table, then
+as the throwaway account attempts, marker-tagged and in order, one INSERT, one
+UPDATE, one DELETE (fixed statements, one placeholder for the adapter-resolved,
+quoted `dbsim_<id>.accounts`), and fingerprints again. Denials are recognised ONLY by
+PG 42501 and MySQL 1142/1143/1044. Note `write_attempt_steps=insert=..,update=..,
+delete=..,fingerprint=unchanged|changed|error|skipped`. Grading: any permitted
+statement => Allowed => FAIL and `fixture_changed=true` (definite finding, even with
+other evidence gaps); all denied but the fingerprint differs or cannot be read =>
+ERROR (`fixture_state_inconsistent` / `fingerprint_failed`), never PASS; any other
+error => ERROR. Tests: `TestWriteDeniedLeavesFixtureUnchanged`,
+`TestWriteSucceedingIsAFailAndReportsChangedFixture`,
+`TestUnchangedFingerprintRequiredForPass`, `TestDenialCodesAreExact` (agent, both
+engines; the orchestrator has the grading equivalents).
+
+**Choice documented:** on MySQL the SELECT-only account is dialled with NO default
+database and every statement names the schema-qualified table, instead of naming the
+fixture schema as default (the brief allowed either). Reason: avoid re-creating the
+default-schema 1044 problem that DB-06 hit live.
+
+### DB-11 `check_export_privileges` (read_only, lab-only via `LabOnly`; ruling R-AR)
+
+Fixed, parameterless, read-only catalog queries about the CONNECTED account; no
+export is ever performed. PostgreSQL: superuser or `MEMBER` of
+`pg_write_server_files` / `pg_execute_server_program` / `pg_read_server_files`
+(guarded by `to_regrole`), `bulk_select` = superuser, replication or
+`pg_read_all_data`, `dump_privs` = count of non-system tables for which
+`has_table_privilege(..., 'SELECT')` holds. MySQL: global `FILE` (sets both
+`file_write` and `file_read`, since one privilege covers both), global `SELECT`,
+`RELOAD`, `LOCK TABLES` and the `secure_file_priv` class (empty/null/path) as context
+in an `export_context=` note, `program_exec` = `na` (no such grant exists),
+`dump_privs` = count of non-system tables visible in `information_schema.TABLES`.
+Typed note `export_checks=file_write=..,program_exec=..,file_read=..,bulk_select=..,
+dump_privs=..`. Policy: a restricted account must NOT hold file-write,
+program-execution or file-read privileges; any held => Allowed => FAIL; none held and
+ALL checks observed => PASS (Blocked); any unobservable check (error, denied catalog
+read, an active MySQL role whose privileges are not visible, no matching
+`USER_PRIVILEGES` row) => unknown => ERROR, never PASS; a held privilege still beats
+an unknown one (R-U). No SIEM expectation (forced off in `dbrun.Evaluate`, like
+DB-04). **"Controlled operation if authorized" from the specification is NOT built.**
+`bulk_select` and `dump_privs` are reported but do not decide the verdict;
+replication is folded into PostgreSQL `bulk_select`.
+
+### Client mode and gates (ruling R-AS)
+
+All three are refused in client mode at every layer: agent `ValidateSpec` and
+`CheckSpec`, executor, orchestrator `Authorize`, `BuildSteps`. DB-11 is read_only by
+class but carries the new `ProbeDef.LabOnly` / `ProbeRegistryEntry.LabOnly` flag, so
+it needs a lab-mode target, `LabConfirmed` + `MutationApproved` orchestrator-side and
+`LabMutationAllowed` on the agent, exactly like the fixture-aware probes.
+`TestMutationProbesRefusedInClientMode` exists in the agent dbprobe, agent root and
+orchestrator dbsim packages. Relaxing DB-11 for client pilots is a later decision.
+`LabOnly` is a new field in both probe catalog goldens (`labOnly`, omitted when
+false); the two goldens remain byte identical.
+
+### Orchestrator grading (summary)
+
+`dbsim/task15.go` adds evidence-gap checks: Enforcement is Blocked/Allowed only when
+the typed step note is present, strict and consistent with the result fields
+(`Denied`, `ErrorClass`); a missing, malformed or contradictory note is Unknown =>
+ERROR. `dbrun.Evaluate` forces `ExpectedPrevention = deny` for the three probes
+(the expectation is intrinsic) and no detection/response for DB-11, and does not
+correlate when the statement evidence is incomplete (a missing alert then says
+nothing about detection). Scenario classes: DB-08 T1562, DB-10 T1565.001 (new
+`dbprobe_*` entries; the execclass catalog pin moved 3616 to 3619 entries and 166 to
+169 hand-authored, hash updated), DB-11 T1213. Signed scenarios
+`dbsim-db08-audit-tamper-resistance`, `dbsim-db10-write-delete-prevention`,
+`dbsim-db11-backup-export-permissions`; scenario count pin 115 to 118.
+`internal/scenario` shows only the known red (`loaded 93 scenarios, want 118`; was
+`90 want 115`) and no `TAMPER ALERT` names `scenarios\dbsim-db*`.
+
+### UNVERIFIED (everything below needs the staging lab)
+
+* PG 42501 on `SET log_statement` for an unprivileged role; MySQL 1227 on
+  `SET SESSION sql_log_off`; whether `pgx` / `go-sql-driver` surface them as
+  `*pgconn.PgError` / `*mysql.MySQLError` on these statements.
+* PG 42501 and MySQL 1142/1143/1044 for INSERT/UPDATE/DELETE by the SELECT-only
+  account; the grant shapes; the `md5` / `CRC32` fingerprint queries on real servers.
+* That the DENIED statements, with their leading marker comment, reach the PG
+  statement log / MySQL general log and fire the generic rule (otherwise DB-08/DB-10
+  grade ERROR or FAIL on detection, which is the honest result).
+* The DB-11 catalog queries on real servers: PG `pg_has_role` with `MEMBER`, MySQL
+  `USER_PRIVILEGES` grantee matching, `CURRENT_ROLE()` on 5.7 vs 8,
+  `secure_file_priv` NULL scanning, and which privileges `dbsim_test` / `dbsim_lab`
+  really hold.
+* `dbsim_lab` can create and grant for the DB-10 account on both engines.
+* The live integration tests (`TestPGTryDisableAuditLive`, `TestPGTryWriteFixtureLive`,
+  `TestPGCheckExportPrivilegesLive` and the MySQL equivalents) compile
+  (`go vet -tags dbsim_integration ./dbprobe/...`) but were not executed; the E2E
+  harness steps (tag `dbsim_e2e`) are written and vetted, not run.
+* Checklist items 20-24 in `lab/dbsim/README.md` and the three new rows of
+  `lab/dbsim/E2E.md` section 6 list what to confirm.

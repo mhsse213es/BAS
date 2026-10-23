@@ -394,6 +394,7 @@ var e2eScenarios = []string{
 	"dbsim-db01-auth-policy", "dbsim-db02-excessive-grants", "dbsim-db03-unauthorized-access",
 	"dbsim-db04-audit-coverage", "dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
 	"dbsim-db06-account-revocation", "dbsim-db07-sensitive-classification",
+	"dbsim-db08-audit-tamper-resistance", "dbsim-db10-write-delete-prevention", "dbsim-db11-backup-export-permissions",
 }
 
 // isFixtureScenario: these seed a per-run fixture (R-AI), so they are mutations
@@ -402,7 +403,11 @@ var e2eScenarios = []string{
 func isFixtureScenario(id string) bool {
 	switch id {
 	case "dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
-		"dbsim-db06-account-revocation", "dbsim-db07-sensitive-classification":
+		"dbsim-db06-account-revocation", "dbsim-db07-sensitive-classification",
+		"dbsim-db08-audit-tamper-resistance", "dbsim-db10-write-delete-prevention",
+		// DB-11 seeds no fixture but is lab-only (LabOnly): it needs the same
+		// approval and the agent-local allowance.
+		"dbsim-db11-backup-export-permissions":
 		return true
 	}
 	return false
@@ -431,6 +436,12 @@ func runE2E(t *testing.T, cfg e2eConfig) {
 			cred, principal := cfg.credLab, "dbsim_lab"
 			if id == "dbsim-db03-unauthorized-access" {
 				cred, principal = cfg.credRO, "dbsim_test" // DB-03 expects the read to be DENIED
+			}
+			if id == "dbsim-db11-backup-export-permissions" {
+				// DB-11 grades the CONNECTED account: the restricted lab account is the
+				// one expected to hold no export privilege (the dbsim_lab account is
+				// privileged by design and would legitimately FAIL).
+				cred, principal = cfg.credRO, "dbsim_test"
 			}
 			tgt := dbsim.Target{ID: "lab-db", Engine: cfg.engine, Host: cfg.host, Port: cfg.port, Database: cfg.db, TLSMode: "disable",
 				CredentialRef: "dbcred:" + cred, Mode: dbsim.ModeLab, ExpectedIdentity: cfg.identity, LabConfirmed: true}
@@ -562,6 +573,42 @@ func checkStep(t stepReporter, cfg e2eConfig, id string, spec dbsim.DBProbeSpec,
 		}
 		if ev.Record.Telemetry != dlpreport.TelemetryUnverifiable || ev.Record.Response != dlpreport.ResponseNotTested {
 			fail("Telemetry %s Response %s, want Unverifiable / NotTested (a failed login carries no marker)", ev.Record.Telemetry, ev.Record.Response)
+		}
+		return
+	}
+	switch spec.ProbeID {
+	case dbsim.ProbeTryDisableAudit:
+		// DB-08 (UNVERIFIED until staging): an unprivileged account is refused the
+		// session-scoped audit change (PG 42501 / MySQL 1227) after a working baseline.
+		if r, ok := dbsim.ParseNotes(ex.DBProbe.Notes).AuditTamper(); !ok || r != (dbsim.AuditTamperSteps{Create: "ok", Baseline: "ok", Attempt: "denied"}) {
+			fail("audit_tamper_steps %+v ok=%v, want create=ok,baseline=ok,attempt=denied (notes: %v)", r, ok, ex.DBProbe.Notes)
+		}
+		if ev.Record.Enforcement != dlpreport.EnforcementBlocked {
+			fail("Enforcement %s, want Blocked", ev.Record.Enforcement)
+		}
+	case dbsim.ProbeTryWriteFixture:
+		// DB-10 (UNVERIFIED until staging): three exact denials and an unchanged table.
+		n := dbsim.ParseNotes(ex.DBProbe.Notes)
+		if r, ok := n.WriteAttempts(); !ok || r != (dbsim.WriteAttemptSteps{Insert: "denied", Update: "denied", Delete: "denied", Fingerprint: "unchanged"}) {
+			fail("write_attempt_steps %+v ok=%v, want denied x3 and fingerprint=unchanged (notes: %v)", r, ok, ex.DBProbe.Notes)
+		}
+		if _, dirty := n.Get(dbsim.WriteFixtureChangedKey); dirty {
+			fail("fixture_changed was reported: a write was accepted (notes: %v)", ex.DBProbe.Notes)
+		}
+		if ev.Record.Enforcement != dlpreport.EnforcementBlocked {
+			fail("Enforcement %s, want Blocked", ev.Record.Enforcement)
+		}
+	case dbsim.ProbeCheckExportPrivileges:
+		// DB-11 (UNVERIFIED until staging): the restricted account holds no export
+		// privilege and every check was observed; no telemetry is claimed.
+		if r, ok := dbsim.ParseNotes(ex.DBProbe.Notes).ExportChecks(); !ok || r.Held() || !r.Complete() {
+			fail("export_checks %+v ok=%v, want none held and complete (notes: %v)", r, ok, ex.DBProbe.Notes)
+		}
+		if ev.Record.Enforcement != dlpreport.EnforcementBlocked {
+			fail("Enforcement %s, want Blocked", ev.Record.Enforcement)
+		}
+		if ev.Record.Telemetry == dlpreport.TelemetryPresent || ev.Record.Response != dlpreport.ResponseNotTested {
+			fail("Telemetry %s Response %s, want no telemetry claim for a catalog read", ev.Record.Telemetry, ev.Record.Response)
 		}
 		return
 	}
