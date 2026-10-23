@@ -3,6 +3,7 @@ package dbprobe
 import (
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // Upper bounds on Limits so MaxRows+1 and TimeoutSec*1000 can never overflow.
@@ -42,7 +43,8 @@ func ProbeIDs() []string {
 }
 
 // ValidateSpec checks the probe exists, supports the engine, declares every
-// param, has a valid mode, and has positive limits.
+// param, has a valid mode, a connection host/port, a registered identity, and
+// positive limits.
 func ValidateSpec(s DBProbeSpec) error {
 	def, ok := LookupProbe(s.ProbeID)
 	if !ok {
@@ -59,6 +61,15 @@ func ValidateSpec(s DBProbeSpec) error {
 	}
 	if s.Mode != ModeLab && s.Mode != ModeClient {
 		return fmt.Errorf("dbprobe: invalid mode %q", s.Mode)
+	}
+	if strings.TrimSpace(s.Host) == "" {
+		return fmt.Errorf("dbprobe: host must not be empty")
+	}
+	if s.Port < 0 || s.Port > 65535 {
+		return fmt.Errorf("dbprobe: port %d out of range", s.Port)
+	}
+	if s.ExpectedIdentity == "" {
+		return fmt.Errorf("dbprobe: expectedIdentity (registered target identity) must not be empty")
 	}
 	for k := range s.Params {
 		if _, ok := def.ParamSchema[k]; !ok {

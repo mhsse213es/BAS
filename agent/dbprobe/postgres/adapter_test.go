@@ -49,7 +49,7 @@ func (f *fakeSession) Query(ctx context.Context, sql string, maxRows int, args .
 func (f *fakeSession) Close(ctx context.Context) error { f.closed = true; return nil }
 
 func spec(id string, mode dbprobe.ExecMode, params map[string]string) dbprobe.DBProbeSpec {
-	return dbprobe.DBProbeSpec{Engine: "postgresql", ProbeID: id, TargetID: "t", Mode: mode,
+	return dbprobe.DBProbeSpec{Engine: "postgresql", ProbeID: id, TargetID: "t", Host: "db.example", Port: 1, ExpectedIdentity: "id-1", Mode: mode,
 		Marker: "dbsim-abc123", Params: params,
 		Limits: dbprobe.Limits{MaxRows: 5, TimeoutSec: 7, MaxConns: 1}}
 }

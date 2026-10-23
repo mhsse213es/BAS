@@ -20,16 +20,25 @@ type Limits struct {
 }
 
 type DBProbeSpec struct {
-	Engine        string            `json:"engine"`
-	ProbeID       string            `json:"probeId"`
-	TargetID      string            `json:"targetId"`
-	CredentialRef string            `json:"credentialRef"`
-	RunID         string            `json:"runId"`
-	Marker        string            `json:"marker"`
-	FixtureID     string            `json:"fixtureId,omitempty"`
-	Mode          ExecMode          `json:"mode"`
-	Limits        Limits            `json:"limits"`
-	Params        map[string]string `json:"params,omitempty"`
+	Engine   string `json:"engine"`
+	ProbeID  string `json:"probeId"`
+	TargetID string `json:"targetId"`
+	// Connection target. Host/Port/Database/TLSMode say where to connect;
+	// ExpectedIdentity is the pre-registered PG system_identifier / MySQL
+	// server_uuid the agent gate compares against the observed identity.
+	// None of these is a secret (credentials stay a CredentialRef).
+	Host             string            `json:"host"`
+	Port             int               `json:"port"`
+	Database         string            `json:"database,omitempty"`
+	TLSMode          string            `json:"tlsMode,omitempty"`
+	ExpectedIdentity string            `json:"expectedIdentity"`
+	CredentialRef    string            `json:"credentialRef"`
+	RunID            string            `json:"runId"`
+	Marker           string            `json:"marker"`
+	FixtureID        string            `json:"fixtureId,omitempty"`
+	Mode             ExecMode          `json:"mode"`
+	Limits           Limits            `json:"limits"`
+	Params           map[string]string `json:"params,omitempty"`
 }
 
 type DBProbeResult struct {

@@ -13,7 +13,8 @@ const agentGoldenPath = "../../../agent/protocol/testdata/dbprobe_spec.golden.js
 func mirrorGoldenSpec() DBProbeSpec {
 	return DBProbeSpec{
 		Engine: "postgresql", ProbeID: "read_restricted_table", TargetID: "tgt-pg-01",
-		CredentialRef: "cred-ro-pg", RunID: "run-123", Marker: "BAS-DBSIM-abc123",
+		Host: "db.lab.internal", Port: 5432, Database: "bas_lab", TLSMode: "verify-full",
+		ExpectedIdentity: "7312345678901234567", CredentialRef: "dbcred:cred-ro-pg", RunID: "run-123", Marker: "BAS-DBSIM-abc123",
 		FixtureID: "fx-1", Mode: ModeLab,
 		Limits: Limits{MaxRows: 100, TimeoutSec: 30, MaxConns: 1},
 		Params: map[string]string{"table": "bas_fixture_cards"},

@@ -8,7 +8,7 @@ import (
 
 func validSpec() DBProbeSpec {
 	return DBProbeSpec{
-		Engine: "postgresql", ProbeID: "read_roles", TargetID: "t", CredentialRef: "c",
+		Engine: "postgresql", ProbeID: "read_roles", TargetID: "t", Host: "db.example", Port: 5432, ExpectedIdentity: "id-1", CredentialRef: "c",
 		RunID: "r", Marker: "m", Mode: ModeLab,
 		Limits: Limits{MaxRows: 10, TimeoutSec: 5, MaxConns: 1},
 	}
@@ -79,6 +79,10 @@ func TestValidateSpecRejectsBadInputs(t *testing.T) {
 		"huge timeout":  func(s *DBProbeSpec) { s.Limits.TimeoutSec = math.MaxInt },
 		"timeout cap":   func(s *DBProbeSpec) { s.Limits.TimeoutSec = MaxTimeoutSecCap + 1 },
 		"conns cap":     func(s *DBProbeSpec) { s.Limits.MaxConns = MaxConnsCap + 1 },
+		"empty host":    func(s *DBProbeSpec) { s.Host = "" },
+		"negative port": func(s *DBProbeSpec) { s.Port = -1 },
+		"port too big":  func(s *DBProbeSpec) { s.Port = 65536 },
+		"no identity":   func(s *DBProbeSpec) { s.ExpectedIdentity = "" },
 	}
 	for name, mut := range cases {
 		s := validSpec()
