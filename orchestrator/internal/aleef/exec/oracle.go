@@ -75,6 +75,11 @@ func (e *Executor) judge(t generate.Test, rep runner.Report, st stateEvidence) V
 		if denied(final) {
 			return verdict(FindingNo, k, "attack refused (status %d) and state unchanged", final.Status)
 		}
+		if tpl.CleanIsEnforced && final.Status/100 == 2 {
+			// Only controls set CleanIsEnforced on this oracle: a clean 2xx that
+			// changed nothing is the expected outcome of a negative control.
+			return verdict(FindingNo, k, "2xx response and state unchanged")
+		}
 		return inc("no state change and status %d is not a refusal", final.Status)
 
 	case property.OracleStateChangeOnReplay:

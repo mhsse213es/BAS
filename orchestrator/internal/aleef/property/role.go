@@ -97,8 +97,7 @@ func (r role1) Templates(ctx TemplateCtx) []Template {
 		var nc *Template
 		if rd, ok := baselineStep(ctx, op, p.victim, false); ok {
 			rd.ID, rd.Role = "control-negative", "attack"
-			nc = newControl(ctx, t, "negative", "Account "+p.victim.Name+" performs a non-reserved read.", "property_level", p.obj,
-				[]contract.Step{base, rd}, nil)
+			nc = sameOracleNegative(ctx, t, "Account "+p.victim.Name+" performs a non-reserved read.", p.obj, []contract.Step{base, rd})
 		}
 		if ts, ok := withControls(t, oc, nc); ok {
 			out = append(out, ts...)

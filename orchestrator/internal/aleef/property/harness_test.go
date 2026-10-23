@@ -479,6 +479,9 @@ func toScenario(t *testing.T, tpl Template, category string) contract.Scenario {
 		DetectionAssert:     contract.DetectionAssertion{Status: "not_evaluated", Reason: "test"},
 		SideEffectClass:     tpl.SideEffect,
 	}
+	if last := tpl.Steps[len(tpl.Steps)-1]; tpl.MaxAccepted > 0 && last.Repeat <= tpl.MaxAccepted {
+		s.MaxAcceptedAttempts = 0 // a within-limit control: the contract needs max < repeat
+	}
 	if tpl.SideEffect == "STATE_CHANGE_SANDBOX" {
 		s.Cleanup = []string{"reset"}
 	}

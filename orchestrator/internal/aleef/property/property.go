@@ -79,30 +79,53 @@
 //     Finding=No (inconclusive counts as a failed control) and, because the
 //     application must allow it, GradedSuccess is true as well.
 //
-// Both controls use OracleForbiddenValues with CleanIsEnforced: the verdict is
-// No when the final response is a clean 2xx (or a refusal) and holds none of
-// the control's ForbiddenValues; the runner's leak and state signals are
-// ignored (a legitimate write changes state, an owner sees its own canary).
-// The ExpectSuccess check is what turns a refusal into a failed control. Where
-// the test's oracle is a state diff or a count, the control cannot reuse it
-// (a legitimate write is itself a state change), so selectivity of the oracle
-// is shown only where a forbidden-value signal exists (ownership and
-// status-lie controls). The per-property rule is written at its builder:
+// The owner control uses OracleForbiddenValues with CleanIsEnforced: the
+// verdict is No when the final response is a clean 2xx (or a refusal), and the
+// runner's leak and state signals are ignored (a legitimate write changes
+// state, an owner sees its own canary). It is the plumbing check; the
+// ExpectSuccess check is what turns a refusal into a failed control.
+//
+// Oracle selectivity. A negative control must show that the test's oracle does
+// not fire on everything. Two mechanisms:
+//
+//   - Same-oracle negative control (sameOracleNegative): P-AUTH-1, P-AUTH-2,
+//     P-MC-1, P-STATE-1 (OracleStateChange), P-ROLE-1 (OracleStateChange for
+//     writes, OracleRepeatAccepted for reads), P-IDEM-1/2
+//     (OracleStateChangeOnReplay) and P-RACE-1 (OracleAcceptedOverLimit). The
+//     negative control is judged by the same Oracle, DeniedStatuses,
+//     SoftFailure, MaxAccepted and limit as the test, but its final graded
+//     step is a request a correct application must allow without the
+//     violating effect: a read of the object, or at most the limit of
+//     requests. Setup and co-actor steps before it stay as in the test. The
+//     oracle compares the state snapshot taken just before the final step
+//     with the one just after it, so setup writes are outside the window.
+//     Expectation: Verdict No. If a correct application perturbs state on
+//     every request (a hit counter, a last-seen field), the state oracle fires
+//     on the read too and the negative control is not No: do not verify. Count
+//     oracles are immune to such noise by construction; their negative control
+//     shows the count rule accepts a request within the limit. A negative
+//     control that coincides with its owner control (P-RACE-1 with a limit of
+//     one) carries Params["control"] = "shared" on both.
+//   - Forbidden-value signal: P-OWN-1/2/3 and P-ROLE-2 (the victim's customer
+//     id and protected values) and P-STATE-2 (the success values). The
+//     negative control uses OracleForbiddenValues over the same values with a
+//     request that must not expose them.
+//
+// The per-property rule is written next to each builder:
 //
 //	P-OWN-1/2/3  owner acts on own object / attacker acts on attacker's own
 //	             object (DELETE operations are replaced by a read, so the
 //	             control never destroys the fixture)
 //	P-ROLE-1     privileged role performs the reserved operation / the
 //	             unprivileged identity performs a non-reserved read
-//	P-ROLE-2     owner uses the route under test / attacker uses it on its own
-//	P-AUTH-1     approval then execute (both controls have this shape: the
-//	             violating element is the missing approval)
-//	P-AUTH-2     owner modifies before any approval / approval then no tamper
-//	P-MC-1       a distinct approver approves / the next distinct approver
-//	             (or the same one when there is only one)
-//	P-IDEM-1/2   single request / replay with a new key (IDEM-1) or the same
-//	             key and body (IDEM-2)
-//	P-STATE-1    legitimate transition (execute) / reverse without executing
+//	P-ROLE-2     owner uses the route under test (intentionally the route
+//	             being tested, not its current-version peer: it proves that
+//	             route works for its owner) / attacker uses it on its own object
+//	P-AUTH-1     approval then execute / approval then a read
+//	P-AUTH-2     owner modifies before any approval / approval then a read
+//	P-MC-1       a distinct approver approves / the owner reads its object
+//	P-IDEM-1/2   single request / the first request then a read, no replay
+//	P-STATE-1    legitimate transition (execute) / reverse then a read
 //	P-STATE-2    reverse succeeds / status read of an unreversed object
 //	P-RACE-1     one request / at most the limit of concurrent requests
 //
@@ -202,7 +225,8 @@ const (
 	// the runner reports the state diff as non-empty (grade FAIL), ignoring
 	// any leak signal (RunnerLeakValid is false). A refusal (status in
 	// DeniedStatuses, or Template.Denied) with no state change is no finding.
-	// Anything else (2xx with no change, odd 4xx) is inconclusive.
+	// A 2xx with no change is no finding only when CleanIsEnforced is set (a
+	// negative control). Anything else is inconclusive.
 	OracleStateChange OracleKind = "state_change"
 
 	// OracleRepeatAccepted: the finding is two accepted responses to a

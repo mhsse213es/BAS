@@ -24,11 +24,11 @@ import (
 // switches on one deliberate flaw by name; the zero-flaw server is the
 // corrected variant. Flaws: read-v1, read-v2, write, query, body, header,
 // soft, role, selfapprove, noauth, tamper, revive, status-lie, idem-ignore,
-// idem-nobody, race.
+// idem-nobody, race. Configuration flags (the app stays correct): openexec, noisy.
 
 type titem struct {
 	ID, Owner, Title, Status string
-	Amount                   int
+	Amount, Hits             int
 }
 
 type keyRec struct {
@@ -105,7 +105,17 @@ func (t *toy) view(it *titem) map[string]any {
 	if st == "reversed" && t.flaws["status-lie"] {
 		st = "completed"
 	}
-	return map[string]any{"id": it.ID, "owner": it.Owner, "title": it.Title, "status": st, "amount": it.Amount}
+	out := map[string]any{"id": it.ID, "owner": it.Owner, "title": it.Title, "status": st, "amount": it.Amount}
+	if t.flaws["noisy"] {
+		// A correct application whose every read perturbs the representation
+		// with fields the state reader does not ignore (updated_at is ignored,
+		// hits and last_seen are not).
+		it.Hits++
+		out["hits"] = it.Hits
+		out["last_seen"] = it.Hits * 7
+		out["updated_at"] = it.Hits
+	}
+	return out
 }
 
 func (t *toy) ServeHTTP(w http.ResponseWriter, r *http.Request) {

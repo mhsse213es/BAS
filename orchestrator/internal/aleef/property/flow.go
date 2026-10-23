@@ -192,7 +192,8 @@ func (a auth1) Templates(ctx TemplateCtx) []Template {
 	}
 	seq := []contract.Step{base, approve, asAttack(atk, "control-sequence")}
 	oc := newControl(ctx, t, "owner", "The owner performs "+ctx.Op.ID+" after the approval.", "property_level", p.obj, seq, nil)
-	nc := newControl(ctx, t, "negative", "Approval then "+ctx.Op.ID+" (the approval is present).", "property_level", p.obj, seq, nil)
+	nc := sameOracleNegative(ctx, t, "Approval then a read of the object, no "+ctx.Op.ID+".", p.obj,
+		[]contract.Step{base, approve, asAttack(base, "control-negative")})
 	ts, ok := withControls(t, oc, nc)
 	if !ok {
 		return nil
@@ -253,8 +254,8 @@ func (a auth2) Templates(ctx TemplateCtx) []Template {
 	// instead of the tamper.
 	oc := newControl(ctx, t, "owner", "The owner changes an unapproved object through "+ctx.Op.ID+".", "property_level", p.obj,
 		[]contract.Step{base, asAttack(atk, "control-owner")}, nil)
-	nc := newControl(ctx, t, "negative", "Approval followed by a read, without the change.", "property_level", p.obj,
-		[]contract.Step{base, approve, asAttack(base, "control-negative")}, nil)
+	nc := sameOracleNegative(ctx, t, "Approval followed by a read, without the change.", p.obj,
+		[]contract.Step{base, approve, asAttack(base, "control-negative")})
 	ts, ok := withControls(t, oc, nc)
 	if !ok {
 		return nil
@@ -300,7 +301,7 @@ func (m mc1) Templates(ctx TemplateCtx) []Template {
 		"Account "+p.victim.Name+" approves its own object through "+ctx.Op.ID+".", p,
 		[]contract.Step{base, atk}, OracleStateChange)
 	// Controls. Owner: a distinct approver approves the owner's object.
-	// Negative: the next distinct approver (the same one when there is only one).
+	// Negative: judged by the test's own oracle, with a read instead of the approval.
 	cands := approvers(ctx, p.victim, auth.Role)
 	if len(cands) == 0 {
 		return nil
@@ -308,14 +309,10 @@ func (m mc1) Templates(ctx TemplateCtx) []Template {
 	mk := func(a model.Account, id string) contract.Step {
 		return mkStep(id, "attack", a.Name, ctx.Op.Method, path, body, "A distinct approver can approve the object.")
 	}
-	neg := cands[0]
-	if len(cands) > 1 {
-		neg = cands[1]
-	}
 	oc := newControl(ctx, t, "owner", "Account "+cands[0].Name+" approves "+p.victim.Name+"'s object.", "function_level", p.obj,
 		[]contract.Step{base, mk(cands[0], "control-owner")}, nil)
-	nc := newControl(ctx, t, "negative", "Account "+neg.Name+" approves "+p.victim.Name+"'s object.", "function_level", p.obj,
-		[]contract.Step{base, mk(neg, "control-negative")}, nil)
+	nc := sameOracleNegative(ctx, t, "The owner reads its object without any approval.", p.obj,
+		[]contract.Step{base, asAttack(base, "control-negative")})
 	ts, ok := withControls(t, oc, nc)
 	if !ok {
 		return nil
@@ -369,8 +366,8 @@ func (s state1) Templates(ctx TemplateCtx) []Template {
 	// Negative: the sequence without the illegal transition, reverse alone.
 	oc := newControl(ctx, t, "owner", "The owner executes a pending object.", "property_level", p.obj,
 		[]contract.Step{base, asAttack(atk, "control-owner")}, nil)
-	nc := newControl(ctx, t, "negative", "The owner reverses the object and does nothing else.", "property_level", p.obj,
-		[]contract.Step{base, asAttack(reverse, "control-negative")}, nil)
+	nc := sameOracleNegative(ctx, t, "The owner reverses the object and then reads it, no execute.", p.obj,
+		[]contract.Step{base, reverse, asAttack(base, "control-negative")})
 	ts, ok := withControls(t, oc, nc)
 	if !ok {
 		return nil

@@ -124,3 +124,68 @@ func TestControlsPassOnCorrectedAndFlawedApplications(t *testing.T) {
 	_ = context.Background
 	_ = httptest.NewServer
 }
+
+// exposed lists the properties whose oracle is a state diff, a replay diff or
+// a count, and so is only trustworthy if the negative control (judged by the
+// same oracle) says No.
+var exposedRows = map[string]bool{
+	"P-AUTH-1/execute": true, "P-AUTH-2/terms": true, "P-MC-1/authorize": true, "P-STATE-1/execute": true,
+	"P-ROLE-1/archive": true, "P-ROLE-1/reports": true, "P-IDEM-1/invoice": true, "P-IDEM-2/invoice": true,
+	"P-RACE-1/redeem": true,
+}
+
+var exposedFlaws = map[string][]string{
+	"P-AUTH-1/execute": {"noauth"}, "P-AUTH-2/terms": {"tamper"}, "P-MC-1/authorize": {"selfapprove"},
+	"P-STATE-1/execute": {"revive", "openexec"}, "P-ROLE-1/archive": {"role"}, "P-ROLE-1/reports": {"role"},
+	"P-IDEM-1/invoice": {"idem-ignore"}, "P-IDEM-2/invoice": {"idem-nobody"}, "P-RACE-1/redeem": {"race"},
+}
+
+// TestNegativeControlDemonstratesOracleSelectivity: on a correct application
+// whose every read perturbs the object (the noisy toy) a state-diff oracle
+// fires on everything. The negative control, judged by the same oracle, must
+// then not be No, so a verifier requiring No refuses to verify. On the clean
+// toy the negative control is No, and on the flawed toy the test is Yes while
+// the negative control is still No.
+func TestNegativeControlDemonstratesOracleSelectivity(t *testing.T) {
+	for key := range exposedRows {
+		prop, op, _ := strings.Cut(key, "/")
+		wf := toyWorkflow()
+		var base []string
+		if prop == "P-STATE-1" {
+			wf, base = noApprovalWorkflow(), []string{"openexec"}
+		}
+		x := generatedFor(t, wf, prop, op)
+		nc := x.NegativeControl
+		if nc == nil || nc.Template.Oracle != x.Template.Oracle {
+			t.Fatalf("%s: negative control must share the test's oracle", key)
+		}
+		run := func(flaws []string, tst generate.Test) Result {
+			ty, srv := newToy(flaws...)
+			defer srv.Close()
+			ty.hideRedeem = true
+			return runTest(t, ty, srv, tst)
+		}
+		// clean: test No, negative control No.
+		if r := run(base, x); r.Verdict.Finding != FindingNo {
+			t.Errorf("%s clean: test %s (%s)", key, r.Verdict.Finding, r.Verdict.Reason)
+		}
+		if r := run(base, *nc); r.Verdict.Finding != FindingNo {
+			t.Errorf("%s clean: negative control %s (%s)", key, r.Verdict.Finding, r.Verdict.Reason)
+		}
+		// flawed: test Yes, negative control still No.
+		fl := append(append([]string{}, base...), exposedFlaws[key]...)
+		if r := run(fl, x); r.Verdict.Finding != FindingYes {
+			t.Errorf("%s flawed: test %s (%s)", key, r.Verdict.Finding, r.Verdict.Reason)
+		}
+		if r := run(fl, *nc); r.Verdict.Finding != FindingNo {
+			t.Errorf("%s flawed: negative control %s (%s)", key, r.Verdict.Finding, r.Verdict.Reason)
+		}
+		// noisy but correct: if the test fires, the negative control must not say No.
+		noisy := append(append([]string{}, base...), "noisy")
+		tr, nr := run(noisy, x), run(noisy, *nc)
+		if tr.Verdict.Finding == FindingYes && nr.Verdict.Finding == FindingNo {
+			t.Errorf("%s noisy: the test fires but the negative control says No: a false verification", key)
+		}
+		t.Logf("%s noisy: test=%s negative=%s", key, tr.Verdict.Finding, nr.Verdict.Finding)
+	}
+}

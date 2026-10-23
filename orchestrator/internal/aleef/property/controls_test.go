@@ -7,6 +7,12 @@ import (
 	"github.com/audspect/bas/internal/apibas/runner"
 )
 
+// sameOracle lists the oracle kinds whose negative control is judged by the
+// test's own oracle (state-diff, replay and count properties).
+var sameOracle = map[OracleKind]bool{
+	OracleStateChange: true, OracleStateChangeOnReplay: true, OracleRepeatAccepted: true, OracleAcceptedOverLimit: true,
+}
+
 func TestEveryTemplateCarriesBothControls(t *testing.T) {
 	sw := sweep(t)
 	for _, p := range All() {
@@ -23,14 +29,21 @@ func TestEveryTemplateCarriesBothControls(t *testing.T) {
 				if c.OwnerControl != nil || c.NegativeControl != nil {
 					t.Errorf("%s: a control must not carry controls", p.ID())
 				}
-				if !c.ExpectSuccess || c.Oracle != OracleForbiddenValues || !c.CleanIsEnforced {
-					t.Errorf("%s %s control: ExpectSuccess=%v oracle=%s clean=%v", p.ID(), kind, c.ExpectSuccess, c.Oracle, c.CleanIsEnforced)
+				wantOracle := OracleForbiddenValues
+				if kind == "negative" && sameOracle[tp.Oracle] {
+					wantOracle = tp.Oracle // selectivity: judged by the test's own oracle
+					if c.MaxAccepted != tp.MaxAccepted || c.RunnerStateValid != tp.RunnerStateValid || c.SoftFailure != tp.SoftFailure {
+						t.Errorf("%s negative control must share the test's oracle parameters", p.ID())
+					}
 				}
-				if c.Params["control"] != kind || c.Property != tp.Property {
+				if !c.ExpectSuccess || c.Oracle != wantOracle || !c.CleanIsEnforced {
+					t.Errorf("%s %s control: ExpectSuccess=%v oracle=%s want %s clean=%v", p.ID(), kind, c.ExpectSuccess, c.Oracle, wantOracle, c.CleanIsEnforced)
+				}
+				if ctl := c.Params["control"]; ctl != kind && ctl != "shared" || c.Property != tp.Property {
 					t.Errorf("%s %s control: bad params/property %v %s", p.ID(), kind, c.Params, c.Property)
 				}
-				if c.RunnerLeakValid || c.RunnerStateValid {
-					t.Errorf("%s %s control must ignore the runner's leak and state signals", p.ID(), kind)
+				if c.RunnerLeakValid {
+					t.Errorf("%s %s control must ignore the runner's leak signal", p.ID(), kind)
 				}
 				toScenario(t, *c, "BIZ") // must validate as a scenario
 			}

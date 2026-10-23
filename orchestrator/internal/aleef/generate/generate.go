@@ -314,10 +314,19 @@ func attachControls(t *Test, m model.Model, tpl property.Template) {
 // assembleControl turns a control template into a validated test with the
 // given id. The control's own controls (none) are not carried.
 func assembleControl(tpl property.Template, id string) (Test, error) {
-	t, err := assembleID(tpl, id, nil, false)
+	// A within-limit control (at most MaxAccepted requests) cannot declare
+	// max_accepted_attempts in the contract, which needs max < repeat. The
+	// scenario omits it; the template keeps it, because the executor's oracle
+	// reads the limit from the template.
+	scen := tpl
+	if last := tpl.Steps[len(tpl.Steps)-1]; tpl.MaxAccepted > 0 && last.Repeat <= tpl.MaxAccepted {
+		scen.MaxAccepted = 0
+	}
+	t, err := assembleID(scen, id, nil, false)
 	if err != nil {
 		return Test{}, err
 	}
+	t.Template = tpl
 	t.Scenario.ExpectedControl = "The legitimate request succeeds and the control's oracle does not fire (" + tpl.Property + " " + tpl.Params["control"] + " control)."
 	if err := t.Scenario.Validate(); err != nil {
 		return Test{}, fmt.Errorf("generate: %s: %w", id, err)

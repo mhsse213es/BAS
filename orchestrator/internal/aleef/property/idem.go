@@ -70,21 +70,15 @@ func idemTemplate(ctx TemplateCtx, prop string, variant int, desc string) []Temp
 	}
 	t = finish(ctx, t, p.obj, prop, "property_level")
 
-	// Controls. Owner: one single request with a key (no replay). Negative:
-	// P-IDEM-1 replays the request under a new key (the violating element, the
-	// shared key, is removed); P-IDEM-2 replays the same key with the same body.
+	// Controls. Owner: one single request with a key (no replay).
 	single := mkStep("control-owner", "attack", p.victim.Name, op.Method, path, body1, "A single request succeeds.")
 	single.Headers = map[string]string{IdempotencyHeader: key + "-owner"}
 	oc := newControl(ctx, t, "owner", "A single request to "+op.ID+" with an idempotency key succeeds.", "property_level", p.obj,
 		[]contract.Step{base, single}, nil)
-	neg := mkStep("control-negative", "attack", p.victim.Name, op.Method, path, body1, "The legitimate second request succeeds.")
-	if variant == 0 {
-		neg.Headers = map[string]string{IdempotencyHeader: key + "-other"}
-	} else {
-		neg.Headers = map[string]string{IdempotencyHeader: key}
-	}
-	nc := newControl(ctx, t, "negative", "A second request to "+op.ID+" that is not a conflicting replay succeeds.", "property_level", p.obj,
-		[]contract.Step{base, first, neg}, nil)
+	// Negative: the same setup (the first request with the key), then a read of
+	// the object instead of the replay, judged by the replay oracle.
+	nc := sameOracleNegative(ctx, t, "The first request to "+op.ID+" followed by a read, no replay.", p.obj,
+		[]contract.Step{base, first, asAttack(base, "control-negative")})
 	ts, ok := withControls(t, oc, nc)
 	if !ok {
 		return nil
@@ -184,17 +178,22 @@ func (r race1) Templates(ctx TemplateCtx) []Template {
 	t.Oracle = OracleAcceptedOverLimit
 	t = finish(ctx, t, p.obj, r.id, "property_level")
 	t.RunnerStateValid = false // the permitted success changes state too
-	// Controls. Owner: one request. Negative: at most the limit of concurrent
-	// requests (one request when the limit is one).
+	// Controls. Owner: one request (the legitimate write, judged by the
+	// plumbing oracle). Negative: judged by the test's own oracle
+	// (AcceptedOverLimit, same limit), with at most the limit of requests: one
+	// request, or limit concurrent requests when the limit is above one. With a
+	// limit of one both controls send the same single request and are marked
+	// "shared".
 	one := mkStep("control-owner", "attack", p.victim.Name, op.Method, path, body, "A single request succeeds.")
 	oc := newControl(ctx, t, "owner", "A single request to "+op.ID+" succeeds.", "property_level", p.obj, []contract.Step{base, one}, nil)
 	neg := one
 	neg.ID = "control-negative"
-	nc := newControl(ctx, t, "negative", "A single request to "+op.ID+" is within the limit.", "property_level", p.obj, []contract.Step{base, neg}, nil)
 	if limit > 1 {
 		neg.Repeat, neg.Parallel = limit, true
-		nc = newControl(ctx, t, "negative", strconv.Itoa(limit)+" concurrent requests to "+op.ID+" are within the limit.", "property_level", p.obj, []contract.Step{base, neg}, nil)
-		nc.MaxAccepted = limit - 1 // the contract needs 1..repeat-1; the verdict ignores it
+	}
+	nc := sameOracleNegative(ctx, t, "At most "+strconv.Itoa(limit)+" requests to "+op.ID+" are within the limit.", p.obj, []contract.Step{base, neg})
+	if limit == 1 && oc != nil && nc != nil {
+		oc.Params["control"], nc.Params["control"] = "shared", "shared"
 	}
 	ts, ok2 := withControls(t, oc, nc)
 	if !ok2 {

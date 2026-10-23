@@ -1,6 +1,8 @@
 package property
 
 import (
+	"sort"
+
 	"github.com/audspect/bas/internal/aleef/model"
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/fixture"
@@ -38,6 +40,26 @@ func newControl(ctx TemplateCtx, base Template, kind, desc, claim string, obj fi
 	return &c
 }
 
+// sameOracleNegative builds the negative control of a state-diff, replay or
+// count property. It is judged by the SAME oracle and parameters as the test
+// (Oracle, DeniedStatuses, SoftFailure, MaxAccepted), but its final graded
+// step is a request a correct application must allow without the violating
+// effect: a read of the object, or a single request within the limit. Setup
+// and co-actor steps before the graded step stay as in the test. The verdict
+// must be No; if the oracle fires here (for example because every request
+// perturbs a volatile field) it fires on everything and the finding must not
+// be verified. CleanIsEnforced lets a clean 2xx with no state change count as
+// No.
+func sameOracleNegative(ctx TemplateCtx, t Template, desc string, obj fixture.Object, steps []contract.Step) *Template {
+	c := newControl(ctx, t, "negative", desc, "property_level", obj, steps, nil)
+	c.Oracle = t.Oracle
+	c.DeniedStatuses = append([]int(nil), t.DeniedStatuses...)
+	c.SoftFailure = t.SoftFailure
+	c.MaxAccepted = t.MaxAccepted
+	c.RunnerStateValid = t.RunnerStateValid
+	return c
+}
+
 // withControls attaches both controls; a template missing one is dropped.
 func withControls(t Template, owner, negative *Template) ([]Template, bool) {
 	if owner == nil || negative == nil {
@@ -64,11 +86,7 @@ func sortedKeys(m map[string]string) []string {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	for i := 1; i < len(keys); i++ {
-		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
-			keys[j], keys[j-1] = keys[j-1], keys[j]
-		}
-	}
+	sort.Strings(keys)
 	return keys
 }
 
