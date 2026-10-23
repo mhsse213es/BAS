@@ -220,6 +220,15 @@ the agent-local `BAS_DBPROBE_LAB_MUTATION_ALLOWED`.
 * `strong_contextual` is stricter than the brief (principal AND run id).
 * A truncated alert source with no visible marker is unattributable, even if a
   foreign marker is visible.
+* A quoted literal `'dbsim:<marker>'` inside another user's statement also
+  matches the correlator's marker form. Risk negligible: the marker has 24
+  random hex characters, is issued per run and is not visible to other database
+  users; attribution additionally rests on the exact post-filter.
+* Ruling R-AK: the DB-02 policy requirement is default-safe. `dbrun.Evaluate`
+  forces `RequirePolicyDiff` for `read_grants`, and the grading layer treats any
+  Outcome whose `ProbeID` is `read_grants` the same way, so a caller that omits
+  the flag still gets ERROR (Unverifiable) without a performed `DiffReport`. A
+  denied `read_grants` is exempt (the denial is the observation).
 * The lab detection rule is a hint (any DB user can start a statement with the
   marker comment); the orchestrator's exact post-filter is the authority.
 * DB-05's 25-row cap is a code constant, not signed per scenario.

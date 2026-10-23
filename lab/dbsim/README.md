@@ -193,9 +193,14 @@ not a pass. So in the lab:
   readability is a different query from the one `grants.go` runs, and MySQL
   `mysql.tables_priv` would need a new grant for no benefit once DB-02 runs as
   `dbsim_lab`.
-* Empty observation = unobservable. Grading must **not** PASS DB-02 on zero
-  grants observed. No such guard exists in the orchestrator yet; it is tracked
-  for Task 12/13 grading, and nothing in this lab asserts it.
+* Empty observation = unobservable, and listable grants are not a policy
+  comparison. The orchestrator (`dbsim` grading, rulings R-AJ/R-AK) now grades
+  the DB-02 `read_grants` probe ERROR (Unverifiable) both when zero grants are
+  observed ("no grants observed: account may lack catalog visibility") and when
+  grants are observed but no policy diff was performed. It never grades PASS
+  without a performed `DiffReport`. Excessive-grant detection is NOT produced
+  end to end because the grant rows are not on the agent wire. `lab/dbsim/E2E.md`
+  asserts this ERROR.
 
 ## Agent connection (BAS_DBCRED / Target registry / tests)
 
