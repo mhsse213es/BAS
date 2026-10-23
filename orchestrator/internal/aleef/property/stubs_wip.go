@@ -39,16 +39,6 @@ type mc1 struct{ meta }
 func (mc1) Applies(model.Operation, model.Model) bool { return false }
 func (mc1) Templates(TemplateCtx) []Template          { return nil }
 
-type idem1 struct{ meta }
-
-func (idem1) Applies(model.Operation, model.Model) bool { return false }
-func (idem1) Templates(TemplateCtx) []Template          { return nil }
-
-type idem2 struct{ meta }
-
-func (idem2) Applies(model.Operation, model.Model) bool { return false }
-func (idem2) Templates(TemplateCtx) []Template          { return nil }
-
 type state1 struct{ meta }
 
 func (state1) Applies(model.Operation, model.Model) bool { return false }
@@ -58,8 +48,3 @@ type state2 struct{ meta }
 
 func (state2) Applies(model.Operation, model.Model) bool { return false }
 func (state2) Templates(TemplateCtx) []Template          { return nil }
-
-type race1 struct{ meta }
-
-func (race1) Applies(model.Operation, model.Model) bool { return false }
-func (race1) Templates(TemplateCtx) []Template          { return nil }

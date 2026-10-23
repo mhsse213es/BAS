@@ -39,12 +39,15 @@ type keyRec struct {
 }
 
 type toy struct {
-	mu     sync.Mutex
-	items  map[string]*titem
-	keys   map[string]keyRec
-	flaws  map[string]bool
-	seq    int
-	tokens map[string][2]string // token -> customer, role
+	mu    sync.Mutex
+	items map[string]*titem
+	keys  map[string]keyRec
+	flaws map[string]bool
+	seq   int
+	// hideRedeem makes the snapshot report a redeemed item as pending, the way a
+	// state adapter that does not track the permitted once-only effect would.
+	hideRedeem bool
+	tokens     map[string][2]string // token -> customer, role
 }
 
 func newToy(flaws ...string) (*toy, *httptest.Server) {
@@ -75,7 +78,11 @@ func (t *toy) Snapshot(context.Context) (map[string]runner.StateRecord, error) {
 	defer t.mu.Unlock()
 	out := map[string]runner.StateRecord{}
 	for id, it := range t.items {
-		out[id] = runner.StateRecord{ID: id, OwnerID: it.Owner, Status: it.Status, Tag: it.Title, Quantity: fmt.Sprint(it.Amount)}
+		st := it.Status
+		if st == "redeemed" && t.hideRedeem {
+			st = "pending"
+		}
+		out[id] = runner.StateRecord{ID: id, OwnerID: it.Owner, Status: st, Tag: it.Title, Quantity: fmt.Sprint(it.Amount)}
 	}
 	return out, nil
 }
@@ -495,9 +502,13 @@ func expect(t *testing.T, ty *toy, srv *httptest.Server, tpls []Template, want g
 	for _, tpl := range tpls {
 		rep := run(t, ty, srv, tpl)
 		if rep.Outcome.Result != want {
-			t.Errorf("%s [%s]: got %s/%s (%s %s), want %s\nsteps: %+v\nexchanges: %+v",
-				tpl.Property, tpl.Params["location"], rep.Outcome.Result, rep.Outcome.Exploitability,
-				rep.Outcome.Reason, rep.Detail, want, tpl.Steps, rep.Exchanges)
+			var ex []string
+			for _, e := range rep.Exchanges {
+				ex = append(ex, fmt.Sprintf("%s %s %s -> %d %s", e.Identity, e.Method, e.Path, e.Status, strings.TrimSpace(e.Body)))
+			}
+			t.Errorf("%s [%s] %s: got %s/%s (%s %s), want %s | %s",
+				tpl.Property, tpl.Params["location"], tpl.Params["operation"], rep.Outcome.Result, rep.Outcome.Exploitability,
+				rep.Outcome.Reason, rep.Detail, want, strings.Join(ex, " | "))
 		}
 	}
 }
