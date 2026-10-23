@@ -321,3 +321,29 @@ func TestMarkVerifiedOnlyCalledFromVerify(t *testing.T) {
 }
 
 var _ = exec.FindingYes
+
+func TestReproductionsHaveAFloorOfThree(t *testing.T) {
+	for _, n := range []int{-1, 0, 1, 2} {
+		ty := newToy()
+		ty.readFlaw = stable
+		env := newEnv(t, ty)
+		v := run(t, env, newRec(), Options{Reproductions: n}, ownTest(t))
+		if v.State != StateVerified || v.Reproductions != 3 || env.fresh.Load() != 9 {
+			t.Fatalf("N=%d: %+v fresh=%d", n, v, env.fresh.Load())
+		}
+	}
+	// reproduces only twice: not verified even when N=2 is requested
+	ty := newToy()
+	ty.readFlaw = func(n int) bool { return n <= 2 }
+	v := run(t, newEnv(t, ty), newRec(), Options{Reproductions: 2}, ownTest(t))
+	if v.State == StateVerified || !strings.HasPrefix(v.Reason, "not reproducible (2/3)") {
+		t.Fatalf("two reproductions verified: %+v", v)
+	}
+	ty = newToy()
+	ty.readFlaw = stable
+	env := newEnv(t, ty)
+	v = run(t, env, newRec(), Options{Reproductions: 5}, ownTest(t))
+	if v.State != StateVerified || v.Reproductions != 5 || env.fresh.Load() != 15 {
+		t.Fatalf("N=5: %+v fresh=%d", v, env.fresh.Load())
+	}
+}

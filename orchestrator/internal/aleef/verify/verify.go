@@ -26,6 +26,10 @@
 // distinct and ordered. Callers must have saved the test and its two controls
 // (Store.SaveTest) before calling Verify.
 //
+// Three rounds (MinReproductions) is a floor, not a default. Re-verifying the
+// same test under the same RunID is unsupported: the (run, test, exec_no) key
+// collides and the result is unconfirmed "result could not be recorded".
+//
 // The package is on the generator side: it must not import the benchmark
 // bank, its sealed data or the bench harness.
 package verify
@@ -84,9 +88,15 @@ type Recorder interface {
 	SaveResult(ctx context.Context, runID string, t generate.Test, execNo int, res exec.Result) error
 }
 
+// MinReproductions is the floor for Options.Reproductions: verification
+// needs 3 consecutive reproductions from fresh objects.
+const MinReproductions = 3
+
 // Options configures a Verifier.
 type Options struct {
-	// Reproductions is N, the number of rounds. Default 3.
+	// Reproductions is N, the number of rounds. 3 is a floor, not a default:
+	// any smaller value (including 0 and negatives) is raised to 3; larger
+	// values are honoured.
 	Reproductions int
 	// Actor is recorded in finding history. Default "aleef-verifier".
 	Actor string
@@ -104,8 +114,8 @@ type Verifier struct {
 
 // New returns a verifier.
 func New(env Env, rec Recorder, opt Options) *Verifier {
-	if opt.Reproductions <= 0 {
-		opt.Reproductions = 3
+	if opt.Reproductions < MinReproductions {
+		opt.Reproductions = MinReproductions
 	}
 	if opt.Actor == "" {
 		opt.Actor = "aleef-verifier"
