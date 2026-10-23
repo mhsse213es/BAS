@@ -22,6 +22,13 @@
 //   - Output is deterministic: accounts, objects, operations and fields are
 //     visited in sorted order.
 //
+// Known runner limitation. The runner counts any protected fixture value (the
+// canary) in an attack response as a leak, even when the caller is the
+// object's owner. Templates in which the owner acts on their own object
+// (property_level and function_level claims) therefore grade FAIL if the
+// operation's response echoes the object's free-text fields. Pick operations
+// whose responses omit them, or have the assembler account for it.
+//
 // Soft failures. A 2xx response whose JSON body has an "error" key,
 // status "error" or success false is a refusal in practice (the application
 // answered 200 but did nothing). IsSoftFailure implements that rule and

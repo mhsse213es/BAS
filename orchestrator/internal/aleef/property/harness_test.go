@@ -103,8 +103,12 @@ func (t *toy) deny(w http.ResponseWriter) {
 	reply(w, 403, map[string]any{"error": "forbidden"})
 }
 
-func view(it *titem) map[string]any {
-	return map[string]any{"id": it.ID, "owner": it.Owner, "title": it.Title, "status": it.Status, "amount": it.Amount}
+func (t *toy) view(it *titem) map[string]any {
+	st := it.Status
+	if st == "reversed" && t.flaws["status-lie"] {
+		st = "completed"
+	}
+	return map[string]any{"id": it.ID, "owner": it.Owner, "title": it.Title, "status": st, "amount": it.Amount}
 }
 
 func (t *toy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -148,7 +152,7 @@ func (t *toy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			t.mu.Lock()
-			v := view(it)
+			v := t.view(it)
 			t.mu.Unlock()
 			reply(w, 200, v)
 		case "PATCH", "DELETE":
@@ -177,7 +181,7 @@ func (t *toy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		t.mu.Lock()
-		v := view(it)
+		v := t.view(it)
 		t.mu.Unlock()
 		reply(w, 200, v)
 	// body-carried (nested) identifier
@@ -245,6 +249,17 @@ func (t *toy) action(w http.ResponseWriter, r *http.Request, cust, role, id, act
 	t.mu.Unlock()
 	if !found {
 		reply(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	if act == "status" && r.Method == "GET" {
+		if it.Owner != cust {
+			t.deny(w)
+			return
+		}
+		t.mu.Lock()
+		v := t.view(it)
+		t.mu.Unlock()
+		reply(w, 200, map[string]any{"id": v["id"], "status": v["status"]})
 		return
 	}
 	switch {
@@ -397,6 +412,7 @@ func toyModel() model.Model {
 				"note": str(), "target": {Type: "object", Properties: map[string]*model.Schema{"item_id": str()}}}}, model.ClassReversible),
 			op("reports", "GET", "/api/v2/admin/reports", nil, nil, model.ClassRead),
 			op("archive", "POST", "/api/v2/items/{id}/archive", idp, &model.Schema{Type: "object", Properties: map[string]*model.Schema{"reason": str()}}, model.ClassReversible),
+			op("statusV2", "GET", "/api/v2/items/{id}/status", idp, nil, model.ClassRead),
 			op("authorize", "POST", "/api/v2/items/{id}/authorize", idp, &model.Schema{Type: "object", Properties: map[string]*model.Schema{"comment": str()}}, model.ClassReversible),
 			op("execute", "POST", "/api/v2/items/{id}/execute", idp, &model.Schema{Type: "object", Properties: map[string]*model.Schema{"comment": str()}}, model.ClassMoney),
 			op("terms", "PATCH", "/api/v2/items/{id}/terms", idp, &model.Schema{Type: "object", Properties: map[string]*model.Schema{"amount": {Type: "integer"}}}, model.ClassReversible),
@@ -427,7 +443,7 @@ func toyWorkflow() *Workflow {
 		{Op: "terms", Kind: StepModify},
 		{Op: "execute", Kind: StepExecute},
 		{Op: "reverse", Kind: StepReverse},
-		{Op: "getV2", Kind: StepRead},
+		{Op: "statusV2", Kind: StepRead},
 	}}
 }
 
