@@ -110,6 +110,7 @@ func runSharpHound(payload *protocol.Payload, args string) ([]byte, error) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, exe, strings.Fields(args)...)
 	cmd.Dir = dir
+	cmd.Env = childEnvironment(os.Environ())
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("sharphound exec: %w (%s)", err, truncateOut(out))
 	}

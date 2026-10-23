@@ -227,8 +227,9 @@ func runCleanup(step ScenarioStep) (verdict, detail string) {
 	cmd := exec.CommandContext(ctx, "powershell",
 		"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
 		"-Command", step.Cleanup)
+	cmd.Env = childEnvironment(os.Environ())
 	if step.PayloadDir != "" {
-		cmd.Env = append(os.Environ(), "BAS_PAYLOAD_DIR="+step.PayloadDir)
+		cmd.Env = append(cmd.Env, "BAS_PAYLOAD_DIR="+step.PayloadDir)
 	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

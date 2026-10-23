@@ -264,7 +264,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 
 	// If applyExecutionContext did not already set cmd.Env (i.e. agent context),
 	// apply step-level env overrides now.
-	if cmd.Env == nil && (step.PayloadDir != "" || len(step.Env) > 0) {
+	if cmd.Env == nil {
 		env := os.Environ()
 		if step.PayloadDir != "" {
 			env = append(env, "BAS_PAYLOAD_DIR="+step.PayloadDir)
@@ -274,6 +274,12 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 		}
 		cmd.Env = env
 	}
+	// Last stop for every shell step, whichever branch built the environment
+	// (agent context, POSIX user context, Windows user token): drop the agent's
+	// own dbsim secrets/policy so a step that dumps its environment cannot
+	// exfiltrate them. A nil Env would have inherited everything, hence the
+	// explicit assignment above.
+	cmd.Env = childEnvironment(cmd.Env)
 
 	// Use Start + Wait (instead of Run) so we can assign the process to a Job
 	// Object between spawn and wait.  exec.CommandContext's own context-kill

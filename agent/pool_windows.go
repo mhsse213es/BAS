@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"io"
 	"maps"
+	"os"
 	"os/exec"
 	"strings"
 	"sync/atomic"
@@ -120,6 +121,8 @@ func startHost() (*psHost, error) {
 		"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
 		"-EncodedCommand", encodePowerShell(hostHarness))
 	silentCmd(cmd)
+	// The warm host runs step scripts: keep dbsim secrets out of its environment.
+	cmd.Env = childEnvironment(os.Environ())
 
 	// Each already-opened pipe is closed explicitly on any later failure --
 	// exec.Cmd only auto-closes the CHILD side of a pipe it created; the

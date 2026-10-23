@@ -200,9 +200,7 @@ func buildUserEnv(tok windows.Token, step ScenarioStep) ([]string, error) {
 	// specific variables so scripts that reference %USERPROFILE%, %APPDATA%, etc.
 	// resolve correctly inside the user session.
 	env := make([]string, 0, 32)
-	for _, e := range syscall.Environ() {
-		env = append(env, e)
-	}
+	env = append(env, childEnvironment(syscall.Environ())...)
 
 	// Patch key user-context variables.
 	if userprofile != "" {

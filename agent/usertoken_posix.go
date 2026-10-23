@@ -120,9 +120,7 @@ func userCtxFromName(name string) (posixUserCtx, bool) {
 // mirroring what buildUserEnv does on Windows.
 func buildPosixUserEnv(ctx posixUserCtx, step ScenarioStep) []string {
 	env := make([]string, 0, 32)
-	for _, e := range os.Environ() {
-		env = append(env, e)
-	}
+	env = append(env, childEnvironment(os.Environ())...)
 	if ctx.home != "" {
 		env = patchPosixEnv(env, "HOME", ctx.home)
 	}
