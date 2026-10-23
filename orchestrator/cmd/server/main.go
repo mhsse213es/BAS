@@ -323,6 +323,9 @@ func main() {
 	if err := db.EnsureDBSimRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] dbsim run schema: %v", err)
 	}
+	if err := db.EnsureDBSimTargetSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] dbsim target schema: %v", err)
+	}
 	if err := db.EnsureEmailGWCampaignSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] email gw campaign schema: %v", err)
 	}

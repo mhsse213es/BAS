@@ -40,6 +40,7 @@ import (
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detectverify"
+	"github.com/audspect/bas/internal/dbsim/dbadmin"
 	"github.com/audspect/bas/internal/emailgwefficacy"
 	"github.com/audspect/bas/internal/emailgwrun"
 	"github.com/audspect/bas/internal/emsweep"
@@ -99,6 +100,10 @@ type Handler struct {
 	db     *pgxpool.Pool
 	hub    *ws.Hub
 	engine *scenario.Engine
+	// dbsimCheckRunner dispatches the dbsim read-only identity check to an
+	// agent. nil in production until the dbsim run API exists (the check
+	// endpoint answers 501 and no target becomes client-eligible).
+	dbsimCheckRunner dbadmin.CheckRunner
 	// detectVerifyConnector builds a detectverify.Connector for a config.
 	// nil in production (New leaves it unset; call sites fall back to
 	// detectverify.NewConnector) — tests override it to avoid real HTTP calls.

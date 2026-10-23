@@ -831,6 +831,20 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanDeleteDetectionConnector)).Delete("/api/detectverify/configs/{id}", h.DeleteDetectionConnector)
 		r.With(auth.RequirePermission(auth.CanTestDetectionConnector)).Post("/api/detectverify/configs/{id}/test", h.TestDetectionConnector)
 
+		// Database security simulation — target registry, DB client mode switch,
+		// stored runs. Reads are Analyst+Admin; registering/deleting targets, the
+		// read-only identity check and the client-mode switch are Admin only. The
+		// /api/dbsim* prefixes are licence-gated in product_gate.go.
+		r.With(auth.RequirePermission(auth.CanViewDBSim)).Get("/api/dbsim/settings", h.GetDBSimSettings)
+		r.With(auth.RequirePermission(auth.CanSetDBSimClientMode)).Put("/api/dbsim/settings/client-mode", h.SetDBSimClientMode)
+		r.With(auth.RequirePermission(auth.CanViewDBSim)).Get("/api/dbsim-targets", h.ListDBSimTargets)
+		r.With(auth.RequirePermission(auth.CanManageDBSimTargets)).Post("/api/dbsim-targets", h.RegisterDBSimTarget)
+		r.With(auth.RequirePermission(auth.CanViewDBSim)).Get("/api/dbsim-targets/{id}", h.GetDBSimTarget)
+		r.With(auth.RequirePermission(auth.CanManageDBSimTargets)).Delete("/api/dbsim-targets/{id}", h.DeleteDBSimTarget)
+		r.With(auth.RequirePermission(auth.CanManageDBSimTargets)).Post("/api/dbsim-targets/{id}/identity-check", h.RunDBSimIdentityCheck)
+		r.With(auth.RequirePermission(auth.CanViewDBSim)).Get("/api/dbsim-runs", h.ListDBSimRuns)
+		r.With(auth.RequirePermission(auth.CanViewDBSim)).Get("/api/dbsim-runs/{id}", h.GetDBSimRun)
+
 		// EPP Response Actions — connector management (Admin only)
 		r.With(auth.RequirePermission(auth.CanListResponseConnectors)).Get("/api/actions/configs", h.ListResponseConnectors)
 		r.With(auth.RequirePermission(auth.CanCreateResponseConnector)).Post("/api/actions/configs", h.CreateResponseConnector)
