@@ -564,26 +564,36 @@ func (a *Adapter) Seed(ctx context.Context, f dbprobe.Fixture) error {
 	if len(f.Tables) > 0 {
 		stmts = tableFixtureStmts(schema, role, f.Tables)
 	}
-	fail := func(err error) error {
+	// fail rolls the transaction back (PG DDL is transactional, so nothing this
+	// call created survives and nothing else is ever dropped). When rollback
+	// is confirmed, the error wraps dbprobe.ErrFixtureNotCreated so the caller
+	// skips Cleanup (its DROP ... CASCADE must never reach an object this call
+	// did not create). When the outcome is unknown (cancelled context, failed
+	// rollback, commit failure) the sentinel is withheld.
+	fail := func(err error, claim bool) error {
+		werr := wrapErr("seed", err, a.secrets...)
 		if isCtxErr(err) || ctx.Err() != nil {
 			a.markBroken()
-		} else {
-			rb, c := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-			_ = a.s.Exec(rb, "ROLLBACK")
-			c()
+			return werr
 		}
-		return wrapErr("seed", err, a.secrets...)
+		rb, c := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		rerr := a.s.Exec(rb, "ROLLBACK") // also clears an aborted transaction state
+		c()
+		if rerr != nil || !claim {
+			return werr
+		}
+		return fmt.Errorf("%w: %s", dbprobe.ErrFixtureNotCreated, werr.Error())
 	}
 	if err := a.s.Exec(ctx, "BEGIN"); err != nil {
-		return fail(err)
+		return fail(err, false)
 	}
 	for _, s := range stmts {
 		if err := a.s.Exec(ctx, s.sql, s.args...); err != nil {
-			return fail(err)
+			return fail(err, true)
 		}
 	}
 	if err := a.s.Exec(ctx, "COMMIT"); err != nil {
-		return fail(err)
+		return fail(err, false)
 	}
 	return nil
 }

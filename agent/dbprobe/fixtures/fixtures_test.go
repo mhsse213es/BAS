@@ -34,6 +34,7 @@ type fakeAd struct {
 	cleanupDeadline    time.Time
 	cleanupHasDeadline bool
 	errClears          bool // a failing Cleanup still removed everything
+	invisible          bool // Seed succeeds but the objects are not visible to inspection
 }
 
 func (f *fakeAd) rec(s string) { f.mu.Lock(); f.calls = append(f.calls, s); f.mu.Unlock() }
@@ -68,7 +69,9 @@ func (f *fakeAd) Seed(ctx context.Context, fx dbprobe.Fixture) error {
 	if f.seedErr != nil {
 		return f.seedErr
 	}
-	f.state = append([]string{"schema:dbsim_" + fx.ID}, fx.Objects...)
+	if !f.invisible {
+		f.state = append([]string{"schema:dbsim_" + fx.ID}, fx.Objects...)
+	}
 	return nil
 }
 
@@ -105,8 +108,8 @@ func TestSeedCreatesIsolatedSchemaOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(ad.calls, ","); got != "inspect,seed" {
-		t.Fatalf("calls = %s, want inspect before seed", got)
+	if got := strings.Join(ad.calls, ","); got != "inspect,seed,inspect" {
+		t.Fatalf("calls = %s, want inspect before seed and a visibility check after", got)
 	}
 	if !regexp.MustCompile(`^[a-f0-9]{12}$`).MatchString(fx.ID) {
 		t.Fatalf("fixture id %q not in the expected format", fx.ID)
@@ -276,7 +279,6 @@ type noInspectAd struct{ *fakeAd }
 func (noInspectAd) InspectFixture() {}
 
 func TestCleanupFailureIsSafetyIncident(t *testing.T) {
-	ranAfter := false
 	// 1. Cleanup errors.
 	ad := labAd()
 	ad.cleanupErr = errors.New("drop denied")
@@ -292,10 +294,8 @@ func TestCleanupFailureIsSafetyIncident(t *testing.T) {
 	if len(res.Residual) == 0 {
 		t.Fatalf("result must carry the residual: %+v", res)
 	}
+	// fn returned nil, yet the run must NOT complete normally.
 	if err == nil {
-		ranAfter = true
-	}
-	if ranAfter {
 		t.Fatal("normal completion must be impossible after a failed cleanup")
 	}
 
@@ -333,7 +333,7 @@ func TestWithFixtureCleanOK(t *testing.T) {
 	if err != nil || called != 1 || len(res.Residual) != 0 {
 		t.Fatalf("err=%v called=%d res=%+v", err, called, res)
 	}
-	want := "inspect,seed,cleanup,inspect"
+	want := "inspect,seed,inspect,cleanup,inspect" // inspect after seed = visibility check
 	if got := strings.Join(ad.calls, ","); got != want {
 		t.Fatalf("calls = %s, want %s", got, want)
 	}

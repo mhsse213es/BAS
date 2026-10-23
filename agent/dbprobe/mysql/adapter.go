@@ -740,27 +740,61 @@ func (a *Adapter) Seed(ctx context.Context, f dbprobe.Fixture) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, labOpTimeout)
 	defer cancel()
-	for _, s := range create {
+	// created holds the undo statement of every object THIS call has
+	// successfully created, in creation order. A failure rolls back exactly
+	// those, newest first, and nothing else: an object this call did not create
+	// (for example a database that already existed, which makes CREATE SCHEMA
+	// fail) is never dropped.
+	var created []string
+	for _, s := range attachUndo(create, drop) {
 		if err := a.s.Exec(ctx, s.sql, s.args...); err != nil {
+			werr := a.wrap("seed", err)
 			if isCtxErr(err) || ctx.Err() != nil {
 				a.markBroken()
-			} else {
-				rb, c := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-				for _, d := range drop {
-					_ = a.s.Exec(rb, d)
-				}
-				c()
+				return werr // state unknown: no sentinel
 			}
-			return a.wrap("seed", err)
+			rb, c := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			clean := true
+			for i := len(created) - 1; i >= 0; i-- {
+				if a.s.Exec(rb, created[i]) != nil {
+					clean = false
+				}
+			}
+			c()
+			if !clean {
+				return werr
+			}
+			return fmt.Errorf("%w: %s", dbprobe.ErrFixtureNotCreated, werr.Error())
+		}
+		if s.undo != "" {
+			created = append(created, s.undo)
 		}
 	}
 	return nil
 }
 
-// myStmt is one fixture statement; values are always bound via args.
+// myStmt is one fixture statement; values are always bound via args. undo, when
+// set, is the exact statement that removes the object this statement creates.
 type myStmt struct {
 	sql  string
 	args []any
+	undo string
+}
+
+// attachUndo marks the statements that create a schema or an account with the
+// matching drop from fixtureSQL's drop list ([0] schema, [1] account).
+func attachUndo(stmts []myStmt, drop []string) []myStmt {
+	out := make([]myStmt, len(stmts))
+	copy(out, stmts)
+	for i := range out {
+		switch {
+		case strings.HasPrefix(out[i].sql, "CREATE SCHEMA"):
+			out[i].undo = drop[0]
+		case strings.HasPrefix(out[i].sql, "CREATE USER"):
+			out[i].undo = drop[1]
+		}
+	}
+	return out
 }
 
 // tableFixtureSQL turns declarative fixture tables into DDL/DML. Identifiers

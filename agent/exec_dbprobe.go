@@ -312,12 +312,29 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 		bodyErr error
 		ran     bool
 	)
-	_, ferr := fixtures.WithFixture(ctx, ad, fxSpec, func(fx dbprobe.Fixture) error {
-		ran = true
-		body, bodyErr = runBody()
-		body.Result.Notes = append(body.Result.Notes, "fixture "+fx.Kind+" seeded as schema "+fixtures.SchemaName(fx.ID))
-		return nil
-	})
+	var ferr error
+	var panicErr error
+	func() {
+		// WithFixture re-raises a probe panic after cleanup; a panic that
+		// carries a cleanup incident must still reach the result as one.
+		defer func() {
+			r := recover()
+			if r == nil {
+				return
+			}
+			if pinc, ok := r.(*fixtures.ErrSafetyIncident); ok {
+				ferr = pinc
+				return
+			}
+			panicErr = fmt.Errorf("probe panicked: %v", r)
+		}()
+		_, ferr = fixtures.WithFixture(ctx, ad, fxSpec, func(fx dbprobe.Fixture) error {
+			ran = true
+			body, bodyErr = runBody()
+			body.Result.Notes = append(body.Result.Notes, "fixture "+fx.Kind+" seeded as schema "+fixtures.SchemaName(fx.ID))
+			return nil
+		})
+	}()
 	var inc *fixtures.ErrSafetyIncident
 	switch {
 	case errors.As(ferr, &inc):
@@ -327,7 +344,12 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 		body.Result.CleanupStatus = inc.Status
 		body.Result.SafetyIncident = true
 		if body.Result.ErrorClass == "" {
-			body.Result.ErrorClass = dbErrCleanupIncident
+			if ran {
+				body.Result.ErrorClass = dbErrCleanupIncident
+			} else {
+				// The probe never ran (fixture invisible to inspection).
+				body.Result.ErrorClass = dbErrFixture
+			}
 		}
 		msg := scrubAll(inc.Error(), cred.Password, cred.User, spec.Host, spec.ExpectedIdentity)
 		body.Result.Notes = append(body.Result.Notes, "safety incident: "+msg)
@@ -337,6 +359,12 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 		// Seed refused or failed and nothing was left behind.
 		out, err := runtimeErr(dbErrFixture, "fixture", ferr)
 		out.Result.CleanupStatus = protocol.DBCleanupNotApplicable
+		return out, err
+	}
+	if panicErr != nil {
+		// Probe panicked, cleanup verified clean: an ordinary probe error.
+		out, err := runtimeErr(dbErrProbe, "probe", panicErr)
+		out.Result.CleanupStatus = protocol.DBCleanupOK
 		return out, err
 	}
 	body.Result.CleanupStatus = protocol.DBCleanupOK

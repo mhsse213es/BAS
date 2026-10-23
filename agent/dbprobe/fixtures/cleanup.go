@@ -113,6 +113,20 @@ func WithFixture(ctx context.Context, ad dbprobe.Adapter, spec dbprobe.FixtureSp
 	}
 
 	res, inc := teardown(ctx, ad, fx)
+	if errors.Is(seedErr, errNotVisible) {
+		// The fixture exists but cannot be seen: even a clean-looking teardown
+		// proves nothing. Always an incident (status failed unless a residual
+		// was actually found), and the probe never ran.
+		if inc == nil {
+			inc = &ErrSafetyIncident{FixtureID: fx.ID, Status: StatusFailed}
+		}
+		if !strings.Contains(inc.Detail, errNotVisible.Error()) {
+			if inc.Detail != "" {
+				inc.Detail += "; "
+			}
+			inc.Detail += errNotVisible.Error()
+		}
+	}
 	if inc != nil {
 		switch {
 		case panicked:

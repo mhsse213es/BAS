@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -21,6 +22,7 @@ type fixtureFakeAdapter struct {
 	errClears  bool
 	seedErr    error
 	seeded     dbprobe.Fixture
+	invisible  bool
 }
 
 func (f *fixtureFakeAdapter) Mode() dbprobe.ExecMode { return f.mode }
@@ -36,7 +38,9 @@ func (f *fixtureFakeAdapter) Seed(_ context.Context, fx dbprobe.Fixture) error {
 	if f.seedErr != nil {
 		return f.seedErr
 	}
-	f.state = []string{"schema:dbsim_" + fx.ID}
+	if !f.invisible {
+		f.state = []string{"schema:dbsim_" + fx.ID}
+	}
 	return nil
 }
 
@@ -103,7 +107,7 @@ func TestDBProbeFixtureSeedsProbesCleansInOrder(t *testing.T) {
 	if err != nil || out.GateRefusal != "" {
 		t.Fatalf("err=%v refusal=%q", err, out.GateRefusal)
 	}
-	want := "Connect,Identity,Inspect,Seed,RunProbe,Cleanup,Inspect,Close"
+	want := "Connect,Identity,Inspect,Seed,Inspect,RunProbe,Cleanup,Inspect,Close"
 	if got := strings.Join(ff.calls, ","); got != want {
 		t.Fatalf("call order = %s\nwant          %s", got, want)
 	}
@@ -189,6 +193,92 @@ func TestDBProbeProbeErrorStillCleansUp(t *testing.T) {
 	}
 	if out.Result.ErrorClass != dbErrProbe {
 		t.Fatalf("probe error class lost: %+v", out.Result)
+	}
+}
+
+func TestDBProbeSeedNotCreatedIssuesNoCleanupAndIsNotAnIncident(t *testing.T) {
+	ff := setupFixtureFake(t)
+	ff.seedErr = fmt.Errorf("create failed (already exists): %w", dbprobe.ErrFixtureNotCreated)
+	out, err := executeDBProbe(context.Background(), testDBProbeStep(withFixtureID("accounts")))
+	if err == nil {
+		t.Fatal("seed error must surface")
+	}
+	if ff.count("Cleanup") != 0 || ff.count("RunProbe") != 0 {
+		t.Fatalf("no cleanup (no DROP) and no probe when nothing was created: %v", ff.calls)
+	}
+	r := out.Result
+	if r.SafetyIncident || r.CleanupStatus != protocol.DBCleanupNotApplicable || r.ErrorClass != dbErrFixture {
+		t.Fatalf("result: %+v", r)
+	}
+}
+
+func TestDBProbeInvisibleFixtureRefusesProbeAndIsIncident(t *testing.T) {
+	ff := setupFixtureFake(t)
+	ff.invisible = true
+	out, err := executeDBProbe(context.Background(), testDBProbeStep(withFixtureID("accounts")))
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if ff.count("RunProbe") != 0 {
+		t.Fatalf("the probe must not run against an unverifiable fixture: %v", ff.calls)
+	}
+	if ff.count("Cleanup") != 1 {
+		t.Fatalf("cleanup must still run: %v", ff.calls)
+	}
+	r := out.Result
+	if !r.SafetyIncident || r.CleanupStatus != protocol.DBCleanupFailed || r.ErrorClass != dbErrFixture {
+		t.Fatalf("result: %+v", r)
+	}
+	if !strings.Contains(strings.Join(r.Notes, " "), "fixture not visible to inspection; cleanup cannot be verified") {
+		t.Fatalf("notes: %v", r.Notes)
+	}
+}
+
+// A panic in the probe while cleanup fails reaches the executor as a panic
+// carrying the incident; the executor must turn it into a result.
+func TestDBProbePanicWithFailedCleanupBecomesIncidentResult(t *testing.T) {
+	ff := setupFixtureFake(t)
+	ff.leftover = []string{"table:dbsim_x.accounts"}
+	ff.probeFn = func(context.Context, dbprobe.ProbeDef, dbprobe.DBProbeSpec) (dbprobe.ProbeResult, error) {
+		panic("kaboom")
+	}
+	step := testDBProbeStep(withFixtureID("accounts"))
+	var er protocol.ExecResult
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("panic escaped the executor: %v", r)
+			}
+		}()
+		er = execDBProbeStep(context.Background(), step)
+	}()
+	if er.ExitCode == 0 || er.DBProbe == nil {
+		t.Fatalf("exec result: %+v", er)
+	}
+	r := er.DBProbe
+	if !r.SafetyIncident || r.CleanupStatus != protocol.DBCleanupResidual || r.ErrorClass == "" {
+		t.Fatalf("result: %+v", r)
+	}
+	if strings.Contains(strings.Join(r.Notes, " ")+er.Stderr, testCredPassword) {
+		t.Fatal("secret leaked")
+	}
+}
+
+func TestDBProbePanicWithCleanCleanupIsProbeError(t *testing.T) {
+	ff := setupFixtureFake(t)
+	ff.probeFn = func(context.Context, dbprobe.ProbeDef, dbprobe.DBProbeSpec) (dbprobe.ProbeResult, error) {
+		panic("kaboom")
+	}
+	out, err := executeDBProbe(context.Background(), testDBProbeStep(withFixtureID("accounts")))
+	if err == nil {
+		t.Fatal("a probe panic must be an error")
+	}
+	if ff.count("Cleanup") != 1 {
+		t.Fatalf("cleanup must run: %v", ff.calls)
+	}
+	r := out.Result
+	if r.SafetyIncident || r.CleanupStatus != protocol.DBCleanupOK || r.ErrorClass != dbErrProbe {
+		t.Fatalf("result: %+v", r)
 	}
 }
 

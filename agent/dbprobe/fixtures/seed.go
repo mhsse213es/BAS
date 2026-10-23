@@ -86,9 +86,37 @@ func Seed(ctx context.Context, ad dbprobe.Adapter, spec dbprobe.FixtureSpec) (db
 	fx.PreState = nil
 
 	if err := ad.Seed(ctx, fx); err != nil {
+		if errors.Is(err, dbprobe.ErrFixtureNotCreated) {
+			// Nothing of this call exists: return no fixture so the caller
+			// issues no Cleanup (and so no DROP) at all.
+			return dbprobe.Fixture{}, fmt.Errorf("fixtures: seed failed: %w", err)
+		}
 		return fx, fmt.Errorf("fixtures: seed failed: %w", err)
 	}
+
+	// Runtime visibility check: the schema just created must be visible to the
+	// inspection the later VerifyClean relies on. If it is not, "clean" could not
+	// be told apart from "cannot see", so fail closed. The fixture is returned
+	// (WithFixture still runs the exact-name cleanup) together with errNotVisible.
+	seen, verr := insp.InspectFixture(ctx, fx)
+	if verr != nil || !contains(seen, "schema:"+schema) {
+		return fx, errNotVisible
+	}
 	return fx, nil
+}
+
+// errNotVisible is returned by Seed when the freshly created fixture cannot be
+// seen through InspectFixture. WithFixture turns it into a safety incident and
+// never runs the probe.
+var errNotVisible = errors.New("fixture not visible to inspection; cleanup cannot be verified")
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneTables(in []dbprobe.FixtureTable) []dbprobe.FixtureTable {

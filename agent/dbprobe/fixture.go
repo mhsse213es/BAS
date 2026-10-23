@@ -137,6 +137,15 @@ func FixtureCellArg(cell any) any {
 	return cell
 }
 
+// ErrFixtureNotCreated is wrapped by an adapter's Seed error when nothing of
+// this call's fixture exists afterwards: the first CREATE failed (for example
+// the name already exists), or everything this call created was rolled back and
+// that was confirmed. The caller must then skip Cleanup entirely, so no DROP is
+// ever issued for an object this call did not create. Adapters must NOT wrap it
+// when the resulting state is unknown (context cancelled, rollback failed,
+// commit outcome unknown).
+var ErrFixtureNotCreated = errors.New("dbprobe: fixture not created")
+
 // ModeReporter is implemented by adapters that can state their connection mode;
 // fixtures.Seed uses it to refuse non-lab adapters before any SQL.
 type ModeReporter interface {
