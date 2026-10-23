@@ -283,6 +283,7 @@ func (im *importer) importParams(path string, pathLevel, opLevel []json.RawMessa
 		case "path":
 			p.Required = true
 			p.Resource = precedingCollection(segs, p.Name)
+			p.ResourceType = paramResourceType(p.Name, p.Resource)
 			p.IsObjectID = objectIDName.MatchString(p.Name) || p.Resource != ""
 			pp = append(pp, p)
 		case "query":

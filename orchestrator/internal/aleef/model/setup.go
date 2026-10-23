@@ -15,6 +15,9 @@ import (
 // Account is a test principal the operator declares for fixture building.
 type Account struct {
 	Name, CustomerID, TokenRef, Role string
+	// Existing maps a resource type to the id of an object the account
+	// already has and the API cannot create. See existing.go.
+	Existing map[string]string
 }
 
 // SetupOp is an operator-declared creation step. Compensate names the
@@ -73,6 +76,12 @@ func BuildFixture(ctx context.Context, m Model, accounts []Account, setup []Setu
 		}
 		ops[i] = op
 	}
+	if err := validateExisting(m, accounts); err != nil {
+		return fixture.Fixture{}, nil, err
+	}
+	if err := validateChains(m, accounts, setup, ops); err != nil {
+		return fixture.Fixture{}, nil, err
+	}
 
 	var f fixture.Fixture
 	f.Name = "aleef-" + runTag
@@ -85,12 +94,18 @@ func BuildFixture(ctx context.Context, m Model, accounts []Account, setup []Setu
 		if err != nil {
 			return f, created, fmt.Errorf("resolve token for account %q: secret unavailable", a.Name)
 		}
+		self := map[string]string{}
+		for _, t := range sortedKeys(a.Existing) {
+			self[t] = a.Existing[t]
+			f.Objects = append(f.Objects, fixture.Object{ID: a.Existing[t], OwnerID: a.CustomerID, Kind: t,
+				Public: map[string]string{"confidence": "structural"}, Protected: map[string]string{"canary": ""}})
+		}
 		for i, s := range setup {
 			op := ops[i]
 			canary := ""
-			body := map[string]any{}
-			for k, v := range s.Body {
-				body[k] = v
+			body, rerr := resolveBody(s.Body, self)
+			if rerr != nil {
+				return f, created, fmt.Errorf("setup %q for account %q: %v", op.ID, a.Name, rerr)
 			}
 			if field := canaryField(op.Body); field != "" {
 				canary = "ALEEF-CANARY-" + runTag + "-" + a.Name
@@ -100,11 +115,14 @@ func BuildFixture(ctx context.Context, m Model, accounts []Account, setup []Setu
 			if err != nil {
 				return f, created, fmt.Errorf("setup %q for account %q: %w", op.ID, a.Name, err)
 			}
-			obj := fixture.Object{ID: id, OwnerID: a.CustomerID, Public: map[string]string{}, Protected: map[string]string{"canary": canary}}
+			obj := fixture.Object{ID: id, OwnerID: a.CustomerID, Kind: op.CreatedType(), Public: map[string]string{}, Protected: map[string]string{"canary": canary}}
 			if canary == "" {
 				obj.Public["confidence"] = "structural"
 			}
 			f.Objects = append(f.Objects, obj)
+			if obj.Kind != "" {
+				self[obj.Kind] = id
+			}
 			created = append(created, CreatedObject{Operation: op.ID, ID: id, Owner: a.CustomerID, Compensate: s.Compensate})
 		}
 	}

@@ -27,8 +27,11 @@ type Param struct {
 	In         string // "path" or "query"
 	IsObjectID bool
 	Resource   string // collection the identifier refers to, when it can be derived
-	Required   bool
-	Schema     *Schema
+	// ResourceType is the derived resource type of a path identifier (see
+	// resource.go); empty when none can be derived.
+	ResourceType string
+	Required     bool
+	Schema       *Schema
 }
 
 // Schema is the subset of JSON Schema the generator reasons about.
