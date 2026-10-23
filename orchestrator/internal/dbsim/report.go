@@ -42,6 +42,9 @@ const (
 	DimFail         DimensionGrade = "fail"
 	DimNotExpected  DimensionGrade = "not_expected"
 	DimUnverifiable DimensionGrade = "unverifiable"
+	// DimSkipped: the dimension could not legitimately be tested (for example
+	// the target has no queryable audit source). It is never a pass.
+	DimSkipped DimensionGrade = "skipped"
 )
 
 // Dimensions is the separated per-dimension grading.
@@ -50,6 +53,9 @@ type Dimensions struct {
 	Detection      DimensionGrade `json:"detection"`
 	Response       DimensionGrade `json:"response"`
 	Classification DimensionGrade `json:"classification"`
+	// Audit grades the target's own audit coverage/evidence (DB-04); it is
+	// DimNotExpected for scenarios that do not expect it.
+	Audit DimensionGrade `json:"audit,omitempty"`
 }
 
 // MatchGrade is the correlator's marker-match confidence (Task 12 produces it).
@@ -76,6 +82,16 @@ type ScenarioMeta struct {
 	Engine                string   `json:"engine"`
 	TargetID              string   `json:"targetId"`
 	Mode                  ExecMode `json:"mode"`
+	// ExpectAudit: the audit readback of this probe's own marker (the agent's
+	// AuditStatus/AuditEvents) is part of the expectation.
+	ExpectAudit bool `json:"expectAudit,omitempty"`
+	// ExpectAuditConfig: the probe is read_audit_config and its
+	// "audit_config: covered|partial|none" summary is part of the expectation.
+	ExpectAuditConfig bool `json:"expectAuditConfig,omitempty"`
+	// RequireObservation: an empty observation (zero rows/grants) means the
+	// account could not see the object, so it can never be graded as a pass
+	// (DB-02: a catalog the account cannot read looks exactly like a clean one).
+	RequireObservation bool `json:"requireObservation,omitempty"`
 }
 
 // Correlation is caller-supplied (the Task 12 correlator will produce it).
@@ -89,6 +105,25 @@ type Correlation struct {
 	Match       MatchGrade                 `json:"match"`
 	Alerts      int                        `json:"alerts"`
 	Limitations string                     `json:"limitations,omitempty"`
+	// AlertRefs are minimised references to the matched alerts (id, time,
+	// rule, host and a redacted excerpt), never the raw alert document. The
+	// wiring layer fills it; it is bounded and redacted again on storage.
+	AlertRefs []AlertRef `json:"alertRefs,omitempty"`
+}
+
+// MaxAlertRefs and MaxAlertExcerptBytes bound what is stored per alert.
+const (
+	MaxAlertRefs         = 5
+	MaxAlertExcerptBytes = 512
+)
+
+// AlertRef is what the report keeps of one matched SIEM alert.
+type AlertRef struct {
+	ID      string    `json:"id,omitempty"`
+	Time    time.Time `json:"time"`
+	Rule    string    `json:"rule,omitempty"`
+	Host    string    `json:"host,omitempty"`
+	Excerpt string    `json:"excerpt,omitempty"`
 }
 
 // Outcome is everything known about one scenario execution.
@@ -116,6 +151,30 @@ type Outcome struct {
 	// grades ERROR: never PASS, never FAIL, never SKIPPED.
 	CleanupStatus  string
 	SafetyIncident bool
+	// Observed, when set, is the number of items actually observed (for DB-02
+	// the DiffReport.GrantsChecked). It overrides Probe.RowsRead for the
+	// RequireObservation guard.
+	Observed *int
+	// Limitations are extra caller-supplied limitation lines (redacted when
+	// rendered), for example "agent row counts disagree".
+	Limitations []string
+}
+
+// unobservable returns a non-empty reason when the scenario requires a
+// non-empty observation and the probe returned none. A denial is its own
+// observation and is not "unobservable".
+func unobservable(s ScenarioMeta, o Outcome) string {
+	if !s.RequireObservation || !o.ProbeRan || o.Probe.Denied || o.ExecutionError != "" || probeErrored(o) {
+		return ""
+	}
+	n := o.Probe.RowsRead
+	if o.Observed != nil {
+		n = *o.Observed
+	}
+	if n > 0 {
+		return ""
+	}
+	return "no grants observed: account may lack catalog visibility"
 }
 
 // cleanupState returns the effective cleanup status and whether the fixture
@@ -146,6 +205,11 @@ var errorClassAllowedRead = map[string]bool{"row_limit_exceeded": true}
 // Denied=true with any other class (timeout, canceled, connection errors,
 // engine-specific codes) is not a trustworthy denial: Enforcement is Unknown.
 var errorClassDenial = map[string]bool{"": true, "permission_denied": true, "auth_failed": true, "read_only_violation": true}
+
+// ProbeCompleted reports whether the probe ran to an observation (success,
+// denial or an allowed read stopped by the row cap), as opposed to not running
+// or failing with an execution-type error class.
+func ProbeCompleted(o Outcome) bool { return o.ProbeRan && !probeErrored(o) }
 
 func probeErrored(o Outcome) bool {
 	if !o.ProbeRan {
@@ -191,7 +255,7 @@ type graded struct {
 //
 // A scenario that expects nothing at all is ERROR, never a vacuous PASS.
 func grade(s ScenarioMeta, o Outcome) graded {
-	g := graded{Dims: Dimensions{DimNotExpected, DimNotExpected, DimNotExpected, DimNotExpected}}
+	g := graded{Dims: Dimensions{DimNotExpected, DimNotExpected, DimNotExpected, DimNotExpected, DimNotExpected}}
 	enf := enforcementOf(o)
 
 	switch s.ExpectedPrevention {
@@ -220,6 +284,13 @@ func grade(s ScenarioMeta, o Outcome) graded {
 		g.Dims.Classification = DimUnverifiable
 	}
 
+	g.Dims.Audit, _ = auditGrade(s, o)
+	unobs := unobservable(s, o)
+	if unobs != "" && g.Dims.Prevention != DimNotExpected {
+		// An empty observation proves neither allow nor deny.
+		g.Dims.Prevention = DimUnverifiable
+	}
+
 	_, cleanupIncident := cleanupState(o)
 	switch {
 	case cleanupIncident:
@@ -242,15 +313,19 @@ func grade(s ScenarioMeta, o Outcome) graded {
 		g.Result, g.Reason = ResultError, "probe did not run and no skip reason recorded"
 	case probeErrored(o):
 		g.Result, g.Reason = ResultError, "probe error class "+o.Probe.ErrorClass
+	case unobs != "":
+		g.Result, g.Reason = ResultError, "unobservable: "+unobs
 	default:
-		all := []DimensionGrade{g.Dims.Prevention, g.Dims.Detection, g.Dims.Response, g.Dims.Classification}
-		var fail, unver, pass int
+		all := []DimensionGrade{g.Dims.Prevention, g.Dims.Detection, g.Dims.Response, g.Dims.Classification, g.Dims.Audit}
+		var fail, unver, skipped, pass int
 		for _, d := range all {
 			switch d {
 			case DimFail:
 				fail++
 			case DimUnverifiable:
 				unver++
+			case DimSkipped:
+				skipped++
 			case DimPass:
 				pass++
 			}
@@ -262,6 +337,10 @@ func grade(s ScenarioMeta, o Outcome) graded {
 			g.Result, g.Reason = ResultFail, "an expected control behaviour was not observed"
 		case unver > 0:
 			g.Result, g.Reason = ResultError, "an expected dimension is unverifiable"
+		case skipped > 0:
+			// Could not legitimately be tested (e.g. no queryable audit
+			// source): neither a pass nor a control failure.
+			g.Result, g.Reason = ResultSkipped, "an expected dimension could not be tested (skipped)"
 		case pass == 0:
 			g.Result, g.Reason = ResultError, "scenario declares no expectation to grade"
 		default:
@@ -354,6 +433,19 @@ func ToRecord(s ScenarioMeta, o Outcome) (dlpreport.Record, error) {
 	} else {
 		lims = append(lims, "No telemetry correlation was attempted: detection telemetry is unverifiable and response was not tested.")
 	}
+	if t2, note, ok := auditTelemetry(s, o, tel, o.Corr.Evaluated); ok {
+		tel = t2
+		lims = append(lims, note)
+		if !o.Corr.Evaluated && t2 == dlpreport.TelemetryPresent && s.ExpectAudit {
+			conf = string(MatchExactMarker) // the audit event carries this run's marker
+		}
+	}
+	_, auditLims := auditGrade(s, o)
+	lims = append(lims, auditLims...)
+	lims = append(lims, o.Limitations...)
+	if u := unobservable(s, o); u != "" {
+		lims = append(lims, "Observation empty ("+u+"): an empty result is unobservable, so the run is graded ERROR, never PASS.")
+	}
 
 	cls := o.Classification
 	if cls == "" {
@@ -422,6 +514,34 @@ type evidence struct {
 	RunID          string      `json:"runId"`
 	CleanupStatus  string      `json:"cleanupStatus,omitempty"`
 	SafetyIncident bool        `json:"safetyIncident,omitempty"`
+	// Audit evidence as accepted by the orchestrator: status, at most
+	// MaxStoredAuditEvents events (redacted, bounded), and how many were not
+	// kept. Never executed or interpreted.
+	AuditStatus        string              `json:"auditStatus,omitempty"`
+	AuditEvents        []DBProbeAuditEvent `json:"auditEvents,omitempty"`
+	AuditEventsDropped int                 `json:"auditEventsDropped,omitempty"`
+}
+
+// Redact is the exported form of the defensive redaction pass, for the wiring
+// layer that handles other untrusted text (alert excerpts) before it reaches
+// a Record or Outcome.
+func Redact(s string) string { return redact(s) }
+
+// sanitizeAlertRefs bounds and redacts the alert references: at most
+// MaxAlertRefs, every text field redacted again and cut.
+func sanitizeAlertRefs(in []AlertRef) []AlertRef {
+	var out []AlertRef
+	for i, a := range in {
+		if i >= MaxAlertRefs {
+			break
+		}
+		out = append(out, AlertRef{
+			ID: cutUTF8(redact(a.ID), 128), Time: a.Time,
+			Rule: cutUTF8(redact(a.Rule), 256), Host: cutUTF8(redact(a.Host), 128),
+			Excerpt: cutUTF8(redact(cutUTF8(a.Excerpt, 4*MaxAlertExcerptBytes)), MaxAlertExcerptBytes),
+		})
+	}
+	return out
 }
 
 func buildEvidence(o Outcome) evidence {
@@ -431,8 +551,11 @@ func buildEvidence(o Outcome) evidence {
 	}
 	c := o.Corr
 	c.Limitations = redact(c.Limitations)
+	c.AlertRefs = sanitizeAlertRefs(c.AlertRefs)
 	cstatus, cinc := cleanupState(o)
+	auditEvents, auditDropped := SanitizeAuditEvents(o.Probe.AuditEvents)
 	return evidence{
+		AuditStatus: redact(o.Probe.AuditStatus), AuditEvents: auditEvents, AuditEventsDropped: auditDropped,
 		CleanupStatus: redact(cstatus), SafetyIncident: cinc,
 		ProbeRan: o.ProbeRan, Denied: o.Probe.Denied, RowsRead: o.Probe.RowsRead,
 		ErrorClass: redact(o.Probe.ErrorClass),

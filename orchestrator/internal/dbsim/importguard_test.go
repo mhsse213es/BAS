@@ -14,7 +14,7 @@ import (
 // import detectverify or dbcorrelate. detectverify imports internal/verification
 // whose tests import testutil -> db -> dbsim, a test-only import cycle that
 // `go build ./...` does not reveal.
-var forbiddenForDBSim = []string{"internal/detectverify", "internal/dbsim/dbcorrelate"}
+var forbiddenForDBSim = []string{"internal/detectverify", "internal/dbsim/dbcorrelate", "internal/dbsim/dbrun"}
 
 func TestDBSimDoesNotImportDetectverify(t *testing.T) {
 	files, err := filepath.Glob("*.go")
