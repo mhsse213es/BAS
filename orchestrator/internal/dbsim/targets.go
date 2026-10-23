@@ -1,9 +1,50 @@
 package dbsim
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"time"
 )
+
+// ErrTargetNotFound is returned by a TargetResolver for an unregistered id.
+var ErrTargetNotFound = errors.New("dbsim: target not registered")
+
+// TargetResolver is the only source of a target's connection details,
+// identity, mode and trust flags (Host, Port, ExpectedIdentity, Mode,
+// LabConfirmed, CredentialRef, ReadOnlyIdentityVerified). A scenario names a
+// target by id only; nothing from scenario YAML or request input may populate
+// these fields. The persistent registry arrives with the target-management
+// task; MemoryResolver serves tests and lab configuration.
+type TargetResolver interface {
+	Resolve(ctx context.Context, id string) (Target, error)
+}
+
+// MemoryResolver is an in-memory TargetResolver.
+type MemoryResolver struct {
+	targets map[string]Target
+}
+
+// NewMemoryResolver registers the given targets by ID.
+func NewMemoryResolver(ts ...Target) *MemoryResolver {
+	m := &MemoryResolver{targets: make(map[string]Target, len(ts))}
+	for _, t := range ts {
+		m.targets[t.ID] = t
+	}
+	return m
+}
+
+// Resolve returns the registered target or ErrTargetNotFound.
+func (m *MemoryResolver) Resolve(ctx context.Context, id string) (Target, error) {
+	if err := ctx.Err(); err != nil {
+		return Target{}, err
+	}
+	t, ok := m.targets[id]
+	if !ok {
+		return Target{}, fmt.Errorf("%w: %q", ErrTargetNotFound, id)
+	}
+	return t, nil
+}
 
 // Target is a pre-registered database target. ExpectedIdentity is the PG
 // system_identifier / MySQL server_uuid recorded at registration.
@@ -12,6 +53,9 @@ type Target struct {
 	Engine                   string
 	Host                     string
 	Port                     int
+	Database                 string
+	TLSMode                  string
+	CredentialRef            string // opaque "dbcred:<name>" reference, never a secret
 	Mode                     ExecMode
 	ExpectedIdentity         string
 	ReadOnlyIdentityVerified bool
