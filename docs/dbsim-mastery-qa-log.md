@@ -35,8 +35,14 @@ binary (`go test -c -tags dbsim_e2e`), not a Linux agent near the database.
   were correctly NOT credited (records say so). DB-02 `read_grants` is ERROR by
   design (R-AJ, no policy diff): DB-02 excessive-grant detection is still NOT
   produced end to end.
-* **Still unverified:** independent post-run cleanup check (`E2E.md` §8);
-  negative case (marker quoted mid-statement must not alert; unit-tested only);
+* **Independent cleanup check: VERIFIED 2026-10-23** (`E2E.md` §8, run by the
+  user on staging after both E2E runs). PostgreSQL: only `dbsim_audit` schema
+  and roles `dbsim_lab`, `dbsim_test`. MySQL: databases `bas_dbsim`, `dbsim`
+  plus system databases; accounts `dbsim_lab`, `dbsim_test` only. No fixture
+  schema/database/role/account left on either engine, matching the agent's own
+  `CleanupStatus ok`. (End state after normal runs only; failure-mid-fixture
+  cleanup is covered by unit tests and the DB-06 limitation F3 below.)
+* **Still unverified:** negative case (marker quoted mid-statement must not alert; unit-tested only);
   Linux agent next to the DB; WebSocket/enrollment/run API/`dbsim_runs` store
   (Task 16); PostgreSQL `dbsim_audit.pg_log` layout was exercised by the passing
   live audit tests but README checklist items 4, 9a, 10-12 outputs were not
