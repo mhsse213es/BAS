@@ -179,9 +179,11 @@ type graded struct {
 // grade implements controller ruling R-R:
 //
 //	ERROR   execution/evidence failed (ExecutionError, probe error class such
-//	        as timeout/canceled, no probe result), or ANY expected dimension is
-//	        unverifiable/incomplete. Checked before FAIL: an unverifiable
-//	        expectation is never a clean fail and never a pass.
+//	        as timeout/canceled, no probe result), or an expected dimension is
+//	        unverifiable/incomplete and no other dimension definitely failed.
+//	        Ruling R-U: a definite FAIL dimension beats an unverifiable one (a
+//	        confirmed failure is not hidden behind an evidence gap); an
+//	        unverifiable expectation is still never a pass.
 //	SKIPPED the test could not legitimately run (Skipped reason, or a gate
 //	        refusal, which is a policy/scope decision rather than a probe result).
 //	FAIL    an expected behaviour was observed to be absent.
@@ -254,10 +256,12 @@ func grade(s ScenarioMeta, o Outcome) graded {
 			}
 		}
 		switch {
+		case fail > 0:
+			// R-U: a definite failure is never hidden behind an evidence gap
+			// in another dimension.
+			g.Result, g.Reason = ResultFail, "an expected control behaviour was not observed"
 		case unver > 0:
 			g.Result, g.Reason = ResultError, "an expected dimension is unverifiable"
-		case fail > 0:
-			g.Result, g.Reason = ResultFail, "an expected control behaviour was not observed"
 		case pass == 0:
 			g.Result, g.Reason = ResultError, "scenario declares no expectation to grade"
 		default:

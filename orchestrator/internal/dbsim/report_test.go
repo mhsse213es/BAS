@@ -165,7 +165,8 @@ func TestGradeTable(t *testing.T) {
 		{"gate_refusal_is_skipped", meta(), gate, ResultSkipped},
 		{"probe_not_run_no_reason_is_error", meta(), noRan, ResultError},
 		{"nothing_expected_is_error_not_vacuous_pass", noExpect, denied(), ResultError},
-		{"unverifiable_beats_fail", meta(), func() Outcome { o := succeeded(); o.Corr = unver; return o }(), ResultError},
+		// R-U amended R-R: a definite fail now beats an unverifiable dimension.
+		{"fail_beats_unverifiable", meta(), func() Outcome { o := succeeded(); o.Corr = unver; return o }(), ResultFail},
 	}
 	for _, c := range cases {
 		if got := ToRunResult(c.m, c.o); got != c.want {

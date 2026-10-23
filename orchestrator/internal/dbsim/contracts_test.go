@@ -81,10 +81,30 @@ func TestElasticBuildQueryScopesByHostNameAndIP(t *testing.T) {
 	}
 	// Pins the fact that the query has no marker/free-text clause: a marker can
 	// only be applied after the fact (spec section 6).
-	for _, absent := range []string{`"match"`, `"query_string"`, `"wildcard"`, `"message"`} {
+	for _, absent := range []string{`"match"`, `"query_string"`, `"wildcard"`} {
 		if strings.Contains(string(raw), absent) {
 			t.Errorf("query unexpectedly contains %s; spec section 3 assumed no marker clause: %s", absent, raw)
 		}
+	}
+	// Amendment A1: "message" is now only in the _source whitelist (so the
+	// marker is visible in RawJSON), never in the query clause.
+	var q struct {
+		Source []string       `json:"_source"`
+		Query  map[string]any `json:"query"`
+	}
+	if err := json.Unmarshal(raw, &q); err != nil {
+		t.Fatal(err)
+	}
+	qb, _ := json.Marshal(q.Query)
+	if strings.Contains(string(qb), `"message"`) {
+		t.Errorf("message must not appear in the query clause: %s", qb)
+	}
+	hasMsg := false
+	for _, f := range q.Source {
+		hasMsg = hasMsg || f == "message"
+	}
+	if !hasMsg {
+		t.Errorf("A1: _source whitelist must include message: %v", q.Source)
 	}
 }
 
@@ -152,8 +172,10 @@ func TestContractElasticRawJSONIsNormalizedSubset(t *testing.T) {
 	if len(res.MatchedAlerts) != 1 {
 		t.Fatalf("want 1 alert, got %d", len(res.MatchedAlerts))
 	}
-	if strings.Contains(string(res.MatchedAlerts[0].RawJSON), marker) {
-		t.Fatalf("RawJSON now carries source fields; spec section 6 post-filter is viable without connector changes (update docs/dbsim-discovery.md): %s", res.MatchedAlerts[0].RawJSON)
+	// Amendment A1 (Task 12): the connector now exposes the whitelisted alert
+	// source under "source", so the exact-marker post-filter is viable.
+	if !strings.Contains(string(res.MatchedAlerts[0].RawJSON), marker) {
+		t.Fatalf("A1: RawJSON must carry the source so the marker is visible: %s", res.MatchedAlerts[0].RawJSON)
 	}
 	var m map[string]any
 	if err := json.Unmarshal(res.MatchedAlerts[0].RawJSON, &m); err != nil {
