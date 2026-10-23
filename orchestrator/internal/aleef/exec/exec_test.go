@@ -279,10 +279,10 @@ func (f doerFn) Do(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestExecWrapsCustomDoer(t *testing.T) {
 	var reached atomic.Int32
-	d := doerFn(func(r *http.Request) (*http.Response, error) {
+	d := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
 		reached.Add(1)
 		return &http.Response{StatusCode: 200, Body: http.NoBody, Header: http.Header{}}, nil
-	})
+	})}
 	g := testGuard(t, "http://127.0.0.1:8080", toyModel())
 	created := []model.CreatedObject{{Operation: "seed", ID: "item-a1", Owner: "cust-a", Compensate: "deleteV2"}}
 	e, err := New(Config{BaseURL: "http://127.0.0.1:8080", Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel(),
@@ -290,15 +290,15 @@ func TestExecWrapsCustomDoer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Cleanup sends through the custom doer, and the guard saw it.
+	// Cleanup sends through the custom client, and the guard saw it.
 	if err := e.Cleanup(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if reached.Load() != 1 || g.Stats().CleanupRequests != 1 {
 		t.Fatalf("reached=%d stats=%+v", reached.Load(), g.Stats())
 	}
-	// A Doer request to a non-engagement origin never reaches the custom doer.
-	g.Stop() // state reads are budgeted requests: refused once stopped
+	// Once stopped, state reads never reach the custom client.
+	g.Stop()
 	reached.Store(0)
 	e2, err := New(Config{BaseURL: "http://127.0.0.1:8080", Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel(),
 		Guard: g, Doer: d, Created: created})
@@ -309,7 +309,71 @@ func TestExecWrapsCustomDoer(t *testing.T) {
 		t.Fatal("snapshot succeeded through a stopped guard")
 	}
 	if reached.Load() != 0 {
-		t.Fatalf("custom doer reached %d times after stop", reached.Load())
+		t.Fatalf("custom client reached %d times after stop", reached.Load())
+	}
+}
+
+func TestNewRefusesNonClientDoer(t *testing.T) {
+	g := testGuard(t, "http://127.0.0.1:8080", toyModel())
+	d := doerFn(func(r *http.Request) (*http.Response, error) { t.Fatal("must never be called"); return nil, nil })
+	if _, err := New(Config{BaseURL: "http://127.0.0.1:8080", Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel(),
+		Guard: g, Doer: d}); err == nil {
+		t.Fatal("custom struct Doer accepted")
+	}
+}
+
+func TestClientDoerNeverFollowsRedirects(t *testing.T) {
+	var otherHits atomic.Int32
+	other := httptest.NewServer(http_counter(&otherHits, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })))
+	defer other.Close()
+	redir := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+r.URL.Path, http.StatusFound)
+	}))
+	defer redir.Close()
+	e, err := New(Config{BaseURL: redir.URL, Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel(),
+		Guard: testGuard(t, redir.URL, toyModel()), Doer: &http.Client{}, Created: toyCreated()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.State().Snapshot(context.Background()); err == nil {
+		t.Fatal("redirect treated as readable object")
+	}
+	if otherHits.Load() != 0 {
+		t.Fatalf("redirect target received %d requests", otherHits.Load())
+	}
+}
+
+func TestRunRefusesClientCertStepsBeforeAnyRequest(t *testing.T) {
+	ty, srv := newToy()
+	defer srv.Close()
+	var hits atomic.Int32
+	counting := httptest.NewServer(http_counter(&hits, srv.Config.Handler))
+	defer counting.Close()
+	e := newExec(t, ty, counting)
+	base := pick(t, "P-OWN-1", "getV2")
+	hits.Store(0)
+	mk := func(f func(*generate.Test)) generate.Test {
+		c := base
+		c.Scenario.Steps = append([]contract.Step(nil), base.Scenario.Steps...)
+		f(&c)
+		return c
+	}
+	cases := map[string]generate.Test{
+		"step": mk(func(c *generate.Test) { c.Scenario.Steps[0].ClientCert = "forged" }),
+		"control": mk(func(c *generate.Test) {
+			oc := base
+			oc.Scenario.Steps = append([]contract.Step(nil), base.Scenario.Steps...)
+			oc.Scenario.Steps[0].ClientCert = "forged"
+			c.OwnerControl = &oc
+		}),
+	}
+	for name, ts := range cases {
+		if _, err := e.Run(context.Background(), ts); err == nil || !strings.Contains(err.Error(), "client-certificate") {
+			t.Fatalf("%s: got %v", name, err)
+		}
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("%d requests sent", hits.Load())
 	}
 }
 

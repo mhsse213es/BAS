@@ -8,6 +8,12 @@
 // unlisted origin or a malformed engagement is a refusal, never a warning.
 // Errors never contain request bodies, headers or tokens.
 //
+// Invariant for callers: the Guard only sees requests made through its
+// Transport. Code that builds its own http.Client or Transport (for example the
+// API BAS runner's client-certificate and lab-admin clients) bypasses it, so
+// such paths must be refused by the caller; internal/aleef/exec does this.
+// Only an exactly *http.Client can be wrapped by WrapDoer.
+//
 // The package may import model and targetscope only; it must not import the
 // benchmark side (bank, bank/sealed, bench).
 package safety

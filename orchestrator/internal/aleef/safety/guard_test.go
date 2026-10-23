@@ -558,7 +558,10 @@ func TestGuardNeverFollowsRedirects(t *testing.T) {
 
 	// an *http.Client Doer is rewrapped so the redirect target is never requested
 	hits.Store(0)
-	d := g.WrapDoer(&http.Client{})
+	d, err := g.WrapDoer(&http.Client{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp, err := d.Do(get(t, context.Background(), "GET", srv.URL+"/api/items/1"))
 	if err != nil {
 		t.Fatal(err)
@@ -568,25 +571,15 @@ func TestGuardNeverFollowsRedirects(t *testing.T) {
 		t.Fatalf("status=%d hits=%d: redirect must be returned, not followed", resp.StatusCode, hits.Load())
 	}
 
-	// any other Doer that followed a redirect itself is refused after the fact
-	custom := g.WrapDoer(doerFunc(func(r *http.Request) (*http.Response, error) {
-		rs := resp
-		rs2 := &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("")),
-			Request: &http.Request{URL: r.URL, Response: rs}}
-		return rs2, nil
-	}))
-	if _, err := custom.Do(get(t, context.Background(), "GET", srv.URL+"/api/items/1")); !errors.Is(err, ErrRedirect) {
-		t.Fatalf("got %v", err)
-	}
 }
 
 func TestWrapDoerEnforcesGuard(t *testing.T) {
 	g, _ := newTestGuard(t, nil, GuardOptions{})
 	var calls int32
-	d := g.WrapDoer(doerFunc(func(*http.Request) (*http.Response, error) {
-		atomic.AddInt32(&calls, 1)
-		return resp(200), nil
-	}))
+	d, err := g.WrapDoer(&http.Client{Transport: okTransport(&calls)})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := d.Do(get(t, context.Background(), "GET", "https://evil.example/api/items/1")); err == nil {
 		t.Fatal("doer reached an unlisted origin")
 	}
@@ -598,6 +591,73 @@ func TestWrapDoerEnforcesGuard(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("calls=%d", calls)
 	}
+}
+
+func TestWrapDoerRefusesNonClientDoer(t *testing.T) {
+	g, _ := newTestGuard(t, nil, GuardOptions{})
+	if _, err := g.WrapDoer(doerFunc(func(*http.Request) (*http.Response, error) { return resp(200), nil })); err == nil {
+		t.Fatal("custom Doer accepted")
+	}
+	var nilClient *http.Client
+	if _, err := g.WrapDoer(nilClient); err == nil {
+		t.Fatal("nil client accepted")
+	}
+}
+
+func overlapGuard(t *testing.T) *Guard {
+	g, _ := newTestGuard(t, nil, GuardOptions{})
+	return g
+}
+
+func TestOverrideKeysWrittenDirectlyAreExamined(t *testing.T) {
+	g := overlapGuard(t)
+	var calls int32
+	rt := g.Transport(okTransport(&calls))
+	for _, k := range []string{"X-HTTP-Method-Override", "x-http-method-override", "X-Http-Method-OVERRIDE", "X-Method-Override", "x-method-override", "X-HTTP-Method", "x-http-method"} {
+		for _, v := range []string{"POST", " post ", "GET, POST"} {
+			rq := get(t, context.Background(), "GET", uatOrigin+"/api/pay")
+			rq.Header[k] = []string{v}
+			if _, err := rt.RoundTrip(rq); !errors.Is(err, ErrClassRefused) {
+				t.Fatalf("key %q value %q: got %v", k, v, err)
+			}
+		}
+	}
+	for _, q := range []string{"_METHOD=POST", "_Method=post", "_method=POST"} {
+		rq := get(t, context.Background(), "GET", uatOrigin+"/api/pay?"+q)
+		if _, err := rt.RoundTrip(rq); !errors.Is(err, ErrClassRefused) {
+			t.Fatalf("%s: got %v", q, err)
+		}
+	}
+	if calls != 0 {
+		t.Fatalf("calls=%d", calls)
+	}
+}
+
+func TestPathSmugglingFormsAreRefused(t *testing.T) {
+	g := overlapGuard(t)
+	var calls int32
+	rt := g.Transport(okTransport(&calls))
+	for _, p := range []string{
+		"/api/x/special;a=1", "/api/x/Special", "/api/x/SPECIAL", "/api/x/special%20", "/api/x/%20special",
+		"/api/x/special%252e", "/api/x/special%2e", "/api/x/special%5c", "/api/x/spec%3bial", "/api/x/special%00",
+		"/api/x/ special",
+	} {
+		rq, err := http.NewRequest("GET", uatOrigin+p, nil)
+		if err != nil {
+			continue // not even constructible
+		}
+		if _, err := rt.RoundTrip(rq); !errors.Is(err, ErrClassRefused) {
+			t.Fatalf("%s: got %v", p, err)
+		}
+	}
+	if calls != 0 {
+		t.Fatalf("calls=%d", calls)
+	}
+	r, err := rt.RoundTrip(get(t, context.Background(), "GET", uatOrigin+"/api/x/abc"))
+	if err != nil {
+		t.Fatalf("a normal id must still be allowed: %v", err)
+	}
+	r.Body.Close()
 }
 
 type doerFunc func(*http.Request) (*http.Response, error)

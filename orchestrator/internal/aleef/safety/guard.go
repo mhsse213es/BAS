@@ -210,33 +210,24 @@ type guardRT struct {
 }
 
 func (t guardRT) RoundTrip(r *http.Request) (*http.Response, error) {
-	return t.g.do(r, t.next.RoundTrip, false)
+	return t.g.do(r, t.next.RoundTrip)
 }
 
-// WrapDoer wraps d so that every request passes the guard first. A response
-// that shows d followed a redirect is refused.
-//
-// An *http.Client is not wrapped at the Do level: a copy is returned whose
-// Transport is guarded and whose redirect policy refuses every redirect, so a
-// redirect target is never requested. Any other Doer is wrapped at the Do level
-// and can only be checked after the fact.
-func (g *Guard) WrapDoer(d model.Doer) model.Doer {
-	if c, ok := d.(*http.Client); ok {
-		cc := *c
-		cc.Transport = g.Transport(c.Transport)
-		cc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-		return &cc
+// WrapDoer returns a guarded copy of d. Only an exactly *http.Client is
+// accepted: it is rebuilt with a guarded Transport and a redirect policy that
+// refuses every redirect, so nothing is ever sent before it is checked and a
+// redirect target is never requested. Any other Doer cannot be guarded (it
+// could send first and be checked after, or follow redirects itself) and is an
+// error.
+func (g *Guard) WrapDoer(d model.Doer) (model.Doer, error) {
+	c, ok := d.(*http.Client)
+	if !ok || c == nil {
+		return nil, fmt.Errorf("safety: only a *http.Client can be guarded, got %T", d)
 	}
-	return guardDoer{g: g, d: d}
-}
-
-type guardDoer struct {
-	g *Guard
-	d model.Doer
-}
-
-func (d guardDoer) Do(r *http.Request) (*http.Response, error) {
-	return d.g.do(r, d.d.Do, true)
+	cc := *c
+	cc.Transport = g.Transport(c.Transport)
+	cc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &cc, nil
 }
 
 var overrideHeaders = []string{"X-HTTP-Method-Override", "X-HTTP-Method", "X-Method-Override"}
@@ -266,14 +257,24 @@ func effectiveMethods(r *http.Request) []string {
 			}
 		}
 	}
-	for _, h := range overrideHeaders {
-		for _, v := range r.Header.Values(h) {
-			add(v)
+	// Header maps may hold non-canonical keys (written directly); the wire
+	// carries them as sent, so compare keys case-insensitively.
+	for k, vs := range r.Header {
+		for _, h := range overrideHeaders {
+			if strings.EqualFold(k, h) {
+				for _, v := range vs {
+					add(v)
+				}
+			}
 		}
 	}
 	if r.URL != nil {
-		for _, v := range r.URL.Query()["_method"] {
-			add(v)
+		for k, vs := range r.URL.Query() {
+			if strings.EqualFold(k, "_method") {
+				for _, v := range vs {
+					add(v)
+				}
+			}
 		}
 	}
 	return out
@@ -287,8 +288,17 @@ func pathAcceptable(u *url.URL) bool {
 	if p == "" || p[0] != '/' || strings.Contains(p, `\`) {
 		return false
 	}
-	if strings.Contains(strings.ToLower(u.EscapedPath()), "%2f") {
+	// Forms a server may decode, strip or route differently from this check:
+	// matrix parameters, double encoding, encoded dots, slashes, backslashes,
+	// spaces and NUL.
+	if strings.Contains(p, ";") {
 		return false
+	}
+	esc := strings.ToLower(u.EscapedPath())
+	for _, bad := range []string{"%25", "%2e", "%2f", "%5c", "%20", "%00", "%3b"} {
+		if strings.Contains(esc, bad) {
+			return false
+		}
 	}
 	for _, c := range p {
 		if c < 0x20 || c == 0x7f {
@@ -297,10 +307,30 @@ func pathAcceptable(u *url.URL) bool {
 	}
 	segs := strings.Split(p[1:], "/")
 	for i, s := range segs {
-		if s == "." || s == ".." {
+		if s == "." || s == ".." || s != strings.TrimSpace(s) {
 			return false
 		}
 		if s == "" && !(i == len(segs)-1 && len(segs) > 1) && p != "/" {
+			return false
+		}
+	}
+	return true
+}
+
+func pathMatchesFold(opPath, concrete string) bool {
+	a := strings.Split(strings.Trim(opPath, "/"), "/")
+	b := strings.Split(strings.Trim(concrete, "/"), "/")
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if strings.HasPrefix(a[i], "{") && strings.HasSuffix(a[i], "}") {
+			if b[i] == "" {
+				return false
+			}
+			continue
+		}
+		if !strings.EqualFold(a[i], b[i]) {
 			return false
 		}
 	}
@@ -317,6 +347,13 @@ func (g *Guard) classify(r *http.Request) error {
 		ops := g.m.Match(method, r.URL.Path)
 		if len(ops) == 0 {
 			return fmt.Errorf("%w: %s request is not an operation of the model (unknown class)", ErrClassRefused, method)
+		}
+		// Matching is case-sensitive. A path that would match another route if
+		// case were ignored may reach that route on a case-insensitive server.
+		for _, op := range g.m.Operations {
+			if strings.EqualFold(op.Method, method) && pathMatchesFold(op.Path, r.URL.Path) && !model.PathMatches(op.Path, r.URL.Path) {
+				return fmt.Errorf("%w: path matches operation %q only when case is ignored", ErrClassRefused, op.ID)
+			}
 		}
 		// Every matching operation must pass; the most restrictive is checked
 		// first so its refusal is the one reported.
@@ -380,7 +417,7 @@ func (g *Guard) gate() error {
 	return g.haltErr
 }
 
-func (g *Guard) do(r *http.Request, send func(*http.Request) (*http.Response, error), isDoer bool) (*http.Response, error) {
+func (g *Guard) do(r *http.Request, send func(*http.Request) (*http.Response, error)) (*http.Response, error) {
 	cleanup := IsCleanup(r.Context())
 	if err := g.preflight(r); err != nil {
 		return nil, g.refusal(err)
@@ -390,7 +427,7 @@ func (g *Guard) do(r *http.Request, send func(*http.Request) (*http.Response, er
 		g.cleanups++
 		g.mu.Unlock()
 		resp, err := send(r)
-		return g.afterSend(r, resp, err, isDoer)
+		return resp, err
 	}
 	if err := g.gate(); err != nil {
 		return nil, g.refusal(err)
@@ -473,11 +510,6 @@ func (g *Guard) do(r *http.Request, send func(*http.Request) (*http.Response, er
 		release()
 		return nil, g.stopOr(err)
 	}
-	resp, err = g.afterSend(r, resp, nil, isDoer)
-	if err != nil {
-		release()
-		return nil, err
-	}
 	resp.Body = &releaseBody{ReadCloser: resp.Body, release: release}
 	return resp, nil
 }
@@ -491,26 +523,6 @@ func (g *Guard) stopOr(err error) error {
 		return ErrStopped
 	}
 	return err
-}
-
-// afterSend refuses a response that shows a redirect was followed.
-func (g *Guard) afterSend(r *http.Request, resp *http.Response, err error, isDoer bool) (*http.Response, error) {
-	if err != nil {
-		return nil, err
-	}
-	if isDoer && resp != nil && resp.Request != nil {
-		followed := resp.Request.Response != nil
-		if !followed && resp.Request.URL != nil && r.URL != nil && resp.Request.URL.String() != r.URL.String() {
-			followed = true
-		}
-		if followed {
-			if resp.Body != nil {
-				resp.Body.Close()
-			}
-			return nil, g.refusal(ErrRedirect)
-		}
-	}
-	return resp, nil
 }
 
 // observe feeds the circuit breaker.

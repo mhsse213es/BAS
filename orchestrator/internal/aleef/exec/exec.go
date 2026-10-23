@@ -15,6 +15,12 @@
 // safety.Guard in Config (New fails without one); a custom Config.Doer is
 // wrapped by it.
 //
+// Guard invariant: every byte this package sends goes through Config.HTTP or
+// Config.Doer, both guarded. The runner can build its own HTTP clients (client
+// certificates, lab admin plane) that would bypass the guard; exec therefore
+// never sets runner.Config.ClientCerts or RogueURL and refuses, before any
+// request, a test whose scenario or controls use Step.ClientCert.
+//
 // The package is on the executing side: it must not import the benchmark
 // bank, its sealed data or the bench harness.
 package exec
@@ -120,7 +126,13 @@ func New(cfg Config) (*Executor, error) {
 	if doer == nil {
 		doer = cfg.HTTP
 	} else {
-		doer = cfg.Guard.WrapDoer(doer)
+		// Only an exactly *http.Client can be guarded (see Guard.WrapDoer); any
+		// other Doer could send before it is checked or follow redirects itself.
+		wrapped, err := cfg.Guard.WrapDoer(doer)
+		if err != nil {
+			return nil, fmt.Errorf("exec: Config.Doer refused: %w", err)
+		}
+		doer = wrapped
 	}
 	state, err := newUATState(cfg, doer)
 	if err != nil {
@@ -149,12 +161,31 @@ func (e *Executor) Cleanup(ctx context.Context) error { return e.reset.Cleanup(c
 // Orphans lists objects that could not be compensated.
 func (e *Executor) Orphans() []model.CreatedObject { return e.reset.Orphans() }
 
+// usesClientCert reports whether the test or any of its controls has a step
+// that presents a client certificate.
+func usesClientCert(t generate.Test) bool {
+	for _, st := range t.Scenario.Steps {
+		if st.ClientCert != "" {
+			return true
+		}
+	}
+	for _, c := range []*generate.Test{t.OwnerControl, t.NegativeControl} {
+		if c != nil && usesClientCert(*c) {
+			return true
+		}
+	}
+	return false
+}
+
 // Run executes one generated test through a fresh runner and returns the
 // runner report and the oracle verdict. A test whose scenario does not
 // validate is refused before any request is sent.
 func (e *Executor) Run(ctx context.Context, t generate.Test) (Result, error) {
 	if err := t.Scenario.Validate(); err != nil {
 		return Result{}, fmt.Errorf("exec: refusing test %s: %w", t.ID, err)
+	}
+	if usesClientCert(t) {
+		return Result{}, fmt.Errorf("exec: refusing test %s: client-certificate steps build their own HTTP client and bypass the guard", t.ID)
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()

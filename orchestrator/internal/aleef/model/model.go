@@ -1,6 +1,9 @@
 // Package model is the generator-side application model: a neutral,
 // deterministic view of an API derived from an OpenAPI description. It knows
 // nothing about any particular application.
+//
+// Model.Match and PathMatches are case-sensitive; callers that guard requests
+// must also consider that a server may route case-insensitively.
 package model
 
 import "sort"
