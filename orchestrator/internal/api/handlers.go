@@ -141,6 +141,7 @@ type Handler struct {
 	exerciseStore        *exercise.Store
 	exerciseExecutor     *exercise.Executor
 	k8sScenario *K8sScenarioService
+	k8sAnalysis K8sAnalysisRunner
 	exerciseChain        *exercise.EvidenceChain
 	verification         *verification.Store    // nil when not loaded — SP2 verification store
 	relationships        *relationships.Store   // nil when not loaded — CVE-ATT&CK Relationship Store

@@ -415,6 +415,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/k8s-scenarios/runs", tierPermission, auth.CanRequestK8sScenario},
 	{http.MethodPost, "/api/k8s-scenarios/runs/{id}/approve", tierPermission, auth.CanApproveK8sScenario},
 	{http.MethodPost, "/api/k8s-scenarios/runs/{id}/execute", tierPermission, auth.CanExecuteK8sScenario},
+	{http.MethodGet, "/api/k8s-discovery/analysis", tierPermission, auth.CanViewK8sDiscovery},
 	{http.MethodPost, "/api/exercises/executions/{id}/evidence", tierPermission, auth.CanInjectExerciseEvidence},
 
 	// ── admin only (per-permission since the 2026-07-18 RBAC expansion) ────

@@ -960,6 +960,7 @@ func main() {
 		WithPublicBaseURL(cfg.PublicBaseURL).
 		WithExercise(exStore, exExecutor, exChain).
 		WithK8sScenario(buildK8sScenarioService(pool)).
+		WithK8sAnalysis(buildK8sAnalysisRunner()).
 		WithVerificationStore(verificationStore).
 		WithRelationshipStore(relationshipStore).
 		WithRuleLibrary(rulesEngine).
