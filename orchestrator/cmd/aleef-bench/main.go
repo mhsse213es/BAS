@@ -321,9 +321,15 @@ func runOne(ctx context.Context, st *store.Store, build string, pol bank.Policy,
 		}
 		setup = append(setup, model.SetupOp{OperationID: id, Body: s.body, Compensate: comp})
 	}
+	// The engagement authorises by signature (method + normalised path), not by the operation ids of the
+	// document, which a run does not control here but which the engagement never trusts.
+	classBySig := map[string]string{}
 	var listed []string
-	for id := range classes {
-		listed = append(listed, id)
+	for _, op := range m.Operations {
+		if c, ok := classes[op.ID]; ok {
+			classBySig[op.Signature()] = string(c)
+			listed = append(listed, op.Signature())
+		}
 	}
 	sort.Strings(listed)
 
@@ -338,10 +344,7 @@ func runOne(ctx context.Context, st *store.Store, build string, pol bank.Policy,
 		SimulatedRail: true, SimulatorBeneficiaries: []string{"bench payee"}, Operations: listed,
 		// The engagement's classification is the ceiling for the run's classes; the lab declares the same
 		// declarative table the harness has always used.
-		Classes: map[string]string{},
-	}
-	for id, c := range classes {
-		eng.Classes[id] = string(c)
+		Classes: classBySig,
 	}
 	rec := &recorder{base: http.DefaultTransport}
 	cfg := campaign.Config{

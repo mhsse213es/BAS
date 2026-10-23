@@ -289,6 +289,15 @@ func (r *fakeRec) SaveResult(ctx context.Context, runID string, t generate.Test,
 	return nil
 }
 
+// toySig maps the toy spec's operation ids to their signatures; the engagement classifies by signature.
+var toySig = map[string]string{
+	"listItems":   "GET /api/v2/items",
+	"createItem":  "POST /api/v2/items",
+	"getItem":     "GET /api/v2/items/{}",
+	"deleteItem":  "DELETE /api/v2/items/{}",
+	"archiveItem": "POST /api/v2/items/{}/archive",
+}
+
 // ---- config helper ----
 
 func toyConfig(t *testing.T, ty *toy, rec Recorder) (Config, *httptest.Server) {
@@ -315,7 +324,7 @@ func toyConfig(t *testing.T, ty *toy, rec Recorder) (Config, *httptest.Server) {
 	// The engagement's classification is the ceiling: declare the same table the run uses.
 	cfg.Engagement.Classes = map[string]string{}
 	for id, c := range cfg.Classes {
-		cfg.Engagement.Classes[id] = string(c)
+		cfg.Engagement.Classes[toySig[id]] = string(c)
 	}
 	return cfg, srv
 }

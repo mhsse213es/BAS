@@ -79,8 +79,8 @@ To be filled by the owner after the held-out run. Nothing here is a result.
   flake). Narrow Aleef, RBAC and licence tests pass.
 - The race detector is unavailable on this host (`go test -race` needs cgo), so data-race checks were by design and test
   only.
-- Existing engagements created before the engagement classes and token references were introduced classify nothing and
-  allow no references; recreate them.
+- Engagements created before classes and token references (or keyed by operation id) classify nothing and allow no references;
+  recreate them. Classes and operation lists written with operation ids are refused.
 
 ## Material deviations from the plan
 
@@ -92,6 +92,11 @@ To be filled by the owner after the held-out run. Nothing here is a result.
   A run may keep or tighten a class, never loosen it; an unclassified operation never runs; setup and compensating
   operations are checked against the engagement's classification. The Guard also refuses any non-GET/HEAD/OPTIONS
   operation classed `read`. Added after the final review found that run-body classes could bypass the engagement.
+  Classes and the explicit money/notifying operation list are keyed by SIGNATURE ("METHOD /path-template", every {param} written
+  {}), never by operationId, because the operationId comes from the OpenAPI document under test (the analyst's input): a
+  second review probe showed a document giving `POST /payments/settle` the id of a read-classed operation. A run request may name
+  an operation by signature or by the document's id, but the id only selects an operation; its class is always resolved through
+  that operation's own signature. Two operations with one signature make the document ambiguous and the run is refused.
 - Id aliasing (campaign package) and a 14a fixture model (per-owner, per-resource-type objects, typed existing objects,
   chained setup) were added beyond the plan.
 - The benchmark bank gained owner-only DELETE operations and an `ObjectCounts` accessor so cleanup can be assessed. They

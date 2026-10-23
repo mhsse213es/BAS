@@ -123,14 +123,20 @@ func listed(list []string, id string) bool {
 //     listed. Recipient values in requests are likewise not inspected in M1.
 //   - unknown (or any unrecognised class): never.
 func Allow(c Class, op model.Operation, e Engagement) error {
+	// The explicit operation list is matched on the operation's signature (method + path template),
+	// never on its id, which comes from the document under test.
+	sig := op.Signature()
+	if sig == "" {
+		return refuse("operation %q has no valid signature and never runs", op.ID)
+	}
 	switch c {
 	case ClassRead, ClassSetupSafe, ClassReversible:
 		// Backstop independent of how the class was chosen: a state-changing method is never "read".
 		if c == ClassRead && !isSafeMethod(op.Method) {
 			return refuse("operation %q uses %s and cannot be classed read", op.ID, op.Method)
 		}
-		if len(e.Operations) > 0 && !listed(e.Operations, op.ID) {
-			return refuse("operation %q is not in the engagement allowlist", op.ID)
+		if len(e.Operations) > 0 && !listed(e.Operations, sig) {
+			return refuse("operation %q is not in the engagement allowlist", sig)
 		}
 		return nil
 	case ClassMoney:
@@ -140,7 +146,7 @@ func Allow(c Class, op model.Operation, e Engagement) error {
 		if len(e.SimulatorBeneficiaries) == 0 {
 			return refuse("operation %q moves money and no simulator beneficiaries are declared", op.ID)
 		}
-		if !listed(e.Operations, op.ID) {
+		if !listed(e.Operations, sig) {
 			return refuse("money operation %q is not explicitly listed in the engagement", op.ID)
 		}
 		return nil
@@ -148,7 +154,7 @@ func Allow(c Class, op model.Operation, e Engagement) error {
 		if len(e.TestRecipients) == 0 {
 			return refuse("operation %q notifies and no test recipients are declared", op.ID)
 		}
-		if !listed(e.Operations, op.ID) {
+		if !listed(e.Operations, sig) {
 			return refuse("notifying operation %q is not explicitly listed in the engagement", op.ID)
 		}
 		return nil

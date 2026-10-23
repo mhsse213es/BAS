@@ -602,7 +602,7 @@ func TestMoneyOperationsRunOnlyWhenTheEngagementDeclaresThem(t *testing.T) {
 	uat := safety.Engagement{ID: "e", Customer: "c", Environment: "uat", Hosts: []string{"https://uat.example"}, Approver: "a",
 		NotBefore: now, NotAfter: now.Add(time.Hour), MaxRequests: 10, MaxConcurrent: 1, RPS: 1}
 	// even with the operations listed, no simulated rail and no simulator beneficiaries: refused
-	uat.Operations = []string{"pay", "mail", "look"}
+	uat.Operations = []string{"POST /pay", "POST /mail", "GET /look"}
 	if got := allowedOps(m, uat); len(got) != 0 {
 		t.Fatalf("UAT engagement without money declarations allowed %v", got)
 	}
@@ -614,7 +614,7 @@ func TestMoneyOperationsRunOnlyWhenTheEngagementDeclaresThem(t *testing.T) {
 	if got := allowedOps(m, uat); !got["pay"] || got["mail"] || got["look"] {
 		t.Fatalf("declared money operation / notifying refusal: %v", got)
 	}
-	uat.Operations = []string{"look"}
+	uat.Operations = []string{"GET /look"}
 	if got := allowedOps(m, uat); len(got) != 0 {
 		t.Fatalf("unlisted money operation allowed: %v", got)
 	}

@@ -220,7 +220,7 @@ func TestGuardMoneyAllowedOnlyWhenEngagementPermits(t *testing.T) {
 	g, _ := newTestGuard(t, func(e *Engagement) {
 		e.SimulatedRail = true
 		e.SimulatorBeneficiaries = []string{"SIM"}
-		e.Operations = []string{"pay", "getPay"}
+		e.Operations = []string{"POST /api/pay", "GET /api/pay"}
 	}, GuardOptions{})
 	var calls int32
 	rt := g.Transport(okTransport(&calls))
@@ -703,5 +703,32 @@ func TestGuardRefusesPostClassedRead(t *testing.T) {
 	r, _ := http.NewRequest("POST", uatOrigin+"/api/settle", nil)
 	if err := g.preflight(r); !errors.Is(err, ErrClassRefused) {
 		t.Fatalf("POST classed read: %v", err)
+	}
+}
+
+// The Guard classifies the FINAL request by matching its method and concrete path to the model, and
+// applies the engagement's list by signature. The operation id (analyst-controlled) plays no part: an
+// entry that is only an id lists nothing, and an operation that takes a listed id gains nothing.
+func TestGuardClassifiesByFinalMethodAndPathNotByOperationID(t *testing.T) {
+	var calls int32
+	bad := uatEngagement()
+	bad.RPS, bad.MaxRequests = 1e6, 10
+	bad.SimulatedRail, bad.SimulatorBeneficiaries = true, []string{"SIM"}
+	bad.Operations = []string{"pay"} // an id, not a signature: the engagement is invalid, so no guard is built
+	if _, err := NewGuard(bad, uatScope(), guardModel(), GuardOptions{}); !errors.Is(err, ErrInvalidEngagement) {
+		t.Fatalf("an id-only operations list was accepted: %v", err)
+	}
+	// A model whose analyst-chosen id equals the listed text, but whose route differs, is still refused.
+	m := model.Model{Operations: []model.Operation{{ID: "POST /api/pay", Method: "POST", Path: "/api/settle", Class: model.ClassMoney}}}
+	e := uatEngagement()
+	e.RPS, e.MaxRequests = 1e6, 10
+	e.SimulatedRail, e.SimulatorBeneficiaries = true, []string{"SIM"}
+	e.Operations = []string{"POST /api/pay"}
+	g2, err := NewGuard(e, uatScope(), m, GuardOptions{Now: func() time.Time { return t0 }, Sleep: func(context.Context, time.Duration) error { return nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g2.Transport(okTransport(&calls)).RoundTrip(get(t, context.Background(), "POST", uatOrigin+"/api/settle")); !errors.Is(err, ErrClassRefused) {
+		t.Fatalf("operation with a listed id string but another route was allowed: %v", err)
 	}
 }

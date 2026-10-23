@@ -229,7 +229,7 @@ func decodeMap(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 func aleefEngagementBody(host string, env string, notBefore, notAfter time.Time) map[string]any {
 	return map[string]any{
 		"customer": "toy", "environment": env, "hosts": []string{host},
-		"classes":    map[string]string{"createItem": "setup_safe", "getItem": "read", "deleteItem": "reversible", "settleItem": "money"},
+		"classes": map[string]string{"POST /api/v2/items": "setup_safe", "GET /api/v2/items/{id}": "read", "DELETE /api/v2/items/{paymentId}": "reversible", "POST /api/v2/items/{id}/settle": "money"},
 		"token_refs": []string{"tok-alice", "tok-bob", "tok-ghost"}, // tok-ghost is declared but resolves to nothing
 		"notBefore":  notBefore, "notAfter": notAfter, "maxRequests": 100000, "maxConcurrent": 64, "rps": 1e6,
 	}

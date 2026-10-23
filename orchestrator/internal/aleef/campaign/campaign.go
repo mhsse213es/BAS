@@ -257,41 +257,64 @@ func prepare(cfg Config) (model.Model, error) {
 	if err != nil {
 		return m, err
 	}
-	have := map[string]bool{}
+	// The operation id comes from the document under test, so authorisation never keys on it. Every
+	// operation is identified by its signature (method + normalised path template); the engagement's
+	// classes are looked up by signature. The importer already refused odd paths and two operations with
+	// one signature.
+	sigOfID := map[string]string{}
+	haveSig := map[string]bool{}
+	for _, op := range m.Operations {
+		sig := op.Signature()
+		sigOfID[op.ID] = sig
+		haveSig[sig] = true
+	}
+	// A request class key may be a signature or the document's operation id; either is only a label for
+	// selecting an operation, and it is always resolved to that operation's signature. Two keys for one
+	// operation must agree.
+	reqBySig := map[string]model.OpClass{}
+	reqKey := map[string]string{}
+	var stray []string
+	for key, c := range cfg.Classes {
+		sig, perr := model.ParseSignature(key)
+		if perr != nil {
+			sig = sigOfID[key]
+		}
+		if sig == "" || !haveSig[sig] {
+			stray = append(stray, key)
+			continue
+		}
+		if prev, dup := reqBySig[sig]; dup && prev != c {
+			return m, fmt.Errorf("campaign: classes %q and %q name the same operation (%s) with different classes", reqKey[sig], key, sig)
+		}
+		reqBySig[sig], reqKey[sig] = c, key
+	}
+	if len(stray) > 0 {
+		sort.Strings(stray)
+		return m, fmt.Errorf("campaign: classes name operations that are not in the model: %s", strings.Join(stray, ", "))
+	}
 	for i := range m.Operations {
-		id := m.Operations[i].ID
-		have[id] = true
+		id, sig := m.Operations[i].ID, m.Operations[i].Signature()
 		// The engagement's classification is the ceiling of permissiveness. An operation it does not
 		// classify is unknown and never runs. A request class may keep or tighten it, never loosen it.
-		ceiling, classified := cfg.Engagement.Classes[id]
+		ceiling, classified := cfg.Engagement.Classes[sig]
 		ceil := safety.ClassUnknown
 		if classified {
 			ceil = safety.FromOpClass(model.OpClass(ceiling))
 		}
 		eff := model.OpClass(ceil)
-		if c, ok := cfg.Classes[id]; ok {
+		if c, ok := reqBySig[sig]; ok {
 			if !validClass(c) {
 				return m, fmt.Errorf("campaign: operation %q has an invalid class %q", id, c)
 			}
 			if !safety.AtLeastAsRestrictive(safety.FromOpClass(c), ceil) {
 				if !classified {
-					return m, fmt.Errorf("campaign: operation %q is not classified by the engagement, so it cannot be given class %q", id, c)
+					return m, fmt.Errorf("campaign: operation %q (%s) is not classified by the engagement, so it cannot be given class %q", id, sig, c)
 				}
-				return m, fmt.Errorf("campaign: operation %q is classified %q by the engagement; the requested class %q is less restrictive", id, ceiling, c)
+				return m, fmt.Errorf("campaign: operation %q (%s) is classified %q by the engagement; the requested class %q is less restrictive", id, sig, ceiling, c)
 			}
 			eff = c
 		}
 		m.Operations[i].Class = eff
-	}
-	var stray []string
-	for id := range cfg.Classes {
-		if !have[id] {
-			stray = append(stray, id)
-		}
-	}
-	if len(stray) > 0 {
-		sort.Strings(stray)
-		return m, fmt.Errorf("campaign: classes name operations that are not in the model: %s", strings.Join(stray, ", "))
 	}
 	m.Roles = cfg.Roles
 	if len(m.Roles) == 0 {
@@ -371,6 +394,10 @@ func Run(ctx context.Context, cfg Config) (rep Report, retErr error) {
 		}
 		rep.RepairedUnregressed++
 	}
+	sigByID := map[string]string{}
+	for _, op := range m.Operations {
+		sigByID[op.ID] = op.Signature()
+	}
 	rep.Model = coverage(m)
 	rep.NotModelled = append([]string(nil), m.NotModelled...)
 	rep.PerOperation = map[string]OpCoverage{}
@@ -426,7 +453,7 @@ func Run(ctx context.Context, cfg Config) (rep Report, retErr error) {
 	for _, id := range rep.Generated.SkippedOps {
 		oc := rep.PerOperation[id]
 		oc.Skipped = "class " + oc.Class
-		if _, classified := cfg.Engagement.Classes[id]; !classified {
+		if _, classified := cfg.Engagement.Classes[sigByID[id]]; !classified {
 			oc.Skipped = "not classified by the engagement"
 		}
 		rep.PerOperation[id] = oc

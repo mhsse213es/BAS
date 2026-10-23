@@ -139,11 +139,11 @@ test('run request carries secret references only and rejects a token-looking val
 
 test('engagement request refuses production and builds the API field names', () => {
   const form = { customer: 'Bank', environment: 'lab', notBefore: '2026-10-23T10:00', notAfter: '2026-10-24T10:00', hosts: 'https://uat.example:8443\nhttps://b.example', maxRequests: '100', maxConcurrent: '2', rps: '5',
-    classes: '{"getItem":"read","pay":"money"}', tokenRefs: 'bank/uat/alice\nbank/uat/bob' };
+    classes: '{"GET /items/{id}":"read","POST /pay/{id}/settle":"money"}', tokenRefs: 'bank/uat/alice\nbank/uat/bob' };
   const ok = model.buildEngagementRequest(form);
   assert.deepEqual(Object.keys(ok.body).sort(), ['classes', 'customer', 'environment', 'hosts', 'maxConcurrent', 'maxRequests', 'notAfter', 'notBefore', 'rps', 'token_refs']);
   assert.equal(ok.body.hosts.length, 2);
-  assert.deepEqual(ok.body.classes, { getItem: 'read', pay: 'money' });
+  assert.deepEqual(ok.body.classes, { 'GET /items/{id}': 'read', 'POST /pay/{id}/settle': 'money' });
   assert.deepEqual(ok.body.token_refs, ['bank/uat/alice', 'bank/uat/bob']);
   assert.equal('approver' in ok.body, false);
   assert.match(model.buildEngagementRequest(Object.assign({}, form, { environment: 'production' })).error, /lab or uat/);
@@ -151,14 +151,21 @@ test('engagement request refuses production and builds the API field names', () 
 
 test('engagement request validates the classes JSON and the token references', () => {
   const form = { customer: 'Bank', environment: 'lab', notBefore: '2026-10-23T10:00', notAfter: '2026-10-24T10:00', hosts: 'https://a.example', maxRequests: '100', maxConcurrent: '2', rps: '5',
-    classes: '{"getItem":"read"}', tokenRefs: 'alice' };
+    classes: '{"GET /items/{id}":"read"}', tokenRefs: 'alice' };
   assert.ok(model.buildEngagementRequest(form).body);
-  for (const bad of ['', 'not json', '[]', '{"a":"readonly"}', '{"a":1}', 'null']) {
+  for (const bad of ['', 'not json', '[]', '{"GET /a":"readonly"}', '{"GET /a":1}', 'null', '{"getItem":"read"}', '{"GET":"read"}', '{"/a":"read"}']) {
     assert.match(model.buildEngagementRequest(Object.assign({}, form, { classes: bad })).error, /[Cc]lasses/, bad);
   }
   for (const bad of ['', 'has space', 'eyJhbGciOiJIUzI1NiJ9.' + 'x'.repeat(80)]) {
     assert.match(model.buildEngagementRequest(Object.assign({}, form, { tokenRefs: bad })).error, /[Tt]oken reference/, bad);
   }
+});
+
+test('engagement request takes the operation allow-list as signatures, never operation ids', () => {
+  const form = { customer: 'Bank', environment: 'lab', notBefore: '2026-10-23T10:00', notAfter: '2026-10-24T10:00', hosts: 'https://a.example', maxRequests: '100', maxConcurrent: '2', rps: '5',
+    classes: '{"GET /items/{id}":"read"}', tokenRefs: 'alice', operations: 'POST /pay/{id}/settle' };
+  assert.deepEqual(model.buildEngagementRequest(form).body.operations, ['POST /pay/{id}/settle']);
+  assert.match(model.buildEngagementRequest(Object.assign({}, form, { operations: 'settlePayment' })).error, /signature/i);
 });
 
 test('derived operation ids mirror the server', () => {

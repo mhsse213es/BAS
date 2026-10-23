@@ -12,6 +12,8 @@ export var ALEEF_PRIOR_KNOWLEDGE = [
 export var ALEEF_ENVIRONMENTS = ['lab', 'uat'];
 export var ALEEF_OPENAPI_WARN_BYTES = 1 << 20;   // warn above 1 MiB
 export var ALEEF_OPENAPI_MAX_BYTES = 4 << 20;    // the server body limit is 5 MiB for the whole request
+// A signature is "METHOD /path-template"; the server canonicalises it and refuses anything else.
+export var ALEEF_SIGNATURE_RE = /^[A-Za-z]+ \/[^\s?#]*$/;
 export var ALEEF_SECRET_REF_RE = /^[A-Za-z0-9_./-]{1,64}$/;
 
 export var SAFETY_BANNER = 'Lab/UAT only. Production testing is prohibited. Findings are NEW TO AUDSPECT candidates/verified results, not zero-day claims.';
@@ -136,10 +138,11 @@ export function buildEngagementRequest(f) {
   var classes;
   try { classes = JSON.parse(String(f.classes || '')); } catch (e) { classes = null; }
   if (!classes || typeof classes !== 'object' || Array.isArray(classes) || !Object.keys(classes).length) {
-    return { error: 'Classes must be a JSON object of operation id to class, for example {"getItem":"read"}.' };
+    return { error: 'Classes must be a JSON object of signature to class, for example {"GET /accounts/{id}":"read"}.' };
   }
   var classIds = Object.keys(classes);
   for (var ci = 0; ci < classIds.length; ci++) {
+    if (!ALEEF_SIGNATURE_RE.test(classIds[ci])) return { error: 'Classes: "' + classIds[ci] + '" is not a signature. Use METHOD /path (for example GET /accounts/{id}), not an operation id.' };
     if (ALEEF_CLASSES.indexOf(classes[classIds[ci]]) < 0) return { error: 'Classes: "' + classIds[ci] + '" needs one of ' + ALEEF_CLASSES.join(', ') + '.' };
   }
   var tokenRefs = lines(f.tokenRefs);
@@ -154,6 +157,9 @@ export function buildEngagementRequest(f) {
     classes: classes, token_refs: tokenRefs
   };
   var ops = lines(f.operations);
+  for (var oi = 0; oi < ops.length; oi++) {
+    if (!ALEEF_SIGNATURE_RE.test(ops[oi])) return { error: 'The operation allow-list takes signatures (METHOD /path, for example POST /payments/{id}/settle), not operation ids.' };
+  }
   if (ops.length) body.operations = ops;
   if (String(f.targetScopeId || '').trim()) body.target_scope_id = String(f.targetScopeId).trim();
   return { body: body };

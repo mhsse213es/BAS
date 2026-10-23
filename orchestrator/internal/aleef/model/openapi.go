@@ -118,6 +118,19 @@ func Import(doc []byte) (m Model, err error) {
 		ops = append(ops, im.importPath(p, im.doc.Paths[p], rootSec, used)...)
 	}
 	im.ctx = ""
+	// Authorisation is keyed by signature (method + normalised path), never by the operation id the
+	// document chose. An odd path, or two operations with one signature, makes the document ambiguous.
+	bySig := map[string]string{}
+	for _, op := range ops {
+		sig, serr := Signature(op.Method, op.Path)
+		if serr != nil {
+			return Model{}, fmt.Errorf("openapi import: operation %q: %v", op.ID, serr)
+		}
+		if prev, dup := bySig[sig]; dup {
+			return Model{}, fmt.Errorf("openapi import: operations %q and %q have the same signature %q", prev, op.ID, sig)
+		}
+		bySig[sig] = op.ID
+	}
 	return Model{Operations: ops, NotModelled: im.notes}, nil
 }
 

@@ -252,7 +252,13 @@ type storedEngagement struct {
 }
 
 // CreateAleefEngagement stores an engagement (admin only: aleef:authorize). The body is the
-// safety.Engagement fields minus approver, plus an optional target_scope_id naming an existing target scope import. Production and unknown
+// safety.Engagement fields minus approver (the server sets it), plus an optional target_scope_id naming
+// an existing target scope import, and token_refs (the allowed secret reference names).
+//
+// "classes" (the ceiling for every run) and "operations" (the money/notifying allow-list) are keyed by
+// SIGNATURE, "METHOD /path-template" such as "POST /payments/{id}/settle". An operation id is refused:
+// ids come from the document under test, which the analyst supplies. The names of path parameters do
+// not matter. Engagements created before signatures must be recreated. Production and unknown
 // environments are refused.
 func (h *Handler) CreateAleefEngagement(w http.ResponseWriter, r *http.Request) {
 	if !h.aleefReady(w) {

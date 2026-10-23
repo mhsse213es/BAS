@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -153,6 +154,78 @@ func TestEngagementRejectsCollidingTokenRefs(t *testing.T) {
 		body["classes"] = map[string]string{"x": "read"}
 		if rec := e.do(http.MethodPost, "/api/aleef/engagements", auth.RoleAnalyst, body); rec.Code != http.StatusForbidden {
 			t.Fatalf("analyst create: %d", rec.Code)
+		}
+	})
+}
+
+// The document under test chooses the operation ids. A document that gives the money route the id of a
+// read operation cannot use that id to loosen the money route: the id only selects an operation, and the
+// class is resolved through the selected operation's own signature. 0 requests reach the target.
+func TestRenamedOperationIDCannotLoosenAnotherRoute(t *testing.T) {
+	withAleefEnv(t, func(e *aleefEnv) {
+		toy := newAleefToy()
+		srv := httptest.NewServer(toy)
+		defer srv.Close()
+		engID := e.createEngagement(srv.URL)
+
+		// settle route takes the id "getItem"; the real getItem is renamed out of the way
+		spec := strings.Replace(aleefToySpec, `"operationId": "getItem"`, `"operationId": "getItem_orig"`, 1)
+		spec = strings.Replace(spec, `"operationId": "settleItem"`, `"operationId": "getItem"`, 1)
+		body := aleefRunBody(engID, srv.URL)
+		body["openapi"] = spec
+		body["classes"] = map[string]string{"createItem": "setup_safe", "getItem": "read", "deleteItem": "reversible"}
+		rec := e.do(http.MethodPost, "/api/aleef/runs", auth.RoleAnalyst, body)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "less restrictive") {
+			t.Fatalf("stolen id accepted: %d %s", rec.Code, rec.Body.String())
+		}
+		// a signature key is resolved the same way, whatever the parameter name
+		body["classes"] = map[string]string{"POST /api/v2/items/{whatever}/settle": "read"}
+		rec = e.do(http.MethodPost, "/api/aleef/runs", auth.RoleAnalyst, body)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "less restrictive") {
+			t.Fatalf("signature key loosened: %d %s", rec.Code, rec.Body.String())
+		}
+		// two operations with one signature: ambiguous, refused
+		dup := strings.Replace(aleefToySpec, `"/api/v2/items/{id}/settle": {`, `"/api/v2/items/{other}": {
+   "parameters": [{"name": "other", "in": "path", "required": true, "schema": {"type": "string"}}],
+   "get": {"operationId": "getItemAgain", "responses": {"200": {"description": "ok"}}}
+  },
+  "/api/v2/items/{id}/settle": {`, 1)
+		body = aleefRunBody(engID, srv.URL)
+		body["openapi"] = dup
+		rec = e.do(http.MethodPost, "/api/aleef/runs", auth.RoleAnalyst, body)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "same signature") {
+			t.Fatalf("duplicate signature accepted: %d %s", rec.Code, rec.Body.String())
+		}
+		time.Sleep(200 * time.Millisecond)
+		if n := toy.requests.Load(); n != 0 {
+			t.Fatalf("%d requests reached the target, want 0", n)
+		}
+	})
+}
+
+// Engagement creation keys classes and operations by signature; an operation id is refused.
+func TestEngagementClassesAndOperationsAreKeyedBySignature(t *testing.T) {
+	withAleefEnv(t, func(e *aleefEnv) {
+		now := time.Now()
+		body := aleefEngagementBody("http://127.0.0.1:9", "lab", now.Add(-time.Hour), now.Add(time.Hour))
+		body["classes"] = map[string]string{"getItem": "read"}
+		rec := e.do(http.MethodPost, "/api/aleef/engagements", auth.RoleAdmin, body)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "METHOD /path") {
+			t.Fatalf("operation-id key: %d %s", rec.Code, rec.Body.String())
+		}
+		body["classes"] = map[string]string{"GET /a/{id}": "read"}
+		body["operations"] = []string{"listAccounts"}
+		if rec := e.do(http.MethodPost, "/api/aleef/engagements", auth.RoleAdmin, body); rec.Code != http.StatusBadRequest {
+			t.Fatalf("operation-id in operations: %d", rec.Code)
+		}
+		body["operations"] = []string{"post /pay/{paymentId}"}
+		rec = e.do(http.MethodPost, "/api/aleef/engagements", auth.RoleAdmin, body)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("signature keys refused: %d %s", rec.Code, rec.Body.String())
+		}
+		got, err := e.store.GetEngagement(context.Background(), decodeMap(t, rec)["id"].(string))
+		if err != nil || !strings.Contains(string(got.Body), `"GET /a/{}"`) || !strings.Contains(string(got.Body), `"POST /pay/{}"`) {
+			t.Fatalf("stored body is not canonical: %s %v", got.Body, err)
 		}
 	})
 }

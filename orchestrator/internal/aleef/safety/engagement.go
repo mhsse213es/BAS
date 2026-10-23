@@ -30,13 +30,16 @@ type Engagement struct {
 	// TokenRefs is the allowlist of secret references an account in a run may use. The administrator
 	// declares it; a run request cannot name any other reference (see the API). Empty means none.
 	TokenRefs []string `json:"tokenRefs,omitempty"`
-	// Classes is the administrator's classification of operations (operation id -> class). It is the
-	// ceiling of permissiveness: a run may keep or tighten a class (see AtLeastAsRestrictive) but never
-	// loosen it, and an operation not listed here is unclassified and never runs.
+	// Classes is the administrator's classification of operations, keyed by SIGNATURE ("METHOD
+	// /path-template", every {param} written {}; see model.Signature), never by operation id: the id
+	// comes from the document under test. It is the ceiling of permissiveness: a run may keep or tighten
+	// a class (see AtLeastAsRestrictive) but never loosen it, and an operation whose signature is not
+	// listed here is unclassified and never runs.
 	Classes map[string]string `json:"classes,omitempty"`
-	// Operations is an allowlist of operation ids. Empty means no restriction
-	// for read, setup_safe and reversible operations; money and notifying
-	// operations must always be listed.
+	// Operations is an allowlist of operation SIGNATURES ("METHOD /path-template", see
+	// model.Signature). Empty means no restriction for read, setup_safe and reversible operations;
+	// money and notifying operations must always be listed. Signatures are used, not operation ids,
+	// because the ids come from the document under test.
 	Operations    []string `json:"operations,omitempty"`
 	MaxRequests   int      `json:"maxRequests"`
 	MaxConcurrent int      `json:"maxConcurrent"`
@@ -71,6 +74,9 @@ func Parse(b []byte) (Engagement, error) {
 		return Engagement{}, fmt.Errorf("%w: trailing data", ErrInvalidEngagement)
 	}
 	e := Engagement(p)
+	if err := e.canonicalise(); err != nil {
+		return Engagement{}, err
+	}
 	if err := e.Validate(); err != nil {
 		return Engagement{}, err
 	}
@@ -79,6 +85,42 @@ func Parse(b []byte) (Engagement, error) {
 
 func invalid(format string, a ...any) error {
 	return fmt.Errorf("%w: %s", ErrInvalidEngagement, fmt.Sprintf(format, a...))
+}
+
+// canonicalise rewrites Classes keys and Operations entries to canonical signatures. Two keys that
+// normalise to the same signature, and any text that is not a signature (an operation id for
+// example), are refused.
+func (e *Engagement) canonicalise() error {
+	if e.Classes != nil {
+		out := make(map[string]string, len(e.Classes))
+		for k, v := range e.Classes {
+			sig, err := model.ParseSignature(k)
+			if err != nil {
+				return invalid("classes: key %v (classes are keyed by \"METHOD /path\", not by operation id)", err)
+			}
+			if _, dup := out[sig]; dup {
+				return invalid("classes: more than one key normalises to %q", sig)
+			}
+			out[sig] = v
+		}
+		e.Classes = out
+	}
+	if e.Operations != nil {
+		seen := map[string]bool{}
+		out := make([]string, 0, len(e.Operations))
+		for _, o := range e.Operations {
+			sig, err := model.ParseSignature(o)
+			if err != nil {
+				return invalid("operations: entry %v (operations are listed as \"METHOD /path\", not by operation id)", err)
+			}
+			if !seen[sig] {
+				seen[sig] = true
+				out = append(out, sig)
+			}
+		}
+		e.Operations = out
+	}
+	return nil
 }
 
 // Validate checks everything that does not depend on the current time or a
@@ -112,9 +154,14 @@ func (e Engagement) Validate() error {
 	if len(e.Classes) > 5000 {
 		return invalid("too many classified operations")
 	}
+	for _, o := range e.Operations {
+		if sig, err := model.ParseSignature(o); err != nil || sig != o {
+			return invalid("operations: %q is not a canonical signature", o)
+		}
+	}
 	for id, c := range e.Classes {
-		if id == "" || len(id) > 128 {
-			return invalid("classes: operation id %q is not valid", id)
+		if sig, err := model.ParseSignature(id); err != nil || sig != id || len(id) > 256 {
+			return invalid("classes: %q is not a canonical signature", id)
 		}
 		if c != string(ClassUnknown) && FromOpClass(model.OpClass(c)) == ClassUnknown {
 			return invalid("classes: %q is not an operation class (read, setup_safe, reversible, notifying, money, unknown)", c)
