@@ -79,6 +79,12 @@ func inCharset(b byte) bool { return strings.IndexByte(markerCharset, b) >= 0 }
 // the statement's leading comment is "/* dbsim:<marker> */"
 // (agent/dbprobe.MarkerComment), so in a real alert the marker is preceded by
 // "dbsim:", whose ':' is itself a token character.
+//
+// Note: a quoted literal such as 'dbsim:<marker>' in someone else's statement
+// matches this form too. The risk is negligible: the marker carries 24 random
+// hex characters issued per run and is never shown to other database users, and
+// the lab alert is only a hint (the exact post-filter plus principal/run id
+// decide attribution).
 const markerCommentPrefix = "dbsim:"
 
 // afterMarkerCommentPrefix reports whether s[:start] ends with the comment

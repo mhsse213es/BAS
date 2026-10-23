@@ -63,29 +63,42 @@ func markerExcerpt(texts []string, marker string) string {
 		if i < 0 {
 			continue
 		}
-		const half = dbsim.MaxAlertExcerptBytes / 2
-		lo, hi := i-half/2, i+len(marker)+half/2
+		// Redact a bounded SUPERSET first, then cut: a cut taken before
+		// redaction can land inside "password=..." and leave the value.
+		const margin = 2 * dbsim.MaxAlertExcerptBytes
+		lo, hi := i-margin, i+len(marker)+margin
 		if lo < 0 {
 			lo = 0
 		}
 		if hi > len(t) {
 			hi = len(t)
 		}
-		for lo < len(t) && lo > 0 && !utf8.RuneStart(t[lo]) {
+		for lo > 0 && lo < len(t) && !utf8.RuneStart(t[lo]) {
 			lo++
 		}
 		for hi < len(t) && !utf8.RuneStart(t[hi]) {
 			hi--
 		}
-		ex := dbsim.Redact(t[lo:hi])
-		if len(ex) > dbsim.MaxAlertExcerptBytes {
-			cut := dbsim.MaxAlertExcerptBytes
-			for cut > 0 && !utf8.RuneStart(ex[cut]) {
-				cut--
-			}
-			ex = ex[:cut]
+		red := dbsim.Redact(t[lo:hi])
+		j := strings.Index(red, marker)
+		if j < 0 {
+			j = 0 // the marker itself was redacted away; keep the head
 		}
-		return ex
+		start := j - dbsim.MaxAlertExcerptBytes/4
+		if start < 0 {
+			start = 0
+		}
+		for start > 0 && start < len(red) && !utf8.RuneStart(red[start]) {
+			start++
+		}
+		end := start + dbsim.MaxAlertExcerptBytes
+		if end > len(red) {
+			end = len(red)
+		}
+		for end < len(red) && !utf8.RuneStart(red[end]) {
+			end--
+		}
+		return red[start:end]
 	}
 	return ""
 }
