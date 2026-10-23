@@ -32,9 +32,10 @@ func decodeDPAPIHex(hexBlob string) ([]byte, error) {
 }
 
 // SECURITY NOTE: machine-scope DPAPI under HKLM service parameters is only as
-// protected as the registry key's ACL. This code neither verifies nor sets that
-// ACL (it mirrors the proxy-credential mechanism); operators must restrict the
-// service Parameters key to SYSTEM/Administrators.
+// protected as the registry key's ACL: any local principal that can read the
+// value can decrypt it. This code neither verifies nor sets that ACL (it mirrors
+// the proxy-credential mechanism); operators must restrict the service
+// Parameters key to SYSTEM/Administrators.
 //
 // readStoredDBCredentialPlatform reads the DPAPI-protected value from the
 // service Parameters registry key. Absent value => not found.
@@ -61,9 +62,12 @@ func readStoredDBCredentialPlatform(name string) ([]byte, bool, error) {
 	return plain, true, nil
 }
 
-// SECURITY NOTE: the value is machine-scope DPAPI, so anything that can read the
-// key and run as SYSTEM/Administrator on this host can decrypt it; the key's ACL
-// is neither verified nor set here and operators must restrict it.
+// SECURITY NOTE: the value is machine-scope DPAPI (CRYPTPROTECT_LOCAL_MACHINE,
+// no extra entropy), so ANY local principal that can read the registry value can
+// decrypt it, not only SYSTEM or Administrators: it is obfuscation at rest, not
+// access control. The only protection is the ACL of the service Parameters key,
+// which is neither verified nor set here; operators must restrict read access to
+// SYSTEM and Administrators themselves.
 //
 // StoreDBCredential DPAPI-encrypts the credential JSON for ref name and writes
 // it to the service Parameters key (operator provisioning helper, mirrors

@@ -714,3 +714,26 @@ nothing about detection). Scenario classes: DB-08 T1562, DB-10 T1565.001 (new
 
 
 PostgreSQL (222.5 s) and MySQL (226.0 s): every scenario PASS (DB-02 `read_grants` ERROR by design, R-AJ). MySQL DB-06 now PASS after the no-default-database fix. DB-08 `try_disable_audit`: Enforcement Blocked, Telemetry Present, Response Alerted, exact_marker, both engines (the denied session-scoped statement reached the audit source with the marker and raised the alert; baseline carries the meta tag only). DB-10 `try_write_fixture`: Blocked, Present, Alerted, exact_marker, both engines (fixture fingerprint unchanged). DB-11 `check_export_privileges` (run as restricted `dbsim_test`): Blocked, Telemetry Unverifiable, Response NotTested by design, both engines. Per-engine exact denial codes are enforced by construction (PASS requires them) but were not printed for passing steps. DB-11 PASS means no server-file-write, program-execution or server-file-read privilege; it does not mean the account cannot dump or back up data. Independent cleanup check for this run: pending user output.
+
+## Task 16: client read-only mode gate, target registry, settings API, operator guide
+
+**Status: Parts A, B and D built; Part C (console) NOT built; the identity-check dispatch is NOT built.** Nothing database- or Docker-dependent was run. Operator guide: `docs/dbsim-operator-guide.md`.
+
+### Built
+* **A. Client-mode gate.** `dbsim.ClientModeGate` injected into `Authorize` (`AuthInput.ClientGate`, replaces the bool); nil, off, or a gate that panics = refused. Client mode also needs a PASSED read-only identity check on the registered target and a non-blank registered identity. Exact client-mode probe set pinned in both modules (`TestClientModeAllowedProbeSetIsExact`). `TestClientRunWithMutationScenarioRefusedAtEveryLayer` exists in the orchestrator (`dbbuild`: Authorize, BuildSteps, mixed scenario, identity-check layer) and the agent (CheckSpec, gate+executor, mislabelled steps).
+* **B1. Probe `check_readonly_identity`** (both engines, read_only, client-allowed, no params/fixture; goldens byte-identical) and `dbsim.EvaluateReadOnlyIdentity` (passes only if write/ddl/admin/audit are all positively `no`; any yes/unknown/malformed/error fails; first note wins).
+* **B2/B3. Registry and settings.** `dbsim_targets` and `dbsim_settings` tables (credential references only; a client target cannot be lab-confirmed), `dbsim.TargetRegistration.Normalize`, `dbadmin.Service` (audited client-mode switch, register/list/get/delete, identity check recording who/when; a failed check withdraws an earlier pass), permissions `CanViewDBSim` (Analyst+Admin), `CanManageDBSimTargets` and `CanSetDBSimClientMode` (Admin), handlers `/api/dbsim/settings`, `/api/dbsim-targets[...]`, `/api/dbsim-runs[...]` (read-only), RBAC matrix rows, startup schema.
+* **D.** Operator guide; DPAPI comment in `agent/dbcred_windows.go` corrected (machine-scope DPAPI is readable by any local principal who can read the value).
+
+### Verified here (fakes only)
+`go test -p 1` of `orchestrator/internal/dbsim/...` and `internal/auth`; agent `dbprobe/...`, `protocol`, agent-root client-mode tests; `go build ./...`; `go vet` of API and DB packages.
+
+### NOT verified: needs a Docker-capable host or staging
+* `go test -p 1 -run 'DBSim|RBACMatrix|ProductGate|NoDrift' ./internal/api/` and `go test -p 1 -run DBSim ./internal/db/` (package TestMains start Docker). API handler tests, RBAC matrix rows and store tests are written and compile only.
+* Every SQL statement of `check_readonly_identity` against real PostgreSQL (incl. the 14 vs 15+ `has_parameter_privilege` branch) and MySQL (5.7 vs 8, roles, grantee matching). Fake-session tests only.
+* Client mode on any real database.
+
+### Open items
+1. **Product run API (missing).** Nothing derives `ScenarioMeta` from a signed scenario, builds steps from a registered target (`DBSimTargetResolver` is the intended resolver), dispatches to an agent, runs `dbrun.Evaluate` or saves via `SaveDBSimRun`. Without it `POST /api/dbsim-targets/{id}/identity-check` answers 501 (no `CheckRunner`), so no target can become client-eligible: client mode is unreachable until it is built.
+2. **Console (Part C) not built.** The dashboard is a hashed-bundle SPA (feature module, `ACTIONS` registry, `index.html` tab/nav, CSS, unit/smoke/visual baselines, integrity manifest) built with Node in Docker; far more than one page and script, and not buildable or browser-verifiable here.
+3. User decisions: forbid `insecure-skip-verify`/`disable` TLS for client targets; staleness limit for an identity-check pass; lab discover-then-confirm; whether Analysts may read targets (currently yes).
