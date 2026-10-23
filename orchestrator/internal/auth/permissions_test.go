@@ -361,6 +361,9 @@ func TestAleefPermissions(t *testing.T) {
 			t.Fatalf("viewer must not hold %s", p)
 		}
 	}
+	if !HasPermission(RoleAdmin, CanAuthorizeAleef) || HasPermission(RoleAnalyst, CanAuthorizeAleef) || HasPermission(RoleViewer, CanAuthorizeAleef) {
+		t.Fatal("aleef:authorize must be admin only")
+	}
 	if CanViewAleef != "aleef:view" || CanRunAleef != "aleef:run" {
 		t.Fatal("permission values changed")
 	}

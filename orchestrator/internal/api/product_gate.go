@@ -49,6 +49,15 @@ var productPrefixes = map[string]license.ProductLine{
 	"/api/network-topology-imports":         license.ProductNetwork,
 }
 
+// Aleef is a separate add-on (license.ProductAleef), not a tier product: PermitsNow grants it only
+// when a verified licence carries the signed "addon:aleef" token. A dev build with no licence (zero
+// licence state) therefore REFUSES /api/aleef with 403, unlike the tier products, which a dev build
+// permits; this is deliberate (fail closed for the product that sends traffic to targets).
+//
+// The prefixes are matched on the raw request path. If a path-cleaning middleware (for example chi's
+// CleanPath) is ever added AFTER this gate, the router would see a different path than the gate and the
+// two could diverge; add any such middleware before ProductGate in Mount, or re-check the cleaned path.
+
 // productForPath returns the product line that licenses path, if the path is product-specific.
 func productForPath(path string) (license.ProductLine, bool) {
 	best := ""

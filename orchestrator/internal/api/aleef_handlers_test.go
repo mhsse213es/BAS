@@ -152,6 +152,7 @@ type aleefEnv struct {
 	pool   *pgxpool.Pool
 	router http.Handler
 	store  *aleefstore.Store
+	state  *aleefState
 }
 
 func setAleefLicense(t *testing.T, tier license.Tier, addons ...string) {
@@ -174,7 +175,7 @@ func withAleefEnv(t *testing.T, fn func(e *aleefEnv)) {
 		st := aleefstore.New(pool)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
 			WithAleef(st, aleefSecretMap{"tok-alice": "tok-alice", "tok-bob": "tok-bob"})
-		fn(&aleefEnv{t: t, pool: pool, store: st, router: Mount(h, ws.NewHub(), testJWTSecret, "", http.NotFoundHandler(), 0, 0)})
+		fn(&aleefEnv{t: t, pool: pool, store: st, state: h.aleef, router: Mount(h, ws.NewHub(), testJWTSecret, "", http.NotFoundHandler(), 0, 0)})
 	})
 }
 
@@ -218,7 +219,7 @@ func decodeMap(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 
 func aleefEngagementBody(host string, env string, notBefore, notAfter time.Time) map[string]any {
 	return map[string]any{
-		"customer": "toy", "environment": env, "hosts": []string{host}, "approver": "test approver",
+		"customer": "toy", "environment": env, "hosts": []string{host},
 		"notBefore": notBefore, "notAfter": notAfter, "maxRequests": 100000, "maxConcurrent": 64, "rps": 1e6,
 	}
 }
@@ -226,7 +227,7 @@ func aleefEngagementBody(host string, env string, notBefore, notAfter time.Time)
 func (e *aleefEnv) createEngagement(host string) string {
 	e.t.Helper()
 	now := time.Now()
-	rec := e.do(http.MethodPost, "/api/aleef/engagements", auth.RoleAnalyst, aleefEngagementBody(host, "lab", now.Add(-time.Hour), now.Add(time.Hour)))
+	rec := e.do(http.MethodPost, "/api/aleef/engagements", auth.RoleAdmin, aleefEngagementBody(host, "lab", now.Add(-time.Hour), now.Add(time.Hour)))
 	if rec.Code != http.StatusCreated {
 		e.t.Fatalf("create engagement: %d %s", rec.Code, rec.Body.String())
 	}
@@ -320,6 +321,16 @@ func TestAleefRoutesRequirePermission(t *testing.T) {
 			}
 			if rec := e.do(rt.method, rt.path, "", nil); rec.Code != http.StatusUnauthorized {
 				t.Fatalf("anonymous %s %s: %d, want 401", rt.method, rt.path, rec.Code)
+			}
+			if rt.path == "/api/aleef/engagements" {
+				// only aleef:authorize (admin) creates engagements
+				if rec := e.do(rt.method, rt.path, auth.RoleAnalyst, map[string]any{}); rec.Code != http.StatusForbidden {
+					t.Fatalf("analyst %s %s: %d, want 403", rt.method, rt.path, rec.Code)
+				}
+				if rec := e.do(rt.method, rt.path, auth.RoleAdmin, map[string]any{}); rec.Code == http.StatusForbidden || rec.Code == http.StatusUnauthorized {
+					t.Fatalf("admin %s %s: %d, want the permission gate cleared", rt.method, rt.path, rec.Code)
+				}
+				continue
 			}
 			if rec := e.do(rt.method, rt.path, auth.RoleAnalyst, map[string]any{}); rec.Code == http.StatusForbidden || rec.Code == http.StatusUnauthorized {
 				t.Fatalf("analyst %s %s: %d, want the permission gate cleared", rt.method, rt.path, rec.Code)
@@ -422,7 +433,11 @@ func mustStoredEngagement(t *testing.T, body map[string]any) []byte {
 
 func mustStoredEngagementRaw(t *testing.T, body map[string]any) []byte {
 	t.Helper()
-	raw, err := json.Marshal(body)
+	b := map[string]any{"approver": "user:seed"}
+	for k, v := range body {
+		b[k] = v
+	}
+	raw, err := json.Marshal(b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -614,7 +629,7 @@ func TestResponsesContainNoSecrets(t *testing.T) {
 		}
 		// The engagement response carries no credential fields either.
 		now := time.Now()
-		rec = e.do(http.MethodPost, "/api/aleef/engagements", auth.RoleAnalyst, aleefEngagementBody(srv.URL, "lab", now.Add(-time.Hour), now.Add(time.Hour)))
+		rec = e.do(http.MethodPost, "/api/aleef/engagements", auth.RoleAdmin, aleefEngagementBody(srv.URL, "lab", now.Add(-time.Hour), now.Add(time.Hour)))
 		if strings.Contains(strings.ToLower(rec.Body.String()), "token") {
 			t.Fatalf("engagement response mentions a token: %s", rec.Body.String())
 		}

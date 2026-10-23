@@ -31,6 +31,15 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			engagement_id text        REFERENCES aleef_engagements(id),
 			created_at    timestamptz NOT NULL DEFAULT NOW()
 		)`,
+		// Run outcome, written when the campaign ends on every path (see MarkRunFinished). A row still
+		// "running" at server start is marked "interrupted" (MarkRunsInterrupted). The report holds ids and
+		// counts only, never secrets or bodies.
+		`ALTER TABLE aleef_runs ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'running'
+			CHECK (status IN ('running', 'completed', 'halted', 'failed', 'interrupted'))`,
+		`ALTER TABLE aleef_runs ADD COLUMN IF NOT EXISTS halted_reason text NOT NULL DEFAULT ''`,
+		`ALTER TABLE aleef_runs ADD COLUMN IF NOT EXISTS orphans jsonb NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE aleef_runs ADD COLUMN IF NOT EXISTS report jsonb`,
+		`ALTER TABLE aleef_runs ADD COLUMN IF NOT EXISTS finished_at timestamptz`,
 		`CREATE TABLE IF NOT EXISTS aleef_tests (
 			run_id   text    NOT NULL REFERENCES aleef_runs(id) ON DELETE CASCADE,
 			id       text    NOT NULL,

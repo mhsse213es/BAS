@@ -387,7 +387,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/vex/sweeps/active", tierPermission, auth.CanViewVariantRun},
 	{http.MethodGet, "/api/apibas/runs", tierPermission, auth.CanViewAPIBASRuns},
 	{http.MethodGet, "/api/apibas/runs/{id}", tierPermission, auth.CanViewAPIBASRuns},
-	{http.MethodPost, "/api/aleef/engagements", tierPermission, auth.CanRunAleef},
+	{http.MethodPost, "/api/aleef/engagements", tierPermission, auth.CanAuthorizeAleef},
 	{http.MethodPost, "/api/aleef/runs", tierPermission, auth.CanRunAleef},
 	{http.MethodGet, "/api/aleef/runs/{id}", tierPermission, auth.CanViewAleef},
 	{http.MethodPost, "/api/aleef/runs/{id}/stop", tierPermission, auth.CanRunAleef},

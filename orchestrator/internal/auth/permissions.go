@@ -82,6 +82,9 @@ const (
 	// engagements, starts and stops runs and records prior-knowledge reviews. Viewer holds neither.
 	CanViewAleef Permission = "aleef:view"
 	CanRunAleef  Permission = "aleef:run"
+	// CanAuthorizeAleef creates engagements: the approval that lets runs touch a target. Admin only, and the
+	// approver recorded is always the authenticated user, so an operator cannot approve their own scope.
+	CanAuthorizeAleef Permission = "aleef:authorize"
 
 	// Payload families — read is Analyst+Admin (write is Admin only, below).
 	CanListPayloadFamilies Permission = "payload-families:list"
@@ -327,7 +330,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 
 		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true, CanManageComponents: true,
 
-		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true, CanViewAleef: true, CanRunAleef: true,
+		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true, CanViewAleef: true, CanRunAleef: true, CanAuthorizeAleef: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,

@@ -985,6 +985,12 @@ func main() {
 			FromName: cfg.SMTPFromName,
 		})
 
+	// Aleef campaigns this process did not finish (killed or crashed) are marked interrupted before any
+	// new run can start. Their target objects may remain; the run records say so.
+	if err := handler.RecoverAleefRuns(context.Background()); err != nil {
+		log.Printf("[!] aleef run recovery: %v", err)
+	}
+
 	// Resume every EmailGW run a previous process restart abandoned
 	// mid-wait (see internal/api.RecoverEmailGWRuns's own doc comment).
 	// Backgrounded: boot must never block on runs that may legitimately
@@ -1387,6 +1393,9 @@ func main() {
 	log.Println("[*] Shutting down gracefully...")
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutCancel()
+	// Cancel in-flight Aleef campaigns first and give their cleanup sweeps time to compensate what they
+	// created on the target, while the rest of shutCtx remains for the servers.
+	handler.ShutdownAleef(8 * time.Second)
 	for _, s := range []*http.Server{mtlsSrv, enrollSrv, legacySrv, dashboardSrv} {
 		if err := s.Shutdown(shutCtx); err != nil {
 			log.Printf("[!] shutdown error: %v", err)

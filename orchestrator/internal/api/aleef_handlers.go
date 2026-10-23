@@ -74,6 +74,7 @@ type aleefRun struct {
 	cancel           context.CancelFunc
 	status           string
 	stopRequested    bool
+	stopReason       string // "stopped by operator" or "server shutdown"
 	finishedAt       time.Time
 	report           *campaign.Report
 	errMsg           string
@@ -85,7 +86,16 @@ type aleefState struct {
 	// httpClient optionally supplies the campaign's base transport (tests).
 	httpClient *http.Client
 
+	// runFn runs a campaign; campaign.Run unless a test replaces it.
+	runFn func(context.Context, campaign.Config) (campaign.Report, error)
+
+	// rootCtx is the parent of every run's context; shutdown cancels it.
+	rootCtx    context.Context
+	rootCancel context.CancelFunc
+	wg         sync.WaitGroup // one per running campaign goroutine
+
 	mu     sync.Mutex
+	closed bool // set by shutdown: no new runs
 	runs   map[string]*aleefRun
 	active map[string]string // engagement id -> run id
 }
@@ -96,8 +106,55 @@ func (h *Handler) WithAleef(st *aleefstore.Store, secrets model.SecretResolver) 
 	if secrets == nil {
 		secrets = AleefEnvSecrets{}
 	}
-	h.aleef = &aleefState{store: st, secrets: secrets, runs: map[string]*aleefRun{}, active: map[string]string{}}
+	root, cancel := context.WithCancel(context.Background())
+	h.aleef = &aleefState{store: st, secrets: secrets, runFn: campaign.Run, rootCtx: root, rootCancel: cancel,
+		runs: map[string]*aleefRun{}, active: map[string]string{}}
 	return h
+}
+
+// RecoverAleefRuns marks runs still 'running' in the database as 'interrupted'. Call once at server
+// start: the process that was running them is gone, so their campaigns did not finish and objects they
+// created on the target may remain. It logs the run ids.
+func (h *Handler) RecoverAleefRuns(ctx context.Context) error {
+	if h.aleef == nil {
+		return nil
+	}
+	ids, err := h.aleef.store.MarkRunsInterrupted(ctx)
+	if err != nil {
+		return err
+	}
+	if len(ids) > 0 {
+		log.Printf("[aleef] marked %d unfinished run(s) interrupted by a restart: %s", len(ids), strings.Join(ids, ", "))
+	}
+	return nil
+}
+
+// ShutdownAleef cancels every running campaign and waits up to timeout for their cleanup sweeps.
+// Call it before the HTTP servers shut down. Runs that do not finish in time stay 'running' in the
+// database and are marked interrupted at the next start.
+func (h *Handler) ShutdownAleef(timeout time.Duration) {
+	if h.aleef != nil {
+		h.aleef.shutdown(timeout)
+	}
+}
+
+func (st *aleefState) shutdown(timeout time.Duration) {
+	st.mu.Lock()
+	st.closed = true
+	for _, run := range st.runs {
+		if run.status == aleefRunning || run.status == aleefStopping {
+			run.stopRequested, run.stopReason, run.status = true, "server shutdown", aleefStopping
+		}
+	}
+	st.mu.Unlock()
+	st.rootCancel()
+	done := make(chan struct{})
+	go func() { st.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		log.Printf("[aleef] shutdown: campaigns still cleaning up after %s; they stay 'running' and are marked interrupted at the next start", timeout)
+	}
 }
 
 // AleefEnvSecrets resolves a token reference from the server environment. The reference
@@ -169,8 +226,8 @@ type storedEngagement struct {
 	TargetScopeID string          `json:"target_scope_id,omitempty"`
 }
 
-// CreateAleefEngagement stores an engagement. The body is the safety.Engagement fields plus an
-// optional target_scope_id naming an existing target scope import. Production and unknown
+// CreateAleefEngagement stores an engagement (admin only: aleef:authorize). The body is the
+// safety.Engagement fields minus approver, plus an optional target_scope_id naming an existing target scope import. Production and unknown
 // environments are refused.
 func (h *Handler) CreateAleefEngagement(w http.ResponseWriter, r *http.Request) {
 	if !h.aleefReady(w) {
@@ -189,6 +246,18 @@ func (h *Handler) CreateAleefEngagement(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	delete(raw, "id") // the engagement id is assigned by the server
+	// The approver is the authenticated user, never a value from the body: an operator cannot name
+	// someone else (or themselves under another name) as the approver of their own scope.
+	if _, ok := raw["approver"]; ok {
+		jsonError(w, "approver is set by the server from the authenticated user and must not be supplied", http.StatusBadRequest)
+		return
+	}
+	actor := aleefActor(r)
+	if actor == "" {
+		jsonError(w, "unauthenticated", http.StatusUnauthorized)
+		return
+	}
+	raw["approver"], _ = json.Marshal(actor)
 	body, err := json.Marshal(raw)
 	if err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
@@ -297,6 +366,11 @@ func (h *Handler) StartAleefRun(w http.ResponseWriter, r *http.Request) {
 
 	st := h.aleef
 	st.mu.Lock()
+	if st.closed {
+		st.mu.Unlock()
+		jsonError(w, "the server is shutting down", http.StatusServiceUnavailable)
+		return
+	}
 	st.pruneLocked()
 	if cur, busy := st.active[req.EngagementID]; busy {
 		st.mu.Unlock()
@@ -306,21 +380,31 @@ func (h *Handler) StartAleefRun(w http.ResponseWriter, r *http.Request) {
 	}
 	st.active[req.EngagementID] = "pending"
 	st.mu.Unlock()
+	// Release the placeholder on every path that does not hand it to a started run (including a panic).
+	started := false
+	defer func() {
+		if !started {
+			st.mu.Lock()
+			if st.active[req.EngagementID] == "pending" {
+				delete(st.active, req.EngagementID)
+			}
+			st.mu.Unlock()
+		}
+	}()
 
 	runID, err := st.store.CreateRun(r.Context(), req.EngagementID)
 	if err != nil {
-		st.mu.Lock()
-		delete(st.active, req.EngagementID)
-		st.mu.Unlock()
 		log.Printf("[aleef] create run: %v", err)
 		jsonError(w, "could not create run", http.StatusInternalServerError)
 		return
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(st.rootCtx)
 	run := &aleefRun{id: runID, engagementID: req.EngagementID, startedAt: time.Now().UTC(), cancel: cancel, status: aleefRunning}
 	st.mu.Lock()
 	st.runs[runID] = run
 	st.active[req.EngagementID] = runID
+	st.wg.Add(1)
+	started = true
 	st.mu.Unlock()
 
 	cfg.Recorder = &presetRunRecorder{Store: st.store, runID: runID}
@@ -329,8 +413,10 @@ func (h *Handler) StartAleefRun(w http.ResponseWriter, r *http.Request) {
 	respondStatus(w, map[string]any{"run_id": runID, "status": aleefRunning, "engagement_id": req.EngagementID}, http.StatusAccepted)
 }
 
-// execute runs the campaign and records its outcome.
+// execute runs the campaign and records its outcome, in the database and in memory, on every path
+// including a panic. The database write uses its own context so a cancelled run still persists.
 func (st *aleefState) execute(ctx context.Context, run *aleefRun, cfg campaign.Config) {
+	defer st.wg.Done()
 	var rep campaign.Report
 	var err error
 	func() {
@@ -339,24 +425,54 @@ func (st *aleefState) execute(ctx context.Context, run *aleefRun, cfg campaign.C
 				err = fmt.Errorf("campaign panicked: %v", p)
 			}
 		}()
-		rep, err = campaign.Run(ctx, cfg)
+		rep, err = st.runFn(ctx, cfg)
 	}()
 	run.cancel()
+
+	st.mu.Lock()
+	stopReason := run.stopReason
+	stopped := run.stopRequested
+	st.mu.Unlock()
+	if stopped && stopReason == "" {
+		stopReason = "stopped by operator"
+	}
+	var memStatus, dbStatus, reason string
+	switch {
+	case err != nil:
+		memStatus, dbStatus, reason = aleefFailed, aleefstore.RunFailed, truncate(err.Error(), 500)
+		log.Printf("[aleef] run %s failed: %s", run.id, reason)
+	case stopped:
+		memStatus, dbStatus, reason = aleefStopped, aleefstore.RunHalted, stopReason
+		if rep.Halted != "" {
+			reason += "; " + rep.Halted
+		}
+	case rep.Halted != "":
+		memStatus, dbStatus, reason = aleefHalted, aleefstore.RunHalted, rep.Halted
+	default:
+		memStatus, dbStatus = aleefCompleted, aleefstore.RunCompleted
+	}
+	var reportJSON []byte
+	if err == nil || rep.RunID != "" {
+		reportJSON, _ = json.Marshal(rep)
+	}
+	orphans := rep.Orphans
+	if orphans == nil {
+		orphans = []model.CreatedObject{}
+	}
+	orphansJSON, _ := json.Marshal(orphans)
+	pctx, pcancel := context.WithTimeout(context.Background(), 15*time.Second)
+	if perr := st.store.MarkRunFinished(pctx, run.id, dbStatus, reason, reportJSON, orphansJSON); perr != nil {
+		log.Printf("[aleef] run %s: could not persist the outcome: %v", run.id, perr)
+	}
+	pcancel()
+
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	run.finishedAt = time.Now().UTC()
 	run.report = &rep
-	switch {
-	case err != nil:
-		run.status = aleefFailed
-		run.errMsg = truncate(err.Error(), 500)
-		log.Printf("[aleef] run %s failed: %s", run.id, run.errMsg)
-	case run.stopRequested:
-		run.status = aleefStopped
-	case rep.Halted != "":
-		run.status = aleefHalted
-	default:
-		run.status = aleefCompleted
+	run.status = memStatus
+	if err != nil {
+		run.errMsg = reason
 	}
 	if st.active[run.engagementID] == run.id {
 		delete(st.active, run.engagementID)
@@ -481,8 +597,9 @@ type aleefRunView struct {
 	StartedAt    *time.Time       `json:"started_at,omitempty"`
 	FinishedAt   *time.Time       `json:"finished_at,omitempty"`
 	Error        string           `json:"error,omitempty"`
-	Note         string           `json:"note,omitempty"`
-	Report       *campaign.Report `json:"report,omitempty"`
+	HaltedReason string           `json:"halted_reason,omitempty"`
+	Orphans      any              `json:"orphans,omitempty"`
+	Report       any              `json:"report,omitempty"`
 }
 
 func (st *aleefState) view(id string) (aleefRunView, bool) {
@@ -502,7 +619,9 @@ func (st *aleefState) view(id string) (aleefRunView, bool) {
 	if run.report != nil {
 		rep := *run.report
 		v.Report = &rep
+		v.Orphans = rep.Orphans
 	}
+	v.HaltedReason = run.stopReason
 	return v, true
 }
 
@@ -521,7 +640,7 @@ func (h *Handler) GetAleefRun(w http.ResponseWriter, r *http.Request) {
 		respond(w, v)
 		return
 	}
-	eng, created, err := h.aleef.store.GetRun(r.Context(), id)
+	rec, err := h.aleef.store.GetRunRecord(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		jsonError(w, "aleef run not found", http.StatusNotFound)
 		return
@@ -530,8 +649,17 @@ func (h *Handler) GetAleefRun(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "could not load run", http.StatusInternalServerError)
 		return
 	}
-	respond(w, aleefRunView{RunID: id, EngagementID: eng, Status: "unknown", StartedAt: &created,
-		Note: "the run record exists but its live status and report were not kept (server restart or retention)"})
+	// Not in memory (server restart or retention): the persisted outcome is authoritative. A run
+	// that was cut short by a restart reads 'interrupted'.
+	v := aleefRunView{RunID: id, EngagementID: rec.EngagementID, Status: rec.Status, StartedAt: &rec.CreatedAt,
+		FinishedAt: rec.FinishedAt, HaltedReason: rec.HaltedReason}
+	if len(rec.Report) > 0 {
+		v.Report = json.RawMessage(rec.Report)
+	}
+	if len(rec.Orphans) > 0 && string(rec.Orphans) != "[]" {
+		v.Orphans = json.RawMessage(rec.Orphans)
+	}
+	respond(w, v)
 }
 
 // StopAleefRun cancels a running campaign. It is idempotent: it answers 200 for a run that is
@@ -552,6 +680,9 @@ func (h *Handler) StopAleefRun(w http.ResponseWriter, r *http.Request) {
 		status := run.status
 		if status == aleefRunning || status == aleefStopping {
 			run.stopRequested = true
+			if run.stopReason == "" {
+				run.stopReason = "stopped by operator"
+			}
 			run.status = aleefStopping
 			status = aleefStopping
 			run.cancel()
