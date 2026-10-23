@@ -225,6 +225,25 @@ zip, its `.sha256`, `.asc`, `pubkey.asc`, `verify-sig.sh`, and the `.lic`.
 | `BASAgent-Setup-*.exe is NN MB, expected ~14MB` | `go:embed` regression | check out the intended release commit |
 | stray `NativeCommandError` early in the run | leftover poisoned Go env from a prior failed run | open a fresh PowerShell window and re-run |
 
+### Aleef add-on licence
+
+Aleef (API discovery) is licensed separately from the three tiers, as an add-on in the "special"
+category. It is carried as the signed feature token `addon:aleef`, so it cannot be added after signing.
+The tier applies independently: the add-on works with any tier, or none, and a tier alone never grants it.
+
+```powershell
+.\packaging\windows-build.ps1 -Customer "HDFC Bank" -CustomerID hdfc-001 -LicenseType Core -Addons aleef
+```
+
+Licence-only (no rebuild):
+
+```bash
+bash packaging/licensing/issue-license.sh -customer "HDFC Bank" -id hdfc-001 -days 365 -addons aleef
+```
+
+The server reads the credentials Aleef needs from `ALEEF_SECRET_*` environment variables (the account
+token reference `bank/uat/alice` is read from `ALEEF_SECRET_BANK_UAT_ALICE`).
+
 > **License-only change** (renewal / new customer, no rebuild): don't rerun this
 > whole script — use
 > `bash packaging/licensing/issue-license.sh -customer "<name>" -id <id> -days <n>`,

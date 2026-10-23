@@ -8,7 +8,7 @@ package main
 // Usage (from repo root):
 //   go run packaging/licensing/licensegen/main.go \
 //     -customer "HDFC Bank" -id hdfc-001 -days 365 \
-//     -key packaging/licensing/keys/private.pem
+//     -key packaging/licensing/keys/private.pem [-tier Core] [-addons aleef]
 //
 // Output: hdfc-001.lic  (send this to the customer along with the platform package)
 
@@ -24,6 +24,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -56,6 +57,7 @@ func main() {
 	customerID := flag.String("id", "", "Customer ID slug (e.g. 'hdfc-001') — used in signature")
 	days := flag.Int("days", 365, "License validity in days from today")
 	features := flag.String("features", "full", "Comma-separated feature list (e.g. 'full')")
+	addons := flag.String("addons", "", "Comma-separated add-on products sold outside the tiers (recognised: aleef). Appends addon:<name> tokens to the signed features")
 	tier := flag.String("tier", "", "Licence tier: Core, Advanced or Enterprise. Empty issues a pre-tier licence, which keeps everything (Enterprise)")
 	keyFile := flag.String("key", "packaging/licensing/keys/private.pem", "Path to RSA private key PEM")
 	outFile := flag.String("out", "", "Output file path (default: <customer_id>.lic)")
@@ -79,13 +81,18 @@ func main() {
 		fmt.Fprintf(os.Stderr, "unknown tier %q: use Core, Advanced or Enterprise\n", *tier)
 		os.Exit(1)
 	}
+	feats, err := buildFeatures(*features, *addons)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 	now := time.Now().UTC()
 	lic := License{
 		Customer:   *customer,
 		CustomerID: *customerID,
 		IssuedAt:   now.Format("2006-01-02"),
 		ExpiresAt:  now.AddDate(0, 0, *days).Format("2006-01-02"),
-		Features:   strings.Split(*features, ","),
+		Features:   feats,
 		Tier:       *tier,
 	}
 
@@ -118,6 +125,32 @@ func main() {
 	fmt.Printf("    2. Install: set LIC_PATH=/path/to/%s in setup.conf\n", outPath)
 	fmt.Printf("       (install.sh derives LICENSE_FILE=%s in .env automatically --\n", outPath)
 	fmt.Printf("       no bas.lic rename anywhere in the stack)\n")
+}
+
+// recognisedAddons must match the add-on allowlist in orchestrator/internal/license (addonProducts).
+var recognisedAddons = map[string]bool{"aleef": true}
+
+// buildFeatures returns the feature list to sign: the base features in the order given, then one
+// "addon:<name>" token per requested add-on, sorted and de-duplicated. An unrecognised add-on is an
+// error. The payload format is unchanged: add-ons are ordinary entries of the signed Features list.
+func buildFeatures(features, addons string) ([]string, error) {
+	out := strings.Split(features, ",")
+	seen := map[string]bool{}
+	var tokens []string
+	for _, a := range strings.Split(addons, ",") {
+		if a == "" {
+			continue
+		}
+		if !recognisedAddons[a] {
+			return nil, fmt.Errorf("unknown add-on %q (recognised: aleef)", a)
+		}
+		if !seen[a] {
+			seen[a] = true
+			tokens = append(tokens, "addon:"+a)
+		}
+	}
+	sort.Strings(tokens)
+	return append(out, tokens...), nil
 }
 
 func loadPrivateKey(path string) (*rsa.PrivateKey, error) {
