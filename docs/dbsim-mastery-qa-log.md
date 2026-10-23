@@ -555,3 +555,5 @@ which passed live (connecting needs only CONNECT, granted to PUBLIC); nothing el
 dials with a restricted account.
 
 **Status:** MySQL DB-06 remains UNVERIFIED until re-run on staging.
+
+**Independent cleanup check after the second live run (2026-10-23, run by the user on staging, `E2E.md` section 8): VERIFIED clean on both engines.** PostgreSQL: only `dbsim_audit` schema, roles `dbsim_lab` and `dbsim_test`. MySQL: databases `bas_dbsim`, `dbsim` and system databases only; accounts `dbsim_lab`, `dbsim_test` only. This includes the MySQL throwaway account that DB-06 created before its baseline failed (error 1044): the failure-mid-run cleanup path dropped it on a real database. DB-06 on PostgreSQL passed (Blocked, Telemetry Unverifiable, Response NotTested, cleanup ok); DB-07 passed on both engines (Classification Correct, exact_marker, second rule, `dbsim.touches_classified` field and the exact rule name verified live).
