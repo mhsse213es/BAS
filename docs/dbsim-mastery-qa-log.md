@@ -7,8 +7,13 @@ facts in `docs/dbsim-discovery.md`). Same role as `docs/dlp-mastery-qa-log.md`:
 every verification gap stays here until it is resolved by updating its own entry
 with the result and date, never by deleting it.
 
-Branch `worktree-dbsim`, nothing pushed. Written 2026-10-23 on a Windows dev host
-with **no Docker, no MySQL and no reachable PostgreSQL credential**.
+Branch `worktree-dbsim` is local and is NOT on `main`. The only part pushed is the
+branch `dbsim-lab-staging` at `40d79264` (the lab/staging work). The header was first
+written 2026-10-23 on a Windows dev host with no Docker, no MySQL and no reachable
+PostgreSQL credential; since then Tasks 1-15 were run live on staging (PostgreSQL
+16.4 and MySQL 8.0.40, see the staging sections below). The Task 16 code (client
+mode, registry, console-less) has still never run against a real database, and the
+`internal/api` and `internal/db` tests have never been run (they need Docker).
 
 ## Milestone entry: Tasks 1-13 (Phase 4 gate)
 
@@ -746,3 +751,9 @@ PostgreSQL (222.5 s) and MySQL (226.0 s): every scenario PASS (DB-02 `read_grant
 * **I4 pass binding and expiry.** `SaveIdentityCheck` updates only the exact record version the probe ran against (id, created_at, engine, host, port, database, TLS, credential ref, expected identity, mode, server host); otherwise `ErrTargetChanged` and nothing is recorded. A pass verifies only while younger than a maximum age (default 24h, exactly the limit fails, future/zero timestamps fail, injected clock). **OPEN USER DECISION: the validity period; 24h is a placeholder default.**
 * Minors: M1 doc comment on `EvaluateReadOnlyIdentity` (caller must guarantee the result is from `check_readonly_identity` for this target: OPEN REQUIREMENT for the future Runner); M2/M3/M7 guide corrections; M4 product-gate enumeration (compile+vet only).
 * Staging integration tests (UNVERIFIED, compile under `-tags dbsim_integration`): PG NOINHERIT writer-role member, PG INSERT on a view, PG `pg_write_server_files` member; MySQL granted-inactive writer role, MySQL grant-option-only account. Provisioning SQL is in each file header; credentials via `DBSIM_PG_ID_*` / `DBSIM_MYSQL_ID_*`.
+
+## Task 16 fix round 2
+
+* **I-2 Elastic alert source is opt-in.** `4d0440b0` had changed the Elastic connector for every user (extra `_source` fields and up to 16 KB of alert source in `MatchedAlert.RawJSON`, which verification stores persist). Now `VerifyRequest.IncludeAlertSource` (zero value false) gates both; only the dbsim correlator sets it (`dbcorrelate/correlation.go`, tested on every lookup). With the flag off the request `_source` list and the RawJSON are the origin/main ones (pinned byte-for-byte by `TestElasticSourceExposureIsOptIn`; the dbsim A1 tests now send the flag). No other connector file changed (diff vs origin/main: `connector.go`, `elastic.go`, one test file). **The lab E2E must be re-run after this change: it touches the live-verified dbsim correlation path (the flag is set by the correlator, but the live path itself has not been re-executed).**
+* **I-1 stale overwrite.** `SaveIdentityCheck` only updates when the stored `identity_check_at` is NULL or not later than the new result; otherwise `ErrIdentityCheckSuperseded` (distinguished from `ErrTargetChanged` / `ErrTargetNotFound` by a follow-up read in the same transaction; the audit row rolls back). Unit-tested at service level; the Docker store test is written, not run here.
+* HTTP: `ErrTargetChanged` and `ErrIdentityCheckSuperseded` answer 409 (pure `dbadmin.StatusFor`, unit-tested here). `RunIdentityCheck` and the target views use the service clock (`Service.Now`) for expiry. Guide section 8 B5 wording corrected; this log's header refreshed.

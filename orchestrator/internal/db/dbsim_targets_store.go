@@ -191,7 +191,8 @@ func (s DBSimTargetStore) SaveIdentityCheck(ctx context.Context, against dbsim.T
 			UPDATE dbsim_targets
 			SET identity_check_passed = $2, identity_check_at = $3, identity_check_by = $4, identity_check_reasons = $5::jsonb
 			WHERE id = $1 AND created_at = $6 AND engine = $7 AND host = $8 AND port = $9 AND database_name = $10
-			  AND tls_mode = $11 AND credential_ref = $12 AND expected_identity = $13 AND mode = $14 AND db_server_host = $15`,
+			  AND tls_mode = $11 AND credential_ref = $12 AND expected_identity = $13 AND mode = $14 AND db_server_host = $15
+			  AND (identity_check_at IS NULL OR identity_check_at <= $3)`,
 			against.ID, st.Passed && st.Checked, st.At, st.By, string(rb), against.CreatedAt, against.Engine, against.Host,
 			against.Port, against.Database, against.TLSMode, against.CredentialRef, against.ExpectedIdentity,
 			string(against.Mode), against.DBServerHost)
@@ -199,18 +200,28 @@ func (s DBSimTargetStore) SaveIdentityCheck(ctx context.Context, against dbsim.T
 			return err
 		}
 		if tag.RowsAffected() == 0 {
-			var exists bool
-			if qerr := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM dbsim_targets WHERE id = $1)`, against.ID).Scan(&exists); qerr != nil {
+			// Zero rows: say why, inside the same transaction (it rolls back, audit row too).
+			var sameVersion, exists bool
+			if qerr := tx.QueryRow(ctx, `
+				SELECT EXISTS (SELECT 1 FROM dbsim_targets WHERE id = $1 AND created_at = $2 AND engine = $3 AND host = $4
+				  AND port = $5 AND database_name = $6 AND tls_mode = $7 AND credential_ref = $8 AND expected_identity = $9
+				  AND mode = $10 AND db_server_host = $11),
+				  EXISTS (SELECT 1 FROM dbsim_targets WHERE id = $1)`,
+				against.ID, against.CreatedAt, against.Engine, against.Host, against.Port, against.Database, against.TLSMode,
+				against.CredentialRef, against.ExpectedIdentity, string(against.Mode), against.DBServerHost).Scan(&sameVersion, &exists); qerr != nil {
 				return qerr
 			}
-			if !exists {
+			switch {
+			case !exists:
 				return dbsim.ErrTargetNotFound
+			case sameVersion:
+				return dbsim.ErrIdentityCheckSuperseded
 			}
 			return dbsim.ErrTargetChanged
 		}
 		return nil
 	})
-	if err != nil && !errors.Is(err, dbsim.ErrTargetNotFound) && !errors.Is(err, dbsim.ErrTargetChanged) {
+	if err != nil && !errors.Is(err, dbsim.ErrTargetNotFound) && !errors.Is(err, dbsim.ErrTargetChanged) && !errors.Is(err, dbsim.ErrIdentityCheckSuperseded) {
 		return fmt.Errorf("save dbsim identity check: %w", err)
 	}
 	return err

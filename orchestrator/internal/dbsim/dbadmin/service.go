@@ -70,6 +70,8 @@ type TargetStore interface {
 	// probe was run against: the update is bound to that record's id, creation
 	// time and connection/identity fields (TargetRecord.SameConfig), and returns
 	// dbsim.ErrTargetChanged, recording nothing, if the stored record differs.
+	// It also returns dbsim.ErrIdentityCheckSuperseded, recording nothing, when a
+	// result with a LATER timestamp is already stored.
 	SaveIdentityCheck(ctx context.Context, against dbsim.TargetRecord, st dbsim.IdentityCheckState, audit AuditEntry) error
 }
 
@@ -102,6 +104,16 @@ const (
 	settingsReadTimeout = 5 * time.Second
 	checkRunExpiry      = 2 * time.Minute
 )
+
+// Eligible reports whether the record is client-eligible on the service clock
+// (a passed, unexpired read-only identity check on a client target). It still
+// needs the Admin client-mode setting.
+func (s *Service) Eligible(r dbsim.TargetRecord) bool {
+	return r.ToTargetAt(s.now(), dbsim.DefaultIdentityCheckMaxAge).ReadOnlyIdentityVerified
+}
+
+// Clock is the service's injected clock.
+func (s *Service) Clock() time.Time { return s.now() }
 
 func (s *Service) now() time.Time {
 	if s.Now != nil {
@@ -266,8 +278,8 @@ func (s *Service) RunIdentityCheck(ctx context.Context, a Actor, id string) (dbs
 	if err != nil {
 		return dbsim.IdentityCheckResult{}, dbsim.TargetRecord{}, err
 	}
-	t := rec.ToTarget()
 	now := s.now()
+	t := rec.ToTargetAt(now, dbsim.DefaultIdentityCheckMaxAge)
 	if err := dbsim.AuthorizeIdentityCheck(t, now, now.Add(checkRunExpiry)); err != nil {
 		s.audit(a, action, resource, map[string]any{"error": err.Error()}, "error")
 		return dbsim.IdentityCheckResult{}, rec, err

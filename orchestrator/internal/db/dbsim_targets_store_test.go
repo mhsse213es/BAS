@@ -205,3 +205,47 @@ func TestDBSimStoreMutationsAreAtomicWithAuditAndBoundToTheRecord(t *testing.T) 
 		}
 	})
 }
+
+// Needs the Docker-backed test database (run on a Docker host). Fix round 2 I-1:
+// a slower earlier check never overwrites a newer result, and its audit row rolls back.
+func TestDBSimSaveIdentityCheckRefusesAnOlderResult(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if err := db.EnsureDBSimTargetSchema(ctx, pool); err != nil {
+			t.Fatal(err)
+		}
+		st := db.DBSimTargetStore{Pool: pool}
+		if err := st.Create(ctx, dbsimTargetRec(t, "t1", dbsim.ModeClient), dbsimAudit("create")); err != nil {
+			t.Fatal(err)
+		}
+		cur, _ := st.Get(ctx, "t1")
+		t2 := time.Now().UTC().Truncate(time.Microsecond)
+		t1 := t2.Add(-time.Minute)
+		if err := st.SaveIdentityCheck(ctx, cur, dbsim.IdentityCheckState{Checked: true, At: t2, By: "fail", Reasons: []string{"x"}}, dbsimAudit("check")); err != nil {
+			t.Fatal(err)
+		}
+		slow := dbsimAudit("slow")
+		slow.Action = "dbsim.test_slow_pass"
+		err := st.SaveIdentityCheck(ctx, cur, dbsim.IdentityCheckState{Checked: true, Passed: true, At: t1, By: "slow"}, slow)
+		if !errors.Is(err, dbsim.ErrIdentityCheckSuperseded) {
+			t.Fatalf("want ErrIdentityCheckSuperseded, got %v", err)
+		}
+		got, _ := st.Get(ctx, "t1")
+		if got.IdentityCheck.Passed || got.IdentityCheck.By != "fail" {
+			t.Fatalf("the newer failure was overwritten: %+v", got.IdentityCheck)
+		}
+		var n int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action = 'dbsim.test_slow_pass'`).Scan(&n); err != nil || n != 0 {
+			t.Fatalf("the superseded check kept an audit row: n=%d err=%v", n, err)
+		}
+		// An equal timestamp is accepted (idempotent re-record); a changed version is ErrTargetChanged.
+		if err := st.SaveIdentityCheck(ctx, cur, dbsim.IdentityCheckState{Checked: true, At: t2, By: "same"}, dbsimAudit("check")); err != nil {
+			t.Fatalf("equal timestamp refused: %v", err)
+		}
+		other := cur
+		other.CredentialRef = "dbcred:other"
+		if err := st.SaveIdentityCheck(ctx, other, dbsim.IdentityCheckState{Checked: true, At: t2.Add(time.Hour)}, dbsimAudit("check")); !errors.Is(err, dbsim.ErrTargetChanged) {
+			t.Fatalf("want ErrTargetChanged, got %v", err)
+		}
+	})
+}

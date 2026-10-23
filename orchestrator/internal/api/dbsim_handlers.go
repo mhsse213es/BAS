@@ -93,6 +93,10 @@ func dbsimFail(w http.ResponseWriter, err error) {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 	case errors.Is(err, dbsim.ErrTargetExists):
 		jsonError(w, "a target with that id is already registered", http.StatusConflict)
+	case errors.Is(err, dbsim.ErrTargetChanged):
+		jsonError(w, "the target was changed or re-registered while the check ran; nothing was recorded, run the check again", dbadmin.StatusFor(err))
+	case errors.Is(err, dbsim.ErrIdentityCheckSuperseded):
+		jsonError(w, "a newer identity check result is already recorded; this older result was discarded", dbadmin.StatusFor(err))
 	case errors.Is(err, dbsim.ErrTargetNotFound):
 		jsonError(w, "target not found", http.StatusNotFound)
 	case errors.Is(err, dbadmin.ErrIdentityCheckUnavailable):
@@ -132,7 +136,8 @@ type dbsimTargetView struct {
 	ClientEligible bool `json:"clientEligible"`
 }
 
-func dbsimView(r dbsim.TargetRecord) dbsimTargetView {
+// now is the service clock (Service.Clock), so the view and the gates agree on expiry.
+func dbsimView(r dbsim.TargetRecord, now time.Time) dbsimTargetView {
 	reasons := r.IdentityCheck.Reasons
 	if reasons == nil {
 		reasons = []string{}
@@ -142,7 +147,7 @@ func dbsimView(r dbsim.TargetRecord) dbsimTargetView {
 		Database: r.Database, TLSMode: r.TLSMode, CredentialRef: r.CredentialRef, ExpectedIdentity: r.ExpectedIdentity,
 		Mode: string(r.Mode), LabConfirmed: r.LabConfirmed, CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt,
 		IdentityCheck:  dbsimIdentityCheckView{Checked: r.IdentityCheck.Checked, Passed: r.IdentityCheck.Passed, At: r.IdentityCheck.At, By: r.IdentityCheck.By, Reasons: reasons},
-		ClientEligible: r.ToTarget().ReadOnlyIdentityVerified,
+		ClientEligible: r.ToTargetAt(now, dbsim.DefaultIdentityCheckMaxAge).ReadOnlyIdentityVerified,
 	}
 }
 
@@ -185,7 +190,7 @@ func (h *Handler) ListDBSimTargets(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]dbsimTargetView, 0, len(recs))
 	for _, rec := range recs {
-		out = append(out, dbsimView(rec))
+		out = append(out, dbsimView(rec, svc.Clock()))
 	}
 	respond(w, map[string]any{"targets": out})
 }
@@ -199,7 +204,7 @@ func (h *Handler) GetDBSimTarget(w http.ResponseWriter, r *http.Request) {
 		dbsimFail(w, err)
 		return
 	}
-	respond(w, dbsimView(rec))
+	respond(w, dbsimView(rec, svc.Clock()))
 }
 
 // RegisterDBSimTarget registers a target with its expected identity (Admin
@@ -237,7 +242,7 @@ func (h *Handler) RegisterDBSimTarget(w http.ResponseWriter, r *http.Request) {
 		dbsimFail(w, err)
 		return
 	}
-	respondStatus(w, dbsimView(rec), http.StatusCreated)
+	respondStatus(w, dbsimView(rec, svc.Clock()), http.StatusCreated)
 }
 
 // DeleteDBSimTarget removes a target (Admin only, audited).
@@ -265,7 +270,7 @@ func (h *Handler) RunDBSimIdentityCheck(w http.ResponseWriter, r *http.Request) 
 	if reasons == nil {
 		reasons = []string{}
 	}
-	respond(w, map[string]any{"passed": verdict.Passed, "reasons": reasons, "target": dbsimView(rec)})
+	respond(w, map[string]any{"passed": verdict.Passed, "reasons": reasons, "target": dbsimView(rec, svc.Clock())})
 }
 
 type dbsimRunView struct {

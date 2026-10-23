@@ -207,8 +207,10 @@ table for the test account, and a SIEM rule that alerts on the marker.
 * Live-verified on one PostgreSQL and one MySQL version in a lab, with the agent running
   as a Windows test binary against a tunnel. Not verified: a Linux agent next to the DB,
   the WebSocket production path, client mode, customer audit plugins.
-* B5 (the agent's destructive-step veto) is deliberately untouched: every probe is
-  read_only or bounded_synthetic.
+* B5 (the agent's destructive-step veto): the B5 logic is unchanged. It is invoked
+  via `gateStep` after the dbsim shape pre-gate, so its call site moved, and the veto
+  result gained fields. Every dbsim probe is read_only or bounded_synthetic, so B5
+  never has a mutation step to veto from dbsim.
 
 ## 9. Troubleshooting (real findings)
 

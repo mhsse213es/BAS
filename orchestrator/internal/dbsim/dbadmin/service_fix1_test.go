@@ -107,3 +107,61 @@ func TestIdentityCheckNotAppliedToARecreatedTarget(t *testing.T) {
 		}
 	}
 }
+
+// Fix round 2 I-1: a slower earlier check cannot overwrite a newer result.
+func TestSlowerEarlierCheckDoesNotOverwriteANewerResult(t *testing.T) {
+	run := &fakeRunner{res: dbsim.DBProbeResult{Notes: []string{clearNote}}}
+	s, tg, au := registered(t, run)
+	newer := dbsim.IdentityCheckState{Checked: true, Passed: false, At: t0.Add(time.Minute), By: "u-other", Reasons: []string{"identity can write data"}}
+	r := tg.recs["prod-pg-1"]
+	r.IdentityCheck = newer
+	tg.recs["prod-pg-1"] = r
+	before := len(au.entries)
+	_, _, err := s.RunIdentityCheck(context.Background(), admin, "prod-pg-1") // clock t0 < newer.At
+	if !errors.Is(err, dbsim.ErrIdentityCheckSuperseded) {
+		t.Fatalf("want ErrIdentityCheckSuperseded, got %v", err)
+	}
+	if got := tg.recs["prod-pg-1"].IdentityCheck; got.Passed || !got.At.Equal(newer.At) || got.By != "u-other" {
+		t.Fatalf("the newer failure was overwritten: %+v", got)
+	}
+	for _, e := range au.entries[before:] {
+		if e.Outcome == "ok" && e.Action == "dbsim.target_identity_checked" {
+			t.Fatalf("an ok audit row was kept for a superseded check: %+v", e)
+		}
+	}
+}
+
+// Fix round 2: the service clock decides whether a stored pass is still fresh.
+func TestServiceClockDecidesEligibility(t *testing.T) {
+	run := &fakeRunner{res: dbsim.DBProbeResult{Notes: []string{clearNote}}}
+	s, tg, _ := registered(t, run)
+	if _, _, err := s.RunIdentityCheck(context.Background(), admin, "prod-pg-1"); err != nil {
+		t.Fatal(err)
+	}
+	rec := tg.recs["prod-pg-1"]
+	s.Now = func() time.Time { return t0.Add(dbsim.DefaultIdentityCheckMaxAge - time.Second) }
+	if !s.Eligible(rec) {
+		t.Fatal("a pass just inside the max age must be eligible on the service clock")
+	}
+	s.Now = func() time.Time { return t0.Add(dbsim.DefaultIdentityCheckMaxAge) }
+	if s.Eligible(rec) {
+		t.Fatal("a pass at the max age must not be eligible")
+	}
+}
+
+// The identity-check authorisation target is built with the service clock too:
+// a record whose pass is stale on that clock is not treated as verified.
+func TestRunIdentityCheckUsesTheServiceClockForTheTarget(t *testing.T) {
+	run := &fakeRunner{res: dbsim.DBProbeResult{Notes: []string{clearNote}}}
+	s, _, _ := registered(t, run)
+	if _, _, err := s.RunIdentityCheck(context.Background(), admin, "prod-pg-1"); err != nil {
+		t.Fatal(err)
+	}
+	s.Now = func() time.Time { return t0.Add(48 * time.Hour) }
+	if _, _, err := s.RunIdentityCheck(context.Background(), admin, "prod-pg-1"); err != nil {
+		t.Fatal(err)
+	}
+	if run.got.ReadOnlyIdentityVerified {
+		t.Fatal("the target handed to the runner was verified by a 48h-old pass")
+	}
+}

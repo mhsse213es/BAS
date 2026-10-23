@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,6 +26,9 @@ func TestDBSimErrorsMapToHTTPStatuses(t *testing.T) {
 		{dbsim.ErrTargetInvalid, http.StatusBadRequest},
 		{dbsim.ErrTargetExists, http.StatusConflict},
 		{dbsim.ErrTargetNotFound, http.StatusNotFound},
+		{dbsim.ErrTargetChanged, http.StatusConflict},
+		{dbsim.ErrIdentityCheckSuperseded, http.StatusConflict},
+		{fmt.Errorf("wrapped: %w", dbsim.ErrTargetChanged), http.StatusConflict},
 		{dbadmin.ErrIdentityCheckUnavailable, http.StatusNotImplemented},
 		{errors.New("pq: connection refused to 10.0.0.9"), http.StatusInternalServerError},
 	} {
@@ -75,11 +79,16 @@ func TestDBSimViewClientEligibility(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec := dbsim.TargetRecord{TargetRegistration: reg}
-	if v := dbsimView(rec); v.ClientEligible || v.IdentityCheck.Reasons == nil {
+	now := time.Now()
+	if v := dbsimView(rec, now); v.ClientEligible || v.IdentityCheck.Reasons == nil {
 		t.Fatalf("fresh target: %+v", v)
 	}
 	rec.IdentityCheck = dbsim.IdentityCheckState{Checked: true, Passed: true, At: time.Now(), By: "u"}
-	if !dbsimView(rec).ClientEligible {
+	if !dbsimView(rec, now).ClientEligible {
 		t.Fatal("a passed check must make a client target eligible")
+	}
+	// The view uses the injected clock: the same pass is stale 24h later.
+	if dbsimView(rec, now.Add(dbsim.DefaultIdentityCheckMaxAge+time.Minute)).ClientEligible {
+		t.Fatal("a stale pass must not show as eligible")
 	}
 }

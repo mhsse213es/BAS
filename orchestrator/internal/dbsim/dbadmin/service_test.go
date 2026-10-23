@@ -131,6 +131,10 @@ func (f *fakeTargets) SaveIdentityCheck(ctx context.Context, against dbsim.Targe
 	if !r.SameConfig(against) {
 		return dbsim.ErrTargetChanged
 	}
+	// A result older than the stored one never overwrites it.
+	if !r.IdentityCheck.At.IsZero() && r.IdentityCheck.At.After(st.At) {
+		return dbsim.ErrIdentityCheckSuperseded
+	}
 	if err := f.au.Log(e); err != nil {
 		return err
 	}
@@ -393,10 +397,10 @@ func TestIdentityCheckPassRecordsWhoAndWhenAndVerifiesTheTarget(t *testing.T) {
 		t.Fatalf("%+v %v", res, err)
 	}
 	st := tg.recs["prod-pg-1"].IdentityCheck
-	if !st.Checked || !st.Passed || st.By != "u-admin" || !st.At.Equal(t0) || !rec.ToTarget().ReadOnlyIdentityVerified {
+	if !st.Checked || !st.Passed || st.By != "u-admin" || !st.At.Equal(t0) || !rec.ToTargetAt(t0, dbsim.DefaultIdentityCheckMaxAge).ReadOnlyIdentityVerified {
 		t.Fatalf("state %+v", st)
 	}
-	if !tg.recs["prod-pg-1"].ToTarget().ReadOnlyIdentityVerified {
+	if !tg.recs["prod-pg-1"].ToTargetAt(t0, dbsim.DefaultIdentityCheckMaxAge).ReadOnlyIdentityVerified {
 		t.Fatal("a passed check must verify the stored target")
 	}
 	// The runner got exactly the stored target (identity from the registry, not from the request).

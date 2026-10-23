@@ -167,6 +167,10 @@ const DefaultIdentityCheckMaxAge = 24 * time.Hour
 // the record a result was produced for was read; the result is not recorded.
 var ErrTargetChanged = errors.New("dbsim target changed since the check started")
 
+// ErrIdentityCheckSuperseded means a newer identity-check result is already
+// recorded for the target; an older (slower) result never overwrites it.
+var ErrIdentityCheckSuperseded = errors.New("dbsim identity check superseded by a newer result")
+
 // SameConfig reports whether two records describe the same registered target
 // version: id, creation time and every field a check result depends on. The
 // identity-check state itself is deliberately not compared.
