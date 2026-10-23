@@ -78,6 +78,11 @@ const (
 	CanViewVariantStats    Permission = "variants:stats:view"
 	CanViewAPIBASRuns      Permission = "apibas:runs:view"
 
+	// Aleef API discovery (separate licence add-on). View reads runs, findings and regressions; run creates
+	// engagements, starts and stops runs and records prior-knowledge reviews. Viewer holds neither.
+	CanViewAleef Permission = "aleef:view"
+	CanRunAleef  Permission = "aleef:run"
+
 	// Payload families — read is Analyst+Admin (write is Admin only, below).
 	CanListPayloadFamilies Permission = "payload-families:list"
 	CanViewPayloadFamily   Permission = "payload-families:view"
@@ -322,7 +327,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 
 		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true, CanManageComponents: true,
 
-		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true,
+		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true, CanViewAleef: true, CanRunAleef: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
@@ -390,7 +395,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 
 		CanViewContentArtifact: true,
 
-		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true,
+		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true, CanViewAleef: true, CanRunAleef: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,

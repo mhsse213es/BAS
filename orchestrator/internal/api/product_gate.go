@@ -19,6 +19,7 @@ import (
 var productPrefixes = map[string]license.ProductLine{
 	"/api/scenarios/api-bas":                license.ProductAPIBAS,
 	"/api/apibas":                           license.ProductAPIBAS,
+	"/api/aleef":                            license.ProductAleef,
 	"/api/waf":                              license.ProductWAF,
 	"/api/av":                               license.ProductAV,
 	"/api/dlp":                              license.ProductDLP,
