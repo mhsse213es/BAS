@@ -13,8 +13,34 @@ import (
 )
 
 // ---- fakes ----------------------------------------------------------------
+//
+// The stores model the real ones: the state change and its audit row are one
+// transaction, so a failing audit write leaves the state untouched.
+
+type fakeAudit struct {
+	entries []AuditEntry
+	fail    bool // every audit write fails
+}
+
+func (f *fakeAudit) Log(e AuditEntry) error {
+	if f.fail {
+		return errors.New("audit store down")
+	}
+	f.entries = append(f.entries, e)
+	return nil
+}
+
+func (f *fakeAudit) find(action, outcome string) *AuditEntry {
+	for i := range f.entries {
+		if f.entries[i].Action == action && f.entries[i].Outcome == outcome {
+			return &f.entries[i]
+		}
+	}
+	return nil
+}
 
 type fakeSettings struct {
+	au       *fakeAudit
 	val      string
 	found    bool
 	readErr  error
@@ -27,9 +53,12 @@ func (f *fakeSettings) GetClientMode(ctx context.Context) (string, bool, error) 
 	return f.val, f.found, f.readErr
 }
 
-func (f *fakeSettings) SetClientMode(ctx context.Context, enabled bool, by string) error {
+func (f *fakeSettings) SetClientMode(ctx context.Context, enabled bool, by string, e AuditEntry) error {
 	if f.writeErr != nil {
 		return f.writeErr
+	}
+	if err := f.au.Log(e); err != nil {
+		return err
 	}
 	f.writes++
 	f.lastBy = by
@@ -42,19 +71,25 @@ func (f *fakeSettings) SetClientMode(ctx context.Context, enabled bool, by strin
 }
 
 type fakeTargets struct {
+	au        *fakeAudit
 	recs      map[string]dbsim.TargetRecord
 	saveCalls int
 	createErr error
 }
 
-func newFakeTargets() *fakeTargets { return &fakeTargets{recs: map[string]dbsim.TargetRecord{}} }
+func newFakeTargets(au *fakeAudit) *fakeTargets {
+	return &fakeTargets{au: au, recs: map[string]dbsim.TargetRecord{}}
+}
 
-func (f *fakeTargets) Create(ctx context.Context, r dbsim.TargetRecord) error {
+func (f *fakeTargets) Create(ctx context.Context, r dbsim.TargetRecord, e AuditEntry) error {
 	if f.createErr != nil {
 		return f.createErr
 	}
 	if _, ok := f.recs[r.ID]; ok {
 		return dbsim.ErrTargetExists
+	}
+	if err := f.au.Log(e); err != nil {
+		return err
 	}
 	f.recs[r.ID] = r
 	return nil
@@ -77,45 +112,31 @@ func (f *fakeTargets) List(ctx context.Context) ([]dbsim.TargetRecord, error) {
 	return out, nil
 }
 
-func (f *fakeTargets) Delete(ctx context.Context, id string) error {
+func (f *fakeTargets) Delete(ctx context.Context, id string, e AuditEntry) error {
 	if _, ok := f.recs[id]; !ok {
 		return dbsim.ErrTargetNotFound
+	}
+	if err := f.au.Log(e); err != nil {
+		return err
 	}
 	delete(f.recs, id)
 	return nil
 }
 
-func (f *fakeTargets) SaveIdentityCheck(ctx context.Context, id string, st dbsim.IdentityCheckState) error {
-	r, ok := f.recs[id]
+func (f *fakeTargets) SaveIdentityCheck(ctx context.Context, against dbsim.TargetRecord, st dbsim.IdentityCheckState, e AuditEntry) error {
+	r, ok := f.recs[against.ID]
 	if !ok {
 		return dbsim.ErrTargetNotFound
 	}
+	if !r.SameConfig(against) {
+		return dbsim.ErrTargetChanged
+	}
+	if err := f.au.Log(e); err != nil {
+		return err
+	}
 	f.saveCalls++
 	r.IdentityCheck = st
-	f.recs[id] = r
-	return nil
-}
-
-type auditEntry struct {
-	actor    Actor
-	action   string
-	resource string
-	detail   map[string]any
-	outcome  string
-}
-
-type fakeAudit struct{ entries []auditEntry }
-
-func (f *fakeAudit) Log(a Actor, action, resource string, detail map[string]any, outcome string) {
-	f.entries = append(f.entries, auditEntry{a, action, resource, detail, outcome})
-}
-
-func (f *fakeAudit) find(action, outcome string) *auditEntry {
-	for i := range f.entries {
-		if f.entries[i].action == action && f.entries[i].outcome == outcome {
-			return &f.entries[i]
-		}
-	}
+	f.recs[against.ID] = r
 	return nil
 }
 
@@ -124,11 +145,15 @@ type fakeRunner struct {
 	err    error
 	called int
 	got    dbsim.Target
+	onRun  func()
 }
 
 func (f *fakeRunner) RunIdentityCheck(ctx context.Context, t dbsim.Target) (dbsim.DBProbeResult, error) {
 	f.called++
 	f.got = t
+	if f.onRun != nil {
+		f.onRun()
+	}
 	return f.res, f.err
 }
 
@@ -141,7 +166,8 @@ var (
 )
 
 func newSvc() (*Service, *fakeSettings, *fakeTargets, *fakeAudit) {
-	st, tg, au := &fakeSettings{}, newFakeTargets(), &fakeAudit{}
+	au := &fakeAudit{}
+	st, tg := &fakeSettings{au: au}, newFakeTargets(au)
 	return &Service{Settings: st, Targets: tg, Audit: au, Now: func() time.Time { return t0 }}, st, tg, au
 }
 
@@ -179,7 +205,7 @@ func TestEnableClientModeRequiresAdminAndWritesAudit(t *testing.T) {
 		t.Fatalf("setting not stored: %+v", st)
 	}
 	e := au.find("dbsim.client_mode_enabled", "ok")
-	if e == nil || e.actor.ID != "u-admin" || e.resource != "dbsim:client-mode" || e.detail["enabled"] != true {
+	if e == nil || e.ActorID != "u-admin" || e.Resource != "dbsim:client-mode" || e.Detail["enabled"] != true {
 		t.Fatalf("enable not audited: %+v", au.entries)
 	}
 	if err := s.SetClientMode(context.Background(), admin, false); err != nil {
@@ -245,10 +271,10 @@ func TestRegisterTargetStoresExpectedIdentity(t *testing.T) {
 		t.Fatal("a new target must not be verified")
 	}
 	e := au.find("dbsim.target_registered", "ok")
-	if e == nil || e.resource != "dbsim-target:prod-pg-1" || e.detail["expectedIdentity"] != "7312345678901234567" || e.detail["credentialRef"] != "dbcred:prod-pg-ro" {
+	if e == nil || e.Resource != "dbsim-target:prod-pg-1" || e.Detail["expectedIdentity"] != "7312345678901234567" || e.Detail["credentialRef"] != "dbcred:prod-pg-ro" {
 		t.Fatalf("registration not audited with its identity: %+v", au.entries)
 	}
-	for k, v := range e.detail {
+	for k, v := range e.Detail {
 		if strings.Contains(strings.ToLower(k), "password") || strings.Contains(strings.ToLower(k), "secret") {
 			t.Errorf("audit detail has a secret-like key %q=%v", k, v)
 		}
@@ -277,10 +303,10 @@ func TestRegisterTargetRefusals(t *testing.T) {
 		t.Fatalf("raw password accepted or echoed: %v", err)
 	}
 	for _, e := range au.entries {
-		if e.outcome == "ok" {
+		if e.Outcome == "ok" {
 			t.Fatalf("an invalid registration was audited ok: %+v", e)
 		}
-		if strings.Contains(strings.Join(mapStrings(e.detail), " "), "hunter2") {
+		if strings.Contains(strings.Join(mapStrings(e.Detail), " "), "hunter2") {
 			t.Fatalf("the rejected value was written to the audit log: %+v", e)
 		}
 	}
@@ -377,7 +403,7 @@ func TestIdentityCheckPassRecordsWhoAndWhenAndVerifiesTheTarget(t *testing.T) {
 	if run.got.ExpectedIdentity != "7312345678901234567" || run.got.Mode != dbsim.ModeClient || run.got.CredentialRef != "dbcred:prod-pg-ro" {
 		t.Fatalf("runner target %+v", run.got)
 	}
-	if e := au.find("dbsim.target_identity_checked", "ok"); e == nil || e.detail["passed"] != true {
+	if e := au.find("dbsim.target_identity_checked", "ok"); e == nil || e.Detail["passed"] != true {
 		t.Fatalf("check not audited: %+v", au.entries)
 	}
 }

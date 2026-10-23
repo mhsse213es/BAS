@@ -28,35 +28,56 @@ var ErrForbidden = errors.New("dbsim: forbidden")
 // mode stays unreachable for it (fail closed).
 var ErrIdentityCheckUnavailable = errors.New("dbsim: read-only identity check dispatch is not configured")
 
-// Actor is the authenticated caller.
+// Actor is the authenticated caller. IP is the client address recorded in the
+// audit row.
 type Actor struct {
 	ID   string
 	Role auth.Role
+	IP   string
 }
 
-// SettingsStore persists the Admin switches.
+// AuditEntry is one audit_logs row.
+type AuditEntry struct {
+	ActorID  string
+	Action   string
+	Resource string
+	Detail   map[string]any
+	Outcome  string
+	IP       string
+}
+
+// SettingsStore persists the Admin switches. Every mutating method writes the
+// state change AND the supplied audit row in ONE transaction: if the audit row
+// cannot be written the state does not change and an error is returned.
 type SettingsStore interface {
 	// GetClientMode returns the raw stored value; found is false when never set.
 	GetClientMode(ctx context.Context) (value string, found bool, err error)
-	SetClientMode(ctx context.Context, enabled bool, by string) error
+	SetClientMode(ctx context.Context, enabled bool, by string, audit AuditEntry) error
 }
 
 // TargetStore persists the target registry.
+//
+// Mutations are atomic with their audit row (see SettingsStore).
 type TargetStore interface {
 	// Create stores a new record; dbsim.ErrTargetExists on a duplicate id.
-	Create(ctx context.Context, r dbsim.TargetRecord) error
+	Create(ctx context.Context, r dbsim.TargetRecord, audit AuditEntry) error
 	// Get returns the record; dbsim.ErrTargetNotFound when absent.
 	Get(ctx context.Context, id string) (dbsim.TargetRecord, error)
 	List(ctx context.Context) ([]dbsim.TargetRecord, error)
 	// Delete removes the record; dbsim.ErrTargetNotFound when absent.
-	Delete(ctx context.Context, id string) error
-	SaveIdentityCheck(ctx context.Context, id string, st dbsim.IdentityCheckState) error
+	Delete(ctx context.Context, id string, audit AuditEntry) error
+	// SaveIdentityCheck records a check result for the exact record version the
+	// probe was run against: the update is bound to that record's id, creation
+	// time and connection/identity fields (TargetRecord.SameConfig), and returns
+	// dbsim.ErrTargetChanged, recording nothing, if the stored record differs.
+	SaveIdentityCheck(ctx context.Context, against dbsim.TargetRecord, st dbsim.IdentityCheckState, audit AuditEntry) error
 }
 
-// Auditor records an audit-log entry. Implementations must not block the
-// request on the write (the platform's audit log is fire-and-forget).
+// Auditor writes an audit-log row SYNCHRONOUSLY and reports failure. It is used
+// for rows that do not accompany a state change (refusals, failures); state
+// changes carry their row into the store's transaction instead.
 type Auditor interface {
-	Log(actor Actor, action, resource string, detail map[string]any, outcome string)
+	Log(e AuditEntry) error
 }
 
 // CheckRunner runs the check_readonly_identity probe on an agent for an already
@@ -89,9 +110,15 @@ func (s *Service) now() time.Time {
 	return time.Now().UTC()
 }
 
+func entry(a Actor, action, resource string, detail map[string]any, outcome string) AuditEntry {
+	return AuditEntry{ActorID: a.ID, Action: action, Resource: resource, Detail: detail, Outcome: outcome, IP: a.IP}
+}
+
+// audit writes a row that does not accompany a state change (a refusal or a
+// failure). It is best effort: the caller is already returning an error.
 func (s *Service) audit(a Actor, action, resource string, detail map[string]any, outcome string) {
 	if s.Audit != nil {
-		s.Audit.Log(a, action, resource, detail, outcome)
+		_ = s.Audit.Log(entry(a, action, resource, detail, outcome))
 	}
 }
 
@@ -130,11 +157,10 @@ func (s *Service) SetClientMode(ctx context.Context, a Actor, enabled bool) erro
 		s.audit(a, action, resource, map[string]any{"enabled": enabled, "error": "settings store unavailable"}, "error")
 		return errors.New("dbsim: settings store unavailable")
 	}
-	if err := s.Settings.SetClientMode(ctx, enabled, a.ID); err != nil {
+	if err := s.Settings.SetClientMode(ctx, enabled, a.ID, entry(a, action, resource, map[string]any{"enabled": enabled}, "ok")); err != nil {
 		s.audit(a, action, resource, map[string]any{"enabled": enabled, "error": "store write failed"}, "error")
 		return fmt.Errorf("dbsim: set client mode: %w", err)
 	}
-	s.audit(a, action, resource, map[string]any{"enabled": enabled}, "ok")
 	return nil
 }
 
@@ -166,15 +192,15 @@ func (s *Service) RegisterTarget(ctx context.Context, a Actor, reg dbsim.TargetR
 		return dbsim.TargetRecord{}, errors.New("dbsim: target store unavailable")
 	}
 	rec := dbsim.TargetRecord{TargetRegistration: norm, CreatedBy: a.ID, CreatedAt: s.now()}
-	if err := s.Targets.Create(ctx, rec); err != nil {
-		s.audit(a, action, resource, map[string]any{"error": "store rejected the registration"}, "error")
-		return dbsim.TargetRecord{}, err
-	}
-	s.audit(a, action, "dbsim-target:"+norm.ID, map[string]any{
+	ok := entry(a, action, "dbsim-target:"+norm.ID, map[string]any{
 		"engine": norm.Engine, "mode": string(norm.Mode), "host": norm.Host, "port": norm.Port,
 		"dbServerHost": norm.DBServerHost, "credentialRef": norm.CredentialRef,
 		"expectedIdentity": norm.ExpectedIdentity, "labConfirmed": norm.LabConfirmed,
 	}, "ok")
+	if err := s.Targets.Create(ctx, rec, ok); err != nil {
+		s.audit(a, action, resource, map[string]any{"error": "store rejected the registration"}, "error")
+		return dbsim.TargetRecord{}, err
+	}
 	return rec, nil
 }
 
@@ -211,11 +237,10 @@ func (s *Service) DeleteTarget(ctx context.Context, a Actor, id string) error {
 	if s.Targets == nil {
 		return errors.New("dbsim: target store unavailable")
 	}
-	if err := s.Targets.Delete(ctx, id); err != nil {
+	if err := s.Targets.Delete(ctx, id, entry(a, action, resource, nil, "ok")); err != nil {
 		s.audit(a, action, resource, map[string]any{"error": "delete failed"}, "error")
 		return err
 	}
-	s.audit(a, action, resource, nil, "ok")
 	return nil
 }
 
@@ -251,8 +276,11 @@ func (s *Service) RunIdentityCheck(ctx context.Context, a Actor, id string) (dbs
 		s.audit(a, action, resource, map[string]any{"error": ErrIdentityCheckUnavailable.Error()}, "error")
 		return dbsim.IdentityCheckResult{}, rec, ErrIdentityCheckUnavailable
 	}
-	record := func(st dbsim.IdentityCheckState) error {
-		if err := s.Targets.SaveIdentityCheck(ctx, id, st); err != nil {
+	// The result is stored against the record version the probe ran against and
+	// atomically with its audit row.
+	against := rec
+	record := func(st dbsim.IdentityCheckState, e AuditEntry) error {
+		if err := s.Targets.SaveIdentityCheck(ctx, against, st, e); err != nil {
 			return err
 		}
 		rec.IdentityCheck = st
@@ -261,18 +289,18 @@ func (s *Service) RunIdentityCheck(ctx context.Context, a Actor, id string) (dbs
 	pr, err := s.Runner.RunIdentityCheck(ctx, t)
 	if err != nil {
 		reasons := []string{"the check could not be run"}
-		if serr := record(dbsim.IdentityCheckState{Checked: true, At: now, By: a.ID, Reasons: reasons}); serr != nil {
+		failed := entry(a, action, resource, map[string]any{"passed": false, "error": "check could not be run"}, "error")
+		if serr := record(dbsim.IdentityCheckState{Checked: true, At: now, By: a.ID, Reasons: reasons}, failed); serr != nil {
 			s.audit(a, action, resource, map[string]any{"error": "check failed and the result could not be stored"}, "error")
 			return dbsim.IdentityCheckResult{}, rec, errors.Join(err, serr)
 		}
-		s.audit(a, action, resource, map[string]any{"passed": false, "error": "check could not be run"}, "error")
 		return dbsim.IdentityCheckResult{Reasons: reasons}, rec, fmt.Errorf("dbsim: identity check run: %w", err)
 	}
 	verdict := dbsim.EvaluateReadOnlyIdentity(rec.Engine, pr)
-	if err := record(dbsim.IdentityCheckState{Checked: true, Passed: verdict.Passed, At: now, By: a.ID, Reasons: verdict.Reasons}); err != nil {
+	done := entry(a, action, resource, map[string]any{"passed": verdict.Passed, "reasons": verdict.Reasons}, "ok")
+	if err := record(dbsim.IdentityCheckState{Checked: true, Passed: verdict.Passed, At: now, By: a.ID, Reasons: verdict.Reasons}, done); err != nil {
 		s.audit(a, action, resource, map[string]any{"error": "result could not be stored"}, "error")
-		return verdict, rec, err
+		return dbsim.IdentityCheckResult{Reasons: []string{"the result could not be stored"}}, rec, err
 	}
-	s.audit(a, action, resource, map[string]any{"passed": verdict.Passed, "reasons": verdict.Reasons}, "ok")
 	return verdict, rec, nil
 }

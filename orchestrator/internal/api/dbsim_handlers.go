@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -26,15 +27,29 @@ import (
 // answers 501 until the dispatch path exists (see docs/dbsim-mastery-qa-log.md,
 // Task 16 open items).
 
-// dbsimRequestAuditor adapts the platform's request-scoped audit log to
-// dbadmin.Auditor.
-type dbsimRequestAuditor struct {
-	h *Handler
-	r *http.Request
-}
+// dbsimAuditor writes audit rows synchronously (unlike the fire-and-forget
+// auditLogAs) and reports failure, for rows that do not accompany a state change.
+// State changes carry their audit row into the store's transaction instead.
+type dbsimAuditor struct{ h *Handler }
 
-func (a dbsimRequestAuditor) Log(actor dbadmin.Actor, action, resource string, detail map[string]any, outcome string) {
-	a.h.auditLogAs(a.r, actor.ID, action, resource, detail, outcome)
+func (a dbsimAuditor) Log(e dbadmin.AuditEntry) error {
+	if a.h.db == nil {
+		return errors.New("audit store unavailable")
+	}
+	detail := []byte("{}")
+	if e.Detail != nil {
+		b, err := json.Marshal(e.Detail)
+		if err != nil {
+			return err
+		}
+		detail = b
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := a.h.db.Exec(ctx,
+		`INSERT INTO audit_logs (actor_id, action, resource, detail, ip, outcome) VALUES ($1,$2,$3,$4,$5,$6)`,
+		e.ActorID, e.Action, e.Resource, detail, e.IP, e.Outcome)
+	return err
 }
 
 // WithDBSimCheckRunner installs the dispatcher that runs the read-only identity
@@ -56,10 +71,14 @@ func (h *Handler) dbsimService(r *http.Request) (*dbadmin.Service, dbadmin.Actor
 	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
 		actor = dbadmin.Actor{ID: c.UserID, Role: c.Role}
 	}
+	actor.IP = r.Header.Get("X-Real-IP")
+	if actor.IP == "" {
+		actor.IP = r.RemoteAddr
+	}
 	return &dbadmin.Service{
 		Settings: db.DBSimSettingsStore{Pool: h.db},
 		Targets:  db.DBSimTargetStore{Pool: h.db},
-		Audit:    dbsimRequestAuditor{h: h, r: r},
+		Audit:    dbsimAuditor{h: h},
 		Runner:   h.dbsimCheckRunner,
 	}, actor
 }

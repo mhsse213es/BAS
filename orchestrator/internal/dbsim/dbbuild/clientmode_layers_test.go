@@ -120,7 +120,7 @@ func TestClientRunWithMutationScenarioRefusedAtEveryLayer(t *testing.T) {
 				t.Fatalf("%q passed the identity check", bad)
 			}
 			rec := dbsim.TargetRecord{TargetRegistration: reg,
-				IdentityCheck: dbsim.IdentityCheckState{Checked: true, Passed: v.Passed, Reasons: v.Reasons}}
+				IdentityCheck: dbsim.IdentityCheckState{Checked: true, Passed: v.Passed, At: time.Now(), Reasons: v.Reasons}}
 			o := opts(rec.ToTarget())
 			o.ClientGate = gate
 			if _, err := BuildSteps(context.Background(), oneStepScenario("read_roles", nil), o); err == nil ||
@@ -130,7 +130,7 @@ func TestClientRunWithMutationScenarioRefusedAtEveryLayer(t *testing.T) {
 		}
 		// Control: the same target with a clear check builds.
 		v := dbsim.EvaluateReadOnlyIdentity("postgresql", dbsim.DBProbeResult{Notes: []string{"identity_checks=can_write=no,can_ddl=no,can_admin=no,can_audit=no"}})
-		rec := dbsim.TargetRecord{TargetRegistration: reg, IdentityCheck: dbsim.IdentityCheckState{Checked: true, Passed: v.Passed}}
+		rec := dbsim.TargetRecord{TargetRegistration: reg, IdentityCheck: dbsim.IdentityCheckState{Checked: true, Passed: v.Passed, At: time.Now()}}
 		o := opts(rec.ToTarget())
 		o.ClientGate = gate
 		if _, err := BuildSteps(context.Background(), oneStepScenario("read_roles", nil), o); err != nil {

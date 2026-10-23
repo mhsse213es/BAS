@@ -69,7 +69,16 @@ type IdentityCheckResult struct {
 // privileges, privileges reachable only through a role the session has not
 // activated, row-level security effects, or anything about the network path.
 // A passing check is evidence about the account at check time, not a guarantee
-// for later; the target registry records when and by whom it was taken.
+// for later; the target registry records when and by whom it was taken, and a
+// pass expires (DefaultIdentityCheckMaxAge).
+//
+// REQUIREMENT ON THE CALLER (open until the dispatch Runner exists): this
+// function only reads the result it is given. The caller, the future
+// dbadmin.CheckRunner, must guarantee the result came from the
+// check_readonly_identity probe run for THIS target (its signed spec carried this
+// target's id, host, credential reference and expected identity, and the agent
+// verified the identity). A result from another probe or target must never reach
+// it.
 func EvaluateReadOnlyIdentity(engine string, res DBProbeResult) IdentityCheckResult {
 	var reasons []string
 	fail := func(f string, a ...any) { reasons = append(reasons, fmt.Sprintf(f, a...)) }

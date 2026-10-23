@@ -11,7 +11,45 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/dbsim"
+	"github.com/audspect/bas/internal/dbsim/dbadmin"
 )
+
+// insertDBSimAudit writes one audit_logs row inside tx, so a state change and
+// its audit row commit or roll back together. The row has the same shape as
+// api.Handler.auditLogAs writes.
+func insertDBSimAudit(ctx context.Context, tx pgx.Tx, e dbadmin.AuditEntry) error {
+	detail := []byte("{}")
+	if e.Detail != nil {
+		b, err := json.Marshal(e.Detail)
+		if err != nil {
+			return fmt.Errorf("audit detail: %w", err)
+		}
+		detail = b
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO audit_logs (actor_id, action, resource, detail, ip, outcome) VALUES ($1,$2,$3,$4,$5,$6)`,
+		e.ActorID, e.Action, e.Resource, detail, e.IP, e.Outcome); err != nil {
+		return fmt.Errorf("audit write: %w", err)
+	}
+	return nil
+}
+
+// withDBSimAuditTx runs fn and the audit insert in one transaction; any error
+// rolls both back.
+func withDBSimAuditTx(ctx context.Context, pool *pgxpool.Pool, e dbadmin.AuditEntry, fn func(tx pgx.Tx) error) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	if err := insertDBSimAudit(ctx, tx, e); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
 
 // EnsureDBSimTargetSchema creates dbsim_targets and dbsim_settings (idempotent).
 // The DDL lives in internal/dbsim so its shape is testable without Docker.
@@ -65,13 +103,16 @@ func scanDBSimTarget(row pgx.Row) (dbsim.TargetRecord, error) {
 }
 
 // Create stores a new target; dbsim.ErrTargetExists on a duplicate id.
-func (s DBSimTargetStore) Create(ctx context.Context, r dbsim.TargetRecord) error {
-	_, err := s.Pool.Exec(ctx, `
+func (s DBSimTargetStore) Create(ctx context.Context, r dbsim.TargetRecord, audit dbadmin.AuditEntry) error {
+	err := withDBSimAuditTx(ctx, s.Pool, audit, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
 		INSERT INTO dbsim_targets (id, display_name, engine, host, port, db_server_host, database_name, tls_mode,
 			credential_ref, expected_identity, mode, lab_confirmed, created_by, created_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-		r.ID, r.DisplayName, r.Engine, r.Host, r.Port, r.DBServerHost, r.Database, r.TLSMode,
-		r.CredentialRef, r.ExpectedIdentity, string(r.Mode), r.LabConfirmed, r.CreatedBy, r.CreatedAt)
+			r.ID, r.DisplayName, r.Engine, r.Host, r.Port, r.DBServerHost, r.Database, r.TLSMode,
+			r.CredentialRef, r.ExpectedIdentity, string(r.Mode), r.LabConfirmed, r.CreatedBy, r.CreatedAt)
+		return err
+	})
 	if err != nil {
 		var pgErr interface{ SQLState() string }
 		if errors.As(err, &pgErr) && pgErr.SQLState() == "23505" {
@@ -113,20 +154,30 @@ func (s DBSimTargetStore) List(ctx context.Context) ([]dbsim.TargetRecord, error
 }
 
 // Delete removes a target; dbsim.ErrTargetNotFound when absent.
-func (s DBSimTargetStore) Delete(ctx context.Context, id string) error {
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM dbsim_targets WHERE id = $1`, id)
-	if err != nil {
+func (s DBSimTargetStore) Delete(ctx context.Context, id string, audit dbadmin.AuditEntry) error {
+	err := withDBSimAuditTx(ctx, s.Pool, audit, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `DELETE FROM dbsim_targets WHERE id = $1`, id)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return dbsim.ErrTargetNotFound
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, dbsim.ErrTargetNotFound) {
 		return fmt.Errorf("delete dbsim target: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return dbsim.ErrTargetNotFound
-	}
-	return nil
+	return err
 }
 
-// SaveIdentityCheck records the latest read-only identity check of a target
-// (result, when, by whom, reasons). It replaces any earlier result.
-func (s DBSimTargetStore) SaveIdentityCheck(ctx context.Context, id string, st dbsim.IdentityCheckState) error {
+// SaveIdentityCheck records the latest read-only identity check (result, when,
+// by whom, reasons) together with its audit row. The UPDATE is bound to the
+// exact record version the probe ran against: id, creation time and every
+// connection/identity field must still match, otherwise nothing is recorded and
+// dbsim.ErrTargetChanged is returned (a deleted and re-registered target cannot
+// inherit the pass). dbsim.ErrTargetNotFound when the id no longer exists.
+func (s DBSimTargetStore) SaveIdentityCheck(ctx context.Context, against dbsim.TargetRecord, st dbsim.IdentityCheckState, audit dbadmin.AuditEntry) error {
 	reasons := st.Reasons
 	if reasons == nil {
 		reasons = []string{}
@@ -135,22 +186,45 @@ func (s DBSimTargetStore) SaveIdentityCheck(ctx context.Context, id string, st d
 	if err != nil {
 		return fmt.Errorf("save dbsim identity check: %w", err)
 	}
-	tag, err := s.Pool.Exec(ctx, `
-		UPDATE dbsim_targets
-		SET identity_check_passed = $2, identity_check_at = $3, identity_check_by = $4, identity_check_reasons = $5::jsonb
-		WHERE id = $1`, id, st.Passed && st.Checked, st.At, st.By, string(rb))
-	if err != nil {
+	err = withDBSimAuditTx(ctx, s.Pool, audit, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `
+			UPDATE dbsim_targets
+			SET identity_check_passed = $2, identity_check_at = $3, identity_check_by = $4, identity_check_reasons = $5::jsonb
+			WHERE id = $1 AND created_at = $6 AND engine = $7 AND host = $8 AND port = $9 AND database_name = $10
+			  AND tls_mode = $11 AND credential_ref = $12 AND expected_identity = $13 AND mode = $14 AND db_server_host = $15`,
+			against.ID, st.Passed && st.Checked, st.At, st.By, string(rb), against.CreatedAt, against.Engine, against.Host,
+			against.Port, against.Database, against.TLSMode, against.CredentialRef, against.ExpectedIdentity,
+			string(against.Mode), against.DBServerHost)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			var exists bool
+			if qerr := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM dbsim_targets WHERE id = $1)`, against.ID).Scan(&exists); qerr != nil {
+				return qerr
+			}
+			if !exists {
+				return dbsim.ErrTargetNotFound
+			}
+			return dbsim.ErrTargetChanged
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, dbsim.ErrTargetNotFound) && !errors.Is(err, dbsim.ErrTargetChanged) {
 		return fmt.Errorf("save dbsim identity check: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return dbsim.ErrTargetNotFound
-	}
-	return nil
+	return err
 }
 
 // DBSimTargetResolver is a dbsim.TargetResolver over the registry: the only
 // production source of a Target's trust flags.
-type DBSimTargetResolver struct{ Store DBSimTargetStore }
+type DBSimTargetResolver struct {
+	Store DBSimTargetStore
+	// Now and MaxAge default to the real clock and
+	// dbsim.DefaultIdentityCheckMaxAge (a placeholder for an open user decision).
+	Now    func() time.Time
+	MaxAge time.Duration
+}
 
 // Resolve implements dbsim.TargetResolver.
 func (r DBSimTargetResolver) Resolve(ctx context.Context, id string) (dbsim.Target, error) {
@@ -161,7 +235,14 @@ func (r DBSimTargetResolver) Resolve(ctx context.Context, id string) (dbsim.Targ
 		}
 		return dbsim.Target{}, err
 	}
-	return rec.ToTarget(), nil
+	now, maxAge := time.Now(), r.MaxAge
+	if r.Now != nil {
+		now = r.Now()
+	}
+	if maxAge == 0 {
+		maxAge = dbsim.DefaultIdentityCheckMaxAge
+	}
+	return rec.ToTargetAt(now, maxAge), nil
 }
 
 // DBSimSettingsStore is the Postgres-backed store of the Admin switches (it
@@ -182,15 +263,18 @@ func (s DBSimSettingsStore) GetClientMode(ctx context.Context) (string, bool, er
 }
 
 // SetClientMode stores the DB client mode setting ("true" or "false").
-func (s DBSimSettingsStore) SetClientMode(ctx context.Context, enabled bool, by string) error {
+func (s DBSimSettingsStore) SetClientMode(ctx context.Context, enabled bool, by string, audit dbadmin.AuditEntry) error {
 	v := "false"
 	if enabled {
 		v = "true"
 	}
-	_, err := s.Pool.Exec(ctx, `
-		INSERT INTO dbsim_settings (key, value, updated_by) VALUES ($1, $2, $3)
-		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by`,
-		dbsim.ClientModeSettingKey, v, by)
+	err := withDBSimAuditTx(ctx, s.Pool, audit, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO dbsim_settings (key, value, updated_by) VALUES ($1, $2, $3)
+			ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by`,
+			dbsim.ClientModeSettingKey, v, by)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("set dbsim client mode: %w", err)
 	}

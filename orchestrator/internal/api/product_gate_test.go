@@ -23,6 +23,7 @@ func TestProductGate_CoreRefusesHigherProducts(t *testing.T) {
 		"/api/dlp/runs", "/api/dlp_sink/x", "/api/phishing-runs",
 		"/api/killchain/list", "/api/cloud-runs/9", "/api/webgw/x", "/api/apibas/runs",
 		"/api/scenarios/api-bas", "/api/dbsim/targets", "/api/dbsim-runs/1", "/api/dbsim-targets",
+		"/api/dbsim/settings/client-mode", "/api/dbsim-targets/x/identity-check",
 	}
 	for _, path := range refused {
 		w := httptest.NewRecorder()

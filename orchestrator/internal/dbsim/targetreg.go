@@ -157,14 +157,40 @@ type TargetRecord struct {
 	IdentityCheck IdentityCheckState
 }
 
-// ToTarget converts a stored record to the Target the gates consume. The trust
+// DefaultIdentityCheckMaxAge is how long a passed read-only identity check
+// verifies a target. 24h is a PLACEHOLDER: the validity period is an open user
+// decision. A pass at or beyond this age, or dated in the future, verifies
+// nothing (fail closed).
+const DefaultIdentityCheckMaxAge = 24 * time.Hour
+
+// ErrTargetChanged means the target was deleted, re-registered or edited after
+// the record a result was produced for was read; the result is not recorded.
+var ErrTargetChanged = errors.New("dbsim target changed since the check started")
+
+// SameConfig reports whether two records describe the same registered target
+// version: id, creation time and every field a check result depends on. The
+// identity-check state itself is deliberately not compared.
+func (r TargetRecord) SameConfig(o TargetRecord) bool {
+	return r.ID == o.ID && r.CreatedAt.Equal(o.CreatedAt) && r.Engine == o.Engine && r.Host == o.Host &&
+		r.Port == o.Port && r.Database == o.Database && r.TLSMode == o.TLSMode && r.CredentialRef == o.CredentialRef &&
+		r.ExpectedIdentity == o.ExpectedIdentity && r.Mode == o.Mode && r.DBServerHost == o.DBServerHost
+}
+
+// ToTarget is ToTargetAt with the real clock and DefaultIdentityCheckMaxAge.
+func (r TargetRecord) ToTarget() Target { return r.ToTargetAt(time.Now(), DefaultIdentityCheckMaxAge) }
+
+// ToTargetAt converts a stored record to the Target the gates consume. The trust
 // flags come only from the stored record: ReadOnlyIdentityVerified needs a
-// recorded, passed check on a client target; LabConfirmed needs a lab target.
-func (r TargetRecord) ToTarget() Target {
+// recorded, passed check on a client target that is younger than maxAge at now
+// (exactly maxAge fails; a non-positive maxAge or a timestamp in the future or
+// missing never verifies); LabConfirmed needs a lab target.
+func (r TargetRecord) ToTargetAt(now time.Time, maxAge time.Duration) Target {
+	c := r.IdentityCheck
+	fresh := maxAge > 0 && !c.At.IsZero() && !c.At.After(now) && now.Sub(c.At) < maxAge
 	return Target{
 		ID: r.ID, Engine: r.Engine, Host: r.Host, Port: r.Port, Database: r.Database, TLSMode: r.TLSMode,
 		CredentialRef: r.CredentialRef, Mode: r.Mode, ExpectedIdentity: r.ExpectedIdentity,
-		ReadOnlyIdentityVerified: r.Mode == ModeClient && r.IdentityCheck.Checked && r.IdentityCheck.Passed,
+		ReadOnlyIdentityVerified: r.Mode == ModeClient && c.Checked && c.Passed && fresh,
 		LabConfirmed:             r.Mode == ModeLab && r.LabConfirmed,
 	}
 }
