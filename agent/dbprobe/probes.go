@@ -70,6 +70,12 @@ var catalog = map[string]ProbeDef{
 	// ever performed. Read-only by class, lab-only by LabOnly.
 	ProbeCheckExportPrivileges: {ID: ProbeCheckExportPrivileges, Class: ClassReadOnly, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{}, LabOnly: true},
+	// check_readonly_identity (Task 16): fixed read-only catalog questions about the
+	// CONNECTED account (can it write, change schema, administer accounts or touch
+	// audit settings). Plain read_only, allowed in client mode: it is how a client
+	// target earns the read-only identity the release gate (R8) requires.
+	ProbeCheckReadOnlyIdentity: {ID: ProbeCheckReadOnlyIdentity, Class: ClassReadOnly, Engines: bothEngines,
+		ParamSchema: map[string]ParamKind{}},
 }
 
 // LookupProbe returns the catalog entry for id.

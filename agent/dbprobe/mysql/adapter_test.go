@@ -103,7 +103,7 @@ func TestMySQLCapabilitiesTruth(t *testing.T) {
 	if c.MarkerInAuditRecord || !c.MarkerInQueryText || c.MarkerInAppName {
 		t.Fatalf("marker facts wrong: %+v", c)
 	}
-	if len(c.ProbeIDs) != 12 {
+	if len(c.ProbeIDs) != 13 {
 		t.Fatalf("probe ids: %v", c.ProbeIDs)
 	}
 	joined := strings.Join(c.Notes, "|")

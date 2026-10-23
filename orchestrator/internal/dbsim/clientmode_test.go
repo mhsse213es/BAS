@@ -50,7 +50,7 @@ func TestClientModeRequiresPassedIdentityCheckAndRegisteredIdentity(t *testing.T
 // Exactly these probes may run in client mode; everything else is refused.
 // A new probe must be added here deliberately.
 var clientAllowedProbes = []string{
-	"auth_check", "read_audit_config", "read_grants", "read_restricted_table", "read_roles",
+	"auth_check", "check_readonly_identity", "read_audit_config", "read_grants", "read_restricted_table", "read_roles",
 }
 
 func TestClientModeAllowedProbeSetIsExact(t *testing.T) {
