@@ -33,6 +33,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"os"
 	"os/exec"
@@ -76,9 +77,39 @@ type e2eConfig struct {
 	credLab, credRO                          string
 }
 
-func envSet(names ...string) (set, missing []string) {
+// e2eDecision decides skip / fail / run for one engine's test. Nothing set at
+// all skips. A common variable set while NEITHER engine is configured is a
+// typo-class mistake and fails hard (otherwise a mistyped engine prefix would
+// look like a skipped run). A configured engine with anything missing fails.
+func e2eDecision(get func(string) string, prefix, otherPrefix string) (action, msg string) {
+	names := func(p string) []string {
+		var out []string
+		for _, v := range engineVars {
+			out = append(out, p+"_"+v)
+		}
+		return out
+	}
+	engSet, engMissing := envSetFn(get, names(prefix)...)
+	otherSet, _ := envSetFn(get, names(otherPrefix)...)
+	comSet, comMissing := envSetFn(get, commonVars...)
+	switch {
+	case len(engSet) == 0 && len(otherSet) == 0 && len(comSet) == 0:
+		return "skip", "dbsim E2E not configured (no DBSIM_E2E_* variables set); see lab/dbsim/E2E.md"
+	case len(engSet) == 0 && len(otherSet) == 0:
+		return "fail", fmt.Sprintf("common DBSIM_E2E_* variables are set (%v) but NEITHER engine is configured: check the %s_* / %s_* names", comSet, prefix, otherPrefix)
+	case len(engSet) == 0:
+		return "skip", fmt.Sprintf("dbsim E2E for %s not configured (no %s_* variables set; the other engine is)", prefix, prefix)
+	case len(engMissing) > 0 || len(comMissing) > 0:
+		return "fail", fmt.Sprintf("partial dbsim E2E configuration for %s: missing %v %v", prefix, comMissing, engMissing)
+	}
+	return "run", ""
+}
+
+func envSet(names ...string) (set, missing []string) { return envSetFn(os.Getenv, names...) }
+
+func envSetFn(get func(string) string, names ...string) (set, missing []string) {
 	for _, n := range names {
-		if os.Getenv(n) != "" {
+		if get(n) != "" {
 			set = append(set, n)
 		} else {
 			missing = append(missing, n)
@@ -90,22 +121,13 @@ func envSet(names ...string) (set, missing []string) {
 // loadE2E returns the configuration for one engine, or skips when the engine's
 // variables are entirely unset. A PARTIAL configuration fails the test: a
 // half-configured run must never look like a skipped (or passed) one.
-func loadE2E(t *testing.T, engine, prefix string) e2eConfig {
+func loadE2E(t *testing.T, engine, prefix, otherPrefix string) e2eConfig {
 	t.Helper()
-	var ev []string
-	for _, v := range engineVars {
-		ev = append(ev, prefix+"_"+v)
-	}
-	engSet, engMissing := envSet(ev...)
-	comSet, comMissing := envSet(commonVars...)
-	if len(engSet) == 0 && len(comSet) == 0 {
-		t.Skipf("dbsim E2E not configured (no DBSIM_E2E_* variables set); see lab/dbsim/E2E.md")
-	}
-	if len(engSet) == 0 {
-		t.Skipf("dbsim E2E for %s not configured (no %s_* variables set)", engine, prefix)
-	}
-	if len(engMissing) > 0 || len(comMissing) > 0 {
-		t.Fatalf("partial dbsim E2E configuration for %s: missing %v %v", engine, comMissing, engMissing)
+	switch action, msg := e2eDecision(os.Getenv, prefix, otherPrefix); action {
+	case "skip":
+		t.Skip(msg)
+	case "fail":
+		t.Fatal(msg)
 	}
 	cfg := e2eConfig{
 		agentBin: os.Getenv("DBSIM_E2E_AGENT_BIN"), esURL: os.Getenv("DBSIM_E2E_ES_URL"),
@@ -238,13 +260,7 @@ func runAgent(t *testing.T, bin string, s signer, envelope []byte, extraEnv ...s
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, "-test.run", "^TestDBSimE2EStepRunner$", "-test.count=1", "-test.v")
-	var childEnv []string
-	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, "DBSIM_E2E_ES_") {
-			continue
-		}
-		childEnv = append(childEnv, kv)
-	}
+	childEnv := filteredEnv()
 	childEnv = append(childEnv, "DBSIM_E2E_ENVELOPE="+envPath, "DBSIM_E2E_SIGNER_CERT="+certPath,
 		"DBSIM_E2E_AGENT_ID="+e2eAgentID, "DBSIM_E2E_RESULT_OUT="+outPath)
 	cmd.Env = append(childEnv, extraEnv...)
@@ -262,6 +278,19 @@ func runAgent(t *testing.T, bin string, s signer, envelope []byte, extraEnv ...s
 		t.Fatalf("decode agent results: %v", err)
 	}
 	return res, logTail
+}
+
+// filteredEnv is the environment handed to every agent subprocess: the alerts
+// reader credentials (DBSIM_E2E_ES_*) are never passed to the agent.
+func filteredEnv() []string {
+	var out []string
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "DBSIM_E2E_ES_") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
 }
 
 func tail(s string, n int) string {
@@ -344,7 +373,7 @@ func agentRejects(t *testing.T, bin string, s signer, envelope []byte) bool {
 	_ = os.WriteFile(envPath, envelope, 0o600)
 	_ = os.WriteFile(certPath, s.certPEM, 0o600)
 	cmd := exec.Command(bin, "-test.run", "^TestDBSimE2EStepRunner$", "-test.count=1", "-test.v")
-	cmd.Env = append(os.Environ(), "DBSIM_E2E_ENVELOPE="+envPath, "DBSIM_E2E_SIGNER_CERT="+certPath,
+	cmd.Env = append(filteredEnv(), "DBSIM_E2E_ENVELOPE="+envPath, "DBSIM_E2E_SIGNER_CERT="+certPath,
 		"DBSIM_E2E_AGENT_ID="+e2eAgentID, "DBSIM_E2E_RESULT_OUT="+outPath)
 	out, err := cmd.CombinedOutput()
 	if _, statErr := os.Stat(outPath); statErr == nil {
@@ -354,11 +383,11 @@ func agentRejects(t *testing.T, bin string, s signer, envelope []byte) bool {
 }
 
 func TestE2E_PostgreSQL_SignedScenarioToCorrelatedRecord(t *testing.T) {
-	runE2E(t, loadE2E(t, "postgresql", "DBSIM_E2E_PG"))
+	runE2E(t, loadE2E(t, "postgresql", "DBSIM_E2E_PG", "DBSIM_E2E_MYSQL"))
 }
 
 func TestE2E_MySQL_SignedScenarioToCorrelatedRecord(t *testing.T) {
-	runE2E(t, loadE2E(t, "mysql", "DBSIM_E2E_MYSQL"))
+	runE2E(t, loadE2E(t, "mysql", "DBSIM_E2E_MYSQL", "DBSIM_E2E_PG"))
 }
 
 var e2eScenarios = []string{
@@ -476,7 +505,14 @@ func checkStep(t *testing.T, cfg e2eConfig, id string, spec dbsim.DBProbeSpec, e
 			t.Errorf("%s: fixture cleanup NOT verified (status %q, incident %v): clean the lab by hand before re-running", spec.ProbeID, ex.DBProbe.CleanupStatus, ex.DBProbe.SafetyIncident)
 		}
 	}
-	if ev.Result != dbsim.ResultPass {
+	// R-AJ: DB-02's grant-vs-policy diff is not wired, so read_grants grades
+	// ERROR (Unverifiable) by design and must NEVER be PASS; every other step
+	// must PASS.
+	if labExpectationFor(id, spec.ProbeID).requireObs {
+		if ev.Result != dbsim.ResultError || !strings.Contains(ev.Record.Limitations, "policy diff not performed") {
+			fail("result %s, want ERROR with 'policy diff not performed' (diff not wired, ruling R-AJ)", ev.Result)
+		}
+	} else if ev.Result != dbsim.ResultPass {
 		fail("result %s, want PASS", ev.Result)
 	}
 	if !ev.Outcome.Corr.Evaluated {
