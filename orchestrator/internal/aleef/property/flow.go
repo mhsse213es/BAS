@@ -74,7 +74,7 @@ func stepCall(ctx TemplateCtx, ws WorkflowStep, obj fixture.Object, variant int)
 	if !ok || !supportedMethod(o.Method) {
 		return model.Operation{}, "", "", false
 	}
-	path, body := buildRequest(o, victimVals(o, obj), variant)
+	path, body := buildRequest(o, victimVals(ctx, o, obj), variant)
 	if ws.Body != "" && (o.Method == "POST" || o.Method == "PATCH") {
 		body = ws.Body
 	}

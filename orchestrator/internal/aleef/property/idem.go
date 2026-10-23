@@ -44,7 +44,7 @@ func idemTemplate(ctx TemplateCtx, prop string, variant int, desc string) []Temp
 	if !ok {
 		return nil
 	}
-	vals := victimVals(op, p.obj)
+	vals := victimVals(ctx, op, p.obj)
 	path, body1 := buildRequest(op, vals, 0)
 	_, body2 := buildRequest(op, vals, variant)
 	if variant > 0 && body1 == body2 {
@@ -160,7 +160,7 @@ func (r race1) Templates(ctx TemplateCtx) []Template {
 	if !ok {
 		return nil
 	}
-	path, body := buildRequest(op, victimVals(op, p.obj), 0)
+	path, body := buildRequest(op, victimVals(ctx, op, p.obj), 0)
 	atk := mkStep("attack-parallel", "attack", p.victim.Name, op.Method, path, body,
 		"At most "+strconv.Itoa(limit)+" of the concurrent identical requests succeed.")
 	atk.Repeat = limit + 4

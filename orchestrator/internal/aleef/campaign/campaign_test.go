@@ -591,3 +591,31 @@ func TestCampaignRepairsVerifiedFindingsWithoutRegression(t *testing.T) {
 		t.Fatalf("still unregressed: %v", left)
 	}
 }
+
+func TestMoneyOperationsRunOnlyWhenTheEngagementDeclaresThem(t *testing.T) {
+	m := model.Model{Operations: []model.Operation{
+		{ID: "pay", Method: "POST", Path: "/pay", Class: model.ClassMoney},
+		{ID: "mail", Method: "POST", Path: "/mail", Class: model.ClassNotifying},
+		{ID: "look", Method: "GET", Path: "/look", Class: model.ClassRead},
+	}}
+	now := time.Now()
+	uat := safety.Engagement{ID: "e", Customer: "c", Environment: "uat", Hosts: []string{"https://uat.example"}, Approver: "a",
+		NotBefore: now, NotAfter: now.Add(time.Hour), MaxRequests: 10, MaxConcurrent: 1, RPS: 1}
+	// even with the operations listed, no simulated rail and no simulator beneficiaries: refused
+	uat.Operations = []string{"pay", "mail", "look"}
+	if got := allowedOps(m, uat); len(got) != 0 {
+		t.Fatalf("UAT engagement without money declarations allowed %v", got)
+	}
+	uat.SimulatedRail = true
+	if got := allowedOps(m, uat); len(got) != 0 {
+		t.Fatalf("simulated rail without simulator beneficiaries allowed %v", got)
+	}
+	uat.SimulatorBeneficiaries = []string{"SIM-1"}
+	if got := allowedOps(m, uat); !got["pay"] || got["mail"] || got["look"] {
+		t.Fatalf("declared money operation / notifying refusal: %v", got)
+	}
+	uat.Operations = []string{"look"}
+	if got := allowedOps(m, uat); len(got) != 0 {
+		t.Fatalf("unlisted money operation allowed: %v", got)
+	}
+}

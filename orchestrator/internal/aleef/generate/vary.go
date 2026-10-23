@@ -134,15 +134,9 @@ func hasToken(t property.Template) bool {
 	return strings.Contains(attackOf(t).Path, "{object}")
 }
 
-func ownedBy(fx fixture.Fixture, a model.Account) (fixture.Object, bool) {
-	var best fixture.Object
-	found := false
-	for _, o := range fx.Objects {
-		if o.OwnerID == a.CustomerID && (!found || o.ID < best.ID) {
-			best, found = o, true
-		}
-	}
-	return best, found
+// ownedBy returns a's object of the type the varied operation acts on.
+func ownedBy(c vctx, a model.Account) (fixture.Object, bool) {
+	return property.OwnedObject(c.fx, a, property.PrimaryTypeOf(c.model, c.fx, c.op))
 }
 
 func account(accts []model.Account, name string) (model.Account, bool) {
@@ -174,7 +168,7 @@ func varOtherAccount(c vctx, t property.Template) []property.Template {
 		if _, ok := c.fx.Identity(a.Name); !ok {
 			continue
 		}
-		obj, ok := ownedBy(c.fx, a)
+		obj, ok := ownedBy(c, a)
 		if !ok {
 			continue
 		}
@@ -238,7 +232,7 @@ func varFieldLocation(c vctx, t property.Template) []property.Template {
 	if !ok {
 		return nil
 	}
-	own, ok := ownedBy(c.fx, attacker)
+	own, ok := ownedBy(c, attacker)
 	if !ok {
 		return nil
 	}

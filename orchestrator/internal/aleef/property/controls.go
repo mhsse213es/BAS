@@ -101,7 +101,7 @@ func actStep(ctx TemplateCtx, op model.Operation, acct model.Account, obj fixtur
 		b.ID, b.Role, b.Hypothesis = id, "attack", hypothesis
 		return b, true
 	}
-	path, body := buildRequest(op, victimVals(op, obj), 0)
+	path, body := buildRequest(op, victimVals(ctx, op, obj), 0)
 	return mkStep(id, "attack", acct.Name, op.Method, path, body, hypothesis), true
 }
 

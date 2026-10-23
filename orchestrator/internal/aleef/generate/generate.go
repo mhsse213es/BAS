@@ -67,6 +67,11 @@ type Options struct {
 	ReservedRoles map[string]string
 	Limits        map[string]int
 
+	// AllowedOps lists operations whose class is not runnable by default
+	// (money, notifying) but which the engagement explicitly permits; the
+	// caller derives it from the safety rules, generate never decides it.
+	AllowedOps map[string]bool
+
 	// Catalogue is the set of existing scenarios used for the novelty check.
 	// Nil loads the embedded catalogue; an empty non-nil slice means nothing
 	// is covered.
@@ -97,6 +102,18 @@ type Report struct {
 	ControlsBlocked int
 	// Truncated counts tests cut by MaxTests.
 	Truncated int
+	// NoFixture counts tests dropped because a step needs a fixture object
+	// of a resource type the account does not have, keyed by resource type.
+	// NoFixtureOps lists operations skipped outright because no account has
+	// an object of their primary resource type (operation id -> type).
+	// Such tests are never sent with a wrong id.
+	NoFixture    map[string]int
+	NoFixtureOps map[string]string
+}
+
+// NoFixtureReason is the human-readable reason for a resource type.
+func NoFixtureReason(t string) string {
+	return "no fixture object of resource type " + t
 }
 
 // Generate is GenerateWithReport without the report.
@@ -111,7 +128,7 @@ func runnable(c model.OpClass) bool {
 
 // GenerateWithReport generates the tests and reports what was skipped.
 func GenerateWithReport(m model.Model, fx fixture.Fixture, accts []model.Account, opt Options) ([]Test, Report, error) {
-	rep := Report{SkippedByClass: map[string]int{}}
+	rep := Report{SkippedByClass: map[string]int{}, NoFixture: map[string]int{}, NoFixtureOps: map[string]string{}}
 	vars, err := resolveVariations(opt.Variations)
 	if err != nil {
 		return nil, rep, err
@@ -131,7 +148,7 @@ func GenerateWithReport(m model.Model, fx fixture.Fixture, accts []model.Account
 	var base, variants []Test
 	vc := vctx{model: m, fx: fx, accts: accts}
 	for _, op := range ops {
-		if !runnable(op.Class) {
+		if !runnable(op.Class) && !opt.AllowedOps[op.ID] {
 			cls := string(op.Class)
 			if cls == "" {
 				cls = string(model.ClassUnknown)
@@ -141,6 +158,19 @@ func GenerateWithReport(m model.Model, fx fixture.Fixture, accts []model.Account
 			continue
 		}
 		vc.op = op
+		if t := property.PrimaryTypeOf(m, fx, op); t != "" {
+			have := false
+			for _, a := range accts {
+				if _, ok := property.OwnedObject(fx, a, t); ok {
+					have = true
+					break
+				}
+			}
+			if !have {
+				rep.NoFixtureOps[op.ID] = t
+				continue
+			}
+		}
 		produced := false
 		for _, p := range property.All() {
 			if !p.Applies(op, m) {
@@ -158,7 +188,14 @@ func GenerateWithReport(m model.Model, fx fixture.Fixture, accts []model.Account
 				if tpl.Params["operation"] == "" {
 					tpl.Params["operation"] = op.ID
 				}
-				if blocked := stepBlock(m, tpl.Steps); blocked != "" {
+				if missing := unresolved(tpl); len(missing) > 0 {
+					for _, t := range missing {
+						rep.NoFixture[t]++
+					}
+					produced = true
+					continue
+				}
+				if blocked := stepBlockWith(m, tpl.Steps, opt.AllowedOps); blocked != "" {
 					rep.countBlocked(blocked)
 					produced = true
 					continue
@@ -172,13 +209,13 @@ func GenerateWithReport(m model.Model, fx fixture.Fixture, accts []model.Account
 					continue
 				}
 				seen[t.ID] = true
-				attachControls(&t, m, tpl)
+				attachControls(&t, m, tpl, opt.AllowedOps)
 				base = append(base, t)
 				produced = true
 				for _, v := range vars {
 					for _, vt := range v.fn(vc, tpl) {
 						vt.Params["variation"] = v.name
-						if blocked := stepBlock(m, vt.Steps); blocked != "" {
+						if blocked := stepBlockWith(m, vt.Steps, opt.AllowedOps); blocked != "" {
 							rep.countBlocked(blocked)
 							continue
 						}
@@ -191,7 +228,7 @@ func GenerateWithReport(m model.Model, fx fixture.Fixture, accts []model.Account
 							continue
 						}
 						seen[t.ID] = true
-						attachControls(&t, m, vt)
+						attachControls(&t, m, vt, opt.AllowedOps)
 						variants = append(variants, t)
 					}
 				}
@@ -242,6 +279,32 @@ const (
 // header changes the effective method. A baseline that the property picked
 // from a non-runnable operation therefore drops the test (it is not re-picked).
 func stepBlock(m model.Model, steps []contract.Step) string {
+	return stepBlockWith(m, steps, nil)
+}
+
+// unresolved lists the resource types a template (or either control) needs a
+// fixture object for and does not have.
+func unresolved(tpl property.Template) []string {
+	set := map[string]bool{}
+	for _, t := range property.UnresolvedTypes(tpl.Steps) {
+		set[t] = true
+	}
+	for _, c := range []*property.Template{tpl.OwnerControl, tpl.NegativeControl} {
+		if c != nil {
+			for _, t := range property.UnresolvedTypes(c.Steps) {
+				set[t] = true
+			}
+		}
+	}
+	var out []string
+	for t := range set {
+		out = append(out, t)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func stepBlockWith(m model.Model, steps []contract.Step, allowed map[string]bool) string {
 	result := ""
 	for _, st := range steps {
 		method := strings.ToUpper(st.Method)
@@ -257,7 +320,7 @@ func stepBlock(m model.Model, steps []contract.Step) string {
 				continue
 			}
 			matched = true
-			if !runnable(op.Class) {
+			if !runnable(op.Class) && !allowed[op.ID] {
 				result = blockedClass
 			}
 		}
@@ -292,9 +355,9 @@ func testID(prop, op string, params map[string]string) string {
 // is missing, is blocked by the safety filter or does not validate, t carries
 // no controls and is marked ControlsBlocked (Report.ControlsBlocked counts them
 // among the tests finally emitted).
-func attachControls(t *Test, m model.Model, tpl property.Template) {
+func attachControls(t *Test, m model.Model, tpl property.Template, allowed map[string]bool) {
 	build := func(c *property.Template, suffix string) *Test {
-		if c == nil || stepBlock(m, c.Steps) != "" {
+		if c == nil || stepBlockWith(m, c.Steps, allowed) != "" {
 			return nil
 		}
 		ct, err := assembleControl(*c, t.ID+suffix)

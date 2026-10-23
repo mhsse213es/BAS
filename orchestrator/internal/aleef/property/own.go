@@ -46,7 +46,7 @@ func crossIdentity(ctx TemplateCtx, prop string, op model.Operation, p pair, val
 	// victim's data as forbidden values. Both use the operation under test
 	// (a DELETE is replaced by a read). Without an object of its own the
 	// attacker has no negative control and the template is not emitted.
-	own, hasOwn := firstOwned(ctx.Fixture, p.attacker)
+	own, hasOwn := firstOwned(ctx, p.attacker)
 	if !hasOwn {
 		return Template{}, false
 	}
@@ -77,7 +77,7 @@ func (o own1) Templates(ctx TemplateCtx) []Template {
 	}
 	var out []Template
 	for _, p := range pairs(ctx) {
-		t, ok := crossIdentity(ctx, o.id, ctx.Op, p, victimVals(ctx.Op, p.obj),
+		t, ok := crossIdentity(ctx, o.id, ctx.Op, p, victimVals(ctx, ctx.Op, p.obj),
 			map[string]string{"location": "path"},
 			"Account "+p.attacker.Name+" reads "+p.victim.Name+"'s object through "+ctx.Op.ID+".")
 		if ok {
@@ -104,7 +104,7 @@ func (o own2) Templates(ctx TemplateCtx) []Template {
 	}
 	var out []Template
 	for _, p := range pairs(ctx) {
-		t, ok := crossIdentity(ctx, o.id, ctx.Op, p, victimVals(ctx.Op, p.obj),
+		t, ok := crossIdentity(ctx, o.id, ctx.Op, p, victimVals(ctx, ctx.Op, p.obj),
 			map[string]string{"location": "path"},
 			"Account "+p.attacker.Name+" changes "+p.victim.Name+"'s object through "+ctx.Op.ID+".")
 		if ok {
@@ -148,7 +148,7 @@ func (o own3) Templates(ctx TemplateCtx) []Template {
 	refs := idRefsOf(op)
 	var out []Template
 	for _, p := range pairs(ctx) {
-		own, hasOwn := firstOwned(ctx.Fixture, p.attacker)
+		own, hasOwn := firstOwned(ctx, p.attacker)
 		var nonPath []idRef
 		for _, r := range refs {
 			if r.loc != "path" {
@@ -160,9 +160,9 @@ func (o own3) Templates(ctx TemplateCtx) []Template {
 			for _, r := range nonPath {
 				vals := map[string]string{}
 				for _, other := range nonPath {
-					vals[other.key()] = literalFor(other, own, hasOwn, false)
+					vals[other.key()] = literalFor(ctx, op, other, own, hasOwn, false)
 				}
-				vals[r.key()] = literalFor(r, p.obj, true, true)
+				vals[r.key()] = literalFor(ctx, op, r, p.obj, true, true)
 				if t, ok := crossIdentity(ctx, o.id, op, p, vals, map[string]string{"location": r.key()},
 					"Account "+p.attacker.Name+" references "+p.victim.Name+"'s object in "+r.key()+" of "+op.ID+"."); ok {
 					out = append(out, t)
@@ -173,11 +173,11 @@ func (o own3) Templates(ctx TemplateCtx) []Template {
 				break
 			}
 			for _, r := range nonPath {
-				vals := ownPathVals(op, own)
+				vals := ownPathVals(ctx, op, own)
 				for _, other := range nonPath {
-					vals[other.key()] = literalFor(other, own, true, false)
+					vals[other.key()] = literalFor(ctx, op, other, own, true, false)
 				}
-				vals[r.key()] = literalFor(r, p.obj, true, true)
+				vals[r.key()] = literalFor(ctx, op, r, p.obj, true, true)
 				if t, ok := crossIdentity(ctx, o.id, op, p, vals, map[string]string{"location": r.key()},
 					"Account "+p.attacker.Name+" references "+p.victim.Name+"'s object in "+r.key()+" of "+op.ID+" while the path names its own."); ok {
 					t.CleanIsEnforced = true // the attacker's own object is legitimately readable
@@ -185,14 +185,14 @@ func (o own3) Templates(ctx TemplateCtx) []Template {
 				}
 			}
 		case len(nonPath) > 0:
-			if t, ok := crossIdentity(ctx, o.id, op, p, victimVals(op, p.obj), map[string]string{"location": "all"},
+			if t, ok := crossIdentity(ctx, o.id, op, p, victimVals(ctx, op, p.obj), map[string]string{"location": "all"},
 				"Account "+p.attacker.Name+" references "+p.victim.Name+"'s object in every identifier field of "+op.ID+"."); ok {
 				out = append(out, t)
 			}
 		}
 		if op.Method == "GET" && hasPathID(op) && hasOwn {
 			for _, h := range ownHeaders {
-				t, ok := crossIdentity(ctx, o.id, op, p, ownPathVals(op, own), map[string]string{"location": "header:" + h},
+				t, ok := crossIdentity(ctx, o.id, op, p, ownPathVals(ctx, op, own), map[string]string{"location": "header:" + h},
 					"Account "+p.attacker.Name+" names its own object in the path of "+op.ID+" and "+p.victim.Name+"'s object in header "+h+".")
 				if !ok {
 					continue
@@ -212,34 +212,24 @@ func (o own3) Templates(ctx TemplateCtx) []Template {
 
 // literalFor renders the value of an identifier field: the object token in
 // path or query position for the victim, the literal id elsewhere.
-func literalFor(r idRef, o fixture.Object, have bool, victim bool) string {
+func literalFor(ctx TemplateCtx, op model.Operation, r idRef, o fixture.Object, have bool, victim bool) string {
 	if !have {
 		return "aleef-none"
 	}
-	if victim && r.loc != "body" {
-		return objToken
-	}
-	if principalRef(r) {
-		return o.OwnerID
-	}
-	return o.ID
+	return resolveRef(ctx, op, r, o, victim)
 }
 
 // ownPathVals sets every path identifier to the attacker's own object.
-func ownPathVals(op model.Operation, own fixture.Object) map[string]string {
+func ownPathVals(ctx TemplateCtx, op model.Operation, own fixture.Object) map[string]string {
 	vals := map[string]string{}
 	for _, r := range idRefsOf(op) {
 		if r.loc == "path" {
-			vals[r.key()] = own.ID
+			vals[r.key()] = resolveRef(ctx, op, r, own, false)
 		}
 	}
 	return vals
 }
 
-func firstOwned(f fixture.Fixture, a model.Account) (fixture.Object, bool) {
-	objs := ownedObjects(f, a)
-	if len(objs) == 0 {
-		return fixture.Object{}, false
-	}
-	return objs[0], true
+func firstOwned(ctx TemplateCtx, a model.Account) (fixture.Object, bool) {
+	return OwnedObject(ctx.Fixture, a, primaryType(ctx, ctx.Op))
 }

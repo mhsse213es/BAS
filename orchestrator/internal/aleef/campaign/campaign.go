@@ -316,6 +316,10 @@ func Run(ctx context.Context, cfg Config) (rep Report, retErr error) {
 		rep.PerOperation[op.ID] = OpCoverage{Class: string(op.Class)}
 	}
 
+	// Money and notifying operations run only when the engagement's own rules
+	// (safety.Allow) permit them; the generator never decides that itself.
+	allowed := allowedOps(m, cfg.Engagement)
+
 	var runErr error
 	defer func() {
 		// Whatever happened, compensate everything the campaign created.
@@ -340,7 +344,7 @@ func Run(ctx context.Context, cfg Config) (rep Report, retErr error) {
 		tests, genRep, runErr = generate.GenerateWithReport(m, e.genFx, cfg.Accounts, generate.Options{
 			Seed: cfg.Options.Seed, MaxTests: cfg.Options.MaxTests, Variations: cfg.Options.Variations,
 			Workflow: cfg.Workflow, ReservedRoles: cfg.ReservedRoles, Limits: cfg.Limits,
-			Catalogue: cfg.Options.Catalogue,
+			Catalogue: cfg.Options.Catalogue, AllowedOps: allowed,
 		})
 		rep.Generated = genRep
 	} else {
@@ -360,6 +364,11 @@ func Run(ctx context.Context, cfg Config) (rep Report, retErr error) {
 	for _, id := range rep.Generated.SkippedOps {
 		oc := rep.PerOperation[id]
 		oc.Skipped = "class " + oc.Class
+		rep.PerOperation[id] = oc
+	}
+	for id, t := range rep.Generated.NoFixtureOps {
+		oc := rep.PerOperation[id]
+		oc.Skipped = generate.NoFixtureReason(t)
 		rep.PerOperation[id] = oc
 	}
 
@@ -470,6 +479,19 @@ func Run(ctx context.Context, cfg Config) (rep Report, retErr error) {
 		}
 	}
 	return rep, runErr
+}
+
+// allowedOps lists the money and notifying operations the engagement's own
+// declarations (safety.Allow) permit to run. Nothing is allowed by default.
+func allowedOps(m model.Model, e safety.Engagement) map[string]bool {
+	allowed := map[string]bool{}
+	for _, op := range m.Operations {
+		c := safety.FromOpClass(op.Class)
+		if (c == safety.ClassMoney || c == safety.ClassNotifying) && safety.Allow(c, op, e) == nil {
+			allowed[op.ID] = true
+		}
+	}
+	return allowed
 }
 
 // tally derives every count from rep.Tests so they cannot disagree.

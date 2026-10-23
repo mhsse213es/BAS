@@ -359,17 +359,6 @@ func sortedAccounts(ctx TemplateCtx) []model.Account {
 	return out
 }
 
-func ownedObjects(f fixture.Fixture, a model.Account) []fixture.Object {
-	var out []fixture.Object
-	for _, o := range f.Objects {
-		if o.OwnerID == a.CustomerID {
-			out = append(out, o)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return out
-}
-
 type pair struct {
 	victim, attacker model.Account
 	obj              fixture.Object
@@ -380,7 +369,7 @@ func pairs(ctx TemplateCtx) []pair {
 	accts := sortedAccounts(ctx)
 	var out []pair
 	for _, v := range accts {
-		objs := ownedObjects(ctx.Fixture, v)
+		objs := ownedOfType(ctx.Fixture, v, primaryType(ctx, ctx.Op))
 		if len(objs) == 0 {
 			continue
 		}
@@ -401,7 +390,7 @@ func ownersWithObject(ctx TemplateCtx, role string) []pair {
 		if role != "" && a.Role != role {
 			continue
 		}
-		if objs := ownedObjects(ctx.Fixture, a); len(objs) > 0 {
+		if objs := ownedOfType(ctx.Fixture, a, primaryType(ctx, ctx.Op)); len(objs) > 0 {
 			out = append(out, pair{victim: a, attacker: a, obj: objs[0]})
 		}
 	}
@@ -631,16 +620,10 @@ func principalRef(r idRef) bool {
 
 // victimVals assigns the fixture object to every identifier field, and the
 // object's owner to principal-naming body fields.
-func victimVals(op model.Operation, obj fixture.Object) map[string]string {
+func victimVals(ctx TemplateCtx, op model.Operation, obj fixture.Object) map[string]string {
 	vals := map[string]string{}
 	for _, r := range idRefsOf(op) {
-		if principalRef(r) {
-			vals[r.key()] = obj.OwnerID
-		} else if r.loc == "body" {
-			vals[r.key()] = obj.ID
-		} else {
-			vals[r.key()] = objToken
-		}
+		vals[r.key()] = resolveRef(ctx, op, r, obj, true)
 	}
 	return vals
 }
@@ -673,7 +656,7 @@ func sideEffectOf(steps []contract.Step) string {
 func baselineStep(ctx TemplateCtx, target model.Operation, owner model.Account, selfOK bool) (contract.Step, bool) {
 	hyp := "The owner can read their own object. If this fails, the test is not applicable."
 	if selfOK && target.Method == "GET" && requiredQueryOnlyIDs(target) {
-		p, _ := buildRequest(target, victimVals(target, fixture.Object{}), 0)
+		p, _ := buildRequest(target, victimVals(ctx, target, objectFor(ctx, owner, target)), 0)
 		return mkStep("baseline-owner-read", "baseline", owner.Name, "GET", p, "", hyp), true
 	}
 	var best *model.Operation
@@ -694,7 +677,7 @@ func baselineStep(ctx TemplateCtx, target model.Operation, owner model.Account, 
 	if best == nil {
 		return contract.Step{}, false
 	}
-	p, _ := buildRequest(*best, victimVals(*best, fixture.Object{}), 0)
+	p, _ := buildRequest(*best, victimVals(ctx, *best, objectFor(ctx, owner, *best)), 0)
 	return mkStep("baseline-owner-read", "baseline", owner.Name, "GET", p, "", hyp), true
 }
 
@@ -727,7 +710,7 @@ func baselineOrSelf(ctx TemplateCtx, op model.Operation, owner model.Account, ob
 	if op.Method == "DELETE" || op.Method == "GET" {
 		return contract.Step{}, false
 	}
-	p, body := buildRequest(op, victimVals(op, obj), 0)
+	p, body := buildRequest(op, victimVals(ctx, op, obj), 0)
 	return mkStep("baseline-owner-call", "baseline", owner.Name, op.Method, p, body,
 		"The owner can perform the operation on their own object. If this fails, the test is not applicable."), true
 }

@@ -64,7 +64,7 @@ func (r role1) Templates(ctx TemplateCtx) []Template {
 		if !ok {
 			continue
 		}
-		path, body := buildRequest(op, victimVals(op, p.obj), 0)
+		path, body := buildRequest(op, victimVals(ctx, op, p.obj), 0)
 		atk := mkStep("attack-role", "attack", p.victim.Name, op.Method, path, body,
 			"The application refuses an operation reserved for role "+required+" to an account with role "+p.victim.Role+".")
 		oracle := OracleStateChange
@@ -166,7 +166,7 @@ func (r role2) Templates(ctx TemplateCtx) []Template {
 		return nil
 	}
 	p := ps[0]
-	t, ok := crossIdentity(ctx, r.id, op, p, victimVals(op, p.obj), map[string]string{
+	t, ok := crossIdentity(ctx, r.id, op, p, victimVals(ctx, op, p.obj), map[string]string{
 		"group": routeKey(op), "peers": strings.Join(peers(op, ctx.Model), ","), "location": "route",
 	}, "Account "+p.attacker.Name+" reaches "+p.victim.Name+"'s object through the alternative route "+op.Path+".")
 	if !ok {

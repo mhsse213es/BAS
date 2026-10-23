@@ -275,3 +275,31 @@ func TestGuardDetectsViolation(t *testing.T) {
 		}
 	})
 }
+
+var bankVocab = regexp.MustCompile(`(?i)beneficiar|kyc|settle|ledger|account[ _-]?number|ifsc|\bupi\b`)
+
+// The generic generator packages must stay free of banking vocabulary. (exec
+// and safety are excluded: the engagement's money-movement rules predate this
+// check and name simulator beneficiaries by design.)
+func TestGenericGeneratorPackagesHaveNoBankVocabulary(t *testing.T) {
+	root := moduleRoot(t)
+	var v []string
+	for _, p := range []string{"model", "property", "generate", "novelty", "verify", "export", "campaign"} {
+		files, err := goFiles(filepath.Join(root, "internal", "aleef", p), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range files {
+			b, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if m := bankVocab.FindString(string(b)); m != "" {
+				v = append(v, f+" mentions "+m)
+			}
+		}
+	}
+	if len(v) > 0 {
+		t.Fatalf("bank vocabulary in generic packages:\n%s", strings.Join(v, "\n"))
+	}
+}
