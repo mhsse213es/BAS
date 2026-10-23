@@ -110,7 +110,7 @@ func (e *elasticConnector) Verify(ctx context.Context, req VerifyRequest) (Verif
 			return VerifyResult{}, err
 		}
 		for _, h := range hits {
-			a, err := normalizeElasticHit(h)
+			a, err := normalizeElasticHitWith(h, req.IncludeAlertSource)
 			if err != nil {
 				return VerifyResult{}, err
 			}
@@ -159,6 +159,15 @@ func (e *elasticConnector) buildQuery(req VerifyRequest, searchAfter []any) map[
 	if ip := strings.TrimSpace(req.HostIP); net.ParseIP(ip) != nil {
 		hostShould = append(hostShould, map[string]any{"term": map[string]any{"host.ip": ip}})
 	}
+	sourceFields := []string{
+		"@timestamp", "kibana.alert.uuid", "kibana.alert.rule.name", "kibana.alert.severity",
+		"kibana.alert.rule.threat", "kibana.alert.workflow_status", "kibana.alert.original_time",
+		"threat", "host.name", "host.hostname",
+	}
+	if req.IncludeAlertSource {
+		// A1 (opt-in): fields in which an in-band marker can appear.
+		sourceFields = append(sourceFields, "message", "event.original", "host.ip", "kibana.alert.reason")
+	}
 	q := map[string]any{
 		"size": e.pageSize,
 		"query": map[string]any{"bool": map[string]any{"filter": []any{
@@ -174,13 +183,7 @@ func (e *elasticConnector) buildQuery(req VerifyRequest, searchAfter []any) map[
 			map[string]any{"@timestamp": "asc"},
 			map[string]any{"kibana.alert.uuid": "asc"},
 		},
-		"_source": []string{
-			"@timestamp", "kibana.alert.uuid", "kibana.alert.rule.name", "kibana.alert.severity",
-			"kibana.alert.rule.threat", "kibana.alert.workflow_status", "kibana.alert.original_time",
-			"threat", "host.name", "host.hostname",
-			// A1: fields in which an in-band marker can appear.
-			"message", "event.original", "host.ip", "kibana.alert.reason",
-		},
+		"_source": sourceFields,
 	}
 	if len(searchAfter) > 0 {
 		q["search_after"] = searchAfter
@@ -258,6 +261,13 @@ func (e *elasticConnector) search(ctx context.Context, body map[string]any) ([]e
 // are the union of technique ids and subtechnique ids from the rule's threat
 // mapping; matchAlerts decides what counts as a match.
 func normalizeElasticHit(h elasticHit) (normalizedAlert, error) {
+	return normalizeElasticHitWith(h, false)
+}
+
+// normalizeElasticHitWith is normalizeElasticHit; includeSource (opt-in, see
+// VerifyRequest.IncludeAlertSource) additionally copies the bounded alert source
+// into RawJSON.
+func normalizeElasticHitWith(h elasticHit, includeSource bool) (normalizedAlert, error) {
 	var src map[string]any
 	if err := json.Unmarshal(h.Source, &src); err != nil {
 		return normalizedAlert{}, fmt.Errorf("elastic: malformed alert document %q: %w", h.ID, err)
@@ -310,7 +320,7 @@ func normalizeElasticHit(h elasticHit) (normalizedAlert, error) {
 	}
 	// Amendment A1: expose the (whitelisted) alert source so callers can look
 	// for an in-band marker. Bounded; never logged.
-	if sb, err := json.Marshal(src); err == nil {
+	if sb, err := json.Marshal(src); includeSource && err == nil {
 		if len(sb) <= elasticRawSourceMax {
 			rawDoc["source"] = json.RawMessage(sb)
 		} else {

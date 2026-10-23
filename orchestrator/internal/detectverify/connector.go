@@ -76,6 +76,13 @@ type VerifyRequest struct {
 	StepExecutedAt time.Time // the step's actual execution time — used for latency
 	WindowStart    time.Time // padded query window start
 	WindowEnd      time.Time // padded query window end
+	// IncludeAlertSource is OPT-IN (zero value false): the Elastic connector then
+	// also requests message, event.original, host.ip and kibana.alert.reason and
+	// returns a bounded copy of the alert source in MatchedAlert.RawJSON under
+	// "source". Only the dbsim correlator sets it. When false the connector
+	// behaves exactly as before: same _source field list, same RawJSON content, so
+	// other products store nothing extra.
+	IncludeAlertSource bool
 }
 
 // MatchedAlert is one vendor alert that satisfied a VerifyRequest.

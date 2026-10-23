@@ -458,3 +458,20 @@ func TestMarkerInJSONKeyIsNotCredited(t *testing.T) {
 		t.Fatalf("value: %s", rv.Match)
 	}
 }
+
+// Fix round 2 I-2: the correlator is the only caller that opts in to the alert
+// source; every lookup it sends must carry the flag.
+func TestEveryLookupOptsInToTheAlertSource(t *testing.T) {
+	c := fixed()
+	if _, err := Correlate(context.Background(), c, corrIn()); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.reqs) == 0 {
+		t.Fatal("no lookups sent")
+	}
+	for i, r := range c.reqs {
+		if !r.IncludeAlertSource {
+			t.Errorf("lookup %d does not request the alert source", i)
+		}
+	}
+}

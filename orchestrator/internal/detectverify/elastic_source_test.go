@@ -21,10 +21,17 @@ func a1Hit(msg string) map[string]any {
 	return h
 }
 
+// a1Req is the request the dbsim correlator sends: it opts in to the alert source.
+func a1Req() VerifyRequest {
+	r := elasticReq()
+	r.IncludeAlertSource = true
+	return r
+}
+
 func a1Verify(t *testing.T, resp string) VerifyResult {
 	t.Helper()
 	c, _, _ := elasticCapture(t, resp)
-	res, err := c.Verify(context.Background(), elasticReq())
+	res, err := c.Verify(context.Background(), a1Req())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +71,7 @@ func TestElasticA1_SourceKeyExposesMarkerAndKeepsExistingKeys(t *testing.T) {
 
 func TestElasticA1_RequestSourceWhitelistWidened(t *testing.T) {
 	c, body, _ := elasticCapture(t, elasticResp())
-	if _, err := c.Verify(context.Background(), elasticReq()); err != nil {
+	if _, err := c.Verify(context.Background(), a1Req()); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := json.Marshal((*body)["_source"])

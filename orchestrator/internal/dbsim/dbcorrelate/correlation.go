@@ -265,6 +265,7 @@ func Correlate(ctx context.Context, c detectverify.Connector, in CorrelationInpu
 	base := detectverify.VerifyRequest{
 		RunID: in.RunID, ExpectationID: "dbsim", StepExecutedAt: in.ProbeAt,
 		WindowStart: start, WindowEnd: end,
+		IncludeAlertSource: true, // dbsim looks for its in-band marker in the alert source
 	}
 	if dbHost != "" || dbIP != "" {
 		r := base
