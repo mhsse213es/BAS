@@ -116,6 +116,8 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 
 		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true,
 		CanManageComponents: true,
+
+		CanViewDBSim: true, CanManageDBSimTargets: true, CanSetDBSimClientMode: true,
 	}
 	for _, p := range Permissions(RoleAdmin) {
 		if !tested[p] {
@@ -171,6 +173,7 @@ func TestPermissions_Ordering(t *testing.T) {
 		CanLinkContentThreat,
 		CanImportNetworkPolicy, CanImportNetworkTopology, CanImportNetworkControlExpectation, CanImportCloudTopology,
 		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport, CanManageComponents,
+		CanViewDBSim, CanManageDBSimTargets, CanSetDBSimClientMode,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("Permissions(RoleAdmin) len = %d, want %d", len(got), len(want))

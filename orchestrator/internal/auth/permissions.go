@@ -288,6 +288,15 @@ const (
 	// target-scope allowlist for active network probing -- same
 	// placement as CanImportOTSafetyConfig, for the same reason.
 	CanImportTargetScope Permission = "target-scope:import"
+
+	// Database security simulation (dbsim). CanViewDBSim (targets, settings, runs
+	// -- read only) is Analyst+Admin. Registering/deleting targets and running the
+	// read-only identity check (CanManageDBSimTargets) and switching DB client mode
+	// (CanSetDBSimClientMode) are Admin only: they decide which database may be
+	// touched and whether a customer database may be used at all.
+	CanViewDBSim          Permission = "dbsim:view"
+	CanManageDBSimTargets Permission = "dbsim:targets:manage"
+	CanSetDBSimClientMode Permission = "dbsim:client-mode:set"
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
@@ -347,6 +356,9 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
 		CanExecuteRemediation: true, CanApproveRemediation: true,
 		CanApprovePipelineInjection: true, CanApprovePipelineCleanup: true,
+		CanViewDBSim:                       true,
+		CanManageDBSimTargets:              true,
+		CanSetDBSimClientMode:              true,
 		CanManageBackups:                   true,
 		CanResolveActorIdentity:            true,
 		CanManageSourceTrust:               true,
@@ -394,6 +406,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		// move/delete them.
 		CanViewAgentGroups:    true,
 		CanExecuteRemediation: true,
+		CanViewDBSim:          true,
 	},
 	RoleViewer: {},
 }
@@ -450,6 +463,7 @@ func Permissions(role Role) []Permission {
 		CanLinkContentThreat,
 		CanImportNetworkPolicy, CanImportNetworkTopology, CanImportNetworkControlExpectation, CanImportCloudTopology,
 		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport, CanManageComponents,
+		CanViewDBSim, CanManageDBSimTargets, CanSetDBSimClientMode,
 	} {
 		if set[p] {
 			out = append(out, p)
