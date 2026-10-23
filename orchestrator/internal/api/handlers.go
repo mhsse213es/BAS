@@ -140,6 +140,7 @@ type Handler struct {
 	publicBaseURL        string                 // orchestrator's externally-reachable base URL; used for {{SINK_URL}} substitution and exercise tracker links
 	exerciseStore        *exercise.Store
 	exerciseExecutor     *exercise.Executor
+	k8sScenario *K8sScenarioService
 	exerciseChain        *exercise.EvidenceChain
 	verification         *verification.Store    // nil when not loaded — SP2 verification store
 	relationships        *relationships.Store   // nil when not loaded — CVE-ATT&CK Relationship Store

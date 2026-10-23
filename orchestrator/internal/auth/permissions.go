@@ -86,6 +86,11 @@ const (
 	CanLaunchExerciseExecution Permission = "exercises:executions:launch"
 	CanAbortExerciseExecution  Permission = "exercises:executions:abort"
 	CanApproveExerciseStep     Permission = "exercises:executions:approve-step"
+	// Kubernetes state-changing scenarios: request plans a run, approve authorises one run (a different operator
+	// from the requester), execute runs an approved run as its requester.
+	CanRequestK8sScenario Permission = "k8s-scenarios:request"
+	CanApproveK8sScenario Permission = "k8s-scenarios:approve"
+	CanExecuteK8sScenario Permission = "k8s-scenarios:execute"
 	CanInjectExerciseEvidence  Permission = "exercises:executions:inject-evidence"
 
 	// Admin-only: agent state, license, connection config.
@@ -321,6 +326,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
+		CanRequestK8sScenario: true, CanApproveK8sScenario: true, CanExecuteK8sScenario: true,
 
 		CanSetAgentState: true, CanStopAgent: true, CanRemoveAgent: true, CanViewLicense: true, CanViewConnectionConfig: true, CanManageAgentGroups: true, CanViewAgentGroups: true,
 		CanListUsers: true, CanCreateUser: true, CanUpdateUser: true, CanDeleteUser: true,
@@ -388,6 +394,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
+		CanRequestK8sScenario: true, CanExecuteK8sScenario: true,
 		CanViewResponseActions: true,
 		// Read-only counterpart to the admin-only CanManageAgentGroups --
 		// analysts can see and target agent groups, not create/rename/
