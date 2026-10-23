@@ -165,6 +165,30 @@ SCPs, permission boundaries, S3 bucket policies, management-group inheritance, a
 
 ### R-8 — Credentials never come from a request — RESOLVED `28304ead`, `7ae44b57`
 - AWS uses the SDK default chain, GCP uses Application Default Credentials, Azure reads service-principal variables. Each discoverer proves the credentials resolve to the account the run names before it reads inventory. Error text names a missing variable, never its value.
+
+## Kubernetes state-changing scenarios (2026-10-23)
+
+Scope: lab only (kind-bas-lab, bas-sandbox), three labelled non-privileged actions. Design: `docs/superpowers/specs/2026-10-23-k8s-state-changing-scenarios-design.md`.
+
+**Verified on kind-bas-lab with the scenario ServiceAccount (narrow RBAC):**
+- Dry run writes nothing. Approved pod run is verified and cleaned up. Unapproved and self-approved runs are refused, creating nothing. ConfigMap patch verified then restored to `original`. Sandbox left empty, fixture at prior value.
+- Rollback failure on the live API: the scenario Role's delete verb was removed mid-run, so the real rollback delete was refused by the server. Run ended `CLEANUP_FAILED`, operator alerted, pod left in place. Role restored and pod removed afterwards.
+
+**Verified against a real Postgres (test container, not the shared DB):**
+- Approval single use under 8 concurrent consumers: exactly one succeeds.
+- Database refuses approver equal to requester.
+- Run store round trip (params, approval link, state). Audit writer records refusals as `denied`, and returns an error when the write fails (engine stops before any write).
+
+**Verified in code/unit tests (not on a live server):**
+- Plan/approve/execute HTTP flow: planning writes nothing; self-approval forbidden; only requester executes; execute without approval conflicts; approval cannot be reused.
+- Console panel: per-state buttons, failed cleanup labelled failed, server text escaped. Lint clean (warnings only, existing innerHTML rule).
+
+**Not verified:**
+- The console has not been opened in a browser.
+- The HTTP endpoints have not been exercised against the live cluster through a running server. Only the engine and client were run live.
+- Live rollback-failure covers the delete verb only, not a failed snapshot restore.
+
+**Open:** token-request action (deferred: mints a credential, needs a redaction design). EKS/AKS/GKE/OpenShift (O-12) and multi-node K3s (O-13) remain blocked on environments. Design stays unapproved for production.
 
 ## Validation record
 
