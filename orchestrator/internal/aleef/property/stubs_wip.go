@@ -24,16 +24,6 @@ type Workflow struct {
 	Steps         []WorkflowStep
 	SuccessValues []string
 }
-type role1 struct{ meta }
-
-func (role1) Applies(model.Operation, model.Model) bool { return false }
-func (role1) Templates(TemplateCtx) []Template          { return nil }
-
-type role2 struct{ meta }
-
-func (role2) Applies(model.Operation, model.Model) bool { return false }
-func (role2) Templates(TemplateCtx) []Template          { return nil }
-
 type auth1 struct{ meta }
 
 func (auth1) Applies(model.Operation, model.Model) bool { return false }
