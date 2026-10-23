@@ -296,7 +296,7 @@ func toyConfig(t *testing.T, ty *toy, rec Recorder) (Config, *httptest.Server) {
 	srv := httptest.NewServer(ty)
 	t.Cleanup(srv.Close)
 	now := time.Now()
-	return Config{
+	cfg := Config{
 		OpenAPI: []byte(toySpec),
 		BaseURL: srv.URL,
 		Engagement: safety.Engagement{ID: "toy-eng", Customer: "toy", Environment: "lab", Hosts: []string{srv.URL}, Approver: "test",
@@ -311,7 +311,13 @@ func toyConfig(t *testing.T, ty *toy, rec Recorder) (Config, *httptest.Server) {
 		Secrets:       toySecrets(),
 		Recorder:      rec,
 		Options:       Options{Seed: 1, Catalogue: []contract.Scenario{}},
-	}, srv
+	}
+	// The engagement's classification is the ceiling: declare the same table the run uses.
+	cfg.Engagement.Classes = map[string]string{}
+	for id, c := range cfg.Classes {
+		cfg.Engagement.Classes[id] = string(c)
+	}
+	return cfg, srv
 }
 
 func (r *fakeRec) GetFinding(ctx context.Context, id string) (store.Finding, error) {

@@ -20,6 +20,7 @@ package safety
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/audspect/bas/internal/aleef/model"
 )
@@ -84,6 +85,22 @@ func rank(c Class) int {
 	return 6
 }
 
+// AtLeastAsRestrictive reports whether requested is the same as or more restrictive than ceiling.
+// The order, least to most restrictive, is read, setup_safe, reversible, notifying, money, and
+// unknown (and anything unrecognised) above all. A run request may only move an operation's class
+// up this order from the administrator's classification, never down.
+func AtLeastAsRestrictive(requested, ceiling Class) bool {
+	return rank(requested) >= rank(ceiling)
+}
+
+func isSafeMethod(m string) bool {
+	switch strings.ToUpper(m) {
+	case "GET", "HEAD", "OPTIONS":
+		return true
+	}
+	return false
+}
+
 func listed(list []string, id string) bool {
 	for _, s := range list {
 		if s == id {
@@ -108,6 +125,10 @@ func listed(list []string, id string) bool {
 func Allow(c Class, op model.Operation, e Engagement) error {
 	switch c {
 	case ClassRead, ClassSetupSafe, ClassReversible:
+		// Backstop independent of how the class was chosen: a state-changing method is never "read".
+		if c == ClassRead && !isSafeMethod(op.Method) {
+			return refuse("operation %q uses %s and cannot be classed read", op.ID, op.Method)
+		}
 		if len(e.Operations) > 0 && !listed(e.Operations, op.ID) {
 			return refuse("operation %q is not in the engagement allowlist", op.ID)
 		}

@@ -38,6 +38,8 @@ type aleefToy struct {
 	readFlaw bool
 	delay    time.Duration
 	requests atomic.Int64
+	// settleHits counts calls to the money-like operation POST /items/{id}/settle.
+	settleHits atomic.Int64
 	tokens   map[string][2]string
 }
 
@@ -106,6 +108,9 @@ func (t *aleefToy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		aleefReply(w, 200, map[string]any{"id": it.ID, "owner": it.Owner, "title": it.Title})
+	case len(p) == 5 && p[4] == "settle" && r.Method == "POST":
+		t.settleHits.Add(1)
+		aleefReply(w, 200, map[string]any{"ok": true})
 	case len(p) == 4 && r.Method == "DELETE":
 		if it.Owner != who[0] {
 			aleefReply(w, 403, map[string]any{"error": "forbidden"})
@@ -132,6 +137,10 @@ const aleefToySpec = `{
    "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}],
    "get": {"operationId": "getItem", "responses": {"200": {"description": "ok"}}},
    "delete": {"operationId": "deleteItem", "responses": {"200": {"description": "ok"}}}
+  },
+  "/api/v2/items/{id}/settle": {
+   "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}],
+   "post": {"operationId": "settleItem", "responses": {"200": {"description": "ok"}}}
   }
  }
 }`
@@ -220,6 +229,8 @@ func decodeMap(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 func aleefEngagementBody(host string, env string, notBefore, notAfter time.Time) map[string]any {
 	return map[string]any{
 		"customer": "toy", "environment": env, "hosts": []string{host},
+		"classes":    map[string]string{"createItem": "setup_safe", "getItem": "read", "deleteItem": "reversible", "settleItem": "money"},
+		"token_refs": []string{"tok-alice", "tok-bob", "tok-ghost"}, // tok-ghost is declared but resolves to nothing
 		"notBefore": notBefore, "notAfter": notAfter, "maxRequests": 100000, "maxConcurrent": 64, "rps": 1e6,
 	}
 }
@@ -400,6 +411,10 @@ func TestRunRefusedWithoutValidEngagement(t *testing.T) {
 				m["engagement_id"] = valid
 				m["accounts"] = []map[string]string{{"name": "a", "customer_id": "c", "token_ref": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig-sig-sig-sig-sig-sig-sig-sig-sig", "role": "member"}}
 			}, http.StatusBadRequest},
+			{"token_ref not declared by the engagement", func(m map[string]any) {
+				m["engagement_id"] = valid
+				m["accounts"] = []map[string]string{{"name": "a", "customer_id": "c", "token_ref": "tok-carol", "role": "member"}}
+			}, http.StatusBadRequest},
 			{"unresolvable token_ref", func(m map[string]any) {
 				m["engagement_id"] = valid
 				m["accounts"] = []map[string]string{{"name": "a", "customer_id": "c", "token_ref": "no-such-ref", "role": "member"}}
@@ -435,6 +450,9 @@ func mustStoredEngagementRaw(t *testing.T, body map[string]any) []byte {
 	t.Helper()
 	b := map[string]any{"approver": "user:seed"}
 	for k, v := range body {
+		if k == "token_refs" {
+			k = "tokenRefs"
+		}
 		b[k] = v
 	}
 	raw, err := json.Marshal(b)

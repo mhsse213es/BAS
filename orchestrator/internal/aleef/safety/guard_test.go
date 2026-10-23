@@ -675,3 +675,33 @@ func TestCheckOrigin(t *testing.T) {
 		}
 	}
 }
+
+// Backstop independent of how classes were chosen: a state-changing method is never "read".
+func TestAllowRefusesNonGetClassedRead(t *testing.T) {
+	e := uatEngagement()
+	for _, m := range []string{"POST", "PUT", "PATCH", "DELETE"} {
+		op := model.Operation{ID: "o", Method: m, Path: "/p", Class: model.ClassRead}
+		if err := Allow(ClassRead, op, e); !errors.Is(err, ErrClassRefused) {
+			t.Fatalf("%s classed read was allowed: %v", m, err)
+		}
+	}
+	for _, m := range []string{"GET", "HEAD", "OPTIONS"} {
+		op := model.Operation{ID: "o", Method: m, Path: "/p", Class: model.ClassRead}
+		if err := Allow(ClassRead, op, e); err != nil {
+			t.Fatalf("%s read refused: %v", m, err)
+		}
+	}
+}
+
+func TestGuardRefusesPostClassedRead(t *testing.T) {
+	m := model.Model{Operations: []model.Operation{{ID: "settle", Method: "POST", Path: "/api/settle", Class: model.ClassRead}}}
+	g, err := NewGuard(func() Engagement { e := uatEngagement(); e.RPS = 1e6; e.MaxRequests = 10; return e }(), uatScope(), m,
+		GuardOptions{Now: func() time.Time { return t0 }, Sleep: func(context.Context, time.Duration) error { return nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ := http.NewRequest("POST", uatOrigin+"/api/settle", nil)
+	if err := g.preflight(r); !errors.Is(err, ErrClassRefused) {
+		t.Fatalf("POST classed read: %v", err)
+	}
+}

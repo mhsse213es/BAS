@@ -336,6 +336,12 @@ func runOne(ctx context.Context, st *store.Store, build string, pol bank.Policy,
 		// synthetic bank, simulated rail, explicit operation list. The safety
 		// rules for UAT and production are unchanged.
 		SimulatedRail: true, SimulatorBeneficiaries: []string{"bench payee"}, Operations: listed,
+		// The engagement's classification is the ceiling for the run's classes; the lab declares the same
+		// declarative table the harness has always used.
+		Classes: map[string]string{},
+	}
+	for id, c := range classes {
+		eng.Classes[id] = string(c)
 	}
 	rec := &recorder{base: http.DefaultTransport}
 	cfg := campaign.Config{

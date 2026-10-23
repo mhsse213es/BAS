@@ -185,12 +185,9 @@ func (st *aleefState) shutdown(timeout time.Duration) {
 // never contain the reference or the value.
 type AleefEnvSecrets struct{}
 
-// Resolve returns the token behind ref.
-func (AleefEnvSecrets) Resolve(ref string) (string, error) {
-	if !aleefRefRe.MatchString(ref) {
-		return "", errors.New("invalid secret reference")
-	}
-	name := "ALEEF_SECRET_" + strings.Map(func(r rune) rune {
+// aleefEnvName is the environment variable a reference is read from.
+func aleefEnvName(ref string) string {
+	return "ALEEF_SECRET_" + strings.Map(func(r rune) rune {
 		switch {
 		case r >= 'a' && r <= 'z':
 			return r - 'a' + 'A'
@@ -199,7 +196,14 @@ func (AleefEnvSecrets) Resolve(ref string) (string, error) {
 		}
 		return '_'
 	}, ref)
-	v := os.Getenv(name)
+}
+
+// Resolve returns the token behind ref.
+func (AleefEnvSecrets) Resolve(ref string) (string, error) {
+	if !aleefRefRe.MatchString(ref) {
+		return "", errors.New("invalid secret reference")
+	}
+	v := os.Getenv(aleefEnvName(ref))
 	if v == "" {
 		return "", errors.New("no secret configured for the reference")
 	}
@@ -266,6 +270,16 @@ func (h *Handler) CreateAleefEngagement(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
+	// The administrator declares which secret references runs under this engagement may use. The API
+	// field is token_refs; the engagement record calls it tokenRefs.
+	if v, ok := raw["token_refs"]; ok {
+		delete(raw, "token_refs")
+		if _, dup := raw["tokenRefs"]; dup {
+			jsonError(w, "token_refs and tokenRefs are the same field", http.StatusBadRequest)
+			return
+		}
+		raw["tokenRefs"] = v
+	}
 	delete(raw, "id") // the engagement id is assigned by the server
 	// The approver is the authenticated user, never a value from the body: an operator cannot name
 	// someone else (or themselves under another name) as the approver of their own scope.
@@ -290,6 +304,10 @@ func (h *Handler) CreateAleefEngagement(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		h.auditLog(r, "aleef.engagement.create", "", map[string]any{"reason": "refused"}, "refused")
 		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if msg := checkAleefTokenRefs(e.TokenRefs); msg != "" {
+		jsonError(w, msg, http.StatusBadRequest)
 		return
 	}
 	if scopeID != "" {
@@ -317,6 +335,29 @@ func (h *Handler) CreateAleefEngagement(w http.ResponseWriter, r *http.Request) 
 	h.auditLog(r, "aleef.engagement.create", id, map[string]any{"environment": e.Environment, "customer": e.Customer}, "ok")
 	respondStatus(w, map[string]any{"id": id, "environment": e.Environment, "customer": e.Customer,
 		"not_before": e.NotBefore, "not_after": e.NotAfter, "hosts": e.Hosts}, http.StatusCreated)
+}
+
+// checkAleefTokenRefs validates the allowed token references of an engagement: at least one, valid
+// names, no duplicates, and no two that read the same environment variable.
+func checkAleefTokenRefs(refs []string) string {
+	if len(refs) == 0 || len(refs) > maxAleefAccounts {
+		return fmt.Sprintf("token_refs: between 1 and %d secret references are required", maxAleefAccounts)
+	}
+	seen := map[string]string{}
+	for _, ref := range refs {
+		if !aleefRefRe.MatchString(ref) {
+			return "token_refs: a reference must be a short name of letters, digits, '.', '/', '_' or '-' (never a credential)"
+		}
+		env := aleefEnvName(ref)
+		if prev, ok := seen[env]; ok {
+			if prev == ref {
+				return "token_refs: duplicate reference"
+			}
+			return "token_refs: two references map to the same server secret (" + env + ")"
+		}
+		seen[env] = ref
+	}
+	return ""
 }
 
 type aleefAccountReq struct {
@@ -348,6 +389,8 @@ type aleefRunReq struct {
 	Classes      map[string]string `json:"classes"`
 	Options      aleefOptionsReq   `json:"options"`
 }
+
+const aleefTokenRefRefused = "token reference not permitted for this engagement"
 
 var aleefClasses = []model.OpClass{model.ClassUnknown, model.ClassRead, model.ClassSetupSafe, model.ClassReversible, model.ClassMoney, model.ClassNotifying}
 
@@ -600,13 +643,14 @@ func (h *Handler) buildAleefConfig(ctx context.Context, req aleefRunReq) (campai
 		if a.Name == "" || a.CustomerID == "" || a.Role == "" || len(a.Name) > 64 || len(a.CustomerID) > 128 || len(a.Role) > 64 {
 			return zero, http.StatusBadRequest, fmt.Sprintf("accounts[%d]: name, customer_id and role are required", i)
 		}
-		// Only a short reference is accepted, so a pasted token is refused. The message never
-		// repeats the value.
-		if !aleefRefRe.MatchString(a.TokenRef) {
-			return zero, http.StatusBadRequest, fmt.Sprintf("accounts[%d]: token_ref must be a secret reference name, not a credential", i)
+		// Only references the administrator declared for this engagement may be used. "Not allowed",
+		// "does not exist" and "cannot be resolved" all answer with the same message, so the response
+		// is no oracle for which references exist on the server. The value is never repeated.
+		if !slices.Contains(eng.TokenRefs, a.TokenRef) {
+			return zero, http.StatusBadRequest, aleefTokenRefRefused
 		}
 		if _, err := h.aleef.secrets.Resolve(a.TokenRef); err != nil {
-			return zero, http.StatusBadRequest, fmt.Sprintf("accounts[%d]: token_ref does not resolve on the server", i)
+			return zero, http.StatusBadRequest, aleefTokenRefRefused
 		}
 		accounts = append(accounts, model.Account{Name: a.Name, CustomerID: a.CustomerID, TokenRef: a.TokenRef, Role: a.Role})
 	}
@@ -621,13 +665,20 @@ func (h *Handler) buildAleefConfig(ctx context.Context, req aleefRunReq) (campai
 		}
 		classes[op] = model.OpClass(c)
 	}
-	return campaign.Config{
+	cfg := campaign.Config{
 		OpenAPI: spec, BaseURL: req.BaseURL, Engagement: eng, Scope: scope,
 		Accounts: accounts, Setup: setup, Classes: classes,
 		Secrets: h.aleef.secrets, HTTP: h.aleef.httpClient,
 		Options: campaign.Options{Seed: req.Options.Seed, MaxTests: req.Options.MaxTests,
 			Reproductions: req.Options.Reproductions, Variations: req.Options.Variations},
-	}, 0, ""
+	}
+	// The engagement's classes are the ceiling: a request may keep or tighten a class, never loosen it,
+	// and setup and compensating operations are checked against the engagement's classification.
+	// Nothing is sent to the target here.
+	if err := campaign.Validate(cfg); err != nil {
+		return zero, http.StatusBadRequest, err.Error()
+	}
+	return cfg, 0, ""
 }
 
 type aleefRunView struct {

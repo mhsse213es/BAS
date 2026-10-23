@@ -210,7 +210,48 @@ func validClass(c model.OpClass) bool {
 	return false
 }
 
-// prepare imports the model and applies the operator's classes.
+// Validate checks, without sending any request, everything about the configuration that does not
+// need the target: the model, the class ceiling set by the engagement, and the setup and
+// compensating operations. Run performs the same checks first; the API calls Validate to refuse a
+// request before it starts a campaign.
+func Validate(cfg Config) error {
+	m, err := prepare(cfg)
+	if err != nil {
+		return err
+	}
+	return checkSetup(m, cfg)
+}
+
+// checkSetup requires every setup operation to be classified setup_safe and every compensating
+// operation to be classified reversible, by the effective class (the engagement's ceiling).
+func checkSetup(m model.Model, cfg Config) error {
+	byID := map[string]model.Operation{}
+	for _, op := range m.Operations {
+		byID[op.ID] = op
+	}
+	for _, s := range cfg.Setup {
+		op, ok := byID[s.OperationID]
+		if !ok {
+			return fmt.Errorf("campaign: setup operation %q is not in the model", s.OperationID)
+		}
+		if op.Class != model.ClassSetupSafe {
+			return fmt.Errorf("campaign: setup operation %q is classified %q, not setup_safe", s.OperationID, op.Class)
+		}
+		if s.Compensate == "" {
+			continue
+		}
+		comp, ok := byID[s.Compensate]
+		if !ok {
+			return fmt.Errorf("campaign: compensating operation %q is not in the model", s.Compensate)
+		}
+		if comp.Class != model.ClassReversible {
+			return fmt.Errorf("campaign: compensating operation %q is classified %q, not reversible", s.Compensate, comp.Class)
+		}
+	}
+	return nil
+}
+
+// prepare imports the model and applies the classes (see the ceiling rule below).
 func prepare(cfg Config) (model.Model, error) {
 	m, err := model.Import(cfg.OpenAPI)
 	if err != nil {
@@ -218,16 +259,29 @@ func prepare(cfg Config) (model.Model, error) {
 	}
 	have := map[string]bool{}
 	for i := range m.Operations {
-		have[m.Operations[i].ID] = true
-		c, ok := cfg.Classes[m.Operations[i].ID]
-		if !ok {
-			m.Operations[i].Class = model.ClassUnknown
-			continue
+		id := m.Operations[i].ID
+		have[id] = true
+		// The engagement's classification is the ceiling of permissiveness. An operation it does not
+		// classify is unknown and never runs. A request class may keep or tighten it, never loosen it.
+		ceiling, classified := cfg.Engagement.Classes[id]
+		ceil := safety.ClassUnknown
+		if classified {
+			ceil = safety.FromOpClass(model.OpClass(ceiling))
 		}
-		if !validClass(c) {
-			return m, fmt.Errorf("campaign: operation %q has an invalid class %q", m.Operations[i].ID, c)
+		eff := model.OpClass(ceil)
+		if c, ok := cfg.Classes[id]; ok {
+			if !validClass(c) {
+				return m, fmt.Errorf("campaign: operation %q has an invalid class %q", id, c)
+			}
+			if !safety.AtLeastAsRestrictive(safety.FromOpClass(c), ceil) {
+				if !classified {
+					return m, fmt.Errorf("campaign: operation %q is not classified by the engagement, so it cannot be given class %q", id, c)
+				}
+				return m, fmt.Errorf("campaign: operation %q is classified %q by the engagement; the requested class %q is less restrictive", id, ceiling, c)
+			}
+			eff = c
 		}
-		m.Operations[i].Class = c
+		m.Operations[i].Class = eff
 	}
 	var stray []string
 	for id := range cfg.Classes {
@@ -289,6 +343,9 @@ func Run(ctx context.Context, cfg Config) (rep Report, retErr error) {
 	}
 	m, err := prepare(cfg)
 	if err != nil {
+		return rep, err
+	}
+	if err := checkSetup(m, cfg); err != nil {
 		return rep, err
 	}
 	guard, err := safety.NewGuard(cfg.Engagement, cfg.Scope, m, safety.GuardOptions{Now: cfg.Now})
@@ -369,6 +426,9 @@ func Run(ctx context.Context, cfg Config) (rep Report, retErr error) {
 	for _, id := range rep.Generated.SkippedOps {
 		oc := rep.PerOperation[id]
 		oc.Skipped = "class " + oc.Class
+		if _, classified := cfg.Engagement.Classes[id]; !classified {
+			oc.Skipped = "not classified by the engagement"
+		}
 		rep.PerOperation[id] = oc
 	}
 	for id, t := range rep.Generated.NoFixtureOps {

@@ -255,17 +255,44 @@ func TestNotifyingOnlyWithRecipientsAndListed(t *testing.T) {
 func TestAllowReadSetupReversibleAndAllowlist(t *testing.T) {
 	e := uatEngagement()
 	for _, c := range []Class{ClassRead, ClassSetupSafe, ClassReversible} {
-		if err := Allow(c, model.Operation{ID: "a"}, e); err != nil {
+		if err := Allow(c, model.Operation{ID: "a", Method: "GET"}, e); err != nil {
 			t.Fatalf("%s: %v", c, err)
 		}
 	}
 	e.Operations = []string{"b"}
 	for _, c := range []Class{ClassRead, ClassSetupSafe, ClassReversible} {
-		if err := Allow(c, model.Operation{ID: "a"}, e); err == nil {
+		if err := Allow(c, model.Operation{ID: "a", Method: "GET"}, e); err == nil {
 			t.Fatalf("%s allowed outside non-empty allowlist", c)
 		}
-		if err := Allow(c, model.Operation{ID: "b"}, e); err != nil {
+		if err := Allow(c, model.Operation{ID: "b", Method: "GET"}, e); err != nil {
 			t.Fatalf("%s: %v", c, err)
+		}
+	}
+}
+
+func TestParseValidatesClassesAndTokenRefs(t *testing.T) {
+	base := `{"customer":"c","environment":"lab","hosts":["http://127.0.0.1:1"],"approver":"user:1",
+		"notBefore":"2026-10-23T00:00:00Z","notAfter":"2026-10-24T00:00:00Z","maxRequests":10,"maxConcurrent":1,"rps":1,
+		"classes":%s,"tokenRefs":["a/b"]}`
+	good := strings.Replace(base, "%s", `{"getItem":"read","pay":"money","x":"unknown"}`, 1)
+	e, err := Parse([]byte(good))
+	if err != nil || e.Classes["pay"] != "money" || len(e.TokenRefs) != 1 {
+		t.Fatalf("good engagement: %+v %v", e, err)
+	}
+	for _, bad := range []string{`{"getItem":"readonly"}`, `{"getItem":"READ"}`, `{"getItem":""}`, `{"":"read"}`} {
+		if _, err := Parse([]byte(strings.Replace(base, "%s", bad, 1))); !errors.Is(err, ErrInvalidEngagement) {
+			t.Fatalf("classes %s accepted: %v", bad, err)
+		}
+	}
+}
+
+func TestAtLeastAsRestrictive(t *testing.T) {
+	order := []Class{ClassRead, ClassSetupSafe, ClassReversible, ClassNotifying, ClassMoney, ClassUnknown}
+	for i, ceiling := range order {
+		for j, requested := range order {
+			if got := AtLeastAsRestrictive(requested, ceiling); got != (j >= i) {
+				t.Fatalf("requested %s ceiling %s: %v", requested, ceiling, got)
+			}
 		}
 	}
 }

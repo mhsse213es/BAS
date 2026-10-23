@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/audspect/bas/internal/aleef/model"
 	"github.com/audspect/bas/internal/targetscope"
 )
 
@@ -26,7 +27,13 @@ type Engagement struct {
 	Approver  string    `json:"approver"`
 	NotBefore time.Time `json:"notBefore"`
 	NotAfter  time.Time `json:"notAfter"`
-	Accounts  []string  `json:"accounts,omitempty"`
+	// TokenRefs is the allowlist of secret references an account in a run may use. The administrator
+	// declares it; a run request cannot name any other reference (see the API). Empty means none.
+	TokenRefs []string `json:"tokenRefs,omitempty"`
+	// Classes is the administrator's classification of operations (operation id -> class). It is the
+	// ceiling of permissiveness: a run may keep or tighten a class (see AtLeastAsRestrictive) but never
+	// loosen it, and an operation not listed here is unclassified and never runs.
+	Classes map[string]string `json:"classes,omitempty"`
 	// Operations is an allowlist of operation ids. Empty means no restriction
 	// for read, setup_safe and reversible operations; money and notifying
 	// operations must always be listed.
@@ -100,6 +107,17 @@ func (e Engagement) Validate() error {
 	for _, h := range e.Hosts {
 		if _, err := NormalizeOrigin(h); err != nil {
 			return invalid("host %q: %v", h, err)
+		}
+	}
+	if len(e.Classes) > 5000 {
+		return invalid("too many classified operations")
+	}
+	for id, c := range e.Classes {
+		if id == "" || len(id) > 128 {
+			return invalid("classes: operation id %q is not valid", id)
+		}
+		if c != string(ClassUnknown) && FromOpClass(model.OpClass(c)) == ClassUnknown {
+			return invalid("classes: %q is not an operation class (read, setup_safe, reversible, notifying, money, unknown)", c)
 		}
 	}
 	if e.MaxRequests <= 0 {
