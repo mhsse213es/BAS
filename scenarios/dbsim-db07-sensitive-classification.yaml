@@ -1,0 +1,58 @@
+id: dbsim-db07-sensitive-classification
+product_line: dbsim
+name: Database Security Simulation DB-07 - Sensitive Data Classification
+description: >
+  Lab-only. Checks whether a data-classification control recognises a read of a
+  table that holds sensitive-looking data. The agent seeds the classified-pii
+  fixture (six rows of obviously fake personal data with published payment-card
+  TEST numbers and a reserved-range SSN; no real data) in a dedicated per-run
+  schema, then runs ONE unfiltered all-column SELECT of its customers_pii table
+  with the named probe read_classified_fixture. The probe addresses only that
+  table (it takes no table parameter), reads at most 25 rows, runs inside a READ
+  ONLY transaction and returns counts only, never row contents. The fixture is
+  dropped and its removal verified before the run completes; a cleanup failure
+  is a safety incident, never a pass. Because the run seeds a fixture it mutates
+  the lab database, so it is classed bounded_synthetic and needs a confirmed lab
+  target, the scenario's mutation approval and the agent-local lab-mutation
+  allowance; it is refused for client targets.
+
+  Classification is graded by RULE IDENTITY. It is Correct only when a
+  marker-correlated alert was raised by the classification-specific rule the
+  orchestrator is told to look for. It is Incorrect only when the read was
+  allowed, the SIEM provably saw the statement (a marker-correlated alert from
+  any rule exists) and the classification rule did not fire. A generic
+  marker-in-audit alert never counts as classification, so this scenario is not a
+  re-run of DB-05. If no classification rule is configured, or telemetry cannot
+  be verified, classification is not evaluated and the run is graded ERROR,
+  never as a pass; missing evidence is never read as a miss.
+
+  ATT&CK mapping: T1213 Data from Information Repositories.
+
+  This scenario names its target by id only; host, port, identity, credential
+  reference and mode come from the server-side target registry.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - classification
+  - detection
+  - lab-only
+  - mitre-attack
+mitre_phases:
+  - collection
+
+steps:
+  - name: "DB-07 Read of a synthetic classified table (T1213)"
+    technique_id: T1213
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_classified_fixture
+    db_fixture: classified-pii
+    db_limits:
+      max_rows: 10
+      timeout_sec: 30
+      max_conns: 1
+    risk: medium
+    blast_radius: "creates and drops a per-run synthetic fixture schema (dbsim_<id>) in the lab database with verified cleanup; one unfiltered SELECT inside a READ ONLY transaction against its customers_pii table; at most 10 rows"
+    reversible: true

@@ -201,6 +201,14 @@ var fixtureTablePat = regexp.MustCompile(`^[a-z][a-z0-9_]{0,30}$`)
 // param (the agent resolves it to the active fixture's schema, spec R-Z); a
 // probe that does not read a fixture must not carry one.
 func checkFixture(e dbsim.ProbeRegistryEntry, st scenario.Step) error {
+	if e.RequiredFixture != "" {
+		// A probe with one fixed fixture (DB-06, DB-07): db_fixture must be exactly
+		// that fixture; the table (if any) is fixed in the agent and no param exists.
+		if st.DBFixture != e.RequiredFixture {
+			return fmt.Errorf("probe %q requires db_fixture %q", e.ID, e.RequiredFixture)
+		}
+		return nil // checkParams has already refused any declared-nothing param
+	}
 	if e.FixtureParam == "" {
 		if st.DBFixture != "" {
 			return fmt.Errorf("probe %q does not use a fixture; db_fixture must be empty", e.ID)

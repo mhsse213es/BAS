@@ -106,6 +106,12 @@ type ProbeRegistryEntry struct {
 	// that carries a fixture TABLE NAME (never a schema). Such a probe reads the
 	// run's seeded fixture, so it needs a db_fixture on the step and is lab-only.
 	FixtureParam string
+	// RequiredFixture, when set, is the one catalog fixture a step of this probe
+	// must name in db_fixture; such a probe is lab-only and takes no table param.
+	RequiredFixture string
+	// FixedTable, when set, is the fixture table a RequiredFixture read probe
+	// reads. It is fixed in the agent, so no param can address a table.
+	FixedTable string
 }
 
 var probeRegistry = map[string]ProbeRegistryEntry{
@@ -119,7 +125,17 @@ var probeRegistry = map[string]ProbeRegistryEntry{
 	"suspicious_read": {ID: "suspicious_read", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}, FixtureParam: "table"},
 	// DB-09: the same SELECT as a row-capped bulk read (bounded_synthetic: lab only, needs mutation approval).
 	"bounded_synthetic_read": {ID: "bounded_synthetic_read", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}, FixtureParam: "table"},
+	// DB-07: the same bounded unfiltered read, fixed to the customers_pii table of the classified-pii fixture (no table param).
+	"read_classified_fixture": {ID: "read_classified_fixture", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "classified-pii", FixedTable: "customers_pii"},
+	// DB-06: creates a throwaway login account for the run, proves it can log in, revokes its login and proves a NEW connection is refused (mutation: lab only, mutation-approved, fixture-cleaned).
+	"auth_after_revoke": {ID: "auth_after_revoke", Class: ClassMutation, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "empty"},
 }
+
+// Task 14 probe ids.
+const (
+	ProbeReadClassifiedFixture = "read_classified_fixture"
+	ProbeAuthAfterRevoke       = "auth_after_revoke"
+)
 
 // ProbeReadGrants is the grant-enumeration probe (DB-02); its result is only
 // meaningful against a performed policy diff (ruling R-AK).

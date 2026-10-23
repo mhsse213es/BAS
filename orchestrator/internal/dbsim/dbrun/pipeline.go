@@ -70,6 +70,12 @@ type StepInput struct {
 	// nil when none was: nothing in dbrun computes or fabricates one, and a DB-02
 	// step without it grades ERROR (ruling R-AJ).
 	Diff *dbsim.DiffReport
+	// ClassificationRuleName is policy data for DB-07 (probe read_classified_fixture):
+	// the name of the classification-specific detection rule whose alert counts as
+	// a correct classification. Empty (the default) means no verdict can be given:
+	// Classification stays NotEvaluated and the run is never a PASS (ruling R-AM).
+	// The generic marker rule never counts, whatever is configured here.
+	ClassificationRuleName string
 	// Now is an optional clock (zero means time.Now).
 	Now func() time.Time
 }
@@ -216,6 +222,13 @@ func Evaluate(ctx context.Context, conn detectverify.Connector, in StepInput) (E
 		// R-AK: forced, not left to the caller.
 		in.Scenario.RequirePolicyDiff = true
 	}
+	// R-AM, forced like R-AK: a classification probe always carries a
+	// classification expectation and is always correlated, whatever the caller's
+	// scenario meta says.
+	classifyProbe := in.Spec.ProbeID == dbsim.ProbeReadClassifiedFixture
+	if classifyProbe {
+		in.Scenario.ExpectClassification = true
+	}
 	now := time.Now
 	if in.Now != nil {
 		now = in.Now
@@ -252,7 +265,11 @@ func Evaluate(ctx context.Context, conn detectverify.Connector, in StepInput) (E
 	// expectation: a SIEM query for a refused/failed probe or a scenario that
 	// expects no alert would only create noise.
 	_, incident := cleanupIncident(o)
-	if in.Scenario.ExpectDetection && dbsim.ProbeCompleted(o) && !incident {
+	// DB-06 (auth_after_revoke) is never correlated: its denial carries no marker.
+	if o.ProbeID == dbsim.ProbeAuthAfterRevoke {
+		in.Scenario.ExpectDetection, in.Scenario.ExpectResponse = false, false
+	}
+	if (in.Scenario.ExpectDetection || classifyProbe) && dbsim.ProbeCompleted(o) && !incident {
 		switch {
 		case conn == nil:
 			o.Limitations = append(o.Limitations, "No detection connector is configured: detection telemetry is unverifiable.")
@@ -280,6 +297,18 @@ func Evaluate(ctx context.Context, conn detectverify.Connector, in StepInput) (E
 			c.Limitations = dbsim.Redact(c.Limitations)
 			o.Corr = c
 		}
+	}
+
+	if classifyProbe {
+		var rules []string
+		if ev.Correlation != nil {
+			for _, a := range ev.Correlation.Alerts {
+				rules = append(rules, a.RuleName)
+			}
+		}
+		cls, lim := dbsim.ClassifyByRule(in.ClassificationRuleName, o, rules)
+		o.Classification = cls
+		o.Limitations = append(o.Limitations, lim)
 	}
 
 	rep, err := dbsim.BuildReport(in.Scenario, o)

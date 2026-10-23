@@ -35,6 +35,10 @@ func labExpectationFor(scenarioID, probeID string) labExpectation {
 		e.prevention = "deny"
 	case "read_grants":
 		e.requireObs = true
+	case "auth_after_revoke":
+		// DB-06: the NEW login after the revoke must be refused. Telemetry is not
+		// assessed (a failed login carries no marker), so no detection expectation.
+		e.prevention, e.detection = "deny", false
 	}
 	if scenarioID == "dbsim-db04-audit-coverage" && probeID == "read_roles" {
 		e.audit = true

@@ -83,7 +83,8 @@ func stageDBScenarios(t *testing.T) string {
 // dbFixtureScenarioIDs are the fixture-reading scenarios (DB-05 read_only, DB-09
 // bounded_synthetic). They are kept out of dbScenarioIDs because that list is
 // asserted to be read_only/non_destructive end to end, which DB-09 is not.
-var dbFixtureScenarioIDs = []string{"dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read"}
+var dbFixtureScenarioIDs = []string{"dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
+	"dbsim-db06-account-revocation", "dbsim-db07-sensitive-classification"}
 
 func allDBScenarioIDs() []string {
 	return append(append([]string(nil), dbScenarioIDs...), dbFixtureScenarioIDs...)

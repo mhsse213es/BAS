@@ -99,6 +99,11 @@ type ScenarioMeta struct {
 	// (DB-02). Listable grants are not a comparison: without Outcome.Diff the
 	// policy dimension is unverifiable and the run is never a PASS (ruling R-AJ).
 	RequirePolicyDiff bool `json:"requirePolicyDiff,omitempty"`
+	// ExpectClassification: a classification verdict (Outcome.Classification) is
+	// part of the expectation (DB-07). A verdict other than Correct/Incorrect is
+	// then never a pass: NotEvaluated and Unknown both grade the dimension
+	// unverifiable (ruling R-AM).
+	ExpectClassification bool `json:"expectClassification,omitempty"`
 }
 
 // Correlation is caller-supplied (the Task 12 correlator will produce it).
@@ -244,11 +249,44 @@ func probeErrored(o Outcome) bool {
 	return o.Probe.ErrorClass != "" && !errorClassAllowedRead[o.Probe.ErrorClass]
 }
 
+// revokeTelemetryLimitation is recorded on every auth_after_revoke result: the
+// denial is a failed login, which has no SQL statement to carry the marker, and
+// the lab audit sources may not record failed connections at all, so neither
+// telemetry nor response is claimed for it.
+const revokeTelemetryLimitation = "Telemetry and response were not assessed for DB-06: a failed login has no SQL statement to carry the marker, and the audit sources may not record failed connections with it. The marker rides on the baseline statement only; Enforcement is graded from the denial itself."
+
+// revocationGap returns a non-empty reason when an auth_after_revoke result does
+// not carry complete, consistent step evidence. Enforcement is Blocked only when
+// the account was created, the BASELINE login worked, the revoke was issued and
+// the reconnect was refused; and Allowed only when the reconnect succeeded after
+// the same preconditions. Anything else is not evidence about the revoke.
+func revocationGap(o Outcome) string {
+	if o.ProbeID != ProbeAuthAfterRevoke || !o.ProbeRan {
+		return ""
+	}
+	r, ok := ParseNotes(o.Probe.Notes).Revocation()
+	switch {
+	case !ok:
+		return "the create/baseline/revoke/reconnect step note is missing or malformed"
+	case !r.PreconditionsOK():
+		return fmt.Sprintf("a precondition step did not succeed (create=%s baseline=%s revoke=%s)", r.Create, r.Baseline, r.Revoke)
+	case r.Reconnect == RevokeReconnectDenied && !o.Probe.Denied:
+		return "the step note reports a denial the result does not"
+	case r.Reconnect == RevokeReconnectConnected && (o.Probe.Denied || o.Probe.ErrorClass != ""):
+		return "the step note reports a successful reconnect the result contradicts"
+	case r.Reconnect != RevokeReconnectDenied && r.Reconnect != RevokeReconnectConnected:
+		return "the reconnect outcome is " + r.Reconnect
+	}
+	return ""
+}
+
 func enforcementOf(o Outcome) dlpreport.EnforcementOutcome {
 	switch {
 	case !o.ProbeRan || o.ExecutionError != "":
 		return dlpreport.EnforcementUnknown
 	case probeErrored(o):
+		return dlpreport.EnforcementUnknown
+	case revocationGap(o) != "":
 		return dlpreport.EnforcementUnknown
 	case o.Probe.Denied:
 		return dlpreport.EnforcementBlocked
@@ -298,12 +336,25 @@ func grade(s ScenarioMeta, o Outcome) graded {
 	if s.ExpectResponse {
 		g.Dims.Response = responseGrade(o.Corr)
 	}
+	if o.ProbeID == ProbeAuthAfterRevoke {
+		// The denial cannot carry the marker (revokeTelemetryLimitation): an
+		// expectation of detection or response is never satisfied by it.
+		if s.ExpectDetection {
+			g.Dims.Detection = DimUnverifiable
+		}
+		if s.ExpectResponse {
+			g.Dims.Response = DimUnverifiable
+		}
+	}
 	switch o.Classification {
 	case dlpreport.ClassificationCorrect:
 		g.Dims.Classification = DimPass
 	case dlpreport.ClassificationIncorrect:
 		g.Dims.Classification = DimFail
 	case dlpreport.ClassificationUnsupported, dlpreport.ClassificationUnknown:
+		g.Dims.Classification = DimUnverifiable
+	}
+	if s.ExpectClassification && g.Dims.Classification == DimNotExpected {
 		g.Dims.Classification = DimUnverifiable
 	}
 
@@ -464,6 +515,13 @@ func ToRecord(s ScenarioMeta, o Outcome) (dlpreport.Record, error) {
 			conf = string(MatchExactMarker) // the audit event carries this run's marker
 		}
 	}
+	if o.ProbeID == ProbeAuthAfterRevoke {
+		tel, resp, conf = dlpreport.TelemetryUnverifiable, dlpreport.ResponseNotTested, string(MatchNone)
+		lims = append(lims, revokeTelemetryLimitation)
+		if gap := revocationGap(o); gap != "" {
+			lims = append(lims, "DB-06 evidence incomplete, so Enforcement is Unknown: "+gap+".")
+		}
+	}
 	_, auditLims := auditGrade(s, o)
 	lims = append(lims, auditLims...)
 	_, policyLims := policyGrade(s, o)
@@ -477,7 +535,7 @@ func ToRecord(s ScenarioMeta, o Outcome) (dlpreport.Record, error) {
 	if cls == "" {
 		cls = dlpreport.ClassificationNotEvaluated
 	}
-	if cls == dlpreport.ClassificationNotEvaluated {
+	if cls == dlpreport.ClassificationNotEvaluated && !s.ExpectClassification {
 		lims = append(lims, "Classification not evaluated: this scenario does not classify data.")
 	}
 

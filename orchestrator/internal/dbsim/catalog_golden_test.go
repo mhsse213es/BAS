@@ -18,6 +18,10 @@ type catalogRow struct {
 	Params  map[string]string `json:"params"`
 	// FixtureParam is set only on fixture-aware probes (omitted otherwise).
 	FixtureParam string `json:"fixtureParam,omitempty"`
+	// RequiredFixture / FixedTable: the one catalog fixture a probe needs and the
+	// fixed table it reads (Task 14); omitted otherwise.
+	RequiredFixture string `json:"requiredFixture,omitempty"`
+	FixedTable      string `json:"fixedTable,omitempty"`
 }
 
 func marshalRegistry() ([]byte, error) {
@@ -33,7 +37,8 @@ func marshalRegistry() ([]byte, error) {
 		for k, v := range e.ParamSchema {
 			p[k] = v
 		}
-		rows = append(rows, catalogRow{ID: e.ID, Class: string(e.Class), Engines: e.Engines, Params: p, FixtureParam: e.FixtureParam})
+		rows = append(rows, catalogRow{ID: e.ID, Class: string(e.Class), Engines: e.Engines, Params: p, FixtureParam: e.FixtureParam,
+			RequiredFixture: e.RequiredFixture, FixedTable: e.FixedTable})
 	}
 	return json.Marshal(rows)
 }

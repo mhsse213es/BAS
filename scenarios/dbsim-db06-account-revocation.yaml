@@ -1,0 +1,69 @@
+id: dbsim-db06-account-revocation
+product_line: dbsim
+name: Database Security Simulation DB-06 - Account Revocation Enforcement
+description: >
+  Lab-only. Checks that revoking a database login actually stops it
+  authenticating. The agent creates a THROWAWAY login account for this run only
+  (named dbsim_<fixture id>_acct, with a random password generated in the agent
+  process and never logged, returned or reported, and no privileges beyond
+  connecting), opens a NEW connection as it and runs one trivial statement
+  tagged with the per-dispatch marker (the baseline), revokes the login
+  (PostgreSQL ALTER ROLE ... NOLOGIN, MySQL ALTER USER ... ACCOUNT LOCK), and
+  then tries a NEW connection as the same account. A refused authentication is
+  graded as Blocked; a connection that still succeeds is graded as Allowed,
+  which is the failure this scenario exists to catch. Any other outcome (network,
+  TLS, timeout, an unrecognised error, a failed baseline, a failed revoke) is
+  reported as unverifiable and the run is graded ERROR, never as a pass. A PASS
+  needs the baseline to work, the denial to be recognised (PostgreSQL SQLSTATE
+  28000 or 28P01, MySQL error 1045 or 3118) and the throwaway account to be
+  dropped and verified gone.
+
+  The revoked account is never a configured, target or BAS account: it is always
+  the throwaway account the agent creates, addressed by its exact name. The
+  account is created inside the per-run fixture lifecycle, so it is dropped with
+  the fixture and a leftover account is a safety incident, never a pass. The run
+  mutates the lab database, so it is classed mutation and needs a confirmed lab
+  target, the scenario's mutation approval and the agent-local lab-mutation
+  allowance; it is refused for client targets.
+
+  Telemetry is NOT assessed here. A failed login has no SQL statement to carry
+  the marker, and the lab audit sources may not record failed connections with
+  it at all, so this scenario makes no claim that the denial was detected or
+  alerted on: only the baseline statement carries the marker. Enforcement is
+  graded from the denial itself; Telemetry stays unverifiable and Response is not
+  tested. On PostgreSQL the account's password appears in the server's own
+  statement log if log_statement records DDL (it is a one-run random value for an
+  account that is dropped at the end of the same run).
+
+  ATT&CK mapping: T1078 Valid Accounts (an attempt to keep using a credential
+  after its account was revoked).
+
+  This scenario names its target by id only; host, port, identity, credential
+  reference and mode come from the server-side target registry.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - authentication
+  - account-revocation
+  - lab-only
+  - mitre-attack
+mitre_phases:
+  - initial-access
+  - persistence
+
+steps:
+  - name: "DB-06 Revoked account must not authenticate (T1078)"
+    technique_id: T1078
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: auth_after_revoke
+    db_fixture: empty
+    db_limits:
+      max_rows: 1
+      timeout_sec: 60
+      max_conns: 1
+    risk: high
+    blast_radius: "creates, logs in as, locks and drops one throwaway login account (dbsim_<id>_acct) plus a per-run empty fixture schema in the lab database; no configured or BAS account is created, altered or revoked; cleanup is verified and a leftover is a safety incident"
+    reversible: true

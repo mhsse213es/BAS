@@ -89,6 +89,77 @@ func (n Notes) Bool(key string) (bool, bool) {
 	return b, true
 }
 
+// Values of the auth_after_revoke step note
+// "revoke_steps=create=<v>,baseline=<v>,revoke=<v>,reconnect=<v>" (same strings
+// as the agent's dbprobe.RevokeStep* / RevokeReconnect*).
+const (
+	RevokeStepsKey = "revoke_steps"
+
+	RevokeStepOK      = "ok"
+	RevokeStepFailed  = "failed"
+	RevokeStepSkipped = "skipped"
+
+	RevokeReconnectDenied    = "denied"
+	RevokeReconnectConnected = "connected"
+	RevokeReconnectError     = "error"
+)
+
+// RevocationSteps says which step of auth_after_revoke produced which outcome.
+type RevocationSteps struct {
+	Create, Baseline, Revoke, Reconnect string
+}
+
+// PreconditionsOK reports whether the account was created, the BASELINE login
+// worked and the revoke was issued: the only state in which the reconnect
+// outcome says anything about the revoke.
+func (r RevocationSteps) PreconditionsOK() bool {
+	return r.Create == RevokeStepOK && r.Baseline == RevokeStepOK && r.Revoke == RevokeStepOK
+}
+
+// Revocation returns the parsed auth_after_revoke step note. It is strict: all
+// four steps must be present exactly once with a known value, otherwise the
+// note is reported absent (a malformed note is never partial evidence).
+func (n Notes) Revocation() (RevocationSteps, bool) {
+	v, ok := n.kv[RevokeStepsKey]
+	if !ok {
+		return RevocationSteps{}, false
+	}
+	var r RevocationSteps
+	seen := map[string]bool{}
+	for _, part := range strings.Split(v, ",") {
+		k, val, ok := strings.Cut(part, "=")
+		if !ok || seen[k] {
+			return RevocationSteps{}, false
+		}
+		seen[k] = true
+		switch k {
+		case "create", "baseline", "revoke":
+			if val != RevokeStepOK && val != RevokeStepFailed && val != RevokeStepSkipped {
+				return RevocationSteps{}, false
+			}
+			switch k {
+			case "create":
+				r.Create = val
+			case "baseline":
+				r.Baseline = val
+			default:
+				r.Revoke = val
+			}
+		case "reconnect":
+			if val != RevokeReconnectDenied && val != RevokeReconnectConnected && val != RevokeReconnectError && val != RevokeStepSkipped {
+				return RevocationSteps{}, false
+			}
+			r.Reconnect = val
+		default:
+			return RevocationSteps{}, false
+		}
+	}
+	if len(seen) != 4 {
+		return RevocationSteps{}, false
+	}
+	return r, true
+}
+
 // Audit coverage values reported by read_audit_config ("audit_config: <v>").
 const (
 	AuditConfigCovered = "covered"
