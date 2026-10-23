@@ -94,6 +94,9 @@ DBSIM_E2E_AGENT_BIN=../lab/dbsim/agent-bin/agent-e2e.test \
   go test -tags dbsim_e2e -count=1 -run TestE2EPlumbing -v ./internal/dbsim/dbrun/
 ```
 
+(Always use `-run`: with only a common `DBSIM_E2E_*` variable set and no engine
+configured, the `TestE2E_*` tests fail on purpose as a typo guard.)
+
 Then each engine (the timeout matters: up to 150 s of alert polling per
 detection step):
 
@@ -114,13 +117,13 @@ Mapping of the plan's wording to the real enums: `Telemetry=Present` is
 (set only when a marker-correlated alert exists; no case/escalation/remediation
 is assessed); non-zero latency is `Outcome.Corr.Latency > 0` (alert timestamp
 minus the database-reported probe time); match grade `exact_marker`;
-`Record.Validate() == nil`; result `PASS`.
+`Record.Validate() == nil`; result `PASS` (except DB-02 `read_grants`, below).
 
 | Scenario step | Expected |
 |---|---|
 | DB-01 `auth_check`, `read_roles` | PASS, Telemetry Present, Response Alerted |
 | DB-02 `read_roles` | PASS, Present/Alerted |
-| DB-02 `read_grants` (as `dbsim_lab`) | PASS only if the account sees the `bas_dbsim_app` grants (README checklist 14). If it sees none the result is ERROR with "no grants observed: account may lack catalog visibility": the guard working and a lab finding, not a pipeline bug |
+| DB-02 `read_grants` (as `dbsim_lab`) | **ERROR (Unverifiable) today, by design (ruling R-AJ):** grants observed, policy diff not wired. The Record carries "policy diff not performed; grants were observable (N) but not compared to a stated policy". The harness asserts this ERROR; a PASS here would be a bug. DB-02's excessive-grant detection is NOT produced end to end. Zero grants (README checklist 14 failing) is also ERROR, with "no grants observed: account may lack catalog visibility". Telemetry stays Present/Alerted |
 | DB-03 `read_restricted_table` (as `dbsim_test`) | Enforcement Blocked, PASS, Present/Alerted |
 | DB-04 `read_audit_config` | PASS if `audit_config: covered`; no SIEM query (the lab rule never alerts on it) |
 | DB-04 `read_roles` (tagged) | PASS needs audit status `found` AND the alert. `unsupported` => SKIPPED, `absent` => FAIL, `incomplete`/`error` => ERROR (the harness reports any non-PASS as a failed assertion; the Record explains why) |

@@ -117,6 +117,23 @@ unit VERIFIED, integration NOT executed; 13b fake pipeline VERIFIED, E2E NOT.
    so the orchestrator cannot yet compute `dbsim.Report(policy, grants)`; the
    policy diff itself is not wired end to end (no non-test caller of `Report`).
    The guard works from the row count or an explicit `GrantsChecked`.
+   **Ruling R-AJ (review fix round 1): DB-02 never grades PASS today.**
+   `ScenarioMeta.RequirePolicyDiff` + `Outcome.Diff`: listable grants are not a
+   comparison. Without a performed `DiffReport` the policy dimension is
+   Unverifiable and the run is ERROR, with the limitation "policy diff not
+   performed; grants were observable (N) but not compared to a stated policy".
+   **Expected DB-02 outcome today: ERROR (Unverifiable): grants observed, policy
+   diff not wired. DB-02's excessive-grant detection is NOT produced end to end.**
+   A supplied `DiffReport` already decides (no deviations PASS, deviations FAIL);
+   nothing fabricates one. This deliberately changed an earlier test that asserted
+   PASS for 2 rows. The DB-02 scenario description was corrected to say the
+   comparison is not wired and re-signed.
+   Minor 7 (deliberate): an empty observation together with an absent alert
+   grades ERROR (unobservable) before FAIL.
+   Audit events additionally must BEGIN with the exact `/* dbsim:<marker> */`
+   comment (after `statement: ` / `execute <name>: `) and not be a meta/lookup
+   statement; a `found` status with zero such events is downgraded to
+   Unverifiable.
 5. **Minimised evidence.** `Correlation.AlertRefs` keeps id, time, rule, host and
    a redacted excerpt of at most 512 bytes (at most 5 alerts); raw alert JSON is
    never stored. Agent notes, audit events and error text are bounded and

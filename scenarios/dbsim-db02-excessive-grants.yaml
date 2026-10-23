@@ -2,11 +2,14 @@ id: dbsim-db02-excessive-grants
 product_line: dbsim
 name: Database Security Simulation DB-02 - Excessive Grants Against Policy
 description: >
-  Enumerates database roles and the privilege grants held by the BAS lab
-  application role, read-only, so the orchestrator can diff the observed grants
-  against a stated grant policy (dbsim.Diff). The diff includes role
-  inheritance and reports the policy Source with every deviation. It is a
-  report only: no deviation carries a revoke or any executable remediation.
+  Enumerates database roles and counts the privilege grants held by the BAS lab
+  application role, read-only. The orchestrator has a grant-policy comparison
+  (dbsim.Diff: role inheritance, policy Source on every deviation, report only,
+  no revoke or executable remediation), but it is NOT yet wired to this probe:
+  the agent returns only a grant count, not the grant rows, so no comparison
+  against a stated policy is performed. Until it is, this scenario can only
+  show that grants were listable; it never grades PASS and does not produce
+  excessive-grant findings.
 
   ATT&CK mapping: T1087 Account Discovery (roles and grants are read to learn
   what each account can do).
@@ -14,8 +17,8 @@ description: >
   The read_grants probe takes a role name; this scenario uses the role
   bas_dbsim_app, which the lab fixture or client onboarding runbook must
   provision. A role that does not exist, or grants the test account cannot
-  see, yield an empty grant set; that is unobservable and must not be treated
-  as a pass (grading enforcement is tracked for the correlator/grading work).
+  see, yield an empty grant set; that is unobservable and is graded ERROR
+  (never a pass).
   Target details come from the server-side registry by id.
 author: Audspect Research
 executable: true
