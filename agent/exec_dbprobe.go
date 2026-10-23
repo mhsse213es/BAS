@@ -49,6 +49,10 @@ func dbprobePolicyFromEnv() dbprobe.Policy {
 // real registry is populated by the blank imports above).
 var dbprobeNewAdapter = dbprobe.New
 
+// withFixtureFn is the fixture lifecycle seam (tests substitute a panicking one
+// to prove an unattributable panic is never reported as a clean teardown).
+var withFixtureFn = fixtures.WithFixture
+
 // Error classes carried in protocol.DBProbeResult.ErrorClass for outcomes that
 // are not a probe observation. The agent never scores; the orchestrator maps
 // these (credential_unresolved / adapter_unsupported -> SKIPPED, the rest ->
@@ -312,58 +316,97 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 		bodyErr error
 		ran     bool
 	)
-	var ferr error
-	var panicErr error
+	var (
+		ferr     error
+		fnPanic  any  // the probe panicked inside fn; WithFixture then tore down normally
+		hadPanic bool // distinguishes panic(nil)-free recover from "no panic"
+		stray    any  // a panic that escaped WithFixture: no teardown result to attribute
+		strayHit bool
+	)
+	emptyBody := func(class, note string) DBProbeOutcome {
+		return DBProbeOutcome{Result: protocol.DBProbeResult{
+			AgentTime: time.Now(), ErrorClass: class,
+			Notes: []string{note + " (probe " + spec.ProbeID + ", fixture " + spec.FixtureID + ")"},
+		}}
+	}
 	func() {
-		// WithFixture re-raises a probe panic after cleanup; a panic that
-		// carries a cleanup incident must still reach the result as one.
+		// Defence in depth only: WithFixture guards Seed and fn and re-raises a
+		// panic only after teardown, and fn below never lets one through. Anything
+		// that still escapes cannot be tied to a completed teardown.
 		defer func() {
-			r := recover()
-			if r == nil {
-				return
+			if r := recover(); r != nil {
+				if pinc, ok := r.(*fixtures.ErrSafetyIncident); ok {
+					ferr = pinc
+					return
+				}
+				stray, strayHit = r, true
 			}
-			if pinc, ok := r.(*fixtures.ErrSafetyIncident); ok {
-				ferr = pinc
-				return
-			}
-			panicErr = fmt.Errorf("probe panicked: %v", r)
 		}()
-		_, ferr = fixtures.WithFixture(ctx, ad, fxSpec, func(fx dbprobe.Fixture) error {
+		_, ferr = withFixtureFn(ctx, ad, fxSpec, func(fx dbprobe.Fixture) error {
 			ran = true
-			body, bodyErr = runBody()
+			func() {
+				// Capture a probe panic here so WithFixture finishes its normal
+				// teardown and returns the real cleanup status.
+				defer func() {
+					if r := recover(); r != nil {
+						fnPanic, hadPanic = r, true
+					}
+				}()
+				body, bodyErr = runBody()
+			}()
+			if hadPanic {
+				return nil
+			}
 			body.Result.Notes = append(body.Result.Notes, "fixture "+fx.Kind+" seeded as schema "+fixtures.SchemaName(fx.ID))
 			return nil
 		})
 	}()
+	if strayHit {
+		// No teardown result: never report ok.
+		msg := scrubAll(fmt.Sprint(stray), cred.Password, cred.User, spec.Host, spec.ExpectedIdentity)
+		out := emptyBody(dbErrFixture, "panic before cleanup could be verified")
+		out.Result.CleanupStatus = protocol.DBCleanupFailed
+		out.Result.SafetyIncident = true
+		log.Printf("[dbprobe] %s panic outside a verified teardown: %s", step.TaskID, msg)
+		return out, fmt.Errorf("dbprobe fixture: panic before cleanup could be verified: %s", msg)
+	}
 	var inc *fixtures.ErrSafetyIncident
 	switch {
 	case errors.As(ferr, &inc):
-		if !ran {
-			body = DBProbeOutcome{Result: protocol.DBProbeResult{AgentTime: time.Now()}}
+		if !ran || hadPanic {
+			note := "fixture cleanup incident"
+			class := dbErrFixture
+			if hadPanic {
+				note = "probe panicked: " + scrubAll(fmt.Sprint(fnPanic), cred.Password, cred.User, spec.Host, spec.ExpectedIdentity)
+				class = dbErrProbe
+			}
+			body = emptyBody(class, note)
 		}
 		body.Result.CleanupStatus = inc.Status
 		body.Result.SafetyIncident = true
 		if body.Result.ErrorClass == "" {
-			if ran {
-				body.Result.ErrorClass = dbErrCleanupIncident
-			} else {
-				// The probe never ran (fixture invisible to inspection).
-				body.Result.ErrorClass = dbErrFixture
-			}
+			body.Result.ErrorClass = dbErrCleanupIncident
 		}
 		msg := scrubAll(inc.Error(), cred.Password, cred.User, spec.Host, spec.ExpectedIdentity)
 		body.Result.Notes = append(body.Result.Notes, "safety incident: "+msg)
 		log.Printf("[dbprobe] %s fixture safety incident: %s", step.TaskID, msg)
 		return body, fmt.Errorf("dbprobe fixture cleanup: safety incident (%s): %s", inc.Status, msg)
 	case ferr != nil:
-		// Seed refused or failed and nothing was left behind.
+		// Seed refused or failed. ok only when a teardown actually ran and
+		// verified clean (a seed panic after the adapter was reached); every
+		// other seed failure left nothing of ours behind.
 		out, err := runtimeErr(dbErrFixture, "fixture", ferr)
 		out.Result.CleanupStatus = protocol.DBCleanupNotApplicable
+		var sp *fixtures.SeedPanic
+		if errors.As(ferr, &sp) && sp.TornDown {
+			out.Result.CleanupStatus = protocol.DBCleanupOK
+		}
 		return out, err
 	}
-	if panicErr != nil {
-		// Probe panicked, cleanup verified clean: an ordinary probe error.
-		out, err := runtimeErr(dbErrProbe, "probe", panicErr)
+	if hadPanic {
+		// Probe panicked, WithFixture's teardown completed and verified clean
+		// (ferr is nil): an ordinary probe error.
+		out, err := runtimeErr(dbErrProbe, "probe", fmt.Errorf("probe panicked: %v", fnPanic))
 		out.Result.CleanupStatus = protocol.DBCleanupOK
 		return out, err
 	}

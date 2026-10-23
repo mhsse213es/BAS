@@ -23,12 +23,20 @@ type fixtureFakeAdapter struct {
 	seedErr    error
 	seeded     dbprobe.Fixture
 	invisible  bool
+
+	seedPanic      bool
+	inspectPanicAt int // 1-based InspectFixture call that panics (0 = never)
+	inspectCalls   int
 }
 
 func (f *fixtureFakeAdapter) Mode() dbprobe.ExecMode { return f.mode }
 
 func (f *fixtureFakeAdapter) InspectFixture(context.Context, dbprobe.Fixture) ([]string, error) {
 	f.rec("Inspect")
+	f.inspectCalls++
+	if f.inspectPanicAt != 0 && f.inspectCalls == f.inspectPanicAt {
+		panic("inspect exploded")
+	}
 	return append([]string(nil), f.state...), nil
 }
 
@@ -40,6 +48,9 @@ func (f *fixtureFakeAdapter) Seed(_ context.Context, fx dbprobe.Fixture) error {
 	}
 	if !f.invisible {
 		f.state = []string{"schema:dbsim_" + fx.ID}
+	}
+	if f.seedPanic {
+		panic("adapter seed exploded")
 	}
 	return nil
 }

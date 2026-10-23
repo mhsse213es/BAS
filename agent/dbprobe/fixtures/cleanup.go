@@ -81,6 +81,46 @@ func VerifyClean(ctx context.Context, ad dbprobe.Adapter, fx dbprobe.Fixture) (d
 	return out, nil
 }
 
+// SeedPanic is returned (as the error) when Seed panicked. TornDown is true only
+// when the fixture may have existed (the adapter's Seed had been reached), the
+// exact-name teardown then ran and VerifyClean confirmed nothing is left. When
+// teardown cannot be verified the error is an *ErrSafetyIncident instead. A
+// panic before the adapter's Seed was reached (TornDown false) created nothing
+// and ran no cleanup.
+type SeedPanic struct {
+	Value    string
+	TornDown bool
+}
+
+func (e *SeedPanic) Error() string {
+	if e.TornDown {
+		return "fixtures: seed panicked: " + e.Value + " (teardown ran and verified clean)"
+	}
+	return "fixtures: seed panicked: " + e.Value + " (before any fixture was created)"
+}
+
+// guardedSeed runs Seed under recover. A panic after the adapter's Seed was
+// reached returns the fixture (the caller tears it down) plus a *SeedPanic; a
+// panic before that returns a zero Fixture so nothing is cleaned or dropped.
+func guardedSeed(ctx context.Context, ad dbprobe.Adapter, spec dbprobe.FixtureSpec) (fx dbprobe.Fixture, err error, sp *SeedPanic) {
+	var st seedState
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		sp = &SeedPanic{Value: dbprobe.TruncateUTF8(fmt.Sprint(r), 200)}
+		err = sp
+		if st.adapterReached {
+			fx = st.fx
+		} else {
+			fx = dbprobe.Fixture{}
+		}
+	}()
+	fx, err = seedStaged(ctx, ad, spec, &st)
+	return fx, err, nil
+}
+
 // WithFixture seeds spec, runs fn, then always runs Cleanup and VerifyClean
 // under a fresh bounded context, even when fn errors, panics or the run
 // context is cancelled. A panic is re-raised after cleanup. When cleanup or
@@ -93,7 +133,7 @@ func VerifyClean(ctx context.Context, ad dbprobe.Adapter, fx dbprobe.Fixture) (d
 func WithFixture(ctx context.Context, ad dbprobe.Adapter, spec dbprobe.FixtureSpec,
 	fn func(dbprobe.Fixture) error) (dbprobe.CleanupResult, error) {
 
-	fx, seedErr := Seed(ctx, ad, spec)
+	fx, seedErr, seedPanic := guardedSeed(ctx, ad, spec)
 	if seedErr != nil && fx.ID == "" {
 		return dbprobe.CleanupResult{}, seedErr
 	}
@@ -138,6 +178,11 @@ func WithFixture(ctx context.Context, ad dbprobe.Adapter, spec dbprobe.FixtureSp
 			panic(inc)
 		}
 		return res, inc
+	}
+	if seedPanic != nil {
+		// The adapter's Seed panicked, the exact-name teardown ran and verified
+		// clean.
+		seedPanic.TornDown = true
 	}
 	if panicked {
 		panic(panicVal)

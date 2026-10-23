@@ -46,6 +46,18 @@ func SchemaName(id string) string { return "dbsim_" + id }
 // has its id set: part of the fixture may exist and the caller must clean up
 // (WithFixture does).
 func Seed(ctx context.Context, ad dbprobe.Adapter, spec dbprobe.FixtureSpec) (dbprobe.Fixture, error) {
+	return seedStaged(ctx, ad, spec, &seedState{})
+}
+
+// seedState lets a guarding caller (WithFixture) learn, even when Seed panics,
+// whether the adapter's Seed was reached (so the fixture MAY exist) and which
+// fixture that was.
+type seedState struct {
+	adapterReached bool
+	fx             dbprobe.Fixture
+}
+
+func seedStaged(ctx context.Context, ad dbprobe.Adapter, spec dbprobe.FixtureSpec, st *seedState) (dbprobe.Fixture, error) {
 	if spec.Kind == "" {
 		return dbprobe.Fixture{}, errors.New("fixtures: fixture spec has no kind")
 	}
@@ -85,6 +97,8 @@ func Seed(ctx context.Context, ad dbprobe.Adapter, spec dbprobe.FixtureSpec) (db
 	}
 	fx.PreState = nil
 
+	// From here on the fixture may exist, even if the adapter panics.
+	st.fx, st.adapterReached = fx, true
 	if err := ad.Seed(ctx, fx); err != nil {
 		if errors.Is(err, dbprobe.ErrFixtureNotCreated) {
 			// Nothing of this call exists: return no fixture so the caller
