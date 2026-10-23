@@ -1,0 +1,33 @@
+{
+  "index_patterns": ["dbsim-audit-*"],
+  "priority": 500,
+  "template": {
+    "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
+    "mappings": {
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "message": { "type": "text" },
+        "event": {
+          "properties": {
+            "original": { "type": "text" },
+            "dataset": { "type": "keyword" },
+            "module": { "type": "keyword" }
+          }
+        },
+        "host": {
+          "properties": {
+            "name": { "type": "keyword" },
+            "ip": { "type": "ip" }
+          }
+        },
+        "user": { "properties": { "name": { "type": "keyword" } } },
+        "dbsim": {
+          "properties": {
+            "engine": { "type": "keyword" },
+            "database": { "type": "keyword" }
+          }
+        }
+      }
+    }
+  }
+}

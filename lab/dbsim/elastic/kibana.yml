@@ -1,0 +1,14 @@
+server.host: "0.0.0.0"
+server.name: "dbsim-kibana"
+elasticsearch.hosts: ["http://elasticsearch:9200"]
+elasticsearch.username: "kibana_system"
+elasticsearch.password: "${KIBANA_SYSTEM_PASSWORD}"
+xpack.security.encryptionKey: "${KIBANA_SECURITY_KEY}"
+xpack.encryptedSavedObjects.encryptionKey: "${KIBANA_SAVEDOBJECTS_KEY}"
+xpack.reporting.encryptionKey: "${KIBANA_REPORTING_KEY}"
+# Lab only: allow detection rules to run more often than the 1m default so the
+# marker alert appears well inside the smoke test's 90 s budget.
+xpack.alerting.rules.minimumScheduleInterval.value: "10s"
+xpack.alerting.rules.minimumScheduleInterval.enforce: false
+telemetry.optIn: false
+telemetry.allowChangingOptInStatus: false

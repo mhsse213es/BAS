@@ -1,0 +1,8 @@
+# secrets and runtime state - never commit
+.env
+*.env
+!.env.example
+agent-bin/
+data/
+*.log
+*.csv

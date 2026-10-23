@@ -1,0 +1,22 @@
+{
+  "rule_id": "bas-dbsim-marker-in-db-audit",
+  "name": "BAS dbsim marker in database audit event",
+  "description": "Lab detection rule for the Audspect dbsim simulation. Alerts when a PostgreSQL or MySQL audit/general-log event carries the bas-dbsim: probe marker. The alert keeps the original audit message (message, event.original) and the DB server host.name / host.ip so the orchestrator can post-filter by marker.",
+  "type": "query",
+  "language": "kuery",
+  "index": ["dbsim-audit-*"],
+  "query": "message : \"bas-dbsim:\" and not message : (\"dbsim-meta\" or \"general_log\" or \"pg_log\" or \"dbsim_audit\" or \"events_statements_history_long\")",
+  "interval": "10s",
+  "from": "now-70s",
+  "to": "now",
+  "max_signals": 1000,
+  "enabled": true,
+  "risk_score": 21,
+  "severity": "low",
+  "author": ["Audspect"],
+  "tags": ["bas-dbsim", "lab"],
+  "false_positives": [],
+  "references": [],
+  "actions": [],
+  "version": 1
+}

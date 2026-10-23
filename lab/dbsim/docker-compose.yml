@@ -1,0 +1,208 @@
+# dbsim lab: PostgreSQL+pgaudit, MySQL 8, Elasticsearch, Kibana, Filebeat and a
+# separate "agent" container. NOT executed by the author (no Docker on the dev
+# host); validated statically only. See README.md. Secrets come from ./.env.
+name: dbsim-lab
+
+networks:
+  dbsim-lab:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.50.0/24
+
+volumes:
+  pg-data:
+  pg-log:
+  mysql-data:
+  mysql-log:
+  es-data:
+
+services:
+  postgres:
+    build: ./postgres
+    image: dbsim-lab/postgres-pgaudit:16.4
+    hostname: dbsim-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PG_SUPERUSER_PASSWORD:?set in .env}
+      POSTGRES_DB: dbsim
+      DBSIM_TEST_PASSWORD: ${DBSIM_TEST_PASSWORD:?set in .env}
+      DBSIM_LAB_PASSWORD: ${DBSIM_LAB_PASSWORD:?set in .env}
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pgaudit
+      - -c
+      - logging_collector=on
+      - -c
+      - log_destination=csvlog,stderr
+      - -c
+      - log_directory=/var/log/postgresql
+      - -c
+      - log_filename=dbsim-pg.log
+      - -c
+      - log_rotation_age=0
+      - -c
+      - log_rotation_size=0
+      - -c
+      - log_file_mode=0640
+      - -c
+      - log_statement=all
+      - -c
+      - "log_line_prefix=%m [%p] %q%u@%d "
+      - -c
+      - pgaudit.log=read,write,ddl,role
+      - -c
+      - pgaudit.log_catalog=off
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - pg-log:/var/log/postgresql
+      - ./seed-postgres.sql:/seed/seed-postgres.sql:ro
+      - ./postgres/10-seed.sh:/docker-entrypoint-initdb.d/10-seed.sh:ro
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dbsim"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      dbsim-lab:
+        ipv4_address: 172.28.50.10
+
+  mysql:
+    build: ./mysql
+    image: dbsim-lab/mysql-general-log:8.0.40
+    hostname: dbsim-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set in .env}
+      DBSIM_TEST_PASSWORD: ${DBSIM_TEST_PASSWORD:?set in .env}
+      DBSIM_LAB_PASSWORD: ${DBSIM_LAB_PASSWORD:?set in .env}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - mysql-log:/var/log/mysql
+      - ./mysql/dbsim.cnf:/etc/mysql/conf.d/dbsim.cnf:ro
+      - ./seed-mysql.sql:/seed/seed-mysql.sql:ro
+      - ./mysql/10-seed.sh:/docker-entrypoint-initdb.d/10-seed.sh:ro
+    ports:
+      - "127.0.0.1:53306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks:
+      dbsim-lab:
+        ipv4_address: 172.28.50.11
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    hostname: dbsim-es
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.enabled: "false"
+      xpack.security.transport.ssl.enabled: "false"
+      xpack.license.self_generated.type: basic
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?set in .env}
+    mem_limit: 2g
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    ports:
+      - "127.0.0.1:59200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -u elastic:$$ELASTIC_PASSWORD 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+    networks:
+      dbsim-lab:
+        ipv4_address: 172.28.50.20
+
+  # One-shot: sets the kibana_system password and creates the index template,
+  # roles and users (setup.sh es). Kibana and Filebeat wait for it.
+  bootstrap:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      ES_URL: http://elasticsearch:9200
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?set in .env}
+      KIBANA_SYSTEM_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:?set in .env}
+      FILEBEAT_PASSWORD: ${FILEBEAT_PASSWORD:?set in .env}
+      ALERTS_READER_PASSWORD: ${ALERTS_READER_PASSWORD:?set in .env}
+    entrypoint: ["/bin/sh", "/elastic/setup.sh", "es"]
+    volumes:
+      - ./elastic:/elastic:ro
+    restart: "no"
+    networks:
+      - dbsim-lab
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.3
+    hostname: dbsim-kibana
+    restart: unless-stopped
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    environment:
+      KIBANA_SYSTEM_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:?set in .env}
+      KIBANA_SECURITY_KEY: ${KIBANA_SECURITY_KEY:?set in .env}
+      KIBANA_SAVEDOBJECTS_KEY: ${KIBANA_SAVEDOBJECTS_KEY:?set in .env}
+      KIBANA_REPORTING_KEY: ${KIBANA_REPORTING_KEY:?set in .env}
+    mem_limit: 2g
+    volumes:
+      - ./elastic/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+    ports:
+      - "127.0.0.1:55601:5601"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:5601/api/status | grep -q '^[234]'"]
+      interval: 10s
+      timeout: 10s
+      retries: 40
+    networks:
+      dbsim-lab:
+        ipv4_address: 172.28.50.21
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.15.3
+    hostname: dbsim-filebeat
+    restart: unless-stopped
+    user: root
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    environment:
+      FILEBEAT_PASSWORD: ${FILEBEAT_PASSWORD:?set in .env}
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    volumes:
+      - ./elastic/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - pg-log:/var/log/dbsim/pg:ro
+      - mysql-log:/var/log/dbsim/mysql:ro
+    networks:
+      dbsim-lab:
+        ipv4_address: 172.28.50.22
+
+  # The probing agent's network position: a DIFFERENT container from the DBs.
+  # smoke.sh issues its tagged queries from here. The real agent binary is
+  # built separately; put it in ./agent-bin (mounted read-only at /opt/agent).
+  agent:
+    build: ./agent-sim
+    image: dbsim-lab/agent-sim:16.4
+    hostname: dbsim-agent
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./agent-bin:/opt/agent:ro
+    networks:
+      dbsim-lab:
+        ipv4_address: 172.28.50.30

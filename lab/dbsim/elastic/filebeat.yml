@@ -1,0 +1,95 @@
+# Filebeat 8.15.3 for the dbsim lab. NOT run by the author. Ships the PostgreSQL
+# stderr log (log_statement=all + pgaudit AUDIT lines) and the MySQL general
+# log FILE to dbsim-audit-<date>. The leading /* ... */ comment is part of the
+# log line text and is NOT altered here (no comment-stripping processor).
+# host.name / host.ip are forced to the DATABASE server's identity (static
+# lab IPs from docker-compose.yml), not the Filebeat container's.
+
+name: dbsim-lab-filebeat
+
+filebeat.inputs:
+  - type: filestream
+    id: dbsim-pg-stderr
+    paths:
+      - /var/log/dbsim/pg/dbsim-pg.log
+    parsers:
+      # A log record starts with the %m timestamp; statements and pgaudit rows
+      # can span lines.
+      - multiline:
+          type: pattern
+          pattern: '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ '
+          negate: true
+          match: after
+    processors:
+      - add_fields:
+          target: host
+          fields:
+            name: dbsim-pg
+            ip: ["172.28.50.10"]
+      - add_fields:
+          target: event
+          fields:
+            dataset: postgresql.log
+            module: dbsim-lab
+      - add_fields:
+          target: dbsim
+          fields:
+            engine: postgresql
+      # Prefix: "%m [%p] %q%u@%d " e.g. "2026-10-23 10:00:00.123 UTC [42] dbsim_test@dbsim LOG:  statement: ..."
+      - dissect:
+          tokenizer: "%{ts_date} %{ts_time} %{ts_tz} [%{pid}] %{user.name}@%{dbsim.database} %{level}:  %{}"
+          field: message
+          target_prefix: ""
+          ignore_failure: true
+      - drop_fields:
+          fields: ["ts_date", "ts_time", "ts_tz", "pid", "level"]
+          ignore_missing: true
+
+  - type: filestream
+    id: dbsim-mysql-general
+    paths:
+      - /var/log/dbsim/mysql/general.log
+    parsers:
+      - multiline:
+          type: pattern
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z'
+          negate: true
+          match: after
+    processors:
+      - add_fields:
+          target: host
+          fields:
+            name: dbsim-mysql
+            ip: ["172.28.50.11"]
+      - add_fields:
+          target: event
+          fields:
+            dataset: mysql.general_log
+            module: dbsim-lab
+      - add_fields:
+          target: dbsim
+          fields:
+            engine: mysql
+
+processors:
+  # Keep the original line in an ECS field too, so the alert document carries
+  # the raw audit text even if `message` is not copied into the alert.
+  - copy_fields:
+      fields:
+        - from: message
+          to: event.original
+      fail_on_error: false
+      ignore_missing: true
+
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dbsim-audit"
+setup.template.pattern: "dbsim-audit-*"
+
+output.elasticsearch:
+  hosts: ["http://elasticsearch:9200"]
+  username: "dbsim_filebeat"
+  password: "${FILEBEAT_PASSWORD}"
+  index: "dbsim-audit-%{+yyyy.MM.dd}"
+
+logging.level: info

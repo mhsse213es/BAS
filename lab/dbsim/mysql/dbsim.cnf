@@ -1,0 +1,10 @@
+[mysqld]
+general_log = ON
+log_output = TABLE,FILE
+general_log_file = /var/log/mysql/general.log
+performance_schema = ON
+performance-schema-consumer-events-statements-current = ON
+performance-schema-consumer-events-statements-history = ON
+performance-schema-consumer-events-statements-history-long = ON
+performance_schema_events_statements_history_long_size = 10000
+performance_schema_max_sql_text_length = 4096
