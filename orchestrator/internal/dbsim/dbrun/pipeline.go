@@ -212,13 +212,18 @@ func Evaluate(ctx context.Context, conn detectverify.Connector, in StepInput) (E
 	if in.Window <= 0 {
 		return Evaluation{}, errors.New("dbrun: a positive detection window is required")
 	}
+	if in.Spec.ProbeID == dbsim.ProbeReadGrants {
+		// R-AK: forced, not left to the caller.
+		in.Scenario.RequirePolicyDiff = true
+	}
 	now := time.Now
 	if in.Now != nil {
 		now = in.Now
 	}
 	ev := Evaluation{}
 	o := dbsim.Outcome{
-		Marker: in.Spec.Marker, RunID: in.Spec.RunID, Principal: in.Principal,
+		ProbeID: in.Spec.ProbeID,
+		Marker:  in.Spec.Marker, RunID: in.Spec.RunID, Principal: in.Principal,
 		CollectedAt: now().UTC(), Observed: in.GrantsChecked, Diff: in.Diff,
 	}
 	classifyExec(in.Exec, &o)

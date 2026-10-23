@@ -167,6 +167,9 @@ type Outcome struct {
 	// GrantsChecked is the observation count and its Deviations decide the
 	// policy dimension.
 	Diff *DiffReport
+	// ProbeID is the probe that produced Probe. For ProbeReadGrants the policy
+	// requirement is forced on (ruling R-AK).
+	ProbeID string
 	// Limitations are extra caller-supplied limitation lines (redacted when
 	// rendered), for example "agent row counts disagree".
 	Limitations []string

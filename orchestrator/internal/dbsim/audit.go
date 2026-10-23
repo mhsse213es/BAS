@@ -89,7 +89,14 @@ func auditHasMarkerEvidence(o Outcome) bool {
 // grants are not a comparison: unless a real DiffReport was supplied the
 // dimension is unverifiable, so DB-02 is never a PASS (nor a FAIL by omission).
 func policyGrade(s ScenarioMeta, o Outcome) (DimensionGrade, []string) {
-	if !s.RequirePolicyDiff {
+	// Ruling R-AK: default-safe. The read_grants probe always needs a policy
+	// comparison, whatever the caller put in the scenario meta.
+	if !s.RequirePolicyDiff && o.ProbeID != ProbeReadGrants {
+		return DimNotExpected, nil
+	}
+	if o.Probe.Denied {
+		// A denial has no grants to compare: the denial is the observation and
+		// prevention grades it.
 		return DimNotExpected, nil
 	}
 	if o.Diff == nil {

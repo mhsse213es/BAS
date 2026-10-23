@@ -121,6 +121,10 @@ var probeRegistry = map[string]ProbeRegistryEntry{
 	"bounded_synthetic_read": {ID: "bounded_synthetic_read", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}, FixtureParam: "table"},
 }
 
+// ProbeReadGrants is the grant-enumeration probe (DB-02); its result is only
+// meaningful against a performed policy diff (ruling R-AK).
+const ProbeReadGrants = "read_grants"
+
 // LookupProbeEntry returns the registry entry for a probe id.
 func LookupProbeEntry(id string) (ProbeRegistryEntry, bool) {
 	e, ok := probeRegistry[id]

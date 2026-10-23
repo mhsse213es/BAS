@@ -24,6 +24,8 @@ func TestAuditEventMustBeginWithTheMarkerComment(t *testing.T) {
 		"meta statement":   {c + "SELECT 1 /* dbsim:dbsim-meta */", false},
 		"audit lookup":     {c + "SELECT * FROM dbsim_audit.pg_log", false},
 		"general log":      {c + "SELECT argument FROM mysql.general_log", false},
+		"other run":        {"/* dbsim:bas-dbsim:OTHERRUN */ SELECT 1", false},
+		"longer marker":    {"/* dbsim:bas-dbsim:abc1234 */ SELECT 1", false},
 	}
 	for name, tc := range cases {
 		o := auditOutcome(AuditFound, DBProbeAuditEvent{Time: t0, Statement: tc.stmt})
@@ -31,6 +33,9 @@ func TestAuditEventMustBeginWithTheMarkerComment(t *testing.T) {
 		got := rep.Dimensions.Audit == DimPass
 		if got != tc.want {
 			t.Errorf("%s: audit pass=%v want %v", name, got, tc.want)
+		}
+		if !tc.want && rep.Dimensions.Audit != DimUnverifiable {
+			t.Errorf("%s: audit dim %s, want the Unverifiable downgrade", name, rep.Dimensions.Audit)
 		}
 		if !tc.want && !strings.Contains(rep.Record.Limitations, "no audit event carrying this run's marker") {
 			t.Errorf("%s: missing downgrade limitation: %q", name, rep.Record.Limitations)
