@@ -16,13 +16,20 @@ var poller = null;
 var confirmingStop = false;
 var currentRunId = '';
 var lastSummary = null;
+var loggingOut = false;   // one doLogout per session expiry
+var navToken = 0;         // staleness token for initAleefNav
+var stopInFlight = false;
 
 function byId(id) { return document.getElementById(id); }
 
+// Attributes that can load or run something are never set from props.
+var BLOCKED_ATTR = /^(on.*|href|src|srcdoc|style|formaction|action|xlink:href)$/i;
+export function safeEl(tag, props, children) { return el(tag, props, children); }
 function el(tag, props, children) {
   var n = document.createElement(tag);
   if (props) {
     Object.keys(props).forEach(function(k) {
+      if (BLOCKED_ATTR.test(k)) return;
       if (k === 'text') n.textContent = props[k];
       else if (k === 'class') n.className = props[k];
       else n.setAttribute(k, props[k]);
@@ -50,7 +57,7 @@ export function aleefApi(path, opts) {
   return fetch(path, Object.assign({ credentials: 'same-origin' }, opts, {
     headers: Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {})
   })).then(function(r) {
-    if (r.status === 401) { doLogout(); }
+    if (r.status === 401 && !loggingOut) { loggingOut = true; doLogout(); }
     return r.json().catch(function() { return {}; }).then(function(body) { return { status: r.status, body: body }; });
   });
 }
@@ -61,18 +68,36 @@ export function aleefApi(path, opts) {
 export function initAleefNav(role) {
   var nav = byId('nav-aleef');
   if (!nav) return Promise.resolve(false);
+  loggingOut = false; // a new sign-in re-arms the 401 handling
+  var token = ++navToken;
   setDisplay(nav, 'none');
   if (!aleefPerms(role).view) return Promise.resolve(false);
   var check = role === 'admin'
     ? aleefApi('/api/license').then(function(r) { return r.status === 200 && hasAleefAddon(r.body); })
     : aleefApi('/api/aleef/findings').then(function(r) { return r.status === 200; });
-  return check.then(function(ok) { setDisplay(nav, ok ? '' : 'none'); return ok; }).catch(function() { return false; });
+  return check.then(function(ok) {
+    if (token !== navToken) return false; // a newer login superseded this check
+    setDisplay(nav, ok ? '' : 'none'); return ok;
+  }).catch(function() { return false; });
 }
 
 // ── tab lifecycle ────────────────────────────────────────────────────────────
 export function stopAleefPolling() {
   if (poller) poller.stop();
   confirmingStop = false;
+}
+
+// resetAleefState runs on logout: stop timers, forget the run, findings and per-browser ids so the next user sees nothing.
+export function resetAleefState() {
+  stopAleefPolling();
+  navToken++;
+  poller = null; currentRunId = ''; lastSummary = null; stopInFlight = false;
+  try { localStorage.removeItem(RUN_KEY); localStorage.removeItem(ENG_KEY); } catch (e) { /* storage unavailable */ }
+  ['aleef-run-card', 'aleef-findings', 'aleef-classes', 'aleef-accounts', 'aleef-eng-list'].forEach(function(id) { clear(byId(id)); });
+  ['aleef-status'].forEach(function(id) { var n = byId(id); if (n) n.textContent = ''; });
+  var nav = byId('nav-aleef');
+  if (nav) setDisplay(nav, 'none');
+  ['aleef-run-openapi', 'aleef-run-setup', 'aleef-run-eng', 'aleef-load-run'].forEach(function(id) { var n = byId(id); if (n) n.value = ''; });
 }
 
 export function loadAleef() {
@@ -252,13 +277,15 @@ function trackRun(runId) {
     intervalMs: 3000,
     fetchFn: function() {
       return aleefApi('/api/aleef/runs/' + encodeURIComponent(runId)).then(function(r) {
-        if (r.status !== 200) { throw new Error(apiErrorMessage(r.status, r.body)); }
+        if (r.status !== 200) { var e = new Error(apiErrorMessage(r.status, r.body)); e.status = r.status; throw e; }
         return r.body;
       });
     },
     onUpdate: function(run) { if (isPanelVisible()) showRun(run); },
     onFinished: function() { confirmingStop = false; loadAleefFindings(); },
-    onError: function(err) { setStatus(err.message || 'Could not refresh the run', 'error'); }
+    onError: function(err, n) { setStatus((err.message || 'Could not refresh the run') + ' (retry ' + n + ' of 10, backing off)', 'error'); },
+    onFatal: function(err) { setStatus((err.message || 'Polling stopped') + ' Polling stopped.', 'error'); },
+    onGiveUp: function(err) { setStatus('Polling stopped after repeated errors: ' + (err.message || 'request failed') + '. Press Load to try again.', 'error'); }
   });
   poller.start();
 }
@@ -269,24 +296,38 @@ function isPanelVisible() {
 }
 
 function stopRun() {
-  if (!currentRunId) return Promise.resolve();
+  if (!currentRunId || stopInFlight) return Promise.resolve();
+  stopInFlight = true;
+  var btn = document.querySelector('[data-aleef-action="stop-confirm"]');
+  if (btn) btn.disabled = true;
   confirmingStop = false;
   return aleefApi('/api/aleef/runs/' + encodeURIComponent(currentRunId) + '/stop', { method: 'POST' }).then(function(r) {
+    stopInFlight = false;
     if (r.status !== 200) { setStatus(apiErrorMessage(r.status, r.body), 'error'); showRun(lastSummary); return; }
     setStatus('Stop requested. The campaign is cleaning up.', 'ok');
     trackRun(currentRunId);
-  }).catch(function(err) { setStatus(err.message || 'Request failed', 'error'); });
+  }).catch(function(err) { stopInFlight = false; setStatus(err.message || 'Request failed', 'error'); showRun(lastSummary); });
 }
 
 // ── findings ─────────────────────────────────────────────────────────────────
-function findingRow(f, verified, perms) {
-  var cells = [f.title || '', f.property_id || '', f.test_id || '', f.state || '', f.novelty_label || '', f.evidence_hash || '', f.created_at || ''];
+// consistencyFlag: the server's arrays are authoritative, but a row whose own fields disagree with its array is flagged, not
+// silently shown as what the array says.
+export function consistencyFlag(f, list) {
+  if (list === 'candidates' && f.state === 'verified') return 'unverified (server reported verified)';
+  if (list === 'verified' && (f.state !== 'verified' || !f.regression_id)) return 'inconsistent: listed verified but ' + (f.state !== 'verified' ? 'state is ' + (f.state || 'empty') : 'no regression id');
+  return '';
+}
+
+function findingRow(f, verified, perms, listName) {
+  var flag = consistencyFlag(f, listName);
+  var cells = [f.title || '', f.property_id || '', f.test_id || '', flag || f.state || '', f.novelty_label || '', f.evidence_hash || '', f.created_at || ''];
   if (verified) cells.push(f.regression_id || '');
-  var tr = el('tr', { 'data-finding-id': f.id || '' });
+  var tr = el('tr', { 'data-finding-id': f.id || '', class: flag ? 'aleef-inconsistent' : '' });
   cells.forEach(function(c) { tr.appendChild(el('td', { text: String(c) })); });
   if (verified) {
     var actions = el('td');
-    actions.appendChild(el('button', { class: 'btn btn-outline btn-sm', type: 'button', 'data-aleef-action': 'download-regression', 'data-finding': f.id || '', text: 'Download regression' }));
+    if (f.regression_id) actions.appendChild(el('button', { class: 'btn btn-outline btn-sm', type: 'button', 'data-aleef-action': 'download-regression', 'data-finding': f.id || '', text: 'Download regression' }));
+    else actions.appendChild(el('span', { class: 'aleef-error', text: 'No regression: not downloadable' }));
     var sel = el('select', { 'data-aleef-pk': f.id || '', 'aria-label': 'Prior knowledge for ' + (f.title || f.id || '') });
     ALEEF_PRIOR_KNOWLEDGE.forEach(function(p) { var o = el('option', { value: p.value, text: p.label }); if ((f.prior_knowledge || 'not_checked') === p.value) o.selected = true; sel.appendChild(o); });
     if (!perms.run) sel.disabled = true;
@@ -296,20 +337,20 @@ function findingRow(f, verified, perms) {
   return tr;
 }
 
-function findingsTable(list, verified, perms) {
+function findingsTable(list, verified, perms, listName) {
   var heads = ['Title', 'Property', 'Test', 'State', 'Novelty', 'Evidence hash', 'Created'];
   if (verified) heads = heads.concat(['Regression', 'Actions']);
   return el('table', { class: 'tbl' }, [
     el('thead', null, [el('tr', null, heads.map(function(h) { return el('th', { text: h }); }))]),
-    el('tbody', null, list.map(function(f) { return findingRow(f, verified, perms); }))
+    el('tbody', null, list.map(function(f) { return findingRow(f, verified, perms, listName); }))
   ]);
 }
 
-function section(id, title, note, list, verified, perms) {
+function section(id, title, note, list, verified, perms, listName) {
   var wrap = el('section', { id: id, class: 'aleef-findings-section' }, [el('h3', { text: title + ' (' + list.length + ')' })]);
   if (note) wrap.appendChild(el('p', { class: 'muted', text: note }));
   if (!list.length) wrap.appendChild(el('p', { class: 'muted', text: 'None.' }));
-  else wrap.appendChild(findingsTable(list, verified, perms));
+  else wrap.appendChild(findingsTable(list, verified, perms, listName));
   return wrap;
 }
 
@@ -323,8 +364,8 @@ function collapsed(id, title, list, perms) {
 export function renderFindings(host, body, perms) {
   clear(host);
   var f = splitFindings(body);
-  host.appendChild(section('aleef-candidates', 'Candidates (unverified)', 'Reproduced at least once but not verified. Treat as leads, not results.', f.candidates, false, perms));
-  host.appendChild(section('aleef-verified', 'Verified (reproduced 3×, owner + negative control, regression saved)', 'Each row has a saved regression. Set the prior-knowledge review before reporting any finding as new.', f.verified, true, perms));
+  host.appendChild(section('aleef-candidates', 'Candidates (unverified)', 'Reproduced at least once but not verified. Treat as leads, not results.', f.candidates, false, perms, 'candidates'));
+  host.appendChild(section('aleef-verified', 'Verified (reproduced 3×, owner + negative control, regression saved)', 'Each row has a saved regression. Set the prior-knowledge review before reporting any finding as new.', f.verified, true, perms, 'verified'));
   if (f.pendingRegression.length) {
     host.appendChild(section('aleef-pending', 'Pending regression', 'Verified but the regression is not saved yet, so these are not listed as verified.', f.pendingRegression, false, perms));
   }
@@ -341,12 +382,15 @@ export function loadAleefFindings() {
   }).catch(function(err) { setStatus(err.message || 'Could not load findings', 'error'); });
 }
 
+export function safeFileId(id) { return String(id || '').replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 64) || 'finding'; }
+
 function downloadRegression(id) {
   return aleefApi('/api/aleef/findings/' + encodeURIComponent(id) + '/regression').then(function(r) {
     if (r.status !== 200) { setStatus(apiErrorMessage(r.status, r.body), 'error'); return; }
     var blob = new Blob([JSON.stringify(r.body, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
-    var a = el('a', { href: url, download: 'aleef-regression-' + id + '.json' });
+    var a = document.createElement('a');
+    a.href = url; a.download = 'aleef-regression-' + safeFileId(id) + '.json';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
     setStatus('Regression downloaded.', 'ok');

@@ -1357,6 +1357,7 @@ body.theme-slate {
 .email-hdr-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
 
 /* Aleef console (special add-on) */
+.aleef-inconsistent td { background: var(--danger-dim); }
 .aleef-banner { border: 1px solid var(--warning-border); background: var(--warning-dim); color: var(--text); padding: 0.6rem 0.9rem; border-radius: var(--radius); margin-bottom: 0.75rem; font-weight: 600; }
 .aleef-addon-badge { display: inline-block; margin-left: 0.4rem; padding: 0 0.4rem; font-size: 0.65rem; border: 1px solid var(--accent-border); background: var(--accent-dim); border-radius: var(--radius); vertical-align: middle; }
 .aleef-status { min-height: 1.2rem; margin: 0.4rem 0; font-size: 0.85rem; }

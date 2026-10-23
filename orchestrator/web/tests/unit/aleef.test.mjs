@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { setupDom, load, PAYLOADS } from './dom.mjs';
 
 setupDom();
-const { renderFindings, renderRunCard, renderClassTable } = await load(['renderFindings', 'renderRunCard', 'renderClassTable']);
+const { renderFindings, renderRunCard, renderClassTable, resetAleefState, safeEl, safeFileId } = await load(['renderFindings', 'renderRunCard', 'renderClassTable', 'resetAleefState', 'safeEl', 'safeFileId']);
 const model = await import('../../src/features/aleef-model.js');
 
 const RUN = { view: true, run: true, authorize: false };
@@ -13,6 +13,7 @@ function f(id, over) {
   return Object.assign({ id, run_id: 'r1', test_id: 't-' + id, property_id: 'OWN-1', title: 'Title ' + id, state: 'candidate',
     prior_knowledge: 'not_checked', novelty_label: 'prior reports not checked', evidence_hash: 'h' + id, created_at: '2026-10-23T00:00:00Z' }, over || {});
 }
+const fv = (id, over) => f(id, Object.assign({ state: 'verified', regression_id: 'reg-' + id }, over || {}));
 function render(body, perms) {
   const host = document.createElement('div');
   renderFindings(host, body, perms || RUN);
@@ -21,7 +22,7 @@ function render(body, perms) {
 const titles = (n) => [...n.querySelectorAll('tbody tr td:first-child')].map((c) => c.textContent);
 
 test('candidates and verified render in separate tables and never merge', () => {
-  const host = render({ candidates: [f('c1')], verified: [f('v1', { state: 'verified', regression_id: 'reg1' })], pending_regression: [], unconfirmed: [], rejected: [] });
+  const host = render({ candidates: [f('c1')], verified: [fv('v1')], pending_regression: [], unconfirmed: [], rejected: [] });
   assert.deepEqual(titles(host.querySelector('#aleef-candidates')), ['Title c1']);
   assert.deepEqual(titles(host.querySelector('#aleef-verified')), ['Title v1']);
   assert.match(host.querySelector('#aleef-candidates h3').textContent, /Candidates \(unverified\)/);
@@ -29,7 +30,7 @@ test('candidates and verified render in separate tables and never merge', () => 
 });
 
 test('verified table is fed only from verified, pending_regression never appears in it', () => {
-  const host = render({ candidates: [], verified: [f('v1')], pending_regression: [f('p1', { state: 'verified_without_regression' })], unconfirmed: [f('u1')], rejected: [f('x1')] });
+  const host = render({ candidates: [], verified: [fv('v1')], pending_regression: [f('p1', { state: 'verified_without_regression' })], unconfirmed: [f('u1')], rejected: [f('x1')] });
   assert.deepEqual(titles(host.querySelector('#aleef-verified')), ['Title v1']);
   assert.deepEqual(titles(host.querySelector('#aleef-pending')), ['Title p1']);
   assert.equal(host.querySelector('#aleef-verified').textContent.includes('Title p1'), false);
@@ -52,7 +53,7 @@ test('unconfirmed and rejected are collapsed details, pending is hidden when emp
 });
 
 test('each verified row has Download regression and a prior-knowledge select with the API values', () => {
-  const host = render({ verified: [f('v1', { prior_knowledge: 'known_public' })] });
+  const host = render({ verified: [fv('v1', { prior_knowledge: 'known_public' })] });
   assert.ok(host.querySelector('[data-aleef-action="download-regression"][data-finding="v1"]'));
   const sel = host.querySelector('select[data-aleef-pk="v1"]');
   assert.deepEqual([...sel.options].map((o) => o.value), ['not_checked', 'checked_none_found', 'known_public', 'known_vendor']);
@@ -61,13 +62,13 @@ test('each verified row has Download regression and a prior-knowledge select wit
 });
 
 test('a user without aleef:run cannot change prior knowledge', () => {
-  const host = render({ verified: [f('v1')] }, VIEWER);
+  const host = render({ verified: [fv('v1')] }, VIEWER);
   assert.equal(host.querySelector('select[data-aleef-pk]').disabled, true);
 });
 
 test('XSS payloads in a finding title and hash render as text', () => {
   for (const p of PAYLOADS) {
-    const host = render({ candidates: [f('c1', { title: p, evidence_hash: p })], verified: [f('v1', { title: p, regression_id: p })] });
+    const host = render({ candidates: [f('c1', { title: p, evidence_hash: p })], verified: [fv('v1', { title: p, regression_id: p })] });
     assert.equal(host.querySelector('img,svg,script,iframe'), null);
     assert.equal(titles(host.querySelector('#aleef-candidates'))[0], p);
     assert.equal(titles(host.querySelector('#aleef-verified'))[0], p);
@@ -208,4 +209,72 @@ test('a transient error keeps polling and reports the error', async () => {
 test('finished statuses', () => {
   for (const s of ['completed', 'halted', 'failed', 'interrupted']) assert.equal(model.isRunFinished(s), true, s);
   for (const s of ['running', 'stopping', '']) assert.equal(model.isRunFinished(s), false, s);
+});
+
+// ── review fixes ─────────────────────────────────────────────────────────────
+test('poller stops on 401 and 403: no further fetch, no timer, onFatal once', async () => {
+  for (const status of [401, 403]) {
+    const t = fakeTimers(); let calls = 0, fatal = 0;
+    const p = model.createPoller({ setTimer: t.setTimer, clearTimer: t.clearTimer, fetchFn: async () => { calls++; const e = new Error('x'); e.status = status; throw e; }, onUpdate: () => {}, onFatal: () => fatal++ });
+    p.start(); await flush();
+    assert.equal(t.pending, null); assert.equal(p.isActive(), false);
+    assert.equal(calls, 1); assert.equal(fatal, 1);
+  }
+});
+
+test('backoff doubles from 3 s and is capped at 30 s', () => {
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 9].map((n) => model.backoffDelay(n, 3000)), [3000, 6000, 12000, 24000, 30000, 30000, 30000]);
+});
+
+test('poller gives up after 10 consecutive errors, resets the count on success', async () => {
+  const t = fakeTimers(); let calls = 0, gaveUp = 0; const delays = [];
+  const p = model.createPoller({ setTimer: (fn, ms) => { delays.push(ms); return t.setTimer(fn); }, clearTimer: t.clearTimer, fetchFn: async () => { calls++; throw new Error('net'); }, onUpdate: () => {}, onGiveUp: () => gaveUp++ });
+  p.start(); await flush();
+  while (t.pending) { t.pending(); await flush(); }
+  assert.equal(calls, 10); assert.equal(gaveUp, 1); assert.equal(p.isActive(), false);
+  assert.deepEqual(delays.slice(0, 5), [3000, 6000, 12000, 24000, 30000]);
+  // success resets
+  const t2 = fakeTimers(); let n = 0;
+  const p2 = model.createPoller({ setTimer: t2.setTimer, clearTimer: t2.clearTimer, maxConsecutiveErrors: 3, fetchFn: async () => { n++; if (n % 3 === 0) return { status: 'running' }; throw new Error('e'); }, onUpdate: () => {} });
+  p2.start(); await flush();
+  for (let i = 0; i < 8; i++) { t2.pending(); await flush(); }
+  assert.equal(p2.isActive(), true, 'never reached 3 in a row');
+  p2.stop();
+});
+
+test('logout reset clears findings, run card, status, stored ids and the nav', () => {
+  localStorage.setItem('aleef_last_run', 'r9'); localStorage.setItem('aleef_engagements', '[{"id":"e1"}]');
+  renderFindings(document.getElementById('aleef-findings'), { candidates: [f('c1')] }, RUN);
+  renderRunCard(document.getElementById('aleef-run-card'), { run_id: 'r9', status: 'running' }, RUN, false);
+  document.getElementById('aleef-status').textContent = 'old';
+  resetAleefState();
+  assert.equal(document.getElementById('aleef-findings').childNodes.length, 0);
+  assert.equal(document.getElementById('aleef-run-card').childNodes.length, 0);
+  assert.equal(document.getElementById('aleef-status').textContent, '');
+  assert.equal(localStorage.getItem('aleef_last_run'), null);
+  assert.equal(localStorage.getItem('aleef_engagements'), null);
+});
+
+test('a verified-state row in candidates is flagged unverified; inconsistent verified rows are flagged and have no download', () => {
+  const host = render({ candidates: [f('c1', { state: 'verified' })], verified: [fv('v1'), f('v2', { state: 'candidate', regression_id: 'r' }), fv('v3', { regression_id: '' })] });
+  assert.match(host.querySelector('#aleef-candidates tbody').textContent, /unverified \(server reported verified\)/);
+  const rows = host.querySelectorAll('#aleef-verified tbody tr');
+  assert.equal(rows[0].classList.contains('aleef-inconsistent'), false);
+  assert.equal(rows[1].classList.contains('aleef-inconsistent'), true);
+  assert.match(rows[1].textContent, /inconsistent: listed verified but state is candidate/);
+  assert.equal(rows[2].classList.contains('aleef-inconsistent'), true);
+  assert.match(rows[2].textContent, /no regression id/);
+  assert.equal(rows[2].querySelector('[data-aleef-action="download-regression"]'), null);
+});
+
+test('safeEl skips href, src, style and on* attributes', () => {
+  const n = safeEl('a', { href: 'javascript:alert(1)', src: 'x', style: 'color:red', onclick: 'x()', onmouseover: 'x()', srcdoc: 'x', formaction: 'x', 'data-ok': '1', class: 'c', text: 'hi' });
+  assert.deepEqual([...n.getAttributeNames()].sort(), ['class', 'data-ok']);
+  assert.equal(n.textContent, 'hi');
+});
+
+test('download file name is sanitised and capped', () => {
+  assert.equal(safeFileId('../../a b<c>.json'), '.._.._a_b_c_.json');
+  assert.equal(safeFileId('x'.repeat(200)).length, 64);
+  assert.equal(safeFileId(''), 'finding');
 });

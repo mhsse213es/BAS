@@ -26,7 +26,7 @@ import { loadScheduledAssessments } from './scheduled.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { loadExecutionPolicyDefault } from './execution-policy.js';
 import { loadK8sRuns } from './k8s-scenarios.js';
-import { initAleefNav, loadAleef, stopAleefPolling } from './aleef.js';
+import { initAleefNav, loadAleef, resetAleefState, stopAleefPolling } from './aleef.js';
 import { loadVariantTab } from './variant-executor.js';
 import { displayOf, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
@@ -253,6 +253,7 @@ export function doLogin() {
 
 export function doLogout() {
   TOKEN = ''; ROLE = '';
+  resetAleefState(); // stop the run poll and drop the previous session's Aleef data
   localStorage.removeItem('bas_role');
   if (state.socket) state.socket.close();
   fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(function(){});

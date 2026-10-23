@@ -76,31 +76,44 @@ export function runSummary(run) {
   };
 }
 
+// backoffDelay: interval, 2x, 4x ... for the 1st, 2nd, 3rd ... consecutive error, capped at 30 s.
+export function backoffDelay(consecutiveErrors, interval) {
+  return Math.min(30000, (interval || 3000) * Math.pow(2, Math.max(0, consecutiveErrors - 1)));
+}
+
 // createPoller polls fetchFn every intervalMs while the run is not finished and stops itself when it is. The timer
 // functions are injectable so tests do not wait. stop() is idempotent and is what a tab switch calls.
 export function createPoller(opts) {
   var setT = opts.setTimer || function(f, ms) { return setTimeout(f, ms); };
   var clearT = opts.clearTimer || function(t) { clearTimeout(t); };
   var interval = opts.intervalMs || 3000;
-  var timer = null, active = false, generation = 0;
-  function schedule(gen) {
-    timer = setT(function() { timer = null; tick(gen); }, interval);
+  var maxErrors = opts.maxConsecutiveErrors || 10;
+  var timer = null, active = false, generation = 0, errors = 0;
+  function schedule(gen, delay) {
+    timer = setT(function() { timer = null; tick(gen); }, delay || interval);
   }
   function tick(gen) {
     if (!active || gen !== generation) return;
     Promise.resolve().then(opts.fetchFn).then(function(run) {
       if (!active || gen !== generation) return;
+      errors = 0;
       opts.onUpdate(run);
       if (isRunFinished(run && run.status)) { active = false; if (opts.onFinished) opts.onFinished(run); return; }
       schedule(gen);
     }).catch(function(err) {
       if (!active || gen !== generation) return;
-      if (opts.onError) opts.onError(err);
-      schedule(gen); // transient failure: keep polling until the user leaves the tab
+      var st = err && err.status;
+      if (st === 401 || st === 403) { // the session or the licence is gone: retrying cannot help
+        active = false; if (opts.onFatal) opts.onFatal(err); return;
+      }
+      errors++;
+      if (errors >= maxErrors) { active = false; if (opts.onGiveUp) opts.onGiveUp(err, errors); return; }
+      if (opts.onError) opts.onError(err, errors);
+      schedule(gen, backoffDelay(errors, interval)); // transient failure: back off, bounded
     });
   }
   return {
-    start: function() { this.stop(); active = true; generation++; tick(generation); },
+    start: function() { this.stop(); active = true; generation++; errors = 0; tick(generation); },
     stop: function() { active = false; generation++; if (timer !== null) { clearT(timer); timer = null; } },
     isActive: function() { return active; }
   };
