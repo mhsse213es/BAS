@@ -698,6 +698,7 @@ func (h *Handler) GetLicenseInfo(w http.ResponseWriter, r *http.Request) {
 		"features":      lic.Features,
 		"tier":          string(lic.EffectiveTier()),
 		"productLines":  productLines,
+		"specialAddons": lic.SpecialAddons(),
 		"status":        string(info.State),
 		"daysRemaining": info.DaysRemaining,
 		"lockoutAt":     info.LockoutAt.Format("2006-01-02"),

@@ -66,6 +66,26 @@ func featuresHaveAddon(features []string, name string) bool {
 	return false
 }
 
+// SpecialAddon describes a licensed add-on for display. Add-ons are sold outside the tiers, under
+// the "special" category.
+type SpecialAddon struct {
+	Name     string `json:"name"`
+	Category string `json:"category"`
+	Label    string `json:"label"`
+}
+
+// addonLabels are the display names of the recognised add-ons.
+var addonLabels = map[string]string{"aleef": "Aleef API discovery"}
+
+// SpecialAddons returns the recognised add-ons this licence carries, labelled category "special".
+func (l *License) SpecialAddons() []SpecialAddon {
+	out := []SpecialAddon{}
+	for _, name := range l.Addons() {
+		out = append(out, SpecialAddon{Name: name, Category: "special", Label: addonLabels[name]})
+	}
+	return out
+}
+
 // Addons returns the recognised add-on names this licence carries, sorted. Unrecognised
 // "addon:" tokens are ignored.
 func (l *License) Addons() []string {
