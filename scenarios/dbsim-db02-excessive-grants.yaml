@@ -13,9 +13,10 @@ description: >
 
   The read_grants probe takes a role name; this scenario uses the role
   bas_dbsim_app, which the lab fixture or client onboarding runbook must
-  provision. A role that does not exist yields an empty grant set, which the
-  orchestrator reports as such rather than as a pass. Target details come from
-  the server-side registry by id.
+  provision. A role that does not exist, or grants the test account cannot
+  see, yield an empty grant set; that is unobservable and must not be treated
+  as a pass (grading enforcement is tracked for the correlator/grading work).
+  Target details come from the server-side registry by id.
 author: Audspect Research
 executable: true
 tags:
