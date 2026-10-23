@@ -66,6 +66,10 @@ type StepInput struct {
 	// GrantsChecked, when set, is dbsim.DiffReport.GrantsChecked (DB-02); it
 	// overrides the probe's row count for the empty-observation guard.
 	GrantsChecked *int
+	// Diff is a policy diff that was ACTUALLY performed (dbsim.Report). Leave it
+	// nil when none was: nothing in dbrun computes or fabricates one, and a DB-02
+	// step without it grades ERROR (ruling R-AJ).
+	Diff *dbsim.DiffReport
 	// Now is an optional clock (zero means time.Now).
 	Now func() time.Time
 }
@@ -215,7 +219,7 @@ func Evaluate(ctx context.Context, conn detectverify.Connector, in StepInput) (E
 	ev := Evaluation{}
 	o := dbsim.Outcome{
 		Marker: in.Spec.Marker, RunID: in.Spec.RunID, Principal: in.Principal,
-		CollectedAt: now().UTC(), Observed: in.GrantsChecked,
+		CollectedAt: now().UTC(), Observed: in.GrantsChecked, Diff: in.Diff,
 	}
 	classifyExec(in.Exec, &o)
 	if in.Exec.DBProbe != nil {

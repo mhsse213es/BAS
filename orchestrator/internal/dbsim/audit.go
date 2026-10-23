@@ -1,6 +1,8 @@
 package dbsim
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -17,7 +19,6 @@ const (
 	maxAuditPrincipalBytes  = 128
 	maxAuditSourceBytes     = 64
 	maxMarkerScanBytes      = 4096
-	markerTokenChars        = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-"
 	auditUnsupportedMessage = "Audit evidence was not tested: the target exposes no queryable audit source (audit status unsupported); this is neither a pass nor a failure of the control."
 )
 
@@ -31,59 +32,76 @@ func cutUTF8(s string, n int) string {
 	return s[:n]
 }
 
-// afterCommentPrefix: the agent writes "/* dbsim:<marker> */", so the marker is
-// preceded by the word "dbsim:" whose ':' is itself a token character. Same
-// rule as dbcorrelate (which dbsim must not import, R-AG).
-func afterCommentPrefix(s string, start int) bool {
-	const prefix = "dbsim:"
-	p := start - len(prefix)
-	if p < 0 || s[p:start] != prefix {
-		return false
-	}
-	return p == 0 || strings.IndexByte(markerTokenChars, s[p-1]) < 0
-}
+var reExecutePrefix = regexp.MustCompile(`^execute [^:\s]{1,64}: `)
 
-// containsMarkerToken reports whether marker occurs in s as a whole token (a
-// longer identifier that merely starts with it, e.g. abc1234 for abc123, does
-// not count). Case sensitive.
-func containsMarkerToken(s, marker string) bool {
+// auditSourceWords / metaStatementWord mirror the agent's exclusions
+// (agent/dbprobe/audit.go auditSourceWords and MetaStatementTag): a statement
+// that names an audit source or carries the meta tag is a lookup, never
+// evidence about a probe. The agent is not imported (A3); drift is covered by
+// the audit tests here and the agent's own.
+var auditSourceWords = []string{"general_log", "events_statements_history_long", "pg_log", "dbsim_audit"}
+
+const metaStatementWord = "dbsim:dbsim-meta"
+
+// qualifyingAuditStatement reports whether stmt is this run's own statement:
+// after trimming and tolerating a "statement: " / "execute <name>: " log
+// prefix it BEGINS with the exact marker comment "/* dbsim:<marker> */"
+// (the form the agent writes), and it is not a meta/audit-lookup statement.
+// Merely containing the marker (WHERE clause, another statement) does not count.
+func qualifyingAuditStatement(stmt, marker string) bool {
 	if marker == "" {
 		return false
 	}
-	s = cutUTF8(s, maxMarkerScanBytes)
-	for from := 0; from <= len(s)-len(marker); {
-		i := strings.Index(s[from:], marker)
-		if i < 0 {
+	s := strings.TrimSpace(cutUTF8(stmt, maxMarkerScanBytes))
+	s = strings.TrimPrefix(s, "statement: ")
+	if loc := reExecutePrefix.FindStringIndex(s); loc != nil {
+		s = s[loc[1]:]
+	}
+	s = strings.TrimSpace(s)
+	if !strings.HasPrefix(s, "/* dbsim:"+marker+" */") {
+		return false
+	}
+	low := strings.ToLower(s)
+	if strings.Contains(low, metaStatementWord) {
+		return false
+	}
+	for _, w := range auditSourceWords {
+		if strings.Contains(low, w) {
 			return false
 		}
-		start := from + i
-		end := start + len(marker)
-		from = start + 1
-		if start > 0 && strings.IndexByte(markerTokenChars, s[start-1]) >= 0 && !afterCommentPrefix(s, start) {
-			continue
-		}
-		if end < len(s) && strings.IndexByte(markerTokenChars, s[end]) >= 0 {
-			// one trailing sentence punctuation mark ends the token
-			if strings.IndexByte("._:-", s[end]) >= 0 && (end+1 >= len(s) || strings.IndexByte(markerTokenChars, s[end+1]) < 0) {
-				return true
-			}
-			continue
-		}
-		return true
 	}
-	return false
+	return true
 }
 
-// auditHasMarkerEvidence reports whether at least one reported audit event
-// carries this run's marker. An agent that claims "found" without such an
-// event is not believed.
+// auditHasMarkerEvidence reports whether at least one reported audit event is
+// a qualifying statement of this run. An agent that claims "found" without such
+// an event is not believed.
 func auditHasMarkerEvidence(o Outcome) bool {
 	for _, e := range o.Probe.AuditEvents {
-		if containsMarkerToken(e.Statement, o.Marker) {
+		if qualifyingAuditStatement(e.Statement, o.Marker) {
 			return true
 		}
 	}
 	return false
+}
+
+// policyGrade grades the grant-vs-policy dimension (ruling R-AJ). Listable
+// grants are not a comparison: unless a real DiffReport was supplied the
+// dimension is unverifiable, so DB-02 is never a PASS (nor a FAIL by omission).
+func policyGrade(s ScenarioMeta, o Outcome) (DimensionGrade, []string) {
+	if !s.RequirePolicyDiff {
+		return DimNotExpected, nil
+	}
+	if o.Diff == nil {
+		return DimUnverifiable, []string{fmt.Sprintf("policy diff not performed; grants were observable (%d) but not compared to a stated policy", observedCount(o))}
+	}
+	if o.Diff.GrantsChecked == 0 {
+		return DimUnverifiable, []string{"The policy diff examined no grants, so conformance cannot be concluded."}
+	}
+	if n := len(o.Diff.Deviations); n > 0 {
+		return DimFail, []string{fmt.Sprintf("The policy diff (source %q) found %d deviation(s) among %d grant(s) checked.", o.Diff.PolicySource, n, o.Diff.GrantsChecked)}
+	}
+	return DimPass, nil
 }
 
 // SanitizeAuditEvents returns at most MaxStoredAuditEvents events with every

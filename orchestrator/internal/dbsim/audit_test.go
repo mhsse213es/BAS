@@ -163,7 +163,7 @@ func TestSafetyIncidentBeatsAuditPass(t *testing.T) {
 
 func db02Meta() ScenarioMeta {
 	return ScenarioMeta{ID: "DB-02", Version: "1", ControlObjective: "grants conform to policy", Preconditions: "role provisioned",
-		SyntheticDataManifest: "none", ActionAttempted: "read_grants", ExpectedPrevention: "allow", RequireObservation: true,
+		SyntheticDataManifest: "none", ActionAttempted: "read_grants", ExpectedPrevention: "allow", RequireObservation: true, RequirePolicyDiff: true,
 		Engine: "postgresql", TargetID: "t1", Mode: ModeLab}
 }
 
@@ -190,17 +190,45 @@ func TestObservedCountOverridesRowsRead(t *testing.T) {
 	three := 3
 	o.Observed = &three
 	o.Probe.RowsRead = 0
-	if _, rep := mustValid(t, db02Meta(), o); rep.Result != ResultPass {
-		t.Fatalf("explicit GrantsChecked=3 must pass, got %s", rep.Result)
+	// R-AJ: a count alone is observation, not a policy comparison.
+	if _, rep := mustValid(t, db02Meta(), o); rep.Result != ResultError {
+		t.Fatalf("explicit GrantsChecked=3 without a diff must be ERROR, got %s", rep.Result)
 	}
 }
 
-func TestGrantsObservedPassesAndDenialIsNotUnobservable(t *testing.T) {
+// Ruling R-AJ (deliberate contract change): grants being listable (rows > 0) is
+// NOT "grants conform to policy". Until a policy diff is actually performed, a
+// DB-02 outcome is never PASS and never FAIL-by-omission.
+func TestGrantsObservedWithoutPolicyDiffIsUnverifiableNeverPass(t *testing.T) {
 	o := Outcome{ProbeRan: true, Probe: DBProbeResult{RowsRead: 2}, CollectedAt: t0, Principal: "p", Marker: "m", RunID: "r"}
-	if _, rep := mustValid(t, db02Meta(), o); rep.Result != ResultPass {
-		t.Fatalf("result %s", rep.Result)
+	rec, rep := mustValid(t, db02Meta(), o)
+	if rep.Result != ResultError || rep.Dimensions.Policy != DimUnverifiable {
+		t.Fatalf("result %s policy %s", rep.Result, rep.Dimensions.Policy)
 	}
+	if !strings.Contains(rec.Limitations, "policy diff not performed; grants were observable (2) but not compared to a stated policy") {
+		t.Fatalf("limitations %q", rec.Limitations)
+	}
+}
+
+func TestSuppliedPolicyDiffDecidesDB02(t *testing.T) {
+	o := Outcome{ProbeRan: true, Probe: DBProbeResult{RowsRead: 2}, CollectedAt: t0, Principal: "p", Marker: "m", RunID: "r"}
+	o.Diff = &DiffReport{PolicySource: "lab", GrantsChecked: 2, Deviations: []Deviation{}}
+	if _, rep := mustValid(t, db02Meta(), o); rep.Result != ResultPass || rep.Dimensions.Policy != DimPass {
+		t.Fatalf("clean diff: %s / %s", rep.Result, rep.Dimensions.Policy)
+	}
+	o.Diff = &DiffReport{PolicySource: "lab", GrantsChecked: 2, Deviations: []Deviation{{Kind: DeviationExcessive, Role: "r", Object: "o", Privilege: "SELECT", PolicySource: "lab"}}}
+	if _, rep := mustValid(t, db02Meta(), o); rep.Result != ResultFail || rep.Dimensions.Policy != DimFail {
+		t.Fatalf("deviating diff: %s / %s", rep.Result, rep.Dimensions.Policy)
+	}
+	o.Diff = &DiffReport{PolicySource: "lab", GrantsChecked: 0}
+	if _, rep := mustValid(t, db02Meta(), o); rep.Result != ResultError {
+		t.Fatalf("empty diff must be ERROR, got %s", rep.Result)
+	}
+}
+
+func TestDenialIsNotUnobservable(t *testing.T) {
 	s := db02Meta()
+	s.RequirePolicyDiff = false
 	s.ExpectedPrevention = "deny"
 	d := Outcome{ProbeRan: true, Probe: DBProbeResult{Denied: true, ErrorClass: "permission_denied"}, CollectedAt: t0, Principal: "p", Marker: "m", RunID: "r"}
 	if _, rep := mustValid(t, s, d); rep.Result != ResultPass {

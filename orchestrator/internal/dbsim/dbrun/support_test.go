@@ -49,7 +49,7 @@ func labMeta(scenarioID string, spec dbsim.DBProbeSpec) dbsim.ScenarioMeta {
 		Preconditions: "dbsim lab stack up", SyntheticDataManifest: "synthetic lab data only",
 		ActionAttempted: "named probe " + spec.ProbeID, ExpectedPrevention: e.prevention,
 		ExpectDetection: e.detection, ExpectResponse: e.detection,
-		ExpectAudit: e.audit, ExpectAuditConfig: e.auditCfg, RequireObservation: e.requireObs,
+		ExpectAudit: e.audit, ExpectAuditConfig: e.auditCfg, RequireObservation: e.requireObs, RequirePolicyDiff: e.requireObs,
 		Engine: spec.Engine, TargetID: spec.TargetID, Mode: spec.Mode,
 	}
 }

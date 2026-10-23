@@ -56,6 +56,9 @@ type Dimensions struct {
 	// Audit grades the target's own audit coverage/evidence (DB-04); it is
 	// DimNotExpected for scenarios that do not expect it.
 	Audit DimensionGrade `json:"audit,omitempty"`
+	// Policy grades the grant-vs-policy comparison (DB-02); DimNotExpected
+	// elsewhere.
+	Policy DimensionGrade `json:"policy,omitempty"`
 }
 
 // MatchGrade is the correlator's marker-match confidence (Task 12 produces it).
@@ -92,6 +95,10 @@ type ScenarioMeta struct {
 	// account could not see the object, so it can never be graded as a pass
 	// (DB-02: a catalog the account cannot read looks exactly like a clean one).
 	RequireObservation bool `json:"requireObservation,omitempty"`
+	// RequirePolicyDiff: the expectation is "grants conform to a stated policy"
+	// (DB-02). Listable grants are not a comparison: without Outcome.Diff the
+	// policy dimension is unverifiable and the run is never a PASS (ruling R-AJ).
+	RequirePolicyDiff bool `json:"requirePolicyDiff,omitempty"`
 }
 
 // Correlation is caller-supplied (the Task 12 correlator will produce it).
@@ -155,9 +162,26 @@ type Outcome struct {
 	// the DiffReport.GrantsChecked). It overrides Probe.RowsRead for the
 	// RequireObservation guard.
 	Observed *int
+	// Diff is a policy diff that was actually performed (DiffReport from Report).
+	// Nothing fabricates one: nil means "not performed". When set, its
+	// GrantsChecked is the observation count and its Deviations decide the
+	// policy dimension.
+	Diff *DiffReport
 	// Limitations are extra caller-supplied limitation lines (redacted when
 	// rendered), for example "agent row counts disagree".
 	Limitations []string
+}
+
+// observedCount is the number of items observed: the performed diff's
+// GrantsChecked, else the explicit Observed, else the probe's row count.
+func observedCount(o Outcome) int {
+	switch {
+	case o.Diff != nil:
+		return o.Diff.GrantsChecked
+	case o.Observed != nil:
+		return *o.Observed
+	}
+	return o.Probe.RowsRead
 }
 
 // unobservable returns a non-empty reason when the scenario requires a
@@ -167,11 +191,7 @@ func unobservable(s ScenarioMeta, o Outcome) string {
 	if !s.RequireObservation || !o.ProbeRan || o.Probe.Denied || o.ExecutionError != "" || probeErrored(o) {
 		return ""
 	}
-	n := o.Probe.RowsRead
-	if o.Observed != nil {
-		n = *o.Observed
-	}
-	if n > 0 {
+	if observedCount(o) > 0 {
 		return ""
 	}
 	return "no grants observed: account may lack catalog visibility"
@@ -255,7 +275,7 @@ type graded struct {
 //
 // A scenario that expects nothing at all is ERROR, never a vacuous PASS.
 func grade(s ScenarioMeta, o Outcome) graded {
-	g := graded{Dims: Dimensions{DimNotExpected, DimNotExpected, DimNotExpected, DimNotExpected, DimNotExpected}}
+	g := graded{Dims: Dimensions{DimNotExpected, DimNotExpected, DimNotExpected, DimNotExpected, DimNotExpected, DimNotExpected}}
 	enf := enforcementOf(o)
 
 	switch s.ExpectedPrevention {
@@ -285,6 +305,7 @@ func grade(s ScenarioMeta, o Outcome) graded {
 	}
 
 	g.Dims.Audit, _ = auditGrade(s, o)
+	g.Dims.Policy, _ = policyGrade(s, o)
 	unobs := unobservable(s, o)
 	if unobs != "" && g.Dims.Prevention != DimNotExpected {
 		// An empty observation proves neither allow nor deny.
@@ -316,7 +337,7 @@ func grade(s ScenarioMeta, o Outcome) graded {
 	case unobs != "":
 		g.Result, g.Reason = ResultError, "unobservable: "+unobs
 	default:
-		all := []DimensionGrade{g.Dims.Prevention, g.Dims.Detection, g.Dims.Response, g.Dims.Classification, g.Dims.Audit}
+		all := []DimensionGrade{g.Dims.Prevention, g.Dims.Detection, g.Dims.Response, g.Dims.Classification, g.Dims.Audit, g.Dims.Policy}
 		var fail, unver, skipped, pass int
 		for _, d := range all {
 			switch d {
@@ -442,6 +463,8 @@ func ToRecord(s ScenarioMeta, o Outcome) (dlpreport.Record, error) {
 	}
 	_, auditLims := auditGrade(s, o)
 	lims = append(lims, auditLims...)
+	_, policyLims := policyGrade(s, o)
+	lims = append(lims, policyLims...)
 	lims = append(lims, o.Limitations...)
 	if u := unobservable(s, o); u != "" {
 		lims = append(lims, "Observation empty ("+u+"): an empty result is unobservable, so the run is graded ERROR, never PASS.")
@@ -520,6 +543,8 @@ type evidence struct {
 	AuditStatus        string              `json:"auditStatus,omitempty"`
 	AuditEvents        []DBProbeAuditEvent `json:"auditEvents,omitempty"`
 	AuditEventsDropped int                 `json:"auditEventsDropped,omitempty"`
+	// PolicyDiff is the performed diff, when there was one.
+	PolicyDiff *DiffReport `json:"policyDiff,omitempty"`
 }
 
 // Redact is the exported form of the defensive redaction pass, for the wiring
@@ -555,6 +580,7 @@ func buildEvidence(o Outcome) evidence {
 	cstatus, cinc := cleanupState(o)
 	auditEvents, auditDropped := SanitizeAuditEvents(o.Probe.AuditEvents)
 	return evidence{
+		PolicyDiff:  o.Diff,
 		AuditStatus: redact(o.Probe.AuditStatus), AuditEvents: auditEvents, AuditEventsDropped: auditDropped,
 		CleanupStatus: redact(cstatus), SafetyIncident: cinc,
 		ProbeRan: o.ProbeRan, Denied: o.Probe.Denied, RowsRead: o.Probe.RowsRead,

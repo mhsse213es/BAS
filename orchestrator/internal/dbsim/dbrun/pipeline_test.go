@@ -231,9 +231,16 @@ func TestPipeline_FakeAgentFakeConnector_DB02ZeroGrantsIsNeverPass(t *testing.T)
 	in := input("dbsim-db02-excessive-grants", "read_grants", okExec(0))
 	n := 7
 	in.GrantsChecked = &n
-	if ev := mustEval(t, &fakeConn{reply: alertsReply(alert)}, in); ev.Result != dbsim.ResultPass {
-		t.Fatalf("DiffReport.GrantsChecked=7 should pass, got %s (%s)", ev.Result, ev.Report.Reason)
+	// R-AJ: a count without a performed diff is still ERROR (grants listable, not compared).
+	ev = mustEval(t, &fakeConn{reply: alertsReply(alert)}, in)
+	if ev.Result != dbsim.ResultError || !strings.Contains(ev.Record.Limitations, "policy diff not performed; grants were observable (7) but not compared to a stated policy") {
+		t.Fatalf("count without diff: %s (%s) %q", ev.Result, ev.Report.Reason, ev.Record.Limitations)
 	}
+	in.Diff = &dbsim.DiffReport{PolicySource: "lab", GrantsChecked: 7, Deviations: []dbsim.Deviation{}}
+	if ev := mustEval(t, &fakeConn{reply: alertsReply(alert)}, in); ev.Result != dbsim.ResultPass {
+		t.Fatalf("a supplied clean diff should pass, got %s (%s)", ev.Result, ev.Report.Reason)
+	}
+	in.Diff = nil
 	zero := 0
 	in.GrantsChecked = &zero
 	in.Exec = okExec(9)
