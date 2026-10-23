@@ -30,10 +30,10 @@ func breadthInventory() *K8sInventory {
 			breadthSecrets: {{Resources: []string{"secrets"}, Verbs: []string{"get"}}},
 		},
 		Permissions: []*CloudPermission{
-			{Source: sa("reader"), Target: reader, Action: "k8s:bind", Attributes: map[string]string{"binding": "reader-b", "bindingKind": "rolebindings", "namespace": "default"}},
-			{Source: sa("cluster"), Target: cget, Action: "k8s:bind", Attributes: map[string]string{"binding": "cluster-b", "bindingKind": "clusterrolebindings"}},
-			{Source: sa("writer"), Target: writer, Action: "k8s:bind", Attributes: map[string]string{"binding": "writer-b", "bindingKind": "rolebindings", "namespace": "default"}},
-			{Source: sa("secrets"), Target: secrets, Action: "k8s:bind", Attributes: map[string]string{"binding": "secrets-b", "bindingKind": "rolebindings", "namespace": "default"}},
+			{Source: sa("reader"), Target: reader, Action: "k8s:bind", Attributes: map[string]string{"binding": "reader-b", "bindingKind": "RoleBinding", "namespace": "default"}},
+			{Source: sa("cluster"), Target: cget, Action: "k8s:bind", Attributes: map[string]string{"binding": "cluster-b", "bindingKind": "ClusterRoleBinding"}},
+			{Source: sa("writer"), Target: writer, Action: "k8s:bind", Attributes: map[string]string{"binding": "writer-b", "bindingKind": "RoleBinding", "namespace": "default"}},
+			{Source: sa("secrets"), Target: secrets, Action: "k8s:bind", Attributes: map[string]string{"binding": "secrets-b", "bindingKind": "RoleBinding", "namespace": "default"}},
 		},
 	}
 }

@@ -46,7 +46,7 @@ func K8sServiceAccountBreadthFindings(inv *K8sInventory, rep *K8sDiscoveryReport
 			a = &acc{namespaces: map[string]bool{}}
 			bySubject[p.Source.CanonicalID] = a
 		}
-		if p.Attributes["bindingKind"] == "clusterrolebindings" {
+		if p.Attributes["bindingKind"] == "ClusterRoleBinding" {
 			a.clusterWide = true
 		} else if ns := p.Attributes["namespace"]; ns != "" {
 			a.namespaces[ns] = true
