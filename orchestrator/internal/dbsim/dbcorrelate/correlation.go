@@ -1,4 +1,4 @@
-package dbsim
+package dbcorrelate
 
 import (
 	"context"
@@ -10,19 +10,25 @@ import (
 	"strings"
 	"time"
 
+	"github.com/audspect/bas/internal/dbsim"
 	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/dlpreport"
 )
 
-// Match is the correlator's confidence grade. It is the same vocabulary the
-// report layer stores (MatchGrade); the aliases below give the correlator its
-// own names for the two grades whose report names are longer.
-type Match = MatchGrade
+// Package dbcorrelate lives apart from internal/dbsim on purpose (ruling
+// R-AG): detectverify imports internal/verification, whose tests reach
+// internal/db and therefore internal/dbsim. dbsim must never import
+// detectverify or this package.
+
+// Match is the correlator's confidence grade. report.go (package dbsim) names
+// are canonical; these are thin aliases only.
+type Match = dbsim.MatchGrade
 
 const (
-	MatchExact  = MatchExactMarker
-	MatchStrong = MatchStrongContextual
-	// MatchAmbiguous and MatchNone are shared with report.go.
+	MatchExact     = dbsim.MatchExactMarker
+	MatchStrong    = dbsim.MatchStrongContextual
+	MatchAmbiguous = dbsim.MatchAmbiguous
+	MatchNone      = dbsim.MatchNone
 )
 
 // MaxTrustedSkew is the clock-skew allowance above which latency and the
@@ -52,8 +58,8 @@ type Result struct {
 }
 
 // ToCorrelation converts the result into the report layer's input.
-func (r Result) ToCorrelation() Correlation {
-	return Correlation{
+func (r Result) ToCorrelation() dbsim.Correlation {
+	return dbsim.Correlation{
 		Evaluated: true, Telemetry: r.Telemetry, Response: r.Response,
 		Latency: r.Latency, Match: r.Match, Alerts: len(r.Alerts), Limitations: r.Limitations,
 	}
@@ -98,14 +104,56 @@ func containsToken(s, tok string) bool {
 
 // hasForeignMarker reports whether raw carries a bas-dbsim marker token other
 // than ours.
-func hasForeignMarker(raw, ours string) bool {
-	for _, t := range reAnyMarker.FindAllString(raw, -1) {
-		t = strings.TrimRight(t, "._:-")
-		if t != strings.TrimRight(ours, "._:-") {
+func hasForeignMarker(texts []string, ours string) bool {
+	for _, raw := range texts {
+		for _, t := range reAnyMarker.FindAllString(raw, -1) {
+			t = strings.TrimRight(t, "._:-")
+			if t != strings.TrimRight(ours, "._:-") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// anyToken reports whether tok occurs as a whole token in any of texts.
+func anyToken(texts []string, tok string) bool {
+	for _, s := range texts {
+		if containsToken(s, tok) {
 			return true
 		}
 	}
 	return false
+}
+
+// alertTexts returns the DECODED string values of the alert JSON (so a marker
+// after a JSON "\n" escape is judged on the real newline, not on the letter n).
+// Only values are searched, never object keys: a marker is statement content,
+// and a key can be chosen by whoever shapes the document. If the raw data is
+// not valid JSON it is searched as plain text.
+func alertTexts(raw json.RawMessage) []string {
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return []string{string(raw)}
+	}
+	var out []string
+	var walk func(any)
+	walk = func(x any) {
+		switch t := x.(type) {
+		case string:
+			out = append(out, t)
+		case []any:
+			for _, e := range t {
+				walk(e)
+			}
+		case map[string]any:
+			for _, e := range t {
+				walk(e)
+			}
+		}
+	}
+	walk(v)
+	return out
 }
 
 func rawTruncated(raw json.RawMessage) bool {
@@ -127,18 +175,18 @@ const (
 
 // classify decides what one alert proves for THIS run.
 func classify(a detectverify.MatchedAlert, in CorrelationInput) alertClass {
-	raw := string(a.RawJSON)
-	if containsToken(raw, in.Marker) {
+	texts := alertTexts(a.RawJSON)
+	if anyToken(texts, in.Marker) {
 		return classOurs
 	}
 	if rawTruncated(a.RawJSON) {
 		// The marker may lie beyond the cut: cannot attribute either way.
 		return classUnattributed
 	}
-	if hasForeignMarker(raw, in.Marker) {
+	if hasForeignMarker(texts, in.Marker) {
 		return classForeign
 	}
-	if in.Principal != "" && in.RunID != "" && containsToken(raw, in.Principal) && containsToken(raw, in.RunID) {
+	if in.Principal != "" && in.RunID != "" && anyToken(texts, in.Principal) && anyToken(texts, in.RunID) {
 		return classStrong
 	}
 	return classUnattributed

@@ -1,7 +1,6 @@
 package dbsim
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/audspect/bas/internal/dlpreport"
@@ -62,23 +61,5 @@ func TestRU_DelayedWithExactMarkerIsFail(t *testing.T) {
 	o.Corr = c
 	if got := ToRunResult(meta(), o); got != ResultFail {
 		t.Fatalf("got %s want FAIL (outside SLA window)", got)
-	}
-}
-
-// End to end: the correlator's output flows through the report layer.
-func TestRU_CorrelatorResultFeedsGrade(t *testing.T) {
-	good := Result{Match: MatchExact, Telemetry: dlpreport.TelemetryPresent, Response: dlpreport.ResponseNotTested, Alerts: nil}
-	o := denied()
-	o.Corr = good.ToCorrelation()
-	if got := ToRunResult(meta(), o); got != ResultPass {
-		t.Fatalf("exact+present: %s", got)
-	}
-	amb := Result{Match: MatchAmbiguous, Telemetry: dlpreport.TelemetryUnverifiable, Response: dlpreport.ResponseNotTested}
-	o.Corr = amb.ToCorrelation()
-	if got := ToRunResult(meta(), o); got != ResultError {
-		t.Fatalf("ambiguous: %s", got)
-	}
-	if !strings.Contains(string(MatchAmbiguous), "ambiguous") {
-		t.Fatal("unexpected grade vocabulary")
 	}
 }

@@ -1,4 +1,4 @@
-package dbsim
+package dbcorrelate
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/audspect/bas/internal/dbsim"
 	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/dlpreport"
 )
@@ -398,7 +399,62 @@ func TestAlertOutsideQueriedRangeIgnored(t *testing.T) {
 func TestResultToCorrelationFeedsReport(t *testing.T) {
 	r, _ := Correlate(context.Background(), fixed(corrAlert("a", corrT0, corrMarkerA)), corrIn())
 	c := r.ToCorrelation()
-	if !c.Evaluated || c.Match != MatchExactMarker || c.Alerts != 1 || detectionGrade(c) != DimPass {
+	if !c.Evaluated || c.Match != dbsim.MatchExactMarker || c.Alerts != 1 {
 		t.Fatalf("%+v", c)
+	}
+}
+
+func ruMeta() dbsim.ScenarioMeta {
+	return dbsim.ScenarioMeta{
+		ID: "DB-01", Version: "1", ControlObjective: "o", Preconditions: "p", SyntheticDataManifest: "m",
+		ActionAttempted: "a", ExpectedPrevention: "deny", ExpectDetection: true,
+		Engine: "postgresql", TargetID: "t1", Mode: dbsim.ModeLab,
+	}
+}
+
+// End to end: the correlator's output flows through the report layer.
+func TestCorrelatorResultFeedsGrade(t *testing.T) {
+	o := dbsim.Outcome{ProbeRan: true, Probe: dbsim.DBProbeResult{Denied: true, ErrorClass: "permission_denied"},
+		CollectedAt: corrT0, Principal: "app_ro", Marker: "m1", RunID: "r1"}
+	good := Result{Match: MatchExact, Telemetry: dlpreport.TelemetryPresent, Response: dlpreport.ResponseNotTested}
+	o.Corr = good.ToCorrelation()
+	if got := dbsim.ToRunResult(ruMeta(), o); got != dbsim.ResultPass {
+		t.Fatalf("exact+present: %s", got)
+	}
+	amb := Result{Match: MatchAmbiguous, Telemetry: dlpreport.TelemetryUnverifiable, Response: dlpreport.ResponseNotTested}
+	o.Corr = amb.ToCorrelation()
+	if got := dbsim.ToRunResult(ruMeta(), o); got != dbsim.ResultError {
+		t.Fatalf("ambiguous: %s", got)
+	}
+}
+
+func TestMarkerAfterDecodedNewlineMatches(t *testing.T) {
+	raw := json.RawMessage(`{"source":{"message":"SELECT 1\n` + corrMarkerA + `\nmore"}}`)
+	a := detectverify.MatchedAlert{AlertID: "n", Timestamp: corrT0, RawJSON: raw}
+	r, _ := Correlate(context.Background(), fixed(a), corrIn())
+	if r.Match != MatchExact {
+		t.Fatalf("got %s", r.Match)
+	}
+}
+
+func TestLongerTokenStillRejectedAfterDecoding(t *testing.T) {
+	a := corrAlert("p", corrT0, "x\n"+corrMarkerA+"ff\n")
+	r, _ := Correlate(context.Background(), fixed(a), corrIn())
+	if r.Match == MatchExact {
+		t.Fatal("longer token matched")
+	}
+}
+
+// Decision: only JSON string VALUES are searched, never object keys.
+func TestMarkerInJSONKeyIsNotCredited(t *testing.T) {
+	raw := json.RawMessage(`{"source":{"` + corrMarkerA + `":"x"}}`)
+	a := detectverify.MatchedAlert{AlertID: "k", Timestamp: corrT0, RawJSON: raw}
+	r, _ := Correlate(context.Background(), fixed(a), corrIn())
+	if r.Match == MatchExact {
+		t.Fatal("marker in a key credited")
+	}
+	rv, _ := Correlate(context.Background(), fixed(corrAlert("v", corrT0, corrMarkerA)), corrIn())
+	if rv.Match != MatchExact {
+		t.Fatalf("value: %s", rv.Match)
 	}
 }
