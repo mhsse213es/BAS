@@ -23,9 +23,12 @@ func (a *Adapter) fixtureReadStmt(def dbprobe.ProbeDef, spec dbprobe.DBProbeSpec
 	if mode != dbprobe.ModeLab {
 		return "", nil, 0, fmt.Errorf("dbprobe/mysql: fixture-aware probe %q refused outside lab mode", def.ID)
 	}
-	fx, tbl, err := a.Resolve(spec.Params[def.FixtureParam])
+	fx, tbl, err := a.Resolve(dbprobe.FixtureTableFor(def, spec))
 	if err != nil {
 		return "", nil, 0, fmt.Errorf("dbprobe/mysql: %w", err)
+	}
+	if def.RequiredFixture != "" && fx.Kind != def.RequiredFixture {
+		return "", nil, 0, errors.New("dbprobe/mysql: the active fixture is not the one this probe requires")
 	}
 	if spec.FixtureID != fx.Kind {
 		return "", nil, 0, errors.New("dbprobe/mysql: spec fixture does not match the active fixture")

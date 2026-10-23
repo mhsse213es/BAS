@@ -254,7 +254,7 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 	// 6b. A fixture-aware probe addresses the run's seeded fixture through the
 	// adapter (spec R-Z); an adapter that cannot hold an active fixture cannot
 	// run it, and that is known before any connection.
-	if def.FixtureParam != "" {
+	if dbprobe.NeedsFixtureBinding(def) {
 		if _, ok := ad.(dbprobe.FixtureBinder); !ok {
 			return fail(dbErrAdapterUnsupported, fmt.Sprintf("adapter for %q cannot bind a fixture for probe %q", spec.Engine, spec.ProbeID))
 		}
@@ -337,7 +337,7 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 	// teardown on every path, including a panic, so no probe can address it once
 	// it is being dropped.
 	runBound := func(fx dbprobe.Fixture) (DBProbeOutcome, error) {
-		if def.FixtureParam != "" {
+		if dbprobe.NeedsFixtureBinding(def) {
 			b, ok := ad.(dbprobe.FixtureBinder)
 			if !ok {
 				return runtimeErr(dbErrFixture, "fixture bind", errors.New("adapter cannot bind a fixture"))

@@ -121,6 +121,14 @@ type Adapter struct {
 	auditNotes   []string
 	auditErr     string            // discovery hit a server timeout/shutdown: audit status is error
 	auditSync    dbprobe.AuditSync // injectable clock/sleep for the catch-up wait (zero = real)
+
+	// target is where Connect connected (never the password): auth_after_revoke
+	// opens NEW connections to it as the throwaway account. dial is the injectable
+	// seam for those connections (nil = real driver); acct tracks the throwaway
+	// account this adapter created, so Cleanup drops exactly it.
+	target dbprobe.ConnectionConfig
+	dial   func(ctx context.Context, cfg dbprobe.ConnectionConfig) (session, error)
+	acct   acctState
 }
 
 // String and GoString never print connection details or secrets.
@@ -239,6 +247,8 @@ func (a *Adapter) Connect(ctx context.Context, cfg dbprobe.ConnectionConfig) err
 	a.mode = cfg.Mode
 	a.scrub = scrub
 	a.notes = notes
+	a.target = cfg
+	a.target.Password = "" // new connections use the throwaway account's own credential
 	// Find out what audit evidence this target can give us. No usable source
 	// is not a failure; a broken connection is.
 	if err := a.discoverAudit(ctx); err != nil {
@@ -497,8 +507,8 @@ func truthy(v any) bool {
 // cache; it issues no SQL.
 func (a *Adapter) Capabilities() dbprobe.Capabilities {
 	c := dbprobe.Capabilities{
-		ProbeIDs: []string{"auth_check", "bounded_synthetic_read", "read_audit_config", "read_grants", "read_restricted_table",
-			"read_roles", "suspicious_read"},
+		ProbeIDs: []string{"auth_after_revoke", "auth_check", "bounded_synthetic_read", "read_audit_config", "read_classified_fixture",
+			"read_grants", "read_restricted_table", "read_roles", "suspicious_read"},
 		MarkerInAppName:   false, // no per-probe session attribute: attributes are connect-time only
 		MarkerInQueryText: true,
 		// The marker can only reach an audit record through the statement
@@ -571,6 +581,9 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 		return res, err
 	}
 	mode := a.effectiveMode(spec)
+	if spec.ProbeID == dbprobe.ProbeAuthAfterRevoke {
+		return a.runAuthAfterRevoke(ctx, real, spec, mode)
+	}
 	var (
 		sqlText string
 		args    []any
@@ -581,7 +594,7 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 	// param-supplied schema). Its SQL is a SELECT, so the transaction is always
 	// READ ONLY whatever the probe's class is; it asks for rowCap+1 rows so a
 	// truncation is observable, and keeps at most rowCap.
-	isFixtureRead := real.FixtureParam != ""
+	isFixtureRead := dbprobe.IsFixtureRead(real)
 	txClass, queryMax := real.Class, spec.Limits.MaxRows+1
 	if isFixtureRead {
 		sqlText, args, rowCap, err = a.fixtureReadStmt(real, spec, mode)
@@ -936,6 +949,16 @@ func (a *Adapter) InspectFixture(ctx context.Context, f dbprobe.Fixture) ([]stri
 	if len(rows) > 0 {
 		out = append(out, "user:"+user)
 	}
+	if a.acct.mayExist && a.acct.name != "" {
+		// The throwaway login account this adapter created for auth_after_revoke.
+		rows, err = a.s.Query(ctx, sqlUserExists, 1, a.acct.name)
+		if err != nil {
+			return nil, a.wrap("inspect", err)
+		}
+		if len(rows) > 0 {
+			out = append(out, "user:"+a.acct.name)
+		}
+	}
 	return out, nil
 }
 
@@ -978,6 +1001,21 @@ func (a *Adapter) Cleanup(ctx context.Context, f dbprobe.Fixture) (dbprobe.Clean
 		out.Residual = append(out.Residual, "user:"+user)
 	} else {
 		out.Removed = append(out.Removed, "user:"+user)
+	}
+	if a.acct.mayExist && a.acct.name != "" {
+		// Exactly the account this adapter created for this run, by name, and only
+		// when its CREATE was not refused: never a pattern, never another account.
+		lit, lerr := userLit(a.acct.name)
+		if lerr != nil {
+			errs = append(errs, lerr.Error())
+		} else if err := a.s.Exec(ctx, "DROP USER IF EXISTS "+lit); err != nil {
+			errs = append(errs, a.wrap("cleanup", err).Error())
+		}
+		if rows, err := a.s.Query(ctx, sqlUserExists, 1, a.acct.name); err != nil || len(rows) > 0 {
+			out.Residual = append(out.Residual, "user:"+a.acct.name)
+		} else {
+			out.Removed = append(out.Removed, "user:"+a.acct.name)
+		}
 	}
 	if ctx.Err() != nil {
 		a.markBroken()
