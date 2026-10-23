@@ -31,6 +31,10 @@ const (
 	MatchNone      = dbsim.MatchNone
 )
 
+// ResponseNotAssessedNote is the limitation the correlator always records:
+// it proves telemetry detection only.
+const ResponseNotAssessedNote = "Response was not assessed: the correlator proves telemetry detection only, not alert triage, case creation or remediation."
+
 // MaxTrustedSkew is the clock-skew allowance above which latency and the
 // delayed/on-time boundary are no longer trustworthy (R1, R7). Normal NTP-
 // synchronised hosts are well inside it.
@@ -71,6 +75,22 @@ var reAnyMarker = regexp.MustCompile(`bas-dbsim:[A-Za-z0-9._:-]+`)
 
 func inCharset(b byte) bool { return strings.IndexByte(markerCharset, b) >= 0 }
 
+// markerCommentPrefix is what the agent writes immediately before the marker:
+// the statement's leading comment is "/* dbsim:<marker> */"
+// (agent/dbprobe.MarkerComment), so in a real alert the marker is preceded by
+// "dbsim:", whose ':' is itself a token character.
+const markerCommentPrefix = "dbsim:"
+
+// afterMarkerCommentPrefix reports whether s[:start] ends with the comment
+// prefix as its own word (not glued to a longer identifier).
+func afterMarkerCommentPrefix(s string, start int) bool {
+	p := start - len(markerCommentPrefix)
+	if p < 0 || s[p:start] != markerCommentPrefix {
+		return false
+	}
+	return p == 0 || !inCharset(s[p-1])
+}
+
 // containsToken reports whether tok occurs in s as a whole token: not preceded
 // by a token character, and not followed by one (a single trailing sentence
 // punctuation mark . : - _ is tolerated when it ends the token). Case
@@ -87,7 +107,7 @@ func containsToken(s, tok string) bool {
 		start := from + i
 		end := start + len(tok)
 		from = start + 1
-		if start > 0 && inCharset(s[start-1]) {
+		if start > 0 && inCharset(s[start-1]) && !afterMarkerCommentPrefix(s, start) {
 			continue
 		}
 		if end < len(s) && inCharset(s[end]) {
@@ -203,7 +223,7 @@ type lookup struct {
 func Correlate(ctx context.Context, c detectverify.Connector, in CorrelationInput) (Result, error) {
 	res := Result{Match: MatchNone, Telemetry: dlpreport.TelemetryUnverifiable, Response: dlpreport.ResponseNotTested, TimingConfidence: "normal"}
 	var lims []string
-	lims = append(lims, "Response was not assessed: the correlator proves telemetry detection only, not alert triage, case creation or remediation.")
+	lims = append(lims, ResponseNotAssessedNote)
 	finish := func(err error) (Result, error) {
 		res.Limitations = strings.Join(lims, " ")
 		return res, err
