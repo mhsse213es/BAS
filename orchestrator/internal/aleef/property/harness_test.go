@@ -53,7 +53,7 @@ type toy struct {
 func newToy(flaws ...string) (*toy, *httptest.Server) {
 	t := &toy{flaws: map[string]bool{}, tokens: map[string][2]string{
 		"tok-alice": {"cust-a", "member"}, "tok-bob": {"cust-b", "member"},
-		"tok-carol": {"cust-c", "checker"}, "tok-dave": {"cust-d", "admin"},
+		"tok-carol": {"cust-c", "checker"}, "tok-dave": {"cust-d", "admin"}, "tok-erin": {"cust-e", "checker"},
 	}}
 	for _, f := range flaws {
 		t.flaws[f] = true
@@ -68,7 +68,7 @@ func (t *toy) reset() {
 	t.items = map[string]*titem{}
 	t.keys = map[string]keyRec{}
 	t.seq = 0
-	for _, s := range []struct{ id, owner, who string }{{"item-a1", "cust-a", "alice"}, {"item-b1", "cust-b", "bob"}, {"item-c1", "cust-c", "carol"}, {"item-d1", "cust-d", "dave"}} {
+	for _, s := range []struct{ id, owner, who string }{{"item-a1", "cust-a", "alice"}, {"item-b1", "cust-b", "bob"}, {"item-c1", "cust-c", "carol"}, {"item-d1", "cust-d", "dave"}, {"item-e1", "cust-e", "erin"}} {
 		t.items[s.id] = &titem{ID: s.id, Owner: s.owner, Title: "ALEEF-CANARY-t-" + s.who, Status: "pending", Amount: 10}
 	}
 }
@@ -285,7 +285,7 @@ func (t *toy) action(w http.ResponseWriter, r *http.Request, cust, role, id, act
 	switch {
 	case act == "execute" && r.Method == "POST":
 		t.mu.Lock()
-		okState := it.Status == "authorized" || t.flaws["noauth"] || (t.flaws["revive"] && it.Status == "reversed")
+		okState := it.Status == "authorized" || t.flaws["noauth"] || (t.flaws["openexec"] && it.Status == "pending") || (t.flaws["revive"] && it.Status == "reversed")
 		if okState {
 			it.Status = "executed"
 		}
@@ -375,12 +375,13 @@ func toyAccounts() []model.Account {
 		{Name: "bob", CustomerID: "cust-b", TokenRef: "tok-bob", Role: "member"},
 		{Name: "carol", CustomerID: "cust-c", TokenRef: "tok-carol", Role: "checker"},
 		{Name: "dave", CustomerID: "cust-d", TokenRef: "tok-dave", Role: "admin"},
+		{Name: "erin", CustomerID: "cust-e", TokenRef: "tok-erin", Role: "checker"},
 	}
 }
 
 func toyFixture() fixture.Fixture {
 	f := fixture.Fixture{Name: "toy"}
-	objs := map[string]string{"alice": "item-a1", "bob": "item-b1", "carol": "item-c1", "dave": "item-d1"}
+	objs := map[string]string{"alice": "item-a1", "bob": "item-b1", "carol": "item-c1", "dave": "item-d1", "erin": "item-e1"}
 	for _, a := range toyAccounts() {
 		f.Identities = append(f.Identities, fixture.Identity{Name: a.Name, CustomerID: a.CustomerID, TokenRef: a.TokenRef, Role: a.Role})
 		f.Objects = append(f.Objects, fixture.Object{
@@ -499,7 +500,7 @@ func run(t *testing.T, ty *toy, srv *httptest.Server, tpl Template) runner.Repor
 	t.Helper()
 	r, err := runner.New(runner.Config{
 		BaseURL: srv.URL, Fixture: toyFixture(), State: ty, Reset: ty,
-		Secrets: secretMap{"tok-alice": "tok-alice", "tok-bob": "tok-bob", "tok-carol": "tok-carol", "tok-dave": "tok-dave"},
+		Secrets: secretMap{"tok-alice": "tok-alice", "tok-bob": "tok-bob", "tok-carol": "tok-carol", "tok-dave": "tok-dave", "tok-erin": "tok-erin"},
 		HTTP:    &http.Client{Timeout: 5 * time.Second},
 	})
 	if err != nil {

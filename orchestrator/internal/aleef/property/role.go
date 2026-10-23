@@ -83,7 +83,26 @@ func (r role1) Templates(ctx TemplateCtx) []Template {
 			"required_role": required, "object": p.obj.ID,
 		}
 		t.Oracle = oracle
-		out = append(out, finish(ctx, t, p.obj, r.id, "function_level"))
+		t = finish(ctx, t, p.obj, r.id, "function_level")
+		// Controls. Owner: an account holding the required role (or higher)
+		// performs the reserved operation on its own object. Negative: the
+		// unprivileged account performs a non-reserved read of its own object.
+		var oc *Template
+		for _, priv := range ownersWithObject(ctx, "") {
+			if roleRank(ctx.Model.Roles, priv.victim.Role) >= reqRank {
+				oc = actControl(ctx, t, op, "owner", "An account with role "+priv.victim.Role+" performs "+op.ID+".", priv.victim, priv.obj, nil, false)
+				break
+			}
+		}
+		var nc *Template
+		if rd, ok := baselineStep(ctx, op, p.victim, false); ok {
+			rd.ID, rd.Role = "control-negative", "attack"
+			nc = newControl(ctx, t, "negative", "Account "+p.victim.Name+" performs a non-reserved read.", "property_level", p.obj,
+				[]contract.Step{base, rd}, nil)
+		}
+		if ts, ok := withControls(t, oc, nc); ok {
+			out = append(out, ts...)
+		}
 	}
 	return out
 }

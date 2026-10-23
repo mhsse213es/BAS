@@ -180,5 +180,5 @@ func TestOwn3MassAssignmentFillsPrincipalFieldsWithOwner(t *testing.T) {
 }
 
 func ownerSuffix(victim string) string {
-	return map[string]string{"alice": "a", "bob": "b", "carol": "c", "dave": "d"}[victim]
+	return map[string]string{"alice": "a", "bob": "b", "carol": "c", "dave": "d", "erin": "e"}[victim]
 }

@@ -22,7 +22,7 @@
 //   - Output is deterministic: accounts, objects, operations and fields are
 //     visited in sorted order.
 //
-// Verdicts, soft failures and operator declarations
+// # Verdicts, soft failures and operator declarations
 //
 // The runner and grader decide FAIL/PASS from three signals: a protected
 // value (the fixture canary) in an attack response, any change between the
@@ -65,6 +65,49 @@
 //   - TemplateCtx.Limits: how many concurrent successes a reversible
 //     operation may have (P-RACE-1; operations classified money or notifying
 //     default to one).
+//
+// Controls. A finding may be marked verified only if two controls pass next
+// to it, against the same application, fixture and accounts:
+//
+//   - OwnerControl: the single graded request is the legitimate actor doing
+//     the legitimate thing. Expectation: running it through the executor
+//     gives Verdict Finding=No AND GradedSuccess is true for the final step's
+//     responses (ExpectSuccess). Failing means the environment or plumbing is
+//     broken, not that the application is safe.
+//   - NegativeControl: the same shape as the test with the violating element
+//     removed, which a correct application must allow. Expectation: Verdict
+//     Finding=No (inconclusive counts as a failed control) and, because the
+//     application must allow it, GradedSuccess is true as well.
+//
+// Both controls use OracleForbiddenValues with CleanIsEnforced: the verdict is
+// No when the final response is a clean 2xx (or a refusal) and holds none of
+// the control's ForbiddenValues; the runner's leak and state signals are
+// ignored (a legitimate write changes state, an owner sees its own canary).
+// The ExpectSuccess check is what turns a refusal into a failed control. Where
+// the test's oracle is a state diff or a count, the control cannot reuse it
+// (a legitimate write is itself a state change), so selectivity of the oracle
+// is shown only where a forbidden-value signal exists (ownership and
+// status-lie controls). The per-property rule is written at its builder:
+//
+//	P-OWN-1/2/3  owner acts on own object / attacker acts on attacker's own
+//	             object (DELETE operations are replaced by a read, so the
+//	             control never destroys the fixture)
+//	P-ROLE-1     privileged role performs the reserved operation / the
+//	             unprivileged identity performs a non-reserved read
+//	P-ROLE-2     owner uses the route under test / attacker uses it on its own
+//	P-AUTH-1     approval then execute (both controls have this shape: the
+//	             violating element is the missing approval)
+//	P-AUTH-2     owner modifies before any approval / approval then no tamper
+//	P-MC-1       a distinct approver approves / the next distinct approver
+//	             (or the same one when there is only one)
+//	P-IDEM-1/2   single request / replay with a new key (IDEM-1) or the same
+//	             key and body (IDEM-2)
+//	P-STATE-1    legitimate transition (execute) / reverse without executing
+//	P-STATE-2    reverse succeeds / status read of an unreversed object
+//	P-RACE-1     one request / at most the limit of concurrent requests
+//
+// A template whose controls cannot be built (no suitable account or object)
+// is not emitted.
 //
 // Method limitation. The contract supports GET, PATCH, POST and DELETE only;
 // operations with other methods (for example PUT) produce no templates.
@@ -128,6 +171,15 @@ type Template struct {
 	// RunnerStateValid is false when the runner's state-change finding must be
 	// ignored: a permitted success changes state too (P-RACE-1).
 	RunnerStateValid bool
+	// ExpectSuccess is set on control templates only: every graded exchange
+	// (every response to the final step) must be a real success, that is 2xx
+	// and not a soft failure (see GradedSuccess).
+	ExpectSuccess bool
+	// OwnerControl and NegativeControl are the verifier's controls. Every
+	// template produced by a property carries both; controls themselves carry
+	// neither. See the "Controls" section of the package documentation.
+	OwnerControl    *Template
+	NegativeControl *Template
 }
 
 // OracleKind says which rule decides a template's verdict, and so what the

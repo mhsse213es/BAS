@@ -104,6 +104,35 @@ func approver(ctx TemplateCtx, owner model.Account, role string) (model.Account,
 	return model.Account{}, false
 }
 
+// approveStep is the approval by a second identity as a co_actor setup step.
+func approveStep(ctx TemplateCtx, auth WorkflowStep, p pair, checker model.Account) (contract.Step, bool) {
+	_, path, body, ok := stepCall(ctx, auth, p.obj, 0)
+	if !ok {
+		return contract.Step{}, false
+	}
+	st := mkStep("setup-approval", "setup", checker.Name, methodOf(ctx, auth), path, body, "The approving party approves the object.")
+	st.CoActor = true
+	return st, true
+}
+
+// asAttack turns a prepared step into the control's graded step.
+func asAttack(st contract.Step, id string) contract.Step {
+	st.ID, st.Role, st.CoActor = id, "attack", false
+	return st
+}
+
+// approvers lists the accounts that can approve p's object: another customer,
+// with the approval step's role when it names one.
+func approvers(ctx TemplateCtx, owner model.Account, role string) []model.Account {
+	var out []model.Account
+	for _, a := range sortedAccounts(ctx) {
+		if a.CustomerID != owner.CustomerID && (role == "" || a.Role == role) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
 func flowTemplate(ctx TemplateCtx, prop, claim, desc string, p pair, steps []contract.Step, oracle OracleKind) Template {
 	t := Template{
 		Description:    desc,
@@ -147,9 +176,28 @@ func (a auth1) Templates(ctx TemplateCtx) []Template {
 	}
 	atk := mkStep("attack-skip-approval", "attack", p.victim.Name, ctx.Op.Method, path, body,
 		"The action is refused until its required approval has been given.")
-	return []Template{flowTemplate(ctx, a.id, "property_level",
+	t := flowTemplate(ctx, a.id, "property_level",
 		"Account "+p.victim.Name+" performs "+ctx.Op.ID+" without the required approval.", p,
-		[]contract.Step{base, atk}, OracleStateChange)}
+		[]contract.Step{base, atk}, OracleStateChange)
+	// Controls. The violating element is the missing approval, so both controls
+	// are the legitimate sequence: approval by a second identity, then execute.
+	auth, _ := ctx.Workflow.step(StepAuthorize)
+	checker, ok := approver(ctx, p.victim, auth.Role)
+	if !ok {
+		return nil
+	}
+	approve, ok := approveStep(ctx, auth, p, checker)
+	if !ok {
+		return nil
+	}
+	seq := []contract.Step{base, approve, asAttack(atk, "control-sequence")}
+	oc := newControl(ctx, t, "owner", "The owner performs "+ctx.Op.ID+" after the approval.", "property_level", p.obj, seq, nil)
+	nc := newControl(ctx, t, "negative", "Approval then "+ctx.Op.ID+" (the approval is present).", "property_level", p.obj, seq, nil)
+	ts, ok := withControls(t, oc, nc)
+	if !ok {
+		return nil
+	}
+	return ts
 }
 
 // ---- P-AUTH-2 ----
@@ -200,7 +248,18 @@ func (a auth2) Templates(ctx TemplateCtx) []Template {
 		"Account "+p.victim.Name+" changes the values of an approved object through "+ctx.Op.ID+".", p,
 		[]contract.Step{base, approve, atk}, OracleStateChange)
 	t.Params["approver"] = checker.Name
-	return []Template{t}
+	// Controls. Owner: the owner changes the object before any approval (a
+	// legitimate change). Negative: approval, then a read of the object
+	// instead of the tamper.
+	oc := newControl(ctx, t, "owner", "The owner changes an unapproved object through "+ctx.Op.ID+".", "property_level", p.obj,
+		[]contract.Step{base, asAttack(atk, "control-owner")}, nil)
+	nc := newControl(ctx, t, "negative", "Approval followed by a read, without the change.", "property_level", p.obj,
+		[]contract.Step{base, approve, asAttack(base, "control-negative")}, nil)
+	ts, ok := withControls(t, oc, nc)
+	if !ok {
+		return nil
+	}
+	return ts
 }
 
 func methodOf(ctx TemplateCtx, ws WorkflowStep) string {
@@ -237,9 +296,31 @@ func (m mc1) Templates(ctx TemplateCtx) []Template {
 	}
 	atk := mkStep("attack-self-approval", "attack", p.victim.Name, ctx.Op.Method, path, body,
 		"The account that made an object cannot approve it.")
-	return []Template{flowTemplate(ctx, m.id, "property_level",
+	t := flowTemplate(ctx, m.id, "property_level",
 		"Account "+p.victim.Name+" approves its own object through "+ctx.Op.ID+".", p,
-		[]contract.Step{base, atk}, OracleStateChange)}
+		[]contract.Step{base, atk}, OracleStateChange)
+	// Controls. Owner: a distinct approver approves the owner's object.
+	// Negative: the next distinct approver (the same one when there is only one).
+	cands := approvers(ctx, p.victim, auth.Role)
+	if len(cands) == 0 {
+		return nil
+	}
+	mk := func(a model.Account, id string) contract.Step {
+		return mkStep(id, "attack", a.Name, ctx.Op.Method, path, body, "A distinct approver can approve the object.")
+	}
+	neg := cands[0]
+	if len(cands) > 1 {
+		neg = cands[1]
+	}
+	oc := newControl(ctx, t, "owner", "Account "+cands[0].Name+" approves "+p.victim.Name+"'s object.", "function_level", p.obj,
+		[]contract.Step{base, mk(cands[0], "control-owner")}, nil)
+	nc := newControl(ctx, t, "negative", "Account "+neg.Name+" approves "+p.victim.Name+"'s object.", "function_level", p.obj,
+		[]contract.Step{base, mk(neg, "control-negative")}, nil)
+	ts, ok := withControls(t, oc, nc)
+	if !ok {
+		return nil
+	}
+	return ts
 }
 
 // ---- P-STATE-1 ----
@@ -281,9 +362,20 @@ func (s state1) Templates(ctx TemplateCtx) []Template {
 	reverse := mkStep("setup-reverse", "setup", p.victim.Name, methodOf(ctx, rev), rpath, rbody, "The owner reverses the object.")
 	atk := mkStep("attack-execute-reversed", "attack", p.victim.Name, ctx.Op.Method, epath, ebody,
 		"A reversed object cannot be executed.")
-	return []Template{flowTemplate(ctx, s.id, "property_level",
+	t := flowTemplate(ctx, s.id, "property_level",
 		"Account "+p.victim.Name+" executes an object after reversing it, through "+ctx.Op.ID+".", p,
-		[]contract.Step{base, reverse, atk}, OracleStateChange)}
+		[]contract.Step{base, reverse, atk}, OracleStateChange)
+	// Controls. Owner: the legitimate transition, execute without reversing.
+	// Negative: the sequence without the illegal transition, reverse alone.
+	oc := newControl(ctx, t, "owner", "The owner executes a pending object.", "property_level", p.obj,
+		[]contract.Step{base, asAttack(atk, "control-owner")}, nil)
+	nc := newControl(ctx, t, "negative", "The owner reverses the object and does nothing else.", "property_level", p.obj,
+		[]contract.Step{base, asAttack(reverse, "control-negative")}, nil)
+	ts, ok := withControls(t, oc, nc)
+	if !ok {
+		return nil
+	}
+	return ts
 }
 
 // ---- P-STATE-2 ----
@@ -341,5 +433,15 @@ func (s state2) Templates(ctx TemplateCtx) []Template {
 		[]contract.Step{base, reverse, atk}, OracleForbiddenValues)
 	t.ForbiddenValues = forbidden
 	t.CleanIsEnforced = true
-	return []Template{t}
+	// Controls. Owner: the reversal itself succeeds. Negative: the status read
+	// of an object that was not reversed, with the same forbidden values.
+	oc := newControl(ctx, t, "owner", "The owner reverses the object.", "property_level", p.obj,
+		[]contract.Step{base, asAttack(reverse, "control-owner")}, nil)
+	nc := newControl(ctx, t, "negative", "The status read of an unreversed object reports no success value.", "property_level", p.obj,
+		[]contract.Step{base, asAttack(atk, "control-negative")}, forbidden)
+	ts, ok := withControls(t, oc, nc)
+	if !ok {
+		return nil
+	}
+	return ts
 }

@@ -39,7 +39,25 @@ func crossIdentity(ctx TemplateCtx, prop string, op model.Operation, p pair, val
 	for k, v := range extra {
 		t.Params[k] = v
 	}
-	return finish(ctx, t, p.obj, prop, "cross_identity"), true
+	t = finish(ctx, t, p.obj, prop, "cross_identity")
+	// Controls. Owner: the owner performs the same operation on its own
+	// object. Negative: the attacker performs it on the attacker's OWN object
+	// (the violating element, another account's object, is removed), with the
+	// victim's data as forbidden values. Both use the operation under test
+	// (a DELETE is replaced by a read). Without an object of its own the
+	// attacker has no negative control and the template is not emitted.
+	own, hasOwn := firstOwned(ctx.Fixture, p.attacker)
+	if !hasOwn {
+		return Template{}, false
+	}
+	oc := actControl(ctx, t, op, "owner", "The owner performs "+op.ID+" on its own object.", p.victim, p.obj, nil, true)
+	nc := actControl(ctx, t, op, "negative", "Account "+p.attacker.Name+" performs "+op.ID+" on its own object.",
+		p.attacker, own, append(leakValues(p.victim), protectedValues(p.obj)...), true)
+	ts, ok := withControls(t, oc, nc)
+	if !ok {
+		return Template{}, false
+	}
+	return ts[0], true
 }
 
 // ---- P-OWN-1 ----
@@ -181,6 +199,9 @@ func (o own3) Templates(ctx TemplateCtx) []Template {
 				}
 				last := &t.Steps[len(t.Steps)-1]
 				last.Headers = map[string]string{h: p.obj.ID}
+				// The negative control names the attacker's own object in the header too.
+				nl := &t.NegativeControl.Steps[len(t.NegativeControl.Steps)-1]
+				nl.Headers = map[string]string{h: own.ID}
 				t.CleanIsEnforced = true // the attacker's own object is legitimately readable
 				out = append(out, t)
 			}

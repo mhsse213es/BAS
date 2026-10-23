@@ -16,8 +16,8 @@ func TestRoleTemplatesDetectToyBFLA(t *testing.T) {
 	defer srv.Close()
 	tpls := templatesFor(t, "P-ROLE-1", "archive", reserved("archive", "admin"))
 	// alice (member) and bob (member), carol (checker): three lower-role owners.
-	if len(tpls) != 3 {
-		t.Fatalf("want 3 templates (member, member, checker), got %d", len(tpls))
+	if len(tpls) != 4 {
+		t.Fatalf("want 4 templates (member x2, checker x2), got %d", len(tpls))
 	}
 	expect(t, ty, srv, tpls, grade.FAIL)
 
