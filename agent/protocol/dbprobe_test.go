@@ -17,6 +17,29 @@ func goldenResult() DBProbeResult {
 			Time: t0.Add(time.Second), Principal: "svc_dbsim_probe",
 			Statement: "/* dbsim:BAS-DBSIM-abc123 */ SELECT rolname FROM pg_roles", Source: "dbsim_audit.pg_log",
 		}},
+		CleanupStatus: DBCleanupResidual, SafetyIncident: true,
+	}
+}
+
+func TestDBProbeResultCleanupFieldsOmittedWhenEmpty(t *testing.T) {
+	b, _ := json.Marshal(DBProbeResult{})
+	if hasKey(b, "cleanupStatus") || hasKey(b, "safetyIncident") {
+		t.Fatalf("empty cleanup fields must be omitted: %s", b)
+	}
+	// An older agent's result (no cleanup keys) still decodes.
+	var back DBProbeResult
+	if err := json.Unmarshal([]byte(`{"denied":false,"rowsRead":1}`), &back); err != nil || back.SafetyIncident || back.CleanupStatus != "" {
+		t.Fatalf("older result must decode with zero cleanup fields: %v %+v", err, back)
+	}
+}
+
+func TestDBCleanupStatusValues(t *testing.T) {
+	got := []string{DBCleanupNotApplicable, DBCleanupOK, DBCleanupResidual, DBCleanupFailed}
+	want := []string{"not_applicable", "ok", "residual", "failed"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("status %d: %q want %q", i, got[i], want[i])
+		}
 	}
 }
 

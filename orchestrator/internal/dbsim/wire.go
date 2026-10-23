@@ -53,7 +53,22 @@ type DBProbeResult struct {
 	// recorded; "unsupported" and "error" must never be graded as a pass.
 	AuditStatus string              `json:"auditStatus,omitempty"`
 	AuditEvents []DBProbeAuditEvent `json:"auditEvents,omitempty"`
+	// CleanupStatus and SafetyIncident mirror the agent's fixture teardown
+	// report (agent/protocol/dbprobe.go). Empty status means an older agent or
+	// no fixture. A SafetyIncident, or a residual/failed status, can never be
+	// graded as a pass.
+	CleanupStatus  string `json:"cleanupStatus,omitempty"`
+	SafetyIncident bool   `json:"safetyIncident,omitempty"`
 }
+
+// Cleanup status values (DBProbeResult.CleanupStatus); same strings as the
+// agent's protocol.DBCleanup* constants, tied by the result golden vector.
+const (
+	CleanupNotApplicable = "not_applicable" // no fixture was used
+	CleanupOK            = "ok"             // fixture removed and verified gone
+	CleanupResidual      = "residual"       // verification found leftover objects
+	CleanupFailed        = "failed"         // cleanup or verification itself failed
+)
 
 // Audit status values (DBProbeResult.AuditStatus); same strings as the agent's
 // protocol.DBAudit* constants, tied by the result golden vector.

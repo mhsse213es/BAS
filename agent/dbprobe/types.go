@@ -132,6 +132,9 @@ type FixtureSpec struct {
 	Kind  string            `json:"kind"`
 	RunID string            `json:"runId"`
 	Opts  map[string]string `json:"opts,omitempty"`
+	// Tables is the declarative synthetic data (see fixture.go). Empty means the
+	// adapter's small built-in fixture.
+	Tables []FixtureTable `json:"tables,omitempty"`
 }
 
 // Fixture identifies a created fixture so it can be cleaned up.
@@ -139,6 +142,12 @@ type Fixture struct {
 	ID      string   `json:"id"`
 	Kind    string   `json:"kind"`
 	Objects []string `json:"objects,omitempty"`
+	// Tables is copied from the spec; adapters generate DDL from it using their
+	// own identifier quoting and bind every value as a parameter.
+	Tables []FixtureTable `json:"tables,omitempty"`
+	// PreState lists the fixture-scoped objects that existed before Seed
+	// (expected empty; Seed refuses otherwise). VerifyClean diffs against it.
+	PreState []string `json:"preState,omitempty"`
 }
 
 // CleanupResult reports fixture teardown. Residual objects mean cleanup

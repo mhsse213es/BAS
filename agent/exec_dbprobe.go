@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"audspect/agent/dbprobe"
+	"audspect/agent/dbprobe/fixtures"
 	_ "audspect/agent/dbprobe/mysql"    // registers the "mysql" adapter
 	_ "audspect/agent/dbprobe/postgres" // registers the "postgresql" adapter
 	"audspect/agent/protocol"
@@ -61,6 +62,8 @@ const (
 	dbErrProbe                = "probe_error"
 	dbErrCancelled            = "cancelled"
 	dbErrTimeout              = "timeout"
+	dbErrFixture              = "fixture_error"
+	dbErrCleanupIncident      = "cleanup_incident"
 )
 
 // DBProbeOutcome is the result of executing one dbprobe step. GateRefusal is
@@ -199,6 +202,20 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 	if !engineOK {
 		return fail(dbErrAdapterUnsupported, fmt.Sprintf("probe %q does not support engine %q", spec.ProbeID, spec.Engine))
 	}
+	// 3b. Fixture: FixtureID is the NAME of a catalog fixture seeded for this
+	// run. Lab mode only; refused here, before any connection, otherwise.
+	var fxSpec dbprobe.FixtureSpec
+	if spec.FixtureID != "" {
+		if spec.Mode != dbprobe.ModeLab {
+			return fail(dbErrGateRefused, "fixtures run only in lab mode: a client-mode step may not carry a fixture id")
+		}
+		s, ok := fixtures.Lookup(spec.FixtureID)
+		if !ok {
+			return fail(dbErrGateRefused, fmt.Sprintf("unknown fixture %q", dbprobe.TruncateUTF8(spec.FixtureID, 64)))
+		}
+		s.RunID = spec.RunID
+		fxSpec = s
+	}
 	// 4. Agent-local policy. CheckSpec is the single implementation of the
 	// mode/class rules; identities are pre-matched with a placeholder here so
 	// only the policy half can fail. The real identity gate runs after Connect.
@@ -263,23 +280,67 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 		return fail(dbErrGateRefused, err.Error())
 	}
 
-	probeStart := time.Now()
-	res, err := ad.RunProbe(cctx, def, spec)
-	if err != nil {
-		return runtimeErr(dbErrProbe, "probe", err)
+	runBody := func() (DBProbeOutcome, error) {
+		probeStart := time.Now()
+		res, err := ad.RunProbe(cctx, def, spec)
+		if err != nil {
+			return runtimeErr(dbErrProbe, "probe", err)
+		}
+		probeEnd := time.Now()
+		if res.AgentTime.IsZero() {
+			res.AgentTime = time.Now()
+		}
+		out := DBProbeOutcome{Result: res}
+		// Audit readback runs after the probe, on the same connection, whenever
+		// the adapter reports a source (client mode included: it is read-only and
+		// bounded). Whatever happens here is recorded in AuditStatus; it can never
+		// fail the run or make an observation look better than it was.
+		out.Audit = collectDBAudit(ctx, ad, spec, cred.User, probeStart, probeEnd, &out.Result,
+			cred.Password, cred.User, spec.Host, spec.ExpectedIdentity)
+		return out, nil
 	}
-	probeEnd := time.Now()
-	if res.AgentTime.IsZero() {
-		res.AgentTime = time.Now()
+	if spec.FixtureID == "" {
+		return runBody()
 	}
-	out := DBProbeOutcome{Result: res}
-	// Audit readback runs after the probe, on the same connection, whenever
-	// the adapter reports a source (client mode included: it is read-only and
-	// bounded). Whatever happens here is recorded in AuditStatus; it can never
-	// fail the run or make an observation look better than it was.
-	out.Audit = collectDBAudit(ctx, ad, spec, cred.User, probeStart, probeEnd, &out.Result,
-		cred.Password, cred.User, spec.Host, spec.ExpectedIdentity)
-	return out, nil
+
+	// Fixture run: seed -> probe -> cleanup -> verify, with teardown guaranteed
+	// (fresh bounded context) and any cleanup failure a safety incident that
+	// the result carries even if the probe itself succeeded. Seed and cleanup
+	// use the caller's context, not the probe's budget.
+	var (
+		body    DBProbeOutcome
+		bodyErr error
+		ran     bool
+	)
+	_, ferr := fixtures.WithFixture(ctx, ad, fxSpec, func(fx dbprobe.Fixture) error {
+		ran = true
+		body, bodyErr = runBody()
+		body.Result.Notes = append(body.Result.Notes, "fixture "+fx.Kind+" seeded as schema "+fixtures.SchemaName(fx.ID))
+		return nil
+	})
+	var inc *fixtures.ErrSafetyIncident
+	switch {
+	case errors.As(ferr, &inc):
+		if !ran {
+			body = DBProbeOutcome{Result: protocol.DBProbeResult{AgentTime: time.Now()}}
+		}
+		body.Result.CleanupStatus = inc.Status
+		body.Result.SafetyIncident = true
+		if body.Result.ErrorClass == "" {
+			body.Result.ErrorClass = dbErrCleanupIncident
+		}
+		msg := scrubAll(inc.Error(), cred.Password, cred.User, spec.Host, spec.ExpectedIdentity)
+		body.Result.Notes = append(body.Result.Notes, "safety incident: "+msg)
+		log.Printf("[dbprobe] %s fixture safety incident: %s", step.TaskID, msg)
+		return body, fmt.Errorf("dbprobe fixture cleanup: safety incident (%s): %s", inc.Status, msg)
+	case ferr != nil:
+		// Seed refused or failed and nothing was left behind.
+		out, err := runtimeErr(dbErrFixture, "fixture", ferr)
+		out.Result.CleanupStatus = protocol.DBCleanupNotApplicable
+		return out, err
+	}
+	body.Result.CleanupStatus = protocol.DBCleanupOK
+	return body, bodyErr
 }
 
 // collectDBAudit fills res.AuditStatus / res.AuditEvents (and explanatory

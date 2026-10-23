@@ -722,14 +722,26 @@ func (a *Adapter) Seed(ctx context.Context, f dbprobe.Fixture) error {
 	if err != nil {
 		return err
 	}
-	create, drop, err := fixtureSQL(schema, user)
+	baseCreate, drop, err := fixtureSQL(schema, user)
 	if err != nil {
 		return err
+	}
+	if err := dbprobe.ValidateFixtureTables(f.Tables); err != nil {
+		return err
+	}
+	create := make([]myStmt, len(baseCreate))
+	for i, s := range baseCreate {
+		create[i] = myStmt{sql: s}
+	}
+	if len(f.Tables) > 0 {
+		if create, err = tableFixtureSQL(schema, user, f.Tables); err != nil {
+			return err
+		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, labOpTimeout)
 	defer cancel()
 	for _, s := range create {
-		if err := a.s.Exec(ctx, s); err != nil {
+		if err := a.s.Exec(ctx, s.sql, s.args...); err != nil {
 			if isCtxErr(err) || ctx.Err() != nil {
 				a.markBroken()
 			} else {
@@ -743,6 +755,123 @@ func (a *Adapter) Seed(ctx context.Context, f dbprobe.Fixture) error {
 		}
 	}
 	return nil
+}
+
+// myStmt is one fixture statement; values are always bound via args.
+type myStmt struct {
+	sql  string
+	args []any
+}
+
+// tableFixtureSQL turns declarative fixture tables into DDL/DML. Identifiers
+// are validated by dbprobe.ValidateFixtureTables and quoted with quoteIdent;
+// cell values are bound parameters, never spliced. In MySQL a schema is a
+// database, so "dbsim_<id>" is a dedicated database.
+func tableFixtureSQL(schema, user string, tables []dbprobe.FixtureTable) ([]myStmt, error) {
+	qs, err := quoteIdent(schema)
+	if err != nil {
+		return nil, err
+	}
+	ul, err := userLit(user)
+	if err != nil {
+		return nil, err
+	}
+	out := []myStmt{{sql: "CREATE SCHEMA " + qs + " CHARACTER SET utf8mb4"}}
+	qualified := make([]string, len(tables))
+	for ti, t := range tables {
+		qt, err := quoteIdent(t.Name)
+		if err != nil {
+			return nil, err
+		}
+		qualified[ti] = qs + "." + qt
+		cols := make([]string, len(t.Columns))
+		names := make([]string, len(t.Columns))
+		marks := make([]string, len(t.Columns))
+		for i, c := range t.Columns {
+			qc, err := quoteIdent(c.Name)
+			if err != nil {
+				return nil, err
+			}
+			typ := "LONGTEXT CHARACTER SET utf8mb4"
+			if c.Type == dbprobe.FixtureColInt {
+				typ = "BIGINT"
+			}
+			def := qc + " " + typ
+			if c.PK {
+				def += " PRIMARY KEY"
+			}
+			cols[i], names[i], marks[i] = def, qc, "?"
+		}
+		out = append(out, myStmt{sql: "CREATE TABLE " + qualified[ti] + " (" + strings.Join(cols, ", ") + ") DEFAULT CHARSET=utf8mb4"})
+		ins := "INSERT INTO " + qualified[ti] + " (" + strings.Join(names, ", ") + ") VALUES (" + strings.Join(marks, ", ") + ")"
+		for _, row := range t.Rows {
+			args := make([]any, len(row))
+			for i, c := range row {
+				args[i] = dbprobe.FixtureCellArg(c)
+			}
+			out = append(out, myStmt{sql: ins, args: args})
+		}
+	}
+	out = append(out, myStmt{sql: "CREATE USER " + ul + " ACCOUNT LOCK"})
+	for _, q := range qualified {
+		out = append(out, myStmt{sql: "GRANT SELECT ON " + q + " TO " + ul})
+	}
+	return out, nil
+}
+
+// Mode reports the connection mode (dbprobe.ModeReporter); fixtures.Seed
+// refuses anything but lab.
+func (a *Adapter) Mode() dbprobe.ExecMode { return a.mode }
+
+const sqlFixtureTables = "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME"
+
+// fixtureInspectMax bounds how many objects one inspection reads.
+const fixtureInspectMax = 200
+
+// InspectFixture lists the objects that exist for a fixture: its schema, the
+// tables in it and its account. Names are bound parameters. Lab mode only.
+func (a *Adapter) InspectFixture(ctx context.Context, f dbprobe.Fixture) ([]string, error) {
+	if err := a.requireLab("inspect"); err != nil {
+		return nil, err
+	}
+	schema, user, err := fixtureNames(f.ID)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, labOpTimeout)
+	defer cancel()
+	var out []string
+	rows, err := a.s.Query(ctx, sqlSchemaExists, 1, schema)
+	if err != nil {
+		return nil, a.wrap("inspect", err)
+	}
+	if len(rows) > 0 {
+		out = append(out, "schema:"+schema)
+	}
+	rows, err = a.s.Query(ctx, sqlFixtureTables, fixtureInspectMax, schema)
+	if err != nil {
+		return nil, a.wrap("inspect", err)
+	}
+	for _, r := range rows {
+		if len(r) > 0 {
+			out = append(out, "table:"+schema+"."+cellString(r[0]))
+		}
+	}
+	rows, err = a.s.Query(ctx, sqlUserExists, 1, user)
+	if err != nil {
+		return nil, a.wrap("inspect", err)
+	}
+	if len(rows) > 0 {
+		out = append(out, "user:"+user)
+	}
+	return out, nil
+}
+
+func cellString(v any) string {
+	if b, ok := v.([]byte); ok {
+		return string(b)
+	}
+	return fmt.Sprint(v)
 }
 
 // Cleanup drops the fixture schema and account (lab mode only) and verifies

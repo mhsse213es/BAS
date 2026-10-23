@@ -547,16 +547,22 @@ func (a *Adapter) Seed(ctx context.Context, f dbprobe.Fixture) error {
 	if err != nil {
 		return err
 	}
+	if err := dbprobe.ValidateFixtureTables(f.Tables); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(ctx, labOpTimeout)
 	defer cancel()
 	tbl := pgx.Identifier{schema, "restricted"}.Sanitize()
-	stmts := []string{
-		"CREATE SCHEMA " + pgx.Identifier{schema}.Sanitize(),
-		"CREATE TABLE " + tbl + " (id int PRIMARY KEY, label text)",
-		"INSERT INTO " + tbl + " VALUES (1, 'synthetic-1'), (2, 'synthetic-2'), (3, 'synthetic-3')",
-		"CREATE ROLE " + pgx.Identifier{role}.Sanitize() + " NOLOGIN",
-		"GRANT USAGE ON SCHEMA " + pgx.Identifier{schema}.Sanitize() + " TO " + pgx.Identifier{role}.Sanitize(),
-		"GRANT SELECT ON " + tbl + " TO " + pgx.Identifier{role}.Sanitize(),
+	stmts := []pgStmt{
+		{sql: "CREATE SCHEMA " + pgx.Identifier{schema}.Sanitize()},
+		{sql: "CREATE TABLE " + tbl + " (id int PRIMARY KEY, label text)"},
+		{sql: "INSERT INTO " + tbl + " VALUES (1, 'synthetic-1'), (2, 'synthetic-2'), (3, 'synthetic-3')"},
+		{sql: "CREATE ROLE " + pgx.Identifier{role}.Sanitize() + " NOLOGIN"},
+		{sql: "GRANT USAGE ON SCHEMA " + pgx.Identifier{schema}.Sanitize() + " TO " + pgx.Identifier{role}.Sanitize()},
+		{sql: "GRANT SELECT ON " + tbl + " TO " + pgx.Identifier{role}.Sanitize()},
+	}
+	if len(f.Tables) > 0 {
+		stmts = tableFixtureStmts(schema, role, f.Tables)
 	}
 	fail := func(err error) error {
 		if isCtxErr(err) || ctx.Err() != nil {
@@ -572,7 +578,7 @@ func (a *Adapter) Seed(ctx context.Context, f dbprobe.Fixture) error {
 		return fail(err)
 	}
 	for _, s := range stmts {
-		if err := a.s.Exec(ctx, s); err != nil {
+		if err := a.s.Exec(ctx, s.sql, s.args...); err != nil {
 			return fail(err)
 		}
 	}
@@ -581,6 +587,107 @@ func (a *Adapter) Seed(ctx context.Context, f dbprobe.Fixture) error {
 	}
 	return nil
 }
+
+// pgStmt is one fixture statement; values are always bound via args.
+type pgStmt struct {
+	sql  string
+	args []any
+}
+
+// tableFixtureStmts turns declarative fixture tables into DDL/DML. Identifiers
+// are validated by dbprobe.ValidateFixtureTables and quoted with
+// pgx.Identifier; cell values are bound parameters, never spliced.
+func tableFixtureStmts(schema, role string, tables []dbprobe.FixtureTable) []pgStmt {
+	qs := pgx.Identifier{schema}.Sanitize()
+	qr := pgx.Identifier{role}.Sanitize()
+	out := []pgStmt{{sql: "CREATE SCHEMA " + qs}}
+	for _, t := range tables {
+		tbl := pgx.Identifier{schema, t.Name}.Sanitize()
+		cols := make([]string, len(t.Columns))
+		names := make([]string, len(t.Columns))
+		marks := make([]string, len(t.Columns))
+		for i, c := range t.Columns {
+			typ := "text"
+			if c.Type == dbprobe.FixtureColInt {
+				typ = "bigint"
+			}
+			def := pgx.Identifier{c.Name}.Sanitize() + " " + typ
+			if c.PK {
+				def += " PRIMARY KEY"
+			}
+			cols[i] = def
+			names[i] = pgx.Identifier{c.Name}.Sanitize()
+			marks[i] = "$" + strconv.Itoa(i+1)
+		}
+		out = append(out, pgStmt{sql: "CREATE TABLE " + tbl + " (" + strings.Join(cols, ", ") + ")"})
+		ins := "INSERT INTO " + tbl + " (" + strings.Join(names, ", ") + ") VALUES (" + strings.Join(marks, ", ") + ")"
+		for _, row := range t.Rows {
+			args := make([]any, len(row))
+			for i, c := range row {
+				args[i] = dbprobe.FixtureCellArg(c)
+			}
+			out = append(out, pgStmt{sql: ins, args: args})
+		}
+	}
+	out = append(out,
+		pgStmt{sql: "CREATE ROLE " + qr + " NOLOGIN"},
+		pgStmt{sql: "GRANT USAGE ON SCHEMA " + qs + " TO " + qr},
+	)
+	for _, t := range tables {
+		out = append(out, pgStmt{sql: "GRANT SELECT ON " + pgx.Identifier{schema, t.Name}.Sanitize() + " TO " + qr})
+	}
+	return out
+}
+
+// Mode reports the connection mode (dbprobe.ModeReporter); fixtures.Seed
+// refuses anything but lab.
+func (a *Adapter) Mode() dbprobe.ExecMode { return a.mode }
+
+// InspectFixture lists the objects that exist for a fixture: its schema, the
+// tables in it and its role. Names are bound parameters. Lab mode only.
+func (a *Adapter) InspectFixture(ctx context.Context, f dbprobe.Fixture) ([]string, error) {
+	if err := a.require(); err != nil {
+		return nil, err
+	}
+	if a.mode != dbprobe.ModeLab {
+		return nil, errors.New("dbprobe/postgres: fixture inspection refused outside lab mode")
+	}
+	schema, role, err := fixtureNames(f.ID)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, labOpTimeout)
+	defer cancel()
+	var out []string
+	rows, err := a.s.Query(ctx, "SELECT 1 FROM pg_namespace WHERE nspname = $1", 1, schema)
+	if err != nil {
+		return nil, wrapErr("inspect", err, a.secrets...)
+	}
+	if len(rows) > 0 {
+		out = append(out, "schema:"+schema)
+	}
+	rows, err = a.s.Query(ctx, "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "+
+		"WHERE n.nspname = $1 AND c.relkind IN ('r','p','v','m','f','S') ORDER BY c.relname", fixtureInspectMax, schema)
+	if err != nil {
+		return nil, wrapErr("inspect", err, a.secrets...)
+	}
+	for _, r := range rows {
+		if len(r) > 0 {
+			out = append(out, "table:"+schema+"."+fmt.Sprint(r[0]))
+		}
+	}
+	rows, err = a.s.Query(ctx, "SELECT 1 FROM pg_roles WHERE rolname = $1", 1, role)
+	if err != nil {
+		return nil, wrapErr("inspect", err, a.secrets...)
+	}
+	if len(rows) > 0 {
+		out = append(out, "role:"+role)
+	}
+	return out, nil
+}
+
+// fixtureInspectMax bounds how many objects one inspection reads.
+const fixtureInspectMax = 200
 
 func fixtureNames(id string) (schema, role string, err error) {
 	id = strings.ReplaceAll(strings.ToLower(id), "-", "_")

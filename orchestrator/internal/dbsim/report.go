@@ -110,6 +110,30 @@ type Outcome struct {
 	Principal string
 	Marker    string
 	RunID     string
+	// CleanupStatus and SafetyIncident report the synthetic-fixture teardown
+	// (copied from the probe result by the caller, or read from o.Probe when
+	// unset). A safety incident, or a residual/failed/unrecognised status,
+	// grades ERROR: never PASS, never FAIL, never SKIPPED.
+	CleanupStatus  string
+	SafetyIncident bool
+}
+
+// cleanupState returns the effective cleanup status and whether the fixture
+// teardown is a safety incident. Either source (Outcome or the probe result)
+// can raise it; only an empty, "ok" or "not_applicable" status is benign, so
+// an unrecognised value fails closed.
+func cleanupState(o Outcome) (status string, incident bool) {
+	status = o.CleanupStatus
+	if status == "" {
+		status = o.Probe.CleanupStatus
+	}
+	incident = o.SafetyIncident || o.Probe.SafetyIncident
+	switch status {
+	case "", CleanupOK, CleanupNotApplicable:
+	default:
+		incident = true
+	}
+	return status, incident
 }
 
 // errorClassAllowedRead lists agent error classes that still mean the read
@@ -194,7 +218,12 @@ func grade(s ScenarioMeta, o Outcome) graded {
 		g.Dims.Classification = DimUnverifiable
 	}
 
+	_, cleanupIncident := cleanupState(o)
 	switch {
+	case cleanupIncident:
+		// Fixture cleanup failed or left residual objects (spec section 8, gate
+		// 4). Checked first: no other outcome, SKIPPED included, may hide it.
+		g.Result, g.Reason = ResultError, "fixture cleanup safety incident: the run cannot be graded as completed"
 	case o.ExecutionError != "":
 		g.Result, g.Reason = ResultError, "execution error: "+o.ExecutionError
 	case o.ProbeRan && (o.Skipped != "" || o.GateRefusal != ""):
@@ -298,6 +327,10 @@ func ToRecord(s ScenarioMeta, o Outcome) (dlpreport.Record, error) {
 		lims = append(lims, "Inconsistent outcome: the probe ran but a skip or gate refusal was also recorded.")
 	}
 
+	if st, inc := cleanupState(o); inc {
+		lims = append(lims, fmt.Sprintf("Fixture cleanup safety incident (cleanup status %q): synthetic fixture objects may remain in the target database; the run is graded ERROR and must be investigated.", redact(st)))
+	}
+
 	tel, resp := dlpreport.TelemetryUnverifiable, dlpreport.ResponseNotTested
 	conf := string(MatchNone)
 	if o.Corr.Evaluated {
@@ -383,6 +416,8 @@ type evidence struct {
 	Principal      string      `json:"principal"`
 	Marker         string      `json:"marker"`
 	RunID          string      `json:"runId"`
+	CleanupStatus  string      `json:"cleanupStatus,omitempty"`
+	SafetyIncident bool        `json:"safetyIncident,omitempty"`
 }
 
 func buildEvidence(o Outcome) evidence {
@@ -392,7 +427,9 @@ func buildEvidence(o Outcome) evidence {
 	}
 	c := o.Corr
 	c.Limitations = redact(c.Limitations)
+	cstatus, cinc := cleanupState(o)
 	return evidence{
+		CleanupStatus: redact(cstatus), SafetyIncident: cinc,
 		ProbeRan: o.ProbeRan, Denied: o.Probe.Denied, RowsRead: o.Probe.RowsRead,
 		ErrorClass: redact(o.Probe.ErrorClass),
 		DBTime:     ts(o.Probe.DBTime), AgentTime: ts(o.Probe.AgentTime),

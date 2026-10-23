@@ -59,7 +59,23 @@ type DBProbeResult struct {
 	// AuditEvents are the marker-bearing audit records (minimised: at most 50,
 	// statements redacted and cut to 512 bytes).
 	AuditEvents []DBProbeAuditEvent `json:"auditEvents,omitempty"`
+	// CleanupStatus reports the synthetic-fixture teardown for this run: one of
+	// the DBCleanup* values. Empty means an older agent (treated as not
+	// applicable). SafetyIncident is true when a fixture cleanup or its
+	// verification failed or left residual objects; such a result must never be
+	// usable as a PASS, even if the probe itself succeeded.
+	CleanupStatus  string `json:"cleanupStatus,omitempty"`
+	SafetyIncident bool   `json:"safetyIncident,omitempty"`
 }
+
+// Cleanup status values (DBProbeResult.CleanupStatus). Mirrored by
+// orchestrator/internal/dbsim/wire.go.
+const (
+	DBCleanupNotApplicable = "not_applicable" // no fixture was used
+	DBCleanupOK            = "ok"             // fixture removed and verified gone
+	DBCleanupResidual      = "residual"       // verification found leftover objects
+	DBCleanupFailed        = "failed"         // cleanup or verification itself failed
+)
 
 // Audit status values (DBProbeResult.AuditStatus). Mirrored by
 // orchestrator/internal/dbsim/wire.go.

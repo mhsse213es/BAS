@@ -71,6 +71,7 @@ func mirrorGoldenResult() DBProbeResult {
 			Time: t0.Add(time.Second), Principal: "svc_dbsim_probe",
 			Statement: "/* dbsim:BAS-DBSIM-abc123 */ SELECT rolname FROM pg_roles", Source: "dbsim_audit.pg_log",
 		}},
+		CleanupStatus: CleanupResidual, SafetyIncident: true,
 	}
 }
 
