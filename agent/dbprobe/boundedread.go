@@ -45,7 +45,7 @@ func ReadShape(probeID string) string {
 // Both adapters ask the database for cap+1 rows (a bound LIMIT parameter) so a
 // truncation is detected, and keep at most cap.
 func FixtureReadRowCap(probeID string, maxRows int) int {
-	if probeID == ProbeSuspiciousRead && maxRows > SuspiciousReadMaxRows {
+	if (probeID == ProbeSuspiciousRead || probeID == ProbeReadClassifiedFixture) && maxRows > SuspiciousReadMaxRows {
 		return SuspiciousReadMaxRows
 	}
 	return maxRows
@@ -113,6 +113,28 @@ func (s BoundedReadSummary) Notes(shape string, d time.Duration) []string {
 	}
 }
 
+// IsFixtureRead reports whether def is a probe that reads a table of the run's
+// seeded fixture (DB-05, DB-07, DB-09).
+func IsFixtureRead(def ProbeDef) bool { return def.FixtureParam != "" || def.FixedTable != "" }
+
+// FixtureTableFor is the fixture table name a fixture read probe addresses: the
+// caller's param for the param-driven probes, the probe's own fixed table
+// otherwise. A fixed table is never overridden by a param. It returns "" for a
+// probe that reads no fixture table.
+func FixtureTableFor(def ProbeDef, spec DBProbeSpec) string {
+	if def.FixedTable != "" {
+		return def.FixedTable
+	}
+	if def.FixtureParam != "" {
+		return spec.Params[def.FixtureParam]
+	}
+	return ""
+}
+
+// NeedsFixtureBinding reports whether the executor must bind the seeded fixture
+// to the adapter before running def.
+func NeedsFixtureBinding(def ProbeDef) bool { return IsFixtureRead(def) || def.RequiredFixture != "" }
+
 // FixtureBinder is implemented by adapters whose fixture-aware probes need the
 // run's active fixture. The executor binds it after a successful Seed and
 // unbinds it before Cleanup.
@@ -153,6 +175,14 @@ func (a *ActiveFixture) BindFixture(f Fixture) error {
 
 // UnbindFixture clears the active fixture.
 func (a *ActiveFixture) UnbindFixture() { a.f = nil }
+
+// Current returns the active fixture. It fails closed when none is bound.
+func (a *ActiveFixture) Current() (Fixture, error) {
+	if a == nil || a.f == nil {
+		return Fixture{}, errors.New("dbprobe: no active fixture: this probe needs a seeded fixture")
+	}
+	return *a.f, nil
+}
 
 // Resolve returns the active fixture and the declared table whose name equals
 // name exactly. A schema-qualified, quoted, differently cased or unknown name

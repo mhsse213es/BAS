@@ -47,7 +47,7 @@ func CheckSpec(spec DBProbeSpec, def ProbeDef, observedIdentity string, expected
 	}
 	// A fixture-aware probe reads a per-run seeded fixture, which exists only in
 	// lab mode; it is refused elsewhere whatever its class says.
-	if real.FixtureParam != "" && spec.Mode != ModeLab {
+	if (real.FixtureParam != "" || real.RequiredFixture != "") && spec.Mode != ModeLab {
 		return fmt.Errorf("dbprobe: gate: %s mode refuses fixture-aware probe %q (lab only)", spec.Mode, spec.ProbeID)
 	}
 	// R-AI: a run that seeds a fixture mutates the lab database, so any step that

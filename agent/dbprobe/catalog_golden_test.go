@@ -15,6 +15,10 @@ type catalogRow struct {
 	// FixtureParam names the param holding a fixture table name; set only on
 	// fixture-aware probes (omitted otherwise so older rows are unchanged).
 	FixtureParam string `json:"fixtureParam,omitempty"`
+	// RequiredFixture / FixedTable: the one catalog fixture a probe needs and the
+	// fixed table it reads (Task 14); omitted otherwise.
+	RequiredFixture string `json:"requiredFixture,omitempty"`
+	FixedTable      string `json:"fixedTable,omitempty"`
 }
 
 func TestCatalogMatchesGolden(t *testing.T) {
@@ -25,7 +29,8 @@ func TestCatalogMatchesGolden(t *testing.T) {
 		for k, v := range d.ParamSchema {
 			p[k] = string(v)
 		}
-		rows = append(rows, catalogRow{ID: d.ID, Class: string(d.Class), Engines: d.Engines, Params: p, FixtureParam: d.FixtureParam})
+		rows = append(rows, catalogRow{ID: d.ID, Class: string(d.Class), Engines: d.Engines, Params: p, FixtureParam: d.FixtureParam,
+			RequiredFixture: d.RequiredFixture, FixedTable: d.FixedTable})
 	}
 	got, err := json.Marshal(rows)
 	if err != nil {

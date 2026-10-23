@@ -40,6 +40,16 @@ var catalog = map[string]ProbeDef{
 	// read (cap = Limits.MaxRows, plus a byte cap). Lab-only.
 	ProbeBoundedSyntheticRead: {ID: ProbeBoundedSyntheticRead, Class: ClassBoundedSynthetic, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{"table": ParamString}, FixtureParam: "table"},
+	// read_classified_fixture (DB-07): the same bounded unfiltered read, fixed to
+	// the customers_pii table of the classified-pii fixture (published test card
+	// numbers only). No table param exists, so nothing else can be addressed.
+	ProbeReadClassifiedFixture: {ID: ProbeReadClassifiedFixture, Class: ClassBoundedSynthetic, Engines: bothEngines,
+		ParamSchema: map[string]ParamKind{}, RequiredFixture: ClassifiedFixtureKind, FixedTable: ClassifiedFixtureTable},
+	// auth_after_revoke (DB-06): creates a throwaway login account for this run,
+	// proves it can connect, revokes its login and proves a NEW connection is then
+	// refused. Class mutation: lab-only, mutation-approved, fixture-cleaned.
+	ProbeAuthAfterRevoke: {ID: ProbeAuthAfterRevoke, Class: ClassMutation, Engines: bothEngines,
+		ParamSchema: map[string]ParamKind{}, RequiredFixture: RevokeFixtureKind},
 }
 
 // LookupProbe returns the catalog entry for id.
@@ -98,6 +108,14 @@ func ValidateSpec(s DBProbeSpec) error {
 		}
 		if s.Mode != ModeLab {
 			return fmt.Errorf("dbprobe: probe %q is fixture-aware and runs only in lab mode", s.ProbeID)
+		}
+	}
+	if def.RequiredFixture != "" {
+		if s.FixtureID != def.RequiredFixture {
+			return fmt.Errorf("dbprobe: probe %q requires fixture %q", s.ProbeID, def.RequiredFixture)
+		}
+		if s.Mode != ModeLab {
+			return fmt.Errorf("dbprobe: probe %q needs a seeded fixture and runs only in lab mode", s.ProbeID)
 		}
 	}
 	if s.Limits.MaxRows <= 0 || s.Limits.TimeoutSec <= 0 || s.Limits.MaxConns <= 0 {

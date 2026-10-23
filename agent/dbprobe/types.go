@@ -53,6 +53,14 @@ type ProbeDef struct {
 	// derives the schema itself (spec R-Z); the param never carries a schema.
 	// A fixture-aware probe is lab-only and needs spec.FixtureID.
 	FixtureParam string
+	// RequiredFixture, when non-empty, names the one catalog fixture kind a step
+	// of this probe must carry (spec.FixtureID must equal it). Such a probe is
+	// lab-only and needs the run's seeded fixture to be bound, but takes no table
+	// param from the caller.
+	RequiredFixture string
+	// FixedTable, when non-empty, is the fixture table a RequiredFixture read
+	// probe reads. It is fixed in agent code, so no param can address a table.
+	FixedTable string
 }
 
 // ConnectionConfig describes how to reach a target. Secrets are resolved
