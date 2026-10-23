@@ -182,7 +182,10 @@ type Report struct {
 	Clean, ReachedCandidate, Verified, Rejected, Unconfirmed, Inconclusive int
 	PerOperation                                                           map[string]OpCoverage
 	NotModelled                                                            []string
-	Orphans                                                                []model.CreatedObject
+	// Notes are facts about the run worth reading, for example an engagement route that is not in the
+	// run document (the Guard still enforces its class).
+	Notes   []string
+	Orphans []model.CreatedObject
 	// Halted is the reason the campaign stopped early, and "cleanup failed"
 	// when any object could not be compensated.
 	Halted   string
@@ -208,6 +211,28 @@ func validClass(c model.OpClass) bool {
 		return true
 	}
 	return false
+}
+
+// engagementRouteNotes lists money and notifying routes the engagement classifies but the run document
+// does not contain. The run is not refused: the Guard matches every request against the engagement's own
+// routes too, so the class is still enforced.
+func engagementRouteNotes(e safety.Engagement, m model.Model) []string {
+	have := map[string]bool{}
+	for _, op := range m.Operations {
+		have[op.Signature()] = true
+	}
+	var sigs []string
+	for sig, c := range e.Classes {
+		if (c == string(safety.ClassMoney) || c == string(safety.ClassNotifying)) && !have[sig] {
+			sigs = append(sigs, sig)
+		}
+	}
+	sort.Strings(sigs)
+	var out []string
+	for _, sig := range sigs {
+		out = append(out, "engagement route "+sig+" ("+e.Classes[sig]+") is not in the run document; the guard still enforces its class")
+	}
+	return out
 }
 
 // Validate checks, without sending any request, everything about the configuration that does not
@@ -400,6 +425,7 @@ func Run(ctx context.Context, cfg Config) (rep Report, retErr error) {
 	}
 	rep.Model = coverage(m)
 	rep.NotModelled = append([]string(nil), m.NotModelled...)
+	rep.Notes = engagementRouteNotes(cfg.Engagement, m)
 	rep.PerOperation = map[string]OpCoverage{}
 	for _, op := range m.Operations {
 		rep.PerOperation[op.ID] = OpCoverage{Class: string(op.Class)}

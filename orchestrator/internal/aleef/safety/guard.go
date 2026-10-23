@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -54,8 +55,12 @@ func IsCleanup(ctx context.Context) bool {
 // Guard enforces an engagement on every outgoing request. It is safe for
 // concurrent use.
 type Guard struct {
-	e       Engagement
-	m       model.Model
+	e Engagement
+	m model.Model
+	// extra are the engagement's own routes (its Classes, sorted by signature). They are matched against
+	// every request in addition to the model, so a route the administrator classified is judged by that
+	// class even when the run document leaves it out or covers it with a looser parameter route.
+	extra   []model.Operation
 	origins map[string]bool
 	now     func() time.Time
 	sleep   func(ctx context.Context, d time.Duration) error
@@ -102,6 +107,15 @@ func NewGuard(e Engagement, scope *targetscope.TargetScopeImport, m model.Model,
 		}
 		n, _ := NormalizeOrigin(h)
 		g.origins[n] = true
+	}
+	sigs := make([]string, 0, len(e.Classes))
+	for sig := range e.Classes {
+		sigs = append(sigs, sig)
+	}
+	sort.Strings(sigs)
+	for _, sig := range sigs {
+		i := strings.IndexByte(sig, ' ') // Validate guarantees the canonical "METHOD /path" form
+		g.extra = append(g.extra, model.Operation{ID: sig, Method: sig[:i], Path: sig[i+1:], Class: model.OpClass(e.Classes[sig])})
 	}
 	g.sem = make(chan struct{}, e.MaxConcurrent)
 	g.interval = time.Duration(float64(time.Second) / e.RPS)
@@ -353,6 +367,18 @@ func (g *Guard) classify(r *http.Request) error {
 		for _, op := range g.m.Operations {
 			if strings.EqualFold(op.Method, method) && pathMatchesFold(op.Path, r.URL.Path) && !model.PathMatches(op.Path, r.URL.Path) {
 				return fmt.Errorf("%w: path matches operation %q only when case is ignored", ErrClassRefused, op.ID)
+			}
+		}
+		// The engagement's own routes are candidates too: a literal route it classifies beats a looser
+		// parameter route in the document, and one the document omits is still enforced.
+		for _, op := range g.extra {
+			if !strings.EqualFold(op.Method, method) {
+				continue
+			}
+			if model.PathMatches(op.Path, r.URL.Path) {
+				ops = append(ops, op)
+			} else if pathMatchesFold(op.Path, r.URL.Path) {
+				return fmt.Errorf("%w: path matches engagement route %q only when case is ignored", ErrClassRefused, op.ID)
 			}
 		}
 		// Every matching operation must pass; the most restrictive is checked

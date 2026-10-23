@@ -210,3 +210,33 @@ func TestSetupOperationResolvedBySignature(t *testing.T) {
 		t.Fatalf("%d requests sent", ty.total())
 	}
 }
+
+// An engagement route the run document leaves out is not a reason to refuse the run, but it is noted,
+// and the Guard still enforces its class: the target never sees a request to it.
+func TestEngagementRouteMissingFromDocumentIsNotedAndNeverRequested(t *testing.T) {
+	ty := newToy()
+	cfg, _ := toyConfig(t, ty, newRec())
+	cfg.Engagement.Classes[toySig["archiveItem"]] = "money"
+	// the document omits the archive route entirely
+	i := strings.Index(toySpec, `  "/api/v2/items/{id}/archive"`)
+	j := strings.Index(toySpec[i:], "\n  }\n") + i + len("\n  }\n")
+	spec := toySpec[:i] + toySpec[j:]
+	spec = strings.Replace(spec, "\n  },\n }\n}", "\n  }\n }\n}", 1)
+	cfg.OpenAPI = []byte(spec)
+	rep, err := Run(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, n := range rep.Notes {
+		if strings.Contains(n, toySig["archiveItem"]) && strings.Contains(n, "not in the run document") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no note for the omitted engagement route: %v", rep.Notes)
+	}
+	if got := ty.hitCount("POST /api/v2/items/{id}/archive"); got != 0 {
+		t.Fatalf("%d requests reached the omitted route", got)
+	}
+}

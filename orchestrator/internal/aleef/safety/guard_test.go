@@ -732,3 +732,128 @@ func TestGuardClassifiesByFinalMethodAndPathNotByOperationID(t *testing.T) {
 		t.Fatalf("operation with a listed id string but another route was allowed: %v", err)
 	}
 }
+
+// ---- the engagement's own route list is enforced by the Guard, whatever the run document contains ----
+
+func engGuard(t *testing.T, m model.Model, mut func(*Engagement)) *Guard {
+	t.Helper()
+	e := uatEngagement()
+	e.RPS, e.MaxRequests = 1e6, 100
+	if mut != nil {
+		mut(&e)
+	}
+	g, err := NewGuard(e, uatScope(), m, GuardOptions{Now: func() time.Time { return t0 }, Sleep: func(context.Context, time.Duration) error { return nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g
+}
+
+func paramOnlyModel(class model.OpClass) model.Model {
+	return model.Model{Operations: []model.Operation{{ID: "xAny", Method: "GET", Path: "/api/x/{a}", Class: class}}}
+}
+
+// The probe: the document has only GET /api/x/{a} (read). The engagement classes GET /api/x/special as
+// money. A request to the literal route must be judged as money, not as the looser param operation.
+func TestGuardEnforcesEngagementRouteMissingFromTheDocument(t *testing.T) {
+	var calls int32
+	g := engGuard(t, paramOnlyModel(model.ClassRead), func(e *Engagement) {
+		e.Classes = map[string]string{"GET /api/x/special": "money"}
+	})
+	rt := g.Transport(okTransport(&calls))
+	if _, err := rt.RoundTrip(get(t, context.Background(), "GET", uatOrigin+"/api/x/special")); !errors.Is(err, ErrClassRefused) {
+		t.Fatalf("money route reached through the param operation: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("%d requests reached the target", calls)
+	}
+	// other values of the parameter are still plain reads
+	if r, err := rt.RoundTrip(get(t, context.Background(), "GET", uatOrigin+"/api/x/other")); err != nil {
+		t.Fatalf("ordinary read refused: %v", err)
+	} else {
+		r.Body.Close()
+	}
+	// money needs the rail, beneficiaries AND the explicit listing; all present: allowed
+	g2 := engGuard(t, paramOnlyModel(model.ClassRead), func(e *Engagement) {
+		e.Classes = map[string]string{"GET /api/x/special": "money"}
+		e.SimulatedRail, e.SimulatorBeneficiaries = true, []string{"SIM"}
+		e.Operations = []string{"GET /api/x/special", "GET /api/x/{}"}
+	})
+	if r, err := g2.Transport(okTransport(&calls)).RoundTrip(get(t, context.Background(), "GET", uatOrigin+"/api/x/special")); err != nil {
+		t.Fatalf("declared money route refused: %v", err)
+	} else {
+		r.Body.Close()
+	}
+	// rail declared but the route not listed: refused
+	g3 := engGuard(t, paramOnlyModel(model.ClassRead), func(e *Engagement) {
+		e.Classes = map[string]string{"GET /api/x/special": "money"}
+		e.SimulatedRail, e.SimulatorBeneficiaries = true, []string{"SIM"}
+		e.Operations = []string{"GET /api/x/{}"}
+	})
+	if _, err := g3.Transport(okTransport(&calls)).RoundTrip(get(t, context.Background(), "GET", uatOrigin+"/api/x/special")); !errors.Is(err, ErrClassRefused) {
+		t.Fatalf("unlisted money route allowed: %v", err)
+	}
+}
+
+// The reverse: the engagement classes the literal route read while the param operation is money. The
+// most restrictive candidate decides, in either direction.
+func TestGuardMostRestrictiveCandidateWinsInEitherDirection(t *testing.T) {
+	var calls int32
+	g := engGuard(t, paramOnlyModel(model.ClassMoney), func(e *Engagement) {
+		e.Classes = map[string]string{"GET /api/x/special": "read"}
+	})
+	if _, err := g.Transport(okTransport(&calls)).RoundTrip(get(t, context.Background(), "GET", uatOrigin+"/api/x/special")); !errors.Is(err, ErrClassRefused) {
+		t.Fatalf("looser literal class beat the money param operation: %v", err)
+	}
+	if calls != 0 {
+		t.Fatal("request reached the target")
+	}
+}
+
+func TestGuardEngagementUnknownClassRefuses(t *testing.T) {
+	var calls int32
+	g := engGuard(t, paramOnlyModel(model.ClassRead), func(e *Engagement) {
+		e.Classes = map[string]string{"GET /api/x/special": "unknown"}
+	})
+	if _, err := g.Transport(okTransport(&calls)).RoundTrip(get(t, context.Background(), "GET", uatOrigin+"/api/x/special")); !errors.Is(err, ErrClassRefused) || calls != 0 {
+		t.Fatalf("unknown engagement class allowed: %v (%d calls)", err, calls)
+	}
+}
+
+// A path that matches an engagement route only when case is ignored may reach it on a case-insensitive
+// server, so it is refused, like the model's own case rule.
+func TestGuardEngagementRouteCaseFoldVariantRefused(t *testing.T) {
+	var calls int32
+	g := engGuard(t, paramOnlyModel(model.ClassRead), func(e *Engagement) {
+		e.Classes = map[string]string{"GET /api/x/special": "money"}
+	})
+	for _, p := range []string{"/api/x/SPECIAL", "/api/x/Special"} {
+		if _, err := g.Transport(okTransport(&calls)).RoundTrip(get(t, context.Background(), "GET", uatOrigin+p)); !errors.Is(err, ErrClassRefused) {
+			t.Fatalf("%s: %v", p, err)
+		}
+	}
+	if calls != 0 {
+		t.Fatal("request reached the target")
+	}
+}
+
+// The decision does not depend on map order: the same engagement built many times refuses with the same error.
+func TestGuardEngagementRouteOrderIsDeterministic(t *testing.T) {
+	var first string
+	for i := 0; i < 30; i++ {
+		var calls int32
+		g := engGuard(t, paramOnlyModel(model.ClassRead), func(e *Engagement) {
+			e.Classes = map[string]string{"GET /api/x/{}": "read", "GET /api/x/special": "money", "GET /api/{}/special": "notifying", "GET /api/x/spe{}": "read"}
+			delete(e.Classes, "GET /api/x/spe{}")
+		})
+		_, err := g.Transport(okTransport(&calls)).RoundTrip(get(t, context.Background(), "GET", uatOrigin+"/api/x/special"))
+		if !errors.Is(err, ErrClassRefused) || calls != 0 {
+			t.Fatalf("iteration %d: %v", i, err)
+		}
+		if i == 0 {
+			first = err.Error()
+		} else if err.Error() != first {
+			t.Fatalf("non-deterministic refusal: %q vs %q", err.Error(), first)
+		}
+	}
+}

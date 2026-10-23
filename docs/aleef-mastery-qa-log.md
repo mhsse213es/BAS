@@ -81,6 +81,8 @@ To be filled by the owner after the held-out run. Nothing here is a result.
   only.
 - Engagements created before classes and token references (or keyed by operation id) classify nothing and allow no references;
   recreate them. Classes and operation lists written with operation ids are refused.
+  Stored engagements written with operation-id keys fail `Parse` when a run starts (fail closed, HTTP 400); the feature has never
+  shipped, so no migration is provided: delete and recreate them.
 
 ## Material deviations from the plan
 
@@ -97,6 +99,11 @@ To be filled by the owner after the held-out run. Nothing here is a result.
   second review probe showed a document giving `POST /payments/settle` the id of a read-classed operation. A run request may name
   an operation by signature or by the document's id, but the id only selects an operation; its class is always resolved through
   that operation's own signature. Two operations with one signature make the document ambiguous and the run is refused.
+  The Guard also matches every request against the engagement's own routes (its classes), in addition to the run document: a literal
+  route the engagement classifies (for example `GET /api/x/special` as money) is judged by that class even when the document omits it
+  or covers it with a looser parameter route (`GET /api/x/{a}`); the most restrictive matching candidate decides, `unknown` refuses,
+  and a case-fold-only match is refused. A money or notifying engagement route missing from the document is noted in the Report
+  (`Notes`), not refused.
 - Id aliasing (campaign package) and a 14a fixture model (per-owner, per-resource-type objects, typed existing objects,
   chained setup) were added beyond the plan.
 - The benchmark bank gained owner-only DELETE operations and an `ObjectCounts` accessor so cleanup can be assessed. They
