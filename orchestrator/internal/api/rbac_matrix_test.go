@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/go-chi/chi/v5"
@@ -386,6 +387,13 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/vex/sweeps/active", tierPermission, auth.CanViewVariantRun},
 	{http.MethodGet, "/api/apibas/runs", tierPermission, auth.CanViewAPIBASRuns},
 	{http.MethodGet, "/api/apibas/runs/{id}", tierPermission, auth.CanViewAPIBASRuns},
+	{http.MethodPost, "/api/aleef/engagements", tierPermission, auth.CanRunAleef},
+	{http.MethodPost, "/api/aleef/runs", tierPermission, auth.CanRunAleef},
+	{http.MethodGet, "/api/aleef/runs/{id}", tierPermission, auth.CanViewAleef},
+	{http.MethodPost, "/api/aleef/runs/{id}/stop", tierPermission, auth.CanRunAleef},
+	{http.MethodGet, "/api/aleef/findings", tierPermission, auth.CanViewAleef},
+	{http.MethodGet, "/api/aleef/findings/{id}/regression", tierPermission, auth.CanViewAleef},
+	{http.MethodPost, "/api/aleef/findings/{id}/prior-knowledge", tierPermission, auth.CanRunAleef},
 	{http.MethodGet, "/api/vex/sweeps/{id}", tierPermission, auth.CanViewVariantRun},
 	{http.MethodGet, "/api/vex/sweeps/{id}/runs", tierPermission, auth.CanViewVariantRun},
 	{http.MethodGet, "/api/vex/sweeps/{id}/report", tierPermission, auth.CanViewVariantRun},
@@ -673,6 +681,10 @@ func mountTestRouter(t *testing.T) http.Handler {
 	// scenario-listing route -- a real, empty Engine is just as cheap to
 	// construct and lets every route in the matrix actually execute.
 	h := New(sharedDB.Pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+	// The Aleef routes sit behind the separate add-on gate, so the matrix runs with it granted.
+	prev := license.Current()
+	license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise, Addons: []string{"aleef"}})
+	t.Cleanup(func() { license.SetInitial(prev) })
 	return Mount(h, ws.NewHub(), testJWTSecret, "", http.NotFoundHandler(), 0, 0)
 }
 

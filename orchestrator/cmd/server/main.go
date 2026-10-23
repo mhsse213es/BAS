@@ -970,6 +970,8 @@ func main() {
 		WithVexSweep(vexSweepStore, vexSweepDispatcher).
 		WithEMSweep(emSweepStore, emSweepDispatcher).
 		WithTAXII(taxiiStore, taxiiManager).
+		// Aleef API discovery. Token references resolve from ALEEF_SECRET_* environment variables (api.AleefEnvSecrets).
+		WithAleef(aleefstore.New(pool), nil).
 		WithIOCProvider(iocProvider).
 		WithNetworkVantagePoint(networkVP).
 		WithEmailGWRun(emailgwProvider, emailgwInjectionTarget, emailgwEnvironment).

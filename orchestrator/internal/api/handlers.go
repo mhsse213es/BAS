@@ -198,6 +198,8 @@ type Handler struct {
 	// called -- a run then fails with a clear "no evidence" NotTested
 	// result (see executePHDET002), never a fabricated Pass/Fail.
 	phishingReportTicketProvider phishbridge.ReportTicketEvidenceProvider
+	// aleef is the Aleef API discovery state; nil until WithAleef.
+	aleef *aleefState
 }
 
 // New creates a Handler.
