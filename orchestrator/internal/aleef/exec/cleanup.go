@@ -24,8 +24,15 @@ var ErrCleanupFailed = errors.New(runner.ReasonCleanupFailed)
 // Reset (called by the runner before and after each sandbox scenario)
 // compensates the objects registered with Track during runs. The fixture
 // objects in Created are the shared starting state of every test, so Reset
-// leaves them alone; Cleanup compensates them (and any tracked objects) at
-// the end of a campaign.
+// leaves them alone. Unless callers use Track, Reset is therefore effectively
+// a no-op: it is not a restore to seed state, and sandbox mutations of
+// fixture objects are not undone, so fixtures must be rebuilt between such
+// tests. Cleanup compensates Created (and any tracked objects) and must be
+// called at the end of a campaign.
+//
+// Only operations of class reversible or setup_safe, with a method other than
+// GET, HEAD or OPTIONS, may be used as compensation; anything else is not
+// called and the object becomes an orphan.
 type CompensatingReset struct {
 	base    string
 	fx      fixture.Fixture
@@ -128,6 +135,13 @@ func (c *CompensatingReset) compensate(ctx context.Context, o model.CreatedObjec
 	op, ok := opByID(c.m, o.Compensate)
 	if !ok {
 		return errors.New("compensating operation not in model")
+	}
+	if op.Class != model.ClassReversible && op.Class != model.ClassSetupSafe {
+		return fmt.Errorf("compensating operation class %q is not allowed", op.Class)
+	}
+	switch strings.ToUpper(op.Method) {
+	case "GET", "HEAD", "OPTIONS", "":
+		return fmt.Errorf("compensating operation method %q cannot undo anything", op.Method)
 	}
 	path, ok := fillPath(op, o.ID)
 	if !ok {

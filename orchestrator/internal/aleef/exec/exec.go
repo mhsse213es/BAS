@@ -7,6 +7,13 @@
 // that decides finding yes / no / inconclusive from the typed property
 // template (see property.OracleKind) instead of the runner's own grade.
 //
+// Reset is not a restore to seed state: unless callers register objects with
+// Track it does nothing, and sandbox mutations of fixture objects are not
+// undone, so fixtures must be rebuilt between such tests. Call Cleanup at the
+// end of a campaign to compensate everything ALEEF created. No client built or
+// wrapped by this package follows redirects; a custom Config.Doer is used as
+// given and must apply its own policy.
+//
 // The package is on the executing side: it must not import the benchmark
 // bank, its sealed data or the bench harness.
 package exec
@@ -109,7 +116,13 @@ func New(cfg Config) (*Executor, error) {
 	}
 	if cfg.HTTP == nil {
 		cfg.HTTP = &http.Client{Timeout: 10 * time.Second}
+	} else {
+		c := *cfg.HTTP // never mutate the caller's client
+		cfg.HTTP = &c
 	}
+	// No redirect is ever followed: a redirect could carry a bearer token to
+	// another host. A caller-supplied client has its CheckRedirect replaced.
+	cfg.HTTP.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	doer := cfg.Doer
 	if doer == nil {
 		doer = cfg.HTTP

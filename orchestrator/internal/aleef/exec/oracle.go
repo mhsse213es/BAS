@@ -99,6 +99,9 @@ func (e *Executor) judge(t generate.Test, rep runner.Report, st stateEvidence) V
 		if hasFault(attack) {
 			return inc("server error in an attack response")
 		}
+		if truncatedSuccess(tpl, attack) {
+			return inc("body truncated")
+		}
 		n := tpl.AcceptedCount(responses(attack))
 		if n > tpl.MaxAccepted {
 			return verdict(FindingYes, k, "%d attack responses accepted, limit %d", n, tpl.MaxAccepted)
@@ -111,6 +114,9 @@ func (e *Executor) judge(t generate.Test, rep runner.Report, st stateEvidence) V
 		}
 		if hasFault(after) {
 			return inc("server error in an attack response")
+		}
+		if truncatedSuccess(tpl, after) {
+			return inc("body truncated")
 		}
 		rs := responses(after)
 		if tpl.ExceedsLimit(rs) {
@@ -317,4 +323,20 @@ func bodyTexts(body string) []string {
 	}
 	walk(doc)
 	return out
+}
+
+// truncatedSuccess reports whether a 2xx response that is not refused by
+// status has a body the runner truncated. The soft-failure rule needs the
+// whole JSON body, so such a response can be neither counted as accepted nor
+// as refused.
+func truncatedSuccess(tpl property.Template, xs []runner.Exchange) bool {
+	if !tpl.SoftFailure {
+		return false
+	}
+	for _, x := range xs {
+		if x.Status/100 == 2 && strings.HasSuffix(x.Body, truncatedMarker) && !tpl.Denied(x.Status, nil) {
+			return true
+		}
+	}
+	return false
 }

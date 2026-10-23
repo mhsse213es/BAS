@@ -395,3 +395,95 @@ func http_counter(n *atomic.Int32, next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+func TestCountOracleTruncatedSoftFailureIsInconclusive(t *testing.T) {
+	ts := pick(t, "P-ROLE-1", "reports")
+	ty, srv := newToy()
+	defer srv.Close()
+	big := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v2/admin/reports" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"error":"forbidden","pad":"` + strings.Repeat("x", 4000) + `"}`))
+			return
+		}
+		srv.Config.Handler.ServeHTTP(w, r)
+	}))
+	defer big.Close()
+	res := runTest(t, ty, big, ts)
+	wantFinding(t, res, property.OracleRepeatAccepted, FindingInconclusive)
+	if res.Verdict.Reason != "body truncated" {
+		t.Fatalf("reason %q", res.Verdict.Reason)
+	}
+}
+
+func TestCompensationClassAndMethodAreChecked(t *testing.T) {
+	ty, srv := newToy()
+	defer srv.Close()
+	var hits atomic.Int32
+	counting := httptest.NewServer(http_counter(&hits, srv.Config.Handler))
+	defer counting.Close()
+	m := toyModel()
+	idp := []model.Param{idParam()}
+	m.Operations = append(m.Operations,
+		op("cMoney", "POST", "/api/v2/items/{id}/redeem", idp, nil, model.ClassMoney),
+		op("cNotify", "POST", "/api/v2/items/{id}/reverse", idp, nil, model.ClassNotifying),
+		op("cUnknown", "POST", "/api/v2/items/{id}/reverse", idp, nil, model.ClassUnknown),
+	)
+	ids := []string{"item-a1", "item-b1", "item-c1", "item-d1"}
+	owners := []string{"cust-a", "cust-b", "cust-c", "cust-d"}
+	var created []model.CreatedObject
+	for i, c := range []string{"cMoney", "cNotify", "cUnknown", "getV2"} {
+		created = append(created, model.CreatedObject{Operation: "seed", ID: ids[i], Owner: owners[i], Compensate: c})
+	}
+	e, err := New(Config{BaseURL: counting.URL, Fixture: toyFixture(), Secrets: toySecrets(), Model: m, Created: created})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hits.Store(0)
+	err = e.Cleanup(context.Background())
+	if !errors.Is(err, ErrCleanupFailed) {
+		t.Fatalf("got %v", err)
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("%d compensation requests were sent", hits.Load())
+	}
+	if len(e.Orphans()) != 4 {
+		t.Fatalf("orphans: %v", e.Orphans())
+	}
+	if len(ty.items) != 4 {
+		t.Fatal("toy state changed")
+	}
+}
+
+func TestRedirectsAreNeverFollowed(t *testing.T) {
+	var otherHits atomic.Int32
+	other := httptest.NewServer(http_counter(&otherHits, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})))
+	defer other.Close()
+	redir := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+r.URL.Path, http.StatusFound)
+	}))
+	defer redir.Close()
+	// A caller-supplied client that would follow redirects is overridden.
+	e, err := New(Config{BaseURL: redir.URL, Fixture: toyFixture(), Secrets: toySecrets(), Model: toyModel(),
+		Created: toyCreated(), HTTP: &http.Client{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Runner path.
+	if _, err := e.Run(context.Background(), pick(t, "P-OWN-1", "getV2")); err != nil {
+		t.Fatal(err)
+	}
+	// UATState path.
+	if _, err := e.State().Snapshot(context.Background()); err == nil {
+		t.Fatal("redirect must not be treated as a readable object")
+	}
+	// Cleanup path.
+	if err := e.Cleanup(context.Background()); !errors.Is(err, ErrCleanupFailed) {
+		t.Fatalf("got %v", err)
+	}
+	if otherHits.Load() != 0 {
+		t.Fatalf("redirect target received %d requests", otherHits.Load())
+	}
+}
