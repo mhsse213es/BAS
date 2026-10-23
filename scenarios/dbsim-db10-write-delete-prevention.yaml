@@ -11,16 +11,17 @@ description: >
   database server, so no row content leaves it), proves the account can log in
   and read the table (baseline), and then, as that account, attempts exactly one
   INSERT, one UPDATE and one DELETE against the fixture table, in that order,
-  each a fixed statement tagged with the per-dispatch marker. It fingerprints the
-  table again.
+  each a fixed statement tagged with the per-dispatch marker (these three are
+  the ONLY statements carrying it; the baseline read and both fingerprints carry
+  the non-correlated meta tag). It fingerprints the table again.
 
   A refusal is recognised ONLY by PostgreSQL SQLSTATE 42501, or MySQL error 1142,
   1143 or 1044 (access denied for the table, column or database). The run PASSES
   only when all three statements are refused, the table fingerprint is unchanged,
   the throwaway account and the fixture are dropped and verified gone, and the
   SIEM shows an alert correlated to this run's marker (detection and response are
-  graded like DB-03: a denied statement is expected to be recorded by the audit
-  source with the marker). If any statement SUCCEEDS the control failed: the run
+  graded like DB-03; that a denied statement is recorded by the audit source
+  with the marker is an expectation to be confirmed on staging). If any statement SUCCEEDS the control failed: the run
   is FAIL, the account could write, and the fixture is reported changed
   (fixture_changed=true; it is a synthetic fixture and is dropped by the verified
   cleanup). If all statements are reported refused but the fingerprint differs,

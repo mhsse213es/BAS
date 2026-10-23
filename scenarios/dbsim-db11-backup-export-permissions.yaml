@@ -24,6 +24,11 @@ description: >
   an error, privileges that arrive through an active database role and are not
   visible, an unmatched account) is unknown and the run is ERROR, never a pass.
 
+  PASS means no server-file-write, program-execution or server-file-read
+  privilege is held; it does NOT mean the account cannot dump or back up data
+  (replication, pg_read_all_data, RELOAD, LOCK TABLES and broad SELECT are
+  reported as informational only).
+
   No export, backup, file or program operation is ever performed: only catalog
   privileges are read. The specification's "controlled operation if authorized"
   mode is NOT built. No SIEM expectation applies (a catalog read), so telemetry

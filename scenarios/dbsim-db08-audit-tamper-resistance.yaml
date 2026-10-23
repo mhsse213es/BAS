@@ -7,9 +7,10 @@ description: >
   account for this run only (named dbsim_<fixture id>_acct, with a random
   password generated in the agent process and never logged, returned or
   reported, and no privileges granted beyond defaults), opens a NEW connection as
-  it and runs one trivial statement tagged with the per-dispatch marker (the
-  baseline login check), and then attempts exactly ONE fixed, session-scoped
-  statement, also tagged with the marker: PostgreSQL SET log_statement = 'none',
+  it and runs one trivial statement tagged with the non-correlated meta tag (the
+  baseline login check; it can never be credited as detection), and then
+  attempts exactly ONE fixed, session-scoped statement, the ONLY statement
+  tagged with the per-dispatch marker: PostgreSQL SET log_statement = 'none',
   MySQL SET SESSION sql_log_off = 1. The connection is closed right after. A
   permission refusal recognised ONLY by PostgreSQL SQLSTATE 42501 or MySQL error
   1227 is graded as Blocked. A statement that SUCCEEDS is graded as Allowed (a
@@ -19,8 +20,9 @@ description: >
   and the run is graded ERROR, never as a pass. A PASS also needs the baseline to
   work, the throwaway account to be dropped and verified gone, and the SIEM to
   show an alert correlated to this run's marker (detection and response are
-  graded like DB-03: a denied statement is expected to be recorded by the audit
-  source with the marker).
+  graded like DB-03; that a denied statement is recorded by the audit source
+  with the marker is an expectation to be confirmed on staging, and only the
+  attempt statement is correlated).
 
   What this scenario does NOT do, deliberately: it never runs ALTER SYSTEM,
   SET GLOBAL, SET PERSIST, any plugin or configuration-file change, or anything

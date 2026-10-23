@@ -700,3 +700,11 @@ nothing about detection). Scenario classes: DB-08 T1562, DB-10 T1565.001 (new
   harness steps (tag `dbsim_e2e`) are written and vetted, not run.
 * Checklist items 20-24 in `lab/dbsim/README.md` and the three new rows of
   `lab/dbsim/E2E.md` section 6 list what to confirm.
+
+### Task 15 fix round 1 (review findings F1-F6)
+
+- **F1 (correlation hygiene):** only the attempt statements carry the per-dispatch marker (DB-08: the one SET; DB-10: INSERT, UPDATE, DELETE). The DB-08 baseline, the DB-10 baseline read and both lab fingerprints carry the non-correlated meta tag (`/* dbsim:dbsim-meta */`: Filebeat sets `dbsim.is_meta`, the rule excludes it, the audit `ownStatement` check rejects it). A logged baseline can therefore never be credited as detection. Pinned by `TestOnlyAttemptStatementsCarryTheSpecMarker` (both engines). DB-06 intentionally unchanged.
+- **F2:** the MySQL database-level `GRANT SELECT ON` escapes `_` and `%` in the schema name (wildcards even inside backticks); CREATE/identifier validation unchanged.
+- **F3:** a second throwaway-account probe on an adapter that still tracks an account is refused before anything is sent (DB-06, DB-08, DB-10, both engines).
+- **F4:** a context expiry in the lab-connection fingerprint now marks the adapter broken, like create/grant.
+- **F5/F6 (wording):** audit-log recording of denied statements is an EXPECTATION to confirm on staging, not an observed fact. DB-11 PASS means no server-file-write, program-execution or server-file-read privilege is held; it does NOT mean the account cannot dump or back up data (replication, pg_read_all_data, RELOAD, LOCK TABLES, broad SELECT are informational only). Scenarios DB-08/10/11 reworded and re-signed.
