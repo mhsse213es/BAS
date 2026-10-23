@@ -48,7 +48,7 @@ Related constraints:
 
 ## Label file format
 
-Ground-truth labels are held only by the owner and are never committed to this repository. File name `labels.json`:
+Ground-truth labels are held only by the owner and are never committed to this repository. File name `labels.json`; the repository `.gitignore` ignores `**/labels.json` and `orchestrator/internal/aleef/bank/sealed/sealed_defects.go`, and `TestOwnerOnlyFilesAreIgnoredAndUntracked` (internal/aleef/isolation_test.go) fails if either pattern stops being ignored or any such file becomes tracked:
 
 ```json
 [{"id":"H1","operation":"...","note":"..."}]
@@ -81,7 +81,7 @@ Package `orchestrator/internal/aleef/bank` serves the clean bank (`/v1` reads, `
 
 `CanReadDocument` receives the document, the route and the customer id from the request path (empty on the primary route); the fixed `CanReadDocument` authorizes on the document owner.
 
-Sealed-defect hook: package `bank/sealed` exposes `Policy(id string) (bank.Policy, bool)`. The committed stub `sealed/sealed_stub.go` carries `//go:build !aleefsealed` and returns `(bank.FixedPolicy(), false)`. The owner supplies `sealed/sealed_defects.go` with `//go:build aleefsealed`, defining `Policy(id)` that returns the defective policy for H1-H8 keyed by id. The two files are mutually exclusive by build tag, so they never collide. The implementer does not write or read that file.
+Sealed-defect hook: package `bank/sealed` exposes `Policy(id string) (bank.Policy, bool)`. The committed stub `sealed/sealed_stub.go` carries `//go:build !aleefsealed` and returns `(bank.FixedPolicy(), false)`. The owner supplies `sealed/sealed_defects.go` with `//go:build aleefsealed`, defining `Policy(id)` that returns the defective policy for H1-H8 keyed by id. The two files are mutually exclusive by build tag, so they never collide. The implementer does not write or read that file. The file is git-ignored (see above), so it cannot be committed by accident.
 
 ## Addendum: fixed-rule operations outside the hook table (Task 14a)
 

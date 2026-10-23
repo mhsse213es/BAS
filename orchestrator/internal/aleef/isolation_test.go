@@ -303,3 +303,36 @@ func TestGenericGeneratorPackagesHaveNoBankVocabulary(t *testing.T) {
 		t.Fatalf("bank vocabulary in generic packages:\n%s", strings.Join(v, "\n"))
 	}
 }
+
+// The owner's sealed defect file and ground-truth labels must never be committed: they are
+// git-ignored, and no tracked file may match either pattern.
+func TestOwnerOnlyFilesAreIgnoredAndUntracked(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	root := moduleRoot(t)
+	run := func(args ...string) (string, error) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+	if out, err := run("rev-parse", "--is-inside-work-tree"); err != nil || strings.TrimSpace(out) != "true" {
+		t.Skip("not inside a git work tree")
+	}
+	for _, p := range []string{"internal/aleef/bank/sealed/sealed_defects.go", "internal/aleef/bench/labels.json", "labels.json"} {
+		if out, err := run("check-ignore", "-q", p); err != nil {
+			t.Errorf("%s is not git-ignored (%v %s)", p, err, out)
+		}
+	}
+	out, err := run("ls-files")
+	if err != nil {
+		t.Skipf("git ls-files: %v", err)
+	}
+	for _, f := range strings.Split(out, "\n") {
+		f = strings.TrimSpace(f)
+		if strings.HasSuffix(f, "/labels.json") || f == "labels.json" || strings.HasSuffix(f, "internal/aleef/bank/sealed/sealed_defects.go") {
+			t.Errorf("owner-only file is tracked: %s", f)
+		}
+	}
+}

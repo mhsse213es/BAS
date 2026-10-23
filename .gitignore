@@ -101,3 +101,8 @@ node_modules/
 /Threat_Intel_Installation.docx
 /troubleshootingOfAgents.docx
 /updt_bas-report-Atomic_Red_Team__-__Selective_Te-18b8523b.pdf
+
+# Aleef owner-only benchmark material: the sealed defect file and the ground-truth labels are authored
+# and held by the owner and must never be committed (see docs/aleef-benchmark-spec.md).
+orchestrator/internal/aleef/bank/sealed/sealed_defects.go
+**/labels.json
