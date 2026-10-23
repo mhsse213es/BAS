@@ -708,3 +708,9 @@ nothing about detection). Scenario classes: DB-08 T1562, DB-10 T1565.001 (new
 - **F3:** a second throwaway-account probe on an adapter that still tracks an account is refused before anything is sent (DB-06, DB-08, DB-10, both engines).
 - **F4:** a context expiry in the lab-connection fingerprint now marks the adapter broken, like create/grant.
 - **F5/F6 (wording):** audit-log recording of denied statements is an EXPECTATION to confirm on staging, not an observed fact. DB-11 PASS means no server-file-write, program-execution or server-file-read privilege is held; it does NOT mean the account cannot dump or back up data (replication, pg_read_all_data, RELOAD, LOCK TABLES, broad SELECT are informational only). Scenarios DB-08/10/11 reworded and re-signed.
+
+### Staging results, fourth live run (2026-10-23, code 90c4ac81): Tasks 14 and 15 VERIFIED LIVE
+
+
+
+PostgreSQL (222.5 s) and MySQL (226.0 s): every scenario PASS (DB-02 `read_grants` ERROR by design, R-AJ). MySQL DB-06 now PASS after the no-default-database fix. DB-08 `try_disable_audit`: Enforcement Blocked, Telemetry Present, Response Alerted, exact_marker, both engines (the denied session-scoped statement reached the audit source with the marker and raised the alert; baseline carries the meta tag only). DB-10 `try_write_fixture`: Blocked, Present, Alerted, exact_marker, both engines (fixture fingerprint unchanged). DB-11 `check_export_privileges` (run as restricted `dbsim_test`): Blocked, Telemetry Unverifiable, Response NotTested by design, both engines. Per-engine exact denial codes are enforced by construction (PASS requires them) but were not printed for passing steps. DB-11 PASS means no server-file-write, program-execution or server-file-read privilege; it does not mean the account cannot dump or back up data. Independent cleanup check for this run: pending user output.
