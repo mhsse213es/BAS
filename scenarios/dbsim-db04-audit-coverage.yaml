@@ -1,0 +1,65 @@
+id: dbsim-db04-audit-coverage
+product_line: dbsim
+name: Database Security Simulation DB-04 - Audit Coverage Check
+description: >
+  Read-only check of whether a registered database target records and exposes
+  an audit trail for the BAS probe's own activity. The agent first reads the
+  audit-relevant server settings with the named probe read_audit_config
+  (statement logging level, audit plugins or extensions, whether a queryable
+  audit source exists), then runs one marker-tagged read_roles probe and reads
+  that marker back from the target's audit source with the test account's own
+  privileges. Both probes run inside a READ ONLY transaction against a
+  pre-registered target whose server identity (PostgreSQL system_identifier /
+  MySQL server_uuid) is verified before any probe runs.
+
+  ATT&CK mapping: T1562 Impair Defenses (the scenario evaluates whether the
+  target's audit logging is configured and complete, i.e. whether disabling or
+  gutting it would blind the defender; it changes nothing and never disables
+  any log), T1087 Account Discovery (the marker-tagged role enumeration is the
+  activity whose audit record is looked for).
+
+  An audit source is only queryable when the lab or customer has provisioned
+  one the test account can read (PostgreSQL: the view dbsim_audit.pg_log;
+  MySQL: general_log with TABLE output, or the performance_schema statement
+  history). Without one the agent reports the audit status as unsupported and
+  the orchestrator reports SKIPPED, never a pass. An audit window that was
+  rotated or evicted mid-run is reported as incomplete, and a failed collection
+  as an error; neither is ever treated as proof that the activity was audited.
+
+  This scenario names its target by id only. Host, port, identity, credential
+  reference and mode come from the server-side target registry, never from this
+  file. Credentials are references (dbcred:...) resolved on the agent host.
+  The agent reports observations (audit status and the marker-bearing events,
+  at most 50, statements redacted and truncated); it never scores. Verdicts are
+  produced by the orchestrator.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - audit
+  - logging
+  - read-only
+  - mitre-attack
+mitre_phases:
+  - defense-evasion
+  - discovery
+
+steps:
+  - name: "DB-04 Audit configuration read (T1562)"
+    technique_id: T1562
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_audit_config
+    risk: low
+    blast_radius: "read-only query of audit-related server settings; no setting is changed"
+    reversible: true
+
+  - name: "DB-04 Marker-tagged role enumeration for audit readback (T1087)"
+    technique_id: T1087
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_roles
+    risk: low
+    blast_radius: "read-only role catalog query tagged with the probe marker; the audit source is then read back for that marker; no state changed"
+    reversible: true

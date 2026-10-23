@@ -18,7 +18,59 @@ func yamlUnmarshal(b []byte, v any) error { return yaml.Unmarshal(b, v) }
 
 const repoScenarios = "../../../../scenarios"
 
-var dbScenarioIDs = []string{"dbsim-db01-auth-policy", "dbsim-db02-excessive-grants", "dbsim-db03-unauthorized-access"}
+var dbScenarioIDs = []string{"dbsim-db01-auth-policy", "dbsim-db02-excessive-grants", "dbsim-db03-unauthorized-access", "dbsim-db04-audit-coverage"}
+
+// DB-04 asks the agent for the audit configuration first and then runs one
+// marker-tagged read_roles whose statement the agent reads back from the
+// target's audit source. Both steps must compile for either engine, be
+// read-only, and carry distinct markers so the audit evidence of one step can
+// never be attributed to the other.
+func TestDB04AuditCoverageStepsBuildForBothEngines(t *testing.T) {
+	eng := scenario.NewEngine(stageDBScenarios(t))
+	if err := eng.Load(); err != nil {
+		t.Fatal(err)
+	}
+	sc, ok := eng.Get("dbsim-db04-audit-coverage")
+	if !ok {
+		t.Fatal("dbsim-db04-audit-coverage not loaded")
+	}
+	my := labTarget()
+	my.Engine, my.Port, my.ExpectedIdentity = "mysql", 3306, "3b0f6e7a-1111-2222-3333-444455556666"
+	for _, tgt := range []dbsim.Target{labTarget(), my} {
+		steps, err := BuildSteps(context.Background(), sc, opts(tgt))
+		if err != nil {
+			t.Fatalf("%s: %v", tgt.Engine, err)
+		}
+		if len(steps) != 2 {
+			t.Fatalf("%s: %d steps, want 2", tgt.Engine, len(steps))
+		}
+		wantProbe := []string{"read_audit_config", "read_roles"}
+		wantTech := []string{"T1562", "T1087"}
+		markers := map[string]bool{}
+		for i, st := range steps {
+			var spec dbsim.DBProbeSpec
+			if err := json.Unmarshal(st.DBProbe, &spec); err != nil {
+				t.Fatal(err)
+			}
+			if spec.ProbeID != wantProbe[i] || st.Command != wantProbe[i] {
+				t.Errorf("%s step %d: probe %q command %q, want %q", tgt.Engine, i, spec.ProbeID, st.Command, wantProbe[i])
+			}
+			if st.TechniqueID != wantTech[i] {
+				t.Errorf("%s step %d: technique %q, want %q", tgt.Engine, i, st.TechniqueID, wantTech[i])
+			}
+			if st.Executor != "dbprobe" || st.ExecutionClass != scenario.ClassNonDestructive || len(st.Payloads) != 0 || st.Cleanup != "" {
+				t.Errorf("%s step %d: shape %+v", tgt.Engine, i, st)
+			}
+			if len(spec.Params) != 0 {
+				t.Errorf("%s step %d: unexpected params %v", tgt.Engine, i, spec.Params)
+			}
+			if markers[spec.Marker] {
+				t.Errorf("duplicate marker %q", spec.Marker)
+			}
+			markers[spec.Marker] = true
+		}
+	}
+}
 
 // stageDBScenarios copies the shipped dbsim YAMLs and their .sig files, byte
 // for byte, into a temp builtin scenarios directory, so Load verifies exactly
