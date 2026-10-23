@@ -309,3 +309,125 @@ the agent-local `BAS_DBPROBE_LAB_MUTATION_ALLOWED`.
 E2E.md ran on staging 2026-10-23 (see "Staging results" above). Remaining before
 Tasks 14-16 are accepted as built on solid ground: the independent cleanup check
 (`E2E.md` §8). The user directed work to continue with Task 14 on 2026-10-23.
+
+## Task 14: DB-06 account revocation, DB-07 sensitive-data classification
+
+Built on commit `88e6e2e6` (staging E2E PASS base). Nothing in this section has
+touched a live database or SIEM: every behaviour below is **unit/fake tested
+only** unless it says VERIFIED, and the live tests are written, compile
+(`go vet -tags dbsim_integration`, `-tags dbsim_e2e`) and have NOT been run.
+
+### What was built
+
+* **DB-06 `auth_after_revoke`** (class `mutation`, fixture `empty`, both engines).
+  The adapter creates a throwaway LOGIN account `dbsim_<fixture id>_acct` (PG
+  `CREATE ROLE ... LOGIN PASSWORD`, MySQL `CREATE USER ... IDENTIFIED BY`; a random
+  password generated in the agent process, hex only, added to the redaction set
+  and never logged, returned, noted or put on the wire), opens a NEW connection
+  as it and runs one marker-tagged statement (baseline), revokes it (PG `ALTER
+  ROLE ... NOLOGIN`, MySQL `ALTER USER ... ACCOUNT LOCK`) and opens a NEW
+  connection again. A refusal classified by SQLSTATE 28000/28P01 or the message
+  "is not permitted to log in" (PG) or error 1045/3118 (MySQL) is `Denied`
+  (`auth_failed`) => Enforcement Blocked; a connection that works is Allowed;
+  anything else is `reconnect_error` => Unknown => ERROR, never Blocked. The
+  account is registered in the adapter's created-objects tracking
+  (`acctState.mayExist`, set before the CREATE, cleared when the server refuses
+  the CREATE): `Cleanup` drops exactly that name and only then, and
+  `InspectFixture` lists `role:`/`user:` `dbsim_<id>_acct` so `VerifyClean`
+  reports a leftover as residual => `ErrSafetyIncident` (existing path). No
+  configured, target or BAS account is ever created, altered or revoked (tests
+  assert every account-addressing statement names only the throwaway account).
+  A typed note `revoke_steps=create=<v>,baseline=<v>,revoke=<v>,reconnect=<v>` says
+  which step produced which outcome; `dbsim.Notes.Revocation()` parses it
+  strictly.
+* **Grading** (`dbsim/report.go`): Enforcement is Blocked only if create,
+  baseline and revoke are `ok` AND reconnect is `denied` AND the result agrees;
+  contradictory or missing evidence => Unknown (ERROR). PASS therefore needs
+  baseline OK + denial recognised + cleanup ok. Keyed on `Outcome.ProbeID`
+  (default-safe, like R-AK). **Telemetry honesty:** DB-06 is never correlated
+  (`dbrun.Evaluate` forces ExpectDetection/ExpectResponse off, no SIEM lookup),
+  `ToRecord` pins Telemetry Unverifiable / Response NotTested whatever a caller
+  supplies, and every record carries the limitation that a failed login has no
+  SQL statement to carry the marker and the marker rides on the baseline
+  statement only. The scenario description says so plainly.
+* **DB-07 `read_classified_fixture`** (class `bounded_synthetic`, fixture
+  `classified-pii`, both engines): the same bounded unfiltered SELECT as DB-05/09
+  but fixed to `customers_pii` of the `classified-pii` fixture (no table param
+  exists; a param can never override the fixed table), 25-row hard cap, READ ONLY
+  transaction, counts only. Reuses `ActiveFixture` resolution (R-Z).
+* **Rule-specific classification verdict** (`dbsim.ClassifyByRule`, wired in
+  `dbrun.Evaluate`; policy data `StepInput.ClassificationRuleName`): Correct only
+  when a marker-correlated (exact/strong) alert came from the named rule;
+  Incorrect only when the read was allowed, on-time marker-correlated telemetry is
+  Present and no alert came from that rule; Unknown for absent/delayed/ambiguous/
+  unverifiable telemetry (never Incorrect from missing evidence); NotEvaluated
+  when no rule is configured (default), the rule is the generic marker rule
+  (`BAS dbsim marker in database audit event` never counts), or the read was
+  denied/incomplete. `ExpectClassification` is forced on for the probe and any
+  verdict other than Correct/Incorrect grades the dimension unverifiable, so
+  DB-07 without a classification rule is ERROR, never a PASS.
+* **Wire/catalog:** no new wire fields (the step note rides in the existing
+  `Notes`). `ProbeDef`/`ProbeRegistryEntry` gained `RequiredFixture` and
+  `FixedTable`; both catalog goldens regenerated (byte-identical across modules,
+  no trailing newline); agent validation, gate, executor binding and orchestrator
+  Authorize/builder (`checkFixture`) all enforce the one required fixture, lab
+  only, no table param.
+* **Scenarios:** `dbsim-db06-account-revocation` (T1078, risk high, mutation) and
+  `dbsim-db07-sensitive-classification` (T1213, risk medium), both signed with
+  `orchestrator/scripts/signer.go` (the private key is gitignored and not
+  committed). Scenario-count pin 113 -> 115.
+* **Lab (UNVERIFIED, ~45 lines):** `lab/dbsim/elastic/rule-classified.json`
+  (second detection rule, name `BAS dbsim classified-fixture read`, KQL on the
+  keyword/boolean field `dbsim.touches_classified`), the field extracted by both
+  Filebeat `script` processors in the style of `dbsim.is_meta` (no reliance on text
+  analysis), mapped boolean in the index template, `setup.sh kibana` creates both
+  rules, README checklist items 16-19, E2E.md sections 5, 6 and 8.
+* **Tests:** new tests: agent `dbprobe` 8, postgres 14, mysql 14, executor 4,
+  fixtures 1; orchestrator `dbsim` 6, `dbbuild` 3, `dbrun` 10 (including
+  `TestClassificationOutcomeCorrectWhenRuleFires`, `...IncorrectWhenRuleSilent`,
+  `...NotEvaluatedWhenNoRuleConfigured`, `...UnknownWhenTelemetryUnverifiable`,
+  `...GenericMarkerAlertDoesNotCountAsClassification`). Live tests written, NOT
+  run: `postgres|mysql/revoke_integration_test.go` (tag `dbsim_integration`) and
+  the DB-06/DB-07 steps in `dbrun/e2e_test.go` (tag `dbsim_e2e`).
+
+### Verified here vs staging-unverified
+
+Verified on this host (fakes only): all unit tests above; `go build ./...` and
+`go vet` (orchestrator `dbsim`, `detectverify`, `verification`, tags `dbsim_e2e`,
+`dbsim_integration`); agent cross-builds for windows/linux/darwin; the import-guard
+test; both catalog goldens identical; `signer.go verify-all` lists exactly the same
+25 pre-existing invalid signatures and none of ours (the scenario engine now loads
+90, was 88: the known `TestBuiltinScenarios_AllHaveValidProductLine` red is
+unchanged in cause: "loaded 90 want 115" instead of "loaded 88 want 113").
+
+**UNVERIFIED (staging queue):** everything that needs a database or the SIEM:
+CREATE ROLE/USER privileges for `dbsim_lab`; `pg_hba.conf`/TLS/auth plugin letting
+the throwaway account connect from the agent host (a baseline failure is reported
+`baseline_failed`, never a pass); the exact refusal SQLSTATE/number after
+NOLOGIN/ACCOUNT LOCK; anonymous or host-specific MySQL accounts shadowing
+`'name'@'%'`; whether `InspectFixture` sees the account (`pg_roles`, `mysql.user`);
+the second Filebeat field and rule actually firing, and the alert's rule name
+reaching `MatchedAlert.RuleName` unchanged (the DB-07 verdict is an exact name
+comparison); MySQL comment survival for DB-07 (else Unknown/ERROR).
+
+### Honest limits and risks
+
+* DB-06 makes **no telemetry claim**. Failed logins are not expected in the audit
+  sources; nothing proves the denial was detected. Only Enforcement is graded.
+* On PostgreSQL the one-run random password appears in the server statement log if
+  `log_statement` records DDL (`CREATE ROLE ... PASSWORD '<hex>'` cannot take a bound
+  parameter). It belongs to an account dropped at the end of the same run, but it
+  does reach the lab's audit/SIEM text (MySQL is documented to rewrite account
+  passwords in its general log; not verified here). Pre-hashing a SCRAM verifier client-side would avoid this; not done.
+* The agent's audit readback for DB-06 filters on the configured (admin)
+  principal, so the baseline statement (run by the throwaway account) is not
+  counted as audit evidence; DB-06 does not expect audit.
+* `auth_after_revoke` runs create/baseline/revoke/reconnect under ONE spec
+  deadline (`timeout_sec` 60); a timeout mid-run marks the adapter broken and the
+  teardown then reports a safety incident rather than guessing (the existing known
+  limitation of every fixture).
+* DB-07's Incorrect needs a marker-correlated alert from SOME other rule as proof
+  the pipeline saw the statement; with no alert at all the verdict is Unknown by
+  design (a broken pipeline looks identical to a silent rule).
+* A classification-rule alert is matched by rule NAME. If the connector reports
+  another field, every run is Incorrect/Unknown, never a false Correct.

@@ -107,8 +107,16 @@ go test -tags dbsim_e2e -count=1 -timeout 60m -v \
   -run TestE2E_MySQL_SignedScenarioToCorrelatedRecord ./internal/dbsim/dbrun/
 ```
 
-Sub-tests: DB-01, DB-02, DB-03, DB-04, DB-05, DB-09 (each scenario's steps are
-graded one step at a time; combining steps into one scenario Record is Task 16).
+Sub-tests: DB-01, DB-02, DB-03, DB-04, DB-05, DB-09, DB-06, DB-07 (each
+scenario's steps are graded one step at a time; combining steps into one
+scenario Record is Task 16).
+
+DB-06 and DB-07 (Task 14) are UNVERIFIED until a staging run. Before running
+them: re-run `elastic/setup.sh kibana` (and the `es` phase, so the index template
+maps `dbsim.touches_classified`) and restart Filebeat with the updated
+`filebeat.yml`, so the second rule `rule-classified.json` exists; confirm
+`dbsim_lab` may create roles/users (README checklist 18). The agent test binary
+must be rebuilt from this commit (it carries the new probes).
 
 ## 6. Expected end state (per step, both engines)
 
@@ -128,6 +136,8 @@ minus the database-reported probe time); match grade `exact_marker`;
 | DB-04 `read_audit_config` | PASS if `audit_config: covered`; no SIEM query (the lab rule never alerts on it) |
 | DB-04 `read_roles` (tagged) | PASS needs audit status `found` AND the alert. `unsupported` => SKIPPED, `absent` => FAIL, `incomplete`/`error` => ERROR (the harness reports any non-PASS as a failed assertion; the Record explains why) |
 | DB-05, DB-09 | PASS, Present/Alerted, `CleanupStatus ok` (fixture schema `dbsim_*` gone) |
+| DB-06 `auth_after_revoke` | **UNVERIFIED.** PASS needs the step note `revoke_steps=create=ok,baseline=ok,revoke=ok,reconnect=denied` (baseline login worked, revoke issued, NEW login refused with PG 28000/28P01 or MySQL 1045/3118), Enforcement Blocked, `CleanupStatus ok`. **Telemetry stays Unverifiable and Response NotTested BY DESIGN** (a failed login has no statement to carry the marker; the harness asserts they are NOT Present/Alerted and never queries the SIEM for this step). Honest non-PASS outcomes: `baseline_failed` / `revoke_failed` / `reconnect_error` / `account_create_failed` => ERROR (look at the `revoke_steps` note and the `revoke_detail:` lines; typical causes are `pg_hba.conf`, TLS mode, auth plugin, a missing CREATEROLE/CREATE USER privilege); the account still logs in after the revoke => FAIL (a real finding); a leftover `dbsim_<id>_acct` => ERROR (safety incident, clean by hand) |
+| DB-07 `read_classified_fixture` | **UNVERIFIED.** Needs `rule-classified.json` installed. PASS needs Classification **Correct** (an exact-marker alert whose rule name equals `BAS dbsim classified-fixture read`), Present/Alerted, `CleanupStatus ok`. Only the generic rule alerting => Classification **Incorrect** => FAIL (rule missing or not firing: README checklist 16-17). Telemetry unverifiable (for example the MySQL marker comment not surviving) => Classification **Unknown** => ERROR, never Incorrect. No rule name configured => NotEvaluated => ERROR (the harness always configures it) |
 
 ## 7. If the MySQL marker comment does not survive
 
@@ -158,8 +168,11 @@ docker compose exec mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SHOW DATABAS
 
 (`dbsim_audit`, `dbsim_lab`, `dbsim_test` are the lab's own objects and are
 expected. Fixture objects are named `dbsim_<fixture id>` (schema/database) and,
-on PostgreSQL, `dbsim_<fixture id>_ro` (role); anything else matching is a
-leftover. The exact fixture ids come from the agent's fixture catalog.)
+on PostgreSQL, `dbsim_<fixture id>_ro` (role); DB-06 also creates the throwaway
+login `dbsim_<fixture id>_acct` (PostgreSQL role / MySQL user `'...'@'%'`),
+which must be gone too (`SELECT rolname FROM pg_roles WHERE rolname LIKE
+'dbsim\_%\_acct'`; `SELECT User FROM mysql.user WHERE User LIKE
+'dbsim\_%\_acct'`). Anything else matching is a leftover. The exact fixture ids come from the agent's fixture catalog.)
 
 ## 9. What to send back
 
