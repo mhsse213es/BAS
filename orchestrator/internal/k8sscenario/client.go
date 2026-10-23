@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -71,6 +72,11 @@ func (c *APIClient) do(ctx context.Context, method, path, contentType string, bo
 
 // doAs sends a request with the given bearer token. The token is used only in the Authorization header.
 func (c *APIClient) doAs(ctx context.Context, token, method, path, contentType string, body any) (int, []byte, error) {
+	return c.doAsAccept(ctx, token, method, path, "application/json", contentType, body)
+}
+
+// doAsAccept is doAs with an explicit Accept header, for requests that ask for a different representation.
+func (c *APIClient) doAsAccept(ctx context.Context, token, method, path, accept, contentType string, body any) (int, []byte, error) {
 	var rdr io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -84,7 +90,7 @@ func (c *APIClient) doAs(ctx context.Context, token, method, path, contentType s
 		return 0, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", accept)
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
@@ -344,4 +350,168 @@ func (c *APIClient) IdentityWithToken(ctx context.Context, token []byte) (string
 		return "", errors.New("SelfSubjectReview response is not valid JSON")
 	}
 	return review.Status.UserInfo.Username, nil
+}
+
+// The synthetic-secret methods below touch exactly one secret and one RoleBinding, fixed by name. They refuse any other
+// name, so the client cannot be pointed at other objects even if a caller asks.
+const (
+	rbacBase = "/apis/rbac.authorization.k8s.io/v1"
+	// subjectKindServiceAccount is the only subject kind the synthetic binding may hold.
+	subjectKindServiceAccount = "ServiceAccount"
+)
+
+func checkSynthetic(name, want string) error {
+	if name != want {
+		return fmt.Errorf("object %q is not the synthetic fixture", name)
+	}
+	return nil
+}
+
+// ReadSecretAs reads the synthetic secret authenticated as the token. A 200 is allowed, a 403 is denied, and any
+// other status is an error. The value is returned to the caller only; errors never include it.
+func (c *APIClient) ReadSecretAs(ctx context.Context, token []byte, namespace, name string) (string, bool, error) {
+	if err := checkSynthetic(name, synthSecret); err != nil {
+		return "", false, err
+	}
+	path := objectPath("secrets", ObjectRef{Namespace: namespace, Name: name})
+	status, raw, err := c.doAs(ctx, string(token), http.MethodGet, path, "", nil)
+	if err != nil {
+		return "", false, err
+	}
+	switch status {
+	case http.StatusForbidden:
+		return "", false, nil
+	case http.StatusOK:
+		var wire struct {
+			Data map[string]string `json:"data"`
+		}
+		if err := json.Unmarshal(raw, &wire); err != nil {
+			return "", false, errors.New("secret response is not valid JSON")
+		}
+		enc, ok := wire.Data["value"]
+		if !ok {
+			return "", false, errors.New("secret has no value key")
+		}
+		v, err := base64.StdEncoding.DecodeString(enc)
+		if err != nil {
+			return "", false, errors.New("secret value is not valid base64")
+		}
+		return string(v), true, nil
+	default:
+		return "", false, statusErr(http.MethodGet, path, status)
+	}
+}
+
+// SyntheticSecretLabels reads only the labels of the synthetic secret. It asks the API for metadata alone, so the secret's
+// data is never returned to the engine.
+func (c *APIClient) SyntheticSecretLabels(ctx context.Context, namespace, name string) (map[string]string, bool, error) {
+	if err := checkSynthetic(name, synthSecret); err != nil {
+		return nil, false, err
+	}
+	path := objectPath("secrets", ObjectRef{Namespace: namespace, Name: name})
+	status, raw, err := c.doAsAccept(ctx, c.token, http.MethodGet, path, partialMetadataAccept, "", nil)
+	if err != nil {
+		return nil, false, err
+	}
+	switch status {
+	case http.StatusNotFound:
+		return nil, false, nil
+	case http.StatusOK:
+		var wire struct {
+			Metadata struct {
+				Labels map[string]string `json:"labels"`
+			} `json:"metadata"`
+		}
+		if err := json.Unmarshal(raw, &wire); err != nil {
+			return nil, false, errors.New("secret metadata response is not valid JSON")
+		}
+		return wire.Metadata.Labels, true, nil
+	default:
+		return nil, false, statusErr(http.MethodGet, path, status)
+	}
+}
+
+// partialMetadataAccept asks the API server for an object's metadata only.
+const partialMetadataAccept = "application/json;as=PartialObjectMetadata;g=meta.k8s.io;v=v1"
+
+// GetBinding reads the synthetic RoleBinding's roleRef name and subjects.
+func (c *APIClient) GetBinding(ctx context.Context, namespace, name string) (BindingState, bool, error) {
+	if err := checkSynthetic(name, synthBinding); err != nil {
+		return BindingState{}, false, err
+	}
+	path := rbacBase + "/namespaces/" + url.PathEscape(namespace) + "/rolebindings/" + url.PathEscape(name)
+	status, raw, err := c.do(ctx, http.MethodGet, path, "", nil)
+	if err != nil {
+		return BindingState{}, false, err
+	}
+	switch status {
+	case http.StatusNotFound:
+		return BindingState{}, false, nil
+	case http.StatusOK:
+	default:
+		return BindingState{}, false, statusErr(http.MethodGet, path, status)
+	}
+	var wire struct {
+		RoleRef struct {
+			Name string `json:"name"`
+		} `json:"roleRef"`
+		Subjects []struct {
+			Kind      string `json:"kind"`
+			Name      string `json:"name"`
+			Namespace string `json:"namespace"`
+		} `json:"subjects"`
+	}
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		return BindingState{}, false, errors.New("binding response is not valid JSON")
+	}
+	out := BindingState{RoleName: wire.RoleRef.Name}
+	for _, sub := range wire.Subjects {
+		ns := sub.Namespace
+		if ns == "" {
+			ns = namespace
+		}
+		out.Subjects = append(out.Subjects, sub.Kind+"/"+ns+"/"+sub.Name)
+	}
+	return out, true, nil
+}
+
+// SetBindingSubjects replaces the synthetic binding's subjects. Only ServiceAccounts in the binding's own namespace
+// are accepted, so the binding cannot be pointed at anything wider.
+func (c *APIClient) SetBindingSubjects(ctx context.Context, namespace, name string, subjects []string) error {
+	if err := checkSynthetic(name, synthBinding); err != nil {
+		return err
+	}
+	wire := []map[string]string{}
+	for _, s := range subjects {
+		parts := strings.Split(s, "/")
+		if len(parts) != 3 || parts[0] != subjectKindServiceAccount || parts[1] != namespace {
+			return fmt.Errorf("subject %q is not a ServiceAccount in %s", s, namespace)
+		}
+		wire = append(wire, map[string]string{"kind": subjectKindServiceAccount, "name": parts[2], "namespace": namespace})
+	}
+	path := rbacBase + "/namespaces/" + url.PathEscape(namespace) + "/rolebindings/" + url.PathEscape(name)
+	status, _, err := c.do(ctx, http.MethodPatch, path, "application/merge-patch+json", map[string]any{"subjects": wire})
+	if err != nil {
+		return err
+	}
+	if status != http.StatusOK {
+		return statusErr(http.MethodPatch, path, status)
+	}
+	return nil
+}
+
+// SetSecretValue replaces the synthetic secret's value. The value is sent once and never logged.
+func (c *APIClient) SetSecretValue(ctx context.Context, namespace, name, value string) error {
+	if err := checkSynthetic(name, synthSecret); err != nil {
+		return err
+	}
+	path := objectPath("secrets", ObjectRef{Namespace: namespace, Name: name})
+	status, _, err := c.do(ctx, http.MethodPatch, path, "application/merge-patch+json", map[string]any{"stringData": map[string]string{"value": value}})
+	if err != nil {
+		return err
+	}
+	if status != http.StatusOK {
+		return statusErr(http.MethodPatch, path, status)
+	}
+	return nil
 }

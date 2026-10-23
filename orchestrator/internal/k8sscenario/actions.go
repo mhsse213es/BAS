@@ -25,6 +25,8 @@ type Action struct {
 	// in StateDiscardedNotRevoked, never StateCleaned. summary describes that result for the operator.
 	unrevocable bool
 	summary     func(snap any) string
+	// observation reports a conclusive read result, recorded separately from the state. Nil for actions that have none.
+	observation func(snap any) string
 }
 
 var (
@@ -38,6 +40,7 @@ var registry = map[string]*Action{
 	"pod-create-unprivileged":  podAction(),
 	"configmap-patch-labelled": configMapAction(),
 	"sa-token-probe":           tokenProbeAction(),
+	"synthetic-secret-read":    syntheticSecretAction(),
 }
 
 // Registry returns the fixed action registry.

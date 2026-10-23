@@ -412,3 +412,21 @@ func (f *fakeClient) IssueToken(_ context.Context, _ string, _ string, _ int64) 
 func (f *fakeClient) IdentityWithToken(_ context.Context, _ []byte) (string, error) {
 	return f.tokenIdentity, nil
 }
+
+// Synthetic-secret methods are not used by the pod, ConfigMap or token actions; they fail closed if called.
+func (f *fakeClient) ReadSecretAs(context.Context, []byte, string, string) (string, bool, error) {
+	return "", false, errors.New("not used by this action")
+}
+func (f *fakeClient) GetBinding(context.Context, string, string) (BindingState, bool, error) {
+	return BindingState{}, false, errors.New("not used by this action")
+}
+func (f *fakeClient) SetBindingSubjects(context.Context, string, string, []string) error {
+	return errors.New("not used by this action")
+}
+func (f *fakeClient) SetSecretValue(context.Context, string, string, string) error {
+	return errors.New("not used by this action")
+}
+
+func (f *fakeClient) SyntheticSecretLabels(context.Context, string, string) (map[string]string, bool, error) {
+	return nil, false, errors.New("not used by this action")
+}

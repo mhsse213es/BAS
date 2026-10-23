@@ -1,6 +1,6 @@
 # Synthetic secret read-access verification (scenario 1) — design
 
-Status: approved in principle by the owner on 2026-10-23. Lab fixtures and runner RBAC applied and verified on 2026-10-23 (step 1 of 3). Engine action not built; no live run yet. Each step below needs its own approval before
+Status: approved in principle 2026-10-23. Lab fixtures and runner RBAC applied and verified (step 1 of 3). Engine action built with unit tests (step 2 of 3). No live run yet; the live run needs a separate approval (step 3 of 3). Each step below needs its own approval before
 it runs on the lab: the RBAC change, the first live run, and any later change to the design.
 
 ## 1. Intent

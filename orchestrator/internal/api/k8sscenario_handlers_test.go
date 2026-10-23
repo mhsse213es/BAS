@@ -308,3 +308,20 @@ func TestK8sRun_ApprovalCannotBeUsedTwice(t *testing.T) {
 		t.Fatalf("second execute: status %d, extra writes %d; want 409 and none", rec.Code, sh.cluster.writeCount()-writesAfterFirst)
 	}
 }
+
+func (f *fakeScenarioCluster) ReadSecretAs(context.Context, []byte, string, string) (string, bool, error) {
+	return "", false, errors.New("not used by pod actions")
+}
+func (f *fakeScenarioCluster) GetBinding(context.Context, string, string) (k8sscenario.BindingState, bool, error) {
+	return k8sscenario.BindingState{}, false, errors.New("not used by pod actions")
+}
+func (f *fakeScenarioCluster) SetBindingSubjects(context.Context, string, string, []string) error {
+	return errors.New("not used by pod actions")
+}
+func (f *fakeScenarioCluster) SetSecretValue(context.Context, string, string, string) error {
+	return errors.New("not used by pod actions")
+}
+
+func (f *fakeScenarioCluster) SyntheticSecretLabels(context.Context, string, string) (map[string]string, bool, error) {
+	return nil, false, errors.New("not used by pod actions")
+}

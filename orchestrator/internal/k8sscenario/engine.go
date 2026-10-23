@@ -94,6 +94,9 @@ type Result struct {
 	Verified bool
 	Error    string
 	Withheld bool
+	// Observation is the read result of an action that has one (see ObservationSucceeded and friends). It is
+	// recorded apart from State: a denied read is a finding, not a failed run.
+	Observation string
 }
 
 // Client is the cluster surface the engine needs. The real implementation is a separate, reviewed write client.
@@ -108,6 +111,23 @@ type Client interface {
 	IssueToken(ctx context.Context, namespace, serviceAccount string, ttlSeconds int64) (IssuedToken, error)
 	// IdentityWithToken reports the username a token authenticates as.
 	IdentityWithToken(ctx context.Context, token []byte) (string, error)
+	// ReadSecretAs reads a secret authenticated as the given token. allowed is false only for a refusal (403); any
+	// other failure is an error. The value goes to the caller only and is never logged or audited.
+	ReadSecretAs(ctx context.Context, token []byte, namespace, name string) (value string, allowed bool, err error)
+	// SyntheticSecretLabels reads only the labels of the synthetic secret, never its data.
+	SyntheticSecretLabels(ctx context.Context, namespace, name string) (map[string]string, bool, error)
+	// GetBinding reads a RoleBinding's roleRef name and subjects. Subjects are "Kind/namespace/name".
+	GetBinding(ctx context.Context, namespace, name string) (BindingState, bool, error)
+	// SetBindingSubjects replaces a RoleBinding's subjects. Only the synthetic binding may be changed.
+	SetBindingSubjects(ctx context.Context, namespace, name string, subjects []string) error
+	// SetSecretValue replaces the value of one synthetic secret. Only the synthetic secret may be changed.
+	SetSecretValue(ctx context.Context, namespace, name, value string) error
+}
+
+// BindingState is what the engine reads from a RoleBinding.
+type BindingState struct {
+	RoleName string
+	Subjects []string
 }
 
 // IssuedToken is a minted credential. Token is never logged, audited, returned or placed in an error.
@@ -210,7 +230,13 @@ func (e *Engine) Run(ctx context.Context, req RunRequest) Result {
 func (e *Engine) execute(ctx context.Context, req RunRequest, a *Action, plan []string) Result {
 	snap, err := a.snapshot(ctx, e.cfg.Client, req)
 	if err != nil {
-		return e.finish(ctx, req, plan, StateFailed, false, "snapshot: "+err.Error())
+		return e.finish(ctx, req, plan, StateFailed, false, "snapshot: "+err.Error(), "")
+	}
+	observed := func() string {
+		if a.observation == nil {
+			return ""
+		}
+		return a.observation(snap)
 	}
 
 	applyErr := a.apply(ctx, e.cfg.Client, req, snap)
@@ -226,7 +252,7 @@ func (e *Engine) execute(ctx context.Context, req RunRequest, a *Action, plan []
 	}
 	if rollbackErr != nil {
 		msg := "rollback not verified: " + rollbackErr.Error()
-		return e.finish(ctx, req, plan, StateCleanupFailed, verified, msg)
+		return e.finish(ctx, req, plan, StateCleanupFailed, verified, msg, observed())
 	}
 
 	state := StateCleaned
@@ -247,17 +273,20 @@ func (e *Engine) execute(ctx context.Context, req RunRequest, a *Action, plan []
 			msg = "verification failed; " + msg
 		}
 	}
-	return e.finish(ctx, req, plan, state, verified, msg)
+	return e.finish(ctx, req, plan, state, verified, msg, observed())
 }
 
 // finish records the outcome. A failed outcome write withholds the result. CLEANUP_FAILED always alerts.
-func (e *Engine) finish(ctx context.Context, req RunRequest, plan []string, state State, verified bool, msg string) Result {
-	res := Result{State: state, Plan: plan, Verified: verified, Error: msg}
+func (e *Engine) finish(ctx context.Context, req RunRequest, plan []string, state State, verified bool, msg, observation string) Result {
+	res := Result{State: state, Plan: plan, Verified: verified, Error: msg, Observation: observation}
 	fields := runFields(req)
 	fields["state"] = string(state)
 	fields["verified"] = fmt.Sprint(verified)
 	if msg != "" {
 		fields["detail"] = msg
+	}
+	if observation != "" {
+		fields["observation"] = observation
 	}
 	if err := e.cfg.Audit.Write(ctx, Event{Type: EventOutcome, RunID: req.RunID, Fields: fields}); err != nil {
 		res.Withheld = true

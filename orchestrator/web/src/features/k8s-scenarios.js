@@ -10,7 +10,8 @@ import { showToast } from '../core/util.js';
 var K8S_ACTIONS = {
   'pod-create-unprivileged': { label: 'Create unprivileged pod', params: ['name'] },
   'configmap-patch-labelled': { label: 'Patch labelled ConfigMap', params: ['name', 'value'] },
-  'sa-token-probe': { label: 'Mint and discard a probe token', params: [] }
+  'sa-token-probe': { label: 'Mint and discard a probe token', params: [] },
+  'synthetic-secret-read': { label: 'Read synthetic secret as probe', params: [] }
 };
 
 // Each state maps to a dashboard badge modifier and a label.
