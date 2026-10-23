@@ -18,7 +18,7 @@ func fixtureWith(tables ...string) Fixture {
 
 func TestFixtureAwareProbesAreCatalogedWithClasses(t *testing.T) {
 	sr, ok := LookupProbe("suspicious_read")
-	if !ok || sr.Class != ClassReadOnly || sr.FixtureParam != "table" {
+	if !ok || sr.Class != ClassBoundedSynthetic || sr.FixtureParam != "table" {
 		t.Fatalf("suspicious_read: %+v ok=%v", sr, ok)
 	}
 	bb, ok := LookupProbe("bounded_synthetic_read")
@@ -59,13 +59,43 @@ func TestBoundedSyntheticReadRefusedInClientMode(t *testing.T) {
 	if err := CheckSpec(fixtureSpec("bounded_synthetic_read", ModeLab), def, "7001", "7001", Policy{LabMutationAllowed: true}); err != nil {
 		t.Fatalf("lab mode with allowance must pass the gate: %v", err)
 	}
-	// suspicious_read is read_only by class but fixture-aware, so it is lab-only too.
+	// suspicious_read seeds a fixture too: same class, same gating (R-AI).
 	sdef, _ := LookupProbe("suspicious_read")
 	if err := CheckSpec(fixtureSpec("suspicious_read", ModeClient), sdef, "7001", "7001", all); err == nil {
-		t.Fatal("client mode must refuse a fixture-aware probe even though its class is read_only")
+		t.Fatal("client mode must refuse suspicious_read")
 	}
-	if err := CheckSpec(fixtureSpec("suspicious_read", ModeLab), sdef, "7001", "7001", Policy{}); err != nil {
-		t.Fatalf("read_only fixture-aware probe in lab mode needs no mutation allowance: %v", err)
+	if err := CheckSpec(fixtureSpec("suspicious_read", ModeLab), sdef, "7001", "7001", Policy{}); err == nil {
+		t.Fatal("suspicious_read seeds a fixture and needs the agent-local lab-mutation allowance")
+	}
+	if err := CheckSpec(fixtureSpec("suspicious_read", ModeLab), sdef, "7001", "7001", Policy{LabMutationAllowed: true}); err != nil {
+		t.Fatalf("lab + allowance must pass: %v", err)
+	}
+}
+
+// R-AI: any step that names a fixture mutates the lab database (the run seeds
+// it), whatever the probe's own class is.
+func TestAnyFixtureStepIsGatedAsMutation(t *testing.T) {
+	catalog["t_ro_fixture"] = ProbeDef{ID: "t_ro_fixture", Class: ClassReadOnly, Engines: bothEngines, ParamSchema: map[string]ParamKind{}}
+	t.Cleanup(func() { delete(catalog, "t_ro_fixture") })
+	for _, id := range []string{"t_ro_fixture", "read_roles"} {
+		def, _ := LookupProbe(id)
+		s := validSpec()
+		s.ProbeID, s.Mode, s.FixtureID = id, ModeLab, "accounts"
+		if err := CheckSpec(s, def, "7001", "7001", Policy{}); err == nil {
+			t.Errorf("%s + fixture in lab mode without allowance accepted", id)
+		}
+		if err := CheckSpec(s, def, "7001", "7001", Policy{LabMutationAllowed: true}); err != nil {
+			t.Errorf("%s + fixture + allowance refused: %v", id, err)
+		}
+		s.Mode = ModeClient
+		if err := CheckSpec(s, def, "7001", "7001", Policy{ClientEnabled: true, LabMutationAllowed: true}); err == nil {
+			t.Errorf("%s + fixture in client mode accepted", id)
+		}
+		// Without a fixture a read_only probe is unchanged.
+		s.FixtureID, s.Mode = "", ModeLab
+		if err := CheckSpec(s, def, "7001", "7001", Policy{}); err != nil {
+			t.Errorf("%s without fixture must be unchanged: %v", id, err)
+		}
 	}
 }
 

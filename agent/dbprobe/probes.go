@@ -28,18 +28,16 @@ var catalog = map[string]ProbeDef{
 		ParamSchema: map[string]ParamKind{}},
 	"read_restricted_table": {ID: "read_restricted_table", Class: ClassReadOnly, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{"table": ParamString}},
+	// Rule (R-AI): a run that seeds a fixture mutates the lab database and is
+	// gated as bounded_synthetic regardless of what the probe itself reads.
+	//
 	// suspicious_read (DB-05): one unfiltered all-column SELECT of a seeded
-	// fixture table, a read pattern a DAM/SIEM rule is expected to flag. It only
-	// runs a SELECT inside a READ ONLY transaction (class read_only) and reads at
-	// most SuspiciousReadMaxRows rows whatever the spec limit says. It is
-	// fixture-aware, hence lab-only.
-	ProbeSuspiciousRead: {ID: ProbeSuspiciousRead, Class: ClassReadOnly, Engines: bothEngines,
+	// fixture table, a read pattern a DAM/SIEM rule is expected to flag; at most
+	// SuspiciousReadMaxRows rows whatever the spec limit says. Lab-only.
+	ProbeSuspiciousRead: {ID: ProbeSuspiciousRead, Class: ClassBoundedSynthetic, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{"table": ParamString}, FixtureParam: "table"},
 	// bounded_synthetic_read (DB-09): the same fixed SELECT as a row-capped BULK
-	// read (cap = Limits.MaxRows, plus a byte cap). Classified bounded_synthetic
-	// because it runs against a per-run seeded fixture, so it needs the
-	// lab-mutation allowance even though its own SQL is a SELECT in a READ ONLY
-	// transaction.
+	// read (cap = Limits.MaxRows, plus a byte cap). Lab-only.
 	ProbeBoundedSyntheticRead: {ID: ProbeBoundedSyntheticRead, Class: ClassBoundedSynthetic, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{"table": ParamString}, FixtureParam: "table"},
 }

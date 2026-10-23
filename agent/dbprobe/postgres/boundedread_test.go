@@ -85,6 +85,9 @@ func TestSuspiciousReadProbeIsNamedAndFixedSQL(t *testing.T) {
 			t.Errorf("call without a deadline: %q", c.sql)
 		}
 	}
+	if !hasNote(res.Notes, "row_cap_applied=25") {
+		t.Errorf("a cap override must be reported: %v", res.Notes)
+	}
 	if !hasNote(res.Notes, "shape=wide_select") {
 		t.Errorf("shape category missing: %v", res.Notes)
 	}

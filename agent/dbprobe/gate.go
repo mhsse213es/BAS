@@ -50,16 +50,19 @@ func CheckSpec(spec DBProbeSpec, def ProbeDef, observedIdentity string, expected
 	if real.FixtureParam != "" && spec.Mode != ModeLab {
 		return fmt.Errorf("dbprobe: gate: %s mode refuses fixture-aware probe %q (lab only)", spec.Mode, spec.ProbeID)
 	}
+	// R-AI: a run that seeds a fixture mutates the lab database, so any step that
+	// names one is gated as a mutation whatever the probe's own class says.
+	mutates := class != ClassReadOnly || spec.FixtureID != ""
 	switch spec.Mode {
 	case ModeLab:
-		if class != ClassReadOnly && !p.LabMutationAllowed {
-			return fmt.Errorf("dbprobe: gate: lab mode refuses %s probe %q without local mutation allowance", class, spec.ProbeID)
+		if mutates && !p.LabMutationAllowed {
+			return fmt.Errorf("dbprobe: gate: lab mode refuses %s probe %q (fixture %q) without local mutation allowance", class, spec.ProbeID, spec.FixtureID)
 		}
 	case ModeClient:
 		if !p.ClientEnabled {
 			return fmt.Errorf("dbprobe: gate: client mode is disabled on this agent")
 		}
-		if class != ClassReadOnly {
+		if mutates {
 			return fmt.Errorf("dbprobe: gate: client mode refuses %s probe %q", class, spec.ProbeID)
 		}
 	default:

@@ -74,6 +74,8 @@ func setupFixtureFake(t *testing.T) *fixtureFakeAdapter {
 	dbprobeNewAdapter = func(string) (dbprobe.Adapter, bool) { return ff, true }
 	t.Cleanup(func() { dbprobeNewAdapter = orig })
 	provisionDBCred(t, "lab-pg-ro", "ro_user", testCredPassword)
+	// A fixture run mutates the lab database and is gated as such (R-AI).
+	t.Setenv(envDBProbeLabMutationAllows, "1")
 	return ff
 }
 
@@ -296,6 +298,7 @@ func TestDBProbePanicWithCleanCleanupIsProbeError(t *testing.T) {
 func TestDBProbeFixtureSeedRefusedByAdapterRunsNoProbe(t *testing.T) {
 	// A plain adapter cannot report its mode, so fixtures.Seed refuses it.
 	fa := setupHappy(t)
+	t.Setenv(envDBProbeLabMutationAllows, "1") // a fixture run is gated as a mutation (R-AI)
 	out, err := executeDBProbe(context.Background(), testDBProbeStep(withFixtureID("accounts")))
 	if err == nil {
 		t.Fatal("expected a fixture error")

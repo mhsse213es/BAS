@@ -16,7 +16,7 @@ const (
 // Bounds of the fixture read probes.
 const (
 	// SuspiciousReadMaxRows is the hard row cap of suspicious_read: it is a
-	// read_only probe, so no spec limit can turn it into a bulk read.
+	// probe of a single suspicious read, so no spec limit can turn it into a bulk read.
 	SuspiciousReadMaxRows = 25
 	// MaxReadBytes caps the cell bytes a fixture read accounts for (1 MiB). The
 	// read stops counting on a row boundary once the next row would exceed it
@@ -122,7 +122,8 @@ type FixtureBinder interface {
 }
 
 // ActiveFixture holds the fixture a fixture-aware probe may address. Adapters
-// embed it. The zero value has no fixture, and Resolve then fails closed.
+// embed it. It is NOT safe for concurrent use: an adapter is created per step
+// and used from a single goroutine. The zero value has no fixture, and Resolve then fails closed.
 type ActiveFixture struct {
 	f *Fixture
 }

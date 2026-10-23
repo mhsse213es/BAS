@@ -45,10 +45,40 @@ func fixtureReadStep(probe string) ScenarioStep {
 		s.FixtureID = "accounts"
 		s.Params = map[string]string{"table": "accounts"}
 	})
-	if probe == dbprobe.ProbeBoundedSyntheticRead {
-		st.ExecutionClass = "potentially_destructive"
-	}
+	// Both fixture probes are bounded_synthetic (R-AI): the run seeds a fixture.
+	st.ExecutionClass = "potentially_destructive"
 	return st
+}
+
+func TestBothFixtureProbesNeedLocalAllowanceAndSignedClass(t *testing.T) {
+	for _, probe := range []string{dbprobe.ProbeSuspiciousRead, dbprobe.ProbeBoundedSyntheticRead} {
+		t.Setenv(envDBProbeLabMutationAllows, "")
+		bf := setupBinderFake(t)
+		if out, _ := executeDBProbe(context.Background(), fixtureReadStep(probe)); out.GateRefusal == "" || bf.count("Connect") != 0 {
+			t.Errorf("%s: lab mode without the agent-local allowance must be refused before connect: %+v", probe, out)
+		}
+		t.Setenv(envDBProbeLabMutationAllows, "1")
+		st := fixtureReadStep(probe)
+		st.ExecutionClass = "non_destructive"
+		if out, _ := executeDBProbe(context.Background(), st); out.GateRefusal == "" || bf.count("Connect") != 0 {
+			t.Errorf("%s: a non_destructive label must be refused: %+v", probe, out)
+		}
+		if out, err := executeDBProbe(context.Background(), fixtureReadStep(probe)); err != nil || out.GateRefusal != "" {
+			t.Errorf("%s: allowed run refused: err=%v %q", probe, err, out.GateRefusal)
+		}
+	}
+}
+
+// R-AI: even a read_only probe given a fixture id is gated as a mutation.
+func TestReadOnlyProbeWithFixtureNeedsAllowance(t *testing.T) {
+	t.Setenv(envDBProbeLabMutationAllows, "")
+	ff := setupFixtureFake(t)
+	// setupFixtureFake enables the allowance for older tests; turn it back off.
+	t.Setenv(envDBProbeLabMutationAllows, "")
+	out, _ := executeDBProbe(context.Background(), testDBProbeStep(withFixtureID("accounts")))
+	if out.GateRefusal == "" || ff.count("Connect") != 0 {
+		t.Fatalf("read_roles + fixture without allowance must be refused: %+v", out)
+	}
 }
 
 func TestFixtureReadBindsActiveFixtureAfterSeedAndUnbindsBeforeCleanup(t *testing.T) {

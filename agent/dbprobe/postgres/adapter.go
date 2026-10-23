@@ -529,6 +529,9 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 			return res, nil
 		}
 		res.RowsRead = b.Used()
+		if rowCap < spec.Limits.MaxRows {
+			res.Notes = append(res.Notes, fmt.Sprintf("row_cap_applied=%d", rowCap))
+		}
 		res.Notes = append(res.Notes, sum.Notes(dbprobe.ReadShape(spec.ProbeID), time.Since(readStart))...)
 		return res, nil
 	}
