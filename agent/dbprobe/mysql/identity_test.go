@@ -32,8 +32,12 @@ func identRows(spec ...string) func() ([][]any, error) {
 	return func() ([][]any, error) {
 		var out [][]any
 		for _, s := range spec {
-			p := strings.SplitN(s, "|", 3)
-			out = append(out, []any{[]byte(p[0]), []byte(p[1]), []byte(p[2])})
+			p := strings.SplitN(s, "|", 4)
+			g := "NO"
+			if len(p) == 4 {
+				g = p[3]
+			}
+			out = append(out, []any{[]byte(p[0]), []byte(p[1]), []byte(p[2]), []byte(g)})
 		}
 		return out, nil
 	}
@@ -42,6 +46,7 @@ func identRows(spec ...string) func() ([][]any, error) {
 func identAnswers(role any, rows ...string) map[string]func() ([][]any, error) {
 	return map[string]func() ([][]any, error){
 		"CURRENT_ROLE":      func() ([][]any, error) { return [][]any{{role}}, nil },
+		"APPLICABLE_ROLES":  func() ([][]any, error) { return nil, nil }, // no granted roles
 		"SCHEMA_PRIVILEGES": identRows(rows...),
 	}
 }

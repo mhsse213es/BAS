@@ -16,45 +16,65 @@ import (
 // anywhere (any non-system schema or table, through any membership) counts, and
 // anything that cannot be observed is reported unknown, never "no".
 //
-//   - can_write: superuser, membership in pg_write_all_data, or INSERT, UPDATE,
-//     DELETE or TRUNCATE on any non-system table (table or column level).
-//   - can_ddl: superuser, CREATE on the current database, CREATE on any non-system
-//     schema, or ownership (by membership) of any non-system relation (an owner
-//     can ALTER and DROP it).
-//   - can_admin: membership (including the role itself) in any role that is a
-//     superuser or has CREATEROLE, CREATEDB, BYPASSRLS or REPLICATION.
-//   - can_audit: able to change an audit setting. Audit parameters (log_statement,
-//     pgaudit.log) are superuser-only unless PostgreSQL 15 or later granted SET on
-//     the parameter, so this is superuser membership, plus has_parameter_privilege
-//     on 15 or later. On an older server the parameter function does not exist and
-//     the version query selects the superuser-only answer.
+// NEVER RUN against a real server (fake-session and structure tests only); the
+// semantics are UNVERIFIED until the dbsim_integration tests run on staging.
 //
-// Not covered: privileges on sequences, functions and large objects are not
-// examined; a role that can ALTER ROLE ... SET for audit parameters needs
-// CREATEROLE or ownership, which can_admin and can_ddl already report.
+// Roles. Every question is asked for each role the account is a MEMBER of
+// (pg_has_role(current_user, x.oid, 'MEMBER'), which includes the account itself),
+// using the role-qualified forms such as has_table_privilege(x.oid, c.oid, ...).
+// A NOINHERIT membership does not confer privileges automatically but the account
+// can SET ROLE into it, so inherited-only checks (has_table_privilege(c.oid, ...),
+// pg_has_role(..., 'USAGE')) would miss it.
+//
+//   - can_write: a member role that is a superuser or pg_write_all_data, or holds
+//     INSERT, UPDATE, DELETE or TRUNCATE (table level) or INSERT/UPDATE (column
+//     level) on any non-system table, partitioned table, VIEW or FOREIGN table
+//     (views and foreign tables are write paths).
+//   - can_ddl: a member role that is a superuser, has CREATE on the current
+//     database or on any non-system schema, or the account owns (by MEMBER) any
+//     non-system relation (an owner can ALTER and DROP it).
+//   - can_admin: a member role that is a superuser or has CREATEROLE, CREATEDB,
+//     BYPASSRLS or REPLICATION, or any predefined pg_* role OUTSIDE an explicit
+//     allow-list of read-only ones (pg_read_all_data, pg_read_all_settings,
+//     pg_read_all_stats, pg_stat_scan_tables, pg_monitor, pg_database_owner).
+//     pg_write_server_files, pg_execute_server_program, pg_signal_backend,
+//     pg_maintain and any role added by a future version therefore count: fail
+//     closed.
+//   - can_audit: a member role that is a superuser, or (PostgreSQL 15 and later)
+//     holds SET on log_statement or pgaudit.log. Audit parameters are
+//     superuser-only before 15; the version query selects the superuser-only answer.
+//
+// KNOWN GAPS (not examined): privileges on sequences, functions and procedures
+// (a SECURITY DEFINER function can write on the caller's behalf), large objects,
+// foreign data wrappers and servers, event triggers, languages and tablespaces;
+// row-level security effects; column-level privileges other than INSERT/UPDATE;
+// default privileges that will apply to future objects; and PostgreSQL before 15
+// grants CREATE on the public schema to everyone by default, so can_ddl reports
+// yes there (a conservative false FAIL).
 const (
-	sqlIdWrite = "SELECT (r.rolsuper OR CASE WHEN to_regrole('pg_write_all_data') IS NULL THEN false " +
-		"ELSE pg_has_role(current_user, 'pg_write_all_data', 'MEMBER') END OR EXISTS (" +
+	sqlIdSystemNS = "n.nspname NOT IN ('pg_catalog','information_schema') " +
+		"AND n.nspname NOT LIKE 'pg\\_toast%' AND n.nspname NOT LIKE 'pg\\_temp%'"
+
+	sqlIdWrite = "SELECT EXISTS (SELECT 1 FROM pg_roles x WHERE pg_has_role(current_user, x.oid, 'MEMBER') AND (" +
+		"x.rolsuper OR x.rolname = 'pg_write_all_data' OR EXISTS (" +
 		"SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
-		"WHERE c.relkind IN ('r','p') AND n.nspname NOT IN ('pg_catalog','information_schema') " +
-		"AND n.nspname NOT LIKE 'pg\\_toast%' AND n.nspname NOT LIKE 'pg\\_temp%' AND (" +
-		"has_table_privilege(c.oid, 'INSERT') OR has_table_privilege(c.oid, 'UPDATE') OR " +
-		"has_table_privilege(c.oid, 'DELETE') OR has_table_privilege(c.oid, 'TRUNCATE') OR " +
-		"has_any_column_privilege(c.oid, 'INSERT') OR has_any_column_privilege(c.oid, 'UPDATE')))) " +
-		"FROM pg_roles r WHERE r.rolname = current_user"
-	sqlIdDDL = "SELECT (r.rolsuper OR has_database_privilege(current_database(), 'CREATE') OR EXISTS (" +
-		"SELECT 1 FROM pg_namespace n WHERE n.nspname NOT IN ('pg_catalog','information_schema') " +
-		"AND n.nspname NOT LIKE 'pg\\_toast%' AND n.nspname NOT LIKE 'pg\\_temp%' " +
-		"AND has_schema_privilege(n.oid, 'CREATE')) OR EXISTS (" +
-		"SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
-		"WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg\\_toast%' " +
-		"AND n.nspname NOT LIKE 'pg\\_temp%' AND pg_has_role(current_user, c.relowner, 'USAGE'))) " +
-		"FROM pg_roles r WHERE r.rolname = current_user"
-	sqlIdAdmin = "SELECT EXISTS (SELECT 1 FROM pg_roles x WHERE (x.rolsuper OR x.rolcreaterole OR x.rolcreatedb " +
-		"OR x.rolbypassrls OR x.rolreplication) AND pg_has_role(current_user, x.oid, 'MEMBER'))"
+		"WHERE c.relkind IN ('r','p','v','f') AND " + sqlIdSystemNS + " AND (" +
+		"has_table_privilege(x.oid, c.oid, 'INSERT') OR has_table_privilege(x.oid, c.oid, 'UPDATE') OR " +
+		"has_table_privilege(x.oid, c.oid, 'DELETE') OR has_table_privilege(x.oid, c.oid, 'TRUNCATE') OR " +
+		"has_any_column_privilege(x.oid, c.oid, 'INSERT') OR has_any_column_privilege(x.oid, c.oid, 'UPDATE')))))"
+	sqlIdDDL = "SELECT EXISTS (SELECT 1 FROM pg_roles x WHERE pg_has_role(current_user, x.oid, 'MEMBER') AND (" +
+		"x.rolsuper OR has_database_privilege(x.oid, current_database(), 'CREATE') OR EXISTS (" +
+		"SELECT 1 FROM pg_namespace n WHERE " + sqlIdSystemNS + " AND has_schema_privilege(x.oid, n.oid, 'CREATE')))) " +
+		"OR EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
+		"WHERE " + sqlIdSystemNS + " AND pg_has_role(current_user, c.relowner, 'MEMBER'))"
+	sqlIdAdmin = "SELECT EXISTS (SELECT 1 FROM pg_roles x WHERE pg_has_role(current_user, x.oid, 'MEMBER') AND (" +
+		"x.rolsuper OR x.rolcreaterole OR x.rolcreatedb OR x.rolbypassrls OR x.rolreplication OR (" +
+		"x.rolname LIKE 'pg\\_%' AND x.rolname NOT IN ('pg_read_all_data','pg_read_all_settings'," +
+		"'pg_read_all_stats','pg_stat_scan_tables','pg_monitor','pg_database_owner'))))"
 	sqlIdSuper = "SELECT EXISTS (SELECT 1 FROM pg_roles x WHERE x.rolsuper AND pg_has_role(current_user, x.oid, 'MEMBER'))"
 	sqlIdVer   = "SELECT current_setting('server_version_num')::int"
-	sqlIdParam = "SELECT bool_or(has_parameter_privilege(current_user, p, 'SET')) FROM unnest(ARRAY['log_statement','pgaudit.log']) AS p"
+	sqlIdParam = "SELECT COALESCE(bool_or(has_parameter_privilege(x.oid, p, 'SET')), false) FROM pg_roles x, " +
+		"unnest(ARRAY['log_statement','pgaudit.log']) AS p WHERE pg_has_role(current_user, x.oid, 'MEMBER')"
 )
 
 // pgParameterPrivilegeVersion is the first server version with

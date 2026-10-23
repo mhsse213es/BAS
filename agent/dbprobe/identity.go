@@ -56,6 +56,10 @@ type PrivRow struct {
 	Scope     string
 	Schema    string
 	Privilege string
+	// Grantable is the row's IS_GRANTABLE value. "YES" on ANY row means the
+	// account holds GRANT OPTION (information_schema has no GRANT OPTION
+	// PRIVILEGE_TYPE row). Empty is treated as not grantable.
+	Grantable string
 }
 
 var (
@@ -65,7 +69,7 @@ var (
 	mysqlAdminPrivs = setOf("SUPER", "CREATE USER", "GRANT OPTION", "RELOAD", "SHUTDOWN", "REPLICATION SLAVE",
 		"FILE", "CREATE ROLE", "DROP ROLE")
 	mysqlAuditPrivs  = setOf("SUPER", "SYSTEM_VARIABLES_ADMIN", "AUDIT_ADMIN")
-	mysqlBenignPrivs = setOf("SELECT", "USAGE", "SHOW VIEW", "SHOW DATABASES", "EXECUTE", "PROCESS",
+	mysqlBenignPrivs = setOf("SELECT", "USAGE", "SHOW VIEW", "SHOW DATABASES", "PROCESS",
 		"REFERENCES", "REPLICATION CLIENT", "LOCK TABLES", "CREATE TEMPORARY TABLES", "SHOW_ROUTINE")
 )
 
@@ -90,13 +94,15 @@ func setOf(v ...string) map[string]bool {
 //     wildcard schema, or a schema/table row for those schemas), because the
 //     general log and audit tables live there.
 //
-// What it does NOT see: privileges that arrive through an active role (the
-// caller reports unknown in that case) and column-level SELECT detail.
+// What it does NOT see: privileges that arrive through an active or merely
+// granted role (the caller reports unknown), column-level SELECT detail, PROXY
+// grants (mysql.proxies_priv) and the PROCESS privilege's reach. Never run
+// against a real server: UNVERIFIED until the staging integration tests run.
 func ClassifyMySQLPrivileges(rows []PrivRow) (canWrite, canDDL, canAdmin, canAudit string) {
 	if len(rows) == 0 {
 		return IdentityUnknown, IdentityUnknown, IdentityUnknown, IdentityUnknown
 	}
-	var w, d, a, au, unknown bool
+	var w, d, a, au, unknown, execute bool
 	for _, r := range rows {
 		scope := strings.ToUpper(strings.TrimSpace(r.Scope))
 		p := strings.ToUpper(strings.TrimSpace(r.Privilege))
@@ -104,6 +110,10 @@ func ClassifyMySQLPrivileges(rows []PrivRow) (canWrite, canDDL, canAdmin, canAud
 		if scope != "G" && scope != "S" && scope != "T" && scope != "C" {
 			unknown = true
 			continue
+		}
+		// GRANT OPTION appears only as IS_GRANTABLE=YES on another row.
+		if strings.EqualFold(strings.TrimSpace(r.Grantable), "YES") {
+			a = true
 		}
 		reachesAudit := scope == "G" || schema == "mysql" || schema == "sys" || strings.ContainsAny(schema, "%_*")
 		switch {
@@ -120,6 +130,11 @@ func ClassifyMySQLPrivileges(rows []PrivRow) (canWrite, canDDL, canAdmin, canAud
 		case strings.HasSuffix(p, "_ADMIN"):
 			a = true
 			au = au || mysqlAuditPrivs[p]
+		case p == "EXECUTE":
+			// A SECURITY DEFINER routine can write on the caller's behalf, and
+			// routine bodies are not inspected: write is unknown unless a write
+			// privilege shows yes. Not a DDL/admin/audit signal.
+			execute = true
 		case mysqlBenignPrivs[p]:
 		default:
 			unknown = true
@@ -137,5 +152,9 @@ func ClassifyMySQLPrivileges(rows []PrivRow) (canWrite, canDDL, canAdmin, canAud
 		}
 		return IdentityNo
 	}
-	return pick(w), pick(d), pick(a), pick(au)
+	cw := pick(w)
+	if cw == IdentityNo && execute {
+		cw = IdentityUnknown
+	}
+	return cw, pick(d), pick(a), pick(au)
 }

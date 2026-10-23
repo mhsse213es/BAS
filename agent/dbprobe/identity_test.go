@@ -101,8 +101,12 @@ func TestIdentityVerdictNeverClearOnUnknown(t *testing.T) {
 func rows(spec ...string) []PrivRow {
 	var out []PrivRow
 	for _, s := range spec {
-		p := strings.SplitN(s, "|", 3)
-		out = append(out, PrivRow{Scope: p[0], Schema: p[1], Privilege: p[2]})
+		p := strings.SplitN(s, "|", 4)
+		r := PrivRow{Scope: p[0], Schema: p[1], Privilege: p[2]}
+		if len(p) == 4 {
+			r.Grantable = p[3]
+		}
+		out = append(out, r)
 	}
 	return out
 }
@@ -123,7 +127,14 @@ func TestClassifyMySQLPrivileges(t *testing.T) {
 		{"alter on app", rows("G||USAGE", "S|app|ALTER"), [4]string{"no", "yes", "no", "no"}},
 		{"global drop", rows("G||USAGE", "G||DROP"), [4]string{"no", "yes", "no", "yes"}},
 		{"create user", rows("G||USAGE", "G||CREATE USER"), [4]string{"no", "no", "yes", "no"}},
-		{"grant option", rows("G||USAGE", "G||GRANT OPTION"), [4]string{"no", "no", "yes", "no"}},
+		// GRANT OPTION is not a PRIVILEGE_TYPE row: it is IS_GRANTABLE=YES on another row.
+		{"grantable select", rows("G||USAGE", "S|app|SELECT|YES"), [4]string{"no", "no", "yes", "no"}},
+		{"grantable usage", rows("G||USAGE|YES"), [4]string{"no", "no", "yes", "no"}},
+		{"not grantable", rows("G||USAGE|NO", "S|app|SELECT|NO"), [4]string{"no", "no", "no", "no"}},
+		{"grantable lower case", rows("T|app|SELECT|yes"), [4]string{"no", "no", "yes", "no"}},
+		// EXECUTE can run a SECURITY DEFINER routine that writes: write is unknown, never no.
+		{"execute", rows("G||USAGE", "S|app|EXECUTE"), [4]string{"unknown", "no", "no", "no"}},
+		{"execute does not hide a write", rows("S|app|EXECUTE", "S|app|INSERT"), [4]string{"yes", "no", "no", "no"}},
 		{"dynamic admin", rows("G||USAGE", "G||CONNECTION_ADMIN"), [4]string{"no", "no", "yes", "no"}},
 		{"audit admin", rows("G||USAGE", "G||AUDIT_ADMIN"), [4]string{"no", "no", "yes", "yes"}},
 		{"system variables admin", rows("G||USAGE", "G||SYSTEM_VARIABLES_ADMIN"), [4]string{"no", "no", "yes", "yes"}},
