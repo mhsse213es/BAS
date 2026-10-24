@@ -779,7 +779,7 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
   padding:6px 13px;border-radius:20px;font-size:0.72rem;font-weight:700;letter-spacing:0.03em;margin-top:14px}
 .cover-bottom{padding:24px 48px;border-top:1px solid rgba(255,255,255,0.06);
   display:flex;justify-content:space-between;align-items:center;position:relative;z-index:1}
-.cover-bottom-copy{font-size:0.62rem;color:#2a4a6a;line-height:1.6}
+.cover-bottom-copy{font-size:0.62rem;color:#ffffff;line-height:1.6}
 .cover-scores{display:flex;gap:22px}
 .cs-item{text-align:center}
 .cs-num{font-size:1.45rem;font-weight:900;line-height:1}
