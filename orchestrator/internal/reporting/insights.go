@@ -161,12 +161,11 @@ func buildInsights(heatmap []TacticEntry, det DetectionSummary) Insights {
 		}
 	}
 	ins.Most = &TacticInsight{Tactic: most.Tactic, PassPct: most.PassPct, Tested: most.Total}
-	// A "least protected" callout implies something is comparatively weak.
-	// When the worst tactic is still at 100% (nothing failed anywhere,
-	// whether because only one tactic had data or every tactic tied at
-	// 100%), there is no legitimate "least protected" story -- showing it
-	// anyway previously duplicated the Most Protected card verbatim.
-	if least.PassPct < 100 {
+	// A "least protected" callout only means something when it names a
+	// different tactic that is measurably weaker than the most protected one.
+	// With a single tested tactic, or every tactic tied, the two callouts
+	// would repeat each other, so the Least card is omitted.
+	if least.Tactic != most.Tactic && least.PassPct < most.PassPct {
 		ins.Least = &TacticInsight{Tactic: least.Tactic, PassPct: least.PassPct, Tested: least.Total}
 	}
 	if !det.TelemetryObserved {

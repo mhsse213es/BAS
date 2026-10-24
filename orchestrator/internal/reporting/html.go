@@ -670,6 +670,8 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
   .det-matrix td{padding:4px 3px}
 
   .fc,.scard,.gloss-item,.exec-card{page-break-inside:avoid;break-inside:avoid}
+  /* Keep a section title with the content under it, so it is never left alone at the foot of a page. */
+  .stitle,.ph-title,h2,h3{break-after:avoid;page-break-after:avoid}
   thead{display:table-header-group}
 
   /* Per-section header/footer bars must not print (2026-09-04).
@@ -2238,6 +2240,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <!-- ═══ 10b. EPSS PRIORITY INDEX ═══════════════════════════════════════════ -->
 {{if .priorityScores}}
+{{$hasKEV := false}}{{$hasEPSS := false}}{{range .priorityScores}}{{if .kev}}{{$hasKEV = true}}{{end}}{{if gt .epssScore 0.0}}{{$hasEPSS = true}}{{end}}{{end}}
 <div class="page">
 <div class="inner">
 <div class="ph">
@@ -2265,8 +2268,8 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <th>Tactic</th>
     <th style="text-align:right">Score</th>
     <th>Tier</th>
-    <th style="text-align:center">KEV</th>
-    <th style="text-align:right">EPSS</th>
+    {{if $hasKEV}}<th style="text-align:center">KEV</th>{{end}}
+    {{if $hasEPSS}}<th style="text-align:right">EPSS</th>{{end}}
     <th style="text-align:right">Actors</th>
     <th>Verdict</th>
   </tr></thead>
@@ -2295,12 +2298,12 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
         {{$p.priorityTier}}
       </span>
     </td>
-    <td style="text-align:center">
+    {{if $hasKEV}}<td style="text-align:center">
       {{if $p.kev}}<span style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:3px;padding:1px 5px;font-size:0.68rem;font-weight:700">KEV</span>{{else}}<span style="color:#e5e7eb">—</span>{{end}}
-    </td>
-    <td style="text-align:right;font-size:0.8rem;color:#6e7681">
+    </td>{{end}}
+    {{if $hasEPSS}}<td style="text-align:right;font-size:0.8rem;color:#6e7681">
       {{if gt $p.epssScore 0.0}}{{printf "%.4f" $p.epssScore}}<div style="font-size:0.65rem">{{printf "%.0f" $p.epssPercentile}}th %ile</div>{{else}}—{{end}}
-    </td>
+    </td>{{end}}
     <td style="text-align:right;font-size:0.85rem">{{$p.threatActorCount}}</td>
     <td>
       <span style="font-size:0.75rem;font-weight:600;color:{{if eq $p.verdict "fail"}}#da3633{{else if eq $p.verdict "pass"}}#0d9488{{else if eq $p.verdict "blocked"}}#0d9488{{else}}#6e7681{{end}}">
