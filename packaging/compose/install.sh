@@ -50,6 +50,9 @@ readonly DEFAULT_ENROLL_PORT="9444"
 readonly DEFAULT_LEGACY_PORT="9000"
 readonly DEFAULT_DASHBOARD_PORT="9543"
 readonly MIN_RAM_MB=3800
+readonly COSIGN_VERSION="v3.1.3"
+readonly COSIGN_SHA256_AMD64="4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"
+readonly COSIGN_SHA256_ARM64="c5d324e091826b0d7a78eb16fef316450b4eb9aaec045611c08ba06f5e73220a"
 readonly MIN_DISK_MB=10240        # 10 GB -images + DB + logs
 readonly MIN_CPU_CORES=2
 readonly COMPOSE_PROJECT="audspect"
@@ -587,9 +590,9 @@ _check_compose() {
 # packaging/windows-build.ps1, via sign-blob/verify-blob against the
 # docker-save tarball -- cosign's image subcommands all need a registry,
 # which doesn't exist here); this installer must be able to verify that
-# signature before the tarball is ever loaded. No auto-install path like
-# Docker's -- cosign is specific enough that silently installing it on an
-# operator's box is not appropriate here.
+# signature before the tarball is ever loaded. This air-gapped installer never
+# downloads cosign: the release bundle ships tools/cosign-linux-<arch>, which is
+# installed on operator consent only if its SHA-256 matches the pin above.
 # Minimum confirmed-working cosign version for the sigstore bundle format
 # sign-blob/verify-blob now always produce. Real cross-version testing
 # during review found v2.2.4/v2.4.3/v2.5.3/v2.6.1/v3.0.2 all reject a
@@ -765,15 +768,67 @@ _resolve_cosign_pub() {
   fi
 }
 
+_cosign_installed_version() {
+  cosign version 2>/dev/null | sed -n 's/^GitVersion:[[:space:]]*\(.*\)$/\1/p' | tr -d '[:space:]'
+}
+
+_cosign_arch() {
+  case "$(uname -m)" in
+    x86_64) echo amd64 ;;
+    aarch64|arm64) echo arm64 ;;
+    *) return 1 ;;
+  esac
+}
+
+_cosign_needs_install() {
+  command -v cosign &>/dev/null || return 0
+  local ver
+  ver=$(_cosign_installed_version)
+  [[ -z "$ver" ]] || ! _cosign_version_ok "$ver"
+}
+
+_install_bundled_cosign() {
+  local arch sha src
+  arch=$(_cosign_arch) || { err "No bundled cosign for this architecture ($(uname -m))."; exit 1; }
+  case "$arch" in amd64) sha="$COSIGN_SHA256_AMD64" ;; arm64) sha="$COSIGN_SHA256_ARM64" ;; esac
+  src="${SCRIPT_DIR}/tools/cosign-linux-${arch}"
+  [[ -f "$src" ]] || { err "Bundled cosign not found at ${src}. The release bundle is incomplete -- obtain a complete bundle."; exit 1; }
+  if ! echo "${sha}  ${src}" | sha256sum -c --status -; then
+    err "Bundled cosign does not match the SHA-256 pinned in this installer -- refusing to install it."; exit 1
+  fi
+  install -m 0755 "$src" /usr/local/bin/cosign
+}
+
+_ensure_cosign() {
+  _cosign_needs_install || return 0
+  echo ""
+  echo "  cosign ${COSIGN_VERSION} is required to verify the release artifact before it is loaded."
+  echo "  The installer can install it from the copy inside this release bundle (no network)."
+  echo ""
+  if ! $YES; then
+    read -rp "  Install cosign ${COSIGN_VERSION} from the bundle now? [yes/N] " confirm
+    [[ "$confirm" == "yes" ]] || { err "cosign is required to continue. Install it manually (or re-run with --yes) and re-run."; exit 1; }
+  fi
+  _install_bundled_cosign
+  if _cosign_needs_install; then err "cosign is still missing or too old after install."; exit 1; fi
+  log "cosign installed: $(_cosign_installed_version)"
+}
+
 _check_cosign() {
   if ! command -v cosign &>/dev/null; then
-    echo "FAIL:Cosign -not installed (required to verify the orchestrator artifact before install; see https://docs.sigstore.dev/cosign/system_config/installation/)"
+    local arch
+    arch=$(_cosign_arch 2>/dev/null) || arch=""
+    if [[ -n "$arch" && -f "${SCRIPT_DIR}/tools/cosign-linux-${arch}" ]]; then
+      echo "INST:Cosign -not installed (installer can install ${COSIGN_VERSION} from the release bundle, SHA-256 pinned)"
+    else
+      echo "FAIL:Cosign -not installed and not in the release bundle (tools/cosign-linux-<arch> missing; the bundle is incomplete)"
+    fi
     return
   fi
   local ver
-  ver=$(cosign version 2>/dev/null | sed -n 's/^GitVersion:[[:space:]]*\(.*\)$/\1/p' | tr -d '[:space:]')
+  ver=$(_cosign_installed_version)
   if [[ -z "$ver" ]] || ! _cosign_version_ok "$ver"; then
-    echo "FAIL:Cosign -version ${ver:-unknown} is too old (need >= v3.1.0 to verify the sigstore bundle format this bundle's signature uses)"
+    echo "INST:Cosign -version ${ver:-unknown} is too old (installer can install ${COSIGN_VERSION} from the release bundle; need >= v3.1.0)"
     return
   fi
   if [[ ! -f "$COSIGN_PUB_USED" ]]; then
@@ -1095,6 +1150,7 @@ mode_install() {
   render_checks "${results[@]}" || exit 1
   # Verify EVERY bundled image before anything is installed or written: a
   # missing images/ or any unsigned/unlisted/tampered tar aborts here.
+  _ensure_cosign
   _verify_all_images "${SCRIPT_DIR}/images" "installation"
 
   step "2/10  Docker Engine"
@@ -1266,6 +1322,7 @@ mode_upgrade() {
   # Verify EVERY bundled image before anything is backed up or replaced: a
   # missing images/ is FATAL (nothing is pulled, BAS_VERSION is not rewritten).
   local what="upgrade (the previous version is still running; nothing was replaced)"
+  _ensure_cosign
   _verify_all_images "${SCRIPT_DIR}/images" "$what"
 
   step "1/5  Backup current installation"

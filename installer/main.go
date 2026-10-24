@@ -7,6 +7,8 @@ package main
 import (
 	"crypto/x509"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -470,6 +472,21 @@ func createControls(hwnd uintptr) {
 
 // ── Install logic ─────────────────────────────────────────────────────────────
 
+// enrollmentProbeURL points the pre-install health check at the enrollment
+// listener. The server URL advertised by the dashboard is the mTLS port,
+// which requires a client certificate a new agent does not have yet.
+func enrollmentProbeURL(serverURL, enrollPort string) (string, error) {
+	u, err := url.Parse(serverURL)
+	if err != nil {
+		return "", err
+	}
+	if enrollPort == "" {
+		enrollPort = "9444"
+	}
+	u.Host = net.JoinHostPort(u.Hostname(), enrollPort)
+	return u.String(), nil
+}
+
 func runInstall() {
 	installing = true
 	procEnableWindow.Call(hInstBtn, 0)
@@ -519,7 +536,14 @@ func runInstall() {
 	}
 
 	appendStatus("[1/4] Validating server connectivity and secret...")
-	if err := validateEnrollment(serverURL, secret, caPool); err != nil {
+	probeURL, probeErr := enrollmentProbeURL(serverURL, enrollPort)
+	if probeErr != nil {
+		appendStatus("[ERROR] Server URL is not valid: " + probeErr.Error())
+		procEnableWindow.Call(hInstBtn, 1)
+		installing = false
+		return
+	}
+	if err := validateEnrollment(probeURL, secret, caPool); err != nil {
 		appendStatus("[ERROR] " + err.Error())
 		appendStatus("       Check the Server URL and Agent Secret, then try again.")
 		procEnableWindow.Call(hInstBtn, 1)

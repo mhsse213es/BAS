@@ -283,6 +283,20 @@ if [[ ! -f "$COSIGN_PUB" ]]; then
 fi
 cp "$COSIGN_PUB" "${BUILD_DIR}/"
 
+# The air-gapped installer verifies the bundle with the cosign binary shipped
+# here and never downloads one. Each binary must match the SHA-256 pinned in
+# compose/install.sh before it is copied in.
+COSIGN_TOOLS_DIR="${REPO_ROOT}/packaging/tools"
+mkdir -p "${BUILD_DIR}/tools"
+for arch in amd64 arm64; do
+  src="${COSIGN_TOOLS_DIR}/cosign-linux-${arch}"
+  [[ -f "$src" ]] || { err "missing ${src} -- place the pinned cosign linux-${arch} binary there before building the release."; exit 1; }
+  pin=$(grep -oP "readonly COSIGN_SHA256_${arch^^}=\"\K[0-9a-f]{64}" "${REPO_ROOT}/packaging/compose/install.sh")
+  [[ -n "$pin" ]] || { err "no COSIGN_SHA256_${arch^^} pin found in compose/install.sh"; exit 1; }
+  echo "${pin}  ${src}" | sha256sum -c --status - || { err "${src} does not match the SHA-256 pinned in compose/install.sh"; exit 1; }
+  cp "$src" "${BUILD_DIR}/tools/cosign-linux-${arch}"
+done
+
 # Postgres: pulled BY DIGEST (packaging/images.pin; a digest mismatch is fatal),
 # saved UNCOMPRESSED and cosign-signed with the same helper and key as the
 # orchestrator. setup.sh/install.sh refuse any image tar without a valid
