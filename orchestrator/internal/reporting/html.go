@@ -1061,7 +1061,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   body{background:transparent !important}
   /* The inline footer in the last section is the same running footer: hide it, the margin boxes print it. */
   .runfoot,.runfoot *{display:none !important}
-  .page:not(.cover){background:transparent !important;min-height:calc(297mm - 30mm)}
+  .page:not(.cover){background-color:transparent !important;min-height:calc(297mm - 30mm);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='794' height='1009' viewBox='0 0 794 1009'%3E%3Ctext x='397' y='505' transform='rotate(-35 397 505)' text-anchor='middle' font-family='Arial' font-weight='700' font-size='110' fill='%23000' fill-opacity='0.08'%3ECONFIDENTIAL%3C/text%3E%3C/svg%3E") !important;background-repeat:repeat-y !important;background-size:210mm 267mm !important;background-position:0 0 !important}
   .runsheet>tbody>tr>td{background:#f3f6fa !important}
   /* Each section tag opens its own sheet, so it can never be stranded at the foot of the previous one. */
   .stag{break-before:page;page-break-before:always}
