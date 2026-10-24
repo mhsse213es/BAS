@@ -665,6 +665,9 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
      document wide, so a future regression names itself. */
   table{table-layout:fixed}
   th,td{white-space:normal !important;overflow-wrap:anywhere;padding:5px 6px}
+  .det-matrix{font-size:0.7rem}
+  .det-matrix th{font-size:0.6rem;letter-spacing:0.02em;padding:4px 3px}
+  .det-matrix td{padding:4px 3px}
 
   .fc,.scard,.gloss-item{page-break-inside:avoid;break-inside:avoid}
   thead{display:table-header-group}
@@ -1777,13 +1780,13 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <table>
   <thead>
     <tr>
-      <th style="width:9%">Technique</th>
-      <th style="width:25%">Name</th>
-      <th style="width:14%">Tactic</th>
-      <th style="width:14%">Verdict</th>
-      <th>Security Control</th>
-      <th style="width:8%">Severity</th>
-      <th style="width:7%">Duration</th>
+      <th style="width:12%">Technique</th>
+      <th style="width:24%">Name</th>
+      <th style="width:13%">Tactic</th>
+      <th style="width:13%">Verdict</th>
+      <th style="width:12%">Security Control</th>
+      <th style="width:14%">Severity</th>
+      <th style="width:12%">Duration</th>
     </tr>
   </thead>
   <tbody>
@@ -3277,9 +3280,12 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </table>
 
 {{if .techniqueMatrix}}
-<table>
+<table class="det-matrix">
+  <colgroup>
+    <col style="width:14%"><col style="width:9%"><col style="width:6%"><col style="width:7%"><col style="width:7%"><col style="width:6%"><col style="width:11%"><col style="width:8%"><col style="width:6%"><col style="width:8%"><col style="width:5%"><col style="width:8%"><col style="width:5%">
+  </colgroup>
   <thead><tr>
-    <th>Technique</th><th>Tactic</th><th>Sev</th><th>Execution</th><th>Requested Priv</th><th>Executed As</th><th>Detection</th><th>Alert Source</th><th>Event&nbsp;ID</th><th>Threat&nbsp;/&nbsp;Process</th><th>MTTD</th><th>Cleanup</th><th>Blocking Control</th>
+    <th>Technique</th><th>Tactic</th><th>Sev</th><th>Exec</th><th>Req.&nbsp;Priv</th><th>Ran&nbsp;As</th><th>Detection</th><th>Alert&nbsp;Source</th><th>Event</th><th>Threat</th><th>MTTD</th><th>Clean&nbsp;Up</th><th>Blocked&nbsp;By</th>
   </tr></thead>
   <tbody>
   {{range .techniqueMatrix}}
