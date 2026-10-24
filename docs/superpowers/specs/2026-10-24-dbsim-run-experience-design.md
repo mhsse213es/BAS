@@ -1,6 +1,6 @@
 # Database Security Simulation: run experience, history and reports (design)
 
-Status: DRAFT for owner review. Nothing in this document is implemented. `dbsim_runs` is unchanged. Nothing is pushed.
+Status: APPROVED by the owner on 2026-10-24 (the owner replied "approve" to the document including the recommendations in section 8, which are therefore the working decisions: run permission = `CanRunScenario` for lab runs and Admin only for client mode; 24-hour identity-check validity as a configurable default; TLS opt-outs forbidden for client targets; Analysts read-only; DPAPI helper documented, not built). The plan starts with the dispatch spike in section 6.8. Nothing in this document is implemented yet. `dbsim_runs` is unchanged. Nothing is pushed.
 
 ## 1. Intent
 
