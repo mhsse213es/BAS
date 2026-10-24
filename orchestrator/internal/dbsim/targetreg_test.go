@@ -11,6 +11,7 @@ func validPGReg() TargetRegistration {
 	return TargetRegistration{
 		ID: "prod-pg-1", DisplayName: "Prod PG 1", Engine: "postgresql", Host: "db1.example.com", Port: 5432,
 		Database: "app", CredentialRef: "dbcred:prod-pg-ro", ExpectedIdentity: "7312345678901234567", Mode: ModeClient,
+		AgentID: "0123456789abcdef",
 	}
 }
 
@@ -198,5 +199,58 @@ func TestTargetSchemaIsIdempotentAndHoldsNoSecrets(t *testing.T) {
 		if !strings.Contains(all, want) {
 			t.Errorf("schema lacks %s", want)
 		}
+	}
+}
+
+func TestRegisterRequiresAgentID(t *testing.T) {
+	for name, id := range map[string]string{
+		"empty": "", "blank": "   ", "too short": "0123456789abcde", "too long": "0123456789abcdef0",
+		"upper case": "0123456789ABCDEF", "path chars": "../../etc/passwd!", "injection": "0123456789abcde'",
+	} {
+		r := validPGReg()
+		r.AgentID = id
+		if _, err := r.Normalize(); !errors.Is(err, ErrTargetInvalid) {
+			t.Errorf("%s: agent id %q accepted: %v", name, id, err)
+		}
+	}
+	r := validPGReg()
+	r.AgentID = " 0123456789abcdef "
+	got, err := r.Normalize()
+	if err != nil || got.AgentID != "0123456789abcdef" {
+		t.Fatalf("valid agent id: %+v %v", got, err)
+	}
+}
+
+// A target registered before agent binding has no agent: it can never run and is
+// never client-eligible until re-registered (fail closed).
+func TestLegacyTargetWithoutAgentCannotRun(t *testing.T) {
+	for _, mode := range []ExecMode{ModeLab, ModeClient} {
+		tg := goodTarget(mode)
+		tg.AgentID = ""
+		if err := Authorize(tg, roEntry(), AuthInput{ClientGate: StaticClientGate(true), RunExpiry: time.Now().Add(time.Hour)}); err == nil {
+			t.Errorf("%s: Authorize ran a target with no agent", mode)
+		}
+		if err := AuthorizeIdentityCheck(tg, time.Now(), time.Now().Add(time.Minute)); err == nil {
+			t.Errorf("%s: identity check allowed for a target with no agent", mode)
+		}
+	}
+	rec := passedRecord(t, time.Now())
+	rec.AgentID = ""
+	if rec.ToTarget().ReadOnlyIdentityVerified {
+		t.Error("a legacy record without an agent must never be client-eligible")
+	}
+	rec.AgentID = "0123456789abcdef"
+	tg := rec.ToTarget()
+	if tg.AgentID != "0123456789abcdef" || !tg.ReadOnlyIdentityVerified {
+		t.Errorf("agent id not carried to the Target: %+v", tg)
+	}
+}
+
+func TestAgentChangeInvalidatesIdentityCheck(t *testing.T) {
+	base := passedRecord(t, time.Now())
+	c := base
+	c.AgentID = "fedcba9876543210"
+	if base.SameConfig(c) {
+		t.Fatal("a different agent must not be the same registered version")
 	}
 }

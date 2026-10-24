@@ -72,7 +72,7 @@ func EnsureDBSimTargetSchema(ctx context.Context, pool *pgxpool.Pool) error {
 type DBSimTargetStore struct{ Pool *pgxpool.Pool }
 
 const dbsimTargetCols = `id, display_name, engine, host, port, db_server_host, database_name, tls_mode,
-	credential_ref, expected_identity, mode, lab_confirmed, created_by, created_at,
+	credential_ref, agent_id, expected_identity, mode, lab_confirmed, created_by, created_at,
 	identity_check_passed, identity_check_at, identity_check_by, identity_check_reasons`
 
 func scanDBSimTarget(row pgx.Row) (dbsim.TargetRecord, error) {
@@ -84,7 +84,7 @@ func scanDBSimTarget(row pgx.Row) (dbsim.TargetRecord, error) {
 		passed  bool
 	)
 	if err := row.Scan(&r.ID, &r.DisplayName, &r.Engine, &r.Host, &r.Port, &r.DBServerHost, &r.Database, &r.TLSMode,
-		&r.CredentialRef, &r.ExpectedIdentity, &mode, &r.LabConfirmed, &r.CreatedBy, &r.CreatedAt,
+		&r.CredentialRef, &r.AgentID, &r.ExpectedIdentity, &mode, &r.LabConfirmed, &r.CreatedBy, &r.CreatedAt,
 		&passed, &at, &r.IdentityCheck.By, &reasons); err != nil {
 		return dbsim.TargetRecord{}, err
 	}
@@ -107,10 +107,10 @@ func (s DBSimTargetStore) Create(ctx context.Context, r dbsim.TargetRecord, audi
 	err := withDBSimAuditTx(ctx, s.Pool, audit, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 		INSERT INTO dbsim_targets (id, display_name, engine, host, port, db_server_host, database_name, tls_mode,
-			credential_ref, expected_identity, mode, lab_confirmed, created_by, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+			credential_ref, agent_id, expected_identity, mode, lab_confirmed, created_by, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
 			r.ID, r.DisplayName, r.Engine, r.Host, r.Port, r.DBServerHost, r.Database, r.TLSMode,
-			r.CredentialRef, r.ExpectedIdentity, string(r.Mode), r.LabConfirmed, r.CreatedBy, r.CreatedAt)
+			r.CredentialRef, r.AgentID, r.ExpectedIdentity, string(r.Mode), r.LabConfirmed, r.CreatedBy, r.CreatedAt)
 		return err
 	})
 	if err != nil {
@@ -192,10 +192,10 @@ func (s DBSimTargetStore) SaveIdentityCheck(ctx context.Context, against dbsim.T
 			SET identity_check_passed = $2, identity_check_at = $3, identity_check_by = $4, identity_check_reasons = $5::jsonb
 			WHERE id = $1 AND created_at = $6 AND engine = $7 AND host = $8 AND port = $9 AND database_name = $10
 			  AND tls_mode = $11 AND credential_ref = $12 AND expected_identity = $13 AND mode = $14 AND db_server_host = $15
-			  AND (identity_check_at IS NULL OR identity_check_at <= $3)`,
+			  AND agent_id = $16 AND (identity_check_at IS NULL OR identity_check_at <= $3)`,
 			against.ID, st.Passed && st.Checked, st.At, st.By, string(rb), against.CreatedAt, against.Engine, against.Host,
 			against.Port, against.Database, against.TLSMode, against.CredentialRef, against.ExpectedIdentity,
-			string(against.Mode), against.DBServerHost)
+			string(against.Mode), against.DBServerHost, against.AgentID)
 		if err != nil {
 			return err
 		}
@@ -205,10 +205,10 @@ func (s DBSimTargetStore) SaveIdentityCheck(ctx context.Context, against dbsim.T
 			if qerr := tx.QueryRow(ctx, `
 				SELECT EXISTS (SELECT 1 FROM dbsim_targets WHERE id = $1 AND created_at = $2 AND engine = $3 AND host = $4
 				  AND port = $5 AND database_name = $6 AND tls_mode = $7 AND credential_ref = $8 AND expected_identity = $9
-				  AND mode = $10 AND db_server_host = $11),
+				  AND mode = $10 AND db_server_host = $11 AND agent_id = $12),
 				  EXISTS (SELECT 1 FROM dbsim_targets WHERE id = $1)`,
 				against.ID, against.CreatedAt, against.Engine, against.Host, against.Port, against.Database, against.TLSMode,
-				against.CredentialRef, against.ExpectedIdentity, string(against.Mode), against.DBServerHost).Scan(&sameVersion, &exists); qerr != nil {
+				against.CredentialRef, against.ExpectedIdentity, string(against.Mode), against.DBServerHost, against.AgentID).Scan(&sameVersion, &exists); qerr != nil {
 				return qerr
 			}
 			switch {

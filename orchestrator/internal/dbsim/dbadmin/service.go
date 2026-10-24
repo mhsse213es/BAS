@@ -90,6 +90,12 @@ type CheckRunner interface {
 	RunIdentityCheck(ctx context.Context, t dbsim.Target) (dbsim.DBProbeResult, error)
 }
 
+// AgentDirectory says whether an agent id is a known, enrolled agent. It is
+// checked on registration so a target can only be bound to a real agent.
+type AgentDirectory interface {
+	Exists(ctx context.Context, agentID string) (bool, error)
+}
+
 // Service is the Admin logic. Settings and Targets are required for the
 // corresponding methods; a missing one makes them fail closed.
 type Service struct {
@@ -97,7 +103,10 @@ type Service struct {
 	Targets  TargetStore
 	Audit    Auditor
 	Runner   CheckRunner
-	Now      func() time.Time
+	// Agents validates the agent a target is bound to. Nil refuses every
+	// registration (fail closed).
+	Agents AgentDirectory
+	Now    func() time.Time
 }
 
 const (
@@ -203,10 +212,25 @@ func (s *Service) RegisterTarget(ctx context.Context, a Actor, reg dbsim.TargetR
 	if s.Targets == nil {
 		return dbsim.TargetRecord{}, errors.New("dbsim: target store unavailable")
 	}
+	if s.Agents == nil {
+		s.audit(a, action, resource, map[string]any{"error": "agent directory unavailable"}, "error")
+		return dbsim.TargetRecord{}, errors.New("dbsim: agent directory unavailable")
+	}
+	known, derr := s.Agents.Exists(ctx, norm.AgentID)
+	if derr != nil {
+		s.audit(a, action, resource, map[string]any{"error": "agent lookup failed"}, "error")
+		return dbsim.TargetRecord{}, fmt.Errorf("dbsim: agent lookup: %w", derr)
+	}
+	if !known {
+		err := fmt.Errorf("%w: agentId does not name a known agent", dbsim.ErrTargetInvalid)
+		s.audit(a, action, resource, map[string]any{"error": err.Error()}, "error")
+		return dbsim.TargetRecord{}, err
+	}
 	rec := dbsim.TargetRecord{TargetRegistration: norm, CreatedBy: a.ID, CreatedAt: s.now()}
 	ok := entry(a, action, "dbsim-target:"+norm.ID, map[string]any{
 		"engine": norm.Engine, "mode": string(norm.Mode), "host": norm.Host, "port": norm.Port,
 		"dbServerHost": norm.DBServerHost, "credentialRef": norm.CredentialRef,
+		"agentId":          norm.AgentID,
 		"expectedIdentity": norm.ExpectedIdentity, "labConfirmed": norm.LabConfirmed,
 	}, "ok")
 	if err := s.Targets.Create(ctx, rec, ok); err != nil {

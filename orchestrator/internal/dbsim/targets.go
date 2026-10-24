@@ -57,6 +57,7 @@ type Target struct {
 	Database                 string
 	TLSMode                  string
 	CredentialRef            string // opaque "dbcred:<name>" reference, never a secret
+	AgentID                  string // the agent next to the database; empty (legacy target) never runs
 	Mode                     ExecMode
 	ExpectedIdentity         string
 	ReadOnlyIdentityVerified bool
@@ -151,6 +152,9 @@ func Authorize(t Target, def ProbeRegistryEntry, in AuthInput) error {
 	}
 	if strings.TrimSpace(t.ExpectedIdentity) == "" {
 		return fmt.Errorf("dbsim: authorize: target %q has no pre-registered identity", t.ID)
+	}
+	if !reAgentID.MatchString(t.AgentID) {
+		return fmt.Errorf("dbsim: authorize: target %q is not bound to an agent (re-register it)", t.ID)
 	}
 	// A fixture-aware probe reads a per-run seeded fixture, which exists only in
 	// lab mode: refused for any other mode whatever its class says.

@@ -327,7 +327,7 @@ func TestE2EPlumbing_SignedEnvelopeReachesAgentExecutor(t *testing.T) {
 		t.Fatal("scenario not loaded")
 	}
 	tgt := dbsim.Target{ID: "lab-db", Engine: "postgresql", Host: "127.0.0.1", Port: 1, Database: "dbsim", TLSMode: "disable",
-		CredentialRef: "dbcred:e2e-plumbing-never-provisioned", Mode: dbsim.ModeLab, ExpectedIdentity: "1", LabConfirmed: true}
+		CredentialRef: "dbcred:e2e-plumbing-never-provisioned", Mode: dbsim.ModeLab, ExpectedIdentity: "1", LabConfirmed: true, AgentID: "0123456789abcdef"}
 	steps, err := dbbuild.BuildSteps(context.Background(), sc, dbbuild.Options{
 		Resolver: dbsim.NewMemoryResolver(tgt), RunExpiry: time.Now().Add(10 * time.Minute)})
 	if err != nil {
@@ -444,7 +444,7 @@ func runE2E(t *testing.T, cfg e2eConfig) {
 				cred, principal = cfg.credRO, "dbsim_test"
 			}
 			tgt := dbsim.Target{ID: "lab-db", Engine: cfg.engine, Host: cfg.host, Port: cfg.port, Database: cfg.db, TLSMode: "disable",
-				CredentialRef: "dbcred:" + cred, Mode: dbsim.ModeLab, ExpectedIdentity: cfg.identity, LabConfirmed: true}
+				CredentialRef: "dbcred:" + cred, Mode: dbsim.ModeLab, ExpectedIdentity: cfg.identity, LabConfirmed: true, AgentID: "0123456789abcdef"}
 			fixture := isFixtureScenario(id)
 			steps, err := dbbuild.BuildSteps(context.Background(), sc, dbbuild.Options{
 				Resolver: dbsim.NewMemoryResolver(tgt), MutationApproved: fixture, RunExpiry: time.Now().Add(20 * time.Minute)})

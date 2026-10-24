@@ -102,7 +102,7 @@ func TestClientRunWithMutationScenarioRefusedAtEveryLayer(t *testing.T) {
 	t.Run("db_role_identity_check", func(t *testing.T) {
 		reg, err := dbsim.TargetRegistration{
 			ID: "lab-db", Engine: "postgresql", Host: "10.20.30.40", Port: 5432, CredentialRef: "dbcred:lab-pg",
-			ExpectedIdentity: "7312345678901234567", Mode: dbsim.ModeClient,
+			ExpectedIdentity: "7312345678901234567", Mode: dbsim.ModeClient, AgentID: "0123456789abcdef",
 		}.Normalize()
 		if err != nil {
 			t.Fatal(err)

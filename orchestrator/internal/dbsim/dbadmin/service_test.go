@@ -144,6 +144,16 @@ func (f *fakeTargets) SaveIdentityCheck(ctx context.Context, against dbsim.Targe
 	return nil
 }
 
+type fakeAgents map[string]bool
+
+func (f fakeAgents) Exists(ctx context.Context, id string) (bool, error) { return f[id], nil }
+
+type errAgents struct{}
+
+func (errAgents) Exists(ctx context.Context, id string) (bool, error) {
+	return false, errors.New("agents table unreachable")
+}
+
 type fakeRunner struct {
 	res    dbsim.DBProbeResult
 	err    error
@@ -172,12 +182,13 @@ var (
 func newSvc() (*Service, *fakeSettings, *fakeTargets, *fakeAudit) {
 	au := &fakeAudit{}
 	st, tg := &fakeSettings{au: au}, newFakeTargets(au)
-	return &Service{Settings: st, Targets: tg, Audit: au, Now: func() time.Time { return t0 }}, st, tg, au
+	return &Service{Settings: st, Targets: tg, Audit: au, Agents: fakeAgents{"0123456789abcdef": true}, Now: func() time.Time { return t0 }}, st, tg, au
 }
 
 func pgReg() dbsim.TargetRegistration {
 	return dbsim.TargetRegistration{ID: "prod-pg-1", Engine: "postgresql", Host: "db1.example.com", Port: 5432,
-		CredentialRef: "dbcred:prod-pg-ro", ExpectedIdentity: "7312345678901234567", Mode: dbsim.ModeClient}
+		CredentialRef: "dbcred:prod-pg-ro", ExpectedIdentity: "7312345678901234567", Mode: dbsim.ModeClient,
+		AgentID: "0123456789abcdef"}
 }
 
 const clearNote = "identity_checks=can_write=no,can_ddl=no,can_admin=no,can_audit=no"
@@ -485,4 +496,51 @@ func TestIdentityCheckRefusals(t *testing.T) {
 	if _, _, err := s.RunIdentityCheck(context.Background(), admin, "prod-pg-1"); err == nil || run.called != 0 {
 		t.Fatalf("an unauthorised target reached the runner: %v called=%d", err, run.called)
 	}
+}
+
+func TestRegisterRejectsUnknownAgent(t *testing.T) {
+	ctx := context.Background()
+	t.Run("unknown agent", func(t *testing.T) {
+		s, _, tg, au := newSvc()
+		r := pgReg()
+		r.AgentID = "fedcba9876543210"
+		if _, err := s.RegisterTarget(ctx, admin, r); !errors.Is(err, dbsim.ErrTargetInvalid) || len(tg.recs) != 0 {
+			t.Fatalf("unknown agent accepted: %v", err)
+		}
+		if au.find("dbsim.target_registered", "ok") != nil {
+			t.Fatal("audited ok")
+		}
+	})
+	t.Run("missing agent id never reaches the directory", func(t *testing.T) {
+		s, _, tg, _ := newSvc()
+		r := pgReg()
+		r.AgentID = ""
+		if _, err := s.RegisterTarget(ctx, admin, r); !errors.Is(err, dbsim.ErrTargetInvalid) || len(tg.recs) != 0 {
+			t.Fatalf("empty agent accepted: %v", err)
+		}
+	})
+	t.Run("nil directory fails closed", func(t *testing.T) {
+		s, _, tg, _ := newSvc()
+		s.Agents = nil
+		if _, err := s.RegisterTarget(ctx, admin, pgReg()); err == nil || len(tg.recs) != 0 {
+			t.Fatalf("registered with no agent directory: %v", err)
+		}
+	})
+	t.Run("directory error fails closed", func(t *testing.T) {
+		s, _, tg, _ := newSvc()
+		s.Agents = errAgents{}
+		if _, err := s.RegisterTarget(ctx, admin, pgReg()); err == nil || errors.Is(err, dbsim.ErrTargetInvalid) || len(tg.recs) != 0 {
+			t.Fatalf("directory failure must be an internal error, not a registration: %v", err)
+		}
+	})
+	t.Run("known agent registers and is audited", func(t *testing.T) {
+		s, _, tg, au := newSvc()
+		rec, err := s.RegisterTarget(ctx, admin, pgReg())
+		if err != nil || rec.AgentID != "0123456789abcdef" || tg.recs["prod-pg-1"].AgentID != "0123456789abcdef" {
+			t.Fatalf("%+v %v", rec, err)
+		}
+		if e := au.find("dbsim.target_registered", "ok"); e == nil || e.Detail["agentId"] != "0123456789abcdef" {
+			t.Fatalf("agent not audited: %+v", au.entries)
+		}
+	})
 }

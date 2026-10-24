@@ -22,8 +22,11 @@ var (
 	reDatabaseName = regexp.MustCompile(`^[A-Za-z0-9_.$-]{0,63}$`)
 	// reCredentialRef mirrors the agent's resolver (agent/dbcred.go dbcredRefRE).
 	reCredentialRef = regexp.MustCompile(`^dbcred:[a-z0-9][a-z0-9-]{0,62}$`)
-	rePGIdentity    = regexp.MustCompile(`^[0-9]{1,20}$`)
-	reMyIdentity    = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	// reAgentID is the exact shape agent/identity.go produces (hex(SHA-256(hostname))[:16]),
+	// the same rule api.agentIDPattern enforces at enrolment.
+	reAgentID    = regexp.MustCompile(`^[0-9a-f]{16}$`)
+	rePGIdentity = regexp.MustCompile(`^[0-9]{1,20}$`)
+	reMyIdentity = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 )
 
 // TargetRegistration is what an Admin supplies to register a target. It holds a
@@ -43,6 +46,9 @@ type TargetRegistration struct {
 	TLSMode      string
 	// CredentialRef is the opaque "dbcred:<name>" reference resolved on the agent.
 	CredentialRef string
+	// AgentID is the agent that sits next to the database and resolves
+	// CredentialRef. Required: a target with no agent can never run (fail closed).
+	AgentID string
 	// ExpectedIdentity is supplied at registration for every target (R6). Client
 	// mode never trusts the first identity it sees. (Lab discover-then-confirm is
 	// not implemented: a lab target also needs its identity up front.)
@@ -102,6 +108,10 @@ func (r TargetRegistration) Normalize() (TargetRegistration, error) {
 	}
 	if !reCredentialRef.MatchString(r.CredentialRef) {
 		return bad(`credentialRef must be a reference of the form "dbcred:<name>" (lower case letters, digits, -); never a password`)
+	}
+	r.AgentID = strings.TrimSpace(r.AgentID)
+	if !reAgentID.MatchString(r.AgentID) {
+		return bad("agentId must be the 16 lower-case hex characters of the agent that sits next to the database")
 	}
 	id := strings.TrimSpace(r.ExpectedIdentity)
 	if id == "" {
@@ -177,7 +187,8 @@ var ErrIdentityCheckSuperseded = errors.New("dbsim identity check superseded by 
 func (r TargetRecord) SameConfig(o TargetRecord) bool {
 	return r.ID == o.ID && r.CreatedAt.Equal(o.CreatedAt) && r.Engine == o.Engine && r.Host == o.Host &&
 		r.Port == o.Port && r.Database == o.Database && r.TLSMode == o.TLSMode && r.CredentialRef == o.CredentialRef &&
-		r.ExpectedIdentity == o.ExpectedIdentity && r.Mode == o.Mode && r.DBServerHost == o.DBServerHost
+		r.ExpectedIdentity == o.ExpectedIdentity && r.Mode == o.Mode && r.DBServerHost == o.DBServerHost &&
+		r.AgentID == o.AgentID
 }
 
 // ToTarget is ToTargetAt with the real clock and DefaultIdentityCheckMaxAge.
@@ -187,14 +198,16 @@ func (r TargetRecord) ToTarget() Target { return r.ToTargetAt(time.Now(), Defaul
 // flags come only from the stored record: ReadOnlyIdentityVerified needs a
 // recorded, passed check on a client target that is younger than maxAge at now
 // (exactly maxAge fails; a non-positive maxAge or a timestamp in the future or
-// missing never verifies); LabConfirmed needs a lab target.
+// missing never verifies); LabConfirmed needs a lab target. A record with no
+// AgentID (registered before agent binding) is never verified: it stays
+// ineligible until re-registered with an agent.
 func (r TargetRecord) ToTargetAt(now time.Time, maxAge time.Duration) Target {
 	c := r.IdentityCheck
 	fresh := maxAge > 0 && !c.At.IsZero() && !c.At.After(now) && now.Sub(c.At) < maxAge
 	return Target{
 		ID: r.ID, Engine: r.Engine, Host: r.Host, Port: r.Port, Database: r.Database, TLSMode: r.TLSMode,
-		CredentialRef: r.CredentialRef, Mode: r.Mode, ExpectedIdentity: r.ExpectedIdentity,
-		ReadOnlyIdentityVerified: r.Mode == ModeClient && c.Checked && c.Passed && fresh,
+		CredentialRef: r.CredentialRef, Mode: r.Mode, ExpectedIdentity: r.ExpectedIdentity, AgentID: r.AgentID,
+		ReadOnlyIdentityVerified: r.AgentID != "" && r.Mode == ModeClient && c.Checked && c.Passed && fresh,
 		LabConfirmed:             r.Mode == ModeLab && r.LabConfirmed,
 	}
 }
@@ -228,6 +241,9 @@ func AuthorizeIdentityCheck(t Target, now, runExpiry time.Time) error {
 	if !reCredentialRef.MatchString(t.CredentialRef) {
 		return fmt.Errorf("dbsim: authorize identity check: target %q has no valid credential reference", t.ID)
 	}
+	if !reAgentID.MatchString(t.AgentID) {
+		return fmt.Errorf("dbsim: authorize identity check: target %q is not bound to an agent (re-register it)", t.ID)
+	}
 	return nil
 }
 
@@ -255,6 +271,7 @@ var TargetsSchemaSQL = []string{
 			database_name          text        NOT NULL DEFAULT '',
 			tls_mode               text        NOT NULL DEFAULT '',
 			credential_ref         text        NOT NULL,
+			agent_id               text        NOT NULL DEFAULT '',
 			expected_identity      text        NOT NULL CHECK (expected_identity <> ''),
 			mode                   text        NOT NULL CHECK (mode IN ('lab', 'client')),
 			lab_confirmed          boolean     NOT NULL DEFAULT false,
@@ -266,6 +283,9 @@ var TargetsSchemaSQL = []string{
 			identity_check_reasons jsonb       NOT NULL DEFAULT '[]'::jsonb,
 			CHECK (NOT (mode = 'client' AND lab_confirmed))
 		)`,
+	// Additive migration: targets registered before agent binding get '' and fail
+	// closed (never run, never eligible) until re-registered with an agent.
+	`ALTER TABLE dbsim_targets ADD COLUMN IF NOT EXISTS agent_id text NOT NULL DEFAULT ''`,
 }
 
 // SettingsSchemaSQL is the DDL for dbsim_settings (executed in order,

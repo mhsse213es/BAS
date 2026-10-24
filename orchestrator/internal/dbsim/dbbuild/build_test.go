@@ -20,7 +20,7 @@ func labTarget() dbsim.Target {
 	return dbsim.Target{
 		ID: "lab-db", Engine: "postgresql", Host: "10.20.30.40", Port: 5432, Database: "appdb",
 		TLSMode: "require", CredentialRef: "dbcred:lab-pg", Mode: dbsim.ModeLab,
-		ExpectedIdentity: "7312345678901234567", LabConfirmed: true,
+		ExpectedIdentity: "7312345678901234567", LabConfirmed: true, AgentID: "0123456789abcdef",
 	}
 }
 

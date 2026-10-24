@@ -73,6 +73,7 @@ func TestSameConfigDetectsAnyBoundFieldChange(t *testing.T) {
 		"engine":     func(r *TargetRecord) { r.Engine = "mysql" },
 		"mode":       func(r *TargetRecord) { r.Mode = ModeLab },
 		"id":         func(r *TargetRecord) { r.ID = "other" },
+		"agent":      func(r *TargetRecord) { r.AgentID = "fedcba9876543210" },
 	} {
 		c := base
 		mut(&c)

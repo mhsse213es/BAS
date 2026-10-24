@@ -21,7 +21,7 @@ func registerTestEntry(t *testing.T, id string, class ProbeClass) ProbeRegistryE
 
 func goodTarget(mode ExecMode) Target {
 	return Target{ID: "t1", Engine: "postgresql", Host: "10.0.0.5", Port: 5432, Mode: mode,
-		ExpectedIdentity: "7001", ReadOnlyIdentityVerified: true, LabConfirmed: true}
+		ExpectedIdentity: "7001", ReadOnlyIdentityVerified: true, LabConfirmed: true, AgentID: "0123456789abcdef"}
 }
 
 func roEntry() ProbeRegistryEntry {

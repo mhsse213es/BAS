@@ -52,6 +52,22 @@ func (a dbsimAuditor) Log(e dbadmin.AuditEntry) error {
 	return err
 }
 
+// dbsimAgentDirectory answers whether an agent id is enrolled, over the agents
+// table (parameterised). Any failure answers "not known" with the error, so a
+// registration is refused (fail closed).
+type dbsimAgentDirectory struct{ h *Handler }
+
+func (d dbsimAgentDirectory) Exists(ctx context.Context, agentID string) (bool, error) {
+	if d.h == nil || d.h.db == nil {
+		return false, errors.New("agents store unavailable")
+	}
+	var ok bool
+	if err := d.h.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agents WHERE agent_id = $1)`, agentID).Scan(&ok); err != nil {
+		return false, err
+	}
+	return ok, nil
+}
+
 // WithDBSimCheckRunner installs the dispatcher that runs the read-only identity
 // check on an agent. Until one is installed the check endpoint reports 501.
 func (h *Handler) WithDBSimCheckRunner(r dbadmin.CheckRunner) *Handler {
@@ -80,6 +96,7 @@ func (h *Handler) dbsimService(r *http.Request) (*dbadmin.Service, dbadmin.Actor
 		Targets:  db.DBSimTargetStore{Pool: h.db},
 		Audit:    dbsimAuditor{h: h},
 		Runner:   h.dbsimCheckRunner,
+		Agents:   dbsimAgentDirectory{h: h},
 	}, actor
 }
 
@@ -125,6 +142,7 @@ type dbsimTargetView struct {
 	Database         string                 `json:"database"`
 	TLSMode          string                 `json:"tlsMode"`
 	CredentialRef    string                 `json:"credentialRef"`
+	AgentID          string                 `json:"agentId"`
 	ExpectedIdentity string                 `json:"expectedIdentity"`
 	Mode             string                 `json:"mode"`
 	LabConfirmed     bool                   `json:"labConfirmed"`
@@ -144,7 +162,7 @@ func dbsimView(r dbsim.TargetRecord, now time.Time) dbsimTargetView {
 	}
 	return dbsimTargetView{
 		ID: r.ID, DisplayName: r.DisplayName, Engine: r.Engine, Host: r.Host, Port: r.Port, DBServerHost: r.DBServerHost,
-		Database: r.Database, TLSMode: r.TLSMode, CredentialRef: r.CredentialRef, ExpectedIdentity: r.ExpectedIdentity,
+		Database: r.Database, TLSMode: r.TLSMode, CredentialRef: r.CredentialRef, AgentID: r.AgentID, ExpectedIdentity: r.ExpectedIdentity,
 		Mode: string(r.Mode), LabConfirmed: r.LabConfirmed, CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt,
 		IdentityCheck:  dbsimIdentityCheckView{Checked: r.IdentityCheck.Checked, Passed: r.IdentityCheck.Passed, At: r.IdentityCheck.At, By: r.IdentityCheck.By, Reasons: reasons},
 		ClientEligible: r.ToTargetAt(now, dbsim.DefaultIdentityCheckMaxAge).ReadOnlyIdentityVerified,
@@ -222,6 +240,7 @@ func (h *Handler) RegisterDBSimTarget(w http.ResponseWriter, r *http.Request) {
 		Database         string `json:"database"`
 		TLSMode          string `json:"tlsMode"`
 		CredentialRef    string `json:"credentialRef"`
+		AgentID          string `json:"agentId"`
 		ExpectedIdentity string `json:"expectedIdentity"`
 		Mode             string `json:"mode"`
 		LabConfirmed     bool   `json:"labConfirmed"`
@@ -235,7 +254,7 @@ func (h *Handler) RegisterDBSimTarget(w http.ResponseWriter, r *http.Request) {
 	svc, actor := h.dbsimService(r)
 	rec, err := svc.RegisterTarget(r.Context(), actor, dbsim.TargetRegistration{
 		ID: req.ID, DisplayName: req.DisplayName, Engine: req.Engine, Host: req.Host, Port: req.Port,
-		DBServerHost: req.DBServerHost, Database: req.Database, TLSMode: req.TLSMode, CredentialRef: req.CredentialRef,
+		DBServerHost: req.DBServerHost, Database: req.Database, TLSMode: req.TLSMode, CredentialRef: req.CredentialRef, AgentID: req.AgentID,
 		ExpectedIdentity: req.ExpectedIdentity, Mode: dbsim.ExecMode(req.Mode), LabConfirmed: req.LabConfirmed,
 	})
 	if err != nil {
