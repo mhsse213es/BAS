@@ -2994,6 +2994,9 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "result MAC invalid — possible tampered payload", http.StatusUnauthorized)
 		return
 	}
+	if dbsimSpikeHook(h, w, body) { // TEMPORARY dbsim spike (Task 1); removed at Step 4
+		return
+	}
 	var raw scenario.RawRunResult
 	if e := json.Unmarshal(body, &raw); e != nil || raw.RunID == "" {
 		jsonError(w, "invalid payload — expected {runId, scenarioId, agentId, results}", http.StatusBadRequest)
