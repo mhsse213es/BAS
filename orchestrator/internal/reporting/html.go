@@ -522,6 +522,9 @@ func GenerateHTML(w io.Writer, r *FullReport, compliance []ComplianceSummaryRow)
 	if r.AttackFlowGroups == nil && len(r.AttackFlow) > 0 {
 		r.AttackFlowGroups = groupAttackFlow(r.AttackFlow)
 	}
+	if r.TechniqueMatrixGroups == nil && len(r.TechniqueMatrix) > 0 {
+		r.TechniqueMatrixGroups = groupTechniqueMatrix(r.TechniqueMatrix)
+	}
 	// appControlSections is what the template ranges over: one page per run
 	// section. A single run contributes its own section; a campaign contributes
 	// one per child run; a run with no application-control steps contributes none.
@@ -3310,38 +3313,40 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <th>Technique</th><th>Tactic</th><th>Sev</th><th>Exec</th><th>Req.&nbsp;Priv</th><th>Ran&nbsp;As</th><th>Detection</th><th>Alert&nbsp;Source</th><th>Event</th><th>Threat</th><th>MTTD</th><th>Clean&nbsp;Up</th><th>Blocked&nbsp;By</th>
   </tr></thead>
   <tbody>
-  {{range .techniqueMatrix}}
-  <tr>
-    <td><code style="font-size:0.78rem">{{.techniqueId}}</code><br><span style="font-size:0.8rem">{{.techniqueName}}</span>{{if and .stepName (ne .stepName .techniqueName)}}<br><span style="font-size:0.72rem;color:#9aa5b5">{{.stepName}}</span>{{end}}</td>
-    <td style="font-size:0.8rem;color:#6e7681">{{humanize .tactic}}</td>
-    <td><span class="dot" style="background:{{sevColor .severity}}"></span>{{.severity}}</td>
-    <td><span style="font-size:0.78rem;font-weight:600;color:{{execVerdictColor .execVerdict}}">{{upper .execVerdict}}</span></td>
+  {{range .techniqueMatrixGroups}}{{$g := .}}{{range $i, $s := .steps}}
+  <tr style="{{if eq $i 0}}border-top:2px solid #d0d7de{{end}}">
+    {{if eq $i 0}}
+    <td rowspan="{{len $g.steps}}"><code style="font-size:0.78rem">{{$g.techniqueId}}</code><br><span style="font-size:0.8rem">{{$g.techniqueName}}</span></td>
+    <td rowspan="{{len $g.steps}}" style="font-size:0.8rem;color:#6e7681">{{humanize $g.tactic}}</td>
+    <td rowspan="{{len $g.steps}}"><span class="dot" style="background:{{sevColor $g.severity}}"></span>{{$g.severity}}</td>
+    {{end}}
+    <td><span style="font-size:0.78rem;font-weight:600;color:{{execVerdictColor $s.execVerdict}}">{{upper $s.execVerdict}}</span>{{if and $s.stepName (ne $s.stepName $g.techniqueName)}}<br><span style="font-size:0.7rem;color:#9aa5b5">{{$s.stepName}}</span>{{end}}</td>
     <td style="font-size:0.78rem;color:#6e7681;white-space:nowrap">
-      {{.requestedPriv}}
-      {{if and .requestedPrivMin (ne .requestedPrivMin "Legacy") (ne .requestedPrivPref "")}}<span style="font-size:0.65rem;color:#9aa5b5;display:block">min:{{.requestedPrivMin}} / pref:{{.requestedPrivPref}}</span>{{end}}
+      {{$s.requestedPriv}}
+      {{if and $s.requestedPrivMin (ne $s.requestedPrivMin "Legacy") (ne $s.requestedPrivPref "")}}<span style="font-size:0.65rem;color:#9aa5b5;display:block">min:{{$s.requestedPrivMin}} / pref:{{$s.requestedPrivPref}}</span>{{end}}
     </td>
-    <td style="font-size:0.78rem;white-space:nowrap;{{if contains .executedAs "→"}}color:#d29922;font-weight:600{{else if eq .executedAs "Legacy"}}color:#6e7681{{else}}color:#9aa9bc{{end}}">{{.executedAs}}</td>
+    <td style="font-size:0.78rem;white-space:nowrap;{{if contains $s.executedAs "→"}}color:#d29922;font-weight:600{{else if eq $s.executedAs "Legacy"}}color:#6e7681{{else}}color:#9aa9bc{{end}}">{{$s.executedAs}}</td>
     <td>
-      {{if .detectionVerdict}}
-      <span style="font-size:0.78rem;font-weight:700;color:{{detVerdictColor .detectionVerdict}}">{{detVerdictLabel .detectionVerdict}}</span>
-      {{if eq .confidence "high"}}<span style="font-size:0.68rem;color:#6e7681;margin-left:4px">high conf</span>{{end}}
+      {{if $s.detectionVerdict}}
+      <span style="font-size:0.78rem;font-weight:700;color:{{detVerdictColor $s.detectionVerdict}}">{{detVerdictLabel $s.detectionVerdict}}</span>
+      {{if eq $s.confidence "high"}}<span style="font-size:0.68rem;color:#6e7681;margin-left:4px">high conf</span>{{end}}
       {{else}}
       <span style="font-size:0.78rem;color:#6e7681">NO DATA</span>
       {{end}}
     </td>
-    <td style="font-size:0.75rem;color:#6e7681;max-width:140px;word-break:break-all">{{.alertProvider}}{{if and .alertProvider .alertChannel}}<br>{{end}}{{.alertChannel}}</td>
-    <td style="font-size:0.78rem;text-align:center">{{if .alertEventId}}{{.alertEventId}}{{else}}—{{end}}</td>
+    <td style="font-size:0.75rem;color:#6e7681;max-width:140px;word-break:break-all">{{$s.alertProvider}}{{if and $s.alertProvider $s.alertChannel}}<br>{{end}}{{$s.alertChannel}}</td>
+    <td style="font-size:0.78rem;text-align:center">{{if $s.alertEventId}}{{$s.alertEventId}}{{else}}—{{end}}</td>
     <td style="font-size:0.75rem;max-width:160px;word-break:break-all">
-      {{if .alertThreatName}}<strong>{{.alertThreatName}}</strong>{{if .alertCommandLine}}<br>{{end}}{{end}}
-      {{if .alertCommandLine}}<span style="color:#6e7681">{{.alertCommandLine}}</span>{{end}}
+      {{if $s.alertThreatName}}<strong>{{$s.alertThreatName}}</strong>{{if $s.alertCommandLine}}<br>{{end}}{{end}}
+      {{if $s.alertCommandLine}}<span style="color:#6e7681">{{$s.alertCommandLine}}</span>{{end}}
     </td>
-    <td style="font-size:0.78rem;white-space:nowrap">{{if .mttdMs}}{{mttd .mttdMs}}{{else}}—{{end}}</td>
-    <td style="font-size:0.78rem;font-weight:600;white-space:nowrap;color:{{cleanupVerdictColor .cleanupVerdict}}">{{cleanupVerdictLabel .cleanupVerdict}}</td>
+    <td style="font-size:0.78rem;white-space:nowrap">{{if $s.mttdMs}}{{mttd $s.mttdMs}}{{else}}—{{end}}</td>
+    <td style="font-size:0.78rem;font-weight:600;white-space:nowrap;color:{{cleanupVerdictColor $s.cleanupVerdict}}">{{cleanupVerdictLabel $s.cleanupVerdict}}</td>
     <td style="font-size:0.75rem;max-width:160px">
-      {{if .controlName}}<strong>{{.controlName}}</strong>{{if .controlRuleId}}<br><code style="font-size:0.65rem;color:#6e7681">{{.controlRuleId}}</code>{{end}}{{else}}—{{end}}
+      {{if $s.controlName}}<strong>{{$s.controlName}}</strong>{{if $s.controlRuleId}}<br><code style="font-size:0.65rem;color:#6e7681">{{$s.controlRuleId}}</code>{{end}}{{else}}—{{end}}
     </td>
   </tr>
-  {{end}}
+  {{end}}{{end}}
   </tbody>
 </table>
 {{else}}

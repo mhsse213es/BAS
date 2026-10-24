@@ -213,6 +213,8 @@ type FullReport struct {
 	// TechniqueMatrix is the per-step detection validation table: execution result
 	// combined with post-run EDR alert correlation for every technique in the run.
 	TechniqueMatrix []TechniqueRow `json:"techniqueMatrix,omitempty"`
+	// TechniqueMatrixGroups is TechniqueMatrix with adjacent steps of one technique merged (rendered per technique).
+	TechniqueMatrixGroups []TechniqueMatrixGroup `json:"techniqueMatrixGroups,omitempty"`
 	// Executive-grade derivations (Cymulate-style report).
 	ExecutiveConclusion string          `json:"executiveConclusion"`
 	TopRiskDrivers      []RiskDriver    `json:"topRiskDrivers"`
