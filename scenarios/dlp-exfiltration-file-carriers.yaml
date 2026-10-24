@@ -1,0 +1,275 @@
+id: dlp-exfiltration-file-carriers
+product_line: dlp
+name: DLP Exfiltration Validation — Document and Image File Carriers
+description: >
+  Stages synthetic regulated-data records inside real, parseable file-format
+  carriers (Word DOCX, Excel XLSX, PDF, PNG image) and a password-protected
+  archive, in the endpoint's own temporary workspace. Tests whether the
+  endpoint's local file operation for each carrier format is blocked or
+  allowed. Each carrier is a deterministic template embedded as base64 in this
+  file; each step decodes its carrier, verifies the bytes by SHA-256, and
+  deletes its workspace in a finally block.
+
+  Carrier validity is verified at authoring time by parsing each template with
+  a real library (python-docx, openpyxl, pypdf, Pillow) and confirming the
+  expected text. Carrier validity proves generation and parser compatibility
+  only: it does NOT prove that any DLP product detects the sensitive content
+  inside a carrier. This scenario reports local file-operation outcomes only.
+
+  Known coverage limitations: (1) the image carrier holds text as pixels, so
+  content detection needs OCR, which this scenario does not exercise; (2) the
+  password-protected archive step uses 7-Zip only if already installed on the
+  endpoint, and otherwise reports OperationUnknown (not evaluated), so no
+  archive-content inspection is claimed in either case.
+
+  Safety: all content is fabricated ([BAS-SIM-DLP-CARRIER] tagged), never real
+  data. Windows only. Writes only inside %TEMP%.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - exfiltration
+  - file-carriers
+  - windows
+  - mitre-attack
+  - bfsi
+  - india
+mitre_phases:
+  - collection
+  - exfiltration
+
+steps:
+  - name: "DLP Validation — DOCX Carrier Staging of Regulated Data (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a deterministic synthetic Word document of fabricated regulated-data patterns into the endpoint's %TEMP% workspace, verifies it by SHA-256, then deletes the workspace. No real data, no network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: DOCX file created in %TEMP%"
+    detection:
+      - "DLP: file-content inspection of DOCX carrier matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dlpcarrier_$runId"
+      $expected = '[BAS-SIM-DLP-CARRIER] ABCDE1234F 123456789012'
+      $bytes = [Convert]::FromBase64String('UEsDBBQAAAAIAAAAIVx5bjPX7AAAAK0BAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbH2Qy07DMBBFf8XyFsUOLBBCcbrgsQQW5QMse5JYtWcsjxvSv0dpSxeosL6Pc3W7zZKimKFwIDTyVrVSADryAUcjP7evzYMUXC16GwnByAOw3PTd9pCBxZIispFTrflRa3YTJMuKMuCS4kAl2cqKyqizdTs7gr5r23vtCCtgberaIfvuGQa7j1W8LBXwtKNAZCmeTsaVZaTNOQZnayDUM/pflOZMUAXi0cNTyHyzpCj1VcKq/A04595nKCV4EB+21DebwEj9RcVrT26fAKv6v+bKThqG4OCSX9tyIQfMAccU1UVJNuDPfn28u/8GUEsDBBQAAAAIAAAAIVyb/TfqsQAAACkBAAALAAAAX3JlbHMvLnJlbHONz8FqwzAQBNBfEXuv5eQQQrDsSwjkWtwPENLaFpV2hVZNnb/PJYc49NDrMLxhumFNUd2wSGAysGtaUEiOfaDZwNd4+TiCkmrJ28iEBu4oMPTdJ0ZbA5MsIYtaUyQxsNSaT1qLWzBZaTgjrSlOXJKt0nCZdbbu286o92170OXVgK2prt5AufodqPGe8T82T1NweGb3k5DqHxNvDVCjLTNWA79cvPbPuFlTBN13enOxfwBQSwMEFAAAAAgAAAAhXB/KmRDGAAAA9gAAABEAAAB3b3JkL2RvY3VtZW50LnhtbEXOzWrDMBAE4FcRutuy3TZNje3g/EGgheKkp5KDYqmOQdoVWrV23r4oPfTyzWmGqVazNexHexoRap6nGWcaelQjDDX/OO2TJWcUJChpEHTNb5r4qqmmUmH/bTUENlsDVE41v4bgSiGov2orKUWnYbbmC72VgVL0g5jQK+ex10QjDNaIIssWwsoReJy8oLrFdBEfCc3nuj0mx8Nbsn19TzZt1x123Zm16812lxcPj3sWfVo8L1+yvKhErET9XXf3b1b8X25+AVBLAQIUABQAAAAIAAAAIVx5bjPX7AAAAK0BAAATAAAAAAAAAAAAAACAAQAAAABbQ29udGVudF9UeXBlc10ueG1sUEsBAhQAFAAAAAgAAAAhXJv9N+qxAAAAKQEAAAsAAAAAAAAAAAAAAIABHQEAAF9yZWxzLy5yZWxzUEsBAhQAFAAAAAgAAAAhXB/KmRDGAAAA9gAAABEAAAAAAAAAAAAAAIAB9wEAAHdvcmQvZG9jdW1lbnQueG1sUEsFBgAAAAADAAMAuQAAAOwCAAAAAA==')
+      $sha = 'b430dfeb318abbf59b7243555aad4741c520ff0a8889fe202d1983366264af50'
+      $path = Join-Path $work 'carrier.docx'
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        [System.IO.File]::WriteAllBytes($path, $bytes)
+        $actual = (Get-FileHash -Algorithm SHA256 -Path $path).Hash.ToLower()
+        if ($actual -eq $sha) {
+          Write-Output "EXEC T1074.001: DOCX carrier written to $path unimpeded. [BAS-SIM-DLP-CARRIER-DOCX]"
+          Write-Output "FAIL: DOCX carrier containing regulated-data patterns was created without being blocked."
+          Write-Output "DLP_OBSERVATION: OperationSucceeded"
+        } else {
+          Write-Output "EXEC T1074.001: DOCX carrier integrity check failed after write. [BAS-SIM-DLP-CARRIER-DOCX]"
+          Write-Output "DLP_OBSERVATION: OperationUnknown"
+        }
+      } catch {
+        Write-Output "EXEC T1074.001: DOCX carrier write was blocked or failed. [BAS-SIM-DLP-CARRIER-DOCX]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    cleanup: ""
+
+  - name: "DLP Validation — XLSX Carrier Staging of Regulated Data (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a deterministic synthetic Excel workbook of fabricated regulated-data patterns into the endpoint's %TEMP% workspace, verifies it by SHA-256, then deletes the workspace. No real data, no network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: XLSX file created in %TEMP%"
+    detection:
+      - "DLP: file-content inspection of XLSX carrier matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dlpcarrier_$runId"
+      $expected = '[BAS-SIM-DLP-CARRIER] ABCDE1234F 123456789012'
+      $bytes = [Convert]::FromBase64String('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')
+      $sha = '92bb3991a06c387452b0476815146e5f0ef101a4aeddf2ffb41043dfd5c58060'
+      $path = Join-Path $work 'carrier.xlsx'
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        [System.IO.File]::WriteAllBytes($path, $bytes)
+        $actual = (Get-FileHash -Algorithm SHA256 -Path $path).Hash.ToLower()
+        if ($actual -eq $sha) {
+          Write-Output "EXEC T1074.001: XLSX carrier written to $path unimpeded. [BAS-SIM-DLP-CARRIER-XLSX]"
+          Write-Output "FAIL: XLSX carrier containing regulated-data patterns was created without being blocked."
+          Write-Output "DLP_OBSERVATION: OperationSucceeded"
+        } else {
+          Write-Output "EXEC T1074.001: XLSX carrier integrity check failed after write. [BAS-SIM-DLP-CARRIER-XLSX]"
+          Write-Output "DLP_OBSERVATION: OperationUnknown"
+        }
+      } catch {
+        Write-Output "EXEC T1074.001: XLSX carrier write was blocked or failed. [BAS-SIM-DLP-CARRIER-XLSX]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    cleanup: ""
+
+  - name: "DLP Validation — PDF Carrier Staging of Regulated Data (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a deterministic synthetic PDF of fabricated regulated-data patterns into the endpoint's %TEMP% workspace, verifies it by SHA-256, then deletes the workspace. No real data, no network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: PDF file created in %TEMP%"
+    detection:
+      - "DLP: file-content inspection of PDF carrier matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dlpcarrier_$runId"
+      $expected = '[BAS-SIM-DLP-CARRIER] ABCDE1234F 123456789012'
+      $bytes = [Convert]::FromBase64String('JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA0MDAgMjAwXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA1IDAgUiA+PiA+PiAvQ29udGVudHMgNCAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA3NiA+PgpzdHJlYW0KQlQgL0YxIDEyIFRmIDEwIDE4MCBUZCAoW0JBUy1TSU0tRExQLUNBUlJJRVJdIEFCQ0RFMTIzNEYgMTIzNDU2Nzg5MDEyKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNDEgMDAwMDAgbiAKMDAwMDAwMDM2NyAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQzNwolJUVPRg==')
+      $sha = '27f32468005e2df1d2f33b4612d63e264b3d617107aca7b265892cfd71a18ed8'
+      $path = Join-Path $work 'carrier.pdf'
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        [System.IO.File]::WriteAllBytes($path, $bytes)
+        $actual = (Get-FileHash -Algorithm SHA256 -Path $path).Hash.ToLower()
+        if ($actual -eq $sha) {
+          Write-Output "EXEC T1074.001: PDF carrier written to $path unimpeded. [BAS-SIM-DLP-CARRIER-PDF]"
+          Write-Output "FAIL: PDF carrier containing regulated-data patterns was created without being blocked."
+          Write-Output "DLP_OBSERVATION: OperationSucceeded"
+        } else {
+          Write-Output "EXEC T1074.001: PDF carrier integrity check failed after write. [BAS-SIM-DLP-CARRIER-PDF]"
+          Write-Output "DLP_OBSERVATION: OperationUnknown"
+        }
+      } catch {
+        Write-Output "EXEC T1074.001: PDF carrier write was blocked or failed. [BAS-SIM-DLP-CARRIER-PDF]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    cleanup: ""
+
+  - name: "DLP Validation — PNG Image Carrier Staging of Regulated Data (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a deterministic synthetic PNG image of fabricated regulated-data text into the endpoint's %TEMP% workspace, verifies it by SHA-256, then deletes the workspace. Detection would need OCR, which this step does not evaluate. No real data, no network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: PNG image file created in %TEMP%"
+    detection:
+      - "DLP: file-content inspection of PNG image carrier matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dlpcarrier_$runId"
+      $expected = '[BAS-SIM-DLP-CARRIER] ABCDE1234F 123456789012'
+      $bytes = [Convert]::FromBase64String('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')
+      $sha = 'cdddf4d0580a8ca69910cdda0f08ce7b3946330bab588f639b5559763e59bdba'
+      $path = Join-Path $work 'carrier.png'
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        [System.IO.File]::WriteAllBytes($path, $bytes)
+        $actual = (Get-FileHash -Algorithm SHA256 -Path $path).Hash.ToLower()
+        if ($actual -eq $sha) {
+          Write-Output "EXEC T1074.001: PNG image carrier written to $path unimpeded. [BAS-SIM-DLP-CARRIER-PNG]"
+          Write-Output "FAIL: PNG image carrier containing regulated-data patterns was created without being blocked."
+          Write-Output "DLP_OBSERVATION: OperationSucceeded"
+        } else {
+          Write-Output "EXEC T1074.001: PNG image carrier integrity check failed after write. [BAS-SIM-DLP-CARRIER-PNG]"
+          Write-Output "DLP_OBSERVATION: OperationUnknown"
+        }
+      } catch {
+        Write-Output "EXEC T1074.001: PNG image carrier write was blocked or failed. [BAS-SIM-DLP-CARRIER-PNG]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    cleanup: ""
+
+  - name: "DLP Validation — Password-Protected Archive of Regulated Data (T1560.001)"
+    technique_id: T1560.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 40
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Stages a synthetic DOCX carrier and, only if 7-Zip is already installed on the endpoint, creates a password-protected archive of it in %TEMP%, then deletes everything. Without 7-Zip the step reports OperationUnknown and creates no archive. No real data, no network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: 7z.exe with a password switch over a temp directory"
+      - "Sysmon EID 11: .7z archive created in %TEMP%"
+    detection:
+      - "DLP: password-protected archive creation over regulated data (contents not inspectable)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dlpcarrier_$runId"
+      $expected = '[BAS-SIM-DLP-CARRIER] ABCDE1234F 123456789012'
+      $docxBytes = [Convert]::FromBase64String('UEsDBBQAAAAIAAAAIVx5bjPX7AAAAK0BAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbH2Qy07DMBBFf8XyFsUOLBBCcbrgsQQW5QMse5JYtWcsjxvSv0dpSxeosL6Pc3W7zZKimKFwIDTyVrVSADryAUcjP7evzYMUXC16GwnByAOw3PTd9pCBxZIispFTrflRa3YTJMuKMuCS4kAl2cqKyqizdTs7gr5r23vtCCtgberaIfvuGQa7j1W8LBXwtKNAZCmeTsaVZaTNOQZnayDUM/pflOZMUAXi0cNTyHyzpCj1VcKq/A04595nKCV4EB+21DebwEj9RcVrT26fAKv6v+bKThqG4OCSX9tyIQfMAccU1UVJNuDPfn28u/8GUEsDBBQAAAAIAAAAIVyb/TfqsQAAACkBAAALAAAAX3JlbHMvLnJlbHONz8FqwzAQBNBfEXuv5eQQQrDsSwjkWtwPENLaFpV2hVZNnb/PJYc49NDrMLxhumFNUd2wSGAysGtaUEiOfaDZwNd4+TiCkmrJ28iEBu4oMPTdJ0ZbA5MsIYtaUyQxsNSaT1qLWzBZaTgjrSlOXJKt0nCZdbbu286o92170OXVgK2prt5AufodqPGe8T82T1NweGb3k5DqHxNvDVCjLTNWA79cvPbPuFlTBN13enOxfwBQSwMEFAAAAAgAAAAhXB/KmRDGAAAA9gAAABEAAAB3b3JkL2RvY3VtZW50LnhtbEXOzWrDMBAE4FcRutuy3TZNje3g/EGgheKkp5KDYqmOQdoVWrV23r4oPfTyzWmGqVazNexHexoRap6nGWcaelQjDDX/OO2TJWcUJChpEHTNb5r4qqmmUmH/bTUENlsDVE41v4bgSiGov2orKUWnYbbmC72VgVL0g5jQK+ex10QjDNaIIssWwsoReJy8oLrFdBEfCc3nuj0mx8Nbsn19TzZt1x123Zm16812lxcPj3sWfVo8L1+yvKhErET9XXf3b1b8X25+AVBLAQIUABQAAAAIAAAAIVx5bjPX7AAAAK0BAAATAAAAAAAAAAAAAACAAQAAAABbQ29udGVudF9UeXBlc10ueG1sUEsBAhQAFAAAAAgAAAAhXJv9N+qxAAAAKQEAAAsAAAAAAAAAAAAAAIABHQEAAF9yZWxzLy5yZWxzUEsBAhQAFAAAAAgAAAAhXB/KmRDGAAAA9gAAABEAAAAAAAAAAAAAAIAB9wEAAHdvcmQvZG9jdW1lbnQueG1sUEsFBgAAAAADAAMAuQAAAOwCAAAAAA==')
+      $staged = Join-Path $work 'staged'
+      $archivePath = Join-Path $work 'exfil_protected.7z'
+      try {
+        New-Item -ItemType Directory -Path $staged -Force | Out-Null
+        [System.IO.File]::WriteAllBytes((Join-Path $staged 'carrier.docx'), $docxBytes)
+        $sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
+        if (-not $sevenZip) { $sevenZip = Get-Item "$env:ProgramFiles\7-Zip\7z.exe" -ErrorAction SilentlyContinue }
+        if ($sevenZip) {
+          & $sevenZip.Source a -pBAS-SIM-PW $archivePath (Join-Path $staged 'carrier.docx') 2>&1 | Out-Null
+          if (Test-Path $archivePath) {
+            Write-Output "EXEC T1560.001: 7-Zip created a PASSWORD-PROTECTED archive over a regulated-data DOCX carrier. [BAS-SIM-DLP-CARRIER-ARCHIVE]"
+            Write-Output "FAIL: encrypted archive of regulated data was created without being blocked. Its contents were not inspected by this scenario."
+            Write-Output "DLP_OBSERVATION: OperationSucceeded"
+          } else {
+            Write-Output "EXEC T1560.001: 7-Zip ran but produced no archive. [BAS-SIM-DLP-CARRIER-ARCHIVE]"
+            Write-Output "DLP_OBSERVATION: OperationBlocked"
+          }
+        } else {
+          Write-Output "COVERAGE_LIMITATION: 7-Zip not installed on endpoint; password-protected archive creation and inspection not evaluated. [BAS-SIM-DLP-CARRIER-ARCHIVE]"
+          Write-Output "DLP_OBSERVATION: OperationUnknown"
+        }
+      } catch {
+        Write-Output "EXEC T1560.001: archive staging was blocked or failed. [BAS-SIM-DLP-CARRIER-ARCHIVE]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    cleanup: ""

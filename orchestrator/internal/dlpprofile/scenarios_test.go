@@ -2,7 +2,7 @@ package dlpprofile
 
 import "testing"
 
-func TestRealDLPScenarioIDs_ReturnsExactlyTheTenRealIDs(t *testing.T) {
+func TestRealDLPScenarioIDs_ReturnsExactlyTheElevenRealIDs(t *testing.T) {
 	ids := RealDLPScenarioIDs()
 	want := []string{
 		"dlp-exfiltration-validation",
@@ -15,6 +15,7 @@ func TestRealDLPScenarioIDs_ReturnsExactlyTheTenRealIDs(t *testing.T) {
 		"dlp-exfiltration-coderepo",
 		"dlp-exfiltration-telnet",
 		"dlp-exfiltration-multichannel",
+		"dlp-exfiltration-file-carriers",
 	}
 	if len(ids) != len(want) {
 		t.Fatalf("len(ids) = %d, want %d", len(ids), len(want))
