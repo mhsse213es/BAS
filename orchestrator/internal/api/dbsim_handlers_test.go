@@ -74,7 +74,7 @@ func TestSetDBSimClientModeNeedsAnExplicitBoolean(t *testing.T) {
 
 func TestDBSimViewClientEligibility(t *testing.T) {
 	reg, err := dbsim.TargetRegistration{ID: "t1", Engine: "postgresql", Host: "h.example", CredentialRef: "dbcred:x",
-		ExpectedIdentity: "123", Mode: dbsim.ModeClient}.Normalize()
+		ExpectedIdentity: "123", Mode: dbsim.ModeClient, AgentID: "0123456789abcdef"}.Normalize()
 	if err != nil {
 		t.Fatal(err)
 	}
