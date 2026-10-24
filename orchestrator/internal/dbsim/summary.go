@@ -44,14 +44,16 @@ func Summarize(reports []StoredReport) Summary {
 }
 
 // noneEstablished: no dimension was established (pass or fail) and at least
-// one was left unverifiable.
+// one was left unverifiable. An empty or unknown grade is treated as
+// unverifiable, matching how the printable report renders it.
 func noneEstablished(d Dimensions) bool {
 	unver := false
 	for _, g := range []DimensionGrade{d.Prevention, d.Detection, d.Response, d.Classification, d.Audit, d.Policy} {
 		switch g {
 		case DimPass, DimFail:
 			return false
-		case DimUnverifiable:
+		case DimNotExpected, DimSkipped:
+		default: // DimUnverifiable, "" or unknown
 			unver = true
 		}
 	}

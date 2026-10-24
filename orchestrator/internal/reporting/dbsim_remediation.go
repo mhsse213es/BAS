@@ -21,8 +21,8 @@ var dbsimRemediation = map[string]map[string]string{
 		"detection":  "Review whether database audit events for the denied or successful read reach your SIEM and whether a rule covers access to restricted tables. If they do not, enable forwarding and add a rule.",
 	},
 	"dbsim-db04-audit-coverage": {
-		"audit":      "Review the target's audit configuration (for example pgaudit settings or MySQL audit/general log settings). If audit coverage is partial or absent for the statement classes you need, enable or widen it.",
-		"prevention": "Review whether the audit configuration is readable by the monitoring identity. If the expected audit settings are not present, enable them per your logging standard.",
+		"audit":      "Review the target's audit configuration (for example pgaudit settings or MySQL audit/general log settings) and whether the probe's own marker appeared in the audit source. If coverage is partial or absent for the statement classes you need, enable or widen it.",
+		"prevention": "Review why the read-only audit-check probes were refused for the BAS test account. If the account lacks the read access this check needs, grant only that minimal read access (audit settings and the audit source) in the lab or agreed target.",
 	},
 	"dbsim-db05-suspicious-read": {
 		"detection":      "Review whether your SIEM receives database audit data and has a rule for reads of classified or high-volume tables. If no alert correlated to the run marker, add or tune such a rule.",
@@ -30,7 +30,7 @@ var dbsimRemediation = map[string]map[string]string{
 		"classification": "Review the data-classification rules applied to the fixture table. If the classified columns were not recognised, update the rule set.",
 	},
 	"dbsim-db06-account-revocation": {
-		"prevention": "Review how login revocation is performed (role drop, lock, or privilege revoke) and whether existing connections or cached credentials persist. If a revoked account could still sign in, check for pooled sessions, alternative authentication paths or replication lag.",
+		"prevention": "Review whether other authentication paths (for example pooled sessions or cached credentials) still allow the revoked account to sign in, and how revocation is applied on this target.",
 	},
 	"dbsim-db07-sensitive-classification": {
 		"classification": "Review the data-classification control's rules and the sources it monitors. If the synthetic sensitive patterns were not recognised by their expected rule, update or enable the matching rule.",

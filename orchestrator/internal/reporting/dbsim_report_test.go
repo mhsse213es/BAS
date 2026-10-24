@@ -56,7 +56,7 @@ func TestReportShowsLimitationsConfidenceAndAlertSourceUnavailable(t *testing.T)
 	r.Record.Telemetry = dlpreport.TelemetryUnverifiable
 	r.Evidence.Corr.Limitations = "elastic unreachable"
 	out := dbsimRender(t, r)
-	for _, want := range []string{"record limitation", "high", "elastic unreachable", "Alert source unavailable", "Not tested"} {
+	for _, want := range []string{"record limitation", "high", "elastic unreachable", "Telemetry could not be verified (see limitations)", "Not tested"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q", want)
 		}

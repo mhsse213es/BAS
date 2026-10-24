@@ -10,10 +10,21 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"net/http"
 	"time"
 
 	"github.com/audspect/bas/internal/dbsim"
+	"github.com/audspect/bas/internal/dlpreport"
 )
+
+// SetDBSimReportHeaders sets the response headers for the printable report and
+// for its error responses: HTML (or whatever the caller overrides), never
+// cached, never sniffed.
+func SetDBSimReportHeaders(h http.Header) {
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("Cache-Control", "no-store")
+	h.Set("X-Content-Type-Options", "nosniff")
+}
 
 // DBSimReportOptions carries what is not in the stored report itself.
 type DBSimReportOptions struct {
@@ -68,7 +79,7 @@ func BuildDBSimReport(r dbsim.StoredReport, opts DBSimReportOptions) (string, er
 			mk("Policy", "policy", d.Policy),
 		},
 		Summary:     dbsim.Summarize([]dbsim.StoredReport{r}),
-		AlertSource: r.Record.Telemetry == "Unverifiable",
+		AlertSource: r.Record.Telemetry == dlpreport.TelemetryUnverifiable,
 	}
 	var buf bytes.Buffer
 	if err := dbsimReportTmpl.Execute(&buf, view); err != nil {
@@ -122,7 +133,7 @@ th,td{border:1px solid #e8edf4;padding:6px 10px;text-align:left;vertical-align:t
 {{range .Dims}}<tr><td>{{.Name}}</td><td class="state">{{.State}}</td><td class="fix">{{.Remediation}}</td></tr>
 {{end}}</table>
 
-{{if .AlertSource}}<div class="note warn">Alert source unavailable: detection could not be verified. This is not a miss.</div>{{end}}
+{{if .AlertSource}}<div class="note warn">Telemetry could not be verified (see limitations). This is not a miss.</div>{{end}}
 
 <h2>Record</h2>
 <table>

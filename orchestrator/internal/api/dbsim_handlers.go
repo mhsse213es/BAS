@@ -351,12 +351,20 @@ func (h *Handler) GetDBSimRun(w http.ResponseWriter, r *http.Request) {
 // GET /api/dbsim-runs/{id}/report
 func (h *Handler) GetDBSimRunReport(w http.ResponseWriter, r *http.Request) {
 	run, err := db.GetDBSimRun(r.Context(), h.db, chi.URLParam(r, "id"))
+	writeDBSimRunReport(w, run, err)
+}
+
+// writeDBSimRunReport answers the report request from an already-loaded run
+// (or the load error). Split out so it is testable without a database.
+func writeDBSimRunReport(w http.ResponseWriter, run db.DBSimRun, err error) {
+	reporting.SetDBSimReportHeaders(w.Header())
 	if errors.Is(err, db.ErrDBSimRunNotFound) {
 		jsonError(w, "run not found", http.StatusNotFound)
 		return
 	}
 	if err != nil {
-		dbsimFail(w, err)
+		log.Printf("dbsim: load run for report: %v", err)
+		jsonError(w, "could not load run", http.StatusInternalServerError)
 		return
 	}
 	var stored dbsim.StoredReport
@@ -371,6 +379,5 @@ func (h *Handler) GetDBSimRunReport(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "could not render report", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(page))
 }
