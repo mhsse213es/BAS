@@ -425,13 +425,15 @@ func buildGlossary(results []models.SimulationResult) []GlossaryEntry {
 			if enr.Name != "" {
 				e.Name = enr.Name
 			}
-			e.Description = enr.Description
-			e.Detection = enr.Detection
-			e.DataSources = enr.DataSources
+			e.Description = cleanATTCKText(enr.Description)
+			e.Detection = cleanATTCKText(enr.Detection)
+			for _, ds := range enr.DataSources {
+				e.DataSources = append(e.DataSources, cleanATTCKText(ds))
+			}
 			e.URL = enr.URL
 			for _, m := range enr.Mitigations {
 				if m.Name != "" {
-					e.Mitigations = append(e.Mitigations, m.Name)
+					e.Mitigations = append(e.Mitigations, cleanATTCKText(m.Name))
 				}
 			}
 		}

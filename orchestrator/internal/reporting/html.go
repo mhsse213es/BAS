@@ -669,7 +669,7 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
   .det-matrix th{font-size:0.6rem;letter-spacing:0.02em;padding:4px 3px}
   .det-matrix td{padding:4px 3px}
 
-  .fc,.scard,.gloss-item{page-break-inside:avoid;break-inside:avoid}
+  .fc,.scard,.gloss-item,.exec-card{page-break-inside:avoid;break-inside:avoid}
   thead{display:table-header-group}
 
   /* Per-section header/footer bars must not print (2026-09-04).
@@ -1179,7 +1179,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <div class="stitle" role="heading" aria-level="1">Executive Summary</div>
 
 
-<div class="risk-hero">
+<div class="risk-hero exec-card">
   <div class="rh-ring"></div>
   <!-- SVG donut — prevention score ring -->
   <svg width="120" height="120" viewBox="0 0 100 100" style="flex-shrink:0">
@@ -1777,9 +1777,11 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 
+{{$hasCtl := false}}{{range .attackFlow}}{{if .controlName}}{{$hasCtl = true}}{{end}}{{end}}
 <table>
   <thead>
     <tr>
+      {{if $hasCtl}}
       <th style="width:12%">Technique</th>
       <th style="width:24%">Name</th>
       <th style="width:13%">Tactic</th>
@@ -1787,6 +1789,14 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
       <th style="width:12%">Security Control</th>
       <th style="width:14%">Severity</th>
       <th style="width:12%">Duration</th>
+      {{else}}
+      <th style="width:14%">Technique</th>
+      <th style="width:29%">Name</th>
+      <th style="width:16%">Tactic</th>
+      <th style="width:17%">Verdict</th>
+      <th style="width:12%">Severity</th>
+      <th style="width:12%">Duration</th>
+      {{end}}
     </tr>
   </thead>
   <tbody>
@@ -1795,7 +1805,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   {{if ne .tactic $prevTactic}}
   {{$prevTactic = .tactic}}
   <tr>
-    <td colspan="7" style="background:#161b22;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#58a6ff;padding:5px 8px;border-left:3px solid #58a6ff">{{humanize .tactic}}</td>
+    <td colspan="{{if $hasCtl}}7{{else}}6{{end}}" style="background:#161b22;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#58a6ff;padding:5px 8px;border-left:3px solid #58a6ff">{{humanize .tactic}}</td>
   </tr>
   {{end}}
   {{$vc := "#6e7681"}}
@@ -1809,10 +1819,10 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <td>{{.techniqueName}}{{if and .stepName (ne .stepName .techniqueName)}}<br><span style="font-weight:400;font-size:0.75rem;color:#6e7681">{{.stepName}}</span>{{end}}</td>
     <td style="font-size:0.7rem;color:#6e7681">{{humanize .tactic}}</td>
     <td style="font-weight:600;color:{{$vc}}">{{.verdictLabel}}</td>
-    <td>
+    {{if $hasCtl}}<td>
       {{if .controlName}}{{.controlName}}{{if .alertName}} <span style="color:#6e7681;font-size:0.75rem">· {{.alertName}}</span>{{end}}{{else}}<span style="color:#6e7681">—</span>{{end}}
       {{if .isStopPoint}}<div style="font-size:0.68rem;color:#238636;font-weight:600;margin-top:2px">&#9940; Attack stopped here</div>{{end}}
-    </td>
+    </td>{{end}}
     <td style="font-size:0.8rem">{{if .severity}}{{.severity}}{{else}}—{{end}}</td>
     <td style="font-size:0.8rem;color:#6e7681">{{if .durationMs}}{{.durationMs}}ms{{else}}—{{end}}</td>
   </tr>
