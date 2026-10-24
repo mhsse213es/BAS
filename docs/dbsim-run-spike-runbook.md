@@ -21,8 +21,10 @@ Spike files (branch `worktree-dbsim`, one commit "spike(dbsim): TEMPORARY ..."):
   `BAS_DBCRED_LAB_MY_RO`; each value `{"user":"...","password":"..."}`).
 * For DB-05 (fixture scenario) the agent service also needs
   `BAS_DBPROBE_LAB_MUTATION_ALLOWED=true`. DB-01 needs nothing extra.
-* The dbsim product licence is active on staging (the `/api/dbsim*` prefix is
-  licence-gated in `product_gate.go`, and `/api/dbsim-spike/run` falls under it).
+* The route `/api/dbsim-spike/run` is NOT licence-gated (`productForPath` in
+  `product_gate.go` matches only `/api/dbsim` or `/api/dbsim/...`, not
+  `/api/dbsim-spike`). It is protected by Admin-only permission and exists only
+  in a binary built with `-tags dbsim_spike`.
 * You can log in as an Admin.
 
 ## 1. Build the orchestrator with the tag
@@ -35,7 +37,9 @@ go build -tags dbsim_spike ./...
 ```
 
 For the staging image, on the staging checkout ONLY (do not commit this edit),
-add the tag to the `garble` line in `orchestrator/Dockerfile` (~line 223):
+add the tag to the `garble -literals build` command in `orchestrator/Dockerfile`
+(CONFIRM its location with `grep -n "garble -literals build" orchestrator/Dockerfile`
+before editing; do not rely on a line number):
 
 ```
 garble -literals -tags dbsim_spike build \
@@ -75,6 +79,14 @@ No target registry rows are needed: the target is given inline in the body.
 `mode` must be `"lab"` (anything else is refused). The scenario file names its
 target `lab-db`; the spike answers whatever id the scenario asks for with this
 one inline target.
+
+**WARNING: `target.host` MUST be the lab database.** The agent will present the
+agent-held credential to whatever host you name; a mistyped host sends a lab
+credential to a non-lab machine. The spike refuses (400) a `credentialRef` that
+does not start with `dbcred:lab-` (the lab refs are `dbcred:lab-pg-lab`,
+`dbcred:lab-pg-ro`, `dbcred:lab-my-lab`, `dbcred:lab-my-ro`, per
+`lab/dbsim/E2E.md`) and a blank `expectedIdentity`. Double-check host and port
+before sending.
 
 PostgreSQL, DB-01 (read-only; run this first):
 
@@ -116,8 +128,8 @@ docker logs <orchestrator container> 2>&1 | grep -E 'dbsim-spike|\[events\]|\[pe
 Expected lines:
 
 * `[dbsim-spike] dispatched run=spike-... scenario=... agent=... steps=N (no scenario_runs row)`
-* `[dbsim-spike] RESULT run=spike-... ... agentMatch=true results=N expectedSteps=N partial=false elapsed=...`
-* `[dbsim-spike]   step i task=... exit=... dbProbePresent=true probe="..." errorClass=""` per step
+* `[dbsim-spike] RESULT run=spike-... ... agentCheck=match results=N expectedSteps=N partial=false elapsed=...`
+* `[dbsim-spike]   step i task=... exit=... dbProbePresent=true denied=... rowsRead=... errorClass="" auditStatus="..."` per step (a failing step also logs `stderr(first 200, redacted)`)
 * NO `result MAC verification FAILED`, NO `[events] ingest run ...` errors, NO `agent mismatch`.
 
 ### 5.2 Database
@@ -156,7 +168,7 @@ spike run to be cancelled. Record exactly which one and how it ended.
 | 3 | `POST /api/scenarios/events` calls arrived: rows in `run_events` | 5.2 | |
 | 4 | Events reached the browser relay (`run_event` frames) | 5.3 | |
 | 5 | Result MAC check passed (no MAC FAILED line) | 5.1 | |
-| 6 | Agent-id check did not object (`agentMatch=true`, no 403) | 5.1 | |
+| 6 | Agent-id check did not object (`agentCheck=match`; `EMPTY(not checked)` means the agent sent no id and is NOT a pass; `MISMATCH` is a fail) | 5.1 | |
 | 7 | Agent run-limit / `ExecutionAttempt` bookkeeping did not object (no agent-side error, no stuck state) | agent log, 5.2 | |
 | 8 | Agent-side posts to `/api/scenarios/runs/{id}/detections` and `/host-events` did not break the run (they target a missing row) | agent log, orchestrator log | |
 | 9 | Normal run active on same agent: behaviour (cancelled which run?) | 5.4 | |

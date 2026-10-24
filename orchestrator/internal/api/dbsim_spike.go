@@ -65,6 +65,24 @@ func (s spikeResolver) Resolve(ctx context.Context, id string) (dbsim.Target, er
 	return t, nil
 }
 
+// spikeValidateTarget is a pure check (no I/O) of the inline lab target. It
+// returns "" when acceptable, else the refusal message. The credential ref must
+// be a lab one (dbcred:lab-..., as in lab/dbsim/E2E.md) and the expected identity
+// must be present, so a mistyped host cannot receive a non-lab credential and an
+// identity mismatch is always caught by the agent.
+func spikeValidateTarget(t spikeTarget) string {
+	if t.Mode != "lab" {
+		return `spike is lab only: target.mode must be "lab"`
+	}
+	if !strings.HasPrefix(t.CredentialRef, "dbcred:lab-") {
+		return `spike accepts only lab credential references (prefix "dbcred:lab-")`
+	}
+	if strings.TrimSpace(t.ExpectedIdentity) == "" {
+		return "target.expectedIdentity is required"
+	}
+	return ""
+}
+
 // POST /api/dbsim-spike/run
 // {"agentId":"...","scenarioId":"dbsim-db01-auth-policy","target":{...mode "lab"}}
 func (h *Handler) dbsimSpikeRun(w http.ResponseWriter, r *http.Request) {
@@ -84,8 +102,8 @@ func (h *Handler) dbsimSpikeRun(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "body must be {agentId, scenarioId, target{engine,host,port,database,tlsMode,credentialRef,expectedIdentity,mode}}", http.StatusBadRequest)
 		return
 	}
-	if req.Target.Mode != "lab" {
-		jsonError(w, `spike is lab only: target.mode must be "lab"`, http.StatusBadRequest)
+	if msg := spikeValidateTarget(req.Target); msg != "" {
+		jsonError(w, msg, http.StatusBadRequest)
 		return
 	}
 	sc, found := h.engine.Get(req.ScenarioID)
@@ -146,6 +164,7 @@ func dbsimSpikeHook(_ *Handler, w http.ResponseWriter, body []byte) bool {
 			ExitCode int             `json:"exitCode"`
 			TimedOut bool            `json:"timedOut"`
 			Vetoed   bool            `json:"vetoed"`
+			Stderr   string          `json:"stderr"`
 			DBProbe  json.RawMessage `json:"dbProbe"`
 		} `json:"results"`
 	}
@@ -157,17 +176,33 @@ func dbsimSpikeHook(_ *Handler, w http.ResponseWriter, body []byte) bool {
 		return false
 	}
 	sr := v.(spikeRun)
-	agentMatch := raw.AgentID == "" || raw.AgentID == sr.AgentID
-	log.Printf("[dbsim-spike] RESULT run=%s scenario=%s agent=%q dispatchedAgent=%q agentMatch=%v results=%d expectedSteps=%d partial=%v elapsed=%s",
-		raw.RunID, raw.ScenarioID, raw.AgentID, sr.AgentID, agentMatch, len(raw.Results), sr.Steps, raw.Partial, time.Since(sr.SentAt).Round(time.Millisecond))
+	agentState := "match"
+	switch {
+	case raw.AgentID == "":
+		agentState = "EMPTY(not checked)"
+	case raw.AgentID != sr.AgentID:
+		agentState = "MISMATCH"
+	}
+	log.Printf("[dbsim-spike] RESULT run=%s scenario=%s agent=%q dispatchedAgent=%q agentCheck=%s results=%d expectedSteps=%d partial=%v elapsed=%s",
+		raw.RunID, raw.ScenarioID, raw.AgentID, sr.AgentID, agentState, len(raw.Results), sr.Steps, raw.Partial, time.Since(sr.SentAt).Round(time.Millisecond))
 	for i, res := range raw.Results {
 		var pr struct {
-			ProbeID    string `json:"probeId"`
-			ErrorClass string `json:"errorClass"`
+			Denied      bool   `json:"denied"`
+			RowsRead    int    `json:"rowsRead"`
+			ErrorClass  string `json:"errorClass"`
+			AuditStatus string `json:"auditStatus"`
 		}
-		_ = json.Unmarshal(res.DBProbe, &pr) // field names are best effort; presence is what matters
-		log.Printf("[dbsim-spike]   step %d task=%s exit=%d timedOut=%v vetoed=%v dbProbePresent=%v probe=%q errorClass=%q",
-			i, res.TaskID, res.ExitCode, res.TimedOut, res.Vetoed, len(res.DBProbe) > 0 && string(res.DBProbe) != "null", pr.ProbeID, pr.ErrorClass)
+		_ = json.Unmarshal(res.DBProbe, &pr) // presence is what matters
+		present := len(res.DBProbe) > 0 && string(res.DBProbe) != "null"
+		log.Printf("[dbsim-spike]   step %d task=%s exit=%d timedOut=%v vetoed=%v dbProbePresent=%v denied=%v rowsRead=%d errorClass=%q auditStatus=%q",
+			i, res.TaskID, res.ExitCode, res.TimedOut, res.Vetoed, present, pr.Denied, pr.RowsRead, pr.ErrorClass, pr.AuditStatus)
+		if res.ExitCode != 0 || res.TimedOut || res.Vetoed || !present {
+			se := res.Stderr
+			if len(se) > 200 {
+				se = se[:200]
+			}
+			log.Printf("[dbsim-spike]   step %d stderr(first 200, redacted)=%q", i, dbsim.Redact(se))
+		}
 	}
 	dbsimSpikeRuns.Delete(raw.RunID)
 	respond(w, map[string]any{"accepted": true, "spike": true})
