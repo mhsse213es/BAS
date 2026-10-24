@@ -133,8 +133,17 @@ type Service struct {
 	DetectionWait   time.Duration
 	DetectionPoll   time.Duration
 	Sleep           func(ctx context.Context, d time.Duration)
-	Principal       func(rec dbsim.TargetRecord, spec dbsim.DBProbeSpec) string
-	AgentIP         func(ctx context.Context, agentID string) string
+	// Principal names the DB account the probe ran as (the alert correlation key).
+	// The agent reports no observed account, so there is no guess: without this
+	// func (or when it returns "") correlation is skipped and telemetry is
+	// Unverifiable.
+	Principal func(job dbsim.RunJob, rec dbsim.TargetRecord, res dbsim.DBProbeResult) string
+	AgentIP   func(ctx context.Context, agentID string) string
+	// ConnectorTimeout bounds the connector factory call and each SIEM query
+	// (default DefaultConnectorTimeout); IngestTimeout bounds the whole grading
+	// phase of one Ingest (default DefaultIngestTimeout).
+	ConnectorTimeout time.Duration
+	IngestTimeout    time.Duration
 
 	mu sync.Mutex // serialises check-then-create within this process
 }

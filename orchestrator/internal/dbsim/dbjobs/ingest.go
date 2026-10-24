@@ -123,7 +123,18 @@ func (s *Service) finish(ctx context.Context, job dbsim.RunJob, to dbsim.JobStat
 	}
 	action := "dbsim.run_" + string(to)
 	e := dbadmin.AuditEntry{ActorID: "agent:" + job.AgentID, Action: action, Resource: "dbsim-run:" + job.ID, Detail: detail, Outcome: outcome}
-	if _, err := s.Jobs.Transition(ctx, job.ID, []dbsim.JobStatus{dbsim.JobPending, dbsim.JobRunning}, to, dbsim.Redact(reason), e); err != nil {
+	moved, err := s.Jobs.Transition(ctx, job.ID, []dbsim.JobStatus{dbsim.JobPending, dbsim.JobRunning}, to, dbsim.Redact(reason), e)
+	if err == nil && moved {
+		return nil
+	}
+	// The guarded move did not happen. If the job is already settled (a
+	// concurrent Ingest, the deadline reaper or a cancel got there first) this is
+	// a benign loss; only a real store error with the job still active is
+	// reported.
+	if cur, gerr := s.Jobs.Get(ctx, job.ID); gerr == nil && !cur.Status.Active() {
+		return nil
+	}
+	if err != nil {
 		return redactf("dbsim: ingest: finish job: %v", err)
 	}
 	return nil
@@ -226,6 +237,13 @@ func specMatchesRecord(sp dbsim.DBProbeSpec, rec dbsim.TargetRecord) bool {
 // echoes a task id is matched by it (an id outside the plan, or a repeat, is
 // dropped); a result without an echo is matched by its position. The returned
 // slice has one entry per plan step, nil where nothing usable arrived.
+//
+// Mixed lists (some results echoing, some not) are matched independently: an
+// echoing result goes to its task's step, a silent one to its own list position.
+// A silent result whose position is already taken by an echoing one is dropped,
+// so the worst case is a missing step (partial), never a mis-graded one. The
+// agent populates TaskID on every dbprobe result (agent/exec_dbprobe.go), so in
+// practice every result echoes.
 func matchResults(plan []dbsim.PlannedStep, results []dbrun.AgentExec) []*dbrun.AgentExec {
 	out := make([]*dbrun.AgentExec, len(plan))
 	byTask := make(map[string]int, len(plan))
@@ -263,6 +281,18 @@ func rank(r dbsim.RunResult) int {
 	return 0
 }
 
+// Bounds on one Ingest. The result handler (Task 6) calls Ingest synchronously,
+// so everything it can wait on is bounded: the connector factory and each SIEM
+// query by ConnectorTimeout, the inline wait for a late alert by
+// MaxInlineDetectionWait (larger DetectionWait values are clamped), and the whole
+// grading phase by IngestTimeout. A timeout or error from the connector leaves
+// that step's telemetry Unverifiable: never a miss, never a pass.
+const (
+	DefaultConnectorTimeout = 20 * time.Second
+	DefaultIngestTimeout    = 120 * time.Second
+	MaxInlineDetectionWait  = 30 * time.Second
+)
+
 func (s *Service) window() time.Duration {
 	if s.DetectionWindow > 0 {
 		return s.DetectionWindow
@@ -275,6 +305,31 @@ func (s *Service) skew() time.Duration {
 		return s.SkewAllowance
 	}
 	return DefaultSkewAllowance
+}
+
+func (s *Service) connectorTimeout() time.Duration {
+	if s.ConnectorTimeout > 0 {
+		return s.ConnectorTimeout
+	}
+	return DefaultConnectorTimeout
+}
+
+func (s *Service) ingestTimeout() time.Duration {
+	if s.IngestTimeout > 0 {
+		return s.IngestTimeout
+	}
+	return DefaultIngestTimeout
+}
+
+func (s *Service) detectionWait() time.Duration {
+	w := s.DetectionWait
+	if w > MaxInlineDetectionWait {
+		w = MaxInlineDetectionWait
+	}
+	if w < 0 {
+		w = 0
+	}
+	return w
 }
 
 func (s *Service) sleep(ctx context.Context, d time.Duration) {
@@ -290,42 +345,97 @@ func (s *Service) sleep(ctx context.Context, d time.Duration) {
 	}
 }
 
+// boundedConn bounds every Verify by d, even when the wrapped connector ignores
+// its context (the call is abandoned, not waited for).
+type boundedConn struct {
+	c detectverify.Connector
+	d time.Duration
+}
+
+func (b boundedConn) Verify(ctx context.Context, req detectverify.VerifyRequest) (detectverify.VerifyResult, error) {
+	cctx, cancel := context.WithTimeout(ctx, b.d)
+	defer cancel()
+	type out struct {
+		v   detectverify.VerifyResult
+		err error
+	}
+	ch := make(chan out, 1)
+	go func() {
+		v, err := b.c.Verify(cctx, req)
+		ch <- out{v, err}
+	}()
+	select {
+	case o := <-ch:
+		return o.v, o.err
+	case <-cctx.Done():
+		return detectverify.VerifyResult{}, cctx.Err()
+	}
+}
+
+func (b boundedConn) TestConnection(ctx context.Context) error { return b.c.TestConnection(ctx) }
+
+// connector returns the alert source, or nil (no correlation) when there is no
+// factory, it fails or it does not answer in time.
 func (s *Service) connector(ctx context.Context) detectverify.Connector {
 	if s.ConnectorFactory == nil {
 		return nil
 	}
-	c, err := s.ConnectorFactory(ctx)
-	if err != nil || c == nil {
+	d := s.connectorTimeout()
+	cctx, cancel := context.WithTimeout(ctx, d)
+	defer cancel()
+	type out struct {
+		c   detectverify.Connector
+		err error
+	}
+	ch := make(chan out, 1)
+	go func() {
+		c, err := s.ConnectorFactory(cctx)
+		ch <- out{c, err}
+	}()
+	select {
+	case o := <-ch:
+		if o.err != nil || o.c == nil {
+			return nil
+		}
+		return boundedConn{c: o.c, d: d}
+	case <-cctx.Done():
 		return nil
 	}
-	return c
 }
 
-func principalOf(s *Service, rec dbsim.TargetRecord, spec dbsim.DBProbeSpec) string {
-	if s.Principal != nil {
-		return s.Principal(rec, spec)
+// principalFor is the DB account the probe ran as. The agent reports no observed
+// account, so the only source is Service.Principal; there is no guess. Empty
+// means unknown.
+func (s *Service) principalFor(job dbsim.RunJob, rec dbsim.TargetRecord, ex dbrun.AgentExec) string {
+	if s.Principal == nil {
+		return ""
 	}
-	return strings.TrimPrefix(spec.CredentialRef, "dbcred:")
+	var res dbsim.DBProbeResult
+	if ex.DBProbe != nil {
+		res = *ex.DBProbe
+	}
+	return strings.TrimSpace(s.Principal(job, rec, res))
 }
 
 // evaluateStep grades one step, re-asking the SIEM (never re-running the probe)
-// until the alert is present or DetectionWait is over.
+// until the alert is present or the (clamped) DetectionWait is over.
 func (s *Service) evaluateStep(ctx context.Context, conn detectverify.Connector, in dbrun.StepInput) (dbrun.Evaluation, error) {
 	start := s.now()
+	wait := s.detectionWait()
 	poll := s.DetectionPoll
 	if poll <= 0 {
 		poll = DefaultDetectionPoll
 	}
 	for {
 		ev, err := dbrun.Evaluate(ctx, conn, in)
-		if err != nil || conn == nil || s.DetectionWait <= 0 || !in.Scenario.ExpectDetection && in.Spec.ProbeID != dbsim.ProbeReadClassifiedFixture {
+		if err != nil || conn == nil || wait <= 0 || !in.Scenario.ExpectDetection && in.Spec.ProbeID != dbsim.ProbeReadClassifiedFixture {
 			return ev, err
 		}
 		done := ev.Record.Telemetry == dlpreport.TelemetryPresent
 		if in.Spec.ProbeID == dbsim.ProbeReadClassifiedFixture {
 			done = done && ev.Record.Classification == dlpreport.ClassificationCorrect
 		}
-		if done || ev.Correlation == nil || s.now().Sub(start) >= s.DetectionWait || ctx.Err() != nil {
+		if done || ev.Correlation == nil || s.now().Sub(start) >= wait || ctx.Err() != nil {
 			return ev, err
 		}
 		s.sleep(ctx, poll)
@@ -337,18 +447,29 @@ func (s *Service) ingestRun(ctx context.Context, job dbsim.RunJob, sub Submissio
 		return errors.New("dbsim: ingest: result sink or scenario source unavailable")
 	}
 	matched := matchResults(job.Plan, sub.Results)
-	conn := s.connector(ctx)
 
-	// The target supplies where the alerts are looked for.
+	// Grading phase: bounded as a whole. Nothing is stored until it is over.
+	gctx, cancel := context.WithTimeout(ctx, s.ingestTimeout())
+	defer cancel()
+	conn := s.connector(gctx)
+
+	// The target supplies where the alerts are looked for. Without it correlation
+	// is skipped (Unverifiable), never guessed.
 	var rec dbsim.TargetRecord
-	if s.Targets != nil {
-		if r, err := s.Targets.Get(ctx, job.TargetID); err == nil {
-			rec = r
-		}
+	skip := ""
+	if s.Targets == nil {
+		skip = "target unavailable"
+	} else if r, err := s.Targets.Get(gctx, job.TargetID); err != nil {
+		skip = "target unavailable"
+	} else {
+		rec = r
 	}
 	dbHost := rec.DBServerHost
 	if dbHost == "" {
 		dbHost = rec.Host
+	}
+	if skip == "" && dbHost == "" {
+		skip = "target unavailable"
 	}
 	dbIP := ""
 	if net.ParseIP(dbHost) != nil {
@@ -356,27 +477,48 @@ func (s *Service) ingestRun(ctx context.Context, job dbsim.RunJob, sub Submissio
 	}
 	agentIP := ""
 	if s.AgentIP != nil {
-		agentIP = s.AgentIP(ctx, job.AgentID)
+		agentIP = s.AgentIP(gctx, job.AgentID)
 	}
 
 	seen := map[string]bool{}
-	graded, duplicates := 0, 0
-	var missing []string
+	var (
+		rows    []RunRecord
+		steps   []map[string]any
+		missing []string
+	)
 	for _, scID := range job.ScenarioIDs {
 		if seen[scID] {
 			continue
 		}
 		seen[scID] = true
-		row, reason := s.gradeScenario(ctx, conn, job, rec, scID, matched, dbHost, dbIP, agentIP)
+		row, sv, reason := s.gradeScenario(gctx, conn, skip, job, rec, scID, matched, dbHost, dbIP, agentIP)
 		if reason != "" {
 			missing = append(missing, scID+": "+reason)
 			continue
 		}
+		rows = append(rows, row)
+		steps = append(steps, sv...)
+	}
+	cancel()
+
+	// A cancel (or the reaper) may have settled the job while grading: store
+	// nothing then. The remaining window between this read and Save is the
+	// store's to close; a late row of a cancelled job is harmless but unwanted.
+	cur, err := s.Jobs.Get(ctx, job.ID)
+	if err != nil {
+		return redactf("dbsim: ingest: reload job: %v", err)
+	}
+	if !cur.Status.Active() {
+		return nil
+	}
+
+	graded, duplicates := 0, 0
+	for _, row := range rows {
 		dup, err := s.Sink.Save(ctx, row)
 		if err != nil {
 			// A storage failure leaves the job active: a replay or the deadline
 			// reaper settles it; nothing is claimed finished.
-			return redactf("dbsim: ingest: save %s: %v", trunc(scID, 80), err)
+			return redactf("dbsim: ingest: save %s: %v", trunc(row.ScenarioID, 80), err)
 		}
 		graded++
 		if dup {
@@ -385,7 +527,11 @@ func (s *Service) ingestRun(ctx context.Context, job dbsim.RunJob, sub Submissio
 	}
 
 	expected := len(seen)
-	detail := map[string]any{"scenariosExpected": expected, "scenariosGraded": graded, "duplicates": duplicates, "partialReported": sub.Partial}
+	if len(steps) > 100 {
+		steps = steps[:100]
+	}
+	detail := map[string]any{"scenariosExpected": expected, "scenariosGraded": graded, "duplicates": duplicates,
+		"partialReported": sub.Partial, "steps": steps}
 	switch {
 	case graded == 0:
 		return s.finish(ctx, job, dbsim.JobFailed, "no scenario could be graded: "+strings.Join(missing, "; "), "error", detail)
@@ -399,58 +545,75 @@ func (s *Service) ingestRun(ctx context.Context, job dbsim.RunJob, sub Submissio
 	return s.finish(ctx, job, dbsim.JobCompleted, "", "ok", detail)
 }
 
-// gradeScenario grades every plan step of one scenario and returns the row, or a
-// reason string when the scenario cannot be graded (a step has no result, or the
-// step could not be evaluated). The row's Result is the worst verdict of its
-// steps (ERROR, then FAIL, then SKIPPED, then PASS); its report is that step's
-// report (the first one with the worst verdict).
-func (s *Service) gradeScenario(ctx context.Context, conn detectverify.Connector, job dbsim.RunJob, rec dbsim.TargetRecord, scID string, matched []*dbrun.AgentExec, dbHost, dbIP, agentIP string) (RunRecord, string) {
+// gradeScenario grades every plan step of one scenario and returns the row, a
+// compact per-step verdict list (scenario, step number, probe, result: no
+// secrets) for the job's audit row, or a reason string when the scenario cannot
+// be graded (a step has no result, or could not be evaluated). The row's Result
+// is the worst verdict of its steps (ERROR, then FAIL, then SKIPPED, then PASS);
+// its report is that step's report (the first one with the worst verdict).
+// skip, when set, is why correlation must not be attempted at all.
+func (s *Service) gradeScenario(ctx context.Context, conn detectverify.Connector, skip string, job dbsim.RunJob, rec dbsim.TargetRecord, scID string, matched []*dbrun.AgentExec, dbHost, dbIP, agentIP string) (RunRecord, []map[string]any, string) {
 	sc, ok := s.Scenarios.Get(scID)
 	if !ok || sc == nil {
-		return RunRecord{}, "scenario is no longer loaded"
+		return RunRecord{}, nil, "scenario is no longer loaded"
 	}
 	var (
 		best    *dbrun.Evaluation
 		bestSpc dbsim.DBProbeSpec
-		steps   int
+		verd    []map[string]any
 	)
 	for i, p := range job.Plan {
 		if p.ScenarioID != scID {
 			continue
 		}
-		steps++
 		if matched[i] == nil {
-			return RunRecord{}, fmt.Sprintf("no result for step %d", p.Index+1)
+			return RunRecord{}, nil, fmt.Sprintf("no result for step %d", p.Index+1)
 		}
 		meta, err := dbbuild.MetaFor(sc, p.Spec)
 		if err != nil {
-			return RunRecord{}, "no grading expectations for step " + fmt.Sprint(p.Index+1)
+			return RunRecord{}, nil, fmt.Sprintf("no grading expectations for step %d", p.Index+1)
+		}
+		principal := s.principalFor(job, rec, *matched[i])
+		stepConn, note := conn, ""
+		switch {
+		case skip != "":
+			stepConn, note = nil, skip
+		case principal == "":
+			stepConn, note = nil, "principal unknown"
 		}
 		in := dbrun.StepInput{
-			Scenario: meta, Spec: p.Spec, Exec: *matched[i], Principal: principalOf(s, rec, p.Spec),
+			Scenario: meta, Spec: p.Spec, Exec: *matched[i], Principal: principal,
 			DBHost: dbHost, DBIP: dbIP, AgentIP: agentIP, Window: s.window(), SkewAllowance: s.skew(),
 		}
 		if job.Mode == dbsim.ModeLab && p.Spec.ProbeID == dbsim.ProbeReadClassifiedFixture {
 			in.ClassificationRuleName = dbsim.LabClassificationRuleName
 		}
-		ev, err := s.evaluateStep(ctx, conn, in)
+		ev, err := s.evaluateStep(ctx, stepConn, in)
 		if err != nil {
-			return RunRecord{}, "step " + fmt.Sprint(p.Index+1) + " could not be evaluated: " + dbsim.Redact(err.Error())
+			return RunRecord{}, nil, fmt.Sprintf("step %d could not be evaluated: %s", p.Index+1, dbsim.Redact(err.Error()))
 		}
+		if note != "" && conn != nil {
+			lim := "Detection correlation skipped: " + note + "; telemetry is unverifiable."
+			if ev.Report.Record.Limitations != "" {
+				lim = ev.Report.Record.Limitations + " " + lim
+			}
+			ev.Report.Record.Limitations = lim
+		}
+		verd = append(verd, map[string]any{"scenarioId": dbsim.Redact(scID), "step": p.Index + 1, "probeId": dbsim.Redact(p.Spec.ProbeID), "result": string(ev.Result)})
 		if best == nil || rank(ev.Result) > rank(best.Result) {
 			e := ev
 			best, bestSpc = &e, p.Spec
 		}
 	}
-	if best == nil || steps == 0 {
-		return RunRecord{}, "no steps in the plan"
+	if best == nil {
+		return RunRecord{}, nil, "no steps in the plan"
 	}
 	body, err := json.Marshal(best.Report)
 	if err != nil {
-		return RunRecord{}, "report could not be encoded"
+		return RunRecord{}, nil, "report could not be encoded"
 	}
 	return RunRecord{
 		ScenarioID: scID, ScenarioVersion: best.Report.Scenario.Version, TargetID: job.TargetID, Engine: bestSpc.Engine,
 		RunID: job.ID, Result: string(best.Result), Report: body,
-	}, ""
+	}, verd, ""
 }

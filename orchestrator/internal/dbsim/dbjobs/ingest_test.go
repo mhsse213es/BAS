@@ -130,6 +130,7 @@ func newIngestRig(t *testing.T, steps []pstep) *ingestRig {
 	r.tg = &fakeTargets{recs: map[string]dbsim.TargetRecord{"lab-db": rec("lab-db", dbsim.ModeLab)}}
 	r.svc = &Service{
 		Targets: r.tg, Jobs: r.store, Sink: r.sink, Now: func() time.Time { return t0 },
+		Principal:        func(dbsim.RunJob, dbsim.TargetRecord, dbsim.DBProbeResult) string { return "dbsim_lab" },
 		Scenarios:        fakeScenarios{scDB01: dbsimScenario(scDB01), scDB03: dbsimScenario(scDB03), scDB05: dbsimScenario(scDB05)},
 		ConnectorFactory: func(context.Context) (detectverify.Connector, error) { return r.conn, nil },
 	}
