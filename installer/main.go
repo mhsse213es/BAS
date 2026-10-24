@@ -45,6 +45,7 @@ var (
 	procSendMessage            = user32.NewProc("SendMessageW")
 	procMessageBox             = user32.NewProc("MessageBoxW")
 	procGetSystemMetrics       = user32.NewProc("GetSystemMetrics")
+	procSystemParametersInfo   = user32.NewProc("SystemParametersInfoW")
 	procSetWindowPos           = user32.NewProc("SetWindowPos")
 	procBeginPaint             = user32.NewProc("BeginPaint")
 	procEndPaint               = user32.NewProc("EndPaint")
@@ -159,7 +160,7 @@ const (
 	yEnvEdit    = yEnvLbl + 22
 	yLogLbl     = yEnvEdit + EDTH + 24
 	yLog        = yLogLbl + 22
-	logH        = 160
+	logH        = 120
 	yBtns       = yLog + logH + 18
 	btnH        = 34
 	// WINCLIENTH is the CLIENT area height the layout above needs — buttons'
@@ -491,7 +492,7 @@ func runInstall() {
 	installing = true
 	procEnableWindow.Call(hInstBtn, 0)
 
-	serverURL := getWindowText(hURLEdit)
+	serverURL := strings.TrimSpace(getWindowText(hURLEdit))
 	secret := getWindowText(hSecEdit)
 	envLabel := getWindowText(hEnvEdit)
 	enrollPort := strings.TrimSpace(getWindowText(hEnrollEdit))
@@ -784,6 +785,14 @@ func main() {
 	procAdjustWindowRectEx.Call(uintptr(unsafe.Pointer(&rect)), uintptr(style), 0, 0)
 	outerW := int(rect.Right - rect.Left)
 	outerH := int(rect.Bottom - rect.Top)
+	// Never taller than the usable screen (excludes the taskbar), so the
+	// button row stays reachable on small or scaled displays.
+	var work RECT
+	if ok, _, _ := procSystemParametersInfo.Call(0x0030, 0, uintptr(unsafe.Pointer(&work)), 0); ok != 0 {
+		if maxH := int(work.Bottom - work.Top); outerH > maxH {
+			outerH = maxH
+		}
+	}
 
 	hMainWnd = createCtl(0, "AudspectInstallerWnd",
 		"BAS Platform - Agent Setup",

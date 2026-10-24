@@ -73,7 +73,16 @@ function Update-OrchestratorAgentArtifacts {
     # succeeded just because it ran earlier in this same script invocation.
     # Pinning the thumbprint (not just chain trust) catches a stale file
     # signed by a certificate that is no longer the one in use.
+    # Dev build (no certificate configured): these files are unsigned by design,
+    # so Authenticode re-verification cannot pass. Skip it here, and say so, so
+    # the self-integrity manifest and BINARIES.sha256 still get generated and
+    # injected. A certificate-configured build still runs the full check.
+    $authenticodeChecked = [bool]$ExpectedThumbprint
+    if (-not $authenticodeChecked) {
+        Write-Host "[!]   Dev build: Authenticode re-verification skipped (no Windows certificate configured)."
+    }
     foreach ($path in @($installerPath, $artifacts["bas-agent-windows-amd64.exe"], $artifacts["bas-agent-windows-legacy-amd64.exe"])) {
+        if (-not $authenticodeChecked) { break }
         $v = Test-AuthenticodeSignature -Path $path
         if (-not $v.Valid) {
             Write-Error "Update-OrchestratorAgentArtifacts: $path failed signature re-verification: $($v.Status) $($v.Reason)" -ErrorAction Continue

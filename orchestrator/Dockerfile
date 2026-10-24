@@ -77,7 +77,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     go build -trimpath -ldflags="-s -w -H windowsgui" \
     -o /agents/Audspect_Agent.exe . && \
     EXE_MB=$(( $(stat -c%s /agents/Audspect_Agent.exe) / 1024 / 1024 )) && \
-    if [ "$EXE_MB" -gt 25 ]; then echo "Audspect_Agent.exe is ${EXE_MB}MB, expected ~14MB - something is being embedded that shouldn't be" >&2; exit 1; fi && \
+    if [ "$EXE_MB" -gt 40 ]; then echo "Audspect_Agent.exe is ${EXE_MB}MB, expected ~30MB - something is being embedded that shouldn't be" >&2; exit 1; fi && \
     cd /agents && zip -q bas-agent-windows-amd64-setup.zip Audspect_Agent.exe && rm Audspect_Agent.exe
 # macOS one-click installer -- each embeds its matching darwin agent binary
 # built above via go:embed, same reasoning as the Windows installer: this

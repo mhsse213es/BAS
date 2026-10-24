@@ -517,6 +517,11 @@ func _loadLogos() {
 // can resolve regardless of obfuscation. Consequently every type reachable from
 // here must carry json tags on the fields the template uses.
 func GenerateHTML(w io.Writer, r *FullReport, compliance []ComplianceSummaryRow) error {
+	// Reports built outside the engine (e.g. campaign aggregates) may carry an
+	// AttackFlow without its grouped view; derive it here so the table is never empty.
+	if r.AttackFlowGroups == nil && len(r.AttackFlow) > 0 {
+		r.AttackFlowGroups = groupAttackFlow(r.AttackFlow)
+	}
 	// appControlSections is what the template ranges over: one page per run
 	// section. A single run contributes its own section; a campaign contributes
 	// one per child run; a run with no application-control steps contributes none.
@@ -670,6 +675,8 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
   .det-matrix td{padding:4px 3px}
 
   .fc,.scard,.gloss-item,.exec-card{page-break-inside:avoid;break-inside:avoid}
+  /* Steps of one technique share a row group: keep their cells neutral so the group reads as one block. */
+  table tbody tr.step-row td{background:#fff}
   /* Keep a section title with the content under it, so it is never left alone at the foot of a page. */
   .stitle,.ph-title,h2,h3{break-after:avoid;page-break-after:avoid}
   thead{display:table-header-group}
@@ -1806,31 +1813,30 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </thead>
   <tbody>
   {{$prevTactic := ""}}
-  {{range .attackFlow}}
+  {{range .attackFlowGroups}}
   {{if ne .tactic $prevTactic}}
   {{$prevTactic = .tactic}}
   <tr>
     <td colspan="{{if $hasCtl}}7{{else}}6{{end}}" style="background:#161b22;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#58a6ff;padding:5px 8px;border-left:3px solid #58a6ff">{{humanize .tactic}}</td>
   </tr>
   {{end}}
-  {{$vc := "#6e7681"}}
-  {{if eq .verdict "blocked"}}{{$vc = "#238636"}}{{end}}
-  {{if eq .verdict "detected"}}{{$vc = "#d29922"}}{{end}}
-  {{if eq .verdict "logged"}}{{$vc = "#b58800"}}{{end}}
-  {{if eq .verdict "bypassed"}}{{$vc = "#da3633"}}{{end}}
-  {{if eq .verdict "error"}}{{$vc = "#6e7681"}}{{end}}
-  <tr>
-    <td><code>{{.techniqueId}}</code></td>
-    <td>{{.techniqueName}}{{if and .stepName (ne .stepName .techniqueName)}}<br><span style="font-weight:400;font-size:0.75rem;color:#6e7681">{{.stepName}}</span>{{end}}</td>
-    <td style="font-size:0.7rem;color:#6e7681">{{humanize .tactic}}</td>
-    <td style="font-weight:600;color:{{$vc}}">{{.verdictLabel}}</td>
-    {{if $hasCtl}}<td>
-      {{if .controlName}}{{.controlName}}{{if .alertName}} <span style="color:#6e7681;font-size:0.75rem">· {{.alertName}}</span>{{end}}{{else}}<span style="color:#6e7681">—</span>{{end}}
-      {{if .isStopPoint}}<div style="font-size:0.68rem;color:#238636;font-weight:600;margin-top:2px">&#9940; Attack stopped here</div>{{end}}
-    </td>{{end}}
-    <td style="font-size:0.8rem">{{if .severity}}{{.severity}}{{else}}—{{end}}</td>
-    <td style="font-size:0.8rem;color:#6e7681">{{if .durationMs}}{{.durationMs}}ms{{else}}—{{end}}</td>
+  {{$gname := .techniqueName}}
+  {{$gid := .techniqueId}}
+  {{$gtac := .tactic}}
+  {{$gsev := .severity}}
+  {{$n := len .steps}}
+  {{range $i, $s := .steps}}
+  <tr class="step-row">
+    {{if eq $i 0}}<td rowspan="{{$n}}" style="vertical-align:top"><code>{{$gid}}</code><div style="font-size:0.75rem;color:#374151">{{$gname}}</div>{{if gt $n 1}}<div style="font-size:0.68rem;color:#6e7681">{{$n}} steps</div>{{end}}</td>{{end}}
+    <td>{{if $s.stepName}}{{$s.stepName}}{{else}}{{$gname}}{{end}}</td>
+    {{if eq $i 0}}<td rowspan="{{$n}}" style="font-size:0.7rem;color:#6e7681;vertical-align:top">{{humanize $gtac}}</td>{{end}}
+    {{$vc := "#6e7681"}}{{if eq $s.verdict "blocked"}}{{$vc = "#238636"}}{{end}}{{if eq $s.verdict "detected"}}{{$vc = "#d29922"}}{{end}}{{if eq $s.verdict "logged"}}{{$vc = "#b58800"}}{{end}}{{if eq $s.verdict "bypassed"}}{{$vc = "#da3633"}}{{end}}
+    <td style="font-weight:600;color:{{$vc}}">{{$s.verdictLabel}}</td>
+    {{if $hasCtl}}<td>{{if $s.controlName}}{{$s.controlName}}{{else}}<span style="color:#6e7681">—</span>{{end}}{{if $s.isStopPoint}} <span style="font-size:0.68rem;color:#238636;font-weight:600">&#9940; stopped here</span>{{end}}</td>{{end}}
+    {{if eq $i 0}}<td rowspan="{{$n}}" style="font-size:0.8rem;vertical-align:top">{{if $gsev}}{{$gsev}}{{else}}—{{end}}</td>{{end}}
+    <td style="font-size:0.8rem;color:#6e7681">{{if $s.durationMs}}{{$s.durationMs}}ms{{else}}—{{end}}</td>
   </tr>
+  {{end}}
   {{end}}
   </tbody>
 </table>

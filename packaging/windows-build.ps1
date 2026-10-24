@@ -432,10 +432,11 @@ $env:GOOS = ""; $env:GOARCH = ""
 Pop-Location
 $exeSizeMB = [math]::Round((Get-Item "$OutDir\BASAgent-Setup-$Version.exe").Length / 1MB, 1)
 Log "  Installer EXE: BASAgent-Setup-$Version.exe (${exeSizeMB}MB)"
-# Size guardrail: this must stay close to its current ~14MB. A jump well past
-# that means something is being embedded again (e.g. a reverted fix), not a
-# one-off fluctuation worth silently allowing through.
-if ($exeSizeMB -gt 25) { Err "BASAgent-Setup-$Version.exe is ${exeSizeMB}MB, expected ~14MB - something is being embedded that shouldn't be (check for a go:embed regression)." }
+# Size guardrail: the agent now includes the dbsim database probe drivers
+# (pgx/v5, go-sql-driver/mysql), which put the installer at ~30MB. The limit
+# is raised to 40MB for that growth; a jump past it still means something
+# unexpected is being embedded (e.g. a reverted fix).
+if ($exeSizeMB -gt 40) { Err "BASAgent-Setup-$Version.exe is ${exeSizeMB}MB, expected ~30MB - something is being embedded that shouldn't be (check for a go:embed regression)." }
 
 # Also stage the standalone Windows agent artifact (for manual / side-by-side
 # deploy). Copied from the already-signed installer\bas_agent.exe, not

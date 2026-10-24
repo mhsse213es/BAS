@@ -178,6 +178,7 @@ type FullReport struct {
 	TrendAnalysis  TrendSummary        `json:"trendAnalysis"`
 	AttackPath          AttackPath                 `json:"attackPath"`
 	AttackFlow          []AttackFlowNode           `json:"attackFlow,omitempty"`
+	AttackFlowGroups   []AttackFlowGroup         `json:"attackFlowGroups,omitempty"`
 	AttackFlowSummary   AttackFlowSummary          `json:"attackFlowSummary"`
 	// VariantCoverage holds multi-variant evasion analysis for the HTML/PDF report.
 	// Populated from scenario_variant_technique_summary; nil for runs with no variant depth.
@@ -1718,6 +1719,7 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 	report.AttackPath = buildAttackPath(latestResults)
 	report.AttackFlow = BuildAttackFlow(latestResults)
 	report.AttackFlowSummary = summariseAttackFlow(report.AttackFlow)
+	report.AttackFlowGroups = groupAttackFlow(report.AttackFlow)
 	// Coverage breakdown: derive from results directly (no detection telemetry in Build()
 	// because the latest-run query omits detection_summary; we use exec verdict only).
 	report.TechniqueMatrix = buildTechniqueMatrix(latestResults, nil)
@@ -1997,6 +1999,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	report.AttackPath = buildAttackPath(results)
 	report.AttackFlow = BuildAttackFlow(results)
 	report.AttackFlowSummary = summariseAttackFlow(report.AttackFlow)
+	report.AttackFlowGroups = groupAttackFlow(report.AttackFlow)
 	report.KillChain = buildKillChain(results, report.DetectionTechniques)
 	report.TechniqueMatrix = buildTechniqueMatrix(results, report.DetectionTechniques)
 	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)
