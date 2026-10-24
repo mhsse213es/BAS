@@ -673,7 +673,8 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
      document wide, so a future regression names itself. */
   table{table-layout:fixed}
   th,td{white-space:normal !important;overflow-wrap:anywhere;padding:5px 6px}
-  .det-matrix{font-size:0.7rem}
+  .det-matrix{font-size:0.7rem;table-layout:fixed;width:100%}
+  .det-matrix td.thr{overflow-wrap:anywhere;word-break:normal}
   .det-matrix th{font-size:0.6rem;letter-spacing:0.02em;padding:4px 3px}
   .det-matrix td{padding:4px 3px}
 
@@ -3305,9 +3306,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </table>
 
 {{if .techniqueMatrix}}
-<table class="det-matrix">
+<table class="det-matrix" style="table-layout:fixed;width:100%">
   <colgroup>
-    <col style="width:14%"><col style="width:9%"><col style="width:6%"><col style="width:7%"><col style="width:7%"><col style="width:6%"><col style="width:11%"><col style="width:8%"><col style="width:6%"><col style="width:8%"><col style="width:5%"><col style="width:8%"><col style="width:5%">
+    <col style="width:13%"><col style="width:9%"><col style="width:6%"><col style="width:7%"><col style="width:7%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:6%"><col style="width:8%"><col style="width:5%"><col style="width:8%"><col style="width:5%">
   </colgroup>
   <thead><tr>
     <th>Technique</th><th>Tactic</th><th>Sev</th><th>Exec</th><th>Req.&nbsp;Priv</th><th>Ran&nbsp;As</th><th>Detection</th><th>Alert&nbsp;Source</th><th>Event</th><th>Threat</th><th>MTTD</th><th>Clean&nbsp;Up</th><th>Blocked&nbsp;By</th>
@@ -3336,7 +3337,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     </td>
     <td style="font-size:0.75rem;color:#6e7681;max-width:140px;word-break:break-all">{{$s.alertProvider}}{{if and $s.alertProvider $s.alertChannel}}<br>{{end}}{{$s.alertChannel}}</td>
     <td style="font-size:0.78rem;text-align:center">{{if $s.alertEventId}}{{$s.alertEventId}}{{else}}—{{end}}</td>
-    <td style="font-size:0.75rem;max-width:160px;word-break:break-all">
+    <td class="thr" style="font-size:0.75rem">
       {{if $s.alertThreatName}}<strong>{{$s.alertThreatName}}</strong>{{if $s.alertCommandLine}}<br>{{end}}{{end}}
       {{if $s.alertCommandLine}}<span style="color:#6e7681">{{$s.alertCommandLine}}</span>{{end}}
     </td>
