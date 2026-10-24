@@ -15,6 +15,7 @@ import (
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/dbsim"
 	"github.com/audspect/bas/internal/dbsim/dbadmin"
+	"github.com/audspect/bas/internal/reporting"
 )
 
 // Database security simulation: Admin settings, the target registry and the
@@ -342,4 +343,34 @@ func (h *Handler) GetDBSimRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, dbsimRunToView(run, true))
+}
+
+// GetDBSimRunReport renders one stored run as a printable HTML report. It
+// renders the persisted report only; it never re-grades and never touches any
+// score.
+// GET /api/dbsim-runs/{id}/report
+func (h *Handler) GetDBSimRunReport(w http.ResponseWriter, r *http.Request) {
+	run, err := db.GetDBSimRun(r.Context(), h.db, chi.URLParam(r, "id"))
+	if errors.Is(err, db.ErrDBSimRunNotFound) {
+		jsonError(w, "run not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		dbsimFail(w, err)
+		return
+	}
+	var stored dbsim.StoredReport
+	if err := json.Unmarshal(run.Report, &stored); err != nil {
+		log.Printf("dbsim: report for run %s is not readable: %v", run.ID, err)
+		jsonError(w, "stored report is not readable", http.StatusInternalServerError)
+		return
+	}
+	page, err := reporting.BuildDBSimReport(stored, reporting.DBSimReportOptions{RunID: run.RunID})
+	if err != nil {
+		log.Printf("dbsim: render report for run %s: %v", run.ID, err)
+		jsonError(w, "could not render report", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(page))
 }

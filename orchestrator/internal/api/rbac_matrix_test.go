@@ -488,6 +488,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/dbsim-targets/{id}/identity-check", tierPermission, auth.CanManageDBSimTargets},
 	{http.MethodGet, "/api/dbsim-runs", tierPermission, auth.CanViewDBSim},
 	{http.MethodGet, "/api/dbsim-runs/{id}", tierPermission, auth.CanViewDBSim},
+	{http.MethodGet, "/api/dbsim-runs/{id}/report", tierPermission, auth.CanViewDBSim},
 	{http.MethodGet, "/api/actions/configs", tierPermission, auth.CanListResponseConnectors},
 	{http.MethodPost, "/api/actions/configs", tierPermission, auth.CanCreateResponseConnector},
 	{http.MethodPut, "/api/actions/configs/{id}", tierPermission, auth.CanUpdateResponseConnector},
