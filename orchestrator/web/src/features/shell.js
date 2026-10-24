@@ -224,6 +224,17 @@ function maybeShowLicenseGraceModal(info) {
   });
 }
 
+export function togglePasswordVisibility() {
+  var input = document.getElementById('inp-pass');
+  var btn = document.getElementById('inp-pass-toggle');
+  var show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  var label = show ? 'Hide password' : 'Show password';
+  btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+}
+
 export function doLogin() {
   var username = document.getElementById('inp-user').value.trim();
   var password = document.getElementById('inp-pass').value;

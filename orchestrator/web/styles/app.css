@@ -169,6 +169,17 @@ body {
 .error-msg { color: var(--danger); font-size: 0.78rem; margin-top: 0.4rem; min-height: 1.2em; }
 
 /* ── Scenario builder ──────────────────────────────────────── */
+.pw-wrap { position: relative; }
+.pw-wrap input { width: 100%; box-sizing: border-box; padding-right: 2.5rem; }
+.pw-toggle {
+  position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%);
+  background: none; border: 0; padding: 0.25rem; cursor: pointer;
+  color: inherit; opacity: 0.65; line-height: 0;
+}
+.pw-toggle:hover, .pw-toggle:focus-visible { opacity: 1; }
+.pw-toggle .eye-off { display: none; }
+.pw-toggle[aria-pressed="true"] .eye-on { display: none; }
+.pw-toggle[aria-pressed="true"] .eye-off { display: inline; }
 .form-group textarea, .form-group select {
   width: 100%; padding: 0.55rem 0.875rem;
   background: var(--elevated); border: 1px solid var(--border);

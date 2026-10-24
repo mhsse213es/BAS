@@ -1917,7 +1917,10 @@ export function addStep(st) {
       '<div class="bld-field"><label>Executor</label><select class="st-exec">' + execOpts + '</select></div>' +
       '<div class="bld-field"><label>Timeout (sec)</label><input class="st-timeout" type="number" min="0" value="' + (st.timeoutSec || 60) + '"></div>' +
       '<div class="bld-field"><label>Requires privilege</label><select class="st-priv">' + privOpts + '</select></div>' +
-      '<div class="bld-field full"><label>Command</label><textarea class="st-cmd" rows="2" placeholder="command to run on the endpoint">' + x(st.command || '') + '</textarea></div>' +
+      '<div class="bld-field full"><label>Command</label>' +
+        '<label class="btn btn-outline btn-sm" title="Load a .ps1 or .sh file into this step">Upload .ps1 / .sh' +
+          '<input type="file" accept=".ps1,.sh" class="is-hidden" data-on-change="loadStepScript"></label>' +
+        '<textarea class="st-cmd" rows="2" placeholder="command to run on the endpoint">' + x(st.command || '') + '</textarea></div>' +
       '<div class="bld-field full"><label>Cleanup (optional)</label><textarea class="st-cleanup" rows="1" placeholder="command run after the step">' + x(st.cleanup || '') + '</textarea></div>' +
     '</div>' +
     '<div class="bld-mode-help">Steps requiring higher privilege than a run\'s Max Privilege ceiling are skipped, not dispatched.</div>';
@@ -2067,6 +2070,32 @@ export function uploadScenarioFile(input) {
   };
   reader.readAsText(file);
 }
+// Step script upload: loads a .ps1 or .sh file into the step's Command box.
+// Only those two extensions are accepted, the file is size-capped, and the
+// text lands in the normal command field, so it is saved and validated the
+// same way as typed text.
+var STEP_SCRIPT_MAX_BYTES = 256 * 1024;
+export function loadStepScript(input) {
+  var file = input.files && input.files[0];
+  input.value = ''; // reset so the same file can be re-picked
+  if (!file) return;
+  var name = file.name.toLowerCase();
+  var executor = name.endsWith('.ps1') ? 'powershell' : (name.endsWith('.sh') ? 'sh' : '');
+  if (!executor) { showToast('Only .ps1 and .sh files can be uploaded', 'err'); return; }
+  if (file.size > STEP_SCRIPT_MAX_BYTES) { showToast('Script is larger than 256 KB', 'err'); return; }
+  var row = input.closest('.bld-step');
+  var reader = new FileReader();
+  reader.onload = function() {
+    var text = String(reader.result);
+    if (text.indexOf('\u0000') !== -1) { showToast('File looks binary, not a text script', 'err'); return; }
+    row.querySelector('.st-cmd').value = text;
+    row.querySelector('.st-exec').value = executor;
+    showToast('Loaded ' + file.name, 'ok');
+  };
+  reader.onerror = function() { showToast('Could not read ' + file.name, 'err'); };
+  reader.readAsText(file);
+}
+
 export function pickScenarioUploadFile() { document.getElementById('sc-upload-file').click(); }
 
 export function downloadBuilderYaml() {
