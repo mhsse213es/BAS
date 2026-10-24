@@ -145,6 +145,10 @@ type Service struct {
 	ConnectorTimeout time.Duration
 	IngestTimeout    time.Duration
 
+	// Presence says whether an agent is connected (reaper.go). Nil means
+	// presence is unknown: the offline rule is skipped, never assumed.
+	Presence AgentPresence
+
 	mu sync.Mutex // serialises check-then-create within this process
 }
 
