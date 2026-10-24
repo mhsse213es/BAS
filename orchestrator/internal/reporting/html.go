@@ -1054,14 +1054,14 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   /* Running footer now lives in the page margin boxes (see the style before the
      runsheet table): it repeats at the bottom of every sheet, so it can never
      sit mid-page. The table footer is hidden in print. */
-  @page{size:A4;margin:0 0 16mm 0}
+  @page{size:A4;margin:14mm 0 16mm 0}
   @page :first{margin:0}
   .runsheet>tfoot{display:none !important}
   html{background:#f3f6fa !important}
   body{background:transparent !important}
   /* The inline footer in the last section is the same running footer: hide it, the margin boxes print it. */
   .runfoot,.runfoot *{display:none !important}
-  .page:not(.cover){background:transparent !important;min-height:calc(297mm - 16mm)}
+  .page:not(.cover){background:transparent !important;min-height:calc(297mm - 30mm)}
   .runsheet>tbody>tr>td{background:#f3f6fa !important}
   /* Each section tag opens its own sheet, so it can never be stranded at the foot of the previous one. */
   .stag{break-before:page;page-break-before:always}
