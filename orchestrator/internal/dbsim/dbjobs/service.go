@@ -59,6 +59,9 @@ type JobStore interface {
 	ActiveForAgent(ctx context.Context, agentID string) (bool, error)
 	// Expired lists active jobs whose deadline is before now.
 	Expired(ctx context.Context, now time.Time) ([]dbsim.RunJob, error)
+	// Running lists jobs whose status is running (oldest first, bounded); the
+	// reaper's offline-agent rule needs jobs that are not yet past deadline.
+	Running(ctx context.Context) ([]dbsim.RunJob, error)
 }
 
 // Dispatcher sends a signed command_scenario to an agent. It reports whether the

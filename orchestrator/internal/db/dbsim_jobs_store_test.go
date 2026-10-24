@@ -116,6 +116,12 @@ func TestDBSimJobStore(t *testing.T) {
 			t.Fatalf("expired %+v %v", exp, err)
 		}
 
+		// Running: only jobs in status running (run-a is running; run-old is pending).
+		run, err := st.Running(ctx)
+		if err != nil || len(run) != 1 || run[0].ID != "run-a" {
+			t.Fatalf("running %+v %v", run, err)
+		}
+
 		// A terminal job frees its target and agent.
 		if ok, err := st.Transition(ctx, "run-a", []dbsim.JobStatus{dbsim.JobRunning}, dbsim.JobCompleted, "", dbsimAudit("t")); err != nil || !ok {
 			t.Fatalf("complete %v %v", ok, err)

@@ -186,6 +186,25 @@ func (s DBSimJobStore) ActiveForAgent(ctx context.Context, agentID string) (bool
 	return ok, nil
 }
 
+// Running lists jobs in status running, oldest first, bounded to 500.
+func (s DBSimJobStore) Running(ctx context.Context) ([]dbsim.RunJob, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT `+dbsimJobCols+` FROM dbsim_run_jobs
+		WHERE status = 'running' ORDER BY created_at LIMIT 500`)
+	if err != nil {
+		return nil, fmt.Errorf("dbsim running jobs: %w", err)
+	}
+	defer rows.Close()
+	var out []dbsim.RunJob
+	for rows.Next() {
+		j, err := scanDBSimJob(rows)
+		if err != nil {
+			return nil, fmt.Errorf("dbsim running jobs: %w", err)
+		}
+		out = append(out, j)
+	}
+	return out, rows.Err()
+}
+
 // Expired lists active jobs whose deadline is before now (oldest first).
 func (s DBSimJobStore) Expired(ctx context.Context, now time.Time) ([]dbsim.RunJob, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+dbsimJobCols+` FROM dbsim_run_jobs

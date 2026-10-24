@@ -183,6 +183,26 @@ func TestReapIdentityCheckExpiresFailedAndRecordsNothing(t *testing.T) {
 	}
 }
 
+type runningFails struct{ *reapStore }
+
+func (runningFails) Running(context.Context) ([]dbsim.RunJob, error) {
+	return nil, errors.New("db down password=hunter2")
+}
+
+func TestReapRunningListErrorStillReapsDeadlines(t *testing.T) {
+	r := newReapRig(presence{})
+	r.add("j1", dbsim.JobKindRun, dbsim.JobPending, agentA, "t1", 1, past)
+	r.add("j2", dbsim.JobKindRun, dbsim.JobRunning, "bbbbbbbbbbbbbbbb", "t2", 1, future)
+	r.svc.Jobs = runningFails{r.store}
+	n, err := r.svc.Reap(context.Background(), t0)
+	if n != 1 || err == nil || strings.Contains(err.Error(), "hunter2") {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	if r.store.jobs["j1"].Status != dbsim.JobFailed || r.store.jobs["j2"].Status != dbsim.JobRunning {
+		t.Fatalf("j1=%s j2=%s", r.store.jobs["j1"].Status, r.store.jobs["j2"].Status)
+	}
+}
+
 func TestReapNilPresenceSkipsOfflineRule(t *testing.T) {
 	r := newReapRig(nil)
 	r.add("j1", dbsim.JobKindRun, dbsim.JobRunning, agentA, "t1", 1, future)

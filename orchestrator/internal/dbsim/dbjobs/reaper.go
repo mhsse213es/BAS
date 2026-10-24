@@ -19,13 +19,6 @@ type AgentPresence interface {
 	Online(agentID string) bool
 }
 
-// RunningLister is an optional JobStore capability: the jobs currently in
-// status running (the offline rule needs jobs that are not yet past their
-// deadline). A store without it gets deadline reaping only.
-type RunningLister interface {
-	Running(ctx context.Context) ([]dbsim.RunJob, error)
-}
-
 // Reap settles jobs that can no longer finish and returns how many it moved.
 //
 // A job past its deadline, or a running job whose agent went offline, becomes
@@ -70,8 +63,8 @@ func (s *Service) Reap(ctx context.Context, now time.Time) (int, error) {
 		reap(j, "deadline")
 	}
 
-	if rl, ok := s.Jobs.(RunningLister); ok && s.Presence != nil {
-		running, err := rl.Running(ctx)
+	if s.Presence != nil {
+		running, err := s.Jobs.Running(ctx)
 		if err != nil {
 			errs = append(errs, redactf("dbsim: list running jobs: %v", err))
 		}

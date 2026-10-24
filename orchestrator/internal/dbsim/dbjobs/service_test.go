@@ -119,6 +119,7 @@ func (s *fakeStore) ActiveForAgent(_ context.Context, id string) (bool, error) {
 	return false, nil
 }
 func (s *fakeStore) Expired(context.Context, time.Time) ([]dbsim.RunJob, error) { return nil, nil }
+func (s *fakeStore) Running(context.Context) ([]dbsim.RunJob, error)             { return nil, nil }
 func (s *fakeStore) only(t *testing.T) dbsim.RunJob {
 	t.Helper()
 	if len(s.jobs) != 1 {
