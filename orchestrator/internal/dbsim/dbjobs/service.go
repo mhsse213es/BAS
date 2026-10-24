@@ -118,6 +118,24 @@ type Service struct {
 	Now    func() time.Time
 	MaxAge time.Duration
 
+	// Result ingest (ingest.go). Sink stores one graded row per scenario;
+	// nil refuses to grade (fail closed). ConnectorFactory supplies the alert
+	// source; nil or an error means no correlation (Telemetry Unverifiable).
+	// Identity records identity-check results; nil records nothing.
+	Sink             RunSink
+	ConnectorFactory ConnectorFactory
+	Identity         IdentityRecorder
+	// Detection window / clock skew / how long to keep re-asking the SIEM for a
+	// late alert (zero values take the lab defaults; DetectionWait zero means ask
+	// once). Principal and AgentIP are optional lookups with safe defaults.
+	DetectionWindow time.Duration
+	SkewAllowance   time.Duration
+	DetectionWait   time.Duration
+	DetectionPoll   time.Duration
+	Sleep           func(ctx context.Context, d time.Duration)
+	Principal       func(rec dbsim.TargetRecord, spec dbsim.DBProbeSpec) string
+	AgentIP         func(ctx context.Context, agentID string) string
+
 	mu sync.Mutex // serialises check-then-create within this process
 }
 

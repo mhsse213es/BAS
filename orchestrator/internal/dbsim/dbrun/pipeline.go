@@ -38,6 +38,10 @@ const (
 // AgentExec is the part of the agent's protocol.ExecResult that dbsim needs
 // (JSON tags match the agent wire). The orchestrator never imports agent code.
 type AgentExec struct {
+	// TaskID is the agent's echo of the step's task id (protocol.ExecResult.TaskID).
+	// It is only a cross-check for matching results to the stored plan; grading
+	// never reads anything else from the agent's answer about WHICH step it was.
+	TaskID            string `json:"taskId,omitempty"`
 	ExitCode          int    `json:"exitCode"`
 	Stderr            string `json:"stderr"`
 	TimedOut          bool   `json:"timedOut,omitempty"`
