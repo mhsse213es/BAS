@@ -846,6 +846,7 @@ h1{font-size:1.28rem;font-weight:900;color:#0b1420;letter-spacing:-0.025em;
 .toc-item:hover{color:var(--accent)}
 .toc-num{font-size:0.95rem;font-weight:700;color:var(--muted);min-width:34px;flex-shrink:0}
 .toc-title{font-size:1.1rem;font-weight:600;flex:1;border-bottom:1px dotted #9aa5b5;padding-bottom:3px}
+.toc-pg{font-size:1.1rem;font-weight:700;min-width:34px;text-align:right;flex-shrink:0;color:var(--ink)}
 h2{font-size:0.88rem;font-weight:800;color:#0b1420;margin:18px 0 10px;letter-spacing:-0.01em}
 h3{font-size:0.63rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6e7681;margin:14px 0 7px}
 p{margin-bottom:9px;font-size:0.82rem}
