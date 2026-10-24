@@ -75,6 +75,18 @@ var expectationByID = map[string]MailExpectation{
 	"EG-016.relay-path.direct.known-bad":  RelayPathBypassDirectExpectation(false),
 	"EG-016.relay-path.relay.known-good":  RelayPathBypassRelayExpectation(true),
 	"EG-016.relay-path.relay.known-bad":   RelayPathBypassRelayExpectation(false),
+
+	"EG-017.malware-category-script.known-good": MalwareCategoryAttachmentExpectation(true),
+	"EG-017.malware-category-script.known-bad":  MalwareCategoryAttachmentExpectation(false),
+
+	"EG-018.ransomware-stand-in.known-good": RansomwareStandInExpectation(true),
+	"EG-018.ransomware-stand-in.known-bad":  RansomwareStandInExpectation(false),
+
+	"EG-019.file-type-spoofing.known-good": FileTypeSpoofingExpectation(true),
+	"EG-019.file-type-spoofing.known-bad":  FileTypeSpoofingExpectation(false),
+
+	"EG-020.blocked-extension-policy.known-good": BlockedExtensionPolicyExpectation(true),
+	"EG-020.blocked-extension-policy.known-bad":  BlockedExtensionPolicyExpectation(false),
 }
 
 // ExpectationByID returns the MailExpectation expectationID resolves
