@@ -841,11 +841,11 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
 h1{font-size:1.28rem;font-weight:900;color:#0b1420;letter-spacing:-0.025em;
   line-height:1.15;margin:0 0 16px;padding-left:13px;border-left:4px solid #0d9488}
 .toc-list{display:flex;flex-direction:column;margin-top:8px}
-.toc-item{display:flex;align-items:baseline;gap:14px;padding:9px 0;
+.toc-item{display:flex;align-items:baseline;gap:14px;padding:14px 0;
   border-bottom:1px solid var(--line2);text-decoration:none;color:var(--ink)}
 .toc-item:hover{color:var(--accent)}
-.toc-num{font-size:0.7rem;font-weight:700;color:var(--muted);min-width:28px;flex-shrink:0}
-.toc-title{font-size:0.86rem;font-weight:600}
+.toc-num{font-size:0.95rem;font-weight:700;color:var(--muted);min-width:34px;flex-shrink:0}
+.toc-title{font-size:1.1rem;font-weight:600;flex:1;border-bottom:1px dotted #9aa5b5;padding-bottom:3px}
 h2{font-size:0.88rem;font-weight:800;color:#0b1420;margin:18px 0 10px;letter-spacing:-0.01em}
 h3{font-size:0.63rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6e7681;margin:14px 0 7px}
 p{margin-bottom:9px;font-size:0.82rem}
@@ -1031,6 +1031,28 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 .sev-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .sd-c{background:#dc2626}.sd-h{background:#ea580c}.sd-m{background:#d97706}.sd-l{background:#0d9488}
 .gloss-item{margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #e5e7eb}
+@media print{
+  :root{--muted:#000;--faint:#000;--line:#999}
+  html,body{background:#fff !important}
+  .cover{height:297mm;max-height:297mm;overflow:hidden}
+  /* Every section starts on its own sheet (table of contents included). */
+  .page{break-before:page;page-break-before:always}
+  .page:first-child{break-before:auto;page-break-before:auto}
+  /* Light tints off the printed sheet: cards and table cells print white. */
+  .fc,.scard,.gloss-item,.ctrl,table th,table td{background:#fff !important}
+  /* The Executive Summary hero is a dark panel by design: keep it dark and its text light. */
+  .risk-hero{background:#0b1420 !important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .risk-hero *:not([style*="color"]){color:#fff !important}
+  .risk-hero [style*="#6e7681"]{color:#9aa5b5 !important}
+  /* Paragraphs: one alignment, and black text throughout. */
+  .page p,.page li{text-align:left !important}
+  .page p,.page li,.page td:not([style*="color"]),.page th:not([style*="color"]),
+  [style*="#6e7681"],[style*="#9aa5b5"],[style*="#8b949e"]{color:#000 !important}
+  .runsheet>tfoot,.runsheet>tfoot td{text-align:left !important}
+  .runsheet>tfoot td,.runsheet>tfoot td *:not([style*="color"]){color:#000 !important}
+  /* Each section tag opens its own sheet, so it can never be stranded at the foot of the previous one. */
+  .stag{break-before:page;page-break-before:always}
+}
 </style>
 </head>
 <body>
