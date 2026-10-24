@@ -2,13 +2,13 @@ package reporting
 
 // adAssessmentTmpl is the enterprise AD coverage assessment HTML (also the PDF
 // source). Every dynamic field is auto-escaped by html/template.
-const adAssessmentTmpl = `<!DOCTYPE html>
+var adAssessmentTmpl = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Active Directory Coverage Assessment</title>
-<style>` + reportSharedPrintCSS + `
+<style>` + reportDesignCSS() + `
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}
 body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;color:#1a2332;background:#fff;line-height:1.6;font-variant-numeric:tabular-nums}

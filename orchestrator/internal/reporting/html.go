@@ -1057,6 +1057,8 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   @page{size:A4;margin:14mm 0 16mm 0}
   @page :first{margin:0}
   .runsheet>tfoot{display:none !important}
+  @page{@bottom-left{content:"Audspect BAS \00b7 Generated report";font-size:7pt;color:#000;background:#f3f6fa}}
+  @page{@bottom-right{content:"Confidential \2014 Authorised Recipients Only";font-size:7pt;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#c2410c;background:#f3f6fa}}
   html{background:#f3f6fa !important}
   body{background:transparent !important}
   /* The inline footer in the last section is the same running footer: hide it, the margin boxes print it. */

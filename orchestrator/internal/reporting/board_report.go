@@ -219,7 +219,7 @@ func boardTmpl() (*template.Template, error) {
 				return fmt.Sprintf("%v", t)
 			}
 		},
-	}).Parse(boardReportHTML)
+	}).Parse(strings.Replace(boardReportHTML, "<style>:root", "<style>"+reportDesignCSS()+"@page{margin:10mm 0 12mm 0}@page :first{margin:10mm 0 12mm 0;counter-reset:page 0}</style><style>:root", 1))
 	if err != nil {
 		return nil, err
 	}

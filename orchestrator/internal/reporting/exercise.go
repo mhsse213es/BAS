@@ -390,13 +390,13 @@ func evClass(summary string) string {
 
 // ── HTML template ─────────────────────────────────────────────────────────────
 
-const exerciseReportTmpl = `<!DOCTYPE html>
+var exerciseReportTmpl = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Exercise Report — {{.Execution.Name}}</title>
-<style>` + reportSharedPrintCSS + `
+<style>` + reportDesignCSS() + `
 /* ── reset ── */
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}

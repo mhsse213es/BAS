@@ -252,13 +252,13 @@ func complianceTmpl() (*template.Template, error) {
 	return t, nil
 }
 
-const complianceReportHTML = `<!DOCTYPE html>
+var complianceReportHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Regulatory Compliance Report — {{.Framework.Name}}</title>
-<style>` + reportSharedPrintCSS + `
+<style>` + reportDesignCSS() + `
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}
 body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;
