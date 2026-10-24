@@ -69,3 +69,52 @@ This is the single place to check before claiming WAF Mastery is "done" or makin
 - `internal/wafefficacy` + `internal/reporting/waf_coverage.go`/`waf_industry_profiles.go` + `internal/api/waf_efficacy_handlers.go` console integration: `/api/waf/coverage(.html)`, `/api/waf/industry-profiles(.html)` — all tested.
 - `/api/waf/scenarios/<slug>(.html)` × 10 (slug ≠ catalog `EnterpriseScenario.ID`, resolved through a shared slug-keyed registry): all 10 present in both `routes.go` and `rbac_matrix_test.go`.
 - `TestRBACMatrix_NoDrift`: now passes cleanly as of 2026-10-16 — see item #0.
+
+
+## CVE assessment catalog (internal/cvecatalog, internal/cveval, internal/cvelab) — 2026-10-24
+
+A separate, new initiative against the same Cymulate-comparison gap list as the WAF payload-corpus work above
+(priority 2 of that list: CVE-specific simulations). Built in this order, per the owner's own milestone, with
+safeguards built and tested before any payload beyond the first CVE was added.
+
+**Catalog (`internal/cvecatalog`):** `CVEEntry` carries CVE ID, CWE IDs, severity, affected product + version
+ranges, preconditions, execution profile, at least one external reference, a `LastVerified` date, and two
+`ConfigFixture` values (vulnerable/patched) with an `Implies` field the constructor forces to match which fixture
+it is — a vulnerable fixture can never be miscoded to imply `NOT_VULNERABLE`. One entry shipped: CVE-2021-44228
+(Log4Shell), `ExecutionProfile: lab_capable`. `ExecutionProfile: lab_capable` is a statement about what kind of
+check this CVE supports in principle — **no real network-sending prober exists for it yet** (see below).
+
+**Verdict contract (`internal/cveval`):** five terminal verdicts — `VULNERABLE`, `NOT_VULNERABLE`,
+`INCONCLUSIVE`, `ERROR`, `SKIPPED` — with `SKIPPED` first-class so a check that never ran is never silently
+absent from a report. `ValidateResult` enforces "never report a CVE as tested merely because a Result value
+exists": `VULNERABLE`/`NOT_VULNERABLE` require non-empty `Evidence.Source` and `Evidence.Detail`; `ERROR`/
+`SKIPPED`/`INCONCLUSIVE` require a free-text `Detail`.
+
+**Lab execution gate (`internal/cvelab`):** the safeguards the owner asked to be built before more payloads.
+Live execution requires, in order: the entry's `ExecutionProfile` must be `lab_capable`; `RunRequest.Authorized`
+must be explicitly true (never inferred — obtaining real authorization is the caller's own integration concern,
+same discipline as `wafval.Expectation.PolicyVerified`); a `LabTarget` on an explicit, exact-match allow-list
+(`AllowedLabTargets`, operator-configured, empty by default); `IsPublicAddress` refuses any target that is not a
+literal private/loopback/link-local IP — **a hostname target is refused outright, never resolved**, to close a
+DNS-based bypass, and a public address is refused even if it was allow-listed by mistake (tested directly); a
+positive `Timeout` and `MaxRequests`; and a configured `Prober` (nil by default — no live execution is possible
+in any deployment that hasn't wired one in). A `Prober` that times out reports `INCONCLUSIVE`, never `ERROR` or
+a guessed verdict; a `Prober` that returns a `cveval`-invalid result is downgraded to `ERROR` rather than passed
+through, since it is external, pluggable code. Every assessment — fixture or live, found or unknown CVE — is
+audited through a fail-closed `Audit` interface (a failed write aborts before any further work), mirroring
+`internal/k8sscenario`'s own audit discipline.
+
+**What does not exist yet, stated plainly:** no real `Prober` implementation. `internal/cvelab`'s `Prober`
+interface is the deferred seam, exactly like `wafval`'s own "the lab adapter that produces observations is a
+separate, deferred package" line — building a live Log4Shell JNDI-triggering sender without a real lab to test
+it against was explicitly declined this round, per the owner's own instruction ("do not introduce external
+callbacks or uncontrolled command execution"). Only one CVE is cataloged. No console/API wiring exists for this
+initiative; it is a Go-internal package only, same scope as the owner's milestone asked for.
+
+**Tests:** `go test ./internal/cveval/... ./internal/cvecatalog/... ./internal/cvelab/...` — all pass, covering
+catalog construction validation (malformed CVE/CWE IDs, missing references, bad date, fixture `Implies`
+mismatches, duplicate indicators), fixture evaluation (exact-match only, no substring match), and every live-
+execution gate individually (not lab-capable, unauthorized, off-allow-list, public address even if allow-listed,
+missing timeout, missing request limit, no prober, probe timeout vs. probe error vs. an invalid probe result,
+fail-closed audit on the first write). Full WAF regression suite (`wafcatalog`/`wafassessment`/`wafevasion`/
+`wafpolicygap`/`wafprofile`/`wafval`/`waforigin`) and `go build ./...`/`go vet ./...` all pass unchanged.

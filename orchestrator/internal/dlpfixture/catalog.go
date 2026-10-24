@@ -15,6 +15,9 @@ const (
 	scenarioCodeRepo     = "dlp-exfiltration-coderepo"
 	scenarioTelnet       = "dlp-exfiltration-telnet"
 	scenarioMultichannel = "dlp-exfiltration-multichannel"
+	scenarioFileCarriers = "dlp-exfiltration-file-carriers"
+	scenarioAIPrompt     = "dlp-exfiltration-ai-prompt"
+	scenarioDBExport     = "dlp-exfiltration-db-export"
 )
 
 // AllFixtures returns Audspect's real, current seed catalog of every
@@ -72,6 +75,10 @@ func AllFixtures() ([]Fixture, error) {
 			{scenarioCodeRepo, "DLP Validation — GitHub Gist-Compatible Traffic Simulation (T1567.001)"},
 			{scenarioCodeRepo, "DLP Validation — GitLab Snippet-Compatible Traffic Simulation (T1567.001)"},
 			{scenarioTelnet, "DLP Validation — Telnet-Compatible Login Session Simulation (T1048.003)"},
+			{scenarioAIPrompt, "DLP Validation — AI Chat-Completion Exfiltration of Multi-Type Sensitive Record (T1567)"},
+			{scenarioAIPrompt, "DLP Validation — AI Connector-Ingestion Exfiltration of Multi-Type Sensitive Record (T1567)"},
+			{scenarioDBExport, "DLP Validation — Data Warehouse Extract Export via Slack-Compatible Webhook (T1567.004)"},
+			{scenarioDBExport, "DLP Validation — BI Dashboard Export via S3-Compatible Cloud Upload (T1567.002)"},
 		},
 		"the one fixture every other DLP scenario in this program shares; centralizing it here is this package's primary duplication-elimination target")); err != nil {
 		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
@@ -153,7 +160,10 @@ func AllFixtures() ([]Fixture, error) {
 
 	if err := add(NewFixture("go-source-code", "Go source code with embedded fake secret",
 		[]string{"BAS-SIM-DLP-Placeholder8"},
-		[]Occurrence{{scenarioSMTP, "DLP Validation — SMTP Exfiltration of Go Source Code (T1048.003)"}},
+		[]Occurrence{
+			{scenarioSMTP, "DLP Validation — SMTP Exfiltration of Go Source Code (T1048.003)"},
+			{scenarioAIPrompt, "DLP Validation — AI Chat-Completion Exfiltration of Go Source Code (T1567)"},
+		},
 		"placeholder token only -- the surrounding Go syntax is not reproduced here to avoid PowerShell backtick-escaping drift")); err != nil {
 		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
 	}
@@ -243,7 +253,10 @@ func AllFixtures() ([]Fixture, error) {
 
 	if err := add(NewFixture("employment-contract", "Synthetic employment contract",
 		[]string{"Employment Contract (Synthetic)", "BAS-SIM-Employee"},
-		[]Occurrence{{scenarioSMTP, "DLP Validation — SMTP Exfiltration of Employment Contract (T1048.003)"}},
+		[]Occurrence{
+			{scenarioSMTP, "DLP Validation — SMTP Exfiltration of Employment Contract (T1048.003)"},
+			{scenarioAIPrompt, "DLP Validation — AI Connector-Ingestion Exfiltration of Employment Contract (T1567)"},
+		},
 		"cited by dlpprofile's DLPPROFILE-GOVERNMENT Covered entry alongside partnership-agreement")); err != nil {
 		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
 	}
@@ -273,6 +286,29 @@ func AllFixtures() ([]Fixture, error) {
 		[]string{"Maestro,6759649826438453"},
 		[]Occurrence{{scenarioWebhook, "DLP Validation — Microsoft Teams-Compatible Exfiltration of Maestro Card Record (T1567.004)"}},
 		"single occurrence, no duplication to eliminate, catalogued for drift protection")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("bfsi-india-data-row", "BFSI/India customer data row (no header)",
+		[]string{"BAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX"},
+		[]Occurrence{
+			{scenarioDBExport, "DLP Validation — SQL Query Result Export via SFTP Managed File Transfer (T1048.002)"},
+			{scenarioDBExport, "DLP Validation — CRM/ERP Report Export via OneDrive-Compatible Upload (T1567.002)"},
+		},
+		"the data row alone, without bfsi-india-anchor's header, as these two db-export steps embed it; kept separate so each fixture's drift check matches its own real content")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("file-carrier-regulated-record", "Synthetic regulated-data record embedded in file-format carriers",
+		[]string{"[BAS-SIM-DLP-CARRIER] ABCDE1234F 123456789012"},
+		[]Occurrence{
+			{scenarioFileCarriers, "DLP Validation — DOCX Carrier Staging of Regulated Data (T1074.001)"},
+			{scenarioFileCarriers, "DLP Validation — XLSX Carrier Staging of Regulated Data (T1074.001)"},
+			{scenarioFileCarriers, "DLP Validation — PDF Carrier Staging of Regulated Data (T1074.001)"},
+			{scenarioFileCarriers, "DLP Validation — PNG Image Carrier Staging of Regulated Data (T1074.001)"},
+			{scenarioFileCarriers, "DLP Validation — Password-Protected Archive of Regulated Data (T1560.001)"},
+		},
+		"carrier formats are deterministic base64 templates in the scenario file; the value is the expected plaintext each step verifies against, so drift protection covers both the bytes' text and each step's registration")); err != nil {
 		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
 	}
 

@@ -75,6 +75,39 @@ func xssVectors() ([]AttackVector, error) {
 	}
 	out = append(out, v3)
 
+	benign4 := RequestTemplate{Method: "GET", Path: "/catalog", PayloadLocation: "query:sort", Payload: "price_asc", Description: "ordinary sort-order selector"}
+	v4, err := NewAttackVector("XSS-004", 1, FamilyXSS, "Attribute-context XSS via an HTML event handler", SeverityHigh,
+		"target reflects a parameter value inside an HTML attribute without encoding, breaking out of the attribute into a new one",
+		RequestTemplate{Method: "GET", Path: "/catalog", PayloadLocation: "query:sort", Payload: `" onmouseover="alert(1)`, Description: "attribute-breakout XSS attempting script execution via an injected onmouseover event handler"},
+		&benign4, "", StandardsMapping{CWEIDs: []string{"CWE-79"}, WSTGCategory: "WSTG-INPV-01", Top10Category: "A03:2021-Injection"},
+		"manually authored from CWE-79 / OWASP WSTG-INPV-01")
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, v4)
+
+	benign5 := RequestTemplate{Method: "GET", Path: "/redirect", PayloadLocation: "query:url", Payload: "https://example.com/account", Description: "ordinary destination URL for a redirect link"}
+	v5, err := NewAttackVector("XSS-005", 1, FamilyXSS, "javascript: URI-scheme XSS via a redirect link parameter", SeverityHigh,
+		"target renders a user-supplied URL as an href attribute without restricting the URI scheme",
+		RequestTemplate{Method: "GET", Path: "/redirect", PayloadLocation: "query:url", Payload: "javascript:alert(document.cookie)", Description: "URI-scheme XSS attempting script execution by substituting a javascript: URI for the expected http(s) redirect target"},
+		&benign5, "", StandardsMapping{CWEIDs: []string{"CWE-79"}, WSTGCategory: "WSTG-CLNT-01", Top10Category: "A03:2021-Injection"},
+		"manually authored from CWE-79 / OWASP WSTG-CLNT-01")
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, v5)
+
+	benign6 := RequestTemplate{Method: "POST", Path: "/comments", PayloadLocation: "body:json:body", Payload: "Nice photos from the trip!", Description: "ordinary comment text"}
+	v6, err := NewAttackVector("XSS-006", 1, FamilyXSS, "Hex-entity-encoded XSS attempting a tag-blocklist bypass", SeverityMedium,
+		"target blocklists the literal <script> tag but decodes HTML character references before rendering the comment body",
+		RequestTemplate{Method: "POST", Path: "/comments", PayloadLocation: "body:json:body", Payload: "&#x3C;script&#x3E;alert(1)&#x3C;/script&#x3E;", Description: "encoding-obfuscation XSS attempting to bypass a literal <script> blocklist using hex HTML character references"},
+		&benign6, "", StandardsMapping{CWEIDs: []string{"CWE-79"}, WSTGCategory: "WSTG-INPV-02", Top10Category: "A03:2021-Injection"},
+		"manually authored from CWE-79 / OWASP WSTG-INPV-02")
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, v6)
+
 	return out, nil
 }
 

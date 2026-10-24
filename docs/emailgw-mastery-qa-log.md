@@ -365,6 +365,48 @@ Per email.txt §6 P2's own ask to "correlate gateway and Microsoft 365 Defender 
 
 **Still open:** both correlation layers are fixture-only -- no real SIEM or ticketing-system connector exists yet (this package deliberately never imports `internal/detectverify`, so a real connector would need its own adapter, same as every other vendor integration in this initiative). IR workflow orchestration beyond this evidence layer (automated remediation playbooks, cross-tool case management) remains unbuilt, named explicitly in `coverage.go`'s own comment rather than silently implied by the Covered flip.
 
+### 20. Attachment-type matrix (EG-017..020) -- distinct from EG-004 (`EICARAttachmentExpectation`), each isolating one attachment-handling question independently of the others
+
+Picked up as part of a separate Cymulate-comparison initiative (priority 3 of that comparison's gap list,
+`docs/waf-mastery-qa-log.md`'s CVE-catalog section covers priority 2). EG-004 already proved the gateway's
+basic attachment inspection with a plain-text EICAR attachment; this closes the breadth gap the comparison
+found -- Cymulate's own CSV export showed malware/ransomware/file-type tests across many container shapes, not
+one.
+
+**Built (`attachmentmatrix.go`):** four new scenarios, each wired for real injection the same way as EG-004
+(`EnvelopeFrom` set, real multipart MIME via `exercise.SpoofableSMTPInjector`):
+
+- **EG-017** `MalwareCategoryAttachmentExpectation` -- the same EICAR string, inside a script-type (`.js`)
+  container instead of EG-004's plain-text one, proving content-scanning reaches a second attachment
+  MIME/extension.
+- **EG-018** `RansomwareStandInExpectation` -- a double-extension attachment (`invoice.pdf.exe`), the classic
+  ransomware-delivery disguise technique, carrying the EICAR string (never real ransomware code).
+- **EG-019** `FileTypeSpoofingExpectation` -- a filename/Content-Type claiming a Word document while the actual
+  bytes (EICAR) are not a valid OOXML document at all, testing a declared-type/actual-content mismatch
+  independent of EG-018's extension trick.
+- **EG-020** `BlockedExtensionPolicyExpectation` -- a disallowed script extension (`.vbs`) carrying wholly
+  benign, non-EICAR placeholder text, deliberately isolating "is this extension blocked by policy at all" from
+  content scanning, which the other three scenarios conflate it with.
+
+**Content discipline:** every byte sent is either the pre-existing `eicarTestString` or plain benign placeholder
+text -- no new kind of attachment content was introduced, and `attachmentmatrix.go`'s own package comment states
+this. The package-level comment on `eicarTestString` itself ("the one and only attachment content this package
+sends for real") is now stale wording left from before this file existed; it still holds in substance (EICAR or
+benign placeholder only, never anything else), but the sentence itself should be corrected the next time that
+file is touched for an unrelated reason.
+
+**Proven real:** `attachmentmatrix_test.go` -- each scenario's dispatch-table wiring, `ExpectedAction`,
+`MessageClass`, and `EnvelopeFrom`; the double-extension filename and real executable extension for EG-018; the
+declared-vs-actual mismatch for EG-019 (asserts the content does NOT start with the OOXML "PK" magic bytes); and
+an explicit isolation test proving exactly three of the four scenarios carry EICAR and the fourth does not. Full
+`internal/emailgwefficacy` suite, the `internal/api` email-gateway tests, and `go build ./...`/`go vet ./...`
+all pass unchanged.
+
+**Still open:** the console panel (`web/src/features/email.js`) was already stale before this work -- it lists
+only EG-001 through EG-010 and was never updated for EG-011 through EG-016 either. EG-017..020 are not added to
+it. This is a pre-existing gap, not introduced here, and is flagged rather than silently fixed as part of an
+unrelated task.
+
 ### Correction: no "Email" console UI page exists
 
 An earlier session's memory claimed an "Email" console UI page had been built at `web/src/features/email.js` (2026-10-16, "not browser-verified"). Checked directly before writing this up, not assumed: that path does not exist on `main`, in any remote branch (`git branch -r` enumerated and checked each), in the one local `git stash` entry (unrelated -- an old agent-simulation cleanup), or in any worktree still on disk. If that work was ever real, it was never committed or pushed anywhere findable, and the worktree it would have lived in (`EmailBasCredPhish`) has since been removed. Treat the claim as not true of the current repository state; EmailGW Mastery remains API/report-only in the web console, same as item 4's own scope decision -- no dedicated web page or nav entry.
@@ -374,3 +416,10 @@ An earlier session's memory claimed an "Email" console UI page had been built at
 The investigation above was thorough for everywhere git tracks state (commits, branches, stash, worktrees) but didn't check one place: the main checkout's own *uncommitted* working-tree changes. `web/src/features/email.js` was untracked (`git status` `??`) on the Windows build host the whole time, alongside uncommitted edits to `shell.js`/`globals.js`/`main.js`/`app.css` wiring it in -- none of it visible to a branch/stash/worktree search, only to `git status` run in that exact directory. `index.html`'s own nav item and `tab-email` markup had separately been swept into an unrelated commit (`f370b71f`, SentinelOne EPP wiring) by whatever `git add` that session ran, which is why half the feature already looked committed and half didn't.
 
 Found and verified intact 2026-10-18 (file present, diffs matched the original work, `npm run build` and `eslint src` both clean), then committed and pushed: `e8a6dc1d` / merged to `main` at `c9e8e211`. The "Email" console tab is real and live on `main` now -- coverage areas, MTTD/MTTR metrics, the EG-001-EG-010 scenario catalog with run buttons, campaign list/launch/cancel, and run history with expandable verdict/evidence detail. Still not browser-verified against a running stack. **Lesson for next time a "lost work" claim needs checking**: `git status`/`git diff` in every live checkout (not just the one being actively worked) before concluding something was never committed anywhere.
+
+### 21. Console catalog brought up to EG-020 (`web/src/features/email.js`) — 2026-10-24
+
+- `EG_CATALOG` previously stopped at EG-010, so the console could not show EG-011 through EG-020. It now lists all twenty scenarios, 48 expectation rows in total. Each ID and expectation key matches `internal/emailgwefficacy/dispatch.go` exactly.
+- Verified: the catalog parses in Node with no array holes, and `node --check` passes. This is structural verification only.
+- Not verified: the page has not been loaded in a browser against a running orchestrator, so the rendered layout and run dispatch from the console are unconfirmed. This needs a running stack.
+- Pre-existing, left as-is: the console keeps EG-007 with known-good/known-bad rows. EG-007 is deliberately absent from the dispatch table because it is a mailbox-rule check, not an SMTP injection, so those console rows have no matching backend expectation.

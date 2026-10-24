@@ -97,3 +97,27 @@ This is the single place to check before claiming either DLP vendor connector is
 ## Resolved items
 
 (none yet)
+
+## File-carrier coverage (dlp-exfiltration-file-carriers) — 2026-10-24
+
+### Implemented coverage (proven in this repo)
+- Scenario `scenarios/dlp-exfiltration-file-carriers.yaml` with five steps: DOCX, XLSX, PDF and PNG carrier staging (T1074.001), plus a password-protected archive step (T1560.001). Each carrier is a deterministic base64 template embedded in the YAML.
+- Template verification at authoring time: each carrier opens with its real parser (python-docx, openpyxl, pypdf, Pillow) and returns the expected text. Regenerating the templates yields identical bytes and SHA-256 values.
+- Go regression tests (`internal/dlpfixture/carrier_templates_test.go`): decoded bytes match the embedded SHA-256; DOCX/XLSX entries contain the expected text; PDF stream and PNG bounds are checked; the archive step embeds the same DOCX bytes as the DOCX step; the expected text equals the registered fixture value.
+- Endpoint-side execution, run on the Windows build host (no DLP product active): all four carriers were written to a per-run `%TEMP%` workspace, passed the SHA-256 check, and the workspace was removed. A forced write failure produced `OperationBlocked` and the workspace was still removed. The archive step reported `OperationUnknown` because 7-Zip is not installed, and created no archive.
+- Fixture registration: new fixture `file-carrier-regulated-record` covers all five steps; drift tests pass against the real YAML.
+- Pre-existing drift repaired: eight steps in `dlp-exfiltration-ai-prompt.yaml` and `dlp-exfiltration-db-export.yaml` had no fixture claim at HEAD, so `TestDrift_EveryRealStepIsCatalogued` was already failing. They are now claimed by existing fixtures (`bfsi-india-anchor`, `go-source-code`, `employment-contract`) or the new `bfsi-india-data-row`.
+- Profile: `dlpprofile.RealDLPScenarioIDs()` lists the new scenario.
+- Signing: re-signed with the repository's `orchestrator/scripts/signer.go` and `orchestrator/private_key.pem`. `signer verify-all ../scenarios` reports ok=137 fail=0. No key was generated and no trust configuration or verification was changed.
+
+### Verified detection (NOT yet shown)
+- No DLP product was run against these carriers. The step markers (`OperationSucceeded` / `OperationBlocked`) record only whether the local file operation succeeded. They do not show that any DLP product inspected or detected the regulated data inside a carrier.
+- PNG: the sensitive text is pixels. Detection needs OCR, which this scenario does not evaluate.
+- Password-protected archive: contents are never inspected. Without 7-Zip the result is `OperationUnknown`, which is a coverage limitation, not a detection result.
+- Live run against an enrolled endpoint with DLP enabled is still needed. It belongs on staging, per the heavy-jobs convention.
+
+### Count pins updated for the new content
+- `TestAllFixtures_ReturnsTwentyNineFixtures`: 27 → 29 fixtures.
+- `TestAllFixtures_TotalOccurrenceCountMatchesRealStepCount`: 62 → 75 real steps (62 previously catalogued + 5 carrier steps + the 8 drift repairs above).
+- `TestRealDLPScenarioIDs_ReturnsExactlyTheElevenRealIDs`: 10 → 11 IDs.
+- `TestBuiltinScenarios_AllHaveValidProductLine`: 107 → 108 built-in scenarios.
