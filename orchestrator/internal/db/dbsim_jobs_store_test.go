@@ -65,6 +65,12 @@ func TestDBSimJobStore(t *testing.T) {
 			t.Fatal("unrelated target must be idle")
 		}
 
+		// A duplicate id (primary key) is a plain error, never "busy".
+		dup := dbsimJob("run-a", "t7", "3333333333333333")
+		if err := st.Create(ctx, dup, dbsimAudit("job_create")); err == nil || errors.Is(err, dbsim.ErrJobBusy) {
+			t.Fatalf("duplicate id must fail and not be ErrJobBusy: %v", err)
+		}
+
 		// A failed audit write rolls the whole create back.
 		if err := st.Create(ctx, dbsimJob("run-d", "t3", "1111111111111111"), failingAudit()); err == nil {
 			t.Fatal("create with a failing audit row must fail")

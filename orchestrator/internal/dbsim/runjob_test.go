@@ -9,7 +9,8 @@ import (
 func TestJobStatusTransitions(t *testing.T) {
 	all := []JobStatus{JobPending, JobRunning, JobCompleted, JobFailed, JobPartial, JobCancelled}
 	allowed := map[JobStatus][]JobStatus{
-		JobPending: {JobRunning, JobFailed, JobCancelled},
+		// A fast agent may report before Start's pending->running lands.
+		JobPending: {JobRunning, JobCompleted, JobPartial, JobFailed, JobCancelled},
 		JobRunning: {JobCompleted, JobFailed, JobPartial, JobCancelled},
 	}
 	for _, from := range all {
@@ -28,6 +29,17 @@ func TestJobStatusTransitions(t *testing.T) {
 	}
 	if JobStatus("bogus").CanTransitionTo(JobRunning) || JobStatus("bogus").Valid() {
 		t.Error("unknown status must be inert and invalid")
+	}
+}
+
+func TestActiveJobConstraint(t *testing.T) {
+	for name, want := range map[string]bool{
+		"dbsim_run_jobs_one_active_target": true, "dbsim_run_jobs_one_active_agent": true,
+		"dbsim_run_jobs_pkey": false, "": false, "other_table_one_active_x": false,
+	} {
+		if got := ActiveJobConstraint(name); got != want {
+			t.Errorf("%q = %v, want %v", name, got, want)
+		}
 	}
 }
 

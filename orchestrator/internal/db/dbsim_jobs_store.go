@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -102,7 +101,7 @@ func (s DBSimJobStore) Create(ctx context.Context, j dbsim.RunJob, audit dbadmin
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.HasPrefix(pgErr.ConstraintName, "dbsim_run_jobs_one_active") {
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && dbsim.ActiveJobConstraint(pgErr.ConstraintName) {
 			return dbsim.ErrJobBusy
 		}
 		return fmt.Errorf("create dbsim job: %w", err)

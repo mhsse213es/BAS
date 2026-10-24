@@ -46,6 +46,8 @@ type fakeStore struct {
 	jobs      map[string]dbsim.RunJob
 	audits    []auditRow
 	failAudit bool
+	// failRunning makes the pending->running transition error.
+	failRunning bool
 }
 
 func newStore() *fakeStore { return &fakeStore{jobs: map[string]dbsim.RunJob{}} }
@@ -88,7 +90,7 @@ func (s *fakeStore) Transition(_ context.Context, id string, from []dbsim.JobSta
 	if !hit {
 		return false, nil
 	}
-	if s.failAudit {
+	if s.failAudit || (s.failRunning && to == dbsim.JobRunning) {
 		return false, errors.New("audit write failed")
 	}
 	j.Status, j.Reason = to, reason
@@ -139,11 +141,16 @@ type fakeDispatch struct {
 	sent  bool
 	calls []scenario.ScenarioCommand
 	agent string
+	// onDispatch runs inside Dispatch (a slow or racing agent).
+	onDispatch func(runID string)
 }
 
 func (d *fakeDispatch) Dispatch(_ context.Context, agentID string, c scenario.ScenarioCommand) bool {
 	d.calls = append(d.calls, c)
 	d.agent = agentID
+	if d.onDispatch != nil {
+		d.onDispatch(c.RunID)
+	}
 	return d.sent
 }
 
@@ -558,4 +565,73 @@ func TestCancelRequiresRunPermission(t *testing.T) {
 
 func reflectField(v any, name string) (reflect.StructField, bool) {
 	return reflect.TypeOf(v).FieldByName(name)
+}
+
+func TestStartResultBeforeRunningTransitionLeavesJobCompleted(t *testing.T) {
+	r := newRig()
+	r.disp.onDispatch = func(runID string) { // the agent's result lands before Start advances the job
+		ok, err := r.store.Transition(context.Background(), runID, []dbsim.JobStatus{dbsim.JobPending, dbsim.JobRunning}, dbsim.JobCompleted, "", dbadmin.AuditEntry{Action: "dbsim.ingest"})
+		if err != nil || !ok {
+			t.Errorf("ingest transition: %v %v", ok, err)
+		}
+	}
+	j, err := r.svc.Start(context.Background(), analyst, labReq())
+	if err != nil {
+		t.Fatalf("Start must succeed: %v", err)
+	}
+	if got := r.store.only(t); got.Status != dbsim.JobCompleted {
+		t.Errorf("stored status = %s, want completed (must not be resurrected)", got.Status)
+	}
+	if j.Status != dbsim.JobCompleted {
+		t.Errorf("returned status = %s, want completed", j.Status)
+	}
+}
+
+func TestStartRunningTransitionErrorAfterDispatchIsNotAnError(t *testing.T) {
+	r := newRig()
+	r.store.failRunning = true
+	j, err := r.svc.Start(context.Background(), analyst, labReq())
+	if err != nil {
+		t.Fatalf("the command was sent; Start must return nil, got %v", err)
+	}
+	if j.ID == "" || len(r.disp.calls) != 1 {
+		t.Errorf("job %+v calls %d", j, len(r.disp.calls))
+	}
+	if got := r.store.only(t); got.Status != dbsim.JobPending {
+		t.Errorf("status = %s, want pending (the reaper settles it)", got.Status)
+	}
+}
+
+func TestStartDoesNotHoldLockAcrossDispatch(t *testing.T) {
+	r := newRig()
+	var second error
+	r.disp.onDispatch = func(string) {
+		// Would deadlock if Start still held its mutex; refused because the job row exists.
+		_, second = r.svc.Start(context.Background(), analyst, labReq())
+	}
+	if _, err := r.svc.Start(context.Background(), analyst, labReq()); err != nil {
+		t.Fatal(err)
+	}
+	if !errors.Is(second, ErrBusy) {
+		t.Errorf("second start during dispatch: %v, want ErrBusy", second)
+	}
+}
+
+func TestPlannedStepsCarryTaskID(t *testing.T) {
+	r := newRig()
+	j, err := r.svc.Start(context.Background(), analyst, labReq())
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := r.disp.calls[0].Steps
+	if len(j.Plan) != len(steps) || j.Plan[0].TaskID == "" || j.Plan[0].TaskID != steps[0].TaskID {
+		t.Errorf("plan %+v steps %+v", j.Plan, steps)
+	}
+	raw, _ := json.Marshal(j.Plan)
+	if !strings.Contains(string(raw), `"taskId":"`+steps[0].TaskID+`"`) {
+		t.Errorf("plan JSON lacks taskId: %s", raw)
+	}
+	if low := strings.ToLower(string(raw)); strings.Contains(low, "password") || strings.Contains(low, "secret") {
+		t.Errorf("plan JSON leaks: %s", raw)
+	}
 }

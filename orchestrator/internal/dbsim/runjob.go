@@ -53,7 +53,9 @@ func (s JobStatus) Active() bool { return s == JobPending || s == JobRunning }
 func (s JobStatus) CanTransitionTo(next JobStatus) bool {
 	switch s {
 	case JobPending:
-		return next == JobRunning || next == JobFailed || next == JobCancelled
+		// A fast agent can report before the dispatching Start has advanced the
+		// job to running, so a pending job may also finish directly.
+		return next == JobRunning || next == JobCompleted || next == JobPartial || next == JobFailed || next == JobCancelled
 	case JobRunning:
 		return next == JobCompleted || next == JobFailed || next == JobPartial || next == JobCancelled
 	}
@@ -65,6 +67,7 @@ func (s JobStatus) CanTransitionTo(next JobStatus) bool {
 type PlannedStep struct {
 	ScenarioID string      `json:"scenarioId"`
 	Index      int         `json:"index"`
+	TaskID     string      `json:"taskId"`
 	Spec       DBProbeSpec `json:"spec"`
 }
 
@@ -107,6 +110,13 @@ func DeadlineFor(created time.Time, nScenarios int) time.Time {
 		nScenarios = 1
 	}
 	return created.Add(time.Duration(jobSecondsPerScenario*nScenarios+jobSecondsBase) * time.Second)
+}
+
+// ActiveJobConstraint reports whether a unique-violation constraint name is one
+// of the one-active-job partial indexes. A violation of any other constraint
+// (the primary key on a duplicate id) is NOT "busy".
+func ActiveJobConstraint(name string) bool {
+	return name == "dbsim_run_jobs_one_active_target" || name == "dbsim_run_jobs_one_active_agent"
 }
 
 // JobsSchemaSQL is the DDL of dbsim_run_jobs (statements run in order). The two

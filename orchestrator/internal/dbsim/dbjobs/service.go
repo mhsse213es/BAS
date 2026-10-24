@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -269,7 +270,8 @@ func (s *Service) Start(ctx context.Context, a dbadmin.Actor, req StartRequest) 
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock := sync.OnceFunc(s.mu.Unlock)
+	defer unlock()
 	if err := s.checkIdle(ctx, rec); err != nil {
 		return fail(err)
 	}
@@ -317,7 +319,7 @@ func (s *Service) Start(ctx context.Context, a dbadmin.Actor, req StartRequest) 
 				return fail(fmt.Errorf("%w: scenarios share a step (%q); select them in separate runs", ErrInvalidRequest, trunc(st.Name, 64)))
 			}
 			tasks[st.TaskID] = true
-			plan = append(plan, dbsim.PlannedStep{ScenarioID: orig.ID, Index: i, Spec: spec})
+			plan = append(plan, dbsim.PlannedStep{ScenarioID: orig.ID, Index: i, TaskID: st.TaskID, Spec: spec})
 		}
 		steps = append(steps, built...)
 	}
@@ -342,7 +344,7 @@ func (s *Service) Start(ctx context.Context, a dbadmin.Actor, req StartRequest) 
 		detail["labConfirmation"] = job.LabConfirmation
 	}
 	return s.createAndDispatch(ctx, a, job, entry(a, action, "dbsim-run:"+runID, detail, "ok"),
-		scenario.ScenarioCommand{RunID: runID, ScenarioID: scID, Name: name, Steps: steps})
+		scenario.ScenarioCommand{RunID: runID, ScenarioID: scID, Name: name, Steps: steps}, unlock)
 }
 
 // StartIdentityCheck runs the read-only check_readonly_identity probe on the
@@ -364,7 +366,8 @@ func (s *Service) StartIdentityCheck(ctx context.Context, a dbadmin.Actor, targe
 		return fail(err)
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock := sync.OnceFunc(s.mu.Unlock)
+	defer unlock()
 	if err := s.checkIdle(ctx, rec); err != nil {
 		return fail(err)
 	}
@@ -381,20 +384,24 @@ func (s *Service) StartIdentityCheck(ctx context.Context, a dbadmin.Actor, targe
 	}
 	job := dbsim.RunJob{
 		ID: runID, Kind: dbsim.JobKindIdentityCheck, TargetID: rec.ID, AgentID: rec.AgentID, Mode: rec.Mode,
-		ScenarioIDs: []string{}, Plan: []dbsim.PlannedStep{{Index: 0, Spec: spec}}, Status: dbsim.JobPending,
+		ScenarioIDs: []string{}, Plan: []dbsim.PlannedStep{{Index: 0, TaskID: step.TaskID, Spec: spec}}, Status: dbsim.JobPending,
 		CreatedBy: a.ID, CreatedAt: now, Deadline: deadline,
 	}
 	detail := map[string]any{"runId": runID, "targetId": rec.ID, "agentId": rec.AgentID, "mode": string(rec.Mode),
 		"deadline": deadline.Format(time.RFC3339)}
 	return s.createAndDispatch(ctx, a, job, entry(a, action, "dbsim-run:"+runID, detail, "ok"),
-		scenario.ScenarioCommand{RunID: runID, ScenarioID: "dbsim-identity-check", Name: step.Name, Steps: []scenario.ScenarioStep{step}})
+		scenario.ScenarioCommand{RunID: runID, ScenarioID: "dbsim-identity-check", Name: step.Name, Steps: []scenario.ScenarioStep{step}}, unlock)
 }
 
 // createAndDispatch stores the pending job with its audit row, sends the
 // command and moves the job: running when delivered, failed (ErrAgentOffline)
-// when not. Caller holds s.mu.
-func (s *Service) createAndDispatch(ctx context.Context, a dbadmin.Actor, job dbsim.RunJob, created dbadmin.AuditEntry, cmd scenario.ScenarioCommand) (dbsim.RunJob, error) {
-	if err := s.Jobs.Create(ctx, job, created); err != nil {
+// when not. The caller holds s.mu; unlock is called as soon as the job row
+// exists (the row is what refuses a concurrent start) so the mutex is never held
+// across Dispatch.
+func (s *Service) createAndDispatch(ctx context.Context, a dbadmin.Actor, job dbsim.RunJob, created dbadmin.AuditEntry, cmd scenario.ScenarioCommand, unlock func()) (dbsim.RunJob, error) {
+	err := s.Jobs.Create(ctx, job, created)
+	unlock()
+	if err != nil {
 		if errors.Is(err, dbsim.ErrJobBusy) {
 			s.refuse(a, created.Action, created.Resource, map[string]any{"error": "store: an active job exists"}, "error")
 			return dbsim.RunJob{}, fmt.Errorf("%w: another job became active", ErrBusy)
@@ -414,12 +421,20 @@ func (s *Service) createAndDispatch(ctx context.Context, a dbadmin.Actor, job db
 	ra := entry(a, "dbsim.run_dispatched", resource, map[string]any{"runId": job.ID, "agentId": job.AgentID}, "ok")
 	moved, err := s.Jobs.Transition(ctx, job.ID, []dbsim.JobStatus{dbsim.JobPending}, dbsim.JobRunning, "", ra)
 	if err != nil {
-		// The command is out but the record could not be advanced; the deadline
-		// reaper settles it. Say so rather than pretend.
-		return job, fmt.Errorf("dbsim: job dispatched but could not be marked running: %w", err)
+		// The command WAS sent, so the start succeeded. The record stays pending
+		// and the deadline reaper settles it (or the agent's result does).
+		log.Printf("dbsim: job %s dispatched but could not be marked running (left pending for the reaper): %v", job.ID, err)
+		return job, nil
 	}
 	if moved {
 		job.Status, job.StartedAt = dbsim.JobRunning, s.now()
+		return job, nil
+	}
+	// Zero rows: the job already left pending (the agent's result, a cancel or
+	// the reaper got there first). The guarded UPDATE did not resurrect it;
+	// report the stored state.
+	if cur, gerr := s.Jobs.Get(ctx, job.ID); gerr == nil {
+		return cur, nil
 	}
 	return job, nil
 }
