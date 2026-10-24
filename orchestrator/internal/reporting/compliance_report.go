@@ -258,7 +258,7 @@ const complianceReportHTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Regulatory Compliance Report — {{.Framework.Name}}</title>
-<style>
+<style>` + reportSharedPrintCSS + `
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}
 body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;

@@ -8,7 +8,7 @@ const adAssessmentTmpl = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Active Directory Coverage Assessment</title>
-<style>
+<style>` + reportSharedPrintCSS + `
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}
 body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;color:#1a2332;background:#fff;line-height:1.6;font-variant-numeric:tabular-nums}

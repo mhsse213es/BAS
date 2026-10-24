@@ -396,7 +396,7 @@ const exerciseReportTmpl = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Exercise Report — {{.Execution.Name}}</title>
-<style>
+<style>` + reportSharedPrintCSS + `
 /* ── reset ── */
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}
