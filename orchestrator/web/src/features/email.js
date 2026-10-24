@@ -64,6 +64,48 @@ var EG_CATALOG = [
   { id: 'EG-010', name: 'Detection-to-response chain', expectations: [
     { id: 'EG-010.detection', label: 'Detection' },
     { id: 'EG-010.response', label: 'Response' }
+  ] },
+  { id: 'EG-011', name: 'QR-code lure', expectations: [
+    { id: 'EG-011.qr-code-lure.known-good', label: 'Known-good' },
+    { id: 'EG-011.qr-code-lure.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-012', name: 'PDF with embedded link', expectations: [
+    { id: 'EG-012.pdf-embedded-link.known-good', label: 'Known-good' },
+    { id: 'EG-012.pdf-embedded-link.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-013', name: 'Office document with external link', expectations: [
+    { id: 'EG-013.office-external-link.known-good', label: 'Known-good' },
+    { id: 'EG-013.office-external-link.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-014', name: 'Internal-sender spoof', expectations: [
+    { id: 'EG-014.internal-sender-spoof.known-good', label: 'Known-good' },
+    { id: 'EG-014.internal-sender-spoof.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-015', name: 'Reply-chain hijack', expectations: [
+    { id: 'EG-015.reply-chain-hijack.known-good', label: 'Known-good' },
+    { id: 'EG-015.reply-chain-hijack.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-016', name: 'Relay-path bypass', expectations: [
+    { id: 'EG-016.relay-path.direct.known-good', label: 'Direct — known-good' },
+    { id: 'EG-016.relay-path.direct.known-bad', label: 'Direct — known-bad' },
+    { id: 'EG-016.relay-path.relay.known-good', label: 'Relay — known-good' },
+    { id: 'EG-016.relay-path.relay.known-bad', label: 'Relay — known-bad' }
+  ] },
+  { id: 'EG-017', name: 'Malware-category script attachment', expectations: [
+    { id: 'EG-017.malware-category-script.known-good', label: 'Known-good' },
+    { id: 'EG-017.malware-category-script.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-018', name: 'Ransomware stand-in (double extension)', expectations: [
+    { id: 'EG-018.ransomware-stand-in.known-good', label: 'Known-good' },
+    { id: 'EG-018.ransomware-stand-in.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-019', name: 'File-type spoofing', expectations: [
+    { id: 'EG-019.file-type-spoofing.known-good', label: 'Known-good' },
+    { id: 'EG-019.file-type-spoofing.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-020', name: 'Blocked-extension policy', expectations: [
+    { id: 'EG-020.blocked-extension-policy.known-good', label: 'Known-good' },
+    { id: 'EG-020.blocked-extension-policy.known-bad', label: 'Known-bad' }
   ] }
 ];
 
