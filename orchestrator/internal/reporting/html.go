@@ -865,7 +865,10 @@ a{color:#2563eb;text-decoration:none}
 .kpi-bar-fill{height:100%;border-radius:2px;background:var(--c,#0d9488)}
 
 /* ── Score cards (backward-compat) ── */
-.score-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:11px;margin-bottom:18px}
+.score-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin-bottom:18px}
+/* Three columns keeps 5 or 6 summary cards in balanced rows (3+2, 3+3); the
+   old auto-fit grid put 4 in the first row and left the trend card alone. */
+@media (max-width:700px){.score-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .scard{background:#fff;border:1px solid #e7eaf0;border-radius:10px;padding:15px 15px 13px}
 .scard-label{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.1em;color:#9aa5b5;font-weight:700;margin-bottom:7px}
 .scard-value{font-size:1.55rem;font-weight:900;color:#0b1420;letter-spacing:-0.02em;line-height:1;margin-bottom:5px}
@@ -1378,7 +1381,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 
 <div class="score-row" style="margin-top:20px;margin-bottom:20px">
-  <div class="scard" style="flex:1;min-width:100%;border-left:4px solid {{if eq .attackSurfaceSLAStatus "critical-sla"}}#da3633{{else if eq .attackSurfaceSLAStatus "over-sla"}}#d29922{{else}}#0d9488{{end}};background:#f7f9fc;padding:12px 16px;border-radius:6px;display:block">
+  <div class="scard" style="grid-column:1 / -1;flex:1;min-width:100%;border-left:4px solid {{if eq .attackSurfaceSLAStatus "critical-sla"}}#da3633{{else if eq .attackSurfaceSLAStatus "over-sla"}}#d29922{{else}}#0d9488{{end}};background:#f7f9fc;padding:12px 16px;border-radius:6px;display:block">
     <div class="scard-label" style="font-size:0.72rem;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Attack Surface Age</div>
     <div class="scard-value" style="font-size:1.15rem;font-weight:700;color:var(--navy)">Exposed weakness present for {{.attackSurfaceAge}} days</div>
     <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">
@@ -1406,7 +1409,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 {{if .perfCpuBefore}}
 <div class="score-row" style="margin-top:20px;margin-bottom:20px">
-  <div class="scard" style="flex:1;min-width:100%;border-left:4px solid #0d9488;background:#f7f9fc;padding:12px 16px;border-radius:6px;display:block">
+  <div class="scard" style="grid-column:1 / -1;flex:1;min-width:100%;border-left:4px solid #0d9488;background:#f7f9fc;padding:12px 16px;border-radius:6px;display:block">
     <div class="scard-label" style="font-size:0.72rem;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Endpoint Stability Check</div>
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
       <div style="flex:1;min-width:180px">
