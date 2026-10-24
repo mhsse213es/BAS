@@ -1051,6 +1051,18 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   [style*="#6e7681"],[style*="#9aa5b5"],[style*="#8b949e"]{color:#000 !important}
   .runsheet>tfoot,.runsheet>tfoot td{text-align:left !important}
   .runsheet>tfoot td,.runsheet>tfoot td *:not([style*="color"]){color:#000 !important}
+  /* Running footer now lives in the page margin boxes (see the style before the
+     runsheet table): it repeats at the bottom of every sheet, so it can never
+     sit mid-page. The table footer is hidden in print. */
+  @page{size:A4;margin:0 0 16mm 0}
+  @page :first{margin:0}
+  .runsheet>tfoot{display:none !important}
+  html{background:#f3f6fa !important}
+  body{background:transparent !important}
+  /* The inline footer in the last section is the same running footer: hide it, the margin boxes print it. */
+  .runfoot,.runfoot *{display:none !important}
+  .page:not(.cover){background:transparent !important;min-height:calc(297mm - 16mm)}
+  .runsheet>tbody>tr>td{background:#f3f6fa !important}
   /* Each section tag opens its own sheet, so it can never be stranded at the foot of the previous one. */
   .stag{break-before:page;page-break-before:always}
 }
@@ -1191,6 +1203,15 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <!-- Everything past the cover is wrapped in one table so its tfoot repeats the
      classification bar on every printed sheet, with space reserved for it. -->
+<style>
+@page{@bottom-left{content:"Audspect BAS \00b7 {{.agent.hostname}}{{if .agent.ipAddress}} \00b7 {{.agent.ipAddress}}{{end}} \00b7 Generated {{fmtTime .generatedAt}}";font-size:7pt;color:#000;background:#f3f6fa}}
+@page{@bottom-right{content:"Confidential \2014 Authorised Recipients Only";font-size:7pt;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#c2410c;background:#f3f6fa}}
+@page :first{@bottom-left{content:none}}
+@page :first{@bottom-right{content:none}}
+@page :first{counter-reset:page -1}
+@page{@bottom-center{content:counter(page);font-size:7pt;color:#000;background:#f3f6fa}}
+@page :first{@bottom-center{content:none}}
+</style>
 <table class="runsheet">
 <tfoot><tr><td>
   <div class="runfoot">
