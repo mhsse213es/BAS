@@ -6,63 +6,45 @@ import (
 	"time"
 
 	"github.com/audspect/bas/internal/dbsim"
+	"github.com/audspect/bas/internal/dbsim/dbbuild"
 	"github.com/audspect/bas/internal/detectverify"
+	"github.com/audspect/bas/internal/scenario"
 )
 
 // Shared by the fake pipeline tests (untagged) and the E2E harness (tag
-// dbsim_e2e): the lab-calibrated expectations per shipped scenario step.
-//
-// These are NOT product policy. The lab detection rule fires on every statement
-// that begins with the marker comment, except the agent's own audit-lookup and
-// meta statements (read_audit_config mentions audit-source words, so it never
-// alerts). The product run API (Task 16) owns the real per-scenario
-// expectations.
+// dbsim_e2e): the expectations per shipped scenario step now come from
+// production (dbsim.ExpectationFor / dbbuild.MetaFor), so the live-verified
+// E2E and the unit grading run through the same code. Only a scenario/probe
+// pair that is not shipped (a test-only scenario id) falls back to the lab
+// default: allow + detection.
 
 type labExpectation struct {
 	prevention string // "allow" | "deny"
 	detection  bool
-	audit      bool
-	auditCfg   bool
 	requireObs bool
 }
 
 func labExpectationFor(scenarioID, probeID string) labExpectation {
-	e := labExpectation{prevention: "allow", detection: true}
-	switch probeID {
-	case "read_audit_config":
-		e.detection, e.auditCfg = false, true
-	case "read_restricted_table":
-		e.prevention = "deny"
-	case "read_grants":
-		e.requireObs = true
-	case "try_disable_audit", "try_write_fixture":
-		// DB-08 / DB-10: the denied statements carry the marker, so detection and
-		// response are graded like DB-03.
-		e.prevention = "deny"
-	case "check_export_privileges":
-		// DB-11: a catalog read; no SIEM expectation.
-		e.prevention, e.detection = "deny", false
-	case "auth_after_revoke":
-		// DB-06: the NEW login after the revoke must be refused. Telemetry is not
-		// assessed (a failed login carries no marker), so no detection expectation.
-		e.prevention, e.detection = "deny", false
+	e, ok := dbsim.ExpectationFor(scenarioID, probeID)
+	if !ok {
+		return labExpectation{prevention: "allow", detection: true}
 	}
-	if scenarioID == "dbsim-db04-audit-coverage" && probeID == "read_roles" {
-		e.audit = true
-	}
-	return e
+	return labExpectation{prevention: e.ExpectedPrevention, detection: e.ExpectDetection, requireObs: e.RequireObservation}
 }
 
 func labMeta(scenarioID string, spec dbsim.DBProbeSpec) dbsim.ScenarioMeta {
-	e := labExpectationFor(scenarioID, spec.ProbeID)
-	return dbsim.ScenarioMeta{
-		ID: scenarioID, Version: "1", ControlObjective: "lab check of " + spec.ProbeID,
-		Preconditions: "dbsim lab stack up", SyntheticDataManifest: "synthetic lab data only",
-		ActionAttempted: "named probe " + spec.ProbeID, ExpectedPrevention: e.prevention,
-		ExpectDetection: e.detection, ExpectResponse: e.detection,
-		ExpectAudit: e.audit, ExpectAuditConfig: e.auditCfg, RequireObservation: e.requireObs, RequirePolicyDiff: e.requireObs,
-		Engine: spec.Engine, TargetID: spec.TargetID, Mode: spec.Mode,
+	m, err := dbbuild.MetaFor(&scenario.Scenario{ID: scenarioID, ProductLine: scenario.ProductLineDBSim}, spec)
+	if err != nil {
+		// Not a shipped scenario/probe pair: the lab default.
+		m = dbsim.ScenarioMeta{
+			ID: scenarioID, Version: "1", ControlObjective: "lab check of " + spec.ProbeID,
+			Preconditions: "dbsim lab stack up", SyntheticDataManifest: "synthetic lab data only",
+			ActionAttempted: "named probe " + spec.ProbeID, ExpectedPrevention: "allow",
+			ExpectDetection: true, ExpectResponse: true,
+			Engine: spec.Engine, TargetID: spec.TargetID, Mode: spec.Mode,
+		}
 	}
+	return m
 }
 
 // fakeConn is a detectverify.Connector answering from a function. Its Verdict
