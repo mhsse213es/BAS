@@ -151,6 +151,13 @@ type Service struct {
 	// Presence says whether an agent is connected (reaper.go). Nil means
 	// presence is unknown: the offline rule is skipped, never assumed.
 	Presence AgentPresence
+	// OfflineGrace is how long an agent must stay continuously offline (as seen
+	// by successive Reap calls) before its running job is reaped; zero takes
+	// DefaultOfflineGrace.
+	OfflineGrace time.Duration
+
+	offMu        sync.Mutex
+	offlineSince map[string]time.Time // job id -> first offline observation
 
 	mu sync.Mutex // serialises check-then-create within this process
 }

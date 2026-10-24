@@ -138,11 +138,12 @@ func TestReapOfflineAgentBeforeDeadlineBecomesPartialOrFailed(t *testing.T) {
 	r.saveRows("j2", 1)
 	r.svc.Presence = presence{}
 	n, err := r.svc.Reap(context.Background(), t0)
+	if err != nil || n != 0 {
+		t.Fatalf("first observation must not reap: n=%d err=%v", n, err)
+	}
+	n, err = r.svc.Reap(context.Background(), t0.Add(DefaultOfflineGrace))
 	if err != nil || n != 2 {
 		t.Fatalf("n=%d err=%v", n, err)
-	}
-	if j := r.store.jobs["j1"]; j.Status != dbsim.JobFailed && j.Status != dbsim.JobPartial || j.Reason == "" {
-		t.Fatalf("j1 = %s %q", j.Status, j.Reason)
 	}
 	if j := r.store.jobs["j1"]; j.Status != dbsim.JobFailed || j.Reason != "agent went offline" {
 		t.Fatalf("j1 = %s %q", j.Status, j.Reason)
@@ -200,6 +201,71 @@ func TestReapRunningListErrorStillReapsDeadlines(t *testing.T) {
 	}
 	if r.store.jobs["j1"].Status != dbsim.JobFailed || r.store.jobs["j2"].Status != dbsim.JobRunning {
 		t.Fatalf("j1=%s j2=%s", r.store.jobs["j1"].Status, r.store.jobs["j2"].Status)
+	}
+}
+
+type flipPresence struct{ online bool }
+
+func (p *flipPresence) Online(string) bool { return p.online }
+
+func TestReapOfflineBlipResetsGrace(t *testing.T) {
+	p := &flipPresence{}
+	r := newReapRig(p)
+	r.add("j1", dbsim.JobKindRun, dbsim.JobRunning, agentA, "t1", 1, future)
+	ctx := context.Background()
+	r.svc.Reap(ctx, t0) // offline first seen
+	p.online = true
+	r.svc.Reap(ctx, t0.Add(40*time.Second)) // back: entry cleared
+	p.online = false
+	r.svc.Reap(ctx, t0.Add(70*time.Second)) // offline again: new first observation
+	if n, _ := r.svc.Reap(ctx, t0.Add(100*time.Second)); n != 0 || r.store.jobs["j1"].Status != dbsim.JobRunning {
+		t.Fatalf("blip must reset the grace clock, n=%d", n)
+	}
+	if n, _ := r.svc.Reap(ctx, t0.Add(130*time.Second)); n != 1 {
+		t.Fatalf("n=%d after full grace", n)
+	}
+}
+
+func TestReapOfflineGraceEntriesAreCleanedUp(t *testing.T) {
+	r := newReapRig(&flipPresence{})
+	r.svc.OfflineGrace = time.Minute
+	r.add("j1", dbsim.JobKindRun, dbsim.JobRunning, agentA, "t1", 1, future)
+	ctx := context.Background()
+	r.svc.Reap(ctx, t0)
+	if len(r.svc.offlineSince) != 1 {
+		t.Fatalf("entries = %d", len(r.svc.offlineSince))
+	}
+	j := r.store.jobs["j1"]
+	j.Status = dbsim.JobCompleted // left running
+	r.store.jobs["j1"] = j
+	r.svc.Reap(ctx, t0.Add(time.Second))
+	if len(r.svc.offlineSince) != 0 {
+		t.Fatalf("leaked entries = %d", len(r.svc.offlineSince))
+	}
+}
+
+// countSeq returns the scripted counts in order (last one repeats).
+type countSeq struct {
+	*fakeSink
+	seq []int
+	i   int
+}
+
+func (c *countSeq) Count(context.Context, string) (int, error) {
+	n := c.seq[min(c.i, len(c.seq)-1)]
+	c.i++
+	return n, nil
+}
+
+func TestReapRowsArrivingBeforeTransitionMakeItPartial(t *testing.T) {
+	r := newReapRig(nil)
+	r.svc.Sink = &countSeq{fakeSink: r.sink, seq: []int{0, 2}}
+	r.add("j1", dbsim.JobKindRun, dbsim.JobRunning, agentA, "t1", 3, past)
+	if n, err := r.svc.Reap(context.Background(), t0); err != nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	if j := r.store.jobs["j1"]; j.Status != dbsim.JobPartial {
+		t.Fatalf("status = %s %q", j.Status, j.Reason)
 	}
 }
 

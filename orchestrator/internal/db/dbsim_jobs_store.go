@@ -208,7 +208,7 @@ func (s DBSimJobStore) Running(ctx context.Context) ([]dbsim.RunJob, error) {
 // Expired lists active jobs whose deadline is before now (oldest first).
 func (s DBSimJobStore) Expired(ctx context.Context, now time.Time) ([]dbsim.RunJob, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+dbsimJobCols+` FROM dbsim_run_jobs
-		WHERE status IN ('pending','running') AND deadline < $1 ORDER BY deadline`, now)
+		WHERE status IN ('pending','running') AND deadline < $1 ORDER BY deadline LIMIT 500`, now)
 	if err != nil {
 		return nil, fmt.Errorf("dbsim expired jobs: %w", err)
 	}

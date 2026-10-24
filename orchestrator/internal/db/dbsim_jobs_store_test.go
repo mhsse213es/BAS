@@ -115,6 +115,9 @@ func TestDBSimJobStore(t *testing.T) {
 		if err != nil || len(exp) != 1 || exp[0].ID != "run-old" {
 			t.Fatalf("expired %+v %v", exp, err)
 		}
+		if len(exp) > 500 {
+			t.Fatalf("Expired must be bounded to 500, got %d", len(exp))
+		}
 
 		// Running: only jobs in status running (run-a is running; run-old is pending).
 		run, err := st.Running(ctx)
