@@ -1357,6 +1357,11 @@ func (h *Handler) DownloadAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if platform == "windows-amd64-msi" {
+		h.serveWindowsMSI(w, r)
+		return
+	}
+
 	entry, ok := agentFiles[platform]
 	if !ok {
 		jsonError(w, "unknown platform: "+platform, http.StatusNotFound)

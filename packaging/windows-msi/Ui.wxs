@@ -1,0 +1,131 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <!--
+    Wizard: Welcome, Licence, Deployment configuration (verify the signed file against the
+    dashboard fingerprint), Agent secret, Test connection, Ready, Progress, Finish.
+    Silent installs skip all of this and use the public properties (see Package.wxs).
+  -->
+  <Fragment>
+
+    <CustomAction Id="CheckDeploymentConfig" BinaryRef="AudspectCA" DllEntry="CheckDeploymentConfig" Execute="immediate" Return="check" />
+    <CustomAction Id="TestAgentConnection" BinaryRef="AudspectCA" DllEntry="TestAgentConnection" Execute="immediate" Return="check" />
+    <CustomAction Id="LaunchStatusWindow" Directory="INSTALLFOLDER" ExeCommand="&quot;[INSTALLFOLDER]bas_agent.exe&quot; --status-window" Return="asyncNoWait" Impersonate="yes" />
+
+    <UI Id="AudspectWizard">
+      <TextStyle Id="WixUI_Font_Normal" FaceName="Tahoma" Size="8" />
+      <TextStyle Id="WixUI_Font_Bigger" FaceName="Tahoma" Size="12" />
+      <TextStyle Id="WixUI_Font_Title" FaceName="Tahoma" Size="9" Bold="yes" />
+      <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
+
+      <DialogRef Id="ErrorDlg" />
+      <DialogRef Id="FatalError" />
+      <DialogRef Id="FilesInUse" />
+      <DialogRef Id="MsiRMFilesInUse" />
+      <DialogRef Id="PrepareDlg" />
+      <DialogRef Id="ProgressDlg" />
+      <DialogRef Id="ResumeDlg" />
+      <DialogRef Id="UserExit" />
+      <DialogRef Id="WelcomeDlg" />
+      <DialogRef Id="LicenseAgreementDlg" />
+      <DialogRef Id="VerifyReadyDlg" />
+      <DialogRef Id="MaintenanceWelcomeDlg" />
+      <DialogRef Id="MaintenanceTypeDlg" />
+      <DialogRef Id="ExitDialog" />
+
+      <Dialog Id="ConfigDlg" Width="370" Height="270" Title="Audspect Agent Setup">
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Deployment configuration" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="330" Height="30" Transparent="yes" NoPrefix="yes"
+                 Text="The signed file from your Audspect dashboard tells this agent where to connect. It is only trusted if its signing key matches the fingerprint shown in the dashboard." />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+        <Control Id="ConfigLabel" Type="Text" X="25" Y="58" Width="320" Height="10" Transparent="yes" Text="Deployment configuration file (deployment.json):" />
+        <Control Id="ConfigEdit" Type="Edit" X="25" Y="70" Width="320" Height="15" Property="DEPLOYMENT_CONFIG" />
+        <Control Id="FpLabel" Type="Text" X="25" Y="96" Width="320" Height="20" Transparent="yes"
+                 Text="Signing key fingerprint (SHA-256). Copy it from the dashboard, not from the downloaded files:" />
+        <Control Id="FpEdit" Type="Edit" X="25" Y="118" Width="320" Height="15" Property="CONFIG_FINGERPRINT" />
+        <Control Id="VerifyBtn" Type="PushButton" X="25" Y="142" Width="90" Height="17" Text="Verify">
+          <Publish Event="DoAction" Value="CheckDeploymentConfig" />
+        </Control>
+        <Control Id="ConfigMsg" Type="Text" X="25" Y="166" Width="320" Height="44" Transparent="yes" NoPrefix="yes" Text="[CONFIG_MESSAGE]" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)">
+          <Publish Event="NewDialog" Value="LicenseAgreementDlg" />
+        </Control>
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)">
+          <Publish Event="DoAction" Value="CheckDeploymentConfig" Order="1" />
+          <Publish Event="NewDialog" Value="SecretDlg" Order="2" Condition="CONFIG_OK = &quot;1&quot;" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+      </Dialog>
+
+      <Dialog Id="SecretDlg" Width="370" Height="270" Title="Audspect Agent Setup">
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Agent secret" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="330" Height="20" Transparent="yes" NoPrefix="yes"
+                 Text="The agent secret authorises this endpoint to enrol. It is never stored in the installer or written to the log." />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+        <Control Id="SecretLabel" Type="Text" X="25" Y="64" Width="320" Height="10" Transparent="yes" Text="Agent secret:" />
+        <Control Id="SecretEdit" Type="Edit" X="25" Y="76" Width="320" Height="15" Property="AGENT_SECRET" Password="yes" />
+        <Control Id="EnvLabel" Type="Text" X="25" Y="106" Width="320" Height="10" Transparent="yes" Text="Environment label:" />
+        <Control Id="EnvEdit" Type="Edit" X="25" Y="118" Width="200" Height="15" Property="ENV_LABEL" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)">
+          <Publish Event="NewDialog" Value="ConfigDlg" />
+        </Control>
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)"
+                 EnableCondition="AGENT_SECRET &lt;&gt; &quot;&quot;">
+          <Publish Event="NewDialog" Value="TestConnectionDlg" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+      </Dialog>
+
+      <Dialog Id="TestConnectionDlg" Width="370" Height="270" Title="Audspect Agent Setup">
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Test connection" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="330" Height="20" Transparent="yes" NoPrefix="yes"
+                 Text="Checks that the server is reachable, its certificate is trusted by the deployment CA, and the secret is accepted. Nothing is installed." />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+        <Control Id="TestBtn" Type="PushButton" X="25" Y="64" Width="110" Height="17" Text="Test connection">
+          <Publish Event="DoAction" Value="TestAgentConnection" />
+        </Control>
+        <Control Id="TestMsg" Type="Text" X="25" Y="92" Width="320" Height="80" Transparent="yes" NoPrefix="yes" Text="[PREFLIGHT_MESSAGE]" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)">
+          <Publish Event="NewDialog" Value="SecretDlg" />
+        </Control>
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)"
+                 EnableCondition="PREFLIGHT_OK = &quot;1&quot; OR SKIPPREFLIGHT = &quot;1&quot;">
+          <Publish Event="NewDialog" Value="VerifyReadyDlg" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+      </Dialog>
+
+      <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchStatusWindow" Order="998"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="LicenseAgreementDlg" Condition="NOT Installed" />
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Condition="Installed AND PATCH" />
+
+      <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" />
+      <!-- An existing agent keeps its enrollment: no configuration, secret or test is needed. -->
+      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ConfigDlg" Order="2"
+               Condition="LicenseAccepted = &quot;1&quot; AND NOT AGENT_PRESENT" />
+      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Order="3"
+               Condition="LicenseAccepted = &quot;1&quot; AND AGENT_PRESENT" />
+
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="TestConnectionDlg" Order="1" Condition="NOT Installed AND NOT AGENT_PRESENT" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg" Order="2" Condition="NOT Installed AND AGENT_PRESENT" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" Order="3" Condition="Installed AND NOT PATCH" />
+
+      <Publish Dialog="MaintenanceWelcomeDlg" Control="Next" Event="NewDialog" Value="MaintenanceTypeDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RepairButton" Event="NewDialog" Value="VerifyReadyDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="VerifyReadyDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="Back" Event="NewDialog" Value="MaintenanceWelcomeDlg" />
+    </UI>
+
+    <UIRef Id="WixUI_Common" />
+  </Fragment>
+</Wix>

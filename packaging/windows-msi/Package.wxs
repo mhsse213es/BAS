@@ -1,0 +1,97 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!--
+    Audspect Agent installer.
+
+    Build inputs (wix build -d ...): Version, AgentExe (signed bas_agent.exe), CaDll (AudspectCA.CA.dll).
+
+    Public properties for a silent install:
+      DEPLOYMENT_CONFIG    path to the signed deployment.json (default: next to this MSI)
+      CONFIG_FINGERPRINT   SHA-256 of the deployment signing certificate, from the dashboard
+      AGENT_SECRET         hidden; passed to the agent on stdin only
+
+    The first install requires all three. An upgrade, repair or an agent already
+    registered by the legacy setup keeps its enrollment and needs none of them.
+  -->
+  <Package Name="Audspect Agent" Manufacturer="Audspect" Version="$(Version)"
+           UpgradeCode="{7F82553E-E3B9-4686-A1EF-A8AE8723AD37}" Scope="perMachine" InstallerVersion="500" Compressed="yes">
+    <SummaryInformation Description="Audspect Agent installer" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of the Audspect Agent is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="DEPLOYMENT_CONFIG" Secure="yes" />
+    <Property Id="CONFIG_FINGERPRINT" Secure="yes" />
+    <Property Id="AGENT_SECRET" Secure="yes" Hidden="yes" />
+    <!-- Carries the secret to the deferred action; Hidden keeps it out of the MSI log. -->
+    <Property Id="RunAgentInstall" Hidden="yes" Value="-" />
+
+    <!-- An already-registered agent keeps its enrollment, so the wizard skips configuration, secret and test. -->
+    <Property Id="AGENT_PRESENT">
+      <RegistrySearch Id="AgentServiceKey" Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\Audspect Agent" Name="ImagePath" Type="raw" Bitness="always64" />
+    </Property>
+
+    <!-- Wizard state and inputs. The agent is embedded a second time (Binary table) so the wizard can run
+         its checks before anything is installed. -->
+    <Property Id="ENV_LABEL" Value="Production" Secure="yes" />
+    <Property Id="SKIPPREFLIGHT" Secure="yes" />
+    <Property Id="CONFIG_OK" Value="0" />
+    <Property Id="PREFLIGHT_OK" Value="0" />
+    <Property Id="CONFIG_MESSAGE" Value=" " />
+    <Property Id="PREFLIGHT_MESSAGE" Value=" " />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Open the Audspect Agent status window" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(EulaRtf)" />
+    <Binary Id="AgentForPreflight" SourceFile="$(AgentExe)" />
+    <UIRef Id="AudspectWizard" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="BASAgent" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AudspectMenuFolder" Name="Audspect" />
+    </StandardDirectory>
+
+    <ComponentGroup Id="AgentFiles" Directory="INSTALLFOLDER">
+      <Component Id="AgentExe" Guid="*" Bitness="always64">
+        <File Id="BasAgentExe" Name="bas_agent.exe" Source="$(AgentExe)" KeyPath="yes" />
+        <!-- Stop the running service before files are replaced and start it afterwards.
+             The service itself is registered and removed by the agent (custom actions below). -->
+        <ServiceControl Id="AgentService" Name="Audspect Agent" Stop="both" Start="install" Wait="yes" />
+      </Component>
+      <Component Id="StatusShortcut" Guid="*" Directory="AudspectMenuFolder">
+        <Shortcut Id="StatusShortcutLnk" Name="Audspect Agent Status" Target="[INSTALLFOLDER]bas_agent.exe"
+                  Arguments="--status-window" WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="RemoveAudspectMenuFolder" Directory="AudspectMenuFolder" On="uninstall" />
+        <RegistryValue Root="HKLM" Key="Software\Audspect\Agent" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Main" Title="Audspect Agent" Level="1">
+      <ComponentGroupRef Id="AgentFiles" />
+    </Feature>
+
+    <Binary Id="AudspectCA" SourceFile="$(CaDll)" />
+    <CustomAction Id="PrepareAgentInstall" BinaryRef="AudspectCA" DllEntry="PrepareAgentInstall" Execute="immediate" Return="check" />
+    <CustomAction Id="PrepareAgentRemoval" BinaryRef="AudspectCA" DllEntry="PrepareAgentRemoval" Execute="immediate" Return="check" />
+    <CustomAction Id="RunAgentInstall" BinaryRef="AudspectCA" DllEntry="RunAgentInstall" Execute="deferred" Impersonate="no" Return="check" />
+    <CustomAction Id="RollbackAgentInstall" BinaryRef="AudspectCA" DllEntry="RollbackAgentInstall" Execute="rollback" Impersonate="no" Return="ignore" />
+    <CustomAction Id="RunAgentUninstall" BinaryRef="AudspectCA" DllEntry="RunAgentUninstall" Execute="deferred" Impersonate="no" Return="check" />
+    <CustomAction Id="RefreshAgentIntegrity" BinaryRef="AudspectCA" DllEntry="RefreshAgentIntegrity" Execute="deferred" Impersonate="no" Return="ignore" />
+
+    <SetProperty Id="DEPLOYMENT_CONFIG" Value="[SourceDir]deployment.json" Before="PrepareAgentInstall" Sequence="execute" Condition="NOT DEPLOYMENT_CONFIG" />
+
+    <InstallExecuteSequence>
+      <Custom Action="PrepareAgentRemoval" After="CostFinalize" />
+      <Custom Action="PrepareAgentInstall" After="PrepareAgentRemoval" Condition="REMOVE&lt;&gt;&quot;ALL&quot;" />
+
+      <!-- Fresh install only: rollback entry first so a failed registration is undone. -->
+      <Custom Action="RollbackAgentInstall" After="InstallFiles" Condition="REMOVE&lt;&gt;&quot;ALL&quot; AND NOT AGENT_SERVICE_EXISTS" />
+      <Custom Action="RunAgentInstall" After="RollbackAgentInstall" Condition="REMOVE&lt;&gt;&quot;ALL&quot; AND NOT AGENT_SERVICE_EXISTS" />
+
+      <!-- Upgrade or repair: the files were replaced, so re-store the integrity hash. -->
+      <Custom Action="RefreshAgentIntegrity" After="InstallFiles" Condition="REMOVE&lt;&gt;&quot;ALL&quot; AND AGENT_SERVICE_EXISTS" />
+
+      <!-- Real uninstall only, never during a major upgrade of this product. -->
+      <Custom Action="RunAgentUninstall" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>
