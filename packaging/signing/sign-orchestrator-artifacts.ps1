@@ -39,6 +39,22 @@ function Update-BinaryManifestEntries {
     return ($updated -join "`n") + "`n"
 }
 
+function Add-ManifestEntryIfMissing {
+    # Appends "<64 zeros>  <FileName>" when the manifest does not list the file, so that
+    # Update-BinaryManifestEntries (which only replaces existing lines) can then set its real hash.
+    # Used for artifacts the Docker image does not know about, such as the Windows MSI.
+    param(
+        [Parameter(Mandatory)][string]$ManifestContent,
+        [Parameter(Mandatory)][string]$FileName
+    )
+    $lines = $ManifestContent -split "`n" | Where-Object { $_ -ne "" } | ForEach-Object { $_.TrimEnd("`r") }
+    foreach ($line in $lines) {
+        $parts = $line -split "  ", 2
+        if ($parts.Count -eq 2 -and $parts[1] -eq $FileName) { return $ManifestContent }
+    }
+    return ($lines -join "`n") + "`n" + ("0" * 64) + "  $FileName`n"
+}
+
 function Update-OrchestratorAgentArtifacts {
     [OutputType([bool])]
     param(
@@ -61,6 +77,11 @@ function Update-OrchestratorAgentArtifacts {
         "bas-agent-windows-legacy-amd64-setup.zip" = Join-Path $OutDir "bas-agent-windows-legacy-amd64-setup.zip"
     }
     $installerPath = Join-Path $OutDir "BASAgent-Setup-$Version.exe"
+    # The MSI is optional (windows-build.ps1 -BuildMsi). When present it is served by the orchestrator
+    # as a per-request bundle, so it must be in the image and in the signed manifest.
+    $msiName = "AudspectAgent-x64.msi"
+    $msiPath = Join-Path $OutDir $msiName
+    $includeMsi = Test-Path $msiPath
 
     foreach ($path in (@($installerPath) + @($artifacts.Values))) {
         if (-not (Test-Path $path)) {
@@ -81,7 +102,9 @@ function Update-OrchestratorAgentArtifacts {
     if (-not $authenticodeChecked) {
         Write-Host "[!]   Dev build: Authenticode re-verification skipped (no Windows certificate configured)."
     }
-    foreach ($path in @($installerPath, $artifacts["bas-agent-windows-amd64.exe"], $artifacts["bas-agent-windows-legacy-amd64.exe"])) {
+    $verifyPaths = @($installerPath, $artifacts["bas-agent-windows-amd64.exe"], $artifacts["bas-agent-windows-legacy-amd64.exe"])
+    if ($includeMsi) { $verifyPaths += $msiPath }
+    foreach ($path in $verifyPaths) {
         if (-not $authenticodeChecked) { break }
         $v = Test-AuthenticodeSignature -Path $path
         if (-not $v.Valid) {
@@ -117,6 +140,7 @@ function Update-OrchestratorAgentArtifacts {
         Copy-Item $artifacts["bas-agent-windows-amd64.exe"] (Join-Path $patchCtx "bas-agent-windows-amd64.exe")
         Copy-Item $artifacts["bas-agent-windows-legacy-amd64.exe"] (Join-Path $patchCtx "bas-agent-windows-legacy-amd64.exe")
         Copy-Item $artifacts["bas-agent-windows-legacy-amd64-setup.zip"] (Join-Path $patchCtx "bas-agent-windows-legacy-amd64-setup.zip")
+        if ($includeMsi) { Copy-Item $msiPath (Join-Path $patchCtx $msiName) }
 
         # Rebuild the amd64 setup zip from the signed installer under the
         # Dockerfile's internal filename (Audspect_Agent.exe) -- same
@@ -176,7 +200,11 @@ function Update-OrchestratorAgentArtifacts {
             "bas-agent-windows-amd64-setup.zip"        = (Get-FileHash -Path (Join-Path $patchCtx "bas-agent-windows-amd64-setup.zip") -Algorithm SHA256).Hash.ToLower()
             "bas-agent-windows-legacy-amd64-setup.zip" = (Get-FileHash -Path $artifacts["bas-agent-windows-legacy-amd64-setup.zip"] -Algorithm SHA256).Hash.ToLower()
         }
+        if ($includeMsi) {
+            $replacements[$msiName] = (Get-FileHash -Path (Join-Path $patchCtx $msiName) -Algorithm SHA256).Hash.ToLower()
+        }
         $manifestContent = Get-Content $manifestPath -Raw
+        if ($includeMsi) { $manifestContent = Add-ManifestEntryIfMissing -ManifestContent $manifestContent -FileName $msiName }
         try {
             $updatedManifest = Update-BinaryManifestEntries -ManifestContent $manifestContent -Replacements $replacements
         } catch {
@@ -216,6 +244,7 @@ function Update-OrchestratorAgentArtifacts {
             "COPY bas-agent-windows-legacy-amd64.exe /agents/bas-agent-windows-legacy-amd64.exe`n" +
             "COPY bas-agent-windows-legacy-amd64-setup.zip /agents/bas-agent-windows-legacy-amd64-setup.zip`n" +
             "COPY bas-agent-windows-amd64-setup.zip /agents/bas-agent-windows-amd64-setup.zip`n" +
+            $(if ($includeMsi) { "COPY $msiName /agents/$msiName`n" } else { "" }) +
             "COPY BINARIES.sha256 /agents/BINARIES.sha256`n" +
             "COPY BINARIES.sha256.sig /agents/BINARIES.sha256.sig`n" +
             "COPY SELFINTEGRITY.sha256 /SELFINTEGRITY.sha256`n" +

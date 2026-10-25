@@ -44,7 +44,13 @@ param(
     # dev). -AllowUnsignedImages is the explicit dev-only escape hatch; such a
     # bundle is refused by install.sh/setup.sh and must never be shipped.
     [Nullable[bool]] $CosignSigningRequired  = $null,
-    [switch] $AllowUnsignedImages
+    [switch] $AllowUnsignedImages,
+
+    # Also build the signed WiX MSI (packaging\windows-msi). Opt-in so existing builds are unchanged.
+    # A customer build signs it with the trusted certificate and needs the owner-approved licence text
+    # (-MsiEulaRtf); any other build dev-signs it with a clearly marked, untrusted certificate.
+    [switch] $BuildMsi,
+    [string] $MsiEulaRtf = ""
 )
 
 $IsCustomerBuild = ($Customer -ne "" -and $CustomerID -ne "")
@@ -461,6 +467,24 @@ if (-not (Test-Path "$OutDir\bas-agent-windows-amd64.exe")) {
     if ($embedHash -ne $standaloneHash) {
         Err "installer\bas_agent.exe and bas-agent-windows-amd64.exe diverged after a copy -- this should be structurally impossible; investigate before shipping."
     }
+}
+
+# -- 5a1. Build the Windows MSI (opt-in) ---------------------------------------
+# Built from the same signed agent binary as the standalone artifact. The orchestrator serves it as a
+# per-request bundle (MSI + signed deployment.json + install scripts); see packaging\windows-msi.
+if ($BuildMsi) {
+    Log "Building the Windows MSI..."
+    $msiArgs = @{ AgentExe = "$InstallerDiras_agent.exe"; Version = $Version; OutDir = $OutDir }
+    if ($MsiEulaRtf) { $msiArgs.EulaRtf = $MsiEulaRtf }
+    if ($IsCustomerBuild) {
+        $msiArgs.Release = $true
+        $msiArgs.CertThumbprint = $WindowsCertThumbprint
+    } else {
+        $msiArgs.DevSign = $true
+    }
+    & (Join-Path $PSScriptRoot "windows-msiuild-msi.ps1") @msiArgs
+    if ($LASTEXITCODE -ne 0) { Err "MSI build failed." }
+    if (-not (Test-Path "$OutDir\AudspectAgent-x64.msi")) { Err "MSI build reported success but produced no AudspectAgent-x64.msi." }
 }
 
 # -- 5a2. Build Legacy Windows agent binary (amd64 only) ---------------------
