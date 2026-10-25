@@ -29,6 +29,7 @@ func main() {
 	flagServer := flag.String("server", "", "Override BAS_SERVER_URL")
 	flagEnv := flag.String("env", "Production", "Override BAS_ENV_LABEL")
 	flagSecret := flag.String("secret", "", "Agent shared secret (encrypted at rest via DPAPI on Windows)")
+	flagSecretStdin := flag.Bool("secret-stdin", false, "Read the agent secret from stdin (one line) instead of --secret, so it never appears in process arguments")
 	flagCARoot := flag.String("ca-root", "", "Path to the deployment CA root PEM (required for mTLS enrollment; fetch via GET /api/config/connection)")
 	flagEnrollPort := flag.String("enroll-port", "", "Host port of the orchestrator enrollment listener, if the published port was remapped from the 9444 default (persisted as BAS_ENROLL_PORT)")
 
@@ -48,8 +49,12 @@ func main() {
 			fmt.Fprintln(os.Stderr, "error: provide --server <url> or set BAS_SERVER_URL")
 			os.Exit(1)
 		}
-		secret := *flagSecret
-		if secret == "" {
+		secret, secretFromStdin, secretErr := secretFromFlags(*flagSecret, *flagSecretStdin, os.Stdin)
+		if secretErr != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", secretErr)
+			os.Exit(1)
+		}
+		if secret == "" && !secretFromStdin {
 			secret = os.Getenv("BAS_AGENT_SECRET")
 		}
 		if secret == "" {
