@@ -37,6 +37,31 @@ func buildCmd(ctx context.Context, step ScenarioStep) *exec.Cmd {
 	return cmd
 }
 
+// stepScriptFile moves a long sh/bash step off the argument list: the script is
+// written to a private temp file and the shell runs that file. Short steps are
+// left exactly as built. When the step runs as another user the file is handed
+// to that user, since the shell can no longer read a root-only 0600 file. The
+// returned cleanup removes the file and must be deferred by the caller.
+func stepScriptFile(cmd *exec.Cmd, step ScenarioStep) (func(), error) {
+	noop := func() {}
+	if len(step.Command) <= stepScriptThreshold || len(cmd.Args) != 3 || cmd.Args[1] != "-c" {
+		return noop, nil
+	}
+	path, cleanup, err := writeStepScript(os.TempDir(), ".sh", step.Command, false)
+	if err != nil {
+		return noop, err
+	}
+	if cmd.SysProcAttr != nil && cmd.SysProcAttr.Credential != nil {
+		cred := cmd.SysProcAttr.Credential
+		if err := os.Chown(path, int(cred.Uid), int(cred.Gid)); err != nil {
+			cleanup()
+			return noop, err
+		}
+	}
+	cmd.Args = []string{cmd.Args[0], path}
+	return cleanup, nil
+}
+
 // runCleanup executes the step's cleanup command and returns a verdict --
 // "reverted" (exit 0), "partial" (non-zero exit), or "leaked" (start/timeout
 // failure) -- plus a detail string. detail is empty on success; on failure it

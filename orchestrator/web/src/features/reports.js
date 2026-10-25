@@ -2082,6 +2082,7 @@ export function loadStepScript(input) {
   var name = file.name.toLowerCase();
   var executor = name.endsWith('.ps1') ? 'powershell' : (name.endsWith('.sh') ? 'sh' : '');
   if (!executor) { showToast('Only .ps1 and .sh files can be uploaded', 'err'); return; }
+  if (file.size === 0) { showToast('Script file is empty', 'err'); return; }
   if (file.size > STEP_SCRIPT_MAX_BYTES) { showToast('Script is larger than 256 KB', 'err'); return; }
   var row = input.closest('.bld-step');
   var reader = new FileReader();

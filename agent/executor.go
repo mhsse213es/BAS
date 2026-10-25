@@ -262,6 +262,21 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 	executedAs, releaseExecCtx := applyExecutionContext(cmd, step)
 	defer releaseExecCtx()
 
+	// A step too long for a command line runs from a private temp file instead.
+	cleanupScript, scriptErr := stepScriptFile(cmd, step)
+	defer cleanupScript()
+	if scriptErr != nil {
+		return protocol.ExecResult{
+			TaskID:        step.TaskID,
+			ExitCode:      -1,
+			Stderr:        "could not stage step script: " + scriptErr.Error(),
+			DurationMs:    time.Since(before).Milliseconds(),
+			ExecutedAt:    time.Now(),
+			RequestedPriv: step.RequiresPriv,
+			ExecutedAs:    executedAs,
+		}
+	}
+
 	// If applyExecutionContext did not already set cmd.Env (i.e. agent context),
 	// apply step-level env overrides now.
 	if cmd.Env == nil {
