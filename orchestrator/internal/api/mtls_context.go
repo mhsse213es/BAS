@@ -67,3 +67,16 @@ func wsAgentAuthorized(req *http.Request, agentSecret string) (ok bool, statusCo
 	}
 	return true, 0, ""
 }
+
+// agentMatchesCertificate enforces that an agent request acts only for the agent its client certificate
+// was issued to (audit F-02): the shared X-Agent-Token proves nothing about WHICH agent is calling, so
+// whenever a verified certificate is present the AgentID the request claims must equal its identity.
+// It writes the 401 and returns false on a mismatch. A request with no certificate (the legacy
+// listener) is unchanged for now; that listener's retirement makes the certificate mandatory.
+func agentMatchesCertificate(w http.ResponseWriter, r *http.Request, claimedID string) bool {
+	if mtlsID := AuthenticatedAgentID(r); mtlsID != "" && claimedID != mtlsID {
+		jsonError(w, "agentId does not match authenticated certificate", http.StatusUnauthorized)
+		return false
+	}
+	return true
+}

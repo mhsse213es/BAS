@@ -446,6 +446,9 @@ func (h *Handler) UnenrollAgent(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "agentId required", http.StatusBadRequest)
 		return
 	}
+	if !agentMatchesCertificate(w, r, body.AgentID) {
+		return
+	}
 	tag, err := h.db.Exec(r.Context(), `UPDATE agents SET state = 'retired' WHERE agent_id = $1`, body.AgentID)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -1474,6 +1477,9 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid heartbeat payload", http.StatusBadRequest)
 		return
 	}
+	if !agentMatchesCertificate(w, r, hb.AgentID) {
+		return
+	}
 
 	// Verify binary hash against the manifest if one is loaded.
 	trusted := false
@@ -1603,6 +1609,9 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
 		jsonError(w, "invalid enrollment payload — agentId required", http.StatusBadRequest)
+		return
+	}
+	if !agentMatchesCertificate(w, r, req.AgentID) {
 		return
 	}
 
@@ -3006,6 +3015,9 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	var raw scenario.RawRunResult
 	if e := json.Unmarshal(body, &raw); e != nil || raw.RunID == "" {
 		jsonError(w, "invalid payload — expected {runId, scenarioId, agentId, results}", http.StatusBadRequest)
+		return
+	}
+	if !agentMatchesCertificate(w, r, raw.AgentID) {
 		return
 	}
 	// validateAgentAuth/verifyResultMAC only prove possession of the

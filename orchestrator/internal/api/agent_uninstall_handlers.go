@@ -76,6 +76,9 @@ func (h *Handler) UninstallAgentResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agentID := chi.URLParam(r, "agentId")
+	if !agentMatchesCertificate(w, r, agentID) {
+		return
+	}
 	var body struct {
 		Success bool   `json:"success"`
 		Error   string `json:"error"`

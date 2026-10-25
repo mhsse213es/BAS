@@ -41,13 +41,25 @@ Progress: 1 and 2 done (F-01 fixed). 3, 4 and 5 traced by code reading (below, n
 * **Regression test:** `TestIssueClientCertificate_KeyPolicy` (RSA-1024, P-224, Ed25519 rejected; P-256, P-384, RSA-2048 accepted). Written first and watched fail for exactly the three rejected keys.
 * **Fix:** `checkClientKeyPolicy` in `internal/pki/issue.go`; the enrollment handler returns 400 with the reason.
 
-#### F-02 Agent HTTP endpoints ignore the certificate's identity. High. Verified (code).
+#### F-02 Agent HTTP endpoints ignore the certificate's identity. High. Verified (code). **FIXED when a certificate is present; mandatory binding waits on the legacy listener**
 
 * **Path:** `Heartbeat`, `SubmitRunEvents`, `ReceiveEvents` (logs), `UninstallAgentResult`, `UnenrollAgent` and the other `validateAgentAuth` callers authenticate with the shared `X-Agent-Token` only, and take the AgentID from the request body or URL. `AuthenticatedAgentID` is read in exactly two places: `EnrollCSR` and `wsAgentAuthorized`.
 * **Impact:** any holder of the shared secret (and any enrolled agent, which holds it too) can report as, mark `uninstalled` (`UninstallAgentResult`), or retire (`UnenrollAgent`) any other agent, and inject events or heartbeats for it. Holding a valid certificate gives no extra protection on these routes. With `AGENT_SECRET` empty, `validateAgentAuth` returns true and there is no authentication at all.
 * **Constraint on the fix:** the plaintext legacy listener (`:9000`) serves the same router and its agents have no certificate, so binding cannot be mandatory until that listener is retired.
 * **Remediation:** when a request carries an mTLS identity, require the AgentID in the body or URL to equal it (reject otherwise). Then make the identity mandatory on the agent routes once the legacy listener is gone. Track the legacy listener retirement as the dependency.
 * **Regression test:** a table test over each agent route: a request with identity A and an AgentID of B returns 401; identity A with AgentID A succeeds. (Needs the Postgres test harness used by `internal/api`.)
+
+#### Fix for F-02
+
+* `agentMatchesCertificate` (`internal/api/mtls_context.go`): when a request carries a verified client certificate, the AgentID it
+  acts on must equal the certificate's identity, otherwise 401. Applied to heartbeat, enroll, unenroll, uninstall-result, log events
+  (the whole batch is refused), host events, SharpHound upload, attack-path collection and scenario results.
+* Correction to the finding: `SubmitScenarioResult` already refused a result naming an agent other than the one the run was
+  dispatched to. It now also checks the certificate. `SubmitRunEvents` and `SubmitRunDetections` carry no agent ID (only run IDs),
+  so they are not covered; binding a run to its agent there is still open.
+* Not done: requests with **no** certificate (the plaintext legacy listener) are unchanged, so an agent holding only the shared
+  secret can still claim any ID there. Making the certificate mandatory depends on retiring that listener.
+* Tests: `TestAgentMatchesCertificate`, `TestAgentRoutes_RefuseAnotherAgentsCertificate` (8 routes, written first and failing).
 
 #### F-03 Bootstrap identity is claimed, not attested. Medium. Design limit.
 
