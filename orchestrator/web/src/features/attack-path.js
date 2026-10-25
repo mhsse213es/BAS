@@ -1729,6 +1729,14 @@ export function injectServerURL() {
   apicall('/api/config/connection').then(apply).catch(function() { apply({}); });
 }
 
+// formatFingerprint groups a SHA-256 fingerprint (64 hex characters) in uppercase blocks of 8 so an
+// operator can compare it by eye with the one shown by the installer. Anything else returns '' so
+// a malformed value is never shown as if it were a fingerprint.
+export function formatFingerprint(hex) {
+  if (typeof hex !== 'string' || !/^[0-9a-fA-F]{64}$/.test(hex)) return '';
+  return hex.toUpperCase().match(/.{8}/g).join(' ');
+}
+
 export function loadConnectionConfig() {
   apicall('/api/config/connection').then(function(data) {
     var wrap = document.getElementById('conn-cfg-wrap');
@@ -1737,6 +1745,16 @@ export function loadConnectionConfig() {
     document.getElementById('cfg-server-url').textContent = window.location.origin;
     var secretEl = document.getElementById('cfg-agent-secret');
     secretEl.dataset.value = data.agentSecret || '';
+    // The deployment signing fingerprint is the trust anchor for the Windows MSI bundle: operators
+    // compare it with the one the installer shows. It comes from this authenticated call only.
+    var fpRow = document.getElementById('cfg-fingerprint-row');
+    var fpEl = document.getElementById('cfg-deployment-fingerprint');
+    var fpText = formatFingerprint(data.deploymentSigningFingerprint);
+    if (fpRow && fpEl) {
+      fpEl.textContent = fpText;
+      fpEl.dataset.value = fpText ? data.deploymentSigningFingerprint.toLowerCase() : '';
+      setDisplay(fpRow, fpText ? '' : 'none');
+    }
     // keep masked until user clicks Show
   }).catch(function(e) { showToast('Failed to load connection config: ' + (e.message || 'error'), 'err'); });
 }

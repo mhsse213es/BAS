@@ -589,6 +589,13 @@
                 <button class="btn btn-sm btn-outline" data-on-click="copyText" data-args="[&quot;cfg-server-url&quot;]">Copy</button>
               </div>
             </div>
+            <div class="conn-cfg-row" id="cfg-fingerprint-row" hidden>
+              <span class="conn-cfg-label">Deployment signing fingerprint (SHA-256)</span>
+              <span class="conn-cfg-val" id="cfg-deployment-fingerprint" data-value=""></span>
+              <div class="conn-cfg-actions">
+                <button class="btn btn-sm btn-outline" data-on-click="copyText" data-args="[&quot;cfg-deployment-fingerprint&quot;]">Copy</button>
+              </div>
+            </div>
             <div class="conn-cfg-row">
               <span class="conn-cfg-label">Agent Secret</span>
               <span class="conn-cfg-val secret-hidden" id="cfg-agent-secret" data-value="">••••••••••••••••••••••••</span>
@@ -618,7 +625,14 @@
             <div class="agent-dl-badge">&#10003; Recommended</div>
           </div>
           <div class="g1-display-flex g1-s-85c697c1">
-            <a class="btn btn-primary g1-display-inline-flex g1-s-8c05ed56" href="/api/agents/download/windows-amd64-setup" download="BASAgent-Setup.zip">
+            <a class="btn btn-primary g1-display-inline-flex g1-s-8c05ed56" id="msi-download" href="/api/agents/download/windows-amd64-msi" download="AudspectAgent-x64.zip">
+              Download MSI installer
+            </a>
+            <div class="g1-s-b80a2c9b">AudspectAgent-x64.zip &nbsp;·&nbsp; Signed MSI + signed deployment.json. Compare the fingerprint above with the one the installer shows before you trust it.</div>
+          </div>
+          <div class="g1-display-flex g1-s-85c697c1">
+            <span class="g1-s-007f626a">Legacy installer (being retired):</span>
+            <a class="btn btn-sm btn-outline g1-display-inline-flex" href="/api/agents/download/windows-amd64-setup" download="BASAgent-Setup.zip">
               <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M7.47 10.78a.75.75 0 0 0 1.06 0l3.75-3.75a.75.75 0 0 0-1.06-1.06L8.75 8.44V1.75a.75.75 0 0 0-1.5 0v6.69L4.78 5.97a.75.75 0 0 0-1.06 1.06l3.75 3.75ZM3.75 13a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z"/></svg>
               Download Installer
             </a>
