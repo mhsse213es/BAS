@@ -24,6 +24,21 @@ Back up `ca-key.pem` and `ca-cert.pem` together, somewhere only administrators c
 re-enrolling the whole fleet. Restoring means copying both files back into `PKI_DIR` before starting the server;
 a restored pair is loaded as the same CA (covered by a test).
 
+### Ownership after a restore
+
+The server runs as the unprivileged user `65532` and `install.sh` makes the PKI directory owned by it. If you
+restore the files as root they will be owned by root, and a key with mode 0600 is then unreadable to the
+server. After restoring, run `chown 65532:65532 <PKI_DIR>/ca-key.pem <PKI_DIR>/ca-cert.pem`. The server only
+tightens a key it can already read, so tightening never takes access away from the service; the failure to
+watch for is a restore that leaves the files owned by someone else.
+
+### `BAS_CONFIRM_NEW_CA`
+
+Set it only for a deliberate replacement, and **remove it again straight afterwards**. Left set, a CA that is
+later lost on a running deployment would be replaced instead of stopping the server. It is only consulted when the
+CA key is missing and agents are already enrolled, and even then a surviving `ca-cert.pem` is never overwritten:
+remove both files first.
+
 ## Using a company (enterprise) CA
 
 Not supported yet, deliberately. Placing an arbitrary certificate in `PKI_DIR` is not a supported way to do it,

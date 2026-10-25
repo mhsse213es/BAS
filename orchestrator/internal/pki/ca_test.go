@@ -6,9 +6,11 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
 	"math/big"
 	"net"
 	"os"
@@ -17,6 +19,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/audspect/bas/internal/pki/pkitest"
 )
 
 func TestLoadOrGenerateCA_GeneratesOnFirstCall(t *testing.T) {
@@ -305,5 +309,77 @@ func TestLoadOrGenerateCA_RestoredCopyIsTheSameCA(t *testing.T) {
 	}
 	if !bytes.Equal(orig.RootCertPEM(), restored.RootCertPEM()) {
 		t.Fatal("a restored CA must be the same CA, or every enrolled agent breaks")
+	}
+}
+
+func TestLoadOrGenerateCA_CAWithoutSigningUsageRejected(t *testing.T) {
+	dir := t.TempDir()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// IsCA is set, but the key usage does not allow signing certificates.
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(7), Subject: pkix.Name{CommonName: "no certsign"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+		KeyUsage: x509.KeyUsageDigitalSignature, BasicConstraintsValid: true, IsCA: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeECKeyPEM(filepath.Join(dir, "ca-key.pem"), key); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeCertPEM(filepath.Join(dir, "ca-cert.pem"), der); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadOrGenerateCA(dir); err == nil || !strings.Contains(err.Error(), "not allowed to sign") {
+		t.Fatalf("got %v, want a cannot-sign error", err)
+	}
+}
+
+// A restore must give back the same CA (same fingerprint) and agents enrolled before it must still verify.
+func TestLoadOrGenerateCA_RestoreKeepsFingerprintAndExistingAgentCertsStillVerify(t *testing.T) {
+	src := t.TempDir()
+	orig, err := LoadOrGenerateCAWithSANs(src, []string{"192.168.10.78"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	csr, err := pkitest.GenerateTestCSR("agent-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	issued, err := orig.IssueClientCertificate("agent-1", csr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dst := t.TempDir() // simulate: server lost, CA restored from backup into a new directory
+	for _, f := range []string{"ca-key.pem", "ca-cert.pem"} {
+		b, _ := os.ReadFile(filepath.Join(src, f))
+		writeFile(t, filepath.Join(dst, f), b, 0600)
+	}
+	restored, err := LoadOrGenerateCA(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if sha256.Sum256(orig.Certificate().Raw) != sha256.Sum256(restored.Certificate().Raw) {
+		t.Fatal("the restored CA must have the same fingerprint")
+	}
+	blk, _ := pem.Decode(issued.CertPEM)
+	agentCert, err := x509.ParseCertificate(blk.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(restored.Certificate())
+	if _, err := agentCert.Verify(x509.VerifyOptions{Roots: roots, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}); err != nil {
+		t.Fatalf("an agent certificate issued before the restore no longer verifies against the restored CA: %v", err)
+	}
+	// And the restored CA can keep issuing.
+	if _, err := restored.IssueClientCertificate("agent-2", csr); err != nil {
+		t.Fatalf("the restored CA cannot issue: %v", err)
 	}
 }
