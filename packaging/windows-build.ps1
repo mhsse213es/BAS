@@ -474,7 +474,7 @@ if (-not (Test-Path "$OutDir\bas-agent-windows-amd64.exe")) {
 # per-request bundle (MSI + signed deployment.json + install scripts); see packaging\windows-msi.
 if ($BuildMsi) {
     Log "Building the Windows MSI..."
-    $msiArgs = @{ AgentExe = "$InstallerDiras_agent.exe"; Version = $Version; OutDir = $OutDir }
+    $msiArgs = @{ AgentExe = "$InstallerDir\bas_agent.exe"; Version = $Version; OutDir = $OutDir }
     if ($MsiEulaRtf) { $msiArgs.EulaRtf = $MsiEulaRtf }
     if ($IsCustomerBuild) {
         $msiArgs.Release = $true
@@ -482,7 +482,7 @@ if ($BuildMsi) {
     } else {
         $msiArgs.DevSign = $true
     }
-    & (Join-Path $PSScriptRoot "windows-msiuild-msi.ps1") @msiArgs
+    & (Join-Path $PSScriptRoot "windows-msi\build-msi.ps1") @msiArgs
     if ($LASTEXITCODE -ne 0) { Err "MSI build failed." }
     if (-not (Test-Path "$OutDir\AudspectAgent-x64.msi")) { Err "MSI build reported success but produced no AudspectAgent-x64.msi." }
 }
