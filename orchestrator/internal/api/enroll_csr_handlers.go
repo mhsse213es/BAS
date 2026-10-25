@@ -109,6 +109,17 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var agentRevoked bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agents WHERE agent_id = $1 AND state = $2)`,
+		req.AgentID, AgentStateRevoked).Scan(&agentRevoked); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if agentRevoked {
+		jsonError(w, "this agent has been revoked — an administrator must reinstate it before it can enrol", http.StatusForbidden)
+		return
+	}
+
 	if mtlsID != "" {
 		serial := r.TLS.PeerCertificates[0].SerialNumber.Text(16)
 		var revoked bool

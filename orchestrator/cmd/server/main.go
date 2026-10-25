@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"log"
 	"log/slog"
@@ -1266,8 +1265,6 @@ func main() {
 		log.Println("[smtpsink] disabled via SMTP_SINK_ENABLED=false")
 	}
 
-	clientCAPool := x509.NewCertPool()
-	clientCAPool.AddCert(ca.Certificate())
 	serverTLSCert, err := ca.TLSCertificate()
 	if err != nil {
 		log.Fatalf("[FATAL] build server TLS identity from CA: %v", err)
@@ -1280,11 +1277,12 @@ func main() {
 	mtlsSrv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
 		Handler: mtlsHandler,
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{serverTLSCert},
-			ClientAuth:   tls.RequireAndVerifyClientCert,
-			ClientCAs:    clientCAPool,
-		},
+		TLSConfig: pki.NewAgentTLSConfig(serverTLSCert, ca, func(serial, agentID string) (bool, error) {
+			// Fail closed: a database error refuses the connection (see pki.NewAgentTLSConfig).
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			return handler.AgentCertRevoked(ctx, serial, agentID)
+		}),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 90 * time.Second,
 		IdleTimeout:  120 * time.Second,

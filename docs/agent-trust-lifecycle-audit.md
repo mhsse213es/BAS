@@ -69,7 +69,7 @@ What holds (verified, code): `:9443` uses `RequireAndVerifyClientCert` with the 
 chain verification rejects expired certificates, certificates from another CA and certificates without the ClientAuth usage.
 Renewal never uses the bootstrap secret, and a certificate marked revoked cannot renew.
 
-#### F-04 There is no way to revoke an agent certificate or block an agent. High. Missing.
+#### F-04 There is no way to revoke an agent certificate or block an agent. High. Missing. **FIXED (API; no dashboard button yet)**
 
 * **Evidence (code):** no non-test code sets `agent_certificates.revoked`/`revoked_at` (the columns exist and are only read).
   `UnenrollAgent` only sets `agents.state = 'retired'` and does not touch certificates.
@@ -79,7 +79,7 @@ Renewal never uses the bootstrap secret, and a certificate marked revoked cannot
   block; see F-05 for enforcement. Do not rely on certificate revocation alone, see F-08.
 * **Regression test:** revoke agent A, then A's certificate is refused on every agent route while agent B is unaffected.
 
-#### F-05 Revocation and agent state are checked only on renewal, not on connection. High. Verified (code).
+#### F-05 Revocation and agent state are checked only on renewal, not on connection. High. Verified (code). **FIXED**
 
 * **Evidence:** the only reader of `revoked` is `EnrollCSR`'s renewal branch. `:9443` has no `VerifyPeerCertificate` or
   `VerifyConnection` hook, `wsAgentAuthorized` compares only the claimed ID with the certificate CN, and `ServeAgentWS` does not
@@ -115,12 +115,28 @@ Renewal never uses the bootstrap secret, and a certificate marked revoked cannot
   `TestResolveOperationalConfig_EnrolledExpiredCertRecovers`, `TestRunPeriodic_RunsImmediatelyThenOnEachTickUntilCancelled`.
   Known unrelated failure: `TestExecStepCleanupRunsAfterOperatorCancel` fails with and without this change.
 
+#### Fix for F-04, F-05 and F-08 (revocation)
+
+* `POST /api/agents/{agentId}/revoke` (admin, reason required, audited): marks all of that agent's certificates revoked, sets
+  `agents.state = 'revoked'`, and drops its live websocket (`Hub.DisconnectAgent`). The CA and other agents are untouched.
+* `POST /api/agents/{agentId}/reinstate` (admin, reason required): lets the agent enrol again; old certificates stay revoked.
+  The agent must enrol afresh (reinstall or reset its enrolment marker); there is no automatic recovery on the agent side.
+* Enforcement at connection time: `pki.NewAgentTLSConfig` (used by the `:9443` listener) runs a revocation check on every
+  handshake, including resumed sessions, and **fails closed** if the database lookup errors. A revoked agent is refused whatever
+  certificate it presents. The bootstrap secret cannot re-enrol a revoked agent (403).
+* The same function pins `MinVersion` to TLS 1.2 for the listener.
+* Tests: `TestNewAgentTLSConfig_Handshakes` (valid, no cert, expired, other CA, wrong usage, revoked, lookup error),
+  `TestRevokeAgent_RevokesOnlyThatAgentsCertificatesAndBlocksIt`, `TestReinstateAgent_AllowsAFreshEnrolment`,
+  `TestDisconnectAgent_ClosesTheLiveConnection`, plus RBAC matrix entries. The RBAC matrix suite still has its 314 earlier failures,
+  none about these routes.
+* Not done: a dashboard button, and the agent does not yet tell the operator it was revoked (it just fails to connect).
+
 #### F-07 Renewal reuses the same private key. Low. Design limit.
 
 `loadOrGenerateAgentKey` returns the stored key, so a renewed certificate carries the old key. Renewal therefore does not limit
 the damage of a key that leaked earlier. Fix by generating a fresh key on renewal and swapping atomically.
 
-#### F-08 Long-lived websocket connections are not re-validated. Low. Untested assumption.
+#### F-08 Long-lived websocket connections are not re-validated. Low. Untested assumption. **PARTLY FIXED (dropped on revoke; no re-check at expiry)**
 
 TLS verifies the certificate at handshake only. A connection opened before expiry or revocation stays up. Needed alongside
 F-05: the server should drop connections of revoked or blocked agents when the block is applied.

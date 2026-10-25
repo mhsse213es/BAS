@@ -4,7 +4,13 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/gorilla/websocket"
 
 	"github.com/audspect/bas/internal/models"
 )
@@ -250,5 +256,38 @@ func TestMostRestrictiveStep_DestructiveBeatsPotentiallyDestructive(t *testing.T
 	class, action, _ := mostRestrictiveStep(steps)
 	if class != "destructive" || action != "vss_delete" {
 		t.Errorf("class/action = %q/%q, want destructive/vss_delete", class, action)
+	}
+}
+
+// Revoking an agent must drop its live connection, not wait for it to reconnect (audit F-05/F-08).
+func TestDisconnectAgent_ClosesTheLiveConnection(t *testing.T) {
+	hub := NewHub()
+	srv := httptest.NewServer(http.HandlerFunc(hub.ServeAgentWS))
+	defer srv.Close()
+	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "?agentId=abc123deadbeef01"
+	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	deadline := time.Now().Add(2 * time.Second)
+	for !hub.IsAgentConnected("abc123deadbeef01") && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !hub.IsAgentConnected("abc123deadbeef01") {
+		t.Fatal("agent never registered")
+	}
+	if hub.DisconnectAgent("0000000000000000") {
+		t.Error("disconnecting an unknown agent must report false")
+	}
+	if !hub.DisconnectAgent("abc123deadbeef01") {
+		t.Fatal("DisconnectAgent reported false for a connected agent")
+	}
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, _, err := conn.ReadMessage(); err == nil {
+		t.Error("the client connection should be closed")
+	}
+	if hub.IsAgentConnected("abc123deadbeef01") {
+		t.Error("the agent must no longer be registered")
 	}
 }
