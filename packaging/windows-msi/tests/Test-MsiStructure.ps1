@@ -82,6 +82,9 @@ Check (([int]$deferredInstall[1] -band 0x800) -ne 0) 'RunAgentInstall runs witho
 $bin = Query 'SELECT `Name` FROM `Binary`'
 Check (@($bin | Where-Object { $_[0] -eq 'AgentForPreflight' }).Count -eq 1) 'the agent is embedded for the pre-install checks'
 
+$reg = Query 'SELECT `Name`, `Value` FROM `Registry`'
+Check (@($reg | Where-Object { $_[0] -eq 'ProductCode' -and $_[1] -eq '[ProductCode]' }).Count -eq 1) 'the product code is recorded so a remote uninstall can remove the MSI registration'
+
 $upg = Query 'SELECT `UpgradeCode`, `Attributes` FROM `Upgrade`'
 Check ($upg.Count -ge 1) 'a major-upgrade entry exists'
 

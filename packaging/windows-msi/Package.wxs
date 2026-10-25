@@ -61,6 +61,7 @@
         <Shortcut Id="StatusShortcutLnk" Name="Audspect Agent Status" Target="[INSTALLFOLDER]bas_agent.exe"
                   Arguments="--status-window" WorkingDirectory="INSTALLFOLDER" />
         <RemoveFolder Id="RemoveAudspectMenuFolder" Directory="AudspectMenuFolder" On="uninstall" />
+        <RegistryValue Root="HKLM" Key="Software\Audspect\Agent" Name="ProductCode" Type="string" Value="[ProductCode]" />
         <RegistryValue Root="HKLM" Key="Software\Audspect\Agent" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </ComponentGroup>

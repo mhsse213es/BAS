@@ -696,6 +696,13 @@ func platformSelfUninstall() error {
 	if err := removeTrayShortcut(); err != nil {
 		log.Printf("[~] Could not remove tray shortcut: %v", err)
 	}
+	// An agent installed from the MSI is also registered in Apps & features. Remove that
+	// registration (and the files) the same way an administrator would, so the two paths agree.
+	if code, ok := readMSIProductCode(); ok {
+		if err := startMSIRemoval(code); err != nil {
+			log.Printf("[~] Could not schedule the MSI removal: %v", err)
+		}
+	}
 	return nil
 }
 
