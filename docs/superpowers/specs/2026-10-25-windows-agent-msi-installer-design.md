@@ -1,6 +1,6 @@
 # Windows Agent Installer: Wizard MSI — Design
 
-Status: DRAFT for review. Nothing in this document is built.
+Status: DECISIONS CONFIRMED by the owner (section 10). Nothing in this document is built yet.
 
 ## 1. Why
 
@@ -144,3 +144,40 @@ Real-machine matrix (must be run on real VMs; not claimable from a build)
    reputation; dev builds stay unsigned.
 4. Is installing the WiX toolchain on the Windows build host acceptable?
 5. Licence/EULA text and any extra branding assets for the wizard.
+
+## 10. Owner decisions (2026-10-25)
+
+1. WiX MSI. Confirmed.
+2. The agent secret stays out of the downloaded ZIP. It is requested at install time in a masked field, passed
+   to the agent on stdin, and never logged. Confirmed.
+3. Release builds use a trusted code-signing certificate. If none exists, use a clearly separated development
+   signing workflow and never present development signatures as production-trusted. Signing keys stay outside
+   the repository.
+4. Install and pin the WiX toolchain on the Windows build host; keep the build reproducible.
+5. Audspect branding only (no Trellix or InstallShield branding). The EULA must be approved before release;
+   no invented legal terms.
+
+Non-negotiable requirements
+- N1. Signed deployment configuration: verify the server-signed `deployment.json` before trusting its URL,
+  port or CA; reject tampering and unsupported versions or fields.
+- N2. Safe upgrades and rollback: preserve enrollment and service configuration on upgrade; test rollback
+  after failures at each installation stage.
+- N3. Remote uninstall consistency: the dashboard's Uninstall Agent action uses a defined, authenticated
+  workflow and stays consistent with Apps & features. A local MSI uninstall is not assumed to implement it.
+- N4. The MSI signature and the `deployment.json` signature are verified independently. A signed MSI does not
+  make the ZIP or its configuration trustworthy.
+
+Implementation order: `--preflight` and tests; signed deployment configuration; WiX MSI; signing integration;
+full lifecycle validation on real Windows machines.
+
+### Open problem found while planning: trust anchor for `deployment.json` (blocks work item 2)
+
+The agent has no key it can trust before it enrolls (command-signing keys are delivered after enrollment), and
+the MSI is generic, so it cannot carry each customer's orchestrator key. Something outside the ZIP must vouch
+for the config. Options:
+- A. Pin by fingerprint: the dashboard shows the SHA-256 fingerprint of the orchestrator's config-signing
+  public key and puts it in the generated `install.cmd`; the wizard shows it for the operator to confirm and
+  the MSI takes it as `CONFIG_FINGERPRINT` for silent installs. Recommended.
+- B. Customer-owned code-signing certificate signs the ZIP contents (requires the customer to have one).
+- C. Per-customer MSI built or transformed on the server (heavy; reintroduces per-download signing problems).
+Decision needed from the owner before work item 2 starts.
