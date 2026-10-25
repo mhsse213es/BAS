@@ -10,6 +10,25 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-25-windows-agent-msi-installer-design.md` (owner decisions in section 10).
 
+## Status (2026-10-25)
+
+Built and tested on the build host; live-machine verification is the only open item. Operator guide:
+`docs/guides/windows-msi-installer.md` (includes the verification table and the key rotation procedure).
+
+| Task | State | Evidence |
+|---|---|---|
+| 1. `agent/preflight`, `--preflight` | Done | commits e3de69e3, 067f5eaa; unit tests; built-binary exit codes |
+| 2. `--secret-stdin` | Done | commit 37e470c6; unit tests |
+| 3. Signed `deployment.json` (Option A, fingerprint pinned) | Done | `agent/deployconfig`, `orchestrator/internal/deployconfig`, shared golden fixture; `--config`, `--config-fingerprint`, `--verify-config`; dashboard fingerprint; key rotation in the guide |
+| 4. WiX MSI (install, upgrade, repair, uninstall, rollback entry) | Built, validated | `packaging/windows-msi`; ICE validation; `Test-MsiStructure.ps1`; 33 custom action tests |
+| 5. Wizard | Built, structure-checked | `Ui.wxs`; not clicked through on a desktop yet |
+| 6. Build, signing, serving | Done | `build-msi.ps1` (release guards tested), `windows-build.ps1 -BuildMsi`, signed manifest entry, `windows-amd64-msi` bundle endpoint |
+| 7. Lifecycle and remote uninstall | Remote uninstall done; lifecycle script written | `msi_removal*.go`; `tests/Test-MsiLifecycle.ps1` **not yet run** (needs a clean VM per OS) |
+
+Open, by nature rather than by omission: running the lifecycle script on Windows 10, 11, Server 2019 and
+2022; a visual pass over the wizard; a production-trusted signature (needs the organisation's certificate);
+the owner-approved licence text.
+
 ## Global Constraints
 
 - Release builds use a trusted code-signing certificate; development signing is a clearly separate workflow and is never presented as production-trusted. Signing keys never enter the repository.
