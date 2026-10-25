@@ -143,7 +143,14 @@ Renewal never uses the bootstrap secret, and a certificate marked revoked cannot
   none about these routes.
 * Not done: a dashboard button, and the agent does not yet tell the operator it was revoked (it just fails to connect).
 
-#### F-07 Renewal reuses the same private key. Low. Design limit.
+#### F-07 Renewal reuses the same private key. Low. Design limit. **FIXED**
+
+* **Fix:** renewal and re-enrolment generate a new key in memory (`newAgentKey`); only after the server issues the certificate are
+  the new key and certificate written as `.new` files and moved into place together (`rotateCredentials`). A crash at any point is
+  repaired on the next start (`recoverPendingRotation`), and a failed renewal leaves the old key untouched. The first bootstrap
+  is unchanged.
+* **Tests:** `TestRenewal_GeneratesAFreshKey`, `TestRenewalFailure_LeavesTheOldKeyUntouched`, `TestRecoverPendingRotation`
+  (crash before any rename, between the two renames, stale files).
 
 `loadOrGenerateAgentKey` returns the stored key, so a renewed certificate carries the old key. Renewal therefore does not limit
 the damage of a key that leaked earlier. Fix by generating a fresh key on renewal and swapping atomically.

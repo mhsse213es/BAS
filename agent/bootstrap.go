@@ -2,6 +2,7 @@
 package main
 
 import (
+	"crypto/ecdsa"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -126,6 +127,9 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 		return "", fmt.Errorf("derive operational mTLS URL: %w", err)
 	}
 
+	if err := recoverPendingRotation(); err != nil {
+		log.Printf("[!] could not finish a pending certificate rotation: %v", err)
+	}
 	enrolled := isEnrolled()
 	existing, loadErr := loadAgentCertificate()
 	expired := loadErr == nil && !time.Now().Before(existing.NotAfter)
@@ -168,7 +172,14 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 	// bootstrap over the enrollment listener with the shared secret.
 	renewing := enrolled && !reEnrolling
 
-	key, err := loadOrGenerateAgentKey()
+	// An enrolled identity (renewal or re-enrolment) gets a fresh key, kept in memory until the server
+	// has issued the certificate; the first bootstrap keeps using the stored key.
+	var key *ecdsa.PrivateKey
+	if enrolled {
+		key, err = newAgentKey()
+	} else {
+		key, err = loadOrGenerateAgentKey()
+	}
 	if err != nil {
 		return "", fmt.Errorf("load/generate agent key: %w", err)
 	}
@@ -215,7 +226,7 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 	})
 	if err != nil {
 		err = fmt.Errorf("submit CSR (renewing=%v): %w", renewing, err)
-	} else if saveErr := saveAgentCertificate([]byte(resp.CertPEM)); saveErr != nil {
+	} else if saveErr := persistIssuedCertificate(enrolled, key, []byte(resp.CertPEM)); saveErr != nil {
 		err = fmt.Errorf("save issued certificate: %w", saveErr)
 	}
 	if err != nil {
@@ -412,4 +423,13 @@ func verifyServerCertChain(pool *x509.CertPool) func(rawCerts [][]byte, _ [][]*x
 		}
 		return nil
 	}
+}
+
+// persistIssuedCertificate stores the issued certificate: with its new key for an enrolled identity
+// (a rotation), or against the stored key for the first bootstrap.
+func persistIssuedCertificate(rotating bool, key *ecdsa.PrivateKey, certPEM []byte) error {
+	if rotating {
+		return rotateCredentials(key, certPEM)
+	}
+	return saveAgentCertificate(certPEM)
 }
