@@ -1815,6 +1815,7 @@ export function loadScenarios() {
         tags:               s.tags               || [],
         steps:              s.steps              || [],
         mitrePhases:        s.mitrePhases        || [],
+        productLine:        s.productLine        || '',
         source:             s.source             || 'builtin',
         executable:         !!s.executable,
         localCheck:         !!s.localCheck,
