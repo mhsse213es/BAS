@@ -1994,10 +1994,10 @@ var SCENARIO_CATEGORIES = {
 // dashboard elsewhere).
 // Scenario section grouping by licensed product line. The server sends each scenario's productLine
 // (from its signed YAML). Threat-intel scenarios keep their own group, since they are split by source.
-export var PRODUCT_LINE_ORDER = ['av', 'waf', 'network', 'email', 'dlp', 'killchain', 'ransomware', 'webgw', 'cloud', 'apibas', 'ad', 'common'];
+export var PRODUCT_LINE_ORDER = ['av', 'waf', 'network', 'email', 'dlp', 'killchain', 'ransomware', 'webgw', 'cloud', 'apibas', 'ad', 'dbsim', 'common'];
 var PRODUCT_LINE_LABELS = {
-  av: 'Antivirus', waf: 'WAF', network: 'Network', email: 'Email', dlp: 'DLP', apibas: 'API BAS', ad: 'AD BAS',
-  ransomware: 'Ransomware', killchain: 'Kill Chain', webgw: 'Web Gateway', cloud: 'Cloud', common: 'Common'
+  av: 'Antivirus', waf: 'WAF', network: 'Network', email: 'Email', dlp: 'DLP', apibas: 'API BAS', ad: 'AD BAS', dbsim: 'DB Simulation',
+  ransomware: 'Ransomware', killchain: 'Kill Chain', webgw: 'Web Gateway', cloud: 'Cloud', common: 'Simulation Frameworks'
 };
 PRODUCT_LINE_ORDER.forEach(function(p) {
   SCENARIO_CATEGORIES[p] = { label: PRODUCT_LINE_LABELS[p], icon: SCENARIO_CATEGORIES.other.icon };
@@ -2006,7 +2006,7 @@ PRODUCT_LINE_ORDER.forEach(function(p) {
 // scenarioSectionOrder is the order the Scenarios landing shows its sections. Phishing is not a
 // scenario product line (its entries come from the phishing library), so it is placed here by key.
 export function scenarioSectionOrder() {
-  var keys = ['av', 'waf', 'network', 'email', 'dlp', 'phishing', 'killchain', 'ransomware', 'webgw', 'cloud', 'apibas', 'ad', 'common', 'intel'];
+  var keys = ['av', 'waf', 'network', 'email', 'dlp', 'phishing', 'killchain', 'ransomware', 'webgw', 'cloud', 'apibas', 'ad', 'dbsim', 'common', 'intel'];
   return keys.map(function(key) { return { key: key, label: SCENARIO_CATEGORIES[key].label }; });
 }
 

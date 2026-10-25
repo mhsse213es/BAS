@@ -77,7 +77,7 @@ export function licenseProductChips(lines) {
   var names = {
     av: 'Antivirus', waf: 'WAF', network: 'Network', email: 'Email', dlp: 'DLP', phishing: 'Phishing',
     killchain: 'Kill Chain', ransomware: 'Ransomware', webgw: 'Web Gateway', cloud: 'Cloud',
-    apibas: 'API BAS', common: 'Common'
+    apibas: 'API BAS', ad: 'AD BAS', dbsim: 'DB Simulation', common: 'Simulation Frameworks'
   };
   return (lines || []).map(function(p) {
     return '<span class="sbadge g1-display-inline-block g1-s-221fcf42">' + x(names[p] || p) + '</span>';
