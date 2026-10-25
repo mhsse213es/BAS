@@ -181,3 +181,18 @@ for the config. Options:
 - B. Customer-owned code-signing certificate signs the ZIP contents (requires the customer to have one).
 - C. Per-customer MSI built or transformed on the server (heavy; reintroduces per-download signing problems).
 Decision needed from the owner before work item 2 starts.
+
+### Decision: Option A, with mandatory conditions (2026-10-25)
+
+- The fingerprint is mandatory and must not be trusted merely because it arrived inside the ZIP or the config.
+- The dashboard shows the SHA-256 fingerprint over an authenticated channel, and the generated `install.cmd`
+  passes it explicitly. The operator must verify it independently (dashboard or another trusted channel):
+  an attacker who can replace both the ZIP and the script can replace the fingerprint too, so a fingerprint
+  carried only by `install.cmd` proves nothing on its own.
+- The wizard displays the expected fingerprint and requires explicit operator confirmation. Silent installs
+  require `CONFIG_FINGERPRINT`; missing or invalid values fail closed.
+- The config signature and the fingerprint are verified before the server URL, port or CA are trusted.
+- Key rotation and recovery: a changed fingerprint fails verification until an administrator explicitly
+  approves the new key through a trusted channel. The rotation and recovery procedure must be written
+  before work item 2 ships.
+- The agent secret never appears in command-line arguments, logs, process listings or generated scripts.

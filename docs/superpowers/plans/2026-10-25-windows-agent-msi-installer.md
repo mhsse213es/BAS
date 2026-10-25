@@ -94,7 +94,11 @@
 - [ ] **Step 4: Run tests.** Expected: PASS.
 - [ ] **Step 5: Commit** `feat(agent): accept the install secret on stdin`.
 
-## Task 3: Signed `deployment.json` (BLOCKED on the trust-anchor decision)
+> Execution order for Tasks 1-2 (separate commits): (a) `agent/preflight` package, (b) `readSecretFromStdin` and
+> `--secret-stdin` for `--install`, (c) the `--preflight` CLI, which reuses `readSecretFromStdin`. Preflight adds
+> `CodeInvalidCA = 24` for a malformed CA PEM (a configuration failure distinct from invalid input).
+
+## Task 3: Signed `deployment.json` (Option A chosen; NOT STARTED until Tasks 1-2 pass)
 
 Do not start until the owner picks option A, B or C in the spec (section 10, "Open problem"). With option A (recommended) the work is:
 
