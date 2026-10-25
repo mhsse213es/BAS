@@ -116,12 +116,53 @@ To be filled by the owner after the held-out run. Nothing here is a result.
 
 None so far. Any property added after seeing benchmark results must be recorded here as post-hoc.
 
-## Owner steps for Step 6
+## Owner steps for Step 6 (owner-only; the implementers must not do these)
 
-1. Author `orchestrator/internal/aleef/bank/sealed/sealed_defects.go` (`//go:build aleefsealed`) and `labels.json`
-   outside version control (both are git-ignored).
-2. Build and run the held-out evaluation on the vulnerable and the fixed bank with the `aleefsealed` tag
-   (`go run -tags aleefsealed ./cmd/aleef-bench -labels PATH`); keep the labels away from the generator.
-3. Record the results in the Evaluation table above, with the per-flaw property and test ids.
-4. Review each verified finding, record the prior-knowledge check (`checked_none_found`, `known_public`, `known_vendor`).
-5. Decide the merge and the next milestone (UAT needs a design partner, DNS-rebinding hardening and a secret store).
+Prerequisites
+1. Use the branch `aleef-m1` at commit `32956a2a` or later. Do not merge to `main` before the evaluation is recorded here.
+2. Docker Desktop running (the harness starts a throwaway Postgres), or pass `-database-url` to your own Postgres.
+3. Delete any engagement created before the signature and token-reference changes and recreate it (see Known limitations).
+
+Authoring (keep these files outside the implementers' view)
+4. Write `orchestrator/internal/aleef/bank/sealed/sealed_defects.go` with the build tag `//go:build aleefsealed`. It
+   must provide one `bank.Policy` hook per flaw, using the hook names in `docs/aleef-benchmark-spec.md`. Two flaws that
+   replace the same hook make the harness refuse to run.
+5. Write `labels.json` in a folder OUTSIDE the repository (for example `C:\Users\Administrator\aleef-private\labels.json`).
+   Format: `[{"id":"H1","operation":"<operation id or METHOD /path>","note":"..."}]`, one entry per flaw, ids `H1`..`H8`.
+   The loader refuses any path under a folder containing `.git`.
+6. Confirm nothing sensitive is tracked: `git ls-files | findstr /i "sealed_defects labels.json"` must print nothing.
+
+Rehearsal first (no owner files needed)
+7. From `orchestrator/`: `go run ./cmd/aleef-bench -fixed-only -seed 1 -out <folder>\rehearsal.md`.
+   Expect 0 verified. Record the numbers in the rehearsal section above if they differ. Any verified finding here is a
+   false positive on a flaw-free bank: stop and investigate before the real run. Do not tune properties to make it pass.
+
+Real evaluation
+8. From `orchestrator/`:
+   `go run -tags aleefsealed ./cmd/aleef-bench -labels C:\Users\Administrator\aleef-private\labels.json -out C:\Users\Administrator\aleef-private\result.md`
+   Without the `aleefsealed` tag the harness refuses the vulnerable build, by design.
+9. The harness runs both builds. Read the report's headline: `PASS (pending owner assessment of: ...)` means the
+   pass depends on checks the harness cannot make (currently unauthorised money movement); assess them from the bank's
+   own logs before quoting a pass.
+10. Paste the report's figures into the Evaluation table: flaws verified of 8, per-flaw property and test ids, fixed-build
+    verified count (must be 0), controls, reproductions, regression, safety checks, cleanup. Keep `result.md` out of the repo.
+
+After the run (owner)
+11. Review each verified finding and set its prior knowledge with `POST /api/aleef/findings/{id}/prior-knowledge`. Allowed
+    values: `not_checked` (default), `checked_none_found` (a human checked public sources and found nothing), `known_public`,
+    `known_vendor`. Only `checked_none_found` supports the "new to Audspect" wording. Never write "zero-day".
+12. Record any property added or changed after seeing results under "Post-hoc property additions", with the reason.
+13. Record the per-flaw outcome and any missed flaw honestly. A missed flaw is a finding about the generator, not a
+    reason to edit the sealed file or the labels.
+
+Decisions that remain yours
+14. Merge `aleef-m1` to `main`: after the evaluation is recorded here and the open decisions below are made.
+15. Next milestone: UAT needs a design partner or sandbox (none exists today), DNS-rebinding hardening of the Guard, and a
+    real secret store (today: `ALEEF_SECRET_*` environment variables).
+16. Open decisions: whether the two rejected `approve` candidates should drive the approver-role refinement; whether the
+    engagement-creation permission (`aleef:authorize`, admin only) is the right gate for your team.
+
+Follow-ups not blocking the evaluation
+- Console: a retry control for a failed run load (today the user must retype the run id).
+- Findings listing: a batched regression lookup instead of one query per verified finding.
+- Approver-role refinement (P-OWN-2), see Known limitations.
