@@ -30,11 +30,19 @@ func main() {
 	flagEnv := flag.String("env", "Production", "Override BAS_ENV_LABEL")
 	flagSecret := flag.String("secret", "", "Agent shared secret (encrypted at rest via DPAPI on Windows)")
 	flagSecretStdin := flag.Bool("secret-stdin", false, "Read the agent secret from stdin (one line) instead of --secret, so it never appears in process arguments")
+	flagPreflight := flag.Bool("preflight", false, "Check connectivity, CA trust and the agent secret without installing anything; the secret is read from stdin (--secret-stdin). Exit codes: 0 ok, 20 invalid input, 21 unreachable, 22 secret rejected, 23 trust failure, 24 invalid CA")
 	flagCARoot := flag.String("ca-root", "", "Path to the deployment CA root PEM (required for mTLS enrollment; fetch via GET /api/config/connection)")
 	flagEnrollPort := flag.String("enroll-port", "", "Host port of the orchestrator enrollment listener, if the published port was remapped from the 9444 default (persisted as BAS_ENROLL_PORT)")
 
 	registerPlatformFlags()
 	flag.Parse()
+
+	if *flagPreflight {
+		os.Exit(runPreflightCLI(preflightCLIArgs{
+			Server: *flagServer, EnrollPort: *flagEnrollPort, CARootPath: *flagCARoot,
+			SecretArg: *flagSecret, SecretStdin: *flagSecretStdin,
+		}, os.Stdin, os.Stdout))
+	}
 
 	if platformHandleFlags() {
 		return
