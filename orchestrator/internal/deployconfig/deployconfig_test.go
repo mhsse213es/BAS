@@ -1,6 +1,7 @@
 package deployconfig
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -61,7 +62,11 @@ func loadOrCreateTestSigner(t *testing.T, update bool) testSigner {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return testSigner{key: key, cert: cb}
+		// A Windows checkout may convert the certificate's line endings; the envelope
+		// must embed the same bytes regardless.
+		return testSigner{key: key, cert: bytes.ReplaceAll(cb, []byte("
+"), []byte("
+"))}
 	}
 	if !update {
 		t.Skip("golden fixtures missing; run with DEPLOYCONFIG_UPDATE_GOLDEN=1 to create them")
