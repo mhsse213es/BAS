@@ -6,6 +6,12 @@ import (
 	"encoding/pem"
 	"testing"
 
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509/pkix"
 	"github.com/audspect/bas/internal/pki/pkitest"
 )
 
@@ -113,5 +119,54 @@ func TestCACertificate_StillVerifiesAsServerIdentity(t *testing.T) {
 		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}); err != nil {
 		t.Fatalf("CA certificate no longer verifies as server identity: %v", err)
+	}
+}
+
+func csrForKey(t *testing.T, key any) []byte {
+	t.Helper()
+	der, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{Subject: pkix.Name{CommonName: "x"}}, key)
+	if err != nil {
+		t.Fatalf("build CSR: %v", err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: der})
+}
+
+func TestIssueClientCertificate_KeyPolicy(t *testing.T) {
+	ca, err := LoadOrGenerateCA(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	gen := func(c elliptic.Curve) any { k, _ := ecdsa.GenerateKey(c, rand.Reader); return k }
+	rsaKey := func(bits int) any {
+		k, err := rsa.GenerateKey(rand.Reader, bits)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return k
+	}
+	_, ed, _ := ed25519.GenerateKey(rand.Reader)
+
+	cases := []struct {
+		name string
+		key  any
+		ok   bool
+	}{
+		{"ECDSA P-256", gen(elliptic.P256()), true},
+		{"ECDSA P-384", gen(elliptic.P384()), true},
+		{"RSA-2048", rsaKey(2048), true},
+		{"ECDSA P-224", gen(elliptic.P224()), false},
+		{"RSA-1024", rsaKey(1024), false},
+		{"Ed25519", ed, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ca.IssueClientCertificate("0123456789abcdef", csrForKey(t, tc.key))
+			if tc.ok && err != nil {
+				t.Fatalf("a %s key must be accepted: %v", tc.name, err)
+			}
+			if !tc.ok && err == nil {
+				t.Fatalf("a %s key must be rejected", tc.name)
+			}
+		})
 	}
 }

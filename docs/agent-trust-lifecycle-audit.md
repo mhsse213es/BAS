@@ -32,13 +32,14 @@ Progress: 1 and 2 done. 3, 4, 5, 6 not started (incidental observations recorded
 
 ### Findings
 
-#### F-01 CSR key algorithm and size are not validated. Medium. Verified (executed).
+#### F-01 CSR key algorithm and size are not validated. Medium. Verified (executed). **FIXED**
 
 * **Path:** `IssueClientCertificate` signs `csr.PublicKey` whatever it is. There is no check anywhere.
 * **Evidence:** a scratch test issued a certificate for an RSA-1024 key and for an ECDSA P-224 key (both `err = nil`). (RSA-512 could not be tested: Go refuses to generate it.)
 * **Impact:** whoever can enroll (holds the bootstrap secret) can obtain a client certificate with a key that is cheap to break, and then impersonate that agent. The agent's own key is ECDSA P-256 (`agent/certstore.go`), so legitimate agents are unaffected.
 * **Remediation:** accept ECDSA P-256/P-384 and RSA at least 2048 bits; reject everything else with a clear error. Do the check in `IssueClientCertificate` so every caller is covered.
-* **Regression test:** `TestIssueClientCertificate_RejectsWeakKeys` (RSA-1024, P-224 rejected; P-256, P-384, RSA-2048 accepted).
+* **Regression test:** `TestIssueClientCertificate_KeyPolicy` (RSA-1024, P-224, Ed25519 rejected; P-256, P-384, RSA-2048 accepted). Written first and watched fail for exactly the three rejected keys.
+* **Fix:** `checkClientKeyPolicy` in `internal/pki/issue.go`; the enrollment handler returns 400 with the reason.
 
 #### F-02 Agent HTTP endpoints ignore the certificate's identity. High. Verified (code).
 

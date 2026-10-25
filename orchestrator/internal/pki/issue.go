@@ -2,7 +2,10 @@
 package pki
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -46,6 +49,10 @@ func (c *CA) IssueClientCertificate(agentID string, csrPEM []byte) (*IssuedCert,
 		return nil, fmt.Errorf("CSR signature invalid (does not prove possession of the private key): %w", err)
 	}
 
+	if err := checkClientKeyPolicy(csr.PublicKey); err != nil {
+		return nil, err
+	}
+
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
 		return nil, fmt.Errorf("generate serial: %w", err)
@@ -70,4 +77,27 @@ func (c *CA) IssueClientCertificate(agentID string, csrPEM []byte) (*IssuedCert,
 		SerialNumber: serial.Text(16),
 		ExpiresAt:    notAfter,
 	}, nil
+}
+
+// minClientRSABits is the smallest RSA key accepted for an agent certificate.
+const minClientRSABits = 2048
+
+// checkClientKeyPolicy accepts ECDSA P-256 or P-384 and RSA of at least minClientRSABits. The agent
+// generates P-256; anything weaker would let a holder of the enrollment secret obtain a certificate
+// for a key that is cheap to break.
+func checkClientKeyPolicy(pub any) error {
+	switch k := pub.(type) {
+	case *ecdsa.PublicKey:
+		if k.Curve == elliptic.P256() || k.Curve == elliptic.P384() {
+			return nil
+		}
+		return fmt.Errorf("unsupported ECDSA curve %s: use P-256 or P-384", k.Curve.Params().Name)
+	case *rsa.PublicKey:
+		if k.N.BitLen() >= minClientRSABits {
+			return nil
+		}
+		return fmt.Errorf("RSA key too small (%d bits): use at least %d", k.N.BitLen(), minClientRSABits)
+	default:
+		return fmt.Errorf("unsupported key type %T: use ECDSA P-256/P-384 or RSA %d+", pub, minClientRSABits)
+	}
 }
