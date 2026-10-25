@@ -115,6 +115,7 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 	}
 
 	go agent.connectWS()
+	go agent.runCertRenewal(context.Background())
 	go agent.startLocalAPI()
 	go agent.runSpoolDrainer()
 	go agent.runDisconnectWatchdog()

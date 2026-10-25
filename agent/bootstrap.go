@@ -130,13 +130,13 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 	existing, loadErr := loadAgentCertificate()
 	expired := loadErr == nil && !time.Now().Before(existing.NotAfter)
 
-	if enrolled && (loadErr != nil || expired) {
-		reason := "no usable certificate on disk for an enrolled identity"
-		if loadErr == nil && expired {
-			reason = "certificate has expired with no successful renewal"
-		}
-		return "", &errBlocked{errors.New(reason)}
+	if enrolled && loadErr != nil {
+		return "", &errBlocked{errors.New("no usable certificate on disk for an enrolled identity")}
 	}
+	// An expired certificate cannot authenticate a renewal, and a running agent that was offline
+	// past expiry would be stranded for good. It re-enrols once over the TLS enrolment listener
+	// with the shared secret (never over legacy transport). The server records the re-enrolment.
+	reEnrolling := enrolled && expired
 
 	if enrolled && !certExpiringSoon(existing) {
 		if err := checkMTLSUsable(cfg); err != nil {
@@ -166,7 +166,7 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 	// renewal threshold, but missing command-signing trust -- also renews
 	// over mTLS, solely to obtain it; (c) never enrolled -- initial
 	// bootstrap over the enrollment listener with the shared secret.
-	renewing := enrolled
+	renewing := enrolled && !reEnrolling
 
 	key, err := loadOrGenerateAgentKey()
 	if err != nil {
@@ -224,6 +224,10 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 				existing.NotAfter.Format(time.RFC3339), err)
 			return opURL, nil
 		}
+		if enrolled {
+			// Never fall through to legacy transport for an enrolled identity.
+			return "", &errBlocked{fmt.Errorf("re-enrolment after certificate expiry failed: %w", err)}
+		}
 		return "", err
 	}
 	if resp.CommandSigningTrust.CertPEM != "" {
@@ -243,6 +247,10 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 		if err := markEnrolled(); err != nil {
 			return "", fmt.Errorf("certificate issued but could not persist enrollment state: %w", err)
 		}
+	}
+	if reEnrolling {
+		log.Printf("[!] certificate had expired; re-enrolled through the enrolment listener (new certificate expires %s)", resp.ExpiresAt)
+		return opURL, nil
 	}
 	log.Printf("[*] certificate %s (expires %s)", map[bool]string{true: "renewed", false: "issued"}[renewing], resp.ExpiresAt)
 	return opURL, nil

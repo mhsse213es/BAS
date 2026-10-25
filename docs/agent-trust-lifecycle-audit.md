@@ -90,7 +90,7 @@ Renewal never uses the bootstrap secret, and a certificate marked revoked cannot
 * **Regression test:** extract the listener's TLS configuration into one function used by `main` and by tests, then test expired,
   wrong-CA, wrong-usage and revoked certificates against it.
 
-#### F-06 An enrolled agent whose certificate expires is blocked permanently. High (availability). Verified (code).
+#### F-06 An enrolled agent whose certificate expires is blocked permanently. High (availability). Verified (code). **FIXED**
 
 * **Evidence:** `certExpiringSoon` (renew at 75% of lifetime) has a single caller, inside `ensureCertificate`, which runs only
   at process start (`main.go`, `service.go`) and in the legacy retry loop. There is no renewal timer in a running agent. If the
@@ -105,6 +105,15 @@ Renewal never uses the bootstrap secret, and a certificate marked revoked cannot
   blocking forever. Keeping "never use the secret once enrolled" is right while the certificate is still valid.
 * **Regression test:** with the clock past the threshold a running agent renews without restart; with an expired certificate
   the agent recovers via re-bootstrap and logs it.
+
+* **Fix:** `agent/cert_renewal.go` re-checks the certificate every 6 hours in the running agent (console and service). An enrolled agent
+  with an expired certificate now re-enrols once through the TLS enrolment listener with the secret (`reEnrolling` in
+  `ensureCertificate`); if that fails it stays blocked and never uses legacy transport. This reverses the earlier rule that an
+  enrolled agent never uses the secret after expiry, so the two tests that pinned that rule were rewritten on purpose. The server
+  already accepted such a request; recording it as an audit event is part of F-03.
+* **Tests:** `TestEnsureCertificate_EnrolledExpiredCertReEnrolsOverEnrolmentListener`, `..._ReEnrolmentFailureStaysBlocked`,
+  `TestResolveOperationalConfig_EnrolledExpiredCertRecovers`, `TestRunPeriodic_RunsImmediatelyThenOnEachTickUntilCancelled`.
+  Known unrelated failure: `TestExecStepCleanupRunsAfterOperatorCancel` fails with and without this change.
 
 #### F-07 Renewal reuses the same private key. Low. Design limit.
 

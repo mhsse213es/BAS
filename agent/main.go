@@ -194,6 +194,7 @@ func main() {
 	go agent.runSpoolDrainer()
 	go agent.runDisconnectWatchdog()
 	go agent.runPressureLoop()
+	go agent.runCertRenewal(context.Background())
 	agent.sendHeartbeat("idle")
 
 	quit := make(chan os.Signal, 1)
