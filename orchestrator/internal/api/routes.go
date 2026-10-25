@@ -766,6 +766,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanManageAgentGroups)).Patch("/api/agents/{agentId}/group", h.SetAgentGroup)
 		r.With(auth.RequirePermission(auth.CanViewLicense)).Get("/api/license", h.GetLicenseInfo)
 		r.With(auth.RequirePermission(auth.CanViewConnectionConfig)).Get("/api/config/connection", h.GetConnectionConfig)
+		r.With(auth.RequirePermission(auth.CanViewConnectionConfig)).Get("/api/config/deployment-config", h.GetDeploymentConfig)
 		r.With(auth.RequirePermission(auth.CanListUsers)).Get("/api/users", h.ListUsers)
 		r.With(auth.RequirePermission(auth.CanCreateUser)).Post("/api/users", h.CreateUser)
 		r.With(auth.RequirePermission(auth.CanUpdateUser)).Put("/api/users/{id}", h.UpdateUser)

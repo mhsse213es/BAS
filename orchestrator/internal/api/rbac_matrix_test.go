@@ -430,6 +430,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPatch, "/api/agents/{agentId}/group", tierPermission, auth.CanManageAgentGroups},
 	{http.MethodGet, "/api/license", tierPermission, auth.CanViewLicense},
 	{http.MethodGet, "/api/config/connection", tierPermission, auth.CanViewConnectionConfig},
+	{http.MethodGet, "/api/config/deployment-config", tierPermission, auth.CanViewConnectionConfig},
 	{http.MethodGet, "/api/users", tierPermission, auth.CanListUsers},
 	{http.MethodPost, "/api/users", tierPermission, auth.CanCreateUser},
 	{http.MethodPut, "/api/users/{id}", tierPermission, auth.CanUpdateUser},

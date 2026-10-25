@@ -33,6 +33,7 @@ import (
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/cloudgraph"
 	"github.com/audspect/bas/internal/cmdsigning"
+	"github.com/audspect/bas/internal/deployconfig"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/contentregistry"
@@ -3773,6 +3774,11 @@ func (h *Handler) GetConnectionConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.advertisedEnrollPort > 0 {
 		resp["enrollPort"] = strconv.Itoa(h.advertisedEnrollPort)
+	}
+	if h.signingKey != nil {
+		if fp, err := deployconfig.Fingerprint(h.signingKey.CertPEM()); err == nil {
+			resp["deploymentSigningFingerprint"] = fp
+		}
 	}
 	respond(w, resp)
 }
