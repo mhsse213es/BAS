@@ -39,9 +39,14 @@ func main() {
 
 	flagConfig := flag.String("config", "", "Path to the signed deployment.json; replaces --server, --enroll-port and --ca-root. Requires --config-fingerprint")
 	flagConfigFingerprint := flag.String("config-fingerprint", "", "SHA-256 fingerprint of the deployment signing certificate, obtained from the dashboard (not from the downloaded files)")
+	flagVerifyConfig := flag.Bool("verify-config", false, "Verify --config against --config-fingerprint and print the verified target; exit 25 if rejected")
 
 	registerPlatformFlags()
 	flag.Parse()
+
+	if *flagVerifyConfig {
+		os.Exit(runVerifyConfigCLI(deployFlags{ConfigPath: *flagConfig, Fingerprint: *flagConfigFingerprint}, time.Now(), os.Stdout))
+	}
 
 	if *flagPreflight {
 		os.Exit(runPreflightCLI(preflightCLIArgs{

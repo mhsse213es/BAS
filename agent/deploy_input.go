@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"audspect/agent/deployconfig"
+	"audspect/agent/preflight"
 )
 
 // deployFlags are the inputs that describe where the agent should connect.
@@ -76,4 +77,28 @@ func resolveDeployment(f deployFlags, now time.Time) (deployment, error) {
 		d.CARootPEM = []byte(cfg.CARootPEM)
 	}
 	return d, nil
+}
+
+// runVerifyConfigCLI implements `--verify-config`: it verifies the signed
+// deployment config against the fingerprint and prints the verified target on
+// one line (exit 0), or a rejection without any config content (exit 25). The
+// installer's configuration page uses it to show the operator what the
+// verified file points at before any secret is entered.
+func runVerifyConfigCLI(f deployFlags, now time.Time, out io.Writer) int {
+	if f.ConfigPath == "" {
+		fmt.Fprintln(out, "deployment configuration rejected: --verify-config needs --config")
+		return preflight.CodeConfigRejected
+	}
+	f.Server, f.EnrollPort, f.CARootPath = "", "", ""
+	d, err := resolveDeployment(f, now)
+	if err != nil {
+		fmt.Fprintln(out, err.Error())
+		return preflight.CodeConfigRejected
+	}
+	port := d.EnrollPort
+	if port == "" {
+		port = "9444"
+	}
+	fmt.Fprintf(out, "Verified deployment configuration: server %s, enrollment port %s\n", d.Server, port)
+	return 0
 }

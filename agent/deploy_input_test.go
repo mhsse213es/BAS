@@ -98,3 +98,32 @@ func TestPreflightCLIWithConfigRejectsUntrustedKeyDistinctCode(t *testing.T) {
 		t.Fatal("secret leaked")
 	}
 }
+
+func TestVerifyConfigCLIPrintsTheVerifiedTarget(t *testing.T) {
+	path, fp, now := goldenFor(t)
+	var out bytes.Buffer
+	code := runVerifyConfigCLI(deployFlags{ConfigPath: path, Fingerprint: fp}, now, &out)
+	if code != 0 {
+		t.Fatalf("code %d: %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "https://bas.example.com:9443") || !strings.Contains(out.String(), "9444") {
+		t.Fatalf("output %q", out.String())
+	}
+}
+
+func TestVerifyConfigCLIFailsClosedWithDistinctCode(t *testing.T) {
+	path, _, now := goldenFor(t)
+	for name, f := range map[string]deployFlags{
+		"wrong fingerprint": {ConfigPath: path, Fingerprint: strings.Repeat("0", 64)},
+		"no fingerprint":    {ConfigPath: path},
+		"no config":         {Fingerprint: strings.Repeat("0", 64)},
+	} {
+		var out bytes.Buffer
+		if code := runVerifyConfigCLI(f, now, &out); code != preflight.CodeConfigRejected {
+			t.Fatalf("%s: code %d, want %d (%s)", name, code, preflight.CodeConfigRejected, out.String())
+		}
+		if strings.Contains(out.String(), "bas.example.com") {
+			t.Fatalf("%s: a rejected config must not echo its content: %s", name, out.String())
+		}
+	}
+}
