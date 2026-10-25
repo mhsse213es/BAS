@@ -12,7 +12,7 @@ Evidence classes used below:
 * **Missing**: functionality that does not exist.
 * **Unconfirmed**: assumption not yet checked; will be settled in its own pass.
 
-Progress: 1 and 2 done (F-01 fixed). 3, 4 and 5 traced by code reading (below, no new tests yet). 6 not started.
+Progress: all six areas assessed. Fixed: F-01, F-02, F-04, F-05, F-06, F-07; partly: F-03, F-08. Open: F-09, F-10 (design decisions, below).
 
 ## 1. Agent identity binding and 2. certificate issuance
 
@@ -61,12 +61,18 @@ Progress: 1 and 2 done (F-01 fixed). 3, 4 and 5 traced by code reading (below, n
   secret can still claim any ID there. Making the certificate mandatory depends on retiring that listener.
 * Tests: `TestAgentMatchesCertificate`, `TestAgentRoutes_RefuseAnotherAgentsCertificate` (8 routes, written first and failing).
 
-#### F-03 Bootstrap identity is claimed, not attested. Medium. Design limit.
+#### F-03 Bootstrap identity is claimed, not attested. Medium. Design limit. **MITIGATED (audit trail only); stronger options need a decision**
 
 * **Path:** `EnrollCSR` on `:9444` accepts the shared secret and any well-formed AgentID that has no currently valid certificate. AgentID is `hex(SHA-256(hostname))[:16]`, so it is predictable.
 * **Impact:** a holder of the bootstrap secret can enroll under another machine's AgentID once that machine's certificate has expired, or before it first enrolls, and later receive its commands. Recovery of an expired agent uses the same path, so this is intended behaviour, but it means the shared secret is the whole trust anchor for first identity.
 * **Remediation options (decision needed):** per-agent or single-use enrollment tokens; an operator approval step for an AgentID that already exists; or at minimum an audit event and dashboard alert when an existing AgentID re-bootstraps.
 * **Regression test:** depends on the chosen option.
+
+* **Mitigation done:** every bootstrap is now written to the audit log as `agent.enroll`, and a bootstrap for an AgentID that
+  already had certificates as `agent.reenroll` (with the count of earlier certificates and the new serial).
+  Test: `TestEnrollCSR_BootstrapIsAuditedAndReEnrolmentIsFlagged`. This detects abuse; it does not prevent it.
+* **Still open, needs your decision:** per-agent or single-use enrollment tokens, or operator approval before an existing AgentID
+  may re-enrol. Either changes how installs are done (the MSI and install scripts would need a token), so it is not done here.
 
 ### Positive checks still to execute (cheap, planned)
 
@@ -159,6 +165,42 @@ the damage of a key that leaked earlier. Fix by generating a fresh key on renewa
 
 TLS verifies the certificate at handshake only. A connection opened before expiry or revocation stays up. Needed alongside
 F-05: the server should drop connections of revoked or blocked agents when the block is applied.
+
+## 6. Server certificate and CA rotation
+
+How trust works today (verified, code): the agent pins the deployment CA root from a file written at install time (`--ca-root` or
+the fingerprint-verified signed deployment config). The agent never reads the CA from an enrollment or renewal response (the
+server sends `caPem`, the agent does not use it), so a server that presents an unexpected replacement CA is **not** trusted: the
+agent's chain check fails and it stays blocked. That is the behaviour you asked for, and it is already true. The server holds one
+CA only (`ClientCAs` has a single entry) and its TLS identity is the CA certificate itself.
+
+#### F-09 There is no safe CA rotation path. High (operational). Missing.
+
+* **Evidence (code):** one CA keypair in `PKI_DIR`; `NewAgentTLSConfig` trusts exactly that CA; the agent trusts exactly the root
+  file it was installed with and has no way to receive a second root.
+* **Impact:** replacing the CA (expiry after 10 years, suspected CA-key compromise) invalidates every agent certificate and every
+  agent's trust in the server at once; each agent needs a new root file and a fresh enrolment. There is no overlap period.
+* **Recommended design (not built):**
+  1. The server holds a *current* and a *next* CA; the listener accepts client certificates from either.
+  2. The new root reaches agents over the existing authenticated channel as a command signed by the command-signing key the agent
+     already trusts (the agent verifies the signature and the root's fingerprint before appending it to its root file). Agents never
+     take roots from enrollment responses, so the "unexpected CA is rejected" property is kept.
+  3. The dashboard shows how many agents report both roots; when all do, the server switches issuing to the new CA and agents renew
+     into it (a forced renewal, using the F-06 loop).
+  4. After a full renewal cycle the old root is removed from the server and from the agents.
+  5. Rollback: until step 4, the old CA is still trusted both ways.
+* **Regression tests to write with it:** an agent with both roots accepts a server certificate from either; an unsigned or
+  wrongly signed trust update is refused; a root whose fingerprint does not match the update is refused.
+
+#### F-10 The server's TLS certificate is the CA certificate. Medium. Design limit.
+
+* **Evidence (code):** `CA.TLSCertificate()` presents the CA certificate and key as the server identity (and the dashboard's
+  fallback certificate).
+* **Impact:** the CA signing key is used in every TLS handshake, so it must stay online, and the server certificate cannot be
+  rotated or have its names changed without replacing the CA (which is the fleet-wide event in F-09).
+* **Recommended change (not built):** issue a separate server leaf certificate from the CA, with the SANs, a short lifetime and
+  automatic renewal. Agents already verify the server by chain to the pinned CA, so no agent change should be needed, but this
+  needs a live test against real agents before release because the agent's server check is hand-written (`verifyServerCertChain`).
 
 ## Incidental observations (status after the trace above)
 

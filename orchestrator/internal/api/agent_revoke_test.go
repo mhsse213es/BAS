@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -148,6 +149,53 @@ func TestReinstateAgent_AllowsAFreshEnrolment(t *testing.T) {
 		}
 		if revoked, _ := h.AgentCertRevoked(context.Background(), oldSerial, revAgentA); !revoked {
 			t.Error("the old certificate must stay revoked after reinstatement")
+		}
+	})
+}
+
+// auditActionCount polls for audit rows (they are written asynchronously).
+func auditActionCount(t *testing.T, pool *pgxpool.Pool, action, resource string, wantAtLeast int) int {
+	t.Helper()
+	var n int
+	for i := 0; i < 50; i++ {
+		pool.QueryRow(context.Background(),
+			`SELECT count(*) FROM audit_logs WHERE action = $1 AND resource = $2`, action, resource).Scan(&n)
+		if n >= wantAtLeast {
+			return n
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return n
+}
+
+// Bootstrap trusts the shared secret for first identity (audit F-03), so every bootstrap is recorded and a
+// bootstrap for an AgentID that already held certificates is marked as a re-enrolment for the operator.
+func TestEnrollCSR_BootstrapIsAuditedAndReEnrolmentIsFlagged(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h, _ := newTestHandlerWithPKI(t, pool)
+		if _, status := enrollForTest(t, h, revAgentA); status != http.StatusOK {
+			t.Fatalf("first enrolment = %d", status)
+		}
+		if n := auditActionCount(t, pool, "agent.enroll", revAgentA, 1); n != 1 {
+			t.Fatalf("agent.enroll audit rows = %d, want 1", n)
+		}
+		if n := auditActionCount(t, pool, "agent.reenroll", revAgentA, 1); n != 0 {
+			t.Fatalf("a first enrolment must not be flagged as a re-enrolment (got %d)", n)
+		}
+
+		// The certificate expires, then the same AgentID bootstraps again with the secret.
+		if _, err := pool.Exec(context.Background(),
+			`UPDATE agent_certificates SET expires_at = NOW() - interval '1 hour' WHERE agent_id = $1`, revAgentA); err != nil {
+			t.Fatal(err)
+		}
+		if _, status := enrollForTest(t, h, revAgentA); status != http.StatusOK {
+			t.Fatalf("second enrolment = %d", status)
+		}
+		if n := auditActionCount(t, pool, "agent.reenroll", revAgentA, 1); n != 1 {
+			t.Fatalf("agent.reenroll audit rows = %d, want 1", n)
 		}
 	})
 }

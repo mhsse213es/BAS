@@ -120,6 +120,7 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var previousCerts int64
 	if mtlsID != "" {
 		serial := r.TLS.PeerCertificates[0].SerialNumber.Text(16)
 		var revoked bool
@@ -149,6 +150,12 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 		}
 		if alreadyValid {
 			jsonError(w, "agent already holds a valid certificate — renew via mTLS instead of re-bootstrapping", http.StatusConflict)
+			return
+		}
+		// The shared secret is the only proof of identity here (audit F-03): count earlier certificates so
+		// the audit trail can tell a first enrolment from a re-enrolment of a known AgentID.
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM agent_certificates WHERE agent_id = $1`, req.AgentID).Scan(&previousCerts); err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
@@ -181,6 +188,15 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 	if err := tx.Commit(ctx); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	if mtlsID == "" {
+		action := "agent.enroll"
+		if previousCerts > 0 {
+			action = "agent.reenroll"
+		}
+		h.auditLogAs(r, "agent:"+req.AgentID, action, req.AgentID,
+			map[string]any{"previousCertificates": previousCerts, "serial": issued.SerialNumber}, "ok")
 	}
 
 	resp := enrollCSRResponse{
