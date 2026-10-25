@@ -64,9 +64,7 @@ func loadOrCreateTestSigner(t *testing.T, update bool) testSigner {
 		}
 		// A Windows checkout may convert the certificate's line endings; the envelope
 		// must embed the same bytes regardless.
-		return testSigner{key: key, cert: bytes.ReplaceAll(cb, []byte("
-"), []byte("
-"))}
+		return testSigner{key: key, cert: bytes.ReplaceAll(cb, []byte{13, 10}, []byte{10})}
 	}
 	if !update {
 		t.Skip("golden fixtures missing; run with DEPLOYCONFIG_UPDATE_GOLDEN=1 to create them")
