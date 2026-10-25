@@ -35,6 +35,9 @@ const (
 	CodeSecretRejected = 22
 	CodeTrustFailure   = 23
 	CodeInvalidCA      = 24
+	// CodeConfigRejected: the signed deployment config failed verification
+	// (missing/mismatched fingerprint, bad signature, unsupported or invalid content).
+	CodeConfigRejected = 25
 )
 
 const defaultEnrollPort = "9444"

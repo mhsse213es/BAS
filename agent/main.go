@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -11,6 +12,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"audspect/agent/preflight"
 )
 
 const (
@@ -34,6 +37,9 @@ func main() {
 	flagCARoot := flag.String("ca-root", "", "Path to the deployment CA root PEM (required for mTLS enrollment; fetch via GET /api/config/connection)")
 	flagEnrollPort := flag.String("enroll-port", "", "Host port of the orchestrator enrollment listener, if the published port was remapped from the 9444 default (persisted as BAS_ENROLL_PORT)")
 
+	flagConfig := flag.String("config", "", "Path to the signed deployment.json; replaces --server, --enroll-port and --ca-root. Requires --config-fingerprint")
+	flagConfigFingerprint := flag.String("config-fingerprint", "", "SHA-256 fingerprint of the deployment signing certificate, obtained from the dashboard (not from the downloaded files)")
+
 	registerPlatformFlags()
 	flag.Parse()
 
@@ -41,6 +47,7 @@ func main() {
 		os.Exit(runPreflightCLI(preflightCLIArgs{
 			Server: *flagServer, EnrollPort: *flagEnrollPort, CARootPath: *flagCARoot,
 			SecretArg: *flagSecret, SecretStdin: *flagSecretStdin,
+			ConfigPath: *flagConfig, ConfigFingerprint: *flagConfigFingerprint,
 		}, os.Stdin, os.Stdout))
 	}
 
@@ -49,7 +56,19 @@ func main() {
 	}
 
 	if *flagInstall {
-		serverURL := *flagServer
+		dep, depErr := resolveDeployment(deployFlags{
+			ConfigPath: *flagConfig, Fingerprint: *flagConfigFingerprint,
+			Server: *flagServer, EnrollPort: *flagEnrollPort, CARootPath: *flagCARoot,
+		}, time.Now())
+		if depErr != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", depErr)
+			var ce *caFileError
+			if errors.As(depErr, &ce) {
+				os.Exit(1)
+			}
+			os.Exit(preflight.CodeConfigRejected)
+		}
+		serverURL := dep.Server
 		if serverURL == "" {
 			serverURL = os.Getenv("BAS_SERVER_URL")
 		}
@@ -77,12 +96,8 @@ func main() {
 			}
 			secret = s
 		}
-		if *flagCARoot != "" {
-			pemBytes, err := os.ReadFile(*flagCARoot)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error: read --ca-root file: %v\n", err)
-				os.Exit(1)
-			}
+		if len(dep.CARootPEM) > 0 {
+			pemBytes := dep.CARootPEM
 			// A stale identity (issued by another CA) can never enroll; move it aside first.
 			if moved, err := clearStaleIdentity(pemBytes); err != nil {
 				fmt.Fprintf(os.Stderr, "error: reset old agent identity: %v\n", err)
@@ -93,12 +108,12 @@ func main() {
 			// saveDeploymentCARoot validates that pemBytes parses as an
 			// X.509 certificate before writing anything.
 			if err := saveDeploymentCARoot(pemBytes); err != nil {
-				fmt.Fprintf(os.Stderr, "error: --ca-root %s: %v\n", *flagCARoot, err)
+				fmt.Fprintf(os.Stderr, "error: deployment CA root: %v\n", err)
 				os.Exit(1)
 			}
 			fmt.Println("[+] deployment CA root installed")
 		}
-		if err := svcInstall(serverURL, *flagEnv, secret, *flagEnrollPort); err != nil {
+		if err := svcInstall(serverURL, *flagEnv, secret, dep.EnrollPort); err != nil {
 			fmt.Fprintf(os.Stderr, "install failed: %v\n", err)
 			os.Exit(1)
 		}

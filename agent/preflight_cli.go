@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"audspect/agent/preflight"
@@ -12,11 +12,13 @@ import (
 
 // preflightCLIArgs are the command-line inputs of `--preflight`.
 type preflightCLIArgs struct {
-	Server      string // --server
-	EnrollPort  string // --enroll-port
-	CARootPath  string // --ca-root (path to a PEM file; optional)
-	SecretArg   string // --secret: refused, present only so misuse gets a clear error
-	SecretStdin bool   // --secret-stdin: the only accepted way to supply the secret
+	Server            string // --server
+	EnrollPort        string // --enroll-port
+	CARootPath        string // --ca-root (path to a PEM file; optional)
+	SecretArg         string // --secret: refused, present only so misuse gets a clear error
+	SecretStdin       bool   // --secret-stdin: the only accepted way to supply the secret
+	ConfigPath        string // --config: signed deployment.json (replaces --server/--enroll-port/--ca-root)
+	ConfigFingerprint string // --config-fingerprint: independently obtained SHA-256 of the signing certificate
 }
 
 // runPreflightCLI runs the pre-install checks and returns the process exit
@@ -42,14 +44,20 @@ func runPreflightCLI(a preflightCLIArgs, stdin io.Reader, out io.Writer) int {
 		return finish(preflight.Result{Code: preflight.CodeInvalidInput, Message: err.Error()})
 	}
 
-	var caPEM []byte
-	if a.CARootPath != "" {
-		caPEM, err = os.ReadFile(a.CARootPath)
-		if err != nil {
-			return finish(preflight.Result{Code: preflight.CodeInvalidCA,
-				Message: "cannot read the deployment CA file given with --ca-root"})
+	dep, derr := resolveDeployment(deployFlags{
+		ConfigPath: a.ConfigPath, Fingerprint: a.ConfigFingerprint,
+		Server: a.Server, EnrollPort: a.EnrollPort, CARootPath: a.CARootPath,
+	}, time.Now())
+	if derr != nil {
+		code := preflight.CodeConfigRejected
+		var ce *caFileError
+		if errors.As(derr, &ce) {
+			code = preflight.CodeInvalidCA
 		}
+		return finish(preflight.Result{Code: code, Message: derr.Error()})
 	}
+	a.Server, a.EnrollPort = dep.Server, dep.EnrollPort
+	caPEM := dep.CARootPEM
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
