@@ -16,10 +16,12 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"log"
 	"math/big"
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -76,10 +78,22 @@ func LoadOrGenerateCAWithSANs(dir string, sans []string) (*CA, error) {
 	keyPath := filepath.Join(dir, "ca-key.pem")
 	certPath := filepath.Join(dir, "ca-cert.pem")
 
-	if _, err := os.Stat(keyPath); err == nil {
+	_, keyErr := os.Stat(keyPath)
+	_, certErr := os.Stat(certPath)
+	keyThere, certThere := keyErr == nil, certErr == nil
+
+	switch {
+	case keyThere && certThere:
 		return loadCA(keyPath, certPath)
+	case !keyThere && !certThere:
+		return generateCA(keyPath, certPath, sans)
+	default:
+		// Exactly one of the two exists: a damaged or half-restored CA. Generating a replacement
+		// here would overwrite the survivor and silently lock out every enrolled agent.
+		return nil, fmt.Errorf("incomplete CA in %s (key present: %t, certificate present: %t): "+
+			"restore both ca-key.pem and ca-cert.pem from backup; if you really want a new CA, remove both files "+
+			"and set BAS_CONFIRM_NEW_CA=true -- every enrolled agent must then re-enroll", dir, keyThere, certThere)
 	}
-	return generateCA(keyPath, certPath, sans)
 }
 
 func generateCA(keyPath, certPath string, sans []string) (*CA, error) {
@@ -162,7 +176,59 @@ func loadCA(keyPath, certPath string) (*CA, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse CA certificate: %w", err)
 	}
+	if err := validateLoadedCA(cert, key, time.Now()); err != nil {
+		return nil, fmt.Errorf("CA in %s is not usable: %w", filepath.Dir(keyPath), err)
+	}
+	tightenKeyPermissions(keyPath)
 	return &CA{cert: cert, certDER: certBlock.Bytes, key: key}, nil
+}
+
+// caExpiryWarning is how far ahead of expiry a startup warning is logged. An expired CA locks out
+// the whole fleet, so it must be noticed long before it happens.
+const caExpiryWarning = 180 * 24 * time.Hour
+
+// validateLoadedCA rejects a CA that would fail later in confusing ways: a key that does not belong
+// to the certificate, a certificate that is not a CA or cannot sign, and one outside its validity.
+func validateLoadedCA(cert *x509.Certificate, key *ecdsa.PrivateKey, now time.Time) error {
+	pub, ok := cert.PublicKey.(*ecdsa.PublicKey)
+	if !ok || !pub.Equal(&key.PublicKey) {
+		return fmt.Errorf("the private key does not match the CA certificate (wrong or mixed-up backup files?)")
+	}
+	if !cert.IsCA || !cert.BasicConstraintsValid {
+		return fmt.Errorf("the certificate is not a certificate authority")
+	}
+	if cert.KeyUsage&x509.KeyUsageCertSign == 0 {
+		return fmt.Errorf("the certificate is not allowed to sign certificates")
+	}
+	if now.Before(cert.NotBefore) {
+		return fmt.Errorf("the certificate is not yet valid (starts %s): check this machine's clock", cert.NotBefore.UTC().Format(time.RFC3339))
+	}
+	if now.After(cert.NotAfter) {
+		return fmt.Errorf("the certificate expired on %s: agents can no longer enroll or connect; this needs a planned CA replacement", cert.NotAfter.UTC().Format(time.RFC3339))
+	}
+	if remaining := cert.NotAfter.Sub(now); remaining < caExpiryWarning {
+		log.Printf("[!] The deployment CA expires in %d days (%s). Plan its replacement now: expiry locks out every agent.",
+			int(remaining.Hours()/24), cert.NotAfter.UTC().Format("2006-01-02"))
+	}
+	return nil
+}
+
+// tightenKeyPermissions repairs a CA key that group or others can read, for example after a backup
+// restore. Best effort: POSIX file modes are not enforced on Windows, and a failure is only logged
+// because refusing to start would turn a permissions slip into an outage.
+func tightenKeyPermissions(keyPath string) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+	st, err := os.Stat(keyPath)
+	if err != nil || st.Mode().Perm()&0o077 == 0 {
+		return
+	}
+	if err := os.Chmod(keyPath, 0o600); err != nil {
+		log.Printf("[!] The CA private key %s is readable by other users (mode %v) and could not be restricted: %v", keyPath, st.Mode().Perm(), err)
+		return
+	}
+	log.Printf("[!] The CA private key %s was readable by other users (mode %v); restricted to 0600.", keyPath, st.Mode().Perm())
 }
 
 func writeECKeyPEM(path string, key *ecdsa.PrivateKey) error {

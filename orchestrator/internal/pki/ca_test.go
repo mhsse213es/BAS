@@ -2,12 +2,21 @@
 package pki
 
 import (
+	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"math/big"
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadOrGenerateCA_GeneratesOnFirstCall(t *testing.T) {
@@ -137,5 +146,164 @@ func TestLoadOrGenerateCA_CorruptKeyFileFailsLoudly(t *testing.T) {
 	if _, err := LoadOrGenerateCA(dir); err == nil {
 		t.Fatal("expected LoadOrGenerateCA to fail loudly on a corrupt key file, got nil error — " +
 			"silently regenerating here would invalidate the whole fleet's certificates without warning")
+	}
+}
+
+// --- managed-CA hardening: a half-present, mismatched, invalid or loose CA must fail closed ---
+
+func writeFile(t *testing.T, path string, data []byte, mode os.FileMode) {
+	t.Helper()
+	if err := os.WriteFile(path, data, mode); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoadOrGenerateCA_CertWithoutKeyFailsClosedAndLeavesCertAlone(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := LoadOrGenerateCA(dir); err != nil {
+		t.Fatal(err)
+	}
+	certPath := filepath.Join(dir, "ca-cert.pem")
+	before, _ := os.ReadFile(certPath)
+	if err := os.Remove(filepath.Join(dir, "ca-key.pem")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadOrGenerateCA(dir)
+	if err == nil || !strings.Contains(err.Error(), "incomplete") {
+		t.Fatalf("got %v, want an 'incomplete CA' error: silently generating a replacement would lock out every enrolled agent", err)
+	}
+	after, _ := os.ReadFile(certPath)
+	if !bytes.Equal(before, after) {
+		t.Fatal("the existing CA certificate must not be overwritten")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "ca-key.pem")); err == nil {
+		t.Fatal("no replacement key may be created")
+	}
+}
+
+func TestLoadOrGenerateCA_KeyWithoutCertFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := LoadOrGenerateCA(dir); err != nil {
+		t.Fatal(err)
+	}
+	keyPath := filepath.Join(dir, "ca-key.pem")
+	before, _ := os.ReadFile(keyPath)
+	os.Remove(filepath.Join(dir, "ca-cert.pem"))
+	if _, err := LoadOrGenerateCA(dir); err == nil {
+		t.Fatal("a key with no certificate must fail")
+	}
+	after, _ := os.ReadFile(keyPath)
+	if !bytes.Equal(before, after) {
+		t.Fatal("the existing key must not be touched")
+	}
+}
+
+func TestLoadOrGenerateCA_MismatchedKeyAndCertRejected(t *testing.T) {
+	a, b := t.TempDir(), t.TempDir()
+	if _, err := LoadOrGenerateCA(a); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadOrGenerateCA(b); err != nil {
+		t.Fatal(err)
+	}
+	other, _ := os.ReadFile(filepath.Join(b, "ca-cert.pem"))
+	writeFile(t, filepath.Join(a, "ca-cert.pem"), other, 0644) // key from A, certificate from B
+	_, err := LoadOrGenerateCA(a)
+	if err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("got %v, want a key/certificate mismatch error", err)
+	}
+}
+
+// craftCA writes a key and a certificate with the given properties for tests of invalid CAs.
+func craftCA(t *testing.T, dir string, isCA bool, notBefore, notAfter time.Time) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usage := x509.KeyUsageDigitalSignature
+	if isCA {
+		usage |= x509.KeyUsageCertSign
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(42), Subject: pkix.Name{CommonName: "crafted"},
+		NotBefore: notBefore, NotAfter: notAfter, KeyUsage: usage,
+		BasicConstraintsValid: true, IsCA: isCA,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeECKeyPEM(filepath.Join(dir, "ca-key.pem"), key); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeCertPEM(filepath.Join(dir, "ca-cert.pem"), der); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoadOrGenerateCA_NonCACertificateRejected(t *testing.T) {
+	dir := t.TempDir()
+	craftCA(t, dir, false, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+	if _, err := LoadOrGenerateCA(dir); err == nil || !strings.Contains(err.Error(), "not a certificate authority") {
+		t.Fatalf("got %v, want a not-a-CA error", err)
+	}
+}
+
+func TestLoadOrGenerateCA_ExpiredCARejectedWithClearMessage(t *testing.T) {
+	dir := t.TempDir()
+	craftCA(t, dir, true, time.Now().Add(-48*time.Hour), time.Now().Add(-time.Hour))
+	_, err := LoadOrGenerateCA(dir)
+	if err == nil || !strings.Contains(err.Error(), "expired") {
+		t.Fatalf("got %v, want an expired error: an expired CA locks out the whole fleet and must be loud", err)
+	}
+}
+
+func TestLoadOrGenerateCA_NotYetValidCARejected(t *testing.T) {
+	dir := t.TempDir()
+	craftCA(t, dir, true, time.Now().Add(2*time.Hour), time.Now().Add(48*time.Hour))
+	if _, err := LoadOrGenerateCA(dir); err == nil || !strings.Contains(err.Error(), "not yet valid") {
+		t.Fatalf("got %v, want a not-yet-valid error (check the clock)", err)
+	}
+}
+
+func TestLoadOrGenerateCA_LooseKeyPermissionsAreTightened(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file modes are not enforced on Windows")
+	}
+	dir := t.TempDir()
+	if _, err := LoadOrGenerateCA(dir); err != nil {
+		t.Fatal(err)
+	}
+	keyPath := filepath.Join(dir, "ca-key.pem")
+	if err := os.Chmod(keyPath, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadOrGenerateCA(dir); err != nil {
+		t.Fatalf("a readable key is repaired, not fatal: %v", err)
+	}
+	st, _ := os.Stat(keyPath)
+	if st.Mode().Perm() != 0o600 {
+		t.Fatalf("key mode %v, want 0600", st.Mode().Perm())
+	}
+}
+
+func TestLoadOrGenerateCA_RestoredCopyIsTheSameCA(t *testing.T) {
+	src := t.TempDir()
+	orig, err := LoadOrGenerateCA(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := t.TempDir() // a restore: copy the two files into a fresh directory
+	for _, f := range []string{"ca-key.pem", "ca-cert.pem"} {
+		b, _ := os.ReadFile(filepath.Join(src, f))
+		writeFile(t, filepath.Join(dst, f), b, 0600)
+	}
+	restored, err := LoadOrGenerateCA(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(orig.RootCertPEM(), restored.RootCertPEM()) {
+		t.Fatal("a restored CA must be the same CA, or every enrolled agent breaks")
 	}
 }
