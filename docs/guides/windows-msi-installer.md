@@ -116,9 +116,10 @@ process exit code, so the MSI returns 1603 and the reason is logged. Deployment 
   assistant) are recorded before the first change and restored exactly: a value that did not exist is removed,
   an administrator's own value is put back. The output ends with *No agent data remains on this computer* or lists
   what could not be removed. Something an administrator put in those folders is left alone and reported. A file
-  still in use is deleted at the next restart. To check a computer afterwards, run
-  `packaging\windows-msi\tools\Test-AgentTraces.ps1` (read-only; it lists any service, process, folder, registry
-  key, installed-program entry or pending delete that names the agent).
+  still in use is deleted at the next restart. Nothing else has to be run by the person
+  uninstalling: the cleanup is part of the MSI itself, with no script, no prompt and no secret.
+  (QA only: `packaging\windows-msi\tools\Test-AgentTraces.ps1` is a read-only audit used to prove a lab computer is clean after an
+  uninstall. It is not part of the product and is never needed in a deployment.)
   Not removed by design: records on the server (the agent's history and audit entries stay in the dashboard).
 * **Remote *Uninstall Agent*** from the dashboard: the agent removes its service and artifacts as before and,
   when it was installed from the MSI, also starts a delayed `msiexec /x` so the Apps & features entry and the
