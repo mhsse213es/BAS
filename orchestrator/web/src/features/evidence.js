@@ -3,6 +3,7 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { ago, daysAgo, fmtDate, showToast } from '../core/util.js';
+import { setHeroStat } from './shell-ui.js';
 import { _apOnCollected, _apOnJobUpdate, _apOnProgress, _onRevalidationStarted, _onSIEMCorrelationComplete, renderScenarios, requestAgentsLiveRefresh, showSettingsSection, showThreatPriorityDetail } from './attack-path.js';
 import { loadEndpointPostureWidget, loadKEVWidget, loadReadinessTrends } from './campaigns.js';
 import { loadComplianceScores, refreshDashboardCampaigns } from './compliance.js';
@@ -1166,12 +1167,10 @@ export function loadDashboard() {
     var techCount = Object.keys(techSet).length;
     var lastRun = runs[0];
     var lastStr = lastRun ? ago(lastRun.completedAt || lastRun.startedAt) : '';
-    var subEl = document.getElementById('dash-subtitle');
-    if (subEl) {
-      subEl.textContent = 'Continuous validation across ' + ag.length + ' agent' + (ag.length === 1 ? '' : 's') +
-        ' and ' + techCount + ' ATT&CK technique' + (techCount === 1 ? '' : 's') + '.' +
-        (lastStr ? ' Last assessment ' + lastStr + '.' : ' No runs yet.');
-    }
+    setHeroStat('hs-dash-agents', ag.length);
+    setHeroStat('hs-dash-techniques', techCount);
+    setHeroStat('hs-dash-runs', runs.length);
+    setHeroStat('hs-dash-last', lastStr || 'no runs yet');
 
     // KPI — Prevention score: weighted aggregate across the last ~8 scored runs
     // (weighted by technique count, not a flat average of percentages) + trend

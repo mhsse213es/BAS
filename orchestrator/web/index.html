@@ -291,16 +291,7 @@
           <button type="button" class="dash-view-btn" data-view="executive" data-on-click="setDashView" data-args="[&quot;executive&quot;]">Executive</button>
         </div>
         <div id="dash-view-operational">
-        <div class="g1-display-flex g1-s-19d47d5e">
-          <div>
-            <h1 class="g1-s-f7a002ca">Security Posture</h1>
-            <div id="dash-subtitle" class="g1-s-2134bc46">Loading continuous-validation summary…</div>
-          </div>
-          <div class="g1-display-flex g1-s-993532d2">
-            <button class="btn btn-outline btn-sm" data-on-click="showTab" data-args="[&quot;reports&quot;]">Generate report</button>
-            <button class="btn btn-primary btn-sm" data-on-click="openModal">&#9654; New simulation</button>
-          </div>
-        </div>
+        <div id="hero-dashboard"></div>
         <div class="kpi-row">
           <div class="kpi-card stat-tile" data-on-click="showTab" data-args="[&quot;findings&quot;]" title="View findings">
             <div class="stat-top">
@@ -507,20 +498,7 @@
         </div>
         </div>
         <div id="dash-view-executive" class="is-hidden">
-        <div class="g1-display-flex g1-s-21cf47f4">
-          <div>
-            <h1 class="g1-s-f7a002ca">Executive Dashboard</h1>
-            <div class="g1-s-2134bc46">Fleet-wide risk, exposure, and detection-coverage trends over time — daily snapshots, not a single point-in-time report.</div>
-          </div>
-          <div class="g1-display-flex g1-s-9b5be34d">
-            <select id="ed-range" data-on-change="loadExecDashboard" class="g1-s-d41e6472">
-              <option value="30">30 days</option>
-              <option value="90" selected>90 days</option>
-              <option value="365">1 year</option>
-            </select>
-            <button class="btn btn-outline btn-sm" data-on-click="loadExecDashboard">Refresh</button>
-          </div>
-        </div>
+        <div id="hero-executive"></div>
         <div class="kpi-row" id="ed-kpi-row"><div class="empty">Loading…</div></div>
         <div id="ed-forecast"></div>
         <div id="ed-exposure"></div>
