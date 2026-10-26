@@ -34,9 +34,11 @@ import './features/k8s-scenarios.js';
 import './features/variant-executor.js';
 import './features/variant-report.js';
 import './features/variants.js';
+import { mountPageHeroes } from './features/page-heroes.js';
 
 installActions(ACTIONS);
 installCssVars();
+mountPageHeroes();
 __init_L5162();
 __init_L5212();
 __init_L5490();

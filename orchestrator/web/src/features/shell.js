@@ -29,6 +29,7 @@ import { loadK8sRuns } from './k8s-scenarios.js';
 import { loadVariantTab } from './variant-executor.js';
 import { displayOf, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
+import { renderBreadcrumb } from './shell-ui.js';
 export function __init_L5162() {
 (function() {
   var t = localStorage.getItem('audspect_theme') || 'dark';
@@ -448,6 +449,7 @@ export function activateTab(name) {
   });
   var titleEl = document.getElementById('header-page-title');
   if (titleEl) titleEl.textContent = TAB_TITLES[name] || name;
+  renderBreadcrumb(name, TAB_TITLES[name] || name);
 }
 
 // Unified Dashboard shell (Sub-project B) -- one Dashboard tab, two views.

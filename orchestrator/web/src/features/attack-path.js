@@ -10,6 +10,7 @@ import { loadAuditLogs, loadBackups, loadLicenseInfo } from './audit-logs.js';
 import { loadCalderaStatus } from './compliance.js';
 import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
+import { setHeroStat } from './shell-ui.js';
 import { loadRuns, loadSIEMCorrelationPanel, openModal } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
 import { describePhishingRun } from './phishing-run-view.js';
@@ -1383,8 +1384,7 @@ export function loadAgents() {
     state.agentsHasMore = !!(page && page.has_more);
     state.agentsPagesLoaded = 1;
     state.agentTotals = (page && page.totals) || { online: 0, degraded: 0, offline: 0, retired: 0 };
-    document.getElementById('agent-cnt').textContent = state.agentTotals.online + state.agentTotals.degraded + state.agentTotals.offline;
-    renderAgentTiles(); renderAgentToolbar(); renderAgentRows();
+    renderAgentHero(); renderAgentToolbar(); renderAgentRows();
     renderLegacyMigrationPanel();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
@@ -1454,16 +1454,14 @@ export function statTileCard(lbl, val, col) {
   return '<div class="kpi-card stat-tile"><div class="stat-top"><div><div class="kpi-label">' + lbl +
     '</div><div class="kpi-value" style="color:' + col + '">' + val + '</div></div></div></div>';
 }
-function renderAgentTiles() {
+// renderAgentHero fills the chips in the page banner from the server's own bucket totals.
+function renderAgentHero() {
   var b = state.agentTotals;
-  var tile = statTileCard;
-  var el = document.getElementById('agent-tiles');
-  if (el) el.innerHTML =
-    tile('Total agents', b.online + b.degraded + b.offline, 'var(--text)') +
-    tile('Online', b.online, b.online ? 'var(--success)' : 'var(--muted)') +
-    tile('Degraded', b.degraded, b.degraded ? 'var(--warning)' : 'var(--muted)') +
-    tile('Offline', b.offline, b.offline ? 'var(--danger)' : 'var(--muted)') +
-    tile('Retired', b.retired, 'var(--muted)');
+  setHeroStat('hs-agents-total', b.online + b.degraded + b.offline);
+  setHeroStat('hs-agents-online', b.online);
+  setHeroStat('hs-agents-degraded', b.degraded);
+  setHeroStat('hs-agents-offline', b.offline);
+  setHeroStat('hs-agents-retired', b.retired);
 }
 // covSegHtml renders the shared "cov-seg" toggle-button-group shape used by
 // several toolbars below (agent/campaign/coverage/findings/run-IOC
