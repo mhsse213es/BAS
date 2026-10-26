@@ -110,6 +110,30 @@ sudo ./bas-agent \
 
 Config is written to `/etc/bas-agent/config`, same format as Linux. The agent installs as a launchd service.
 
+### Enrollment tokens (servers in token mode)
+
+When the server runs with `BAS_ENROLLMENT_MODE=token`, the shared agent secret no longer enrols anyone; each computer needs its own
+single-use token, valid for that computer only and for a limited time.
+
+1. On **Agents > Deploy Agent**, paste the hostnames (exactly as each computer reports them; case matters) into **Enrollment tokens**,
+   choose a lifetime and click **Generate tokens**. The tokens are shown **once**; copy them or download the CSV.
+2. Give each token to whoever installs that computer. Never put a token in a shared script, image or installer package.
+3. Enter it when the installer asks (the field is hidden): the MSI wizard, the Linux script prompt, or the agent prompt on macOS and
+   Windows. For unattended installs use a channel that is not a command line:
+
+| Platform | Unattended token input |
+|---|---|
+| Windows MSI | `set AUDSPECT_ENROLLMENT_TOKEN=<token>` in the environment of `msiexec`, then `msiexec /i ... /qn` |
+| Linux script | `--token-file <path>` (deleted once read), `--token-stdin`, or `BAS_ENROLLMENT_TOKEN` in the environment; the agent secret via `BAS_AGENT_SECRET` |
+| Agent CLI | `--enrollment-token-file <path>`, `--enrollment-token-stdin` (not together with `--secret-stdin`), or `BAS_ENROLLMENT_TOKEN` |
+
+If the install fails, the message tells you which problem it is: **exit 26** means the server answered and refused the token
+(invalid, expired, already used, or issued for a different host: ask for a new one); **exit 27** means the server could not be reached
+(network, firewall or port: the token is not at fault).
+
+**Expired certificates.** An agent whose certificate expired up to 24 hours ago recovers by itself, with no token, by proving
+possession of the expired certificate. Past 24 hours, or if the agent was revoked, it needs a fresh token.
+
 ### Verify enrollment
 
 The agent appears in the dashboard under **Agents** with state **active**. The agent table shows:

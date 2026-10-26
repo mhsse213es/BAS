@@ -160,6 +160,25 @@ restarted after its certificate nears expiry) its certificate is issued by FP2. 
 agents still connect. Also test `ca-rotation rollback --yes` on a second run before retiring. `ca-rotation start` with the CA files
 removed must refuse. An agent that was offline during `distribute` must receive the root when `distribute` is run again.
 
+## 5b. Token enrolment and 24-hour recovery (disposable installation; added for audit F-03, NOT yet validated)
+
+Set `BAS_ENROLLMENT_MODE=token` for the orchestrator and restart it. Use one Ubuntu agent host and one Windows host.
+
+| Step | Do | Pass when |
+|---|---|---|
+| 1 | Deploy Agent page: generate a token for each host's exact hostname | tokens shown once; the CSV downloads |
+| 2 | Ubuntu: `sudo ./bas-agent-setup-linux.run`, paste the token at the hidden prompt | agent enrols and connects; `ps aux \| grep bas` shows neither the secret nor the token; `ls /tmp` leaves no token file |
+| 3 | Windows: run the MSI wizard, paste the token in the masked field | agent enrols; the MSI log (`/l*v`) contains no token |
+| 4 | Windows silent: `set AUDSPECT_ENROLLMENT_TOKEN=<token>` then `msiexec /i ... /qn` | enrols; token not in the process list or log |
+| 5 | Reuse the same token on a clean host | refused with exit 26 and the "refused the enrolment token" message |
+| 6 | Use host A's token on host B | refused with exit 26 |
+| 7 | Generate a token, block the enrolment port with the firewall, install | exit 27, "could not reach the server" (not a token message) |
+| 8 | Expired token (set lifetime 4 h, wait or edit `expires_at`) | refused with exit 26 |
+| 9 | Stop the agent service, set the system date forward past certificate expiry + 2 h (or shorten the lifetime in a test CA), start it | agent recovers by itself, no token; dashboard shows `agent.recover` in the audit log; the old certificate is not accepted a second time |
+| 10 | Repeat 9 with expiry + 25 h | agent stays blocked; a fresh token restores it; audit shows `agent.recover_denied` |
+| 11 | Revoke the agent in the dashboard, then repeat 9 | recovery refused immediately, even inside 24 h |
+| 12 | While an agent holds an expired certificate, confirm it cannot reach the agent listener (:9443) | TLS handshake fails (expired certificates are still refused there) |
+
 ## 5. Cleanup
 
 ```bash

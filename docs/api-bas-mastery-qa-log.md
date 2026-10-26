@@ -3034,3 +3034,43 @@ Fixture: `fixture.NBFCTwoBorrower()` (`nbfc-two-borrower`). Two borrowers, one l
 - Field validation against a live NBFC deployment has not been done.
 - NBFC-007 detection is not implemented (see above).
 - The Executive Regulation for PDPL is not in the source set (carried over).
+
+## Platform decisions for production (21 October 2026)
+
+Decided by the product owner. Implementation follows these.
+
+### Results and retention
+- Store: the orchestrator's existing PostgreSQL, through a new migration.
+- Persist run metadata, scenario verdicts, exploitability results, detection outcomes, evidence references, hashes, timestamps, and target and build fingerprints.
+- Do not store raw HTTP request or response bodies by default. Redact secrets and protected values. Keep hashes and the minimum evidence needed to verify an outcome.
+- Retention: 90 days by default, configurable per installation.
+
+### Access
+- A dedicated API BAS read permission governs results and reports. Run-management permission does not grant result access.
+- Admin access to results is explicit and audited.
+
+### Execution
+- Use the existing `internal/jobs` machinery, plus a manual "Run now" action.
+- Every run references a named target, scenario set and environment. A general run request may not supply an arbitrary target URL.
+- Live targets require explicit operator approval for each live run. A target-level approval flag alone is not sufficient.
+- Enforce concurrency limits, timeouts, cancellation and bounded retries. Never automatically retry a potentially state-changing live scenario.
+- No production schedules are enabled by default.
+
+### Secrets
+- Preferred: the platform's existing secret mechanism, if it meets three conditions: encrypted storage, access controls, and auditability.
+- Fallback: Vault or another approved external secret manager.
+- Credentials are referenced per target. A run gets access only when it needs it. Secrets are never copied into job records, result records or logs.
+- Environment variables are for the local lab and development only. Production environment injection is a temporary exception.
+- Rotation is an open decision. Nothing in this log implies rotation is implemented.
+
+**Verification of the existing mechanism (done 21 October 2026): it does not meet the condition.**
+- Connector and SIEM credentials are stored in plain `text` columns (`client_secret`, `token`, `password`, `api_token`, `sso_configs.client_secret`, `notification_webhooks.secret`; `internal/db/postgres.go`).
+- The `pgcrypto` extension is created at startup, but no code calls `pgp_sym_encrypt` or `pgp_sym_decrypt`, and no application key exists.
+- The schema comment says protection relies on disk-level TDE or LUKS. That is not column-level encryption.
+- Audit: connector create, update and delete are audited (`internal/api/action_handlers.go`). API responses mask `client_secret`.
+- Consequence: the API BAS secret store uses the Vault fallback. This also raises a separate finding: existing platform credentials are plaintext at the column level. That is not a regression from this decision, and fixing it is outside API BAS. It needs its own decision.
+
+### Timing qualification
+- The 250 ms ceiling stays provisional and unvalidated until a named product or security owner approves the requirement and its rationale. **Owner: not yet named.**
+- Qualifying staging host: `audspecterver` (the existing staging host, `zain@audspecterver`, per the deployment record). Before use, confirm it is not carrying other load during qualification. Record its hardware, OS and build, Go version, CPU and memory, workload, and background load.
+- Until qualified: no timing-based PASS or FAIL verdict and no new timing scenarios. Timing is reported as diagnostic only, or INCONCLUSIVE when qualification is missing.

@@ -86,11 +86,18 @@ Progress: all six areas assessed. Fixed: F-01, F-02, F-04, F-05, F-06, F-07; par
   The token goes only to the enrolment listener, never on a renewal. Tests: `install_enroll_test.go`, `protocol/csr_token_test.go`.
   Linux: `sudo BAS_ENROLLMENT_TOKEN=... bas_agent --install --server ... --secret-stdin`. Windows: set the variable in the
   elevated session before `bas_agent.exe --install`.
-* **Not built yet:** the MSI and its custom action asking for the token (a hidden property, passed to the agent through the
-  environment), the Linux/macOS install scripts, the Deploy Agent page and deployment bundle; and the F-06 recovery path, which
-  re-enrols an expired agent with the shared secret only and therefore fails in token mode. Proposed replacement:
-  re-enrolment proven by the agent's previous (expired) certificate within a grace period, otherwise an operator-issued token.
-  Operator approval as a higher-security mode is not built.
+* **Installers: BUILT.** Every entry point takes the token without a command-line argument: the Linux script (hidden prompt,
+  `--token-file`, `--token-stdin` or `BAS_ENROLLMENT_TOKEN`; the secret goes to the agent on stdin, which also removes the old
+  `-secret` argument from the process list), the agent CLI on Windows/Linux/macOS (`--enrollment-token-file`,
+  `--enrollment-token-stdin`, `BAS_ENROLLMENT_TOKEN`, or a hidden prompt), and the MSI (a masked, hidden wizard field and
+  `AUDSPECT_ENROLLMENT_TOKEN` for silent installs, passed to the agent only through the SYSTEM child's environment). No generic
+  package embeds a token. The Deploy Agent page has a token generator (hostnames, lifetime, shown once, CSV). Exit code 26 means the
+  server answered and refused the token; 27 means the server could not be reached; the Linux script, the MSI and the agent each say
+  which. Verified: unit tests on all three; the Linux script run in a container against a fake agent (argv, stdin, token file mode,
+  exit-code messages); the MSI built and structure-checked (not installed). The legacy `installer.exe` (being retired) still passes
+  `--secret` on its command line and has no token field; it was not changed.
+* **Operator approval mode: deferred by decision.** Per-agent tokens suit the current installation model; revisit when a customer
+  requires manual enrolment authorization.
 
 ### Positive checks still to execute (cheap, planned)
 
@@ -151,6 +158,23 @@ Renewal never uses the bootstrap secret, and a certificate marked revoked cannot
   `TestResolveOperationalConfig_EnrolledExpiredCertRecovers`, `TestRunPeriodic_RunsImmediatelyThenOnEachTickUntilCancelled`.
   Known unrelated failure: `TestExecStepCleanupRunsAfterOperatorCancel` fails with and without this change.
 
+* **Token-mode recovery (decided 2026-10-26): 24 hours, restricted.** The shared secret cannot re-enrol an agent in token mode, so
+  `POST /api/agents/recover-csr` (enrolment listener only) replaces an expired certificate when the agent proves itself with that
+  certificate and a signature, by its key, over a fresh timestamp and the new CSR. Rules, all enforced by the server on its own
+  clock: valid certificate -> refused (409, renew over mTLS); expired up to 24 hours -> one new certificate for the SAME AgentID;
+  expired more than 24 hours -> refused (fresh authorized enrolment required); revoked certificate, revoked/disabled/uninstalling
+  agent, certificate not issued by this server, not the agent's newest certificate, or already used (`superseded_at`) -> refused
+  immediately. Every refusal and success is audited (`agent.recover_denied`, `agent.recover`), failures are throttled per address.
+  **Verification of the critical condition:** the agent protocol already separates renewal from ordinary operation (renewal is a
+  call to enroll-csr over mTLS, and an expired certificate fails the TLS handshake on the agent listener). Recovery therefore adds a
+  separate endpoint on the listener that never accepted client certificates; certificate validation was not loosened anywhere, and
+  an expired certificate still cannot do anything else (`TestNewAgentTLSConfig_Handshakes`). The agent tries recovery first and, if
+  the server refuses, falls back to a fresh authorized enrolment with the credential it was given (secret or token). Tests:
+  `enroll_recover_test.go` (grace boundary 23h59m/24h01m, still valid, revoked agent/certificate, uninstalling, AgentID mismatch,
+  wrong key, proof for a different CSR, stale or future timestamp, certificate from another CA, replay, throttling, server clock),
+  `agent/recovery_test.go`, and a golden proof vector pinned on both sides. Not yet run on Ubuntu/Windows hosts. Limit: the proof
+  timestamp uses the agent's clock (+/-5 minutes of the server), so a badly skewed agent clock fails recovery and needs a fresh
+  authorized enrolment.
 #### Fix for F-04, F-05 and F-08 (revocation)
 
 * `POST /api/agents/{agentId}/revoke` (admin, reason required, audited): marks all of that agent's certificates revoked, sets

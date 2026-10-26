@@ -61,6 +61,8 @@ msiexec /i AudspectAgent-x64.msi /qn /l*v install.log CONFIG_FINGERPRINT=<64 hex
 | `CONFIG_FINGERPRINT` | **Required** on a first install. Missing or malformed fails the install. |
 | `AUDSPECT_AGENT_SECRET` (environment) | The agent secret. Preferred for silent installs. |
 | `AGENT_SECRET` | The same as a property. It works, but a command line is visible to every user on the machine, so avoid it. |
+| `AUDSPECT_ENROLLMENT_TOKEN` (environment) | A single-use, per-host enrollment token, only for servers in token mode (see Deploy Agent, "Enrollment tokens"). Supply it per computer; it is never part of the package. Not as a command-line property. |
+| `ENROLLMENT_TOKEN` | The same as a hidden property (the wizard fills it); avoid it on a command line. |
 | `DEPLOYMENT_CONFIG` | Path to `deployment.json`. Default: the folder the MSI is in. Use a local path, not a network share. |
 | `ENV_LABEL` | Environment label. Default `Production`. |
 | `SKIPPREFLIGHT=1` | Skip the pre-install connection check. Only the exact value `1` counts. |
