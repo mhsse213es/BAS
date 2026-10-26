@@ -239,7 +239,6 @@
 .g1-s-5f4eefe2 { padding:0.55rem 0.9rem;font-weight:600;color:var(--text) }
 .g1-s-60115d3d { max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.5rem }
 .g1-s-6020933c { cursor:pointer;color:var(--accent);font-size:0.75rem;list-style:none }
-.g1-s-60660758 { padding:0.45rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit;min-width:200px }
 .g1-s-610bc650 { width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.6rem;font-family:var(--font-mono);font-size:0.78rem }
 .g1-s-6116f709 { align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem }
 .g1-s-614e7f0e { background:#f3f6fa;border-color:#e2e8f0 }
@@ -514,7 +513,6 @@
 .g1-s-e2a61913 { gap:0.9rem;flex-wrap:wrap;margin-bottom:0.4rem }
 .g1-s-e335ce0e { padding:8px;flex-direction:column;gap:4px }
 .g1-s-e34130f8 { font-size:1.4rem;margin-bottom:0.75rem }
-.g1-s-e36961d8 { padding:0.45rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit }
 .g1-s-e3eaa215 { margin-top:0.4rem;font-size:0.78rem;color:var(--muted) }
 .g1-s-e4789e4b { font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-weight:700;margin-bottom:0.6rem }
 .g1-s-e493f968 { border-radius:3px;font-size:0.62rem;padding:0.05rem 0.28rem;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0 }
@@ -564,7 +562,6 @@
 .g1-s-f79155c8 { padding:1rem 1.2rem }
 .g1-s-f83fcad9 { color:var(--success) }
 .g1-s-f86334a3 { background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;flex-shrink:0;padding:0;line-height:1 }
-.g1-s-f87248f3 { gap:0.4rem;align-items:center;flex-wrap:wrap }
 .g1-s-f89e8d63 { flex:1;background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.55rem 0.7rem }
 .g1-s-f916096d { font-size:0.72rem;color:var(--muted);margin-bottom:0.3rem }
 .g1-s-f950f05c { color:var(--muted);font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-right:2px }

@@ -39,43 +39,26 @@ export function renderTemplateGrid() {
   var filtered = _templates.filter(function(t) {
     return cat === 'all' || t.category === cat;
   });
-  var catCls = { apt: 'tmpl-cat-apt', ransomware: 'tmpl-cat-ransomware', technique: 'tmpl-cat-technique', insider: 'tmpl-cat-insider' };
-  var riskLabel = { critical: '● Critical', high: '● High', medium: '● Medium' };
-  var riskColor = { critical: 'var(--danger)', high: 'var(--warning)', medium: 'var(--accent)' };
+  var riskLabel = { critical: 'Critical', high: 'High', medium: 'Medium' };
+  var riskTone = { critical: 'none', high: 'pending', medium: 'ok' };
 
   var html = filtered.map(function(t) {
-    var stripeClass = 'tmpl-stripe-' + (t.risk || 'high');
-    var actorCls = catCls[t.category] || 'tmpl-cat-technique';
-    var tactics = (t.tactics || []).slice(0, 4).map(function(tac) {
-      return '<span style="font-size:0.65rem;padding:1px 6px;border-radius:7px;background:var(--elevated);border:1px solid var(--border);color:var(--muted)">' + x(tac) + '</span>';
+    var tactics = (t.tactics || []).slice(0, 2).map(function(tac) {
+      return '<span class="sc-tag purple">' + x(tac) + '</span>';
     }).join('');
-    var keyTechs = (t.keyTechniques || []).slice(0, 4).map(function(tid) {
-      return '<span style="font-size:0.65rem;font-family:var(--font-mono);color:var(--accent)">' + x(tid) + '</span>';
-    }).join(' ');
+    var keyTechs = (t.keyTechniques || []).slice(0, 4).map(function(tid) { return x(tid); }).join(', ');
     // Source availability badges.
     var srcBAS    = t.basScenarioId    ? '<span class="utl-badge utl-bas">BAS</span>' : '';
     var srcART    = (t.artTechniques && t.artTechniques.length) ? '<span class="utl-badge utl-art">ART&nbsp;' + t.artTechniques.length + '</span>' : '';
     var srcCaldera = t.calderaAdversaryName ? '<span class="utl-badge utl-emu">Emu</span>' : '';
 
-    return '<div class="tmpl-card ' + stripeClass + '">' +
-      '<div style="padding:0.9rem 1rem 0.75rem">' +
-        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem;margin-bottom:0.6rem">' +
-          '<div>' +
-            '<span class="tmpl-actor ' + actorCls + '">' + x(t.shortName || t.category) + '</span>' +
-          '</div>' +
-          '<span style="font-size:0.7rem;font-weight:700;color:' + (riskColor[t.risk] || 'var(--muted)') + '">' + (riskLabel[t.risk] || '') + '</span>' +
-        '</div>' +
-        '<div style="font-size:0.9rem;font-weight:700;color:var(--text);margin-bottom:0.3rem">' + x(t.name) + '</div>' +
-        '<div style="font-size:0.75rem;color:var(--muted);line-height:1.45;margin-bottom:0.65rem;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">' + x(t.description) + '</div>' +
-        '<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.55rem">' + tactics + '</div>' +
-        '<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.5rem">' + keyTechs + '</div>' +
-        '<div style="display:flex;gap:0.3rem;flex-wrap:wrap;align-items:center;justify-content:space-between">' +
-          '<div style="display:flex;gap:0.3rem">' + srcBAS + srcART + srcCaldera + '</div>' +
-          '<span style="font-size:0.7rem;color:var(--muted)">' + x(t.estDuration || '') + '</span>' +
-        '</div>' +
-      '</div>' +
-      '<div style="border-top:1px solid var(--border);padding:0.55rem 1rem;display:flex;gap:0.4rem;justify-content:flex-end">' +
-        '<button class="btn btn-primary btn-sm"' + on('click', 'openTmplRun', t.id) + '>&#9654; Launch</button>' +
+    return '<div class="sc-card src-intel">' +
+      '<div class="sc-tags"><span class="sc-tag blue">' + x(t.shortName || t.category) + '</span>' + tactics + '</div>' +
+      '<h3>' + x(t.name) + '</h3><p>' + x(t.description) + '</p>' +
+      '<div class="sc-foot"><span class="mono">' + (keyTechs || '—') + '</span>' + (t.estDuration ? '<span>' + x(t.estDuration) + '</span>' : '') + '</div>' +
+      '<div class="sc-actions">' + srcBAS + srcART + srcCaldera +
+        (riskLabel[t.risk] ? '<span class="sc-avail ' + riskTone[t.risk] + '">&#9679; ' + riskLabel[t.risk] + '</span>' : '') +
+        '<button type="button" class="btn btn-primary btn-sm"' + on('click', 'openTmplRun', t.id) + '>&#9654; Launch</button>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -83,8 +66,8 @@ export function renderTemplateGrid() {
   var grid = document.getElementById('sc-tile-grid');
   if (grid) {
     grid.innerHTML = html
-      ? '<div class="sc-fade" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:0.85rem">' + html + '</div>'
-      : '<div class="empty" style="padding:1.5rem">No templates in this category.</div>';
+      ? '<div class="sc-fade sc-grid">' + html + '</div>'
+      : '<div class="empty">No templates in this category.</div>';
   }
   var titleEl = document.getElementById('sc-backbar-title');
   if (titleEl) titleEl.textContent = 'Adversary Templates (' + filtered.length + ')';

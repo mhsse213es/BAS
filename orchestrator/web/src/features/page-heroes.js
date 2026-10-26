@@ -69,6 +69,20 @@ var HEROES = {
       { id: 'hs-exec-fleet', icon: ICON.agents, value: '—', label: 'Fleet assets' },
     ],
   },
+  'hero-scenarios': {
+    icon: ICON.technique,
+    title: 'Scenarios',
+    sub: 'Explore and launch security scenarios to validate your security controls.',
+    actions:
+      '<button type="button" id="sc-upload-btn" class="btn btn-outline" data-on-click="pickScenarioUploadFile">' + svg('<path d="M12 16V5M7 9l5-5 5 5M5 20h14"/>') + 'Upload YAML</button>' +
+      '<button type="button" id="sc-new-btn" class="btn btn-primary" data-on-click="openBuilder" data-args="[null]">' + svg('<path d="M12 5v14M5 12h14"/>') + 'New Scenario</button>',
+    stats: [
+      { id: 'sc-hs-total', icon: ICON.technique, value: '—', label: 'Total Scenarios' },
+      { id: 'sc-hs-tech', icon: ICON.mapped, value: '—', label: 'ATT&CK Techniques' },
+      { id: 'sc-hs-fam', icon: ICON.layers, value: '—', label: 'Product Families' },
+      { id: 'sc-hs-upd', icon: ICON.ok, value: '—', label: 'Updated' },
+    ],
+  },
   'hero-agents': {
     icon: ICON.agents,
     title: 'Agents',

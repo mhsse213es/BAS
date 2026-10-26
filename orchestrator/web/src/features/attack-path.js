@@ -13,17 +13,18 @@ import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
 import { setHeroStat } from './shell-ui.js';
 import { seg } from '../core/kit.js';
 import { covFilterOpts, covFilterRows, covRowsHtml, covSummary, expFilterAssets, expFilterOpts, expRowsHtml, expScoreTiles, expSection, expSummary, recRowsHtml, recSummary, sevChip, tpDetailSummaryHtml, tpFactorsHtml, tpFilterActors, tpFilterOpts, tpHistoryHtml, tpRowsHtml, tpSummary } from './rich-g4.js';
-import { loadRuns, loadSIEMCorrelationPanel, openModal } from './reports.js';
+import { loadRuns, loadSIEMCorrelationPanel, openModal, viewRunResults } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
 import { describePhishingRun } from './phishing-run-view.js';
 import { LIBRARY_TYPE_PHISHING, buildDispatchFields, buildPhishingRunRequest, libraryEntryRoute, phishingLibraryCounts, showNoScenariosMessage } from './scenario-library-route.js';
-import { ROLE, STRIPE_COLORS, scenarioSrcCollapsed, setAgentsView, showTab } from './shell.js';
+import { ROLE, setAgentsView, showTab } from './shell.js';
+import { sourceOf as scnSourceOf, heroStats as scnHeroStats, filterList as scnFilterList, sortList as scnSortList, categoryRows as scnCategoryRows, showing as scnShowing } from './scn-model.js';
+import { catsHtml as scnCatsHtml, toolbarHtml as scnToolbarHtml, gridHtml as scnGridHtml, emptyHtml as scnEmptyHtml, scnUi, setScenarioViewMode, setScenarioSortMode, setScenarioCatOffMode, hideFilterSelects, openDrawer as openScnDrawer, closeDrawer as closeScnDrawer, drawerTab, drawerScenarioId, paintDrawer, bindApproveButton, runById as scnRunById } from './scn-rich.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
 import { agentInsightsHtml, migrationPanelHtml } from './agents-insights.js';
-import { kpi, grid as kitGrid, card, chip, hbars, bar as kitBar, empty as kitEmpty } from '../core/kit.js';
+import { kpi, card, chip, empty as kitEmpty } from '../core/kit.js';
 import { renderExecAll, renderRangeSeg } from './dash-exec.js';
-import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
 
 // ── Attack Path Validation ─────────────────────────────────────────────────
@@ -1591,12 +1592,6 @@ export function copyText(elId, btn) {
   }
 }
 
-function stripeColor(id) {
-  var h = 0;
-  for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
-  return STRIPE_COLORS[h % STRIPE_COLORS.length];
-}
-
 // loadCatalogs fetches the live ART + Caldera catalogs so sweep cards show a
 // real technique/ability count and the picker has data. Best-effort: a failure
 // (e.g. Caldera offline) just leaves that count blank — it never blocks the UI.
@@ -1644,6 +1639,7 @@ export function loadScenarios() {
         registry:           s.registry            || null
       };
     });
+    _scnLoadedAt = new Date();
     renderScenarios();
     loadRegistryMigrationBanner();
     // renderScheduledAssessmentsList() looks up each schedule's human name
@@ -1655,22 +1651,6 @@ export function loadScenarios() {
     // re-renders it. Re-render now that scenarios is actually populated.
     if (SCHED.schedules.length) renderScheduledAssessmentsList();
   }).catch(function(e) { showToast(e.message, 'err'); });
-}
-
-// TCF Phase 1: registry lifecycle/trust badge. Only server-provided enum
-// strings and numbers, all escaped via x().
-function registryBadge(s) {
-  var r = s.registry;
-  if (!r) return '<span class="tag" title="Not registered — cannot run">unregistered</span> ';
-  if (r.executableVersion) {
-    var label = r.executableTrust === 'VENDOR_SIGNED' ? 'signed v' : (r.executableTrust === 'LOCAL_TRUSTED' ? 'approved v' : 'dev-unsigned v');
-    var pending = r.latestVersion > r.executableVersion
-      ? ' <span class="tag" title="Newer version awaiting approval">v' + x(String(r.latestVersion)) + ' ' + x(r.latestLifecycle) + '</span>'
-      : '';
-    return '<span class="tag tag-approved">' + label + x(String(r.executableVersion)) + '</span>' + pending + ' ';
-  }
-  return '<span class="tag tag-pending" title="Not executable until approved">v' +
-    x(String(r.latestVersion)) + ' ' + x(r.latestLifecycle) + '</span> ';
 }
 
 // Approvable: the latest version is a DRAFT/VALIDATED intel or custom one and
@@ -1832,557 +1812,157 @@ export function scenarioCategoryOf(s) {
   return 'other';
 }
 
-function scenarioCategoryCounts(list, key) {
-  var inCat = list.filter(function(s) { return scenarioProductOf(s) === key; });
-  var counts = { total: inCat.length, builtin: 0, custom: 0, intel: 0 };
-  inCat.forEach(function(s) { counts[scenarioSourceOf(s)]++; });
-  return counts;
-}
+// ── Scenarios page: sidebar + toolbar + grid/list + drawer (see scn-rich.js / scn-model.js) ──
+function scenarioSourceOf(s) { return scnSourceOf(s); }
 
-var TMPL_ICON = '<svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-width="2" stroke-linejoin="round"/></svg>';
-
-// The landing's last inputs, so a library that loads after the landing can
-// re-draw the Phishing card without re-running the agent filters.
-var _lastLanding = null;
-
-function phishingLandingCardHTML() {
-  var c = phishingLibraryCounts(_libraryEntries);
-  if (c.total === 0) return '';
-  var breakdown = [c.runnable ? c.runnable + ' runnable here' : '',
-    c.unavailable ? c.unavailable + ' need a connector' : '',
-    c.catalogOnly ? c.catalogOnly + ' catalogued only' : '']
-    .filter(Boolean).join(' · ');
-  return '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
-    on('click', 'openScenarioCategory', 'phishing') + on('keydown', 'scenarioCategoryKeydown', 'phishing') + '>' +
-    '<h3>' + SCENARIO_CATEGORIES.phishing.icon + x(SCENARIO_CATEGORIES.phishing.label) + '</h3>' +
-    '<div class="sc-cat-count">' + c.total + ' scenario' + (c.total === 1 ? '' : 's') + '</div>' +
-    '<div class="sc-cat-breakdown">' + x(breakdown) + '</div>' +
-  '</div>';
-}
-
-// Summary strip above the category cards. Every figure is counted from the scenarios the library
-// already loaded (after the search/source/OS filters), so it always matches the cards below.
-function scenarioLandingStatsHTML(list) {
-  var counts = { builtin: 0, custom: 0, intel: 0 }, os = {};
-  list.forEach(function(s) {
-    counts[scenarioSourceOf(s)]++;
-    (s.supportedOs || []).forEach(function(o) { var k = String(o).toLowerCase(); os[k] = (os[k] || 0) + 1; });
-  });
-  var cats = scenarioSectionOrder().map(function(sec) {
-    return { label: sec.label, n: sec.key === 'phishing' ? phishingLibraryCounts(_libraryEntries).total : scenarioCategoryCounts(list, sec.key).total };
-  }).filter(function(c) { return c.n > 0; }).sort(function(a, b) { return b.n - a.n; }).slice(0, 6);
-  var maxN = cats.length ? cats[0].n : 1;
-  var OSL = { windows: 'Windows', linux: 'Linux', darwin: 'macOS' }, OSC = { windows: CHART_COLORS.info, linux: CHART_COLORS.teal, darwin: CHART_COLORS.violet };
-  var osSegs = Object.keys(os).sort().map(function(k) { return { label: OSL[k] || k, value: os[k], color: OSC[k] || CHART_COLORS.muted }; });
-  return kitGrid(4, [
-    kpi({ label: 'Scenarios', value: list.length, sub: 'in the library', icon: 'mapped', tone: 'accent' }),
-    kpi({ label: 'Built-in', value: counts.builtin, sub: 'shipped with the platform', icon: 'shield', tone: 'ok' }),
-    kpi({ label: 'Custom', value: counts.custom, sub: 'created or uploaded', icon: 'file', tone: 'info' }),
-    kpi({ label: 'Threat intel', value: counts.intel, sub: 'generated from feeds', icon: 'alert', tone: 'warn' })
-  ]) + kitGrid(2, [
-    card('Largest categories', cats.length ? hbars(cats.map(function(c) { return [c.label, Math.round(c.n / maxN * 100), 'accent', String(c.n)]; })) : kitEmpty('mapped', 'No categories yet'), { sub: 'scenarios per category' }),
-    card('Platform coverage', osSegs.length ? chartSlot({ type: 'donut', segments: osSegs, center: String(list.length), centerSub: 'scenarios', h: 170, legendRight: true }) : kitEmpty('server', 'No platform data'), { sub: 'scenarios by supported OS (a scenario can support several)' })
-  ]);
-}
-
-function renderScenarioLanding(list, src) {
-  var el = document.getElementById('sc-landing');
-  if (!el) return;
-  _lastLanding = { list: list, src: src };
-  var html = scenarioSectionOrder().map(function(sec) {
-    var key = sec.key;
-    if (key === 'phishing') return phishingLandingCardHTML();
-    var cat = SCENARIO_CATEGORIES[key];
-    var c = scenarioCategoryCounts(list, key);
-    if (c.total === 0) return '';
-    // The intel category is single-source by construction (scenarioCategoryOf
-    // routes every threat-intel scenario here) -- a Built-in/Custom/Intel
-    // breakdown would just repeat "N Intel" next to the count above it.
-    var breakdown = key === 'intel' ? '' :
-      [c.builtin ? c.builtin + ' Built-in' : '', c.custom ? c.custom + ' Custom' : '', c.intel ? c.intel + ' Intel' : '']
-      .filter(Boolean).join(' · ');
-    return '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
-      on('click', 'openScenarioCategory', key) + on('keydown', 'scenarioCategoryKeydown', key) + '>' +
-      '<h3>' + cat.icon + x(cat.label) + '</h3>' +
-      '<div class="sc-cat-count">' + c.total + ' scenario' + (c.total === 1 ? '' : 's') + '</div>' +
-      '<div class="sc-cat-breakdown">' + x(breakdown) + '</div>' +
-      kitBar(list.length ? c.total / list.length * 100 : 0, 'accent') +
-    '</div>';
-  }).join('');
-  // The source filter (Threat intel / Custom) only narrows `list` -- it has
-  // no bearing on Adversary Templates below, which aren't drawn from
-  // `scenarios` at all (see the sc-filter-source display-toggle comment
-  // above). Without this message, filtering to a source with zero real
-  // scenarios left "BFSI Scenarios (0)" sitting directly above the
-  // Adversary Templates card with no explanation -- reading as if the
-  // filter had matched templates instead of correctly matching nothing.
-  if (!list.length && src && src !== 'all') {
-    var emptySrcLabel = { builtin: 'Built-in', custom: 'Custom', intel: 'Threat Intel' }[src] || src;
-    html = '<div class="tiny muted" style="width:100%;padding:0.5rem 0.1rem">There is no Scenarios for ' + x(emptySrcLabel) + ' yet</div>' + html;
-  }
-  if (_templates.length) {
-    html += '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
-      on('click', 'openScenarioCategory', 'templates') + on('keydown', 'scenarioCategoryKeydown', 'templates') + '>' +
-      '<h3>' + TMPL_ICON + 'Adversary Templates</h3>' +
-      '<div class="sc-cat-count">' + _templates.length + ' template' + (_templates.length === 1 ? '' : 's') + '</div>' +
-    '</div>';
-  }
-  if (list.length) html = '<div class="sc-landing-stats">' + scenarioLandingStatsHTML(list) + '</div>' + html;
-  el.innerHTML = html || '<p class="empty">No scenarios loaded.</p>';
-}
+// Set when /api/scenarios last answered; shown as the hero's "Updated" figure.
+var _scnLoadedAt = null;
 
 export function scenarioCategoryKeydown(key, el, event) {
   if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openScenarioCategory(key); }
 }
 
 export function openScenarioCategory(key) {
+  if (key === 'all') key = 'landing';
   state.scenarioView = key;
   closeScenarioOverlay();
-  history.pushState({ scenarioView: key }, '', '#tab-scenarios/' + key);
-  renderScenarios();
-}
-export function closeScenarioCategoryView() {
-  if (state.scenarioView === 'search') {
-    var se = document.getElementById('sc-search');
-    if (se) se.value = '';
-  }
-  state.scenarioView = 'landing';
-  closeScenarioOverlay();
-  history.pushState({ scenarioView: 'landing' }, '', '#tab-scenarios');
-  renderScenarios();
+  history.pushState({ scenarioView: key }, '', key === 'landing' ? '#tab-scenarios' : '#tab-scenarios/' + key);
+  paintScenarios();
 }
 export function __init_L8723() {
 window.addEventListener('popstate', function(e) {
   var tab = document.getElementById('tab-scenarios');
   if (!tab || displayOf(tab) === 'none') return;
-  var view = (e.state && e.state.scenarioView) || 'landing';
-  if (view === 'landing') {
-    var se = document.getElementById('sc-search');
-    if (se) se.value = '';
-  }
-  state.scenarioView = view;
+  state.scenarioView = (e.state && e.state.scenarioView) || 'landing';
   closeScenarioOverlay();
-  renderScenarios();
+  paintScenarios();
 });
 }
 
+function scnFilters() {
+  var v = function(id) { var el = document.getElementById(id); return el ? el.value : 'all'; };
+  var q = document.getElementById('sc-search');
+  return { q: q ? q.value.trim() : '', source: v('sc-filter-source'), os: v('sc-filter-os'), product: v('sc-filter-product') };
+}
 
-// renderScenarios filters the loaded scenarios by the search box + source/OS
-// filters, then dispatches to either the category landing or a drilled-in
-// category's tile grid depending on scenarioView.
-export function renderScenarios() {
-  var landingEl = document.getElementById('sc-landing');
-  var catEl = document.getElementById('sc-category-view');
-  if (!landingEl || !catEl) return;
-  loadScenarioLibrary();
+var _scnProdSig = '';
+// "All Product Lines" lists the product lines that really have scenarios, labelled like the sidebar.
+function paintProductFilter(all) {
+  var sel = document.getElementById('sc-filter-product');
+  if (!sel) return;
+  var present = {};
+  all.forEach(function(s) { present[scenarioProductOf(s)] = 1; });
+  var opts = scenarioSectionOrder().filter(function(sec) { return present[sec.key]; });
+  var sig = opts.map(function(o) { return o.key; }).join(',');
+  if (sig === _scnProdSig) return;
+  _scnProdSig = sig;
+  var prev = sel.value;
+  sel.innerHTML = '<option value="all">All Product Lines</option>' + opts.map(function(o) { return '<option value="' + x(o.key) + '">' + x(o.label) + '</option>'; }).join('');
+  sel.value = present[prev] ? prev : 'all';
+}
 
-  if (showNoScenariosMessage(state.scenarios.length, _libraryEntries)) {
-    setDisplay(catEl, 'none');
-    setDisplay(landingEl, 'block');
-    landingEl.innerHTML = '<p class="empty">No scenarios loaded.</p>';
-    document.getElementById('sc-cnt').textContent = 0;
-    return;
-  }
+function paintHero(all) {
+  var st = scnHeroStats(all, scenarioProductOf);
+  setHeroStat('sc-hs-total', st.total);
+  setHeroStat('sc-hs-tech', st.techniques);
+  setHeroStat('sc-hs-fam', st.families);
+  setHeroStat('sc-hs-upd', _scnLoadedAt ? _scnLoadedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
+}
 
-  var searchEl = document.getElementById('sc-search');
-  var srcEl = document.getElementById('sc-filter-source');
-  var osEl = document.getElementById('sc-filter-os');
-  var q = (searchEl ? searchEl.value : '').trim().toLowerCase();
-  var src = srcEl ? srcEl.value : 'all';
-  var osFilter = osEl ? osEl.value : 'all';
-
-  var filtered = state.scenarios.filter(function(s) {
-    if (osFilter !== 'all' && (s.supportedOs || []).indexOf(osFilter) === -1) return false;
-    if (src !== 'all' && scenarioSourceOf(s) !== src) return false;
-    return true;
-  });
-  document.getElementById('sc-cnt').textContent = filtered.length;
+// paintScenarios redraws the whole page body from the loaded scenarios and the toolbar. It never
+// fetches, so the library loader can call it when its answer lands without looping.
+function paintScenarios() {
+  var grid = document.getElementById('sc-tile-grid'), cats = document.getElementById('sc-cats');
+  if (!grid || !cats) return;
+  var all = state.scenarios, ph = phishingLibraryCounts(_libraryEntries);
+  var view = state.scenarioView;
+  if (!view || view === 'landing' || view === 'search') view = 'all';
+  paintHero(all);
+  paintProductFilter(all);
+  paintDrawer(scnApproveFor);
+  document.getElementById('sc-layout').classList.toggle('cat-off', scnUi().catOff);
   setDisplay(document.getElementById('sc-tmpl-filters'), 'none');
-  // Adversary Templates aren't drawn from `scenarios` and carry no
-  // builtin/custom/intel source field, so this dropdown can't filter them --
-  // hide it in template view rather than let it show a stale/irrelevant
-  // count for an unrelated array. See sc-tmpl-filters above for the
-  // filter that actually applies to templates (category, not source).
-  setDisplay(document.getElementById('sc-filter-source'), '');
-  // Same reasoning as sc-filter-source above -- renderTemplateGrid() never
-  // reads this either, and templates carry no supportedOs field.
-  setDisplay(document.getElementById('sc-filter-os'), '');
+  var foot = document.getElementById('sc-foot'), tools = document.getElementById('sc-toolbar');
+  if (foot) foot.textContent = '';
 
-  if (q) { state.scenarioView = 'search'; }
-
-  // The agent source and OS filters apply to agent scenarios only, so they are
-  // hidden while the Phishing category is open.
-  if (state.scenarioView === 'phishing') {
-    setDisplay(srcEl, 'none');
-    setDisplay(osEl, 'none');
-    setDisplay(landingEl, 'none');
-    setDisplay(catEl, 'block');
-    document.getElementById('sc-backbar-title').textContent =
-      SCENARIO_CATEGORIES.phishing.label + ' (' + phishingLibraryCounts(_libraryEntries).total + ')';
-    renderPhishingLibrary();
+  if (showNoScenariosMessage(all.length, _libraryEntries)) {
+    cats.innerHTML = '';
+    tools.innerHTML = '';
+    grid.innerHTML = kitEmpty('mapped', 'No scenarios loaded');
     return;
   }
 
-  if (state.scenarioView === 'search') {
-    setDisplay(landingEl, 'none');
-    setDisplay(catEl, 'block');
-    var results = filtered.filter(function(s) {
-      var hay = [s.id, s.name, s.description, (s.tags || []).join(' '),
-                 (s.mitrePhases || []).join(' '), (s.artTechniques || []).join(' '),
-                 s.intelActor].join(' ').toLowerCase();
-      return hay.indexOf(q) !== -1;
-    });
-    document.getElementById('sc-backbar-title').textContent = 'Search results for: "' + x(searchEl.value.trim()) + '" (' + results.length + ')';
-    var sgrid = document.getElementById('sc-tile-grid');
-    sgrid.innerHTML = results.length
-      ? '<div class="sc-fade">' + renderScenarioTileGroup('search', results) + '</div>'
-      : '<p class="empty">No scenarios match your search.</p>';
-    return;
+  var pool = scnFilterList(all, scnFilters(), scenarioProductOf);
+  var subs = {};
+  if (ph.total) {
+    subs.phishing = [ph.runnable ? ph.runnable + ' runnable here' : '', ph.unavailable ? ph.unavailable + ' need a connector' : '', ph.catalogOnly ? ph.catalogOnly + ' catalogued only' : ''].filter(Boolean).join(' · ');
   }
+  var catList = scenarioSectionOrder().map(function(sec) { return { key: sec.key, label: sec.label, icon: sec.key }; });
+  if (_templates.length) catList.push({ key: 'templates', label: 'Adversary Templates' });
+  var rows = scnCategoryRows(catList, pool.length, function(key) {
+    return key === 'phishing' ? ph.total : key === 'templates' ? _templates.length : pool.filter(function(s) { return scenarioProductOf(s) === key; }).length;
+  }, subs);
+  cats.innerHTML = scnCatsHtml(rows, view);
 
-  if (state.scenarioView === 'landing') {
-    setDisplay(catEl, 'none');
-    setDisplay(landingEl, 'block');
-    renderScenarioLanding(filtered, src);
-    return;
-  }
+  var special = view === 'phishing' || view === 'templates';
+  hideFilterSelects(special);
+  tools.innerHTML = scnToolbarHtml(special);
 
-  if (state.scenarioView === 'templates') {
-    setDisplay(landingEl, 'none');
-    setDisplay(catEl, 'block');
+  if (view === 'phishing') { renderPhishingLibrary(); return; }
+  if (view === 'templates') {
     setDisplay(document.getElementById('sc-tmpl-filters'), 'flex');
-    setDisplay(document.getElementById('sc-filter-source'), 'none');
-    setDisplay(document.getElementById('sc-filter-os'), 'none');
     renderTemplateGrid();
     return;
   }
-
-  setDisplay(landingEl, 'none');
-  setDisplay(catEl, 'block');
-  var cat = SCENARIO_CATEGORIES[state.scenarioView];
-  var inCat = filtered.filter(function(s) { return scenarioProductOf(s) === state.scenarioView; });
-  document.getElementById('sc-backbar-title').textContent = cat.label + ' (' + inCat.length + ')';
-  var grid = document.getElementById('sc-tile-grid');
-  grid.innerHTML = inCat.length
-    ? '<div class="sc-fade">' + renderScenarioTileGroup(state.scenarioView, inCat) + '</div>'
-    : '<p class="empty">No scenarios match your filter.</p>';
-}
-export function scenarioSearchClear() {
-  if (!this.value.trim() && state.scenarioView === 'search') { state.scenarioView = 'landing'; }
-  renderScenarios();
+  var list = scnSortList(view === 'all' ? pool : pool.filter(function(s) { return scenarioProductOf(s) === view; }), scnUi().sort);
+  grid.innerHTML = list.length ? scnGridHtml(list) : scnEmptyHtml();
+  if (foot && list.length) foot.textContent = scnShowing(list.length, all.length);
 }
 
-// Collapsible description: shows a short preview with a "Read more" / "Read less"
-// toggle (WhatsApp style) so long scenario paragraphs don't bloat the cards.
-var descSeq = 0;
-function descHtml(desc, sid, opts) {
-  desc = (desc || '').trim();
-  opts = opts || {};
-  var limit = opts.limit || 140;
-  var style = opts.style || '';
-  if (desc.length <= limit) {
-    return '<p style="' + style + '">' + x(desc) + '</p>';
-  }
-  // trim the preview back to the last whole word so we don't cut mid-word
-  var preview = desc.substring(0, limit).replace(/\s+\S*$/, '');
-  var id = 'desc-' + String(sid || 'x').replace(/[^a-zA-Z0-9_-]/g, '') + '-' + (descSeq++);
-  return '<p style="' + style + '">' +
-    '<span id="' + id + '-s">' + x(preview) + '&hellip; </span>' +
-    '<span id="' + id + '-f" style="display:none">' + x(desc) + ' </span>' +
-    '<a href="#" class="desc-toggle"' + on('click', 'toggleDesc', id) + '>Read more</a>' +
-    '</p>';
+// renderScenarios reloads the phishing library and redraws; the toolbar and sidebar call paintScenarios
+// directly because they change nothing the library depends on.
+export function renderScenarios() {
+  if (!document.getElementById('sc-tile-grid')) return;
+  loadScenarioLibrary();
+  paintScenarios();
 }
-export function toggleDesc(id, el) {
-  var sEl = document.getElementById(id + '-s');
-  var fEl = document.getElementById(id + '-f');
-  if (!sEl || !fEl) return;
-  var expanded = (displayOf(fEl) !== 'none');
-  setDisplay(sEl, expanded ? 'inline' : 'none');
-  setDisplay(fEl, expanded ? 'none' : 'inline');
-  el.textContent = expanded ? 'Read more' : 'Read less';
-}
+export function refreshScenarioView() { paintScenarios(); }
+export function scenarioSearchClear() { paintScenarios(); }
 
-function scenarioSourceOf(s) {
-  return s.intelSource ? 'intel' : (s.source || 'builtin');
-}
-var SCENARIO_SOURCE_LABELS = { builtin: 'Built-in', custom: 'Custom', intel: 'Threat-Intel' };
-var SCENARIO_SOURCE_ORDER = ['builtin', 'custom', 'intel'];
+function scnApproveFor(s) { return canApproveForLocal(s) ? approveButton(s) : ''; }
+bindApproveButton(scnApproveFor);
 
-function scenarioTileOSBadges(s) {
-  var osArr = s.supportedOs || [];
-  if (!osArr.length) return '';
-  var osIcons = { windows: '<svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10"><path d="M3 3h8.5v8.5H3V3zm10.5 0H22v8.5h-8.5V3zM3 13.5h8.5V22H3v-8.5zm10.5 0H22V22h-8.5v-8.5z"/></svg>', linux: '🐧', darwin: '⌘' };
-  var osColors = {
-    windows: 'rgba(47,129,247,0.15);color:#58a6ff;border-color:rgba(47,129,247,0.4)',
-    linux:   'rgba(47,216,195,0.15);color:#5cead8;border-color:rgba(47,216,195,0.4)',
-    darwin:  'rgba(154,169,188,0.15);color:#9aa9bc;border-color:rgba(154,169,188,0.35)'
-  };
-  return osArr.map(function(os) {
-    var lc = os.toLowerCase();
-    var col = osColors[lc] || 'rgba(154,169,188,0.12);color:#9aa9bc;border-color:rgba(154,169,188,0.35)';
-    return '<span class="tag" style="background:' + col + ';font-size:0.6rem;padding:1px 5px" title="Supported OS: ' + x(os) + '">' + (osIcons[lc] || x(os)) + '</span>';
-  }).join('');
+export function setScenarioView(v) { setScenarioViewMode(v); paintScenarios(); }
+export function setScenarioSort(el) { setScenarioSortMode(el && el.value); paintScenarios(); }
+export function setScenarioCatOff(v) { setScenarioCatOffMode(v); paintScenarios(); }
+export function clearScenarioFilters() {
+  var q = document.getElementById('sc-search'); if (q) q.value = '';
+  ['sc-filter-source', 'sc-filter-os', 'sc-filter-product'].forEach(function(id) { var el = document.getElementById(id); if (el) el.value = 'all'; });
+  state.scenarioView = 'landing';
+  paintScenarios();
 }
-
-function scenarioTileMitreBadge(s) {
-  var phases = s.mitrePhases || [];
-  if (!phases.length) return '';
-  var extra = phases.length > 1 ? ' <span style="opacity:0.7">+' + (phases.length - 1) + '</span>' : '';
-  return '<span class="tag" style="font-size:0.6rem;padding:1px 5px" title="' + x(phases.join(', ')) + '">' + x(phases[0]) + extra + '</span>';
+export function openScenarioDrawer(id) { openScnDrawer(id); }
+export function closeScenarioDrawer() { closeScnDrawer(); }
+export function closeScenarioDrawerOnBackdrop(el, event) { if (event.target === el) closeScnDrawer(); }
+export function scenarioDrawerTab(id) { drawerTab(id); }
+export function scenarioCardKeydown(id, el, event) {
+  if (event.target !== el) return;
+  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openScnDrawer(id); }
 }
-
-function scenarioTileHTML(s) {
-  var color = s.intelSource ? '#2f81f7' : stripeColor(s.id);
-  var sid = x(s.id);
-  return '<div class="sc-tile" tabindex="0" role="button" aria-expanded="false" data-sid="' + sid + '" ' +
-    on('mouseenter', 'previewScenarioOverlay', s.id) + on('mouseleave', 'unpreviewScenarioOverlay', s.id) + on('click', 'toggleScenarioPinFromEvent', s.id) + on('keydown', 'scenarioPinKeydown', s.id) + '>' +
-    '<div class="sc-tile-stripe" style="background:' + color + '"></div>' +
-    '<div class="sc-tile-name">' + x(s.name) + '</div>' +
-    '<div class="sc-tile-badges">' + scenarioTileOSBadges(s) + scenarioTileMitreBadge(s) + '</div>' +
-    '<div class="sc-tile-detail" id="scd-' + sid + '">' + scenarioDetailHTML(s) + '</div>' +
-  '</div>';
+// The Run button sits inside the clickable card, so it must not also open the drawer.
+export function runScenarioCard(id, el, event) { event.stopPropagation(); openModal(id, null); }
+export function runScenarioFromDrawer(id) { closeScnDrawer(); openModal(id, null); }
+export function openScenarioRun(runId) {
+  var r = scnRunById(runId);
+  if (!r) return;
+  closeScnDrawer();
+  viewRunResults(r);
 }
-
-function renderScenarioTileGroup(viewKey, list) {
-  var bySrc = { builtin: [], custom: [], intel: [] };
-  list.forEach(function(s) { bySrc[scenarioSourceOf(s)].push(s); });
-  var activeSources = SCENARIO_SOURCE_ORDER.filter(function(k) { return bySrc[k].length; });
-  // A single active source (e.g. the Threat-Intel category, which is
-  // single-source by construction) would just repeat "X (N)" as a
-  // sub-header directly under the backbar title that already says the
-  // same thing -- render those tiles flat instead. Mixed-source views
-  // (search results, or a category that legitimately spans sources) keep
-  // the per-source grouping.
-  // Cards sit in the same grid as Adversary Templates, not as stacked rows.
-  if (activeSources.length <= 1) {
-    return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:0.85rem">' +
-      list.map(scenarioTileHTML).join('') + '</div>';
-  }
-  return activeSources.map(function(k) {
-    var collapsed = !!(scenarioSrcCollapsed[viewKey] && scenarioSrcCollapsed[viewKey][k]);
-    return '<div class="sc-src-group">' +
-      '<div class="sc-src-hdr' + (collapsed ? ' collapsed' : '') + '"' + on('click', 'toggleScenarioSrcGroup', viewKey, k) + '>' +
-        '<span class="chev">&#9660;</span>' + x(SCENARIO_SOURCE_LABELS[k]) + ' (' + bySrc[k].length + ')' +
-      '</div>' +
-      '<div class="sc-src-body' + (collapsed ? ' collapsed' : '') + '">' + bySrc[k].map(scenarioTileHTML).join('') + '</div>' +
-    '</div>';
-  }).join('');
-}
-
-export function toggleScenarioSrcGroup(viewKey, srcKey) {
-  if (!scenarioSrcCollapsed[viewKey]) scenarioSrcCollapsed[viewKey] = {};
-  scenarioSrcCollapsed[viewKey][srcKey] = !scenarioSrcCollapsed[viewKey][srcKey];
-  renderScenarios();
-}
-
-function _scOverlayEl(id) { return document.getElementById('scd-' + id); }
-function _scTileEl(id) {
-  var d = _scOverlayEl(id);
-  return d ? d.parentElement : null;
-}
-
-// Keeps the 420px overlay from clipping past the right edge of the viewport
-// for tiles that aren't in the leftmost grid column.
-function _scPositionOverlay(id) {
-  var detail = _scOverlayEl(id);
-  var tile = _scTileEl(id);
-  if (!detail || !tile) return;
-  detail.style.left = '';
-  detail.style.right = '';
-  var rect = tile.getBoundingClientRect();
-  if (rect.left + 420 > window.innerWidth - 16) {
-    detail.style.left = 'auto';
-    detail.style.right = '0';
-  }
-}
-
-export function previewScenarioOverlay(id) {
-  if (state.overlayPinned) return; // a pinned overlay is never disturbed by hovering elsewhere
-  var detail = _scOverlayEl(id);
-  if (!detail) return;
-  _scPositionOverlay(id);
-  detail.classList.add('show');
-}
-export function unpreviewScenarioOverlay(id) {
-  if (state.overlayPinned === id) return; // pinned overlays only close via toggle/ESC/outside-click
-  var detail = _scOverlayEl(id);
-  if (detail) detail.classList.remove('show');
-}
-export function toggleScenarioPinFromEvent(id, el, event) { toggleScenarioPin(event, id); }
-
-export function scenarioPinKeydown(id, el, event) {
-  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleScenarioPin(event, id); }
-}
-
-function toggleScenarioPin(event, id) {
-  // A click on a button/link inside the already-open detail panel must not
-  // re-toggle the tile's own pin state — the panel is a DOM child of the
-  // tile, so such clicks bubble up to this same handler.
-  if (event.target.closest && event.target.closest('.sc-tile-detail')) return;
-  event.stopPropagation();
-  if (state.overlayPinned === id) { closeScenarioOverlay(); return; }
-  closeScenarioOverlay();
-  state.overlayPinned = id;
-  var tile = _scTileEl(id);
-  var detail = _scOverlayEl(id);
-  if (tile) { tile.classList.add('pinned'); tile.setAttribute('aria-expanded', 'true'); }
-  if (detail) { _scPositionOverlay(id); detail.classList.add('show'); }
-}
-export function closeScenarioOverlay() {
-  if (!state.overlayPinned) return;
-  var tile = _scTileEl(state.overlayPinned);
-  var detail = _scOverlayEl(state.overlayPinned);
-  if (tile) { tile.classList.remove('pinned'); tile.setAttribute('aria-expanded', 'false'); }
-  if (detail) detail.classList.remove('show');
-  state.overlayPinned = null;
-}
-export function __init_L8985() {
-document.addEventListener('click', function(e) {
-  if (!state.overlayPinned) return;
-  var detail = _scOverlayEl(state.overlayPinned);
-  var tile = _scTileEl(state.overlayPinned);
-  if ((detail && detail.contains(e.target)) || (tile && tile.contains(e.target))) return;
-  closeScenarioOverlay();
-});
-}
-
+export function closeScenarioOverlay() { closeScnDrawer(); }
 export function __init_L8992() {
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape' && state.overlayPinned) {
-    var tile = _scTileEl(state.overlayPinned);
-    closeScenarioOverlay();
-    if (tile) tile.focus();
-  }
+  if (e.key === 'Escape' && drawerScenarioId()) closeScnDrawer();
 });
-}
-
-
-function scenarioDetailHTML(s) {
-      var visibleTags = (s.tags || []).filter(function(t) {
-        return t !== 'intel' && t !== 'auto-generated';
-      });
-      var tags = visibleTags.map(function(t) { return '<span class="tag">' + x(t) + '</span>'; }).join('');
-      var intelBadge = '';
-      if (s.intelSource) {
-        var confColor = s.intelConfidence === 'high' ? '#5cead8' : s.intelConfidence === 'medium' ? '#d29922' : '#9aa9bc';
-        intelBadge = '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(47,129,247,0.12);' +
-          'border:1px solid rgba(47,129,247,0.35);border-radius:4px;padding:2px 7px;font-size:0.72rem;color:#58a6ff;font-weight:600;margin-bottom:6px">' +
-          '&#128268; Intel &nbsp;·&nbsp; ' + x(s.intelActor) +
-          ' &nbsp;<span style="color:' + confColor + '">' + x(s.intelConfidence) + '</span>' +
-          ' &nbsp;·&nbsp; ' + x(s.intelSource.toUpperCase()) + '</span><br>';
-        var techCount = (s.artTechniques || []).length;
-        // No delete action here, deliberately -- auto-generated intel
-        // scenarios cannot be deleted by anyone, through any path (the
-        // backend enforces this too; see Engine.Delete's intel-source guard).
-        var footerMeta = techCount + ' techniques';
-        return '<div>' + registryBadge(s) + intelBadge + '</div>' +
-          '<h3>' + x(s.name) + '</h3>' +
-          descHtml(s.description, s.id, {limit:120, style:'font-size:0.78rem;color:var(--muted)'}) +
-          '<div class="tags">' + tags + '</div>' +
-          '<div class="card-footer">' +
-            '<div class="card-meta">' + footerMeta + '</div>' +
-            (canApproveForLocal(s) ? approveButton(s) : '') +
-            '<button class="btn btn-outline-green btn-sm"' + on('click', 'openModalForScenario', s.id) + '>&#9654; Run</button>' +
-          '</div>';
-      }
-      var canEdit = (ROLE === 'admin' || ROLE === 'analyst');
-      var customBadge = s.source === 'custom'
-        ? '<span class="tag" style="background:rgba(47,216,195,0.15);color:#5cead8;border-color:rgba(47,216,195,0.4)">custom</span> '
-        : '';
-      var editBtns = '';
-      if (canApproveForLocal(s)) editBtns += approveButton(s);
-      if (canEdit) {
-        editBtns += '<button class="btn btn-outline btn-sm"' + on('click', 'cloneScenario', s.id) + ' title="Clone into an editable custom scenario">&#9112; Clone</button> ';
-        if (s.source === 'custom') {
-          editBtns += '<button class="btn btn-outline btn-sm"' + on('click', 'openBuilder', s.id) + ' title="Edit">&#9998; Edit</button> ';
-          editBtns += '<button class="btn btn-sm" style="background:rgba(218,54,51,0.12);color:#f85149"' + on('click', 'deleteCustomScenario', s.id) + ' title="Delete">&#10005;</button> ';
-        }
-      }
-      // Mode label — describe what the scenario actually runs. Sweep scenarios
-      // carry an empty technique/ability list (the real set is resolved live on
-      // the server), so they must be detected by their flags, not list length —
-      // otherwise they fall through to a meaningless "0 steps". Live catalog
-      // counts get appended in Phase B.
-      var modeMeta;
-      var stepN = (s.steps || []).length;
-      if (s.localCheck) {
-        modeMeta = '<a href="#" class="desc-toggle" title="Choose which posture checks to run"' + on('click', 'openModalForScenario', s.id) + '>Posture check &#9881;</a>';
-      } else if (s.artAllWindows) {
-        modeMeta = 'Full ART sweep' + (state.artCatalog.length ? ' · ' + state.artCatalog.length + ' techniques' : '');
-      } else if (s.artAllPlatform) {
-        // artCatalog is the Windows-scoped catalog count -- not meaningful
-        // for a Linux/macOS full sweep, so no count is shown here (the
-        // read-only Detailed view has the real per-platform number).
-        modeMeta = 'Full ART sweep';
-      } else if (s.artSelectiveWindows) {
-        modeMeta = 'Selective ART sweep' + (state.artCatalog.length ? ' · up to ' + state.artCatalog.length + ' techniques' : '');
-      } else if (s.artSelectivePlatform) {
-        modeMeta = 'Selective ART sweep';
-      } else if (s.calderaAllWindows) {
-        modeMeta = 'Full Caldera sweep' + (state.calderaCatalog.length ? ' · ' + state.calderaCatalog.length + ' abilities' : '');
-      } else if ((s.artTechniques || []).length) {
-        modeMeta = s.artTechniques.length + ' ART techniques';
-      } else if ((s.calderaAbilities || []).length) {
-        modeMeta = s.calderaAbilities.length + ' Caldera abilities';
-      } else if (stepN) {
-        // The step count is a live entry point to the step picker — operators can
-        // click it to choose which steps to run (steps come straight from the YAML).
-        modeMeta = '<a href="#" class="desc-toggle" title="Choose which steps to run"' + on('click', 'openPicker', s.id, 'steps') + '>' +
-          stepN + (stepN === 1 ? ' step' : ' steps') + '</a>';
-      } else {
-        modeMeta = '—';
-      }
-
-      // OS platform badge
-      var osArr = s.supportedOs || [];
-      var osBadge = '';
-      if (osArr.length > 0) {
-        var osIcons = { windows: '<svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10"><path d="M3 3h8.5v8.5H3V3zm10.5 0H22v8.5h-8.5V3zM3 13.5h8.5V22H3v-8.5zm10.5 0H22V22h-8.5v-8.5z"/></svg>', linux: '🐧', darwin: '⌘' };
-        var osColors = {
-          windows: 'rgba(47,129,247,0.15);color:#58a6ff;border-color:rgba(47,129,247,0.4)',
-          linux:   'rgba(47,216,195,0.15);color:#5cead8;border-color:rgba(47,216,195,0.4)',
-          darwin:  'rgba(154,169,188,0.15);color:#9aa9bc;border-color:rgba(154,169,188,0.4)'
-        };
-        var osOnly = (osArr.length === 1);
-        osBadge = osArr.map(function(os) {
-          var lc = os.toLowerCase();
-          var col = osColors[lc] || 'rgba(154,169,188,0.12);color:#9aa9bc;border-color:rgba(154,169,188,0.35)';
-          var label = osOnly ? (os === 'darwin' ? 'macOS' : os.charAt(0).toUpperCase() + os.slice(1)) : (osIcons[lc] || os);
-          return '<span class="tag" style="background:' + col + ';font-size:0.62rem;padding:1px 6px" title="Supported OS: ' + os + '">' + label + '</span>';
-        }).join('') + ' ';
-      }
-
-      // Customize: ART/Caldera scenarios can be narrowed to a chosen subset of
-      // techniques/abilities before running. Detect the framework from the flags
-      // or the explicit list.
-      var fw = (s.artAllWindows || s.artAllPlatform || s.artSelectiveWindows || s.artSelectivePlatform || (s.artTechniques || []).length) ? 'art'
-             : (s.calderaAllWindows || (s.calderaAbilities || []).length) ? 'caldera'
-             : (!s.localCheck && stepN) ? 'steps'
-             : '';
-      var fwNoun = fw === 'art' ? 'techniques' : fw === 'caldera' ? 'abilities' : 'steps';
-      // art_all_windows/art_all_platform always run every atomic for every
-      // technique their platform supports -- no subset to choose, so a
-      // read-only Detailed view replaces the selectable Customize button
-      // here too (same reasoning as renderModalSelection for the Run modal).
-      var customizeBtn = (s.artAllWindows || s.artAllPlatform)
-        ? '<button class="btn btn-outline btn-sm"' + on('click', 'openDetailedViewForScenario', s.id) + ' ' +
-          'title="Every atomic test that will run">&#128269; Detailed view</button> '
-        : fw
-        ? '<button class="btn btn-outline btn-sm"' + on('click', 'openPicker', s.id, fw) + ' ' +
-          'title="Choose which ' + fwNoun + ' to run">&#9881; Customize</button> '
-        : '';
-
-      return '<div>' + registryBadge(s) + customBadge + '</div>' +
-        '<h3>' + x(s.name) + '</h3>' +
-        descHtml(s.description, s.id, {limit:140}) +
-        '<div class="tags">' + osBadge + tags + '</div>' +
-        '<div class="card-footer">' +
-          '<div class="card-meta">' + modeMeta + '</div>' +
-          '<div style="display:flex;gap:0.3rem;flex-wrap:wrap;justify-content:flex-end">' +
-            editBtns + customizeBtn +
-            '<button class="btn btn-outline-green btn-sm"' + on('click', 'openModalForScenario', s.id) + '>&#9654; Run</button>' +
-          '</div>' +
-        '</div>';
 }
 // ── Scenario Library: phishing entries from GET /api/scenarios/library ──
 // Phishing entries are listed beside the agent scenarios. A phishing entry gets
@@ -2412,16 +1992,9 @@ export function loadScenarioLibrary() {
   });
 }
 
-// Redraws whichever view shows phishing entries. Never calls renderScenarios,
-// which itself loads the library, so this cannot loop.
-function refreshLibraryViews() {
-  if (state.scenarioView === 'phishing') { renderPhishingLibrary(); return; }
-  if (state.scenarioView === 'landing') {
-    // With no agent scenarios the landing was never drawn, so fall back to an
-    // empty list. The landing then shows only the Phishing card, if any.
-    renderScenarioLanding(_lastLanding ? _lastLanding.list : [], _lastLanding ? _lastLanding.src : 'all');
-  }
-}
+// Redraws the page once the library answers (the Phishing count and tiles depend on it). Never calls
+// renderScenarios, which itself loads the library, so this cannot loop.
+function refreshLibraryViews() { paintScenarios(); }
 
 // The phishing category grid is the shared sc-tile-grid. Clicks on its tiles
 // and parameter form go to onPhishingLibraryClick, bound once.
@@ -2440,11 +2013,13 @@ function phishingLibraryTileHTML(entry, index) {
     : (LIBRARY_STATUS_LABEL[entry.status] || 'Not runnable');
   // Experimental stays visible in every state, not only when runnable.
   var tag = entry.experimental && entry.status !== 'experimental' ? ' · Experimental' : '';
-  return '<button type="button" class="sc-tile" data-entry-index="' + index + '"' +
-    (runnable ? '' : ' disabled') + '>' +
-    '<div class="sc-tile-name">' + x(entry.name) + '</div>' +
-    '<div class="sc-tile-badges">' + x(entry.id) + ' · ' + x(label) + x(tag) + '</div>' +
-    '</button>';
+  var pill = entry.status === 'available' ? 'ok' : entry.status === 'experimental' ? 'pending' : 'none';
+  return '<div class="sc-card src-builtin' + (runnable ? '' : ' unavail') + '" data-entry-index="' + index + '">' +
+    '<div class="sc-tags"><span class="sc-tag blue">Phishing</span>' + (entry.experimental ? '<span class="sc-tag amber">Experimental</span>' : '') + '</div>' +
+    '<h3>' + x(entry.name) + '</h3><p>' + x(entry.id) + ' · ' + x(label) + x(tag) + '</p>' +
+    '<div class="sc-actions"><span class="sc-avail ' + pill + '">&#9679; ' + x(label) + '</span>' +
+    '<button type="button" class="btn btn-primary btn-sm" data-entry-index="' + index + '"' + (runnable ? '' : ' disabled') + '>Run</button></div>' +
+    '</div>';
 }
 
 function renderPhishingLibrary() {
@@ -2460,7 +2035,7 @@ function renderPhishingLibrary() {
   var open = _libraryEntries[_phishingFormIndex];
   var form = open && libraryEntryRoute(open).kind === LIBRARY_TYPE_PHISHING ? phishingFormHTML(open) : '';
   grid.innerHTML = tiles.length
-    ? '<div class="sc-fade"><div class="sc-tile-grid">' + tiles.join('') + '</div>' + form + '</div>'
+    ? '<div class="sc-fade"><div class="sc-grid">' + tiles.join('') + '</div>' + form + '</div>'
     : '<p class="empty">No phishing scenarios are catalogued.</p>';
   renderPhishingRunResults(grid);
 }

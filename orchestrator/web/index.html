@@ -1116,50 +1116,50 @@
 
       <!-- Scenarios -->
       <div id="tab-scenarios">
-        <div class="sec-hdr">
-          <h1>Scenarios <span id="sc-cnt" class="cnt">0</span></h1>
-          <div class="g1-display-flex g1-s-f87248f3">
-            <input type="search" id="sc-search" placeholder="Search name, tag, technique…"
-                   data-on-input="scenarioSearchClear"
-                   class="g1-s-60660758">
-            <select id="sc-filter-source" data-on-change="renderScenarios"
-                    class="g1-s-e36961d8">
-              <option value="all">All sources</option>
-              <option value="builtin">Built-in</option>
-              <option value="custom">Custom</option>
-              <option value="intel">Threat intel</option>
-            </select>
-            <select id="sc-filter-os" data-on-change="renderScenarios"
-                    class="g1-s-e36961d8">
-              <option value="all">All OS</option>
-              <option value="windows">Windows</option>
-              <option value="linux">Linux</option>
-              <option value="darwin">macOS</option>
-            </select>
-            <button id="sc-new-btn" class="btn btn-primary btn-sm g1-s-b5fa1dcd" data-on-click="openBuilder" data-args="[null]">+ New Scenario</button>
-            <button id="sc-upload-btn" class="btn btn-outline btn-sm" data-on-click="pickScenarioUploadFile">&#8657; Upload YAML</button>
-            <input type="file" id="sc-upload-file" accept=".yaml,.yml" class="is-hidden" data-on-change="uploadScenarioFile">
-            <button class="btn btn-outline btn-sm" data-on-click="loadScenarios">Refresh</button>
-          </div>
+        <div id="hero-scenarios"></div>
+        <input type="file" id="sc-upload-file" accept=".yaml,.yml" class="is-hidden" data-on-change="uploadScenarioFile">
+        <div id="registryMigrationBanner" class="alert-warning" hidden></div>
+
+        <div class="scn-filters">
+          <label class="rk-search">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            <input type="search" id="sc-search" placeholder="Search by name, tag, technique, or ID..." data-on-input="scenarioSearchClear">
+          </label>
+          <select id="sc-filter-source" aria-label="Source" data-on-change="refreshScenarioView">
+            <option value="all">All Sources</option>
+            <option value="builtin">Built-in</option>
+            <option value="custom">Custom</option>
+            <option value="intel">Threat intel</option>
+          </select>
+          <select id="sc-filter-os" aria-label="Operating system" data-on-change="refreshScenarioView">
+            <option value="all">All OS</option>
+            <option value="windows">Windows</option>
+            <option value="linux">Linux</option>
+            <option value="darwin">macOS</option>
+          </select>
+          <select id="sc-filter-product" aria-label="Product line" data-on-change="refreshScenarioView">
+            <option value="all">All Product Lines</option>
+          </select>
+          <button type="button" class="btn btn-outline" data-on-click="loadScenarios">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 10-2.3 5.7M20 5v6h-6"/></svg>Refresh
+          </button>
         </div>
 
-        <!-- Scenario Library: category landing + drill-down tile view -->
-        <div id="registryMigrationBanner" class="alert-warning" hidden></div>
-        <div id="sc-landing" class="sc-landing"></div>
-
-        <div id="sc-category-view" class="is-hidden">
-          <div class="sc-backbar">
-            <button class="sc-back-btn" data-on-click="closeScenarioCategoryView">&larr; Back</button>
-            <h2 id="sc-backbar-title"></h2>
+        <!-- Scenario Library: category sidebar + toolbar + grid/list of scenario cards -->
+        <div class="scn-layout" id="sc-layout">
+          <aside class="scn-cats" id="sc-cats" aria-label="Scenario categories"></aside>
+          <div class="scn-main">
+            <div class="scn-tools" id="sc-toolbar"></div>
+            <div id="sc-tmpl-filters" class="is-hidden g1-s-0d019c74">
+              <button class="pfbtn active" data-tf="cat" data-val="all"        data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;all&quot;]">All</button>
+              <button class="pfbtn"        data-tf="cat" data-val="apt"        data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;apt&quot;]">APT</button>
+              <button class="pfbtn"        data-tf="cat" data-val="ransomware" data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;ransomware&quot;]">Ransomware</button>
+              <button class="pfbtn"        data-tf="cat" data-val="technique"  data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;technique&quot;]">Technique</button>
+              <button class="pfbtn"        data-tf="cat" data-val="insider"    data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;insider&quot;]">Insider</button>
+            </div>
+            <div id="sc-tile-grid"></div>
+            <div id="sc-foot" class="scn-showing"></div>
           </div>
-          <div id="sc-tmpl-filters" class="is-hidden g1-s-0d019c74">
-            <button class="pfbtn active" data-tf="cat" data-val="all"        data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;all&quot;]">All</button>
-            <button class="pfbtn"        data-tf="cat" data-val="apt"        data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;apt&quot;]">APT</button>
-            <button class="pfbtn"        data-tf="cat" data-val="ransomware" data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;ransomware&quot;]">Ransomware</button>
-            <button class="pfbtn"        data-tf="cat" data-val="technique"  data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;technique&quot;]">Technique</button>
-            <button class="pfbtn"        data-tf="cat" data-val="insider"    data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;insider&quot;]">Insider</button>
-          </div>
-          <div id="sc-tile-grid"></div>
         </div>
 
         <!-- Threat Actor Library (Caldera emu adversary profiles) -->
@@ -3378,6 +3378,18 @@
 </div>
 
 <!-- Initiative Detail Drawer -->
+<!-- Scenario detail drawer -->
+        <div id="sc-drawer-overlay" class="drawer-overlay" data-on-click="closeScenarioDrawerOnBackdrop">
+          <div class="drawer sc-drawer" role="dialog" aria-modal="true" aria-label="Scenario details">
+            <div class="drawer-header">
+              <div class="sc-dh" id="sc-drawer-head"></div>
+              <button class="drawer-close" data-on-click="closeScenarioDrawer" aria-label="Close">&#10005;</button>
+            </div>
+            <div class="drawer-body" id="sc-drawer-body"></div>
+            <div class="sc-drawer-ft" id="sc-drawer-foot"></div>
+          </div>
+        </div>
+
 <div id="init-drawer-overlay" class="drawer-overlay" data-on-click="closeInitiativeDrawerOnBackdrop">
   <div class="drawer g1-s-37327333">
     <div class="drawer-header">
