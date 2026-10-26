@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"os/signal"
 	"syscall"
 	"time"
@@ -96,7 +97,10 @@ func main() {
 				fmt.Fprintln(os.Stderr, "error: provide --secret <secret> or set BAS_AGENT_SECRET")
 				os.Exit(1)
 			}
-			s, err := promptSecret(os.Stdin, os.Stdout)
+			s, err := promptHidden("Agent Secret: ", os.Stdin, os.Stdout)
+			if err == nil && s == "" {
+				err = errors.New("agent secret must not be empty")
+			}
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
@@ -126,6 +130,15 @@ func main() {
 		if tokErr != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", tokErr)
 			os.Exit(1)
+		}
+		if tok == "" && stdinIsTerminal() {
+			// Optional: servers that issue per-host tokens need one; servers using only the shared secret do not.
+			t, perr := promptHidden("Enrollment token (press Enter to skip if this server uses the shared secret only): ", os.Stdin, os.Stdout)
+			if perr != nil {
+				fmt.Fprintln(os.Stderr, "error: could not read the enrollment token")
+				os.Exit(1)
+			}
+			tok = strings.TrimSpace(t)
 		}
 		if tok != "" {
 			icfg := Config{ServerURL: serverURL, AgentSecret: secret, EnrollmentToken: tok}
