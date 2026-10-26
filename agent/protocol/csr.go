@@ -46,6 +46,12 @@ type commandSigningTrust struct {
 // (bootstrap.go) and any future loadgen equivalent both call this, neither
 // reimplements it.
 func SubmitCSR(ctx context.Context, client *http.Client, enrollURL, bootstrapSecret string, req CSRRequest) (CSRResponse, error) {
+	return SubmitCSRWithToken(ctx, client, enrollURL, bootstrapSecret, "", req)
+}
+
+// SubmitCSRWithToken is SubmitCSR plus a single-use enrolment token, sent as X-Enrollment-Token when
+// non-empty. Servers in token mode require it; servers in secret mode ignore it.
+func SubmitCSRWithToken(ctx context.Context, client *http.Client, enrollURL, bootstrapSecret, enrollmentToken string, req CSRRequest) (CSRResponse, error) {
 	var resp CSRResponse
 	data, err := json.Marshal(req)
 	if err != nil {
@@ -57,6 +63,9 @@ func SubmitCSR(ctx context.Context, client *http.Client, enrollURL, bootstrapSec
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("X-Agent-Token", bootstrapSecret)
+	if enrollmentToken != "" {
+		httpReq.Header.Set("X-Enrollment-Token", enrollmentToken)
+	}
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
 		return resp, fmt.Errorf("POST /api/agents/enroll-csr: %w", err)

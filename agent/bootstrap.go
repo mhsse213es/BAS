@@ -220,7 +220,12 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 		bootstrapSecret = cfg.AgentSecret
 	}
 
-	resp, err := protocol.SubmitCSR(ctx, client, targetURL, bootstrapSecret, protocol.CSRRequest{
+	// The enrolment token only ever goes to the enrolment listener; a renewal over mTLS needs none.
+	enrollmentToken := cfg.EnrollmentToken
+	if renewing {
+		enrollmentToken = ""
+	}
+	resp, err := protocol.SubmitCSRWithToken(ctx, client, targetURL, bootstrapSecret, enrollmentToken, protocol.CSRRequest{
 		AgentID: agentID,
 		CSRPEM:  string(csrPEM),
 	})

@@ -38,6 +38,10 @@ const (
 	// CodeConfigRejected: the signed deployment config failed verification
 	// (missing/mismatched fingerprint, bad signature, unsupported or invalid content).
 	CodeConfigRejected = 25
+
+	// CodeEnrollmentRejected: the server refused the single-use enrolment token (invalid, expired,
+	// already used, or issued for a different agent), or enrolment could not be completed.
+	CodeEnrollmentRejected = 26
 )
 
 const defaultEnrollPort = "9444"

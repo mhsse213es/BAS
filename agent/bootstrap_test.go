@@ -83,6 +83,7 @@ type csrRecord struct {
 	mu            sync.Mutex
 	calls         int
 	token         string
+	enrollToken   string // X-Enrollment-Token as received
 	clientCertCN  string
 	hadClientCert bool
 }
@@ -103,6 +104,7 @@ func newMockOrchestrator(t *testing.T, ca testCA, clientAuth tls.ClientAuthType,
 		rec.mu.Lock()
 		rec.calls++
 		rec.token = r.Header.Get("X-Agent-Token")
+		rec.enrollToken = r.Header.Get("X-Enrollment-Token")
 		if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
 			rec.hadClientCert = true
 			rec.clientCertCN = r.TLS.PeerCertificates[0].Subject.CommonName
@@ -147,6 +149,7 @@ func newMockOrchestratorWithSigningTrust(t *testing.T, ca testCA, signingCertPEM
 		rec.mu.Lock()
 		rec.calls++
 		rec.token = r.Header.Get("X-Agent-Token")
+		rec.enrollToken = r.Header.Get("X-Enrollment-Token")
 		if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
 			rec.hadClientCert = true
 			rec.clientCertCN = r.TLS.PeerCertificates[0].Subject.CommonName

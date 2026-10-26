@@ -6,11 +6,12 @@ import (
 )
 
 type Config struct {
-	ServerURL     string
-	EnvLabel      string
-	AgentSecret   string // shared secret for X-Agent-Token + result HMAC signing
-	ProxyUser     string // forward-proxy username, Basic auth only (NTLM needs none)
-	ProxyPassword string // forward-proxy password, Basic auth only
+	ServerURL       string
+	EnvLabel        string
+	AgentSecret     string // shared secret for X-Agent-Token + result HMAC signing
+	EnrollmentToken string // single-use enrolment token; env only, never persisted
+	ProxyUser       string // forward-proxy username, Basic auth only (NTLM needs none)
+	ProxyPassword   string // forward-proxy password, Basic auth only
 	// MTLS is set only by resolveOperationalConfig (bootstrap.go), after
 	// ensureCertificate confirmed a usable client certificate and rewrote
 	// ServerURL to the orchestrator's mTLS listener. Every client built from
@@ -59,11 +60,12 @@ func loadConfig() Config {
 		envLabel = "Production"
 	}
 	return Config{
-		ServerURL:     strings.TrimRight(serverURL, "/"),
-		EnvLabel:      envLabel,
-		AgentSecret:   agentSecret,
-		ProxyUser:     proxyUser,
-		ProxyPassword: proxyPassword,
+		ServerURL:       strings.TrimRight(serverURL, "/"),
+		EnvLabel:        envLabel,
+		AgentSecret:     agentSecret,
+		EnrollmentToken: strings.TrimSpace(os.Getenv("BAS_ENROLLMENT_TOKEN")),
+		ProxyUser:       proxyUser,
+		ProxyPassword:   proxyPassword,
 	}
 }
 

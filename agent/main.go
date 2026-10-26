@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -117,6 +118,17 @@ func main() {
 				os.Exit(1)
 			}
 			fmt.Println("[+] deployment CA root installed")
+		}
+		// A single-use enrolment token (BAS_ENROLLMENT_TOKEN, installer environment only) is spent right
+		// here, so it never has to be stored: the service then starts already enrolled.
+		if tok := strings.TrimSpace(os.Getenv("BAS_ENROLLMENT_TOKEN")); tok != "" {
+			os.Unsetenv("BAS_ENROLLMENT_TOKEN")
+			icfg := Config{ServerURL: serverURL, AgentSecret: secret, EnrollmentToken: tok}
+			if err := enrollAtInstall(context.Background(), icfg, dep.EnrollPort, collectIdentity().AgentID); err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				os.Exit(preflight.CodeEnrollmentRejected)
+			}
+			fmt.Println("[+] agent enrolled with the supplied token")
 		}
 		if err := svcInstall(serverURL, *flagEnv, secret, dep.EnrollPort); err != nil {
 			fmt.Fprintf(os.Stderr, "install failed: %v\n", err)

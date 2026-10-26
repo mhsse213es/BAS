@@ -79,11 +79,17 @@ Progress: all six areas assessed. Fixed: F-01, F-02, F-04, F-05, F-06, F-07; par
   per address (in memory, resets on restart). Tests: `enroll_token_test.go` (5 tests, written first).
 * **Rulings:** default stays `secret` so existing fleets and installers keep working; a malformed `BAS_ENROLLMENT_MODE` stops the
   server instead of weakening enrolment; renewal over mTLS is unaffected by the mode.
-* **Not built yet (each needs the agent or installers):** the agent sending a token (it still sends only the shared secret, so in token
-  mode no agent can enrol until this lands); the Deploy Agent page, MSI/install scripts and deployment bundle asking for a token; and
-  the F-06 recovery path, which re-enrols an expired agent with the shared secret and therefore fails in token mode. Proposed
-  replacement: re-enrolment proven by the agent's previous (expired) certificate within a grace period, otherwise an operator-issued
-  token. Operator approval as a higher-security mode is not built.
+* **Agent side: BUILT.** `bas_agent --install` reads `BAS_ENROLLMENT_TOKEN` from the installer's environment (never a command-line
+  argument), enrols immediately and sends it as `X-Enrollment-Token` next to the shared secret (`enrollAtInstall`), so the token is
+  spent once and never stored; the service then starts already enrolled. A refused token fails the install with exit code 26.
+  The token goes only to the enrolment listener, never on a renewal. Tests: `install_enroll_test.go`, `protocol/csr_token_test.go`.
+  Linux: `sudo BAS_ENROLLMENT_TOKEN=... bas_agent --install --server ... --secret-stdin`. Windows: set the variable in the
+  elevated session before `bas_agent.exe --install`.
+* **Not built yet:** the MSI and its custom action asking for the token (a hidden property, passed to the agent through the
+  environment), the Linux/macOS install scripts, the Deploy Agent page and deployment bundle; and the F-06 recovery path, which
+  re-enrols an expired agent with the shared secret only and therefore fails in token mode. Proposed replacement:
+  re-enrolment proven by the agent's previous (expired) certificate within a grace period, otherwise an operator-issued token.
+  Operator approval as a higher-security mode is not built.
 
 ### Positive checks still to execute (cheap, planned)
 
