@@ -12,6 +12,9 @@ The web console has a new look. Every screen keeps its existing behaviour, data 
 - All four themes (Dark, Light, Cyberpunk, Slate) share one set of colour tokens, so the Light theme now has a light sidebar and header, and status text stays readable on light backgrounds
 - Sign-in page: form card, larger logo, stacked layout on narrow screens
 - Settings: side navigation becomes a card, and tabs on narrow screens
+- Every page now has the demo's richer layout: KPI tiles, donut/bar/line charts, cards, filters and polished tables. Every number comes from data the page already loads; widgets that would need data the server does not provide were left out
+- Sidebar: count badges (agents offline or degraded, open findings, running campaigns), a pin star on each item, and Pinned and Recent groups (saved in the browser only)
+- Windows agent: the service now checks every 30 seconds that the tray icon process is running and restarts it; a top-level Start Menu entry "Audspect Agent" brings the tray back by hand (MSI and CLI install); starting the tray from a shortcut no longer shows a console window
 - Fixes found on the way: the Factory health and Email pages no longer throw when the server returns an empty or unexpected response
 
 ---
