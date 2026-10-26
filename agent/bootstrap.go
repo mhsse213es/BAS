@@ -225,10 +225,24 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 	if renewing {
 		enrollmentToken = ""
 	}
-	resp, err := protocol.SubmitCSRWithToken(ctx, client, targetURL, bootstrapSecret, enrollmentToken, protocol.CSRRequest{
-		AgentID: agentID,
-		CSRPEM:  string(csrPEM),
-	})
+	var resp protocol.CSRResponse
+	recovered := false
+	if reEnrolling {
+		// The certificate has expired. First try restricted recovery, proven by that certificate and its key
+		// (valid for 24 hours after expiry); only if the server refuses does the agent fall back to a fresh
+		// authorized enrolment with whatever credential it has been given.
+		if r, rerr := attemptRecovery(ctx, client, targetURL, agentID, string(csrPEM)); rerr == nil {
+			resp, recovered = r, true
+		} else {
+			logRecoveryFailure(rerr)
+		}
+	}
+	if !recovered {
+		resp, err = protocol.SubmitCSRWithToken(ctx, client, targetURL, bootstrapSecret, enrollmentToken, protocol.CSRRequest{
+			AgentID: agentID,
+			CSRPEM:  string(csrPEM),
+		})
+	}
 	if err != nil {
 		err = fmt.Errorf("submit CSR (renewing=%v): %w", renewing, err)
 	} else if saveErr := persistIssuedCertificate(enrolled, key, []byte(resp.CertPEM)); saveErr != nil {

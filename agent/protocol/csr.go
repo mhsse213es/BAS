@@ -88,3 +88,39 @@ func SubmitCSRWithToken(ctx context.Context, client *http.Client, enrollURL, boo
 	}
 	return resp, nil
 }
+
+// RecoverRequest is the body of POST /api/agents/recover-csr.
+type RecoverRequest struct {
+	AgentID        string `json:"agentId"`
+	CSRPEM         string `json:"csrPem"`
+	ExpiredCertPEM string `json:"expiredCertPem"`
+	SignedAt       string `json:"signedAt"`
+	Proof          string `json:"proof"`
+}
+
+// SubmitRecovery performs POST {enrollURL}/api/agents/recover-csr: restricted recovery of a certificate that
+// expired recently, proven by the expired certificate and its key. No shared secret and no token are sent.
+func SubmitRecovery(ctx context.Context, client *http.Client, enrollURL string, req RecoverRequest) (CSRResponse, error) {
+	var resp CSRResponse
+	data, err := json.Marshal(req)
+	if err != nil {
+		return resp, fmt.Errorf("marshal recovery request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, enrollURL+"/api/agents/recover-csr", bytes.NewReader(data))
+	if err != nil {
+		return resp, fmt.Errorf("new request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpResp, err := client.Do(httpReq)
+	if err != nil {
+		return resp, fmt.Errorf("POST /api/agents/recover-csr: %w", err)
+	}
+	defer httpResp.Body.Close()
+	if httpResp.StatusCode >= 300 {
+		return resp, &StatusError{Code: httpResp.StatusCode, Path: "/api/agents/recover-csr"}
+	}
+	if err := json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
+		return resp, fmt.Errorf("decode recovery response: %w", err)
+	}
+	return resp, nil
+}

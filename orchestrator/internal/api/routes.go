@@ -37,6 +37,7 @@ func MountEnrollment(h *Handler) http.Handler {
 	r.Use(middleware.StripSlashes)
 	r.Use(LicenseGate)
 	r.Post("/api/agents/enroll-csr", h.EnrollCSR)
+	r.Post("/api/agents/recover-csr", h.RecoverCSR)
 	r.Get("/health", healthHandler)
 	return r
 }

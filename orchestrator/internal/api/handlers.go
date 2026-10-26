@@ -117,6 +117,7 @@ type Handler struct {
 	agentSecret          string                 // optional shared secret for agent-facing endpoints
 	enrollmentMode       string                 // "" / "secret" (shared secret enrols) or "token" (single-use per-agent token)
 	enrollThrottle       enrollThrottle         // failed enrolment-token attempts per client address
+	now                  func() time.Time       // server clock override for tests (expired-agent recovery); nil = time.Now
 	ingestAPIKey         string                 // shared secret for POST /api/ingest/v1/events; empty disables the endpoint
 	pki                  *pki.CA                // deployment CA for agent mTLS enrollment (B1/B3)
 	pkiDir               string                 // directory holding the CA files; used for planned CA rotation (audit F-09)
