@@ -39,6 +39,15 @@ type commandSigningTrust struct {
 	CertPEM string `json:"certPem"`
 }
 
+// StatusError is a non-success HTTP answer from the server, so callers can tell a refusal (401/403) from a
+// server that is down or misbehaving.
+type StatusError struct {
+	Code int
+	Path string
+}
+
+func (e *StatusError) Error() string { return fmt.Sprintf("server %d on %s", e.Code, e.Path) }
+
 // SubmitCSR performs the bootstrap CSR submission against
 // POST {enrollURL}/api/agents/enroll-csr, authenticated with
 // bootstrapSecret via X-Agent-Token (the same header shape Enroll already
@@ -72,7 +81,7 @@ func SubmitCSRWithToken(ctx context.Context, client *http.Client, enrollURL, boo
 	}
 	defer httpResp.Body.Close()
 	if httpResp.StatusCode >= 300 {
-		return resp, fmt.Errorf("server %d on /api/agents/enroll-csr", httpResp.StatusCode)
+		return resp, &StatusError{Code: httpResp.StatusCode, Path: "/api/agents/enroll-csr"}
 	}
 	if err := json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
 		return resp, fmt.Errorf("decode CSR response: %w", err)

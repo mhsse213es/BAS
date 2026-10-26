@@ -10,7 +10,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -34,6 +33,8 @@ func main() {
 	flagEnv := flag.String("env", "Production", "Override BAS_ENV_LABEL")
 	flagSecret := flag.String("secret", "", "Agent shared secret (encrypted at rest via DPAPI on Windows)")
 	flagSecretStdin := flag.Bool("secret-stdin", false, "Read the agent secret from stdin (one line) instead of --secret, so it never appears in process arguments")
+	flagTokenFile := flag.String("enrollment-token-file", "", "Path to a file holding a single-use enrolment token (one line); the file is deleted once read. The token is never accepted as a command-line value")
+	flagTokenStdin := flag.Bool("enrollment-token-stdin", false, "Read a single-use enrolment token from stdin (one line); cannot be combined with --secret-stdin")
 	flagPreflight := flag.Bool("preflight", false, "Check connectivity, CA trust and the agent secret without installing anything; the secret is read from stdin (--secret-stdin). Exit codes: 0 ok, 20 invalid input, 21 unreachable, 22 secret rejected, 23 trust failure, 24 invalid CA")
 	flagCARoot := flag.String("ca-root", "", "Path to the deployment CA root PEM (required for mTLS enrollment; fetch via GET /api/config/connection)")
 	flagEnrollPort := flag.String("enroll-port", "", "Host port of the orchestrator enrollment listener, if the published port was remapped from the 9444 default (persisted as BAS_ENROLL_PORT)")
@@ -121,12 +122,16 @@ func main() {
 		}
 		// A single-use enrolment token (BAS_ENROLLMENT_TOKEN, installer environment only) is spent right
 		// here, so it never has to be stored: the service then starts already enrolled.
-		if tok := strings.TrimSpace(os.Getenv("BAS_ENROLLMENT_TOKEN")); tok != "" {
-			os.Unsetenv("BAS_ENROLLMENT_TOKEN")
+		tok, tokErr := resolveEnrollmentToken(*flagTokenFile, *flagTokenStdin, secretFromStdin, os.Stdin)
+		if tokErr != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", tokErr)
+			os.Exit(1)
+		}
+		if tok != "" {
 			icfg := Config{ServerURL: serverURL, AgentSecret: secret, EnrollmentToken: tok}
 			if err := enrollAtInstall(context.Background(), icfg, dep.EnrollPort, collectIdentity().AgentID); err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
-				os.Exit(preflight.CodeEnrollmentRejected)
+				os.Exit(installExitCode(err))
 			}
 			fmt.Println("[+] agent enrolled with the supplied token")
 		}

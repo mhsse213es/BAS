@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 )
 
@@ -25,7 +24,7 @@ func enrollAtInstall(ctx context.Context, cfg Config, enrollPort, agentID string
 		}()
 	}
 	if _, err := ensureCertificate(ctx, cfg, agentID); err != nil {
-		return fmt.Errorf("enrolment with the supplied token failed: %w", err)
+		return classifyEnrollError(err)
 	}
 	return nil
 }

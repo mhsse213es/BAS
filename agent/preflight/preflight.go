@@ -42,6 +42,11 @@ const (
 	// CodeEnrollmentRejected: the server refused the single-use enrolment token (invalid, expired,
 	// already used, or issued for a different agent), or enrolment could not be completed.
 	CodeEnrollmentRejected = 26
+
+	// CodeServerUnreachable: enrolment could not be completed because the server could not be reached or
+	// failed (network, TLS, 5xx, unexpected response), as opposed to CodeEnrollmentRejected where the server
+	// answered and refused the credentials.
+	CodeServerUnreachable = 27
 )
 
 const defaultEnrollPort = "9444"
