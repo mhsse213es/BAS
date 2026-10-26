@@ -47,6 +47,11 @@ export function __init_L5162() {
 // so the choice survives a reload (same bas_-prefixed localStorage pattern
 // used for theme/role/last-tab elsewhere in this file).
 export function toggleSidebarCollapsed() {
+  // Below 900px the sidebar is an off-canvas drawer: the same button opens and closes it.
+  if (window.matchMedia && window.matchMedia('(max-width: 900px)').matches) {
+    document.getElementById('app').classList.toggle('sidebar-open');
+    return;
+  }
   var collapsed = document.getElementById('app').classList.toggle('sidebar-collapsed');
   try { localStorage.setItem('bas_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
   document.getElementById('sidebar-collapse-btn').title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
@@ -441,6 +446,8 @@ export function doLogoutFromMenu() { closeUserMenu(); doLogout(); }
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 export function activateTab(name) {
+  var appEl = document.getElementById('app');
+  if (appEl) appEl.classList.remove('sidebar-open');
   ['dashboard','agents','scenarios','runs','k8s-scenarios','scheduled-assessments','initiatives','campaigns','factory-health','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','ad-coverage','email','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) setDisplay(el, t === name ? '' : 'none');
