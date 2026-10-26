@@ -4,7 +4,7 @@
 #hero-factory .hero-actions .btn svg { width: 15px; height: 15px; margin-right: 6px; vertical-align: -3px; flex: none; }
 #hero-factory .hero-actions .btn { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; font-size: 13px; width: auto; }
 
-#factory-health-tiles, #factory-health-funnel, .fh-side { margin-top: 14px; }
+#factory-health-tiles, #factory-health-funnel { margin-top: 14px; }
 
 /* Content pipeline: four stage boxes joined by arrows, then the data-quality lines */
 .fh-funnel { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; }
@@ -15,7 +15,7 @@
 .fh-stage.tone-info { --pc: var(--info-text); }
 .fh-stage.tone-ok { --pc: var(--success); }
 .fh-stage.tone-bad { --pc: var(--danger); }
-.fh-stage-v { font-size: 30px; font-weight: 700; color: var(--pc); line-height: 1.2; }
+.fh-stage-v { font-family: var(--font-display); font-size: 30px; font-weight: 700; color: var(--pc); line-height: 1.2; }
 .fh-stage-n { font-size: 12px; color: var(--muted-hi); letter-spacing: .06em; text-transform: uppercase; }
 .fh-arrow { align-self: center; color: var(--muted); }
 .fh-quality { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 14px; font-size: 12.5px; }
@@ -24,12 +24,48 @@
 .fh-q.tone-ok { color: var(--success); }
 .fh-q.tone-warn { color: var(--warning); }
 
-/* Source table beside the ingestion summary */
-.fh-side { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
-.fh-side > div { min-width: 0; }
-.fh-row { cursor: pointer; }
-.fh-row:hover { background: var(--row-hover, var(--surface-2)); }
-.fh-diag { max-width: 260px; overflow-wrap: anywhere; }
-.fh-dr-state { margin-bottom: 14px; }
-@media (max-width: 1000px) { .fh-side { grid-template-columns: minmax(0, 1fr); } }
+/* Metric tiles: tinted icon square on the left, label, big value, caption; coloured top border (demo "real-tile") */
+.fh-tile { --tc: var(--accent); position: relative; overflow: hidden; display: flex; gap: 14px; align-items: center; padding: 16px;
+  background: var(--surface); border: 1px solid var(--border); border-top: 2px solid var(--tc); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+  transition: transform .15s, box-shadow .15s; }
+.fh-tile:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+.fh-tile::after { content: ''; position: absolute; inset: 0; background: radial-gradient(120px 80px at 0 0, color-mix(in srgb, var(--tc) 16%, transparent), transparent); pointer-events: none; }
+.fh-c-accent { --tc: var(--accent); }
+.fh-c-ok { --tc: var(--success); }
+.fh-c-cyan { --tc: #22d3ee; }
+.fh-c-muted { --tc: var(--muted); }
+.fh-ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; color: var(--tc);
+  background: color-mix(in srgb, var(--tc) 14%, transparent); border: 1px solid color-mix(in srgb, var(--tc) 35%, transparent); }
+.fh-ico svg { width: 18px; height: 18px; }
+.fh-tb { min-width: 0; position: relative; z-index: 1; }
+.fh-lbl { font-size: 10.5px; letter-spacing: .08em; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+.fh-val { font-family: var(--font-display); font-size: 24px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.fh-c-muted .fh-val { color: var(--muted-hi); }
+.fh-cap { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+.fh-ringtile .fh-cap { margin-top: 4px; }
+.fh-ringtile .ring-n { flex: none; position: relative; z-index: 1; }
+
+/* Source table (chrome shared with Live Runs / Scheduled Assessments via .dt-*) */
+.fh-card { margin-bottom: 14px; }
+.fh-card .tbl-wrap { border: 0; }
+#factory-health-ingestion .sec-label { margin-top: 18px; }
+#fh-table-wrap { border: 0; border-radius: 0; box-shadow: none; background: transparent; max-height: 560px; overflow: auto; }
+#fh-table-wrap[hidden] { display: none; }
+#fh-table-wrap thead { position: sticky; top: 0; z-index: 2; }
+#fh-table-wrap th { background: var(--elevated); box-shadow: 0 1px 0 var(--border); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; white-space: nowrap; }
+#fh-table-wrap th.dt-th { cursor: pointer; user-select: none; }
+#fh-table-wrap th.dt-th:hover { color: var(--text); }
+#fh-table-wrap th.sorted { color: var(--info-text); }
+#fh-table-wrap th.num, #fh-table-wrap td.num { text-align: right; font-variant-numeric: tabular-nums; }
+#fh-table-wrap .dt-selcol { width: 34px; padding-right: 0; }
+#fh-table-wrap tbody td { vertical-align: middle; font-size: 13px; }
+#fh-table-wrap tbody tr:has(.dt-cb:checked) td { background: var(--accent-dim); }
+#fh-table-wrap tbody tr.dt-click { cursor: pointer; }
+#fh-table-wrap tbody tr.dt-click:hover td { background: var(--hover); }
+#fh-table-wrap tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+#fh-table-wrap tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+#fh-table-wrap .rk-pill { text-transform: capitalize; }
+.fh-id { font-size: 11px; }
+.fh-diag { max-width: 320px; overflow-wrap: anywhere; }
+.fh-dr-state { margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .fh-trends { margin-top: 14px; }

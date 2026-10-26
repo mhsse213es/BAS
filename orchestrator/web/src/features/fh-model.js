@@ -69,3 +69,72 @@ export function qualityLines(dq) {
     { tone: stuck > 0 ? 'warn' : 'ok', text: stuck + ' stuck in validation' },
   ];
 }
+
+// ── Metric tiles ─────────────────────────────────────────────────────────────
+
+// windowDays: whole days in the lookback window the report covers (windowSince -> now), or null.
+export function windowDays(r, nowTs) {
+  var t = r && r.windowSince ? Date.parse(r.windowSince) : NaN;
+  if (!isFinite(t)) return null;
+  var d = Math.round(((nowTs == null ? Date.now() : nowTs) - t) / 86400000);
+  return d > 0 ? d : null;
+}
+
+// tileCaption: the one line under a tile's value, taken from the response (never invented).
+export function tileCaption(key, r, nowTs) {
+  r = r || {};
+  if (key === 'threats') { var d = windowDays(r, nowTs); return d ? 'last ' + d + (d === 1 ? ' day' : ' days') : 'selected window'; }
+  if (key === 'published') return 'scenarios and variants';
+  if (key === 'tcv') return 'median TCV';
+  if (key === 'validation') {
+    var m = r.staticValidationPassRate;
+    return m && m.state !== 'no_data' && n(m.value) >= 1 ? 'every build passed' : 'of builds passed validation';
+  }
+  return '';
+}
+
+// ── Source table ─────────────────────────────────────────────────────────────
+
+export var COLUMNS = ['Source', 'State', 'Last success', 'Failures', 'Last diagnostic'];
+
+// cellText: the text of one cell, used for the table filter and the CSV.
+export function cellText(row, col) {
+  switch (col) {
+    case 0: return row.name;
+    case 1: return row.state.label;
+    case 2: return row.lastSuccessAt ? row.lastSuccessAt : 'never synced';
+    case 3: return String(row.failures);
+    default: return row.diagnostic || '';
+  }
+}
+
+export function filterSources(rows, q) {
+  var s = String(q || '').trim().toLowerCase();
+  if (!s) return rows.slice();
+  return rows.filter(function(r) { return (r.name + ' ' + r.id + ' ' + r.state.label + ' ' + r.diagnostic).toLowerCase().indexOf(s) !== -1; });
+}
+
+function sortKey(r, col) {
+  switch (col) {
+    case 0: return r.name;
+    case 1: return r.state.label;
+    case 2: return r.lastSuccessAt ? Date.parse(r.lastSuccessAt) : null;
+    case 3: return r.failures;
+    default: return r.diagnostic || null;
+  }
+}
+
+// sortSources: stable; empty values (never synced, no diagnostic) always sort last.
+export function sortSources(rows, col, dir) {
+  if (col < 0) return rows.slice();
+  var d = dir < 0 ? -1 : 1;
+  return rows.map(function(r, i) { return { r: r, i: i }; }).sort(function(a, b) {
+    var u = sortKey(a.r, col), v = sortKey(b.r, col);
+    var ue = u == null || u === '' || (typeof u === 'number' && isNaN(u)), ve = v == null || v === '' || (typeof v === 'number' && isNaN(v));
+    if (ue || ve) return ue && ve ? a.i - b.i : ue ? 1 : -1;
+    var c = typeof u === 'number' && typeof v === 'number' ? u - v : String(u).localeCompare(String(v), undefined, { numeric: true });
+    return c * d || a.i - b.i;
+  }).map(function(o) { return o.r; });
+}
+
+export { pageCount, rangeText, csvText } from './runs-model.js';

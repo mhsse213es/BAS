@@ -1,0 +1,55 @@
+/* Reports page (Reports / Compliance report / SLA compliance): banner button, type tiles, per-agent
+   table, filter row, history table beside the deliveries card, framework cards and the Generate report
+   modal. Mirrors the design demo. Theme tokens only. */
+
+#hero-reports .hero-actions .btn, #hero-compliance .hero-actions .btn, #hero-sla .hero-actions .btn { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; font-size: 13px; width: auto; }
+#hero-reports .hero-actions .btn svg, #hero-compliance .hero-actions .btn svg, #hero-sla .hero-actions .btn svg { width: 15px; height: 15px; margin-right: 6px; vertical-align: -3px; flex: none; }
+
+/* Type tiles */
+.rpt-types { margin-bottom: 14px; }
+.rpt-type { --tc: var(--accent); display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; font: inherit; color: inherit; cursor: pointer; margin-bottom: 0;
+  position: relative; overflow: hidden; border-top: 2px solid var(--tc); transition: transform .15s, box-shadow .15s; }
+.rpt-type:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0, 0, 0, .25); }
+.rpt-type.t-violet { --tc: var(--purple); }
+.rpt-type.t-ok { --tc: var(--success); }
+.rpt-type.t-warn { --tc: var(--warning); }
+.rpt-ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; margin-bottom: 6px; color: var(--tc);
+  background: color-mix(in srgb, var(--tc) 14%, transparent); border: 1px solid color-mix(in srgb, var(--tc) 35%, transparent); }
+.rpt-lbl { font-size: 10.5px; letter-spacing: .08em; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+.rpt-type b { font-size: 15px; font-weight: 600; }
+.rpt-d { font-size: 12px; color: var(--muted); line-height: 1.45; }
+
+/* Per-agent table */
+.rpt-avail { margin-bottom: 14px; }
+.rpt-avail .num, .rpt-side .num { text-align: right; font-variant-numeric: tabular-nums; }
+.rpt-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.rpt-acts.end { justify-content: flex-end; }
+td.rpt-acts { display: table-cell; white-space: nowrap; text-align: right; }
+.rpt-acts .btn svg { width: 14px; height: 14px; margin-right: 5px; vertical-align: -2px; }
+.rpt-acts a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+
+/* Filter row + history beside the deliveries card */
+.rpt-filters .rk-search { flex: 0 1 280px; }
+.rpt-filters select, .rpt-cmp-tools select { height: 36px; margin: 0; min-width: 170px; }
+.rpt-filters .btn, .rpt-cmp-tools .btn, .rpt-sla-tools .btn { height: 36px; width: auto; display: inline-flex; align-items: center; padding: 0 14px; font-size: 13px; }
+.rpt-side { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
+.rpt-side > .rk-card { margin-bottom: 0; }
+.rpt-side .rk-empty { padding: 18px 8px; }
+@media (max-width: 1000px) { .rpt-side { grid-template-columns: minmax(0, 1fr); } }
+
+/* Compliance report: framework cards, then the per-agent report toolbar */
+#cmp-fw-cards { margin-bottom: 14px; }
+.rpt-pct { font-size: 14px; }
+.rpt-bar { margin: 10px 0; }
+.rpt-cdetail { font-size: 12.5px; margin: 0 0 12px; }
+.rpt-cmp-tools { margin-top: 4px; }
+.rpt-sla-tools { margin-top: -6px; }
+
+/* Generate report modal: format cards */
+.rpt-fmts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.rpt-fmt { border: 1px solid var(--border-hi); border-radius: 9px; padding: 12px 14px; cursor: pointer; display: flex; align-items: center; gap: 10px; background: var(--surface); transition: border-color .15s, background-color .15s; }
+.rpt-fmt:hover { border-color: var(--border-hi); }
+.rpt-fmt.on { border-color: var(--accent); background: var(--accent-dim); }
+.rpt-fmt b { font-weight: 600; }
+.rpt-fmt input { margin: 0; }
+#report-overlay .init-mbd select.init-field { height: auto; }

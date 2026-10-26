@@ -17,6 +17,7 @@ import { loadADCoverage } from './ad-coverage.js';
 import { loadEmailTab } from './email.js';
 import { connectWS, loadDashboard, openCmdk } from './evidence.js';
 import { loadFindings, loadRemediations, loadSLAReport } from './findings.js';
+import { loadComplianceCards } from './rpt-view.js';
 import { loadInitiatives } from './initiatives.js';
 import { loadIntegrations, loadResponseConnectors, renderResponseConnectorList } from './integrations.js';
 import { loadIOCRegistry } from './iocs.js';
@@ -594,7 +595,7 @@ export function showTab(name) {
     setDashView(resolveDashView());
   }
   if (name === 'integrations') { loadIntegrations(); loadResponseConnectors(renderResponseConnectorList); }
-  if (name === 'compliance') initComplianceTab();
+  if (name === 'compliance') { initComplianceTab(); loadComplianceCards(); }
   if (name === 'settings') {
     if (ROLE === 'admin') {
       showSettingsSection(state.SETTINGS_SECTION);

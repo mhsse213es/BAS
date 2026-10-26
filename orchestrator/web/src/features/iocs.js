@@ -7,9 +7,10 @@ import { covSegHtml } from './attack-path.js';
 import { ROLE } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
-import { kpi, card, grid, hbars, bar, chip, pill, empty } from '../core/kit.js';
-import { chartSlot, CHART_COLORS } from '../core/charts.js';
-import { countBy, hbarRows } from './rich-g3.js';
+import { kpi, card, grid, hbars, bar, chip, pill, empty, kv } from '../core/kit.js';
+import { chartSlot } from '../core/charts.js';
+import { setHeroStat } from './shell-ui.js';
+import * as M from './ioc-model.js';
 
 
 // ── Indicators (IOCs) tab ────────────────────────────────────────────────────
@@ -123,8 +124,10 @@ export function closeResultsOnBackdrop(el, event) { if (event.target === el) clo
 var _iocRegistryRows = [];
 
 export function loadIOCRegistry() {
-  var importBtn = document.getElementById('ioc-import-btn');
-  if (importBtn) setDisplay(importBtn, ROLE === 'admin' ? '' : 'none');
+  ['ioc-import-btn', 'ioc-import-btn2', 'ioc-add-btn'].forEach(function(id) {
+    var b = document.getElementById(id);
+    if (b) setDisplay(b, ROLE === 'admin' ? '' : 'none');
+  });
 
   apicall('/api/analytics/iocs?limit=5').then(renderIOCAnalyticsTiles).catch(function() {
     var el = document.getElementById('ioc-analytics-tiles');
@@ -146,7 +149,9 @@ export function loadIOCRegistry() {
   params.push('limit=200');
 
   var tbody = document.getElementById('ioc-registry-body');
-  tbody.innerHTML = '<tr><td colspan="9" class="empty">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" class="empty">Loading…</td></tr>';
+  var clr = document.getElementById('ioc-clear-btn');
+  if (clr) setDisplay(clr, (type || source || origin || status || search || showSuppressed) ? '' : 'none');
   apicall('/api/iocs?' + params.join('&')).then(function(rows) {
     rows = rows || [];
     // suppressed filtering happens client-side -- GetIOCs has no suppressed
@@ -155,80 +160,80 @@ export function loadIOCRegistry() {
     _iocRegistryRows = showSuppressed ? rows : rows.filter(function(r) { return !r.suppressed; });
     renderIOCRegistryTable();
   }).catch(function(e) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>';
+    ['ioc-side', 'ioc-insights'].forEach(function(id) { var el = document.getElementById(id); if (el) el.innerHTML = ''; });
+    ['total', 'detected', 'missed', 'observed'].forEach(function(k) { setHeroStat('ioc-hs-' + k, '—'); });
   });
+}
+// Type chip beside the charts: sets the type filter (the select in the search bar) and reloads.
+export function setIOCType(t) {
+  var sel = document.getElementById('ioc-filter-type');
+  if (sel) sel.value = t || '';
+  loadIOCRegistry();
+}
+export function clearIOCFilters() {
+  ['ioc-filter-type', 'ioc-filter-source', 'ioc-filter-origin', 'ioc-filter-status', 'ioc-filter-search'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  var sup = document.getElementById('ioc-filter-suppressed');
+  if (sup) sup.checked = false;
+  loadIOCRegistry();
 }
 export function loadIOCRegistryOnEnter(el, event) { if (event.key === 'Enter') loadIOCRegistry(); }
 
-var IOC_TYPE_LABEL_REGISTRY = {
-  file_hash: 'File hash', domain: 'Domain', url: 'URL', ip: 'IP', registry_key: 'Registry key',
-  mutex: 'Mutex', service: 'Service', process: 'Process', command_line: 'Command line',
-  ja3: 'JA3', user_agent: 'User agent', email: 'Email', dns_record: 'DNS record', certificate: 'Certificate'
-};
+var IOC_TYPE_LABEL_REGISTRY = M.TYPE_LABEL;
+var IOC_PALETTE = ['#3b82f6', '#22d3ee', '#a78bfa', '#f59e0b', '#10b981', '#ef4444', '#60a5fa'];
 
+// The four ranking tiles (GET /api/analytics/iocs): the top entry of each ranking, or an honest "No data yet".
 function renderIOCAnalyticsTiles(result) {
   var el = document.getElementById('ioc-analytics-tiles');
   if (!el) return;
-  result = result || {};
-  // One card per ranking the analytics endpoint returns; bars are scaled to the largest count shown.
-  function rank(label, entries, unit, tone) {
-    var list = (entries || []).slice(0, 5);
-    var max = 0;
-    list.forEach(function(e) { if ((e.sightingCount || 0) > max) max = e.sightingCount || 0; });
-    var body = list.length
-      ? '<ul class="g3-top">' + list.map(function(e) {
-          return '<li><code title="' + x(e.value) + '">' + x(e.value) + '</code><span class="n">' + x(e.sightingCount || 0) + '</span>' + bar(max ? (e.sightingCount || 0) / max * 100 : 0, tone) + '</li>';
-        }).join('') + '</ul>'
-      : empty('hash', 'No data yet');
-    return card(label, body, { sub: unit });
-  }
-  el.innerHTML = grid(4, [
-    rank('Most Detected', result.mostDetected, 'detections', 'ok'),
-    rank('Highest Bypass Rate', result.highestBypassRate, 'bypasses', 'bad'),
-    rank('Frequently Reused', result.frequentlyReused, 'sightings', 'accent'),
-    rank('Longest Surviving', result.longestSurviving, 'sightings', 'warn')
-  ]);
+  el.innerHTML = grid(4, M.analyticsTiles(result).map(function(t) { return kpi(t); }));
 }
 
-var IOC_STATUS_TONE = { detected: 'ok', missed: 'bad', expired: 'muted', archived: 'muted', draft: 'info', generated: 'info', assigned: 'info', executed: 'accent', observed: 'accent' };
+// Indicator-type chips + sightings-by-type donut (side by side), then the by-type donut and top-sources bars.
 function renderIOCInsights() {
+  var side = document.getElementById('ioc-side');
   var el = document.getElementById('ioc-insights');
-  if (!el) return;
-  if (!_iocRegistryRows.length) { el.innerHTML = ''; return; }
-  var palette = [CHART_COLORS.accent, CHART_COLORS.teal, CHART_COLORS.violet, CHART_COLORS.warn, CHART_COLORS.pink, CHART_COLORS.info, CHART_COLORS.ok, CHART_COLORS.bad];
-  var types = countBy(_iocRegistryRows, function(r) { return IOC_TYPE_LABEL_REGISTRY[r.type] || r.type; }, 'Unknown');
-  var segs = types.slice(0, 7).map(function(p, k) { return { label: p[0], value: p[1], color: palette[k % palette.length] }; });
-  var rest = types.slice(7).reduce(function(a, p) { return a + p[1]; }, 0);
-  if (rest) segs.push({ label: 'Other', value: rest, color: CHART_COLORS.muted });
-  var status = countBy(_iocRegistryRows, function(r) { return r.status; }, 'Unknown');
-  var source = countBy(_iocRegistryRows, function(r) { return r.origin || r.source; }, 'Unknown');
-  el.innerHTML = grid(3, [
-    card('Indicators by type', chartSlot({ type: 'donut', h: 160, legendRight: true, centerSub: 'indicators', segments: segs }), { sub: 'current view' }),
-    card('By status', hbars(hbarRows(status, 'accent', 6)), { sub: 'current view' }),
-    card('By origin', hbars(hbarRows(source, 'info', 6)), { sub: 'current view' })
+  if (!side || !el) return;
+  if (!_iocRegistryRows.length) { side.innerHTML = ''; el.innerHTML = ''; return; }
+  var typeSel = document.getElementById('ioc-filter-type');
+  var active = typeSel ? typeSel.value : '';
+  var chips = '<div class="ioc-chips">' + M.typeChips(_iocRegistryRows, active).map(function(c) {
+    return '<button type="button" class="ioc-chip' + (c.on ? ' on' : '') + '"' + on('click', 'setIOCType', c.id) + '>' + x(c.label) + '</button>';
+  }).join('') + '</div>';
+  var sightings = M.sightingCountsByType(_iocRegistryRows);
+  var total = sightings.reduce(function(a, p) { return a + p[1]; }, 0);
+  var sightBody = total
+    ? chartSlot({ type: 'donut', h: 130, legendRight: false, center: total, centerSub: 'sightings', segments: M.donutSegments(sightings, IOC_PALETTE, 4, '#64748b') })
+    : empty('hash', 'No sightings yet');
+  side.innerHTML = '<div class="rk-grid ioc-side">' + card('Indicator types', chips) + card('Sightings by type', sightBody) + '</div>';
+  el.innerHTML = grid(2, [
+    card('By type', chartSlot({ type: 'donut', h: 160, legendRight: true, centerSub: 'indicators', segments: M.donutSegments(M.typeCounts(_iocRegistryRows), IOC_PALETTE, 7, '#64748b') })),
+    card('Top sources', hbars(M.sourceRows(_iocRegistryRows, 6)))
   ]);
 }
 
 function renderIOCRegistryTable() {
   var tbody = document.getElementById('ioc-registry-body');
-  var cnt = document.getElementById('ioc-count');
-  if (cnt) cnt.textContent = _iocRegistryRows.length + ' indicator' + (_iocRegistryRows.length === 1 ? '' : 's');
+  var h = M.heroStats(_iocRegistryRows);
+  setHeroStat('ioc-hs-total', h.total); setHeroStat('ioc-hs-detected', h.detected);
+  setHeroStat('ioc-hs-missed', h.missed); setHeroStat('ioc-hs-observed', h.observed);
   renderIOCInsights();
   if (!_iocRegistryRows.length) {
-    tbody.innerHTML = '<tr><td colspan="9">' + empty('hash', 'No indicators match this filter', 'Change or clear a filter to see more.') + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7">' + empty('search', 'No indicators match', 'Clear the filters.') + '</td></tr>';
     return;
   }
   tbody.innerHTML = _iocRegistryRows.map(function(row, idx) {
     var suppressedBadge = row.suppressed ? ' <span class="sbadge g1-s-3518ee58" title="' + x(row.suppressionReason || '') + '">suppressed</span>' : '';
     return '<tr class="u-pointer"' + on('click', 'openIOCDetail', idx) + '>' +
+      '<td class="ioc-val"><code class="g1-s-51a7b72a">' + x(row.value) + '</code>' + suppressedBadge + '</td>' +
       '<td>' + chip(IOC_TYPE_LABEL_REGISTRY[row.type] || row.type, 'muted') + '</td>' +
-      '<td><code class="g1-s-51a7b72a">' + x(row.value) + '</code>' + suppressedBadge + '</td>' +
-      '<td class="tiny muted">' + x(row.source || '—') + '</td>' +
-      '<td class="tiny muted">' + x(row.origin || '—') + '</td>' +
-      '<td>' + (row.status ? pill(row.status, IOC_STATUS_TONE[row.status] || 'muted') : '<span class="tiny muted">—</span>') + '</td>' +
-      '<td class="tiny g1-s-82cece3f">' + (row.sightingCount || 0) + '</td>' +
-      '<td class="tiny muted">' + (row.firstSeen ? ago(row.firstSeen) : '—') + '</td>' +
-      '<td class="tiny muted">' + (row.lastSeen ? ago(row.lastSeen) : '—') + '</td>' +
+      '<td class="muted">' + x(M.sourceLabel(row.source) || '—') + '</td>' +
+      '<td class="ioc-sight"><div class="ioc-sight-in">' + bar(M.sightingPct(row, _iocRegistryRows), 'accent') + '<span class="mono muted">' + (row.sightingCount || 0) + '</span></div></td>' +
+      '<td>' + (row.status ? pill(row.status, M.statusTone(row.status)) : '<span class="tiny muted">—</span>') + '</td>' +
+      '<td class="muted">' + (row.lastSeen ? ago(row.lastSeen) : '—') + '</td>' +
       '<td' + on('click', 'stopEvent') + '>' +
         (ROLE === 'admin' ?
           '<button class="btn btn-outline btn-sm g1-s-765a0fbc"' + on('click', 'toggleIOCSuppressed', idx) + '>' + (row.suppressed ? 'Unsuppress' : 'Suppress') + '</button>'
@@ -252,6 +257,7 @@ export function toggleIOCSuppressed(idx) {
     body: JSON.stringify({ suppressed: next, reason: reason })
   }).then(function() {
     showToast(next ? 'Indicator suppressed' : 'Indicator unsuppressed', 'ok');
+    closeIOCDrawer();
     loadIOCRegistry();
   }).catch(function(e) { showToast(e.message || 'Failed to update', 'err'); });
 }
@@ -264,27 +270,19 @@ export function toggleIOCSuppressed(idx) {
 export function openIOCDetail(idx) {
   var row = _iocRegistryRows[idx];
   if (!row) return;
-  document.getElementById('results-overlay').classList.remove('run-mode');
-  document.getElementById('results-title').textContent = (IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + ': ' + row.value;
-  document.getElementById('results-export').innerHTML = '';
-
-  // Escapes v internally -- every caller passes a raw value, not
-  // pre-escaped HTML (G1a hardening: this used to rely on every call site
-  // remembering to pre-escape, which was safe only by caller discipline).
-  var rowHtml = function(k, v) {
-    return v ? '<div class="g1-display-flex g1-s-b60b87ad"><span class="g1-s-485ffd37">' + k + '</span><span class="u-flex1">' + x(v) + '</span></div>' : '';
-  };
-  var body =
-    rowHtml('Source', row.source || '—') +
-    rowHtml('Origin', row.origin || '—') +
-    rowHtml('Status', row.status || '—') +
-    rowHtml('Sightings', String(row.sightingCount || 0)) +
-    rowHtml('First seen', row.firstSeen ? new Date(row.firstSeen).toLocaleString() : '—') +
-    rowHtml('Last seen', row.lastSeen ? new Date(row.lastSeen).toLocaleString() : '—') +
-    (row.suppressed ? rowHtml('Suppressed', row.suppressionReason || 'yes') : '') +
-    '<div id="ioc-detail-relationships" class="g1-s-66e6b652"><div class="tiny muted">Loading relationships…</div></div>';
-  document.getElementById('results-body').innerHTML = body;
-  document.getElementById('results-overlay').classList.add('open');
+  var set = function(id, t) { var el = document.getElementById(id); if (el) el.textContent = t; };
+  set('ioc-drawer-title', row.value);
+  set('ioc-drawer-sub', (IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + ' · ' + (M.sourceLabel(row.source) || '—'));
+  var fmt = function(t) { return new Date(t).toLocaleString(); };
+  var body = document.getElementById('ioc-drawer-body');
+  body.innerHTML =
+    '<div class="ioc-dr-top">' + (row.status ? pill(row.status, M.statusTone(row.status)) : '') +
+      '<span class="muted">' + (row.sightingCount || 0) + ' sighting' + (row.sightingCount === 1 ? '' : 's') + '</span></div>' +
+    bar(M.sightingPct(row, _iocRegistryRows), 'accent') +
+    '<div class="ioc-dr-kv">' + kv(M.drawerFacts(row, fmt)) + '</div>' +
+    (ROLE === 'admin' ? '<div class="ioc-dr-sec"><h4>Suppression</h4><button type="button" class="btn btn-outline btn-sm"' + on('click', 'toggleIOCSuppressed', idx) + '>' + (row.suppressed ? 'Unsuppress' : 'Suppress') + '</button></div>' : '') +
+    '<div id="ioc-detail-relationships" class="ioc-dr-sec"><div class="tiny muted">Loading relationships…</div></div>';
+  document.getElementById('ioc-drawer-overlay').classList.add('open');
 
   apicall('/api/knowledge-graph/ioc/' + encodeURIComponent(row.id)).then(function(nbh) {
     var el = document.getElementById('ioc-detail-relationships');
@@ -297,16 +295,49 @@ export function openIOCDetail(idx) {
     var groupLabels = { scenario: 'Seen in scenarios', run: 'Seen in runs', agent: 'Seen on agents', technique: 'Seen with techniques' };
     var sections = Object.keys(groupLabels).map(function(t) {
       if (!byType[t].length) return '';
-      return '<div class="g1-s-80cee471"><div class="kpi-label g1-s-9f42fc4f">' + groupLabels[t] + ' (' + byType[t].length + ')</div>' +
-        '<div class="g1-display-flex g1-s-14755e4d">' +
-        byType[t].map(function(l) { return '<span class="tiny g1-s-90caba8c">' + x(l) + '</span>'; }).join('') +
+      return '<div class="ioc-rel"><h4>' + groupLabels[t] + ' (' + byType[t].length + ')</h4>' +
+        '<div class="ioc-rel-chips">' +
+        byType[t].map(function(l) { return chip(l, 'muted'); }).join('') +
         '</div></div>';
     }).join('');
-    el.innerHTML = sections || '<div class="tiny muted">No relationships recorded.</div>';
+    el.innerHTML = '<h4>Related</h4>' + (sections || '<div class="tiny muted">No relationships recorded.</div>');
   }).catch(function() {
     var el = document.getElementById('ioc-detail-relationships');
     if (el) el.innerHTML = '<div class="tiny muted">Relationships unavailable.</div>';
   });
+}
+
+export function closeIOCDrawer() {
+  var o = document.getElementById('ioc-drawer-overlay');
+  if (o) o.classList.remove('open');
+}
+export function closeIOCDrawerOnBackdrop(el, event) { if (event.target === el) closeIOCDrawer(); }
+
+export function openIOCAddModal() {
+  document.getElementById('ioc-add-value').value = '';
+  setDisplay(document.getElementById('ioc-add-err'), 'none');
+  document.getElementById('ioc-add-overlay').classList.add('open');
+}
+export function closeIOCAddModal() { document.getElementById('ioc-add-overlay').classList.remove('open'); }
+export function closeIOCAddOnBackdrop(el, event) { if (event.target === el) closeIOCAddModal(); }
+
+// Add IOC: one indicator through the same admin-only import endpoint (customer origin, draft status).
+export function submitIOCAdd() {
+  var errEl = document.getElementById('ioc-add-err');
+  setDisplay(errEl, 'none');
+  var parsed = M.parseEntry(document.getElementById('ioc-add-type').value, document.getElementById('ioc-add-value').value);
+  if (parsed.error) { errEl.textContent = parsed.error; setDisplay(errEl, ''); return; }
+  var btn = document.getElementById('ioc-add-submit-btn');
+  btn.disabled = true;
+  apicall('/api/iocs/import', { method: 'POST', body: JSON.stringify({ entries: [parsed.entry] }) })
+    .then(function(res) {
+      btn.disabled = false;
+      if (!(res && res.written)) { errEl.textContent = 'Indicator was not added.'; setDisplay(errEl, ''); return; }
+      showToast('Indicator added', 'ok');
+      closeIOCAddModal();
+      loadIOCRegistry();
+    })
+    .catch(function(e) { btn.disabled = false; errEl.textContent = e.message || 'Add failed'; setDisplay(errEl, ''); });
 }
 
 export function openIOCImportModal() {
@@ -315,6 +346,7 @@ export function openIOCImportModal() {
   document.getElementById('ioc-import-overlay').classList.add('open');
 }
 export function closeIOCImportModal() { document.getElementById('ioc-import-overlay').classList.remove('open'); }
+export function closeIOCImportOnBackdrop(el, event) { if (event.target === el) closeIOCImportModal(); }
 
 export function submitIOCImport() {
   var raw = document.getElementById('ioc-import-text').value;

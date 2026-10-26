@@ -1,0 +1,38 @@
+/* IOC Registry: ranking tiles, filter rows, chips + charts, table, indicator drawer, add/import modals. Theme tokens only. */
+
+#tab-iocs #ioc-analytics-tiles { margin-bottom: 14px; }
+.ioc-row1, .ioc-row2 { margin: 0 0 14px; align-items: center; }
+.ioc-row1 .ioc-grow { flex: 1 1 auto; }
+.ioc-sup { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted-hi); }
+.ioc-row2 .rk-search { flex: 0 1 320px; }
+.ioc-row2 .rk-search input { height: 36px; margin: 0; }
+
+#ioc-side, #ioc-insights { margin-bottom: 14px; }
+#ioc-side:empty, #ioc-insights:empty { display: none; }
+.rk-grid.ioc-side { grid-template-columns: minmax(0, 1fr) 300px; }
+@media (max-width: 900px) { .rk-grid.ioc-side { grid-template-columns: minmax(0, 1fr); } }
+
+.ioc-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.ioc-chip { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border-hi, var(--border)); background: transparent; color: var(--muted-hi); font-size: 12px; font-family: inherit; cursor: pointer; display: inline-flex; align-items: center; }
+.ioc-chip:hover { color: var(--text); }
+.ioc-chip.on { background: var(--accent-dim, color-mix(in srgb, var(--accent) 18%, transparent)); border-color: var(--accent-border); color: var(--accent-hi, var(--text)); }
+
+.ioc-table-card .tbl-wrap { margin: 0; }
+.ioc-val { max-width: 320px; word-break: break-all; }
+.ioc-sight { min-width: 140px; }
+.ioc-sight-in { display: flex; align-items: center; gap: 10px; }
+.ioc-sight-in .rk-bar { flex: 1; }
+
+.ioc-mono { font-family: var(--font-mono); font-size: 12.5px; }
+.ioc-err { margin: 0 0 12px; font-size: 12.5px; color: var(--danger); }
+#ioc-import-overlay .sub2, #ioc-add-overlay .sub2 { margin: 0 0 12px; }
+
+#ioc-drawer-overlay .drawer { width: min(560px, 94vw); }
+.ioc-dh-t, .ioc-dh-t { word-break: break-all; }
+.ioc-dr-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.ioc-dr-kv { margin-top: 14px; }
+.ioc-dr-sec { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.ioc-dr-sec h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.ioc-rel { margin-top: 12px; }
+.ioc-rel h4 { margin: 0 0 6px; font-size: 12px; text-transform: none; letter-spacing: 0; color: var(--muted-hi); font-weight: 500; }
+.ioc-rel-chips { display: flex; gap: 6px; flex-wrap: wrap; }

@@ -44,6 +44,20 @@ export var ICON = {
   star: svg('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>'),
 };
 
+// The Reports / Compliance report / SLA compliance sub-tabs share one banner; sfx keeps the chip ids unique.
+function rptHero(sfx) {
+  return {
+    icon: ICON.report,
+    title: 'Reports',
+    sub: 'Generate, review and share validation and compliance reports.',
+    actions: '<button type="button" class="btn btn-primary" data-on-click="openReportGen">' + svg('<path d="M12 5v14M5 12h14"/>') + 'Generate report</button>',
+    stats: [
+      { id: 'rpt-hs-reports' + sfx, icon: ICON.report, value: '—', label: 'Reports' },
+      { id: 'rpt-hs-frameworks' + sfx, icon: ICON.check, value: '—', label: 'Frameworks tracked' },
+    ],
+  };
+}
+
 var HEROES = {
   'hero-dashboard': {
     icon: ICON.posture,
@@ -204,70 +218,101 @@ var HEROES = {
     icon: ICON.flag,
     title: 'Findings',
     sub: 'Security gaps surfaced by simulations — each is a technique that executed without being prevented. Triage and re-validate.',
-    actions: '<div class="g1-display-flex g1-s-993532d2"><button class="btn btn-outline btn-sm is-hidden" id="findings-bulk-btn" data-on-click="bulkPushSelectedFindings">Push to ITSM</button><button class="btn btn-outline btn-sm" data-on-click="loadFindings">Refresh</button></div>',
+    actions: '<button type="button" class="btn btn-outline" data-on-click="exportFindings">' + svg('<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>') + 'Export</button>',
   },
   'hero-iocs': {
     icon: ICON.hash,
     title: 'IOC Registry',
     sub: 'Indicators observed across every run, deduplicated and cross-referenced against scenarios, agents, and ATT&CK techniques.',
-    actions: '<div class="g1-display-flex g1-s-993532d2"><button class="btn btn-outline btn-sm is-hidden" id="ioc-import-btn" data-on-click="openIOCImportModal">Import</button><button class="btn btn-outline btn-sm" data-on-click="loadIOCRegistry">Refresh</button></div>',
+    actions: '<div class="g1-display-flex g1-s-993532d2"><button type="button" class="btn btn-outline is-hidden" id="ioc-import-btn" data-on-click="openIOCImportModal">' + svg('<path d="M12 16V5M7 9l5-5 5 5M5 20h14"/>') + 'Import Indicators</button><button type="button" class="btn btn-primary is-hidden" id="ioc-add-btn" data-on-click="openIOCAddModal">' + svg('<path d="M12 5v14M5 12h14"/>') + 'Add IOC</button></div>',
+    stats: [
+      { id: 'ioc-hs-total', icon: ICON.hash, value: '—', label: 'Indicators' },
+      { id: 'ioc-hs-detected', icon: ICON.ok, value: '—', label: 'Detected' },
+      { id: 'ioc-hs-missed', icon: ICON.warn, value: '—', label: 'Missed' },
+      { id: 'ioc-hs-observed', icon: ICON.technique, value: '—', label: 'Observed' },
+    ],
   },
   'hero-remediation': {
     icon: ICON.wrench,
     title: 'Remediation',
-    sub: 'Prioritized fixes from your open findings, with authoritative MITRE ATT&CK mitigations. Re-validate after applying a fix.',
-    actions: '<div id="rem-ticket-actions" class="is-hidden g1-s-993532d2"><button class="btn btn-outline btn-sm" data-on-click="remBulkTicket" data-args="[&quot;critical&quot;]">Create Tickets for All Critical</button><button class="btn btn-outline btn-sm" data-on-click="remBulkTicket" data-args="[&quot;all&quot;]">Create Tickets for All</button></div>',
+    sub: 'Track fixes from detection through verification.',
+    stats: [
+      { id: 'rem-hs-open', icon: ICON.wrench, value: '—', label: 'Open items' },
+      { id: 'rem-hs-critical', icon: ICON.warn, value: '—', label: 'Critical open' },
+    ],
   },
   'hero-verification': {
     icon: ICON.check,
     title: 'Verification',
     sub: 'Attest whether off-host controls (SIEM, identity, cloud, DLP, network) actually detected each simulated technique. Attestations are immutable, evidence is SHA-256 hashed at upload, and every action is written to the audit log.',
   },
-  'hero-reports': {
-    icon: ICON.report,
-    title: 'Reports',
-    sub: 'Generate evidence reports from your validated results. History re-generates on download — no stale copies.',
-  },
+  'hero-reports': rptHero(''),
   'hero-integrations': {
     icon: ICON.plug,
     title: 'Integrations',
     sub: 'Configure ITSM connectors. Analysts create tickets from the Findings tab; BAS can auto-create tickets for critical exposures based on policy.',
     actions: '<div class="g1-display-flex g1-s-993532d2" id="integrations-admin-actions"><button class="btn btn-outline btn-sm" data-on-click="triggerTicketingSync">Sync Now</button><button class="btn btn-primary btn-sm" data-on-click="openAddConnector">+ Add Connector</button></div>',
   },
-  'hero-compliance': {
-    icon: ICON.check,
-    title: 'Compliance Report',
-    sub: 'Generate a compliance report for one agent against a regulatory framework, then export it.',
-    actions: '<div class="g1-display-flex g1-s-377dd6f6"><select id="cmp-agent-sel" class="btn btn-outline g1-s-4f2248ba"></select><select id="cmp-fw-sel" class="btn btn-outline g1-s-0eddd0ab"></select><button class="btn btn-primary btn-sm" data-on-click="loadComplianceReport">Generate</button><button class="btn btn-outline btn-sm is-hidden" data-on-click="openComplianceDoc" data-args="[&quot;html&quot;]" id="cmp-export-html">↗ HTML</button><button class="btn btn-outline btn-sm is-hidden" data-on-click="openComplianceDoc" data-args="[&quot;pdf&quot;]" id="cmp-export-pdf">↓ PDF</button><button class="btn btn-outline btn-sm is-hidden" data-on-click="exportCompliance" data-args="[&quot;json&quot;]" id="cmp-export-json">↓ JSON</button><button class="btn btn-outline btn-sm is-hidden" data-on-click="exportCompliance" data-args="[&quot;csv&quot;]" id="cmp-export-csv">↓ CSV</button></div>',
-  },
-  'hero-sla': {
-    icon: ICON.clock,
-    title: 'SLA Compliance',
-    sub: 'Fleet SLA report: on-time resolution rate by severity, monthly trend and recent history.',
-    actions: '<button class="btn btn-outline btn-sm" data-on-click="loadSLAReport">&#x21bb; Refresh</button>',
-  },
+  'hero-compliance': rptHero('-c'),
+  'hero-sla': rptHero('-s'),
   'hero-variants': {
     icon: ICON.layers,
     title: 'Variants',
-    sub: 'Run technique variants on an agent and see which ones bypass your controls.',
-    actions: '<div class="g1-display-flex g1-s-9b5be34d"><button class="btn btn-outline btn-sm" data-on-click="loadVariantTab">&#x21bb; Refresh</button></div>',
+    sub: 'Generated technique variants and full-estate variant sweeps.',
+    actions: '<div class="g1-display-flex g1-s-9b5be34d"><button class="btn btn-outline btn-sm" data-on-click="loadVariantTab">&#x21bb; Refresh</button><button class="btn btn-primary btn-sm" data-on-click="vexRunFullSweep">&#9654; Run Full Sweep</button></div>',
+    stats: [
+      { id: 'var-hs-techniques', icon: ICON.layers, value: '—', label: 'Techniques tested' },
+      { id: 'var-hs-variants', icon: ICON.box, value: '—', label: 'Variants tested' },
+      { id: 'var-hs-prevented', icon: ICON.ok, value: '—', label: 'Prevented' },
+      { id: 'var-hs-bypassed', icon: ICON.warn, value: '—', label: 'Variants that bypassed' },
+    ],
   },
   'hero-email': {
     icon: ICON.mail,
     title: 'Email',
     sub: 'Email security-effectiveness validation — SPF/DKIM/DMARC, phishing, attachments, outbound DLP, mailbox/identity security',
-    actions: '<div class="email-launch-buttons"><button class="btn btn-outline btn-sm" data-on-click="loadEmailTab">&#x21bb; Refresh</button></div>',
+    actions: '<button type="button" class="btn btn-outline" data-on-click="loadEmailTab">&#x21bb; Refresh</button><button type="button" class="btn btn-primary" data-on-click="openEmailCampaignDrawer">' + svg('<path d="M12 5v14M5 12h14"/>') + 'New Email Campaign</button>',
+    stats: [
+      { id: 'eml-hs-runs', icon: ICON.runs, value: '—', label: 'Runs' },
+      { id: 'eml-hs-done', icon: ICON.ok, value: '—', label: 'Completed runs' },
+      { id: 'eml-hs-failed', icon: ICON.warn, value: '—', label: 'Failed runs' },
+      { id: 'eml-hs-camps', icon: ICON.campaign, value: '—', label: 'Campaigns' },
+    ],
+  },
+  'hero-adc': {
+    icon: ICON.box,
+    title: 'AD Coverage',
+    sub: 'Active Directory attack-surface capabilities: what is modeled, composed into scenarios, executed and detection-validated.',
+    actions: '<button type="button" class="btn btn-outline" data-on-click="loadADCoverage">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh</button>',
+    stats: [
+      { id: 'adc-hs-total', icon: ICON.posture, value: '—', label: 'Capabilities' },
+      { id: 'adc-hs-composed', icon: ICON.layers, value: '—', label: 'Scenario-composed' },
+      { id: 'adc-hs-executed', icon: ICON.runs, value: '—', label: 'Executed vs real AD' },
+      { id: 'adc-hs-detected', icon: ICON.ok, value: '—', label: 'Detection-validated' },
+    ],
   },
   'hero-factory': {
     icon: ICON.factory,
     title: 'Factory Health',
-    sub: 'Threat-content pipeline health: ingestion, validation, publication and data quality.',
+    sub: 'Health of the scenario build, signing and content pipelines.',
     actions: '<button type="button" class="btn btn-outline" data-on-click="loadFactoryHealth">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Re-check</button>',
     stats: [
       { id: 'fh-hs-threats', icon: ICON.globe, value: '—', label: 'Threats processed' },
       { id: 'fh-hs-published', icon: ICON.ok, value: '—', label: 'Published content' },
       { id: 'fh-hs-sources', icon: ICON.posture, value: '—', label: 'Sources healthy' },
       { id: 'fh-hs-unresolved', icon: ICON.warn, value: '—', label: 'Unresolved candidates' },
+    ],
+  },
+  'hero-coverage': {
+    icon: ICON.mapped,
+    title: 'MITRE ATT&CK Coverage',
+    sub: 'Detection coverage mapped to the ATT&CK matrix from validated scenario results.',
+    actions: '<button type="button" class="btn btn-primary" data-on-click="recalcCoverage">' + svg('<path d="M20 11a8 8 0 10-2.3 5.7M20 5v6h-6"/>') + 'Recalculate</button>',
+    stats: [
+      { id: 'cov-hs-covered', icon: ICON.mapped, value: '—', label: 'Techniques prevented' },
+      { id: 'cov-hs-detected', icon: ICON.ok, value: '—', label: 'Validated detected' },
+      { id: 'cov-hs-missed', icon: ICON.warn, value: '—', label: 'Missed' },
+      { id: 'cov-hs-untested', icon: ICON.technique, value: '—', label: 'Untested' },
     ],
   },
   'hero-exercises': {

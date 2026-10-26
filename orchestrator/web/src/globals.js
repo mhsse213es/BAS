@@ -1,5 +1,5 @@
 import { x } from './core/escape.js';
-import { closeFactoryDrawerOnBackdrop, closeFactorySource, loadFactoryHealth, openFactorySource } from './features/factory-health.js';
+import { closeFactoryDrawerOnBackdrop, closeFactorySource, loadFactoryHealth, openFactorySource, fhTableQuery, clearFhTableQuery, setFhPer, fhPage, fhSortBy, toggleFhCols, fhColToggle, fhSelectRow, fhSelectAll, clearFhSelection, fhRowKeydown, exportFhCsv, exportFhSelected } from './features/factory-health.js';
 import { stopEvent } from './core/actions.js';
 import { closeAdvDrawer, closeAdvRunModal, closeTmplRun, confirmAdversaryRun, confirmTmplRun, loadAdversariesStop, openAdvDrawer, openAdvRunModal, openTmplRun, renderAdvRunWarn, renderAdversaryLibrary, renderTmplOSCompat, setTmplFilter, setTmplTargetMode, tmplGroupChange, tmplRunModeChange, tmplSelAgentChange, toggleAdversarySection } from './features/adversaries.js';
 import { clearEnrollmentTokens, copyEnrollmentToken, downloadEnrollmentTokensCsv, generateEnrollmentTokens } from './features/enroll-tokens.js';
@@ -9,16 +9,18 @@ import { _apCancelJob, apAssetsClose, apCollectClose, apCollectViewResults, apCo
 import { auditPage, backupNow, exportAuditLogs, loadAuditLogs, loadBackups, loadLicenseInfo, prepareRestore } from './features/audit-logs.js';
 import { campaignClearFilters, campaignOpenFindings, campaignSearch, closeCampaignDetail, closeCampaignDrawerOnBackdrop, closeCampaignLaunch, cmpAllConfirmChange, cmpOnExistingScenarioChange, cmpOnGroupChange, cmpOnTargetTypeChange, cmpSelChange, cmpSelectAllFiltered, cmpToggleExclusionFromChecked, generateTIScenario, loadCampaigns, loadKEVPack, openCampaignDetail, openCampaignLaunch, openRunFromCampaign, openThreatPriorityActor, pauseCampaign, renderCampaignTargets, resumeCampaign, selectTIPack, setCampaignSource, setCampaignTab, stopCampaign, submitCampaign } from './features/campaigns.js';
 import { closeChangePassword, closeChangePasswordOnBackdrop, closeConfirmDiffModal, loadCalderaStatus, openChangePassword, openComplianceDetail, runConfirmDiffModal, submitChangePassword } from './features/compliance.js';
-import { loadCoverageAnalytics, openTechnique, renderUTL, setCovView, setUTLFilter } from './features/coverage.js';
+import { closeCovDrawer, closeCovDrawerOnBackdrop, loadCoverageAnalytics, openTechnique, recalcCoverage, renderUTL, setCovView, setUTLFilter } from './features/coverage.js';
 import { loadADCoverage, setADFilter, exportADReportPDF, exportADReportJSON } from './features/ad-coverage.js';
+import { setReportType, pickReportFormat } from './features/reports.js';
+import { rptFilter, rptClear } from './features/rpt-view.js';
 import { vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfToggleHistory, vfUploadEvidence } from './features/detection-verification.js';
-import { egCancelCampaignClick, egLaunchCampaign, egRunExpectation, egToggleCampaign, egToggleRunDetail, loadEmailTab, setEmailCampaignsTab, setEmailRunsTab } from './features/email.js';
+import { egCancelCampaignClick, egLaunchCampaign, egRunExpectation, egToggleCampaign, egToggleRunDetail, loadEmailTab, setEmailCampaignsTab, setEmailRunsTab, openEmailScenario, openEmailCampaignDrawer, closeEmailDrawer, closeEmailDrawerOnBackdrop, setEmailTab, emailCampaignSearch, emailClearFilters, emailScenarioKeydown } from './features/email.js';
 import { _toggleEMExtraScenario, _toggleEMPreviewRow, _toggleVexPreviewRow, _toggleVexPreviewSection, cancelEMSweep, closeEMSweepModal, closeEMSweepModalOnBackdrop, closeEMSweepProgress, closeEMSweepProgressOnBackdrop, closeSweepPreview, closeSweepPreviewOnBackdrop, emGroupSelChange, emRunLayer, emSweepDispatch, openEMSweepProgress, openEMSweepReport, setEMExtraSearchFromInput, setEMSweepTargetMode, setVexPreviewSearchFromInput, setVexPreviewTacticFromSelect, startSweepFromPreview, stopEMSweep, stopEMSweepCurrent } from './features/endpoint-mastery.js';
 import { closeCreateUser, closeCreateUserOnBackdrop, closeDownloadOptions, closeEditUser, closeEditUserOnBackdrop, closeEvidence, closeEvidenceOnBackdrop, confirmRun, copyRaw, doResetPassword, downloadCampaignCSV, downloadCampaignReport, downloadEMSweepReport, downloadRunCSV, downloadRunReport, downloadSweepReport, exportRunJSON, openCampaignReport, openCmdk, openCreateUser, openDashRun, openEditUser, openEvidence, openFindingFromDashboard, openRunReport, pauseRun, resumeRun, stopRun, submitCreateUser, submitEditUser, toggleUserActive } from './features/evidence.js';
-import { bulkPushSelectedFindings, loadFindings, loadSLAReport, openFinding, openRemediation, pushFindingToITSM, quickTriageFinding, remBulkTicket, remSingleTicket, revalidateRemediation, setFindingSearch, setFindingStatus, setFindingTab, setRemFilter, setRemSearch, toggleAllFindingChecksFromChecked, toggleFindingCheck } from './features/findings.js';
+import { bulkPushSelectedFindings, loadFindings, loadSLAReport, openFinding, openRemediation, pushFindingToITSM, quickTriageFinding, remBulkTicket, remSingleTicket, revalidateRemediation, exportFindings, fndGo, fndTech, setFindingSearch, setFindingSev, setFindingStatus, setFindingTab, setRemFilter, setRemSearch, toggleAllFindingChecksFromChecked, toggleFindingCheck } from './features/findings.js';
 import { closeInitiativeAttachDrawer, closeInitiativeAttachDrawerOnBackdrop, closeInitiativeCreateDrawer, closeInitiativeCreateDrawerOnBackdrop, closeInitiativeDrawer, closeInitiativeDrawerOnBackdrop, initiativeArchiveAction, initiativeAttachSelect, initiativeCloseAction, initiativeDeleteFromMenu, initiativeDetachJob, initiativeRenderAttachList, initiativeSetFilter, initiativeSearch, initiativeClearFilters, initiativeCardKeydown, loadInitiatives, openInitiativeAttachDrawer, openInitiativeCreateDrawer, openInitiativeDrawer, submitInitiativeAttach, submitInitiativeCreate } from './features/initiatives.js';
 import { closeConnectorForm, closeRespondModal, closeResponseConnectorForm, connectorProjectSelectChange, deleteConnector, deleteResponseConnector, fetchConnectorProjects, openAddConnector, openAddResponseConnector, openEditConnector, openEditResponseConnector, openRespondModal, renderConnectorSettings, renderRespondFields, renderResponseConnectorFields, saveConnectorForm, saveResponseConnectorForm, submitRespondAction, testConnectorById, testConnectorForm, testResponseConnectorById } from './features/integrations.js';
-import { closeIOCImportModal, closeResults, closeResultsOnBackdrop, loadIOCRegistry, loadIOCRegistryOnEnter, openIOCDetail, openIOCImportModal, setRunIOCSearchFromInput, setRunIOCTypeFilter, submitIOCImport, toggleIOCSuppressed, toggleRunIOCRow } from './features/iocs.js';
+import { clearIOCFilters, closeIOCAddModal, closeIOCAddOnBackdrop, closeIOCDrawer, closeIOCDrawerOnBackdrop, closeIOCImportOnBackdrop, openIOCAddModal, setIOCType, submitIOCAdd, closeIOCImportModal, closeResults, closeResultsOnBackdrop, loadIOCRegistry, loadIOCRegistryOnEnter, openIOCDetail, openIOCImportModal, setRunIOCSearchFromInput, setRunIOCTypeFilter, submitIOCImport, toggleIOCSuppressed, toggleRunIOCRow } from './features/iocs.js';
 import { closeRunLive, closeRunLiveOnBackdrop, closeSweepDrilldown, closeSweepDrilldownOnBackdrop, openRunPanelAction, openSweepDrilldown, openSweepReport, toggleLiveStepAction } from './features/live-run.js';
 import { abortExecution, abortExecutionStop, approveExStep, closeExerciseDetail, closeExerciseDetailOnBackdrop, closeOpenAEVDetail, closeOpenAEVDetailOnBackdrop, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory } from './features/openaev.js';
 import { runRansomwareDrill } from './features/ransomware.js';
@@ -81,8 +83,24 @@ export const ACTIONS = {
   closeCampaignDetail,
   closeFactoryDrawerOnBackdrop,
   closeFactorySource,
+  closeCovDrawer,
+  closeCovDrawerOnBackdrop,
+  recalcCoverage,
   loadFactoryHealth,
   openFactorySource,
+  fhTableQuery,
+  clearFhTableQuery,
+  setFhPer,
+  fhPage,
+  fhSortBy,
+  toggleFhCols,
+  fhColToggle,
+  fhSelectRow,
+  fhSelectAll,
+  clearFhSelection,
+  fhRowKeydown,
+  exportFhCsv,
+  exportFhSelected,
   closeCampaignDrawerOnBackdrop,
   campaignSearch,
   campaignClearFilters,
@@ -184,6 +202,14 @@ export const ACTIONS = {
   loadEmailTab,
   setEmailCampaignsTab,
   setEmailRunsTab,
+  openEmailScenario,
+  openEmailCampaignDrawer,
+  closeEmailDrawer,
+  closeEmailDrawerOnBackdrop,
+  setEmailTab,
+  emailCampaignSearch,
+  emailClearFilters,
+  emailScenarioKeydown,
   emGroupSelChange,
   emRunLayer,
   emSweepDispatch,
@@ -231,6 +257,15 @@ export const ACTIONS = {
   loadFindings,
   loadIOCRegistry,
   loadIOCRegistryOnEnter,
+  clearIOCFilters,
+  closeIOCAddModal,
+  closeIOCAddOnBackdrop,
+  closeIOCDrawer,
+  closeIOCDrawerOnBackdrop,
+  closeIOCImportOnBackdrop,
+  openIOCAddModal,
+  setIOCType,
+  submitIOCAdd,
   loadInitiatives,
   loadKEVPack,
   loadLicenseInfo,
@@ -309,6 +344,10 @@ export const ACTIONS = {
   openPickerFromModal,
   openRemediation,
   openReportGen,
+  setReportType,
+  pickReportFormat,
+  rptFilter,
+  rptClear,
   openRerunReview,
   openRespondModal,
   openRunFromCampaign,
@@ -457,6 +496,10 @@ export const ACTIONS = {
   setFindingStatus,
   setFindingSearch,
   setFindingTab,
+  setFindingSev,
+  exportFindings,
+  fndGo,
+  fndTech,
   setRemFilter,
   setRemSearch,
   setPF,

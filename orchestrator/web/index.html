@@ -1482,7 +1482,7 @@
         <div id="hero-factory"></div>
         <div id="factory-health-tiles"></div>
         <div id="factory-health-funnel"></div>
-        <div class="fh-side"><div id="factory-health-ingestion"></div><div id="factory-health-dataquality"></div></div>
+        <div id="factory-health-ingestion"></div>
         <div class="rk-grid g2 fh-trends"><div id="factory-health-threats-trend"></div><div id="factory-health-tcv-trend"></div></div>
       </div>
 
@@ -1502,126 +1502,101 @@
 
       <!-- Active Directory Coverage -->
       <div id="tab-ad-coverage" class="is-hidden">
-        <div class="rg2-sec first">
-          <div><h2>Active Directory Coverage &amp; Assessment</h2><p>Per-capability record across five independent axes. Nothing here is executed by the view.</p></div>
-          <div class="rg2-sec-actions">
-            <button class="btn btn-outline btn-sm" data-on-click="exportADReportPDF" title="Download the enterprise assessment report (PDF)">Export PDF</button>
-            <button class="btn btn-outline btn-sm" data-on-click="exportADReportJSON" title="Download the assessment data (JSON)">JSON</button>
-            <button class="btn btn-outline btn-sm" data-on-click="loadADCoverage">Refresh</button>
-          </div>
-        </div>
+        <div id="hero-adc"></div>
         <div id="adc-disclaimer"></div>
         <div id="adc-summary"></div>
-        <div id="adc-inventory-note"></div>
-        <div id="adc-filters" class="u-mt-06"></div>
-        <div id="adc-list" class="u-mt-06"><div class="rk-empty">Loading AD coverage…</div></div>
+        <div id="adc-filters"></div>
+        <div id="adc-list"><div class="rk-empty">Loading AD coverage…</div></div>
         <div id="adc-foot" class="u-muted u-mt-06"></div>
+        <div id="adc-charts" class="adc-charts"></div>
+        <div id="adc-inventory-note"></div>
       </div>
 
       <!-- ATT&CK Coverage -->
       <div id="tab-coverage" class="is-hidden">
+        <div id="hero-coverage"></div>
 
-        <section class="rk-card" id="ca-panel">
-          <header class="rk-hd">
-            <h2>Coverage Analytics</h2><span class="rk-hd-sub">Most recent 50 runs</span>
-            <div class="rk-hd-actions">
-              <select id="ca-scenario" data-on-change="loadCoverageAnalytics">
-                <option value="">All scenarios</option>
-              </select>
-              <select id="ca-agent" data-on-change="loadCoverageAnalytics">
-                <option value="">All agents</option>
-              </select>
-              <button class="btn btn-outline btn-sm" data-on-click="loadCoverageAnalytics">Refresh</button>
-            </div>
-          </header>
-          <div id="ca-root"><div class="rk-empty">Loading analytics…</div></div>
-        </section>
-
-        <section class="rk-card" id="priv-cov-panel">
-          <header class="rk-hd"><h2>Privilege Tier Coverage</h2><span class="rk-hd-sub">Prevention rates by execution context, last 50 runs</span></header>
-          <div id="priv-root"><div class="rk-empty">Loading…</div></div>
-        </section>
-
-        <div class="rg2-sec">
-          <div>
-            <h2>MITRE ATT&amp;CK Coverage</h2>
-            <p>Enterprise matrix coloured by your validated control effectiveness. Last result per technique, not theoretical inventory.</p>
-          </div>
-          <div class="rg2-sec-actions">
-            <button class="btn btn-outline btn-sm" disabled title="ATT&amp;CK Navigator export — coming soon">Export layer · soon</button>
-            <button class="btn btn-primary btn-sm" data-on-click="openModal">&#9654; Test coverage gaps</button>
-          </div>
+        <div class="rk-filters cov-filters">
+          <select id="ca-scenario" data-on-change="loadCoverageAnalytics">
+            <option value="">All scenarios</option>
+          </select>
+          <select id="ca-agent" data-on-change="loadCoverageAnalytics">
+            <option value="">All agents</option>
+          </select>
+          <button class="btn btn-outline" data-on-click="loadCoverageAnalytics">Refresh</button>
+          <button class="btn btn-outline" disabled title="ATT&amp;CK Navigator export — coming soon">Export layer · soon</button>
+          <button class="btn btn-primary" data-on-click="openModal">&#9654; Test coverage gaps</button>
         </div>
-        <div id="cov-toolbar" class="rg2-toolbar"></div>
-        <section class="rk-card"><div class="rg2-matrix" id="cov-matrix"><div class="rk-empty">Loading matrix…</div></div></section>
-        <div class="rg2-foot" id="cov-foot"></div>
 
-        <!-- Live Threat Coverage — assembled from the real threat-intel pipeline, not the static ATT&CK dataset above. -->
-        <div class="rg2-sec">
-          <div>
-            <h2>Live Threat Coverage</h2>
-            <p>Threats currently tracked by your intelligence sources, and whether validated, executable content exists for them.</p>
-          </div>
-        </div>
-        <div id="lte-body"><div class="rk-empty">Loading…</div></div>
-        <div class="rg2-foot" id="lte-foot"></div>
+        <div id="ca-root" class="cov-block"><div class="rk-empty">Loading analytics…</div></div>
+        <div id="priv-root" class="cov-block"><div class="rk-empty">Loading…</div></div>
+
+        <!-- Tracked threats, from the real threat-intel pipeline, not the static ATT&CK dataset. -->
+        <div id="lte-body" class="cov-block"><div class="rk-empty">Loading…</div></div>
 
         <!-- Unified Technique Library — deduplicated view across all execution sources -->
-        <div class="dash-panel g1-s-5012029f">
-          <div class="dash-panel-hdr g1-display-flex g1-s-f4e01574">
-            <span>Unified Technique Library</span>
-            <span id="utl-summary" class="card-meta g1-s-8bde36d0"></span>
+        <section class="rk-card cov-utl">
+          <div class="rk-hd"><h2>Unified technique library</h2></div>
+          <p class="cov-lead"><span id="utl-summary"></span> Each row is one ATT&amp;CK technique; counts show execution variants per source, not whether any were run.</p>
+          <div class="cov-utl-bar">
+            <div class="cov-chips">
+              <button class="pfbtn cov-chip active on" data-uf="src" data-val="all"    data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;all&quot;]">All</button>
+              <button class="pfbtn cov-chip"        data-uf="src" data-val="bas"    data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;bas&quot;]">BAS</button>
+              <button class="pfbtn cov-chip"        data-uf="src" data-val="art"    data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;art&quot;]">ART</button>
+              <button class="pfbtn cov-chip"        data-uf="src" data-val="emu"    data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;emu&quot;]">Emu</button>
+              <button class="pfbtn cov-chip"        data-uf="src" data-val="atomic" data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;atomic&quot;]">Atomic</button>
+              <button class="pfbtn cov-chip"        data-uf="src" data-val="multi"  data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;multi&quot;]">Multi-source</button>
+            </div>
+            <div class="cov-legend-inline">
+              <span><b>BAS</b> native step</span>
+              <span><b>ART</b> Atomic Red Team</span>
+              <span><b>Emu</b> CTID ability</span>
+              <span><b>Atomic</b> Caldera plugin</span>
+            </div>
           </div>
-          <div class="dash-panel-body g1-s-4b2e7fa7">
-            <div class="g1-s-133f05c6">
-              Each row is one ATT&amp;CK technique ID. Counts show how many execution variants exist per source — not whether any were run. The <em>Detected</em> column comes from actual run results.
-            </div>
-            <!-- Source filter chips -->
-            <div class="g1-display-flex g1-s-d4340bf3">
-              <span class="g1-s-37d53eb3">Source</span>
-              <button class="pfbtn active" data-uf="src" data-val="all"    data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;all&quot;]">All</button>
-              <button class="pfbtn"        data-uf="src" data-val="bas"    data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;bas&quot;]">BAS</button>
-              <button class="pfbtn"        data-uf="src" data-val="art"    data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;art&quot;]">ART</button>
-              <button class="pfbtn"        data-uf="src" data-val="emu"    data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;emu&quot;]">Emu</button>
-              <button class="pfbtn"        data-uf="src" data-val="atomic" data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;atomic&quot;]">Atomic</button>
-              <button class="pfbtn"        data-uf="src" data-val="multi"  data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;multi&quot;]">Multi-source</button>
-              <span class="g1-s-d15114c3">|</span>
-              <span class="g1-s-37d53eb3">Tactic</span>
-              <select id="utl-tactic" data-on-change="renderUTL"
-                      class="g1-s-e5ea82ed">
-                <option value="all">All tactics</option>
-              </select>
-              <input id="utl-search" type="text" placeholder="Filter technique…" data-on-input="renderUTL" autocomplete="off"
-                     class="g1-s-52b176d6">
-            </div>
-            <!-- Source legend -->
-            <div class="g1-display-flex g1-s-55d60221">
-              <span><span class="utl-badge utl-bas">BAS</span> Native scenario step</span>
-              <span><span class="utl-badge utl-art">ART</span> Atomic Red Team test</span>
-              <span><span class="utl-badge utl-emu">Emu</span> CTID adversary-emulation ability</span>
-              <span><span class="utl-badge utl-atomic">Atomic</span> Caldera atomic-plugin ability</span>
-            </div>
-            <div class="tbl-wrap" id="utl-wrap">
-              <table id="utl-table">
-                <thead>
-                  <tr>
-                    <th class="g1-s-5cda73a4">Technique</th>
-                    <th class="g1-s-0eddd0ab">Name</th>
-                    <th class="g1-s-5cda73a4">Tactic</th>
-                    <th class="g1-s-b9c0249e">BAS</th>
-                    <th class="g1-s-b9c0249e">ART</th>
-                    <th class="g1-s-b9c0249e">Emu</th>
-                    <th class="g1-s-51ce760d">Atomic</th>
-                    <th class="g1-s-51ce760d">Total</th>
-                    <th class="g1-s-51ce760d">Sources</th>
-                  </tr>
-                </thead>
-                <tbody id="utl-body"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
-              </table>
-            </div>
-            <div id="utl-foot" class="tiny muted g1-s-1354cb18"></div>
+          <div class="cov-utl-bar">
+            <select id="utl-tactic" data-on-change="renderUTL" aria-label="Tactic">
+              <option value="all">All tactics</option>
+            </select>
+            <input id="utl-search" type="text" placeholder="Filter technique…" data-on-input="renderUTL" autocomplete="off">
           </div>
+          <div class="tbl-wrap cov-utl-wrap" id="utl-wrap">
+            <table id="utl-table">
+              <thead>
+                <tr>
+                  <th>Technique</th>
+                  <th>Name</th>
+                  <th>Tactic</th>
+                  <th class="u-center">BAS</th>
+                  <th class="u-center">ART</th>
+                  <th class="u-center">Emu</th>
+                  <th class="u-center">Atomic</th>
+                  <th class="u-center">Total</th>
+                  <th class="u-center">Sources</th>
+                </tr>
+              </thead>
+              <tbody id="utl-body"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+          <div id="utl-foot" class="rg2-note"></div>
+        </section>
+
+        <!-- ATT&CK heatmap: the enterprise matrix coloured by the last validated result per technique -->
+        <section class="rk-card cov-heat">
+          <div class="rk-hd">
+            <h2>ATT&amp;CK heatmap</h2>
+            <span class="rk-hd-sub">last validated result per technique</span>
+            <div class="rk-hd-actions" id="cov-toolbar"></div>
+          </div>
+          <div class="rg2-matrix" id="cov-matrix"><div class="rk-empty">Loading matrix…</div></div>
+        </section>
+        <div class="rg2-foot" id="cov-foot"></div>
+
+        <div class="rk-grid g2 cov-block">
+          <div id="cov-weakest"></div>
+          <div id="cov-livecov"></div>
         </div>
+        <div id="cov-gaps" class="cov-block"></div>
       </div>
 
       <!-- Attack Paths -->
@@ -1980,14 +1955,15 @@
       <div id="tab-findings" class="is-hidden g3-page">
         <div id="hero-findings"></div>
         <div class="rk-grid g5" id="findings-tiles"></div>
+        <div class="fnd-bar" id="findings-statusbar"></div>
         <div id="findings-insights"></div>
-        <div id="findings-toolbar"></div>
+        <div class="fnd-filters" id="findings-toolbar"></div>
         <div class="rk-card flush">
-          <header class="rk-hd"><h2>Findings</h2><span class="rk-hd-sub" id="findings-count"></span></header>
+          
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th id="findings-th-check" class="is-hidden g1-s-99c58a15"><input type="checkbox" id="findings-chk-all" data-on-change="toggleAllFindingChecksFromChecked" class="u-pointer"></th><th>Finding</th><th>Technique</th><th>Severity</th><th>Control</th><th>Agent</th><th>Status</th><th>Age</th><th id="findings-th-ticket" class="is-hidden">Ticket</th><th id="findings-th-triage" class="is-hidden"></th></tr></thead>
-            <tbody id="findings-body"><tr><td colspan="10" class="empty">No findings yet.</td></tr></tbody>
+            <thead><tr><th id="findings-th-check" class="is-hidden g1-s-99c58a15"><input type="checkbox" id="findings-chk-all" data-on-change="toggleAllFindingChecksFromChecked" class="u-pointer"></th><th>ID</th><th>Finding</th><th>Severity</th><th>Asset</th><th>Technique</th><th>Status</th><th>Age</th><th id="findings-th-ticket" class="is-hidden">Ticket</th><th id="findings-th-triage" class="is-hidden"></th></tr></thead>
+            <tbody id="findings-body"><tr><td colspan="9" class="empty">No findings yet.</td></tr></tbody>
           </table>
         </div>
         </div>
@@ -1998,26 +1974,7 @@
         <div id="hero-iocs"></div>
 
         <div id="ioc-analytics-tiles"></div>
-        <div id="ioc-insights"></div>
-
-        <div id="ioc-toolbar" class="rk-filters">
-          <select id="ioc-filter-type" data-on-change="loadIOCRegistry" class="g1-s-d41e6472">
-            <option value="">All types</option>
-            <option value="file_hash">File hash</option>
-            <option value="domain">Domain</option>
-            <option value="url">URL</option>
-            <option value="ip">IP</option>
-            <option value="registry_key">Registry key</option>
-            <option value="mutex">Mutex</option>
-            <option value="service">Service</option>
-            <option value="process">Process</option>
-            <option value="command_line">Command line</option>
-            <option value="ja3">JA3</option>
-            <option value="user_agent">User agent</option>
-            <option value="email">Email</option>
-            <option value="dns_record">DNS record</option>
-            <option value="certificate">Certificate</option>
-          </select>
+        <div id="ioc-toolbar" class="rk-filters ioc-row1">
           <select id="ioc-filter-source" data-on-change="loadIOCRegistry" class="g1-s-d41e6472">
             <option value="">All sources</option>
             <option value="detection_alert">Detection alert</option>
@@ -2049,35 +2006,101 @@
             <option value="expired">Expired</option>
             <option value="archived">Archived</option>
           </select>
-          <input type="text" id="ioc-filter-search" placeholder="Search value…" data-on-keydown="loadIOCRegistryOnEnter" class="g1-s-8a7b32bc">
-          <button class="btn btn-outline btn-sm" data-on-click="loadIOCRegistry">Search</button>
-          <label class="g1-display-flex g1-s-3f401984">
+          <label class="ioc-sup">
             <input type="checkbox" id="ioc-filter-suppressed" data-on-change="loadIOCRegistry"> Show suppressed
           </label>
+          <span class="ioc-grow"></span>
+          <button class="btn btn-primary btn-sm is-hidden" id="ioc-import-btn2" data-on-click="openIOCImportModal">Import</button>
         </div>
 
-        <div class="rk-card flush">
-          <header class="rk-hd"><h2>Indicators</h2><span class="rk-hd-sub" id="ioc-count"></span></header>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr><th>Type</th><th>Value</th><th>Source</th><th>Origin</th><th>Status</th><th>Sightings</th><th>First Seen</th><th>Last Seen</th><th></th></tr></thead>
-            <tbody id="ioc-registry-body"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
-          </table>
+        <div id="ioc-side"></div>
+        <div id="ioc-insights"></div>
+
+        <div id="ioc-searchbar" class="rk-filters ioc-row2">
+          <label class="rk-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="ioc-filter-search" placeholder="Search indicators or sources..." data-on-keydown="loadIOCRegistryOnEnter"></label>
+          <select id="ioc-filter-type" data-on-change="loadIOCRegistry" class="g1-s-d41e6472">
+            <option value="">All types</option>
+            <option value="file_hash">File hash</option>
+            <option value="domain">Domain</option>
+            <option value="url">URL</option>
+            <option value="ip">IP</option>
+            <option value="registry_key">Registry key</option>
+            <option value="mutex">Mutex</option>
+            <option value="service">Service</option>
+            <option value="process">Process</option>
+            <option value="command_line">Command line</option>
+            <option value="ja3">JA3</option>
+            <option value="user_agent">User agent</option>
+            <option value="email">Email</option>
+            <option value="dns_record">DNS record</option>
+            <option value="certificate">Certificate</option>
+          </select>
+          <button class="btn btn-outline btn-sm" data-on-click="loadIOCRegistry">Search</button>
+          <button class="btn btn-outline btn-sm is-hidden" id="ioc-clear-btn" data-on-click="clearIOCFilters">Clear filters</button>
         </div>
+
+        <div class="rk-card flush ioc-table-card">
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Indicator</th><th>Type</th><th>Source</th><th>Sightings</th><th>Status</th><th>Last seen</th><th></th></tr></thead>
+              <tbody id="ioc-registry-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
       <!-- IOC Import Modal -->
-      <div id="ioc-import-overlay" class="overlay">
-        <div class="modal g1-s-8aa2b24f">
-          <h3>Import Indicators</h3>
-          <p class="sub2">One per line: <code>type,value</code> — e.g. <code>domain,evil.example.com</code>. Written as customer-provided, draft status.</p>
-          <textarea id="ioc-import-text" rows="8" placeholder="domain,evil.example.com&#10;ip,203.0.113.9" class="g1-s-0e5c1ac1"></textarea>
-          <div id="ioc-import-err" class="is-hidden g1-s-10c83707"></div>
-          <div class="modal-actions">
+      <div id="ioc-import-overlay" class="overlay" data-on-click="closeIOCImportOnBackdrop">
+        <div class="modal init-modal" role="dialog" aria-modal="true" aria-label="Import Indicators">
+          <div class="init-mhd">
+            <h3><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V5M7 9l5-5 5 5M5 20h14"/></svg>Import Indicators</h3>
+            <button type="button" class="drawer-close" data-on-click="closeIOCImportModal" aria-label="Close">&#10005;</button>
+          </div>
+          <div class="init-mbd">
+            <p class="sub2">One per line: <code>type,value</code> — e.g. <code>domain,evil.example.com</code>. Written as customer-provided, draft status.</p>
+            <textarea id="ioc-import-text" rows="8" placeholder="domain,evil.example.com&#10;ip,203.0.113.9" class="init-field ioc-mono"></textarea>
+            <div id="ioc-import-err" class="is-hidden ioc-err"></div>
+          </div>
+          <div class="init-mft">
             <button class="btn btn-outline btn-sm" data-on-click="closeIOCImportModal">Cancel</button>
-            <span class="u-flex1"></span>
             <button id="ioc-import-submit-btn" class="btn btn-primary btn-sm" data-on-click="submitIOCImport">Import</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- IOC Add Modal -->
+      <div id="ioc-add-overlay" class="overlay" data-on-click="closeIOCAddOnBackdrop">
+        <div class="modal init-modal" role="dialog" aria-modal="true" aria-label="Add IOC">
+          <div class="init-mhd">
+            <h3><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add IOC</h3>
+            <button type="button" class="drawer-close" data-on-click="closeIOCAddModal" aria-label="Close">&#10005;</button>
+          </div>
+          <div class="init-mbd">
+            <label class="modal-lbl" for="ioc-add-value">Indicator value</label>
+            <input type="text" id="ioc-add-value" class="init-field" placeholder="e.g. 203.0.113.9 or evil-domain.com">
+            <label class="modal-lbl" for="ioc-add-type">Type</label>
+            <select id="ioc-add-type" class="init-field">
+              <option value="ip">IP</option>
+              <option value="domain">Domain</option>
+              <option value="file_hash">File hash</option>
+              <option value="url">URL</option>
+              <option value="registry_key">Registry key</option>
+              <option value="mutex">Mutex</option>
+              <option value="service">Service</option>
+              <option value="process">Process</option>
+              <option value="command_line">Command line</option>
+              <option value="ja3">JA3</option>
+              <option value="user_agent">User agent</option>
+              <option value="email">Email</option>
+              <option value="dns_record">DNS record</option>
+              <option value="certificate">Certificate</option>
+            </select>
+            <p class="sub2">Written as a customer-provided indicator in draft status, like an import.</p>
+            <div id="ioc-add-err" class="is-hidden ioc-err"></div>
+          </div>
+          <div class="init-mft">
+            <button class="btn btn-outline btn-sm" data-on-click="closeIOCAddModal">Cancel</button>
+            <button id="ioc-add-submit-btn" class="btn btn-primary btn-sm" data-on-click="submitIOCAdd">Add indicator</button>
           </div>
         </div>
       </div>
@@ -2085,8 +2108,11 @@
       <!-- Remediation -->
       <div id="tab-remediation" class="is-hidden g3-page">
         <div id="hero-remediation"></div>
-        <div class="rk-grid g4" id="rem-tiles"></div>
-        <div id="rem-insights"></div>
+        <div class="rem-intro">
+          <div class="muted rem-intro-t">Prioritized fixes from your open findings, with authoritative MITRE ATT&amp;CK mitigations. Re-validate after applying a fix.</div>
+          <div id="rem-ticket-actions" class="is-hidden rem-intro-btns"><button class="btn btn-outline btn-sm rem-danger" data-on-click="remBulkTicket" data-args="[&quot;critical&quot;]">Create Tickets for All Critical</button><button class="btn btn-outline btn-sm" data-on-click="remBulkTicket" data-args="[&quot;all&quot;]">Create Tickets for All</button></div>
+        </div>
+        <div class="rk-grid g3" id="rem-tiles"></div>
         <div id="rem-toolbar"></div>
         <div id="rem-list"><div class="empty g1-s-be6df18e">Loading…</div></div>
       </div>
@@ -2111,29 +2137,43 @@
 
       <div id="tab-reports" class="is-hidden g3-page">
         <div id="hero-reports"></div>
-        <div class="rk-tabs g3-subtabs" role="tablist">
-          <button type="button" role="tab" class="on" aria-selected="true">Reports</button>
-          <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;compliance&quot;]">Compliance report</button>
-          <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;sla-report&quot;]">SLA compliance</button>
+        <div class="rk-grid g4 rpt-types">
+          <button type="button" class="rk-card rpt-type t-accent" data-on-click="openReportGen" data-args="[&quot;posture&quot;]"><span class="rpt-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg></span><span class="rpt-lbl">Posture report</span><b>Full per-agent posture</b><span class="rpt-d">Prevention, detection, kill-chain — HTML report</span></button>
+          <button type="button" class="rk-card rpt-type t-violet" data-on-click="openReportGen" data-args="[&quot;audit&quot;]"><span class="rpt-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg></span><span class="rpt-lbl">Audit pack</span><b>Evidence bundle</b><span class="rpt-d">Per-agent audit-ready package</span></button>
+          <button type="button" class="rk-card rpt-type t-ok" data-on-click="showTab" data-args="[&quot;compliance&quot;]"><span class="rpt-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/></svg></span><span class="rpt-lbl">Compliance evidence</span><b>Framework mapping</b><span class="rpt-d">SEBI / RBI / IRDAI / CERT-In / ISO / NIST — on-screen, export JSON / CSV</span></button>
+          <button type="button" class="rk-card rpt-type t-warn" data-on-click="showTab" data-args="[&quot;sla-report&quot;]"><span class="rpt-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></span><span class="rpt-lbl">SLA compliance</span><b>Fleet SLA report</b><span class="rpt-d">On-time resolution rate by severity, trend, recent history</span></button>
         </div>
-        <div class="rk-grid g4">
-          <button type="button" class="g3-launch" data-on-click="openReportGen" data-args="[&quot;posture&quot;]"><span class="rk-kpi-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg></span><span><b>Posture report</b><span class="d">Full per-agent posture: prevention, detection and kill-chain as an HTML report.</span></span></button>
-          <button type="button" class="g3-launch" data-on-click="openReportGen" data-args="[&quot;audit&quot;]"><span class="rk-kpi-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4"/></svg></span><span><b>Audit pack</b><span class="d">Evidence bundle: a per-agent, audit-ready package.</span></span></button>
-          <button type="button" class="g3-launch" data-on-click="showTab" data-args="[&quot;compliance&quot;]"><span class="rk-kpi-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg></span><span><b>Compliance evidence</b><span class="d">SEBI, RBI, IRDAI, CERT-In, ISO and NIST mapping. View on screen, export JSON or CSV.</span></span></button>
-          <button type="button" class="g3-launch" data-on-click="showTab" data-args="[&quot;sla-report&quot;]"><span class="rk-kpi-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></span><span><b>SLA compliance</b><span class="d">On-time resolution rate by severity, monthly trend and recent history.</span></span></button>
-        </div>
-        <div id="rep-insights"></div>
-        <section class="rk-card flush"><header class="rk-hd"><h2>Available reports</h2><span class="rk-hd-sub">by agent</span></header>
-          <div id="rep-available"><div class="empty g1-s-decac807">Loading…</div></div>
-        </section>
-        <section class="rk-card flush"><header class="rk-hd"><h2>Recent report history</h2><span class="rk-hd-sub" id="reports-count"></span></header>
+        <section class="rk-card flush rpt-avail"><div class="rk-hd"><h2>Available reports — by agent</h2></div>
           <div class="tbl-wrap">
             <table>
-              <thead><tr><th>Report</th><th>Scope</th><th>Format</th><th>Generated by</th><th>Generated</th><th>Status</th><th></th></tr></thead>
-              <tbody id="reports-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+              <thead><tr><th>Agent</th><th>Reports on</th><th>Runs</th><th>Last</th><th></th></tr></thead>
+              <tbody id="rep-available"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
             </table>
           </div>
         </section>
+        <div class="rk-tabs g3-subtabs" role="tablist">
+          <button type="button" role="tab" class="on" aria-selected="true">Reports <span class="rk-seg-n" id="rpt-tab-n"></span></button>
+          <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;compliance&quot;]">Compliance report</button>
+          <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;sla-report&quot;]">SLA compliance</button>
+        </div>
+        <div class="rk-filters rpt-filters">
+          <label class="rk-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="rpt-q" placeholder="Search reports..." data-on-input="rptFilter"></label>
+          <select id="rpt-type" aria-label="Report type" data-on-change="rptFilter"><option value="">All types</option></select>
+          <button type="button" class="btn btn-outline is-hidden" id="rpt-clear" data-on-click="rptClear">Clear</button>
+        </div>
+        <div class="rpt-side">
+          <section class="rk-card flush">
+            <div class="tbl-wrap">
+              <table>
+                <thead><tr><th>Report</th><th>Type</th><th>Created</th><th>By</th><th>Format</th><th></th></tr></thead>
+                <tbody id="reports-body"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+          <section class="rk-card"><div class="rk-hd"><h2>Scheduled deliveries</h2></div>
+            <div class="rk-empty"><span class="rk-empty-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></span><b>No scheduled deliveries</b><div>Reports are generated on demand. Scheduled delivery is not available in this release.</div></div>
+          </section>
+        </div>
       </div>
 
       <!-- Integrations (admin only — ITSM connector management) -->
@@ -2448,9 +2488,19 @@
       <div id="tab-compliance" class="is-hidden g3-page">
                 <div id="hero-compliance"></div>
         <div class="rk-tabs g3-subtabs" role="tablist">
-          <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;reports&quot;]">Reports</button>
+          <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;reports&quot;]">Reports <span class="rk-seg-n" id="rpt-tab-n-c"></span></button>
           <button type="button" role="tab" class="on" aria-selected="true">Compliance report</button>
           <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;sla-report&quot;]">SLA compliance</button>
+        </div>
+        <div id="cmp-fw-cards"><div class="rk-empty">Loading…</div></div>
+        <div class="rk-filters rpt-cmp-tools">
+          <select id="cmp-agent-sel" aria-label="Agent"></select>
+          <select id="cmp-fw-sel" aria-label="Framework"></select>
+          <button type="button" class="btn btn-primary" data-on-click="loadComplianceReport">Generate</button>
+          <button type="button" class="btn btn-outline is-hidden" data-on-click="openComplianceDoc" data-args="[&quot;html&quot;]" id="cmp-export-html">↗ HTML</button>
+          <button type="button" class="btn btn-outline is-hidden" data-on-click="openComplianceDoc" data-args="[&quot;pdf&quot;]" id="cmp-export-pdf">↓ PDF</button>
+          <button type="button" class="btn btn-outline is-hidden" data-on-click="exportCompliance" data-args="[&quot;json&quot;]" id="cmp-export-json">↓ JSON</button>
+          <button type="button" class="btn btn-outline is-hidden" data-on-click="exportCompliance" data-args="[&quot;csv&quot;]" id="cmp-export-csv">↓ CSV</button>
         </div>
 
         <div id="cmp-placeholder" class="rk-card rk-empty">
@@ -2497,36 +2547,26 @@
       <div id="tab-sla-report" class="is-hidden g3-page">
                 <div id="hero-sla"></div>
         <div class="rk-tabs g3-subtabs" role="tablist">
-          <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;reports&quot;]">Reports</button>
+          <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;reports&quot;]">Reports <span class="rk-seg-n" id="rpt-tab-n-s"></span></button>
           <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;compliance&quot;]">Compliance report</button>
           <button type="button" role="tab" class="on" aria-selected="true">SLA compliance</button>
         </div>
+        <div class="rk-filters rpt-sla-tools"><button type="button" class="btn btn-outline" data-on-click="loadSLAReport">&#x21bb; Refresh</button></div>
         <div id="sla-rpt-empty" class="is-hidden"><div class="rk-card"><div class="rk-empty"><b>No SLA data yet</b><div>SLA episodes appear once findings have been opened and resolved.</div></div></div></div>
         <div id="sla-rpt-body">
           <div class="rk-grid g4" id="sla-rpt-kpis"></div>
           <div class="rk-grid g2">
-            <section class="rk-card"><header class="rk-hd"><h2>Compliance by severity</h2></header><div id="sla-rpt-severity"></div></section>
-            <section class="rk-card"><header class="rk-hd"><h2>Episodes by severity</h2></header><div id="sla-rpt-sev-chart"></div></section>
+            <section class="rk-card"><div class="rk-hd"><h2>By Severity</h2></div><div id="sla-rpt-severity"></div></section>
+            <section class="rk-card"><div class="rk-hd"><h2>Monthly Trend</h2></div><div id="sla-rpt-trend-chart"></div></section>
           </div>
-          <section class="rk-card"><header class="rk-hd"><h2>Monthly compliance trend</h2></header><div id="sla-rpt-trend-chart"></div></section>
-          <div class="rk-grid g2">
-            <section class="rk-card flush"><header class="rk-hd"><h2>Monthly trend</h2></header>
-              <div class="tbl-wrap">
-                <table>
-                  <thead><tr><th>Month</th><th>Resolved</th><th>On-Time</th><th>Compliance Rate</th></tr></thead>
-                  <tbody id="sla-rpt-trend-body"></tbody>
-                </table>
-              </div>
-            </section>
-            <section class="rk-card flush"><header class="rk-hd"><h2>Recently resolved</h2></header>
-              <div class="tbl-wrap">
-                <table>
-                  <thead><tr><th>Agent</th><th>Check</th><th>Severity</th><th>Resolved</th><th>Outcome</th></tr></thead>
-                  <tbody id="sla-rpt-recent-body"></tbody>
-                </table>
-              </div>
-            </section>
-          </div>
+          <section class="rk-card flush"><div class="rk-hd"><h2>Recently Resolved</h2></div>
+            <div class="tbl-wrap">
+              <table>
+                <thead><tr><th>Finding</th><th>Severity</th><th>Resolved</th><th>Outcome</th></tr></thead>
+                <tbody id="sla-rpt-recent-body"></tbody>
+              </table>
+            </div>
+          </section>
         </div>
       </div>
 
@@ -2537,27 +2577,26 @@
         <!-- Stats row -->
         <div id="vex-stats"></div>
 
-        <!-- Full Sweep banner -->
-        <div class="card g1-s-f9a62d25" id="vex-sweep-card">
-          <div class="g1-display-flex g1-s-6116f709">
-            <div>
-              <div class="g1-display-flex g1-s-0bebdbea">
-                <svg viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6" class="g1-s-0a5fb189"><path d="M3 10a7 7 0 1 1 14 0A7 7 0 0 1 3 10z"/><path d="m10 7 3 3-3 3M7 10h6"/></svg>
-                Full Variant Sweep
-              </div>
-              <div class="tiny muted">Run all <strong id="vex-sweep-tech-count" class="u-text">—</strong> Windows-runnable ART techniques<span id="vex-sweep-caldera-count"></span> sequentially · <span id="vex-sweep-total-variants" class="u-text">—</span> total variants ·
-                <button type="button" class="btn btn-sm g1-s-25c0e939" data-on-click="showVexStatHelp" data-args="[&quot;Windows-runnable ART techniques&quot;,&quot;This is the subset of ART techniques that have at least one Windows atomic test — see Settings → Simulation Engine for the full breakdown (total ART techniques, how many are Windows-runnable, and total atomic tests across all of them). Techniques with Linux/macOS-only atomics are excluded here since this sweep only runs on Windows agents.&quot;]" title="Why this number?">why this number?</button>
-                · <span class="tiny muted">runs technique-by-technique; you can see live progress</span></div>
+        <!-- Running full sweeps (progress cards) -->
+        <div id="vex-sweep-list" class="g1-s-3d340acf"></div>
+
+        <!-- Full variant sweep + Run variants side by side -->
+        <div class="var-grid">
+          <!-- Full variant sweep -->
+          <div class="card var-card" id="vex-sweep-card">
+            <div class="card-title">Full variant sweep</div>
+            <p class="tiny muted var-note">Run all <strong id="vex-sweep-tech-count" class="u-text">—</strong> Windows-runnable ART techniques<span id="vex-sweep-caldera-count"></span> sequentially · <span id="vex-sweep-total-variants" class="u-text">—</span> total variants ·
+              <button type="button" class="btn btn-sm g1-s-25c0e939" data-on-click="showVexStatHelp" data-args="[&quot;Windows-runnable ART techniques&quot;,&quot;This is the subset of ART techniques that have at least one Windows atomic test — see Settings → Simulation Engine for the full breakdown (total ART techniques, how many are Windows-runnable, and total atomic tests across all of them). Techniques with Linux/macOS-only atomics are excluded here since this sweep only runs on Windows agents.&quot;]" title="Why this number?">why this number?</button>
+              · runs technique by technique with live progress.</p>
+            <div class="var-radios">
+              <label class="g1-display-flex g1-s-e09a7aa9">
+                <input type="radio" name="vex-target-mode" value="individual" checked data-on-change="setVexTargetMode" data-args="[&quot;individual&quot;]"> Individual
+              </label>
+              <label class="g1-display-flex g1-s-e09a7aa9">
+                <input type="radio" name="vex-target-mode" value="group" data-on-change="setVexTargetMode" data-args="[&quot;group&quot;]"> Group(s)
+              </label>
             </div>
-            <div class="g1-display-flex g1-s-16d1de7c">
-              <div class="g1-display-flex g1-s-25a694ca">
-                <label class="g1-display-flex g1-s-e09a7aa9">
-                  <input type="radio" name="vex-target-mode" value="individual" checked data-on-change="setVexTargetMode" data-args="[&quot;individual&quot;]"> Individual
-                </label>
-                <label class="g1-display-flex g1-s-e09a7aa9">
-                  <input type="radio" name="vex-target-mode" value="group" data-on-change="setVexTargetMode" data-args="[&quot;group&quot;]"> Group(s)
-                </label>
-              </div>
+            <div class="var-row">
               <div id="vex-sweep-individual-wrap" class="g1-display-flex g1-s-16d1de7c">
                 <select id="vex-sweep-agent" class="btn btn-outline g1-s-9a9ba5b5" data-on-change="_vexCheckAgentSweepConflict">
                   <option value="">Select agent…</option>
@@ -2573,49 +2612,54 @@
               </label>
               <span id="vex-sweep-btn-inline-slot"><button id="vex-sweep-btn" class="btn btn-primary g1-s-eb99a4c1" data-on-click="vexRunFullSweep">▶ Start Sweep</button></span>
             </div>
+            <div id="vex-sweep-group-wrap" class="is-hidden g1-s-592b7d66">
+              <div id="vex-sweep-group-list" class="g1-s-b57c19fa"></div>
+              <p class="tiny muted g1-s-d21775d3" id="vex-sweep-group-summary"></p>
+              <div class="g1-display-flex g1-s-bcdea8ee" id="vex-sweep-btn-group-slot"></div>
+            </div>
           </div>
-          <div id="vex-sweep-group-wrap" class="is-hidden g1-s-592b7d66">
-            <div id="vex-sweep-group-list" class="g1-s-b57c19fa"></div>
-            <p class="tiny muted g1-s-d21775d3" id="vex-sweep-group-summary"></p>
-            <div class="g1-display-flex g1-s-bcdea8ee" id="vex-sweep-btn-group-slot"></div>
-          </div>
-          <div id="vex-sweep-list" class="g1-s-3d340acf"></div>
-        </div>
 
-        <!-- Run form + result side-by-side -->
-        <div class="g1-display-grid g1-s-2278d819">
-          <!-- Run form -->
-          <div class="card g1-s-4b908108">
-            <div class="card-title g1-s-2fc766d7">Run Variants</div>
+          <!-- Run variants -->
+          <div class="card var-card">
+            <div class="card-title">Run variants</div>
             <div class="g1-display-flex g1-s-af46cafc">
-              <div>
-                <label class="modal-lbl g1-display-block g1-s-e02b1221">Target</label>
-                <div class="g1-display-flex g1-s-e2a61913">
-                  <label class="g1-display-flex g1-s-7cbcbec8">
-                    <input type="radio" name="vex-run-target-mode" value="individual" checked data-on-change="setVexRunTargetMode" data-args="[&quot;individual&quot;]"> Individual
-                  </label>
-                  <label class="g1-display-flex g1-s-7cbcbec8">
-                    <input type="radio" name="vex-run-target-mode" value="group" data-on-change="setVexRunTargetMode" data-args="[&quot;group&quot;]"> Group(s)
-                  </label>
-                  <label id="vex-run-all-label" class="is-hidden g1-s-7cbcbec8">
-                    <input type="radio" name="vex-run-target-mode" value="all" data-on-change="setVexRunTargetMode" data-args="[&quot;all&quot;]"> All Agents
-                  </label>
+              <div class="var-two">
+                <div>
+                  <label class="modal-lbl g1-display-block g1-s-e02b1221">Target</label>
+                  <div class="g1-display-flex g1-s-e2a61913">
+                    <label class="g1-display-flex g1-s-7cbcbec8">
+                      <input type="radio" name="vex-run-target-mode" value="individual" checked data-on-change="setVexRunTargetMode" data-args="[&quot;individual&quot;]"> Individual
+                    </label>
+                    <label class="g1-display-flex g1-s-7cbcbec8">
+                      <input type="radio" name="vex-run-target-mode" value="group" data-on-change="setVexRunTargetMode" data-args="[&quot;group&quot;]"> Group(s)
+                    </label>
+                    <label id="vex-run-all-label" class="is-hidden g1-s-7cbcbec8">
+                      <input type="radio" name="vex-run-target-mode" value="all" data-on-change="setVexRunTargetMode" data-args="[&quot;all&quot;]"> All Agents
+                    </label>
+                  </div>
+                  <div id="vex-run-individual-wrap">
+                    <select id="vex-agent" class="btn btn-outline g1-s-7177bdcb"></select>
+                  </div>
+                  <div id="vex-run-group-wrap" class="is-hidden">
+                    <div id="vex-run-group-list" class="g1-s-2f8835c1"></div>
+                    <p class="tiny muted g1-s-f10b735a" id="vex-run-group-summary"></p>
+                  </div>
+                  <div id="vex-run-all-wrap" class="is-hidden">
+                    <p class="tiny muted g1-s-ab79ea2b">Every agent will be targeted (Admin only).</p>
+                  </div>
                 </div>
-                <div id="vex-run-individual-wrap">
-                  <select id="vex-agent" class="btn btn-outline g1-s-7177bdcb"></select>
-                </div>
-                <div id="vex-run-group-wrap" class="is-hidden">
-                  <div id="vex-run-group-list" class="g1-s-2f8835c1"></div>
-                  <p class="tiny muted g1-s-f10b735a" id="vex-run-group-summary"></p>
-                </div>
-                <div id="vex-run-all-wrap" class="is-hidden">
-                  <p class="tiny muted g1-s-ab79ea2b">Every agent will be targeted (Admin only).</p>
+                <div>
+                  <label class="modal-lbl g1-display-block g1-s-e02b1221">Tactic</label>
+                  <select id="vex-tactic" class="btn btn-outline g1-s-7177bdcb" data-on-change="filterVexTechniques">
+                    <option value="">All tactics</option>
+                  </select>
                 </div>
               </div>
               <div>
-                <label class="modal-lbl g1-display-block g1-s-e02b1221">Tactic</label>
-                <select id="vex-tactic" class="btn btn-outline g1-s-7177bdcb" data-on-change="filterVexTechniques">
-                  <option value="">All tactics</option>
+                <label class="modal-lbl g1-display-block g1-s-e02b1221">Base Source</label>
+                <select id="vex-base-type" class="btn btn-outline g1-s-7177bdcb">
+                  <option value="art">Atomic Red Team</option>
+                  <option value="caldera">Caldera</option>
                 </select>
               </div>
               <div>
@@ -2632,13 +2676,6 @@
                 </div>
               </div>
               <div>
-                <label class="modal-lbl g1-display-block g1-s-e02b1221">Base Source</label>
-                <select id="vex-base-type" class="btn btn-outline g1-s-7177bdcb">
-                  <option value="art">Atomic Red Team</option>
-                  <option value="caldera">Caldera</option>
-                </select>
-              </div>
-              <div>
                 <label class="modal-lbl g1-display-block g1-s-e02b1221">Mode</label>
                 <select id="vex-mode" class="btn btn-outline g1-s-7177bdcb">
                   <option value="sequential">Sequential (all variants)</option>
@@ -2652,23 +2689,23 @@
               <button id="vex-run-btn" class="btn btn-primary g1-s-d3b986ae" data-on-click="runVariants">Run</button>
             </div>
           </div>
+        </div>
 
-          <!-- Result panel -->
-          <div id="vex-result-panel">
-            <div class="card g1-s-171208db">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" class="g1-display-block g1-s-a8e7c80e">
-                <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-                <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
-              </svg>
-              Select an agent and technique, then click <strong>Run</strong> to execute all encoding &times; context &times; evasion variants.
-            </div>
+        <!-- Run result (appears under the two cards once a run starts) -->
+        <div id="vex-result-panel" class="var-result">
+          <div class="card g1-s-171208db">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" class="g1-display-block g1-s-a8e7c80e">
+              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+            </svg>
+            Select an agent and technique, then click <strong>Run</strong> to execute all encoding &times; context &times; evasion variants.
           </div>
         </div>
 
         <!-- Coverage table -->
         <div class="card">
           <div class="card-title g1-display-flex g1-s-f74c1979">
-            <span>Coverage</span>
+            <span>Bypass coverage</span>
             <span class="tiny muted">Aggregate bypass results across all variant runs</span>
           </div>
           <div id="vex-coverage"><div class="empty g1-s-1eb1d451">Loading…</div></div>
@@ -2678,48 +2715,43 @@
       <div id="tab-email" class="is-hidden">
         <div id="hero-email"></div>
 
-        <div id="email-summary"></div>
-
-        <section class="rk-card">
-          <header class="rk-hd"><h2>Coverage</h2><span class="rk-hd-sub">Email security areas exercised by the scenarios</span></header>
+        <div class="eml-top">
           <div id="email-coverage"><div class="rk-empty">Loading coverage…</div></div>
-        </section>
-
-        <div class="rg2-sec first"><div><h2>Time-Based Metrics</h2><p>Prevention, detection (MTTD) and response (MTTR) outcomes, lab versus customer environments.</p></div></div>
-        <div id="email-metrics"><div class="rk-empty">Loading metrics…</div></div>
-
-        <div class="rg2-sec"><div><h2>Scenarios</h2><p>Run an individual expectation against the email gateway.</p></div></div>
-        <div id="email-catalog-grid"><div class="rk-empty">Loading scenarios…</div></div>
-
-        <!-- Campaigns -->
-        <div class="dash-panel u-mb-1">
-          <div class="dash-panel-hdr email-hdr-row">
-            <span>Campaigns</span>
-            <div id="email-campaigns-toolbar"></div>
-            <div class="u-flex1"></div>
-            <div id="email-campaign-launch-buttons" class="email-launch-buttons"></div>
-          </div>
-          <div class="tbl-wrap">
-            <table>
-              <thead><tr><th>Campaign</th><th>Status</th><th>Created</th><th>Completed</th><th></th></tr></thead>
-              <tbody id="email-campaigns-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
-            </table>
-          </div>
+          <div id="email-metrics"><div class="rk-empty">Loading metrics…</div></div>
         </div>
 
+        <div id="email-catalog-grid" class="eml-sec"><div class="rk-empty">Loading scenarios…</div></div>
+
         <!-- Runs -->
-        <div class="dash-panel">
-          <div class="dash-panel-hdr email-hdr-row">
-            <span>Runs</span>
-            <div id="email-runs-toolbar"></div>
-          </div>
+        <section class="rk-card flush eml-sec">
+          <div class="rk-hd"><h2>Runs</h2><div class="rk-hd-actions" id="email-runs-toolbar"></div></div>
           <div class="tbl-wrap">
             <table>
               <thead><tr><th>Scenario</th><th>Status</th><th>Environment</th><th>Started</th><th>Error</th></tr></thead>
               <tbody id="email-runs-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
             </table>
           </div>
+        </section>
+
+        <!-- Campaigns and templates -->
+        <div id="email-tabs" class="eml-sec"></div>
+        <div id="email-panel-campaigns">
+          <div class="rk-filters eml-filters">
+            <div id="email-campaigns-toolbar"></div>
+            <span class="grow"></span>
+            <label class="rk-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="email-campaign-search" placeholder="Search campaigns..." data-on-input="emailCampaignSearch"></label>
+            <button type="button" id="email-campaign-clear" class="btn btn-outline btn-sm" data-on-click="emailClearFilters" hidden>Clear</button>
+          </div>
+          <section class="rk-card flush">
+            <div class="tbl-wrap">
+              <table>
+                <thead><tr><th>Campaign</th><th>Status</th><th>Created</th><th>Completed</th><th></th></tr></thead>
+                <tbody id="email-campaigns-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+              </table>
+            </div>
+          </section>
         </div>
+        <div id="email-panel-templates" class="is-hidden"></div>
       </div>
     </main>
   </div>
@@ -3394,29 +3426,41 @@
 
 <!-- Generate Report Modal -->
 <div id="report-overlay" class="overlay">
-  <div class="modal g1-s-fa4ea140">
-    <h3 id="report-modal-title">Generate report</h3>
-    <label class="modal-lbl">Target agent</label>
-    <select id="rep-agent"></select>
-    <div id="rep-fw-wrap" class="is-hidden">
-      <label class="modal-lbl">Framework</label>
-      <select id="rep-fw"></select>
+  <div class="modal init-modal" role="dialog" aria-modal="true" aria-label="Generate report">
+    <div class="init-mhd">
+      <h3><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/></svg><span id="report-modal-title">Generate report</span></h3>
+      <button type="button" class="drawer-close" data-on-click="closeReportGen" aria-label="Close">&#10005;</button>
     </div>
-    <label class="modal-lbl">Format</label>
-    <select id="rep-format"></select>
-    <div id="rep-filter-wrap">
-      <label class="modal-lbl">Results Filter</label>
-      <select id="rep-filter">
-        <option value="all">All simulation results (Default)</option>
-        <option value="prevented">Prevented only</option>
-        <option value="not_prevented">Not prevented only</option>
-        <option value="detected">Detected only</option>
-        <option value="not_detected">Not detected only</option>
+    <div class="init-mbd">
+      <label class="modal-lbl" for="rep-type">Report type</label>
+      <select id="rep-type" class="init-field" data-on-change="setReportType">
+        <option value="posture">Posture report</option>
+        <option value="audit">Audit pack</option>
+        <option value="compliance">Compliance evidence</option>
       </select>
+      <label class="modal-lbl" for="rep-agent">Target agent</label>
+      <select id="rep-agent" class="init-field"></select>
+      <div id="rep-fw-wrap" class="is-hidden">
+        <label class="modal-lbl" for="rep-fw">Framework</label>
+        <select id="rep-fw" class="init-field"></select>
+      </div>
+      <div id="rep-filter-wrap">
+        <label class="modal-lbl" for="rep-filter">Results filter</label>
+        <select id="rep-filter" class="init-field">
+          <option value="all">All simulation results (Default)</option>
+          <option value="prevented">Prevented only</option>
+          <option value="not_prevented">Not prevented only</option>
+          <option value="detected">Detected only</option>
+          <option value="not_detected">Not detected only</option>
+        </select>
+      </div>
+      <label class="modal-lbl">Format</label>
+      <div id="rep-format-cards" class="rpt-fmts"></div>
+      <input type="hidden" id="rep-format" value="html">
     </div>
-    <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" data-on-click="closeReportGen">Cancel</button>
-      <button class="btn btn-primary btn-sm" data-on-click="submitReport">&#9660; Generate &amp; download</button>
+    <div class="init-mft">
+      <button type="button" class="btn btn-outline btn-sm" data-on-click="closeReportGen">Cancel</button>
+      <button type="button" class="btn btn-primary btn-sm" data-on-click="submitReport">&#9660; Generate &amp; download</button>
     </div>
   </div>
 </div>
@@ -3455,6 +3499,40 @@
       <button class="btn btn-outline btn-sm" data-on-click="closeDownloadOptions">Cancel</button>
       <button class="btn btn-primary btn-sm" id="dl-confirm-btn">Confirm &amp; Download</button>
     </div>
+  </div>
+</div>
+
+<!-- Email drawer (scenario, campaign, new campaign) -->
+<div id="eml-drawer-overlay" class="drawer-overlay" data-on-click="closeEmailDrawerOnBackdrop">
+  <div class="drawer sc-drawer" role="dialog" aria-modal="true" aria-label="Email details">
+    <div class="drawer-header">
+      <div class="sc-dh"><span class="sc-dh-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span><div><div class="sc-dh-t" id="eml-drawer-title">Email</div><div class="sc-dh-s" id="eml-drawer-sub"></div></div></div>
+      <button class="drawer-close" data-on-click="closeEmailDrawer" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="drawer-body" id="eml-drawer-body"></div>
+    <div class="sc-drawer-ft" id="eml-drawer-foot"></div>
+  </div>
+</div>
+
+<!-- Coverage technique drawer -->
+<div id="cov-drawer-overlay" class="drawer-overlay" data-on-click="closeCovDrawerOnBackdrop">
+  <div class="drawer sc-drawer" role="dialog" aria-modal="true" aria-label="Technique details">
+    <div class="drawer-header">
+      <div class="sc-dh"><span class="sc-dh-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span><div><div class="sc-dh-t" id="cov-drawer-title">Technique</div><div class="sc-dh-s" id="cov-drawer-sub"></div></div></div>
+      <button class="drawer-close" data-on-click="closeCovDrawer" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="drawer-body" id="cov-drawer-body"></div>
+  </div>
+</div>
+
+<!-- IOC Registry indicator drawer -->
+<div id="ioc-drawer-overlay" class="drawer-overlay" data-on-click="closeIOCDrawerOnBackdrop">
+  <div class="drawer sc-drawer" role="dialog" aria-modal="true" aria-label="Indicator details">
+    <div class="drawer-header">
+      <div class="sc-dh"><span class="sc-dh-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9h14M5 15h14M10 4L8 20M16 4l-2 16"/></svg></span><div><div class="sc-dh-t ioc-dh-t" id="ioc-drawer-title">Indicator</div><div class="sc-dh-s" id="ioc-drawer-sub"></div></div></div>
+      <button class="drawer-close" data-on-click="closeIOCDrawer" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="drawer-body" id="ioc-drawer-body"></div>
   </div>
 </div>
 

@@ -2,7 +2,7 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
-import { ago, fmtDate, fmtRunIdCode, showToast } from '../core/util.js';
+import { fmtRunIdCode, showToast } from '../core/util.js';
 import { renderGroupCheckboxList } from './adversaries.js';
 import { agentBucket, loadScenarios, renderScenarios, resolveGroupTargetAgents } from './attack-path.js';
 import { cmpAgentOS } from './campaigns.js';
@@ -14,9 +14,9 @@ import { rerunSubset } from './rerun-review.js';
 import { ROLE, _artCatalogByPlatform, _riskScoreColor } from './shell.js';
 import { renderAttackFlow, renderRunFindings, renderRunRecommendations, renderRunReportExtra, renderVariantCoverage } from './variant-report.js';
 import { displayOf, replaceClasses, setDisplay } from '../core/inline-style.js';
-import { kpi, card, grid, hbars, pill, chip, empty, icon } from '../core/kit.js';
-import { chartSlot, CHART_COLORS, hydrateCharts } from '../core/charts.js';
-import { countBy, hbarRows } from './rich-g3.js';
+import { hydrateCharts } from '../core/charts.js';
+import { TYPE_LABEL, formatsFor, agentRows } from './rpt-model.js';
+import { paintAvailable, paintAvailableError, paintHistory, loadReportsHero } from './rpt-view.js';
 import { applyRunsFilter, renderRunsSummary, runsStatusAttr, runsSelCell, runsRowClick } from './runs-rich.js';
 import { fmtWhen, shortRunId, isLive as isLiveRun } from './runs-model.js';
 import { paintResultsExtras, paintRecommendationExtra } from './runs-drawer.js';
@@ -26,84 +26,17 @@ import { paintResultsExtras, paintRecommendationExtra } from './runs-drawer.js';
 var REPORT_TYPE = 'posture';
 export function loadReports() {
   renderRepHistory();
+  loadReportsHero();
   // Per-agent launcher: which agents have run data we can report on.
   apicall('/api/scenarios/runs').then(function(runs) {
-    var byAgent = {};
-    (runs || []).forEach(function(r) {
-      if (r.status !== 'completed' && r.status !== 'partial') return;
-      var id = r.agentId; if (!id) return;
-      if (!byAgent[id]) byAgent[id] = { runs: 0, last: r.completedAt || r.startedAt, lastName: r.name };
-      byAgent[id].runs++;
-    });
     var hostOf = {};
     (state.agents || []).forEach(function(a) { hostOf[a.agentId] = a.hostname || a.agentId; });
-    var ids = Object.keys(byAgent);
-    var el = document.getElementById('rep-available');
-    if (!ids.length) {
-      el.innerHTML = empty('report', 'No agents with completed runs yet', 'Run a scenario, then generate its report here.');
-      return;
-    }
-    el.innerHTML = ids.map(function(id) {
-      var host = hostOf[id] || id, n = byAgent[id].runs, lastName = byAgent[id].lastName;
-      return '<div class="g3-agent">' +
-        '<span class="rk-kpi-ico">' + icon('file') + '</span>' +
-        '<div class="g3-agent-main"><b>' + x(host) + '</b>' +
-          '<span>Reports on: <strong class="u-text">' + x(lastName || 'unnamed scenario') + '</strong> (latest run) · ' + n + ' run' + (n === 1 ? '' : 's') + ' total · last ' + ago(byAgent[id].last) + '</span></div>' +
-        '<div class="g3-agent-acts">' +
-          '<button class="btn btn-outline btn-sm"' + on('click', 'genAgentReport', id, 'posture', 'pdf') + '>PDF Report</button>' +
-          '<button class="btn btn-outline btn-sm"' + on('click', 'genAgentReport', id, 'posture', 'csv') + '>CSV</button>' +
-          '<button class="btn btn-outline btn-sm"' + on('click', 'genAgentReport', id, 'audit', '') + '>Audit pack</button>' +
-        '</div></div>';
-    }).join('');
-  }).catch(function() {
-    document.getElementById('rep-available').innerHTML = empty('alert', 'Could not load agents');
-  });
-}
-function renderRepInsights(list) {
-  var el = document.getElementById('rep-insights');
-  if (!el) return;
-  if (!list.length) { el.innerHTML = ''; return; }
-  var failed = list.filter(function(r) { return r.status === 'failed'; }).length;
-  var latest = list.reduce(function(m, r) { return !m || new Date(r.generatedAt) > new Date(m.generatedAt) ? r : m; }, null);
-  var label = { posture: 'Posture report', audit: 'Audit pack', compliance: 'Compliance evidence' };
-  var colors = { posture: CHART_COLORS.accent, audit: CHART_COLORS.violet, compliance: CHART_COLORS.teal };
-  var segs = countBy(list, function(r) { return r.reportType; }, 'Other').map(function(p) {
-    return { label: label[p[0]] || p[0], value: p[1], color: colors[p[0]] || CHART_COLORS.muted };
-  });
-  var who = countBy(list, function(r) { return r.generatedBy; }, 'Unknown');
-  el.innerHTML = grid(4, [
-    kpi({ label: 'Reports generated', value: list.length, sub: 'in the history log', icon: 'report', tone: 'accent' }),
-    kpi({ label: 'Completed', value: list.length - failed, sub: 'ready to download', icon: 'ok', tone: 'ok' }),
-    kpi({ label: 'Failed', value: failed, sub: failed ? 'regenerate from the tiles above' : 'none', icon: 'warn', tone: failed ? 'bad' : 'muted' }),
-    kpi({ label: 'Latest report', value: latest ? ago(latest.generatedAt) : '—', sub: latest ? (label[latest.reportType] || latest.reportType) : '', icon: 'clock', tone: 'info' })
-  ]) + grid(2, [
-    card('Reports by type', chartSlot({ type: 'donut', h: 160, legendRight: true, centerSub: 'reports', segments: segs })),
-    card('Generated by', hbars(hbarRows(who, 'accent', 5)), { sub: 'top 5 users' })
-  ]);
+    paintAvailable(agentRows(runs, hostOf));
+  }).catch(function() { paintAvailableError(); });
 }
 function renderRepHistory() {
-  apicall('/api/reports').then(function(list) {
-    var tb = document.getElementById('reports-body');
-    list = list || [];
-    renderRepInsights(list);
-    var cnt = document.getElementById('reports-count');
-    if (cnt) cnt.textContent = list.length ? list.length + ' report' + (list.length === 1 ? '' : 's') : '';
-    if (!list.length) {
-      tb.innerHTML = '<tr><td colspan="7">' + empty('report', 'No reports generated yet', 'This log fills when you generate one (from a tile above or the per-agent buttons). Test runs do not create reports automatically.') + '</td></tr>';
-      return;
-    }
-    var label = { posture: 'Posture report', audit: 'Audit pack', compliance: 'Compliance evidence' };
-    tb.innerHTML = list.map(function(r) {
-      return '<tr>' +
-        '<td class="cell-main">' + x(label[r.reportType] || r.reportType) + '</td>' +
-        '<td class="tiny muted">' + x(r.scopeLabel) + '</td>' +
-        '<td>' + chip((r.format || '—').toUpperCase(), 'muted') + '</td>' +
-        '<td class="tiny muted">' + x(r.generatedBy || '—') + '</td>' +
-        '<td class="tiny muted">' + fmtDate(r.generatedAt) + '</td>' +
-        '<td>' + pill(r.status, r.status === 'failed' ? 'bad' : 'ok') + '</td>' +
-        '<td class="td-r"><a class="btn btn-outline btn-sm" href="' + x(r.downloadPath) + '" target="_blank" rel="noopener">&#9660; Download</a></td></tr>';
-    }).join('');
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  apicall('/api/reports').then(function(list) { paintHistory(list || []); })
+    .catch(function(e) { showToast(e.message, 'err'); });
 }
 // genAgentReport logs the generation to history (report_log) and opens the
 // download — the same path the modal uses, so the per-agent launcher and the
@@ -129,38 +62,45 @@ export function genAgentReport(agentId, type, format) {
     });
   }
 }
-export function openReportGen(type) {
-  REPORT_TYPE = type;
+// openReportGen(type, framework) opens the Generate report modal. Called from a tile it gets a type
+// name; from the banner button the dispatcher passes the element instead, which means the default type.
+export function openReportGen(type, framework) {
+  if (typeof type !== 'string' || !TYPE_LABEL[type]) type = 'posture';
   if (!state.agents.length) { showToast('No agents registered yet', 'err'); return; }
-  var label = { posture: 'Posture report', audit: 'Audit pack', compliance: 'Compliance evidence' };
-  document.getElementById('report-modal-title').textContent = 'Generate — ' + label[type];
   document.getElementById('rep-agent').innerHTML = state.agents.map(function(a) {
     return '<option value="' + x(a.agentId) + '">' + x(a.agentId) + ' — ' + x(a.hostname) + '</option>';
   }).join('');
-  var fmts = type === 'compliance' ? ['html', 'csv'] : type === 'audit' ? [''] : ['html', 'csv'];
-  document.getElementById('rep-format').innerHTML = fmts.map(function(f) {
-    var lbl = f ? f.toUpperCase() : 'Package';
-    if (type === 'posture' && f === 'csv') lbl = 'CSV (forensic)';
-    return '<option value="' + f + '">' + lbl + '</option>';
+  fillReportForm(type, typeof framework === 'string' ? framework : '');
+  document.getElementById('report-overlay').classList.add('open');
+}
+// setReportType re-fills the modal when the Report type select changes.
+export function setReportType(el) { fillReportForm(el && TYPE_LABEL[el.value] ? el.value : 'posture', ''); }
+// pickReportFormat records the chosen format card in the hidden #rep-format that submitReport reads.
+export function pickReportFormat(el) {
+  document.getElementById('rep-format').value = el.value;
+  document.querySelectorAll('#rep-format-cards .rpt-fmt').forEach(function(l) { l.classList.toggle('on', l.contains(el)); });
+}
+function fillReportForm(type, framework) {
+  REPORT_TYPE = type;
+  document.getElementById('rep-type').value = type;
+  var fmts = formatsFor(type);
+  document.getElementById('rep-format').value = fmts[0].value;
+  document.getElementById('rep-format-cards').innerHTML = fmts.map(function(f, i) {
+    return '<label class="rpt-fmt' + (i === 0 ? ' on' : '') + '"><input type="radio" name="rep-fmt" value="' + x(f.value) + '"' + (i === 0 ? ' checked' : '') + on('change', 'pickReportFormat') + '><b>' + x(f.label) + '</b></label>';
   }).join('');
   var fwWrap = document.getElementById('rep-fw-wrap');
   if (type === 'compliance') {
     setDisplay(fwWrap, '');
     apicall('/api/compliance/frameworks').then(function(fws) {
       document.getElementById('rep-fw').innerHTML = (fws || []).map(function(f) {
-        return '<option value="' + x(f.id) + '">' + x(f.name || f.id) + '</option>';
+        return '<option value="' + x(f.id) + '"' + (f.id === framework ? ' selected' : '') + '>' + x(f.name || f.id) + '</option>';
       }).join('');
     });
   } else {
     setDisplay(fwWrap, 'none');
   }
   var filterWrap = document.getElementById('rep-filter-wrap');
-  if (type === 'audit') {
-    if (filterWrap) setDisplay(filterWrap, 'none');
-  } else {
-    if (filterWrap) setDisplay(filterWrap, '');
-  }
-  document.getElementById('report-overlay').classList.add('open');
+  if (filterWrap) setDisplay(filterWrap, type === 'audit' ? 'none' : '');
 }
 export function closeReportGen() { document.getElementById('report-overlay').classList.remove('open'); }
 export function submitReport() {
