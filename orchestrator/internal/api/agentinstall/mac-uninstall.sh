@@ -12,9 +12,29 @@ RES="$(cd "$(dirname "$SELF")/../Resources" 2>/dev/null && pwd)"
 
 esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
-dialog() { # message, icon (stop|note)
+ICON="$RES/AppIcon.icns"
+ICONCLAUSE=""
+[ -f "$ICON" ] && ICONCLAUSE=" with icon file ((POSIX file \"$(esc "$ICON")\") as text)"
+
+# dialog <message> <fallback icon: stop|note>: an information box with the Audspect icon. If this macOS refuses the custom
+# icon, the same box is shown with the standard one, so a cosmetic problem can never hide a message.
+dialog() {
+	if [ -n "$ICONCLAUSE" ]; then
+		osascript -e "display dialog \"$(esc "$1")\" with title \"$TITLE\" buttons {\"OK\"} default button \"OK\"$ICONCLAUSE" >/dev/null 2>&1 && return 0
+	fi
 	osascript -e "display dialog \"$(esc "$1")\" with title \"$TITLE\" buttons {\"OK\"} default button \"OK\" with icon $2" >/dev/null 2>&1
 	return 0
+}
+
+# confirm: returns 1 when the person chose Cancel.
+confirm() {
+	MSG="Remove the Audspect Agent and all of its data from this Mac? This stops the agent, deletes its certificates, configuration and logs, and tells your Audspect server it was decommissioned."
+	BTN="buttons {\"Cancel\", \"Remove\"} default button \"Cancel\""
+	if [ -n "$ICONCLAUSE" ]; then
+		ERR="$(osascript -e "display dialog \"$(esc "$MSG")\" with title \"$TITLE\" $BTN$ICONCLAUSE" 2>&1 >/dev/null)" && return 0
+		case "$ERR" in *"User canceled"* | *"(-128)"*) return 1 ;; esac
+	fi
+	osascript -e "display dialog \"$(esc "$MSG")\" with title \"$TITLE\" $BTN with icon caution" >/dev/null 2>&1
 }
 
 # ---- second phase: runs as root through the administrator prompt ----
@@ -41,7 +61,7 @@ if [ -z "$WANT" ] || [ "$WANT" != "$HAVE" ]; then
 	exit 1
 fi
 
-osascript -e "display dialog \"Remove the Audspect Agent and all of its data from this Mac?\" with title \"$TITLE\" buttons {\"Cancel\", \"Remove\"} default button \"Cancel\" with icon caution" >/dev/null 2>&1 || exit 0
+confirm || exit 0
 
 xattr -dr com.apple.quarantine "$RES" >/dev/null 2>&1
 

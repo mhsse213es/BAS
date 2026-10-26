@@ -22,7 +22,14 @@ esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 # Shell-quote one word for the command the administrator prompt runs.
 quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
-dialog() { # message, icon (stop|note)
+ICON="$RES/AppIcon.icns"
+
+# dialog <message> <fallback icon: stop|note>: an information box with the Audspect icon. If this macOS refuses the custom
+# icon, the same box is shown with the standard one, so a cosmetic problem can never hide a message.
+dialog() {
+	if [ -f "$ICON" ]; then
+		osascript -e "display dialog \"$(esc "$1")\" with title \"$TITLE\" buttons {\"OK\"} default button \"OK\" with icon file ((POSIX file \"$(esc "$ICON")\") as text)" >/dev/null 2>&1 && return 0
+	fi
 	osascript -e "display dialog \"$(esc "$1")\" with title \"$TITLE\" buttons {\"OK\"} default button \"OK\" with icon $2" >/dev/null 2>&1
 	return 0
 }
@@ -43,8 +50,20 @@ describe() {
 }
 
 # ask <prompt>: a masked dialog. Prints the answer; returns 1 when the person cancelled.
-ask() {
-	osascript -e "text returned of (display dialog \"$(esc "$1")\" default answer \"\" with hidden answer with title \"$TITLE\" buttons {\"Cancel\", \"Continue\"} default button \"Continue\")" 2>/dev/null
+ask() { # prompt, confirm button label
+	_ask() { # extra icon clause
+		osascript -e "text returned of (display dialog \"$(esc "$1")\" default answer \"\" with hidden answer with title \"$TITLE\" buttons {\"Cancel\", \"$2\"} default button \"$2\"$3)" 2>"$ASKERR"
+	}
+	ASKERR="${WORK:-/tmp}/ask.err"
+	if [ -f "$ICON" ]; then
+		ANS="$(_ask "$1" "$2" " with icon file ((POSIX file \"$(esc "$ICON")\") as text)")"
+		RC=$?
+		[ "$RC" -eq 0 ] && { printf '%s' "$ANS"; return 0; }
+		# cancelling is an answer; anything else is the icon being refused, so ask again without it
+		case "$(cat "$ASKERR" 2>/dev/null)" in *"User canceled"* | *"(-128)"*) return 1 ;; esac
+	fi
+	ANS="$(_ask "$1" "$2" "")" || return 1
+	printf '%s' "$ANS"
 }
 
 # ---- second phase: runs as root through the administrator prompt ------------------------------------------------
@@ -102,7 +121,7 @@ umask 077
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/audspect-setup.XXXXXX")" || { dialog "Could not create a private working folder." stop; exit 1; }
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 
-SECRET="$(ask "Enter the agent secret provided by your administrator.")" || exit 0
+SECRET="$(ask "Enter the agent secret provided by your administrator. It is checked with your Audspect server and is never shown or stored in a command." "Install")" || exit 0
 if [ -z "$SECRET" ]; then
 	dialog "The agent secret is required." stop
 	exit 1
@@ -112,7 +131,7 @@ SECRET=""
 
 TOKENFILE=""
 if [ -f "$RES/enrollment-token.required" ]; then
-	TOKEN="$(ask "Enter the enrollment token for this Mac.")" || exit 0
+	TOKEN="$(ask "Enter the enrollment token for this Mac. Each token works once, for one computer." "Continue")" || exit 0
 	if [ -z "$TOKEN" ]; then
 		dialog "The enrollment token is required." stop
 		exit 1

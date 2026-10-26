@@ -139,6 +139,7 @@ const macUninstallInfoPlist = `<?xml version="1.0" encoding="UTF-8"?>
 	<key>CFBundleDisplayName</key><string>Audspect Agent Uninstall</string>
 	<key>CFBundleIdentifier</key><string>com.audspect.agent-uninstall</string>
 	<key>CFBundleExecutable</key><string>uninstall</string>
+	<key>CFBundleIconFile</key><string>AppIcon</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleVersion</key><string>1</string>
 	<key>CFBundleShortVersionString</key><string>1.0</string>
@@ -171,6 +172,7 @@ func buildMacUninstallApp(agents map[string][]byte) ([]byte, error) {
 	entries := []entry{
 		{"Contents/Info.plist", 0o644, []byte(macUninstallInfoPlist)},
 		{"Contents/MacOS/uninstall", 0o755, macUninstallScriptSource},
+		{"Contents/Resources/AppIcon.icns", 0o644, macAppIcon},
 		{"Contents/Resources/agents.sha256", 0o644, []byte(sumsFile(files))},
 	}
 	for _, n := range sortedNames(files) {

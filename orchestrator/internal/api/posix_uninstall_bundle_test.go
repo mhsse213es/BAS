@@ -413,3 +413,28 @@ func TestMacUninstallScript_StaticSafetyProperties(t *testing.T) {
 		}
 	}
 }
+
+// Both Mac apps carry the Audspect icon and name it in Info.plist, so Finder and the dialogs show the brand.
+func TestMacApps_CarryTheAudspectIcon(t *testing.T) {
+	setup, err := buildMacSetupApp([]byte("A"), []byte("{}"), testFP, "arm64", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	un, err := buildMacUninstallApp(map[string][]byte{"arm64": []byte("A"), "x86_64": []byte("B")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, c := range map[string]struct {
+		zip []byte
+		app string
+	}{"setup": {setup, macApp}, "uninstall": {un, macUnApp}} {
+		files := readZip(t, c.zip)
+		icon := files[c.app+"Contents/Resources/AppIcon.icns"]
+		if len(icon) < 1000 || !strings.HasPrefix(icon, "icns") {
+			t.Errorf("%s app: AppIcon.icns missing or not an icns file (%d bytes)", name, len(icon))
+		}
+		if !strings.Contains(files[c.app+"Contents/Info.plist"], "<key>CFBundleIconFile</key><string>AppIcon</string>") {
+			t.Errorf("%s app: Info.plist does not name the icon", name)
+		}
+	}
+}

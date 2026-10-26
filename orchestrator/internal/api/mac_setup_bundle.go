@@ -19,6 +19,11 @@ import (
 //go:embed agentinstall/mac-setup.sh
 var macSetupScriptRaw []byte
 
+// macAppIcon is the Audspect app icon, shared by the setup and uninstall apps.
+//
+//go:embed agentinstall/AppIcon.icns
+var macAppIcon []byte
+
 // macSetupScriptSource is the program inside the app. Line endings are normalised because a Windows checkout may
 // have turned them into CRLF, which /bin/sh on macOS would read as part of every command.
 var macSetupScriptSource = bytes.ReplaceAll(macSetupScriptRaw, []byte("\r\n"), []byte("\n"))
@@ -33,6 +38,7 @@ const macInfoPlist = `<?xml version="1.0" encoding="UTF-8"?>
 	<key>CFBundleDisplayName</key><string>Audspect Agent Setup</string>
 	<key>CFBundleIdentifier</key><string>com.audspect.agent-setup</string>
 	<key>CFBundleExecutable</key><string>setup</string>
+	<key>CFBundleIconFile</key><string>AppIcon</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleVersion</key><string>1</string>
 	<key>CFBundleShortVersionString</key><string>1.0</string>
@@ -68,6 +74,7 @@ func buildMacSetupApp(agent, deploymentJSON []byte, fingerprint, arch string, to
 	}{
 		{"Contents/Info.plist", 0o644, []byte(macInfoPlist)},
 		{"Contents/MacOS/setup", 0o755, macSetupScriptSource},
+		{"Contents/Resources/AppIcon.icns", 0o644, macAppIcon},
 		{"Contents/Resources/bas-agent", 0o755, agent},
 		{"Contents/Resources/agent.sha256", 0o644, []byte(hex.EncodeToString(sum[:]) + "\n")},
 		{"Contents/Resources/arch", 0o644, []byte(uname + "\n")},

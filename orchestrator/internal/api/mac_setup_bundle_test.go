@@ -267,7 +267,7 @@ case "$all" in
     exit 0 ;;
   *"hidden answer"*)
     case "$all" in
-      *oken*) if [ -n "${CANCEL_TOKEN:-}" ]; then echo "execution error: User canceled. (-128)" >&2; exit 1; fi; printf '%s\n' "$FAKE_TOKEN" ;;
+      *"enrollment token for this Mac"*) if [ -n "${CANCEL_TOKEN:-}" ]; then echo "execution error: User canceled. (-128)" >&2; exit 1; fi; printf '%s\n' "$FAKE_TOKEN" ;;
       *)      if [ -n "${CANCEL_SECRET:-}" ]; then echo "execution error: User canceled. (-128)" >&2; exit 1; fi; printf '%s\n' "$FAKE_SECRET" ;;
     esac
     exit 0 ;;
