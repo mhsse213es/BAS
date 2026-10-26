@@ -108,7 +108,18 @@ process exit code, so the MSI returns 1603 and the reason is logged. Deployment 
 * **Repair**: same as above.
 * **Uninstall** (Apps & features, or `msiexec /x`): the agent removes its service, tray entry and shortcut,
   tells the server it was decommissioned, and the files are removed. During a major upgrade the uninstall step
-  is skipped.
+  is skipped, so an upgrade keeps the enrollment. A real uninstall also removes everything the agent left on the
+  computer: the client key and certificate and enrolled CA (`C:\ProgramData\Audspect\certs` and the
+  `certs.replaced-*` copies from CA rotation), the local API token, logs and event spool
+  (`C:\ProgramData\BASAgent`), and the log folders beside the program, in the service profile and in Temp. The
+  Windows settings the agent changes while it runs (crash dialogs, hung-app timeouts, the compatibility
+  assistant) are recorded before the first change and restored exactly: a value that did not exist is removed,
+  an administrator's own value is put back. The output ends with *No agent data remains on this computer* or lists
+  what could not be removed. Something an administrator put in those folders is left alone and reported. A file
+  still in use is deleted at the next restart. To check a computer afterwards, run
+  `packaging\windows-msi	ools\Test-AgentTraces.ps1` (read-only; it lists any service, process, folder, registry
+  key, installed-program entry or pending delete that names the agent).
+  Not removed by design: records on the server (the agent's history and audit entries stay in the dashboard).
 * **Remote *Uninstall Agent*** from the dashboard: the agent removes its service and artifacts as before and,
   when it was installed from the MSI, also starts a delayed `msiexec /x` so the Apps & features entry and the
   files go too. Both paths end in the same state.

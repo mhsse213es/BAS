@@ -46,3 +46,7 @@ func readProxyCredentialsPlatform() (user, password string) {
 
 // platformRestoreOnShutdown is a no-op on non-Windows.
 func platformRestoreOnShutdown() {}
+
+// platformPurgeLocalData is the Windows-only removal of the agent's data after a remote uninstall; the Linux and
+// macOS uninstalls are unchanged.
+func platformPurgeLocalData() {}

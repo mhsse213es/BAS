@@ -188,6 +188,13 @@ func svcInstall(serverURL, envLabel, secret, enrollPort string) error {
 		return fmt.Errorf("service %q already installed — run --uninstall first", svcName)
 	}
 
+	// A delete-at-restart order left by an earlier uninstall would delete this installation at the next restart.
+	if n, err := cancelPendingDeletes(agentPendingDeleteRoots(exePath)...); err != nil {
+		fmt.Printf("[~] Could not check for delete-at-restart orders from an earlier uninstall: %v\n", err)
+	} else if n > 0 {
+		fmt.Printf("[+] Cancelled %d delete-at-restart order(s) left by an earlier uninstall\n", n)
+	}
+
 	s, err := m.CreateService(svcName, exePath,
 		mgr.Config{
 			DisplayName:      svcDisplayName,
@@ -448,6 +455,7 @@ func svcUninstall() error {
 
 	removedAny := false
 	var lastErr error
+	installDirs := installedBinaryDirs(m) // read before the services are deleted
 	for _, name := range []string{svcName, svcNameLegacy} {
 		removed, err := uninstallServiceRegistration(m, name)
 		if err != nil {
@@ -459,6 +467,11 @@ func svcUninstall() error {
 		}
 	}
 	if !removedAny {
+		// No service is registered, but an earlier, partial uninstall may have left the agent's data behind.
+		if rep := cleanAgentFootprint(nil, nil); len(rep.Removed)+len(rep.Deferred) > 0 {
+			fmt.Printf("[+] No service was registered; the leftover agent data was removed\n")
+			return nil
+		}
 		if lastErr != nil {
 			return lastErr
 		}
@@ -478,8 +491,30 @@ func svcUninstall() error {
 		fmt.Printf("[~] Could not remove tray shortcut: %v\n", err)
 	}
 
+	// The service is gone and its process has ended, so nothing holds the agent's files any more: put back the
+	// Windows settings it changed and remove its data (keys, certificates, token, logs, spool).
+	cleanAgentFootprint(installDirs, nil)
+
 	fmt.Printf("[+] Uninstall complete\n")
 	return nil
+}
+
+// installedBinaryDirs returns the folder each registered agent service runs from.
+func installedBinaryDirs(m *mgr.Mgr) []string {
+	var dirs []string
+	for _, name := range []string{svcName, svcNameLegacy} {
+		s, err := m.OpenService(name)
+		if err != nil {
+			continue
+		}
+		if cfg, err := s.Config(); err == nil {
+			if p := unquoteServicePath(cfg.BinaryPathName); p != "" {
+				dirs = append(dirs, filepath.Dir(p))
+			}
+		}
+		s.Close()
+	}
+	return dirs
 }
 
 // uninstallServiceRegistration stops and deletes the named service
@@ -533,7 +568,9 @@ func uninstallServiceRegistration(m *mgr.Mgr, name string) (removed bool, err er
 	}
 
 	if binaryPath != "" {
-		if err := scheduleBinaryDeleteOnReboot(binaryPath); err != nil {
+		// Windows Installer removes the executable itself once this uninstall ends; scheduling it here as well
+		// would leave a delete order that removes the next installation at the next restart.
+		if _, err := scheduleExeDelete(binaryPath, removedByMSI(), scheduleBinaryDeleteOnReboot); err != nil {
 			fmt.Printf("[~] Could not schedule binary for delayed deletion: %v\n", err)
 		}
 	}
@@ -684,8 +721,9 @@ func platformSelfUninstall() error {
 	// Everything below is best-effort cleanup, matching svcUninstall's own
 	// philosophy: a missing key/window/file is already the desired end
 	// state, not an error worth failing the whole uninstall over.
+	_, msiManaged := readMSIProductCode() // an MSI install is removed by Windows Installer below
 	if binaryPath != "" {
-		if err := scheduleBinaryDeleteOnReboot(binaryPath); err != nil {
+		if _, err := scheduleExeDelete(binaryPath, msiManaged, scheduleBinaryDeleteOnReboot); err != nil {
 			log.Printf("[~] Could not schedule binary for delayed deletion: %v", err)
 		}
 	}

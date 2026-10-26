@@ -62,6 +62,9 @@ namespace Audspect.Installer
 
         public const string SecretEnvVar = "AUDSPECT_AGENT_SECRET";
 
+        /// <summary>Set to 1 on the agent the uninstall action runs, so it leaves the executable to Windows Installer.</summary>
+        public const string MsiRemovingEnvVar = "BAS_REMOVED_BY_MSI";
+
         /// <summary>Environment variable a silent install uses for the single-use enrolment token.</summary>
         public const string TokenEnvVar = "AUDSPECT_ENROLLMENT_TOKEN";
 
@@ -207,7 +210,7 @@ namespace Audspect.Installer
         }
 
         /// <summary>Runs an executable, writing <paramref name="secret"/> and a newline to its stdin.</summary>
-        public static AgentRun RunAgent(string exe, string args, string secret, int timeoutMs, string token = null)
+        public static AgentRun RunAgent(string exe, string args, string secret, int timeoutMs, string token = null, bool msiRemoving = false)
         {
             var psi = new ProcessStartInfo(exe, args)
             {
@@ -223,6 +226,8 @@ namespace Audspect.Installer
             // happens to be set in this process's environment is not passed on unless it was given explicitly.
             psi.EnvironmentVariables.Remove(AgentTokenEnvVar);
             if (!string.IsNullOrEmpty(token)) psi.EnvironmentVariables[AgentTokenEnvVar] = token;
+            psi.EnvironmentVariables.Remove(MsiRemovingEnvVar);
+            if (msiRemoving) psi.EnvironmentVariables[MsiRemovingEnvVar] = "1";
             var sb = new StringBuilder();
             object gate = new object();
             Process p;

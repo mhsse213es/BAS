@@ -523,6 +523,7 @@ var (
 	platformDisableAutoStartFn = platformDisableAutoStart
 	platformExitAfterStopFn    = platformExitAfterStop
 	platformSelfUninstallFn    = platformSelfUninstall
+	platformPurgeLocalDataFn   = platformPurgeLocalData
 )
 
 // stopSelf performs a durable, operator-requested shutdown: finalize any
@@ -566,6 +567,11 @@ func (a *Agent) uninstallSelf(reason string) {
 		log.Printf("[!] self-uninstall cleanup failed: %v", uninstallErr)
 	}
 	reportUninstallResultFn(a, uninstallErr)
+	// Once the success is reported the credentials are no longer needed: remove the agent's data. Never when the
+	// cleanup failed -- the agent will come back and still needs its certificates.
+	if uninstallErr == nil {
+		platformPurgeLocalDataFn()
+	}
 
 	if err := platformDisableAutoStartFn(); err != nil {
 		log.Printf("[!] disable auto-start: %v — agent may restart at next boot", err)

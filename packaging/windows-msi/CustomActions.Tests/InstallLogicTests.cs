@@ -265,4 +265,10 @@ public class InstallLogicTests
         Assert.True(InstallLogic.BundleRequiresToken(Msi, p => p == @"C:\agent\enrollment-token.required"));
         Assert.False(InstallLogic.BundleRequiresToken(Msi, _ => false));
     }
+
+    // The agent (agent/pendingdelete.go: msiRemovingEnv) reads this name to know Windows Installer is removing its
+    // executable; the two sides must agree or a delete-at-restart order is left behind.
+    [Fact]
+    public void TheMsiTellsTheAgentItIsRemovingTheFileThroughAnAgreedVariable()
+        => Assert.Equal("BAS_REMOVED_BY_MSI", InstallLogic.MsiRemovingEnvVar);
 }

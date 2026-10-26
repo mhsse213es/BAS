@@ -133,8 +133,11 @@ namespace Audspect.Installer
 
         static ActionResult Uninstall(Session session, bool failIfStillRegistered)
         {
-            if (!AgentServiceExists()) return ActionResult.Success;
-            var run = InstallLogic.RunAgent(session.CustomActionData["exe"], "--uninstall", "", AgentTimeoutMs);
+            // Run the agent's own uninstall even when no service is registered but its executable is still here: a
+            // partial earlier uninstall leaves the agent's keys, certificates and logs behind, and this removes them.
+            var exe = session.CustomActionData["exe"];
+            if (!AgentServiceExists() && !File.Exists(exe)) return ActionResult.Success;
+            var run = InstallLogic.RunAgent(exe, "--uninstall", "", AgentTimeoutMs, null, true);
             if (!string.IsNullOrEmpty(run.Output)) session.Log("Audspect agent output:\n" + run.Output);
             if (AgentServiceExists() && failIfStillRegistered)
             {
