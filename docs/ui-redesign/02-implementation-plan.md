@@ -21,7 +21,7 @@ Status: `todo` / `doing` / `done`. Update this table in the same commit as the w
 
 | # | Phase | Deliverable | Verification | Status |
 |---|---|---|---|---|
-| 0 | Workspace and harness | worktree + branch; `node_modules` link; rich-fixture capture harness (populated / empty / error; 4 themes; 3 widths); baseline screenshots of the current console | harness renders all 28 tabs without page errors | todo |
+| 0 | Workspace and harness | worktree + branch; `node_modules` link; rich-fixture capture harness (populated / empty / error; 4 themes; 3 widths); baseline screenshots of the current console | harness renders all 28 tabs without page errors | done |
 | 1 | Visual foundation | tokens, typography, buttons, inputs/selects, cards, pills, tables (toolbar, sticky head, empty/loading/error), tabs, modal and drawer shells, toasts, focus rings, scrollbars — in `app.css`; all four themes | smoke passes; screenshots of all pages in 4 themes show no regressions | todo |
 | 2 | Shell | sidebar (groups, badges, collapse, pinned/recent as client-only), topbar (search, live indicator, role badge, user menu), breadcrumb row, banners (tamper, license) restyled, responsive drawer < 900 px | role-gating and feature-hidden nav unchanged; keyboard and screen-reader pass | todo |
 | 3 | Page-header component | shared `pageHero()` helper (icon, title, subtitle, actions, stat chips) + CSS; unit tests | unit tests; used by phase 4+ | todo |
