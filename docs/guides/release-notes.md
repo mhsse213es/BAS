@@ -2,6 +2,20 @@
 
 ---
 
+## v1.9.6 — console redesign (unreleased)
+
+The web console has a new look. Every screen keeps its existing behaviour, data and permissions.
+
+- New header banner on every page: title, one-line description, the page's actions, and live counts taken from the same data the page already loads
+- Breadcrumb row with the time the page was last refreshed
+- Sidebar: rounded items, the Audspect mark on a transparent background (readable on dark and light themes; the shield alone when collapsed), and an off-canvas drawer on narrow screens
+- All four themes (Dark, Light, Cyberpunk, Slate) share one set of colour tokens, so the Light theme now has a light sidebar and header, and status text stays readable on light backgrounds
+- Sign-in page: form card, larger logo, stacked layout on narrow screens
+- Settings: side navigation becomes a card, and tabs on narrow screens
+- Fixes found on the way: the Findings, Factory health and Email pages no longer throw when the server returns an empty or unexpected response
+
+---
+
 ## v1.7.3 (Current) — 2026-07-03
 
 ### New Features
