@@ -77,6 +77,7 @@ Progress: all six areas assessed. Fixed: F-01, F-02, F-04, F-05, F-06, F-07; par
   enrolment, or a token presented for another agent, does not burn it), revocable while unused. Admin API: `POST/GET /api/enrollment-tokens`,
   `DELETE /api/enrollment-tokens/{id}`; every issue, revoke and denial is audited. Failed attempts are throttled to 20 per 10 minutes
   per address (in memory, resets on restart). Tests: `enroll_token_test.go` (5 tests, written first).
+* **Bulk issue: BUILT.** `POST /api/enrollment-tokens/bulk` takes up to 500 hostnames and creates one token each in a single all-or-nothing request (exact duplicates collapsed and reported); `?format=csv` returns `hostname,agentId,token,expiresAt` with `Cache-Control: no-store` and spreadsheet-formula-safe hostnames. Hostnames must be spelled exactly as the OS reports them, because the agent ID is derived from that spelling. Tests: `TestEnrollmentTokenBulk_*`.
 * **Rulings:** default stays `secret` so existing fleets and installers keep working; a malformed `BAS_ENROLLMENT_MODE` stops the
   server instead of weakening enrolment; renewal over mTLS is unaffected by the mode.
 * **Agent side: BUILT.** `bas_agent --install` reads `BAS_ENROLLMENT_TOKEN` from the installer's environment (never a command-line

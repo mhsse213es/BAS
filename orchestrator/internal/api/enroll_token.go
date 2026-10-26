@@ -46,6 +46,15 @@ func agentIDForHostname(hostname string) string {
 	return hex.EncodeToString(sum[:])[:16]
 }
 
+// newEnrollmentToken returns 256 bits of randomness with a recognisable prefix, so secret scanners can find a leaked one.
+func newEnrollmentToken() (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return enrollTokenPrefix + base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
 func hashEnrollmentToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
@@ -152,12 +161,11 @@ func (h *Handler) CreateEnrollmentToken(w http.ResponseWriter, r *http.Request) 
 		note = note[:200]
 	}
 
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
+	token, err := newEnrollmentToken()
+	if err != nil {
 		jsonError(w, "could not generate a token", http.StatusInternalServerError)
 		return
 	}
-	token := enrollTokenPrefix + base64.RawURLEncoding.EncodeToString(raw)
 
 	createdBy := ""
 	if claims, ok := auth.ClaimsFrom(r.Context()); ok {
@@ -165,7 +173,7 @@ func (h *Handler) CreateEnrollmentToken(w http.ResponseWriter, r *http.Request) 
 	}
 	var id string
 	var expires time.Time
-	err := h.db.QueryRow(r.Context(), `
+	err = h.db.QueryRow(r.Context(), `
 		INSERT INTO agent_enrollment_tokens (token_hash, agent_id, note, created_by, expires_at)
 		VALUES ($1, $2, $3, $4, NOW() + make_interval(secs => $5))
 		RETURNING id, expires_at`,

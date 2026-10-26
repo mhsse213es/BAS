@@ -197,3 +197,111 @@ func TestEnrollmentToken_RepeatedFailuresFromOneAddressAreThrottled(t *testing.T
 		}
 	})
 }
+
+func bulkRequest(h *Handler, body map[string]any, query string) *httptest.ResponseRecorder {
+	b, _ := json.Marshal(body)
+	rec := httptest.NewRecorder()
+	r := chi.NewRouter()
+	r.Post("/api/enrollment-tokens/bulk", h.BulkCreateEnrollmentTokens)
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/enrollment-tokens/bulk"+query, bytes.NewReader(b)))
+	return rec
+}
+
+func TestEnrollmentTokenBulk_OneTokenPerHostnameEachWorksForItsOwnAgent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := tokenHandler(t, pool)
+		hosts := []string{"FIN-01", "FIN-02", "HR-LAPTOP-9", "FIN-01"} // one duplicate
+		rec := bulkRequest(h, map[string]any{"hostnames": hosts, "note": "Q4 rollout"}, "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("bulk = %d: %s", rec.Code, rec.Body.String())
+		}
+		var out struct {
+			Tokens []struct {
+				Hostname string `json:"hostname"`
+				AgentID  string `json:"agentId"`
+				Token    string `json:"token"`
+			} `json:"tokens"`
+			Duplicates []string `json:"duplicates"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		if len(out.Tokens) != 3 || len(out.Duplicates) != 1 || out.Duplicates[0] != "FIN-01" {
+			t.Fatalf("tokens=%d duplicates=%v, want 3 tokens and FIN-01 reported as a duplicate", len(out.Tokens), out.Duplicates)
+		}
+		seen := map[string]bool{}
+		for _, tk := range out.Tokens {
+			if tk.AgentID != agentIDForHostname(tk.Hostname) {
+				t.Errorf("%s: agentId %s does not match the agent's derivation", tk.Hostname, tk.AgentID)
+			}
+			if seen[tk.Token] || tk.Token == "" {
+				t.Errorf("%s: token missing or repeated", tk.Hostname)
+			}
+			seen[tk.Token] = true
+		}
+		// Each token enrols its own agent and nobody else's.
+		first, second := out.Tokens[0], out.Tokens[1]
+		if c := enrollWith(t, h, second.AgentID, first.Token, ""); c != http.StatusUnauthorized {
+			t.Errorf("a token used for a different host = %d, want 401", c)
+		}
+		if c := enrollWith(t, h, first.AgentID, first.Token, ""); c != http.StatusOK {
+			t.Errorf("a token used for its own host = %d, want 200", c)
+		}
+	})
+}
+
+func TestEnrollmentTokenBulk_IsAllOrNothingAndBounded(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := tokenHandler(t, pool)
+		count := func() int {
+			var n int
+			pool.QueryRow(context.Background(), `SELECT count(*) FROM agent_enrollment_tokens`).Scan(&n)
+			return n
+		}
+		tooMany := make([]string, 501)
+		for i := range tooMany {
+			tooMany[i] = "host-" + strings.Repeat("x", i%5) + string(rune('a'+i%26)) + strings.Repeat("y", i/26)
+		}
+		bad := map[string]map[string]any{
+			"empty list":  {"hostnames": []string{}},
+			"blank name":  {"hostnames": []string{"ok-host", "   "}},
+			"too many":    {"hostnames": tooMany},
+			"ttl too big": {"hostnames": []string{"a"}, "ttlHours": 24 * 365},
+		}
+		for name, body := range bad {
+			if c := bulkRequest(h, body, "").Code; c != http.StatusBadRequest {
+				t.Errorf("%s = %d, want 400", name, c)
+			}
+		}
+		if n := count(); n != 0 {
+			t.Errorf("%d tokens were created by rejected requests, want none", n)
+		}
+	})
+}
+
+func TestEnrollmentTokenBulk_CSVForHandingOut(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := tokenHandler(t, pool)
+		rec := bulkRequest(h, map[string]any{"hostnames": []string{"FIN-01", "FIN-02"}}, "?format=csv")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("csv = %d", rec.Code)
+		}
+		if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/csv") {
+			t.Errorf("Content-Type = %q", ct)
+		}
+		if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "no-store") {
+			t.Errorf("Cache-Control = %q, tokens must not be cached", cc)
+		}
+		lines := strings.Split(strings.TrimSpace(rec.Body.String()), "\n")
+		if len(lines) != 3 || !strings.HasPrefix(lines[0], "hostname,agentId,token,expiresAt") {
+			t.Errorf("unexpected CSV:\n%s", rec.Body.String())
+		}
+	})
+}
