@@ -12,7 +12,7 @@ The web console has a new look. Every screen keeps its existing behaviour, data 
 - All four themes (Dark, Light, Cyberpunk, Slate) share one set of colour tokens, so the Light theme now has a light sidebar and header, and status text stays readable on light backgrounds
 - Sign-in page: form card, larger logo, stacked layout on narrow screens
 - Settings: side navigation becomes a card, and tabs on narrow screens
-- Fixes found on the way: the Findings, Factory health and Email pages no longer throw when the server returns an empty or unexpected response
+- Fixes found on the way: the Factory health and Email pages no longer throw when the server returns an empty or unexpected response
 
 ---
 
