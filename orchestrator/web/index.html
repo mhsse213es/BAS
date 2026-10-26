@@ -1481,10 +1481,9 @@
       <div id="tab-factory-health" class="is-hidden">
         <div id="hero-factory"></div>
         <div id="factory-health-tiles"></div>
-        <div id="factory-health-ingestion"></div>
         <div id="factory-health-funnel"></div>
-        <div id="factory-health-dataquality"></div>
-        <div class="rk-grid g2"><div id="factory-health-threats-trend"></div><div id="factory-health-tcv-trend"></div></div>
+        <div class="fh-side"><div id="factory-health-ingestion"></div><div id="factory-health-dataquality"></div></div>
+        <div class="rk-grid g2 fh-trends"><div id="factory-health-threats-trend"></div><div id="factory-health-tcv-trend"></div></div>
       </div>
 
       <!-- Campaigns -->
@@ -3456,6 +3455,17 @@
       <button class="btn btn-outline btn-sm" data-on-click="closeDownloadOptions">Cancel</button>
       <button class="btn btn-primary btn-sm" id="dl-confirm-btn">Confirm &amp; Download</button>
     </div>
+  </div>
+</div>
+
+<!-- Factory Health source drawer -->
+<div id="fh-drawer-overlay" class="drawer-overlay" data-on-click="closeFactoryDrawerOnBackdrop">
+  <div class="drawer sc-drawer" role="dialog" aria-modal="true" aria-label="Ingestion source details">
+    <div class="drawer-header">
+      <div class="sc-dh"><span class="sc-dh-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/></svg></span><div><div class="sc-dh-t" id="fh-drawer-title">Source</div><div class="sc-dh-s" id="fh-drawer-sub"></div></div></div>
+      <button class="drawer-close" data-on-click="closeFactorySource" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="drawer-body" id="fh-drawer-body"></div>
   </div>
 </div>
 

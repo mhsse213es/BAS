@@ -1,4 +1,5 @@
 import { x } from './core/escape.js';
+import { closeFactoryDrawerOnBackdrop, closeFactorySource, loadFactoryHealth, openFactorySource } from './features/factory-health.js';
 import { stopEvent } from './core/actions.js';
 import { closeAdvDrawer, closeAdvRunModal, closeTmplRun, confirmAdversaryRun, confirmTmplRun, loadAdversariesStop, openAdvDrawer, openAdvRunModal, openTmplRun, renderAdvRunWarn, renderAdversaryLibrary, renderTmplOSCompat, setTmplFilter, setTmplTargetMode, tmplGroupChange, tmplRunModeChange, tmplSelAgentChange, toggleAdversarySection } from './features/adversaries.js';
 import { clearEnrollmentTokens, copyEnrollmentToken, downloadEnrollmentTokensCsv, generateEnrollmentTokens } from './features/enroll-tokens.js';
@@ -78,6 +79,10 @@ export const ACTIONS = {
   closeBuilder,
   closeBuilderOnBackdrop,
   closeCampaignDetail,
+  closeFactoryDrawerOnBackdrop,
+  closeFactorySource,
+  loadFactoryHealth,
+  openFactorySource,
   closeCampaignDrawerOnBackdrop,
   campaignSearch,
   campaignClearFilters,

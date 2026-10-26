@@ -262,6 +262,13 @@ var HEROES = {
     icon: ICON.factory,
     title: 'Factory Health',
     sub: 'Threat-content pipeline health: ingestion, validation, publication and data quality.',
+    actions: '<button type="button" class="btn btn-outline" data-on-click="loadFactoryHealth">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Re-check</button>',
+    stats: [
+      { id: 'fh-hs-threats', icon: ICON.globe, value: '—', label: 'Threats processed' },
+      { id: 'fh-hs-published', icon: ICON.ok, value: '—', label: 'Published content' },
+      { id: 'fh-hs-sources', icon: ICON.posture, value: '—', label: 'Sources healthy' },
+      { id: 'fh-hs-unresolved', icon: ICON.warn, value: '—', label: 'Unresolved candidates' },
+    ],
   },
   'hero-exercises': {
     icon: ICON.bolt,
