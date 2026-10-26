@@ -10,5 +10,6 @@
 @import "./scn-rich.css" layer(app);
 @import "./runs-rich.css" layer(app);
 @import "./k8s-rich.css" layer(app);
+@import "./sched-rich.css" layer(app);
 @import "./rich-g4.css" layer(app);
 @import "./inline-equivalent.css";

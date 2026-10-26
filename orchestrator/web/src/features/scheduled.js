@@ -5,8 +5,10 @@ import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
 import { ROLE } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
-import { kpi, grid, card, chip, pill, seg, empty } from '../core/kit.js';
+import { kpi, grid, card, chip, pill, seg, empty, icon } from '../core/kit.js';
 import { chartSlot, CHART_COLORS } from '../core/charts.js';
+import { setHeroStat } from './shell-ui.js';
+import * as M from './sched-model.js';
 
 
 // ── Scheduled Assessments ──────────────────────────────────────────────────
@@ -41,7 +43,23 @@ export function loadScheduledAssessments() {
     var groups = Array.isArray(res[1]) ? res[1] : [];
     SCHED.groupsById = schedFlattenGroupNames(groups, {});
     renderScheduledAssessmentsList();
+    loadLastRuns();
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// The outcome of each schedule's most recent run: the state of the job it last spawned
+// (GET /api/jobs/{id}). A schedule that never ran, or a job that cannot be read, shows no outcome.
+var LAST_JOBS = {}; // jobId -> job object, or null when unreadable
+function loadLastRuns() {
+  var ids = {};
+  SCHED.schedules.forEach(function(s) { if (s.LastSpawnedJobID) ids[s.LastSpawnedJobID] = 1; });
+  var list = Object.keys(ids).slice(0, 60);
+  if (!list.length) return;
+  Promise.all(list.map(function(id) {
+    return apicall('/api/jobs/' + encodeURIComponent(id)).then(function(b) {
+      LAST_JOBS[id] = b && b.job ? b.job : null;
+    }).catch(function() { LAST_JOBS[id] = null; });
+  })).then(renderScheduledAssessmentsList);
 }
 
 function schedFlattenGroupNames(nodes, map) {
@@ -103,80 +121,340 @@ export function schedSummary(list) {
   return out;
 }
 
-var SCHED_FILTER = 'all';
-export function setSchedFilter(v) { SCHED_FILTER = v; renderScheduledAssessmentsList(); }
+// ── Page state: filter chips, the table's own controls, the open drawer ─────
+var F = { status: 'all', q: '' };
+var T = { q: '', col: -1, dir: 1, page: 0, per: 8, hidden: {}, sel: {} };
+var DR = { id: null, run: null }; // run: { status: 'loading' | 'ok' | 'none' | 'err', targets: [] }
 
-function renderSchedSummary() {
+export function setSchedFilter(v) { F.status = v; T.page = 0; renderScheduledAssessmentsList(); }
+export function schedSearch(el) { F.q = (el && el.value) || ''; T.page = 0; renderScheduledAssessmentsList(); }
+export function schedClearFilters() {
+  F.status = 'all'; F.q = ''; T.q = ''; T.page = 0;
+  var s = document.getElementById('sched-search'); if (s) s.value = '';
+  var q = document.getElementById('sched-dt-q'); if (q) q.value = '';
+  renderScheduledAssessmentsList();
+}
+
+function scheduleName(sch) {
+  // sch.Payload is a Go json.RawMessage with no json:"..." tag override, so
+  // it arrives already embedded as a real object in the outer response --
+  // NOT as a JSON string needing a second JSON.parse.
+  var payload = sch.Payload || {};
+  var sc = state.scenarios.find(function(s) { return s.id === payload.scenarioId; });
+  return sc ? sc.name : (payload.scenarioId || '—');
+}
+
+function lastResult(sch) {
+  if (!sch.LastSpawnedJobID) return M.resultOf(null);
+  return M.resultOf(LAST_JOBS[sch.LastSpawnedJobID]);
+}
+
+// One table row's worth of values per schedule: what the table shows, sorts, filters and exports.
+function buildRows(nowTs) {
+  return SCHED.schedules.map(function(sch) {
+    var st = schedStatus(sch);
+    var last = sch.LastOccurrenceAt ? new Date(sch.LastOccurrenceAt).getTime() : null;
+    return {
+      sch: sch, id: sch.ID, name: scheduleName(sch),
+      mode: sch.Mode === 'telemetry' ? 'Telemetry' : 'Posture',
+      targets: schedTargetsText(sch), recurrence: schedRecurrenceText(sch),
+      lastTs: last, lastText: last !== null && !isNaN(last) ? M.fmtStamp(last) : 'Never',
+      nextTs: M.nextRun(sch, nowTs), result: lastResult(sch), status: st,
+    };
+  });
+}
+
+function renderSchedHero(nowTs) {
+  var h = M.heroStats(SCHED.schedules, nowTs);
+  setHeroStat('sched-cnt', h.total);
+  setHeroStat('sched-hs-enabled', h.enabled);
+  setHeroStat('sched-hs-cancelled', h.cancelled);
+  setHeroStat('sched-hs-next', h.nextTs === null ? '—' : M.fmtWhen(h.nextTs));
+}
+
+// Four tiles under the banner. Every number is counted from the schedules; the next run is worked out
+// from each schedule's recurrence; the last tile counts the schedules whose most recent run finished.
+function renderSchedSummary(nowTs, rows) {
   var el = document.getElementById('sched-summary');
   if (!el) return;
   var sm = schedSummary(SCHED.schedules);
   if (!sm.total) { el.innerHTML = ''; return; }
-  var recLabels = { once: 'Once', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
-  var recColors = [CHART_COLORS.accent, CHART_COLORS.teal, CHART_COLORS.violet, CHART_COLORS.warn];
-  var recSegs = Object.keys(sm.byRecurrence).map(function(k, i) { return { label: recLabels[k] || k, value: sm.byRecurrence[k], color: recColors[i % recColors.length] }; });
-  var stSegs = [
-    { label: 'Enabled', value: sm.enabled, color: CHART_COLORS.ok },
-    { label: 'Completed', value: sm.completed, color: CHART_COLORS.info },
-    { label: 'Cancelled', value: sm.cancelled, color: CHART_COLORS.muted },
-  ].filter(function(g) { return g.value > 0; });
-  el.innerHTML = grid(4, [
-    kpi({ label: 'Schedules', value: sm.total, icon: 'calendar', tone: 'accent' }),
-    kpi({ label: 'Enabled', value: sm.enabled, sub: 'Firing on their recurrence', icon: 'play', tone: 'ok' }),
-    kpi({ label: 'Posture mode', value: sm.posture, icon: 'shield', tone: 'info' }),
-    kpi({ label: 'Telemetry mode', value: sm.telemetry, icon: 'eye', tone: 'violet' }),
-  ]) + grid(2, [
-    card('By status', chartSlot({ type: 'donut', segments: stSegs, center: String(sm.total), centerSub: 'schedules', legend: true, h: 150 })),
-    card('By recurrence', chartSlot({ type: 'donut', segments: recSegs, center: String(sm.total), centerSub: 'schedules', legend: true, h: 150 })),
-  ]);
+  var next = M.nextAcross(SCHED.schedules, nowTs);
+  var lr = M.lastRunsCompleted(rows.map(function(r) { return r.result; }));
+  el.innerHTML = '<div class="sched-tiles">' + grid(4, [
+    kpi({ label: 'Active schedules', value: sm.enabled, sub: 'of ' + sm.total + ' defined', icon: 'clock', tone: 'ok' }),
+    kpi({ label: 'Cancelled', value: sm.cancelled, sub: 'will not run', icon: 'x', tone: 'bad' }),
+    kpi({ label: 'Next run', value: next ? M.fmtDayTime(next.ts) : '—', sub: next ? scheduleName(next.sch) : 'nothing scheduled', icon: 'play', tone: 'accent' }),
+    kpi({ label: 'Last runs completed', value: lr.pct === null ? '—' : lr.pct + '%', sub: lr.total ? lr.done + ' of ' + lr.total + ' finished runs' : 'no finished runs yet', icon: 'check', tone: lr.pct === null ? 'muted' : lr.pct >= 80 ? 'ok' : lr.pct >= 50 ? 'warn' : 'bad' }),
+  ]) + '</div>';
+}
+
+// "Next 7 days": the runs each enabled schedule will fire, by day, from its recurrence.
+function renderSchedWeek(nowTs) {
+  var el = document.getElementById('sched-week');
+  if (!el) return;
+  if (!SCHED.schedules.length) { el.innerHTML = ''; return; }
+  var plan = M.weekPlan(SCHED.schedules, nowTs, scheduleName);
+  var body = '<div class="week">' + plan.days.map(function(d) {
+    return '<div class="wk-day' + (d.today ? ' today' : '') + '"><div class="wk-h">' + x(d.label) + '</div>' +
+      (d.events.length ? d.events.map(function(e) { return '<div class="wk-ev"><b>' + x(e.time) + '</b>' + x(e.name) + '</div>'; }).join('') : '<div class="muted wk-none">—</div>') + '</div>';
+  }).join('') + '</div>';
+  el.innerHTML = card('Next 7 days', body, { sub: plan.planned + (plan.planned === 1 ? ' run' : ' runs') + ' planned · your local time', cls: 'sched-week-card' });
+}
+
+function renderSchedFilters() {
+  var fEl = document.getElementById('sched-filter');
+  var bar = document.getElementById('sched-filters');
+  if (bar) bar.hidden = !SCHED.schedules.length;
+  if (!fEl) return;
+  var sm = schedSummary(SCHED.schedules);
+  var opts = [{ id: 'all', label: 'All', count: sm.total }, { id: 'enabled', label: 'Enabled', count: sm.enabled }];
+  if (sm.completed) opts.push({ id: 'completed', label: 'Completed', count: sm.completed });
+  opts.push({ id: 'cancelled', label: 'Cancelled', count: sm.cancelled });
+  fEl.innerHTML = SCHED.schedules.length ? seg(opts, F.status, 'setSchedFilter') : '';
+}
+
+function visibleCols() {
+  var out = [];
+  M.COLUMNS.forEach(function(c, i) { if (!T.hidden[i]) out.push(i); });
+  return out;
+}
+
+function cellHtml(col, r) {
+  var sch = r.sch;
+  switch (col) {
+    case 0: return '<td class="sched-name"><div><b>' + x(r.name) + '</b></div><div class="mono muted sched-id">' + x(r.id) + '</div></td>';
+    case 1: return '<td>' + chip(r.mode, sch.Mode === 'telemetry' ? 'violet' : 'info') + '</td>';
+    case 2: return '<td>' + x(r.targets) + '</td>';
+    case 3: return '<td class="muted">' + x(r.recurrence) + '</td>';
+    case 4: return '<td class="mono muted">' + x(r.lastText) + '</td>';
+    case 5: return '<td>' + (r.nextTs === null ? '<span class="muted">—</span>' : x(M.fmtWhen(r.nextTs))) + '</td>';
+    case 6: return '<td>' + (r.result.key === 'none' ? '<span class="muted">—</span>' : pill(r.result.label, r.result.tone)) + '</td>';
+    default: return '<td>' + pill(r.status.label, r.status.tone) + '</td>';
+  }
+}
+
+function rowActions(r) {
+  if (r.status.onceCompleted) return '<span class="tiny muted">Ran once — nothing to edit or cancel</span>';
+  return '<button class="btn btn-outline btn-sm"' + on('click', 'openSchedWizardForEdit', r.id) + '>Edit</button>' +
+    (r.sch.Enabled ? ' <button class="btn btn-outline btn-sm sched-cancel"' + on('click', 'cancelScheduledAssessment', r.id) + '>Cancel</button>' : '');
+}
+
+function renderSchedHead(listIds) {
+  var th = document.getElementById('sched-thead');
+  if (!th) return;
+  var onList = listIds.filter(function(id) { return T.sel[id]; }).length;
+  th.innerHTML = '<tr><th class="dt-selcol"><input type="checkbox" class="dt-cb" id="sched-sel-all" title="Select all on this table"' + on('change', 'schedSelectAll') + '></th>' +
+    visibleCols().map(function(c) {
+      return '<th class="dt-th' + (T.col === c ? ' sorted' : '') + '"' + on('click', 'schedSortBy', c) + '>' + x(M.COLUMNS[c]) + '<span class="dt-arrow">' + (T.col === c ? (T.dir > 0 ? '▲' : '▼') : '') + '</span></th>';
+    }).join('') + '<th></th></tr>';
+  var all = document.getElementById('sched-sel-all');
+  if (all) { all.checked = listIds.length > 0 && onList === listIds.length; all.indeterminate = onList > 0 && onList < listIds.length; }
+}
+
+function setHidden(id, hidden) { var el = document.getElementById(id); if (el) el.hidden = hidden; }
+function setText(id, t) { var el = document.getElementById(id); if (el) el.textContent = t; }
+
+// The rows after the chips, the search box and the table's own filter, in the chosen order.
+function currentList(rows) {
+  return M.sortRows(M.filterRows(rows, { status: F.status, q: F.q, tq: T.q }), T.col, T.dir);
 }
 
 export function renderScheduledAssessmentsList() {
-  document.getElementById('sched-cnt').textContent = SCHED.schedules.length;
-  renderSchedSummary();
-  var fEl = document.getElementById('sched-filter');
-  if (fEl) {
-    var sm = schedSummary(SCHED.schedules);
-    fEl.innerHTML = SCHED.schedules.length ? seg([
-      { id: 'all', label: 'All', count: sm.total }, { id: 'enabled', label: 'Enabled', count: sm.enabled },
-      { id: 'completed', label: 'Completed', count: sm.completed }, { id: 'cancelled', label: 'Cancelled', count: sm.cancelled },
-    ], SCHED_FILTER, 'setSchedFilter') : '';
-  }
+  var nowTs = Date.now();
+  var rows = buildRows(nowTs);
+  renderSchedHero(nowTs);
+  renderSchedSummary(nowTs, rows);
+  renderSchedWeek(nowTs);
+  renderSchedFilters();
   var tbody = document.getElementById('sched-body');
-  if (!SCHED.schedules.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty">' + empty('calendar', 'No scheduled assessments yet', 'Create a schedule to run an assessment on a recurrence.') + '</td></tr>';
-    return;
+  var none = !rows.length;
+  var byChips = M.filterRows(rows, { status: F.status, q: F.q });
+  var list = currentList(rows);
+  var pg = M.pageSlice(list, T.page, T.per);
+  T.page = pg.page;
+  setHidden('sched-dt-toolbar', none);
+  setHidden('sched-table-wrap', !list.length);
+  setHidden('sched-dt-foot', !list.length);
+  var clr = document.getElementById('sched-clear'); if (clr) clr.hidden = !(F.q || F.status !== 'all');
+  var cols = document.getElementById('sched-cols');
+  if (cols) {
+    cols.innerHTML = M.COLUMNS.map(function(h, i) {
+      return '<label class="dt-colitem"><input type="checkbox" class="dt-colchk"' + (T.hidden[i] ? '' : ' checked') + on('change', 'schedColToggle', i) + '><span>' + x(h) + '</span></label>';
+    }).join('');
   }
-  var shown = SCHED.schedules.filter(function(sch) { return SCHED_FILTER === 'all' || schedStatus(sch).key === SCHED_FILTER; });
-  if (!shown.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty">No schedules match this filter.</td></tr>';
-    return;
+  var selN = rows.filter(function(r) { return T.sel[r.id]; }).length;
+  setHidden('sched-bulk', selN === 0);
+  setText('sched-bulk-n', String(selN));
+  setText('sched-dt-count', list.length + ' of ' + byChips.length + ' rows');
+  setText('sched-dt-range', M.rangeText(list.length, pg.page, T.per));
+  var pager = document.getElementById('sched-dt-pager');
+  if (pager) {
+    pager.innerHTML = pg.pages > 1
+      ? '<button class="btn btn-ghost btn-sm"' + on('click', 'schedPage', -1) + (pg.page === 0 ? ' disabled' : '') + '>‹ Prev</button><span class="mono muted">' + (pg.page + 1) + ' / ' + pg.pages + '</span><button class="btn btn-ghost btn-sm"' + on('click', 'schedPage', 1) + (pg.page >= pg.pages - 1 ? ' disabled' : '') + '>Next ›</button>'
+      : '';
   }
-  tbody.innerHTML = shown.map(function(sch) {
-    // sch.Payload is a Go json.RawMessage with no json:"..." tag override, so
-    // it arrives already embedded as a real object in the outer response --
-    // NOT as a JSON string needing a second JSON.parse.
-    var payload = sch.Payload || {};
-    var sc = state.scenarios.find(function(s) { return s.id === payload.scenarioId; });
-    var name = sc ? sc.name : (payload.scenarioId || '—');
-    var st = schedStatus(sch);
-    var onceCompleted = st.onceCompleted;
-    var lastRun = sch.LastOccurrenceAt ? fmtDate(sch.LastOccurrenceAt) : 'Never';
-    return '<tr>' +
-      '<td><span class="rg2-cell-main">' + x(name) + '</span></td>' +
-      '<td>' + chip(sch.Mode === 'telemetry' ? 'Telemetry' : 'Posture', sch.Mode === 'telemetry' ? 'violet' : 'info') + '</td>' +
-      '<td>' + x(schedTargetsText(sch)) + '</td>' +
-      '<td>' + x(schedRecurrenceText(sch)) + '</td>' +
-      '<td>' + x(lastRun) + '</td>' +
-      '<td>' + pill(st.label, st.tone) + '</td>' +
-      '<td><div class="rg2-row-actions">' +
-        (onceCompleted
-          ? '<span class="tiny muted">Ran once — nothing to edit or cancel</span>'
-          : '<button class="btn btn-outline btn-sm"' + on('click', 'openSchedWizardForEdit', sch.ID) + '>Edit</button>' +
-            (sch.Enabled ? ' <button class="btn btn-outline btn-sm"' + on('click', 'cancelScheduledAssessment', sch.ID) + '>Cancel</button>' : '')) +
-      '</div></td>' +
-    '</tr>';
-  }).join('');
+  var emp = document.getElementById('sched-empty');
+  if (emp) {
+    emp.hidden = list.length > 0;
+    if (none) emp.innerHTML = empty('calendar', 'No scheduled assessments yet', 'Create a schedule to run an assessment on a recurrence.');
+    else if (!list.length) emp.innerHTML = empty('search', 'No schedules match', 'Clear the filters to see all schedules.') + '<div class="dt-empty-act"><button class="btn btn-outline btn-sm"' + on('click', 'schedClearFilters') + '>Clear filters</button></div>';
+  }
+  renderSchedHead(list.map(function(r) { return r.id; }));
+  if (tbody) {
+    tbody.innerHTML = pg.rows.map(function(r) {
+      return '<tr class="dt-click" tabindex="0"' + on('click', 'schedOpen', r.id) + on('keydown', 'schedRowKeydown', r.id) + '>' +
+        '<td class="dt-selcol"' + on('click', 'stopEvent') + '><input type="checkbox" class="dt-cb" aria-label="Select schedule"' + (T.sel[r.id] ? ' checked' : '') + on('change', 'schedSelectRow', r.id) + '></td>' +
+        visibleCols().map(function(c) { return cellHtml(c, r); }).join('') +
+        '<td class="sched-actions"' + on('click', 'stopEvent') + '><div class="rg2-row-actions">' + rowActions(r) + '</div></td></tr>';
+    }).join('');
+  }
+  if (DR.id) paintSchedDrawer();
 }
+
+// ── Table controls ──────────────────────────────────────────────────────────
+export function schedTableQuery(el) { T.q = String((el && el.value) || ''); T.page = 0; renderScheduledAssessmentsList(); }
+export function setSchedPer(el) { T.per = Number(el && el.value) || 8; T.page = 0; renderScheduledAssessmentsList(); }
+export function schedPage(d) { T.page += Number(d) || 0; renderScheduledAssessmentsList(); }
+export function schedSortBy(col) {
+  col = Number(col);
+  if (T.col === col) T.dir = -T.dir; else { T.col = col; T.dir = 1; }
+  T.page = 0;
+  renderScheduledAssessmentsList();
+}
+export function toggleSchedCols() { var m = document.getElementById('sched-cols'); if (m) m.hidden = !m.hidden; }
+export function schedColToggle(col, el) {
+  if (el && el.checked) delete T.hidden[col]; else T.hidden[col] = true;
+  if (T.hidden[T.col]) T.col = -1;
+  renderScheduledAssessmentsList();
+}
+export function schedSelectRow(id, el) { if (el && el.checked) T.sel[id] = true; else delete T.sel[id]; renderScheduledAssessmentsList(); }
+export function schedSelectAll(el) {
+  currentList(buildRows(Date.now())).forEach(function(r) { if (el && el.checked) T.sel[r.id] = true; else delete T.sel[r.id]; });
+  renderScheduledAssessmentsList();
+}
+export function clearSchedSelection() { T.sel = {}; renderScheduledAssessmentsList(); }
+
+function exportSched(onlySelected) {
+  var rows = onlySelected ? buildRows(Date.now()).filter(function(r) { return T.sel[r.id]; }) : currentList(buildRows(Date.now()));
+  var cols = visibleCols();
+  var csv = M.csvText(cols.map(function(c) { return M.COLUMNS[c]; }).concat(['ID']), rows.map(function(r) {
+    return cols.map(function(c) {
+      return [r.name, r.mode, r.targets, r.recurrence, r.lastText, r.nextTs === null ? '—' : M.fmtWhen(r.nextTs), r.result.label, r.status.label][c];
+    }).concat([r.id]);
+  }));
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'scheduled-assessments.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
+  showToast('CSV exported — ' + rows.length + ' row' + (rows.length === 1 ? '' : 's'), 'ok');
+}
+export function exportSchedCsv() { exportSched(false); }
+export function exportSchedSelected() { exportSched(true); }
+
+document.addEventListener('click', function(e) {
+  var m = document.getElementById('sched-cols');
+  if (m && !m.hidden && !(e.target.closest && e.target.closest('.dt-colwrap'))) m.hidden = true;
+});
+
+// ── Schedule drawer ─────────────────────────────────────────────────────────
+function findSched(id) { return SCHED.schedules.filter(function(s) { return s.ID === id; })[0] || null; }
+
+function kvRows(rows) {
+  return '<dl class="sc-kv">' + rows.map(function(p) { return '<dt>' + x(p[0]) + '</dt><dd' + (p[2] ? ' class="mono"' : '') + '>' + x(p[1]) + '</dd>'; }).join('') + '</dl>';
+}
+
+function runSection() {
+  var run = DR.run;
+  if (!run || run.status === 'none') return '<div class="sc-sub">This schedule has not started a run yet.</div>';
+  if (run.status === 'loading') return '<div class="sc-sub">Loading the last run…</div>';
+  if (run.status === 'err') return '<div class="sc-sub">The last run could not be read.</div>';
+  var targets = run.targets;
+  if (!targets.length) return '<div class="sc-sub">The last run has no targets.</div>';
+  var counts = {};
+  targets.forEach(function(t) { var k = String(t.State || 'unknown').toLowerCase(); counts[k] = (counts[k] || 0) + 1; });
+  var colors = { completed: CHART_COLORS.ok, failed: CHART_COLORS.bad, cancelled: CHART_COLORS.muted, pending: CHART_COLORS.info, dispatched: CHART_COLORS.accent, deferred: CHART_COLORS.warn };
+  var segs = Object.keys(counts).map(function(k) { return { label: k.charAt(0).toUpperCase() + k.slice(1), value: counts[k], color: colors[k] || CHART_COLORS.muted }; });
+  var tone = { completed: 'ok', failed: 'bad', cancelled: 'muted', pending: 'info', dispatched: 'info', deferred: 'warn' };
+  var shown = targets.slice(0, 25);
+  return chartSlot({ type: 'donut', segments: segs, center: String(targets.length), centerSub: targets.length === 1 ? 'target' : 'targets', legend: true, h: 140 }) +
+    '<div class="tbl-wrap sched-dr-tbl"><table><thead><tr><th>Agent</th><th>State</th><th>Finished</th></tr></thead><tbody>' +
+    shown.map(function(t) {
+      var k = String(t.State || '').toLowerCase();
+      return '<tr><td class="mono">' + x(t.AgentID) + '</td><td>' + pill(k ? k.charAt(0).toUpperCase() + k.slice(1) : '—', tone[k] || 'muted') + (t.Error ? '<div class="tiny muted">' + x(t.Error) + '</div>' : '') + '</td><td class="muted">' + x(t.CompletedAt ? M.fmtStamp(new Date(t.CompletedAt).getTime()) : '—') + '</td></tr>';
+    }).join('') + '</tbody></table></div>' +
+    (targets.length > shown.length ? '<div class="sc-sub">+ ' + (targets.length - shown.length) + ' more targets</div>' : '');
+}
+
+function drawerBody(sch) {
+  var st = schedStatus(sch);
+  var last = lastResult(sch);
+  var next = M.nextRun(sch, Date.now());
+  var rows = [['Scope', schedTargetsText(sch)], ['Recurrence', schedRecurrenceText(sch)], ['Next run', next === null ? '—' : M.fmtWhen(next)],
+    ['Jitter', 'Up to ±2 min, fixed for this schedule'], ['Mode', sch.Mode === 'telemetry' ? 'Telemetry' : 'Posture'],
+    ['Concurrency', sch.ConcurrencyLimit ? String(sch.ConcurrencyLimit) : 'Unlimited']];
+  if (sch.EndDate) rows.push(['Ends', new Date(sch.EndDate).toLocaleDateString()]);
+  if (sch.InitiativeID) rows.push(['Initiative', sch.InitiativeID, true]);
+  if (sch.Reason) rows.push(['Reason', sch.Reason]);
+  if (sch.ApprovedBy) rows.push(['Approved by', sch.ApprovedBy]);
+  if (sch.CreatedBy) rows.push(['Created by', sch.CreatedBy]);
+  if (sch.CreatedAt) rows.push(['Created', M.fmtStamp(new Date(sch.CreatedAt).getTime())]);
+  return '<div class="k8s-dr-top">' + pill(st.label, st.tone) + (last.key === 'none' ? '' : pill('Last run: ' + last.label, last.tone)) + '</div>' +
+    kvRows(rows) + '<h4 class="sc-h4">Last run</h4>' + runSection();
+}
+
+function paintSchedDrawer() {
+  var sch = findSched(DR.id);
+  var head = document.getElementById('sched-drawer-head');
+  if (!sch || !head) { closeSchedDrawer(); return; }
+  head.innerHTML = '<span class="sc-dh-ico">' + icon('clock') + '</span><div><div class="sc-dh-t">' + x(scheduleName(sch)) + '</div>' +
+    '<div class="sc-dh-s">' + x(sch.ID) + ' · ' + x(schedTargetsText(sch)) + '</div></div>';
+  document.getElementById('sched-drawer-body').innerHTML = drawerBody(sch);
+  var st = schedStatus(sch);
+  document.getElementById('sched-drawer-foot').innerHTML =
+    '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'closeSchedDrawer') + '>Close</button><span class="grow"></span>' +
+    (st.onceCompleted ? '<span class="tiny muted">Ran once — nothing to edit or cancel</span>' :
+      (sch.Enabled ? '<button type="button" class="btn btn-outline btn-sm sched-cancel"' + on('click', 'schedCancelFromDrawer', sch.ID) + '>Cancel schedule</button>' : '') +
+      '<button type="button" class="btn btn-primary btn-sm"' + on('click', 'schedEditFromDrawer', sch.ID) + '>Edit</button>');
+}
+
+export function schedOpen(id) {
+  var sch = findSched(id);
+  if (!sch) return;
+  DR.id = id;
+  DR.run = sch.LastSpawnedJobID ? { status: 'loading', targets: [] } : { status: 'none', targets: [] };
+  paintSchedDrawer();
+  var ov = document.getElementById('sched-drawer-overlay');
+  if (ov) ov.classList.add('open');
+  var b = document.getElementById('sched-drawer-body'); if (b) b.scrollTop = 0;
+  if (!sch.LastSpawnedJobID) return;
+  apicall('/api/jobs/' + encodeURIComponent(sch.LastSpawnedJobID)).then(function(body) {
+    if (DR.id !== id) return;
+    DR.run = body && body.job ? { status: 'ok', targets: Array.isArray(body.targets) ? body.targets : [] } : { status: 'err', targets: [] };
+    paintSchedDrawer();
+  }).catch(function() {
+    if (DR.id !== id) return;
+    DR.run = { status: 'err', targets: [] };
+    paintSchedDrawer();
+  });
+}
+export function schedRowKeydown(id, el, e) {
+  if (e && e.target !== el) return;
+  if (e && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); schedOpen(id); }
+}
+export function closeSchedDrawer() {
+  DR.id = null; DR.run = null;
+  var ov = document.getElementById('sched-drawer-overlay');
+  if (ov) ov.classList.remove('open');
+}
+export function closeSchedDrawerOnBackdrop(el, event) { if (event.target === el) closeSchedDrawer(); }
+export function schedEditFromDrawer(id) { closeSchedDrawer(); openSchedWizardForEdit(id); }
+export function schedCancelFromDrawer(id) { cancelScheduledAssessment(id); }
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && DR.id) closeSchedDrawer();
+});
 
 export function cancelScheduledAssessment(id) {
   if (!confirm('Cancel this scheduled assessment? It will stop firing future runs; the schedule stays visible in this list as Cancelled.')) return;
@@ -290,6 +568,8 @@ function schedWizardSet(step) {
   if (step < 1) step = 1;
   if (step > 4) step = 4;
   SCHED.step = step;
+  var stepLbl = document.getElementById('sched-wz-step');
+  if (stepLbl) stepLbl.textContent = 'Step ' + step + ' of 4';
   [1, 2, 3, 4].forEach(function(n) {
     var pane = document.querySelector('[data-sched-pane="' + n + '"]');
     if (pane) setDisplay(pane, (n === step) ? 'block' : 'none');
