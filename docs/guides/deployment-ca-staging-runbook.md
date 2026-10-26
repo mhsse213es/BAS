@@ -138,6 +138,28 @@ mount is more permissive than the guide assumes and the guide's wording must cha
 Also try a loose key readable by others (`chmod 644 pki/ca-key.pem`, restart): the server should start, log
 `restricted to 0600`, and `stat` should then show `600`.
 
+## 5a. Planned CA rotation (disposable installation only; added for audit F-09, NOT yet validated)
+
+Needs at least two enrolled test agents running a build that includes the `command_trust_ca` change. Record FP1 first.
+
+```bash
+cd "$D"
+docker exec audspect-orchestrator /orchestrator ca-rotation status            # stable
+docker exec audspect-orchestrator /orchestrator ca-rotation start --yes       # prepared
+docker compose restart orchestrator; sleep 15
+fp                                                                          # still FP1
+curl -sk -H "Authorization: Bearer $ADMIN_TOKEN" https://localhost:9443/api/ca-rotation/status
+curl -sk -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://localhost:9443/api/ca-rotation/distribute
+curl -sk -H "Authorization: Bearer $ADMIN_TOKEN" https://localhost:9443/api/ca-rotation/status   # wait for readyToPromote:true
+```
+
+Pass when: both agents stay connected throughout; each agent's `deployment-ca.pem` now holds two certificates; status reaches
+`readyToPromote: true`. Then `ca-rotation promote --yes`, restart the orchestrator, and confirm: `fp` shows a **different**
+fingerprint (FP2), the server certificate chains to FP2, both agents reconnect without any action, and after an agent renews (or is
+restarted after its certificate nears expiry) its certificate is issued by FP2. Only then `ca-rotation retire --yes`; confirm the
+agents still connect. Also test `ca-rotation rollback --yes` on a second run before retiring. `ca-rotation start` with the CA files
+removed must refuse. An agent that was offline during `distribute` must receive the root when `distribute` is run again.
+
 ## 5. Cleanup
 
 ```bash
