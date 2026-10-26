@@ -71,7 +71,7 @@ var HEROES = {
   },
   'hero-agents': {
     icon: ICON.agents,
-    title: 'Simulation agents',
+    title: 'Agents',
     sub: 'Lightweight collectors across your environment — they execute safe emulations locally and stream telemetry back.',
     actions:
       '<button class="btn btn-outline btn-sm" data-on-click="loadAgents">Refresh</button>' +
@@ -96,7 +96,7 @@ var HEROES = {
   },
   'hero-runs': {
     icon: ICON.runs,
-    title: 'Scenario runs',
+    title: 'Live Runs',
     sub: 'Every scenario execution across your agents, with status, results and score. Open a run for the full investigation.',
     actions: '<button class="btn btn-outline btn-sm" data-on-click="loadRuns">Refresh</button>',
     stats: [
@@ -141,7 +141,7 @@ var HEROES = {
   },
   'hero-attackpath': {
     icon: ICON.path,
-    title: 'Attack Path Validation',
+    title: 'Attack Paths',
     sub: 'Fleet lateral-movement graph — reachability, blast radius, choke points, and paths to Domain Admin. Recon only: relationship mapping, no exploitation or propagation.',
     actions: '<div class="g1-display-flex g1-s-993532d2"><button class="btn btn-outline btn-sm" data-on-click="loadAttackPath">Refresh</button><button class="btn btn-outline btn-sm" data-on-click="openAPAssets">&#9873; Tag Assets</button><button class="btn btn-outline btn-sm" data-on-click="openAPSchedule">&#8635; Schedule</button><button class="btn btn-outline btn-sm" data-on-click="openAPAbout" title="How Attack Path Validation works">&#9432; About</button><button class="btn btn-primary btn-sm" id="ap-collect-btn" data-on-click="openAPCollect">&#9654; Run Collection</button></div>',
   },
@@ -177,7 +177,7 @@ var HEROES = {
   },
   'hero-verification': {
     icon: ICON.check,
-    title: 'Detection Verification',
+    title: 'Verification',
     sub: 'Attest whether off-host controls (SIEM, identity, cloud, DLP, network) actually detected each simulated technique. Attestations are immutable, evidence is SHA-256 hashed at upload, and every action is written to the audit log.',
   },
   'hero-reports': {
@@ -205,7 +205,7 @@ var HEROES = {
   },
   'hero-variants': {
     icon: ICON.layers,
-    title: 'Variant Executor',
+    title: 'Variants',
     sub: 'Run technique variants on an agent and see which ones bypass your controls.',
     actions: '<div class="g1-display-flex g1-s-9b5be34d"><button class="btn btn-outline btn-sm" data-on-click="loadVariantTab">&#x21bb; Refresh</button></div>',
   },
@@ -217,7 +217,7 @@ var HEROES = {
   },
   'hero-factory': {
     icon: ICON.factory,
-    title: 'Factory health',
+    title: 'Factory Health',
     sub: 'Threat-content pipeline health: ingestion, validation, publication and data quality.',
   },
   'hero-exercises': {
@@ -227,12 +227,12 @@ var HEROES = {
   },
   'hero-attack-coverage': {
     icon: ICON.mapped,
-    title: 'Technique coverage',
+    title: 'Technique Coverage',
     sub: 'Per technique: what is simulated, detected, exercised, mapped to compliance and covered by a response playbook.',
   },
   'hero-threat-priority': {
     icon: ICON.star,
-    title: 'Threat prioritization',
+    title: 'Threat Prioritization',
     sub: 'Threat actors ranked by relevance to you, with the techniques you have not yet validated.',
   },
 };
