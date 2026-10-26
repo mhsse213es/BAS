@@ -31,11 +31,11 @@ test('runsPerDay buckets by start day and tolerates bad dates', () => {
   assert.deepEqual(runs.runsPerDay([], 7), { labels: [], data: [] });
 });
 
-test('summary html escapes status names and is empty without runs', () => {
-  assert.equal(runs.runsSummaryHTML([]), '');
-  const h = runs.runsSummaryHTML([{ status: '<img src=x onerror=1>', startedAt: '2026-10-26T01:00:00Z' }]);
+test('charts html escapes status names and is empty without runs', () => {
+  assert.equal(runs.chartsHtml([]), '');
+  const h = runs.chartsHtml([{ status: '<img src=x onerror=1>', startedAt: '2026-10-26T01:00:00Z' }]);
   assert.ok(!h.includes('<img'), h);
-  assert.match(runs.runsStatusAttr({ status: 'failed' }), /data-run-bucket="attention"/);
+  assert.match(runs.runsStatusAttr({ id: 'r1', status: 'failed' }), /data-run-status="failed"/);
 });
 
 test('campaignStats counts paused separately and survives missing summaries', () => {

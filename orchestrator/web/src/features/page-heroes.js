@@ -6,7 +6,7 @@ import { mountHero } from './shell-ui.js';
 // Icons are internal inline SVG; action buttons use the normal data-on-click registry.
 
 function svg(paths) {
-  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + paths + '</svg>';
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
 }
 export var ICON = {
   agents: svg('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>'),
@@ -111,10 +111,16 @@ var HEROES = {
   'hero-runs': {
     icon: ICON.runs,
     title: 'Live Runs',
-    sub: 'Every scenario execution across your agents, with status, results and score. Open a run for the full investigation.',
-    actions: '<button class="btn btn-outline btn-sm" data-on-click="loadRuns">Refresh</button>',
+    sub: 'Scenario executions in progress, queued and recently completed.',
+    actions:
+      '<button type="button" class="btn btn-outline" data-on-click="exportRunsCsv">' + svg('<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>') + 'Export</button>' +
+      '<button type="button" class="btn btn-outline" data-on-click="loadRuns">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh</button>' +
+      '<button type="button" class="btn btn-primary" data-on-click="showTab" data-args="[&quot;scenarios&quot;]">' + svg('<path d="M12 5v14M5 12h14"/>') + 'New Run</button>',
     stats: [
-      { id: 'runs-cnt', icon: ICON.runs, value: '—', label: 'Runs' },
+      { id: 'runs-cnt', icon: ICON.runs, value: '—', label: 'Running now' },
+      { id: 'runs-hs-queued', icon: ICON.clock, value: '—', label: 'Queued' },
+      { id: 'runs-hs-pass', icon: ICON.ok, value: '—', label: 'Pass rate (all)' },
+      { id: 'runs-hs-agents', icon: ICON.agents, value: '—', label: 'Agents busy' },
     ],
   },
   'hero-k8s': {

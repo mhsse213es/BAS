@@ -15,9 +15,11 @@ import { ROLE, _artCatalogByPlatform, _riskScoreColor } from './shell.js';
 import { renderAttackFlow, renderRunFindings, renderRunRecommendations, renderRunReportExtra, renderVariantCoverage } from './variant-report.js';
 import { displayOf, replaceClasses, setDisplay } from '../core/inline-style.js';
 import { kpi, card, grid, hbars, pill, chip, empty, icon } from '../core/kit.js';
-import { chartSlot, CHART_COLORS } from '../core/charts.js';
+import { chartSlot, CHART_COLORS, hydrateCharts } from '../core/charts.js';
 import { countBy, hbarRows } from './rich-g3.js';
-import { applyRunsFilter, renderRunsSummary, runsStatusAttr } from './runs-rich.js';
+import { applyRunsFilter, renderRunsSummary, runsStatusAttr, runsSelCell, runsRowClick } from './runs-rich.js';
+import { fmtWhen, shortRunId, isLive as isLiveRun } from './runs-model.js';
+import { paintResultsExtras, paintRecommendationExtra } from './runs-drawer.js';
 
 
 // ── Reports ──────────────────────────────────────────────────────────────────
@@ -265,16 +267,17 @@ function runRowHtml(r) {
                 // the run having ended incomplete even at N/N.
                 '<span style="color:var(--muted);font-size:0.65rem;margin-left:0.35rem">' + pr.stepsDone + '/' + pr.stepsTotal + ' live</span>';
   }
-  return '<tr' + runsStatusAttr(r) + '>' +
-    '<td>' + fmtRunIdCode(r.id) + '</td>' +
-    '<td style="font-weight:500">' + x(r.name) + '</td>' +
+  var agentRec = state.agents.find(function(a) { return a.agentId === r.agentId; });
+  return '<tr' + runsStatusAttr(r) + runsRowClick(r.id) + '>' + runsSelCell(r.id) +
+    '<td data-csv="' + x(r.id) + '" title="' + x(r.id) + '"><code>' + x(shortRunId(r.id)) + '</code></td>' +
+    '<td class="runs-scn"><div class="runs-scn-n">' + x(r.name) + '</div>' + (agentRec && agentRec.hostname ? '<div class="runs-scn-s muted">' + x(agentRec.hostname) + '</div>' : '') + '</td>' +
     '<td><code>' + x(r.agentId) + '</code></td>' +
     '<td><span class="sbadge ' + (r.agentDisconnected && r.status === 'running' ? 's-agent_disconnected' : (r.status === 'running' && r.paused ? 's-paused' : 's-' + x(r.status))) + '">' +
         (r.agentDisconnected && r.status === 'running' ? 'Agent Disconnected' : (r.status === 'running' && r.paused ? 'Paused' : x(r.status))) + '</span></td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + x(r.initiatedBy || '—') + '</td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(r.startedAt) + '</td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + (r.completedAt ? fmtDate(r.completedAt) : '—') + '</td>' +
-    '<td>' + (function() {
+    '<td class="muted">' + x(r.initiatedBy || '—') + '</td>' +
+    '<td class="mono muted runs-when" data-sort="' + x(r.startedAt || '') + '">' + fmtWhen(r.startedAt) + '</td>' +
+    '<td class="mono muted runs-when" data-sort="' + x(r.completedAt || '') + '">' + (r.completedAt ? fmtWhen(r.completedAt) : '—') + '</td>' +
+    '<td class="runs-res">' + (function() {
       var acts = '';
       // Live is only meaningful while the run is actually running -- once
       // it's terminal (partial/completed), the same underlying data (see
@@ -291,7 +294,7 @@ function runRowHtml(r) {
           : '<button class="btn btn-outline btn-sm" id="pause-btn-' + x(r.id) + '"' + on('click', 'pauseRun', r.id) + '>&#10073;&#10073; Pause</button> ';
       }
       if (verdictCounts(r).total) {
-        acts += '<button class="btn btn-outline btn-sm"' + on('click', 'viewRunResults', r) + '>' + badge + '</button>';
+        acts += '<button class="btn btn-outline btn-sm rk-chip-btn"' + on('click', 'viewRunResults', r) + '>' + badge + '</button>';
       } else if (r.id && r.status !== 'running' && r.progress) {
         // A cancelled/partial run never gets the agent's one atomic
         // `results` write (see cancelScenarioRun/forceCancelAfterGracePeriod
@@ -303,18 +306,18 @@ function runRowHtml(r) {
         // labeled as a completed (partial) run's results instead of "Live".
         var pr = r.progress;
         var toBadge = pr.stepsFailed + ' fail / ' + pr.stepsPassed + ' pass' + (pr.stepsTimeout ? ' / ' + pr.stepsTimeout + ' timeout' : '');
-        acts += '<button class="btn btn-outline btn-sm"' + on('click', 'openRunPanelAction', r.id, r.name, pr.stepsTotal || 0, r.mode || '', r.maxPrivilege || '') + ' title="Per-step results for this partial run">' + toBadge + '</button>';
+        acts += '<button class="btn btn-outline btn-sm rk-chip-btn"' + on('click', 'openRunPanelAction', r.id, r.name, pr.stepsTotal || 0, r.mode || '', r.maxPrivilege || '') + ' title="Per-step results for this partial run">' + toBadge + '</button>';
       } else if (r.failReason) {
         // A run that failed before any step produced results/progress (e.g.
         // dispatch-time failure -- agent offline, no matching agent, etc.)
         // has nothing for the two branches above to render, but the API
         // already returns exactly why (r.failReason) -- it was simply never
         // surfaced here, leaving the cell a dead "—" with no way to see it.
-        acts += '<span style="color:var(--danger);font-size:0.78rem" title="' + x(r.failReason) + '">' + x(r.failReason) + '</span>';
+        acts += '<span class="runs-fail" title="' + x(r.failReason) + '">' + x(r.failReason) + '</span>';
       }
       return acts || '—';
     })() + '</td>' +
-    '<td>' + scoreHtml + '</td></tr>';
+    '<td class="runs-score"' + (r.score && typeof r.score.preventionScore !== 'undefined' ? ' data-sort="' + Math.round(r.score.preventionScore || 0) + '"' : '') + '>' + scoreHtml + '</td></tr>';
 }
 
 function renderRunRows(list) {
@@ -382,15 +385,15 @@ function _sweepRowHtml(payload, opts) {
   var badge = totalCnt ? (totalFail + ' fail / ' + (totalCnt - totalFail) + ' pass') : '—';
   var agent = state.agents.find(function(a) { return a.agentId === sw.agentId; });
   var agentLabel = agent ? agent.hostname : sw.agentId;
-  return '<tr>' +
-    '<td>' + fmtRunIdCode(sw.id) + '</td>' +
-    '<td style="font-weight:500">' + opts.labelPrefix + ' — ' + x(agentLabel) + '</td>' +
+  return '<tr' + runsStatusAttr({ id: sw.id, status: sw.status, agentId: sw.agentId }) + '>' + runsSelCell(sw.id) +
+    '<td data-csv="' + x(sw.id) + '" title="' + x(sw.id) + '"><code>' + x(shortRunId(sw.id)) + '</code></td>' +
+    '<td class="runs-scn"><div class="runs-scn-n">' + opts.labelPrefix + '</div><div class="runs-scn-s muted">' + x(agentLabel) + '</div></td>' +
     '<td><code>' + x(sw.agentId) + '</code></td>' +
     '<td><span class="sbadge s-' + x(sw.status) + '">' + x(sweepStatusLabel(sw.status)) + '</span></td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + x(sw.createdBy || '—') + '</td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(sw.startedAt) + '</td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + (sw.completedAt ? fmtDate(sw.completedAt) : '—') + '</td>' +
-    '<td><button class="btn btn-outline btn-sm"' + on('click', opts.drilldownFn, sw.id) + ' title="' + opts.drilldownTitle + '">' +
+    '<td class="muted">' + x(sw.createdBy || '—') + '</td>' +
+    '<td class="mono muted runs-when" data-sort="' + x(sw.startedAt || '') + '">' + fmtWhen(sw.startedAt) + '</td>' +
+    '<td class="mono muted runs-when" data-sort="' + x(sw.completedAt || '') + '">' + (sw.completedAt ? fmtWhen(sw.completedAt) : '—') + '</td>' +
+    '<td class="runs-res"><button class="btn btn-outline btn-sm rk-chip-btn"' + on('click', opts.drilldownFn, sw.id) + ' title="' + opts.drilldownTitle + '">' +
         x(opts.progressLabel(sw)) + ' — ' + badge + '</button>' +
         ((sw.status === 'running' || sw.status === 'agent_disconnected')
           ? ' <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)"' + on('click', opts.stopFn, sw.id) + '>&#9632; Stop</button>'
@@ -455,9 +458,12 @@ export function loadRuns() {
     });
 
     var tbody = document.getElementById('runs-body');
+    // In-flight individual runs live in the strip above the charts (runs-rich.js); the table lists
+    // everything else, plus every sweep row (a sweep keeps its own Stop button there).
+    individualRuns = individualRuns.filter(function(r) { return !isLiveRun(r); });
     if (!runs.length) {
-      document.getElementById('runs-cnt').textContent = '0';
-      tbody.innerHTML = '<tr><td colspan="9" class="empty">No runs yet. Go to Scenarios and run one.</td></tr>';
+      tbody.innerHTML = '';
+      applyRunsFilter();
       return;
     }
 
@@ -473,7 +479,6 @@ export function loadRuns() {
 
     var totalGroupIds = groups.reduce(function(n, g) { return n + g.ids.length; }, 0);
     if (!totalGroupIds) {
-      document.getElementById('runs-cnt').textContent = individualRuns.length;
       tbody.innerHTML = individualRuns.slice().sort(byStartedAtDesc).map(runRowHtml).join('');
       applyRunsFilter();
       return;
@@ -510,7 +515,6 @@ export function loadRuns() {
       var allEntries = rowsToRenderIndividually.map(function(r) {
         return { startedAt: r.startedAt, html: runRowHtml(r) };
       }).concat(groupEntries).sort(byStartedAtDesc);
-      document.getElementById('runs-cnt').textContent = allEntries.length;
       tbody.innerHTML = allEntries.map(function(e) { return e.html; }).join('');
       applyRunsFilter();
     });
@@ -2394,6 +2398,8 @@ export function viewRunResults(run) {
         (s.previousPreventionScore ? '<span>Prev Prevention: <strong>' + Math.round(s.previousPreventionScore) + '%</strong></span>' : '') +
       '</div>';
 
+    scorePanel += '<div id="run-ov-extra"></div>';
+
     // Critical failures alert
     var cf = s.criticalFailures || [];
     if (cf.length > 0) {
@@ -2444,6 +2450,8 @@ export function viewRunResults(run) {
         '</div>';
     }
   }
+
+  if (!scorePanel) scorePanel = '<div id="run-ov-extra"></div>';
 
   // Privilege-tier breakdown — always shown; shows "inherited" for unannotated steps
   (function() {
@@ -2746,16 +2754,13 @@ export function viewRunResults(run) {
             '<div><div class="kpi-label">Status</div><div>' + x(run.status || '') + '</div></div>' +
           '</div>' +
         '</div></div>' +
-        '<div class="dash-panel"><div class="dash-panel-hdr">Export</div><div class="dash-panel-body" style="display:flex;gap:0.5rem;flex-wrap:wrap">' +
-          '<button class="btn btn-sm btn-outline"' + on('click', 'exportRunJSON', runId) + '>&#8595; JSON</button>' +
-          '<button class="btn btn-sm btn-outline"' + on('click', 'openRunReport', runId) + '>&#8599; HTML Report</button>' +
-          '<button class="btn btn-sm btn-outline"' + on('click', 'downloadRunReport', runId) + '>&#8595; PDF Report</button>' +
-          '<button class="btn btn-sm btn-outline"' + on('click', 'downloadRunCSV', runId) + '>&#8595; CSV</button>' +
-        '</div></div>';
+        '';
     } else {
       reportsEl.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:1rem 0">No exportable output yet — this run hasn\'t completed.</div>';
     }
   }
+
+  paintResultsExtras(run);
 
   // Overview dashboard panels + Key Findings + Prioritised Recommendations —
   // all fetched from the report engine (BuildFromRun, the same source as the
@@ -2772,6 +2777,7 @@ export function viewRunResults(run) {
         if (findingsEl) findingsEl.innerHTML = renderRunFindings(rep);
         var recEl = document.getElementById('run-report-recommendation');
         if (recEl) recEl.innerHTML = renderRunRecommendations(rep);
+        paintRecommendationExtra(rep, run);
         renderDetectionValidationTab(rep, run);
       }
     }).catch(function() {
@@ -2844,6 +2850,9 @@ export function switchRunTab(tabId) {
   Array.prototype.forEach.call(document.getElementById('run-tabbar').querySelectorAll('.run-tab-btn'), function(btn) {
     btn.classList.toggle('active', btn.id === 'run-tabbtn-' + tabId);
   });
+  // Charts drawn while their tab was hidden had no width; redraw the ones that just became visible.
+  var shown = document.getElementById('run-tab-' + tabId);
+  if (shown) hydrateCharts(shown);
 }
 
 // Status label map for the unified Detection Validation tab. Deliberately

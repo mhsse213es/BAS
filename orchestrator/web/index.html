@@ -1289,21 +1289,49 @@
       <!-- Runs -->
       <div id="tab-runs" class="is-hidden">
         <div id="hero-runs"></div>
+        <div id="runs-live"></div>
         <div id="runs-summary"></div>
         <div class="rk-filters">
-          <label class="rk-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="runs-search" placeholder="Filter runs by name, agent or status" data-on-input="filterRuns"></label>
-          <span id="runs-seg"></span>
+          <label class="rk-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="runs-search" placeholder="Search by run ID, scenario, agent or user..." data-on-input="filterRuns"></label>
+          <select id="runs-status-sel" aria-label="Status" data-on-change="setRunsStatusFilter"><option value="all">All statuses</option></select>
+          <select id="runs-target-sel" aria-label="Target" data-on-change="setRunsTargetFilter"><option value="all">All targets</option></select>
+          <button type="button" id="runs-clear" class="btn btn-outline btn-sm" data-on-click="clearRunsFilters" hidden>Clear</button>
         </div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr>
-              <th>Run ID</th><th>Scenario</th><th>Agent</th><th>Status</th>
-              <th>Initiated By</th><th>Started</th><th>Completed</th><th>Results</th><th>Score</th>
-            </tr></thead>
-            <tbody id="runs-body">
-              <tr><td colspan="9" class="empty">No runs yet.</td></tr>
-            </tbody>
-          </table>
+        <div class="rk-card runs-card" id="runs-card">
+          <div class="runs-card-hd"><h2>Scenario Runs <span class="cnt" id="runs-card-n">0</span></h2><span class="muted" id="runs-card-sub">completed, partial and failed</span></div>
+          <div class="runs-dt">
+            <div class="dt-toolbar" id="runs-dt-toolbar">
+              <label class="dt-search"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="runs-dt-q" placeholder="Filter rows…" aria-label="Filter rows" data-on-input="runsTableQuery"></label>
+              <span class="dt-count muted" id="runs-dt-count"></span>
+              <span class="grow"></span>
+              <div class="dt-colwrap">
+                <button type="button" class="btn btn-outline btn-sm" data-on-click="toggleRunsCols"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Columns</button>
+                <div class="dt-cols" id="runs-cols" hidden></div>
+              </div>
+              <select id="runs-dt-per" class="dt-per" aria-label="Rows per page" data-on-change="setRunsPer"><option value="5">5 / page</option><option value="8" selected>8 / page</option><option value="15">15 / page</option><option value="9999">All rows</option></select>
+              <button type="button" class="btn btn-outline btn-sm" data-on-click="exportRunsCsv"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>Export CSV</button>
+            </div>
+            <div class="dt-bulk" id="runs-bulk" hidden><b id="runs-bulk-n">0</b><span>selected</span><span class="grow"></span><button type="button" class="btn btn-outline btn-sm" data-on-click="exportRunsSelected">Export selected</button><button type="button" class="btn btn-ghost btn-sm" data-on-click="clearRunsSelection">Clear selection</button></div>
+            <div class="tbl-wrap dt-scroll" id="runs-table-wrap">
+              <table>
+                <thead><tr>
+                  <th class="dt-selcol"><input type="checkbox" class="dt-cb" id="runs-sel-all" title="Select all on this table" data-on-change="runsSelectAll"></th>
+                  <th class="dt-th" data-on-click="sortRunsBy" data-args="[0]">Run ID<span class="dt-arrow"></span></th>
+                  <th class="dt-th" data-on-click="sortRunsBy" data-args="[1]">Scenario<span class="dt-arrow"></span></th>
+                  <th class="dt-th" data-on-click="sortRunsBy" data-args="[2]">Agent<span class="dt-arrow"></span></th>
+                  <th class="dt-th" data-on-click="sortRunsBy" data-args="[3]">Status<span class="dt-arrow"></span></th>
+                  <th class="dt-th" data-on-click="sortRunsBy" data-args="[4]">Initiated by<span class="dt-arrow"></span></th>
+                  <th class="dt-th" data-on-click="sortRunsBy" data-args="[5]">Started<span class="dt-arrow"></span></th>
+                  <th class="dt-th" data-on-click="sortRunsBy" data-args="[6]">Completed<span class="dt-arrow"></span></th>
+                  <th class="dt-th" data-on-click="sortRunsBy" data-args="[7]">Results<span class="dt-arrow"></span></th>
+                  <th class="dt-th" data-on-click="sortRunsBy" data-args="[8]">Score<span class="dt-arrow"></span></th>
+                </tr></thead>
+                <tbody id="runs-body"></tbody>
+              </table>
+            </div>
+            <div class="dt-empty" id="runs-empty" hidden></div>
+            <div class="dt-foot" id="runs-dt-foot"><span class="dt-range muted" id="runs-dt-range"></span><div class="dt-pager" id="runs-dt-pager"></div></div>
+          </div>
         </div>
       </div>
 

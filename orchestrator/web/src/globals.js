@@ -32,7 +32,7 @@ import { closeTAXIIConnectorModal, deleteTAXIIConnector, loadARTContentStatus, l
 import { loadVariantTab } from './features/variant-executor.js';
 import { loadVariantMatrixFromButton } from './features/variant-report.js';
 import { _vexCheckAgentSweepConflict, filterVexTechniques, pollVariantRun, runVariants, setVexRunTargetMode, setVexTargetMode, showVexStatHelp, stopVex, stopVexSweep, vexClearAll, vexRunFullSweep, vexRunGroupChange, vexSelectAll, vexSweepGroupChange } from './features/variants.js';
-import { filterRuns, setRunsFilter } from './features/runs-rich.js';
+import { filterRuns, setRunsStatusFilter, setRunsTargetFilter, clearRunsFilters, runsTableQuery, clearRunsTableQuery, setRunsPer, runsPage, sortRunsBy, toggleRunsCols, runsColToggle, runsSelectRow, runsSelectAll, clearRunsSelection, exportRunsCsv, exportRunsSelected, openRunCard, openRunRow } from './features/runs-rich.js';
 
 // The action registry for data-on-* attributes and on() templates (G1d).
 // Explicit list: core/actions.js dispatches only through this object, never
@@ -224,8 +224,24 @@ export const ACTIONS = {
   loadMoreAgents,
   loadRecommendations,
   loadRuns,
-  setRunsFilter,
   filterRuns,
+  setRunsStatusFilter,
+  setRunsTargetFilter,
+  clearRunsFilters,
+  runsTableQuery,
+  clearRunsTableQuery,
+  setRunsPer,
+  runsPage,
+  sortRunsBy,
+  toggleRunsCols,
+  runsColToggle,
+  runsSelectRow,
+  runsSelectAll,
+  clearRunsSelection,
+  exportRunsCsv,
+  exportRunsSelected,
+  openRunCard,
+  openRunRow,
   loadSLAReport,
   loadScenarios,
   loadScheduledAssessments,
