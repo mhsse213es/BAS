@@ -1498,6 +1498,15 @@ mode_status() {
 # MODE: --uninstall
 # ═════════════════════════════════════════════════════════════════════════════
 mode_uninstall() {
+  # One implementation: uninstall.sh (shipped beside this script) finds the install itself, protects against deleting
+  # the wrong directory, removes the backup timers too, and verifies the result. The code below is only the fallback
+  # for a bundle that lacks it.
+  if [[ -f "${SCRIPT_DIR}/uninstall.sh" ]]; then
+    local fwd=()
+    $YES && fwd+=(--yes)
+    $PURGE_IMAGES && fwd+=(--purge-images)
+    exec bash "${SCRIPT_DIR}/uninstall.sh" ${fwd[@]+"${fwd[@]}"}
+  fi
   local data_dir="$DEFAULT_DATA_DIR"
   if [[ -f /etc/systemd/system/${SERVICE_NAME}.service ]]; then
     detected=$(grep -oP '(?<=WorkingDirectory=)[^\s]+' /etc/systemd/system/${SERVICE_NAME}.service || true)
