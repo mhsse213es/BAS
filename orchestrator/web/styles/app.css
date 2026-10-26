@@ -52,7 +52,6 @@
   --row-line:   rgba(34,50,74,0.55);
   --overlay-bg: rgba(5,10,18,0.72);
   --on-accent:  #ffffff;
-  --hero-bg:    radial-gradient(700px 240px at 85% 0%, var(--accent-glow), transparent 70%), linear-gradient(180deg, var(--elevated), var(--surface));
 
   /* ── Elevation ─────────────────────────────── */
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.25);
@@ -74,6 +73,9 @@
 }
 
 html, body { height: 100%; }
+/* Declared on body, not :root: var() inside a custom property is resolved where it is declared, and the
+   themes override --elevated/--surface/--accent-glow on body. */
+body { --hero-bg: radial-gradient(700px 240px at 85% 0%, var(--accent-glow), transparent 70%), linear-gradient(180deg, var(--elevated), var(--surface)); }
 body {
   /* #license-grace-banner is position:fixed (pinned, doesn't scroll away) --
      this reserves the space it would otherwise occupy in-flow. Defaults to
@@ -410,6 +412,16 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
   font-size: 0.68rem; color: var(--muted); opacity: 0.45;
 }
 
+/* ── Brand logos: transparent marks, one pair per background (see packaging/branding/make-console-logos.py) ── */
+.logo-onlight { display: none; }
+.sidebar-brand img { display: none; height: 40px; width: auto; }
+.sidebar-brand .brand-full.logo-ondark { display: block; }
+body.theme-light .sidebar-brand .brand-full.logo-ondark { display: none; }
+body.theme-light .sidebar-brand .brand-full.logo-onlight { display: block; }
+.login-logo { height: 46px; width: auto; }
+body.theme-light .login-logo.logo-ondark { display: none; }
+body.theme-light .login-logo.logo-onlight { display: block; }
+
 /* ── Sidebar collapse (icon rail) ──────────────────────────────
    #sidebar's width and .main-wrapper's margin-left both read the
    single --sidebar-w custom property, so overriding just that one
@@ -417,7 +429,11 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
    width/margin rules needed. */
 :root { --sidebar-w-collapsed: 56px; }
 #app.sidebar-collapsed { --sidebar-w: var(--sidebar-w-collapsed); }
-#app.sidebar-collapsed .sidebar-brand img { display: none; }
+#app.sidebar-collapsed .sidebar-brand { justify-content: center; padding: 0.5rem; }
+#app.sidebar-collapsed .sidebar-brand .brand-full { display: none !important; }
+#app.sidebar-collapsed .sidebar-brand .brand-mini.logo-ondark { display: block; height: 36px; }
+body.theme-light #app.sidebar-collapsed .sidebar-brand .brand-mini.logo-ondark { display: none; }
+body.theme-light #app.sidebar-collapsed .sidebar-brand .brand-mini.logo-onlight { display: block; height: 36px; }
 #app.sidebar-collapsed .nav-group-label { display: none; }
 #app.sidebar-collapsed .nav-item::before { left: -0.4rem; }
 #app.sidebar-collapsed .nav-item {
