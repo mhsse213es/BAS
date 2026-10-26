@@ -276,7 +276,7 @@ export function doLogout() {
   if (state.socket) state.socket.close();
   fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
   setDisplay(document.getElementById('app'), 'none');
-  setDisplay(document.getElementById('login-screen'), 'flex');
+  setDisplay(document.getElementById('login-screen'), 'grid');
   document.getElementById('inp-pass').value = '';
 }
 

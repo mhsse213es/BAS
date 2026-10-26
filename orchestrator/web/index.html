@@ -24,30 +24,31 @@
 
 <!-- Login -->
 <div id="login-screen">
-  <div class="login-left">
-    <div class="login-brand g1-s-4a4a72d5">
-      <img src="/images/logo_name_ondark.png" alt="Audspect" class="login-logo logo-ondark"/>
-      <img src="/images/logo_name_onlight.png" alt="" aria-hidden="true" class="login-logo logo-onlight"/>
+  <section class="lg-hero" aria-hidden="true">
+    <div class="lg-grid"></div><div class="lg-glow"></div>
+    <div class="lg-hero-in">
+      <img src="/images/logo_name_ondark.png" alt="" class="lg-wordmark"/>
+      <h1>Know your defences work<br>before attackers test them.</h1>
+      <p>Continuous breach-and-attack simulation across endpoint, identity, email, network and cloud, mapped to MITRE ATT&amp;CK.</p>
+      <ul class="lg-points">
+        <li><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span><div><b>Validated, not assumed</b>Every control tested with safe, real attack behaviour.</div></li>
+        <li><span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg></span><div><b>Runs entirely on-premises</b>Your data and results never leave your network.</div></li>
+        <li><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18l5-6 4 3 7-9"/></svg></span><div><b>Evidence for auditors</b>Reports aligned to SEBI CSCRF, RBI CSF, IRDAI, ISO 27001 and NIST CSF.</div></li>
+      </ul>
     </div>
-    <div class="login-tagline">Continuous Control Validation for Enterprise Security</div>
-    <div class="login-sub">On-premise Breach &amp; Attack Simulation platform built for regulated industries. SEBI CSCRF, RBI CSF, and IRDAI aligned.</div>
-    <ul class="login-caps">
-      <li>ATT&amp;CK-mapped adversary emulation</li>
-      <li>BFSI threat actor scenario library</li>
-      <li>Real-time detection &amp; prevention metrics</li>
-      <li>Compliance-ready audit evidence</li>
-    </ul>
-  </div>
-  <div class="login-right">
-    <div class="login-form-wrap">
-      <h2>Sign in to your workspace</h2>
-      <p class="form-sub">Enter your credentials to access the platform</p>
+  </section>
+  <section class="lg-form-wrap">
+    <div class="lg-card">
+      <img src="/images/logo_name_ondark.png" alt="Audspect" class="lg-form-logo logo-ondark"/>
+      <img src="/images/logo_name_onlight.png" alt="" aria-hidden="true" class="lg-form-logo logo-onlight"/>
+      <h2>Welcome back</h2>
+      <p class="lg-sub">Sign in to your Audspect workspace</p>
       <div class="form-group">
-        <label>Username / Email</label>
+        <label for="inp-user">Username / Email</label>
         <input type="text" id="inp-user" autocomplete="username" placeholder="admin or your email">
       </div>
       <div class="form-group">
-        <label>Password</label>
+        <label for="inp-pass">Password</label>
         <div class="pw-wrap">
           <input type="password" id="inp-pass" autocomplete="current-password">
           <button type="button" id="inp-pass-toggle" class="pw-toggle" data-on-click="togglePasswordVisibility" aria-label="Show password" aria-pressed="false" title="Show password">
@@ -58,8 +59,10 @@
       </div>
       <button class="btn btn-primary" data-on-click="doLogin">Sign in</button>
       <div id="login-err" class="error-msg"></div>
+      <div class="lg-secure"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>Encrypted in transit &middot; sign-ins are audit-logged</div>
+      <p class="lg-foot">On-premise deployment &middot; forgot your password? Ask an administrator to reset it.</p>
     </div>
-  </div>
+  </section>
 </div>
 
 <!-- App -->
