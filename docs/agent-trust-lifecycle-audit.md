@@ -146,7 +146,8 @@ Renewal never uses the bootstrap secret, and a certificate marked revoked cannot
   `TestRevokeAgent_RevokesOnlyThatAgentsCertificatesAndBlocksIt`, `TestReinstateAgent_AllowsAFreshEnrolment`,
   `TestDisconnectAgent_ClosesTheLiveConnection`, plus RBAC matrix entries. The RBAC matrix suite still has its 314 earlier failures,
   none about these routes.
-* Not done: a dashboard button, and the agent does not yet tell the operator it was revoked (it just fails to connect).
+* Dashboard: admins get **Revoke…** (live agents) and **Reinstate…** (revoked agents) in the Agents row menu, each with a required reason and a confirmation (`web/tests/unit/revoke-agent.test.mjs`). Not clicked through in a browser yet.
+* Not done: the agent does not yet tell the operator it was revoked (it just fails to connect).
 
 #### F-07 Renewal reuses the same private key. Low. Design limit. **FIXED**
 

@@ -70,6 +70,53 @@ export function submitUninstallAgent() {
   }).catch(function(e) { btn.disabled = false; showToast(e.message, 'err'); });
 }
 
+// ── Revoke / Reinstate Agent ───────────────────────────────────────────────
+// Revoke blocks ONE agent (certificates revoked, connection dropped, re-enrolment refused) without touching
+// the deployment CA or any other agent. Reinstate only lifts the block; the agent must enrol afresh.
+function agentStateAction(idPrefix, verb, getTarget, successMsg, confirmText, closeFn) {
+  return function() {
+    var target = getTarget();
+    if (!target) return;
+    var reason = document.getElementById(idPrefix + '-reason').value.trim();
+    if (!reason) { showToast('Reason is required', 'err'); return; }
+    if (!confirm(confirmText + '\n\nReason: ' + reason + '\n\nProceed?')) return;
+    var btn = document.getElementById(idPrefix + '-submit-btn');
+    btn.disabled = true;
+    apicall('/api/agents/' + encodeURIComponent(target) + '/' + verb, {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason })
+    }).then(function(res) {
+      btn.disabled = false;
+      if (res && res.error) { showToast(res.error, 'err'); return; }
+      showToast(successMsg, 'ok');
+      closeFn();
+      loadAgents();
+    }).catch(function(e) { btn.disabled = false; showToast(e.message, 'err'); });
+  };
+}
+
+var _revokeAgentTargetId = null;
+export function openRevokeAgentModal(agentId, hostname) {
+  _revokeAgentTargetId = agentId;
+  _openAgentActionModal(hostname, 'revoke-agent');
+}
+export function closeRevokeAgentModal() {
+  document.getElementById('revoke-agent-overlay').classList.remove('open');
+}
+export var submitRevokeAgent = agentStateAction('revoke-agent', 'revoke', function() { return _revokeAgentTargetId; },
+  'Agent revoked', 'Revoke this agent? It will be disconnected and refused until reinstated.', closeRevokeAgentModal);
+
+var _reinstateAgentTargetId = null;
+export function openReinstateAgentModal(agentId, hostname) {
+  _reinstateAgentTargetId = agentId;
+  _openAgentActionModal(hostname, 'reinstate-agent');
+}
+export function closeReinstateAgentModal() {
+  document.getElementById('reinstate-agent-overlay').classList.remove('open');
+}
+export var submitReinstateAgent = agentStateAction('reinstate-agent', 'reinstate', function() { return _reinstateAgentTargetId; },
+  'Agent reinstated', 'Reinstate this agent so it can enrol again?', closeReinstateAgentModal);
+
 // ── Remove Agent (Force Remove) ─────────────────────────────────────────────
 // Removes the dashboard record only (sets state=retired) -- unlike Stop
 // Agent, this never talks to the endpoint and works regardless of whether

@@ -3382,6 +3382,50 @@
   </div>
 </div>
 
+<!-- Revoke Agent Modal -->
+<div id="revoke-agent-overlay" class="overlay">
+  <div class="modal g1-s-779f6e95">
+    <h3>Revoke Agent</h3>
+    <p class="sub2" id="revoke-agent-target-sub"></p>
+
+    <div class="g1-s-2c7ed8f1">
+      &#9888; This revokes every certificate this agent holds and blocks it. It is disconnected now and refused when it tries to reconnect, even with the shared secret. Other agents and the deployment CA are not affected. To bring it back, use Reinstate and enrol it again.
+    </div>
+
+    <label class="modal-lbl">Reason <span class="tiny muted">(required)</span></label>
+    <input type="text" id="revoke-agent-reason" placeholder="e.g. laptop lost, key suspected compromised"
+           class="g1-s-99573e36">
+
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" data-on-click="closeRevokeAgentModal">Cancel</button>
+      <span class="u-flex1"></span>
+      <button id="revoke-agent-submit-btn" class="btn btn-sm g1-s-19a27a33" data-on-click="submitRevokeAgent">&#128683; Revoke Agent</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reinstate Agent Modal -->
+<div id="reinstate-agent-overlay" class="overlay">
+  <div class="modal g1-s-779f6e95">
+    <h3>Reinstate Agent</h3>
+    <p class="sub2" id="reinstate-agent-target-sub"></p>
+
+    <div class="g1-s-2c7ed8f1">
+      This lets the agent enrol again. Its old certificates stay revoked, so the agent must be reinstalled or have its enrolment reset to get a new one.
+    </div>
+
+    <label class="modal-lbl">Reason <span class="tiny muted">(required)</span></label>
+    <input type="text" id="reinstate-agent-reason" placeholder="e.g. host re-imaged"
+           class="g1-s-99573e36">
+
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" data-on-click="closeReinstateAgentModal">Cancel</button>
+      <span class="u-flex1"></span>
+      <button id="reinstate-agent-submit-btn" class="btn btn-outline-green btn-sm" data-on-click="submitReinstateAgent">Reinstate Agent</button>
+    </div>
+  </div>
+</div>
+
 <!-- Force Remove Agent Modal -->
 <div id="remove-agent-overlay" class="overlay">
   <div class="modal g1-s-779f6e95">

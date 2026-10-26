@@ -5,7 +5,7 @@ import { x } from '../core/escape.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
 import { _templates, renderTemplateGrid } from './adversaries.js';
 import { _agtDetailId, downloadAuditPack, downloadBoardScorecard, downloadFullReportCSV, downloadFullReportJSON, downloadFullReportPDF, downloadNavigatorLayer, loadAgtAttackPath, openAgentDetail, openFullReport, safeScan } from './agent-drawer.js';
-import { openRemoveAgentModal, openStopAgentModal, openUninstallAgentModal } from './agent-actions.js';
+import { openReinstateAgentModal, openRemoveAgentModal, openRevokeAgentModal, openStopAgentModal, openUninstallAgentModal } from './agent-actions.js';
 import { loadAuditLogs, loadBackups, loadLicenseInfo } from './audit-logs.js';
 import { loadCalderaStatus } from './compliance.js';
 import { loadUsers } from './evidence.js';
@@ -1553,6 +1553,7 @@ function renderAgentRows() {
             '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuStopAgent', a.agentId, a.hostname || a.agentId) + '>&#9209; Stop agent</button>' : '') +
           (ROLE === 'admin' ?
             '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuUninstallAgent', a.agentId, a.hostname || a.agentId) + '>&#128465; Uninstall Agent</button>' : '') +
+          agentRevokeMenuItems(a, ROLE === 'admin') +
           (ROLE === 'admin' ?
             '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuRemoveAgent', a.agentId, a.hostname || a.agentId) + '>&#9888; Force Remove…</button>' : '') +
         '</div>' +
@@ -1581,6 +1582,18 @@ export function rowMenuNavigator(id) { closeAllRowMenus(); downloadNavigatorLaye
 export function rowMenuMoveGroup(id) { closeAllRowMenus(); moveAgentToGroupPrompt(id); }
 export function rowMenuStopAgent(id, hostname) { closeAllRowMenus(); openStopAgentModal(id, hostname); }
 export function rowMenuUninstallAgent(id, hostname) { closeAllRowMenus(); openUninstallAgentModal(id, hostname); }
+export function rowMenuRevokeAgent(id, hostname) { closeAllRowMenus(); openRevokeAgentModal(id, hostname); }
+export function rowMenuReinstateAgent(id, hostname) { closeAllRowMenus(); openReinstateAgentModal(id, hostname); }
+
+// The Revoke / Reinstate entries of an agent's row menu. Admin only (the server enforces it too). A
+// retired or uninstalled agent has nothing to revoke; a revoked one can only be reinstated.
+export function agentRevokeMenuItems(a, isAdmin) {
+  if (!isAdmin || a.state === 'retired' || a.state === 'uninstalled') return '';
+  if (a.state === 'revoked') {
+    return '<button class="row-menu-item"' + on('click', 'rowMenuReinstateAgent', a.agentId, a.hostname || a.agentId) + '>&#8617; Reinstate…</button>';
+  }
+  return '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuRevokeAgent', a.agentId, a.hostname || a.agentId) + '>&#128683; Revoke…</button>';
+}
 export function rowMenuRemoveAgent(id, hostname) { closeAllRowMenus(); openRemoveAgentModal(id, hostname); }
 
 export function toggleRowMenu(btn, id) {

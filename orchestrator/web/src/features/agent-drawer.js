@@ -72,7 +72,7 @@ function loadAgtOverview(agentId) {
     var a = (data || []).find(function(ag) { return ag.agentId === agentId; });
     if (!a) { pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">Agent not found</div>'; return; }
     document.getElementById('agt-detail-title').textContent = 'Agent: ' + x(a.hostname || agentId);
-    var stateColor = {active:'var(--success)',enrolling:'var(--accent)',restricted:'var(--warning)',quarantined:'var(--danger)',retired:'var(--muted)',uninstalling:'var(--accent)',uninstalled:'var(--muted)'}[a.state] || 'var(--muted)';
+    var stateColor = {active:'var(--success)',enrolling:'var(--accent)',restricted:'var(--warning)',quarantined:'var(--danger)',revoked:'var(--danger)',retired:'var(--muted)',uninstalling:'var(--accent)',uninstalled:'var(--muted)'}[a.state] || 'var(--muted)';
     var policy = a.policy || {};
     pane.innerHTML =
       '<div style="padding:1rem 1.25rem">' +
