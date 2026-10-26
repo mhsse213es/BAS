@@ -1,0 +1,33 @@
+/* Exercises: OpenAEV scenario / exercise / execution table cards (chrome via .dt-*), plan rows, empty and loading states */
+.ex-card { margin-bottom: 14px; }
+.rk-grid > .ex-card, .rk-grid > .ex-plans-card { margin-bottom: 0; }
+.rk-grid.g2 { margin-bottom: 14px; }
+.ex-card > .rk-hd, .ex-plans-card > .rk-hd { padding: 14px 16px 12px; margin-bottom: 0; }
+.ex-plans-card > .rk-hd { padding: 0 0 12px; }
+.ex-state { padding: 18px 16px 22px; text-align: center; font-size: 13px; }
+.ex-card .rk-empty, .ex-plans-card .rk-empty { padding: 22px 16px 28px; }
+
+.ex-wrap { border: 0; border-radius: 0; box-shadow: none; background: transparent; max-height: 560px; overflow: auto; }
+.ex-wrap[hidden] { display: none; }
+.ex-wrap thead { position: sticky; top: 0; z-index: 2; }
+.ex-wrap th { background: var(--elevated); box-shadow: 0 1px 0 var(--border); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; white-space: nowrap; }
+.ex-wrap th.dt-th { cursor: pointer; user-select: none; }
+.ex-wrap th.dt-th:hover { color: var(--text); }
+.ex-wrap th.sorted { color: var(--info-text); }
+.ex-wrap th.num, .ex-wrap td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ex-wrap .dt-selcol { width: 34px; padding-right: 0; }
+.ex-wrap tbody td { vertical-align: middle; font-size: 13px; }
+.ex-wrap tbody tr:has(.dt-cb:checked) td { background: var(--accent-dim); }
+.ex-wrap tbody tr.dt-click { cursor: pointer; }
+.ex-wrap tbody tr.dt-click:hover td { background: var(--hover); }
+.ex-wrap tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.ex-wrap tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ex-wrap .rk-pill { text-transform: capitalize; }
+.ex-progcell { min-width: 140px; }
+.ex-wrap .td-r { text-align: right; white-space: nowrap; }
+
+.ex-plan { display: flex; flex-direction: row; gap: 12px; align-items: center; padding: 10px 12px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--elevated); transition: border-color .15s; }
+.ex-plan:last-child { margin-bottom: 0; }
+.ex-plan:hover { border-color: var(--accent-border); }
+.ex-plan .grow { flex: 1; min-width: 0; }
+.ex-plan-sub { font-size: 12px; }

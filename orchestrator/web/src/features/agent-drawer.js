@@ -7,9 +7,10 @@ import { loadAgents } from './attack-path.js';
 import { buildReportFilename, showDownloadOptions, triggerDownload } from './evidence.js';
 import { apArrow, apNodePill } from './openaev.js';
 import { openModal } from './reports.js';
-import { _riskScoreColor, _riskTrendBadge } from './shell.js';
+import { ROLE, _riskScoreColor, _riskTrendBadge } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
-import { kpi, card, grid, bar as kitBar, chip, kv as kitKv } from '../core/kit.js';
+import { kpi, card, grid, bar as kitBar, chip, kv as kitKv, icon as kitIcon } from '../core/kit.js';
+import * as M from './agt-model.js';
 import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
 
@@ -37,7 +38,8 @@ export function updateLinuxDownloadCmd(arch, type) {
 
 export function openAgentDetail(agentId) {
   _agtDetailId = agentId;
-  document.getElementById('agt-detail-title').textContent = 'Agent: ' + agentId.substring(0,12) + '…';
+  document.getElementById('agt-detail-title').textContent = agentId.substring(0,12) + '…';
+  var subEl = document.getElementById('agt-detail-sub'); if (subEl) subEl.textContent = '';
   document.getElementById('agent-detail-overlay').classList.add('open');
   showAgentTab('overview');
 }
@@ -67,77 +69,86 @@ export function showAgentTab(tab) {
 }
 
 // ── Overview tab ──────────────────────────────────────────────────────────────
+// A key/value list; labels are plain text, values are trusted markup built from escaped pieces.
+function dl(rows) {
+  return '<dl class="rk-kv">' + rows.map(function(r) { return '<dt>' + x(r[0]) + '</dt><dd>' + r[1] + '</dd>'; }).join('') + '</dl>';
+}
+function note(tone, html) { return '<div class="agt-note tone-' + tone + '">' + html + '</div>'; }
+function pill(text, tone) { return '<span class="rk-pill tone-' + tone + '">' + x(text) + '</span>'; }
+var LIFE_TONE = { active: 'ok', enrolling: 'info', restricted: 'warn', quarantined: 'bad', revoked: 'bad', retired: 'muted', uninstalling: 'info', uninstalled: 'muted' };
+function actBtn(label, ic, action, args, cls) {
+  return '<button type="button" class="btn btn-outline btn-sm' + (cls ? ' ' + cls : '') + '"' + on.apply(null, ['click', action].concat(args)) + '>' + (ic ? kitIcon(ic) : '') + x(label) + '</button>';
+}
+
+function overviewHtml(a) {
+  var id = a.agentId, host = a.hostname || id;
+  var offline = a.status === 'offline';
+  var admin = ROLE === 'admin';
+  var life = a.state || 'active';
+  var conn = pill(M.STATUS_LABEL[M.bucketOf(a)], M.STATUS_TONE[M.bucketOf(a)]) +
+    // Heartbeat (HTTP, every 30s) and the WebSocket task-delivery channel are separate connections, and a fresh
+    // heartbeat alone does not mean a run can reach this agent -- same gap the table row flags.
+    (!offline && !a.wsConnected ? ' <span class="agt-flag" title="Heartbeat is reaching the server, but the WebSocket task channel is down -- dispatching a run to this agent will fail until it reconnects. Often a proxy/firewall blocking the WS Upgrade handshake.">' + kitIcon('alert') + 'Task channel down</span>' : '') +
+    // Same class of silent gap for mTLS: the agent never completed certificate bootstrap and cannot receive signed commands.
+    (!offline && a.transport === 'legacy' ? ' <span class="agt-flag" title="This agent is on legacy transport -- it never completed mTLS bootstrap and cannot receive signed commands. Scenario dispatch will fail. Usually means it was installed without --ca-root; see the Deploy agent page for the current install command, or fetch the CA root manually from /api/config/ca-root.">' + kitIcon('alert') + 'Legacy transport</span>' : '');
+  var rows = M.facts(a).map(function(r) { return [r[0], r[2] === 'mono' ? '<code class="mono">' + x(r[1]) + '</code>' : x(r[1])]; });
+  rows.push(['Status', conn]);
+  rows.push(['Lifecycle', pill(life, LIFE_TONE[life] || 'muted')]);
+  rows.push(['Last seen', x(ago(a.lastUpdate))]);
+  rows.push(['Enrolled', x(a.enrolledAt ? ago(a.enrolledAt) : '—')]);
+  rows.push(['Binary', a.binaryTrusted ? pill('Verified', 'ok') : pill('Unverified', 'warn')]);
+
+  var notes = '';
+  if (life === 'quarantined') notes += note('bad', '&#9888; Agent is QUARANTINED — binary hash mismatch detected. Scenario dispatch is blocked. Restore to Active once the binary is verified.');
+  if (life === 'restricted') notes += note('warn', '&#9888; Agent is RESTRICTED — scenario dispatch is blocked by policy. Restore to Active to re-enable.');
+  if (life === 'retired') notes += note('muted', '&#128683; Agent is RETIRED — decommissioned and blocked from running scenarios. Restore to Active to re-enable.');
+  if (life === 'uninstalling') notes += note('info', '&#8987; Uninstall in progress — waiting for the endpoint to confirm.');
+  if (life === 'uninstalled') notes += note('muted', '&#10003; Agent confirmed it uninstalled itself.');
+  if (a.uninstallError) notes += note('bad', '&#9888; Uninstall failed: ' + x(a.uninstallError) + (a.uninstallErrorAt ? ' (' + x(new Date(a.uninstallErrorAt).toLocaleString()) + ')' : ''));
+  if (a.stoppedBy) notes += note('bad', '&#9209; Agent was stopped by ' + x(a.stoppedByName || a.stoppedBy) + ' on ' + x(new Date(a.stoppedAt).toLocaleString()) + (a.stopReason ? ': ' + x(a.stopReason) : ''));
+
+  var policy = a.policy || {};
+  var pol = Object.keys(policy).length
+    ? '<h4 class="agt-h4">Policy bundle</h4>' + dl([
+        ['Log level', x(policy.logLevel || 'info')],
+        ['Max concurrent', x(policy.maxConcurrentRuns || 'unlimited')],
+        ['Heartbeat interval', x((policy.heartbeatIntervalS || 30) + 's')],
+        ['Exec window', x(policy.executionWindow || 'unrestricted')],
+      ])
+    : '';
+
+  var acts = [actBtn('Run simulation', 'play', 'rowMenuRunSimulation', [id])];
+  if (admin) acts.push(actBtn('Move to Group', 'layers', 'rowMenuMoveGroup', [id]));
+  if (life !== 'active') acts.push(actBtn('Restore to Active', 'shield', 'setAgentState', [id, 'active']));
+  if (life !== 'quarantined') acts.push(actBtn('Quarantine', 'alert', 'setAgentState', [id, 'quarantined']));
+  if (life !== 'restricted') acts.push(actBtn('Restrict', 'lock', 'setAgentState', [id, 'restricted']));
+  if (life !== 'retired') acts.push(actBtn('Retire', 'x', 'setAgentState', [id, 'retired']));
+  if (admin && !offline) acts.push(actBtn('Stop Agent', 'pause', 'rowMenuStopAgent', [id, host]));
+  if (admin && life !== 'retired' && life !== 'uninstalled') {
+    acts.push(life === 'revoked'
+      ? actBtn('Reinstate…', 'refresh', 'rowMenuReinstateAgent', [id, host])
+      : actBtn('Revoke…', 'x', 'rowMenuRevokeAgent', [id, host], 'agt-danger'));
+  }
+  if (admin) {
+    acts.push(actBtn('Uninstall Agent', 'x', 'rowMenuUninstallAgent', [id, host], 'agt-danger'));
+    acts.push(actBtn('Force Remove Agent', 'alert', 'rowMenuRemoveAgent', [id, host], 'agt-danger'));
+  }
+  return '<div class="agt-ov">' + notes + dl(rows) + pol +
+    '<h4 class="agt-h4">Actions</h4><div class="agt-actions">' + acts.join('') + '</div>' +
+    '<div class="agt-hint">Quarantine / Restrict / Retire all block scenario dispatch. Only <b>Restore to Active</b> re-enables the agent.</div></div>';
+}
+
 function loadAgtOverview(agentId) {
   var pane = document.getElementById('agt-tab-overview');
-  pane.innerHTML = '<div style="color:var(--muted);padding:1rem">Loading…</div>';
+  pane.innerHTML = '<div class="empty">Loading…</div>';
   apicall('/api/agents').then(function(data) {
     var a = (data || []).find(function(ag) { return ag.agentId === agentId; });
-    if (!a) { pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">Agent not found</div>'; return; }
-    document.getElementById('agt-detail-title').textContent = 'Agent: ' + x(a.hostname || agentId);
-    var stateColor = {active:'var(--success)',enrolling:'var(--accent)',restricted:'var(--warning)',quarantined:'var(--danger)',revoked:'var(--danger)',retired:'var(--muted)',uninstalling:'var(--accent)',uninstalled:'var(--muted)'}[a.state] || 'var(--muted)';
-    var policy = a.policy || {};
-    pane.innerHTML =
-      '<div style="padding:1rem 1.25rem">' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem 1.5rem;margin-bottom:1rem">' +
-      kv('Hostname',     x(a.hostname))    + kv('Agent ID', '<code style="font-size:0.75rem">' + x(a.agentId) + '</code>') +
-      kv('IP Address',   x(a.ipAddress))   + kv('OS', x(a.osVersion || '—')) +
-      kv('Username',     x(a.username))    + kv('Environment', x(a.envLabel || '—')) +
-      kv('Connectivity', '<span class="sbadge s-' + x(a.status||'idle') + '">' + x(a.status||'idle') + '</span>' +
-        // Same gap the System Tree table row already guards against (see
-        // renderAgentRows): heartbeat (HTTP, every 30s) and the WebSocket
-        // task-delivery channel are separate connections, and a fresh
-        // heartbeat alone doesn't mean a run/sweep can actually reach this
-        // agent. Previously this drawer showed only the heartbeat status,
-        // so an agent could read "idle" here while genuinely unable to
-        // receive any dispatch -- exactly what caused a stuck EM sweep to
-        // look like nothing was wrong from this view.
-        (a.status !== 'offline' && !a.wsConnected ? ' <span class="sbadge s-paused" title="Heartbeat is reaching the server, but the WebSocket task channel is down -- dispatching a run to this agent will fail until it reconnects. Often a proxy/firewall blocking the WS Upgrade handshake.">&#9888; Task channel down</span>' : '') +
-        // Same class of silent gap as Task channel down, but for mTLS: this
-        // agent's own heartbeat reports it never completed certificate
-        // bootstrap, so it can't receive signed commands even though it
-        // looks perfectly healthy otherwise. See renderAgentRows' matching
-        // badge and models.Agent.Transport's doc comment.
-        (a.status !== 'offline' && a.transport === 'legacy' ? ' <span class="sbadge s-paused" title="This agent is on legacy transport -- it never completed mTLS bootstrap and cannot receive signed commands. Scenario dispatch will fail. Usually means it was installed without --ca-root; see the Deploy agent page for the current install command.">&#9888; Legacy transport</span>' : '')) +
-      kv('Lifecycle',    '<span class="sbadge s-' + x(a.state||'active') + '" style="color:' + stateColor + '">' + x(a.state||'active') + '</span>') +
-      kv('Last Seen',    ago(a.lastUpdate)) + kv('Enrolled', a.enrolledAt ? ago(a.enrolledAt) : '—') +
-      kv('Binary Trusted', a.binaryTrusted ? '<span class="u-success">&#10003; Verified</span>' : '<span class="u-warning">&#9888; Unverified</span>') +
-      '</div>' +
-      (a.state === 'quarantined' ? '<div style="background:rgba(218,54,51,.12);border:1px solid var(--danger);border-radius:4px;padding:0.6rem 0.85rem;color:var(--danger);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is QUARANTINED — binary hash mismatch detected. Scenario dispatch is blocked. Restore to Active once the issue is resolved.</div>' : '') +
-      (a.state === 'restricted'  ? '<div style="background:rgba(210,153,34,.12);border:1px solid var(--warning);border-radius:4px;padding:0.6rem 0.85rem;color:var(--warning);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is RESTRICTED — scenario dispatch is blocked by policy. Restore to Active to re-enable.</div>' : '') +
-      (a.state === 'retired'     ? '<div style="background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.4);border-radius:4px;padding:0.6rem 0.85rem;color:#94a3b8;font-size:0.78rem;margin-bottom:0.75rem">&#128683; Agent is RETIRED — decommissioned and blocked from running scenarios. Restore to Active to re-enable.</div>' : '') +
-      (a.state === 'uninstalling' ? '<div style="background:rgba(47,129,247,.12);border:1px solid rgba(47,129,247,.4);border-radius:4px;padding:0.6rem 0.85rem;color:var(--accent);font-size:0.78rem;margin-bottom:0.75rem">&#8987; Uninstall in progress — waiting for the endpoint to confirm.</div>' : '') +
-      (a.state === 'uninstalled'  ? '<div style="background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.4);border-radius:4px;padding:0.6rem 0.85rem;color:#94a3b8;font-size:0.78rem;margin-bottom:0.75rem">&#10003; Agent confirmed it uninstalled itself.</div>' : '') +
-      (a.uninstallError ? '<div style="background:rgba(218,54,51,.12);border:1px solid var(--danger);border-radius:4px;padding:0.6rem 0.85rem;color:var(--danger);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Uninstall failed: ' + x(a.uninstallError) + (a.uninstallErrorAt ? ' (' + x(new Date(a.uninstallErrorAt).toLocaleString()) + ')' : '') + '</div>' : '') +
-      (a.stoppedBy ? '<div style="background:rgba(218,54,51,.12);border:1px solid var(--danger);border-radius:4px;padding:0.6rem 0.85rem;color:var(--danger);font-size:0.78rem;margin-bottom:0.75rem">&#9209; Agent was stopped by ' + x(a.stoppedByName || a.stoppedBy) + ' on ' + x(new Date(a.stoppedAt).toLocaleString()) + ': ' + x(a.stopReason || '') + '. It will not restart automatically. Physical/console access to the endpoint is required to bring it back.</div>' : '') +
-      (Object.keys(policy).length ? '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.7rem 0.9rem;margin-bottom:0.75rem">' +
-        '<div style="font-weight:600;font-size:0.78rem;margin-bottom:0.4rem;color:var(--muted)">POLICY BUNDLE</div>' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem 1rem;font-size:0.77rem">' +
-        kv('Log Level', x(policy.logLevel || 'info')) +
-        kv('Max Concurrent', policy.maxConcurrentRuns || 'unlimited') +
-        kv('Heartbeat Interval', (policy.heartbeatIntervalS || 30) + 's') +
-        kv('Exec Window', x(policy.executionWindow || 'unrestricted')) +
-        '</div>' +
-      '</div>' : '') +
-      '<div style="border-top:1px solid var(--border);padding-top:0.85rem;margin-top:0.25rem">' +
-        '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.55rem">Lifecycle Controls</div>' +
-        '<div style="display:flex;gap:0.5rem;flex-wrap:wrap">' +
-          (a.state !== 'active' ?
-            '<button class="btn btn-primary btn-sm" '+ on('click', 'setAgentState', a.agentId, 'active') + '>&#10003; Restore to Active</button>' : '') +
-          (a.state !== 'quarantined' ?
-            '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger-border)" '+ on('click', 'setAgentState', a.agentId, 'quarantined') + '>&#9888; Quarantine</button>' : '') +
-          (a.state !== 'restricted' ?
-            '<button class="btn btn-outline btn-sm" style="color:var(--warning);border-color:var(--warning-border)" '+ on('click', 'setAgentState', a.agentId, 'restricted') + '>&#128274; Restrict</button>' : '') +
-          (a.state !== 'retired' ?
-            '<button class="btn btn-outline btn-sm u-muted" '+ on('click', 'setAgentState', a.agentId, 'retired') + '>&#128683; Retire</button>' : '') +
-        '</div>' +
-        '<div style="font-size:0.7rem;color:var(--muted);margin-top:0.45rem">Quarantine / Restrict / Retire all block scenario dispatch. Only <strong>Restore to Active</strong> re-enables the agent.</div>' +
-      '</div>' +
-      '</div>';
-  }).catch(function(e) { pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>'; });
-}
-function kv(label, val) {
-  return '<div><div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.1rem">' + label + '</div>' +
-         '<div style="font-size:0.82rem">' + val + '</div></div>';
+    if (!a) { pane.innerHTML = '<div class="empty u-danger">Agent not found</div>'; return; }
+    document.getElementById('agt-detail-title').textContent = a.hostname || agentId;
+    var sub = document.getElementById('agt-detail-sub');
+    if (sub) sub.textContent = M.drawerSub(a);
+    pane.innerHTML = overviewHtml(a);
+  }).catch(function(e) { pane.innerHTML = '<div class="empty u-danger">' + x(e.message) + '</div>'; });
 }
 
 export function setAgentState(agentId, newState) {

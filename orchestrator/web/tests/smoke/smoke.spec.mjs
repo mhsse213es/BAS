@@ -22,11 +22,11 @@ async function inlineLeft(page) {
 }
 
 // One representative action per tab beyond the tab switch (G1d spec 6.3).
-// Both are filter buttons: setAgentFilter('online') reloads agents and moves
+// Both are view/filter buttons: setAgentsView('systemtree') re-selects the agents view and moves
 // the "on" highlight; setCampaignTab('all') re-renders the campaign toolbar
 // (under the fixtures only "All" exists). No dialogs, navigation or pickers.
 const ACTION_CLICKS = {
-  agents: `#agent-toolbar button[data-on-click="setAgentFilter"][data-args='["online"]']`,
+  agents: `button[data-on-click="setAgentsView"][data-args='["systemtree"]']`,
   campaigns: '#campaign-toolbar button[data-on-click="setCampaignTab"]',
 };
 

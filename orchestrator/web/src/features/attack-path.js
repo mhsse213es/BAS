@@ -12,7 +12,6 @@ import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
 import { setHeroStat } from './shell-ui.js';
 import { seg } from '../core/kit.js';
-import { covFilterOpts, covFilterRows, covRowsHtml, covSummary, tpDetailSummaryHtml, tpFactorsHtml, tpFilterActors, tpFilterOpts, tpHistoryHtml, tpRowsHtml, tpSummary } from './rich-g4.js';
 import { loadRuns, loadSIEMCorrelationPanel, openModal, viewRunResults } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
 import { describePhishingRun } from './phishing-run-view.js';
@@ -22,8 +21,10 @@ import { sourceOf as scnSourceOf, heroStats as scnHeroStats, filterList as scnFi
 import { catsHtml as scnCatsHtml, toolbarHtml as scnToolbarHtml, gridHtml as scnGridHtml, emptyHtml as scnEmptyHtml, scnUi, setScenarioViewMode, setScenarioSortMode, setScenarioCatOffMode, hideFilterSelects, openDrawer as openScnDrawer, closeDrawer as closeScnDrawer, drawerTab, drawerScenarioId, paintDrawer, bindApproveButton, runById as scnRunById } from './scn-rich.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
-import { agentInsightsHtml, migrationPanelHtml } from './agents-insights.js';
-import { kpi, card, chip, empty as kitEmpty } from '../core/kit.js';
+import { agentInsightsHtml, agentOperationalHtml, migrationPanelHtml } from './agents-insights.js';
+import { kpi, card, chip, empty as kitEmpty, icon as kitIcon } from '../core/kit.js';
+import { paintAgentTable, statusCellHtml, resetAgtFilters, agtOsFilter, setAgtOs } from './agt-view.js';
+import { osOptions as agtOsOptions, fleetCount as agtFleetCount } from './agt-model.js';
 import { renderExecAll, renderRangeSeg } from './dash-exec.js';
 import { recLimit, renderRecControls, renderRecError, renderRecLoading, setRecLimitState, showRecommendations } from './recommendations.js';
 
@@ -110,210 +111,11 @@ export function loadExecDashboard() {
 
 var REC_SCENARIO = null;
 
-export function loadCoverageActors() {
-  var sel = document.getElementById('cov-actor-select');
-  apicall('/api/coverage/actors')
-    .then(function(data) {
-      var actors = (data && data.actors) || [];
-      actors.forEach(function(name) {
-        var opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        sel.appendChild(opt);
-      });
-    })
-    .catch(function(e) { console.error('loadCoverageActors failed', e); });
-}
+// Technique Coverage (actor card, charts, table) lives in tcv-view.js; re-exported so existing imports keep working.
+export { loadCoverageActors, loadCoverageMatrix, setCoverageFilter } from './tcv-view.js';
 
-var COV_ROWS = [];
-var COV_FILTER = 'all';
-function renderCoverageTable() {
-  var body = document.getElementById('cov-matrix-body');
-  var empty = document.getElementById('cov-matrix-empty');
-  var list = covFilterRows(COV_ROWS, COV_FILTER);
-  var segEl = document.getElementById('cov-seg');
-  if (segEl) segEl.innerHTML = COV_ROWS.length ? seg(covFilterOpts(COV_ROWS), COV_FILTER, 'setCoverageFilter') : '';
-  body.innerHTML = covRowsHtml(list);
-  setDisplay(empty, list.length ? 'none' : '');
-}
-export function setCoverageFilter(id) { COV_FILTER = id; renderCoverageTable(); }
-
-export function loadCoverageMatrix() {
-  var sel = document.getElementById('cov-actor-select');
-  var actor = sel ? sel.value : '';
-  var body = document.getElementById('cov-matrix-body');
-  var empty = document.getElementById('cov-matrix-empty');
-  var sum = document.getElementById('cov-summary');
-  body.innerHTML = '<tr><td colspan="6" class="empty">Loading&hellip;</td></tr>';
-  var url = '/api/coverage/matrix' + (actor ? '?actor=' + encodeURIComponent(actor) : '');
-  apicall(url)
-    .then(function(rows) {
-      COV_ROWS = rows || [];
-      if (sum) sum.innerHTML = covSummary(COV_ROWS);
-      renderCoverageTable();
-    })
-    .catch(function(e) {
-      COV_ROWS = [];
-      if (sum) sum.innerHTML = '';
-      setDisplay(empty, 'none');
-      body.innerHTML = '<tr><td colspan="6" class="empty u-danger">Failed to load: ' + x(e.message) + '</td></tr>';
-    });
-}
-
-var TP_ACTOR_CACHE = [];
-
-export function showThreatPriorityList() {
-  setDisplay(document.getElementById('tp-list-view'), '');
-  setDisplay(document.getElementById('tp-detail-view'), 'none');
-}
-
-export function tpTierBadge(tier) {
-  var color = tier === 'Critical' ? 'var(--danger)' : tier === 'High' ? 'var(--warning)' : tier === 'Medium' ? 'var(--accent)' : 'var(--muted)';
-  return '<span class="badge" style="color:' + color + ';border-color:' + color + '">' + x(tier || 'Low') + '</span>';
-}
-
-var TP_TIER = 'all';
-function renderThreatPriorityTable() {
-  var body = document.getElementById('tp-list-body');
-  var empty = document.getElementById('tp-list-empty');
-  var segEl = document.getElementById('tp-seg');
-  if (segEl) segEl.innerHTML = TP_ACTOR_CACHE.length ? seg(tpFilterOpts(TP_ACTOR_CACHE), TP_TIER, 'setThreatPriorityTier') : '';
-  if (!TP_ACTOR_CACHE.length) {
-    body.innerHTML = '';
-    setDisplay(empty, '');
-    return;
-  }
-  setDisplay(empty, 'none');
-  var list = tpFilterActors(TP_ACTOR_CACHE, TP_TIER);
-  body.innerHTML = list.length ? tpRowsHtml(list) : '<tr><td colspan="5" class="empty">No actors in this tier.</td></tr>';
-}
-export function setThreatPriorityTier(id) { TP_TIER = id; renderThreatPriorityTable(); }
-
-export function loadThreatPriorityActors() {
-  var body = document.getElementById('tp-list-body');
-  var sum = document.getElementById('tp-summary');
-  body.innerHTML = '<tr><td colspan="5" class="empty">Loading&hellip;</td></tr>';
-  apicall('/api/threat-priority/actors')
-    .then(function(actors) {
-      TP_ACTOR_CACHE = actors || [];
-      if (sum) sum.innerHTML = tpSummary(TP_ACTOR_CACHE);
-      renderThreatPriorityTable();
-    })
-    .catch(function(e) {
-      if (sum) sum.innerHTML = '';
-      body.innerHTML = '<tr><td colspan="5" class="empty u-danger">Failed to load: ' + x(e.message) + '</td></tr>';
-    });
-}
-
-export function showThreatPriorityDetail(actorName) {
-  setDisplay(document.getElementById('tp-list-view'), 'none');
-  setDisplay(document.getElementById('tp-detail-view'), '');
-  document.getElementById('tp-detail-title').textContent = actorName;
-
-  apicall('/api/threat-priority/actors/' + encodeURIComponent(actorName))
-    .then(function(d) { renderThreatPriorityDetail(d); })
-    .catch(function(e) {
-      document.getElementById('tp-detail-factors').innerHTML = '<div class="empty u-danger">Failed to load: ' + x(e.message) + '</div>';
-    });
-}
-
-function renderThreatPriorityDetail(d) {
-  document.getElementById('tp-detail-title').innerHTML = x(d.actorName) +
-    (d.canonicalGroupId ? '  <span class="tiny muted" style="font-weight:400">&middot; MITRE ' + x(d.canonicalGroupId) + '</span>' : '');
-
-  document.getElementById('tp-detail-summary').innerHTML = tpDetailSummaryHtml(d);
-
-  document.getElementById('tp-detail-factors').innerHTML = tpFactorsHtml(d.factors);
-
-  var uncovered = (d.uncoveredTechniques || []);
-  document.getElementById('tp-detail-uncovered').innerHTML = uncovered.length
-    ? uncovered.map(function(t) { return '<span class="tool-tag">' + x(t) + '</span>'; }).join(' ')
-    : '<span class="muted">No coverage gaps.</span>';
-
-  var techSourceLabel = {
-    mitre: 'Techniques: MITRE-authoritative',
-    connector: 'Techniques: connector-derived (not yet MITRE-confirmed)'
-  }[d.techniqueSource] || '';
-  document.getElementById('tp-detail-technique-source').textContent = techSourceLabel;
-
-  var techCoverage = (d.techniqueCoverage || []);
-  document.getElementById('tp-detail-coverage').innerHTML = techCoverage.length
-    ? '<table class="u-w100"><thead><tr><th>Technique</th><th>Content</th><th>Prevention</th><th>Detection</th></tr></thead><tbody>' +
-      techCoverage.map(function(tc) {
-        var content = [
-          tc.hasSimulation ? '<span class="tool-tag">Sim</span>' : '',
-          tc.hasDetection ? '<span class="tool-tag">Detect</span>' : '',
-          tc.hasCompliance ? '<span class="tool-tag">Compliance</span>' : ''
-        ].filter(Boolean).join(' ') || '<span class="muted">&mdash;</span>';
-        var label = tc.techniqueName ? tc.techniqueName + ' (' + tc.techniqueId + ')' : tc.techniqueId;
-        var prevention = tc.preventionVerdict ? x(tc.preventionVerdict) : '<span class="muted">&mdash;</span>';
-        var detection = tc.detectionVerdict ? x(tc.detectionVerdict) : '<span class="muted">&mdash;</span>';
-        return '<tr><td>' + x(label) + '</td><td>' + content + '</td><td>' + prevention + '</td><td>' + detection + '</td></tr>';
-      }).join('') +
-      '</tbody></table>'
-    : '<span class="muted">No technique data.</span>';
-
-  var sources = (d.sources || []);
-  document.getElementById('tp-detail-sources').innerHTML = sources.length
-    ? '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0.75rem">' +
-      sources.map(function(s) {
-        // "Unknown" (never "None"): an empty field here means this source
-        // never supplied it -- e.g. OpenCTI never reports sectors/regions,
-        // MISP never reports aliases. Rendering it as "None" would read as
-        // a positive assertion the source never made.
-        var unknown = '<span class="muted">Unknown</span>';
-        function list(arr) {
-          return (arr && arr.length)
-            ? arr.map(function(v) { return '<span class="tool-tag">' + x(v) + '</span>'; }).join(' ')
-            : unknown;
-        }
-        function row(label, val) {
-          return '<div style="display:flex;gap:0.5rem;padding:0.14rem 0">' +
-            '<span style="min-width:5.5rem;color:var(--muted);flex-shrink:0">' + label + '</span>' +
-            '<span class="u-flex1">' + val + '</span></div>';
-        }
-        return '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:0.6rem 0.75rem">' +
-          '<div style="font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-bottom:0.4rem">' + x(s.source) + '</div>' +
-          row('Name', x(s.name)) +
-          row('Aliases', list(s.aliases)) +
-          row('Sectors', list(s.sectors)) +
-          row('Regions', list(s.regions)) +
-          row('Confidence', s.confidence ? x(s.confidence) : unknown) +
-          row('Techniques', x(s.techniqueCount)) +
-          row('Last seen', s.lastSeen ? x(fmtDate(s.lastSeen)) : unknown) +
-          '</div>';
-      }).join('') + '</div>'
-    : '<span class="muted">No per-source records yet — populated by the next threat-intel sync.</span>';
-
-  var techEvidence = (d.techniqueEvidence || []);
-  var evidenceCard = document.getElementById('tp-detail-evidence-card');
-  if (techEvidence.length) {
-    setDisplay(evidenceCard, '');
-    document.getElementById('tp-detail-evidence').innerHTML =
-      '<table class="u-w100"><thead><tr><th>Technique</th><th>Via</th><th>Confidence</th><th>Since</th></tr></thead><tbody>' +
-      techEvidence.map(function(e) {
-        var via = e.via ? (e.via + (e.viaName ? ' (' + x(e.viaName) + ')' : '')) : '<span class="muted">direct</span>';
-        var since = e.startTime ? x(fmtDate(e.startTime)) : '<span class="muted">&mdash;</span>';
-        return '<tr><td>' + x(e.techniqueId) + '</td><td>' + via + '</td><td>' + x(e.confidence) + '%</td><td>' + since + '</td></tr>';
-      }).join('') +
-      '</tbody></table>';
-  } else {
-    setDisplay(evidenceCard, 'none');
-  }
-
-  document.getElementById('tp-detail-history').innerHTML = tpHistoryHtml(d.history);
-
-  var techSet = {};
-  (d.techniqueIds || []).forEach(function(t) { techSet[t] = true; });
-  apicall('/api/recommend/simulations?limit=100').then(function(recData) {
-    var matches = ((recData && recData.techniques) || []).filter(function(t) { return techSet[t.techniqueId]; });
-    document.getElementById('tp-detail-recs').innerHTML = matches.length
-      ? matches.map(function(t) { return '<div style="padding:0.3rem 0">' + x(t.techniqueId) + ' — ' + x(t.name) + ' <span class="tiny muted">(score ' + x(t.score) + ')</span></div>'; }).join('')
-      : '<span class="muted">No open recommendations for this actor\'s techniques.</span>';
-  }).catch(function() {
-    document.getElementById('tp-detail-recs').innerHTML = '<span class="muted">Could not load recommendations.</span>';
-  });
-}
+// Threat Prioritization (tier tiles, actor table and detail drawer) lives in tp-view.js; re-exported so existing imports keep working.
+export { loadThreatPriorityActors, setThreatPriorityTier, showThreatPriorityDetail, showThreatPriorityList } from './tp-view.js';
 
 export function loadRecommendations() {
   renderRecControls();
@@ -903,8 +705,10 @@ export function loadAgentGroupTree() {
 function renderAgentGroupTree() {
   var root = document.getElementById('agent-tree-root');
   if (!root) return;
+  var fleet = state.agentTotals ? agtFleetCount(state.agentTotals) : 0;
   var allRow = '<div class="at-node' + (activeAgentGroupId === null ? ' active' : '') + '"' + on('click', 'selectAgentGroup', null) + '>' +
-    '<span class="at-caret"></span><span class="at-name">All</span></div>';
+    '<span class="at-caret"></span><span class="at-ico">' + kitIcon('layers') + '</span><span class="at-name">All agents</span>' +
+    (fleet ? '<span class="at-count">' + fleet + '</span>' : '') + '</div>';
   root.innerHTML = allRow + agentGroupTree.map(renderAgentGroupNode).join('');
 }
 
@@ -914,6 +718,7 @@ function renderAgentGroupNode(node) {
   var active = activeAgentGroupId === node.id ? ' active' : '';
   var html = '<div class="at-node' + active + '"' + on('click', 'selectAgentGroup', node.id) + '>' +
     '<span class="at-caret">' + caret + '</span>' +
+    '<span class="at-ico">' + kitIcon('server') + '</span>' +
     '<span class="at-name">' + x(node.name) + '</span>' +
     '<span class="at-count">' + node.totalAgentCount + '</span>' +
     '<span class="at-menu"' + on('click', 'openAgentGroupMenuStop', node.id) + '>&#8942;</span>' +
@@ -1080,7 +885,7 @@ export function loadAgents() {
     state.agentsHasMore = !!(page && page.has_more);
     state.agentsPagesLoaded = 1;
     state.agentTotals = (page && page.totals) || { online: 0, degraded: 0, offline: 0, retired: 0 };
-    renderAgentHero(); renderAgentInsights(); renderAgentToolbar(); renderAgentRows();
+    renderAgentHero(); renderAgentInsights(); renderAgentToolbar(); renderAgentRows(); renderAgentGroupTree();
     renderLegacyMigrationPanel();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
@@ -1107,7 +912,7 @@ export function loadMoreAgents() {
     // totals intentionally NOT updated here -- they were already
     // fleet-wide-accurate from the first page's response, and appending
     // more rows to `agents` doesn't change the true totals.
-    renderAgentRows(); renderAgentInsights();
+    renderAgentRows(); renderAgentInsights(); renderAgentToolbar();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 export function onAgentSearchInput() {
@@ -1148,6 +953,8 @@ function renderAgentHero() {
 function renderAgentInsights() {
   var el = document.getElementById('agent-insights');
   if (el) el.innerHTML = agentInsightsHtml(state.agents, state.agentTotals);
+  var op = document.getElementById('agent-operational-insights');
+  if (op) op.innerHTML = agentOperationalHtml(state.agents, state.agentTotals);
 }
 // covSegHtml renders the shared "cov-seg" toggle-button-group shape used by
 // several toolbars below (agent/campaign/coverage/findings/run-IOC
@@ -1161,65 +968,66 @@ export function covSegHtml(items, activeVal, setterFnName, countFn) {
   }).join('') + '</div>';
 }
 function renderAgentToolbar() {
-  var c = function(k) {
-    if (k === 'all') return state.agentTotals.online + state.agentTotals.degraded + state.agentTotals.offline;
-    return state.agentTotals[k] || 0;
-  };
-  var el = document.getElementById('agent-toolbar');
-  if (el) el.innerHTML = covSegHtml(
-    [['all', 'All'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline'], ['retired', 'Retired']],
-    AGENT_FILTER, 'setAgentFilter', c
-  );
+  var el = document.getElementById('agent-filter-selects');
+  if (!el) return;
+  var cur = AGENT_FILTER === 'all' ? '' : AGENT_FILTER;
+  var os = agtOsFilter();
+  var statuses = [['', 'All statuses'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline'], ['retired', 'Retired']];
+  var oses = agtOsOptions(state.agents);
+  if (os && oses.indexOf(os) < 0) oses.push(os);
+  var searchEl = document.getElementById('agent-search');
+  var dirty = cur || os || (searchEl && searchEl.value.trim());
+  el.innerHTML =
+    '<select class="select" aria-label="Status"' + on('change', 'setAgentStatusSelect') + '>' + statuses.map(function(s) {
+      return '<option value="' + x(s[0]) + '"' + (s[0] === cur ? ' selected' : '') + '>' + x(s[1]) + '</option>';
+    }).join('') + '</select>' +
+    '<select class="select" aria-label="Operating system"' + on('change', 'setAgentOsSelect') + '><option value="">All OS</option>' + oses.map(function(o) {
+      return '<option value="' + x(o) + '"' + (o === os ? ' selected' : '') + '>' + x(o) + '</option>';
+    }).join('') + '</select>' +
+    (dirty ? '<button type="button" class="btn btn-ghost btn-sm"' + on('click', 'clearAgentFilters') + '>' + kitIcon('x') + 'Clear</button>' : '');
+}
+export function setAgentStatusSelect(el) { setAgentFilter((el && el.value) || 'all'); }
+export function setAgentOsSelect(el) { setAgtOs(el); renderAgentToolbar(); }
+export function clearAgentFilters() {
+  AGENT_FILTER = 'all';
+  var searchEl = document.getElementById('agent-search');
+  if (searchEl) searchEl.value = '';
+  resetAgtFilters();
+  loadAgents();
 }
 export function setAgentFilter(v) { AGENT_FILTER = v; loadAgents(); }
 function renderAgentRows() {
-  // Server already scopes `agents` by bucket/search/group -- nothing left
-  // to filter client-side.
-  var list = state.agents;
+  // Server already scopes `agents` by bucket/search/group; the table layer only filters, sorts and pages
+  // the loaded rows (agt-view.js).
   var searchEl = document.getElementById('agent-search');
   var q = searchEl ? searchEl.value.trim() : '';
-  var tbody = document.getElementById('agents-body');
-  var loadMoreWrap = document.getElementById('agent-load-more-wrap');
-  if (loadMoreWrap) setDisplay(loadMoreWrap, state.agentsHasMore ? '' : 'none');
-  if (!list.length) {
-    var emptyMsg = q ? 'No agents match "' + x(q) + '".' : ('No agents' + (AGENT_FILTER === 'all' ? ' registered yet.' : ' in this state.'));
-    tbody.innerHTML = '<tr><td colspan="8" class="empty">' + emptyMsg + '</td></tr>';
-    return;
+  paintAgentTable({
+    agents: state.agents,
+    totals: state.agentTotals,
+    hasMore: state.agentsHasMore,
+    filtering: !!(q || AGENT_FILTER !== 'all' || activeAgentGroupId !== null),
+    cells: agentCell,
+  });
+}
+// One table cell. Column numbers follow agt-model.js COLUMNS; -1 is the trailing actions cell content.
+function agentCell(a, col, idx) {
+  var host = a.hostname || a.agentId;
+  switch (col) {
+    case 0:
+      return '<td><div class="agt-host mono" title="' + x(host) + '">' + x(host) + '</div>' +
+        '<div class="agt-sub muted" title="' + x(a.agentId) + '">' + x([a.ipAddress, a.agentId].filter(Boolean).join(' · ')) + '</div></td>';
+    case 1: return '<td>' + (a.groupName ? x(a.groupName) : '<span class="muted">Ungrouped</span>') + '</td>';
+    case 2: return '<td class="muted agt-os" title="' + x(a.osVersion || '') + '">' + x(a.osVersion || '—') + '</td>';
+    case 3: return '<td>' + statusCellHtml(a, apActiveJobs[a.agentId]) + '</td>';
+    case 4: return '<td class="muted agt-seen">' + ago(a.lastUpdate) + '</td>';
+    case 5: return '<td class="num">' + (a.sims || 0) + '</td>';
+    default: return agentRowMenu(a, idx);
   }
-  tbody.innerHTML = list.map(function(a, idx) {
-    var dot = agentDotColor(agentBucket(a));
-    var menuId = 'agent-menu-' + idx;
-    return '<tr>' +
-      '<td style="max-width:180px"><div style="display:flex;align-items:center;gap:0.5rem"><span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:' + dot + '"></span>' +
-        '<div style="min-width:0"><div class="cell-main" style="font-family:var(--font-mono);font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px" title="' + x(a.hostname || a.agentId) + '">' + x(a.hostname || a.agentId) + '</div>' +
-        '<div class="tiny muted" style="font-family:var(--font-mono);font-size:0.6rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px" title="' + x(a.agentId) + '">' + x(a.agentId) + '</div></div></div></td>' +
-      '<td style="color:var(--muted);font-size:0.78rem;max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + x(a.osVersion || '') + '">' + x(a.osVersion || '—') + '</td>' +
-      '<td class="tiny muted" style="font-family:var(--font-mono);white-space:nowrap">' + x(a.ipAddress || '—') + '</td>' +
-      '<td><span class="tag">' + x(a.groupName || 'Ungrouped') + '</span></td>' +
-      '<td>' +
-        '<span class="sbadge s-' + x(a.status || 'idle') + '">' + x(a.status || 'idle') + '</span>' +
-        (a.state && a.state !== 'active' ? ' <span class="sbadge s-' + x(a.state) + '" title="Lifecycle state">' + x(a.state) + '</span>' : '') +
-        // Heartbeat (HTTP, every 30s) and the WebSocket task-delivery channel
-        // are separate connections -- a proxy/firewall can pass one and block
-        // the other, so a fresh heartbeat alone doesn't mean a run can reach
-        // this agent. Only shown when that gap is real: status already reads
-        // offline covers the "nothing at all" case on its own.
-        (a.status !== 'offline' && !a.wsConnected ? ' <span class="sbadge s-paused" title="Heartbeat is reaching the server, but the WebSocket task channel is down -- dispatching a run to this agent will fail until it reconnects. Often a proxy/firewall blocking the WS Upgrade handshake.">&#9888; Task channel down</span>' : '') +
-        // transport reflects what the agent's own heartbeat reports (see
-        // models.Agent.Transport). An agent stuck on 'legacy' past its
-        // first heartbeat never completed mTLS bootstrap -- it enrolls and
-        // heartbeats normally, so nothing else here signals a problem, but
-        // it silently rejects every scenario dispatch because it never
-        // received the command-signing trust cert. Usually means it was
-        // installed without --ca-root.
-        (a.status !== 'offline' && a.transport === 'legacy' ? ' <span class="sbadge s-paused" title="This agent is on legacy transport -- it never completed mTLS bootstrap and cannot receive signed commands. Scenario dispatch will fail. Usually means it was installed without --ca-root; see the Deploy agent page for the current install command, or fetch the CA root manually from /api/config/ca-root.">&#9888; Legacy transport</span>' : '') +
-        (apActiveJobs[a.agentId] ? ' <span class="sbadge s-running" title="Attack-path collection: ' + x(apActiveJobs[a.agentId].status) + '">&#128202; AP</span>' : '') +
-      '</td>' +
-      '<td style="color:var(--muted);font-size:0.78rem;white-space:nowrap">' + ago(a.lastUpdate) + '</td>' +
-      '<td class="tiny" style="font-family:var(--font-mono)">' + (a.sims || 0) + '</td>' +
-      '<td>' +
-        '<div class="row-menu-wrap">' +
-        '<button class="btn btn-outline btn-sm row-menu-btn"' + on('click', 'toggleRowMenuById', menuId) + ' title="Actions" aria-haspopup="true">&#8942;</button>' +
+}
+function agentRowMenu(a, idx) {
+  var menuId = 'agent-menu-' + idx;
+  return '<div class="row-menu-wrap">' +
+        '<button class="btn btn-ghost btn-sm row-menu-btn"' + on('click', 'toggleRowMenuById', menuId) + ' title="Actions" aria-label="Actions" aria-haspopup="true">' + kitIcon('more') + '</button>' +
         '<div class="row-menu-panel" id="' + menuId + '">' +
           '<button class="row-menu-item"' + on('click', 'rowMenuDetail', a.agentId) + '>&#128269; Detail</button>' +
           '<button class="row-menu-item"' + on('click', 'rowMenuRunSimulation', a.agentId) + '>&#9654; Run simulation</button>' +
@@ -1241,9 +1049,10 @@ function renderAgentRows() {
           (ROLE === 'admin' ?
             '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuRemoveAgent', a.agentId, a.hostname || a.agentId) + '>&#9888; Force Remove…</button>' : '') +
         '</div>' +
-        '</div>' +
-      '</td></tr>';
-  }).join('');
+        '</div>';
+}
+export function agentRowKeydown(id, el, event) {
+  if (event && (event.key === 'Enter' || event.key === ' ') && event.target === el) { event.preventDefault(); rowMenuDetail(id); }
 }
 // Row action menus (the "⋮" dropdown in the Agents table Actions column).
 // Only one panel is ever open at a time; toggling re-closes any other open
@@ -1328,14 +1137,26 @@ export function __init_L8490() {
 window.addEventListener('scroll', closeAllRowMenus, true);
 }
 
-// Deploy agent → reveal the in-page Connection Config / download section.
-export function showAgentDownload() {
+// Connection Config (hero button, admin only): open the Operational view at the connection settings.
+export function showConnectionConfig() {
   setAgentsView('operational');
   var w = document.getElementById('conn-cfg-wrap');
   if (!w) return;
   setDisplay(w, '');
   if (typeof loadConnectionConfig === 'function') loadConnectionConfig();
   w.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Deploy agent -> open the Operational view at the download / install section (the connection settings
+// above it are revealed too, as before).
+export function showAgentDownload() {
+  setAgentsView('operational');
+  var w = document.getElementById('conn-cfg-wrap');
+  if (!w) return;
+  setDisplay(w, '');
+  if (typeof loadConnectionConfig === 'function') loadConnectionConfig();
+  var d = document.getElementById('agent-deploy-section');
+  (d || w).scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // buildAgentInstallCommands returns the copy-paste install one-liners for each

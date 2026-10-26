@@ -341,38 +341,23 @@
         </div>
         <div id="agents-view-systemtree">
         <div id="agent-insights"></div>
-        <div class="g1-display-flex g1-s-0021a9bb">
-          <input type="search" id="agent-search" placeholder="Search hostname, agent ID, IP, group…"
-                 data-on-input="onAgentSearchInput"
-                 class="g1-s-0f564629">
-        </div>
         <div class="agent-tree-layout">
           <div class="agent-tree-panel">
-            <div class="agent-tree-hdr">
-              <h4>Groups</h4>
-              <button class="btn btn-outline btn-sm" data-on-click="createAgentGroupPrompt" data-args="[null]" title="New root group">+</button>
-            </div>
+            <h4>Groups</h4>
             <div id="agent-tree-root"></div>
+            <div class="agt-newgroup"><button type="button" class="btn btn-outline btn-sm" data-on-click="createAgentGroupPrompt" data-args="[null]" title="New root group"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New group</button></div>
           </div>
           <div class="agent-tree-content">
-        <div id="agent-toolbar" class="g1-s-462c8de6"></div>
-        <div class="tbl-wrap g1-s-1b1d7545">
-          <table class="g1-s-9adcfca6">
-            <thead><tr>
-              <th class="g1-s-4f2248ba">Host</th><th class="g1-s-229dc0cb">OS</th><th class="g1-s-4aa3ae59">IP address</th><th>Group</th><th>Status</th><th class="g1-s-42e77efb">Last seen</th><th>Sims</th><th class="g1-s-f083ea25">Actions</th>
-            </tr></thead>
-            <tbody id="agents-body">
-              <tr><td colspan="8" class="empty">No agents registered yet.</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div id="agent-load-more-wrap" class="is-hidden g1-s-698cc47b">
-          <button class="btn btn-outline btn-sm" data-on-click="loadMoreAgents">Load more</button>
-        </div>
+            <div class="rk-filters agt-filters">
+              <label class="rk-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="agent-search" placeholder="Search host, IP, ID or group..." aria-label="Search agents" data-on-input="onAgentSearchInput"></label>
+              <span id="agent-filter-selects" class="agt-selects"></span>
+            </div>
+            <div id="agent-table-mount"></div>
           </div>
         </div>
         </div>
         <div id="agents-view-operational" class="is-hidden">
+        <div id="agent-operational-insights"></div>
 
         <!-- Connection Config (admin only) -->
         <div id="conn-cfg-wrap" class="is-hidden g1-s-cc6c1079">
@@ -431,7 +416,7 @@
         </div>
 
         <!-- Agent Download -->
-        <div class="sec-hdr g1-s-cc6c1079">
+        <div class="sec-hdr g1-s-cc6c1079" id="agent-deploy-section">
           <h2>Deploy Agent</h2>
         </div>
 
@@ -2321,79 +2306,27 @@
 
       <div id="tab-exercises" class="is-hidden">
         <div id="hero-exercises"></div>
-        <div id="ex-summary"></div>
-        <!-- OpenAEV Scenarios — synced content library, feeds "Create Exercise Plan" below -->
-        <div class="card g1-s-f9a62d25">
-          <div class="card-title">OpenAEV Scenarios</div>
-          <div class="tbl-wrap g1-s-acd4d170">
-            <table id="openaev-scenarios-table">
-              <thead><tr><th>Name</th><th>Category</th><th>Severity</th><th>Techniques</th><th>Injects</th><th>Synced</th></tr></thead>
-              <tbody id="openaev-scenarios-body"></tbody>
-            </table>
-          </div>
-          <div id="openaev-scenarios-empty" class="empty is-hidden">No scenarios synced yet.</div>
+        <section class="rk-card flush ex-card"><div class="rk-hd"><h2>OpenAEV scenarios</h2></div><div id="ex-scen-box"><div class="ex-state muted">Loading…</div></div></section>
+        <div class="rk-grid g2">
+          <section class="rk-card flush ex-card"><div class="rk-hd"><h2>OpenAEV exercises</h2></div><div id="ex-exs-box"><div class="ex-state muted">Loading…</div></div></section>
+          <section class="rk-card ex-plans-card"><div class="rk-hd"><h2>Exercise plans</h2></div><div id="ex-plans-body"><div class="ex-state muted">Loading…</div></div></section>
         </div>
-        <div class="card g1-s-f9a62d25">
-          <div class="card-title">OpenAEV Exercises</div>
-          <div class="tbl-wrap g1-s-acd4d170">
-            <table id="openaev-exercises-table">
-              <thead><tr><th>Name</th><th>Category</th><th>Severity</th><th>Techniques</th><th>Injects</th><th>Synced</th></tr></thead>
-              <tbody id="openaev-exercises-body"></tbody>
-            </table>
-          </div>
-          <div id="openaev-exercises-empty" class="empty is-hidden">No exercises synced yet.</div>
-        </div>
-        <div class="card g1-s-f9a62d25">
-          <div class="card-title">Exercise Plans</div>
-          <div class="tbl-wrap g1-s-acd4d170">
-            <table>
-              <thead><tr><th>Name</th><th>Steps</th><th>Created</th><th></th></tr></thead>
-              <tbody id="ex-plans-body"></tbody>
-            </table>
-          </div>
-          <div id="ex-plans-empty" class="empty is-hidden">No exercise plans yet. Create one from an OpenAEV scenario.</div>
-        </div>
-        <div class="card g1-s-f79155c8">
-          <div class="card-title">Executions</div>
-          <div class="tbl-wrap g1-s-acd4d170">
-            <table>
-              <thead><tr><th>Name</th><th>Status</th><th>Progress</th><th>Started</th><th></th></tr></thead>
-              <tbody id="ex-execs-body"></tbody>
-            </table>
-          </div>
-          <div id="ex-execs-empty" class="empty is-hidden">No executions yet.</div>
-        </div>
+        <section class="rk-card flush ex-card"><div class="rk-hd"><h2>Executions</h2></div><div id="ex-execs-box"><div class="ex-state muted">Loading…</div></div></section>
       </div>
 
       <div id="tab-attack-coverage" class="is-hidden">
         <div id="hero-attack-coverage"></div>
-        <div id="cov-summary"></div>
-        <div class="card g1-s-f9a62d25">
-          <div class="card-title">Technique Coverage</div>
-          <div class="g1-display-flex g1-s-de1b2a08">
-            <label class="tiny muted" for="cov-actor-select">Actor</label>
-            <select id="cov-actor-select" data-on-change="loadCoverageMatrix">
-              <option value="">All techniques</option>
-            </select>
-            <span id="cov-seg"></span>
+        <div class="card tcv-actor">
+          <div class="lbl-s">ACTOR</div>
+          <div class="tcv-actor-row">
+            <select id="cov-actor-select" aria-label="Actor" data-on-change="loadCoverageMatrix"><option value="">All techniques</option></select>
+            <span class="muted tcv-actor-note" id="cov-actor-note"></span>
           </div>
-          <div class="tbl-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Technique</th>
-                  <th>Simulation</th>
-                  <th>Detection Profile</th>
-                  <th>Purple Exercise</th>
-                  <th>Compliance Mapping</th>
-                  <th>Response Playbook</th>
-                </tr>
-              </thead>
-              <tbody id="cov-matrix-body"></tbody>
-            </table>
-          </div>
-          <div id="cov-matrix-empty" class="empty is-hidden">No techniques to show.</div>
+          <div class="tcv-chips" id="cov-actor-chips"></div>
         </div>
+        <div id="cov-summary"></div>
+        <div id="cov-filters"></div>
+        <div id="cov-table"><section class="rk-card"><div class="tcv-state muted">Loading…</div></section></div>
       </div>
 
       <!-- Threat Prioritization -->
@@ -2401,71 +2334,8 @@
         <div id="hero-threat-priority"></div>
         <div id="tp-list-view">
           <div id="tp-summary"></div>
-          <div class="card g1-s-f9a62d25">
-            <div class="card-title">Threat Prioritization</div>
-            <div class="rk-filters"><span id="tp-seg"></span></div>
-            <div class="tbl-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Actor</th>
-                    <th>Tier</th>
-                    <th>Score</th>
-                    <th>Trend</th>
-                    <th>Coverage Gap</th>
-                  </tr>
-                </thead>
-                <tbody id="tp-list-body"></tbody>
-              </table>
-            </div>
-            <div id="tp-list-empty" class="empty is-hidden">No threat actors tracked yet — configure a threat-intel connector to populate this view.</div>
-          </div>
-        </div>
-
-        <div id="tp-detail-view" class="is-hidden">
-          <div class="g1-s-2fc766d7">
-            <a class="tiny g1-s-93cfea45" data-on-click="showThreatPriorityList">&lsaquo; Threat Prioritization</a>
-          </div>
-          <div class="card g1-s-f9a62d25">
-            <div class="card-title" id="tp-detail-title">Actor</div>
-            <div id="tp-detail-summary"></div>
-          </div>
-
-          <div class="card g1-s-f9a62d25">
-            <div class="card-title">Why this score</div>
-            <div id="tp-detail-factors"></div>
-          </div>
-
-          <div class="card g1-s-f9a62d25">
-            <div class="card-title">Uncovered Techniques</div>
-            <div id="tp-detail-uncovered" class="tiny"></div>
-          </div>
-
-          <div class="card g1-s-f9a62d25">
-            <div class="card-title">Technique Coverage Breakdown</div>
-            <div id="tp-detail-technique-source" class="tiny muted g1-s-0990a875"></div>
-            <div id="tp-detail-coverage" class="tiny"></div>
-          </div>
-
-          <div class="card g1-s-f9a62d25">
-            <div class="card-title">Sources</div>
-            <div id="tp-detail-sources" class="tiny"></div>
-          </div>
-
-          <div class="card g1-s-f9a62d25" id="tp-detail-evidence-card">
-            <div class="card-title">Technique Evidence</div>
-            <div id="tp-detail-evidence" class="tiny"></div>
-          </div>
-
-          <div class="card g1-s-f9a62d25">
-            <div class="card-title">History</div>
-            <div id="tp-detail-history" class="tiny"></div>
-          </div>
-
-          <div class="card g1-s-f79155c8">
-            <div class="card-title">Recommendations for this actor</div>
-            <div id="tp-detail-recs" class="tiny"></div>
-          </div>
+          <div id="tp-main"><section class="rk-card"><div class="empty">Loading…</div></section></div>
+          <div id="tp-charts"></div>
         </div>
       </div>
 
@@ -3862,7 +3732,7 @@
 <div id="agent-detail-overlay" class="drawer-overlay" data-on-click="closeAgentDetailOnBackdrop">
   <div class="drawer g1-s-5420eed9">
     <div class="drawer-header">
-      <h3 id="agt-detail-title">Agent Detail</h3>
+      <div class="sc-dh"><span class="sc-dh-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></span><div><div class="sc-dh-t" id="agt-detail-title">Agent Detail</div><div class="sc-dh-s" id="agt-detail-sub"></div></div></div>
       <button class="drawer-close" data-on-click="closeAgentDetail">&#10005;</button>
     </div>
     <div class="tab-bar" id="agt-tab-bar">
@@ -3881,6 +3751,7 @@
       <div id="agt-tab-attackpath" class="tab-pane is-hidden"></div>
       <div id="agt-tab-risk" class="tab-pane is-hidden"></div>
     </div>
+    <div class="sc-drawer-ft"><button type="button" class="btn btn-outline btn-sm" data-on-click="closeAgentDetail">Close</button></div>
   </div>
 </div>
 
@@ -3892,6 +3763,17 @@
     </div>
     <div class="drawer-body" id="exp-detail-body"></div>
     <div class="sc-drawer-ft"><button type="button" class="btn btn-outline btn-sm" data-on-click="closeExposureDetail">Close</button></div>
+  </div>
+</div>
+
+<div id="tp-detail-overlay" class="drawer-overlay" data-on-click="closeThreatPriorityDetailOnBackdrop">
+  <div class="drawer sc-drawer" role="dialog" aria-modal="true" aria-label="Threat actor details">
+    <div class="drawer-header">
+      <div class="sc-dh"><span class="sc-dh-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></span><div><div class="sc-dh-t" id="tp-detail-title">Actor</div><div class="sc-dh-s" id="tp-detail-sub"></div></div></div>
+      <button class="drawer-close" data-on-click="closeThreatPriorityDetail" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="drawer-body" id="tp-detail-body"></div>
+    <div class="sc-drawer-ft"><button type="button" class="btn btn-outline btn-sm" data-on-click="closeThreatPriorityDetail">Close</button></div>
   </div>
 </div>
 

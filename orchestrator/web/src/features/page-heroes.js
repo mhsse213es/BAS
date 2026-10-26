@@ -102,11 +102,12 @@ var HEROES = {
   },
   'hero-agents': {
     icon: ICON.agents,
-    title: 'Agents',
-    sub: 'Lightweight collectors across your environment — they execute safe emulations locally and stream telemetry back.',
+    title: 'Simulation agents',
+    sub: 'Endpoints that execute scenarios under policy.',
     actions:
-      '<button class="btn btn-outline btn-sm" data-on-click="loadAgents">Refresh</button>' +
-      '<button class="btn btn-primary btn-sm" data-on-click="showAgentDownload">&#8595; Deploy agent</button>',
+      '<button type="button" class="btn btn-outline" data-on-click="loadAgents">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh</button>' +
+      '<button type="button" id="agt-conn-cfg-btn" class="btn btn-outline" data-on-click="showConnectionConfig">' + svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>') + 'Connection Config</button>' +
+      '<button type="button" class="btn btn-primary" data-on-click="showAgentDownload">' + svg('<path d="M12 5v14M5 12h14"/>') + 'Deploy Agent</button>',
     stats: [
       { id: 'hs-agents-total', icon: ICON.total, value: '—', label: 'Agents' },
       { id: 'hs-agents-online', icon: ICON.ok, tone: 'ok', value: '—', label: 'Online' },
@@ -337,16 +338,35 @@ var HEROES = {
     icon: ICON.bolt,
     title: 'Exercises',
     sub: 'Purple-team exercises and OpenAEV content: scenarios, exercise plans and executions.',
+    stats: [
+      { id: 'ex-hs-scen', icon: ICON.bolt, value: '—', label: 'Scenarios' },
+      { id: 'ex-hs-plans', icon: ICON.flag, value: '—', label: 'Exercise plans' },
+      { id: 'ex-hs-execs', icon: ICON.runs, value: '—', label: 'Executions' },
+      { id: 'ex-hs-done', icon: ICON.ok, value: '—', label: 'Completed' },
+    ],
   },
   'hero-attack-coverage': {
     icon: ICON.mapped,
     title: 'Technique Coverage',
     sub: 'Per technique: what is simulated, detected, exercised, mapped to compliance and covered by a response playbook.',
+    stats: [
+      { id: 'tcv-hs-total', icon: ICON.mapped, value: '—', label: 'Techniques tracked' },
+      { id: 'tcv-hs-avg', icon: ICON.trend, value: '—', label: 'Avg coverage' },
+      { id: 'tcv-hs-covered', icon: ICON.ok, value: '—', label: 'Fully covered' },
+      { id: 'tcv-hs-gaps', icon: ICON.warn, value: '—', label: 'With gaps' },
+    ],
   },
   'hero-threat-priority': {
     icon: ICON.star,
     title: 'Threat Prioritization',
-    sub: 'Threat actors ranked by relevance to you, with the techniques you have not yet validated.',
+    sub: 'Threat actors ranked by relevance to your estate and validated gaps.',
+    actions: '<button type="button" class="btn btn-outline" data-on-click="loadThreatPriorityActors">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh model</button>',
+    stats: [
+      { id: 'tp-hs-actors', icon: ICON.star, value: '—', label: 'Actors tracked' },
+      { id: 'tp-hs-high', icon: ICON.warn, value: '—', label: 'High relevance' },
+      { id: 'tp-hs-techniques', icon: ICON.technique, value: '—', label: 'Techniques mapped' },
+      { id: 'tp-hs-gaps', icon: ICON.flag, value: '—', label: 'Coverage gaps' },
+    ],
   },
 };
 

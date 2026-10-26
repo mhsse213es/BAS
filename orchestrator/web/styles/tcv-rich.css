@@ -1,0 +1,40 @@
+/* Technique Coverage: actor card, summary cards, search / select bar and the technique table card (table chrome via .dt-*). */
+.tcv-actor { margin: 14px 0; padding: 16px; display: flex; flex-direction: column; gap: 0; }
+.tcv-actor .lbl-s { font-size: 10.5px; letter-spacing: .08em; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+.tcv-actor-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+.tcv-actor-row select { height: 36px; margin: 0; min-width: 200px; }
+.tcv-actor-note { font-size: 12.5px; }
+.tcv-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+.tcv-chip { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border-hi, var(--border)); background: transparent; color: var(--muted-hi, var(--muted)); font-size: 12px; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: background-color .15s, border-color .15s, color .15s; }
+.tcv-chip:hover { color: var(--text); }
+.tcv-chip.on { background: var(--accent-dim); border-color: var(--accent-border, var(--accent)); color: var(--info-text, var(--text)); }
+
+#cov-summary .rk-grid { margin-bottom: 14px; }
+.tcv-filters { margin: 0 0 14px; }
+.tcv-filters .rk-search { flex: 1 1 300px; }
+.tcv-filters .rk-search input, .tcv-filters select { height: 36px; margin: 0; }
+.tcv-filters .btn { height: 36px; display: inline-flex; align-items: center; gap: 6px; }
+.tcv-filters .btn[hidden] { display: none; }
+.tcv-filters .btn svg { width: 13px; height: 13px; }
+
+.tcv-card { margin-bottom: 14px; }
+.tcv-card .tbl-wrap { border: 0; }
+.tcv-state { padding: 18px 16px 22px; text-align: center; font-size: 13px; }
+
+#tcv-table-wrap { border: 0; border-radius: 0; box-shadow: none; background: transparent; max-height: 560px; overflow: auto; }
+#tcv-table-wrap[hidden] { display: none; }
+#tcv-table-wrap thead { position: sticky; top: 0; z-index: 2; }
+#tcv-table-wrap th { background: var(--elevated); box-shadow: 0 1px 0 var(--border); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; white-space: nowrap; }
+#tcv-table-wrap th.dt-th { cursor: pointer; user-select: none; }
+#tcv-table-wrap th.dt-th:hover { color: var(--text); }
+#tcv-table-wrap th.sorted { color: var(--info-text); }
+#tcv-table-wrap .dt-selcol { width: 34px; padding-right: 0; }
+#tcv-table-wrap tbody td { vertical-align: middle; font-size: 13px; }
+#tcv-table-wrap tbody tr:has(.dt-cb:checked) td { background: var(--accent-dim); }
+#tcv-table-wrap tbody tr:hover td { background: var(--hover); }
+#tcv-table-wrap tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+#tcv-empty[hidden], #tcv-dt-foot[hidden] { display: none; }
+.tcv-covcol { min-width: 180px; }
+.tcv-cov { display: flex; align-items: center; gap: 8px; min-width: 150px; }
+.tcv-cov .rk-bar { flex: 1; }
+.tcv-cov-n { min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }

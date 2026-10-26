@@ -1,9 +1,12 @@
 import { x } from './core/escape.js';
 import { closeFactoryDrawerOnBackdrop, closeFactorySource, loadFactoryHealth, openFactorySource, fhTableQuery, clearFhTableQuery, setFhPer, fhPage, fhSortBy, toggleFhCols, fhColToggle, fhSelectRow, fhSelectAll, clearFhSelection, fhRowKeydown, exportFhCsv, exportFhSelected } from './features/factory-health.js';
 import { stopEvent } from './core/actions.js';
+import { loadThreatPriorityActors, onThreatPrioritySearch, clearTpTableQuery, setTpPer, tpPage, tpSortBy, toggleTpCols, tpColToggle, tpSelectRow, tpSelectAll, clearTpSelection, tpRowKeydown, exportTpCsv, exportTpSelected, closeThreatPriorityDetail, closeThreatPriorityDetailOnBackdrop, tpGo } from './features/tp-view.js';
 import { toggleExpCols, setExpPer, expPage, expSortBy, expColToggle, expSelectRow, expSelectAll, clearExpSelection, expRowKeydown, exportExpCsv, exportExpSelected, clearExpTableQuery, expGo } from './features/exp-view.js';
 import { setRecLimit } from './features/attack-path.js';
+import { setCoverageActor, covSearch, covSetResult, covClearFilters, tcvTableQuery, clearTcvTableQuery, setTcvPer, tcvPage, tcvSortBy, toggleTcvCols, tcvColToggle, tcvSelectRow, tcvSelectAll, clearTcvSelection, exportTcvCsv, exportTcvSelected } from './features/tcv-view.js';
 import { recTableQuery, clearRecTableQuery, setRecPer, recPage, recSortBy, toggleRecCols, recColToggle, recSelectRow, recSelectAll, clearRecSelection, exportRecCsv, exportRecSelected } from './features/recommendations.js';
+import { exTblQuery, exTblClear, exTblPer, exTblPage, exTblSort, exTblCols, exTblColToggle, exTblSelectRow, exTblSelectAll, exTblClearSel, exTblExport, exTblExportSel, exRowKeydown } from './features/ex-view.js';
 import { closeAdvDrawer, closeAdvRunModal, closeTmplRun, confirmAdversaryRun, confirmTmplRun, loadAdversariesStop, openAdvDrawer, openAdvRunModal, openTmplRun, renderAdvRunWarn, renderAdversaryLibrary, renderTmplOSCompat, setTmplFilter, setTmplTargetMode, tmplGroupChange, tmplRunModeChange, tmplSelAgentChange, toggleAdversarySection } from './features/adversaries.js';
 import { clearEnrollmentTokens, copyEnrollmentToken, downloadEnrollmentTokensCsv, generateEnrollmentTokens } from './features/enroll-tokens.js';
 import { closeReinstateAgentModal, closeRemoveAgentModal, closeRevokeAgentModal, closeStopAgentModal, closeUninstallAgentModal, submitReinstateAgent, submitRemoveAgent, submitRevokeAgent, submitStopAgent, submitUninstallAgent, triggerTicketingSync } from './features/agent-actions.js';
@@ -33,6 +36,8 @@ import { cancelScheduledAssessment, closeSchedWizard, loadScheduledAssessments, 
 import { toggleNavPin } from './features/nav-extras.js';
 import { k8sSearch, k8sPickCluster, k8sSetCluster, k8sSetState, k8sClearFilters, k8sNewRun, k8sOpenRun, k8sRowKeydown, closeK8sDrawer, closeK8sDrawerOnBackdrop, k8sFilterClusterFromDrawer, k8sOpenCoverage } from './features/k8s-scenarios.js';
 import { setAgentsViewRich as setAgentsView } from './features/agents-risk-view.js';
+import { agtQuery, clearAgtQuery, setAgtPer, agtPage, agtSortBy, toggleAgtCols, agtColToggle, agtSelectRow, agtSelectAll, clearAgtSelection, exportAgtCsv, exportAgtSelected } from './features/agt-view.js';
+import { setAgentStatusSelect, setAgentOsSelect, clearAgentFilters, agentRowKeydown, showConnectionConfig } from './features/attack-path.js';
 import { _dismissLicenseGraceBanner, ackAllTamperEvents, doLogin, doLogoutFromMenu, goToProfileFromMenu, togglePasswordVisibility, licenseBannerDismissHoverOff, licenseBannerDismissHoverOn, openAgentDetailRiskTab, openSettingsFromMenu, setDashView, showTab, tamperAckHoverOff, tamperAckHoverOn, toggleSidebarCollapsed, toggleUserMenuFromEvent } from './features/shell.js';
 import { saveExecutionPolicyDefault } from './features/execution-policy.js';
 import { closeTAXIIConnectorModal, deleteTAXIIConnector, loadARTContentStatus, loadTAXIIConnectors, openTAXIIConnectorModal, removeConnectorConfig, reseedART, saveConnectorConfig, saveTAXIIConnectorForm, simCovHoverOff, simCovHoverOn, syncTAXIIConnectorNow, taxiiToggleAuthFields, testConnectorConfig, testTAXIIConnectorForm, toggleSimCoverage, triggerConnectorSync } from './features/threat-intel.js';
@@ -193,6 +198,22 @@ export const ACTIONS = {
   setRecPer,
   recPage,
   recSortBy,
+  setCoverageActor,
+  covSearch,
+  covSetResult,
+  covClearFilters,
+  tcvTableQuery,
+  clearTcvTableQuery,
+  setTcvPer,
+  tcvPage,
+  tcvSortBy,
+  toggleTcvCols,
+  tcvColToggle,
+  tcvSelectRow,
+  tcvSelectAll,
+  clearTcvSelection,
+  exportTcvCsv,
+  exportTcvSelected,
   toggleRecCols,
   recColToggle,
   recSelectRow,
@@ -200,6 +221,19 @@ export const ACTIONS = {
   clearRecSelection,
   exportRecCsv,
   exportRecSelected,
+  exTblQuery,
+  exTblClear,
+  exTblPer,
+  exTblPage,
+  exTblSort,
+  exTblCols,
+  exTblColToggle,
+  exTblSelectRow,
+  exTblSelectAll,
+  exTblClearSel,
+  exTblExport,
+  exTblExportSel,
+  exRowKeydown,
   clearEnrollmentTokens,
   copyEnrollmentToken,
   downloadEnrollmentTokensCsv,
@@ -488,13 +522,45 @@ export const ACTIONS = {
   selectDashPref,
   selectTIPack,
   selectTheme,
-  setAgentFilter,
-  setCoverageFilter,
   setExposureFilter,
   setThreatPriorityTier,
+  loadThreatPriorityActors,
+  onThreatPrioritySearch,
+  clearTpTableQuery,
+  setTpPer,
+  tpPage,
+  tpSortBy,
+  toggleTpCols,
+  tpColToggle,
+  tpSelectRow,
+  tpSelectAll,
+  clearTpSelection,
+  tpRowKeydown,
+  exportTpCsv,
+  exportTpSelected,
+  closeThreatPriorityDetail,
+  closeThreatPriorityDetailOnBackdrop,
+  tpGo,
   onExposureSearch,
   setAgentState,
   setAgentsView,
+  agtQuery,
+  clearAgtQuery,
+  setAgtPer,
+  agtPage,
+  agtSortBy,
+  toggleAgtCols,
+  agtColToggle,
+  agtSelectRow,
+  agtSelectAll,
+  clearAgtSelection,
+  exportAgtCsv,
+  exportAgtSelected,
+  setAgentStatusSelect,
+  setAgentOsSelect,
+  clearAgentFilters,
+  agentRowKeydown,
+  showConnectionConfig,
   setCampaignSource,
   setCampaignTab,
   setCovView,
@@ -547,7 +613,6 @@ export const ACTIONS = {
   showSettingsSection,
   showTab,
   showThreatPriorityDetail,
-  showThreatPriorityList,
   showVexStatHelp,
   simCovHoverOff,
   simCovHoverOn,

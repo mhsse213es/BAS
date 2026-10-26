@@ -4,8 +4,8 @@ import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
 import { apColor } from './attack-path.js';
 import { freshness as apAgeChip } from './ap-model.js';
-import { apRichBody, exStatusTone, exSummary } from './rich-g4.js';
-import { bar as kitBar, chip } from '../core/kit.js';
+import { apRichBody } from './rich-g4.js';
+import { setExRows, setExError, setExPlans, setExPlansError } from './ex-view.js';
 import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js';
 import { ROLE, showTab } from './shell.js';
 import { displayOf, setDisplay } from '../core/inline-style.js';
@@ -91,39 +91,11 @@ export function removeOpenAEVConfig() {
   });
 }
 
-// What the Exercises page last fetched, so the KPI strip and charts can be drawn from all four lists.
-var EX_STATE = { scen: null, exs: null, plans: null, execs: null };
-function renderExSummary() {
-  var el = document.getElementById('ex-summary');
-  if (el) el.innerHTML = exSummary(EX_STATE);
-}
-
-function loadOpenAEVScenarios(type, bodyId, emptyId) {
-  type = type || 'scenario';
-  bodyId = bodyId || 'openaev-scenarios-body';
-  emptyId = emptyId || 'openaev-scenarios-empty';
-  apicall('/api/openaev/scenarios?type=' + encodeURIComponent(type)).then(function(list) {
-    var body = document.getElementById(bodyId);
-    var empty = document.getElementById(emptyId);
-    EX_STATE[type === 'exercise' ? 'exs' : 'scen'] = list || [];
-    renderExSummary();
-    if (!list || !list.length) {
-      body.innerHTML = '';
-      setDisplay(empty, 'block');
-      return;
-    }
-    setDisplay(empty, 'none');
-    body.innerHTML = list.map(function(sc) {
-      return '<tr class="u-pointer"' + on('click', 'openOpenAEVDetail', sc.OpenAEVScenarioID) + '>' +
-        '<td>' + x(sc.Name) + '</td>' +
-        '<td>' + (sc.Category ? chip(sc.Category, 'muted') : '') + '</td>' +
-        '<td>' + (sc.Severity ? chip(sc.Severity, exSevTone(sc.Severity)) : '') + '</td>' +
-        '<td>' + (sc.TechniqueIDs || []).length + '</td>' +
-        '<td>' + x(sc.InjectsCount) + '</td>' +
-        '<td class="tiny muted">' + x(sc.SourceUpdatedAt || '') + '</td>' +
-        '</tr>';
-    }).join('');
-  }).catch(function() {});
+function loadOpenAEVScenarios(type) {
+  var kind = type === 'exercise' ? 'exs' : 'scen';
+  apicall('/api/openaev/scenarios?type=' + encodeURIComponent(type || 'scenario')).then(function(list) {
+    setExRows(kind, list);
+  }).catch(function(e) { setExError(kind, e && e.message); });
 }
 
 export function testOpenAEVConfig() {
@@ -212,54 +184,16 @@ export function closeOpenAEVDetail() {
 }
 export function closeOpenAEVDetailOnBackdrop(el, event) { if (event.target === el) closeOpenAEVDetail(); }
 
-function exSevTone(sev) {
-  var v = String(sev || '').toLowerCase();
-  return v === 'critical' ? 'bad' : v === 'high' ? 'warn' : v === 'medium' ? 'info' : v === 'low' ? 'ok' : 'muted';
-}
-
 export function loadExercisesTab() {
-  loadOpenAEVScenarios('scenario', 'openaev-scenarios-body', 'openaev-scenarios-empty');
-  loadOpenAEVScenarios('exercise', 'openaev-exercises-body', 'openaev-exercises-empty');
+  loadOpenAEVScenarios('scenario');
+  loadOpenAEVScenarios('exercise');
   apicall('/api/exercises/plans').then(function(plans) {
-    var body = document.getElementById('ex-plans-body');
-    var empty = document.getElementById('ex-plans-empty');
-    EX_STATE.plans = plans || [];
-    renderExSummary();
-    if (!plans || !plans.length) { body.innerHTML = ''; setDisplay(empty, 'block'); return; }
-    setDisplay(empty, 'none');
-    body.innerHTML = plans.map(function(p) {
-      return '<tr>' +
-        '<td>' + x(p.name) + '</td>' +
-        '<td>' + (p.steps ? p.steps.length : 0) + '</td>' +
-        '<td class="tiny muted">' + x(p.created_at || '') + '</td>' +
-        '<td><button class="btn btn-primary btn-sm"' + on('click', 'launchExercisePrompt', p.id) + '>Launch</button></td>' +
-        '</tr>';
-    }).join('');
-  }).catch(function() {});
+    setExPlans(plans);
+  }).catch(function(e) { setExPlansError(e && e.message); });
 
   apicall('/api/exercises/executions').then(function(execs) {
-    var body = document.getElementById('ex-execs-body');
-    var empty = document.getElementById('ex-execs-empty');
-    EX_STATE.execs = execs || [];
-    renderExSummary();
-    if (!execs || !execs.length) { body.innerHTML = ''; setDisplay(empty, 'block'); stopExPoll(); return; }
-    setDisplay(empty, 'none');
-    body.innerHTML = execs.map(function(e) {
-      var live = e.status === 'running' || e.status === 'paused';
-      var progress = e.steps_total
-        ? '<div class="g4-prog">' + kitBar(Math.round(((e.steps_done || 0) / e.steps_total) * 100), exStatusTone(e.status)) + '<small>' + x((e.steps_done || 0) + ' / ' + e.steps_total) + ' steps</small></div>'
-        : '<span class="tiny muted">—</span>';
-      var abortBtn = live
-        ? '<button class="btn btn-outline-red btn-sm"' + on('click', 'abortExecutionStop', e.id) + '>&#9632; Abort</button>'
-        : '';
-      return '<tr class="u-pointer"' + on('click', 'openExerciseDetail', e.id) + '>' +
-        '<td>' + x(e.name || e.plan_id) + '</td>' +
-        '<td>' + chip(e.status + (live ? ' · live' : ''), exStatusTone(e.status)) + '</td>' +
-        '<td class="tiny">' + progress + '</td>' +
-        '<td class="tiny muted">' + x(e.started_at || e.created_at || '') + '</td>' +
-        '<td class="td-r">' + abortBtn + '</td>' +
-        '</tr>';
-    }).join('');
+    setExRows('execs', execs);
+    if (!execs || !execs.length) { stopExPoll(); return; }
     // Keep the list (and any open detail drawer) live while anything is
     // still running/paused -- previously this was a one-shot snapshot from
     // whenever the tab was opened, so a launched exercise just sat on
@@ -271,7 +205,7 @@ export function loadExercisesTab() {
     } else {
       stopExPoll();
     }
-  }).catch(function() {});
+  }).catch(function(e) { setExError('execs', e && e.message); });
 }
 
 var _exPollTimer = null;

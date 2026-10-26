@@ -3,8 +3,10 @@
 // Pure builders (no DOM, no network): the page passes in /api/agents items + fleet totals, and the
 // /api/agents/risk-summary rows. Nothing is invented: every figure is a count or average over those rows.
 import { x } from '../core/escape.js';
-import { kpi, grid, card, hbars, empty } from '../core/kit.js';
+import { kpi, grid, card, hbars, empty, icon } from '../core/kit.js';
 import { chartSlot, CHART_COLORS } from '../core/charts.js';
+import { ring } from './runs-drawer.js';
+import * as M from './agt-model.js';
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
@@ -47,31 +49,55 @@ export function agentInsightStats(agents, totals) {
   };
 }
 
-function distCard(title, rows, loaded) {
-  if (!rows.length) return card(title, empty('server', 'No agents loaded yet'));
-  var max = rows[0][1] || 1;
-  return card(title, hbars(rows.map(function(r) { return [r[0], r[1] / max * 100, 'accent', String(r[1])]; })), { sub: loaded + ' loaded' });
+// A metric tile in the demo's style: tinted icon square on the left, small uppercase label, big value,
+// one-line caption, coloured top border.
+export function tileHtml(o) {
+  return '<div class="agt-tile agt-c-' + x(o.tone || 'accent') + '"><span class="agt-ico">' + icon(o.icon) + '</span><div class="agt-tb"><div class="agt-lbl">' + x(o.label) + '</div>' +
+    '<div class="agt-val">' + x(o.value) + '</div>' + (o.caption ? '<div class="agt-cap">' + x(o.caption) + '</div>' : '') + '</div></div>';
 }
 
-// agentInsightsHtml renders the strip for the System Tree view.
+function shareCard(title, rows, loadedNote, emptyText) {
+  if (!rows.length) return card(title, empty('server', emptyText || 'No agents loaded yet'));
+  return card(title, hbars(rows), loadedNote ? { sub: loadedNote } : undefined);
+}
+
+function loadedNote(list, totals) {
+  var fleet = M.fleetCount(totals);
+  return fleet > list.length ? list.length + ' of ' + fleet + ' loaded' : '';
+}
+
+function statusDonut(totals) {
+  var tone = { online: CHART_COLORS.ok, degraded: CHART_COLORS.warn, offline: CHART_COLORS.bad, retired: CHART_COLORS.muted };
+  var segs = M.statusSegments(totals).map(function(g) { return { label: g.label, value: g.value, color: tone[g.key] }; });
+  var total = segs.reduce(function(a, g) { return a + g.value; }, 0);
+  return segs.length
+    ? chartSlot({ type: 'donut', segments: segs, center: String(total), centerSub: 'agents', h: 150, legend: true })
+    : empty('server', 'No agents registered yet');
+}
+
+// agentInsightsHtml renders the three distribution cards of the System Tree view.
 export function agentInsightsHtml(agents, totals) {
-  var s = agentInsightStats(agents, totals);
-  var tiles = [
-    kpi({ label: 'Fleet online', value: s.onlinePct + '%', sub: s.online + ' of ' + s.fleet + ' agents', icon: 'ok', tone: s.fleet && s.onlinePct < 80 ? 'warn' : 'ok', action: 'setAgentFilter', args: ['online'] }),
-    kpi({ label: 'Needs attention', value: s.attention, sub: s.degraded + ' degraded, ' + s.offline + ' offline', icon: 'warn', tone: s.attention ? 'bad' : 'ok', action: 'setAgentFilter', args: [s.offline ? 'offline' : 'degraded'] }),
-    kpi({ label: 'Task channel down', value: s.channelDown, sub: 'heartbeat reaches server, WebSocket does not', icon: 'alert', tone: s.channelDown ? 'warn' : 'ok' }),
-    kpi({ label: 'Legacy transport', value: s.legacy, sub: s.legacy ? 'cannot receive signed commands' : 'all agents on mTLS', icon: 'shield', tone: s.legacy ? 'warn' : 'ok' }),
-  ];
-  var segs = [
-    { label: 'Online', value: s.online, color: CHART_COLORS.ok },
-    { label: 'Degraded', value: s.degraded, color: CHART_COLORS.warn },
-    { label: 'Offline', value: s.offline, color: CHART_COLORS.bad },
-    { label: 'Retired', value: s.retired, color: CHART_COLORS.muted },
-  ].filter(function(g) { return g.value > 0; });
-  var status = card('Fleet status', segs.length
-    ? chartSlot({ type: 'donut', segments: segs, center: String(s.fleet), centerSub: 'agents', h: 150, legend: true })
-    : empty('server', 'No agents registered yet'), { sub: 'whole fleet' });
-  return grid(4, tiles) + grid(3, [status, distCard('Operating systems', s.os, s.loaded), distCard('Groups', s.groups, s.loaded)]);
+  var list = agents || [];
+  var note = loadedNote(list, totals);
+  return grid(3, [
+    card('Status', statusDonut(totals)),
+    shareCard('Operating systems', M.osShareRows(list), note),
+    shareCard('Groups', M.groupShareRows(list, 5), note),
+  ]);
+}
+
+// agentOperationalHtml renders the Operational view's tiles and its two cards.
+export function agentOperationalHtml(agents, totals) {
+  var list = agents || [];
+  var tiles = M.opTiles(totals).map(tileHtml);
+  var os = M.osDonut(list);
+  var palette = [CHART_COLORS.accent, CHART_COLORS.ok, CHART_COLORS.violet, CHART_COLORS.warn, CHART_COLORS.teal, CHART_COLORS.pink, CHART_COLORS.muted];
+  var osCard = card('Agents by OS', os.length
+    ? chartSlot({ type: 'donut', segments: os.map(function(g, i) { return { label: g.label, value: g.value, color: palette[i % palette.length] }; }), center: String(list.length), centerSub: 'agents', h: 130, legend: true })
+    : empty('server', 'No agents loaded yet'), loadedNote(list, totals) ? { sub: loadedNote(list, totals) } : undefined);
+  var sims = M.simsRows(list, 6);
+  var simCard = card('Simulations per agent', sims.length ? hbars(sims) : empty('play', 'No simulations dispatched yet', 'Run a scenario on an agent to see it here.'));
+  return grid(4, tiles) + grid(2, [osCard, simCard]);
 }
 
 // riskInsightStats: summary of /api/agents/risk-summary rows. An endpoint with nothing collected has no
@@ -116,19 +142,19 @@ export function agentRiskInsightsHtml(rows) {
   return grid(4, tiles) + grid(2, [dist, issues]);
 }
 
-// migrationPanelHtml renders the legacy-transport migration status as a card.
+// migrationPanelHtml renders the legacy-transport migration status as the demo's card: a progress ring,
+// the title with "Days clean: n / m", and the status tag on the right; the unattributed-activity warning
+// and the blocking agents (real data the demo has no field for) sit underneath.
 export function migrationPanelHtml(status, fmtTime) {
+  var v = M.migrationView(status);
   var st = status || {};
-  var req = num(st.daysRequired), clean = num(st.daysClean);
-  var pct = req ? Math.min(100, Math.round(clean / req * 100)) : 0;
   var blocking = (st.blockingAgents || []).map(function(a) {
     return '<div class="legacy-blocking-row"><span>' + x(a.hostname || a.agentId) + '</span><span class="legacy-blocking-time">' + x(fmtTime(a.lastSeen)) + '</span></div>';
   }).join('');
   var unattributed = st.unattributedRequests
     ? '<div class="legacy-unattributed-warning">&#9888; Unattributed legacy activity: ' + x(st.unattributedRequests.count) + ' request(s) — retirement blocked</div>' : '';
-  return '<div class="legacy-migration-header">Legacy Transport Migration</div>' +
-    '<div class="legacy-migration-days">Days clean: ' + x(clean) + ' / ' + x(req) + '</div>' +
-    '<div class="rk-bar thick tone-' + (st.eligible ? 'ok' : 'warn') + ' rich-g5-migbar"><i data-w="' + pct + '"></i></div>' +
-    '<div class="legacy-migration-status ' + (st.eligible ? 'eligible' : 'not-eligible') + '">' + (st.eligible ? 'ELIGIBLE FOR REVIEW' : 'NOT YET ELIGIBLE') + '</div>' +
-    unattributed + (blocking ? '<div class="legacy-blocking-list">' + blocking + '</div>' : '');
+  return '<div class="agt-mig tone-' + v.tone + '"><div class="agt-mig-row">' +
+    '<div class="agt-mig-l">' + ring(v.pct, v.tone) + '<div><b>Legacy transport migration</b><div class="muted agt-mig-days">Days clean: ' + x(v.clean) + ' / ' + x(v.required) + '</div></div></div>' +
+    '<span class="agt-tag tone-' + v.tone + ' ' + (st.eligible ? 'eligible' : 'not-eligible') + '">' + x(v.label) + '</span></div>' +
+    unattributed + (blocking ? '<div class="legacy-blocking-list">' + blocking + '</div>' : '') + '</div>';
 }

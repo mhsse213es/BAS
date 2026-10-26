@@ -319,6 +319,9 @@ function bootApp() {
     var nb = document.getElementById('sc-new-btn');     if (nb) setDisplay(nb, 'none');
     var ub = document.getElementById('sc-upload-btn');  if (ub) setDisplay(ub, 'none');
   }
+  // Agents banner: Connection Config (server URL, agent secret, enrollment tokens) is admin only.
+  var agtCfgBtn = document.getElementById('agt-conn-cfg-btn');
+  if (agtCfgBtn) setDisplay(agtCfgBtn, ROLE === 'admin' ? '' : 'none');
   // Remediation bulk ticket actions — analyst+
   var remTicketActions = document.getElementById('rem-ticket-actions');
   if (remTicketActions) setDisplay(remTicketActions, (ROLE === 'admin' || ROLE === 'analyst') ? 'flex' : 'none');
