@@ -5,7 +5,7 @@
   sequence that would run in the wrong place.
   Usage: .\Test-MsiStructure.ps1 -Msi ..\out\AudspectAgent.msi
 #>
-param([Parameter(Mandatory)][string]$Msi)
+param([Parameter(Mandatory)][string]$Msi, [string]$CaDll)
 $ErrorActionPreference = 'Stop'
 $Msi = (Resolve-Path $Msi).Path
 $failures = New-Object System.Collections.Generic.List[string]
@@ -92,6 +92,14 @@ Check (@($reg | Where-Object { $_[0] -eq 'ProductCode' -and $_[1] -eq '[ProductC
 
 $upg = Query 'SELECT `UpgradeCode`, `Attributes` FROM `Upgrade`'
 Check ($upg.Count -ge 1) 'a major-upgrade entry exists'
+
+# The custom action package must carry its runtime config, or the installer binds CLR 2.0 and cannot load the .NET 4.7.2
+# assembly (BadImageFormatException, install fails with 1603 on a machine that has only .NET 4.x).
+if ($CaDll) {
+    $caBytes = [IO.File]::ReadAllBytes($CaDll)
+    $caText = [Text.Encoding]::ASCII.GetString($caBytes)
+    Check ($caText.Contains('CustomAction.config')) 'the custom action package includes CustomAction.config (runtime v4.0)'
+}
 
 if ($failures.Count -gt 0) { Write-Host "`n$($failures.Count) check(s) failed"; exit 1 }
 Write-Host "`nAll structural checks passed."

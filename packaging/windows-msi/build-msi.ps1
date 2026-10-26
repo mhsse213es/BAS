@@ -97,7 +97,7 @@ try {
     if ($LASTEXITCODE -ne 0) { Fail 'MSI validation failed.' }
 
     Step 'Checking the MSI structure'
-    powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'tests\Test-MsiStructure.ps1') -Msi $msiPath
+    powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'tests\Test-MsiStructure.ps1') -Msi $msiPath -CaDll $caDll
     if ($LASTEXITCODE -ne 0) { Fail 'MSI structure checks failed.' }
 
     $mode = 'unsigned'

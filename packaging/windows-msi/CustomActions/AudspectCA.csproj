@@ -6,6 +6,11 @@
     <LangVersion>9.0</LangVersion>
     <Nullable>disable</Nullable>
   </PropertyGroup>
+  <!-- MakeSfxCA only reads CustomAction.config if it is packed as Content. Without it the installer binds CLR 2.0 and
+       cannot load this .NET 4.7.2 assembly (BadImageFormatException, install fails with 1603). -->
+  <ItemGroup>
+    <Content Include="CustomAction.config" CopyToOutputDirectory="Never" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="WixToolset.Dtf.CustomAction" Version="5.0.2" />
     <Reference Include="System.ServiceProcess" />
