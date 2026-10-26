@@ -1,10 +1,17 @@
 #!/bin/bash
 # install-agent-linux.sh: installs or upgrades the BAS agent on this Linux host.
 #
-#   sudo ./install-agent-linux.sh [<agent-secret>] [--ca-file ./deployment-ca.pem]
+#   sudo ./install-agent-linux.sh [--ca-file ./deployment-ca.pem] [--token-file <path> | --token-stdin]
 #
-# Without a secret argument it asks for the secret. --ca-file uses a CA the console already embedded
-# in the install command, so the CA is not fetched over the network at all.
+# Credentials never go on a command line, where any local user can read them from the process list:
+#   agent secret        asked for interactively, or BAS_AGENT_SECRET in the environment
+#                       (a positional <agent-secret> is still accepted for old command lines but is discouraged)
+#   enrolment token     (servers in token mode) asked for interactively, or --token-file <path> (the file is
+#                       deleted once it is read), or --token-stdin (first line of stdin; then give the
+#                       secret through BAS_AGENT_SECRET), or BAS_ENROLLMENT_TOKEN in the environment.
+#                       The token is single use and bound to this host; never put one in a shared script.
+# --ca-file uses a CA the console already embedded in the install command, so the CA is not fetched
+# over the network at all.
 #
 # Only the agent secret is needed. The server address, ports and agent binary default to this
 # server's values and can be overridden with environment variables or options:
@@ -23,7 +30,7 @@
 # --ca-fingerprint is strongly recommended: without it the first contact is trusted as-is.
 set -euo pipefail
 
-AGENT=""; SECRET=""; FINGERPRINT=""; CA_SRC=""
+AGENT=""; SECRET="${BAS_AGENT_SECRET:-}"; FINGERPRINT=""; CA_SRC=""; TOKEN_FILE=""; TOKEN_STDIN=0
 HOST="${BAS_SERVER_HOST:-192.168.10.78}"
 PORT="${BAS_ENROLL_PORT:-9445}"
 DASH_PORT="${BAS_DASHBOARD_PORT:-9543}"
@@ -33,7 +40,7 @@ CERT_DIR="${BAS_CERT_DIR:-/etc/audspect/certs}"
 CA_FILE="/etc/audspect-agent/deployment-ca.pem"
 IDENTITY_FILES="agent-cert.pem agent-key.pem enrollment-state"
 
-usage() { echo "usage: sudo $0 <agent-secret> [--agent <binary>] [--ca-fingerprint <sha256>]" >&2; exit 2; }
+usage() { echo "usage: sudo $0 [--agent <binary>] [--ca-fingerprint <sha256>] [--token-file <path> | --token-stdin]" >&2; exit 2; }
 
 # clear_stale_identity <new-ca-pem>: moves the agent's identity aside when it was issued under a different CA.
 clear_stale_identity() {
@@ -67,6 +74,8 @@ while [ $# -gt 0 ]; do
     --agent) AGENT="${2:-}"; shift 2 ;;
     --ca-fingerprint) FINGERPRINT="${2:-}"; shift 2 ;;
     --ca-file) CA_SRC="${2:-}"; shift 2 ;;
+    --token-file) TOKEN_FILE="${2:-}"; shift 2 ;;
+    --token-stdin) TOKEN_STDIN=1; shift ;;
     -h|--help) usage ;;
     -*) echo "unknown option: $1" >&2; usage ;;
     *) if [ -z "$SECRET" ]; then SECRET="$1"; shift; else echo "unexpected argument: $1" >&2; usage; fi ;;
@@ -78,6 +87,34 @@ if [ -z "$SECRET" ]; then
     echo
   fi
   [ -n "$SECRET" ] || usage
+fi
+
+# The enrolment token, if the server is in token mode. It is written to a private file (umask 077) that the
+# agent reads once and deletes; it is never placed on a command line.
+umask 077
+TOKEN_DIR="$(mktemp -d)"
+TOKEN_PATH=""
+if [ "$TOKEN_STDIN" -eq 1 ] && [ -n "$TOKEN_FILE" ]; then
+  echo "use --token-file or --token-stdin, not both" >&2; exit 2
+fi
+if [ "$TOKEN_STDIN" -eq 1 ]; then
+  IFS= read -r TOKEN_VALUE || true
+  [ -n "${TOKEN_VALUE:-}" ] || { echo "no enrolment token was provided on stdin" >&2; exit 2; }
+  printf '%s\n' "$TOKEN_VALUE" > "$TOKEN_DIR/token"; unset TOKEN_VALUE
+  TOKEN_PATH="$TOKEN_DIR/token"
+elif [ -n "$TOKEN_FILE" ]; then
+  [ -f "$TOKEN_FILE" ] || { echo "token file not found: $TOKEN_FILE" >&2; exit 1; }
+  TOKEN_PATH="$TOKEN_FILE"
+elif [ -n "${BAS_ENROLLMENT_TOKEN:-}" ]; then
+  printf '%s\n' "$BAS_ENROLLMENT_TOKEN" > "$TOKEN_DIR/token"; unset BAS_ENROLLMENT_TOKEN
+  TOKEN_PATH="$TOKEN_DIR/token"
+elif [ -t 0 ]; then
+  read -r -s -p "Enrolment token (press Enter to skip if this server uses the shared secret only): " TOKEN_VALUE
+  echo
+  if [ -n "$TOKEN_VALUE" ]; then
+    printf '%s\n' "$TOKEN_VALUE" > "$TOKEN_DIR/token"; TOKEN_PATH="$TOKEN_DIR/token"
+  fi
+  unset TOKEN_VALUE
 fi
 
 if [ -z "$AGENT" ]; then
@@ -98,7 +135,7 @@ fi
 command -v openssl >/dev/null || { echo "openssl is required" >&2; exit 1; }
 
 TMP_CA="$(mktemp)"
-trap 'rm -f "$TMP_CA"' EXIT
+trap 'rm -f "$TMP_CA"; rm -rf "$TOKEN_DIR"' EXIT
 
 CA_URL="https://${HOST}:${DASH_PORT}/api/config/ca-root"
 echo "==> Fetching deployment CA from ${CA_URL}"
@@ -136,5 +173,17 @@ install -m 0644 "$TMP_CA" "$CA_FILE"
 
 echo "==> Installing the agent"
 chmod +x "$AGENT"
-"$AGENT" -install -server "https://${HOST}:${MTLS_PORT}" -enroll-port "$PORT" \
-  -secret "$SECRET" -ca-root "$CA_FILE" -env "$ENV"
+AGENT_ARGS=(-install -server "https://${HOST}:${MTLS_PORT}" -enroll-port "$PORT" -ca-root "$CA_FILE" -env "$ENV" --secret-stdin)
+if [ -n "$TOKEN_PATH" ]; then AGENT_ARGS+=(--enrollment-token-file "$TOKEN_PATH"); fi
+# The secret goes in on stdin (printf is a shell builtin, so it never appears in a process list).
+set +e
+printf '%s\n' "$SECRET" | "$AGENT" "${AGENT_ARGS[@]}"
+RC=$?
+set -e
+unset SECRET
+case "$RC" in
+  0) ;;
+  26) echo "ERROR: the server refused the enrolment token (invalid, expired, already used, or issued for a different host). Ask the administrator for a new token for this host." >&2; exit 26 ;;
+  27) echo "ERROR: could not reach the server to enrol (${HOST}, enrolment port ${PORT}). This is a connection problem, not a token problem: check the network, firewall and port." >&2; exit 27 ;;
+  *) exit "$RC" ;;
+esac
