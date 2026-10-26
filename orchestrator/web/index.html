@@ -1467,17 +1467,14 @@
       <!-- Initiatives -->
       <div id="tab-initiatives" class="is-hidden">
         <div id="hero-initiatives"></div>
-        <div id="init-summary"></div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr>
-              <th>Name</th><th>State</th><th>Created by</th><th>Created</th><th></th>
-            </tr></thead>
-            <tbody id="init-body">
-              <tr><td colspan="5" class="empty">Loading…</td></tr>
-            </tbody>
-          </table>
+        <div class="rk-filters init-filters" id="init-filters" hidden>
+          <div id="init-filter"></div>
+          <span class="grow"></span>
+          <label class="rk-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="init-search" placeholder="Search initiatives or owners..." data-on-input="initiativeSearch"></label>
+          <button type="button" id="init-clear" class="btn btn-outline btn-sm" data-on-click="initiativeClearFilters" hidden>Clear</button>
         </div>
+        <div id="init-body" class="rk-grid g2 init-grid"><div class="init-loading muted">Loading…</div></div>
+        <div id="init-empty" hidden></div>
       </div>
 
       <!-- Factory Health -->
@@ -3492,54 +3489,53 @@
         </div>
 
 <div id="init-drawer-overlay" class="drawer-overlay" data-on-click="closeInitiativeDrawerOnBackdrop">
-  <div class="drawer g1-s-37327333">
+  <div class="drawer sc-drawer" role="dialog" aria-modal="true" aria-label="Initiative details">
     <div class="drawer-header">
-      <h3 id="init-drawer-title">Initiative</h3>
-      <button class="drawer-close" data-on-click="closeInitiativeDrawer">&#10005;</button>
+      <div class="sc-dh"><span class="sc-dh-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4h11l-2 4 2 4H5"/></svg></span><div><div class="sc-dh-t" id="init-drawer-title">Initiative</div><div class="sc-dh-s" id="init-drawer-sub"></div></div></div>
+      <button class="drawer-close" data-on-click="closeInitiativeDrawer" aria-label="Close">&#10005;</button>
     </div>
     <div class="drawer-body" id="init-drawer-body"></div>
+    <div class="sc-drawer-ft" id="init-drawer-foot"></div>
   </div>
 </div>
 
-<!-- Initiative Create Drawer -->
-<div id="init-create-overlay" class="drawer-overlay" data-on-click="closeInitiativeCreateDrawerOnBackdrop">
-  <div class="drawer g1-s-e1623379">
-    <div class="drawer-header">
-      <h3>New Initiative</h3>
-      <button class="drawer-close" data-on-click="closeInitiativeCreateDrawer">&#10005;</button>
+<!-- Initiative Create modal -->
+<div id="init-create-overlay" class="overlay" data-on-click="closeInitiativeCreateDrawerOnBackdrop">
+  <div class="modal init-modal" role="dialog" aria-modal="true" aria-label="New Initiative">
+    <div class="init-mhd">
+      <h3><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4h11l-2 4 2 4H5"/></svg>New Initiative</h3>
+      <button type="button" class="drawer-close" data-on-click="closeInitiativeCreateDrawer" aria-label="Close">&#10005;</button>
     </div>
-    <div class="drawer-body">
-      <label class="g1-display-block g1-s-841e0085">Name</label>
-      <input type="text" id="init-create-name" placeholder="Q3 2026 Patch Compliance" class="g1-s-47746990">
-
-      <label class="g1-display-block g1-s-841e0085">Description (optional)</label>
-      <textarea id="init-create-desc" rows="3" placeholder="Quarterly patch push across the BFSI fleet" class="g1-s-0bb96111"></textarea>
-
-      <div id="init-create-error" class="g1-s-6d6ac12c"></div>
-
-      <div class="g1-display-flex g1-s-36404264">
-        <button class="btn btn-outline btn-sm" data-on-click="closeInitiativeCreateDrawer">Cancel</button>
-        <button class="btn btn-primary btn-sm" data-on-click="submitInitiativeCreate">Create</button>
-      </div>
+    <div class="init-mbd">
+      <label class="modal-lbl" for="init-create-name">Name</label>
+      <input type="text" id="init-create-name" class="init-field" placeholder="e.g. Close Kerberoasting exposure">
+      <label class="modal-lbl" for="init-create-desc">Objective (optional)</label>
+      <textarea id="init-create-desc" class="init-field" rows="4" placeholder="What this initiative should achieve"></textarea>
+      <div id="init-create-error"></div>
+    </div>
+    <div class="init-mft">
+      <button type="button" class="btn btn-outline btn-sm" data-on-click="closeInitiativeCreateDrawer">Cancel</button>
+      <button type="button" class="btn btn-primary btn-sm" data-on-click="submitInitiativeCreate">Create initiative</button>
     </div>
   </div>
 </div>
 
-<!-- Initiative Attach Job Drawer -->
-<div id="init-attach-overlay" class="drawer-overlay" data-on-click="closeInitiativeAttachDrawerOnBackdrop">
-  <div class="drawer g1-s-e1623379">
-    <div class="drawer-header">
-      <h3>Attach Job</h3>
-      <button class="drawer-close" data-on-click="closeInitiativeAttachDrawer">&#10005;</button>
+<!-- Initiative Attach Job modal -->
+<div id="init-attach-overlay" class="overlay" data-on-click="closeInitiativeAttachDrawerOnBackdrop">
+  <div class="modal init-modal" role="dialog" aria-modal="true" aria-label="Attach Job">
+    <div class="init-mhd">
+      <h3><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Attach Job</h3>
+      <button type="button" class="drawer-close" data-on-click="closeInitiativeAttachDrawer" aria-label="Close">&#10005;</button>
     </div>
-    <div class="drawer-body">
-      <input type="text" id="init-attach-search" placeholder="Search job ID or type" data-on-input="initiativeRenderAttachList" class="g1-s-47746990">
-      <div id="init-attach-list" class="g1-s-fa075f67"></div>
-      <div id="init-attach-error" class="g1-s-6d6ac12c"></div>
-      <div class="g1-display-flex g1-s-36404264">
-        <button class="btn btn-outline btn-sm" data-on-click="closeInitiativeAttachDrawer">Cancel</button>
-        <button class="btn btn-primary btn-sm" data-on-click="submitInitiativeAttach">Attach</button>
-      </div>
+    <div class="init-mbd">
+      <label class="modal-lbl" for="init-attach-search">Job</label>
+      <input type="text" id="init-attach-search" class="init-field" placeholder="Search job ID or type" data-on-input="initiativeRenderAttachList">
+      <div id="init-attach-list" class="init-attach-list"></div>
+      <div id="init-attach-error"></div>
+    </div>
+    <div class="init-mft">
+      <button type="button" class="btn btn-outline btn-sm" data-on-click="closeInitiativeAttachDrawer">Cancel</button>
+      <button type="button" class="btn btn-primary btn-sm" data-on-click="submitInitiativeAttach">Attach</button>
     </div>
   </div>
 </div>

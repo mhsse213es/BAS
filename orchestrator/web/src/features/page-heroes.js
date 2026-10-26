@@ -39,6 +39,7 @@ export var ICON = {
   mail: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>'),
   factory: svg('<path d="M3 21V10l6 4V10l6 4V6h6v15z"/>'),
   bolt: svg('<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>'),
+  box: svg('<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>'),
   mapped: svg('<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>'),
   star: svg('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>'),
 };
@@ -156,10 +157,15 @@ var HEROES = {
   'hero-initiatives': {
     icon: ICON.flag,
     title: 'Initiatives',
-    sub: 'Group related assessments and jobs under one goal and follow their progress together.',
-    actions: '<div class="g1-display-flex g1-s-9b5be34d"><div id="init-filter" class="g1-display-flex g1-s-48b783bb"><button class="btn btn-outline btn-sm active" data-init-filter="active" data-on-click="initiativeSetFilter" data-args="[&quot;active&quot;]">Active</button><button class="btn btn-outline btn-sm" data-init-filter="closed" data-on-click="initiativeSetFilter" data-args="[&quot;closed&quot;]">Closed</button><button class="btn btn-outline btn-sm" data-init-filter="archived" data-on-click="initiativeSetFilter" data-args="[&quot;archived&quot;]">Archived</button><button class="btn btn-outline btn-sm" data-init-filter="all" data-on-click="initiativeSetFilter" data-args="[&quot;all&quot;]">All</button></div><button class="btn btn-outline btn-sm" data-on-click="loadInitiatives">Refresh</button><button class="btn btn-primary btn-sm" data-on-click="openInitiativeCreateDrawer">+ New Initiative</button></div>',
+    sub: 'Programmes that group validation jobs into measurable remediation goals.',
+    actions:
+      '<button type="button" class="btn btn-outline" data-on-click="loadInitiatives">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh</button>' +
+      '<button type="button" class="btn btn-primary" data-on-click="openInitiativeCreateDrawer">' + svg('<path d="M12 5v14M5 12h14"/>') + 'New Initiative</button>',
     stats: [
-      { id: 'init-cnt', icon: ICON.flag, value: '—', label: 'Initiatives' },
+      { id: 'init-cnt', icon: ICON.flag, value: '—', label: 'Active' },
+      { id: 'init-hs-progress', icon: ICON.trend, value: '—', label: 'Avg progress' },
+      { id: 'init-hs-risk', icon: ICON.warn, value: '—', label: 'At risk' },
+      { id: 'init-hs-jobs', icon: ICON.box, value: '—', label: 'Jobs attached' },
     ],
   },
   'hero-campaigns': {

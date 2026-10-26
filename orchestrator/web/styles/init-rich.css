@@ -1,0 +1,75 @@
+/* Initiatives page: banner buttons, the filter row, the initiative cards, the detail drawer and the
+   create / attach modals. Mirrors the design demo. Theme tokens only. */
+
+#hero-initiatives .hero-actions .btn svg { width: 15px; height: 15px; margin-right: 6px; vertical-align: -3px; flex: none; }
+#hero-initiatives .hero-actions .btn { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; font-size: 13px; width: auto; }
+
+/* Filter row: chips left, search right */
+.init-filters { margin: 14px 0; justify-content: space-between; }
+.init-filters[hidden], .init-filters .btn[hidden] { display: none; }
+.init-filters .grow { flex: 1; }
+.init-filters .rk-search { flex: 0 1 300px; }
+.init-filters .rk-search input { height: 36px; margin: 0; }
+.init-filters .btn { height: 36px; }
+
+/* Cards */
+.init-grid { gap: 14px; }
+.init-grid[hidden], #init-empty[hidden] { display: none; }
+.init-loading { padding: 14px 4px; font-size: 13px; }
+.init-card { cursor: pointer; transition: border-color .15s, background .15s; min-width: 0; }
+.init-card:hover { border-color: var(--accent-border); }
+.init-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.init-hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.init-hd-l { min-width: 0; }
+.init-hd h2 { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.init-sub { font-size: 12px; margin-top: 4px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.init-tags { display: flex; gap: 6px; align-items: center; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+.init-desc { font-size: 12.5px; margin: 10px 0 12px; color: var(--muted-hi); line-height: 1.5; overflow-wrap: anywhere; }
+.init-desc.muted { color: var(--muted); }
+.init-strip { display: flex; gap: 4px; }
+.init-strip i { flex: 1; height: 6px; border-radius: 3px; background: var(--border-hi); min-width: 2px; }
+.init-strip i.done { background: var(--success); }
+.init-strip i.run { background: var(--warning); }
+.init-strip i.fail { background: var(--danger); }
+.init-prog { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted-hi); margin: 10px 0 6px; }
+.init-facts { display: flex; justify-content: space-between; margin-top: 14px; font-size: 12px; color: var(--muted); }
+.init-facts svg, .init-sub svg { width: 13px; height: 13px; vertical-align: -2px; }
+.init-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; gap: 8px; flex-wrap: wrap; }
+.init-av { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--accent-dim); color: var(--accent); font-size: 9px; font-weight: 700; vertical-align: -4px; margin-right: 2px; flex: none; }
+.init-empty-act { display: flex; justify-content: center; margin-top: 8px; }
+@media (max-width: 800px) { .init-filters .rk-search { flex-basis: 100%; } .init-tags { justify-content: flex-start; } .init-hd { flex-direction: column; } }
+
+/* Drawer */
+#init-drawer-overlay .drawer { width: min(640px, 94vw); }
+#init-drawer-overlay .drawer-header { padding: 14px 20px; gap: 12px; }
+#init-drawer-overlay .drawer-body { padding: 18px 20px 20px; }
+#init-drawer-overlay .sc-dh-ico svg { width: 24px; height: 24px; }
+.init-dr-top { flex-wrap: wrap; }
+.init-dr-tags { display: flex; gap: 6px; align-items: center; }
+.init-dr-desc { margin: 0 0 14px; color: var(--muted-hi); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.init-dr-err:empty { display: none; }
+.init-dr-err { margin-bottom: 10px; }
+.init-dr-tbl { border: 1px solid var(--border); border-radius: 10px; }
+.init-jid { font-size: 11px; }
+.init-jact { text-align: right; white-space: nowrap; }
+.init-del { color: var(--danger-text); border-color: var(--danger-border); }
+.init-del:hover { background: var(--danger-dim); }
+#init-drawer-overlay .sc-drawer-ft .btn svg { width: 13px; height: 13px; }
+
+/* Create / attach modals */
+.init-modal { width: min(560px, 94vw); padding: 0; }
+.init-mhd { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+.init-mhd h3 { display: flex; align-items: center; gap: 8px; margin: 0; }
+.init-mhd h3 svg { color: var(--muted-hi); flex: none; }
+.init-mbd { padding: 16px 20px 6px; }
+.init-mbd .modal-lbl { display: block; margin-bottom: 6px; }
+.init-field { width: 100%; margin: 0 0 14px; padding: 8px 10px; background: var(--elevated); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: inherit; resize: vertical; }
+.init-field:focus { outline: none; border-color: var(--accent); }
+.init-mft { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+.init-mft .btn { width: auto; flex: none; }
+.init-attach-list { max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; }
+.init-attach-note { padding: 12px; }
+.init-attach-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 12.5px; }
+.init-attach-row:last-child { border-bottom: 0; }
+.init-attach-row:hover { background: var(--hover); }
+.init-attach-type { flex: 1; min-width: 0; overflow-wrap: anywhere; }
