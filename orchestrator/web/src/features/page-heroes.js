@@ -50,9 +50,9 @@ var HEROES = {
       '<button class="btn btn-outline btn-sm" data-on-click="showTab" data-args="[&quot;reports&quot;]">Generate report</button>' +
       '<button class="btn btn-primary btn-sm" data-on-click="openModal">&#9654; New simulation</button>',
     stats: [
-      { id: 'hs-dash-agents', icon: ICON.agents, value: '—', label: 'Agents' },
-      { id: 'hs-dash-techniques', icon: ICON.technique, value: '—', label: 'ATT&CK techniques tested' },
-      { id: 'hs-dash-runs', icon: ICON.runs, value: '—', label: 'Runs' },
+      { id: 'hs-dash-validations', icon: ICON.runs, value: '—', label: 'Validations (30d)' },
+      { id: 'hs-dash-detect', icon: ICON.check, value: '—', label: 'Detection rate' },
+      { id: 'hs-dash-online', icon: ICON.agents, value: '—', label: 'Agents online' },
       { id: 'hs-dash-last', icon: ICON.clock, value: '—', label: 'Last assessment' },
     ],
   },
@@ -61,9 +61,13 @@ var HEROES = {
     title: 'Executive Dashboard',
     sub: 'Fleet-wide risk, exposure, and detection-coverage trends over time — daily snapshots, not a single point-in-time report.',
     actions:
-      '<select id="ed-range" data-on-change="loadExecDashboard" aria-label="Time range">' +
-        '<option value="30">30 days</option><option value="90" selected>90 days</option><option value="365">1 year</option></select>' +
-      '<button class="btn btn-outline btn-sm" data-on-click="loadExecDashboard">Refresh</button>',
+      '<button class="btn btn-outline btn-sm" data-on-click="showTab" data-args="[&quot;reports&quot;]">Generate report</button>',
+    stats: [
+      { id: 'hs-exec-risk', icon: ICON.check, value: '—', label: 'Risk score' },
+      { id: 'hs-exec-exposure', icon: ICON.warn, value: '—', label: 'Exposure score' },
+      { id: 'hs-exec-detect', icon: ICON.mapped, value: '—', label: 'Detection coverage' },
+      { id: 'hs-exec-fleet', icon: ICON.agents, value: '—', label: 'Fleet assets' },
+    ],
   },
   'hero-agents': {
     icon: ICON.agents,

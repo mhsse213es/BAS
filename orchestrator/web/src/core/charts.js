@@ -183,6 +183,9 @@ export function applyDataWidths(root) {
   const scope = root || document;
   const list = scope.querySelectorAll ? scope.querySelectorAll('[data-w]') : [];
   list.forEach((el) => { el.style.width = el.getAttribute('data-w') + '%'; el.removeAttribute('data-w'); });
+  // Swatches and bar fills outside a chart carry their colour as data-bg (same reason: no style attribute).
+  (scope.querySelectorAll ? scope.querySelectorAll('[data-bg]') : []).forEach((el) => { el.style.background = el.getAttribute('data-bg'); el.removeAttribute('data-bg'); });
+  if (scope.hasAttribute && scope.hasAttribute('data-bg')) { scope.style.background = scope.getAttribute('data-bg'); scope.removeAttribute('data-bg'); }
   if (scope.hasAttribute && scope.hasAttribute('data-w')) { scope.style.width = scope.getAttribute('data-w') + '%'; scope.removeAttribute('data-w'); }
 }
 

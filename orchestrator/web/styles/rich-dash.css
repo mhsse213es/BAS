@@ -1,0 +1,166 @@
+/* Dashboard (operational + executive): layout and cards that mirror the design demo. Theme tokens only. */
+
+/* Toolbar row: view toggle on the left, executive range + refresh (or a one-line note) on the right */
+.dp-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.dp-toolbar .dash-view-toggle { margin-bottom: 0; }
+.dp-toolbar-r { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.dp-exec-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dp-exec-tools.is-hidden { display: none; }
+.dp-toolbar .tiny { font-size: 12px; color: var(--muted); }
+
+/* Grids. Cells wrap one card each and stretch it to the row height. */
+.dp-g5 { display: grid; gap: 14px; grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: 4px; }
+.dp-side { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) 300px; margin-bottom: 14px; }
+.dp-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.dp-cell { display: grid; min-width: 0; }
+.dp-cell > .rk-card { margin: 0; height: 100%; }
+.dp-col > .dp-cell > .rk-card { height: auto; }
+.dp-full { margin-bottom: 14px; }
+#tab-dashboard .rk-grid { margin-bottom: 14px; }
+@media (max-width: 1100px) { .dp-g5 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dp-side { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .dp-g5 { grid-template-columns: minmax(0, 1fr); } }
+
+/* Section label with an optional link on the right */
+.dp-sec { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 22px 0 10px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rk-link { background: none; border: 0; padding: 0; font: inherit; font-size: 12.5px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--accent); cursor: pointer; white-space: nowrap; }
+.rk-link:hover { text-decoration: underline; }
+.dp-pills { display: inline-flex; gap: 8px; flex-wrap: wrap; text-transform: none; letter-spacing: 0; }
+.dp-pills span { padding: 4px 11px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); color: var(--muted); }
+.dp-pills .up { color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, var(--border)); background: color-mix(in srgb, var(--success) 10%, transparent); }
+.dp-pills .down { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+
+/* Regulatory compliance: one card per framework, seven across */
+.dp-reg { display: grid; gap: 12px; grid-template-columns: repeat(7, minmax(0, 1fr)); margin-bottom: 14px; }
+.dp-reg > .rk-card.dp-wide { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 1280px) { .dp-reg { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .dp-reg { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rk-reg { position: relative; overflow: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px; box-shadow: var(--shadow-sm); min-width: 0; transition: transform .15s, border-color .15s; }
+.rk-reg::after { content: ""; position: absolute; inset: auto 0 0 0; height: 2px; background: var(--kc, var(--accent)); opacity: .7; }
+.rk-reg.rk-click { cursor: pointer; }
+.rk-reg.rk-click:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--kc) 55%, var(--border)); }
+.rk-reg-h { display: flex; flex-direction: column; gap: 1px; font-size: 11px; }
+.rk-reg-h b { letter-spacing: .04em; white-space: nowrap; }
+.rk-reg-h span { font-size: 10.5px; color: var(--muted); }
+.rk-reg-v { font-family: var(--font-display); font-size: 28px; font-weight: 700; margin: 8px 0 8px; letter-spacing: -.02em; color: var(--kc, var(--text)); font-variant-numeric: tabular-nums; }
+.rk-reg .rk-bar { margin-bottom: 8px; }
+.rk-reg-m { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
+.rk-reg-n { font-size: 10.5px; font-style: italic; color: var(--muted); margin-top: 6px; line-height: 1.3; }
+
+/* Top threat actors */
+.ta-row { display: grid; grid-template-columns: 22px 42px minmax(0, 1fr) 130px 120px 16px; gap: 14px; align-items: center; padding: 14px 8px; border-bottom: 1px solid var(--border); cursor: pointer; border-radius: 10px; transition: background .15s; }
+.ta-row:last-child { border-bottom: 0; }
+.ta-row:hover { background: var(--hover); }
+.ta-rank { font-family: var(--font-display); font-weight: 700; color: var(--muted); text-align: center; }
+.ta-av { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-weight: 700; font-size: 13px; background: color-mix(in srgb, var(--accent) 18%, var(--elevated)); border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border)); color: var(--accent); flex: none; }
+.ta-av.hi { background: color-mix(in srgb, var(--warning) 22%, var(--elevated)); border-color: color-mix(in srgb, var(--warning) 50%, var(--border)); color: var(--warning); }
+.ta-av.sm { width: 28px; height: 28px; border-radius: 8px; font-size: 10.5px; }
+.ta-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ta-name b { font-size: 14.5px; }
+.ta-meta { display: flex; gap: 14px; margin-top: 6px; font-size: 11.5px; color: var(--muted); flex-wrap: wrap; }
+.ta-meta span { display: inline-flex; gap: 4px; align-items: center; }
+.ta-meta svg { width: 13px; height: 13px; }
+.ta-gap { color: var(--danger); }
+.ta-spark { text-align: center; min-width: 0; }
+.ta-spark span { display: block; font-size: 10px; }
+.ta-tr { font-size: 12px; font-weight: 600; text-transform: capitalize; }
+.ta-score { text-align: right; }
+.ta-score b { font-family: var(--font-display); font-size: 22px; display: block; line-height: 1.1; }
+.ta-score span { font-size: 10px; }
+.ta-bar { height: 5px; border-radius: 3px; background: var(--border); margin-bottom: 6px; overflow: hidden; }
+.ta-bar i { display: block; height: 100%; width: 0; border-radius: 3px; }
+.ta-row > svg { color: var(--muted); }
+@media (max-width: 900px) { .ta-row { grid-template-columns: 22px 42px minmax(0, 1fr) 90px; } .ta-spark, .ta-row > svg { display: none; } }
+@media (max-width: 520px) { .ta-row { grid-template-columns: 38px minmax(0, 1fr) 70px; } .ta-rank { display: none; } }
+.dp-actors { padding-bottom: 8px; }
+
+/* KEV card and small metric tiles */
+.dp-block { width: 100%; justify-content: center; margin-top: 12px; }
+.dp-mini2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.dp-mini2 > div { background: var(--elevated); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; display: flex; justify-content: space-between; gap: 6px; font-size: 11.5px; color: var(--muted); }
+.dp-mini2 b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* Endpoint posture cards */
+.dp-ep { display: block; }
+.dp-lbl { font-size: 10.5px; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.dp-ep-body { display: flex; align-items: center; gap: 18px; margin-top: 10px; }
+.dp-big { font-family: var(--font-display); font-size: 28px; font-weight: 700; line-height: 1.1; }
+.dp-ok { color: var(--success); }
+.dp-bad { color: var(--danger); }
+.dp-flags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+.dp-pad { margin-top: 12px; }
+.dp-ring-v { font-size: 15px; }
+.dp-ep .chart-slot { margin-top: 6px; }
+
+/* Readiness trends table */
+.dp-act { display: flex; align-items: center; gap: 10px; }
+.dp-prog { min-width: 150px; }
+.dp-hb { grid-template-columns: 1fr 44px; margin: 0; }
+.dp-mini { display: block; }
+td.num, th.num { text-align: right; }
+
+/* Posture score */
+.dp-posture { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+.dp-posture-r { flex: 1; min-width: 230px; }
+.dp-two { display: flex; justify-content: space-between; gap: 14px; }
+.dp-right { text-align: right; }
+.dp-tone { font-size: 20px; color: var(--kc, var(--text)); }
+.dp-pbars { display: block; width: 100%; height: auto; margin-top: 8px; }
+.dp-sub { margin: 14px 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
+/* Ransomware readiness */
+.dp-rr { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+.dp-rr-s { font-family: var(--font-display); font-size: 44px; font-weight: 700; line-height: 1; color: var(--kc, var(--text)); }
+.dp-rr-s small { font-size: 15px; color: var(--muted); font-weight: 500; }
+
+/* Two-column bar list (ATT&CK tactic coverage) */
+.dp-2col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
+@media (max-width: 760px) { .dp-2col { grid-template-columns: minmax(0, 1fr); } }
+
+/* Legends outside a chart */
+#tab-dashboard .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+#tab-dashboard .legend .lg { display: inline-flex; align-items: center; gap: 6px; }
+#tab-dashboard .legend.dp-center { justify-content: center; margin-top: 8px; }
+.dl-sw { display: inline-block; width: 9px; height: 9px; border-radius: 3px; }
+.dp-center { display: flex; flex-direction: column; align-items: center; }
+.rk-hd-t { display: inline-flex; align-items: center; gap: 8px; }
+.dot-live.idle { background: var(--muted); box-shadow: none; animation: none; }
+
+/* Feeds: activity, alerts, up next, what changed */
+.dp-feedlist { display: flex; flex-direction: column; }
+.dp-feed, .dp-insight { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--row-line); color: inherit; text-decoration: none; }
+.dp-feed:last-child, .dp-insight:last-child { border-bottom: 0; }
+.dp-feed b, .dp-insight b { display: block; font-weight: 500; }
+.dp-feed span, .dp-insight span { color: var(--muted); font-size: 12px; }
+.dp-feed > div > span, .dp-insight > div > span { display: block; margin-top: 2px; }
+.dp-feed time { color: var(--muted); font-size: 11.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+a.dp-feed:hover b, a.dp-insight:hover b { color: var(--accent); }
+.dp-insight { grid-template-columns: 30px minmax(0, 1fr) 16px; padding: 12px 0; }
+.dp-insight > svg { color: var(--muted); align-self: center; }
+.dp-insight > div > span { font-size: 12.5px; }
+.dp-fi { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--kc, var(--accent)); background: color-mix(in srgb, var(--kc, var(--accent)) 14%, transparent); }
+.dp-insight .dp-fi { width: 30px; height: 30px; }
+.dp-next { grid-template-columns: 28px minmax(0, 1fr); }
+.dp-feed .countdown { display: block; margin-top: 3px; color: var(--info-text); }
+#tab-dashboard .btn svg { width: 15px; height: 15px; flex: none; }
+#tab-dashboard .btn { gap: 6px; }
+.countdown { font-family: var(--font-mono); font-size: 12px; color: var(--info-text); white-space: nowrap; }
+
+/* Clickable rows inside cards */
+.rk-check.rk-click, tr.rk-click { cursor: pointer; }
+.rk-check.rk-click:hover b, tr.rk-click:hover td:first-child { color: var(--accent); }
+.rk-check-t .rk-bar { margin-top: 8px; }
+.rk-card.flush .tbl-wrap { border: 0; border-radius: 0; box-shadow: none; background: none; }
+
+/* Executive: the forecast chart card and the centred gauge */
+#dash-view-executive .rk-grid { margin-bottom: 14px; }
+
+@media (max-width: 760px) {
+  .dp-ep-body { flex-wrap: wrap; }
+  .dp-posture { gap: 14px; }
+}
+
+/* Sidebar logo: the full wordmark sits on a white rounded box in every theme, like the design demo */
+.sidebar-brand .brand-full.logo-ondark { display: none; }
+.sidebar-brand .brand-full.logo-onlight { display: block; height: 46px; max-width: calc(100% - 8px); box-sizing: border-box; background: #fff; border-radius: 12px; padding: 6px 12px; box-shadow: 0 4px 14px rgba(0, 0, 0, .25); }
+body.theme-light .sidebar-brand .brand-full.logo-onlight { box-shadow: 0 1px 4px rgba(15, 23, 42, .15); border: 1px solid var(--border); }
+.rk-kpi-ico svg, .rk-empty-ico svg { width: 16px; height: 16px; }

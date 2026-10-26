@@ -11,6 +11,7 @@ import { cssVars } from '../core/css-vars.js';
 import { kpi, card, grid, hbars, bar, seg, searchBox, empty, pill } from '../core/kit.js';
 import { chartSlot, CHART_COLORS } from '../core/charts.js';
 import { countBy, sevSegments, hbarRows, matchesQuery, rateTone, normSev } from './rich-g3.js';
+import { setDashITSM } from './dash-rich.js';
 
 
 // ── Findings ─────────────────────────────────────────────────────────────────
@@ -537,26 +538,7 @@ export function loadTicketingConfigs(cb) {
 
 // ── Dashboard ITSM widget ───────────────────────────────────────────────────
 export function loadDashboardITSM() {
-  apicall('/api/ticketing/summary').then(function(s) {
-    var sec = document.getElementById('dash-itsm-section');
-    if (!sec) return;
-    var open = s.openTickets || 0, resolved = s.resolvedTickets || 0, pend = s.pendingRevalidation || 0;
-    if (open + resolved + pend === 0 && !(s.byProvider && s.byProvider.length)) {
-      setDisplay(sec, 'none'); return;
-    }
-    setDisplay(sec, '');
-    var tile = function(lbl, val, col) {
-      return '<div class="kpi-card"><div class="kpi-label">' + lbl + '</div>' +
-        '<div class="kpi-value"' + cssVars(['g1-v-7d75dfc9', col]) + '>' + val + '</div></div>';
-    };
-    var html = tile('Open tickets', open, open ? 'var(--warning)' : 'var(--success)') +
-      tile('Resolved tickets', resolved, 'var(--success)') +
-      tile('Pending revalidation', pend, pend ? 'var(--danger)' : 'var(--muted)');
-    (s.byProvider || []).forEach(function(p) {
-      html += tile(x(p.provider), p.count, 'var(--accent)');
-    });
-    document.getElementById('dash-itsm-tiles').innerHTML = html;
-  }).catch(function() {});
+  apicall('/api/ticketing/summary').then(function(s) { setDashITSM(s); }).catch(function() { setDashITSM(null); });
 }
 
 // ── Findings ticket actions ─────────────────────────────────────────────────

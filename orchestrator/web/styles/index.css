@@ -6,5 +6,6 @@
 @import "./rich-g3.css" layer(app);
 @import "./rich-g2.css" layer(app);
 @import "./rich-g1.css" layer(app);
+@import "./rich-dash.css" layer(app);
 @import "./rich-g4.css" layer(app);
 @import "./inline-equivalent.css";

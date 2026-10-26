@@ -22,6 +22,7 @@ import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThr
 import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
 import { agentInsightsHtml, migrationPanelHtml } from './agents-insights.js';
 import { kpi, grid as kitGrid, card, chip, hbars, bar as kitBar, empty as kitEmpty } from '../core/kit.js';
+import { renderExecAll, renderRangeSeg } from './dash-exec.js';
 import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
 
@@ -115,113 +116,25 @@ export function loadExposureAssets() {
   });
 }
 
+var EXEC_DAYS = '90';
+export function setExecRange(id) { EXEC_DAYS = id; renderRangeSeg(EXEC_DAYS); loadExecDashboard(); }
+
 export function loadExecDashboard() {
-  var rangeEl = document.getElementById('ed-range');
-  var days = rangeEl ? rangeEl.value : '90';
+  var days = EXEC_DAYS;
+  renderRangeSeg(days);
   Promise.all([
     apicall('/api/dashboard/current'),
     apicall('/api/dashboard/trends?days=' + encodeURIComponent(days)),
-    apicall('/api/predict/risk')
+    apicall('/api/predict/risk'),
+    apicall('/api/findings').catch(function() { return []; })
   ]).then(function(res) {
-    renderExecDashboard(res[0], res[1]);
-    renderForecast(res[2] && res[2].forecast);
-    renderExposure(res[2] && res[2].exposure);
+    var cur = res[0] || {};
+    setHeroStat('hs-exec-risk', cur.avgRiskScore != null ? cur.avgRiskScore : '—');
+    setHeroStat('hs-exec-exposure', cur.hasAttackPathData ? cur.exposureScore : '—');
+    setHeroStat('hs-exec-detect', cur.hasAttackPathData ? cur.detectionCoverage + '%' : '—');
+    setHeroStat('hs-exec-fleet', cur.assetCount != null ? cur.assetCount : '—');
+    renderExecAll({ current: cur, trends: res[1], predict: res[2], findings: Array.isArray(res[3]) ? res[3] : [], days: days });
   }).catch(function(e) { showToast(e.message, 'err'); });
-}
-
-function edDelta(values, invertGood) {
-  if (values.length < 2) return { text: '', tone: 'muted' };
-  var delta = values[values.length - 1] - values[Math.max(0, values.length - 8)];
-  if (delta === 0) return { text: 'flat over the last week', tone: 'muted' };
-  var up = delta > 0;
-  var good = invertGood ? !up : up;
-  return { text: (up ? '▲ ' : '▼ ') + Math.abs(delta) + ' vs a week ago', tone: good ? 'ok' : 'bad' };
-}
-
-// noDataYet suppresses the number/trend/sparkline in favor of a "No data
-// yet" note -- used for Exposure Score/Detection Coverage when
-// !hasAttackPathData, where the underlying computation reads a vacuous 100
-// (see dashboard.Snapshot.HasAttackPathData's doc comment) rather than a
-// real score, so showing that 100 as-is would misrepresent an unscanned
-// fleet as a perfectly-defended one.
-function edKpiCard(label, current, trendSeries, noDataYet, ic, invertGood) {
-  if (noDataYet) return kpi({ label: label, value: '—', sub: 'No data yet', icon: ic, tone: 'muted' });
-  var d = edDelta(trendSeries, invertGood);
-  return kpi({ label: label, value: current, sub: d.text, icon: ic, tone: d.tone === 'muted' ? 'accent' : d.tone, spark: trendSeries });
-}
-
-function renderExecDashboard(current, trends) {
-  var el = document.getElementById('ed-kpi-row');
-  if (!el) return;
-  trends = trends || [];
-  var risk = trends.map(function(p) { return p.avgRiskScore; });
-  var exp = trends.map(function(p) { return p.exposureScore; });
-  var det = trends.map(function(p) { return p.detectionCoverage; });
-  var cnt = trends.map(function(p) { return p.assetCount; });
-  var noAttackPathData = !current.hasAttackPathData;
-  el.innerHTML = kitGrid(4, [
-    edKpiCard('Risk Score', current.avgRiskScore, risk, false, 'shield', true),
-    edKpiCard('Exposure Score', current.exposureScore, exp, noAttackPathData, 'alert', true),
-    edKpiCard('Detection Coverage', current.detectionCoverage, det, noAttackPathData, 'mapped', false),
-    edKpiCard('Fleet Assets', current.assetCount, cnt, false, 'server', false)
-  ]);
-}
-
-function edDirectionChip(fc) {
-  var d = (fc && fc.direction) || 'unknown';
-  return chip(d.charAt(0).toUpperCase() + d.slice(1), d === 'improving' ? 'ok' : d === 'worsening' ? 'bad' : 'muted');
-}
-
-function renderForecast(fc) {
-  var el = document.getElementById('ed-forecast');
-  if (!el) return;
-  if (!fc) { el.innerHTML = ''; return; }
-  var hist = fc.history || [];
-  var proj = (fc.hasForecast && fc.projected) ? fc.projected : [];
-  var all = hist.concat(proj);
-  var body;
-  if (all.length < 2) {
-    body = kitEmpty('trend', 'Not enough data to chart yet', fc.note || 'A forecast needs a few daily snapshots.');
-  } else {
-    var labels = all.map(function(p) { return 'd' + p.dayIndex; });
-    var series = [{ name: proj.length ? 'Risk score (history + forecast)' : 'Risk score', data: all.map(function(p) { return p.score; }), color: CHART_COLORS.accent }];
-    if (proj.length) series.push({ name: 'Upper bound', data: all.map(function(p) { return typeof p.high === 'number' ? p.high : p.score; }), color: CHART_COLORS.warn, dash: true });
-    body = chartSlot({ type: 'line', labels: labels, series: series, h: 220, area: true }) +
-      (proj.length ? '<div class="rk-note">Forecast begins at day ' + x(proj[0].dayIndex) + '; the dashed line is the upper confidence bound.</div>' : '') +
-      (!fc.hasForecast ? '<div class="rk-note">' + x(fc.note || 'Insufficient history for a forecast.') + '</div>' : '');
-  }
-  var acts = (fc.confidence && fc.confidence !== 'none') ? chip(fc.confidence + ' confidence', 'info') : '';
-  el.innerHTML = card('Risk-score forecast', body, { actions: edDirectionChip(fc) + acts });
-}
-
-function renderExposure(exp) {
-  var el = document.getElementById('ed-exposure');
-  if (!el) return;
-  if (!exp || !exp.hasData) {
-    el.innerHTML = card('Open exposure windows', kitEmpty('check', 'No open findings', 'Nothing is currently exposed.'));
-    return;
-  }
-  var strip = kitGrid(4, [
-    kpi({ label: 'Open', value: exp.openCount, tone: 'accent' }),
-    kpi({ label: 'Worst days', value: exp.worstDaysOpen, tone: 'bad' }),
-    kpi({ label: 'Median days', value: exp.medianDaysOpen, tone: 'info' }),
-    kpi({ label: 'Over ' + exp.thresholdDays + 'd', value: exp.overThreshold, tone: exp.overThreshold ? 'warn' : 'ok' })
-  ]);
-  var rows = (exp.worst || []).map(function(it) {
-    var over = it.daysOpen > exp.thresholdDays;
-    return '<tr>' +
-      '<td><div class="u-fw600">' + x(it.techniqueId) + '</div>' +
-        '<div class="tiny muted">' + x(it.techniqueName) + '</div></td>' +
-      '<td>' + chip(it.severity || '—', /crit/i.test(it.severity) ? 'bad' : /high/i.test(it.severity) ? 'warn' : 'muted') + '</td>' +
-      '<td>' + chip(it.daysOpen + ' d', over ? 'bad' : 'muted') + '</td>' +
-      '<td class="tiny">' + x(it.firstSeen) + '</td>' +
-      '<td>' + (it.reopenedCount ? chip('×' + it.reopenedCount, 'warn') : '<span class="tiny muted">&mdash;</span>') + '</td>' +
-      '</tr>';
-  }).join('');
-  el.innerHTML = card('Open exposure windows', strip +
-    '<div class="tbl-wrap"><table><thead><tr>' +
-      '<th>Technique</th><th>Severity</th><th>Days open</th><th>First seen</th><th>Reopened</th>' +
-    '</tr></thead><tbody>' + rows + '</tbody></table></div>', { sub: 'time each weakness has stayed open' });
 }
 
 var REC_SCENARIO = null;

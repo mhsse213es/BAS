@@ -1,14 +1,12 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
-import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { initComplianceTab, loadComplianceReport } from './agent-drawer.js';
-import { campaignDisplayStatus } from './campaigns.js';
 import { showTab } from './shell.js';
-import { clearInlineStyle, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
-import { cssVars } from '../core/css-vars.js';
+import { setDisplay } from '../core/inline-style.js';
 import { renderCalderaInsights } from './settings-insights.js';
+import { complianceCard, setDashCompliance, setDashCampaigns } from './dash-rich.js';
 
 
 // ── Compliance score tiles ─────────────────────────────────────────────────
@@ -19,28 +17,8 @@ import { renderCalderaInsights } from './settings-insights.js';
 export function loadComplianceScores(agentId) {
   var url = '/api/compliance/scores' + (agentId ? '?agentId=' + encodeURIComponent(agentId) : '');
   apicall(url).then(function(scores) {
-    var el = document.getElementById('compliance-tiles');
-    if (!el) return;
-    if (!scores || !scores.length) {
-      el.innerHTML = '<div class="g1-s-b32f8255">No compliance data yet — run a scenario to generate scores.</div>';
-      return;
-    }
-    el.innerHTML = scores.map(complianceTile).join('');
-  }).catch(function() {});
-}
-
-function complianceWhy(fw) {
-  var tested = fw.testedControls || 0;
-  if (tested === 0) return 'No controls tested yet — run a scenario to generate compliance evidence.';
-  var pct = Math.round(fw.compliancePct || 0);
-  var passing = fw.passingControls || 0;
-  var failing = fw.failingControls || 0;
-  var untested = fw.untestedControls != null ? fw.untestedControls : 0;
-  if (fw.enrolledAgentCount > 1) {
-    return pct + '% compliant — worst of ' + fw.enrolledAgentCount + ' enrolled endpoints. Click for full breakdown.';
-  }
-  return pct + '% compliant — ' + passing + ' of ' + tested + ' tested controls passing, ' +
-    failing + ' failing, ' + untested + ' untested.';
+    setDashCompliance(Array.isArray(scores) ? scores : []);
+  }).catch(function() { setDashCompliance([]); });
 }
 
 export function openComplianceDetail(frameworkId, agentId) {
@@ -55,112 +33,15 @@ export function openComplianceDetail(frameworkId, agentId) {
   });
 }
 
-export function complianceTile(fw) {
-  var pct     = fw.compliancePct  || 0;
-  var cov     = fw.coveragePct    || 0;
-  var tested  = fw.testedControls || 0;
-  var passing = fw.passingControls || 0;
-  var failing = fw.failingControls || 0;
-  var untested = fw.untestedControls != null ? fw.untestedControls : (fw.testableControls - tested);
-  var hasData  = tested > 0;
-
-  var scoreColor  = !hasData ? 'var(--muted)'
-                  : pct >= 75 ? 'var(--success)'
-                  : pct >= 50 ? 'var(--warning)'
-                  : 'var(--danger)';
-  var borderColor = !hasData ? 'var(--border)'
-                  : pct >= 75 ? 'var(--success)'
-                  : pct >= 50 ? 'var(--warning)'
-                  : 'var(--danger)';
-  var covColor    = cov >= 80 ? 'var(--teal)' : cov >= 50 ? 'var(--warning)' : 'var(--danger)';
-
-  var scoreStr = hasData ? Math.round(pct) + '%' : '—';
-  var subLine  = hasData
-    ? passing + ' pass &middot; ' + failing + ' fail &middot; ' + untested + ' untested'
-    : 'No runs yet';
-
-  // A control needs every mapped test to pass to count as compliant — one
-  // bypass found among many blocked attempts still fails the whole control.
-  // Without this note, a low % here (especially mid variant-sweep, where
-  // finding bypasses is the point) reads as "everything is broken" rather
-  // than "gating is strict — see the Controls table for the real pass rate."
-  var gatingNote = (hasData && failing > 0)
-    ? '<div class="g1-s-042ee910">Any 1 failed test fails the control — see breakdown</div>'
-    : '';
-
-  // Compliance % is only computed over TESTED controls (passing/tested) --
-  // untested controls are excluded from the denominator entirely, not
-  // counted against you. A high % from a narrow slice of testable controls
-  // doesn't mean the framework is broadly satisfied; it means the controls
-  // you've actually run are passing. Flag it when coverage itself is thin.
-  var lowCoverageNote = (hasData && cov < 50)
-    ? '<div class="g1-s-042ee910">Only ' + Math.round(cov) + '% of testable controls covered — untested controls aren\'t reflected in this %</div>'
-    : '';
-
-  var covBar = hasData
-    ? '<div class="g1-s-acd4d170">' +
-        '<div class="g1-s-ce99d481">' +
-          '<div class="g1-s-9dced569"' + cssVars(['g1-v-9b890877', Math.round(cov)], ['g1-v-9ffd39ba', covColor]) + '></div>' +
-        '</div>' +
-        '<div class="g1-s-03370085">' + Math.round(cov) + '% coverage</div>' +
-      '</div>'
-    : '';
-
-  return '<div class="kpi-card stat-tile g1-s-787094fd"' + cssVars(['g1-v-882d6893', borderColor]) + ' ' +
-    on('click', 'openComplianceDetail', fw.frameworkId, fw.agentId) + ' ' +
-    'title="' + x(fw.frameworkName) + '\n' + x(complianceWhy(fw)) + '">' +
-    '<div class="stat-top">' +
-      '<div class="g1-s-28637295">' +
-        '<div class="kpi-label g1-s-eb7edfae">' + x(fw.shortName) + '</div>' +
-        '<div class="kpi-value g1-s-ef49234c"' + cssVars(['g1-v-7d75dfc9', scoreColor]) + '>' + scoreStr + '</div>' +
-      '</div>' +
-      '<div class="g1-s-c3a4f7f5">' +
-        '<div class="u-fw600">' + x(fw.regulator) + '</div>' +
-        (hasData ? '<div>' + fw.totalControls + ' controls</div>' : '') +
-      '</div>' +
-    '</div>' +
-    covBar +
-    '<div class="kpi-sub g1-s-250d28a3">' + subLine + '</div>' +
-    gatingNote +
-    lowCoverageNote +
-    '</div>';
-}
+// One framework card of the dashboard's Regulatory compliance grid (rendered by dash-rich.js).
+export function complianceTile(fw) { return complianceCard(fw); }
 
 // refreshDashboardCampaigns — standalone fn so it can be called from the WS
 // handler and the periodic poll without running the full dashboard reload.
 
 export function refreshDashboardCampaigns() {
   apicall('/api/campaigns').then(function(cs) {
-    // KPI tile — Active campaigns (running now).
-    var running = (cs || []).filter(function(c) { return c.summary && c.summary.status === 'running'; }).length;
-    var cvEl = document.getElementById('kpi-campaigns-val');
-    if (cvEl) {
-      cvEl.textContent = running;
-      document.getElementById('kpi-campaigns-sub').textContent = running ? 'running now' : 'none running';
-      // Update both dots: blink+accent when active, solid grey when idle
-      var kpiDot = document.getElementById('kpi-campaigns-dot');
-      var panelDot = document.getElementById('dash-campaigns-dot');
-      if (running) {
-        [kpiDot, panelDot].forEach(function(d) { if (d) { replaceClasses(d, 'dot-live'); clearInlineStyle(d); } });
-      } else {
-        [kpiDot, panelDot].forEach(function(d) { if (d) { replaceClasses(d, ''); setCssText(d, 'display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted);vertical-align:middle;flex-shrink:0;'); } });
-      }
-    }
-    // Live campaigns panel.
-    var el = document.getElementById('dash-campaigns');
-    if (!el) return;
-    var liveList = (cs || []).filter(function(c) { return c.summary && c.summary.status === 'running'; });
-    if (!liveList.length) { el.innerHTML = '<div class="empty g1-s-1eb1d451">No campaigns running.</div>'; return; }
-    el.innerHTML = liveList.map(function(c) {
-      var s = c.summary || {};
-      var cds = campaignDisplayStatus(s);
-      return '<div class="lrow u-pointer"' + on('click', 'openCampaignDetail', c.id) + '>' +
-        '<div class="lic g1-s-2f77bd19"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 8h3l2-5 4 10 2-5h3"/></svg></div>' +
-        '<div class="lmain"><div class="lt">' + x(c.name) + ' <span class="sbadge s-' + cds.cls + '">' + x(cds.label) + '</span></div>' +
-          '<div class="ls">' + x(c.scenarioName || '') + ' · ' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents</div>' +
-          '<div class="prog"><i' + cssVars(['g1-v-9b890877', s.progress || 0]) + '></i></div></div>' +
-        '<div class="lr"><div class="g1-s-b612ca4a">' + (s.progress || 0) + '%</div></div></div>';
-    }).join('');
+    setDashCampaigns(Array.isArray(cs) ? cs : []);
   }).catch(function() {});
 }
 

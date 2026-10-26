@@ -478,6 +478,8 @@ export function setDashView(view) {
   DASH_VIEW = view;
   setDisplay(document.getElementById('dash-view-operational'), view === 'operational' ? '' : 'none');
   setDisplay(document.getElementById('dash-view-executive'), view === 'executive' ? '' : 'none');
+  setDisplay(document.getElementById('dash-exec-tools'), view === 'executive' ? '' : 'none');
+  setDisplay(document.getElementById('dash-op-note'), view === 'operational' ? '' : 'none');
   document.querySelectorAll('.dash-view-btn').forEach(function(b) {
     b.classList.toggle('active', b.getAttribute('data-view') === view);
   });

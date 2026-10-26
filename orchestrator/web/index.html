@@ -294,223 +294,98 @@
     <main>
       <!-- Dashboard -->
       <div id="tab-dashboard" class="is-hidden">
-        <div class="dash-view-toggle" role="tablist" aria-label="Dashboard view">
-          <button type="button" class="dash-view-btn active" data-view="operational" data-on-click="setDashView" data-args="[&quot;operational&quot;]">Operational</button>
-          <button type="button" class="dash-view-btn" data-view="executive" data-on-click="setDashView" data-args="[&quot;executive&quot;]">Executive</button>
+        <div class="dp-toolbar">
+          <div class="dash-view-toggle" role="tablist" aria-label="Dashboard view">
+            <button type="button" class="dash-view-btn active" data-view="operational" data-on-click="setDashView" data-args="[&quot;operational&quot;]">Operational</button>
+            <button type="button" class="dash-view-btn" data-view="executive" data-on-click="setDashView" data-args="[&quot;executive&quot;]">Executive</button>
+          </div>
+          <div class="dp-toolbar-r">
+            <span class="muted tiny" id="dash-op-note"></span>
+            <div class="dp-exec-tools is-hidden" id="dash-exec-tools">
+              <span id="ed-range-seg"></span>
+              <button type="button" class="btn btn-outline btn-sm" data-on-click="loadExecDashboard">Refresh</button>
+            </div>
+          </div>
         </div>
         <div id="dash-view-operational">
-        <div id="hero-dashboard"></div>
-        <div class="kpi-row">
-          <div class="kpi-card stat-tile" data-on-click="showTab" data-args="[&quot;findings&quot;]" title="View findings">
-            <div class="stat-top">
-              <div><div class="kpi-label">Open findings</div><div class="kpi-value" id="kpi-findings-val">—</div></div>
-              <div class="stat-icon g1-s-a1d26cf7"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 14V2.5h8L9.5 5.5 11 8.5H3"/></svg></div>
-            </div>
-            <div class="kpi-sub" id="kpi-findings-sub">awaiting triage</div>
-          </div>
-          <div class="kpi-card stat-tile" data-on-click="showTab" data-args="[&quot;findings&quot;]" title="View attack surface age">
-            <div class="stat-top">
-              <div><div class="kpi-label">Attack surface age</div><div class="kpi-value" id="kpi-surface-val">—</div></div>
-              <div class="stat-icon g1-s-48fb6c3f"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4v4h3"/></svg></div>
-            </div>
-            <div class="kpi-sub" id="kpi-surface-sub">oldest open weakness</div>
-          </div>
-          <div class="kpi-card stat-tile" data-on-click="showTab" data-args="[&quot;runs&quot;]" title="View runs">
-            <div class="stat-top">
-              <div><div class="kpi-label">Prevention score</div><div class="kpi-value" id="kpi-score-val">—</div></div>
-              <div class="stat-icon g1-s-d3ee8f67"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5l5 2v4c0 3-2 5.2-5 6.5C5 12.7 3 10.5 3 7.5v-4z"/></svg></div>
-            </div>
-            <div class="kpi-sub"><span id="kpi-score-trend"></span><span id="kpi-score-sub">no runs yet</span></div>
-            <div class="stat-spark" id="kpi-score-spark"></div>
-            <div id="kpi-score-coverage" class="g1-s-158c0bd8"></div>
-          </div>
-          <div class="kpi-card stat-tile" data-on-click="showTab" data-args="[&quot;runs&quot;]" title="ATT&CK coverage">
-            <div class="stat-top">
-              <div><div class="kpi-label">ATT&amp;CK coverage</div><div class="kpi-value" id="kpi-cov-val">—</div></div>
-              <div class="stat-icon g1-s-efb065ab"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.4"/></svg></div>
-            </div>
-            <div class="kpi-sub" id="kpi-cov-sub">tactic coverage</div>
-            <div class="stat-spark" id="kpi-cov-spark"></div>
-          </div>
-          <div class="kpi-card stat-tile" data-on-click="showTab" data-args="[&quot;campaigns&quot;]" title="View campaigns">
-            <div class="stat-top">
-              <div><div class="kpi-label">Active campaigns</div><div class="kpi-value" id="kpi-campaigns-val">—</div></div>
-              <div class="stat-icon g1-s-7a1328f1"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 8h3l2-5 4 10 2-5h3"/></svg></div>
-            </div>
-            <div class="kpi-sub"><span id="kpi-campaigns-dot" class="dot-live"></span> <span id="kpi-campaigns-sub">—</span></div>
-          </div>
-        </div>
+          <div id="hero-dashboard"></div>
+          <div class="dp-g5" id="dop-kpis"></div>
 
-        <div class="dash-grid g1-s-bf67e27d">
-          <div class="dash-panel">
-            <div class="dash-panel-hdr">Posture Score</div>
-            <div class="dash-panel-body g1-display-flex g1-s-38f54a48">
-              <div class="ring" id="dash-gauge"><div class="empty g1-s-62899a0f">—</div></div>
-              <div class="g1-s-28637295">
-                <div class="g1-display-flex g1-s-33955b7b">
-                  <div><div class="kpi-label">Trend</div><div id="dash-posture-trend" class="g1-s-f0a3d4eb">—</div></div>
-                  <div class="g1-s-390447e4"><div class="kpi-label">vs target</div><div class="g1-s-82805d4e">— <span class="g1-s-62065d87">soon</span></div></div>
-                </div>
-                <div id="dash-posture-bars"></div>
-                <div class="tiny muted g1-s-e642ef8f" id="dash-posture-cap">Based on recent validated runs.</div>
-              </div>
-            </div>
-          </div>
-          <div class="dash-panel">
-            <div class="dash-panel-hdr">Control Effectiveness</div>
-            <div class="dash-panel-body g1-s-9a37eefe" id="dash-donut">
-              <div class="empty">No run data yet.</div>
-            </div>
-          </div>
-        </div>
+          <div class="dp-sec"><span>Regulatory compliance</span><button type="button" class="rk-link" data-on-click="showTab" data-args="[&quot;compliance&quot;]">View details →</button></div>
+          <div class="dp-reg" id="compliance-tiles"></div>
 
-        <div class="dash-grid">
-          <div class="dash-panel">
-            <div class="dash-panel-hdr">Recent Runs</div>
-            <div class="dash-panel-body" id="dash-recent-runs">
-              <div class="empty g1-s-1eb1d451">No runs yet.</div>
-            </div>
+          <div class="dp-sec"><span>Threat intelligence</span><button type="button" class="rk-link" data-on-click="loadKEVPack">Create KEV Pack →</button></div>
+          <div class="dp-side">
+            <div class="dp-cell" id="dop-actors"></div>
+            <div class="dp-col"><div class="dp-cell" id="dop-kev"></div><div class="dp-cell" id="dop-actprev"></div></div>
           </div>
-          <div class="dash-panel">
-            <div class="dash-panel-hdr">Top Failing Techniques</div>
-            <div class="dash-panel-body" id="dash-top-fails">
-              <div class="empty g1-s-1eb1d451">No data yet.</div>
-            </div>
-          </div>
-        </div>
 
-        <div class="dash-grid g1-s-20ce54f7">
-          <div class="dash-panel">
-            <div class="dash-panel-hdr g1-display-flex g1-s-b45541c2">
-              <span><span id="dash-campaigns-dot" class="dot-live"></span> Live campaigns</span>
-              <a class="tiny g1-s-d9708967" data-on-click="showTab" data-args="[&quot;campaigns&quot;]">View all →</a>
-            </div>
-            <div class="dash-panel-body" id="dash-campaigns"><div class="empty g1-s-1eb1d451">No campaigns running.</div></div>
+          <div class="dp-sec"><span>Endpoint posture</span><span id="dop-ep-link"></span></div>
+          <div class="rk-grid g3">
+            <div class="dp-cell" id="dop-ep-online"></div>
+            <div class="dp-cell" id="dop-ep-life"></div>
+            <div class="dp-cell" id="dop-ep-groups"></div>
           </div>
-          <div class="dash-panel dash-soon" id="dash-gaps">
-            <div class="dash-panel-hdr">Top exposure gaps</div>
-            <div class="dash-panel-body g1-s-eafc86b9">
-              <div class="g1-s-93776a5b">Prioritized, de-duplicated findings with severity and owner — surfaced here once the findings/triage backend lands.</div>
-              <div class="lrow">
-                <div class="lic g1-s-e022dd64"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5L15 14H1z"/><path d="M8 6.5v3.5M8 11.8v.2"/></svg></div>
-                <div class="lmain"><div class="g1-s-90a13fca"></div><div class="g1-s-6cd1c25d"></div></div>
-                <div class="lr"><span class="sbadge g1-s-e74c1606">—</span></div>
-              </div>
-              <div class="lrow">
-                <div class="lic g1-s-ba20a5ce"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5L15 14H1z"/><path d="M8 6.5v3.5M8 11.8v.2"/></svg></div>
-                <div class="lmain"><div class="g1-s-0feaf161"></div><div class="g1-s-67391a34"></div></div>
-                <div class="lr"><span class="sbadge g1-s-e74c1606">—</span></div>
-              </div>
-              <div class="lrow">
-                <div class="lic g1-s-30444e87"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5L15 14H1z"/><path d="M8 6.5v3.5M8 11.8v.2"/></svg></div>
-                <div class="lmain"><div class="g1-s-9a848b69"></div><div class="g1-s-12ab1638"></div></div>
-                <div class="lr"><span class="sbadge g1-s-e74c1606">—</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        <div class="dash-panel g1-s-20ce54f7">
-          <div class="dash-panel-hdr g1-display-flex g1-s-9cce89e2">
-            <span id="dash-attackflow-title">Attack flow</span>
-            <span class="g1-display-flex g1-s-4a58574a">
-              <span class="g1-s-fd9cbeef">&#9632; Prevented</span>
-              <span class="g1-s-d3f82290">&#9632; Detected</span>
-              <span class="g1-s-12f8e31d">&#9632; Missed</span>
-              <a class="tiny is-hidden g1-s-d9708967" id="dash-attackflow-open">Open run →</a>
-            </span>
+          <div class="dp-sec"><span>Readiness trends</span><span class="dp-pills" id="dop-rt-pills"></span></div>
+          <div class="dp-side">
+            <div class="dp-cell" id="dop-rt-table"></div>
+            <div class="dp-cell" id="dop-rt-bars"></div>
           </div>
-          <div class="dash-panel-body g1-s-1333f50e" id="dash-attackflow"><div class="empty g1-s-1eb1d451">No completed runs yet.</div></div>
-        </div>
 
-        <div class="dash-panel">
-          <div class="dash-panel-hdr">ATT&amp;CK Tactic Coverage</div>
-          <div class="tactic-grid" id="dash-attck">
-            <div class="empty g1-s-bfaec2bf">No run data yet.</div>
+          <div class="dp-side">
+            <div class="dp-cell" id="dop-posture"></div>
+            <div class="dp-cell" id="dop-ce"></div>
           </div>
-        </div>
+          <div class="rk-grid g2">
+            <div class="dp-cell" id="dop-live"></div>
+            <div class="dp-cell" id="dop-gaps"></div>
+          </div>
+          <div class="rk-grid g2">
+            <div class="dp-cell" id="dop-runs"></div>
+            <div class="dp-cell" id="dop-fails"></div>
+          </div>
+          <div class="dp-side">
+            <div class="dp-cell" id="dop-flow"></div>
+            <div class="dp-cell" id="dop-rr"></div>
+          </div>
+          <div class="dp-cell dp-full" id="dop-tactics"></div>
+          <div class="dp-side">
+            <div class="dp-cell" id="dop-det"></div>
+            <div class="dp-cell" id="dop-daily"></div>
+          </div>
+          <div class="rk-grid g2">
+            <div class="dp-cell" id="dop-valruns"></div>
+            <div class="dp-cell" id="dop-covgaps"></div>
+          </div>
+          <div class="rk-grid g2">
+            <div class="dp-cell" id="dop-agh"></div>
+            <div class="dp-cell" id="dop-alerts"></div>
+          </div>
+          <div class="dp-side">
+            <div class="dp-cell" id="dop-activity"></div>
+            <div class="dp-cell" id="dop-next"></div>
+          </div>
 
-        <!-- Ransomware Readiness -->
-        <div class="dash-panel g1-s-5012029f">
-          <div class="dash-panel-hdr g1-display-flex g1-s-9cce89e2">
-            <span class="g1-display-flex g1-s-2b1d6e05">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" class="g1-s-a2d81453"><path d="M8 1.5l5 2v4c0 3-2 5.2-5 6.5C5 12.7 3 10.5 3 7.5v-4z"/><path d="M8 6v3M8 10.5v.5"/></svg>
-              Ransomware Readiness
-            </span>
-            <div class="g1-display-flex g1-s-9b5be34d">
-              <span id="rr-tier" class="is-hidden g1-s-a70041ce"></span>
-              <span id="rr-last" class="g1-s-007f626a"></span>
-              <button class="btn btn-outline btn-sm" data-on-click="runRansomwareDrill" id="rr-run-btn">&#9654; Run Drill</button>
-            </div>
+          <!-- ITSM Tickets — read-only metrics; hidden until connectors report tickets -->
+          <div id="dash-itsm-section" hidden>
+            <div class="dp-sec"><span>ITSM tickets</span><button type="button" class="rk-link" id="dash-itsm-link" data-on-click="showTab" data-args="[&quot;integrations&quot;]">Manage connectors →</button></div>
+            <div class="dp-g5" id="dash-itsm-tiles"></div>
           </div>
-          <div class="dash-panel-body g1-s-c4ab6026" id="rr-body">
-            <div class="empty g1-s-dab79d7d">Run the Ransomware Drill to see your readiness score.</div>
-          </div>
-        </div>
-<div class="dash-section-label">Compliance, integrations and fleet</div>
-        <!-- Regulatory Compliance score tiles — one per framework, refreshed after each run -->
-        <div class="g1-display-flex g1-s-64be7484">
-          <span class="g1-s-b982edc7">Regulatory Compliance</span>
-          <a class="tiny g1-s-d9708967" data-on-click="showTab" data-args="[&quot;compliance&quot;]">View details →</a>
-        </div>
-        <div class="kpi-row g1-s-4d69a74d" id="compliance-tiles">
-          <div class="g1-s-b32f8255">Loading compliance scores…</div>
-        </div>
-
-        <!-- ITSM Tickets — read-only metrics widget; hidden until connectors are configured -->
-        <div id="dash-itsm-section" class="is-hidden">
-          <div class="g1-display-flex g1-s-64be7484">
-            <span class="g1-s-b982edc7">ITSM Tickets</span>
-            <a class="tiny g1-s-d9708967" id="dash-itsm-link" data-on-click="showTab" data-args="[&quot;integrations&quot;]">Manage connectors →</a>
-          </div>
-          <div class="kpi-row" id="dash-itsm-tiles"></div>
-        </div>
-
-        <!-- Threat Intelligence — KEV exposure widget; hidden until data is loaded -->
-        <div id="dash-ti-section" class="is-hidden">
-          <div class="g1-display-flex g1-s-64be7484">
-            <span class="g1-s-b982edc7">Threat Intelligence</span>
-            <a class="tiny g1-s-d9708967" data-on-click="loadKEVPack">&#9760; Create KEV Pack →</a>
-          </div>
-          <div class="kpi-row" id="dash-ti-tiles"></div>
-          <div id="dash-ti-actors"></div>
-        </div>
-
-        <!-- Endpoint Posture — fleet health + EPP isolation state; hidden until data is loaded -->
-        <div id="dash-endpoint-section" class="is-hidden">
-          <div class="g1-display-flex g1-s-64be7484">
-            <span class="g1-s-b982edc7">Endpoint Posture</span>
-          </div>
-          <div class="kpi-row" id="dash-endpoint-tiles"></div>
-        </div>
-
-        <!-- Readiness Trends — hidden until history data exists -->
-        <div id="dash-trends-section" class="is-hidden">
-          <div class="g1-display-flex g1-s-64be7484">
-            <span class="g1-s-b982edc7">Readiness Trends</span>
-            <span id="dash-trends-kpis" class="g1-s-b80a2c9b"></span>
-          </div>
-          <div class="g1-s-93b33a87">
-            <table class="g1-s-26541d8d">
-              <thead>
-                <tr class="g1-s-76497c6f">
-                  <th class="g1-s-5364df37">Threat Actor</th>
-                  <th class="g1-s-23bf11e0">Prevention</th>
-                  <th class="g1-s-23bf11e0">Trend</th>
-                  <th class="g1-s-23bf11e0">Runs</th>
-                </tr>
-              </thead>
-              <tbody id="dash-trends-table" class="u-text"></tbody>
-            </table>
-          </div>
-        </div>
-
         </div>
         <div id="dash-view-executive" class="is-hidden">
-        <div id="hero-executive"></div>
-        <div class="kpi-row" id="ed-kpi-row"><div class="empty">Loading…</div></div>
-        <div id="ed-forecast"></div>
-        <div id="ed-exposure"></div>
+          <div id="hero-executive"></div>
+          <div id="ed-kpi-row"></div>
+          <div class="dp-side">
+            <div class="dp-cell" id="ed-forecast"></div>
+            <div class="dp-cell" id="ed-posture"></div>
+          </div>
+          <div class="dp-cell dp-full" id="ed-exposure"></div>
+          <div class="dp-cell dp-full" id="ed-changes"></div>
+          <div class="rk-grid g2">
+            <div class="dp-cell" id="ed-domains"></div>
+            <div class="dp-cell" id="ed-risks"></div>
+          </div>
         </div>
       </div>
 

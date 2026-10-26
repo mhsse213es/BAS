@@ -3,14 +3,15 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
-import { covSegHtml, loadScenarios, showThreatPriorityDetail, tpTierBadge } from './attack-path.js';
+import { covSegHtml, loadScenarios, showThreatPriorityDetail } from './attack-path.js';
 import { refreshDashboardCampaigns } from './compliance.js';
 import { findingSevBadge } from './findings.js';
 import { viewRunResults } from './reports.js';
-import { ROLE, _riskScoreColor, activateTab, showTab } from './shell.js';
+import { ROLE, activateTab, showTab } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
 import { campaignSummaryHTML } from './campaigns-rich.js';
+import { setDashKev, setDashPosture, setDashReadiness } from './dash-rich.js';
 
 
 // ── Campaigns ────────────────────────────────────────────────────────────────
@@ -513,132 +514,33 @@ export function cmpOnExistingScenarioChange() {
   el.innerHTML = x(desc) + tagsLine;
 }
 
-// loadKEVWidget fetches the KEV pack data and populates the dashboard TI KPI tiles.
-var _kevWidgetLoaded = false;
+// loadKEVWidget fetches the KEV pack data and the threat-intel summary for the dashboard's Threat
+// intelligence row (Top threat actors, KEV exposure). dash-rich.js renders both cards.
 export function loadKEVWidget() {
-  if (_kevWidgetLoaded) return;
   Promise.all([
     apicall('/api/ti/suggest-pack?type=kev').catch(function() { return null; }),
     apicall('/api/analytics/threat-intel-summary').catch(function() { return null; })
   ]).then(function(res) {
-    var pack = res[0];
-    var summary = res[1];
-    var hasKev = pack && pack.hasData;
-    var actors = (summary && summary.topActors) || [];
-    if (!hasKev && !actors.length) return;
-    _kevWidgetLoaded = true;
-    setDisplay(document.getElementById('dash-ti-section'), '');
-    var tiles = document.getElementById('dash-ti-tiles');
-    tiles.innerHTML = hasKev ?
-      '<div class="kpi-card stat-tile" title="Techniques with CISA KEV CVEs — create a pack to validate them">' +
-      '<div class="stat-top"><div><div class="kpi-label">KEV-Linked Techniques</div><div class="kpi-value u-danger">' + pack.techniqueCount + '</div></div>' +
-      '<div class="stat-icon g1-s-cddc6d2d">&#9760;</div></div>' +
-      '<div class="kpi-sub">' + (pack.totalKevCves||0) + ' CVEs · ' + (pack.ransomwareCount||0) + ' ransomware-linked</div></div>' +
-      '<div class="kpi-card stat-tile" title="CISA Known Exploited Vulnerabilities under active real-world exploitation">' +
-      '<div class="stat-top"><div><div class="kpi-label">Total KEV CVEs</div><div class="kpi-value u-warning">' + (pack.totalKevCves||0) + '</div></div>' +
-      '<div class="stat-icon g1-s-4fdfbee4"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2l1.5 3.5H13l-2.75 2 1 3.5L8 9 4.75 11l1-3.5L3 5.5h3.5z"/></svg></div></div>' +
-      '<div class="kpi-sub">from CISA KEV catalog</div></div>' : '';
-    renderTIActors(actors);
+    setDashKev(res[0] || { hasData: false }, res[1] || { topActors: [] });
   });
 }
 
-// renderTIActors shows the fleet's top-priority threat actors below the KEV
-// tiles, reusing tpTierBadge (index.html:4834) for the same tier coloring
-// the standalone Threat Prioritization tab already uses. Clicking an actor
-// jumps to its detail view there rather than duplicating it here.
-function renderTIActors(actors) {
-  var el = document.getElementById('dash-ti-actors');
-  if (!el) return;
-  if (!actors.length) { el.innerHTML = ''; return; }
-  el.innerHTML =
-    '<div class="g1-s-d3efda58">Top Threat Actors</div>' +
-    actors.map(function(a) {
-      return '<div class="g1-display-flex g1-s-6bd9a151">' +
-        '<span class="g1-s-4d395312"' + on('click', 'openThreatPriorityActor', a.actorName) + '>' + x(a.actorName) + '</span>' +
-        '<span class="g1-display-flex g1-s-c6d87a64">' + tpTierBadge(a.tier) + '<strong>' + x(a.score) + '</strong></span>' +
-        '</div>';
-    }).join('');
-}
-
-// loadEndpointPostureWidget fetches the fleet-wide endpoint posture summary
-// and populates the dashboard's Endpoint Posture KPI tiles. Untrusted
-// Binaries and Currently Isolated tiles only render when nonzero, matching
-// loadKEVWidget's convention of hiding tiles that have nothing to report.
-var _endpointPostureLoaded = false;
+// loadEndpointPostureWidget fetches the fleet-wide endpoint posture summary for the dashboard's
+// Endpoint posture row. dash-rich.js renders the cards (and the untrusted / isolated flags).
 export function loadEndpointPostureWidget() {
-  if (_endpointPostureLoaded) return;
   apicall('/api/analytics/endpoint-posture').then(function(p) {
-    if (!p || !p.totalAgents) return;
-    _endpointPostureLoaded = true;
-    setDisplay(document.getElementById('dash-endpoint-section'), '');
-    var tiles = document.getElementById('dash-endpoint-tiles');
-    var html =
-      '<div class="kpi-card stat-tile u-pointer"' + on('click', 'showTab', 'agents') + ' title="Agents currently reachable vs. past the 90s heartbeat window">' +
-      '<div class="stat-top"><div><div class="kpi-label">Online / Offline</div><div class="kpi-value">' + p.onlineAgents + ' <span class="tiny muted">/ ' + p.offlineAgents + '</span></div></div>' +
-      '<div class="stat-icon g1-s-58719659">&#9679;</div></div>' +
-      '<div class="kpi-sub">' + p.totalAgents + ' total agents</div></div>' +
-      '<div class="kpi-card stat-tile u-pointer"' + on('click', 'showTab', 'agents') + ' title="Agent lifecycle state breakdown">' +
-      '<div class="stat-top"><div><div class="kpi-label">Lifecycle</div><div class="kpi-value">' + p.activeAgents + ' <span class="tiny muted">active</span></div></div></div>' +
-      '<div class="kpi-sub">' + p.restrictedAgents + ' restricted · ' + p.quarantinedAgents + ' quarantined · ' + p.retiredAgents + ' retired</div></div>';
-    if (p.untrustedBinaryCount > 0) {
-      html +=
-        '<div class="kpi-card stat-tile u-pointer"' + on('click', 'showTab', 'agents') + ' title="Agents whose binary hash failed trust verification">' +
-        '<div class="stat-top"><div><div class="kpi-label">Untrusted Binaries</div><div class="kpi-value u-danger">' + p.untrustedBinaryCount + '</div></div>' +
-        '<div class="stat-icon g1-s-cddc6d2d">&#9888;</div></div>' +
-        '<div class="kpi-sub">binary hash failed trust verification</div></div>';
-    }
-    if (p.currentlyIsolated > 0) {
-      html +=
-        '<div class="kpi-card stat-tile u-pointer"' + on('click', 'showTab', 'agents') + ' title="Endpoints currently isolated via an EPP response action">' +
-        '<div class="stat-top"><div><div class="kpi-label">Currently Isolated</div><div class="kpi-value u-warning">' + p.currentlyIsolated + '</div></div>' +
-        '<div class="stat-icon g1-s-4fdfbee4">&#128274;</div></div>' +
-        '<div class="kpi-sub">via EPP response action</div></div>';
-    }
-    tiles.innerHTML = html;
-  }).catch(function() {});
+    setDashPosture(p);
+  }).catch(function() { setDashPosture(null); });
 }
 
-// loadReadinessTrends fetches and renders the per-actor readiness history table
-// for the most recently active agent. Called from loadDashboard.
-var _trendsLoaded = false;
+// loadReadinessTrends fetches the per-actor readiness history for the most recently active agent;
+// dash-rich.js renders the trend table, the Prevention by actor bars and the prevention line.
 export function loadReadinessTrends() {
-  if (_trendsLoaded) return;
   var agentId = state.agents && state.agents.length > 0 ? state.agents[0].agentId : null;
-  if (!agentId) return;
-  apicall('/api/ti/readiness/history?agentId=' + encodeURIComponent(agentId) + '&limit=5').then(function(data) {
-    if (!data || !data.trends || data.trends.length === 0) return;
-    _trendsLoaded = true;
-    var sec = document.getElementById('dash-trends-section');
-    if (sec) setDisplay(sec, '');
-    var el = document.getElementById('dash-trends-table');
-    if (!el) return;
-    var improved = data.trends.filter(function(t) { return t.direction === 'up'; }).length;
-    var regressed = data.trends.filter(function(t) { return t.direction === 'down'; }).length;
-    // Summary KPIs
-    var summary = document.getElementById('dash-trends-kpis');
-    if (summary) {
-      summary.innerHTML =
-        '<span class="g1-s-485ebdca"><strong class="u-success">' + improved + '</strong> improved</span>' +
-        '<span class="g1-s-485ebdca"><strong class="u-danger">' + regressed + '</strong> regressed</span>' +
-        '<span><strong>' + data.total + '</strong> actors tracked</span>';
-    }
-    // Trend table — show top 10 by most recent prevention, sorted worst-first
-    var rows = data.trends.slice().sort(function(a,b) { return a.latestPrevention - b.latestPrevention; }).slice(0, 10);
-    el.innerHTML = rows.map(function(t) {
-      var arrow = t.direction === 'up'
-        ? '<span class="g1-s-771559a5">&#8679; +' + t.preventionDelta.toFixed(1) + '%</span>'
-        : t.direction === 'down'
-        ? '<span class="g1-s-03fae856">&#8681; ' + t.preventionDelta.toFixed(1) + '%</span>'
-        : '<span class="u-muted">&#8213;</span>';
-      var prevColor = _riskScoreColor(t.latestPrevention);
-      return '<tr>' +
-        '<td class="g1-s-13c364ba">' + x(t.actorName) + '</td>' +
-        '<td class="g1-s-e78287d6"' + cssVars(['g1-v-7d75dfc9', prevColor]) + '>' + t.latestPrevention.toFixed(0) + '%</td>' +
-        '<td class="g1-s-5f326564">' + arrow + '</td>' +
-        '<td class="g1-s-18f637a7">' + t.dataPoints + ' runs</td>' +
-        '</tr>';
-    }).join('');
-  }).catch(function() {});
+  if (!agentId) { setDashReadiness({ trends: [] }); return; }
+  apicall('/api/ti/readiness/history?agentId=' + encodeURIComponent(agentId) + '&limit=6').then(function(data) {
+    setDashReadiness(data && data.trends ? data : { trends: [] });
+  }).catch(function() { setDashReadiness({ trends: [] }); });
 }
 export function cmpAgentOS(a) { var o = (a.osVersion || '').toLowerCase(); return o.indexOf('windows') >= 0 ? 'windows' : (o.indexOf('darwin') >= 0 || o.indexOf('macos') >= 0) ? 'darwin' : 'linux'; }
 function cmpFiltered() {

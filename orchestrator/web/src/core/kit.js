@@ -35,6 +35,7 @@ export const KIT_ICON = Object.assign({}, ICON, {
   cloud: svg('<path d="M7 18a5 5 0 01-.5-10 6 6 0 0111.5 1.5A4 4 0 0117 18z"/>'),
   file: svg('<path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4"/>'),
   more: svg('<path d="M5 12h.01M12 12h.01M19 12h.01"/>'),
+  bell: svg('<path d="M6 17V11a6 6 0 0112 0v6l2 2H4zM10 21h4"/>'),
 });
 
 const TONES = { accent: 1, ok: 1, warn: 1, bad: 1, info: 1, muted: 1, violet: 1 };

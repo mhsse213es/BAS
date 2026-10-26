@@ -2,21 +2,21 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
-import { ago, daysAgo, fmtDate, showToast } from '../core/util.js';
+import { ago, fmtDate, showToast } from '../core/util.js';
 import { setHeroStat } from './shell-ui.js';
 import { _apOnCollected, _apOnJobUpdate, _apOnProgress, _onRevalidationStarted, _onSIEMCorrelationComplete, renderScenarios, requestAgentsLiveRefresh, showSettingsSection, showThreatPriorityDetail } from './attack-path.js';
 import { loadEndpointPostureWidget, loadKEVWidget, loadReadinessTrends } from './campaigns.js';
 import { loadComplianceScores, refreshDashboardCampaigns } from './compliance.js';
 import { openTechnique } from './coverage.js';
 import { onRunEvent } from './live-run.js';
-import { findingSevBadge, loadDashboardITSM, openFinding } from './findings.js';
+import { loadDashboardITSM, openFinding } from './findings.js';
 import { loadRansomwareReadiness } from './ransomware.js';
 import { additionalAgentIds, closeModal, loadRuns, openBuilder, openModal, resolvedAllTargetIds, resolvedGroupTargetIds, scenarioFramework, viewRunResults } from './reports.js';
-import { ROLE, _riskScoreColor, showTab, showTamperBanner } from './shell.js';
-import { killChainNodes } from './variant-report.js';
+import { ROLE, showTab, showTamperBanner } from './shell.js';
+import { renderDashAll, setDashAgents, setDashRuns, setDashFindings, setDashAlerts, setDashSchedules, dashRunById } from './dash-rich.js';
+import { effectiveness as dashEffectiveness } from './dash-model.js';
 import { displayOf, replaceClasses, setDisplay } from '../core/inline-style.js';
-import { chartSlot, CHART_COLORS } from '../core/charts.js';
-import { hbars, bar, chip, empty } from '../core/kit.js';
+import { empty } from '../core/kit.js';
 import { renderUsersInsights } from './settings-insights.js';
 
 
@@ -1096,18 +1096,6 @@ export function doResetPassword(id, username) {
   .catch(function(e) { showToast(e.message, 'err'); });
 }
 
-// sparkSVG — minimal sparkline (polyline + soft fill) for KPI tiles.
-function sparkSVG(data, w, h, color) {
-  w = w || 110; h = h || 32; color = color || 'var(--accent)';
-  if (!data || data.length < 2) return '<svg width="' + w + '" height="' + h + '"></svg>';
-  var max = Math.max.apply(null, data), min = Math.min.apply(null, data), rng = (max - min) || 1;
-  var pts = data.map(function(v, i) { return [i / (data.length - 1) * w, h - ((v - min) / rng) * (h - 6) - 3]; });
-  var d = pts.map(function(p, i) { return (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' ');
-  return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
-    '<path d="' + d + ' L' + w + ' ' + h + ' L0 ' + h + ' Z" fill="' + color + '" opacity="0.12"/>' +
-    '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-}
-
 // gaugeSVG — 270° arc gauge for a 0–100 value. Colour reflects the band.
 export function gaugeSVG(value, size, stroke) {
   size = size || 124; stroke = stroke || 14;
@@ -1122,329 +1110,37 @@ export function gaugeSVG(value, size, stroke) {
 }
 
 export function loadDashboard() {
+  // Cards appear at once with their last known (or empty) state; each source then fills its own cells.
+  renderDashAll();
   Promise.all([apicall('/api/agents'), apicall('/api/scenarios/runs')])
   .then(function(res) {
-    var ag = res[0] || [], runs = res[1] || [];
+    var ag = Array.isArray(res[0]) ? res[0] : ((res[0] && res[0].items) || []);
+    var runs = Array.isArray(res[1]) ? res[1] : [];
 
-    // Hero subtitle — agents, distinct techniques exercised, and last assessment.
-    // tacticSet is the cumulative union of ATT&CK tactics ever exercised across
-    // every run (not just the recent scored window below) -- used for the
-    // Prevention Score tile's kill-chain-breadth caveat.
-    var techSet = {}, tacticSet = {};
+    // Banner chips and the note beside the view toggle: counts the loaders already hold.
+    var techSet = {};
     runs.forEach(function(r) {
-      (r.results || []).forEach(function(c) {
-        var id = c.technique && c.technique.id;
-        if (id) techSet[id] = true;
-        var tac = c.technique && c.technique.tactic;
-        if (tac) tacticSet[tac] = true;
-      });
+      (r.results || []).forEach(function(c) { var id = c.technique && c.technique.id; if (id) techSet[id] = true; });
     });
     var techCount = Object.keys(techSet).length;
     var lastRun = runs[0];
-    var lastStr = lastRun ? ago(lastRun.completedAt || lastRun.startedAt) : '';
-    setHeroStat('hs-dash-agents', ag.length);
-    setHeroStat('hs-dash-techniques', techCount);
-    setHeroStat('hs-dash-runs', runs.length);
-    setHeroStat('hs-dash-last', lastStr || 'no runs yet');
+    var since = Date.now() - 30 * 86400000;
+    var recent = runs.filter(function(r) { var t = new Date(r.startedAt || r.completedAt).getTime(); return t >= since; }).length;
+    var eff = dashEffectiveness(runs);
+    var judged = eff.prevented + eff.detected + eff.missed;
+    var online = ag.filter(function(a) { return a.status === 'online'; }).length;
+    setHeroStat('hs-dash-validations', recent);
+    setHeroStat('hs-dash-detect', judged ? Math.round((eff.prevented + eff.detected) / judged * 100) + '%' : '—');
+    setHeroStat('hs-dash-online', ag.length ? online + ' / ' + ag.length : '—');
+    setHeroStat('hs-dash-last', lastRun ? ago(lastRun.completedAt || lastRun.startedAt) : 'no runs yet');
+    var note = document.getElementById('dash-op-note');
+    if (note) note.textContent = 'Continuous validation across ' + ag.length + ' agent' + (ag.length === 1 ? '' : 's') + ' and ' + techCount + ' ATT&CK technique' + (techCount === 1 ? '' : 's') + '.';
 
-    // KPI — Prevention score: weighted aggregate across the last ~8 scored runs
-    // (weighted by technique count, not a flat average of percentages) + trend
-    // chip + sparkline of the same window (oldest→newest).
-    // Only include runs with at least one scoreable result (pass OR fail).
-    // A run where everything errored/skipped has preventionScore=0 but that 0
-    // means "no data", not "0% prevention" — exclude it from the gauge.
-    var scored = runs.filter(function(r) {
-      if (!r.score) return false;
-      if (r.score.preventionScore == null && r.score.riskScore == null) return false;
-      return (r.score.passedTechniques || 0) + (r.score.failedTechniques || 0) > 0;
-    });
-    var prevPctOf = function(r) { return Math.round(r.score.preventionScore != null ? r.score.preventionScore : r.score.preventionEffectiveness || 0); };
-    // techWeightOf: how many scored techniques (pass+fail) a run contributes —
-    // used to weight the aggregate below so a 50-technique run counts more
-    // than a 1-technique run, same principle as the server-side weighted score.
-    var techWeightOf = function(r) { return (r.score.passedTechniques || 0) + (r.score.failedTechniques || 0); };
-    if (scored.length) {
-      // Aggregate Prevention Score across a recent window of runs (weighted by
-      // technique count), not just the single most-recently-completed run --
-      // a full-sweep dispatches one scenario_runs row per variant, so "latest
-      // run" during a sweep is often a single low-N sample (e.g. one variant
-      // that happened to bypass) rather than the fleet's real recent posture.
-      // See project_docs_freshness_audit / the Variant Sweep dashboard report
-      // this fixed 2026-08-10.
-      var windowRuns = scored.slice(0, 8);
-      var totalWeight = 0, weightedSum = 0;
-      windowRuns.forEach(function(r) {
-        var w = techWeightOf(r);
-        totalWeight += w;
-        weightedSum += prevPctOf(r) * w;
-      });
-      var prevPct = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : prevPctOf(scored[0]);
-      var prevCol = prevPct >= 80 ? 'var(--teal)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
-      document.getElementById('kpi-score-val').textContent = prevPct + '%';
-      document.getElementById('kpi-score-val').style.color = prevCol;
-      document.getElementById('kpi-score-sub').textContent = 'across last ' + windowRuns.length +
-        ' run' + (windowRuns.length === 1 ? '' : 's');
-
-      // Coverage caveat: this score only speaks for tactics you've actually
-      // exercised (cumulatively, across every run -- not just this window).
-      // A high Prevention Score from a handful of tested scenarios does not
-      // mean the fleet is broadly prepared; it means those specific controls
-      // are effective. ENTERPRISE_TACTICS mirrors the same 14-tactic MITRE
-      // ATT&CK Enterprise set internal/models/score.go's enterpriseTacticCount
-      // is defined against, so this is directly comparable to a single run's
-      // own killChainCoverage figure, just accumulated across run history.
-      var ENTERPRISE_TACTICS = ['reconnaissance', 'resource-development', 'initial-access', 'execution',
-        'persistence', 'privilege-escalation', 'defense-evasion', 'credential-access', 'discovery',
-        'lateral-movement', 'collection', 'command-and-control', 'exfiltration', 'impact'];
-      var testedTacticCount = Object.keys(tacticSet).filter(function(t) { return ENTERPRISE_TACTICS.indexOf(t) !== -1; }).length;
-      var killChainPct = Math.round(testedTacticCount / ENTERPRISE_TACTICS.length * 100);
-      var covEl = document.getElementById('kpi-score-coverage');
-      if (covEl) {
-        covEl.textContent = killChainPct < 50
-          ? 'Based on ' + testedTacticCount + '/' + ENTERPRISE_TACTICS.length + ' ATT&CK tactics tested — see Technique Coverage for gaps'
-          : '';
-      }
-
-      // Trend: compare the newer half of the window against the older half
-      // (both weighted the same way) rather than reusing a single run's
-      // server-computed trend, which only ever compared that one run to its
-      // immediate predecessor.
-      var tEl = document.getElementById('kpi-score-trend');
-      var mid = Math.ceil(windowRuns.length / 2);
-      var newerHalf = windowRuns.slice(0, mid), olderHalf = windowRuns.slice(mid);
-      var aggOf = function(list) {
-        var tw = 0, ws = 0;
-        list.forEach(function(r) { var w = techWeightOf(r); tw += w; ws += prevPctOf(r) * w; });
-        return tw > 0 ? ws / tw : null;
-      };
-      var newerAgg = aggOf(newerHalf), olderAgg = aggOf(olderHalf);
-      var trend = 'Stable';
-      if (newerAgg != null && olderAgg != null) {
-        if (newerAgg - olderAgg >= 3) trend = 'Improving';
-        else if (olderAgg - newerAgg >= 3) trend = 'Degrading';
-      }
-      if (trend === 'Improving')      tEl.innerHTML = '<span class="trend up">▲</span> ';
-      else if (trend === 'Degrading') tEl.innerHTML = '<span class="trend down">▼</span> ';
-      else                            tEl.innerHTML = '<span class="trend flat">—</span> ';
-      var prevSeries = windowRuns.map(prevPctOf).reverse();
-      document.getElementById('kpi-score-spark').innerHTML = sparkSVG(prevSeries, 110, 30, 'var(--teal)');
-
-      // Posture card — ring gauge + trend + run-history mini-bars.
-      document.getElementById('dash-gauge').innerHTML = gaugeSVG(prevPct, 124, 14) +
-        '<div class="ring-c"><span class="rv" style="color:' + prevCol + '">' + prevPct + '</span><span class="rl">of 100</span></div>';
-      document.getElementById('dash-posture-trend').textContent = trend;
-      var barRuns = scored.slice(0, 10).reverse();
-      var barData = barRuns.map(function(r) {
-        var d = new Date(r.completedAt || r.startedAt);
-        var v = prevPctOf(r);
-        return { l: isNaN(d) ? '' : (d.getMonth() + 1) + '/' + d.getDate(), v: v,
-                 color: v >= 80 ? 'var(--teal)' : v >= 50 ? 'var(--warning)' : 'var(--danger)' };
-      });
-      document.getElementById('dash-posture-bars').innerHTML = chartSlot({ type: 'line', labels: barData.map(function(d) { return d.l; }),
-        series: [{ name: 'Prevention', data: barData.map(function(d) { return d.v; }), color: CHART_COLORS.accent }], h: 150, yMax: 100, suffix: '%' });
-      document.getElementById('dash-posture-cap').textContent = 'Prevention across the last ' + barRuns.length +
-        ' validated run' + (barRuns.length === 1 ? '' : 's') + '.';
-    }
-
-    // KPI — ATT&CK coverage: share of distinct exercised techniques prevented at
-    // least once (pass|blocked). Sparkline = per-run prevention rate, last ~8.
-    var techCov = {};
-    runs.forEach(function(r) {
-      (r.results || []).forEach(function(c) {
-        var id = c.technique && c.technique.id;
-        if (!id) return;
-        if (c.result === 'pass' || c.result === 'blocked') { techCov[id] = techCov[id] || {}; techCov[id].exercised = true; techCov[id].prevented = true; }
-        else if (c.result === 'fail') { techCov[id] = techCov[id] || {}; techCov[id].exercised = true; }
-      });
-    });
-    var exIds = Object.keys(techCov).filter(function(k) { return techCov[k].exercised; });
-    var prevIds = exIds.filter(function(k) { return techCov[k].prevented; });
-    var covPct = exIds.length ? Math.round(prevIds.length / exIds.length * 100) : 0;
-    var covCol = covPct >= 80 ? 'var(--teal)' : covPct >= 50 ? 'var(--warning)' : 'var(--danger)';
-    document.getElementById('kpi-cov-val').textContent = exIds.length ? covPct + '%' : '—';
-    document.getElementById('kpi-cov-val').style.color = exIds.length ? covCol : '';
-    document.getElementById('kpi-cov-sub').textContent = exIds.length + ' technique' + (exIds.length === 1 ? '' : 's') + ' tested';
-    var covSeries = runs.slice(0, 8).map(function(r) {
-      var p = 0, f = 0;
-      (r.results || []).forEach(function(c) { if (c.result === 'pass' || c.result === 'blocked') p++; else if (c.result === 'fail') f++; });
-      return (p + f) ? Math.round(p / (p + f) * 100) : 0;
-    }).reverse();
-    document.getElementById('kpi-cov-spark').innerHTML = sparkSVG(covSeries, 110, 30, 'var(--warning)');
-
-    // Control effectiveness donut — 4-way verdict split across all runs.
-    // Prevented = pass|blocked; a fail is Detected-only when the blue team still
-    // caught it (run.detectedTechs[id]) else Missed; Not-tested = error|skipped.
-    var eff = { prevented: 0, detected: 0, missed: 0, other: 0 };
-    runs.forEach(function(r) {
-      var det = r.detectedTechs || {};
-      (r.results || []).forEach(function(c) {
-        if (c.result === 'pass' || c.result === 'blocked') eff.prevented++;
-        else if (c.result === 'fail') {
-          var id = c.technique && c.technique.id;
-          if (id && det[id]) eff.detected++; else eff.missed++;
-        }
-        else eff.other++;
-      });
-    });
-    var effTotal = eff.prevented + eff.detected + eff.missed + eff.other;
-    var donutEl = document.getElementById('dash-donut');
-    if (!effTotal) {
-      donutEl.innerHTML = empty('shield', 'No run data yet');
-    } else {
-      var prevPctEff = Math.round(eff.prevented / (eff.prevented + eff.detected + eff.missed || 1) * 100);
-      var segs = [{ label: 'Prevented', value: eff.prevented, color: CHART_COLORS.ok }];
-      if (eff.detected > 0) segs.push({ label: 'Detected only', value: eff.detected, color: CHART_COLORS.warn });
-      segs.push({ label: 'Missed', value: eff.missed, color: CHART_COLORS.bad });
-      if (eff.other > 0) segs.push({ label: 'Not tested', value: eff.other, color: CHART_COLORS.muted });
-      donutEl.innerHTML = chartSlot({ type: 'donut', segments: segs, center: prevPctEff + '%', centerSub: 'prevented', h: 190, legendRight: true }) +
-        (eff.detected === 0 ? '<div class="rk-note">Detected-only appears once a SIEM/EDR integration is reporting alerts.</div>' : '');
-    }
-
-    // Attack flow — dual-rail kill-chain of the latest completed/partial run.
-    var afEl = document.getElementById('dash-attackflow');
-    var lastDone = runs.filter(function(r) { return r.status === 'completed' || r.status === 'partial'; })[0];
-    if (afEl && lastDone) {
-      document.getElementById('dash-attackflow-title').textContent = 'Attack flow · ' + (lastDone.name || lastDone.scenarioId || 'latest run');
-      apicall('/api/scenarios/runs/' + encodeURIComponent(lastDone.id) + '/report.json').then(function(rep) {
-        if (document.getElementById('dash-attackflow') !== afEl) return;
-        var kc = (rep && rep.killChain) || [];
-        if (!kc.length) { afEl.innerHTML = '<div class="empty" style="padding:1.5rem">No kill-chain data for the latest run.</div>'; return; }
-        afEl.innerHTML = '<div class="killchain">' + killChainNodes(kc) + '</div>';
-        var openLink = document.getElementById('dash-attackflow-open');
-        if (openLink) { setDisplay(openLink, ''); openLink.onclick = function() { viewRunResults(lastDone); }; }
-      }).catch(function() { afEl.innerHTML = '<div class="empty" style="padding:1.5rem">Attack flow unavailable.</div>'; });
-    }
-
-    // Recent runs (last 5)
-    var recent = runs.slice(0, 5);
-    var rrEl = document.getElementById('dash-recent-runs');
-    if (!recent.length) {
-      rrEl.innerHTML = '<div class="empty" style="padding:1.5rem">No runs yet.</div>';
-    } else {
-      rrEl.innerHTML = recent.map(function(r) {
-        var cnt = (r.results || []).length;
-        var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
-        var scoreStr = '—';
-        var scol = 'var(--text-dim)';
-        if (r.score && r.score.preventionScore != null) {
-          var pp = Math.round(r.score.preventionScore);
-          var ta = r.score.trend === 'Improving' ? ' ↑' : r.score.trend === 'Degrading' ? ' ↓' : '';
-          scoreStr = pp + '%' + ta;
-          scol = pp >= 80 ? 'var(--teal)' : pp >= 50 ? 'var(--warning)' : 'var(--danger)';
-        } else if (r.score && r.score.riskScore != null) {
-          scoreStr = r.score.riskScore;
-          scol = r.score.classification === 'Protected' ? 'var(--teal)' :
-                 r.score.classification === 'Medium Risk' ? 'var(--warning)' : 'var(--danger)';
-        }
-        var dashPaused = r.status === 'running' && r.paused;
-        return '<div class="dash-run-row">' +
-          '<span class="sbadge ' + (dashPaused ? 's-paused' : 's-' + x(r.status)) + '" style="flex-shrink:0">' + (dashPaused ? 'paused' : x(r.status)) + '</span>' +
-          '<span class="dash-run-name">' + x(r.name) + '</span>' +
-          (cnt ? '<span style="font-size:0.72rem;color:var(--danger)">' + fail + ' fail</span>' : '') +
-          '<span style="font-size:0.8rem;font-weight:600;color:' + scol + ';flex-shrink:0">' + scoreStr + '</span>' +
-          '</div>';
-      }).join('');
-    }
-
-    // Top failing techniques
-    var techMap = {};
-    runs.forEach(function(r) {
-      (r.results || []).forEach(function(c) {
-        var id = (c.technique && c.technique.id) || c.name || 'unknown';
-        var name = (c.technique && c.technique.name) || c.name || id;
-        if (!techMap[id]) techMap[id] = { name: name, fail: 0, pass: 0 };
-        if (c.result === 'fail') techMap[id].fail++;
-        else if (c.result === 'pass') techMap[id].pass++;
-      });
-    });
-    var topFails = Object.keys(techMap)
-      .map(function(id) { return techMap[id]; })
-      .filter(function(t) { return t.fail > 0; })
-      .sort(function(a, b) { return b.fail - a.fail; })
-      .slice(0, 6);
-    var tfEl = document.getElementById('dash-top-fails');
-    if (!topFails.length) {
-      tfEl.innerHTML = empty('check', 'No failures recorded', 'Every tested technique was prevented or not yet failing.');
-    } else {
-      tfEl.innerHTML = hbars(topFails.map(function(t) {
-        var pct = Math.round((t.fail / (t.fail + t.pass)) * 100);
-        return [t.name, Math.round(t.fail / topFails[0].fail * 100), 'bad', t.fail + ' fail · ' + pct + '%'];
-      }));
-    }
-
-    // ATT&CK tactic coverage
-    var tacticMap = {};
-    runs.forEach(function(r) {
-      (r.results || []).forEach(function(c) {
-        var tactic = (c.technique && c.technique.tactic) || 'other';
-        if (!tacticMap[tactic]) tacticMap[tactic] = { pass: 0, fail: 0 };
-        if (c.result === 'pass') tacticMap[tactic].pass++;
-        else if (c.result === 'fail') tacticMap[tactic].fail++;
-      });
-    });
-    var tactics = Object.keys(tacticMap);
-    var attckEl = document.getElementById('dash-attck');
-    if (!tactics.length) {
-      attckEl.innerHTML = '<div class="empty" style="padding:1.5rem;grid-column:1/-1">No run data yet.</div>';
-    } else {
-      attckEl.innerHTML = tactics.map(function(tactic) {
-        var d = tacticMap[tactic];
-        var total = d.pass + d.fail;
-        var pct = total ? Math.round((d.pass / total) * 100) : 0;
-        var tone = pct >= 80 ? 'ok' : pct >= 50 ? 'warn' : 'bad';
-        return '<div class="rk-tactic"><div class="rk-tactic-h"><span>' + x(tactic.replace(/-/g, ' ')) + '</span>' + chip(pct + '%', tone) + '</div>' +
-          bar(pct, tone, true) +
-          '<div class="tiny muted">' + d.pass + ' pass · ' + d.fail + ' fail</div></div>';
-      }).join('');
-    }
-
-    // Open findings KPI + Top exposure gaps
-    apicall('/api/findings').then(function(fs) {
-      var open = (fs || []).filter(function(f) { return f.status === 'open'; });
-      var el = document.getElementById('kpi-findings-val');
-      if (el) { el.textContent = open.length; el.style.color = open.length ? 'var(--danger)' : 'var(--success)'; }
-      var sub = document.getElementById('kpi-findings-sub');
-      if (sub) { var crit = open.filter(function(f) { return f.severity === 'Critical'; }).length; sub.textContent = crit ? crit + ' critical' : (open.length ? 'awaiting triage' : 'none open'); }
-      var maxAge = 0;
-      var oldestFinding = null;
-      open.forEach(function(f) {
-        var age = daysAgo(f.firstSeen);
-        if (age > maxAge) {
-          maxAge = age;
-          oldestFinding = f;
-        }
-      });
-      var surfEl = document.getElementById('kpi-surface-val');
-      if (surfEl) {
-        surfEl.textContent = open.length ? maxAge + 'd' : '0d';
-        surfEl.style.color = maxAge >= 90 ? 'var(--danger)' : maxAge >= 30 ? 'var(--warning)' : 'var(--success)';
-      }
-      var surfSub = document.getElementById('kpi-surface-sub');
-      if (surfSub) {
-        if (open.length && oldestFinding) {
-          surfSub.textContent = 'oldest: ' + (oldestFinding.techniqueId || 'unknown');
-          surfSub.title = 'Oldest exposed weakness: ' + (oldestFinding.techniqueName || oldestFinding.techniqueId) + ' on ' + oldestFinding.agentId;
-        } else {
-          surfSub.textContent = 'no open weaknesses';
-          surfSub.title = '';
-        }
-      }
-      var gaps = document.getElementById('dash-gaps');
-      if (gaps) {
-        gaps.classList.remove('dash-soon');
-        var bodyEl = gaps.querySelector('.dash-panel-body');
-        var top = open.slice(0, 5);
-        if (bodyEl) {
-          bodyEl.innerHTML = top.length ? top.map(function(f) {
-            return '<div class="lrow u-pointer"' + on('click', 'openFindingFromDashboard', f.id) + '>' +
-              '<div class="lmain"><div class="lt">' + x(f.techniqueName || f.techniqueId) + '</div>' +
-              '<div class="ls"><span class="tech-id">' + x(f.techniqueId) + '</span> · ' + x(f.controlClass) + ' · ' + x(f.agentId) + '</div></div>' +
-              '<div class="lr">' + findingSevBadge(f.severity, f.exposureState) + '</div></div>';
-          }).join('') : '<div class="empty" style="padding:1.5rem">No open findings.</div>';
-        }
-      }
-    }).catch(function() {});
-
+    setDashAgents(ag);
+    setDashRuns(runs);
+    apicall('/api/findings').then(function(fs) { setDashFindings(Array.isArray(fs) ? fs : []); }).catch(function() { setDashFindings([]); });
+    loadDashAlerts();
+    loadDashSchedules();
     loadRansomwareReadiness(runs);
     refreshDashboardCampaigns();
     loadComplianceScores();
@@ -1454,4 +1150,19 @@ export function loadDashboard() {
     loadReadinessTrends();
   })
   .catch(function(e) { showToast('Dashboard load failed: ' + e.message, 'err'); });
+}
+
+// Recent alerts: the notification history (needs the remediation permission; others see an empty card).
+function loadDashAlerts() {
+  apicall('/api/notifications?limit=5').then(function(d) { setDashAlerts((d && d.notifications) || []); }).catch(function() { setDashAlerts([]); });
+}
+// Up next: the scheduled assessments that are still enabled.
+function loadDashSchedules() {
+  apicall('/api/scheduled-assessments').then(function(d) { setDashSchedules((d && d.schedules) || []); }).catch(function() { setDashSchedules([]); });
+}
+
+// A dashboard card opens the run's results by id (the run object is kept by the dashboard renderer).
+export function openDashRun(id) {
+  var r = dashRunById(id);
+  if (r) viewRunResults(r); else showToast('Run not found', 'err');
 }

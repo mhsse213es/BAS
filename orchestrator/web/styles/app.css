@@ -316,8 +316,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 .row-menu-item-danger:hover { background: rgba(218,54,51,0.1); }
 
 /* ── App shell ─────────────────────────────────────────────── */
-#app { display: flex; width: 100vw;
-    min-width: 100vw;
+#app { display: flex; width: 100%;
+    min-width: 100%;
     max-width: none; }
 
 /* ── Sidebar ───────────────────────────────────────────────── */
