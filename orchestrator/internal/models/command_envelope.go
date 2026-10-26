@@ -99,6 +99,7 @@ var SignedCommandTypes = map[string]bool{
 	"command_resume":             true,
 	"command_stop_agent":         true,
 	"command_uninstall_agent":    true,
+	"command_trust_ca":           true,
 }
 
 // IsSignedCommandType reports whether msgType is one of the 8 command

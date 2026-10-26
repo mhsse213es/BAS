@@ -762,6 +762,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/agents/{agentId}/revoke", h.RevokeAgent)
 		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/enrollment-tokens", h.CreateEnrollmentToken)
 		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/enrollment-tokens/bulk", h.BulkCreateEnrollmentTokens)
+		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/ca-rotation/distribute", h.DistributeCARoot)
+		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Get("/api/ca-rotation/status", h.CARotationStatus)
 		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Get("/api/enrollment-tokens", h.ListEnrollmentTokens)
 		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Delete("/api/enrollment-tokens/{id}", h.RevokeEnrollmentToken)
 		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/agents/{agentId}/reinstate", h.ReinstateAgent)

@@ -605,6 +605,9 @@ type Heartbeat struct {
 
 	SecurityProducts []string `json:"securityProducts,omitempty"` // installed AV/EDR inventory (presence only)
 
+	// TrustedRootFingerprints: SHA-256 fingerprints of the CA roots the agent trusts (planned CA rotation).
+	TrustedRootFingerprints []string `json:"trustedRootFingerprints,omitempty"`
+
 	// Attack-path job progress — only populated when the agent is actively running
 	// a collection job. The server uses this to update the job's progress column
 	// and broadcast live progress to browser sessions.
@@ -677,6 +680,10 @@ const (
 	// and autostart artifacts, report the real outcome to the server, then
 	// exit. Payload: {"reason": string}.
 	MsgCommandUninstallAgent = "command_uninstall_agent"
+	// MsgCommandTrustCA delivers a new deployment CA root during a planned CA rotation (audit F-09).
+	// Payload: {"rootPem": string, "crossPem": string}; the agent accepts it only if the CA it already
+	// pins vouches for the root through the cross-certificate.
+	MsgCommandTrustCA = "command_trust_ca"
 )
 
 // ── ATT&CK Normalisation ──────────────────────────────────────────────────────

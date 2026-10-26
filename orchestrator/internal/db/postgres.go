@@ -1796,6 +1796,8 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// the System Tree surface that gap immediately instead of only after
 		// a run fails.
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS transport text NOT NULL DEFAULT 'legacy'`,
+		// trusted_root_fps: SHA-256 fingerprints of the CA roots the agent reports trusting (planned CA rotation).
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS trusted_root_fps jsonb`,
 
 		// posture_findings: persisted lifecycle for CIS Security Configuration
 		// + Identity posture-check findings, keyed (agent_id, check_id) --

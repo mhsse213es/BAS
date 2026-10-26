@@ -223,11 +223,26 @@ CA only (`ClientCAs` has a single entry) and its TLS identity is the CA certific
 * **Agent pin: determined.** An agent pins ONE root file (`--ca-root` / signed deployment config), loaded into a pool by
   `AppendCertsFromPEM`, so a file containing two PEMs would be trusted as two roots. The agent never takes a root from an
   enrolment response.
-* **Still not built (so a fleet-wide rotation cannot be completed yet):** delivery of the new root to agents through a command
-  signed by the command-signing key (the agent must append the new root, verify against it, then confirm), dashboard progress per
-  agent, and the agents' own re-enrolment onto the new CA. Do not run `promote` on a fleet until that exists: agents that still
-  trust only the old root would reject the server's certificates once the server certificate is re-issued by the new CA.
-  Not exercised on a live fleet or on the Ubuntu staging server.
+* **Agent delivery: BUILT.** `POST /api/ca-rotation/distribute` (admin, only while `prepared`) sends each connected agent a
+  `command_trust_ca` signed by the command-signing key, carrying the new root and the cross-certificate the current CA signed for
+  it. The agent (`acceptCARoot`, `agent/ca_trust.go`) accepts it only if (a) the envelope verifies, (b) the root is a CA inside its
+  validity, (c) the cross-certificate covers the same key and **verifies against the root the agent already pins**, so even a signed
+  command cannot add a root the pinned CA has not vouched for. The root is appended to the pinned file (atomic rename), never
+  replacing the old one; delivery is idempotent. Connections already running pick the new root up without a restart (the
+  server-certificate check re-reads the pinned file). Agents report the fingerprints they trust in every heartbeat
+  (`agents.trusted_root_fps`); `GET /api/ca-rotation/status` returns `agentsWithNewRoot / agentsTotal`, the agents still pending, and
+  `readyToPromote` (true only when every agent that can still connect has the root; revoked and uninstalling agents are not counted).
+  Tests: `agent/ca_trust_test.go`, `ca_trust_interop_test.go` (feeds the agent the server's real rotation output),
+  `internal/api/ca_rotation_handlers_test.go`.
+* **Procedure:** `ca-rotation start --yes` -> restart server -> `POST /api/ca-rotation/distribute` (repeat for agents that were
+  offline) -> wait for `readyToPromote` -> `ca-rotation promote --yes` -> restart server (it re-issues its own certificate from the
+  new CA; agents already trust it) -> agents renew their certificates from the new CA at 75% of lifetime or when re-enrolled ->
+  only when every agent is verified on the new CA, `ca-rotation retire --yes`. `rollback` is available until `retire`.
+* **Still not built / not verified:** (1) the CLI does not itself refuse `promote` when `readyToPromote` is false (the CLI is
+  offline, the gate is the status endpoint, so it is a procedure rule); (2) there is no per-agent "certificate was issued by the new
+  CA" indicator, so deciding that `retire` is safe is a manual check; retiring early locks out any agent still holding an old-CA
+  certificate; (3) no dashboard page, only the API; (4) agents that are offline during distribution only receive the root when
+  `distribute` is run again after they reconnect; (5) not run on a live fleet or on the Ubuntu staging server.
 #### F-10 The server's TLS certificate is the CA certificate. Medium. Design limit. **FIXED**
 
 * **Evidence (code):** `CA.TLSCertificate()` presents the CA certificate and key as the server identity (and the dashboard's

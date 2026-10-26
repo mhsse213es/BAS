@@ -372,6 +372,8 @@ func (a *Agent) buildHeartbeat(status string) protocol.Heartbeat {
 		ProtocolVersion:  protocol.ProtocolVersion,
 		EmitsEvents:      true,
 		SecurityProducts: products,
+
+		TrustedRootFingerprints: trustedRootFingerprints(),
 	}
 	if a.cfg().MTLS {
 		hb.Transport = "mtls"
@@ -1563,6 +1565,14 @@ func gateStep(step ScenarioStep) *stepVeto {
 // command_scenario), never the raw WS frame.
 func (a *Agent) dispatchVerifiedCommand(msgType string, payload json.RawMessage) {
 	switch msgType {
+	case "command_trust_ca":
+		if err := acceptCARoot(payload); err != nil {
+			log.Printf("[!] CA rotation: new root refused: %v", err)
+			a.logger.Op("warn", "security", fmt.Sprintf("refused a new CA root: %v", err))
+			return
+		}
+		log.Printf("[+] CA rotation: now trusting %d CA root(s)", len(trustedRootFingerprints()))
+		a.logger.Op("info", "security", "accepted a new CA root vouched for by the pinned CA")
 	case "command_scenario":
 		var cmd protocol.ScenarioCommand
 		if err := json.Unmarshal(payload, &cmd); err != nil {

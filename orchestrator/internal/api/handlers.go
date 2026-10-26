@@ -119,6 +119,7 @@ type Handler struct {
 	enrollThrottle       enrollThrottle         // failed enrolment-token attempts per client address
 	ingestAPIKey         string                 // shared secret for POST /api/ingest/v1/events; empty disables the endpoint
 	pki                  *pki.CA                // deployment CA for agent mTLS enrollment (B1/B3)
+	pkiDir               string                 // directory holding the CA files; used for planned CA rotation (audit F-09)
 	signingKey           *cmdsigning.SigningKey // deployment command-signing key (B4) -- separate trust domain from pki above, never chained to it
 	advertisedMTLSPort   int                    // host port agents reach the mTLS listener on (may differ from the in-container port when published ports are remapped); 0 = not advertised
 	advertisedEnrollPort int                    // host port agents reach the enrollment listener on; 0 = not advertised
@@ -1533,6 +1534,15 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 	// pre-upgrade agent binary that doesn't send this field must not clobber
 	// a known value back to the 'legacy' column default. See
 	// models.Agent.Transport's doc comment.
+	// Which CA roots the agent trusts (planned CA rotation). Stored only when reported, like transport.
+	if len(hb.TrustedRootFingerprints) > 0 {
+		if fps, err := json.Marshal(hb.TrustedRootFingerprints); err == nil {
+			_, _ = h.db.Exec(r.Context(),
+				`UPDATE agents SET trusted_root_fps = $2::jsonb WHERE agent_id = $1`,
+				hb.AgentID, string(fps))
+		}
+	}
+
 	if hb.Transport != "" {
 		_, _ = h.db.Exec(r.Context(),
 			`UPDATE agents SET transport = $2 WHERE agent_id = $1`,

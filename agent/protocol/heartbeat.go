@@ -35,6 +35,10 @@ type Heartbeat struct {
 
 	SecurityProducts []string `json:"securityProducts,omitempty"`
 
+	// TrustedRootFingerprints are the SHA-256 fingerprints of the CA roots this agent trusts, so a planned
+	// CA rotation can see which agents already have the new root.
+	TrustedRootFingerprints []string `json:"trustedRootFingerprints,omitempty"`
+
 	CurrentJobID string               `json:"currentJobId,omitempty"`
 	JobProgress  HeartbeatJobProgress `json:"jobProgress,omitempty"`
 }

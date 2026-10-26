@@ -953,6 +953,7 @@ func main() {
 		WithIngestAPIKey(cfg.IngestAPIKey).
 		WithAdvertisedPorts(cfg.AdvertisedMTLSPort, cfg.AdvertisedEnrollPort).
 		WithPKI(ca).
+		WithPKIDir(cfg.PKIDir).
 		WithCommandSigningKey(signingKey).
 		WithMetricsToken(cfg.MetricsToken).
 		WithMetrics(exMetrics).

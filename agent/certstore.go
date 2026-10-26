@@ -296,7 +296,19 @@ func mtlsTLSConfig(cfg Config) (*tls.Config, error) {
 		},
 		RootCAs:               pool,
 		InsecureSkipVerify:    true, // see agent/bootstrap.go's verifyServerCertChain doc comment: chain-only verification, hostname check is meaningless for this single-appliance deployment model
-		VerifyPeerCertificate: verifyServerCertChain(pool),
+		// The trusted roots are re-read at verification time, so a root added by a planned CA rotation
+		// (acceptCARoot) is trusted by connections that are already configured, with no restart. If the
+		// file cannot be read the roots loaded at startup are used.
+		VerifyPeerCertificate: func(raw [][]byte, chains [][]*x509.Certificate) error {
+			current := pool
+			if b, err := os.ReadFile(caPath); err == nil {
+				fresh := x509.NewCertPool()
+				if fresh.AppendCertsFromPEM(b) {
+					current = fresh
+				}
+			}
+			return verifyServerCertChain(current)(raw, chains)
+		},
 	}, nil
 }
 
