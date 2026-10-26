@@ -115,3 +115,31 @@ func TestNewAgentTLSConfig_Handshakes(t *testing.T) {
 		t.Errorf("MinVersion = %x, want at least TLS 1.2", cfg.MinVersion)
 	}
 }
+
+// During a CA rotation the server accepts agent certificates from every trusted root (audit F-09), and
+// still refuses a CA that is not on the list.
+func TestNewAgentTLSConfigWithRoots_AcceptsEveryTrustedRootOnly(t *testing.T) {
+	oldCA, _ := LoadOrGenerateCA(t.TempDir())
+	newCA, _ := LoadOrGenerateCA(t.TempDir())
+	stranger, _ := LoadOrGenerateCA(t.TempDir())
+	server, err := newCA.TLSCertificate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := NewAgentTLSConfigWithRoots(func(*tls.ClientHelloInfo) (*tls.Certificate, error) { return &server, nil },
+		[]*x509.Certificate{newCA.Certificate(), oldCA.Certificate()}, nil)
+	now := time.Now()
+	client := []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+	underOld := clientCertSignedBy(t, oldCA, "0123456789abcdef", now.Add(-time.Hour), now.Add(time.Hour), client)
+	underNew := clientCertSignedBy(t, newCA, "0123456789abcdef", now.Add(-time.Hour), now.Add(time.Hour), client)
+	underStranger := clientCertSignedBy(t, stranger, "0123456789abcdef", now.Add(-time.Hour), now.Add(time.Hour), client)
+	if err := serverHandshake(t, cfg, &underOld); err != nil {
+		t.Errorf("an agent certificate from the previous CA must still be accepted: %v", err)
+	}
+	if err := serverHandshake(t, cfg, &underNew); err != nil {
+		t.Errorf("an agent certificate from the new CA must be accepted: %v", err)
+	}
+	if err := serverHandshake(t, cfg, &underStranger); err == nil {
+		t.Error("a certificate from a CA that is not trusted must be refused")
+	}
+}

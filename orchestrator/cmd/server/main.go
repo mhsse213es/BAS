@@ -192,6 +192,14 @@ func main() {
 		os.Exit(runHealthcheck())
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "ca-rotation" {
+		dir := os.Getenv("PKI_DIR")
+		if dir == "" {
+			dir = "/etc/audspect/pki"
+		}
+		os.Exit(runCARotation(os.Args[2:], dir, os.Stdout))
+	}
+
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	api.Version = Version
@@ -1268,6 +1276,11 @@ func main() {
 
 	// The server's TLS identity is its own certificate signed by the CA (audit F-10), not the CA certificate
 	// itself. It renews while the server runs and never changes the CA agents trust.
+	// During a planned CA rotation the previous CA stays trusted for the agent certificates it issued.
+	trustedRoots, err := pki.TrustedClientRoots(cfg.PKIDir)
+	if err != nil {
+		log.Fatalf("[FATAL] CA rotation files are inconsistent: %v", err)
+	}
 	serverCerts, err := pki.NewServerCertSource(ca, cfg.PKIDir, splitServerSANs(cfg.ServerSANs))
 	if err != nil {
 		log.Fatalf("[FATAL] build server TLS identity: %v", err)
@@ -1284,7 +1297,7 @@ func main() {
 	mtlsSrv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
 		Handler: mtlsHandler,
-		TLSConfig: pki.NewAgentTLSConfig(serverCerts.GetCertificate, ca, func(serial, agentID string) (bool, error) {
+		TLSConfig: pki.NewAgentTLSConfigWithRoots(serverCerts.GetCertificate, trustedRoots, func(serial, agentID string) (bool, error) {
 			// Fail closed: a database error refuses the connection (see pki.NewAgentTLSConfig).
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
@@ -1344,9 +1357,9 @@ func main() {
 		dashboardTLS = &tls.Config{GetCertificate: serverCerts.GetCertificate, ClientAuth: tls.NoClientCert}
 	}
 	dashboardSrv := &http.Server{
-		Addr:      fmt.Sprintf(":%d", cfg.DashboardHTTPPort),
-		Handler:   router,
-		TLSConfig: dashboardTLS,
+		Addr:         fmt.Sprintf(":%d", cfg.DashboardHTTPPort),
+		Handler:      router,
+		TLSConfig:    dashboardTLS,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 90 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -1476,7 +1489,6 @@ func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
 		rows.Close()
 	}
 }
-
 
 // enrollmentModeFromEnv reads BAS_ENROLLMENT_MODE: "secret" (default, the shared secret enrols) or "token"
 // (single-use per-agent tokens). Anything else stops the server rather than silently weakening enrolment.

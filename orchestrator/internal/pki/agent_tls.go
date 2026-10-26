@@ -17,8 +17,16 @@ type RevocationCheck func(serialHex, agentID string) (revoked bool, err error)
 // so a revoked certificate stops working at once rather than at expiry. A nil check disables only
 // the revocation step.
 func NewAgentTLSConfig(getServerCert func(*tls.ClientHelloInfo) (*tls.Certificate, error), ca *CA, check RevocationCheck) *tls.Config {
+	return NewAgentTLSConfigWithRoots(getServerCert, []*x509.Certificate{ca.Certificate()}, check)
+}
+
+// NewAgentTLSConfigWithRoots is NewAgentTLSConfig for an explicit set of trusted CAs: during a planned CA
+// rotation that is the current CA plus the previous one (see TrustedClientRoots).
+func NewAgentTLSConfigWithRoots(getServerCert func(*tls.ClientHelloInfo) (*tls.Certificate, error), roots []*x509.Certificate, check RevocationCheck) *tls.Config {
 	pool := x509.NewCertPool()
-	pool.AddCert(ca.Certificate())
+	for _, r := range roots {
+		pool.AddCert(r)
+	}
 	return &tls.Config{
 		GetCertificate: getServerCert,
 		ClientAuth:     tls.RequireAndVerifyClientCert,

@@ -211,6 +211,23 @@ CA only (`ClientCAs` has a single entry) and its TLS identity is the CA certific
 * **Regression tests to write with it:** an agent with both roots accepts a server certificate from either; an unsigned or
   wrongly signed trust update is refused; a root whose fingerprint does not match the update is refused.
 
+* **Server side: BUILT (not the agent side).** `internal/pki/rotation.go` is a file-visible state machine:
+  `stable -> prepared (start) -> promoted (promote) -> stable (retire)`, with `abort` (from prepared) and `rollback` (from promoted).
+  `start` creates a next CA and a cross-certificate for it signed by the current CA, and changes nothing about issuance or trust.
+  `promote` makes the new CA issue and keeps the old one as `previous-ca-*`, so every certificate already issued still verifies;
+  the server's mTLS listener trusts both roots (`TrustedClientRoots`, `NewAgentTLSConfigWithRoots`). `retire` removes the old
+  trust only when the operator says so. Every step copies the PEM files to `rotation-backups/` first. A missing CA is never a
+  rotation (every step refuses unless a complete current CA exists), and an inconsistent file set is an error, not a guess.
+  Operator command, offline, each change needs `--yes` and a server restart: `orchestrator ca-rotation status|start|abort|promote|rollback|retire`.
+  Tests: `rotation_test.go`, `TestNewAgentTLSConfigWithRoots_*`, `ca_rotation_cmd_test.go`.
+* **Agent pin: determined.** An agent pins ONE root file (`--ca-root` / signed deployment config), loaded into a pool by
+  `AppendCertsFromPEM`, so a file containing two PEMs would be trusted as two roots. The agent never takes a root from an
+  enrolment response.
+* **Still not built (so a fleet-wide rotation cannot be completed yet):** delivery of the new root to agents through a command
+  signed by the command-signing key (the agent must append the new root, verify against it, then confirm), dashboard progress per
+  agent, and the agents' own re-enrolment onto the new CA. Do not run `promote` on a fleet until that exists: agents that still
+  trust only the old root would reject the server's certificates once the server certificate is re-issued by the new CA.
+  Not exercised on a live fleet or on the Ubuntu staging server.
 #### F-10 The server's TLS certificate is the CA certificate. Medium. Design limit. **FIXED**
 
 * **Evidence (code):** `CA.TLSCertificate()` presents the CA certificate and key as the server identity (and the dashboard's
