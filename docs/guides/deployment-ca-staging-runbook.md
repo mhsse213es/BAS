@@ -174,9 +174,7 @@ Set `BAS_ENROLLMENT_MODE=token` for the orchestrator and restart it. Use one Ubu
 | 6 | Use host A's token on host B | refused with exit 26 |
 | 7 | Generate a token, block the enrolment port with the firewall, install | exit 27, "could not reach the server" (not a token message) |
 | 8 | Expired token (set lifetime 4 h, wait or edit `expires_at`) | refused with exit 26 |
-| 9 | Stop the agent service, set the system date forward past certificate expiry + 2 h (or shorten the lifetime in a test CA), start it | agent recovers by itself, no token; dashboard shows `agent.recover` in the audit log; the old certificate is not accepted a second time |
-| 10 | Repeat 9 with expiry + 25 h | agent stays blocked; a fresh token restores it; audit shows `agent.recover_denied` |
-| 11 | Revoke the agent in the dashboard, then repeat 9 | recovery refused immediately, even inside 24 h |
+| 9-11 | **Expired-certificate recovery cannot be exercised on real hosts in practice.** Agent certificates last a fixed 365 days, and moving only the agent clock a year ahead also expires the server's own certificate (issued earlier), so the agent could not reach the server at all. These cases (recovery inside 24 h, refusal after 24 h, refusal for a revoked agent, no second use) are covered by the automated tests `TestRecover_*` and `agent/recovery_test.go`. A live check is only possible on a disposable installation by moving the clock of BOTH the server and the agent forward by 365 days + 2 hours, and is optional. | n/a |
 | 12 | While an agent holds an expired certificate, confirm it cannot reach the agent listener (:9443) | TLS handshake fails (expired certificates are still refused there) |
 
 ## 5. Cleanup
