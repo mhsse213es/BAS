@@ -1,0 +1,67 @@
+/* Kubernetes Scenarios page: hero buttons, lab-only banner with the plan/approve/execute/verify flow, cluster
+   cards, filter row, the runs table and the run drawer. Mirrors the design demo. Theme tokens only. */
+
+#hero-k8s .hero-actions .btn svg { width: 15px; height: 15px; margin-right: 6px; vertical-align: -3px; flex: none; }
+#hero-k8s .hero-actions .btn { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; font-size: 13px; width: auto; }
+
+/* Lab-only banner + flow */
+.k8s-warn { border-left: 3px solid var(--warning); background: linear-gradient(90deg, color-mix(in srgb, var(--warning) 9%, var(--surface)), var(--surface) 60%); margin-bottom: 14px; }
+.k8s-warn-t { display: flex; gap: 12px; align-items: flex-start; font-size: 13.5px; line-height: 1.5; }
+.k8s-warn-t > svg { color: var(--warning); flex: none; margin-top: 2px; }
+.k8s-flow { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+.k8s-fs { display: flex; gap: 10px; align-items: center; padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--elevated); font-size: 12.5px; }
+.k8s-fs .muted { font-size: 11px; }
+.k8s-fs-n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; background: var(--accent-dim); color: var(--accent); flex: none; }
+.k8s-fs-i { color: var(--accent); display: inline-flex; }
+.k8s-fs-arrow { color: var(--muted); }
+
+/* New run card, analysis bar */
+.k8s-actions .btn, .k8s-analysis-bar .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.k8s-actions .btn { flex: 1; }
+.k8s-analysis-bar .btn { width: auto; }
+.k8s-analysis-bar { gap: 14px; }
+.k8s-analysis-bar > span:first-child { flex: initial; }
+.k8s-an-toggle { font-size: 13px; color: var(--text); }
+.k8s-unavail { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 10px; }
+.k8s-unavail[hidden] { display: none; }
+#k8s-an-kpis .rk-grid { margin-top: 4px; }
+.k8s-an-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+@media (max-width: 800px) { .k8s-an-split { grid-template-columns: 1fr; } }
+
+/* Clusters */
+#k8s-clusters-sec[hidden] { display: none; }
+.k8s-cl { display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%; font: inherit; color: inherit; cursor: pointer; transition: border-color .15s, transform .15s; }
+.k8s-cl:hover { border-color: var(--accent-border); transform: translateY(-1px); }
+.k8s-cl.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.k8s-cl-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.k8s-cl-top b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.k8s-cl-sub { font-size: 12px; margin-bottom: 6px; }
+.k8s-cl-row { display: flex; justify-content: space-between; font-size: 12px; }
+.k8s-cl-foot { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; margin-top: 4px; }
+#k8s-clusters { margin-bottom: 4px; }
+
+/* Filters */
+#tab-k8s-scenarios .rk-filters { margin: 14px 0; }
+#tab-k8s-scenarios .rk-filters .rk-search { flex: 1 1 300px; }
+#tab-k8s-scenarios .rk-filters .rk-search input, #tab-k8s-scenarios .rk-filters select { height: 36px; margin: 0; }
+#tab-k8s-scenarios .rk-filters .btn { height: 36px; }
+#tab-k8s-scenarios .rk-filters .btn[hidden] { display: none; }
+
+/* Runs table */
+.k8s-runs-card { margin-bottom: 14px; }
+.k8s-runs-card .tbl-wrap { border: 0; }
+#k8s-runs .empty { padding: 24px; }
+#k8s-runs .k8s-empty-act { display: flex; justify-content: center; padding: 0 0 20px; }
+#k8s-runs tr.k8s-row { cursor: pointer; }
+#k8s-runs tr.k8s-row:hover td { background: var(--hover); }
+#k8s-runs .k8s-id { font-size: 11px; }
+#k8s-runs td.k8s-target { font-size: 12.5px; }
+
+/* Run drawer */
+#k8s-drawer-overlay .drawer { width: min(640px, 94vw); }
+#k8s-drawer-overlay .drawer-header { padding: 14px 20px; gap: 12px; }
+#k8s-drawer-overlay .drawer-body { padding: 18px 20px 20px; }
+.k8s-dr-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
+#k8s-drawer-overlay .sc-rel svg, #k8s-drawer-overlay .sc-dh-ico svg { width: 16px; height: 16px; }
+#k8s-drawer-overlay .sc-dh-ico svg { width: 24px; height: 24px; }
+#k8s-drawer-overlay .sd-step b { font-weight: 500; font-size: 13px; overflow-wrap: anywhere; }

@@ -1339,9 +1339,21 @@
       <div id="tab-k8s-scenarios" class="is-hidden">
         <div id="hero-k8s"></div>
 
-        <div class="card k8s-card">
+        <div class="rk-card k8s-warn">
+          <div class="k8s-warn-t"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17v.01"/></svg><div><b>Lab only.</b> Planning writes nothing. A run changes the cluster only after a different operator approves it, and only the requester can execute it.</div></div>
+          <div class="k8s-flow">
+            <div class="k8s-fs"><span class="k8s-fs-n">1</span><span class="k8s-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg></span><div><b>Plan</b><div class="muted">Nothing is written</div></div></div>
+            <span class="k8s-fs-arrow">&rarr;</span>
+            <div class="k8s-fs"><span class="k8s-fs-n">2</span><span class="k8s-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg></span><div><b>Approve</b><div class="muted">A different operator</div></div></div>
+            <span class="k8s-fs-arrow">&rarr;</span>
+            <div class="k8s-fs"><span class="k8s-fs-n">3</span><span class="k8s-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 5l12 7-12 7z"/></svg></span><div><b>Execute</b><div class="muted">Only the requester</div></div></div>
+            <span class="k8s-fs-arrow">&rarr;</span>
+            <div class="k8s-fs"><span class="k8s-fs-n">4</span><span class="k8s-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span><div><b>Verify</b><div class="muted">Evidence and cleanup</div></div></div>
+          </div>
+        </div>
+
+        <div class="card k8s-card" id="k8s-new-run">
           <div class="card-title">New run</div>
-          <p class="k8s-note">Lab only. Planning writes nothing. A run changes the cluster only after a different operator approves it, and only the requester can execute it.</p>
           <div class="k8s-form">
             <div class="form-group">
               <label for="k8s-action">Action</label>
@@ -1370,23 +1382,47 @@
             </div>
           </div>
           <div class="k8s-actions">
-            <button class="btn btn-primary btn-sm" data-k8s-plan="1">Plan run</button>
+            <button class="btn btn-primary" data-k8s-plan="1"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>Plan run</button>
           </div>
+          <div class="k8s-unavail muted" id="k8s-unavail" hidden><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17v.01"/></svg><span id="k8s-unavail-t"></span></div>
         </div>
-
-        <div id="k8s-summary"></div>
-        <div id="k8s-runs" class="tbl-wrap"></div>
 
         <div class="card k8s-card">
           <div class="card-title">Read-only analysis</div>
           <p class="k8s-note">Reads the cluster and reports configured permissions and settings. It writes nothing and proves no attack works.</p>
           <div class="k8s-analysis-bar">
+            <label class="k8s-an-toggle"><input type="checkbox" id="k8s-an-system"> Show built-in system: roles</label>
+            <button class="btn btn-primary" data-k8s-analysis-run="1"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 5l12 7-12 7z"/></svg>Run analysis</button>
             <span id="k8s-an-meta" class="tiny muted">Not run yet.</span>
-            <label class="tiny muted k8s-an-toggle"><input type="checkbox" id="k8s-an-system"> Show built-in system: roles</label>
-            <button class="btn btn-primary btn-sm" data-k8s-analysis-run="1">Run analysis</button>
           </div>
           <div id="k8s-an-kpis"></div>
           <div id="k8s-an-body"></div>
+        </div>
+
+        <div id="k8s-clusters-sec" hidden>
+          <h4 class="sec-label"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg> Clusters <span class="muted">&middot; click to filter</span></h4>
+          <div id="k8s-clusters"></div>
+        </div>
+
+        <div class="rk-filters" id="k8s-filters">
+          <label class="rk-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="k8s-search" placeholder="Search K8s runs..." data-on-input="k8sSearch"></label>
+          <select id="k8s-cluster-sel" aria-label="Cluster" data-on-change="k8sSetCluster"><option value="">All clusters</option></select>
+          <select id="k8s-state-sel" aria-label="State" data-on-change="k8sSetState"><option value="">All states</option><option value="pending">Awaiting approval</option><option value="ready">Ready to execute</option><option value="clean">Cleaned up</option><option value="problem">Failed or needs attention</option></select>
+          <button type="button" id="k8s-clear" class="btn btn-outline btn-sm" data-on-click="k8sClearFilters" hidden>Clear</button>
+        </div>
+        <div class="rk-card runs-card k8s-runs-card"><div id="k8s-runs" class="tbl-wrap"></div></div>
+        <div id="k8s-summary"></div>
+      </div>
+
+      <!-- Kubernetes run drawer -->
+      <div id="k8s-drawer-overlay" class="drawer-overlay" data-on-click="closeK8sDrawerOnBackdrop">
+        <div class="drawer sc-drawer" role="dialog" aria-modal="true" aria-label="Kubernetes run details">
+          <div class="drawer-header">
+            <div class="sc-dh" id="k8s-drawer-head"></div>
+            <button class="drawer-close" data-on-click="closeK8sDrawer" aria-label="Close">&#10005;</button>
+          </div>
+          <div class="drawer-body" id="k8s-drawer-body"></div>
+          <div class="sc-drawer-ft" id="k8s-drawer-foot"></div>
         </div>
       </div>
 

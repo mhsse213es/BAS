@@ -1,8 +1,13 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
-import { kpi as kitKpi, grid, card, hbars, pill } from '../core/kit.js';
+import { kpi as kitKpi, grid, card, hbars, pill, bar, empty, icon } from '../core/kit.js';
 import { chartSlot, CHART_COLORS } from '../core/charts.js';
+import { on } from '../core/actions.js';
+import { setHeroStat } from './shell-ui.js';
+import * as M from './k8s-model.js';
+
+export var k8sRunCounts = M.k8sRunCounts;
 
 // ── Kubernetes state-changing scenarios ──────────────────────────────────────
 // Plan -> approve -> execute. The server enforces every rule (licence, cluster and namespace allow-list,
@@ -35,17 +40,55 @@ function stateBadge(state) {
   return pill(s.label, K8S_TONE[state] || 'muted');
 }
 
-// k8sRunCounts: runs per outcome group for the summary strip.
-export function k8sRunCounts(runs) {
-  var c = { total: 0, pending: 0, ready: 0, clean: 0, problem: 0 };
-  (runs || []).forEach(function(r) {
-    c.total++;
-    if (r.state === 'PLANNED' || r.state === 'DRY_RUN_PLANNED') c.pending++;
-    else if (r.state === 'APPROVED') c.ready++;
-    else if (r.state === 'CLEANED') c.clean++;
-    else c.problem++;
-  });
-  return c;
+var lastRuns = [];
+var F = { q: '', cluster: '', group: '' };
+var DR = { id: null };
+
+function labelOf(a) { return K8S_ACTIONS[a] ? K8S_ACTIONS[a].label : a; }
+function sm(name) { return icon(name).replace('width="16" height="16"', 'width="13" height="13"'); }
+
+function renderK8sHero(runs) {
+  var h = M.heroStats(runs);
+  setHeroStat('k8s-hs-clusters', h.clusters);
+  setHeroStat('k8s-hs-pending', h.pending);
+  setHeroStat('k8s-hs-problem', h.problem);
+}
+
+// One card per cluster that appears in the runs; a click filters the table to it.
+function renderK8sClusters(runs) {
+  var el = document.getElementById('k8s-clusters-sec');
+  var host = document.getElementById('k8s-clusters');
+  if (!host) return;
+  var cards = M.clusterCards(runs);
+  if (el) el.hidden = !cards.length;
+  host.innerHTML = cards.length ? grid(4, cards.map(function(c) {
+    var foot = [];
+    if (c.pending) foot.push(c.pending + ' awaiting');
+    if (c.ready) foot.push(c.ready + ' ready');
+    if (c.problem) foot.push(c.problem + ' need attention');
+    return '<button type="button" class="rk-card k8s-cl' + (F.cluster === c.id ? ' sel' : '') + '"' + on('click', 'k8sPickCluster', c.id) + '>' +
+      '<span class="k8s-cl-top"><b class="mono">' + x(c.id) + '</b>' + pill(c.label, c.tone) + '</span>' +
+      '<span class="k8s-cl-sub muted">' + c.nsCount + (c.nsCount === 1 ? ' namespace' : ' namespaces') + '</span>' +
+      '<span class="k8s-cl-row"><span class="muted">Cleaned up</span><b>' + c.cleanPct + '%</b></span>' + bar(c.cleanPct, c.cleanPct >= 80 ? 'ok' : c.cleanPct >= 40 ? 'warn' : 'bad') +
+      '<span class="k8s-cl-foot muted"><span>' + c.runs + (c.runs === 1 ? ' run' : ' runs') + '</span>' + foot.map(function(f) { return '<span>' + x(f) + '</span>'; }).join('') + '</span>' +
+      '</button>';
+  })) : '';
+  var sel = document.getElementById('k8s-cluster-sel');
+  if (sel) {
+    var opts = M.clusterOptions(runs);
+    if (F.cluster && opts.indexOf(F.cluster) === -1) F.cluster = '';
+    sel.innerHTML = '<option value="">All clusters</option>' + opts.map(function(o) { return '<option value="' + x(o) + '">' + x(o) + '</option>'; }).join('');
+    sel.value = F.cluster;
+  }
+}
+
+function syncFilterBar() {
+  var clr = document.getElementById('k8s-clear');
+  if (clr) clr.hidden = !(F.q || F.cluster || F.group);
+  var st = document.getElementById('k8s-state-sel');
+  if (st) st.value = F.group;
+  var sel = document.getElementById('k8s-cluster-sel');
+  if (sel) sel.value = F.cluster;
 }
 
 function renderK8sSummary(runs) {
@@ -59,12 +102,7 @@ function renderK8sSummary(runs) {
     { label: 'Cleaned up', value: c.clean, color: CHART_COLORS.ok },
     { label: 'Failed or needs attention', value: c.problem, color: CHART_COLORS.bad },
   ].filter(function(g) { return g.value > 0; });
-  el.innerHTML = grid(4, [
-    kitKpi({ label: 'Runs', value: c.total, icon: 'play', tone: 'accent' }),
-    kitKpi({ label: 'Awaiting approval', value: c.pending, icon: 'clock', tone: 'warn' }),
-    kitKpi({ label: 'Ready to execute', value: c.ready, icon: 'bolt', tone: 'info' }),
-    kitKpi({ label: 'Failed or needs attention', value: c.problem, icon: 'warn', tone: c.problem ? 'bad' : 'muted' }),
-  ]) + card('Runs by state', chartSlot({ type: 'donut', segments: segs, center: String(c.total), centerSub: 'runs', legend: true, h: 140 }));
+  el.innerHTML = card('Runs by state', chartSlot({ type: 'donut', segments: segs, center: String(c.total), centerSub: 'runs', legend: true, h: 140 }));
 }
 
 // The signed-in user, from the values stored at login. Used only to decide which controls to show; the
@@ -129,36 +167,147 @@ export function loadK8sRuns() {
     renderK8sRuns(body);
   }).catch(function(err) {
     setCount(0);
+    lastRuns = [];
+    renderK8sClusters([]);
+    renderK8sSummary([]);
+    showUnavailable('Kubernetes scenarios are unavailable on this installation: ' + (err.message || 'request failed'));
     setHost('<div class="empty">Kubernetes scenarios are unavailable: ' + x(err.message || 'request failed') + '</div>');
   });
 }
 
-export function renderK8sRuns(runs) {
-  setCount(runs.length);
-  renderK8sSummary(runs);
+function showUnavailable(msg) {
+  var n = document.getElementById('k8s-unavail');
+  if (!n) return;
+  n.hidden = !msg;
+  var t = document.getElementById('k8s-unavail-t');
+  if (t) t.textContent = msg || '';
+}
+
+// Paints the run table from the loaded rows and the current filter; the cards, hero and drawer follow it.
+function paintRuns() {
+  var runs = lastRuns;
+  syncFilterBar();
   if (!runs.length) {
     setHost('<div class="empty">No runs yet. Plan one above. Nothing is written to a cluster until it is approved and executed.</div>');
     return;
   }
-  var rows = runs.map(function(r) {
-    var target = x(r.cluster) + ' / ' + x(r.namespace);
+  var list = M.filterRuns(runs, F, labelOf);
+  if (!list.length) {
+    setHost(empty('search', 'No runs match these filters', 'Clear the search, cluster or state filter.') +
+      '<div class="k8s-empty-act"><button type="button" class="btn btn-outline btn-sm"' + on('click', 'k8sClearFilters') + '>Clear all filters</button></div>');
+    return;
+  }
+  var rows = list.map(function(r) {
     var btn = runActions(r);
-    var action = K8S_ACTIONS[r.action] ? K8S_ACTIONS[r.action].label : r.action;
     var plan = (r.detail || '').split('\n').filter(Boolean).map(x).join('<br>');
-    return '<tr>' +
-      '<td><code>' + x(r.id) + '</code></td>' +
-      '<td>' + x(action) + '</td>' +
-      '<td class="k8s-target">' + target + '</td>' +
+    return '<tr class="k8s-row" tabindex="0"' + on('click', 'k8sOpenRun', r.id) + on('keydown', 'k8sRowKeydown', r.id) + '>' +
+      '<td><div>' + x(labelOf(r.action)) + '</div><div class="mono muted k8s-id">' + x(r.id) + '</div></td>' +
+      '<td class="k8s-target">' + x(r.cluster) + '</td>' +
+      '<td class="k8s-target">' + x(r.namespace) + '</td>' +
       '<td>' + x(r.requester) + '</td>' +
       '<td>' + stateBadge(r.state) + '</td>' +
       '<td class="k8s-plan">' + plan + '</td>' +
-      '<td class="k8s-row-actions">' + btn + '</td>' +
+      '<td class="k8s-row-actions"' + on('click', 'stopEvent') + '>' + btn + '</td>' +
       '</tr>';
   }).join('');
   setHost('<table><thead><tr>' +
-    '<th>Run</th><th>Action</th><th>Target</th><th>Requested by</th><th>State</th><th>Plan and outcome</th><th></th>' +
+    '<th>Scenario</th><th>Cluster</th><th>Namespace</th><th>Requested by</th><th>State</th><th>Plan and outcome</th><th></th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>');
 }
+
+export function renderK8sRuns(runs) {
+  lastRuns = runs;
+  setCount(runs.length);
+  showUnavailable('');
+  renderK8sHero(runs);
+  renderK8sClusters(runs);
+  renderK8sSummary(runs);
+  paintRuns();
+  if (DR.id) paintDrawer();
+}
+
+// ── Filters ──────────────────────────────────────────────────────────────────
+export function k8sSearch(el) { F.q = (el && el.value) || ''; paintRuns(); }
+export function k8sPickCluster(id) { F.cluster = F.cluster === id ? '' : id; renderK8sClusters(lastRuns); paintRuns(); }
+export function k8sSetCluster(el) { F.cluster = (el && el.value) || ''; renderK8sClusters(lastRuns); paintRuns(); }
+export function k8sSetState(el) { F.group = (el && el.value) || ''; paintRuns(); }
+export function k8sClearFilters() {
+  F.q = ''; F.cluster = ''; F.group = '';
+  var q = document.getElementById('k8s-search'); if (q) q.value = '';
+  renderK8sClusters(lastRuns);
+  paintRuns();
+}
+// "New K8s Run" in the hero: takes the operator to the plan form.
+export function k8sNewRun() {
+  var f = document.getElementById('k8s-new-run');
+  if (f && f.scrollIntoView) f.scrollIntoView({ block: 'start' });
+  var a = document.getElementById('k8s-action');
+  if (a && a.focus) a.focus();
+}
+
+// ── Run drawer ───────────────────────────────────────────────────────────────
+function findRun(id) { return lastRuns.filter(function(r) { return r.id === id; })[0] || null; }
+
+function drawerBody(r) {
+  var rows = [['Run', r.id, true], ['Action', labelOf(r.action)], ['Cluster', r.cluster, true], ['Namespace', r.namespace, true], ['Requested by', r.requester]]
+    .concat(M.paramRows(r.params).map(function(p) { return ['Parameter: ' + p[0], p[1], true]; }));
+  if (r.approvalId) rows.push(['Approval', r.approvalId, true]);
+  var lines = M.planSteps(r.detail);
+  var n = lastRuns.filter(function(o) { return o.cluster === r.cluster; }).length;
+  return '<div class="k8s-dr-top">' + stateBadge(r.state) + '<span class="muted">Requested by ' + x(r.requester) + '</span></div>' +
+    '<dl class="sc-kv">' + rows.map(function(p) { return '<dt>' + x(p[0]) + '</dt><dd' + (p[2] ? ' class="mono"' : '') + '>' + x(p[1]) + '</dd>'; }).join('') + '</dl>' +
+    '<h4 class="sc-h4">Plan and outcome</h4>' +
+    (lines.length ? '<div class="sd-steps">' + lines.map(function(l, i) {
+      return '<div class="sd-step"><span class="sd-n">' + (i + 1) + '</span><div class="grow"><b>' + x(l) + '</b></div></div>';
+    }).join('') + '</div>' : '<div class="sc-sub">No plan or outcome text was recorded for this run.</div>') +
+    '<h4 class="sc-h4">Related</h4><div class="sc-rel-list">' +
+      '<div class="sc-rel" tabindex="0" role="button"' + on('click', 'k8sFilterClusterFromDrawer', r.cluster) + '>' + icon('server') +
+        '<div class="grow"><b>Cluster ' + x(r.cluster) + '</b><em>' + n + (n === 1 ? ' run' : ' runs') + ' on this page</em></div>' + icon('chevron') + '</div>' +
+      '<div class="sc-rel" tabindex="0" role="button"' + on('click', 'k8sOpenCoverage') + '>' + icon('mapped') +
+        '<div class="grow"><b>ATT&amp;CK coverage</b><em>Open the coverage matrix</em></div>' + icon('chevron') + '</div>' +
+    '</div>';
+}
+
+function paintDrawer() {
+  var r = findRun(DR.id);
+  var head = document.getElementById('k8s-drawer-head');
+  if (!r || !head) { closeK8sDrawer(); return; }
+  head.innerHTML = '<span class="sc-dh-ico">' + icon('server') + '</span><div><div class="sc-dh-t">' + x(labelOf(r.action)) + '</div>' +
+    '<div class="sc-dh-s">' + x(r.id) + ' · ' + x(r.cluster) + '</div></div>';
+  document.getElementById('k8s-drawer-body').innerHTML = drawerBody(r);
+  document.getElementById('k8s-drawer-foot').innerHTML =
+    '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'closeK8sDrawer') + '>Close</button><span class="grow"></span>' + runActions(r);
+}
+
+export function k8sOpenRun(id) {
+  if (!findRun(id)) return;
+  DR.id = id;
+  paintDrawer();
+  var ov = document.getElementById('k8s-drawer-overlay');
+  if (ov) ov.classList.add('open');
+  var b = document.getElementById('k8s-drawer-body'); if (b) b.scrollTop = 0;
+}
+export function k8sRowKeydown(id, el, e) {
+  if (e && e.target !== el) return;
+  if (e && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); k8sOpenRun(id); }
+}
+export function closeK8sDrawer() {
+  DR.id = null;
+  var ov = document.getElementById('k8s-drawer-overlay');
+  if (ov) ov.classList.remove('open');
+}
+export function closeK8sDrawerOnBackdrop(el, event) { if (event.target === el) closeK8sDrawer(); }
+export function k8sFilterClusterFromDrawer(id) { closeK8sDrawer(); F.cluster = id; renderK8sClusters(lastRuns); paintRuns(); }
+// Goes through the sidebar item so the tab opens exactly as a click on it would.
+export function k8sOpenCoverage() {
+  closeK8sDrawer();
+  var n = document.querySelector('.nav-item[data-tab="coverage"]');
+  if (n && n.click) n.click();
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && DR.id) closeK8sDrawer();
+});
 
 export function planK8sRun() {
   var action = (document.getElementById('k8s-action') || {}).value || '';
@@ -275,9 +424,15 @@ function renderK8sAnalysis() {
   var cats = [['Wildcard grants', wild.length, 'lock'], ['Broad ServiceAccounts', breadth.length, 'users'], ['Cross-namespace grants', cross.length, 'path'],
     ['Escalation actions', esc.length, 'bolt'], ['Pods with host access', pods.length, 'server'], ['Unused mounted tokens', tokens.length, 'key']];
   var catMax = Math.max.apply(null, cats.map(function(c) { return c[1]; }).concat([1]));
+  var total = cats.reduce(function(s, c) { return s + c[1]; }, 0);
+  var palette = [CHART_COLORS.bad, CHART_COLORS.warn, CHART_COLORS.violet, CHART_COLORS.info, CHART_COLORS.teal, CHART_COLORS.pink];
+  var segs = cats.map(function(c, i) { return { label: c[0], value: c[1], color: palette[i] }; }).filter(function(g) { return g.value > 0; });
   kpis.innerHTML = grid(3, cats.map(function(c) {
     return kitKpi({ label: c[0], value: c[1], icon: c[2], tone: c[1] ? 'warn' : 'muted' });
-  })) + card('Findings by category', hbars(cats.map(function(c) { return [c[0], c[1] / catMax * 100, c[1] ? 'warn' : 'muted', c[1]]; })));
+  })) + '<div class="k8s-an-split">' +
+    card('Findings by category', hbars(cats.map(function(c) { return [c[0], c[1] / catMax * 100, c[1] ? 'warn' : 'muted', c[1]]; }))) +
+    card('Category share', total ? chartSlot({ type: 'donut', segments: segs, center: String(total), centerSub: 'findings', legend: true, h: 140 })
+      : '<div class="empty">No findings to chart.</div>') + '</div>';
 
   body.innerHTML =
     section('Wildcard RBAC', wild.length, listOrNone(wild, {

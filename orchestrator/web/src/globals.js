@@ -25,6 +25,7 @@ import { addStep, addlSelChange, loadStepScript, applyPicker, clearSelection, cl
 import { closeRerunReview, closeRerunReviewOnBackdrop, openCampaignRerunReview, openRerunReview, startRerunFromReview } from './features/rerun-review.js';
 import { cancelScheduledAssessment, closeSchedWizard, loadScheduledAssessments, openSchedWizard, openSchedWizardForEdit, schedAuthCheckChange, schedOnModeChange, schedOnRecurrenceChange, schedToggleAgentFromChecked, schedToggleGroupFromChecked, schedWizardNav, setSchedFilter, submitScheduledAssessment } from './features/scheduled.js';
 import { toggleNavPin } from './features/nav-extras.js';
+import { k8sSearch, k8sPickCluster, k8sSetCluster, k8sSetState, k8sClearFilters, k8sNewRun, k8sOpenRun, k8sRowKeydown, closeK8sDrawer, closeK8sDrawerOnBackdrop, k8sFilterClusterFromDrawer, k8sOpenCoverage } from './features/k8s-scenarios.js';
 import { setAgentsViewRich as setAgentsView } from './features/agents-risk-view.js';
 import { _dismissLicenseGraceBanner, ackAllTamperEvents, doLogin, doLogoutFromMenu, goToProfileFromMenu, togglePasswordVisibility, licenseBannerDismissHoverOff, licenseBannerDismissHoverOn, openAgentDetailRiskTab, openSettingsFromMenu, setDashView, showTab, tamperAckHoverOff, tamperAckHoverOn, toggleSidebarCollapsed, toggleUserMenuFromEvent } from './features/shell.js';
 import { saveExecutionPolicyDefault } from './features/execution-policy.js';
@@ -347,6 +348,18 @@ export const ACTIONS = {
   runScenarioCard,
   runScenarioFromDrawer,
   openScenarioRun,
+  k8sSearch,
+  k8sPickCluster,
+  k8sSetCluster,
+  k8sSetState,
+  k8sClearFilters,
+  k8sNewRun,
+  k8sOpenRun,
+  k8sRowKeydown,
+  closeK8sDrawer,
+  closeK8sDrawerOnBackdrop,
+  k8sFilterClusterFromDrawer,
+  k8sOpenCoverage,
   renderTmplOSCompat,
   renderUTL,
   reseedART,

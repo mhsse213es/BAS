@@ -127,9 +127,14 @@ var HEROES = {
     icon: ICON.globe,
     title: 'Kubernetes Scenarios',
     sub: 'Plan and run Kubernetes security scenarios in a lab cluster. A different operator approves anything that changes the cluster.',
-    actions: '<button class="btn btn-outline btn-sm" data-k8s-refresh="1">Refresh</button>',
+    actions:
+      '<button type="button" class="btn btn-outline" data-k8s-refresh="1">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh</button>' +
+      '<button type="button" class="btn btn-primary" data-on-click="k8sNewRun">' + svg('<path d="M12 5v14M5 12h14"/>') + 'New K8s Run</button>',
     stats: [
+      { id: 'k8s-hs-clusters', icon: ICON.globe, value: '—', label: 'Clusters in runs' },
       { id: 'k8s-cnt', icon: ICON.runs, value: '—', label: 'Runs' },
+      { id: 'k8s-hs-pending', icon: ICON.clock, value: '—', label: 'Open runs' },
+      { id: 'k8s-hs-problem', icon: ICON.warn, value: '—', label: 'Need attention' },
     ],
   },
   'hero-scheduled': {
