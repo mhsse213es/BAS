@@ -12,5 +12,6 @@
 @import "./k8s-rich.css" layer(app);
 @import "./sched-rich.css" layer(app);
 @import "./init-rich.css" layer(app);
+@import "./cmp-rich.css" layer(app);
 @import "./rich-g4.css" layer(app);
 @import "./inline-equivalent.css";

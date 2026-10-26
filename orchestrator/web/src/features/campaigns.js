@@ -3,25 +3,28 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
-import { covSegHtml, loadScenarios, showThreatPriorityDetail } from './attack-path.js';
+import { loadScenarios, showThreatPriorityDetail } from './attack-path.js';
 import { refreshDashboardCampaigns } from './compliance.js';
 import { findingSevBadge } from './findings.js';
 import { viewRunResults } from './reports.js';
 import { ROLE, activateTab, showTab } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
-import { campaignSummaryHTML } from './campaigns-rich.js';
 import { setDashKev, setDashPosture, setDashReadiness } from './dash-rich.js';
+import { kpi, grid, bar, pill, seg, empty, icon } from '../core/kit.js';
+import { setHeroStat } from './shell-ui.js';
+import * as M from './cmp-model.js';
 
 
 // ── Campaigns ────────────────────────────────────────────────────────────────
-function campaignMixBar(s) {
-  var seg = function(v, c) { return v > 0 ? '<i' + cssVars(['g1-v-764cd56d', v], ['g1-v-9ffd39ba', c]) + '></i>' : ''; };
-  var total = (s.prevented || 0) + (s.detected || 0) + (s.missed || 0);
-  if (!total) return '<span class="tiny muted">—</span>';
-  return '<div class="seg-bar g1-display-flex g1-s-d1b7291f" title="Prevented ' + (s.prevented || 0) + ' · Detected ' + (s.detected || 0) + ' · Missed ' + (s.missed || 0) +
-    (s.skipped ? ' · Skipped ' + s.skipped + ' agents' : '') + '">' +
-    seg(s.prevented, 'var(--success)') + seg(s.detected, 'var(--warning)') + seg(s.missed, 'var(--danger)') + '</div>';
+// mixBar: the prevented / detected / missed bar of a campaign (an empty track while nothing has been scored).
+function mixBar(mx) {
+  var segs = mx.segs.filter(function(s) { return s.n > 0; }).map(function(s) { return '<i class="k-' + s.key + '" data-w="' + s.pct.toFixed(1) + '"></i>'; }).join('');
+  return '<div class="cmp-mix" title="Prevented ' + mx.prevented + ' · Detected ' + mx.detected + ' · Missed ' + mx.missed + '">' + segs + '</div>';
+}
+function mixKey(mx) {
+  if (!mx.total) return '<div class="cmp-k"><span class="muted">No results yet</span></div>';
+  return '<div class="cmp-k"><span class="k-prevented">' + mx.prevented + ' prevented</span><span class="k-detected">' + mx.detected + ' detected</span><span class="k-missed">' + mx.missed + ' missed</span></div>';
 }
 // campaignDisplayStatus folds the paused overlay into a single badge state.
 // A campaign's summary.status stays 'running' the whole time it's dispatched
@@ -36,141 +39,194 @@ export function campaignDisplayStatus(s) {
   return { cls: s.status || 'running', label: s.status || '—', live: s.status === 'running' };
 }
 var CAMPAIGN_TAB = 'all';
+var CAMPAIGN_Q = '';
 export function loadCampaigns() {
   apicall('/api/campaigns').then(function(list) {
     state._campaigns = list || [];
-    document.getElementById('campaign-cnt').textContent = state._campaigns.length;
-    var sumEl = document.getElementById('campaign-summary');
-    if (sumEl) sumEl.innerHTML = campaignSummaryHTML(state._campaigns);
+    renderCampaignHero();
     renderCampaignToolbar();
     renderCampaignRows();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
+function renderCampaignHero() {
+  var h = M.heroStats(state._campaigns || []);
+  setHeroStat('campaign-cnt', h.total);
+  setHeroStat('campaign-hs-completed', h.completed);
+  setHeroStat('campaign-hs-partial', h.partial);
+  setHeroStat('campaign-hs-runs', h.runs);
+}
 function renderCampaignToolbar() {
   var list = state._campaigns || [];
-  var count = function(k) { return k === 'all' ? list.length : list.filter(function(c) { return (c.summary || {}).status === k; }).length; };
-  var items = [['all', 'All'], ['running', 'Running'], ['completed', 'Completed'], ['partial', 'Partial'], ['failed', 'Failed'], ['stopped', 'Stopped'], ['empty', 'Empty']]
-    .filter(function(o) { return o[0] === 'all' || count(o[0]) > 0; });
-  document.getElementById('campaign-toolbar').innerHTML = covSegHtml(items, CAMPAIGN_TAB, 'setCampaignTab', count);
+  var chips = M.chipCounts(list);
+  if (!chips.some(function(c) { return c.id === CAMPAIGN_TAB; })) CAMPAIGN_TAB = 'all';
+  var bar2 = document.getElementById('campaign-filters');
+  if (bar2) bar2.hidden = !list.length;
+  var el = document.getElementById('campaign-toolbar');
+  if (el) el.innerHTML = list.length ? seg(chips, CAMPAIGN_TAB, 'setCampaignTab') : '';
+  var clr = document.getElementById('campaign-clear');
+  if (clr) clr.hidden = !(CAMPAIGN_Q || CAMPAIGN_TAB !== 'all');
 }
 export function setCampaignTab(v) { CAMPAIGN_TAB = v; renderCampaignToolbar(); renderCampaignRows(); }
-function renderCampaignRows() {
-  var list = (state._campaigns || []).filter(function(c) { return CAMPAIGN_TAB === 'all' || (c.summary || {}).status === CAMPAIGN_TAB; });
-  var tb = document.getElementById('campaigns-body');
-  if (!list.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">No campaigns' + (CAMPAIGN_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
-  tb.innerHTML = list.map(function(c) {
-    var s = c.summary || {};
-    var cds = campaignDisplayStatus(s);
-    var status = '<span class="sbadge s-' + cds.cls + '">' + x(cds.label) + '</span>';
-    if (s.status === 'running') {
-      status += '<div class="prog g1-s-434cdbc4"><i' + cssVars(['g1-v-9b890877', s.progress || 0]) + '></i></div>' +
-        '<span class="tiny muted">' + (s.progress || 0) + '%</span>';
-    }
-    var targetLabel = c.targetType === 'group'
-      ? (CMP.groupsById[c.targetGroupId] || ('Group #' + c.targetGroupId))
-      : c.targetType === 'all' ? 'All Agents' : 'Agents';
-    return '<tr class="u-pointer"' + on('click', 'openCampaignDetail', c.id) + '>' +
-      '<td><div class="cell-main">' + x(c.name) + '</div><div class="tiny muted g1-s-1b0e39c1">' + x(c.id) + (c.createdBy ? ' · ' + x(c.createdBy) : '') + '</div></td>' +
-      '<td class="tiny muted">' + x(c.scenarioName) + '<div class="tiny muted g1-s-8f1b8bcc">' + x(targetLabel) + '</div></td>' +
-      '<td class="tiny">' + (s.dispatched || 0) + '/' + (s.targets || 0) + (s.skipped ? ' <span class="tiny muted">(' + s.skipped + ' skipped)</span>' : '') + '</td>' +
-      '<td>' + status + '</td>' +
-      '<td>' + campaignMixBar(s) + '</td>' +
-      '<td class="tiny muted">' + fmtDate(c.startedAt) + '</td></tr>';
-  }).join('');
+export function campaignSearch(el) { CAMPAIGN_Q = (el && el.value) || ''; renderCampaignToolbar(); renderCampaignRows(); }
+export function campaignClearFilters() {
+  CAMPAIGN_Q = ''; CAMPAIGN_TAB = 'all';
+  var s = document.getElementById('campaign-search'); if (s) s.value = '';
+  renderCampaignToolbar(); renderCampaignRows();
 }
 
+function campaignCard(c) {
+  var s = c.summary || {};
+  var st = M.statusInfo(s);
+  var mx = M.mix(s);
+  var f = M.cardFacts(c);
+  var live = s.status === 'running'
+    ? '<div class="cmp-live-line"><span>' + (s.paused ? 'Paused' : 'In progress') + '</span><span>' + (s.progress || 0) + '%</span></div>' + bar(s.progress || 0, s.paused ? 'warn' : 'info')
+    : '';
+  var fact = function(label, value) { return '<div><div class="muted">' + label + '</div><b>' + x(value) + '</b></div>'; };
+  return '<div class="rk-card cmp-card"' + on('click', 'openCampaignDetail', c.id) + '>' +
+    '<div class="cmp-hd"><h2>' + x(c.name) + '</h2>' + pill(st.label, st.tone) + '</div>' +
+    '<p class="cmp-sub muted">' + x(c.scenarioName || '—') + ' · ' + x(M.agentsLine(s)) + '</p>' +
+    '<div class="cmp-id mono muted">' + x(c.id) + (c.createdBy ? ' · ' + x(c.createdBy) : '') + '</div>' +
+    live + mixBar(mx) + mixKey(mx) +
+    '<div class="cmp-facts">' + fact('Runs', f.runs) + fact('Prevented', f.rate == null ? '—' : f.rate + '%') + fact('Started', f.started) + '</div>' +
+    '<div><button type="button" class="btn btn-outline btn-sm">View per-agent breakdown</button></div>' +
+    '</div>';
+}
+
+function renderCampaignRows() {
+  var all = state._campaigns || [];
+  var list = M.filter(all, CAMPAIGN_TAB, CAMPAIGN_Q);
+  var body = document.getElementById('campaigns-body');
+  var emp = document.getElementById('campaigns-empty');
+  if (!body) return;
+  if (!list.length) {
+    body.innerHTML = '';
+    body.hidden = true;
+    if (emp) {
+      emp.hidden = false;
+      emp.innerHTML = all.length
+        ? empty('search', 'No campaigns match', 'Clear the filters to see all campaigns.') + '<div class="init-empty-act"><button class="btn btn-outline btn-sm"' + on('click', 'campaignClearFilters') + '>Clear filters</button></div>'
+        : empty('campaign', 'No campaigns yet', 'Launch a campaign to fan one scenario out across many agents.');
+    }
+    return;
+  }
+  body.hidden = false;
+  if (emp) { emp.hidden = true; emp.innerHTML = ''; }
+  body.innerHTML = list.map(campaignCard).join('');
+}
+
+// closeCampaignDetail closes the drawer and refreshes the list (also what showing the tab calls).
 export function closeCampaignDetail() {
-  setDisplay(document.getElementById('campaigns-detail'), 'none');
-  setDisplay(document.getElementById('campaigns-list'), '');
+  var o = document.getElementById('cmp-drawer-overlay');
+  if (o) o.classList.remove('open');
   loadCampaigns();
 }
+export function closeCampaignDrawerOnBackdrop(el, event) { if (event.target === el) closeCampaignDetail(); }
+
+function runTone(rn) {
+  if (rn.status === 'running' && rn.paused) return { label: 'Paused', tone: 'warn' };
+  var tone = rn.status === 'completed' ? 'ok' : rn.status === 'failed' ? 'bad' : rn.status === 'running' ? 'info' : 'muted';
+  var label = String(rn.status || '—');
+  return { label: label.charAt(0).toUpperCase() + label.slice(1), tone: tone };
+}
+
+function timelineHtml(steps) {
+  return '<div class="cmp-tl">' + steps.map(function(t, i) {
+    var dot = t.state === 'done' ? icon('ok') : t.state === 'fail' ? icon('x') : String(i + 1);
+    var tag = t.tag ? '<span class="rk-chip tone-' + M.tagTone(t.pct) + '">' + x(t.tag) + '</span>' : '';
+    return '<div class="cmp-tl-step ' + t.state + '"><div class="cmp-tl-dot">' + dot + '</div>' +
+      '<div class="grow"><div class="t">' + x(t.label) + '</div><div class="d">' + x(t.detail) + '</div></div>' + tag + '</div>';
+  }).join('') + '</div>';
+}
+
 export function openCampaignDetail(id) {
   apicall('/api/campaigns/' + encodeURIComponent(id)).then(function(c) {
     var s = c.summary || {};
-    var cds = campaignDisplayStatus(s);
-    var status = x(cds.label);
-    var liveDot = cds.live ? '<span class="dot-live"></span> ' : '';
-    // ── stat tiles ──
-    var tile = function(lbl, val, col, foot) {
-      return '<div class="kpi-card stat-tile"><div class="stat-top"><div>' +
-        '<div class="kpi-label">' + lbl + '</div>' +
-        '<div class="kpi-value"' + cssVars(['g1-v-7d75dfc9', col || 'var(--text)']) + '>' + val + '</div></div></div>' +
-        (foot ? '<div class="kpi-sub">' + foot + '</div>' : '') + '</div>';
-    };
-    var mt = (s.prevented || 0) + (s.detected || 0) + (s.missed || 0);
-    var eff = mt ? Math.round(((s.prevented || 0) * 100 + (s.detected || 0) * 50) / mt) : 0;
-    var effCol = eff >= 60 ? 'var(--success)' : eff >= 40 ? 'var(--warning)' : 'var(--danger)';
-    var tiles = '<div class="kpi-row g1-s-20ce54f7">' +
-      tile('Effectiveness', mt ? eff : '—', mt ? effCol : 'var(--muted)', 'weighted result') +
-      tile('Prevented', s.prevented || 0, 'var(--success)', 'blocked') +
-      tile('Detected only', s.detected || 0, 'var(--warning)', 'alerted, not blocked') +
-      tile('Missed', s.missed || 0, (s.missed ? 'var(--danger)' : 'var(--muted)'), 'no control response') + '</div>';
+    var st = M.statusInfo(s);
+    var mx = M.mix(s);
+    var eff = mx.total ? Math.round(((s.prevented || 0) * 100 + (s.detected || 0) * 50) / mx.total) : null;
+    document.getElementById('cmp-drawer-title').textContent = c.name || c.id;
+    document.getElementById('cmp-drawer-sub').textContent = c.id + ' · ' + (c.scenarioName || '—');
+
     // ── running banner ──
     var banner = (s.status === 'running')
-      ? '<div class="dash-panel g1-s-20ce54f7"' + cssVars(['g1-v-161b49bb', s.paused ? 'var(--warning)' : 'var(--accent)']) + '><div class="dash-panel-body g1-display-flex g1-s-f769ee49">' +
-        (cds.live ? '<span class="dot-live"></span>' : '<span class="sbadge s-paused g1-s-867764b6">paused</span>') +
-        '<div class="u-flex1"><div class="u-fw600">' + (s.paused ? 'Campaign paused — ' : 'Campaign in progress — ') + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents dispatched</div>' +
-        '<div class="prog g1-s-acd4d170"><i' + cssVars(['g1-v-9b890877', s.progress || 0]) + '></i></div></div>' +
-        '<div class="g1-s-86814ed3">' + (s.progress || 0) + '%</div></div></div>'
+      ? '<div class="cmp-live"><div class="cmp-live-line"><span>' + (s.paused ? 'Campaign paused — ' : 'Campaign in progress — ') + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents dispatched</span><span>' + (s.progress || 0) + '%</span></div>' +
+        bar(s.progress || 0, s.paused ? 'warn' : 'info', true) + '</div>'
       : '';
-    // ── per-agent results table (our fan-out equivalent of the mockup step table) ──
+    // ── per-agent results table ──
     var rows = (c.runs || []).map(function(rn) {
+      var rt = runTone(rn);
       var col = rn.status === 'completed' ? 'var(--success)' : rn.status === 'failed' ? 'var(--danger)' : 'var(--muted)';
-      var rnPaused = rn.status === 'running' && rn.paused;
-      return '<tr><td><span class="sbadge ' + (rnPaused ? 's-paused' : 's-' + x(rn.status)) + '">' + (rnPaused ? 'paused' : x(rn.status)) + '</span></td>' +
+      return '<tr><td>' + pill(rt.label, rt.tone) + '</td>' +
         '<td class="g1-s-97a09173">' + x(rn.agentId) + '</td>' +
         '<td class="g1-s-6e8bcfac"' + cssVars(['g1-v-7d75dfc9', col]) + '>' + (rn.preventionScore ? Math.round(rn.preventionScore) + '%' : '—') + '</td>' +
         '<td class="td-r"><button class="btn btn-outline btn-sm"' + on('click', 'openRunFromCampaign', rn.runId) + '>Results &rarr;</button></td></tr>';
     }).join('') || '<tr><td colspan="4" class="empty">No child runs dispatched.</td></tr>';
-    var perAgent = '<div class="dash-panel g1-s-20ce54f7"><div class="dash-panel-hdr">Per-agent results</div>' +
-      '<div class="dash-panel-body g1-s-35eecf3e"><div class="tbl-wrap"><table>' +
-      '<thead><tr><th>Status</th><th>Agent</th><th>Prevention</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div></div>';
+    var perAgent = '<h4 class="sc-h4">Per-agent results</h4><div class="tbl-wrap init-dr-tbl"><table>' +
+      '<thead><tr><th>Status</th><th>Agent</th><th>Prevention</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
     // ── skipped targets ──
     var skips = (c.skips || []).length
-      ? '<div class="dash-panel g1-s-20ce54f7"><div class="dash-panel-hdr">Skipped targets (' + c.skips.length + ')</div><div class="dash-panel-body">' +
-        c.skips.map(function(k) { return '<div class="g1-display-flex g1-s-0402a75a"><code>' + x(k.agentId) + '</code><span class="tiny muted g1-s-ca6fc035">' + x(k.reason) + '</span></div>'; }).join('') + '</div></div>'
+      ? '<h4 class="sc-h4">Skipped targets (' + c.skips.length + ')</h4><div class="cmp-skips">' +
+        c.skips.map(function(k) { return '<div><code>' + x(k.agentId) + '</code><span class="tiny muted">' + x(k.reason) + '</span></div>'; }).join('') + '</div>'
       : '';
     // ── run summary ──
-    var kv = function(k, v) { return '<div class="g1-display-flex g1-s-b60b87ad"><span class="g1-s-485ffd37">' + k + '</span><span class="u-flex1">' + v + '</span></div>'; };
+    var kvRow = function(k, v) { return '<dt>' + k + '</dt><dd>' + v + '</dd>'; };
     var targetKv = c.targetType === 'group'
       ? 'Agent Group — ' + x(CMP.groupsById[c.targetGroupId] || ('Group #' + c.targetGroupId))
       : c.targetType === 'all' ? 'All Agents' : (s.targets || 0) + ' agents selected';
-    var summary = '<div class="dash-panel"><div class="dash-panel-hdr">Run summary</div><div class="dash-panel-body">' +
-      kv('Campaign ID', '<code>' + x(c.id) + '</code>') + kv('Scenario', x(c.scenarioName)) +
-      kv('Target', targetKv) +
-      kv('Targets', (s.dispatched || 0) + ' dispatched · ' + (s.skipped || 0) + ' skipped of ' + (s.targets || 0)) +
-      kv('Mode', x(c.mode || '—')) + kv('Initiated by', x(c.createdBy || '—')) +
-      kv('Result mix', campaignMixBar(s)) + '</div></div>';
-    // ── actions ──
-    var actions = (s.status === 'running')
-      ? (s.paused
-          ? '<button class="btn btn-outline btn-sm"' + on('click', 'resumeCampaign', c.id) + ' title="Resume every paused child run">&#9654; Resume campaign</button> '
-          : '<button class="btn btn-outline btn-sm"' + on('click', 'pauseCampaign', c.id) + ' title="Pause every running child run">&#10073;&#10073; Pause campaign</button> ')
-        + '<button class="btn btn-outline-red btn-sm"' + on('click', 'stopCampaign', c.id) + '>&#9632; Stop campaign</button>'
-      : '<button class="btn btn-outline btn-sm"' + on('click', 'openCampaignReport', c.id) + ' title="Open the fleet-wide HTML report">&#8599; HTML Report</button>' +
-        ' <button class="btn btn-outline btn-sm"' + on('click', 'downloadCampaignReport', c.id) + ' title="Download the fleet-wide report as a PDF file">&#8595; PDF Report</button>' +
-        ' <button class="btn btn-outline btn-sm"' + on('click', 'downloadCampaignCSV', c.id) + ' title="Download the fleet forensic CSV (one row per technique across all agents)">&#8595; CSV</button>' +
-        ' ' + ((ROLE === 'admin' || ROLE === 'analyst')
-          ? '<button class="btn btn-outline btn-sm"' + on('click', 'openCampaignRerunReview', c) + ' title="Review and re-run this exact campaign configuration">Re-run</button>'
-          : '<button class="btn btn-outline btn-sm g1-s-ddf6ed84" disabled title="Re-run requires the Analyst or Admin role">Re-run</button>');
+    var summary = '<h4 class="sc-h4">Run summary</h4><dl class="rk-kv">' +
+      kvRow('Campaign ID', '<code>' + x(c.id) + '</code>') + kvRow('Scenario', x(c.scenarioName)) +
+      kvRow('Target', targetKv) +
+      kvRow('Targets', (s.dispatched || 0) + ' dispatched · ' + (s.skipped || 0) + ' skipped of ' + (s.targets || 0)) +
+      kvRow('Mode', x(c.mode || '—')) + kvRow('Initiated by', x(c.createdBy || '—')) +
+      kvRow('Started', x(M.startedStamp(c.startedAt))) +
+      kvRow('Result mix', mixBar(mx)) + '</dl>';
+    // ── related ──
+    var rel = '<h4 class="sc-h4">Related</h4><div class="sc-rel-list">' +
+      (s.status === 'running' ? '' :
+        '<div class="sc-rel" tabindex="0" role="button"' + on('click', 'openCampaignReport', c.id) + '>' + icon('file') +
+          '<div class="grow"><b>Campaign report</b><em>Open the fleet-wide HTML report</em></div>' + icon('chevron') + '</div>') +
+      '<div class="sc-rel" tabindex="0" role="button"' + on('click', 'campaignOpenFindings') + '>' + icon('alert') +
+        '<div class="grow"><b>Findings from this campaign</b><em id="cmp-rel-findings">Open the findings list</em></div>' + icon('chevron') + '</div></div>';
 
-    document.getElementById('campaigns-detail').innerHTML =
-      '<div class="g1-display-flex g1-s-21cf47f4">' +
-        '<div><a class="tiny g1-s-ad7942c3"' + on('click', 'closeCampaignDetail') + '>&larr; Campaigns</a>' +
-        '<h1 class="g1-s-661a80eb">' + x(c.name) + ' <span class="sbadge s-' + cds.cls + ' g1-s-06e2033f">' + liveDot + status + '</span></h1>' +
-        '<div class="g1-s-2134bc46">' + x(c.scenarioName) + ' · ' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents · started ' + fmtDate(c.startedAt) + (c.createdBy ? ' by ' + x(c.createdBy) : '') + '</div></div>' +
-        '<div class="g1-display-flex g1-s-993532d2">' + actions + '</div>' +
-      '</div>' +
-      banner + tiles +
-      '<div class="dash-grid g1-s-45aaba5d">' +
-        '<div>' + perAgent + skips + '</div>' +
-        '<div>' + summary + '<div id="cmp-recs" class="g1-s-5012029f"></div></div>' +
-      '</div>';
+    document.getElementById('cmp-drawer-body').innerHTML =
+      '<div class="k8s-dr-top cmp-dr-top">' + pill(st.label, st.tone) + '<span class="muted">' + x(M.runsLine(c)) + '</span></div>' +
+      banner + timelineHtml(M.timeline(c)) +
+      '<h4 class="sc-h4">Results</h4>' +
+      grid(4, [
+        kpi({ label: 'Effectiveness', value: eff == null ? '—' : eff, sub: 'weighted result', icon: 'trend', tone: eff == null ? 'muted' : eff >= 60 ? 'ok' : eff >= 40 ? 'warn' : 'bad' }),
+        kpi({ label: 'Prevented', value: s.prevented || 0, sub: 'blocked', icon: 'shield', tone: 'ok' }),
+        kpi({ label: 'Detected only', value: s.detected || 0, sub: 'alerted, not blocked', icon: 'eye', tone: 'warn' }),
+        kpi({ label: 'Missed', value: s.missed || 0, sub: 'no control response', icon: 'alert', tone: s.missed ? 'bad' : 'muted' }),
+      ]) +
+      perAgent + skips + summary +
+      '<div id="cmp-recs" class="cmp-recs"></div>' + rel;
+
+    // ── actions ──
+    var foot = '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'closeCampaignDetail') + '>Close</button><span class="grow"></span>';
+    if (s.status === 'running') {
+      foot += (s.paused
+        ? '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'resumeCampaign', c.id) + ' title="Resume every paused child run">' + icon('play') + 'Resume campaign</button>'
+        : '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'pauseCampaign', c.id) + ' title="Pause every running child run">' + icon('pause') + 'Pause campaign</button>') +
+        '<button type="button" class="btn btn-outline btn-sm init-del"' + on('click', 'stopCampaign', c.id) + '>Stop campaign</button>';
+    } else {
+      foot += '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'downloadCampaignReport', c.id) + ' title="Download the fleet-wide report as a PDF file">PDF Report</button>' +
+        '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'downloadCampaignCSV', c.id) + ' title="Download the fleet forensic CSV (one row per technique across all agents)">CSV</button>' +
+        ((ROLE === 'admin' || ROLE === 'analyst')
+          ? '<button type="button" class="btn btn-primary btn-sm"' + on('click', 'openCampaignRerunReview', c) + ' title="Review and re-run this exact campaign configuration">Re-run</button>'
+          : '<button type="button" class="btn btn-primary btn-sm" disabled title="Re-run requires the Analyst or Admin role">Re-run</button>');
+    }
+    document.getElementById('cmp-drawer-foot').innerHTML = foot;
+
     activateTab('campaigns'); // in case opened from the dashboard
-    setDisplay(document.getElementById('campaigns-list'), 'none');
-    setDisplay(document.getElementById('campaigns-detail'), '');
+    if (!(state._campaigns || []).length) loadCampaigns();
+    document.getElementById('cmp-drawer-overlay').classList.add('open');
     renderCampaignRecs(c.id);
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+export function campaignOpenFindings() {
+  document.getElementById('cmp-drawer-overlay').classList.remove('open');
+  showTab('findings');
 }
 // renderCampaignRecs shows this campaign's Top Open findings and Top Regressions
 // (not the whole fleet) — the actionable next steps for the run.
@@ -179,9 +235,12 @@ function renderCampaignRecs(campaignId) {
     var el = document.getElementById('cmp-recs');
     if (!el) return;
     var mine = (fs || []).filter(function(f) { return f.lastCampaignId === campaignId; });
-    var open = mine.filter(function(f) { return f.status === 'open'; }).slice(0, 5);
+    var openAll = mine.filter(function(f) { return f.status === 'open'; });
+    var open = openAll.slice(0, 5);
     var regr = mine.filter(function(f) { return f.reopenedCount > 0 && f.status === 'open'; }).slice(0, 3);
-    var hdr = function(t) { return '<div class="g1-s-88664075">' + t + '</div>'; };
+    var relEl = document.getElementById('cmp-rel-findings');
+    if (relEl) relEl.textContent = openAll.length ? openAll.length + ' open' : 'No open findings';
+    var hdr = function(t) { return '<h4 class="sc-h4">' + t + '</h4>'; };
     var rowf = function(f) {
       return '<div class="lrow u-pointer"' + on('click', 'openFindingFromDashboard', f.id) + '>' +
         '<div class="lmain"><div class="lt">' + x(f.techniqueName || f.techniqueId) + '</div>' +
@@ -205,17 +264,17 @@ export function openRunFromCampaign(runId) {
 export function stopCampaign(id) {
   if (!confirm('Stop this campaign? Running child runs will be marked partial.')) return;
   apicall('/api/campaigns/' + encodeURIComponent(id) + '/stop', { method: 'POST' })
-    .then(function() { showToast('Campaign stopped', 'ok'); openCampaignDetail(id); })
+    .then(function() { showToast('Campaign stopped', 'ok'); openCampaignDetail(id); loadCampaigns(); })
     .catch(function(e) { showToast(e.message, 'err'); });
 }
 export function pauseCampaign(id) {
   apicall('/api/campaigns/' + encodeURIComponent(id) + '/pause', { method: 'POST' })
-    .then(function(res) { showToast('Pausing ' + ((res && res.pausing) || 0) + ' running child run(s)', 'ok'); openCampaignDetail(id); })
+    .then(function(res) { showToast('Pausing ' + ((res && res.pausing) || 0) + ' running child run(s)', 'ok'); openCampaignDetail(id); loadCampaigns(); })
     .catch(function(e) { showToast(e.message, 'err'); });
 }
 export function resumeCampaign(id) {
   apicall('/api/campaigns/' + encodeURIComponent(id) + '/resume', { method: 'POST' })
-    .then(function(res) { showToast('Resuming ' + ((res && res.resuming) || 0) + ' paused child run(s)', 'ok'); openCampaignDetail(id); })
+    .then(function(res) { showToast('Resuming ' + ((res && res.resuming) || 0) + ' paused child run(s)', 'ok'); openCampaignDetail(id); loadCampaigns(); })
     .catch(function(e) { showToast(e.message, 'err'); });
 }
 

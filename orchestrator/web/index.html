@@ -1489,18 +1489,16 @@
 
       <!-- Campaigns -->
       <div id="tab-campaigns" class="is-hidden">
-        <div id="campaigns-list">
-          <div id="hero-campaigns"></div>
-          <div id="campaign-summary"></div>
-          <div id="campaign-toolbar" class="g1-s-462c8de6"></div>
-          <div class="tbl-wrap">
-            <table>
-              <thead><tr><th>Campaign</th><th>Scenario</th><th>Targets</th><th>Status</th><th>Result mix</th><th>Started</th></tr></thead>
-              <tbody id="campaigns-body"><tr><td colspan="6" class="empty">No campaigns yet.</td></tr></tbody>
-            </table>
-          </div>
+        <div id="hero-campaigns"></div>
+        <div class="rk-filters init-filters cmp-filters" id="campaign-filters" hidden>
+          <div id="campaign-toolbar"></div>
+          <span class="grow"></span>
+          <label class="rk-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="campaign-search" placeholder="Search campaigns..." data-on-input="campaignSearch"></label>
+          <button type="button" id="campaign-clear" class="btn btn-outline btn-sm" data-on-click="campaignClearFilters" hidden>Clear</button>
+          <button type="button" class="btn btn-outline cmp-sched" disabled title="Scheduled campaigns are not available yet"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Schedule &middot; soon</button>
         </div>
-        <div id="campaigns-detail" class="is-hidden"></div>
+        <div id="campaigns-body" class="rk-grid g3 cmp-grid"><div class="init-loading muted">Loading…</div></div>
+        <div id="campaigns-empty" hidden></div>
       </div>
 
       <!-- Active Directory Coverage -->
@@ -3303,10 +3301,14 @@
 
 <!-- Launch Campaign Modal -->
 <div id="campaign-overlay" class="overlay">
-  <div class="modal g1-s-161f36ec">
-    <h3>New Campaign</h3>
-    <label class="modal-lbl">Name</label>
-    <input id="cmp-name" type="text" placeholder="e.g. Q2 Ransomware Readiness" class="g1-s-9567afe4">
+  <div class="modal init-modal cmp-modal" role="dialog" aria-modal="true" aria-label="New Campaign">
+    <div class="init-mhd">
+      <h3><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14v-4l11-5v14L4 14z"/><path d="M15 9c2 1 2 5 0 6M7 14l1 5"/></svg>New Campaign</h3>
+      <button type="button" class="drawer-close" data-on-click="closeCampaignLaunch" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="init-mbd cmp-mbd">
+    <label class="modal-lbl" for="cmp-name">Campaign name</label>
+    <input id="cmp-name" type="text" placeholder="e.g. Q2 Ransomware Readiness" class="init-field">
 
     <!-- ── Campaign Source (mutually exclusive: a campaign has ONE source) ── -->
     <label class="modal-lbl g1-display-block g1-s-78e6c204">Campaign Source</label>
@@ -3375,7 +3377,7 @@
     </div>
 
     <label class="modal-lbl">Notes (optional)</label>
-    <input id="cmp-notes" type="text" placeholder="optional" class="g1-s-9567afe4">
+    <input id="cmp-notes" type="text" placeholder="optional" class="init-field">
     <div id="cmp-target-all-wrap" class="is-hidden g1-s-4565db10">
       <div id="cmp-all-count" class="g1-s-4bd74f74"></div>
       <label class="g1-display-flex g1-s-5914e41c">
@@ -3383,9 +3385,10 @@
         I understand this will execute against all eligible agents.
       </label>
     </div>
-    <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" data-on-click="closeCampaignLaunch">Cancel</button>
-      <button class="btn btn-primary btn-sm" id="cmp-launch-btn" data-on-click="submitCampaign">&#9654; Launch</button>
+    </div>
+    <div class="init-mft">
+      <button type="button" class="btn btn-outline btn-sm" data-on-click="closeCampaignLaunch">Cancel</button>
+      <button type="button" class="btn btn-primary btn-sm" id="cmp-launch-btn" data-on-click="submitCampaign">Create campaign</button>
     </div>
   </div>
 </div>
@@ -3457,6 +3460,17 @@
 </div>
 
 <!-- Results Drawer -->
+<div id="cmp-drawer-overlay" class="drawer-overlay" data-on-click="closeCampaignDrawerOnBackdrop">
+  <div class="drawer sc-drawer" role="dialog" aria-modal="true" aria-label="Campaign details">
+    <div class="drawer-header">
+      <div class="sc-dh"><span class="sc-dh-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14v-4l11-5v14L4 14z"/><path d="M15 9c2 1 2 5 0 6M7 14l1 5"/></svg></span><div><div class="sc-dh-t" id="cmp-drawer-title">Campaign</div><div class="sc-dh-s" id="cmp-drawer-sub"></div></div></div>
+      <button class="drawer-close" data-on-click="closeCampaignDetail" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="drawer-body" id="cmp-drawer-body"></div>
+    <div class="sc-drawer-ft" id="cmp-drawer-foot"></div>
+  </div>
+</div>
+
 <div id="results-overlay" class="drawer-overlay" data-on-click="closeResultsOnBackdrop">
   <div class="drawer">
     <div class="drawer-header">

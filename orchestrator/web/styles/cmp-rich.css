@@ -1,0 +1,77 @@
+/* Campaigns page: banner buttons, the filter row, the campaign cards, the detail drawer and the
+   New Campaign modal. Mirrors the design demo. Theme tokens only. */
+
+#hero-campaigns .hero-actions .btn svg { width: 15px; height: 15px; margin-right: 6px; vertical-align: -3px; flex: none; }
+#hero-campaigns .hero-actions .btn { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; font-size: 13px; width: auto; }
+
+/* Filter row: chips left, search and the disabled Schedule button right */
+.cmp-filters .rk-search { flex: 0 1 260px; }
+.cmp-filters .cmp-sched { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; font-size: 13px; width: auto; }
+.cmp-filters .cmp-sched svg { width: 15px; height: 15px; flex: none; }
+.cmp-filters .cmp-sched:disabled { opacity: .6; cursor: not-allowed; }
+#campaigns-body[hidden], #campaigns-empty[hidden] { display: none; }
+
+/* Cards */
+.cmp-grid { gap: 14px; }
+.cmp-card { cursor: pointer; transition: border-color .15s, background .15s; min-width: 0; }
+.cmp-card:hover { border-color: var(--accent-border); }
+.cmp-hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.cmp-hd h2 { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+.cmp-hd .rk-pill { flex: none; }
+.cmp-sub { margin: 6px 0 0; font-size: 12.5px; overflow-wrap: anywhere; }
+.cmp-id { font-size: 11px; margin-top: 2px; overflow-wrap: anywhere; }
+.cmp-live-line { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted-hi); margin: 12px 0 6px; }
+.cmp-live-line + .rk-bar { margin-bottom: 2px; }
+.cmp-mix { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--border); gap: 2px; margin: 14px 0 6px; }
+.cmp-mix i { display: block; height: 100%; flex: none; }
+.cmp-mix .k-prevented { background: var(--success); }
+.cmp-mix .k-detected { background: var(--warning); }
+.cmp-mix .k-missed { background: var(--danger); }
+.cmp-k { display: flex; gap: 12px; font-size: 12px; font-weight: 600; flex-wrap: wrap; margin-bottom: 12px; }
+.cmp-k .k-prevented { color: var(--success-text); }
+.cmp-k .k-detected { color: var(--warning-text); }
+.cmp-k .k-missed { color: var(--danger-text); }
+.cmp-k .muted { font-weight: 400; color: var(--muted); }
+.cmp-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; font-size: 13px; }
+.cmp-facts .muted { font-size: 11px; }
+.cmp-facts b { font-weight: 600; }
+
+/* Drawer */
+#cmp-drawer-overlay .drawer { width: min(640px, 94vw); }
+#cmp-drawer-overlay .drawer-header { padding: 14px 20px; gap: 12px; }
+#cmp-drawer-overlay .drawer-body { padding: 18px 20px 20px; }
+#cmp-drawer-overlay .sc-dh-ico svg { width: 24px; height: 24px; }
+#cmp-drawer-overlay .sc-rel svg { width: 16px; height: 16px; }
+#cmp-drawer-overlay .sc-drawer-ft .btn { display: inline-flex; align-items: center; gap: 6px; }
+#cmp-drawer-overlay .sc-drawer-ft .btn svg { width: 13px; height: 13px; }
+#cmp-drawer-overlay .sc-rel > svg:last-child { color: var(--muted); }
+.cmp-dr-top { flex-wrap: wrap; }
+.cmp-live { margin-bottom: 16px; }
+.cmp-live .cmp-live-line { margin-top: 0; }
+.cmp-skips > div { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.cmp-skips > div:last-child { border-bottom: 0; }
+.cmp-skips .tiny { overflow-wrap: anywhere; }
+.cmp-recs { margin-top: 4px; }
+.cmp-dr-top + .cmp-tl, .cmp-live + .cmp-tl { margin-top: 4px; }
+#cmp-drawer-overlay .rk-kv .cmp-mix { margin: 4px 0; min-width: 120px; }
+#cmp-drawer-overlay .rk-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+
+/* Timeline */
+.cmp-tl { display: flex; flex-direction: column; margin-bottom: 8px; }
+.cmp-tl-step { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; padding-bottom: 14px; position: relative; align-items: start; }
+.cmp-tl-step::before { content: ""; position: absolute; left: 10px; top: 22px; bottom: 0; width: 2px; background: var(--border); }
+.cmp-tl-step:last-child::before { display: none; }
+.cmp-tl-dot { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: var(--elevated); border: 2px solid var(--border-hi); color: var(--muted); font-weight: 700; }
+.cmp-tl-dot svg { width: 12px; height: 12px; }
+.cmp-tl-step.done .cmp-tl-dot { background: var(--success-dim); border-color: var(--success); color: var(--success); }
+.cmp-tl-step.run .cmp-tl-dot { border-color: var(--accent); color: var(--accent); }
+.cmp-tl-step.fail .cmp-tl-dot { border-color: var(--danger); color: var(--danger); }
+.cmp-tl-step .t { font-weight: 500; }
+.cmp-tl-step .d { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+
+/* New Campaign modal: same frame as the initiative modal, scrolling body */
+.cmp-modal { width: min(640px, 94vw); max-height: 90vh; display: flex; flex-direction: column; }
+.cmp-mbd { overflow-y: auto; padding-bottom: 14px; min-height: 0; }
+.cmp-mbd .modal-lbl { margin-top: 2px; }
+.cmp-mbd select { width: 100%; }
+@media (max-width: 700px) { .cmp-filters .rk-search { flex-basis: 100%; } .cmp-facts { gap: 6px; } }

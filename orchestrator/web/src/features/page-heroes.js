@@ -172,9 +172,14 @@ var HEROES = {
     icon: ICON.campaign,
     title: 'Campaigns',
     sub: 'One scenario fanned out across many agents. Open a campaign for the per-agent breakdown and result mix.',
-    actions: '<div class="g1-display-flex g1-s-993532d2"><button class="btn btn-outline btn-sm g1-s-ddf6ed84" disabled title="Scheduled campaigns — coming soon">Schedule · soon</button><button class="btn btn-outline btn-sm" data-on-click="loadCampaigns">Refresh</button><button class="btn btn-primary btn-sm" id="campaign-new-btn" data-on-click="openCampaignLaunch">&#9654; New campaign</button></div>',
+    actions:
+      '<button type="button" class="btn btn-outline" data-on-click="loadCampaigns">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh</button>' +
+      '<button type="button" class="btn btn-primary" id="campaign-new-btn" data-on-click="openCampaignLaunch">' + svg('<path d="M12 5v14M5 12h14"/>') + 'New campaign</button>',
     stats: [
       { id: 'campaign-cnt', icon: ICON.campaign, value: '—', label: 'Campaigns' },
+      { id: 'campaign-hs-completed', icon: ICON.ok, value: '—', label: 'Completed' },
+      { id: 'campaign-hs-partial', icon: ICON.warn, value: '—', label: 'Partial' },
+      { id: 'campaign-hs-runs', icon: ICON.box, value: '—', label: 'Runs executed' },
     ],
   },
   'hero-attackpath': {
