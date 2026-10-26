@@ -941,6 +941,7 @@ func main() {
 		WithContentSeed(cfg.ARTDir, cfg.ARTPayloadDir, cfg.KEVFile, cfg.ARTContentVersion).
 		WithEPSSFile(cfg.EPSSFile).
 		WithAgentSecret(cfg.AgentSecret).
+		WithEnrollmentMode(enrollmentModeFromEnv()).
 		WithIngestAPIKey(cfg.IngestAPIKey).
 		WithAdvertisedPorts(cfg.AdvertisedMTLSPort, cfg.AdvertisedEnrollPort).
 		WithPKI(ca).
@@ -1467,3 +1468,18 @@ func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
 	}
 }
 
+
+// enrollmentModeFromEnv reads BAS_ENROLLMENT_MODE: "secret" (default, the shared secret enrols) or "token"
+// (single-use per-agent tokens). Anything else stops the server rather than silently weakening enrolment.
+func enrollmentModeFromEnv() string {
+	switch m := strings.ToLower(strings.TrimSpace(os.Getenv("BAS_ENROLLMENT_MODE"))); m {
+	case "", api.EnrollmentModeSecret:
+		return api.EnrollmentModeSecret
+	case api.EnrollmentModeToken:
+		log.Println("[*] enrollment mode: token (single-use per-agent tokens; the shared secret no longer enrols agents)")
+		return api.EnrollmentModeToken
+	default:
+		log.Fatalf("[FATAL] BAS_ENROLLMENT_MODE=%q is not valid: use \"secret\" or \"token\"", m)
+		return ""
+	}
+}

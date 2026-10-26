@@ -67,7 +67,16 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mtlsID := AuthenticatedAgentID(r)
-	if mtlsID == "" && !h.validateAgentAuth(r) {
+	tokenMode := mtlsID == "" && h.tokenEnrollment()
+	ip := clientIP(r)
+	if tokenMode {
+		// Token mode: the shared secret does not enrol anyone. The token is checked below, inside the
+		// issuing transaction. Repeated failures from one address are throttled first.
+		if h.enrollThrottle.blocked(ip) {
+			jsonError(w, "too many failed enrolment attempts — try again later", http.StatusTooManyRequests)
+			return
+		}
+	} else if mtlsID == "" && !h.validateAgentAuth(r) {
 		jsonError(w, "unauthorized — check AGENT_SECRET", http.StatusUnauthorized)
 		return
 	}
@@ -107,6 +116,30 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('agent_certificates:' || $1, 0))`, req.AgentID); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	if tokenMode {
+		token := r.Header.Get("X-Enrollment-Token")
+		consumed := false
+		if token != "" {
+			// One atomic UPDATE: valid, unused, unexpired, not revoked, and issued for THIS AgentID.
+			// It commits or rolls back with the certificate insert, so a failed enrolment burns nothing.
+			tag, err := tx.Exec(ctx, `
+				UPDATE agent_enrollment_tokens SET used_at = NOW()
+				 WHERE token_hash = $1 AND agent_id = $2 AND used_at IS NULL AND revoked = false AND expires_at > NOW()`,
+				hashEnrollmentToken(token), req.AgentID)
+			if err != nil {
+				jsonError(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			consumed = tag.RowsAffected() == 1
+		}
+		if !consumed {
+			h.enrollThrottle.fail(ip)
+			h.auditLogAs(r, "agent:"+req.AgentID, "agent.enroll_denied", req.AgentID, map[string]any{"reason": "invalid, expired, used or mismatched enrolment token"}, "denied")
+			jsonError(w, "enrolment token invalid, expired, already used, or issued for a different agent", http.StatusUnauthorized)
+			return
+		}
 	}
 
 	var agentRevoked bool

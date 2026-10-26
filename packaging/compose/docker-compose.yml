@@ -259,6 +259,8 @@ services:
       # cmd/server/main.go's checkCANotSilentlyRotated); leave unset for
       # normal operation.
       BAS_CONFIRM_NEW_CA: ${BAS_CONFIRM_NEW_CA:-}
+      # Enrolment authorization: "secret" (default) or "token" (single-use per-agent tokens). Audit F-03.
+      BAS_ENROLLMENT_MODE: ${BAS_ENROLLMENT_MODE:-secret}
       # ── Legacy listener retirement (B2) — operator override ─────────────────
       # BAS_LEGACY_LISTENER_ENABLED=false: Step 3 of the B2 retirement
       # procedure, set only after GET /api/agents/legacy-migration-status

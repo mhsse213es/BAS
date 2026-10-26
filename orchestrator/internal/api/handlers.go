@@ -115,6 +115,8 @@ type Handler struct {
 	actionVendorClient   func(actions.ConnectorConfig) (actions.VendorClient, error)
 	secret               string
 	agentSecret          string                 // optional shared secret for agent-facing endpoints
+	enrollmentMode       string                 // "" / "secret" (shared secret enrols) or "token" (single-use per-agent token)
+	enrollThrottle       enrollThrottle         // failed enrolment-token attempts per client address
 	ingestAPIKey         string                 // shared secret for POST /api/ingest/v1/events; empty disables the endpoint
 	pki                  *pki.CA                // deployment CA for agent mTLS enrollment (B1/B3)
 	signingKey           *cmdsigning.SigningKey // deployment command-signing key (B4) -- separate trust domain from pki above, never chained to it

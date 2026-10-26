@@ -70,8 +70,20 @@ Progress: all six areas assessed. Fixed: F-01, F-02, F-04, F-05, F-06, F-07; par
 * **Mitigation done:** every bootstrap is now written to the audit log as `agent.enroll`, and a bootstrap for an AgentID that
   already had certificates as `agent.reenroll` (with the count of earlier certificates and the new serial).
   Test: `TestEnrollCSR_BootstrapIsAuditedAndReEnrolmentIsFlagged`. This detects abuse; it does not prevent it.
-* **Still open, needs your decision:** per-agent or single-use enrollment tokens, or operator approval before an existing AgentID
-  may re-enrol. Either changes how installs are done (the MSI and install scripts would need a token), so it is not done here.
+* **Server side of per-agent tokens: BUILT, opt-in.** `BAS_ENROLLMENT_MODE=token` (default `secret`, so an upgrade changes nothing).
+  In token mode the shared secret no longer enrols anyone; first enrolment needs `X-Enrollment-Token`. Tokens: 256-bit random
+  (`bas_enr_…`), stored only as SHA-256, issued for one AgentID (given directly or derived from a hostname with the agent's own
+  `hex(SHA-256(hostname))[:16]`), 1 to 168 hours (default 24), consumed atomically inside the certificate-issuing transaction (a failed
+  enrolment, or a token presented for another agent, does not burn it), revocable while unused. Admin API: `POST/GET /api/enrollment-tokens`,
+  `DELETE /api/enrollment-tokens/{id}`; every issue, revoke and denial is audited. Failed attempts are throttled to 20 per 10 minutes
+  per address (in memory, resets on restart). Tests: `enroll_token_test.go` (5 tests, written first).
+* **Rulings:** default stays `secret` so existing fleets and installers keep working; a malformed `BAS_ENROLLMENT_MODE` stops the
+  server instead of weakening enrolment; renewal over mTLS is unaffected by the mode.
+* **Not built yet (each needs the agent or installers):** the agent sending a token (it still sends only the shared secret, so in token
+  mode no agent can enrol until this lands); the Deploy Agent page, MSI/install scripts and deployment bundle asking for a token; and
+  the F-06 recovery path, which re-enrols an expired agent with the shared secret and therefore fails in token mode. Proposed
+  replacement: re-enrolment proven by the agent's previous (expired) certificate within a grace period, otherwise an operator-issued
+  token. Operator approval as a higher-security mode is not built.
 
 ### Positive checks still to execute (cheap, planned)
 
