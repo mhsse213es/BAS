@@ -37,8 +37,20 @@ DASH_PORT="${BAS_DASHBOARD_PORT:-9543}"
 MTLS_PORT="${BAS_MTLS_PORT:-9443}"
 ENV="${BAS_ENV_LABEL:-Production}"
 CERT_DIR="${BAS_CERT_DIR:-/etc/audspect/certs}"
-CA_FILE="/etc/audspect-agent/deployment-ca.pem"
+CA_FILE="${BAS_CA_FILE:-/etc/audspect-agent/deployment-ca.pem}"
 IDENTITY_FILES="agent-cert.pem agent-key.pem enrollment-state"
+
+# describe_rc <exit code of the agent's -preflight>: the failure in plain words.
+describe_rc() {
+  case "$1" in
+    20) echo "the agent rejected its inputs as invalid." ;;
+    21) echo "the Audspect server could not be reached (${HOST}:${MTLS_PORT}). Check the network, the firewall and the server address; nothing was changed." ;;
+    22) echo "the server rejected the agent secret. Check the secret and try again; nothing was changed." ;;
+    23) echo "the server's certificate is not trusted by the deployment CA; nothing was changed." ;;
+    24) echo "the deployment CA is invalid; nothing was changed." ;;
+    *) echo "the pre-install check failed (exit code $1); nothing was changed." ;;
+  esac
+}
 
 usage() { echo "usage: sudo $0 [--agent <binary>] [--ca-fingerprint <sha256>] [--token-file <path> | --token-stdin]" >&2; exit 2; }
 
@@ -109,12 +121,22 @@ elif [ -n "${BAS_ENROLLMENT_TOKEN:-}" ]; then
   printf '%s\n' "$BAS_ENROLLMENT_TOKEN" > "$TOKEN_DIR/token"; unset BAS_ENROLLMENT_TOKEN
   TOKEN_PATH="$TOKEN_DIR/token"
 elif [ -t 0 ]; then
-  read -r -s -p "Enrolment token (press Enter to skip if this server uses the shared secret only): " TOKEN_VALUE
+  if [ "${BAS_TOKEN_REQUIRED:-}" = "1" ]; then
+    read -r -s -p "Enrolment token (required by this server): " TOKEN_VALUE
+  else
+    read -r -s -p "Enrolment token (press Enter to skip if this server uses the shared secret only): " TOKEN_VALUE
+  fi
   echo
   if [ -n "$TOKEN_VALUE" ]; then
     printf '%s\n' "$TOKEN_VALUE" > "$TOKEN_DIR/token"; TOKEN_PATH="$TOKEN_DIR/token"
   fi
   unset TOKEN_VALUE
+fi
+
+if [ "${BAS_TOKEN_REQUIRED:-}" = "1" ] && [ -z "$TOKEN_PATH" ]; then
+  rm -rf "$TOKEN_DIR"
+  echo "ERROR: this server issues single-use enrolment tokens and none was provided. Ask the administrator for a token for this host, then run the setup again (it asks for it, or use --token-file / --token-stdin)." >&2
+  exit 2
 fi
 
 if [ -z "$AGENT" ]; then
@@ -159,13 +181,26 @@ else
   echo "    warning: no --ca-fingerprint given; trusting this CA on first contact" >&2
 fi
 
+# Check the server and the secret BEFORE anything on this host is touched: a wrong secret must not cost the host
+# its working agent.
+chmod +x "$AGENT"
+echo "==> Checking the server and the agent secret"
+set +e
+printf '%s\n' "$SECRET" | "$AGENT" -preflight -server "https://${HOST}:${MTLS_PORT}" -enroll-port "$PORT" -ca-root "$TMP_CA" --secret-stdin
+PRE_RC=$?
+set -e
+if [ "$PRE_RC" -ne 0 ]; then
+  echo "ERROR: $(describe_rc "$PRE_RC")" >&2
+  exit "$PRE_RC"
+fi
+
 echo "==> Checking the existing agent identity"
 clear_stale_identity "$TMP_CA"
 
 if systemctl cat bas-agent >/dev/null 2>&1 || [ -x /usr/local/bin/bas-agent ]; then
   echo "==> Removing the previously installed agent service"
   chmod +x "$AGENT"
-  "$AGENT" -uninstall || echo "    warning: previous uninstall reported errors; continuing"
+  BAS_UNINSTALL_KEEP_DATA=1 "$AGENT" -uninstall || echo "    warning: previous uninstall reported errors; continuing"
 fi
 
 install -d -m 0755 "$(dirname "$CA_FILE")"

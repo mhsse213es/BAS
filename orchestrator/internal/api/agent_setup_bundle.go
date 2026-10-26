@@ -14,12 +14,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
-// linuxSetupAgentName is the agent binary packed into the Linux setup file. It is checked against the
-// signed manifest before it is packed, the same as every other agent download.
-const linuxSetupAgentName = "bas-agent-linux-amd64"
 
 // linuxSetupFileName is the name the browser saves the setup file under.
 const linuxSetupFileName = "bas-agent-setup-linux.run"
@@ -37,8 +35,8 @@ trap 'rm -rf "$TMP"' EXIT
 OFFSET=$(awk '/^__ARCHIVE_BELOW__$/ { print NR + 1; exit 0 }' "$0")
 tail -n +"$OFFSET" "$0" | tar -xz -C "$TMP"
 cd "$TMP"
-BAS_SERVER_HOST=%s BAS_ENROLL_PORT=%d BAS_MTLS_PORT=%d BAS_DASHBOARD_PORT=%d \
-  bash install-agent-linux.sh --ca-file ./deployment-ca.pem --agent ./bas-agent-linux-amd64
+BAS_SERVER_HOST=%s BAS_ENROLL_PORT=%d BAS_MTLS_PORT=%d BAS_DASHBOARD_PORT=%d %s\
+  bash install-agent-linux.sh --ca-file ./deployment-ca.pem --agent ./bas-agent-linux-%s
 exit 0
 __ARCHIVE_BELOW__
 `
@@ -47,8 +45,20 @@ __ARCHIVE_BELOW__
 // metacharacters) is refused, because the host is written into a shell script.
 var setupHostPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$`)
 
-// buildLinuxSetupScript returns the shell header for a setup file, with the server details filled in.
+// buildLinuxSetupScript returns the amd64 shell header for a setup file, with the server details filled in.
 func buildLinuxSetupScript(host string, enrollPort, mtlsPort, dashPort int) ([]byte, error) {
+	return buildLinuxSetupScriptFor(host, enrollPort, mtlsPort, dashPort, "amd64", false)
+}
+
+// linuxSetupArchitectures are the CPU architectures the Linux setup file is built for.
+var linuxSetupArchitectures = map[string]bool{"amd64": true, "arm64": true}
+
+// buildLinuxSetupScriptFor is buildLinuxSetupScript for one architecture. When the server issues enrolment
+// tokens the header sets BAS_TOKEN_REQUIRED, so the installer insists on a token instead of offering to skip it.
+func buildLinuxSetupScriptFor(host string, enrollPort, mtlsPort, dashPort int, arch string, tokenRequired bool) ([]byte, error) {
+	if !linuxSetupArchitectures[arch] {
+		return nil, fmt.Errorf("unknown architecture %q", arch)
+	}
 	if !setupHostPattern.MatchString(host) {
 		return nil, fmt.Errorf("server host %q is not a plain host name or IPv4 address", host)
 	}
@@ -57,11 +67,23 @@ func buildLinuxSetupScript(host string, enrollPort, mtlsPort, dashPort int) ([]b
 			return nil, fmt.Errorf("%s port %d is out of range", name, p)
 		}
 	}
-	return []byte(fmt.Sprintf(linuxSetupScriptTemplate, host, enrollPort, mtlsPort, dashPort)), nil
+	tokenEnv := ""
+	if tokenRequired {
+		tokenEnv = "BAS_TOKEN_REQUIRED=1 "
+	}
+	return []byte(fmt.Sprintf(linuxSetupScriptTemplate, host, enrollPort, mtlsPort, dashPort, tokenEnv, arch)), nil
 }
 
 // buildLinuxSetupArchive packs the installer, the agent and the deployment CA into a gzip'd tar.
 func buildLinuxSetupArchive(agent, installScript, caPEM []byte) ([]byte, error) {
+	return buildLinuxSetupArchiveFor("amd64", agent, installScript, caPEM)
+}
+
+// buildLinuxSetupArchiveFor packs the agent under the name the header expects for its architecture.
+func buildLinuxSetupArchiveFor(arch string, agent, installScript, caPEM []byte) ([]byte, error) {
+	if !linuxSetupArchitectures[arch] {
+		return nil, fmt.Errorf("unknown architecture %q", arch)
+	}
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
@@ -71,7 +93,7 @@ func buildLinuxSetupArchive(agent, installScript, caPEM []byte) ([]byte, error) 
 		data []byte
 	}{
 		{"install-agent-linux.sh", 0o755, installScript},
-		{linuxSetupAgentName, 0o755, agent},
+		{"bas-agent-linux-" + arch, 0o755, agent},
 		{"deployment-ca.pem", 0o644, caPEM},
 	}
 	now := time.Now()
@@ -96,7 +118,7 @@ func buildLinuxSetupArchive(agent, installScript, caPEM []byte) ([]byte, error) 
 // verifiedAgentFile reads an agent binary from ./agents and checks it against the signed manifest,
 // the same check DownloadAgent makes. A file that is not listed, or whose hash differs, is refused.
 func (h *Handler) verifiedAgentFile(filename string) ([]byte, error) {
-	data, err := os.ReadFile(filepath.Join("./agents", filename))
+	data, err := os.ReadFile(filepath.Join(agentArtifactDir, filename))
 	if err != nil {
 		return nil, fmt.Errorf("agent binary not found: %s", filename)
 	}
@@ -118,6 +140,11 @@ func (h *Handler) verifiedAgentFile(filename string) ([]byte, error) {
 // serveLinuxSetup builds the Linux setup file for this deployment: the CA, the server details and the
 // verified agent, with the secret left to be typed at install time.
 func (h *Handler) serveLinuxSetup(w http.ResponseWriter, r *http.Request) {
+	h.serveLinuxSetupFor(w, r, "amd64")
+}
+
+// serveLinuxSetupFor is serveLinuxSetup for one architecture.
+func (h *Handler) serveLinuxSetupFor(w http.ResponseWriter, r *http.Request, arch string) {
 	if h.pki == nil {
 		jsonError(w, "the deployment CA is not configured on this server", http.StatusServiceUnavailable)
 		return
@@ -127,7 +154,7 @@ func (h *Handler) serveLinuxSetup(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "the deployment CA is not configured on this server", http.StatusServiceUnavailable)
 		return
 	}
-	agentBin, err := h.verifiedAgentFile(linuxSetupAgentName)
+	agentBin, err := h.verifiedAgentFile("bas-agent-linux-" + arch)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -146,19 +173,19 @@ func (h *Handler) serveLinuxSetup(w http.ResponseWriter, r *http.Request) {
 			dashPort = n
 		}
 	}
-	script, err := buildLinuxSetupScript(requestHost(r), enrollPort, mtlsPort, dashPort)
+	script, err := buildLinuxSetupScriptFor(requestHost(r), enrollPort, mtlsPort, dashPort, arch, h.tokenEnrollment())
 	if err != nil {
 		jsonError(w, "could not build the setup file: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	archive, err := buildLinuxSetupArchive(agentBin, installAgentLinuxScript, caPEM)
+	archive, err := buildLinuxSetupArchiveFor(arch, agentBin, installAgentLinuxScript, caPEM)
 	if err != nil {
 		jsonError(w, "could not pack the setup file", http.StatusInternalServerError)
 		return
 	}
 	body := append(script, archive...)
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+linuxSetupFileName+`"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+strings.Replace(linuxSetupFileName, "linux", "linux-"+arch, 1)+`"`)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	_, _ = w.Write(body)

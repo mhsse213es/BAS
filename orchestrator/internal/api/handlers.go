@@ -1364,6 +1364,25 @@ func (h *Handler) DownloadAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if platform == "darwin-arm64-setup" || platform == "darwin-amd64-setup" {
+		h.serveMacSetup(w, r, strings.TrimSuffix(strings.TrimPrefix(platform, "darwin-"), "-setup"))
+		return
+	}
+
+	if platform == "linux-uninstall" {
+		h.serveLinuxUninstall(w, r)
+		return
+	}
+	if platform == "darwin-uninstall" {
+		h.serveMacUninstall(w, r)
+		return
+	}
+
+	if platform == "linux-arm64-setup" {
+		h.serveLinuxSetupFor(w, r, "arm64")
+		return
+	}
+
 	if platform == "windows-amd64-msi" {
 		h.serveWindowsMSI(w, r)
 		return

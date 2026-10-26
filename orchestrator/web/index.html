@@ -702,6 +702,8 @@
             </div>
             <div class="agent-dl-btns">
               <a class="btn btn-sm btn-primary" href="/api/agents/download/linux-amd64-setup" download="bas-agent-setup-linux.run">Setup file (.run, x86_64)</a>
+              <a class="btn btn-sm btn-primary" href="/api/agents/download/linux-arm64-setup" download="bas-agent-setup-linux-arm64.run">Setup file (.run, ARM64)</a>
+              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-uninstall" download="bas-agent-uninstall-linux.run">Uninstaller (.run)</a>
               <a class="btn btn-sm btn-primary" href="/api/agents/download/linux-amd64" download="bas-agent-linux-amd64">CLI Binary (x86_64)</a>
               <a class="btn btn-sm btn-primary" href="/api/agents/download/linux-arm64" download="bas-agent-linux-arm64">CLI Binary (ARM64)</a>
             </div>
@@ -729,14 +731,17 @@
               macOS
             </div>
             <div class="agent-dl-btns">
-              <a class="btn btn-sm btn-primary" href="/api/agents/download/darwin-arm64-installer" download="BASAgent-Setup-mac-arm64">Installer (Apple Silicon)</a>
-              <a class="btn btn-sm btn-primary" href="/api/agents/download/darwin-amd64-installer" download="BASAgent-Setup-mac-intel">Installer (Intel)</a>
+              <a class="btn btn-sm btn-primary" href="/api/agents/download/darwin-arm64-setup" download="AudspectAgent-Setup-mac-arm64.zip">Setup app (Apple Silicon)</a>
+              <a class="btn btn-sm btn-primary" href="/api/agents/download/darwin-amd64-setup" download="AudspectAgent-Setup-mac-amd64.zip">Setup app (Intel)</a>
+              <a class="btn btn-sm btn-outline" href="/api/agents/download/darwin-uninstall" download="AudspectAgent-Uninstall-mac.zip">Uninstaller (both Macs)</a>
             </div>
-            <div class="agent-dl-hint">macOS 12 Monterey+ &mdash; asks only for Server URL and Agent Secret, nothing else</div>
+            <div class="agent-dl-hint">macOS 12 Monterey+ &mdash; the server address and CA are inside the app; it asks only for the Agent Secret</div>
             <div class="agent-dl-usage g1-s-fa769ae0">
-              <strong>Install:</strong> this build isn't Apple-notarized, so a plain double-click gets blocked by Gatekeeper &mdash; instead, right-click (or Control-click) the downloaded file and choose <strong class="g1-s-2a4de83d">Open</strong> (one time only), approve the admin-password prompt, then enter the Server URL and Agent Secret when asked. Nothing else to configure.
+              <strong>Install:</strong> unzip the download, then right-click (or Control-click) <strong class="g1-s-2a4de83d">Audspect Agent Setup</strong> and choose <strong class="g1-s-2a4de83d">Open</strong> (one time only: this build isn't Apple-notarized, so a plain double-click is blocked by Gatekeeper). Type the Agent Secret, approve the administrator-password prompt, and you're done. Nothing else to configure.
               <div class="g1-display-flex g1-s-89b169c7">
                 <span class="g1-s-007f626a">Advanced / scripted deployment:</span>
+                <a class="btn btn-sm btn-outline" href="/api/agents/download/darwin-arm64-installer" download="BASAgent-Setup-mac-arm64">Legacy installer (Apple Silicon)</a>
+                <a class="btn btn-sm btn-outline" href="/api/agents/download/darwin-amd64-installer" download="BASAgent-Setup-mac-intel">Legacy installer (Intel)</a>
                 <a class="btn btn-sm btn-outline" href="/api/agents/download/darwin-amd64" download>CLI Binary (Intel)</a>
                 <a class="btn btn-sm btn-outline" href="/api/agents/download/darwin-arm64" download>CLI Binary (Apple Silicon)</a>
               </div>
