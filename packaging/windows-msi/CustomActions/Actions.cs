@@ -57,7 +57,7 @@ namespace Audspect.Installer
                 session["AGENT_SERVICE_EXISTS"] = "1";
                 return ActionResult.Success;
             }
-            var config = session["DEPLOYMENT_CONFIG"];
+            var config = InstallLogic.ResolveConfigPath(session["DEPLOYMENT_CONFIG"], session["OriginalDatabase"]);
             var fp = session["CONFIG_FINGERPRINT"];
             var secret = InstallLogic.ResolveSecret(session["AGENT_SECRET"], Environment.GetEnvironmentVariable(InstallLogic.SecretEnvVar));
             var token = InstallLogic.ResolveToken(session["ENROLLMENT_TOKEN"], Environment.GetEnvironmentVariable(InstallLogic.TokenEnvVar));
@@ -193,7 +193,7 @@ namespace Audspect.Installer
         public static ActionResult CheckDeploymentConfig(Session session)
         {
             session["CONFIG_OK"] = "0";
-            var config = session["DEPLOYMENT_CONFIG"];
+            var config = InstallLogic.ResolveConfigPath(session["DEPLOYMENT_CONFIG"], session["OriginalDatabase"]);
             var fp = session["CONFIG_FINGERPRINT"];
             var problem = InstallLogic.ValidateConfigPageInputs(config, fp, File.Exists);
             if (problem != null) { session["CONFIG_MESSAGE"] = problem; return ActionResult.Success; }
@@ -222,7 +222,7 @@ namespace Audspect.Installer
         public static ActionResult TestAgentConnection(Session session)
         {
             session["PREFLIGHT_OK"] = "0";
-            var config = session["DEPLOYMENT_CONFIG"];
+            var config = InstallLogic.ResolveConfigPath(session["DEPLOYMENT_CONFIG"], session["OriginalDatabase"]);
             var fp = session["CONFIG_FINGERPRINT"];
             var secret = InstallLogic.ResolveSecret(session["AGENT_SECRET"], Environment.GetEnvironmentVariable(InstallLogic.SecretEnvVar));
             var problem = InstallLogic.ValidateInstallInputs(config, fp, secret, File.Exists);

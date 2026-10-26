@@ -43,6 +43,22 @@ namespace Audspect.Installer
         public const int MaxTokenLength = 1024;
 
         /// <summary>
+        /// Where deployment.json is. A full path given by the caller (or the wizard) is used as is; otherwise the
+        /// file is looked for next to the MSI itself. [SourceDir] cannot be relied on for this: it is empty in a
+        /// quiet install from a package path, which made the installer look for a bare "deployment.json".
+        /// </summary>
+        public static string ResolveConfigPath(string property, string originalDatabase)
+        {
+            const string fileName = "deployment.json";
+            var p = (property ?? "").Trim();
+            if (p.Length > 0 && Path.IsPathRooted(p))
+                return p.EndsWith("\\") || p.EndsWith("/") ? Path.Combine(p, fileName) : p;
+            var dir = string.IsNullOrWhiteSpace(originalDatabase) ? null : Path.GetDirectoryName(originalDatabase);
+            if (string.IsNullOrEmpty(dir)) return p.Length == 0 ? "" : p;
+            return Path.Combine(dir, p.Length == 0 || !p.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? fileName : p);
+        }
+
+        /// <summary>
         /// The ENROLLMENT_TOKEN property (typed in the wizard) wins; otherwise the environment variable of the
         /// msiexec process. A token is single use and bound to one host, so the generic installer never contains one
         /// and a silent install must supply it per host, through the environment and not a command-line property.

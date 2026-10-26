@@ -225,4 +225,18 @@ public class InstallLogicTests
         Assert.Contains("could not be reached", unreachable, StringComparison.OrdinalIgnoreCase);
         Assert.NotEqual(refused, unreachable);
     }
+
+    // The deployment.json lookup must not depend on [SourceDir], which is empty when the product is installed
+    // from a package path after an uninstall: the installer then looked for a bare "deployment.json".
+    [Theory]
+    [InlineData("", @"C:\agent\AudspectAgent-x64.msi", @"C:\agent\deployment.json")]
+    [InlineData("deployment.json", @"C:\agent\AudspectAgent-x64.msi", @"C:\agent\deployment.json")]
+    [InlineData(@"C:\other\d.json", @"C:\agent\AudspectAgent-x64.msi", @"C:\other\d.json")]
+    [InlineData(@"D:\media\", @"C:\agent\AudspectAgent-x64.msi", @"D:\media\deployment.json")]
+    public void ConfigPathResolvesNextToTheMsiUnlessAFullPathWasGiven(string property, string originalDatabase, string expected)
+        => Assert.Equal(expected, InstallLogic.ResolveConfigPath(property, originalDatabase));
+
+    [Fact]
+    public void ConfigPathWithNothingToGoOnStaysEmptyAndFailsValidationLater()
+        => Assert.Equal("", InstallLogic.ResolveConfigPath("", ""));
 }
