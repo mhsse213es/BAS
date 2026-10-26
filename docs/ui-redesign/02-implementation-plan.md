@@ -22,7 +22,7 @@ Status: `todo` / `doing` / `done`. Update this table in the same commit as the w
 | # | Phase | Deliverable | Verification | Status |
 |---|---|---|---|---|
 | 0 | Workspace and harness | worktree + branch; `node_modules` link; rich-fixture capture harness (populated / empty / error; 4 themes; 3 widths); baseline screenshots of the current console | harness renders all 28 tabs without page errors | done |
-| 1 | Visual foundation | tokens, typography, buttons, inputs/selects, cards, pills, tables (toolbar, sticky head, empty/loading/error), tabs, modal and drawer shells, toasts, focus rings, scrollbars — in `app.css`; all four themes | smoke passes; screenshots of all pages in 4 themes show no regressions | todo |
+| 1 | Visual foundation | tokens, typography, buttons, inputs/selects, cards, pills, tables (toolbar, sticky head, empty/loading/error), tabs, modal and drawer shells, toasts, focus rings, scrollbars — in `app.css`; all four themes | smoke passes; screenshots of all pages in 4 themes show no regressions | doing (batch 1: tokens, themes, controls, tables, overlays, focus) |
 | 2 | Shell | sidebar (groups, badges, collapse, pinned/recent as client-only), topbar (search, live indicator, role badge, user menu), breadcrumb row, banners (tamper, license) restyled, responsive drawer < 900 px | role-gating and feature-hidden nav unchanged; keyboard and screen-reader pass | todo |
 | 3 | Page-header component | shared `pageHero()` helper (icon, title, subtitle, actions, stat chips) + CSS; unit tests | unit tests; used by phase 4+ | todo |
 | 4 | Dashboard (operational + executive) | hero stats from real endpoints, KPI cards, compliance strip, charts, all existing panels kept (Ransomware Readiness, Attack flow, …) | populated + empty + error fixtures | todo |
@@ -47,3 +47,10 @@ Status: `todo` / `doing` / `done`. Update this table in the same commit as the w
 ## Not in scope
 
 Backend changes, new API endpoints, new scoring, and anything that would make the console show a number the server did not compute.
+
+## Findings recorded during the work
+
+- **Smoke test is already red on `main`** (verified against an untouched build): `email: toast list.filter is not a function` (no fixture for the email endpoint), `factory-health: Cannot read properties of undefined (reading 'state')` (no fixture for `/api/analytics/factory-health`), and `em: tab disappeared` (baseline names a tab that no longer exists). Fix fixtures + re-record the baseline in phase 12; do not read them as regressions of this work.
+- **eslint** has one pre-existing error (`btoa` not defined, `attack-path.js:1702`).
+- The Light theme previously kept a dark sidebar/header because those backgrounds were hard-coded; batch 1 moves them to tokens.
+- Run the smoke suite with `SMOKE_ROOT=dist node node_modules/@playwright/test/cli.js test -c tests/smoke/playwright.config.mjs` (after `node tools/build.mjs`).
