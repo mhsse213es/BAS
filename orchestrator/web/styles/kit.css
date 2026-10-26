@@ -109,3 +109,7 @@
 .dl-row em { font-style: normal; color: var(--muted); text-align: right; font-size: 11.5px; }
 .chart-tip { position: fixed; left: 0; top: 0; z-index: 400; pointer-events: none; background: var(--elevated); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12px; box-shadow: var(--shadow-md); opacity: 0; transition: opacity .1s; max-width: 320px; }
 .chart-tip.on { opacity: 1; }
+
+/* A card header written as <header> would inherit the console top-bar rules; neutralise that. */
+header.rk-hd { position: static; height: auto; z-index: auto; background: none; border-bottom: 0; padding: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.rk-card.flush > header.rk-hd { padding: 14px 16px 0; }

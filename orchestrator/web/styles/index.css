@@ -2,4 +2,9 @@
    inline-equivalent rules unlayered after it. */
 @import "./app.css" layer(app);
 @import "./kit.css" layer(app);
+@import "./rich-g5.css" layer(app);
+@import "./rich-g3.css" layer(app);
+@import "./rich-g2.css" layer(app);
+@import "./rich-g1.css" layer(app);
+@import "./rich-g4.css" layer(app);
 @import "./inline-equivalent.css";

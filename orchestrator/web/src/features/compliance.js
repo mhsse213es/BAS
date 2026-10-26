@@ -8,6 +8,7 @@ import { campaignDisplayStatus } from './campaigns.js';
 import { showTab } from './shell.js';
 import { clearInlineStyle, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
+import { renderCalderaInsights } from './settings-insights.js';
 
 
 // ── Compliance score tiles ─────────────────────────────────────────────────
@@ -217,6 +218,7 @@ export function loadCalderaStatus() {
       dot = '<span class="g1-display-inline-block g1-s-d966ce5b"></span><span class="u-danger">Unreachable</span>';
     }
     document.getElementById('cs-caldera-status').innerHTML = dot;
+    renderCalderaInsights(d);
     document.getElementById('cs-caldera-url').textContent = d.url || '(not configured)';
     document.getElementById('cs-caldera-version').textContent = d.version || (d.reachable ? 'unknown' : '—');
     if (d.reachable) {

@@ -4,7 +4,8 @@ import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { covSegHtml } from './attack-path.js';
-import { setDisplay } from '../core/inline-style.js';
+import { kpi, grid, card, hbars, pill, chip, empty, bar, kv } from '../core/kit.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
 import { cssVars } from '../core/css-vars.js';
 
 
@@ -63,151 +64,111 @@ function populateCoverageFilters(d) {
   }
 }
 
+// Pure helpers (unit-tested): tone by prevention rate, donut segments for an analytics summary.
+export function covTone(rate) {
+  var r = Number(rate) || 0;
+  return r >= 75 ? 'ok' : r >= 40 ? 'warn' : 'bad';
+}
+export function covOutcomeSegments(s) {
+  s = s || {};
+  return [
+    { label: 'Prevented', value: Number(s.prevented) || 0, color: CHART_COLORS.ok },
+    { label: 'Detected only', value: Number(s.detectedOnly) || 0, color: CHART_COLORS.warn },
+    { label: 'Missed', value: Number(s.missed) || 0, color: CHART_COLORS.bad },
+  ].filter(function(g) { return g.value > 0; });
+}
+var TIER_TONE = { user: 'accent', admin: 'warn', system: 'bad', inherited: 'muted' };
+var TIER_LABEL = { user: 'User', admin: 'Admin', system: 'SYSTEM', inherited: 'Inherited' };
+
+function tableWrap(head, rows, emptyHtml, cols) {
+  return '<div class="tbl-wrap rg2-tbl"><table><thead><tr>' + head.map(function(h) {
+    return '<th' + (h[1] ? ' class="' + h[1] + '"' : '') + '>' + x(h[0]) + '</th>';
+  }).join('') + '</tr></thead><tbody>' +
+    (rows.length ? rows.join('') : '<tr><td colspan="' + cols + '" class="empty">' + emptyHtml + '</td></tr>') +
+    '</tbody></table></div>';
+}
+
 function renderCoverageAnalytics(d) {
   var s = d.summary || {};
   var hasData = d.runsAnalyzed > 0 && s.attempted > 0;
-  var emEl = document.getElementById('ca-empty');
-  var detEl = document.getElementById('ca-detail');
-  var ratesEl = document.getElementById('ca-rates');
-  if (emEl) setDisplay(emEl, hasData ? 'none' : '');
-  if (detEl) setDisplay(detEl, hasData ? '' : 'none');
-  if (ratesEl) setDisplay(ratesEl, hasData ? '' : 'none');
-
-  // Scorecards.
-  setText('ca-attempted', hasData ? s.attempted : '—');
-  setText('ca-prevented', hasData ? s.prevented : '—');
-  setText('ca-detected',  hasData ? s.detectedOnly : '—');
-  setText('ca-missed',    hasData ? s.missed : '—');
-  setText('ca-runs', d.runsAnalyzed + ' run' + (d.runsAnalyzed !== 1 ? 's' : '') + ' analysed');
-  setText('ca-prev-pct', hasData ? s.preventionRate + '% prevention rate' : 'Control blocked execution');
-
-  // Rate bars.
-  var prevRate = s.preventionRate || 0;
-  var detRate  = s.detectionCoverage || 0;
-  setText('ca-prev-rate', prevRate + '%');
-  setText('ca-det-rate',  detRate + '%');
-  setW('ca-prev-bar', prevRate);
-  setW('ca-det-bar',  detRate);
-
-  // By-tactic table.
-  var tacBody = document.getElementById('ca-tactic-body');
-  if (tacBody) {
-    tacBody.innerHTML = (d.byTactic || []).map(function(t, i) {
-      var bg = i % 2 ? 'g1-s-ab376776' : '';
-      var mColor = t.missed > 0 ? 'g1-s-d55cf847' : 'g1-s-c6db10d2';
-      return '<tr class="' + bg + '">' +
-        '<td>' + x(t.tactic) + '</td>' +
-        '<td class="g1-s-ffa42d22">' + t.prevented + '</td>' +
-        '<td class="g1-s-08242b1e">' + t.detectedOnly + '</td>' +
-        '<td class="' + mColor + '">' + t.missed + '</td>' +
-      '</tr>';
-    }).join('') || '<tr><td colspan="4" class="empty">No data</td></tr>';
+  var root = document.getElementById('ca-root');
+  if (root) {
+    if (!hasData) {
+      root.innerHTML = empty('shield', 'No completed runs yet', 'Run a scenario or adversary template to generate analytics.');
+    } else {
+      var runsTxt = d.runsAnalyzed + ' run' + (d.runsAnalyzed !== 1 ? 's' : '') + ' analysed';
+      var tiles = grid(4, [
+        kpi({ label: 'Techniques attempted', value: s.attempted, sub: runsTxt, icon: 'technique', tone: 'accent' }),
+        kpi({ label: 'Prevented', value: s.prevented, sub: (s.preventionRate || 0) + '% prevention rate', icon: 'ok', tone: 'ok' }),
+        kpi({ label: 'Detected only', value: s.detectedOnly, sub: 'EDR/SIEM alerted, not blocked', icon: 'warn', tone: 'warn' }),
+        kpi({ label: 'Missed', value: s.missed, sub: 'No prevention, no detection', icon: 'bad', tone: 'bad' }),
+      ]);
+      var segs = covOutcomeSegments(s);
+      var mix = card('Outcome mix',
+        chartSlot({ type: 'donut', segments: segs, center: String(s.attempted), centerSub: 'techniques', legend: true, h: 170 }) +
+        '<div class="rg2-gap">' + hbars([
+          ['Prevention rate', s.preventionRate || 0, 'ok', (s.preventionRate || 0) + '%'],
+          ['Detection coverage', s.detectionCoverage || 0, 'warn', (s.detectionCoverage || 0) + '%'],
+        ]) + '</div>');
+      var tac = d.byTactic || [];
+      var byTac = card('Outcomes by tactic', tac.length ? chartSlot({
+        type: 'bar', stacked: true, h: 230,
+        labels: tac.map(function(t) { return t.tactic; }),
+        series: [
+          { name: 'Prevented', data: tac.map(function(t) { return t.prevented; }), color: CHART_COLORS.ok },
+          { name: 'Detected only', data: tac.map(function(t) { return t.detectedOnly; }), color: CHART_COLORS.warn },
+          { name: 'Missed', data: tac.map(function(t) { return t.missed; }), color: CHART_COLORS.bad },
+        ],
+      }) : empty('technique', 'No tactic data'));
+      var tacRows = tac.map(function(t) {
+        return '<tr><td>' + x(t.tactic) + '</td><td class="u-center"><span class="rg2-num tone-ok">' + x(t.prevented) + '</span></td>' +
+          '<td class="u-center"><span class="rg2-num tone-warn">' + x(t.detectedOnly) + '</span></td>' +
+          '<td class="u-center"><span class="rg2-num ' + (t.missed > 0 ? 'tone-bad' : 'tone-muted') + '">' + x(t.missed) + '</span></td></tr>';
+      });
+      var missed = (d.byTechnique || []).filter(function(t) { return t.bestVerdict === 'missed' || t.bestVerdict === 'detectedOnly'; }).slice(0, 20);
+      var missRows = missed.map(function(t) {
+        return '<tr><td>' + pill(t.techniqueId, t.bestVerdict === 'missed' ? 'bad' : 'warn') + '</td><td>' + x(t.name || '—') + '</td><td class="u-center">' + x(t.runCount) + '</td></tr>';
+      });
+      root.innerHTML = tiles + grid(2, [mix, byTac]) + grid(2, [
+        card('By tactic', tableWrap([['Tactic'], ['Prevented', 'u-center'], ['Detected', 'u-center'], ['Missed', 'u-center']], tacRows, 'No data', 4), { flush: true }),
+        card('Missed techniques, prioritise these', tableWrap([['Technique'], ['Name'], ['Runs', 'u-center']], missRows, '<span class="u-success">No gaps detected</span>', 3), { flush: true, sub: missed.length ? 'top ' + missed.length : '' }),
+      ]);
+    }
   }
-
-  // Missed techniques table (show top 20 missed or detectedOnly).
-  var missedBody = document.getElementById('ca-missed-body');
-  if (missedBody) {
-    var missed = (d.byTechnique || []).filter(function(t) { return t.bestVerdict === 'missed' || t.bestVerdict === 'detectedOnly'; }).slice(0, 20);
-    missedBody.innerHTML = missed.map(function(t, i) {
-      var bg = i % 2 ? 'g1-s-ab376776' : '';
-      var vColor = t.bestVerdict === 'missed' ? 'g1-s-97b209c3' : 'g1-s-ce668815';
-      var vDot   = t.bestVerdict === 'missed' ? '● ' : '◐ ';
-      return '<tr class="' + bg + '">' +
-        '<td class="' + vColor + '">' + vDot + x(t.techniqueId) + '</td>' +
-        '<td class="g1-s-5d164a6d">' + x(t.name || '—') + '</td>' +
-        '<td class="g1-s-557a346f">' + t.runCount + '</td>' +
-      '</tr>';
-    }).join('') || '<tr><td colspan="3" class="empty u-success">✓ No gaps detected</td></tr>';
-  }
-
-  // Privilege tier coverage panel.
   renderPrivilegeCoverage(d.privilegeCoverage);
 }
 
 function renderPrivilegeCoverage(pc) {
-  var empty = document.getElementById('priv-cov-empty');
-  var content = document.getElementById('priv-cov-content');
+  var root = document.getElementById('priv-root');
+  if (!root) return;
   var tiers = (pc && pc.byTier) || [];
   var gaps  = (pc && pc.gapTechs) || [];
-  var hasTiers = tiers.length > 0;
-  if (empty)   setDisplay(empty, hasTiers ? 'none' : '');
-  if (content) setDisplay(content, hasTiers ? ''     : 'none');
-  if (!hasTiers) return;
-
-  // Tier colour map.
-  var tierColor = { user: 'var(--accent)', admin: 'var(--warning)', system: 'var(--danger)', inherited: 'var(--muted)' };
-  var tierLabel = { user: 'User', admin: 'Admin', system: 'SYSTEM', inherited: 'Inherited' };
-
-  // Scorecard tiles.
-  var cards = document.getElementById('priv-tier-cards');
-  if (cards) {
-    cards.innerHTML = tiers.map(function(t) {
-      var col  = tierColor[t.tier] || 'var(--muted)';
-      var lbl  = tierLabel[t.tier] || t.tier;
-      var rate = t.attempted > 0 ? t.preventionRate : 0;
-      var rateColor = rate >= 75 ? 'g1-s-da30d03b' : rate >= 40 ? 'g1-s-c16ccf0e' : 'g1-s-7419514e';
-      return '<div class="ca-card"' + cssVars(['g1-v-c3984016', col]) + '>' +
-        '<div class="ca-label"' + cssVars(['g1-v-7d75dfc9', col]) + '>' + lbl + '</div>' +
-        '<div class="ca-val ' + rateColor + '">' + rate + '%</div>' +
-        '<div class="ca-sub">' + t.prevented + '/' + t.attempted + ' prevented</div>' +
-      '</div>';
-    }).join('');
+  if (!tiers.length) {
+    root.innerHTML = empty('lock', 'No privilege-annotated runs yet', 'Annotate scenario steps with requires_priv to enable tier tracking.');
+    return;
   }
-
-  // Tier table.
-  var tierBody = document.getElementById('priv-tier-body');
-  if (tierBody) {
-    tierBody.innerHTML = tiers.map(function(t, i) {
-      var bg   = i % 2 ? 'g1-s-ab376776' : '';
-      var col  = tierColor[t.tier] || 'var(--muted)';
-      var lbl  = tierLabel[t.tier] || t.tier;
-      var rate = t.attempted > 0 ? t.preventionRate : 0;
-      var rateColor = rate >= 75 ? 'g1-s-01465934' : rate >= 40 ? 'g1-s-a21d7ec5' : 'g1-s-1ea0edbe';
-      var barW = Math.min(100, rate);
-      var missedColor = t.missed > 0 ? 'g1-s-d55cf847' : 'g1-s-1724190c';
-      return '<tr class="' + bg + '">' +
-        '<td><span class="g1-display-inline-block g1-s-acac4f97"' + cssVars(['g1-v-9ffd39ba', col]) + '></span>' + lbl + '</td>' +
-        '<td class="u-center">' + t.attempted + '</td>' +
-        '<td class="g1-s-ffa42d22">' + t.prevented + '</td>' +
-        '<td class="' + missedColor + '">' + t.missed + '</td>' +
-        '<td class="g1-s-229dc0cb">' +
-          '<div class="g1-display-flex g1-s-04e50eda">' +
-            '<div class="g1-s-8987c970"><div class="g1-s-32cf8ef3"' + cssVars(['g1-v-9b890877', barW], ['g1-v-9ffd39ba', col]) + '></div></div>' +
-            '<span class="' + rateColor + '">' + rate + '%</span>' +
-          '</div>' +
-        '</td>' +
-      '</tr>';
-    }).join('') || '<tr><td colspan="5" class="empty">No data</td></tr>';
-  }
-
-  // Gap table.
-  var gapBody = document.getElementById('priv-gap-body');
-  if (gapBody) {
-    if (gaps.length === 0) {
-      gapBody.innerHTML = '<tr><td colspan="3" class="empty u-success">✓ All annotated techniques tested at user tier</td></tr>';
-    } else {
-      gapBody.innerHTML = gaps.slice(0, 25).map(function(g, i) {
-        var bg = i % 2 ? 'g1-s-ab376776' : '';
-        var tierBadges = (g.tiers || []).map(function(t) {
-          var c = tierColor[t] || 'var(--muted)';
-          return '<span class="g1-s-1fd67b02"' + cssVars(['g1-v-97993078', c], ['g1-v-7d75dfc9', c]) + '>' + (tierLabel[t] || t) + '</span>';
-        }).join('');
-        return '<tr class="' + bg + '">' +
-          '<td class="g1-s-ce668815">' + x(g.techniqueId) + '</td>' +
-          '<td class="g1-s-20a371c8" title="' + x(g.name || '') + '">' + x(g.name || '—') + '</td>' +
-          '<td>' + tierBadges + '</td>' +
-        '</tr>';
-      }).join('');
-      if (gaps.length > 25) {
-        gapBody.innerHTML += '<tr><td colspan="3" class="g1-s-f85dc79d">… and ' + (gaps.length - 25) + ' more</td></tr>';
-      }
-    }
-  }
+  var tiles = grid(tiers.length >= 4 ? 4 : tiers.length < 2 ? 2 : tiers.length, tiers.map(function(t) {
+    var rate = t.attempted > 0 ? t.preventionRate : 0;
+    return kpi({ label: TIER_LABEL[t.tier] || t.tier, value: rate + '%', sub: t.prevented + '/' + t.attempted + ' prevented', icon: 'lock', tone: TIER_TONE[t.tier] || 'muted' });
+  }));
+  var tierRows = tiers.map(function(t) {
+    var rate = t.attempted > 0 ? t.preventionRate : 0;
+    return '<tr><td>' + pill(TIER_LABEL[t.tier] || t.tier, TIER_TONE[t.tier] || 'muted') + '</td>' +
+      '<td class="u-center">' + x(t.attempted) + '</td><td class="u-center"><span class="rg2-num tone-ok">' + x(t.prevented) + '</span></td>' +
+      '<td class="u-center"><span class="rg2-num ' + (t.missed > 0 ? 'tone-bad' : 'tone-muted') + '">' + x(t.missed) + '</span></td>' +
+      '<td class="rg2-rate">' + bar(rate, covTone(rate)) + '<span>' + x(rate) + '%</span></td></tr>';
+  });
+  var gapRows = gaps.slice(0, 25).map(function(g) {
+    return '<tr><td><span class="rg2-mono">' + x(g.techniqueId) + '</span></td><td title="' + x(g.name || '') + '">' + x(g.name || '—') + '</td><td>' +
+      (g.tiers || []).map(function(t) { return chip(TIER_LABEL[t] || t, TIER_TONE[t] || 'muted'); }).join(' ') + '</td></tr>';
+  });
+  if (gaps.length > 25) gapRows.push('<tr><td colspan="3" class="u-muted">… and ' + (gaps.length - 25) + ' more</td></tr>');
+  root.innerHTML = tiles + grid(2, [
+    card('Prevention by tier', tableWrap([['Tier'], ['Attempted', 'u-center'], ['Prevented', 'u-center'], ['Missed', 'u-center'], ['Rate']], tierRows, 'No data', 5), { flush: true }),
+    card('Privilege coverage gaps', tableWrap([['Technique'], ['Name'], ['Tested at']], gapRows, '<span class="u-success">All annotated techniques tested at user tier</span>', 3) +
+      '<p class="rg2-note">Gaps are techniques never run as a standard user. Run these at user tier so controls are not solely relying on privilege barriers.</p>', { flush: true, sub: 'tested elevated only' }),
+  ]);
 }
-
-function setText(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
-function setW(id, pct)  { var el = document.getElementById(id); if (el) el.style.width = Math.min(100, pct) + '%'; }
-// ─────────────────────────────────────────────────────────────────────────────
 
 // ── Unified Technique Library ─────────────────────────────────────────────────
 var _utlData = [];          // raw response from /api/techniques/unified
@@ -336,35 +297,27 @@ export function loadThreatExposure() {
 function renderThreatExposure(threats) {
   var body = document.getElementById('lte-body');
   var foot = document.getElementById('lte-foot');
+  if (!body) return;
   if (!threats.length) {
-    body.innerHTML = '<div class="empty" style="padding:2rem">No active threats tracked yet.</div>';
-    foot.textContent = '';
+    body.innerHTML = empty('globe', 'No active threats tracked yet', 'Threats appear here once your intelligence sources report them.');
+    if (foot) foot.textContent = '';
     return;
   }
-  var row = function(label, v) {
-    return '<div style="display:flex;gap:0.6rem;padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.78rem">' +
-      '<span style="color:var(--muted);min-width:110px">' + x(label) + '</span><span class="u-flex1">' + v + '</span></div>';
-  };
-  body.innerHTML = threats.map(function(t) {
+  var cards = threats.map(function(t) {
     var techCount = (t.techniques || []).length;
     var withContent = (t.techniques || []).filter(function(tc) { return tc.hasExecutableContent; }).length;
+    var pct = techCount ? Math.round(withContent / techCount * 100) : 0;
     var contentRows = (t.content || []).map(function(c) {
-      var badge = c.isExecutable
-        ? '<span class="sbadge" style="background:transparent;border:1px solid var(--success);color:var(--success)">Executable</span>'
-        : '<span class="sbadge" style="background:transparent;border:1px solid var(--muted);color:var(--muted)">' + x(c.lifecycle) + '</span>';
       var runInfo = c.runCount > 0 ? c.runCount + ' run(s), last ' + new Date(c.lastRunAt).toLocaleDateString() : 'never run';
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;font-size:0.76rem">' +
-        '<span>' + x(c.contentId) + ' <span style="color:var(--muted)">(' + x(c.relationshipKind) + ', ' + x(c.validation) + ')</span></span>' +
-        '<span style="display:flex;gap:0.5rem;align-items:center">' + badge + '<span style="color:var(--muted)">' + runInfo + '</span></span></div>';
-    }).join('') || '<div class="empty" style="padding:0.5rem 0;font-size:0.76rem">No content available for this threat yet.</div>';
-    return '<div class="dash-panel" style="margin-bottom:0.75rem;padding:0.75rem">' +
-      '<div style="font-weight:600;margin-bottom:0.3rem">' + x(t.title) + '</div>' +
-      row('Last seen', t.lastSeenAt ? new Date(t.lastSeenAt).toLocaleDateString() : 'unknown') +
-      row('Techniques', techCount + ' tracked, ' + withContent + ' with executable content') +
-      contentRows +
-      '</div>';
-  }).join('');
-  foot.textContent = threats.length + ' active threat(s) shown.';
+      return '<div class="rk-check"><div class="rk-check-t"><b>' + x(c.contentId) + '</b><span>' + x(c.relationshipKind) + ', ' + x(c.validation) + ' · ' + x(runInfo) + '</span></div>' +
+        '<div class="rk-check-r">' + (c.isExecutable ? chip('Executable', 'ok') : chip(c.lifecycle || 'n/a', 'muted')) + '</div></div>';
+    }).join('') || '<div class="rg2-note">No content available for this threat yet.</div>';
+    return card(t.title, '<div class="rg2-gap">' +
+      kv([['Last seen', t.lastSeenAt ? new Date(t.lastSeenAt).toLocaleDateString() : 'unknown'], ['Techniques', techCount + ' tracked, ' + withContent + ' with executable content']]) +
+      '</div>' + (techCount ? hbars([['Executable content', pct, covTone(pct), withContent + '/' + techCount]]) : '') + contentRows);
+  });
+  body.innerHTML = grid(2, cards);
+  if (foot) foot.textContent = threats.length + ' active threat(s) shown.';
 }
 
 function renderCovMatrix() {
@@ -384,11 +337,15 @@ function renderCovMatrix() {
 function renderCovToolbar() {
   var c = state._covCounts || { cov: 0, part: 0, gap: 0, none: 0 };
   var seg = covSegHtml([['all', 'All'], ['cov', 'Prevented'], ['part', 'Detected'], ['gap', 'Missed'], ['none', 'Untested']], COV_VIEW, 'setCovView');
-  var badge = function(col, l, v) { return '<span class="sbadge g1-s-e9d33194"' + cssVars(['g1-v-7d75dfc9', col]) + '>' + v + ' ' + l + '</span>'; };
+  var total = c.total || (c.cov + c.part + c.gap + c.none);
+  var share = function(n) { return total ? Math.round(n / total * 100) + '% of techniques' : 'No techniques'; };
   document.getElementById('cov-toolbar').innerHTML =
-    seg + '<span class="u-flex1"></span>' +
-    badge('var(--success)', 'Prevented', c.cov) + badge('var(--warning)', 'Detected', c.part) +
-    badge('var(--danger)', 'Missed', c.gap) + badge('var(--muted)', 'Untested', c.none);
+    grid(4, [
+      kpi({ label: 'Prevented', value: c.cov, sub: share(c.cov), tone: 'ok', action: 'setCovView', args: ['cov'] }),
+      kpi({ label: 'Detected only', value: c.part, sub: share(c.part), tone: 'warn', action: 'setCovView', args: ['part'] }),
+      kpi({ label: 'Missed', value: c.gap, sub: share(c.gap), tone: 'bad', action: 'setCovView', args: ['gap'] }),
+      kpi({ label: 'Untested', value: c.none, sub: share(c.none), tone: 'muted', action: 'setCovView', args: ['none'] }),
+    ]) + seg;
 }
 export function setCovView(v) { COV_VIEW = v; renderCovToolbar(); renderCovMatrix(); }
 export function openTechnique(id) {

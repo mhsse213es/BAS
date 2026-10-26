@@ -1540,3 +1540,16 @@ body.theme-slate {
   .main-wrapper { margin-left: 0 !important; width: 100% !important; }
   #app.sidebar-collapsed #sidebar { width: 260px; }
 }
+
+/* ── Sidebar extras: count badges, pin stars, Pinned / Recent groups ── */
+.nav-badge { margin-left: auto; min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center; font-size: 10.5px; font-weight: 700; line-height: 1; color: var(--on-accent, #fff); background: var(--kc, var(--accent)); font-variant-numeric: tabular-nums; }
+.nav-badge.tone-warn { color: #1a1204; }
+.nav-pin { margin-left: auto; width: 20px; height: 20px; display: none; place-items: center; border: 0; background: transparent; color: var(--muted); border-radius: 5px; cursor: pointer; padding: 0; flex: none; }
+.nav-item:hover .nav-pin, .nav-pin.on { display: inline-grid; }
+.nav-pin:hover { color: var(--text); background: var(--hover); }
+.nav-pin.on { color: var(--warning-text); }
+.nav-badge + .nav-pin { margin-left: 4px; }
+.nav-item:hover .nav-badge:has(+ .nav-pin) { margin-left: auto; }
+.nav-extra .nav-group-label { opacity: .85; }
+#app.sidebar-collapsed .nav-badge { position: absolute; top: 2px; right: 6px; min-width: 14px; height: 14px; padding: 0 3px; font-size: 9px; }
+#app.sidebar-collapsed .nav-pin, #app.sidebar-collapsed #nav-recent { display: none !important; }

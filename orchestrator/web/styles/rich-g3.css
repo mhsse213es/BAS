@@ -1,0 +1,76 @@
+/* Rich layouts for Findings, Remediation, IOC Registry, Reports (+ Compliance, SLA) and Detection
+   Verification. Theme tokens only. */
+
+.rk-grid.g5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 1280px) { .rk-grid.g5 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .rk-grid.g5 { grid-template-columns: minmax(0, 1fr); } }
+.rk-grid.g21 { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+@media (max-width: 1000px) { .rk-grid.g21 { grid-template-columns: minmax(0, 1fr); } }
+
+.g3-page .rk-card .tbl-wrap { border: 0; border-radius: 0; box-shadow: none; background: transparent; margin: 0; }
+.g3-page .rk-card.flush > .tbl-wrap { border-top: 1px solid var(--border); }
+.g3-page .rk-card.flush > .rk-hd { margin-bottom: 12px; }
+.g3-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+.g3-tools .rk-search { flex: 1 1 240px; }
+.g3-tools select, .rk-filters select { min-width: 140px; }
+.g3-subtabs { margin-bottom: 14px; }
+
+/* Launch tiles (Reports) */
+.g3-launch { display: flex; gap: 12px; align-items: flex-start; text-align: left; font: inherit; color: inherit; cursor: pointer; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; box-shadow: var(--shadow-sm); transition: transform .15s, border-color .15s; width: 100%; }
+.g3-launch:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.g3-launch .rk-kpi-ico { flex: none; width: 34px; height: 34px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.g3-launch b { display: block; font-size: 14px; font-weight: 600; }
+.g3-launch span.d { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; line-height: 1.45; }
+
+/* Per-agent report rows */
+.g3-agent { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-top: 1px solid var(--row-line); flex-wrap: wrap; }
+.g3-agent:first-child { border-top: 0; }
+.g3-agent .rk-kpi-ico { flex: none; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.g3-agent-main { flex: 1 1 260px; min-width: 0; }
+.g3-agent-main b { display: block; font-weight: 600; }
+.g3-agent-main span { color: var(--muted); font-size: 12px; }
+.g3-agent-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Top-N lists (IOC analytics) */
+.g3-top { margin: 0; padding: 0; list-style: none; }
+.g3-top li { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 4px 10px; align-items: center; padding: 6px 0; font-size: 12.5px; }
+.g3-top code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.g3-top .n { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.g3-top .rk-bar { grid-column: 1 / -1; height: 4px; }
+
+/* Remediation cards */
+.g3-rem-list { display: grid; gap: 10px; }
+
+/* Verification table */
+.g3-vf { width: 100%; border-collapse: collapse; }
+.g3-vf th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 10px 16px; font-weight: 600; }
+.g3-vf td { padding: 10px 16px; border-top: 1px solid var(--row-line); font-size: 13px; vertical-align: middle; }
+.g3-vf tr:hover td { background: var(--hover); }
+.g3-vf .cap { text-transform: capitalize; }
+.g3-vf .r { text-align: right; }
+
+/* Compliance report */
+.g3-cmp-head { display: grid; grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 1fr); gap: 20px; align-items: center; }
+@media (max-width: 1000px) { .g3-cmp-head { grid-template-columns: minmax(0, 1fr); justify-items: start; } }
+.g3-cmp-head h2 { margin: 6px 0 2px; font-size: 18px; }
+.g3-cmp-head p { margin: 8px 0 0; color: var(--muted); font-size: 13px; line-height: 1.55; max-width: 560px; }
+.g3-dom { display: grid; gap: 6px; }
+.g3-dom-top { display: flex; justify-content: space-between; gap: 8px; font-weight: 500; }
+.g3-dom-st { display: flex; gap: 12px; color: var(--muted); font-size: 12px; }
+
+/* Drawer detail */
+.g3-dwr .rk-kv { margin-top: 14px; }
+.g3-dwr-sec { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.g3-dwr-sec h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.g3-dwr-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+.g3-tools .rk-search input, .rk-filters .rk-search input { height: 36px; }
+
+/* The compliance banner carries two selects and the export buttons: let the actions wrap under the title instead of squeezing it. */
+#hero-compliance .hero-main { flex-wrap: wrap; }
+#hero-compliance .hero-text { flex: 1 1 320px; }
+#hero-compliance .hero-actions { flex: 1 1 100%; margin-left: 0; }
+
+.g3-page .rk-card .tbl-wrap { overflow-x: auto; }
+.g3-tools .rk-seg { flex-wrap: wrap; max-width: 100%; }
+.g3-tools .rk-seg button { height: auto; min-height: 26px; padding-top: 3px; padding-bottom: 3px; }

@@ -12,6 +12,7 @@ import { loadCalderaStatus, refreshDashboardCampaigns } from './compliance.js';
 import { loadCoverage, loadCoverageAnalytics, loadUnifiedTechniques, loadThreatExposure } from './coverage.js';
 import { loadVerificationTab } from './detection-verification.js';
 import { loadEmTab } from './endpoint-mastery.js';
+import { initNavExtras, navTabActivated } from './nav-extras.js';
 import { loadADCoverage } from './ad-coverage.js';
 import { loadEmailTab } from './email.js';
 import { connectWS, loadDashboard, openCmdk } from './evidence.js';
@@ -457,6 +458,8 @@ export function activateTab(name) {
   var titleEl = document.getElementById('header-page-title');
   if (titleEl) titleEl.textContent = TAB_TITLES[name] || name;
   renderBreadcrumb(name, TAB_TITLES[name] || name);
+  initNavExtras();
+  navTabActivated(name);
 }
 
 // Unified Dashboard shell (Sub-project B) -- one Dashboard tab, two views.

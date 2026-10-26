@@ -1,6 +1,8 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
+import { kpi as kitKpi, grid, card, hbars, pill } from '../core/kit.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
 // ── Kubernetes state-changing scenarios ──────────────────────────────────────
 // Plan -> approve -> execute. The server enforces every rule (licence, cluster and namespace allow-list,
@@ -26,9 +28,43 @@ var K8S_STATES = {
   DRY_RUN_PLANNED: { badge: 'v-muted', label: 'Planned (dry run)' }
 };
 
+var K8S_TONE = { PLANNED: 'warn', APPROVED: 'info', CLEANED: 'ok', DISCARDED_NOT_REVOKED: 'warn', CLEANUP_FAILED: 'bad', FAILED: 'bad', REFUSED: 'bad', DRY_RUN_PLANNED: 'muted' };
+
 function stateBadge(state) {
-  var s = K8S_STATES[state] || { badge: 'v-muted', label: state };
-  return '<span class="sbadge ' + s.badge + '">' + x(s.label) + '</span>';
+  var s = K8S_STATES[state] || { label: state };
+  return pill(s.label, K8S_TONE[state] || 'muted');
+}
+
+// k8sRunCounts: runs per outcome group for the summary strip.
+export function k8sRunCounts(runs) {
+  var c = { total: 0, pending: 0, ready: 0, clean: 0, problem: 0 };
+  (runs || []).forEach(function(r) {
+    c.total++;
+    if (r.state === 'PLANNED' || r.state === 'DRY_RUN_PLANNED') c.pending++;
+    else if (r.state === 'APPROVED') c.ready++;
+    else if (r.state === 'CLEANED') c.clean++;
+    else c.problem++;
+  });
+  return c;
+}
+
+function renderK8sSummary(runs) {
+  var el = document.getElementById('k8s-summary');
+  if (!el) return;
+  if (!runs.length) { el.innerHTML = ''; return; }
+  var c = k8sRunCounts(runs);
+  var segs = [
+    { label: 'Awaiting approval', value: c.pending, color: CHART_COLORS.warn },
+    { label: 'Ready to execute', value: c.ready, color: CHART_COLORS.info },
+    { label: 'Cleaned up', value: c.clean, color: CHART_COLORS.ok },
+    { label: 'Failed or needs attention', value: c.problem, color: CHART_COLORS.bad },
+  ].filter(function(g) { return g.value > 0; });
+  el.innerHTML = grid(4, [
+    kitKpi({ label: 'Runs', value: c.total, icon: 'play', tone: 'accent' }),
+    kitKpi({ label: 'Awaiting approval', value: c.pending, icon: 'clock', tone: 'warn' }),
+    kitKpi({ label: 'Ready to execute', value: c.ready, icon: 'bolt', tone: 'info' }),
+    kitKpi({ label: 'Failed or needs attention', value: c.problem, icon: 'warn', tone: c.problem ? 'bad' : 'muted' }),
+  ]) + card('Runs by state', chartSlot({ type: 'donut', segments: segs, center: String(c.total), centerSub: 'runs', legend: true, h: 140 }));
 }
 
 // The signed-in user, from the values stored at login. Used only to decide which controls to show; the
@@ -99,6 +135,7 @@ export function loadK8sRuns() {
 
 export function renderK8sRuns(runs) {
   setCount(runs.length);
+  renderK8sSummary(runs);
   if (!runs.length) {
     setHost('<div class="empty">No runs yet. Plan one above. Nothing is written to a cluster until it is approved and executed.</div>');
     return;
@@ -235,12 +272,12 @@ function renderK8sAnalysis() {
   meta.innerHTML = x(a.cluster || '') + ' · observed ' + x(a.observedAt ? new Date(a.observedAt).toLocaleString() : '') +
     ' · ' + x(completeNote) + (hidden ? ' · ' + hidden + ' built-in hidden' : '');
 
-  function kpi(label, n) {
-    return '<div class="kpi-card"><div class="kpi-label">' + x(label) + '</div><div class="kpi-value">' + n + '</div></div>';
-  }
-  kpis.innerHTML = kpi('Wildcard grants', wild.length) + kpi('Broad ServiceAccounts', breadth.length) +
-    kpi('Cross-namespace grants', cross.length) + kpi('Escalation actions', esc.length) +
-    kpi('Pods with host access', pods.length) + kpi('Unused mounted tokens', tokens.length);
+  var cats = [['Wildcard grants', wild.length, 'lock'], ['Broad ServiceAccounts', breadth.length, 'users'], ['Cross-namespace grants', cross.length, 'path'],
+    ['Escalation actions', esc.length, 'bolt'], ['Pods with host access', pods.length, 'server'], ['Unused mounted tokens', tokens.length, 'key']];
+  var catMax = Math.max.apply(null, cats.map(function(c) { return c[1]; }).concat([1]));
+  kpis.innerHTML = grid(3, cats.map(function(c) {
+    return kitKpi({ label: c[0], value: c[1], icon: c[2], tone: c[1] ? 'warn' : 'muted' });
+  })) + card('Findings by category', hbars(cats.map(function(c) { return [c[0], c[1] / catMax * 100, c[1] ? 'warn' : 'muted', c[1]]; })));
 
   body.innerHTML =
     section('Wildcard RBAC', wild.length, listOrNone(wild, {

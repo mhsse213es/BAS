@@ -2,6 +2,9 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
+import { kpi, card, grid, hbars, seg, pill, empty } from '../core/kit.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
+import { countBy, hbarRows } from './rich-g3.js';
 
 
 // ── Detection Verification (SP2) ───────────────────────────────────────────
@@ -59,13 +62,8 @@ export function loadVerificationTab() {
 function vfRenderDomainChips() {
   var wrap = document.getElementById('vf-domain-chips');
   if (!wrap) return;
-  var all = [{k:'',label:'All domains'}].concat(VF_DOMAINS.map(function(d){ return {k:d,label:d}; }));
-  wrap.innerHTML = all.map(function(d) {
-    var active = VF.domain === d.k;
-    return '<span' + on('click', 'vfSetDomain', d.k) + ' style="cursor:pointer;text-transform:capitalize;padding:0.3rem 0.7rem;border-radius:999px;font-size:0.74rem;border:1px solid ' +
-      (active ? 'var(--accent)' : 'var(--border)') + ';color:' + (active ? 'var(--accent)' : 'var(--muted)') +
-      ';background:' + (active ? 'rgba(79,142,247,0.12)' : 'transparent') + '">' + x(d.label) + '</span>';
-  }).join('');
+  var opts = [{ id: '', label: 'All domains' }].concat(VF_DOMAINS.map(function(d) { return { id: d, label: d.charAt(0).toUpperCase() + d.slice(1) }; }));
+  wrap.innerHTML = seg(opts, VF.domain, 'vfSetDomain');
 }
 
 export function vfSetDomain(d) { VF.domain = d; vfRenderDomainChips(); if (VF.runId) vfLoadQueue(); }
@@ -75,15 +73,19 @@ export function vfLoadQueue() {
   VF.runId = sel ? sel.value : '';
   VF.selected = '';
   var box = document.getElementById('vf-queue');
-  if (!VF.runId) { box.innerHTML = '<div class="empty" style="padding:2.5rem;text-align:center;color:var(--muted)">Select a run to load its pending verifications.</div>'; document.getElementById('vf-summary').textContent = ''; return; }
-  box.innerHTML = '<div class="empty" style="padding:2.5rem;text-align:center;color:var(--muted)">Loading…</div>';
+  if (!VF.runId) { box.innerHTML = card('', empty('check', 'Select a run', 'Pick a run above to load its pending verifications.')); document.getElementById('vf-summary').textContent = ''; return; }
+  box.innerHTML = card('', empty('refresh', 'Loading…'));
   var q = '/api/scenarios/runs/' + encodeURIComponent(VF.runId) + '/verifications' + (VF.domain ? ('?domain=' + encodeURIComponent(VF.domain)) : '');
   apicall(q).then(function(d) {
-    if (d && d.error) { box.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(d.error) + '</div>'; return; }
+    if (d && d.error) { box.innerHTML = card('', empty('alert', 'Could not load verifications', d.error)); return; }
     VF.items = (d && d.items) || [];
     vfRenderQueue();
-  }).catch(function(e){ box.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(e.message) + '</div>'; });
+  }).catch(function(e){ box.innerHTML = card('', empty('alert', 'Could not load verifications', e.message)); });
 }
+
+var VF_TONE = { Detected: 'ok', NotDetected: 'bad', NotApplicable: 'muted', Approved: 'ok', Rejected: 'bad', NeedsReview: 'warn' };
+var VF_PLAIN = { Detected: 'Detected', NotDetected: 'Silent', NotApplicable: 'N/A', NeedsReview: 'Needs review' };
+var VF_COLOR = { Detected: CHART_COLORS.ok, NotDetected: CHART_COLORS.bad, NotApplicable: CHART_COLORS.muted, NeedsReview: CHART_COLORS.warn, Pending: CHART_COLORS.info };
 
 function vfRenderQueue() {
   var box = document.getElementById('vf-queue');
@@ -91,30 +93,46 @@ function vfRenderQueue() {
   var pending = items.filter(function(i){ return i.status === 'Pending' || i.status === 'NeedsReview'; }).length;
   document.getElementById('vf-summary').textContent = items.length + ' expectation' + (items.length===1?'':'s') + ' · ' + pending + ' outstanding';
   if (!items.length) {
-    box.innerHTML = '<div class="empty" style="padding:2.5rem;text-align:center;color:var(--muted)">No off-host expectations for this run' + (VF.domain ? ' in the ' + x(VF.domain) + ' domain' : '') + '. Endpoint controls are verified automatically.</div>';
+    box.innerHTML = card('', empty('check', 'No off-host expectations for this run' + (VF.domain ? ' in the ' + VF.domain + ' domain' : ''), 'Endpoint controls are verified automatically.'));
     return;
   }
-  var rows = items.map(function(i, idx) {
-    var badge = '<span style="font-size:0.7rem;font-weight:700;color:' + vfStatusColor(i.status) + '">' + vfStatusLabel(i.status) + '</span>';
-    var wf = (i.workflowState && i.workflowState !== 'Approved' && i.workflowState !== 'Pending') ? '<div style="font-size:0.62rem;color:var(--warning)">' + x(i.workflowState) + '</div>' : '';
-    var analyst = i.verifiedBy ? x(i.verifiedBy) : '<span class="u-muted">—</span>';
-    var ev = i.evidenceCount ? ('<span style="color:var(--accent)">' + i.evidenceCount + ' file' + (i.evidenceCount===1?'':'s') + '</span>') : '<span class="u-muted">—</span>';
-    return '<tr style="border-top:1px solid var(--border)">' +
-      '<td style="padding:0.6rem 0.8rem">' + badge + wf + '</td>' +
-      '<td style="padding:0.6rem 0.8rem"><code style="font-size:0.72rem">' + x(i.techniqueId) + '</code></td>' +
-      '<td style="padding:0.6rem 0.8rem;font-size:0.82rem"><strong>' + x(i.providerDisplay || i.provider) + '</strong></td>' +
-      '<td style="padding:0.6rem 0.8rem;font-size:0.78rem;text-transform:capitalize;color:var(--muted)">' + x(i.domain) + '</td>' +
-      '<td style="padding:0.6rem 0.8rem;font-size:0.78rem;text-transform:capitalize">' + x(i.confidence) + '</td>' +
-      '<td style="padding:0.6rem 0.8rem;font-size:0.78rem">' + analyst + '</td>' +
-      '<td style="padding:0.6rem 0.8rem;font-size:0.78rem">' + ev + '</td>' +
-      '<td style="padding:0.6rem 0.8rem;text-align:right"><button class="btn btn-outline btn-sm"' + on('click', 'vfSelect', i.expectationId) + '>' + (i.verificationId ? 'Review' : 'Verify') + '</button></td>' +
+  var count = function(st) { return items.filter(function(i) { return i.status === st; }).length; };
+  var detected = count('Detected'), silent = count('NotDetected');
+  var attested = items.length - pending - count('NotApplicable');
+  var stSegs = countBy(items, function(i) { return i.status; }, 'Pending').map(function(p) {
+    return { label: VF_PLAIN[p[0]] || p[0], value: p[1], color: VF_COLOR[p[0]] || CHART_COLORS.muted };
+  });
+  var byDomain = countBy(items, function(i) { return i.domain; }, 'Unknown').map(function(p) { return [p[0].charAt(0).toUpperCase() + p[0].slice(1), p[1]]; });
+  var rows = items.map(function(i) {
+    var plain = VF_PLAIN[i.status] || (i.status || 'Pending');
+    var badge = pill(plain, VF_TONE[i.status] || 'warn');
+    var wf = (i.workflowState && i.workflowState !== 'Approved' && i.workflowState !== 'Pending') ? '<div class="tiny muted">' + x(i.workflowState) + '</div>' : '';
+    var analyst = i.verifiedBy ? x(i.verifiedBy) : '<span class="muted">—</span>';
+    var ev = i.evidenceCount ? ('<span class="rk-chip tone-accent">' + i.evidenceCount + ' file' + (i.evidenceCount===1?'':'s') + '</span>') : '<span class="muted">—</span>';
+    return '<tr>' +
+      '<td>' + badge + wf + '</td>' +
+      '<td><code>' + x(i.techniqueId) + '</code></td>' +
+      '<td><strong>' + x(i.providerDisplay || i.provider) + '</strong></td>' +
+      '<td class="cap muted">' + x(i.domain) + '</td>' +
+      '<td class="cap">' + x(i.confidence) + '</td>' +
+      '<td>' + analyst + '</td>' +
+      '<td>' + ev + '</td>' +
+      '<td class="r"><button class="btn btn-outline btn-sm"' + on('click', 'vfSelect', i.expectationId) + '>' + (i.verificationId ? 'Review' : 'Verify') + '</button></td>' +
       '</tr>';
   }).join('');
   box.innerHTML =
-    '<table style="width:100%;border-collapse:collapse">' +
-    '<thead><tr style="text-align:left;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted)">' +
-    '<th style="padding:0.6rem 0.8rem">Status</th><th style="padding:0.6rem 0.8rem">Technique</th><th style="padding:0.6rem 0.8rem">Expected Control</th><th style="padding:0.6rem 0.8rem">Domain</th><th style="padding:0.6rem 0.8rem">Confidence</th><th style="padding:0.6rem 0.8rem">Analyst</th><th style="padding:0.6rem 0.8rem">Evidence</th><th></th>' +
-    '</tr></thead><tbody>' + rows + '</tbody></table>' +
+    grid(4, [
+      kpi({ label: 'Expectations', value: items.length, sub: 'off-host controls to attest', icon: 'shield', tone: 'accent' }),
+      kpi({ label: 'Detected', value: detected, sub: 'attested as alerted', icon: 'ok', tone: 'ok' }),
+      kpi({ label: 'Silent', value: silent, sub: 'attested as not detected', icon: 'warn', tone: silent ? 'bad' : 'muted' }),
+      kpi({ label: 'Outstanding', value: pending, sub: attested + ' attested so far', icon: 'clock', tone: pending ? 'warn' : 'ok' })
+    ]) +
+    grid(2, [
+      card('Verification status', chartSlot({ type: 'donut', h: 160, legendRight: true, centerSub: 'expectations', segments: stSegs })),
+      card('By domain', hbars(hbarRows(byDomain, 'accent', 6)), { sub: 'expectations' })
+    ]) +
+    '<section class="rk-card flush"><header class="rk-hd"><h2>Expectations</h2><span class="rk-hd-sub">' + items.length + (VF.domain ? ' in ' + x(VF.domain) : '') + '</span></header><div class="tbl-wrap">' +
+    '<table class="g3-vf"><thead><tr><th>Status</th><th>Technique</th><th>Expected Control</th><th>Domain</th><th>Confidence</th><th>Analyst</th><th>Evidence</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></section>' +
     '<div id="vf-detail"></div>';
   if (VF.selected) vfSelect(VF.selected);
 }

@@ -1,0 +1,61 @@
+/* Rich layouts, group 4: Attack Paths, Exposure Explorer, Recommendations, Exercises,
+   Technique Coverage, Threat Prioritization. Theme tokens only. */
+
+.g4-gap { margin-top: 12px; }
+.g4-cap { margin-bottom: 10px; }
+.g4-center { text-align: center; padding-bottom: 8px; }
+.g4-split { display: grid; grid-template-columns: minmax(150px, 190px) 1fr; gap: 18px; align-items: center; }
+.g4-split .donut-wrap { justify-content: center; }
+.g4-split .donut-legend { display: none; }
+.g4-drivers { min-width: 0; }
+@media (max-width: 700px) { .g4-split { grid-template-columns: minmax(0, 1fr); } }
+.g4-cov-n { font-size: 13px; margin-bottom: 10px; }
+.g4-cov-n b { font-family: var(--font-display); font-size: 22px; margin-right: 2px; }
+
+/* Path chains */
+.g4-chain { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.g4-node { display: inline-block; padding: 5px 10px; border: 1px solid var(--border); background: var(--elevated); border-radius: 8px; font-family: var(--font-mono); font-size: 12px; color: var(--text); white-space: nowrap; }
+.g4-node.goal { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.g4-edge { display: inline-flex; flex-direction: column; align-items: center; color: var(--muted); margin: 0 2px; }
+.g4-edge i { font-style: normal; font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; }
+.g4-edge span { font-size: 16px; line-height: .8; }
+
+/* Score cells and table helpers */
+.g4-score { display: flex; flex-direction: column; gap: 5px; min-width: 110px; }
+.g4-score-n { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--kc, var(--text)); }
+.g4-score-n small { font-size: 10.5px; font-weight: 600; opacity: .85; margin-left: 4px; }
+.g4-scorecol { min-width: 130px; }
+.g4-num { font-variant-numeric: tabular-nums; }
+.g4-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.g4-yes { color: var(--success); font-weight: 600; font-size: 12.5px; }
+.g4-no { color: var(--muted); }
+.g4-trend { font-weight: 600; font-size: 12.5px; }
+.g4-trend.up { color: var(--danger); }
+.g4-trend.down { color: var(--success); }
+.rk-card.flush > .tbl-wrap { border: 0; border-radius: 0; box-shadow: none; }
+.g4-table-card { padding: 0; overflow: hidden; }
+.g4-table-card > .tbl-wrap { border: 0; border-radius: 0; box-shadow: none; }
+.g4-table-card .rk-hd { padding: 14px 16px 0; }
+.g4-filters { margin-bottom: 14px; }
+.g4-count { margin-left: auto; font-size: 12px; color: var(--muted); }
+.g4-sec { margin: 18px 0 8px; font-size: 13px; font-weight: 600; color: var(--text); }
+.g4-sec:first-child { margin-top: 0; }
+.g4-detail-card { margin-bottom: 14px; }
+
+/* Threat-priority factors */
+.g4-factor { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(90px, 1fr) 120px; gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--row-line); }
+.g4-factor:last-child { border-bottom: 0; }
+.g4-factor-t { display: flex; flex-direction: column; min-width: 0; }
+.g4-factor-t span { font-size: 12px; color: var(--muted); }
+.g4-factor-v { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.g4-factor-v.muted { font-weight: 400; font-size: 12px; }
+@media (max-width: 700px) { .g4-factor { grid-template-columns: minmax(0, 1fr); gap: 6px; } .g4-factor-v { text-align: left; } }
+
+/* Execution progress */
+.g4-prog { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+.g4-prog .rk-bar { flex: 1; }
+.g4-prog small { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.tbl-wrap .g4-chain { flex-wrap: nowrap; }
+.g4-center .btn { width: auto; display: inline-flex; }
+.rk-filters > span { max-width: 100%; overflow-x: auto; }
+.rk-filters .rk-seg { flex-wrap: nowrap; }

@@ -8,7 +8,9 @@ const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function assertInert(container, label) {
-  assert.equal(container.querySelector('img,svg,script,iframe'), null, `${label}: payload created an element`);
+  // The layout kit's own icons and charts are trusted inline SVG; only payload-created elements count.
+  const stray = [...container.querySelectorAll('img,svg,script,iframe')].filter((el) => !el.closest('.rk-kpi-ico,.rk-empty-ico,.chart-slot'));
+  assert.equal(stray[0] || null, null, `${label}: payload created an element`);
   for (const el of container.querySelectorAll('*')) {
     for (const a of el.attributes) assert.ok(!/^on/i.test(a.name) || !/__xss/.test(a.value), `${label}: payload created ${a.name} on <${el.tagName}>`);
   }

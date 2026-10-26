@@ -5,7 +5,8 @@ import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
 import { closeAllRowMenus } from './attack-path.js';
 import { ROLE } from './shell.js';
-import { cssVars } from '../core/css-vars.js';
+import { kpi, grid, card, hbars, pill, empty, bar } from '../core/kit.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
 
 // ── Initiative Layer ─────────────────────────────────────────────────────
@@ -16,10 +17,21 @@ import { cssVars } from '../core/css-vars.js';
 // The `jobs` array inside GET /api/initiatives/{id} is the one exception:
 // it has explicit lowercase camelCase json tags (id/type/state/createdAt/
 // completedAt). Verified against the actual Go source, not assumed.
-var INITIATIVES = { list: [], filter: 'active' };
+var INITIATIVES = { list: [], all: null, filter: 'active' };
 
-function initiativeStateColor(initState) {
-  return initState === 'active' ? 'g1-s-f213c12d' : 'g1-s-8297411d';
+function initiativeTone(initState) {
+  return initState === 'active' ? 'ok' : initState === 'closed' ? 'info' : 'muted';
+}
+// initiativeCounts: initiatives per state, for the summary strip.
+export function initiativeCounts(list) {
+  var c = { total: 0, active: 0, closed: 0, archived: 0, other: 0, byCreator: {} };
+  (list || []).forEach(function(it) {
+    c.total++;
+    if (it.State === 'active' || it.State === 'closed' || it.State === 'archived') c[it.State]++; else c.other++;
+    var who = it.CreatedBy || 'unknown';
+    c.byCreator[who] = (c.byCreator[who] || 0) + 1;
+  });
+  return c;
 }
 export function initiativeStateLabel(initState) {
   if (initState === 'active') return 'Active';
@@ -41,24 +53,56 @@ export function loadInitiatives() {
   apicall('/api/initiatives' + q).then(function(res) {
     if (res && res.error) { showToast(res.error, 'err'); return; }
     INITIATIVES.list = (res && res.initiatives) || [];
+    INITIATIVES.all = INITIATIVES.filter === 'all' ? INITIATIVES.list : null;
     renderInitiativesList();
+    if (INITIATIVES.filter !== 'all') {
+      // The summary strip counts every state, so fetch the unfiltered list for it.
+      apicall('/api/initiatives').then(function(all) {
+        INITIATIVES.all = (all && all.initiatives) || INITIATIVES.list;
+        renderInitiativesSummary();
+      }).catch(function() { INITIATIVES.all = INITIATIVES.list; renderInitiativesSummary(); });
+    }
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function renderInitiativesSummary() {
+  var el = document.getElementById('init-summary');
+  if (!el) return;
+  var all = INITIATIVES.all || INITIATIVES.list;
+  var c = initiativeCounts(all);
+  if (!c.total) { el.innerHTML = ''; return; }
+  var segs = [
+    { label: 'Active', value: c.active, color: CHART_COLORS.ok },
+    { label: 'Closed', value: c.closed, color: CHART_COLORS.info },
+    { label: 'Archived', value: c.archived, color: CHART_COLORS.muted },
+    { label: 'Other', value: c.other, color: CHART_COLORS.warn },
+  ].filter(function(g) { return g.value > 0; });
+  var creators = Object.keys(c.byCreator).sort(function(p, q) { return c.byCreator[q] - c.byCreator[p]; }).slice(0, 5);
+  el.innerHTML = grid(4, [
+    kpi({ label: 'Initiatives', value: c.total, icon: 'flag', tone: 'accent' }),
+    kpi({ label: 'Active', value: c.active, icon: 'play', tone: 'ok' }),
+    kpi({ label: 'Closed', value: c.closed, icon: 'ok', tone: 'info' }),
+    kpi({ label: 'Archived', value: c.archived, icon: 'file', tone: 'muted' }),
+  ]) + grid(2, [
+    card('By state', chartSlot({ type: 'donut', segments: segs, center: String(c.total), centerSub: 'initiatives', legend: true, h: 150 })),
+    card('Created by', hbars(creators.map(function(n) { return [n, c.byCreator[n] / c.total * 100, 'accent', c.byCreator[n]]; }))),
+  ]);
 }
 
 function renderInitiativesList() {
   document.getElementById('init-cnt').textContent = INITIATIVES.list.length;
+  renderInitiativesSummary();
   var tbody = document.getElementById('init-body');
   if (!INITIATIVES.list.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty">No initiatives yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">' + empty('flag', 'No initiatives yet', 'An initiative groups related remediation jobs and tracks their overall progress.') + '</td></tr>';
     return;
   }
   tbody.innerHTML = INITIATIVES.list.map(function(it, idx) {
-    var col = initiativeStateColor(it.State);
     var menuId = 'init-menu-' + idx;
     var canDelete = it.State === 'archived' && ROLE === 'admin';
     return '<tr' + on('click', 'openInitiativeDrawer', it.ID) + ' class="u-pointer">' +
-      '<td>' + x(it.Name) + '</td>' +
-      '<td><span class="badge ' + col + '">' + initiativeStateLabel(it.State) + '</span></td>' +
+      '<td><span class="rg2-cell-main">' + x(it.Name) + '</span></td>' +
+      '<td>' + pill(initiativeStateLabel(it.State), initiativeTone(it.State)) + '</td>' +
       '<td>' + x(it.CreatedBy || '—') + '</td>' +
       '<td>' + x(fmtDate(it.CreatedAt)) + '</td>' +
       '<td' + on('click', 'stopEvent') + '>' +
@@ -104,7 +148,6 @@ function initiativeProgressCounts(p) {
 
 function renderInitiativeDrawer(it, progress, jobs) {
   document.getElementById('init-drawer-title').textContent = it.Name;
-  var col = initiativeStateColor(it.State);
   var pct = Math.round(progress.PercentComplete || 0);
 
   var canDetach = it.State !== 'archived';
@@ -123,7 +166,7 @@ function renderInitiativeDrawer(it, progress, jobs) {
 
   document.getElementById('init-drawer-body').innerHTML =
     '<div class="u-mb-1">' +
-      '<span class="badge ' + col + '">' + initiativeStateLabel(it.State) + '</span> ' +
+      pill(initiativeStateLabel(it.State), initiativeTone(it.State)) + ' ' +
       '<span class="tiny muted">Created by ' + x(it.CreatedBy || '—') + ' · ' + x(fmtDate(it.CreatedAt)) + '</span>' +
     '</div>' +
     '<div class="g1-display-flex g1-s-de98f8b6">' +
@@ -132,10 +175,9 @@ function renderInitiativeDrawer(it, progress, jobs) {
     '</div>' +
     '<div id="init-drawer-error" class="g1-s-6d6ac12c"></div>' +
     (it.Description ? '<p class="g1-s-691a68f3">' + x(it.Description) + '</p>' : '') +
-    '<div class="bar-row g1-s-20ce54f7">' +
-      '<div class="bar-label"><span>Progress</span><span>' + pct + '%</span></div>' +
-      '<div class="bar-track"><div class="bar-fill g1-s-6557e7ab"' + cssVars(['g1-v-9b890877', pct]) + '></div></div>' +
-      '<div class="tiny muted g1-s-f10b735a">' + x(initiativeProgressCounts(progress)) + '</div>' +
+    '<div class="rg2-gap">' +
+      '<div class="rg2-progress"><span>Progress</span><b>' + pct + '%</b></div>' + bar(pct, pct >= 100 ? 'ok' : 'accent', true) +
+      '<div class="tiny muted rg2-gap">' + x(initiativeProgressCounts(progress)) + '</div>' +
     '</div>' +
     '<div class="g1-display-flex g1-s-1bb6b069">' +
       '<h4 class="g1-s-4e9a1212">Jobs</h4>' +

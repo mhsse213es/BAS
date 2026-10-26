@@ -4,6 +4,8 @@ import { on } from '../core/actions.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
 import { covSegHtml } from './attack-path.js';
 import { ROLE } from './shell.js';
+import { kpi, grid, card, hbars, pill, chip, empty } from '../core/kit.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
 
 // ── Email ───────────────────────────────────────────────────────────────────
@@ -129,28 +131,28 @@ var EMAIL_RUN_OPEN = {};          // runId -> bool
 // class (app.css) rather than a computed inline style -- these pages run
 // under style-src 'self' (G1e), so a per-row color can never be written
 // as a raw style attribute.
-function egVerdictClass(v) {
-  if (v === 'confirmed-success') return 'v-success';
-  if (v === 'confirmed-failure') return 'v-failure';
-  if (v === 'inconclusive') return 'v-warning';
-  return 'v-muted'; // not-tested / not-applicable
+function egVerdictTone(v) {
+  if (v === 'confirmed-success') return 'ok';
+  if (v === 'confirmed-failure') return 'bad';
+  if (v === 'inconclusive') return 'warn';
+  return 'muted'; // not-tested / not-applicable
 }
 function egVerdictBadge(detail) {
   var v = (detail || {}).verdict || 'not-tested';
-  return '<span class="sbadge ' + egVerdictClass(v) + '">' + x(v) + '</span>';
+  return chip(v, egVerdictTone(v));
 }
-function egAreaClass(status) {
-  if (status === 'covered') return 'v-success';
-  if (status === 'excluded') return 'v-muted';
-  return 'v-failure'; // not-covered
+function egAreaTone(status) {
+  if (status === 'covered') return 'ok';
+  if (status === 'excluded') return 'muted';
+  return 'bad'; // not-covered
+}
+// egStatusTone: run/campaign status -> tone. Unrecognised statuses stay neutral rather than
+// being mis-coloured as success or failure.
+export function egStatusTone(status) {
+  return { completed: 'ok', running: 'info', failed: 'bad', partial: 'warn', paused: 'warn' }[status] || 'muted';
 }
 function egStatusBadge(status) {
-  var known = ['running', 'completed', 'failed', 'partial', 'paused'];
-  if (known.indexOf(status) >= 0) return '<span class="sbadge s-' + status + '">' + x(status) + '</span>';
-  // pending / dispatched / cancelling / cancelled / blocked_by_prerequisite --
-  // no dedicated CSS class; fall back to a neutral badge rather than
-  // mis-coloring an unrecognized status as success or failure.
-  return '<span class="sbadge v-muted">' + x(status || '—') + '</span>';
+  return pill(status || '—', egStatusTone(status));
 }
 function egReportError(res, fallback) {
   showToast((res && res.error) ? res.error : fallback, 'err');
@@ -170,70 +172,74 @@ function loadEmailCoverage() {
   var el = document.getElementById('email-coverage');
   if (!el) return;
   apicall('/api/emailgw/coverage').then(function(d) {
-    if (!d || !Array.isArray(d.areas)) { el.innerHTML = '<div class="empty">Coverage report unavailable.</div>'; return; }
-    el.innerHTML =
-      '<div class="tiny muted u-mb-1">' + x(d.summary || '') + '</div>' +
-      '<div class="email-area-badges">' +
+    if (!d || !Array.isArray(d.areas)) { el.innerHTML = empty('mail', 'Coverage report unavailable'); return; }
+    var n = { covered: 0, excluded: 0, other: 0 };
+    d.areas.forEach(function(a) { if (a.status === 'covered') n.covered++; else if (a.status === 'excluded') n.excluded++; else n.other++; });
+    var segs = [
+      { label: 'Covered', value: n.covered, color: CHART_COLORS.ok },
+      { label: 'Not covered', value: n.other, color: CHART_COLORS.bad },
+      { label: 'Excluded', value: n.excluded, color: CHART_COLORS.muted },
+    ].filter(function(g) { return g.value > 0; });
+    el.innerHTML = (d.summary ? '<p class="rg2-note rg2-note-top">' + x(d.summary) + '</p>' : '') +
+      '<div class="rg2-split"><div class="rg2-split-chart">' +
+      (d.areas.length ? chartSlot({ type: 'donut', segments: segs, center: String(d.areas.length), centerSub: 'areas', legend: true, h: 150 }) : '') +
+      '</div><div class="rg2-chips">' +
       d.areas.map(function(a) {
-        return '<span class="sbadge ' + egAreaClass(a.status) + '" title="' + x(a.exclusionReason || '') + '">' +
-          x(a.areaId) + ' — ' + x(a.areaName) + '</span>';
-      }).join('') +
-      '</div>';
-  }).catch(function(e) { el.innerHTML = '<div class="empty">Coverage report unavailable.</div>'; });
+        return '<span title="' + x(a.exclusionReason || '') + '">' + chip(a.areaId + ' — ' + a.areaName, egAreaTone(a.status)) + '</span>';
+      }).join('') + '</div></div>';
+  }).catch(function() { el.innerHTML = empty('mail', 'Coverage report unavailable'); });
 }
 
 // ── Metrics (MTTD/MTTR) ──────────────────────────────────────────────────────
 function egLatencyLine(label, lat) {
-  if (!lat || lat.unavailable) return '<div class="tiny muted">' + label + ': no eligible samples</div>';
-  if (!lat.sufficient) return '<div class="tiny muted">' + label + ': ' + lat.sampleCount + '/' + lat.minimumSampleSize + ' samples — insufficient</div>';
+  if (!lat || lat.unavailable) return '<div class="tiny muted">' + x(label) + ': no eligible samples</div>';
+  if (!lat.sufficient) return '<div class="tiny muted">' + x(label) + ': ' + x(lat.sampleCount) + '/' + x(lat.minimumSampleSize) + ' samples — insufficient</div>';
   var mean = lat.meanSeconds != null ? Math.round(lat.meanSeconds) + 's' : '—';
   var median = lat.medianSeconds != null ? Math.round(lat.medianSeconds) + 's' : '—';
-  return '<div class="tiny">' + label + ': <strong>' + mean + '</strong> mean · ' + median + ' median <span class="muted">(n=' + lat.sampleCount + ')</span></div>';
+  return '<div class="tiny">' + x(label) + ': <strong>' + x(mean) + '</strong> mean · ' + x(median) + ' median <span class="muted">(n=' + x(lat.sampleCount) + ')</span></div>';
 }
-function egOutcomeSummary(dim) {
+// egOutcomeRows: outcome counts for one dimension as horizontal bars (share of all runs considered).
+export function egOutcomeRows(dim) {
   var o = (dim || {}).outcomes || {};
-  var total = (o.confirmedSuccess || 0) + (o.confirmedFailure || 0) + (o.inconclusive || 0) + (o.notTested || 0) + (o.notApplicable || 0);
-  return '<div class="tiny muted">' + (o.confirmedSuccess || 0) + ' success · ' + (o.confirmedFailure || 0) + ' failure · ' +
-    (o.inconclusive || 0) + ' inconclusive' + (total ? '' : ' <span>(no runs yet)</span>') + '</div>';
+  var succ = o.confirmedSuccess || 0, fail = o.confirmedFailure || 0, inc = o.inconclusive || 0;
+  var total = succ + fail + inc + (o.notTested || 0) + (o.notApplicable || 0);
+  if (!total) return '<div class="tiny muted">No runs yet</div>';
+  var pct = function(v) { return v / total * 100; };
+  return hbars([['Success', pct(succ), 'ok', succ], ['Failure', pct(fail), 'bad', fail], ['Inconclusive', pct(inc), 'warn', inc]]);
 }
 function egMetricsColumn(label, m) {
   if (!m) return '';
-  return '<div class="email-metrics-col">' +
-    '<div class="u-fw600">' + x(label) + ' <span class="tiny muted">(' + (m.runsConsidered || 0) + ' runs)</span></div>' +
-    '<div class="email-metrics-block"><div class="tiny muted">Prevention</div>' + egOutcomeSummary(m.prevention) + '</div>' +
-    '<div class="email-metrics-block"><div class="tiny muted">Detection (MTTD)</div>' + egOutcomeSummary(m.detection) + egLatencyLine('MTTD', (m.detection || {}).latency) + '</div>' +
-    '<div><div class="tiny muted">Response (MTTR)</div>' + egOutcomeSummary(m.response) + egLatencyLine('MTTR', (m.response || {}).latency) + '</div>' +
-  '</div>';
+  var block = function(title, dim, lat) {
+    return '<div class="rg2-metric"><div class="rg2-metric-t">' + x(title) + '</div>' + egOutcomeRows(dim) + (lat || '') + '</div>';
+  };
+  return card(label, block('Prevention', m.prevention) +
+    block('Detection (MTTD)', m.detection, egLatencyLine('MTTD', (m.detection || {}).latency)) +
+    block('Response (MTTR)', m.response, egLatencyLine('MTTR', (m.response || {}).latency)),
+    { sub: (m.runsConsidered || 0) + ' runs' });
 }
 function loadEmailMetrics() {
   var el = document.getElementById('email-metrics');
   if (!el) return;
   apicall('/api/emailgw/metrics').then(function(d) {
-    if (!d) { el.innerHTML = '<div class="empty">Metrics unavailable.</div>'; return; }
-    el.innerHTML = '<div class="email-metrics-row">' + egMetricsColumn('Lab', d.lab) + egMetricsColumn('Customer', d.customer) + '</div>';
-  }).catch(function(e) { el.innerHTML = '<div class="empty">Metrics unavailable.</div>'; });
+    if (!d) { el.innerHTML = empty('clock', 'Metrics unavailable'); return; }
+    el.innerHTML = grid(2, [egMetricsColumn('Lab', d.lab), egMetricsColumn('Customer', d.customer)].filter(Boolean));
+  }).catch(function() { el.innerHTML = empty('clock', 'Metrics unavailable'); });
 }
 
 // ── Scenario catalog ──────────────────────────────────────────────────────────
 function renderEmailCatalog() {
   var el = document.getElementById('email-catalog-grid');
   if (!el) return;
-  el.innerHTML = EG_CATALOG.map(function(sc) {
-    return '<div class="dash-panel">' +
-      '<div class="email-card-hdr"><span class="u-fw600">' + x(sc.id) + '</span> — ' + x(sc.name) +
-      '</div>' +
-      '<div class="email-card-body">' +
-        sc.expectations.map(function(e) {
-          return '<div class="email-exp-row">' +
-            '<span class="tiny muted">' + x(e.label) + '</span>' +
-            (EG_CAN_RUN
-              ? '<button class="btn btn-outline btn-sm"' + on('click', 'egRunExpectation', e.id) + '>&#9654; Run</button>'
-              : '') +
-          '</div>';
-        }).join('') +
-      '</div>' +
-    '</div>';
-  }).join('');
+  el.innerHTML = grid(3, EG_CATALOG.map(function(sc) {
+    return card(sc.id + ' — ' + sc.name, sc.expectations.map(function(e) {
+      return '<div class="email-exp-row">' +
+        '<span class="tiny muted">' + x(e.label) + '</span>' +
+        (EG_CAN_RUN
+          ? '<button class="btn btn-outline btn-sm"' + on('click', 'egRunExpectation', e.id) + '>&#9654; Run</button>'
+          : '') +
+      '</div>';
+    }).join(''), { sub: sc.expectations.length + ' checks' });
+  }));
 }
 
 export function egRunExpectation(expectationId) {
@@ -255,9 +261,33 @@ function renderEmailCampaignToolbar(list) {
 }
 export function setEmailCampaignsTab(v) { EMAIL_CAMPAIGNS_TAB = v; loadEmailCampaigns(); }
 
+var EG_LISTS = { runs: null, campaigns: null };
+// egSummary: counts for the strip at the top of the page, from the run and campaign lists the page already loads.
+export function egSummary(runs, campaigns) {
+  var by = function(list, st) { return (list || []).filter(function(r) { return r.status === st; }).length; };
+  return {
+    runs: (runs || []).length, runsCompleted: by(runs, 'completed'), runsFailed: by(runs, 'failed'),
+    runsActive: by(runs, 'running') + by(runs, 'pending'),
+    campaigns: (campaigns || []).length, campaignsRunning: by(campaigns, 'running'),
+  };
+}
+function renderEmailSummary() {
+  var el = document.getElementById('email-summary');
+  if (!el) return;
+  if (!EG_LISTS.runs || !EG_LISTS.campaigns) return;
+  var m = egSummary(EG_LISTS.runs, EG_LISTS.campaigns);
+  el.innerHTML = grid(4, [
+    kpi({ label: 'Runs', value: m.runs, sub: m.runsActive + ' pending or running', icon: 'runs', tone: 'accent' }),
+    kpi({ label: 'Completed runs', value: m.runsCompleted, icon: 'ok', tone: 'ok' }),
+    kpi({ label: 'Failed runs', value: m.runsFailed, icon: 'bad', tone: m.runsFailed ? 'bad' : 'muted' }),
+    kpi({ label: 'Campaigns', value: m.campaigns, sub: m.campaignsRunning + ' running', icon: 'campaign', tone: 'violet' }),
+  ]);
+}
+
 function loadEmailCampaigns() {
   apicall('/api/emailgw-campaigns?limit=50').then(function(list) {
     list = Array.isArray(list) ? list : [];
+    EG_LISTS.campaigns = list; renderEmailSummary();
     renderEmailCampaignToolbar(list);
     var rows = EMAIL_CAMPAIGNS_TAB === 'all' ? list : list.filter(function(c) { return c.status === EMAIL_CAMPAIGNS_TAB; });
     var tb = document.getElementById('email-campaigns-body');
@@ -346,6 +376,7 @@ export function setEmailRunsTab(v) { EMAIL_RUNS_TAB = v; loadEmailRuns(); }
 function loadEmailRuns() {
   apicall('/api/emailgw-runs?limit=50').then(function(list) {
     list = Array.isArray(list) ? list : [];
+    EG_LISTS.runs = list; renderEmailSummary();
     renderEmailRunsToolbar(list);
     var rows = EMAIL_RUNS_TAB === 'all' ? list : list.filter(function(r) { return r.status === EMAIL_RUNS_TAB; });
     var tb = document.getElementById('email-runs-body');

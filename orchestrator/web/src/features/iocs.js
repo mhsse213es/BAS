@@ -7,6 +7,9 @@ import { covSegHtml } from './attack-path.js';
 import { ROLE } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
+import { kpi, card, grid, hbars, bar, chip, pill, empty } from '../core/kit.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
+import { countBy, hbarRows } from './rich-g3.js';
 
 
 // ── Indicators (IOCs) tab ────────────────────────────────────────────────────
@@ -167,34 +170,62 @@ function renderIOCAnalyticsTiles(result) {
   var el = document.getElementById('ioc-analytics-tiles');
   if (!el) return;
   result = result || {};
-  function tile(label, entries, valueSuffix) {
-    var top = (entries || [])[0];
-    var body = top
-      ? '<div class="tiny g1-s-59558949" title="' + x(top.value) + '">' + x(top.value) + '</div><div class="tiny muted">' + top.sightingCount + valueSuffix + '</div>'
-      : '<div class="tiny muted">No data yet</div>';
-    return '<div class="kpi-card stat-tile"><div class="stat-top"><div><div class="kpi-label">' + label + '</div><div class="g1-s-f10b735a">' + body + '</div></div></div></div>';
+  // One card per ranking the analytics endpoint returns; bars are scaled to the largest count shown.
+  function rank(label, entries, unit, tone) {
+    var list = (entries || []).slice(0, 5);
+    var max = 0;
+    list.forEach(function(e) { if ((e.sightingCount || 0) > max) max = e.sightingCount || 0; });
+    var body = list.length
+      ? '<ul class="g3-top">' + list.map(function(e) {
+          return '<li><code title="' + x(e.value) + '">' + x(e.value) + '</code><span class="n">' + x(e.sightingCount || 0) + '</span>' + bar(max ? (e.sightingCount || 0) / max * 100 : 0, tone) + '</li>';
+        }).join('') + '</ul>'
+      : empty('hash', 'No data yet');
+    return card(label, body, { sub: unit });
   }
-  el.innerHTML =
-    tile('Most Detected', result.mostDetected, ' detections') +
-    tile('Highest Bypass Rate', result.highestBypassRate, ' bypasses') +
-    tile('Frequently Reused', result.frequentlyReused, ' sightings') +
-    tile('Longest Surviving', result.longestSurviving, ' sightings');
+  el.innerHTML = grid(4, [
+    rank('Most Detected', result.mostDetected, 'detections', 'ok'),
+    rank('Highest Bypass Rate', result.highestBypassRate, 'bypasses', 'bad'),
+    rank('Frequently Reused', result.frequentlyReused, 'sightings', 'accent'),
+    rank('Longest Surviving', result.longestSurviving, 'sightings', 'warn')
+  ]);
+}
+
+var IOC_STATUS_TONE = { detected: 'ok', missed: 'bad', expired: 'muted', archived: 'muted', draft: 'info', generated: 'info', assigned: 'info', executed: 'accent', observed: 'accent' };
+function renderIOCInsights() {
+  var el = document.getElementById('ioc-insights');
+  if (!el) return;
+  if (!_iocRegistryRows.length) { el.innerHTML = ''; return; }
+  var palette = [CHART_COLORS.accent, CHART_COLORS.teal, CHART_COLORS.violet, CHART_COLORS.warn, CHART_COLORS.pink, CHART_COLORS.info, CHART_COLORS.ok, CHART_COLORS.bad];
+  var types = countBy(_iocRegistryRows, function(r) { return IOC_TYPE_LABEL_REGISTRY[r.type] || r.type; }, 'Unknown');
+  var segs = types.slice(0, 7).map(function(p, k) { return { label: p[0], value: p[1], color: palette[k % palette.length] }; });
+  var rest = types.slice(7).reduce(function(a, p) { return a + p[1]; }, 0);
+  if (rest) segs.push({ label: 'Other', value: rest, color: CHART_COLORS.muted });
+  var status = countBy(_iocRegistryRows, function(r) { return r.status; }, 'Unknown');
+  var source = countBy(_iocRegistryRows, function(r) { return r.origin || r.source; }, 'Unknown');
+  el.innerHTML = grid(3, [
+    card('Indicators by type', chartSlot({ type: 'donut', h: 160, legendRight: true, centerSub: 'indicators', segments: segs }), { sub: 'current view' }),
+    card('By status', hbars(hbarRows(status, 'accent', 6)), { sub: 'current view' }),
+    card('By origin', hbars(hbarRows(source, 'info', 6)), { sub: 'current view' })
+  ]);
 }
 
 function renderIOCRegistryTable() {
   var tbody = document.getElementById('ioc-registry-body');
+  var cnt = document.getElementById('ioc-count');
+  if (cnt) cnt.textContent = _iocRegistryRows.length + ' indicator' + (_iocRegistryRows.length === 1 ? '' : 's');
+  renderIOCInsights();
   if (!_iocRegistryRows.length) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty">No indicators match this filter.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9">' + empty('hash', 'No indicators match this filter', 'Change or clear a filter to see more.') + '</td></tr>';
     return;
   }
   tbody.innerHTML = _iocRegistryRows.map(function(row, idx) {
     var suppressedBadge = row.suppressed ? ' <span class="sbadge g1-s-3518ee58" title="' + x(row.suppressionReason || '') + '">suppressed</span>' : '';
     return '<tr class="u-pointer"' + on('click', 'openIOCDetail', idx) + '>' +
-      '<td><span class="tiny g1-s-e4cd03d6">' + x(IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + '</span></td>' +
+      '<td>' + chip(IOC_TYPE_LABEL_REGISTRY[row.type] || row.type, 'muted') + '</td>' +
       '<td><code class="g1-s-51a7b72a">' + x(row.value) + '</code>' + suppressedBadge + '</td>' +
       '<td class="tiny muted">' + x(row.source || '—') + '</td>' +
       '<td class="tiny muted">' + x(row.origin || '—') + '</td>' +
-      '<td class="tiny">' + x(row.status || '—') + '</td>' +
+      '<td>' + (row.status ? pill(row.status, IOC_STATUS_TONE[row.status] || 'muted') : '<span class="tiny muted">—</span>') + '</td>' +
       '<td class="tiny g1-s-82cece3f">' + (row.sightingCount || 0) + '</td>' +
       '<td class="tiny muted">' + (row.firstSeen ? ago(row.firstSeen) : '—') + '</td>' +
       '<td class="tiny muted">' + (row.lastSeen ? ago(row.lastSeen) : '—') + '</td>' +

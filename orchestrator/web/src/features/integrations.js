@@ -7,6 +7,7 @@ import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js'
 import { _ticketingConfigs, loadTicketingConfigs } from './findings.js';
 import { displayOf, setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
+import { setEppConnectors, setItsmConnectors } from './integrations-insights.js';
 
 
 // ── Integrations tab ────────────────────────────────────────────────────────
@@ -36,6 +37,7 @@ var PROVIDER_ICONS = {
 };
 
 function renderConnectorList(list) {
+  setItsmConnectors(list || []);
   var el = document.getElementById('integrations-list');
   if (!el) return;
   if (!list || !list.length) {
@@ -370,6 +372,7 @@ export function loadResponseConnectors(cb) {
 }
 
 export function renderResponseConnectorList(list) {
+  setEppConnectors(list || []);
   var el = document.getElementById('response-connectors-list');
   if (!el) return;
   if (!list || !list.length) {

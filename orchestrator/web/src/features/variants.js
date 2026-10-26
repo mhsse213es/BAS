@@ -10,6 +10,8 @@ import { schedClassifyOS, vexFilterWindowsAgents } from './scheduled.js';
 import { ROLE } from './shell.js';
 import { VEX_POLL_MAX_FAILURES } from './variant-executor.js';
 import { setDisplay } from '../core/inline-style.js';
+import { kpi, grid, bar, chip, empty } from '../core/kit.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
 
 // ── Run Variants reload-survival ────────────────────────────────────────────
@@ -86,25 +88,25 @@ export function loadVariantStats() {
     var artAtomic = s.artAtomicCount || 0;
     var perFamily = s.variantsPerFamily || 56;
     _vexAvailableVariants = s.availableVariants || 0;
-    el.innerHTML =
+    el.innerHTML = grid(4, [
       vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,
-        'How many individual variant executions (encoding \xd7 privilege \xd7 context combinations) have actually completed so far, summed across every finished variant run — not the total available.') +
+        'How many individual variant executions (encoding \xd7 privilege \xd7 context combinations) have actually completed so far, summed across every finished variant run — not the total available.'),
       vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString() + ' ART tests across ' + artTech + ' techniques \xd7 encoding/privilege/context',
-        'The full combinatorial test space: every one of the ' + artAtomic.toLocaleString() + ' ART atomic tests (across ' + artTech + ' techniques) multiplied by the encoding, privilege, and execution-context variations BAS can generate for it. This is what a Full Sweep dispatches in total, not what has run yet.') +
+        'The full combinatorial test space: every one of the ' + artAtomic.toLocaleString() + ' ART atomic tests (across ' + artTech + ' techniques) multiplied by the encoding, privilege, and execution-context variations BAS can generate for it. This is what a Full Sweep dispatches in total, not what has run yet.'),
       vexStatCard('Custom Payload Families', s.payloadFamilyCount,   'var(--text)',   s.payloadFamilyCount + ' families \xd7 ' + perFamily + ' variants = ' + (s.payloadFamilyVariants || 0).toLocaleString(),
-        'Custom (non-ART) payload families you’ve authored yourself. Each one expands into ' + perFamily + ' variants (encoding/obfuscation/delivery combinations) — counted separately from, and in addition to, the ART-derived Total Variants figure.') +
+        'Custom (non-ART) payload families you’ve authored yourself. Each one expands into ' + perFamily + ' variants (encoding/obfuscation/delivery combinations) — counted separately from, and in addition to, the ART-derived Total Variants figure.'),
       vexStatCard('Custom-Enhanced Techniques', s.techniquesWithFamilies, 'var(--text)', 'of ' + artTech + ' ART techniques have custom payload families',
-        'How many of the ' + artTech + ' ART techniques have at least one custom payload family attached, giving them extra variant coverage beyond their standard ART atomic tests.');
+        'How many of the ' + artTech + ' ART techniques have at least one custom payload family attached, giving them extra variant coverage beyond their standard ART atomic tests.')
+    ]);
     _updateSweepVariantCount(s.availableVariants);
   }).catch(function() {});
 }
 
 export function vexStatCard(label, val, col, sub, help) {
-  return '<div class="kpi-card" style="position:relative">' +
-    (help ? '<button type="button" class="btn btn-sm"' + on('click', 'showVexStatHelp', label, help) + ' title="What does this number mean?" style="position:absolute;top:0.5rem;right:0.5rem;width:18px;height:18px;padding:0;line-height:16px;text-align:center;border-radius:50%;font-size:0.68rem;font-weight:700;color:var(--muted);background:transparent;border:1px solid var(--border)">?</button>' : '') +
-    '<div class="kpi-label">' + label + '</div>' +
-    '<div class="kpi-value" style="color:' + col + '">' + (val || 0).toLocaleString() + '</div>' +
-    (sub ? '<div style="font-size:0.65rem;color:var(--muted);margin-top:0.15rem">' + sub + '</div>' : '') +
+  var tone = col === 'var(--accent)' ? 'accent' : 'info';
+  return '<div class="rg2-helpwrap">' +
+    kpi({ label: label, value: (val || 0).toLocaleString(), sub: sub ? String(sub) : '', tone: tone }) +
+    (help ? '<button type="button" class="btn btn-sm rg2-help"' + on('click', 'showVexStatHelp', label, help) + ' title="What does this number mean?">?</button>' : '') +
     '</div>';
 }
 
@@ -534,40 +536,64 @@ function vexSelectedTechniques() {
   return Array.from(document.querySelectorAll('#vex-technique-list .vex-tech-cb:checked')).map(function(cb) { return cb.value; });
 }
 
+// vexCoverageTotals: sums per-technique coverage rows for the summary strip.
+export function vexCoverageTotals(rows) {
+  var t = { techniques: 0, tested: 0, prevented: 0, allowed: 0, errored: 0, bypassed: 0 };
+  (rows || []).forEach(function(r) {
+    t.techniques++;
+    t.tested += r.totalTested || 0; t.prevented += r.prevented || 0; t.allowed += r.allowed || 0; t.errored += r.errored || 0;
+    if (r.firstBypass) t.bypassed++;
+  });
+  return t;
+}
+
 export function loadVariantCoverage() {
   var el = document.getElementById('vex-coverage');
   if (!el) return;
-  el.innerHTML = '<div class="empty" style="padding:1.5rem">Loading…</div>';
+  el.innerHTML = empty('layers', 'Loading…');
   apicall('/api/variants/coverage').then(function(rows) {
     if (!rows || !rows.length) {
-      el.innerHTML = '<div class="empty" style="padding:1.5rem">No variant runs yet. Run variants on a technique to see coverage here.</div>';
+      el.innerHTML = empty('layers', 'No variant runs yet', 'Run variants on a technique to see coverage here.');
       return;
     }
-    var html = '<div class="tbl-wrap"><table><thead><tr>' +
-      '<th>Technique</th><th>Tactic</th><th>Total</th>' +
-      '<th class="u-success">Prevented</th>' +
+    var t = vexCoverageTotals(rows);
+    var segs = [
+      { label: 'Prevented', value: t.prevented, color: CHART_COLORS.ok },
+      { label: 'Allowed (bypass)', value: t.allowed, color: CHART_COLORS.bad },
+      { label: 'Errors', value: t.errored, color: CHART_COLORS.muted },
+    ].filter(function(g) { return g.value > 0; });
+    var preventedPct = t.tested ? Math.round(t.prevented / t.tested * 100) : 0;
+    var html = grid(4, [
+      kpi({ label: 'Techniques tested', value: t.techniques, icon: 'technique', tone: 'accent' }),
+      kpi({ label: 'Variants tested', value: t.tested.toLocaleString(), icon: 'layers', tone: 'info' }),
+      kpi({ label: 'Prevented', value: t.prevented.toLocaleString(), sub: preventedPct + '% of variants tested', icon: 'ok', tone: 'ok' }),
+      kpi({ label: 'Techniques with a bypass', value: t.bypassed, sub: t.allowed.toLocaleString() + ' variants allowed', icon: 'warn', tone: t.bypassed ? 'bad' : 'muted' }),
+    ]);
+    html += '<div class="rg2-split"><div class="rg2-split-chart">' + chartSlot({ type: 'donut', segments: segs, center: String(t.tested), centerSub: 'variants', legend: true, h: 150 }) + '</div>' +
+      '<div class="tbl-wrap"><table><thead><tr>' +
+      '<th>Technique</th><th>Tactic</th><th>Total</th><th>Prevention</th>' +
       '<th class="u-danger">Allowed</th>' +
       '<th class="u-muted">Errors</th>' +
       '<th>First Bypass</th>' +
       '</tr></thead><tbody>';
     rows.forEach(function(row) {
-      var fp = row.firstBypass
-        ? '<span style="font-family:var(--font-mono);color:var(--warning);font-size:0.74rem">' + x(row.firstBypass) + '</span>'
-        : '<span class="u-success">None</span>';
+      var tot = row.totalTested || 0;
+      var pp = tot ? Math.round((row.prevented || 0) / tot * 100) : 0;
+      var fp = row.firstBypass ? chip(row.firstBypass, 'warn') : '<span class="u-success">None</span>';
       html += '<tr>' +
-        '<td><span class="badge badge-mono" style="font-family:var(--font-mono)">' + x(row.techniqueId) + '</span></td>' +
-        '<td style="color:var(--muted);font-size:0.8rem">' + x(row.tactic || '—') + '</td>' +
-        '<td class="u-center">' + (row.totalTested || 0) + '</td>' +
-        '<td style="text-align:center;color:var(--success);font-weight:600">' + (row.prevented || 0) + '</td>' +
-        '<td style="text-align:center;color:var(--danger);font-weight:600">' + (row.allowed || 0) + '</td>' +
-        '<td style="text-align:center;color:var(--muted)">' + (row.errored || 0) + '</td>' +
+        '<td><span class="rg2-mono">' + x(row.techniqueId) + '</span></td>' +
+        '<td class="u-muted">' + x(row.tactic || '—') + '</td>' +
+        '<td class="u-center">' + x(tot) + '</td>' +
+        '<td><div class="rg2-rate">' + bar(pp, pp >= 75 ? 'ok' : pp >= 40 ? 'warn' : 'bad') + '<span>' + pp + '%</span></div></td>' +
+        '<td class="u-center"><span class="rg2-num ' + (row.allowed ? 'tone-bad' : 'tone-muted') + '">' + x(row.allowed || 0) + '</span></td>' +
+        '<td class="u-center u-muted">' + x(row.errored || 0) + '</td>' +
         '<td>' + fp + '</td>' +
         '</tr>';
     });
-    html += '</tbody></table></div>';
+    html += '</tbody></table></div></div>';
     el.innerHTML = html;
   }).catch(function(e) {
-    el.innerHTML = '<div class="empty" style="color:var(--danger);padding:1rem">' + x(e.message || 'Error loading coverage') + '</div>';
+    el.innerHTML = empty('alert', 'Error loading coverage', e.message || '');
   });
 }
 

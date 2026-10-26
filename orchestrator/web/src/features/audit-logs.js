@@ -4,6 +4,7 @@ import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { buildReportFilename } from './evidence.js';
 import { cssVars } from '../core/css-vars.js';
+import { renderAuditInsights, renderBackupInsights, renderLicenseInsights } from './settings-insights.js';
 
 
 // ── Audit Logs ────────────────────────────────────────────────────────────────
@@ -48,6 +49,7 @@ export function loadLicenseInfo() {
   wrap.innerHTML = '<div class="empty g1-s-be6df18e">Loading…</div>';
   apicall('/api/license').then(function(lic) {
     if (lic.error) { wrap.innerHTML = '<div class="empty g1-s-8e56e4c3">' + x(lic.error) + '</div>'; return; }
+    renderLicenseInsights(lic);
     var statusColor = lic.status === 'valid' ? 'var(--success)' : lic.status === 'grace' ? 'var(--warning)' : lic.status === 'locked' ? 'var(--danger)' : 'var(--muted)';
     var statusLabel = lic.status === 'valid' ? 'Active' : lic.status === 'grace' ? 'Grace Period' : lic.status === 'locked' ? 'Locked' : 'Unknown';
     var features = (lic.features || []).map(function(f) {
@@ -110,6 +112,7 @@ export function loadBackups() {
     }
     renderBackupStatusCard(jobs[0] || null);
     renderBackupJobsTable(jobs);
+    renderBackupInsights(jobs);
   }).catch(function(e) {
     if (wrap) wrap.innerHTML = '<div class="empty g1-s-8e56e4c3">' + x(e.message) + '</div>';
   });
@@ -220,6 +223,7 @@ function fetchAuditPage() {
   apicall('/api/audit-logs' + qs).then(function(d) {
     var entries = d.entries || [];
     AUDIT_TOTAL = entries.length; // approximate
+    renderAuditInsights(entries, AUDIT_ACTION_LABELS);
     var tbody = document.getElementById('audit-body');
     if (!tbody) return;
     if (!entries.length) {

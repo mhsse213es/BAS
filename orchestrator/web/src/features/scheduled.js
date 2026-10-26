@@ -5,6 +5,8 @@ import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
 import { ROLE } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
+import { kpi, grid, card, chip, pill, seg, empty } from '../core/kit.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
 
 // ── Scheduled Assessments ──────────────────────────────────────────────────
@@ -80,47 +82,98 @@ function schedTargetsText(sch) {
   return parts.length ? parts.join(' + ') : '—';
 }
 
+// schedStatus: Completed (a one-time schedule that fired), Enabled, or Cancelled.
+export function schedStatus(sch) {
+  var onceCompleted = sch.RecurrenceType === 'once' && !!sch.LastOccurrenceAt;
+  if (onceCompleted) return { key: 'completed', label: 'Completed', tone: 'info', onceCompleted: true };
+  if (sch.Enabled) return { key: 'enabled', label: 'Enabled', tone: 'ok', onceCompleted: false };
+  return { key: 'cancelled', label: 'Cancelled', tone: 'muted', onceCompleted: false };
+}
+
+// schedSummary: counts by status, mode and recurrence for the summary strip.
+export function schedSummary(list) {
+  var out = { total: 0, enabled: 0, completed: 0, cancelled: 0, telemetry: 0, posture: 0, byRecurrence: {} };
+  (list || []).forEach(function(sch) {
+    out.total++;
+    out[schedStatus(sch).key]++;
+    if (sch.Mode === 'telemetry') out.telemetry++; else out.posture++;
+    var r = sch.RecurrenceType || 'weekly';
+    out.byRecurrence[r] = (out.byRecurrence[r] || 0) + 1;
+  });
+  return out;
+}
+
+var SCHED_FILTER = 'all';
+export function setSchedFilter(v) { SCHED_FILTER = v; renderScheduledAssessmentsList(); }
+
+function renderSchedSummary() {
+  var el = document.getElementById('sched-summary');
+  if (!el) return;
+  var sm = schedSummary(SCHED.schedules);
+  if (!sm.total) { el.innerHTML = ''; return; }
+  var recLabels = { once: 'Once', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
+  var recColors = [CHART_COLORS.accent, CHART_COLORS.teal, CHART_COLORS.violet, CHART_COLORS.warn];
+  var recSegs = Object.keys(sm.byRecurrence).map(function(k, i) { return { label: recLabels[k] || k, value: sm.byRecurrence[k], color: recColors[i % recColors.length] }; });
+  var stSegs = [
+    { label: 'Enabled', value: sm.enabled, color: CHART_COLORS.ok },
+    { label: 'Completed', value: sm.completed, color: CHART_COLORS.info },
+    { label: 'Cancelled', value: sm.cancelled, color: CHART_COLORS.muted },
+  ].filter(function(g) { return g.value > 0; });
+  el.innerHTML = grid(4, [
+    kpi({ label: 'Schedules', value: sm.total, icon: 'calendar', tone: 'accent' }),
+    kpi({ label: 'Enabled', value: sm.enabled, sub: 'Firing on their recurrence', icon: 'play', tone: 'ok' }),
+    kpi({ label: 'Posture mode', value: sm.posture, icon: 'shield', tone: 'info' }),
+    kpi({ label: 'Telemetry mode', value: sm.telemetry, icon: 'eye', tone: 'violet' }),
+  ]) + grid(2, [
+    card('By status', chartSlot({ type: 'donut', segments: stSegs, center: String(sm.total), centerSub: 'schedules', legend: true, h: 150 })),
+    card('By recurrence', chartSlot({ type: 'donut', segments: recSegs, center: String(sm.total), centerSub: 'schedules', legend: true, h: 150 })),
+  ]);
+}
+
 export function renderScheduledAssessmentsList() {
   document.getElementById('sched-cnt').textContent = SCHED.schedules.length;
+  renderSchedSummary();
+  var fEl = document.getElementById('sched-filter');
+  if (fEl) {
+    var sm = schedSummary(SCHED.schedules);
+    fEl.innerHTML = SCHED.schedules.length ? seg([
+      { id: 'all', label: 'All', count: sm.total }, { id: 'enabled', label: 'Enabled', count: sm.enabled },
+      { id: 'completed', label: 'Completed', count: sm.completed }, { id: 'cancelled', label: 'Cancelled', count: sm.cancelled },
+    ], SCHED_FILTER, 'setSchedFilter') : '';
+  }
   var tbody = document.getElementById('sched-body');
   if (!SCHED.schedules.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty">No scheduled assessments yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">' + empty('calendar', 'No scheduled assessments yet', 'Create a schedule to run an assessment on a recurrence.') + '</td></tr>';
     return;
   }
-  tbody.innerHTML = SCHED.schedules.map(function(sch) {
+  var shown = SCHED.schedules.filter(function(sch) { return SCHED_FILTER === 'all' || schedStatus(sch).key === SCHED_FILTER; });
+  if (!shown.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">No schedules match this filter.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = shown.map(function(sch) {
     // sch.Payload is a Go json.RawMessage with no json:"..." tag override, so
     // it arrives already embedded as a real object in the outer response --
-    // NOT as a JSON string needing a second JSON.parse (that silently threw,
-    // caught below, and always fell back to {} -- see openSchedWizardForEdit's
-    // identical fix for the same root cause).
+    // NOT as a JSON string needing a second JSON.parse.
     var payload = sch.Payload || {};
     var sc = state.scenarios.find(function(s) { return s.id === payload.scenarioId; });
     var name = sc ? sc.name : (payload.scenarioId || '—');
-    var modeColor = sch.Mode === 'telemetry' ? 'g1-s-d6e5d834' : 'g1-s-8297411d';
-    var modeLabel = sch.Mode === 'telemetry' ? 'Telemetry' : 'Posture';
-    // A "once" schedule's Enabled flag is never flipped after it fires --
-    // only LastOccurrenceAt gets set (see internal/jobs/dispatch.go's
-    // spawnDueSchedules -> MarkScheduleOccurrenceHandled). nextOccurrenceOnce
-    // already treats LastOccurrenceAt != nil as "never fires again" server-
-    // side; mirror that here so Edit/Cancel stop being offered for a
-    // one-time schedule that has nothing left to edit or cancel.
-    var onceCompleted = sch.RecurrenceType === 'once' && !!sch.LastOccurrenceAt;
-    var statusColor = onceCompleted ? 'g1-s-10acb108' : (sch.Enabled ? 'g1-s-f213c12d' : 'g1-s-8297411d');
-    var statusLabel = onceCompleted ? 'Completed' : (sch.Enabled ? 'Enabled' : 'Cancelled');
+    var st = schedStatus(sch);
+    var onceCompleted = st.onceCompleted;
     var lastRun = sch.LastOccurrenceAt ? fmtDate(sch.LastOccurrenceAt) : 'Never';
     return '<tr>' +
-      '<td>' + x(name) + '</td>' +
-      '<td><span class="badge ' + modeColor + '">' + modeLabel + '</span></td>' +
+      '<td><span class="rg2-cell-main">' + x(name) + '</span></td>' +
+      '<td>' + chip(sch.Mode === 'telemetry' ? 'Telemetry' : 'Posture', sch.Mode === 'telemetry' ? 'violet' : 'info') + '</td>' +
       '<td>' + x(schedTargetsText(sch)) + '</td>' +
       '<td>' + x(schedRecurrenceText(sch)) + '</td>' +
       '<td>' + x(lastRun) + '</td>' +
-      '<td><span class="badge ' + statusColor + '">' + statusLabel + '</span></td>' +
-      '<td>' +
+      '<td>' + pill(st.label, st.tone) + '</td>' +
+      '<td><div class="rg2-row-actions">' +
         (onceCompleted
           ? '<span class="tiny muted">Ran once — nothing to edit or cancel</span>'
           : '<button class="btn btn-outline btn-sm"' + on('click', 'openSchedWizardForEdit', sch.ID) + '>Edit</button>' +
             (sch.Enabled ? ' <button class="btn btn-outline btn-sm"' + on('click', 'cancelScheduledAssessment', sch.ID) + '>Cancel</button>' : '')) +
-      '</td>' +
+      '</div></td>' +
     '</tr>';
   }).join('');
 }

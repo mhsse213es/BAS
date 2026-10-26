@@ -63,7 +63,7 @@ export const grid = (n, items) => '<div class="rk-grid g' + (n >= 2 && n <= 4 ? 
 export function card(title, body, o) {
   o = o || {};
   return '<section class="' + cls('rk-card', o.flush && 'flush', o.cls) + '">' +
-    (title ? '<header class="rk-hd"><h2>' + x(title) + '</h2>' + (o.sub ? '<span class="rk-hd-sub">' + x(o.sub) + '</span>' : '') + (o.actions ? '<div class="rk-hd-actions">' + o.actions + '</div>' : '') + '</header>' : '') +
+    (title ? '<div class="rk-hd"><h2>' + x(title) + '</h2>' + (o.sub ? '<span class="rk-hd-sub">' + x(o.sub) + '</span>' : '') + (o.actions ? '<div class="rk-hd-actions">' + o.actions + '</div>' : '') + '</div>' : '') +
     body + '</section>';
 }
 

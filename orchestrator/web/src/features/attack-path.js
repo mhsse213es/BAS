@@ -11,6 +11,8 @@ import { loadCalderaStatus } from './compliance.js';
 import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
 import { setHeroStat } from './shell-ui.js';
+import { seg } from '../core/kit.js';
+import { covFilterOpts, covFilterRows, covRowsHtml, covSummary, expFilterAssets, expFilterOpts, expRowsHtml, expScoreTiles, expSection, expSummary, recRowsHtml, recSummary, sevChip, tpDetailSummaryHtml, tpFactorsHtml, tpFilterActors, tpFilterOpts, tpHistoryHtml, tpRowsHtml, tpSummary } from './rich-g4.js';
 import { loadRuns, loadSIEMCorrelationPanel, openModal } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
 import { describePhishingRun } from './phishing-run-view.js';
@@ -18,6 +20,9 @@ import { LIBRARY_TYPE_PHISHING, buildDispatchFields, buildPhishingRunRequest, li
 import { ROLE, STRIPE_COLORS, scenarioSrcCollapsed, setAgentsView, showTab } from './shell.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
+import { agentInsightsHtml, migrationPanelHtml } from './agents-insights.js';
+import { kpi, grid as kitGrid, card, chip, hbars, bar as kitBar, empty as kitEmpty } from '../core/kit.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
 
 // ── Attack Path Validation ─────────────────────────────────────────────────
@@ -76,27 +81,36 @@ export function apCard(label, val, col, sub) {
     '<div class="tiny muted">' + (sub || '') + '</div></div>';
 }
 
+var EXP_ASSETS = [];
+var EXP_FILTER = 'all';
+function renderExposureTable() {
+  var body = document.getElementById('exp-table-body');
+  if (!body) return;
+  var searchEl = document.getElementById('exp-search');
+  var list = expFilterAssets(EXP_ASSETS, EXP_FILTER, searchEl ? searchEl.value : '');
+  var segEl = document.getElementById('exp-seg');
+  if (segEl) segEl.innerHTML = EXP_ASSETS.length ? seg(expFilterOpts(EXP_ASSETS), EXP_FILTER, 'setExposureFilter') : '';
+  var cnt = document.getElementById('exp-count');
+  if (cnt) cnt.textContent = EXP_ASSETS.length ? list.length + ' of ' + EXP_ASSETS.length + ' assets' : '';
+  body.innerHTML = list.length
+    ? expRowsHtml(list)
+    : '<tr><td colspan="8" class="empty">' + (EXP_ASSETS.length ? 'No assets match the filter.' : 'No assets found — enroll an agent or run attack-path collection.') + '</td></tr>';
+}
+export function setExposureFilter(id) { EXP_FILTER = id; renderExposureTable(); }
+export function onExposureSearch() { renderExposureTable(); }
+
 export function loadExposureAssets() {
   var body = document.getElementById('exp-table-body');
+  var sum = document.getElementById('exp-summary');
   body.innerHTML = '<tr><td colspan="8" class="empty">Loading…</td></tr>';
   apicall('/api/exposure/assets').then(function(assets) {
-    if (!assets || !assets.length) {
-      body.innerHTML = '<tr><td colspan="8" class="empty">No assets found — enroll an agent or run attack-path collection.</td></tr>';
-      return;
-    }
-    body.innerHTML = assets.map(function(a) {
-      return '<tr class="u-pointer"' + on('click', 'openExposureDetail', a.asset.hostKey) + '>' +
-        '<td class="u-fw600">' + x(a.asset.label) + '</td>' +
-        '<td>' + (a.asset.managed ? '<span class="badge">Managed</span>' : '<span class="badge u-muted">Discovered</span>') + '</td>' +
-        '<td style="color:' + apColor(a.exposureScore) + ';font-weight:700">' + a.exposureScore + '</td>' +
-        '<td>' + a.attackPathScore + '</td>' +
-        '<td>' + a.detectionCoverageScore + '</td>' +
-        '<td>' + (a.asset.crownJewel ? '<span class="badge" style="color:var(--warning);border-color:var(--warning)">' + x(a.asset.crownJewel) + '</span>' : '') + '</td>' +
-        '<td>' + a.openFindingsCount + '</td>' +
-        '<td>' + (a.kevExposed ? '<span class="badge" style="color:var(--danger);border-color:var(--danger)">KEV</span>' : '') + '</td>' +
-        '</tr>';
-    }).join('');
+    EXP_ASSETS = assets || [];
+    if (sum) sum.innerHTML = expSummary(EXP_ASSETS);
+    renderExposureTable();
   }).catch(function(e) {
+    EXP_ASSETS = [];
+    if (sum) sum.innerHTML = '';
+    renderExposureTable();
     body.innerHTML = '<tr><td colspan="8" class="empty u-danger">Failed to load: ' + x(e.message) + '</td></tr>';
   });
 }
@@ -115,29 +129,13 @@ export function loadExecDashboard() {
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
-function edSparkline(values) {
-  if (!values.length) return '';
-  var w = 140, h = 32;
-  var min = Math.min.apply(null, values), max = Math.max.apply(null, values);
-  var range = (max - min) || 1;
-  var pts = values.map(function(v, i) {
-    var px = values.length > 1 ? (i / (values.length - 1)) * w : w;
-    var y = h - ((v - min) / range) * h;
-    return px.toFixed(1) + ',' + y.toFixed(1);
-  }).join(' ');
-  return '<svg class="stat-spark" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
-    '<polyline points="' + pts + '" fill="none" stroke="var(--accent)" stroke-width="1.6"/></svg>';
-}
-
-function edTrendChip(values) {
-  if (values.length < 2) return '';
-  var cur = values[values.length - 1];
-  var priorIdx = Math.max(0, values.length - 8); // ~7 data points back
-  var delta = cur - values[priorIdx];
-  if (delta === 0) return '<span class="tiny muted">flat</span>';
+function edDelta(values, invertGood) {
+  if (values.length < 2) return { text: '', tone: 'muted' };
+  var delta = values[values.length - 1] - values[Math.max(0, values.length - 8)];
+  if (delta === 0) return { text: 'flat over the last week', tone: 'muted' };
   var up = delta > 0;
-  var col = up ? 'var(--success)' : 'var(--danger)';
-  return '<span class="tiny" style="color:' + col + '">' + (up ? '▲' : '▼') + ' ' + Math.abs(delta) + '</span>';
+  var good = invertGood ? !up : up;
+  return { text: (up ? '▲ ' : '▼ ') + Math.abs(delta) + ' vs a week ago', tone: good ? 'ok' : 'bad' };
 }
 
 // noDataYet suppresses the number/trend/sparkline in favor of a "No data
@@ -146,153 +144,87 @@ function edTrendChip(values) {
 // (see dashboard.Snapshot.HasAttackPathData's doc comment) rather than a
 // real score, so showing that 100 as-is would misrepresent an unscanned
 // fleet as a perfectly-defended one.
-function edKpiCard(label, current, trendSeries, noDataYet) {
-  var valueBlock = noDataYet
-    ? '<div class="kpi-value u-muted">—</div><span class="tiny muted">No data yet</span>'
-    : '<div class="kpi-value">' + current + '</div>' + edTrendChip(trendSeries);
-  return '<div class="kpi-card stat-tile">' +
-    '<div class="stat-top"><div>' +
-      '<div class="kpi-label">' + label + '</div>' +
-      valueBlock +
-    '</div></div>' +
-    (noDataYet ? '' : edSparkline(trendSeries)) +
-  '</div>';
+function edKpiCard(label, current, trendSeries, noDataYet, ic, invertGood) {
+  if (noDataYet) return kpi({ label: label, value: '—', sub: 'No data yet', icon: ic, tone: 'muted' });
+  var d = edDelta(trendSeries, invertGood);
+  return kpi({ label: label, value: current, sub: d.text, icon: ic, tone: d.tone === 'muted' ? 'accent' : d.tone, spark: trendSeries });
 }
 
 function renderExecDashboard(current, trends) {
   var el = document.getElementById('ed-kpi-row');
   if (!el) return;
+  trends = trends || [];
   var risk = trends.map(function(p) { return p.avgRiskScore; });
   var exp = trends.map(function(p) { return p.exposureScore; });
   var det = trends.map(function(p) { return p.detectionCoverage; });
   var cnt = trends.map(function(p) { return p.assetCount; });
   var noAttackPathData = !current.hasAttackPathData;
-  el.innerHTML =
-    edKpiCard('Risk Score', current.avgRiskScore, risk) +
-    edKpiCard('Exposure Score', current.exposureScore, exp, noAttackPathData) +
-    edKpiCard('Detection Coverage', current.detectionCoverage, det, noAttackPathData) +
-    edKpiCard('Fleet Assets', current.assetCount, cnt);
+  el.innerHTML = kitGrid(4, [
+    edKpiCard('Risk Score', current.avgRiskScore, risk, false, 'shield', true),
+    edKpiCard('Exposure Score', current.exposureScore, exp, noAttackPathData, 'alert', true),
+    edKpiCard('Detection Coverage', current.detectionCoverage, det, noAttackPathData, 'mapped', false),
+    edKpiCard('Fleet Assets', current.assetCount, cnt, false, 'server', false)
+  ]);
 }
 
-function edForecastChart(fc) {
-  var hist = (fc && fc.history) || [];
-  var proj = (fc && fc.hasForecast && fc.projected) ? fc.projected : [];
-  var all = hist.concat(proj);
-  if (all.length < 2) return '';
-  var w = 520, h = 120, pad = 10;
-  var xs = all.map(function(p) { return p.dayIndex; });
-  var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
-  var rangeX = (maxX - minX) || 1;
-  var vals = [];
-  all.forEach(function(p) {
-    vals.push(p.score);
-    if (typeof p.high === 'number') vals.push(p.high);
-    if (typeof p.low === 'number') vals.push(p.low);
-  });
-  var minY = Math.min.apply(null, vals), maxY = Math.max.apply(null, vals);
-  var rangeY = (maxY - minY) || 1;
-  function sx(dx) { return pad + ((dx - minX) / rangeX) * (w - 2 * pad); }
-  function sy(v) { return (h - pad) - ((v - minY) / rangeY) * (h - 2 * pad); }
-  var svg = '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + ' ' + h +
-    '" preserveAspectRatio="none" style="max-width:100%;margin-top:0.5rem">';
-  if (proj.length) {
-    var top = proj.map(function(p) { return sx(p.dayIndex).toFixed(1) + ',' + sy(p.high).toFixed(1); });
-    var bot = proj.slice().reverse().map(function(p) { return sx(p.dayIndex).toFixed(1) + ',' + sy(p.low).toFixed(1); });
-    svg += '<polygon points="' + top.concat(bot).join(' ') + '" fill="var(--accent)" opacity="0.12"/>';
-  }
-  var histPts = hist.map(function(p) { return sx(p.dayIndex).toFixed(1) + ',' + sy(p.score).toFixed(1); }).join(' ');
-  svg += '<polyline points="' + histPts + '" fill="none" stroke="var(--accent)" stroke-width="1.8"/>';
-  if (proj.length && hist.length) {
-    var last = hist[hist.length - 1];
-    var projPts = [sx(last.dayIndex).toFixed(1) + ',' + sy(last.score).toFixed(1)]
-      .concat(proj.map(function(p) { return sx(p.dayIndex).toFixed(1) + ',' + sy(p.score).toFixed(1); })).join(' ');
-    svg += '<polyline points="' + projPts + '" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="4 3"/>';
-  }
-  svg += '</svg>';
-  return svg;
-}
-
-function edDirectionLabel(fc) {
+function edDirectionChip(fc) {
   var d = (fc && fc.direction) || 'unknown';
-  var col = 'var(--muted)';
-  if (d === 'improving') col = 'var(--success)';
-  else if (d === 'worsening') col = 'var(--danger)';
-  return '<span style="color:' + col + ';font-weight:700;text-transform:capitalize">' + x(d) + '</span>';
+  return chip(d.charAt(0).toUpperCase() + d.slice(1), d === 'improving' ? 'ok' : d === 'worsening' ? 'bad' : 'muted');
 }
 
 function renderForecast(fc) {
   var el = document.getElementById('ed-forecast');
   if (!el) return;
   if (!fc) { el.innerHTML = ''; return; }
-  var conf = (fc.confidence && fc.confidence !== 'none')
-    ? '<span class="badge">' + x(fc.confidence) + ' confidence</span>' : '';
-  var chart = edForecastChart(fc);
-  var note = !fc.hasForecast
-    ? '<div class="tiny muted" style="margin-top:0.4rem">' + x(fc.note || 'Insufficient history for a forecast.') + '</div>'
-    : '';
-  el.innerHTML = '<div class="card" style="margin-top:1rem;padding:1rem">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center">' +
-      '<div><span class="kpi-label">Risk-score forecast</span> &nbsp;' + edDirectionLabel(fc) + '</div>' +
-      conf +
-    '</div>' +
-    (chart || '<div class="tiny muted" style="margin-top:0.4rem">Not enough data to chart yet.</div>') +
-    note +
-  '</div>';
+  var hist = fc.history || [];
+  var proj = (fc.hasForecast && fc.projected) ? fc.projected : [];
+  var all = hist.concat(proj);
+  var body;
+  if (all.length < 2) {
+    body = kitEmpty('trend', 'Not enough data to chart yet', fc.note || 'A forecast needs a few daily snapshots.');
+  } else {
+    var labels = all.map(function(p) { return 'd' + p.dayIndex; });
+    var series = [{ name: proj.length ? 'Risk score (history + forecast)' : 'Risk score', data: all.map(function(p) { return p.score; }), color: CHART_COLORS.accent }];
+    if (proj.length) series.push({ name: 'Upper bound', data: all.map(function(p) { return typeof p.high === 'number' ? p.high : p.score; }), color: CHART_COLORS.warn, dash: true });
+    body = chartSlot({ type: 'line', labels: labels, series: series, h: 220, area: true }) +
+      (proj.length ? '<div class="rk-note">Forecast begins at day ' + x(proj[0].dayIndex) + '; the dashed line is the upper confidence bound.</div>' : '') +
+      (!fc.hasForecast ? '<div class="rk-note">' + x(fc.note || 'Insufficient history for a forecast.') + '</div>' : '');
+  }
+  var acts = (fc.confidence && fc.confidence !== 'none') ? chip(fc.confidence + ' confidence', 'info') : '';
+  el.innerHTML = card('Risk-score forecast', body, { actions: edDirectionChip(fc) + acts });
 }
 
 function renderExposure(exp) {
   var el = document.getElementById('ed-exposure');
   if (!el) return;
   if (!exp || !exp.hasData) {
-    el.innerHTML = '<div class="card" style="margin-top:1rem;padding:1rem">' +
-      '<span class="kpi-label">Open exposure windows</span>' +
-      '<div class="tiny muted" style="margin-top:0.4rem">No open findings.</div></div>';
+    el.innerHTML = card('Open exposure windows', kitEmpty('check', 'No open findings', 'Nothing is currently exposed.'));
     return;
   }
-  function stat(l, v) { return '<div><div class="kpi-label">' + l + '</div><div class="kpi-value">' + v + '</div></div>'; }
-  var strip = '<div style="display:flex;gap:1.75rem;margin:0.5rem 0 0.75rem">' +
-    stat('Open', exp.openCount) + stat('Worst days', exp.worstDaysOpen) +
-    stat('Median days', exp.medianDaysOpen) + stat('Over ' + exp.thresholdDays + 'd', exp.overThreshold) + '</div>';
+  var strip = kitGrid(4, [
+    kpi({ label: 'Open', value: exp.openCount, tone: 'accent' }),
+    kpi({ label: 'Worst days', value: exp.worstDaysOpen, tone: 'bad' }),
+    kpi({ label: 'Median days', value: exp.medianDaysOpen, tone: 'info' }),
+    kpi({ label: 'Over ' + exp.thresholdDays + 'd', value: exp.overThreshold, tone: exp.overThreshold ? 'warn' : 'ok' })
+  ]);
   var rows = (exp.worst || []).map(function(it) {
     var over = it.daysOpen > exp.thresholdDays;
     return '<tr>' +
       '<td><div class="u-fw600">' + x(it.techniqueId) + '</div>' +
         '<div class="tiny muted">' + x(it.techniqueName) + '</div></td>' +
-      '<td class="tiny">' + x(it.severity) + '</td>' +
-      '<td style="' + (over ? 'color:var(--danger);font-weight:700' : '') + '">' + it.daysOpen + '</td>' +
+      '<td>' + chip(it.severity || '—', /crit/i.test(it.severity) ? 'bad' : /high/i.test(it.severity) ? 'warn' : 'muted') + '</td>' +
+      '<td>' + chip(it.daysOpen + ' d', over ? 'bad' : 'muted') + '</td>' +
       '<td class="tiny">' + x(it.firstSeen) + '</td>' +
-      '<td>' + (it.reopenedCount
-        ? '<span class="badge" style="color:var(--warning);border-color:var(--warning)">&times;' + it.reopenedCount + '</span>'
-        : '<span class="tiny muted">&mdash;</span>') + '</td>' +
+      '<td>' + (it.reopenedCount ? chip('×' + it.reopenedCount, 'warn') : '<span class="tiny muted">&mdash;</span>') + '</td>' +
       '</tr>';
   }).join('');
-  el.innerHTML = '<div class="card" style="margin-top:1rem;padding:1rem">' +
-    '<span class="kpi-label">Open exposure windows</span>' + strip +
+  el.innerHTML = card('Open exposure windows', strip +
     '<div class="tbl-wrap"><table><thead><tr>' +
       '<th>Technique</th><th>Severity</th><th>Days open</th><th>First seen</th><th>Reopened</th>' +
-    '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
-  '</div>';
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>', { sub: 'time each weakness has stayed open' });
 }
 
 var REC_SCENARIO = null;
-
-function recTierColor(tier) {
-  return tier === 'Critical' ? 'var(--danger)'
-       : tier === 'High'     ? '#f0883e'
-       : tier === 'Medium'   ? 'var(--warning)'
-       : 'var(--muted)';
-}
-
-function recCoverageBadge(coverage) {
-  if (coverage === 'never-tested') return '<span class="badge" style="color:var(--danger);border-color:var(--danger)">Never tested</span>';
-  if (coverage === 'stale')        return '<span class="badge" style="color:var(--warning);border-color:var(--warning)">Stale</span>';
-  return '<span class="badge u-muted">Recent</span>';
-}
-
-function covStatusCell(val) {
-  if (val === null) return '<span class="tiny muted">N/A</span>';
-  return val ? '<span class="u-success">&#10003;</span>' : '<span class="tiny muted">&mdash;</span>';
-}
 
 export function loadCoverageActors() {
   var sel = document.getElementById('cov-actor-select');
@@ -309,34 +241,37 @@ export function loadCoverageActors() {
     .catch(function(e) { console.error('loadCoverageActors failed', e); });
 }
 
+var COV_ROWS = [];
+var COV_FILTER = 'all';
+function renderCoverageTable() {
+  var body = document.getElementById('cov-matrix-body');
+  var empty = document.getElementById('cov-matrix-empty');
+  var list = covFilterRows(COV_ROWS, COV_FILTER);
+  var segEl = document.getElementById('cov-seg');
+  if (segEl) segEl.innerHTML = COV_ROWS.length ? seg(covFilterOpts(COV_ROWS), COV_FILTER, 'setCoverageFilter') : '';
+  body.innerHTML = covRowsHtml(list);
+  setDisplay(empty, list.length ? 'none' : '');
+}
+export function setCoverageFilter(id) { COV_FILTER = id; renderCoverageTable(); }
+
 export function loadCoverageMatrix() {
   var sel = document.getElementById('cov-actor-select');
   var actor = sel ? sel.value : '';
   var body = document.getElementById('cov-matrix-body');
   var empty = document.getElementById('cov-matrix-empty');
+  var sum = document.getElementById('cov-summary');
   body.innerHTML = '<tr><td colspan="6" class="empty">Loading&hellip;</td></tr>';
   var url = '/api/coverage/matrix' + (actor ? '?actor=' + encodeURIComponent(actor) : '');
   apicall(url)
     .then(function(rows) {
-      rows = rows || [];
-      if (!rows.length) {
-        body.innerHTML = '';
-        setDisplay(empty, '');
-        return;
-      }
-      setDisplay(empty, 'none');
-      body.innerHTML = rows.map(function(r) {
-        return '<tr>' +
-          '<td class="u-fw600">' + x(r.techniqueId) + '</td>' +
-          '<td>' + covStatusCell(r.simulationExists) + '</td>' +
-          '<td>' + covStatusCell(r.detectionProfileExists) + '</td>' +
-          '<td>' + covStatusCell(r.purpleExerciseExists) + '</td>' +
-          '<td>' + covStatusCell(r.complianceMappingExists) + '</td>' +
-          '<td>' + covStatusCell(r.responsePlaybookExists) + '</td>' +
-          '</tr>';
-      }).join('');
+      COV_ROWS = rows || [];
+      if (sum) sum.innerHTML = covSummary(COV_ROWS);
+      renderCoverageTable();
     })
     .catch(function(e) {
+      COV_ROWS = [];
+      if (sum) sum.innerHTML = '';
+      setDisplay(empty, 'none');
       body.innerHTML = '<tr><td colspan="6" class="empty u-danger">Failed to load: ' + x(e.message) + '</td></tr>';
     });
 }
@@ -353,37 +288,35 @@ export function tpTierBadge(tier) {
   return '<span class="badge" style="color:' + color + ';border-color:' + color + '">' + x(tier || 'Low') + '</span>';
 }
 
-function tpTrendCell(trend, delta) {
-  if (trend === 'up') return '<span class="u-success">&#9650; +' + delta + '</span>';
-  if (trend === 'down') return '<span class="u-danger">&#9660; ' + delta + '</span>';
-  if (trend === 'stable') return '<span class="tiny muted">&mdash;</span>';
-  return '<span class="tiny muted">New</span>';
+var TP_TIER = 'all';
+function renderThreatPriorityTable() {
+  var body = document.getElementById('tp-list-body');
+  var empty = document.getElementById('tp-list-empty');
+  var segEl = document.getElementById('tp-seg');
+  if (segEl) segEl.innerHTML = TP_ACTOR_CACHE.length ? seg(tpFilterOpts(TP_ACTOR_CACHE), TP_TIER, 'setThreatPriorityTier') : '';
+  if (!TP_ACTOR_CACHE.length) {
+    body.innerHTML = '';
+    setDisplay(empty, '');
+    return;
+  }
+  setDisplay(empty, 'none');
+  var list = tpFilterActors(TP_ACTOR_CACHE, TP_TIER);
+  body.innerHTML = list.length ? tpRowsHtml(list) : '<tr><td colspan="5" class="empty">No actors in this tier.</td></tr>';
 }
+export function setThreatPriorityTier(id) { TP_TIER = id; renderThreatPriorityTable(); }
 
 export function loadThreatPriorityActors() {
   var body = document.getElementById('tp-list-body');
-  var empty = document.getElementById('tp-list-empty');
+  var sum = document.getElementById('tp-summary');
   body.innerHTML = '<tr><td colspan="5" class="empty">Loading&hellip;</td></tr>';
   apicall('/api/threat-priority/actors')
     .then(function(actors) {
       TP_ACTOR_CACHE = actors || [];
-      if (!TP_ACTOR_CACHE.length) {
-        body.innerHTML = '';
-        setDisplay(empty, '');
-        return;
-      }
-      setDisplay(empty, 'none');
-      body.innerHTML = TP_ACTOR_CACHE.map(function(a) {
-        return '<tr class="u-pointer"' + on('click', 'showThreatPriorityDetail', a.actorName) + '>' +
-          '<td class="u-fw600">' + x(a.actorName) + '</td>' +
-          '<td>' + tpTierBadge(a.tier) + '</td>' +
-          '<td>' + x(a.score) + '</td>' +
-          '<td>' + tpTrendCell(a.trend, a.trendDelta) + '</td>' +
-          '<td>' + x(a.coverageGapCount) + ' of ' + x(a.techniqueCount) + '</td>' +
-          '</tr>';
-      }).join('');
+      if (sum) sum.innerHTML = tpSummary(TP_ACTOR_CACHE);
+      renderThreatPriorityTable();
     })
     .catch(function(e) {
+      if (sum) sum.innerHTML = '';
       body.innerHTML = '<tr><td colspan="5" class="empty u-danger">Failed to load: ' + x(e.message) + '</td></tr>';
     });
 }
@@ -404,20 +337,9 @@ function renderThreatPriorityDetail(d) {
   document.getElementById('tp-detail-title').innerHTML = x(d.actorName) +
     (d.canonicalGroupId ? '  <span class="tiny muted" style="font-weight:400">&middot; MITRE ' + x(d.canonicalGroupId) + '</span>' : '');
 
-  document.getElementById('tp-detail-summary').innerHTML =
-    '<div class="kpi-card"><div class="kpi-label">Score</div><div class="kpi-value">' + x(d.score) + '</div></div>' +
-    '<div class="kpi-card"><div class="kpi-label">Tier</div><div class="kpi-value">' + tpTierBadge(d.tier) + '</div></div>' +
-    '<div class="kpi-card"><div class="kpi-label">Techniques</div><div class="kpi-value">' + x(d.techniqueCount) + '</div></div>' +
-    '<div class="kpi-card"><div class="kpi-label">Coverage Gap</div><div class="kpi-value">' + x(d.coverageGapCount) + '</div></div>';
+  document.getElementById('tp-detail-summary').innerHTML = tpDetailSummaryHtml(d);
 
-  var factors = (d.factors || []).map(function(f) {
-    var val = f.available ? f.rawScore.toFixed(0) + '%' : 'Not yet validated';
-    return '<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid var(--border)">' +
-      '<div><div class="u-fw600">' + x(f.name) + '</div><div class="tiny muted">' + x(f.explanation) + '</div></div>' +
-      '<div style="font-weight:700">' + x(val) + '</div>' +
-      '</div>';
-  }).join('');
-  document.getElementById('tp-detail-factors').innerHTML = factors || '<div class="empty">No factor data.</div>';
+  document.getElementById('tp-detail-factors').innerHTML = tpFactorsHtml(d.factors);
 
   var uncovered = (d.uncoveredTechniques || []);
   document.getElementById('tp-detail-uncovered').innerHTML = uncovered.length
@@ -495,12 +417,7 @@ function renderThreatPriorityDetail(d) {
     setDisplay(evidenceCard, 'none');
   }
 
-  var hist = (d.history || []);
-  document.getElementById('tp-detail-history').innerHTML = hist.length
-    ? '<table class="u-w100"><thead><tr><th>Date</th><th>Score</th></tr></thead><tbody>' +
-      hist.map(function(h) { return '<tr><td>' + x(new Date(h.recordedAt).toLocaleDateString()) + '</td><td>' + x(h.score) + '</td></tr>'; }).join('') +
-      '</tbody></table>'
-    : '<span class="muted">No history yet.</span>';
+  document.getElementById('tp-detail-history').innerHTML = tpHistoryHtml(d.history);
 
   var techSet = {};
   (d.techniqueIds || []).forEach(function(t) { techSet[t] = true; });
@@ -528,30 +445,15 @@ export function loadRecommendations() {
 
 function renderRecommendations(data) {
   var body = document.getElementById('rec-table-body');
+  var sum = document.getElementById('rec-summary');
   REC_SCENARIO = data.suggestedScenario || null;
   var list = (data && data.techniques) || [];
+  if (sum) sum.innerHTML = recSummary(list, REC_SCENARIO);
   if (!list.length) {
     body.innerHTML = '<tr><td colspan="7" class="empty">No recommendations yet — seed ATT&CK/ART content to rank techniques.</td></tr>';
     return;
   }
-  body.innerHTML = list.map(function(t) {
-    var threat = [];
-    if (t.kev) threat.push('<span class="badge" style="color:var(--danger);border-color:var(--danger)">KEV</span>');
-    if (t.epssPercentile) threat.push('<span class="badge">EPSS ' + Math.round(t.epssPercentile) + '</span>');
-    if (t.threatActors) threat.push('<span class="badge">' + t.threatActors + ' group' + (t.threatActors === 1 ? '' : 's') + '</span>');
-    return '<tr>' +
-      '<td><div class="u-fw600">' + x(t.techniqueId) + '</div>' +
-        '<div class="tiny muted">' + x(t.name) + '</div></td>' +
-      '<td class="tiny">' + x(t.tactic) + '</td>' +
-      '<td><span style="color:' + recTierColor(t.tier) + ';font-weight:700">' + t.score + '</span>' +
-        '<div class="tiny" style="color:' + recTierColor(t.tier) + '">' + x(t.tier) + '</div></td>' +
-      '<td>' + recCoverageBadge(t.coverageState) + '</td>' +
-      '<td>' + (threat.join(' ') || '<span class="tiny muted">—</span>') + '</td>' +
-      '<td>' + (t.environmentRisk ? '<span class="badge" style="color:var(--accent);border-color:var(--accent)">' + t.environmentRisk + '</span>'
-                                  : '<span class="tiny muted">—</span>') + '</td>' +
-      '<td class="tiny muted">' + x((t.reasons || []).join(' · ')) + '</td>' +
-      '</tr>';
-  }).join('');
+  body.innerHTML = recRowsHtml(list);
 }
 
 export function copyRecommendedScenario() {
@@ -569,78 +471,54 @@ export function copyRecommendedScenario() {
   }
 }
 
-function _expGapPriorityColor(p) {
-  return p === 'Critical' ? 'var(--danger)' : p === 'High' ? '#f0883e' : p === 'Medium' ? 'var(--warning)' : 'var(--success)';
-}
-
 export function openExposureDetail(hostKey) {
   document.getElementById('exp-detail-title').textContent = hostKey;
   var body = document.getElementById('exp-detail-body');
-  body.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
+  body.innerHTML = '<div class="empty">Loading…</div>';
   document.getElementById('exposure-detail-overlay').classList.add('open');
   apicall('/api/exposure/assets/' + encodeURIComponent(hostKey)).then(function(p) {
     // Each of these is a pure-deficit score (100 - risk), so an asset with
-    // nothing collected scores a flawless 100 across the board. Show "no
-    // data" instead when the backend says it wasn't measurable — on a
-    // "higher is safer" card, an unmeasured 100 is the most misleading
-    // value we could print.
-    var sc = p.scores || {};
-    function expCard(label, val, measurable, note) {
-      return measurable
-        ? apCard(label, val, apColor(typeof val === 'number' ? val : parseInt(val, 10)), note)
-        : apCard(label, '<span style="color:var(--muted);font-size:1.1rem">— no data</span>', 'var(--muted)', 'not collected yet');
-    }
-    var h = '<div class="kpi-row u-mb-1">' +
-      expCard('Exposure Score', sc.exposureScore + '<span style="font-size:0.9rem;color:var(--muted)">/100</span>', sc.exposureMeasurable, 'higher is safer') +
-      expCard('Attack Path', sc.attackPathScore, sc.attackPathMeasurable, '') +
-      expCard('Detection', sc.detectionCoverageScore, sc.detectionMeasurable, '') +
-      expCard('Vulnerability', sc.vulnerabilityScore, sc.vulnerabilityMeasurable, '') +
-      '</div>';
+    // nothing collected scores a flawless 100 across the board. The tiles show
+    // "no data" instead when the backend says it wasn't measurable: on a
+    // "higher is safer" tile, an unmeasured 100 is the most misleading value.
+    var h = expScoreTiles(p.scores);
 
-    h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Prioritized Recommendations</div>';
+    var recs = '<div class="tiny muted">No gaps on this asset&apos;s attack paths.</div>';
     if (p.recommendations && p.recommendations.length) {
-      h += '<div class="tbl-wrap u-mb-1"><table><thead><tr><th>From</th><th>Via</th><th>To</th><th>Priority</th><th>Reason</th></tr></thead><tbody>';
-      p.recommendations.forEach(function(g) {
-        h += '<tr><td>' + x(g.edge.from) + '</td><td>' + x(g.edge.kind) + '</td><td>' + x(g.edge.to) + '</td>' +
-          '<td style="font-weight:700;color:' + _expGapPriorityColor(g.priority) + '">' + x(g.priority) + '</td>' +
-          '<td style="color:var(--muted);font-size:0.8rem">' + x(g.reason) + '</td></tr>';
-      });
-      h += '</tbody></table></div>';
-    } else {
-      h += '<div class="tiny muted u-mb-1">No gaps on this asset&apos;s attack paths.</div>';
+      recs = '<div class="tbl-wrap"><table><thead><tr><th>From</th><th>Via</th><th>To</th><th>Priority</th><th>Reason</th></tr></thead><tbody>' +
+        p.recommendations.map(function(g) {
+          return '<tr><td>' + x(g.edge.from) + '</td><td>' + chip(g.edge.kind, 'info') + '</td><td>' + x(g.edge.to) + '</td>' +
+            '<td>' + sevChip(g.priority) + '</td><td class="tiny muted">' + x(g.reason) + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
     }
+    h += expSection('Prioritized recommendations', recs);
 
-    h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Vulnerabilities</div>';
+    var vulns = '<div class="tiny muted">No mapped CVEs.</div>';
     if (p.vulnerabilities && p.vulnerabilities.length) {
-      h += '<div class="tbl-wrap u-mb-1"><table><thead><tr><th>CVE</th><th>CVSS</th><th>KEV</th><th>EPSS</th><th>Technique</th></tr></thead><tbody>';
-      p.vulnerabilities.forEach(function(v) {
-        h += '<tr><td>' + x(v.cveId) + '</td><td>' + (v.cvss || '—') + '</td><td>' + (v.kev ? 'Yes' : '') + '</td>' +
-          '<td>' + (v.epssScore || '—') + '</td><td>' + x(v.techniqueId) + '</td></tr>';
-      });
-      h += '</tbody></table></div>';
-    } else {
-      h += '<div class="tiny muted u-mb-1">No mapped CVEs.</div>';
+      vulns = '<div class="tbl-wrap"><table><thead><tr><th>CVE</th><th>CVSS</th><th>KEV</th><th>EPSS</th><th>Technique</th></tr></thead><tbody>' +
+        p.vulnerabilities.map(function(v) {
+          return '<tr><td class="u-fw600">' + x(v.cveId) + '</td><td>' + x(v.cvss || '—') + '</td><td>' + (v.kev ? chip('KEV', 'bad') : '') + '</td>' +
+            '<td>' + x(v.epssScore || '—') + '</td><td>' + x(v.techniqueId) + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
     }
+    h += expSection('Vulnerabilities', vulns);
 
-    h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Findings</div>';
+    var finds;
     if (!p.findings.collected) {
-      h += '<div class="tiny muted u-mb-1">Not enrolled — no scan history.</div>';
+      finds = '<div class="tiny muted">Not enrolled — no scan history.</div>';
     } else if (p.findings.findings && p.findings.findings.length) {
-      h += '<div class="tbl-wrap u-mb-1"><table><thead><tr><th>Technique</th><th>Severity</th><th>State</th></tr></thead><tbody>';
-      p.findings.findings.forEach(function(f) {
-        h += '<tr><td>' + x(f.techniqueName || f.techniqueId) + '</td><td>' + x(f.severity) + '</td><td>' + x(f.exposureState) + '</td></tr>';
-      });
-      h += '</tbody></table></div>';
+      finds = '<div class="tbl-wrap"><table><thead><tr><th>Technique</th><th>Severity</th><th>State</th></tr></thead><tbody>' +
+        p.findings.findings.map(function(f) {
+          return '<tr><td>' + x(f.techniqueName || f.techniqueId) + '</td><td>' + sevChip(f.severity) + '</td><td>' + x(f.exposureState) + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
     } else {
-      h += '<div class="tiny muted u-mb-1">No open findings.</div>';
+      finds = '<div class="tiny muted">No open findings.</div>';
     }
+    h += expSection('Findings', finds);
 
-    h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Threat Groups</div>';
-    if (p.threatIntel && p.threatIntel.length) {
-      h += p.threatIntel.map(function(g) { return '<span class="badge" style="margin:2px">' + x(g.groupName) + '</span>'; }).join('');
-    } else {
-      h += '<div class="tiny muted">No attributed threat groups.</div>';
-    }
+    h += expSection('Threat groups', (p.threatIntel && p.threatIntel.length)
+      ? '<div class="g4-chips">' + p.threatIntel.map(function(g) { return chip(g.groupName, 'info'); }).join('') + '</div>'
+      : '<div class="tiny muted">No attributed threat groups.</div>');
 
     body.innerHTML = h;
   }).catch(function(e) {
@@ -1384,7 +1262,7 @@ export function loadAgents() {
     state.agentsHasMore = !!(page && page.has_more);
     state.agentsPagesLoaded = 1;
     state.agentTotals = (page && page.totals) || { online: 0, degraded: 0, offline: 0, retired: 0 };
-    renderAgentHero(); renderAgentToolbar(); renderAgentRows();
+    renderAgentHero(); renderAgentInsights(); renderAgentToolbar(); renderAgentRows();
     renderLegacyMigrationPanel();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
@@ -1392,22 +1270,7 @@ function renderLegacyMigrationPanel() {
   var el = document.getElementById('legacy-migration-panel');
   if (!el) return;
   apicall('/api/agents/legacy-migration-status').then(function(status) {
-    var blockingHtml = (status.blockingAgents || []).map(function(a) {
-      return '<div class="legacy-blocking-row"><span>' + x(a.hostname || a.agentId) + '</span>' +
-             '<span class="legacy-blocking-time">' + new Date(a.lastSeen).toLocaleString() + '</span></div>';
-    }).join('');
-    var unattributedHtml = status.unattributedRequests
-      ? '<div class="legacy-unattributed-warning">&#9888; Unattributed legacy activity: ' +
-        status.unattributedRequests.count + ' request(s) — retirement blocked</div>'
-      : '';
-    el.innerHTML =
-      '<div class="legacy-migration-header">Legacy Transport Migration</div>' +
-      '<div class="legacy-migration-days">Days clean: ' + status.daysClean + ' / ' + status.daysRequired + '</div>' +
-      '<div class="legacy-migration-status ' + (status.eligible ? 'eligible' : 'not-eligible') + '">' +
-        (status.eligible ? 'ELIGIBLE FOR REVIEW' : 'NOT YET ELIGIBLE') +
-      '</div>' +
-      unattributedHtml +
-      (blockingHtml ? '<div class="legacy-blocking-list">' + blockingHtml + '</div>' : '');
+    el.innerHTML = migrationPanelHtml(status, function(t) { return new Date(t).toLocaleString(); });
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 export function loadMoreAgents() {
@@ -1426,7 +1289,7 @@ export function loadMoreAgents() {
     // totals intentionally NOT updated here -- they were already
     // fleet-wide-accurate from the first page's response, and appending
     // more rows to `agents` doesn't change the true totals.
-    renderAgentRows();
+    renderAgentRows(); renderAgentInsights();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 export function onAgentSearchInput() {
@@ -1462,6 +1325,11 @@ function renderAgentHero() {
   setHeroStat('hs-agents-degraded', b.degraded);
   setHeroStat('hs-agents-offline', b.offline);
   setHeroStat('hs-agents-retired', b.retired);
+}
+// renderAgentInsights fills the KPI strip and distribution cards from the same page response the table uses.
+function renderAgentInsights() {
+  var el = document.getElementById('agent-insights');
+  if (el) el.innerHTML = agentInsightsHtml(state.agents, state.agentTotals);
 }
 // covSegHtml renders the shared "cov-seg" toggle-button-group shape used by
 // several toolbars below (agent/campaign/coverage/findings/run-IOC
@@ -2079,6 +1947,31 @@ function phishingLandingCardHTML() {
   '</div>';
 }
 
+// Summary strip above the category cards. Every figure is counted from the scenarios the library
+// already loaded (after the search/source/OS filters), so it always matches the cards below.
+function scenarioLandingStatsHTML(list) {
+  var counts = { builtin: 0, custom: 0, intel: 0 }, os = {};
+  list.forEach(function(s) {
+    counts[scenarioSourceOf(s)]++;
+    (s.supportedOs || []).forEach(function(o) { var k = String(o).toLowerCase(); os[k] = (os[k] || 0) + 1; });
+  });
+  var cats = scenarioSectionOrder().map(function(sec) {
+    return { label: sec.label, n: sec.key === 'phishing' ? phishingLibraryCounts(_libraryEntries).total : scenarioCategoryCounts(list, sec.key).total };
+  }).filter(function(c) { return c.n > 0; }).sort(function(a, b) { return b.n - a.n; }).slice(0, 6);
+  var maxN = cats.length ? cats[0].n : 1;
+  var OSL = { windows: 'Windows', linux: 'Linux', darwin: 'macOS' }, OSC = { windows: CHART_COLORS.info, linux: CHART_COLORS.teal, darwin: CHART_COLORS.violet };
+  var osSegs = Object.keys(os).sort().map(function(k) { return { label: OSL[k] || k, value: os[k], color: OSC[k] || CHART_COLORS.muted }; });
+  return kitGrid(4, [
+    kpi({ label: 'Scenarios', value: list.length, sub: 'in the library', icon: 'mapped', tone: 'accent' }),
+    kpi({ label: 'Built-in', value: counts.builtin, sub: 'shipped with the platform', icon: 'shield', tone: 'ok' }),
+    kpi({ label: 'Custom', value: counts.custom, sub: 'created or uploaded', icon: 'file', tone: 'info' }),
+    kpi({ label: 'Threat intel', value: counts.intel, sub: 'generated from feeds', icon: 'alert', tone: 'warn' })
+  ]) + kitGrid(2, [
+    card('Largest categories', cats.length ? hbars(cats.map(function(c) { return [c.label, Math.round(c.n / maxN * 100), 'accent', String(c.n)]; })) : kitEmpty('mapped', 'No categories yet'), { sub: 'scenarios per category' }),
+    card('Platform coverage', osSegs.length ? chartSlot({ type: 'donut', segments: osSegs, center: String(list.length), centerSub: 'scenarios', h: 170, legendRight: true }) : kitEmpty('server', 'No platform data'), { sub: 'scenarios by supported OS (a scenario can support several)' })
+  ]);
+}
+
 function renderScenarioLanding(list, src) {
   var el = document.getElementById('sc-landing');
   if (!el) return;
@@ -2100,6 +1993,7 @@ function renderScenarioLanding(list, src) {
       '<h3>' + cat.icon + x(cat.label) + '</h3>' +
       '<div class="sc-cat-count">' + c.total + ' scenario' + (c.total === 1 ? '' : 's') + '</div>' +
       '<div class="sc-cat-breakdown">' + x(breakdown) + '</div>' +
+      kitBar(list.length ? c.total / list.length * 100 : 0, 'accent') +
     '</div>';
   }).join('');
   // The source filter (Threat intel / Custom) only narrows `list` -- it has
@@ -2120,6 +2014,7 @@ function renderScenarioLanding(list, src) {
       '<div class="sc-cat-count">' + _templates.length + ' template' + (_templates.length === 1 ? '' : 's') + '</div>' +
     '</div>';
   }
+  if (list.length) html = '<div class="sc-landing-stats">' + scenarioLandingStatsHTML(list) + '</div>' + html;
   el.innerHTML = html || '<p class="empty">No scenarios loaded.</p>';
 }
 

@@ -9,6 +9,8 @@ import { apArrow, apNodePill } from './openaev.js';
 import { openModal } from './reports.js';
 import { _riskScoreColor, _riskTrendBadge } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
+import { kpi, card, grid, bar as kitBar, chip, kv as kitKv } from '../core/kit.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -662,86 +664,49 @@ export function loadComplianceReport() {
 
 function renderComplianceReport(r) {
   var s = r.summary || {};
+  var fw = r.framework || {};
   var pct = +(s.compliancePct || 0);
   var cvr = +(s.coveragePct || 0);
-  var pctColor = pct >= 70 ? '#22d3a6' : pct >= 40 ? '#f59e0b' : '#ef4444';
-  var radius = 54, circ = 2 * Math.PI * radius;
-  var dash = circ * pct / 100, gap = circ - dash;
-  var fwId = (r.framework.id || '').toLowerCase();
-  var fwColorMap = {'sebi-cscrf':'#4f8ef7','sebi':'#4f8ef7','rbi':'#22d3a6','irdai':'#a78bfa','cert-in':'#f59e0b','cert_in':'#f59e0b','iso27001':'#ef4444','iso-27001':'#ef4444','nist-csf':'#2fd8c3','nist':'#2fd8c3'};
-  var fwColor = fwColorMap[fwId] || '#4f8ef7';
   var totalControls = s.totalControls || ((s.passing||0)+(s.failing||0)+(s.partial||0)+(s.untested||0)+(s.manual||0));
+  var notTested = (s.untested||0)+(s.manual||0);
+  var gen = r.generatedAt ? new Date(r.generatedAt) : null;
+  var genText = gen && !isNaN(gen.getTime()) ? gen.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) : '—';
 
-  // Header card with ring gauge
+  // Header: framework identity and narrative, the status donut (centre = compliance %), run metadata.
   document.getElementById('cmp-header-area').innerHTML =
-    '<div class="cmp-header-card" style="border-top:3px solid ' + fwColor + '">' +
-      '<div class="cmp-header-left">' +
-        '<div class="cmp-fw-badge" style="color:' + fwColor + ';background:' + fwColor + '22;border-color:' + fwColor + '44">' + x(r.framework.id || '') + '</div>' +
-        '<div class="cmp-fw-name">' + x(r.framework.name || '') + '</div>' +
-        '<div class="cmp-fw-version">' + x(r.framework.version || '') + '</div>' +
-        '<div class="cmp-header-narrative" style="margin-top:0.5rem;font-size:0.85rem;line-height:1.5;color:var(--text-dim);max-width:520px">' +
-          x(r.narrative || '') +
-        '</div>' +
-      '</div>' +
-      '<div class="cmp-header-gauge">' +
-        '<svg width="128" height="128" viewBox="0 0 130 130">' +
-          '<circle cx="65" cy="65" r="' + radius + '" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10"/>' +
-          '<circle cx="65" cy="65" r="' + radius + '" fill="none" stroke="' + pctColor + '" stroke-width="10"' +
-            ' stroke-dasharray="' + dash.toFixed(1) + ' ' + gap.toFixed(1) + '"' +
-            ' stroke-dashoffset="' + (circ * 0.25).toFixed(1) + '"' +
-            ' stroke-linecap="round" style="transition:stroke-dasharray 0.8s ease"/>' +
-          '<text x="65" y="59" text-anchor="middle" fill="' + pctColor + '" font-family="Space Grotesk,sans-serif" font-size="22" font-weight="700">' + pct.toFixed(0) + '%</text>' +
-          '<text x="65" y="75" text-anchor="middle" fill="rgba(154,169,188,0.9)" font-family="Inter,sans-serif" font-size="9" letter-spacing="1.2">COMPLIANT</text>' +
-          '<text x="65" y="91" text-anchor="middle" fill="rgba(154,169,188,0.6)" font-family="Inter,sans-serif" font-size="8">' + cvr.toFixed(0) + '% coverage</text>' +
-        '</svg>' +
-      '</div>' +
-      '<div class="cmp-header-right">' +
-        '<div class="cmp-hdr-meta-row"><span class="cmp-hdr-meta-lbl">Agent</span><span class="cmp-hdr-meta-val">' + x(r.agentId || '') + '</span></div>' +
-        '<div class="cmp-hdr-meta-row"><span class="cmp-hdr-meta-lbl">Generated</span><span class="cmp-hdr-meta-val">' + new Date(r.generatedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) + '</span></div>' +
-        '<div class="cmp-hdr-meta-row"><span class="cmp-hdr-meta-lbl">Total Controls</span><span class="cmp-hdr-meta-val">' + totalControls + '</span></div>' +
-        '<div class="cmp-hdr-meta-row"><span class="cmp-hdr-meta-lbl">Scope</span><span class="cmp-hdr-meta-val" style="font-size:0.7rem;color:var(--muted)">' + x((r.scenarioName || r.runId || 'Aggregated').substring(0,40)) + '</span></div>' +
-      '</div>' +
-    '</div>';
+    '<section class="rk-card g3-cmp-head">' +
+      '<div>' + chip(fw.id || 'Framework', 'accent') + '<h2>' + x(fw.name || '') + '</h2>' +
+        '<span class="rk-hd-sub">' + x(fw.version || '') + '</span>' +
+        (r.narrative ? '<p>' + x(r.narrative) + '</p>' : '') + '</div>' +
+      '<div>' + chartSlot({ type: 'donut', h: 170, center: pct.toFixed(0) + '%', centerSub: 'compliant', segments: [
+        { label: 'Compliant', value: s.passing || 0, color: CHART_COLORS.ok },
+        { label: 'Non-compliant', value: s.failing || 0, color: CHART_COLORS.bad },
+        { label: 'Partial', value: s.partial || 0, color: CHART_COLORS.warn },
+        { label: 'Not tested', value: notTested, color: CHART_COLORS.muted }
+      ] }) + '</div>' +
+      '<div>' + kitKv([
+        ['Agent', r.agentId || ''], ['Generated', genText], ['Total controls', String(totalControls)],
+        ['Coverage', cvr.toFixed(0) + '%'], ['Scope', (r.scenarioName || r.runId || 'Aggregated').substring(0, 40)]
+      ]) + '</div>' +
+    '</section>';
 
-  // KPI row
-  var kpis = [
-    {label:'Compliant',     val:s.passing||0,                    color:'#22d3a6', dim:'rgba(34,211,166,0.1)',  border:'rgba(34,211,166,0.3)',  icon:'✓', sub:(s.passing||0)+' controls passing'},
-    {label:'Non-Compliant', val:s.failing||0,                    color:'#ef4444', dim:'rgba(239,68,68,0.1)',   border:'rgba(239,68,68,0.3)',   icon:'✗', sub:(s.failing||0)+' controls failing'},
-    {label:'Partial',       val:s.partial||0,                    color:'#f59e0b', dim:'rgba(245,158,11,0.1)',  border:'rgba(245,158,11,0.3)',  icon:'◑', sub:'Mixed pass/fail evidence'},
-    {label:'Not Tested',    val:(s.untested||0)+(s.manual||0),  color:'var(--muted)', dim:'rgba(122,148,176,0.08)', border:'var(--border)', icon:'○', sub:(s.manual||0)+' manual attestation'},
-  ];
-  document.getElementById('cmp-kpi-area').innerHTML =
-    '<div class="cmp-kpi-row">' +
-    kpis.map(function(k) {
-      return '<div class="cmp-kpi-card" style="border-left:3px solid ' + k.border + '">' +
-        '<div class="cmp-kpi-icon" style="color:' + k.color + ';background:' + k.dim + '">' + k.icon + '</div>' +
-        '<div class="cmp-kpi-value" style="color:' + k.color + '">' + k.val + '</div>' +
-        '<div class="cmp-kpi-label">' + k.label + '</div>' +
-        '<div class="cmp-kpi-sub">' + k.sub + '</div>' +
-      '</div>';
-    }).join('') + '</div>';
+  document.getElementById('cmp-kpi-area').innerHTML = grid(4, [
+    kpi({ label: 'Compliant', value: s.passing || 0, sub: (s.passing || 0) + ' controls passing', icon: 'ok', tone: 'ok' }),
+    kpi({ label: 'Non-Compliant', value: s.failing || 0, sub: (s.failing || 0) + ' controls failing', icon: 'warn', tone: (s.failing || 0) ? 'bad' : 'muted' }),
+    kpi({ label: 'Partial', value: s.partial || 0, sub: 'Mixed pass/fail evidence', icon: 'trend', tone: (s.partial || 0) ? 'warn' : 'muted' }),
+    kpi({ label: 'Not Tested', value: notTested, sub: (s.manual || 0) + ' manual attestation', icon: 'eye', tone: 'muted' })
+  ]);
 
-  // Domain grid
-  document.getElementById('cmp-domain-area').innerHTML =
-    '<div class="cmp-section-hdr">Domain Breakdown</div>' +
-    '<div class="cmp-domain-grid">' +
-    (r.domains || []).map(function(d) {
+  // Domain breakdown: one card per domain, bar = compliance over the tested controls only.
+  var doms = r.domains || [];
+  document.getElementById('cmp-domain-area').innerHTML = doms.length ? card('Domain breakdown',
+    '<div class="rk-grid g3">' + doms.map(function(d) {
       var tested = (d.passing||0) + (d.failing||0) + (d.partial||0);
       var p = tested > 0 ? +(d.compliancePct||0) : null;
-      var barColor = p === null ? 'rgba(122,148,176,0.3)' : p >= 70 ? '#22d3a6' : p >= 40 ? '#f59e0b' : '#ef4444';
-      return '<div class="cmp-domain-card" style="border-left:3px solid ' + barColor + '">' +
-        '<div class="cmp-dc-header">' +
-          '<span class="cmp-dc-name">' + x(d.name) + '</span>' +
-          '<span class="cmp-dc-pct" style="color:' + barColor + '">' + (p !== null ? p.toFixed(0) + '%' : '—') + '</span>' +
-        '</div>' +
-        '<div class="cmp-dc-bar-wrap"><div class="cmp-dc-bar" style="width:' + (p||0) + '%;background:' + barColor + '"></div></div>' +
-        '<div class="cmp-dc-stats">' +
-          '<span class="cmp-dc-stat" style="color:#22d3a6">' + (d.passing||0) + ' Pass</span>' +
-          '<span class="cmp-dc-stat" style="color:#ef4444">' + (d.failing||0) + ' Fail</span>' +
-          '<span class="cmp-dc-stat u-muted">' + (d.untested||0) + ' Untested</span>' +
-        '</div>' +
-      '</div>';
-    }).join('') + '</div>';
+      return '<div class="g3-dom"><div class="g3-dom-top"><span>' + x(d.name) + '</span><span>' + (p !== null ? p.toFixed(0) + '%' : '—') + '</span></div>' +
+        kitBar(p || 0, p === null ? 'muted' : (p >= 70 ? 'ok' : p >= 40 ? 'warn' : 'bad'), true) +
+        '<div class="g3-dom-st"><span>' + (d.passing||0) + ' pass</span><span>' + (d.failing||0) + ' fail</span><span>' + (d.untested||0) + ' untested</span></div></div>';
+    }).join('') + '</div>') : '';
 
   renderControlsTable(r.controls, _cmpFilter);
 }

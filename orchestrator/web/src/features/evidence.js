@@ -15,6 +15,9 @@ import { additionalAgentIds, closeModal, loadRuns, openBuilder, openModal, resol
 import { ROLE, _riskScoreColor, showTab, showTamperBanner } from './shell.js';
 import { killChainNodes } from './variant-report.js';
 import { displayOf, replaceClasses, setDisplay } from '../core/inline-style.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
+import { hbars, bar, chip, empty } from '../core/kit.js';
+import { renderUsersInsights } from './settings-insights.js';
 
 
 // ── Evidence Panel ────────────────────────────────────────────────────────────
@@ -1000,6 +1003,7 @@ var ROLE_LABELS = { admin: 'Admin', analyst: 'Analyst', viewer: 'Viewer' };
 export function loadUsers() {
   apicall('/api/users').then(function(data) {
     document.getElementById('users-cnt').textContent = data.length;
+    renderUsersInsights(data);
     var tbody = document.getElementById('users-body');
     if (!data.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">No users found.</td></tr>'; return; }
     tbody.innerHTML = data.map(function(u) {
@@ -1092,21 +1096,6 @@ export function doResetPassword(id, username) {
   .catch(function(e) { showToast(e.message, 'err'); });
 }
 
-// donutSVG renders a stacked donut from [{v,color}] segments (no chart lib).
-function donutSVG(segs, size, stroke) {
-  size = size || 124; stroke = stroke || 16;
-  var r = (size - stroke) / 2, cx = size / 2, cy = size / 2, C = 2 * Math.PI * r;
-  var total = segs.reduce(function(s, seg) { return s + seg.v; }, 0) || 1, off = 0;
-  var c = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--elevated)" stroke-width="' + stroke + '"/>';
-  segs.forEach(function(s) {
-    var len = s.v / total * C;
-    c += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + s.color + '" stroke-width="' + stroke +
-         '" stroke-dasharray="' + len + ' ' + (C - len) + '" stroke-dashoffset="' + (-off) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>';
-    off += len;
-  });
-  return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' + c + '</svg>';
-}
-
 // sparkSVG — minimal sparkline (polyline + soft fill) for KPI tiles.
 function sparkSVG(data, w, h, color) {
   w = w || 110; h = h || 32; color = color || 'var(--accent)';
@@ -1130,20 +1119,6 @@ export function gaugeSVG(value, size, stroke) {
       '" stroke-dasharray="' + arc + ' ' + C + '" stroke-linecap="round" transform="rotate(135 ' + cx + ' ' + cy + ')"/>' +
     '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + col + '" stroke-width="' + stroke +
       '" stroke-dasharray="' + len + ' ' + C + '" stroke-linecap="round" transform="rotate(135 ' + cx + ' ' + cy + ')" style="transition:stroke-dasharray .8s cubic-bezier(.2,.8,.2,1)"/></svg>';
-}
-
-// miniBars — small labelled bar chart (e.g. score across recent runs).
-function miniBars(data, w, h) {
-  w = w || 300; h = h || 70;
-  if (!data || !data.length) return '<svg width="100%" height="' + h + '"></svg>';
-  var max = Math.max.apply(null, data.map(function(d) { return d.v; })) || 1, bw = w / data.length, out = '';
-  data.forEach(function(d, i) {
-    var bh = d.v / max * (h - 16);
-    out += '<rect x="' + (i * bw + bw * 0.18).toFixed(1) + '" y="' + (h - bh - 12).toFixed(1) + '" width="' + (bw * 0.64).toFixed(1) +
-      '" height="' + bh.toFixed(1) + '" rx="2" fill="' + (d.color || 'var(--accent)') + '"/>' +
-      '<text x="' + (i * bw + bw / 2).toFixed(1) + '" y="' + (h - 2) + '" text-anchor="middle" font-size="8.5" fill="var(--muted)" font-family="var(--font-mono)">' + x(d.l) + '</text>';
-  });
-  return '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' + out + '</svg>';
 }
 
 export function loadDashboard() {
@@ -1258,14 +1233,15 @@ export function loadDashboard() {
       document.getElementById('dash-gauge').innerHTML = gaugeSVG(prevPct, 124, 14) +
         '<div class="ring-c"><span class="rv" style="color:' + prevCol + '">' + prevPct + '</span><span class="rl">of 100</span></div>';
       document.getElementById('dash-posture-trend').textContent = trend;
-      var barRuns = scored.slice(0, 6).reverse();
+      var barRuns = scored.slice(0, 10).reverse();
       var barData = barRuns.map(function(r) {
         var d = new Date(r.completedAt || r.startedAt);
         var v = prevPctOf(r);
         return { l: isNaN(d) ? '' : (d.getMonth() + 1) + '/' + d.getDate(), v: v,
                  color: v >= 80 ? 'var(--teal)' : v >= 50 ? 'var(--warning)' : 'var(--danger)' };
       });
-      document.getElementById('dash-posture-bars').innerHTML = miniBars(barData, 320, 64);
+      document.getElementById('dash-posture-bars').innerHTML = chartSlot({ type: 'line', labels: barData.map(function(d) { return d.l; }),
+        series: [{ name: 'Prevention', data: barData.map(function(d) { return d.v; }), color: CHART_COLORS.accent }], h: 150, yMax: 100, suffix: '%' });
       document.getElementById('dash-posture-cap').textContent = 'Prevention across the last ' + barRuns.length +
         ' validated run' + (barRuns.length === 1 ? '' : 's') + '.';
     }
@@ -1313,37 +1289,15 @@ export function loadDashboard() {
     var effTotal = eff.prevented + eff.detected + eff.missed + eff.other;
     var donutEl = document.getElementById('dash-donut');
     if (!effTotal) {
-      donutEl.innerHTML = '<div class="empty">No run data yet.</div>';
+      donutEl.innerHTML = empty('shield', 'No run data yet');
     } else {
       var prevPctEff = Math.round(eff.prevented / (eff.prevented + eff.detected + eff.missed || 1) * 100);
-      var lg = function(color, label, val) {
-        return '<div style="display:flex;align-items:center;gap:0.5rem;font-size:0.82rem">' +
-          '<span style="width:10px;height:10px;border-radius:3px;background:' + color + ';flex-shrink:0"></span>' +
-          label + '<span style="margin-left:auto;font-weight:600;color:var(--text)">' + val + '</span></div>';
-      };
-      setDisplay(donutEl, 'flex');
-      donutEl.style.gap = '1.5rem';
-      donutEl.style.alignItems = 'center';
-      donutEl.innerHTML =
-        '<div style="position:relative;flex-shrink:0">' +
-          donutSVG([
-            { v: eff.prevented, color: 'var(--teal)' },
-            { v: eff.detected, color: 'var(--warning)' },
-            { v: eff.missed, color: 'var(--danger)' },
-            { v: eff.other, color: 'var(--elevated)' }
-          ]) +
-          '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">' +
-            '<span style="font-size:1.5rem;font-weight:700;line-height:1;color:' + (prevPctEff >= 80 ? 'var(--teal)' : prevPctEff >= 50 ? 'var(--warning)' : 'var(--danger)') + '">' + prevPctEff + '%</span>' +
-            '<span style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted)">prevented</span>' +
-          '</div>' +
-        '</div>' +
-        '<div style="flex:1;display:flex;flex-direction:column;gap:0.55rem;min-width:160px">' +
-          lg('var(--teal)',    'Prevented',     eff.prevented) +
-          (eff.detected > 0 ? lg('var(--warning)', 'Detected only', eff.detected) : '') +
-          lg('var(--danger)', 'Missed',         eff.missed) +
-          (eff.other > 0    ? lg('var(--elevated)', 'Not tested',   eff.other)    : '') +
-          (eff.detected === 0 ? '<div style="font-size:0.63rem;color:var(--muted);margin-top:0.3rem;line-height:1.4">Detected-only appears once a SIEM/EDR integration is reporting alerts.</div>' : '') +
-        '</div>';
+      var segs = [{ label: 'Prevented', value: eff.prevented, color: CHART_COLORS.ok }];
+      if (eff.detected > 0) segs.push({ label: 'Detected only', value: eff.detected, color: CHART_COLORS.warn });
+      segs.push({ label: 'Missed', value: eff.missed, color: CHART_COLORS.bad });
+      if (eff.other > 0) segs.push({ label: 'Not tested', value: eff.other, color: CHART_COLORS.muted });
+      donutEl.innerHTML = chartSlot({ type: 'donut', segments: segs, center: prevPctEff + '%', centerSub: 'prevented', h: 190, legendRight: true }) +
+        (eff.detected === 0 ? '<div class="rk-note">Detected-only appears once a SIEM/EDR integration is reporting alerts.</div>' : '');
     }
 
     // Attack flow — dual-rail kill-chain of the latest completed/partial run.
@@ -1410,17 +1364,12 @@ export function loadDashboard() {
       .slice(0, 6);
     var tfEl = document.getElementById('dash-top-fails');
     if (!topFails.length) {
-      tfEl.innerHTML = '<div class="empty" style="padding:1.5rem">No failures recorded.</div>';
+      tfEl.innerHTML = empty('check', 'No failures recorded', 'Every tested technique was prevented or not yet failing.');
     } else {
-      var maxFail = topFails[0].fail;
-      tfEl.innerHTML = topFails.map(function(t) {
+      tfEl.innerHTML = hbars(topFails.map(function(t) {
         var pct = Math.round((t.fail / (t.fail + t.pass)) * 100);
-        var w = Math.round((t.fail / maxFail) * 100);
-        return '<div class="bar-row">' +
-          '<div class="bar-label"><span style="color:var(--text-dim)">' + x(t.name) + '</span><span>' + t.fail + ' fail &middot; ' + pct + '%</span></div>' +
-          '<div class="bar-track"><div class="bar-fill" style="width:' + w + '%;background:var(--danger);opacity:0.7"></div></div>' +
-          '</div>';
-      }).join('');
+        return [t.name, Math.round(t.fail / topFails[0].fail * 100), 'bad', t.fail + ' fail · ' + pct + '%'];
+      }));
     }
 
     // ATT&CK tactic coverage
@@ -1442,12 +1391,10 @@ export function loadDashboard() {
         var d = tacticMap[tactic];
         var total = d.pass + d.fail;
         var pct = total ? Math.round((d.pass / total) * 100) : 0;
-        var col = _riskScoreColor(pct);
-        return '<div class="bar-row">' +
-          '<div class="bar-label"><span style="text-transform:capitalize">' + x(tactic) + '</span><span style="color:' + col + '">' + pct + '%</span></div>' +
-          '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + col + '"></div></div>' +
-          '<div style="font-size:0.68rem;color:var(--muted);margin-top:0.15rem">' + d.pass + ' pass &middot; ' + d.fail + ' fail</div>' +
-          '</div>';
+        var tone = pct >= 80 ? 'ok' : pct >= 50 ? 'warn' : 'bad';
+        return '<div class="rk-tactic"><div class="rk-tactic-h"><span>' + x(tactic.replace(/-/g, ' ')) + '</span>' + chip(pct + '%', tone) + '</div>' +
+          bar(pct, tone, true) +
+          '<div class="tiny muted">' + d.pass + ' pass · ' + d.fail + ' fail</div></div>';
       }).join('');
     }
 

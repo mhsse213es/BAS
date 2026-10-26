@@ -2,7 +2,9 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
-import { apBandColor, apCard, apColor, apFreshness } from './attack-path.js';
+import { apColor, apFreshness } from './attack-path.js';
+import { apRichBody, exStatusTone, exSummary } from './rich-g4.js';
+import { bar as kitBar, chip } from '../core/kit.js';
 import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js';
 import { ROLE, showTab } from './shell.js';
 import { displayOf, setDisplay } from '../core/inline-style.js';
@@ -88,6 +90,13 @@ export function removeOpenAEVConfig() {
   });
 }
 
+// What the Exercises page last fetched, so the KPI strip and charts can be drawn from all four lists.
+var EX_STATE = { scen: null, exs: null, plans: null, execs: null };
+function renderExSummary() {
+  var el = document.getElementById('ex-summary');
+  if (el) el.innerHTML = exSummary(EX_STATE);
+}
+
 function loadOpenAEVScenarios(type, bodyId, emptyId) {
   type = type || 'scenario';
   bodyId = bodyId || 'openaev-scenarios-body';
@@ -95,6 +104,8 @@ function loadOpenAEVScenarios(type, bodyId, emptyId) {
   apicall('/api/openaev/scenarios?type=' + encodeURIComponent(type)).then(function(list) {
     var body = document.getElementById(bodyId);
     var empty = document.getElementById(emptyId);
+    EX_STATE[type === 'exercise' ? 'exs' : 'scen'] = list || [];
+    renderExSummary();
     if (!list || !list.length) {
       body.innerHTML = '';
       setDisplay(empty, 'block');
@@ -104,10 +115,10 @@ function loadOpenAEVScenarios(type, bodyId, emptyId) {
     body.innerHTML = list.map(function(sc) {
       return '<tr class="u-pointer"' + on('click', 'openOpenAEVDetail', sc.OpenAEVScenarioID) + '>' +
         '<td>' + x(sc.Name) + '</td>' +
-        '<td>' + x(sc.Category) + '</td>' +
-        '<td>' + x(sc.Severity) + '</td>' +
+        '<td>' + (sc.Category ? chip(sc.Category, 'muted') : '') + '</td>' +
+        '<td>' + (sc.Severity ? chip(sc.Severity, exSevTone(sc.Severity)) : '') + '</td>' +
         '<td>' + (sc.TechniqueIDs || []).length + '</td>' +
-        '<td>' + sc.InjectsCount + '</td>' +
+        '<td>' + x(sc.InjectsCount) + '</td>' +
         '<td class="tiny muted">' + x(sc.SourceUpdatedAt || '') + '</td>' +
         '</tr>';
     }).join('');
@@ -200,12 +211,19 @@ export function closeOpenAEVDetail() {
 }
 export function closeOpenAEVDetailOnBackdrop(el, event) { if (event.target === el) closeOpenAEVDetail(); }
 
+function exSevTone(sev) {
+  var v = String(sev || '').toLowerCase();
+  return v === 'critical' ? 'bad' : v === 'high' ? 'warn' : v === 'medium' ? 'info' : v === 'low' ? 'ok' : 'muted';
+}
+
 export function loadExercisesTab() {
   loadOpenAEVScenarios('scenario', 'openaev-scenarios-body', 'openaev-scenarios-empty');
   loadOpenAEVScenarios('exercise', 'openaev-exercises-body', 'openaev-exercises-empty');
   apicall('/api/exercises/plans').then(function(plans) {
     var body = document.getElementById('ex-plans-body');
     var empty = document.getElementById('ex-plans-empty');
+    EX_STATE.plans = plans || [];
+    renderExSummary();
     if (!plans || !plans.length) { body.innerHTML = ''; setDisplay(empty, 'block'); return; }
     setDisplay(empty, 'none');
     body.innerHTML = plans.map(function(p) {
@@ -221,19 +239,21 @@ export function loadExercisesTab() {
   apicall('/api/exercises/executions').then(function(execs) {
     var body = document.getElementById('ex-execs-body');
     var empty = document.getElementById('ex-execs-empty');
+    EX_STATE.execs = execs || [];
+    renderExSummary();
     if (!execs || !execs.length) { body.innerHTML = ''; setDisplay(empty, 'block'); stopExPoll(); return; }
     setDisplay(empty, 'none');
     body.innerHTML = execs.map(function(e) {
       var live = e.status === 'running' || e.status === 'paused';
       var progress = e.steps_total
-        ? (e.steps_done || 0) + ' / ' + e.steps_total + ' steps'
+        ? '<div class="g4-prog">' + kitBar(Math.round(((e.steps_done || 0) / e.steps_total) * 100), exStatusTone(e.status)) + '<small>' + x((e.steps_done || 0) + ' / ' + e.steps_total) + ' steps</small></div>'
         : '<span class="tiny muted">—</span>';
       var abortBtn = live
         ? '<button class="btn btn-outline-red btn-sm"' + on('click', 'abortExecutionStop', e.id) + '>&#9632; Abort</button>'
         : '';
       return '<tr class="u-pointer"' + on('click', 'openExerciseDetail', e.id) + '>' +
         '<td>' + x(e.name || e.plan_id) + '</td>' +
-        '<td><span class="badge">' + x(e.status) + (live ? ' <span class="tiny" style="opacity:.7">&#9679; live</span>' : '') + '</span></td>' +
+        '<td>' + chip(e.status + (live ? ' · live' : ''), exStatusTone(e.status)) + '</td>' +
         '<td class="tiny">' + progress + '</td>' +
         '<td class="tiny muted">' + x(e.started_at || e.created_at || '') + '</td>' +
         '<td class="td-r">' + abortBtn + '</td>' +
@@ -410,158 +430,11 @@ export function apArrow(kind) {
     '<span style="font-size:0.55rem;text-transform:uppercase;letter-spacing:0.04em">' + x(kind) + '</span>' +
     '<span style="font-size:1rem;line-height:0.7">&rarr;</span></span>';
 }
-function apTable(title, cols, rows) {
-  var h = '<div class="tbl-wrap u-mb-1"><div style="font-weight:700;color:var(--text);padding:0.6rem 0.2rem">' + title + '</div><table><thead><tr>';
-  cols.forEach(function(c) { h += '<th>' + c + '</th>'; });
-  h += '</tr></thead><tbody>';
-  rows.forEach(function(r) { h += '<tr>' + r.map(function(c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; });
-  return h + '</tbody></table></div>';
-}
 function _fmtDuration(ms) {
   if (!ms || ms <= 0) return '—';
   var s = Math.round(ms / 1000);
   if (s < 60) return s + 's';
   return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
-}
-
-function apFindings(s) {
-  var out = [];
-  if (s.domainCompromiseStatus === 'reachable') {
-    out.push('A path to Domain Admin exists — at least one host can reach a Domain Admin or Crown Jewel target.');
-  } else if (s.domainCompromiseStatus === 'not-observed') {
-    out.push('No Domain Admin path observed in the collected graph.');
-  } else {
-    out.push('Domain Admin reachability is undetermined — Active Directory relationships were not collected.');
-  }
-  var maxReach = s.maxBlastRadius || 0;
-  out.push(maxReach > 0
-    ? (maxReach === 1 ? 'One lateral movement path exists from the highest-risk entry host.' : maxReach + ' lateral movement paths exist from the highest-risk entry host.')
-    : 'No lateral movement paths were observed.');
-  var adminEdges = (s.relationshipCounts && s.relationshipCounts['admin-to']) || 0;
-  out.push(adminEdges > 0
-    ? (adminEdges === 1 ? 'One local administrator relationship identified.' : adminEdges + ' local administrator relationships identified.')
-    : 'No local administrator relationships identified.');
-  var missing = (s.confidence && s.confidence.missing) || [];
-  if (missing.indexOf('Active Directory relationships') !== -1) {
-    out.push('No AD relationships collected — SharpHound was not run or is unavailable.');
-  }
-  var sessionEdges = (s.relationshipCounts && s.relationshipCounts['has-session']) || 0;
-  out.push(sessionEdges > 0
-    ? (sessionEdges === 1 ? 'One active user session detected.' : sessionEdges + ' active user sessions detected.')
-    : 'No active user sessions detected.');
-  return out;
-}
-function apFindingsHtml(s) {
-  var items = apFindings(s);
-  if (!items.length) return '';
-  return '<div class="dash-panel u-mb-1"><div class="dash-panel-body" style="padding:1rem">' +
-    '<div style="font-weight:700;color:var(--text);margin-bottom:0.5rem">Findings</div>' +
-    '<ul style="margin:0;padding-left:1.1rem;list-style:disc;color:var(--text);display:flex;flex-direction:column;gap:0.3rem">' +
-    items.map(function(i) { return '<li>' + x(i) + '</li>'; }).join('') +
-    '</ul></div></div>';
-}
-function apScoreDriversHtml(drivers) {
-  if (!drivers || !drivers.length) return '<div class="tiny muted" style="margin-top:0.4rem">No score driver detail available.</div>';
-  return '<div style="display:flex;flex-direction:column;gap:0.25rem;margin-top:0.4rem">' + drivers.map(function(d) {
-    var ok = d.deficit === 0;
-    var mark = ok ? '<span class="u-success">&#10003;</span>' : '<span class="u-warning">&#9888;</span>';
-    var deficitStr = ok ? 'no deficit' : '-' + d.deficit.toFixed(1) + ' pts';
-    return '<div class="tiny" style="display:flex;justify-content:space-between;gap:0.5rem"><span>' + mark + ' ' + x(d.label) + '</span><span class="muted">' + deficitStr + '</span></div>';
-  }).join('') + '</div>';
-}
-function apScoreCard(s) {
-  var val = (s.attackPathScore != null ? s.attackPathScore : '—') + '<span style="font-size:0.9rem;color:var(--muted)">/100</span>';
-  var sub = (s.band || '') + ' risk · higher is safer';
-  return '<div class="kpi-card"><div class="kpi-label">Attack Path Score</div>' +
-    '<div class="kpi-value" style="color:' + apColor(s.attackPathScore) + '">' + val + '</div>' +
-    '<div class="tiny muted">' + sub + '</div>' +
-    '<details style="margin-top:0.4rem"><summary style="cursor:pointer;color:var(--accent);font-size:0.7rem;list-style:none">Score breakdown &#9660;</summary>' +
-    apScoreDriversHtml(s.scoreDrivers) + '</details></div>';
-}
-function apLateralCard(s) {
-  var avg = (s.avgBlastRadius || 0).toFixed(1);
-  var max = s.maxBlastRadius || 0;
-  var sub = 'Average Reach ' + avg + ' hosts · Maximum Reach ' + max + ' hosts (from ' + x(s.maxBlastEntry || 'entry host') + ')';
-  return apCard('Lateral Movement', x(s.lateralMovementBand || '—'), apBandColor(s.lateralMovementBand), sub);
-}
-function apDomainCard(s) {
-  var status = s.domainCompromiseStatus || (s.domainCompromise ? 'reachable' : 'not-observed');
-  var label, color, sub;
-  if (status === 'reachable') {
-    label = 'Reachable'; color = 'var(--danger)'; sub = 'a host can reach Domain Admin';
-  } else if (status === 'not-observed') {
-    label = 'No Path Observed'; color = 'var(--success)'; sub = 'no path to Domain Admin found in the collected graph';
-  } else {
-    label = 'Undetermined'; color = 'var(--muted)'; sub = 'Active Directory relationships were not collected';
-  }
-  return apCard('Domain Compromise', label, color, sub);
-}
-function apGraphScopeInterp(s) {
-  var hosts = s.hosts || 0;
-  var size = hosts >= 20 ? 'Large' : hosts >= 5 ? 'Medium' : 'Small';
-  var adEdges = ((s.relationshipCounts && s.relationshipCounts['member-of']) || 0) + ((s.relationshipCounts && s.relationshipCounts['credential']) || 0);
-  var adNote = adEdges > 0 ? 'Domain relationships collected.' : 'No domain relationships collected.';
-  return size + ' — ' + hosts + ' host' + (hosts === 1 ? '' : 's') + ' observed. ' + adNote;
-}
-function apScopeCard(s) {
-  var sub = (s.users || 0) + ' users · ' + (s.groups || 0) + ' groups · ' + (s.edges || 0) + ' edges<br><span class="u-muted">' + x(apGraphScopeInterp(s)) + '</span>';
-  return apCard('Graph Scope', (s.hosts || 0) + ' hosts', 'var(--text)', sub);
-}
-function apCoverageConfidencePanel(coverage, confidence) {
-  coverage = coverage || {};
-  confidence = confidence || { based: [], missing: [] };
-  var compColor = coverage.completeness === 'Full' ? 'var(--success)' : coverage.completeness === 'Limited' ? 'var(--warning)' : coverage.completeness === 'Minimal' ? '#f0883e' : 'var(--muted)';
-  var confColor = confidence.level === 'High' ? 'var(--success)' : confidence.level === 'Medium' ? 'var(--warning)' : 'var(--danger)';
-  var covHtml = '<div style="flex:1;min-width:220px">' +
-    '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Coverage</div>' +
-    '<div class="tiny" style="margin-bottom:0.3rem">' + (coverage.targetsRepresented != null ? coverage.targetsRepresented : '—') + ' of ' + (coverage.targetsRequested != null ? coverage.targetsRequested : '—') + ' requested targets represented in the graph</div>' +
-    '<div class="tiny" style="margin-bottom:0.3rem">SharpHound: ' + (coverage.sharpHoundRequested ? (coverage.sharpHoundAvailable ? 'Available' : 'Requested, not available') : 'Not requested') + '</div>' +
-    '<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700;color:' + compColor + ';border:1px solid currentColor">' + x(coverage.completeness || 'Unknown') + '</span>' +
-    '</div>';
-  var basedList = (confidence.based || []).map(function(b) { return '<div class="tiny u-text">&#10003; ' + x(b) + '</div>'; }).join('');
-  var missingList = (confidence.missing || []).map(function(m) { return '<div class="tiny u-muted">&#10005; ' + x(m) + '</div>'; }).join('');
-  var confHtml = '<div style="flex:1;min-width:220px">' +
-    '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Confidence</div>' +
-    '<span style="display:inline-block;margin-bottom:0.4rem;padding:0.15rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700;color:' + confColor + ';border:1px solid currentColor">' + x(confidence.level || '—') + '</span>' +
-    '<div style="margin-top:0.2rem">' + basedList + missingList + '</div>' +
-    '</div>';
-  return '<div class="dash-panel u-mb-1"><div class="dash-panel-body" style="padding:1rem;display:flex;gap:1.5rem;flex-wrap:wrap">' + covHtml + confHtml + '</div></div>';
-}
-var AP_EDGE_KIND_ORDER = ['smb', 'winrm', 'rdp', 'admin-to', 'has-session', 'member-of', 'credential'];
-function apRelationshipsTable(counts) {
-  counts = counts || {};
-  var rows = AP_EDGE_KIND_ORDER.map(function(k) {
-    var n = counts[k] || 0;
-    var style = n === 0 ? ' style="color:var(--muted)"' : '';
-    return ['<code' + style + '>' + k + '</code>', '<span' + style + '>' + n + '</span>'];
-  });
-  return apTable('Observed Relationships', ['Type', 'Count'], rows);
-}
-function apGapsPanel(gaps) {
-  if (!gaps || !gaps.length) return '';
-  var priorityColor = { Critical: 'var(--danger)', High: '#f0883e', Medium: 'var(--warning)', Low: 'var(--success)' };
-  var rows = gaps.slice(0, 10).map(function(g) {
-    var col = priorityColor[g.priority] || 'var(--muted)';
-    var badge = '<span style="display:inline-block;padding:0.1rem 0.45rem;border-radius:4px;font-size:0.7rem;font-weight:700;color:' + col + ';border:1px solid currentColor">' + x(g.priority) + '</span>';
-    var path = apNodePill(g.edge.from) + apArrow(g.edge.kind) + apNodePill(g.edge.to, true);
-    return [badge, '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:0.15rem">' + path + '</div>', x(g.reason), x(g.remediation)];
-  });
-  return apTable('Priority Remediation', ['Priority', 'Path', 'Reason', 'Recommended Action'], rows);
-}
-function apCollectionLimitations(s, coverage) {
-  var items = [];
-  var missing = (s.confidence && s.confidence.missing) || [];
-  if (missing.indexOf('Active Directory relationships') !== -1) items.push('SharpHound disabled or unavailable — no AD relationships in this graph');
-  coverage = coverage || {};
-  if (coverage.targetsRequested && coverage.targetsRepresented != null && coverage.targetsRepresented < coverage.targetsRequested) {
-    items.push('Only ' + coverage.targetsRepresented + ' of ' + coverage.targetsRequested + ' requested targets are represented in the graph');
-  }
-  if (!items.length) return '';
-  return '<div class="dash-panel u-mb-1"><div class="dash-panel-body" style="padding:1rem">' +
-    '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">This Collection\'s Limitations</div>' +
-    '<ul style="margin:0 0 0.4rem;padding-left:1.1rem;list-style:disc;color:var(--muted);display:flex;flex-direction:column;gap:0.2rem">' +
-    items.map(function(i) { return '<li>' + x(i) + '</li>'; }).join('') +
-    '</ul><div class="tiny u-warning">Results may underestimate lateral movement.</div></div></div>';
 }
 
 function _apUpdateMetaBar(d) {
@@ -630,52 +503,5 @@ export function renderAttackPath(d, corr) {
   _apUpdateMetaBar(d);
   var body = document.getElementById('ap-body');
   if (!body) return;
-  if (!d || !d.collected) {
-    body.innerHTML = '<div class="dash-panel"><div class="dash-panel-body" style="padding:2rem;text-align:center">' +
-      '<div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:0.4rem">No attack-path data collected yet</div>' +
-      '<div class="tiny muted" style="max-width:520px;margin:0 auto 1rem">Run a collection on an enrolled agent to map lateral-movement reachability, blast radius, segmentation, and crown-jewel exposure across the fleet.</div>' +
-      '<button class="btn btn-primary btn-sm" data-on-click="openAPCollect">&#9654; Run Collection</button></div></div>';
-    return;
-  }
-  var s = d.summary || {};
-  var h = apFindingsHtml(s);
-  h += '<div class="kpi-row u-mb-1">';
-  h += apScoreCard(s);
-  h += apLateralCard(s);
-  h += apDomainCard(s);
-  h += apScopeCard(s);
-  h += '</div>';
-
-  if (s.domainCompromise && s.shortestDomainAdminPath && s.shortestDomainAdminPath.length) {
-    var p = s.shortestDomainAdminPath;
-    h += '<div class="dash-panel u-mb-1"><div class="dash-panel-body" style="padding:1rem">';
-    h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.2rem">Representative Path to Domain Admin</div>';
-    h += '<div class="tiny muted" style="margin-bottom:0.8rem">Shortest path from the highest-blast-radius entry host. Difficulty: <strong style="color:' + apBandColor(s.shortestDomainAdminDifficulty) + '">' + x(s.shortestDomainAdminDifficulty || '') + '</strong></div>';
-    h += '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:0.25rem">' + apNodePill(p[0].from);
-    for (var i = 0; i < p.length; i++) { h += apArrow(p[i].kind) + apNodePill(p[i].to, i === p.length - 1); }
-    h += '</div></div></div>';
-  }
-
-  h += apCoverageConfidencePanel(d.coverage, s.confidence);
-  h += apRelationshipsTable(s.relationshipCounts);
-  h += apCollectionLimitations(s, d.coverage);
-  if (corr) h += apGapsPanel(corr.gaps);
-
-  var cj = (s.crownJewels || []).filter(function(c) { return c.reachable; });
-  if (cj.length) {
-    h += apTable('Crown-Jewel Exposure', ['Asset', 'Tag', 'Entry Hosts', 'Min Hops'], cj.map(function(c) {
-      return [x(c.node), x(c.tag), c.entryHosts, c.minHops];
-    }));
-  }
-  if ((s.chokePoints || []).length) {
-    h += apTable('Attack Choke Points', ['Node', 'On Paths', 'Path Coverage'], s.chokePoints.slice(0, 10).map(function(c) {
-      return [x(c.label), c.onPaths, Math.round((c.coverage || 0) * 100) + '%'];
-    }));
-  }
-  if ((s.segmentationViolations || []).length) {
-    h += apTable('Segmentation Violations', ['From', 'Segment', 'Via', 'To', 'Segment'], s.segmentationViolations.map(function(v) {
-      return [x(v.from), x(v.fromSegment), (v.kind || '').toUpperCase(), x(v.to), x(v.toSegment)];
-    }));
-  }
-  body.innerHTML = h;
+  body.innerHTML = apRichBody(d, corr);
 }

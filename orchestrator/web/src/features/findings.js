@@ -8,6 +8,9 @@ import { openModal, scenarioFramework } from './reports.js';
 import { ROLE, _riskScoreColor } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
+import { kpi, card, grid, hbars, bar, seg, searchBox, empty, pill } from '../core/kit.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
+import { countBy, sevSegments, hbarRows, matchesQuery, rateTone, normSev } from './rich-g3.js';
 
 
 // ── Findings ─────────────────────────────────────────────────────────────────
@@ -20,14 +23,14 @@ export function findingSevBadge(sev, exp) {
 export function loadSLAReport() {
   apicall('/api/sla/report').then(function(rep) {
     state._slaReport = rep;
-    var empty = document.getElementById('sla-rpt-empty');
+    var emptyEl = document.getElementById('sla-rpt-empty');
     var body = document.getElementById('sla-rpt-body');
     if (!rep.overall || rep.overall.totalEpisodes === 0) {
-      setDisplay(empty, '');
+      setDisplay(emptyEl, '');
       setDisplay(body, 'none');
       return;
     }
-    setDisplay(empty, 'none');
+    setDisplay(emptyEl, 'none');
     setDisplay(body, '');
     renderSLAKPIs(rep.overall);
     renderSLASeverityBars(rep.bySeverity || []);
@@ -44,13 +47,13 @@ function slaRateDisplay(onTime, late, rate) {
   return { text: rate.toFixed(1) + '%', color: _riskScoreColor(rate) };
 }
 function renderSLAKPIs(overall) {
-  var tile = statTileCard;
   var rate = slaRateDisplay(overall.onTime, overall.late, overall.complianceRate);
+  var resolved = overall.onTime + overall.late;
   document.getElementById('sla-rpt-kpis').innerHTML =
-    tile('Compliance Rate', rate.text, rate.color) +
-    tile('On-Time', overall.onTime, 'var(--success)') +
-    tile('Late', overall.late, overall.late ? 'var(--danger)' : 'var(--muted)') +
-    tile('Currently Open', overall.currentlyOpen, overall.currentlyOpen ? 'var(--warning)' : 'var(--muted)');
+    kpi({ label: 'Compliance Rate', value: rate.text, sub: resolved ? overall.onTime + ' of ' + resolved + ' resolved on time' : 'nothing resolved yet', icon: 'clock', tone: resolved ? rateTone(overall.complianceRate) : 'muted' }) +
+    kpi({ label: 'On-Time', value: overall.onTime, sub: 'resolved within SLA', icon: 'ok', tone: 'ok' }) +
+    kpi({ label: 'Late', value: overall.late, sub: 'resolved after the deadline', icon: 'warn', tone: overall.late ? 'bad' : 'muted' }) +
+    kpi({ label: 'Currently Open', value: overall.currentlyOpen, sub: 'of ' + overall.totalEpisodes + ' episodes', icon: 'flag', tone: overall.currentlyOpen ? 'warn' : 'muted' });
 }
 function renderSLASeverityBars(bySeverity) {
   // order[sev] || 9 would be wrong here -- Critical's value is 0, and
@@ -60,34 +63,48 @@ function renderSLASeverityBars(bySeverity) {
   var rank = function(sev) { return sev in order ? order[sev] : 9; };
   var sorted = bySeverity.slice().sort(function(a, b) { return rank(a.severity) - rank(b.severity); });
   var el = document.getElementById('sla-rpt-severity');
-  if (!sorted.length) { el.innerHTML = '<div class="empty g1-s-decac807">No severities with SLA episodes.</div>'; return; }
+  var ch = document.getElementById('sla-rpt-sev-chart');
+  if (!sorted.length) {
+    el.innerHTML = empty('shield', 'No severities with SLA episodes');
+    if (ch) ch.innerHTML = '';
+    return;
+  }
   el.innerHTML = sorted.map(function(s) {
     var rate = slaRateDisplay(s.onTime, s.late, s.complianceRate);
-    return '<div class="bar-row">' +
-      '<div class="bar-label"><span>' + x(s.severity) + '</span><span' + cssVars(['g1-v-7d75dfc9', rate.color]) + '>' + rate.text + '</span></div>' +
-      '<div class="bar-track"><div class="bar-fill"' + cssVars(['g1-v-9b890877', s.complianceRate], ['g1-v-9ffd39ba', rate.color]) + '></div></div>' +
-      '<div class="g1-s-6769b269">' + s.onTime + ' on-time &middot; ' + s.late + ' late &middot; ' + s.currentlyOpen + ' open</div>' +
-      '</div>';
+    var has = s.onTime + s.late > 0;
+    return '<div class="g3-dom"><div class="g3-dom-top"><span>' + x(s.severity) + '</span><span>' + x(rate.text) + '</span></div>' +
+      bar(has ? s.complianceRate : 0, has ? rateTone(s.complianceRate) : 'muted', true) +
+      '<div class="g3-dom-st"><span>' + x(s.onTime) + ' on-time</span><span>' + x(s.late) + ' late</span><span>' + x(s.currentlyOpen) + ' open</span></div></div>';
   }).join('');
+  if (ch) ch.innerHTML = chartSlot({ type: 'bar', stacked: true, h: 210,
+    labels: sorted.map(function(s) { return s.severity; }),
+    series: [
+      { name: 'On-time', data: sorted.map(function(s) { return s.onTime; }), color: CHART_COLORS.ok },
+      { name: 'Late', data: sorted.map(function(s) { return s.late; }), color: CHART_COLORS.bad },
+      { name: 'Open', data: sorted.map(function(s) { return s.currentlyOpen; }), color: CHART_COLORS.warn }
+    ] });
 }
 function renderSLAMonthlyTrend(monthlyTrend) {
   var sorted = monthlyTrend.slice().sort(function(a, b) { return a.month < b.month ? -1 : a.month > b.month ? 1 : 0; });
   var body = document.getElementById('sla-rpt-trend-body');
+  var ch = document.getElementById('sla-rpt-trend-chart');
+  if (ch) ch.innerHTML = sorted.length > 1
+    ? chartSlot({ type: 'line', h: 200, suffix: '%', yMax: 100, labels: sorted.map(function(m) { return m.month; }),
+        series: [{ name: 'Compliance rate', data: sorted.map(function(m) { return m.complianceRate; }), color: CHART_COLORS.accent }] })
+    : empty('trend', 'Not enough history', 'A trend line needs at least two months of resolved episodes.');
   if (!sorted.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No resolved episodes yet.</td></tr>'; return; }
   body.innerHTML = sorted.map(function(m) {
     var rate = slaRateDisplay(m.onTime, m.resolved - m.onTime, m.complianceRate);
     return '<tr><td>' + x(m.month) + '</td><td>' + m.resolved + '</td><td>' + m.onTime + '</td>' +
-      '<td' + cssVars(['g1-v-7d75dfc9', rate.color]) + '>' + rate.text + '</td></tr>';
+      '<td>' + (m.resolved ? pill(rate.text, rateTone(m.complianceRate)) : x(rate.text)) + '</td></tr>';
   }).join('');
 }
 function renderSLARecentlyResolved(recentlyResolved) {
   var body = document.getElementById('sla-rpt-recent-body');
   if (!recentlyResolved.length) { body.innerHTML = '<tr><td colspan="5" class="empty">No resolved episodes yet.</td></tr>'; return; }
   body.innerHTML = recentlyResolved.map(function(r) {
-    var outcome = r.onTime
-      ? '<span class="sbadge g1-s-43c234c9">On time</span>'
-      : '<span class="sbadge g1-s-99a3db64">Late</span>';
-    return '<tr><td>' + x(r.agentId) + '</td><td>' + x(r.checkId) + '</td><td>' + findingSevBadge(r.severity) + '</td>' +
+    var outcome = pill(r.onTime ? 'On time' : 'Late', r.onTime ? 'ok' : 'bad');
+    return '<tr><td>' + x(r.agentId) + '</td><td><code>' + x(r.checkId) + '</code></td><td>' + findingSevBadge(r.severity) + '</td>' +
       '<td>' + fmtDate(r.resolvedAt) + '</td><td>' + outcome + '</td></tr>';
   }).join('');
 }
@@ -115,37 +132,66 @@ export function loadFindings() {
 }
 function renderFindingsTiles() {
   var l = state._findings || [];
-  var open = l.filter(function(f) { return f.status === 'open'; }).length;
-  var crit = l.filter(function(f) { return f.status === 'open' && f.severity === 'Critical'; }).length;
-  var reopened = l.filter(function(f) { return f.status === 'open' && f.reopenedCount > 0; }).length;
+  var openL = l.filter(function(f) { return f.status === 'open'; });
+  var open = openL.length;
+  var crit = openL.filter(function(f) { return f.severity === 'Critical'; }).length;
+  var reopened = openL.filter(function(f) { return f.reopenedCount > 0; }).length;
   var since = Date.now() - 30 * 864e5;
   var remediated = l.filter(function(f) { return f.status === 'remediated' && new Date(f.lastSeen) >= since; }).length;
   var maxAge = 0;
-  l.filter(function(f) { return f.status === 'open'; }).forEach(function(f) {
+  openL.forEach(function(f) {
     var age = daysAgo(f.firstSeen);
     if (age > maxAge) maxAge = age;
   });
-  var ageCol = maxAge >= 90 ? 'var(--danger)' : maxAge >= 30 ? 'var(--warning)' : 'var(--success)';
-  var tile = statTileCard;
+  var ageTone = maxAge >= 90 ? 'bad' : maxAge >= 30 ? 'warn' : 'ok';
   document.getElementById('findings-tiles').innerHTML =
-    tile('Open findings', open, open ? 'var(--danger)' : 'var(--success)') +
-    tile('Attack Surface Age', open ? maxAge + ' days' : '0 days', ageCol) +
-    tile('Critical', crit, crit ? 'var(--danger)' : 'var(--muted)') +
-    tile('Reopened', reopened, reopened ? 'var(--warning)' : 'var(--muted)') +
-    tile('Remediated · 30d', remediated, 'var(--success)');
+    kpi({ label: 'Open findings', value: open, sub: 'of ' + l.length + ' total', icon: 'flag', tone: open ? 'bad' : 'ok' }) +
+    kpi({ label: 'Attack Surface Age', value: open ? maxAge + ' days' : '0 days', sub: open ? 'oldest open finding' : 'nothing open', icon: 'clock', tone: ageTone }) +
+    kpi({ label: 'Critical', value: crit, sub: 'open and critical', icon: 'warn', tone: crit ? 'bad' : 'muted' }) +
+    kpi({ label: 'Reopened', value: reopened, sub: 'came back after a fix', icon: 'trend', tone: reopened ? 'warn' : 'muted' }) +
+    kpi({ label: 'Remediated · 30d', value: remediated, sub: 'fixed in the last 30 days', icon: 'ok', tone: 'ok' });
+  renderFindingsInsights(l, openL);
 }
+// Distribution cards computed from the same /api/findings response: severity of what is still open,
+// the status split of everything, and where the open findings concentrate.
+function renderFindingsInsights(l, openL) {
+  var el = document.getElementById('findings-insights');
+  if (!el) return;
+  if (!l.length) { el.innerHTML = ''; return; }
+  var sevSeg = sevSegments(openL, function(f) { return f.severity; });
+  var sevCard = card('Open findings by severity',
+    sevSeg.length ? chartSlot({ type: 'donut', h: 170, legendRight: true, centerSub: 'open', segments: sevSeg })
+      : empty('ok', 'Nothing open', 'No open findings right now.'));
+  var stLabel = { open: 'Open', triaged: 'Triaged', remediated: 'Remediated', risk_accepted: 'Risk accepted' };
+  var stColor = { open: CHART_COLORS.bad, triaged: CHART_COLORS.warn, remediated: CHART_COLORS.ok, risk_accepted: CHART_COLORS.violet };
+  var stSeg = countBy(l, function(f) { return f.status; }, 'Unknown').map(function(p) {
+    return { label: stLabel[p[0]] || p[0], value: p[1], color: stColor[p[0]] || CHART_COLORS.muted };
+  });
+  var stCard = card('Status', chartSlot({ type: 'donut', h: 170, legendRight: true, centerSub: 'findings', segments: stSeg }));
+  var byTech = countBy(openL, function(f) { return f.techniqueName || f.techniqueId; }, 'Unknown');
+  var techCard = card('Most exposed techniques', byTech.length ? hbars(hbarRows(byTech, 'bad', 5)) : empty('ok', 'No open techniques'), { sub: 'open findings' });
+  el.innerHTML = grid(3, [sevCard, stCard, techCard]);
+}
+var FINDING_Q = '';
 function renderFindingsTabs() {
   var l = state._findings || [];
   var c = function(k) { return k === 'all' ? l.length : l.filter(function(f) { return f.status === k; }).length; };
-  document.getElementById('findings-toolbar').innerHTML = covSegHtml(
-    [['all', 'All'], ['open', 'Open'], ['triaged', 'Triaged'], ['remediated', 'Remediated'], ['risk_accepted', 'Risk-accepted']],
-    FINDING_TAB, 'setFindingTab', c
-  );
+  var opts = [['all', 'All'], ['open', 'Open'], ['triaged', 'Triaged'], ['remediated', 'Remediated'], ['risk_accepted', 'Risk-accepted']]
+    .map(function(o) { return { id: o[0], label: o[1], count: c(o[0]) }; });
+  document.getElementById('findings-toolbar').innerHTML =
+    '<div class="g3-tools">' + searchBox('findings-search', 'Search technique, agent, control…', 'setFindingSearch') + seg(opts, FINDING_TAB, 'setFindingTab') + '</div>';
+  var q = document.getElementById('findings-search');
+  if (q) q.value = FINDING_Q;
 }
 export function setFindingTab(v) { FINDING_TAB = v; renderFindingsTabs(); renderFindingsRows(); }
+export function setFindingSearch(el) { FINDING_Q = (el && el.value) || ''; renderFindingsRows(); }
 function renderFindingsRows() {
-  var l = (state._findings || []).filter(function(f) { return FINDING_TAB === 'all' || f.status === FINDING_TAB; });
+  var l = (state._findings || []).filter(function(f) {
+    return (FINDING_TAB === 'all' || f.status === FINDING_TAB) && matchesQuery(FINDING_Q, [f.techniqueName, f.techniqueId, f.agentId, f.controlClass, f.severity]);
+  });
   var tb = document.getElementById('findings-body');
+  var cnt = document.getElementById('findings-count');
+  if (cnt) cnt.textContent = l.length + ' of ' + (state._findings || []).length;
   var canTriage = (ROLE === 'admin' || ROLE === 'analyst');
   var canPush = canTriage;
   var thTriage = document.getElementById('findings-th-triage');
@@ -155,7 +201,11 @@ function renderFindingsRows() {
   if (thCheck) setDisplay(thCheck, (_findingsBulkMode && canPush) ? '' : 'none');
   if (thTicket) setDisplay(thTicket, canPush ? '' : 'none');
   var colCount = 8 + (canTriage ? 1 : 0) + (canPush ? 1 : 0) + (_findingsBulkMode ? 1 : 0);
-  if (!l.length) { tb.innerHTML = '<tr><td colspan="' + colCount + '" class="empty">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
+  if (!l.length) {
+    var none = (state._findings || []).length && (FINDING_Q || FINDING_TAB !== 'all');
+    tb.innerHTML = '<tr><td colspan="' + colCount + '">' + empty('flag', none ? 'No findings match' : 'No findings yet', none ? 'Try another status or clear the search.' : 'Findings appear when a simulated technique executes without being prevented.') + '</td></tr>';
+    return;
+  }
   tb.innerHTML = l.map(function(f) {
     var checkCell = (_findingsBulkMode && canPush)
       ? '<td class="g1-s-49946d6d"' + on('click', 'stopEvent') + '><input type="checkbox" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' ' + on('change', 'toggleFindingCheck', f.id) + ' class="u-pointer"></td>'
@@ -206,7 +256,7 @@ export function openFinding(id) {
     state._currentFinding = f;
     var e = f.enrichment || {};
     document.getElementById('results-title').textContent = (f.techniqueName || f.techniqueId) + ' — Finding';
-    var row = function(k, v) { return v && v.length ? '<div class="g1-display-flex g1-s-b60b87ad"><span class="g1-s-0a1d5a85">' + k + '</span><span class="u-flex1">' + v + '</span></div>' : ''; };
+    var row = function(k, v) { return v && v.length ? '<dt>' + k + '</dt><dd>' + v + '</dd>' : ''; };
     var list = function(a) { return (a || []).map(x).join(', '); };
     var canPush = (ROLE === 'admin' || ROLE === 'analyst');
     var pushBtn = canPush ? '<button class="btn btn-outline btn-sm"' + on('click', 'pushFindingToITSM', f.id) + '>+ Ticket</button>' : '';
@@ -244,8 +294,9 @@ export function openFinding(id) {
       '</div>';
     }
     document.getElementById('results-body').innerHTML =
-      '<div class="g1-s-462c8de6">' + findingSevBadge(f.severity, f.exposureState) +
+      '<div class="g3-dwr"><div class="g3-dwr-row">' + findingSevBadge(f.severity, f.exposureState) +
         ' <span class="sbadge s-' + findingStatusClass(f.status) + '">' + x((f.status || '').replace('_', ' ')) + '</span></div>' +
+      '<dl class="rk-kv">' +
       row('Technique', '<span class="tech-id">' + x(f.techniqueId) + '</span> ' + x(f.techniqueName)) +
       row('Tactic', x(f.tactic)) + row('Expected control', x(f.controlClass)) +
       row('Agent', x(f.agentId)) + row('Installed product', list(f.productSnapshot)) +
@@ -253,6 +304,7 @@ export function openFinding(id) {
       row('Occurrences', String(f.occurrenceCount) + (f.reopenedCount > 0 ? ' · reopened ' + f.reopenedCount + '×' : '')) +
       row('First seen', fmtDate(f.firstSeen)) + row('Last seen', fmtDate(f.lastSeen)) +
       row('Exposure age', formatFindingAge(f)) +
+      '</dl>' +
       vbHtml +
       (e.description ? '<div class="g1-s-34d69e4c">' + x(e.description) + '</div>' : '') +
       (e.url ? '<div class="u-mt-06"><a href="' + x(e.url) + '" target="_blank" rel="noopener" class="g1-s-824141a9">View on attack.mitre.org →</a></div>' : '') +
@@ -261,7 +313,7 @@ export function openFinding(id) {
             '<div class="g1-s-29cafabe">ITSM Tickets</div>' +
             '<div id="' + x(ticketSectionId) + '"><div class="tiny muted">Loading…</div></div>' +
           '</div>'
-        : '');
+        : '') + '</div>';
     document.getElementById('results-overlay').classList.add('open');
     if (canPush) {
       loadFindingTickets(f.id, document.getElementById(ticketSectionId));
@@ -295,24 +347,55 @@ function renderRemTiles() {
   var l = state._rems || [];
   var findingsTotal = l.reduce(function(s, r) { return s + (r.findingCount || 0); }, 0);
   var crit = l.filter(function(r) { return r.severity === 'Critical'; }).length;
-  var tile = function(lbl, val, col, iconBg, icon, foot) {
-    return '<div class="kpi-card stat-tile"><div class="stat-top">' +
-      '<div><div class="kpi-label">' + lbl + '</div><div class="kpi-value"' + cssVars(['g1-v-7d75dfc9', col]) + '>' + val + '</div></div>' +
-      '<div class="stat-icon"' + cssVars(['g1-v-9ffd39ba', iconBg], ['g1-v-7d75dfc9', col]) + '>' + icon + '</div></div>' +
-      '<div class="kpi-sub">' + foot + '</div></div>';
-  };
+  var missed = l.reduce(function(s, r) { return s + (r.missed || 0); }, 0);
+  var detOnly = l.reduce(function(s, r) { return s + (r.detectedOnly || 0); }, 0);
   document.getElementById('rem-tiles').innerHTML =
-    tile('Open remediations', l.length, l.length ? 'var(--warning)' : 'var(--success)', 'rgba(210,153,34,0.12)', REM_SVG.wrench16, 'prioritized fixes') +
-    tile('Affected findings', findingsTotal, findingsTotal ? 'var(--danger)' : 'var(--success)', 'rgba(218,54,51,0.12)', REM_SVG.flag, 'closed if all applied') +
-    tile('Critical remediations', crit, crit ? 'var(--danger)' : 'var(--muted)', crit ? 'rgba(218,54,51,0.12)' : 'rgba(154,169,188,0.12)', REM_SVG.shield, 'highest attacker value');
+    kpi({ label: 'Open remediations', value: l.length, sub: 'prioritized fixes', icon: 'wrench', tone: l.length ? 'warn' : 'ok' }) +
+    kpi({ label: 'Affected findings', value: findingsTotal, sub: 'closed if all applied', icon: 'flag', tone: findingsTotal ? 'bad' : 'ok' }) +
+    kpi({ label: 'Critical remediations', value: crit, sub: 'highest attacker value', icon: 'shield', tone: crit ? 'bad' : 'muted' }) +
+    kpi({ label: 'Missed techniques', value: missed, sub: detOnly + ' detected only', icon: 'eye', tone: missed ? 'bad' : 'ok' });
+  var ins = document.getElementById('rem-insights');
+  if (!ins) return;
+  if (!l.length) { ins.innerHTML = ''; return; }
+  var wins = l.slice().sort(function(a, b) { return (b.findingCount || 0) - (a.findingCount || 0); }).slice(0, 5)
+    .map(function(r) { return [(r.techniqueId || '') + ' ' + (r.techniqueName || ''), r.findingCount || 0]; });
+  ins.innerHTML = grid(2, [
+    card('Remediations by severity', chartSlot({ type: 'donut', h: 170, legendRight: true, centerSub: 'fixes', segments: sevSegments(l, function(r) { return r.severity; }) })),
+    card('Biggest wins', hbars(hbarRows(wins, 'ok', 5)), { sub: 'findings closed per fix' })
+  ]);
 }
+var REM_SEV = 'all';
+var REM_Q = '';
+function renderRemToolbar() {
+  var el = document.getElementById('rem-toolbar');
+  if (!el) return;
+  var l = state._rems || [];
+  if (!l.length) { el.innerHTML = ''; return; }
+  var c = function(k) { return k === 'all' ? l.length : l.filter(function(r) { return normSev(r.severity) === k; }).length; };
+  var opts = [['all', 'All'], ['Critical', 'Critical'], ['High', 'High'], ['Medium', 'Medium'], ['Low', 'Low']]
+    .map(function(o) { return { id: o[0], label: o[1], count: c(o[0]) }; });
+  el.innerHTML = '<div class="g3-tools">' + searchBox('rem-search', 'Search technique or control\u2026', 'setRemSearch') + seg(opts, REM_SEV, 'setRemFilter') + '</div>';
+  var q = document.getElementById('rem-search');
+  if (q) q.value = REM_Q;
+}
+export function setRemFilter(v) { REM_SEV = v; renderRemToolbar(); renderRemList(); }
+export function setRemSearch(el) { REM_Q = (el && el.value) || ''; renderRemList(); }
 function renderRemList() {
+  renderRemToolbar();
   var l = state._rems || [];
   var el = document.getElementById('rem-list');
-  if (!l.length) { el.innerHTML = '<div class="empty g1-s-be6df18e">No open remediations — nothing to fix right now.</div>'; return; }
-  el.innerHTML = l.map(function(r, i) {
+  if (!l.length) { el.innerHTML = card('', empty('ok', 'No open remediations', 'Nothing to fix right now.')); return; }
+  var shown = [];
+  l.forEach(function(r, i) {
+    if (REM_SEV !== 'all' && normSev(r.severity) !== REM_SEV) return;
+    if (!matchesQuery(REM_Q, [r.techniqueId, r.techniqueName, (r.controlClasses || []).join(' ')])) return;
+    shown.push(i);
+  });
+  if (!shown.length) { el.innerHTML = card('', empty('wrench', 'No remediations match', 'Try another severity or clear the search.')); return; }
+  el.innerHTML = '<div class="g3-rem-list">' + shown.map(function(i) {
+    var r = l[i];
     var critCls = r.severity === 'Critical' ? ' crit' : '';
-    var ctrls = (r.controlClasses || []).map(x).join(', ') || '—';
+    var ctrls = (r.controlClasses || []).map(x).join(', ') || '\u2014';
     return '<div class="rem-card">' +
       '<div class="rem-ic' + critCls + '">' + REM_SVG.wrench + '</div>' +
       '<div class="rem-main">' +
@@ -322,7 +405,7 @@ function renderRemList() {
           '<span>' + REM_SVG.shield12 + 'Closes ' + r.findingCount + ' finding' + (r.findingCount === 1 ? '' : 's') + '</span>' +
           '<span>' + REM_SVG.agents12 + r.agentCount + ' agent' + (r.agentCount === 1 ? '' : 's') + '</span>' +
           '<span>' + REM_SVG.layers12 + ctrls + '</span>' +
-          '<span>' + REM_SVG.eye12 + 'Missed ' + r.missed + ' · Detected only ' + r.detectedOnly + '</span>' +
+          '<span>' + REM_SVG.eye12 + 'Missed ' + r.missed + ' \u00b7 Detected only ' + r.detectedOnly + '</span>' +
         '</div>' +
       '</div>' +
       '<div class="rem-actions">' +
@@ -331,7 +414,7 @@ function renderRemList() {
         '<button class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', r.techniqueId) + '>&#8635; Re-validate</button>' +
       '</div>' +
     '</div>';
-  }).join('');
+  }).join('') + '</div>';
 }
 export function openRemediation(i) {
   var r = (state._rems || [])[i];

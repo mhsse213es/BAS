@@ -1,5 +1,7 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { kpi, grid, card, chip, hbars, empty } from '../core/kit.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
 // ── Active Directory Coverage ────────────────────────────────────────────────
 // Dedicated AD capability-coverage view. It is intentionally separate from
@@ -40,9 +42,22 @@ var RISK_BADGE = {
   'destructive': ['s-quarantined', 'Destructive'],
 };
 
+var BADGE_TONE = { 's-active': 'ok', 's-restricted': 'warn', 's-idle': 'muted', 's-quarantined': 'bad', 's-retired': 'muted' };
 function badge(map, val) {
   var hit = map[val] || ['s-retired', (val || 'unknown')];
-  return '<span class="sbadge ' + hit[0] + '">' + x(hit[1]) + '</span>';
+  return chip(hit[1], BADGE_TONE[hit[0]] || 'muted');
+}
+
+// adDistribution: how many capabilities fall in each value of one axis (counted from the report
+// itself; nothing is classified here). Unknown values keep their own bucket.
+export function adDistribution(caps, field, dflt) {
+  var out = {};
+  (caps || []).forEach(function(c) {
+    if (!c) return;
+    var v = c[field] || dflt || 'unknown';
+    out[v] = (out[v] || 0) + 1;
+  });
+  return out;
 }
 
 export function loadADCoverage() {
@@ -84,7 +99,7 @@ export function renderADCoverage(report) {
   var content = (report && report.contentSummary) || {};
 
   renderDisclaimer(sum);
-  renderSummary(sum, content);
+  renderSummary(sum, content, caps);
   renderInventoryNote();
   renderFilters(caps);
   renderList(caps);
@@ -97,27 +112,38 @@ function renderDisclaimer(sum) {
   if (!el) return;
   var executed = sum.executed || 0;
   var detected = sum.detectionValidated || 0;
-  el.className = 'empty u-warning u-mb-1';
+  el.className = 'rg2-alert';
   el.innerHTML =
     '<strong>Modeled / content coverage — not validated against real Active Directory.</strong> ' +
     x(String(executed)) + ' capabilities executed and ' + x(String(detected)) +
     ' detection-validated. Content availability and scenario composition do not imply a technique has run against, or been detected in, a real domain.';
 }
 
-function renderSummary(sum, content) {
+function renderSummary(sum, content, caps) {
   var el = document.getElementById('adc-summary');
   if (!el) return;
-  function tile(label, val, cls) {
-    return '<div class="ca-card"><div class="ca-label">' + x(label) + '</div>' +
-      '<div class="ca-val ' + (cls || '') + '">' + x(String(val == null ? '—' : val)) + '</div></div>';
+  var n = function(v) { return v == null ? '—' : v; };
+  var tiles = grid(3, [
+    kpi({ label: 'Capabilities', value: n(sum.total), icon: 'shield', tone: 'accent' }),
+    kpi({ label: 'Modeled', value: n(sum.modeled), icon: 'layers', tone: 'info' }),
+    kpi({ label: 'Scenario-composed', value: n(sum.scenarioComposed), icon: 'path', tone: 'violet' }),
+    kpi({ label: 'Executed vs real AD', value: sum.executed || 0, icon: 'play', tone: sum.executed ? 'ok' : 'muted' }),
+    kpi({ label: 'Detection-validated', value: sum.detectionValidated || 0, icon: 'eye', tone: sum.detectionValidated ? 'ok' : 'muted' }),
+    kpi({ label: 'Reusable content', value: n(content.reusableUnmapped), icon: 'file', tone: 'muted' }),
+  ]);
+  var charts = '';
+  if (caps && caps.length) {
+    var cd = adDistribution(caps, 'contentAvailability', 'unknown');
+    var cMap = { 'scenario-composable': ['Composable', CHART_COLORS.ok], 'reusable-unmapped': ['Reusable (unmapped)', CHART_COLORS.info], 'model-only': ['Model-only', CHART_COLORS.muted], 'missing-executable-content': ['Missing content', CHART_COLORS.bad] };
+    var cSegs = Object.keys(cd).map(function(k) { return { label: (cMap[k] || [k])[0], value: cd[k], color: (cMap[k] || [0, CHART_COLORS.warn])[1] }; });
+    var fam = adDistribution(caps, 'family', '—');
+    var famKeys = Object.keys(fam).sort(function(p, q) { return fam[q] - fam[p]; });
+    charts = grid(2, [
+      card('Content availability', chartSlot({ type: 'donut', segments: cSegs, center: String(caps.length), centerSub: 'capabilities', legend: true, h: 150 })),
+      card('Capabilities by family', hbars(famKeys.slice(0, 8).map(function(k) { return [k, fam[k] / caps.length * 100, 'accent', fam[k]]; }))),
+    ]);
   }
-  el.innerHTML =
-    tile('Capabilities', sum.total == null ? '—' : sum.total) +
-    tile('Modeled', sum.modeled == null ? '—' : sum.modeled) +
-    tile('Scenario-composed', sum.scenarioComposed == null ? '—' : sum.scenarioComposed) +
-    tile('Executed vs real AD', sum.executed || 0, (sum.executed ? 'u-success' : 'u-muted')) +
-    tile('Detection-validated', sum.detectionValidated || 0, (sum.detectionValidated ? 'u-success' : 'u-muted')) +
-    tile('Reusable content', content.reusableUnmapped == null ? '—' : content.reusableUnmapped, 'u-muted');
+  el.innerHTML = tiles + charts;
 }
 
 // Live ART/Caldera inventory completeness. Absent or partial stores must read
@@ -159,9 +185,11 @@ function renderFilters(caps) {
   var contentOpts = [['all', 'All content'], ['scenario-composable', 'Composable'], ['reusable-unmapped', 'Reusable'], ['model-only', 'Model-only'], ['missing-executable-content', 'Missing']];
   var execOpts = [['all', 'All execution'], ['not_executed', 'Not executed'], ['execution_completed', 'Executed'], ['postcondition_verified', 'Verified']];
   el.innerHTML =
-    '<div class="u-mb-1"><span class="u-muted">Family:</span> ' + pfSet('family', famOpts, _adFilter.family) + '</div>' +
-    '<div class="u-mb-1"><span class="u-muted">Content:</span> ' + pfSet('content', contentOpts, _adFilter.content) + '</div>' +
-    '<div class="u-mb-1"><span class="u-muted">Execution:</span> ' + pfSet('exec', execOpts, _adFilter.exec) + '</div>';
+    '<div class="rg2-filter-card">' +
+    '<div class="rg2-filter-row"><span class="u-muted">Family</span><div>' + pfSet('family', famOpts, _adFilter.family) + '</div></div>' +
+    '<div class="rg2-filter-row"><span class="u-muted">Content</span><div>' + pfSet('content', contentOpts, _adFilter.content) + '</div></div>' +
+    '<div class="rg2-filter-row"><span class="u-muted">Execution</span><div>' + pfSet('exec', execOpts, _adFilter.exec) + '</div></div>' +
+    '</div>';
 }
 
 function applyFilter(caps) {
@@ -195,7 +223,7 @@ function renderList(caps) {
   var foot = document.getElementById('adc-foot');
   if (!el) return;
   if (!caps.length) {
-    el.innerHTML = '<div class="empty">No AD capabilities reported.</div>';
+    el.innerHTML = empty('shield', 'No AD capabilities reported');
     if (foot) foot.textContent = '';
     return;
   }
@@ -209,9 +237,9 @@ function renderList(caps) {
       '<summary>' +
         '<span class="u-fw600">' + x(c.name || c.primitiveId || '—') + '</span> ' +
         '<span class="u-muted">' + x(c.primitiveId || '') + (c.techniqueId ? ' · ' + x(c.techniqueId) : '') + '</span> ' +
-        '<span class="tag">' + x(c.family || '—') + '</span> ' +
+        chip(c.family || '—', 'accent') + ' ' +
         badge(CONTENT_BADGE, c.contentAvailability) + ' ' +
-        '<span class="sbadge ' + (c.scenarioComposed ? 's-active' : 's-idle') + '">' + (c.scenarioComposed ? 'Composed' : 'Not composed') + '</span> ' +
+        chip(c.scenarioComposed ? 'Composed' : 'Not composed', c.scenarioComposed ? 'ok' : 'muted') + ' ' +
         badge(EXEC_BADGE, c.executionValidation || 'not_executed') + ' ' +
         badge(DET_BADGE, c.detectionValidation || 'not_validated') + ' ' +
         badge(RISK_BADGE, c.riskClass) +
@@ -227,6 +255,6 @@ function renderList(caps) {
         (provenance.length ? detailList('Content provenance', provenance) : '') +
       '</div>' +
     '</details>';
-  }).join('') || '<div class="empty">No capabilities match the current filters.</div>';
+  }).join('') || empty('filter', 'No capabilities match the current filters');
   if (foot) foot.textContent = 'Showing ' + rows.length + ' of ' + caps.length + ' capabilities · states read from /api/ad/coverage; nothing is executed by this view.';
 }

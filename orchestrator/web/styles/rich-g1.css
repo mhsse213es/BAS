@@ -1,0 +1,34 @@
+/* Rich layouts, page group 1: Dashboard, Scenarios, Live Runs, Campaigns. Theme tokens only. */
+.rk-note { margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.45; }
+.dash-section-label { margin: 22px 0 10px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+/* Dashboard: panels read as cards */
+#dash-view-operational .dash-panel { border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+#dash-donut, #dash-posture-bars { min-width: 0; }
+#dash-view-operational .chart-slot { min-width: 0; }
+.rk-tactic { background: var(--elevated); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 7px; }
+.rk-tactic-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; text-transform: capitalize; }
+#dash-view-executive .rk-card { margin-top: 0; }
+#dash-view-executive .rk-grid { margin-bottom: 14px; }
+.rk-strip { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.rk-strip .rk-seg { margin-left: auto; }
+#dash-top-fails .rk-hbar { grid-template-columns: minmax(110px, 38%) 1fr 104px; }
+#dash-top-fails .rk-hbar-v { white-space: nowrap; }
+
+/* Scenarios landing: category cards in a responsive grid (the loader sets display:block inline, hence !important) */
+#sc-landing { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+#sc-landing .sc-landing-stats { grid-column: 1 / -1; }
+#sc-landing .sc-landing-stats .rk-grid:last-child { margin-bottom: 4px; }
+.sc-cat-card { display: grid; gap: 4px; align-content: start; }
+.sc-cat-card .rk-bar { margin-top: 8px; }
+.sc-cat-card:hover { transform: translateY(-1px); }
+
+/* Live Runs */
+#runs-body tr[hidden] { display: none; }
+.rk-search input { height: 34px; }
+
+@media (max-width: 760px) {
+  #dash-view-operational .dash-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  #dash-view-operational .dash-panel-body.g1-display-flex { flex-wrap: wrap; }
+  #sc-landing { grid-template-columns: minmax(0, 1fr); }
+}

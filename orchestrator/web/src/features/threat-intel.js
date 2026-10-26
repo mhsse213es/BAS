@@ -6,6 +6,7 @@ import { loadScenarios } from './attack-path.js';
 import { _diffRow, _diffSecretRow, _renderConnectorCard, openConfirmDiffModal } from './compliance.js';
 import { ROLE } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
+import { renderArtInsights, renderIntelInsights, renderSimMix } from './settings-insights.js';
 
 
 // ── Threat Intel connector config (MISP/OpenCTI/OTX) — editable, matching
@@ -279,6 +280,7 @@ export function loadConnectorStatus() {
   setDisplay(wrap, '');
   apicall('/api/connector/status').then(function(s) {
     var bySource = s.bySource || {};
+    renderIntelInsights(s);
     _renderConnectorCard('misp', s.mispEnabled, bySource.misp, 'cs-misp-events');
     _renderConnectorCard('opencti', s.openctiEnabled, bySource.opencti, 'cs-opencti-nodes');
     document.getElementById('cs-otx').textContent     = s.otxEnabled     ? '✓ Enabled' : '✗ Not configured';
@@ -320,6 +322,7 @@ export function loadARTContentStatus() {
   var btn = document.getElementById('art-check-btn');
   if (btn) btn.disabled = true;
   apicall('/api/art/content/status').then(function(d) {
+    renderArtInsights(d);
     var statusEl = document.getElementById('cs-art-status');
     if (d.seeded) {
       statusEl.innerHTML = '<span class="g1-display-inline-block g1-s-a3bc72af"></span><span class="u-success">Seeded</span>';
@@ -453,6 +456,7 @@ export function loadSimCoverage() {
     var baseTotal = artTests + calCount + customScen + intelScen + builtinScen + apibasScen + phishScen;
 
     totalEl.textContent = baseTotal.toLocaleString();
+    renderSimMix([['ART atomic tests', artTests], ['Caldera abilities', calCount], ['Built-in scenarios', builtinScen], ['Custom scenarios', customScen], ['Threat-intel scenarios', intelScen], ['API BAS scenarios', apibasScen], ['Phishing scenarios', phishScen]]);
     if (variantEl) variantEl.textContent = combinedVariants > 0 ? combinedVariants.toLocaleString() + '+' : '--';
     if (subEl) subEl.textContent =
       artTests.toLocaleString() + ' ART base atomics \xb7 ' +

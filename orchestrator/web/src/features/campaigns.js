@@ -10,6 +10,7 @@ import { viewRunResults } from './reports.js';
 import { ROLE, _riskScoreColor, activateTab, showTab } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
+import { campaignSummaryHTML } from './campaigns-rich.js';
 
 
 // ── Campaigns ────────────────────────────────────────────────────────────────
@@ -38,6 +39,8 @@ export function loadCampaigns() {
   apicall('/api/campaigns').then(function(list) {
     state._campaigns = list || [];
     document.getElementById('campaign-cnt').textContent = state._campaigns.length;
+    var sumEl = document.getElementById('campaign-summary');
+    if (sumEl) sumEl.innerHTML = campaignSummaryHTML(state._campaigns);
     renderCampaignToolbar();
     renderCampaignRows();
   }).catch(function(e) { showToast(e.message, 'err'); });

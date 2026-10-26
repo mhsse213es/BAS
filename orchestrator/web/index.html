@@ -338,6 +338,113 @@
           </div>
         </div>
 
+        <div class="dash-grid g1-s-bf67e27d">
+          <div class="dash-panel">
+            <div class="dash-panel-hdr">Posture Score</div>
+            <div class="dash-panel-body g1-display-flex g1-s-38f54a48">
+              <div class="ring" id="dash-gauge"><div class="empty g1-s-62899a0f">—</div></div>
+              <div class="g1-s-28637295">
+                <div class="g1-display-flex g1-s-33955b7b">
+                  <div><div class="kpi-label">Trend</div><div id="dash-posture-trend" class="g1-s-f0a3d4eb">—</div></div>
+                  <div class="g1-s-390447e4"><div class="kpi-label">vs target</div><div class="g1-s-82805d4e">— <span class="g1-s-62065d87">soon</span></div></div>
+                </div>
+                <div id="dash-posture-bars"></div>
+                <div class="tiny muted g1-s-e642ef8f" id="dash-posture-cap">Based on recent validated runs.</div>
+              </div>
+            </div>
+          </div>
+          <div class="dash-panel">
+            <div class="dash-panel-hdr">Control Effectiveness</div>
+            <div class="dash-panel-body g1-s-9a37eefe" id="dash-donut">
+              <div class="empty">No run data yet.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dash-grid">
+          <div class="dash-panel">
+            <div class="dash-panel-hdr">Recent Runs</div>
+            <div class="dash-panel-body" id="dash-recent-runs">
+              <div class="empty g1-s-1eb1d451">No runs yet.</div>
+            </div>
+          </div>
+          <div class="dash-panel">
+            <div class="dash-panel-hdr">Top Failing Techniques</div>
+            <div class="dash-panel-body" id="dash-top-fails">
+              <div class="empty g1-s-1eb1d451">No data yet.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dash-grid g1-s-20ce54f7">
+          <div class="dash-panel">
+            <div class="dash-panel-hdr g1-display-flex g1-s-b45541c2">
+              <span><span id="dash-campaigns-dot" class="dot-live"></span> Live campaigns</span>
+              <a class="tiny g1-s-d9708967" data-on-click="showTab" data-args="[&quot;campaigns&quot;]">View all →</a>
+            </div>
+            <div class="dash-panel-body" id="dash-campaigns"><div class="empty g1-s-1eb1d451">No campaigns running.</div></div>
+          </div>
+          <div class="dash-panel dash-soon" id="dash-gaps">
+            <div class="dash-panel-hdr">Top exposure gaps</div>
+            <div class="dash-panel-body g1-s-eafc86b9">
+              <div class="g1-s-93776a5b">Prioritized, de-duplicated findings with severity and owner — surfaced here once the findings/triage backend lands.</div>
+              <div class="lrow">
+                <div class="lic g1-s-e022dd64"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5L15 14H1z"/><path d="M8 6.5v3.5M8 11.8v.2"/></svg></div>
+                <div class="lmain"><div class="g1-s-90a13fca"></div><div class="g1-s-6cd1c25d"></div></div>
+                <div class="lr"><span class="sbadge g1-s-e74c1606">—</span></div>
+              </div>
+              <div class="lrow">
+                <div class="lic g1-s-ba20a5ce"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5L15 14H1z"/><path d="M8 6.5v3.5M8 11.8v.2"/></svg></div>
+                <div class="lmain"><div class="g1-s-0feaf161"></div><div class="g1-s-67391a34"></div></div>
+                <div class="lr"><span class="sbadge g1-s-e74c1606">—</span></div>
+              </div>
+              <div class="lrow">
+                <div class="lic g1-s-30444e87"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5L15 14H1z"/><path d="M8 6.5v3.5M8 11.8v.2"/></svg></div>
+                <div class="lmain"><div class="g1-s-9a848b69"></div><div class="g1-s-12ab1638"></div></div>
+                <div class="lr"><span class="sbadge g1-s-e74c1606">—</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dash-panel g1-s-20ce54f7">
+          <div class="dash-panel-hdr g1-display-flex g1-s-9cce89e2">
+            <span id="dash-attackflow-title">Attack flow</span>
+            <span class="g1-display-flex g1-s-4a58574a">
+              <span class="g1-s-fd9cbeef">&#9632; Prevented</span>
+              <span class="g1-s-d3f82290">&#9632; Detected</span>
+              <span class="g1-s-12f8e31d">&#9632; Missed</span>
+              <a class="tiny is-hidden g1-s-d9708967" id="dash-attackflow-open">Open run →</a>
+            </span>
+          </div>
+          <div class="dash-panel-body g1-s-1333f50e" id="dash-attackflow"><div class="empty g1-s-1eb1d451">No completed runs yet.</div></div>
+        </div>
+
+        <div class="dash-panel">
+          <div class="dash-panel-hdr">ATT&amp;CK Tactic Coverage</div>
+          <div class="tactic-grid" id="dash-attck">
+            <div class="empty g1-s-bfaec2bf">No run data yet.</div>
+          </div>
+        </div>
+
+        <!-- Ransomware Readiness -->
+        <div class="dash-panel g1-s-5012029f">
+          <div class="dash-panel-hdr g1-display-flex g1-s-9cce89e2">
+            <span class="g1-display-flex g1-s-2b1d6e05">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" class="g1-s-a2d81453"><path d="M8 1.5l5 2v4c0 3-2 5.2-5 6.5C5 12.7 3 10.5 3 7.5v-4z"/><path d="M8 6v3M8 10.5v.5"/></svg>
+              Ransomware Readiness
+            </span>
+            <div class="g1-display-flex g1-s-9b5be34d">
+              <span id="rr-tier" class="is-hidden g1-s-a70041ce"></span>
+              <span id="rr-last" class="g1-s-007f626a"></span>
+              <button class="btn btn-outline btn-sm" data-on-click="runRansomwareDrill" id="rr-run-btn">&#9654; Run Drill</button>
+            </div>
+          </div>
+          <div class="dash-panel-body g1-s-c4ab6026" id="rr-body">
+            <div class="empty g1-s-dab79d7d">Run the Ransomware Drill to see your readiness score.</div>
+          </div>
+        </div>
+<div class="dash-section-label">Compliance, integrations and fleet</div>
         <!-- Regulatory Compliance score tiles — one per framework, refreshed after each run -->
         <div class="g1-display-flex g1-s-64be7484">
           <span class="g1-s-b982edc7">Regulatory Compliance</span>
@@ -395,112 +502,6 @@
           </div>
         </div>
 
-        <div class="dash-grid g1-s-bf67e27d">
-          <div class="dash-panel">
-            <div class="dash-panel-hdr">Posture Score</div>
-            <div class="dash-panel-body g1-display-flex g1-s-38f54a48">
-              <div class="ring" id="dash-gauge"><div class="empty g1-s-62899a0f">—</div></div>
-              <div class="g1-s-28637295">
-                <div class="g1-display-flex g1-s-33955b7b">
-                  <div><div class="kpi-label">Trend</div><div id="dash-posture-trend" class="g1-s-f0a3d4eb">—</div></div>
-                  <div class="g1-s-390447e4"><div class="kpi-label">vs target</div><div class="g1-s-82805d4e">— <span class="g1-s-62065d87">soon</span></div></div>
-                </div>
-                <div id="dash-posture-bars"></div>
-                <div class="tiny muted g1-s-e642ef8f" id="dash-posture-cap">Based on recent validated runs.</div>
-              </div>
-            </div>
-          </div>
-          <div class="dash-panel">
-            <div class="dash-panel-hdr">Control Effectiveness</div>
-            <div class="dash-panel-body g1-s-9a37eefe" id="dash-donut">
-              <div class="empty">No run data yet.</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="dash-grid g1-s-20ce54f7">
-          <div class="dash-panel">
-            <div class="dash-panel-hdr g1-display-flex g1-s-b45541c2">
-              <span><span id="dash-campaigns-dot" class="dot-live"></span> Live campaigns</span>
-              <a class="tiny g1-s-d9708967" data-on-click="showTab" data-args="[&quot;campaigns&quot;]">View all →</a>
-            </div>
-            <div class="dash-panel-body" id="dash-campaigns"><div class="empty g1-s-1eb1d451">No campaigns running.</div></div>
-          </div>
-          <div class="dash-panel dash-soon" id="dash-gaps">
-            <div class="dash-panel-hdr">Top exposure gaps</div>
-            <div class="dash-panel-body g1-s-eafc86b9">
-              <div class="g1-s-93776a5b">Prioritized, de-duplicated findings with severity and owner — surfaced here once the findings/triage backend lands.</div>
-              <div class="lrow">
-                <div class="lic g1-s-e022dd64"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5L15 14H1z"/><path d="M8 6.5v3.5M8 11.8v.2"/></svg></div>
-                <div class="lmain"><div class="g1-s-90a13fca"></div><div class="g1-s-6cd1c25d"></div></div>
-                <div class="lr"><span class="sbadge g1-s-e74c1606">—</span></div>
-              </div>
-              <div class="lrow">
-                <div class="lic g1-s-ba20a5ce"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5L15 14H1z"/><path d="M8 6.5v3.5M8 11.8v.2"/></svg></div>
-                <div class="lmain"><div class="g1-s-0feaf161"></div><div class="g1-s-67391a34"></div></div>
-                <div class="lr"><span class="sbadge g1-s-e74c1606">—</span></div>
-              </div>
-              <div class="lrow">
-                <div class="lic g1-s-30444e87"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5L15 14H1z"/><path d="M8 6.5v3.5M8 11.8v.2"/></svg></div>
-                <div class="lmain"><div class="g1-s-9a848b69"></div><div class="g1-s-12ab1638"></div></div>
-                <div class="lr"><span class="sbadge g1-s-e74c1606">—</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="dash-grid">
-          <div class="dash-panel">
-            <div class="dash-panel-hdr">Recent Runs</div>
-            <div class="dash-panel-body" id="dash-recent-runs">
-              <div class="empty g1-s-1eb1d451">No runs yet.</div>
-            </div>
-          </div>
-          <div class="dash-panel">
-            <div class="dash-panel-hdr">Top Failing Techniques</div>
-            <div class="dash-panel-body" id="dash-top-fails">
-              <div class="empty g1-s-1eb1d451">No data yet.</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="dash-panel g1-s-20ce54f7">
-          <div class="dash-panel-hdr g1-display-flex g1-s-9cce89e2">
-            <span id="dash-attackflow-title">Attack flow</span>
-            <span class="g1-display-flex g1-s-4a58574a">
-              <span class="g1-s-fd9cbeef">&#9632; Prevented</span>
-              <span class="g1-s-d3f82290">&#9632; Detected</span>
-              <span class="g1-s-12f8e31d">&#9632; Missed</span>
-              <a class="tiny is-hidden g1-s-d9708967" id="dash-attackflow-open">Open run →</a>
-            </span>
-          </div>
-          <div class="dash-panel-body g1-s-1333f50e" id="dash-attackflow"><div class="empty g1-s-1eb1d451">No completed runs yet.</div></div>
-        </div>
-
-        <div class="dash-panel">
-          <div class="dash-panel-hdr">ATT&amp;CK Tactic Coverage</div>
-          <div class="tactic-grid" id="dash-attck">
-            <div class="empty g1-s-bfaec2bf">No run data yet.</div>
-          </div>
-        </div>
-
-        <!-- Ransomware Readiness -->
-        <div class="dash-panel g1-s-5012029f">
-          <div class="dash-panel-hdr g1-display-flex g1-s-9cce89e2">
-            <span class="g1-display-flex g1-s-2b1d6e05">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" class="g1-s-a2d81453"><path d="M8 1.5l5 2v4c0 3-2 5.2-5 6.5C5 12.7 3 10.5 3 7.5v-4z"/><path d="M8 6v3M8 10.5v.5"/></svg>
-              Ransomware Readiness
-            </span>
-            <div class="g1-display-flex g1-s-9b5be34d">
-              <span id="rr-tier" class="is-hidden g1-s-a70041ce"></span>
-              <span id="rr-last" class="g1-s-007f626a"></span>
-              <button class="btn btn-outline btn-sm" data-on-click="runRansomwareDrill" id="rr-run-btn">&#9654; Run Drill</button>
-            </div>
-          </div>
-          <div class="dash-panel-body g1-s-c4ab6026" id="rr-body">
-            <div class="empty g1-s-dab79d7d">Run the Ransomware Drill to see your readiness score.</div>
-          </div>
-        </div>
         </div>
         <div id="dash-view-executive" class="is-hidden">
         <div id="hero-executive"></div>
@@ -520,6 +521,7 @@
           <button type="button" class="dash-view-btn" data-agents-view="risk" data-on-click="setAgentsView" data-args="[&quot;risk&quot;]">Risk &amp; Remediation</button>
         </div>
         <div id="agents-view-systemtree">
+        <div id="agent-insights"></div>
         <div class="g1-display-flex g1-s-0021a9bb">
           <input type="search" id="agent-search" placeholder="Search hostname, agent ID, IP, group…"
                  data-on-input="onAgentSearchInput"
@@ -728,7 +730,7 @@
         </div>
         </div>
         <div id="agents-view-risk" class="is-hidden">
-          <div class="kpi-row u-mb-1" id="agent-risk-tiles"></div>
+          <div id="agent-risk-tiles"></div>
           <div class="tbl-wrap g1-s-1b1d7545">
             <table class="g1-s-9adcfca6">
               <thead><tr>
@@ -746,27 +748,26 @@
       <div id="tab-settings" class="is-hidden">
         <div id="hero-settings"></div>
         <!-- ── Simulation Coverage KPI card ────────────────────────────────── -->
-        <div id="sim-cov-card" class="conn-cfg-card g1-s-a9785b97" data-on-click="toggleSimCoverage"
+        <div id="sim-cov-card" class="rk-card rk-simcov" data-on-click="toggleSimCoverage"
              data-on-mouseenter="simCovHoverOn"
              data-on-mouseleave="simCovHoverOff">
-          <div class="g1-display-flex g1-s-0bdc41ee">
-            <div class="g1-s-28637295">
-              <div class="g1-display-flex g1-s-d14909d0">
-                <div>
-                  <div class="g1-s-8a2cc60c">Base Simulations</div>
-                  <div class="g1-s-81d29b06" id="sim-total">—</div>
-                </div>
-                <div>
-                  <div class="g1-s-8a2cc60c">Available Variants</div>
-                  <div class="g1-s-365fefd5" id="sim-variants">—</div>
-                </div>
+          <div class="rk-simcov-main">
+            <div class="rk-simcov-nums">
+              <div>
+                <div class="rk-simcov-l">Base Simulations</div>
+                <div class="rk-simcov-v" id="sim-total">—</div>
               </div>
-              <div id="sim-sub" class="g1-s-d5e8e4e3">Loading coverage…</div>
+              <div>
+                <div class="rk-simcov-l">Available Variants</div>
+                <div class="rk-simcov-v acc" id="sim-variants">—</div>
+              </div>
             </div>
-            <div class="g1-s-164ce491">
-              <div class="g1-s-910c51e8">Click for breakdown</div>
-              <div id="sim-caret" class="g1-s-f378ee59">&#9654;</div>
-            </div>
+            <div id="sim-sub" class="rk-hd-sub">Loading coverage…</div>
+          </div>
+          <div id="sim-mix" class="rk-simcov-mix"></div>
+          <div class="rk-simcov-hint">
+            <div>Click for breakdown</div>
+            <div id="sim-caret">&#9654;</div>
           </div>
         </div>
         <div id="sim-cov-detail" class="is-hidden g1-s-20ce54f7">
@@ -809,17 +810,12 @@
               <h2>Users &amp; roles <span id="users-cnt" class="cnt">0</span></h2>
               <button class="btn btn-outline-green btn-sm" data-on-click="openCreateUser">+ New User</button>
             </div>
+            <div id="users-insights"></div>
             <div class="tbl-wrap">
               <table>
                 <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Created</th><th>Last Login</th><th>Actions</th></tr></thead>
                 <tbody id="users-body"><tr><td colspan="6" class="empty">Loading...</td></tr></tbody>
               </table>
-            </div>
-            <div class="conn-cfg-card g1-s-5012029f">
-              <div class="g1-s-68ba3aaa">Role permissions</div>
-              <div class="conn-cfg-row"><span class="conn-cfg-label">Admin</span><span class="conn-cfg-val tiny muted">Full access — manage users, agents, settings; run anything</span></div>
-              <div class="conn-cfg-row"><span class="conn-cfg-label">Analyst</span><span class="conn-cfg-val tiny muted">Launch runs &amp; campaigns, triage findings, author scenarios</span></div>
-              <div class="conn-cfg-row"><span class="conn-cfg-label">Viewer</span><span class="conn-cfg-val tiny muted">Read-only access to results, coverage &amp; reports</span></div>
             </div>
           </div>
 
@@ -831,6 +827,7 @@
             <h2>Caldera Engine</h2>
             <button class="btn btn-outline btn-sm" data-on-click="loadCalderaStatus" id="caldera-check-btn">Check Now</button>
           </div>
+          <div id="caldera-insights"></div>
           <div class="conn-cfg-card" id="caldera-status-card">
             <div class="conn-cfg-row">
               <span class="conn-cfg-label">Status</span>
@@ -866,6 +863,7 @@
             <h2>Threat Intel Connector</h2>
             <button class="btn btn-outline btn-sm" data-on-click="triggerConnectorSync" id="connector-sync-btn">Sync Now</button>
           </div>
+          <div id="intel-insights"></div>
           <div class="conn-cfg-card" id="execution-policy-card">
             <div class="g1-s-2efe2454">Execution policy (installation default)</div>
             <div id="execution-policy-panel"></div>
@@ -1011,6 +1009,7 @@
               <button class="btn btn-primary btn-sm g1-s-b5fa1dcd" data-on-click="reseedART" id="art-reseed-btn">Reseed from Pack</button>
             </div>
           </div>
+          <div id="art-insights"></div>
           <div class="conn-cfg-card" id="art-content-card">
             <div class="conn-cfg-row">
               <span class="conn-cfg-label">Status</span>
@@ -1101,6 +1100,7 @@
                 <button class="btn btn-outline btn-sm" data-on-click="exportAuditLogs">&#8659; Export CSV</button>
               </div>
             </div>
+            <div id="audit-insights"></div>
             <div class="tbl-wrap">
               <table>
                 <thead>
@@ -1208,6 +1208,7 @@
               <h2>License</h2>
               <button class="btn btn-outline btn-sm" data-on-click="loadLicenseInfo">&#x21bb; Refresh</button>
             </div>
+            <div id="license-insights"></div>
             <div id="license-card-wrap">
               <div class="empty g1-s-be6df18e">Loading…</div>
             </div>
@@ -1226,6 +1227,7 @@
               the app never touches the database dump or server files directly. Restore is host-only
               by design and cannot be triggered from this page.
             </div>
+            <div id="backup-insights"></div>
             <div id="backup-status-card-wrap" class="g1-s-20ce54f7">
               <div class="empty g1-s-be6df18e">Loading…</div>
             </div>
@@ -1258,6 +1260,7 @@
       <div id="tab-profile" class="is-hidden">
         <div id="hero-profile"></div>
 
+        <div class="rk-grid g2">
         <div class="conn-cfg-card g1-s-a8e567d9">
           <div class="g1-display-flex g1-s-f769ee49">
             <div class="user-avatar g1-s-92141dba" id="profile-avatar"></div>
@@ -1279,6 +1282,7 @@
           <div class="g1-s-5ec12015">
             <button class="btn btn-outline btn-sm" data-on-click="openChangePassword">Change Password</button>
           </div>
+        </div>
         </div>
 
         <div class="conn-cfg-card g1-s-a8e567d9">
@@ -1466,6 +1470,11 @@
       <!-- Runs -->
       <div id="tab-runs" class="is-hidden">
         <div id="hero-runs"></div>
+        <div id="runs-summary"></div>
+        <div class="rk-filters">
+          <label class="rk-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="runs-search" placeholder="Filter runs by name, agent or status" data-on-input="filterRuns"></label>
+          <span id="runs-seg"></span>
+        </div>
         <div class="tbl-wrap">
           <table>
             <thead><tr>
@@ -1518,6 +1527,7 @@
           </div>
         </div>
 
+        <div id="k8s-summary"></div>
         <div id="k8s-runs" class="tbl-wrap"></div>
 
         <div class="card k8s-card">
@@ -1528,13 +1538,15 @@
             <label class="tiny muted k8s-an-toggle"><input type="checkbox" id="k8s-an-system"> Show built-in system: roles</label>
             <button class="btn btn-primary btn-sm" data-k8s-analysis-run="1">Run analysis</button>
           </div>
-          <div id="k8s-an-kpis" class="kpi-row"></div>
+          <div id="k8s-an-kpis"></div>
           <div id="k8s-an-body"></div>
         </div>
       </div>
 
       <div id="tab-scheduled-assessments" class="is-hidden">
         <div id="hero-scheduled"></div>
+        <div id="sched-summary"></div>
+        <div class="rg2-tabs-row"><div id="sched-filter"></div></div>
         <div class="tbl-wrap">
           <table>
             <thead><tr>
@@ -1551,6 +1563,7 @@
       <!-- Initiatives -->
       <div id="tab-initiatives" class="is-hidden">
         <div id="hero-initiatives"></div>
+        <div id="init-summary"></div>
         <div class="tbl-wrap">
           <table>
             <thead><tr>
@@ -1566,18 +1579,18 @@
       <!-- Factory Health -->
       <div id="tab-factory-health" class="is-hidden">
         <div id="hero-factory"></div>
-        <div id="factory-health-tiles" class="kpi-row"></div>
+        <div id="factory-health-tiles"></div>
         <div id="factory-health-ingestion"></div>
-        <div id="factory-health-funnel" class="kpi-row"></div>
+        <div id="factory-health-funnel"></div>
         <div id="factory-health-dataquality"></div>
-        <div id="factory-health-threats-trend"></div>
-        <div id="factory-health-tcv-trend"></div>
+        <div class="rk-grid g2"><div id="factory-health-threats-trend"></div><div id="factory-health-tcv-trend"></div></div>
       </div>
 
       <!-- Campaigns -->
       <div id="tab-campaigns" class="is-hidden">
         <div id="campaigns-list">
           <div id="hero-campaigns"></div>
+          <div id="campaign-summary"></div>
           <div id="campaign-toolbar" class="g1-s-462c8de6"></div>
           <div class="tbl-wrap">
             <table>
@@ -1591,135 +1604,69 @@
 
       <!-- Active Directory Coverage -->
       <div id="tab-ad-coverage" class="is-hidden">
-        <div class="dash-panel">
-          <div class="dash-panel-hdr g1-display-flex">
-            <span>Active Directory Coverage &amp; Assessment</span>
-            <div class="u-flex1"></div>
+        <div class="rg2-sec first">
+          <div><h2>Active Directory Coverage &amp; Assessment</h2><p>Per-capability record across five independent axes. Nothing here is executed by the view.</p></div>
+          <div class="rg2-sec-actions">
             <button class="btn btn-outline btn-sm" data-on-click="exportADReportPDF" title="Download the enterprise assessment report (PDF)">Export PDF</button>
             <button class="btn btn-outline btn-sm" data-on-click="exportADReportJSON" title="Download the assessment data (JSON)">JSON</button>
             <button class="btn btn-outline btn-sm" data-on-click="loadADCoverage">Refresh</button>
           </div>
-          <div class="dash-panel-body">
-            <div id="adc-disclaimer"></div>
-            <div id="adc-summary" class="g1-display-grid g1-s-45a0dd65"></div>
-            <div id="adc-inventory-note"></div>
-            <div id="adc-filters" class="u-mt-06"></div>
-            <div id="adc-list" class="u-mt-06"><div class="empty">Loading AD coverage…</div></div>
-            <div id="adc-foot" class="u-muted u-mt-06"></div>
-          </div>
         </div>
+        <div id="adc-disclaimer"></div>
+        <div id="adc-summary"></div>
+        <div id="adc-inventory-note"></div>
+        <div id="adc-filters" class="u-mt-06"></div>
+        <div id="adc-list" class="u-mt-06"><div class="rk-empty">Loading AD coverage…</div></div>
+        <div id="adc-foot" class="u-muted u-mt-06"></div>
       </div>
 
       <!-- ATT&CK Coverage -->
       <div id="tab-coverage" class="is-hidden">
 
-        <!-- Phase 6: Coverage Analytics panel -->
-        <div class="dash-panel g1-s-20ce54f7">
-          <div class="dash-panel-hdr g1-display-flex g1-s-f4e01574">
-            <span>Coverage Analytics</span>
-            <div class="g1-display-flex g1-s-377dd6f6">
-              <select id="ca-scenario" data-on-change="loadCoverageAnalytics" class="g1-s-220ee6e8">
+        <section class="rk-card" id="ca-panel">
+          <header class="rk-hd">
+            <h2>Coverage Analytics</h2><span class="rk-hd-sub">Most recent 50 runs</span>
+            <div class="rk-hd-actions">
+              <select id="ca-scenario" data-on-change="loadCoverageAnalytics">
                 <option value="">All scenarios</option>
               </select>
-              <select id="ca-agent" data-on-change="loadCoverageAnalytics" class="g1-s-220ee6e8">
+              <select id="ca-agent" data-on-change="loadCoverageAnalytics">
                 <option value="">All agents</option>
               </select>
               <button class="btn btn-outline btn-sm" data-on-click="loadCoverageAnalytics">Refresh</button>
             </div>
-          </div>
-          <div class="dash-panel-body g1-s-500f2f76">
-            <!-- 4-metric scorecards -->
-            <div id="ca-cards" class="g1-display-grid g1-s-45a0dd65">
-              <div class="ca-card"><div class="ca-label">Techniques Attempted</div><div class="ca-val" id="ca-attempted">—</div><div class="ca-sub" id="ca-runs">0 runs</div></div>
-              <div class="ca-card ca-card-ok"><div class="ca-label">Prevented</div><div class="ca-val ca-val-ok" id="ca-prevented">—</div><div class="ca-sub" id="ca-prev-pct">Control blocked execution</div></div>
-              <div class="ca-card ca-card-warn"><div class="ca-label">Detected Only</div><div class="ca-val ca-val-warn" id="ca-detected">—</div><div class="ca-sub">EDR/SIEM alerted — not blocked</div></div>
-              <div class="ca-card ca-card-err"><div class="ca-label">Missed</div><div class="ca-val ca-val-err" id="ca-missed">—</div><div class="ca-sub">No prevention, no detection</div></div>
-            </div>
-            <!-- Rate bars -->
-            <div class="g1-display-grid g1-s-abb87e78" id="ca-rates">
-              <div>
-                <div class="g1-display-flex g1-s-b2273fb2"><span class="u-muted">Prevention Rate</span><span id="ca-prev-rate" class="g1-s-0791b50e">—</span></div>
-                <div class="g1-s-4cbebd5d"><div id="ca-prev-bar" class="g1-s-54f9b5f2"></div></div>
-              </div>
-              <div>
-                <div class="g1-display-flex g1-s-b2273fb2"><span class="u-muted">Detection Coverage</span><span id="ca-det-rate" class="g1-s-dae4bea2">—</span></div>
-                <div class="g1-s-4cbebd5d"><div id="ca-det-bar" class="g1-s-afe50bf5"></div></div>
-              </div>
-            </div>
-            <!-- By-tactic table + Missed techniques side-by-side -->
-            <div class="g1-display-grid g1-s-2d31823f" id="ca-detail">
-              <div>
-                <div class="g1-s-239490c1">By Tactic</div>
-                <div class="tbl-wrap"><table id="ca-tactic-tbl" class="g1-s-8e87c9b5">
-                  <thead><tr><th>Tactic</th><th class="u-center">Prevented</th><th class="u-center">Detected</th><th class="g1-s-6b19cf1c">Missed</th></tr></thead>
-                  <tbody id="ca-tactic-body"><tr><td colspan="4" class="empty">No data</td></tr></tbody>
-                </table></div>
-              </div>
-              <div>
-                <div class="g1-s-239490c1">Missed Techniques — prioritize these</div>
-                <div class="tbl-wrap"><table id="ca-missed-tbl" class="g1-s-8e87c9b5">
-                  <thead><tr><th>Technique</th><th>Name</th><th class="u-center">Runs</th></tr></thead>
-                  <tbody id="ca-missed-body"><tr><td colspan="3" class="empty">No gaps</td></tr></tbody>
-                </table></div>
-              </div>
-            </div>
-            <div id="ca-empty" class="is-hidden g1-s-55ca7498">No completed runs yet — run a scenario or adversary template to generate analytics.</div>
-          </div>
-        </div>
+          </header>
+          <div id="ca-root"><div class="rk-empty">Loading analytics…</div></div>
+        </section>
 
-        <!-- Phase 3: Privilege Tier Coverage panel -->
-        <div class="dash-panel g1-s-20ce54f7" id="priv-cov-panel">
-          <div class="dash-panel-hdr"><span>Privilege Tier Coverage</span><span class="g1-s-e51019bf">Prevention rates by execution context — last 50 runs</span></div>
-          <div class="dash-panel-body g1-s-500f2f76">
-            <div id="priv-cov-empty" class="g1-s-63f52bb9">No privilege-annotated runs yet. Annotate scenario steps with requires_priv to enable tier tracking.</div>
-            <div id="priv-cov-content" class="is-hidden">
-              <!-- Tier scorecards -->
-              <div id="priv-tier-cards" class="g1-display-grid g1-s-45a0dd65"></div>
-              <!-- Gap table + tier detail side by side -->
-              <div class="g1-display-grid g1-s-2d31823f">
-                <div>
-                  <div class="g1-s-239490c1">Prevention by Tier</div>
-                  <div class="tbl-wrap"><table id="priv-tier-tbl" class="g1-s-8e87c9b5">
-                    <thead><tr><th>Tier</th><th class="u-center">Attempted</th><th class="u-center">Prevented</th><th class="g1-s-6b19cf1c">Missed</th><th class="u-center">Rate</th></tr></thead>
-                    <tbody id="priv-tier-body"><tr><td colspan="5" class="empty">No data</td></tr></tbody>
-                  </table></div>
-                </div>
-                <div>
-                  <div class="g1-s-239490c1">Privilege Coverage Gaps — tested elevated only</div>
-                  <div class="tbl-wrap"><table id="priv-gap-tbl" class="g1-s-8e87c9b5">
-                    <thead><tr><th>Technique</th><th>Name</th><th>Tested at</th></tr></thead>
-                    <tbody id="priv-gap-body"><tr><td colspan="3" class="empty u-success">✓ All techniques tested at user tier</td></tr></tbody>
-                  </table></div>
-                  <div class="g1-s-547256f5">Gaps = techniques never run as a standard user. Run these at user tier to validate controls aren't solely relying on privilege barriers.</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <section class="rk-card" id="priv-cov-panel">
+          <header class="rk-hd"><h2>Privilege Tier Coverage</h2><span class="rk-hd-sub">Prevention rates by execution context, last 50 runs</span></header>
+          <div id="priv-root"><div class="rk-empty">Loading…</div></div>
+        </section>
 
-        <div class="g1-display-flex g1-s-21cf47f4">
+        <div class="rg2-sec">
           <div>
-            <h1 class="g1-s-f7a002ca">MITRE ATT&amp;CK Coverage</h1>
-            <div class="g1-s-2134bc46">Enterprise matrix coloured by your validated control effectiveness — last result per technique, not theoretical inventory.</div>
+            <h2>MITRE ATT&amp;CK Coverage</h2>
+            <p>Enterprise matrix coloured by your validated control effectiveness. Last result per technique, not theoretical inventory.</p>
           </div>
-          <div class="g1-display-flex g1-s-993532d2">
-            <button class="btn btn-outline btn-sm g1-s-ddf6ed84" disabled title="ATT&amp;CK Navigator export — coming soon">Export layer · soon</button>
+          <div class="rg2-sec-actions">
+            <button class="btn btn-outline btn-sm" disabled title="ATT&amp;CK Navigator export — coming soon">Export layer · soon</button>
             <button class="btn btn-primary btn-sm" data-on-click="openModal">&#9654; Test coverage gaps</button>
           </div>
         </div>
-        <div id="cov-toolbar" class="g1-display-flex g1-s-32c4be11"></div>
-        <div class="dash-panel"><div class="dash-panel-body g1-s-a477266e" id="cov-matrix"><div class="empty g1-s-be6df18e">Loading matrix…</div></div></div>
-        <div class="tiny muted g1-s-3d340acf" id="cov-foot"></div>
+        <div id="cov-toolbar" class="rg2-toolbar"></div>
+        <section class="rk-card"><div class="rg2-matrix" id="cov-matrix"><div class="rk-empty">Loading matrix…</div></div></section>
+        <div class="rg2-foot" id="cov-foot"></div>
 
         <!-- Live Threat Coverage — assembled from the real threat-intel pipeline, not the static ATT&CK dataset above. -->
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin:1.75rem 0 1rem;flex-wrap:wrap">
+        <div class="rg2-sec">
           <div>
-            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Live Threat Coverage</h1>
-            <div style="font-size:0.8rem;color:var(--muted)">Threats currently tracked by your intelligence sources, and whether validated, executable content exists for them.</div>
+            <h2>Live Threat Coverage</h2>
+            <p>Threats currently tracked by your intelligence sources, and whether validated, executable content exists for them.</p>
           </div>
         </div>
-        <div class="dash-panel"><div class="dash-panel-body" id="lte-body" style="padding:0.75rem"><div class="empty" style="padding:2rem">Loading…</div></div></div>
-        <div class="tiny muted" id="lte-foot" style="margin-top:0.75rem"></div>
+        <div id="lte-body"><div class="rk-empty">Loading…</div></div>
+        <div class="rg2-foot" id="lte-foot"></div>
 
         <!-- Unified Technique Library — deduplicated view across all execution sources -->
         <div class="dash-panel g1-s-5012029f">
@@ -2091,7 +2038,14 @@
       <!-- Exposure Explorer -->
       <div id="tab-exposure" class="is-hidden">
         <div id="hero-exposure"></div>
-        <div class="tbl-wrap">
+        <div id="exp-summary"></div>
+        <div class="rk-filters">
+          <label class="rk-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="exp-search" placeholder="Search hosts, crown-jewel tags..." data-on-input="onExposureSearch"></label>
+          <span id="exp-seg"></span>
+          <span class="g4-count" id="exp-count"></span>
+        </div>
+        <div class="rk-card flush">
+          <div class="tbl-wrap">
           <table>
             <thead>
               <tr>
@@ -2101,12 +2055,15 @@
             </thead>
             <tbody id="exp-table-body"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
           </table>
+          </div>
         </div>
       </div>
 
       <!-- Recommendations -->
       <div id="tab-recommendations" class="is-hidden">
         <div id="hero-recommendations"></div>
+        <div id="rec-summary"></div>
+        <div class="rk-card flush">
         <div class="tbl-wrap">
           <table>
             <thead>
@@ -2118,28 +2075,34 @@
             <tbody id="rec-table-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
           </table>
         </div>
+        </div>
       </div>
 
       <!-- Findings -->
-      <div id="tab-findings" class="is-hidden">
+      <div id="tab-findings" class="is-hidden g3-page">
         <div id="hero-findings"></div>
-        <div class="kpi-row" id="findings-tiles"></div>
-        <div id="findings-toolbar" class="g1-s-462c8de6"></div>
+        <div class="rk-grid g5" id="findings-tiles"></div>
+        <div id="findings-insights"></div>
+        <div id="findings-toolbar"></div>
+        <div class="rk-card flush">
+          <header class="rk-hd"><h2>Findings</h2><span class="rk-hd-sub" id="findings-count"></span></header>
         <div class="tbl-wrap">
           <table>
             <thead><tr><th id="findings-th-check" class="is-hidden g1-s-99c58a15"><input type="checkbox" id="findings-chk-all" data-on-change="toggleAllFindingChecksFromChecked" class="u-pointer"></th><th>Finding</th><th>Technique</th><th>Severity</th><th>Control</th><th>Agent</th><th>Status</th><th>Age</th><th id="findings-th-ticket" class="is-hidden">Ticket</th><th id="findings-th-triage" class="is-hidden"></th></tr></thead>
             <tbody id="findings-body"><tr><td colspan="10" class="empty">No findings yet.</td></tr></tbody>
           </table>
         </div>
+        </div>
       </div>
 
       <!-- IOC Registry -->
-      <div id="tab-iocs" class="is-hidden">
+      <div id="tab-iocs" class="is-hidden g3-page">
         <div id="hero-iocs"></div>
 
-        <div class="kpi-row u-mb-1" id="ioc-analytics-tiles"></div>
+        <div id="ioc-analytics-tiles"></div>
+        <div id="ioc-insights"></div>
 
-        <div id="ioc-toolbar" class="g1-display-flex g1-s-24f39f56">
+        <div id="ioc-toolbar" class="rk-filters">
           <select id="ioc-filter-type" data-on-change="loadIOCRegistry" class="g1-s-d41e6472">
             <option value="">All types</option>
             <option value="file_hash">File hash</option>
@@ -2195,11 +2158,14 @@
           </label>
         </div>
 
+        <div class="rk-card flush">
+          <header class="rk-hd"><h2>Indicators</h2><span class="rk-hd-sub" id="ioc-count"></span></header>
         <div class="tbl-wrap">
           <table>
             <thead><tr><th>Type</th><th>Value</th><th>Source</th><th>Origin</th><th>Status</th><th>Sightings</th><th>First Seen</th><th>Last Seen</th><th></th></tr></thead>
             <tbody id="ioc-registry-body"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
           </table>
+        </div>
         </div>
       </div>
 
@@ -2219,48 +2185,57 @@
       </div>
 
       <!-- Remediation -->
-      <div id="tab-remediation" class="is-hidden">
+      <div id="tab-remediation" class="is-hidden g3-page">
         <div id="hero-remediation"></div>
-        <div class="kpi-row" id="rem-tiles"></div>
+        <div class="rk-grid g4" id="rem-tiles"></div>
+        <div id="rem-insights"></div>
+        <div id="rem-toolbar"></div>
         <div id="rem-list"><div class="empty g1-s-be6df18e">Loading…</div></div>
       </div>
 
       <!-- Reports -->
-      <div id="tab-verification" class="is-hidden">
+      <div id="tab-verification" class="is-hidden g3-page">
         <div id="hero-verification"></div>
 
-        <div class="g1-display-flex g1-s-90850d7f">
+        <div class="rk-filters">
           <select id="vf-run" data-on-change="vfLoadQueue" class="g1-s-8ce8e97e">
             <option value="">Select a run…</option>
           </select>
-          <div id="vf-domain-chips" class="g1-display-flex g1-s-2a39a69c"></div>
+          <div id="vf-domain-chips"></div>
           <div class="u-flex1"></div>
-          <span id="vf-summary" class="g1-s-6bbebbc3"></span>
+          <span id="vf-summary" class="rk-hd-sub"></span>
         </div>
 
-        <div id="vf-queue" class="g1-s-ce7a5d4e">
-          <div class="empty g1-s-4849a9b7">Select a run to load its pending verifications.</div>
+        <div id="vf-queue">
+          <div class="rk-card"><div class="rk-empty"><b>Select a run</b><div>Pick a run above to load its pending verifications.</div></div></div>
         </div>
       </div>
 
-      <div id="tab-reports" class="is-hidden">
+      <div id="tab-reports" class="is-hidden g3-page">
         <div id="hero-reports"></div>
-        <div class="dash-grid g1-s-574c7653">
-          <div class="dash-panel u-pointer" data-on-click="openReportGen" data-args="[&quot;posture&quot;]"><div class="dash-panel-body"><div class="kpi-label">Posture report</div><div class="g1-s-a4c2a7d4">Full per-agent posture</div><div class="tiny muted">Prevention, detection, kill-chain — HTML report</div></div></div>
-          <div class="dash-panel u-pointer" data-on-click="openReportGen" data-args="[&quot;audit&quot;]"><div class="dash-panel-body"><div class="kpi-label">Audit pack</div><div class="g1-s-a4c2a7d4">Evidence bundle</div><div class="tiny muted">Per-agent audit-ready package</div></div></div>
-          <div class="dash-panel u-pointer" data-on-click="showTab" data-args="[&quot;compliance&quot;]"><div class="dash-panel-body"><div class="kpi-label">Compliance evidence</div><div class="g1-s-a4c2a7d4">Framework mapping</div><div class="tiny muted">SEBI/RBI/IRDAI/CERT-In/ISO/NIST — view on-screen, export JSON/CSV</div></div></div>
-          <div class="dash-panel u-pointer" data-on-click="showTab" data-args="[&quot;sla-report&quot;]"><div class="dash-panel-body"><div class="kpi-label">SLA Compliance</div><div class="g1-s-a4c2a7d4">Fleet SLA report</div><div class="tiny muted">On-time resolution rate by severity, trend, recent history</div></div></div>
+        <div class="rk-tabs g3-subtabs" role="tablist">
+          <button type="button" role="tab" class="on" aria-selected="true">Reports</button>
+          <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;compliance&quot;]">Compliance report</button>
+          <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;sla-report&quot;]">SLA compliance</button>
         </div>
-        <div class="rep-shdr">Available reports — by agent</div>
-        <div id="rep-available"><div class="empty g1-s-decac807">Loading…</div></div>
-
-        <div class="rep-shdr g1-s-80dfcf91">Recent report history</div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr><th>Report</th><th>Scope</th><th>Format</th><th>Generated by</th><th>Generated</th><th>Status</th><th></th></tr></thead>
-            <tbody id="reports-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
-          </table>
+        <div class="rk-grid g4">
+          <button type="button" class="g3-launch" data-on-click="openReportGen" data-args="[&quot;posture&quot;]"><span class="rk-kpi-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg></span><span><b>Posture report</b><span class="d">Full per-agent posture: prevention, detection and kill-chain as an HTML report.</span></span></button>
+          <button type="button" class="g3-launch" data-on-click="openReportGen" data-args="[&quot;audit&quot;]"><span class="rk-kpi-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4"/></svg></span><span><b>Audit pack</b><span class="d">Evidence bundle: a per-agent, audit-ready package.</span></span></button>
+          <button type="button" class="g3-launch" data-on-click="showTab" data-args="[&quot;compliance&quot;]"><span class="rk-kpi-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg></span><span><b>Compliance evidence</b><span class="d">SEBI, RBI, IRDAI, CERT-In, ISO and NIST mapping. View on screen, export JSON or CSV.</span></span></button>
+          <button type="button" class="g3-launch" data-on-click="showTab" data-args="[&quot;sla-report&quot;]"><span class="rk-kpi-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></span><span><b>SLA compliance</b><span class="d">On-time resolution rate by severity, monthly trend and recent history.</span></span></button>
         </div>
+        <div id="rep-insights"></div>
+        <section class="rk-card flush"><header class="rk-hd"><h2>Available reports</h2><span class="rk-hd-sub">by agent</span></header>
+          <div id="rep-available"><div class="empty g1-s-decac807">Loading…</div></div>
+        </section>
+        <section class="rk-card flush"><header class="rk-hd"><h2>Recent report history</h2><span class="rk-hd-sub" id="reports-count"></span></header>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Report</th><th>Scope</th><th>Format</th><th>Generated by</th><th>Generated</th><th>Status</th><th></th></tr></thead>
+              <tbody id="reports-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
       </div>
 
       <!-- Integrations (admin only — ITSM connector management) -->
@@ -2268,6 +2243,7 @@
         <div id="hero-integrations"></div>
 
         <!-- Connector list -->
+        <div id="integrations-insights"></div>
         <div id="integrations-list"><div class="empty g1-s-be6df18e">Loading connectors…</div></div>
 
         <!-- Add / Edit connector drawer (inline form) -->
@@ -2422,6 +2398,7 @@
 
       <div id="tab-exercises" class="is-hidden">
         <div id="hero-exercises"></div>
+        <div id="ex-summary"></div>
         <!-- OpenAEV Scenarios — synced content library, feeds "Create Exercise Plan" below -->
         <div class="card g1-s-f9a62d25">
           <div class="card-title">OpenAEV Scenarios</div>
@@ -2467,6 +2444,7 @@
 
       <div id="tab-attack-coverage" class="is-hidden">
         <div id="hero-attack-coverage"></div>
+        <div id="cov-summary"></div>
         <div class="card g1-s-f9a62d25">
           <div class="card-title">Technique Coverage</div>
           <div class="g1-display-flex g1-s-de1b2a08">
@@ -2474,6 +2452,7 @@
             <select id="cov-actor-select" data-on-change="loadCoverageMatrix">
               <option value="">All techniques</option>
             </select>
+            <span id="cov-seg"></span>
           </div>
           <div class="tbl-wrap">
             <table>
@@ -2498,8 +2477,10 @@
       <div id="tab-threat-priority" class="is-hidden">
         <div id="hero-threat-priority"></div>
         <div id="tp-list-view">
+          <div id="tp-summary"></div>
           <div class="card g1-s-f9a62d25">
             <div class="card-title">Threat Prioritization</div>
+            <div class="rk-filters"><span id="tp-seg"></span></div>
             <div class="tbl-wrap">
               <table>
                 <thead>
@@ -2524,7 +2505,7 @@
           </div>
           <div class="card g1-s-f9a62d25">
             <div class="card-title" id="tp-detail-title">Actor</div>
-            <div id="tp-detail-summary" class="score-grid g1-s-4228808f"></div>
+            <div id="tp-detail-summary"></div>
           </div>
 
           <div class="card g1-s-f9a62d25">
@@ -2566,10 +2547,15 @@
       </div>
 
       <!-- Compliance (reached from the Reports hub) -->
-      <div id="tab-compliance" class="is-hidden">
+      <div id="tab-compliance" class="is-hidden g3-page">
                 <div id="hero-compliance"></div>
+        <div class="rk-tabs g3-subtabs" role="tablist">
+          <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;reports&quot;]">Reports</button>
+          <button type="button" role="tab" class="on" aria-selected="true">Compliance report</button>
+          <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;sla-report&quot;]">SLA compliance</button>
+        </div>
 
-        <div id="cmp-placeholder" class="g1-s-1851fb03">
+        <div id="cmp-placeholder" class="rk-card rk-empty">
           Select an agent and framework, then click Generate.
         </div>
 
@@ -2610,26 +2596,38 @@
       </div>
 
       <!-- ── SLA Compliance Report ─────────────────────────────────────── -->
-      <div id="tab-sla-report" class="is-hidden">
+      <div id="tab-sla-report" class="is-hidden g3-page">
                 <div id="hero-sla"></div>
-        <div id="sla-rpt-empty" class="empty is-hidden g1-s-be6df18e">No SLA data yet.</div>
+        <div class="rk-tabs g3-subtabs" role="tablist">
+          <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;reports&quot;]">Reports</button>
+          <button type="button" role="tab" data-on-click="showTab" data-args="[&quot;compliance&quot;]">Compliance report</button>
+          <button type="button" role="tab" class="on" aria-selected="true">SLA compliance</button>
+        </div>
+        <div id="sla-rpt-empty" class="is-hidden"><div class="rk-card"><div class="rk-empty"><b>No SLA data yet</b><div>SLA episodes appear once findings have been opened and resolved.</div></div></div></div>
         <div id="sla-rpt-body">
-          <div class="kpi-row" id="sla-rpt-kpis"></div>
-          <div class="sec-hdr g1-s-61d4ee40"><h2 class="g1-s-51a7b72a">By Severity</h2></div>
-          <div id="sla-rpt-severity"></div>
-          <div class="sec-hdr g1-s-61d4ee40"><h2 class="g1-s-51a7b72a">Monthly Trend</h2></div>
-          <div class="tbl-wrap">
-            <table>
-              <thead><tr><th>Month</th><th>Resolved</th><th>On-Time</th><th>Compliance Rate</th></tr></thead>
-              <tbody id="sla-rpt-trend-body"></tbody>
-            </table>
+          <div class="rk-grid g4" id="sla-rpt-kpis"></div>
+          <div class="rk-grid g2">
+            <section class="rk-card"><header class="rk-hd"><h2>Compliance by severity</h2></header><div id="sla-rpt-severity"></div></section>
+            <section class="rk-card"><header class="rk-hd"><h2>Episodes by severity</h2></header><div id="sla-rpt-sev-chart"></div></section>
           </div>
-          <div class="sec-hdr g1-s-61d4ee40"><h2 class="g1-s-51a7b72a">Recently Resolved</h2></div>
-          <div class="tbl-wrap">
-            <table>
-              <thead><tr><th>Agent</th><th>Check</th><th>Severity</th><th>Resolved</th><th>Outcome</th></tr></thead>
-              <tbody id="sla-rpt-recent-body"></tbody>
-            </table>
+          <section class="rk-card"><header class="rk-hd"><h2>Monthly compliance trend</h2></header><div id="sla-rpt-trend-chart"></div></section>
+          <div class="rk-grid g2">
+            <section class="rk-card flush"><header class="rk-hd"><h2>Monthly trend</h2></header>
+              <div class="tbl-wrap">
+                <table>
+                  <thead><tr><th>Month</th><th>Resolved</th><th>On-Time</th><th>Compliance Rate</th></tr></thead>
+                  <tbody id="sla-rpt-trend-body"></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="rk-card flush"><header class="rk-hd"><h2>Recently resolved</h2></header>
+              <div class="tbl-wrap">
+                <table>
+                  <thead><tr><th>Agent</th><th>Check</th><th>Severity</th><th>Resolved</th><th>Outcome</th></tr></thead>
+                  <tbody id="sla-rpt-recent-body"></tbody>
+                </table>
+              </div>
+            </section>
           </div>
         </div>
       </div>
@@ -2639,7 +2637,7 @@
         <div id="hero-variants"></div>
 
         <!-- Stats row -->
-        <div id="vex-stats" class="score-grid u-mb-1"></div>
+        <div id="vex-stats"></div>
 
         <!-- Full Sweep banner -->
         <div class="card g1-s-f9a62d25" id="vex-sweep-card">
@@ -2782,29 +2780,18 @@
       <div id="tab-email" class="is-hidden">
         <div id="hero-email"></div>
 
-        <!-- Coverage -->
-        <div class="dash-panel u-mb-1">
-          <div class="dash-panel-hdr"><span>Coverage</span></div>
-          <div class="dash-panel-body" id="email-coverage">
-            <div class="empty">Loading coverage…</div>
-          </div>
-        </div>
+        <div id="email-summary"></div>
 
-        <!-- Metrics (MTTD/MTTR) -->
-        <div class="dash-panel u-mb-1">
-          <div class="dash-panel-hdr"><span>Time-Based Metrics</span></div>
-          <div class="dash-panel-body" id="email-metrics">
-            <div class="empty">Loading metrics…</div>
-          </div>
-        </div>
+        <section class="rk-card">
+          <header class="rk-hd"><h2>Coverage</h2><span class="rk-hd-sub">Email security areas exercised by the scenarios</span></header>
+          <div id="email-coverage"><div class="rk-empty">Loading coverage…</div></div>
+        </section>
 
-        <!-- Scenario catalog -->
-        <div class="dash-panel u-mb-1">
-          <div class="dash-panel-hdr"><span>Scenarios</span></div>
-          <div class="dash-panel-body email-catalog-grid" id="email-catalog-grid">
-            <div class="empty">Loading scenarios…</div>
-          </div>
-        </div>
+        <div class="rg2-sec first"><div><h2>Time-Based Metrics</h2><p>Prevention, detection (MTTD) and response (MTTR) outcomes, lab versus customer environments.</p></div></div>
+        <div id="email-metrics"><div class="rk-empty">Loading metrics…</div></div>
+
+        <div class="rg2-sec"><div><h2>Scenarios</h2><p>Run an individual expectation against the email gateway.</p></div></div>
+        <div id="email-catalog-grid"><div class="rk-empty">Loading scenarios…</div></div>
 
         <!-- Campaigns -->
         <div class="dash-panel u-mb-1">
