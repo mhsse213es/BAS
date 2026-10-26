@@ -257,7 +257,7 @@ export function setEmailCampaignsTab(v) { EMAIL_CAMPAIGNS_TAB = v; loadEmailCamp
 
 function loadEmailCampaigns() {
   apicall('/api/emailgw-campaigns?limit=50').then(function(list) {
-    list = list || [];
+    list = Array.isArray(list) ? list : [];
     renderEmailCampaignToolbar(list);
     var rows = EMAIL_CAMPAIGNS_TAB === 'all' ? list : list.filter(function(c) { return c.status === EMAIL_CAMPAIGNS_TAB; });
     var tb = document.getElementById('email-campaigns-body');
@@ -345,7 +345,7 @@ export function setEmailRunsTab(v) { EMAIL_RUNS_TAB = v; loadEmailRuns(); }
 
 function loadEmailRuns() {
   apicall('/api/emailgw-runs?limit=50').then(function(list) {
-    list = list || [];
+    list = Array.isArray(list) ? list : [];
     renderEmailRunsToolbar(list);
     var rows = EMAIL_RUNS_TAB === 'all' ? list : list.filter(function(r) { return r.status === EMAIL_RUNS_TAB; });
     var tb = document.getElementById('email-runs-body');

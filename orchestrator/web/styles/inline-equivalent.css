@@ -22,7 +22,6 @@
 .g1-s-0461ffe3 { max-width:520px;text-align:center;color:var(--text,#e6e6e6) }
 .g1-s-04e50eda { align-items:center;gap:4px }
 .g1-s-04f181fe { margin-bottom:0.5rem }
-.g1-s-04fbe8f9 { grid-column:1/-1;padding:2rem }
 .g1-s-0550e239 { font-size:1.1rem;color:var(--accent);margin:0;gap:8px }
 .g1-s-057c1db7 { flex-direction:column;gap:0;padding-left:0.1rem }
 .g1-s-06068a98 { grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0.75rem }
@@ -379,7 +378,6 @@
 .g1-s-824141a9 { color:var(--accent);font-size:0.78rem }
 .g1-s-82805d4e { font-family:var(--font-display);font-size:1.05rem;font-weight:600;color:var(--muted) }
 .g1-s-8297411d { color:var(--muted);border-color:var(--muted) }
-.g1-s-82c4416d { grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;width:100% }
 .g1-s-82cece3f { font-family:var(--font-mono) }
 .g1-s-836e23a2 { font-size:1rem;font-weight:700;color:var(--text) }
 .g1-s-83725d2c { flex:1 }
@@ -720,7 +718,6 @@
 .g1-s-f769ee49 { align-items:center;gap:1rem }
 .g1-s-f79155c8 { padding:1rem 1.2rem }
 .g1-s-f7a002ca { font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text) }
-.g1-s-f81b7fcb { margin-top:0.2rem }
 .g1-s-f83fcad9 { color:var(--success) }
 .g1-s-f85dc79d { text-align:center;color:var(--muted);font-size:0.72rem;padding:4px }
 .g1-s-f86334a3 { background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;flex-shrink:0;padding:0;line-height:1 }

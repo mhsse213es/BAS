@@ -6,6 +6,11 @@ var _loaded = false;
 export function loadFactoryHealth() {
   apicall('/api/analytics/factory-health').then(function(r) {
     _loaded = true;
+    if (!r || !r.threatsProcessed || !r.pipeline) {
+      var t = document.getElementById('factory-health-tiles');
+      if (t) t.innerHTML = '<div class="empty">Factory health is not available right now.</div>';
+      return;
+    }
     renderFactoryHealthTiles(r);
     renderFactoryHealthIngestion(r);
     renderFactoryHealthFunnel(r);

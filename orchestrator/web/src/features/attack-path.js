@@ -1697,7 +1697,7 @@ export function buildAgentInstallCommands(origin, host, data) {
   var linuxEnv = 'BAS_SERVER_HOST=' + host + ' BAS_ENROLL_PORT=' + enrollPort + ' BAS_MTLS_PORT=' + mtlsPort + ' BAS_DASHBOARD_PORT=' + dashPort;
   // Every OS gets one line. The CA travels as base64 on that line, so nothing multi-line is pasted
   // into a shell or PowerShell (a heredoc or here-string loses its end marker when pasted).
-  var b64 = caRootPem ? btoa(caRootPem) : '';
+  var b64 = caRootPem ? window.btoa(caRootPem) : '';
 
   var linuxCaCmd = caRootPem
     ? 'echo ' + b64 + ' | base64 -d > deployment-ca.pem'
