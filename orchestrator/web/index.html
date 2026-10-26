@@ -605,6 +605,31 @@
               </div>
             </div>
           </div>
+
+          <div class="conn-cfg-card">
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Enrollment tokens (servers in token mode)</span>
+            </div>
+            <div class="conn-cfg-row">
+              <textarea id="enroll-tok-hosts" rows="4" class="g1-s-99573e36" placeholder="One hostname per line, exactly as the computer reports it (case matters)"></textarea>
+            </div>
+            <div class="conn-cfg-row">
+              <select id="enroll-tok-ttl" class="g1-s-99573e36">
+                <option value="4">Valid 4 hours</option>
+                <option value="24" selected>Valid 24 hours</option>
+                <option value="72">Valid 3 days</option>
+                <option value="168">Valid 7 days</option>
+              </select>
+              <input type="text" id="enroll-tok-note" class="g1-s-99573e36" placeholder="Note (e.g. Q4 rollout)" maxlength="200">
+              <div class="conn-cfg-actions">
+                <button class="btn btn-sm btn-primary" id="enroll-tok-generate" data-on-click="generateEnrollmentTokens">Generate tokens</button>
+                <button class="btn btn-sm btn-outline" data-on-click="downloadEnrollmentTokensCsv">Download CSV</button>
+                <button class="btn btn-sm btn-outline" data-on-click="clearEnrollmentTokens">Clear</button>
+              </div>
+            </div>
+            <div class="conn-cfg-row"><span id="enroll-tok-warning"></span></div>
+            <div id="enroll-tok-results"></div>
+          </div>
         </div>
 
         <!-- Agent Download -->

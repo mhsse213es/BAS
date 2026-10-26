@@ -1,6 +1,7 @@
 import { x } from './core/escape.js';
 import { stopEvent } from './core/actions.js';
 import { closeAdvDrawer, closeAdvRunModal, closeTmplRun, confirmAdversaryRun, confirmTmplRun, loadAdversariesStop, openAdvDrawer, openAdvRunModal, openTmplRun, renderAdvRunWarn, renderAdversaryLibrary, renderTmplOSCompat, setTmplFilter, setTmplTargetMode, tmplGroupChange, tmplRunModeChange, tmplSelAgentChange, toggleAdversarySection } from './features/adversaries.js';
+import { clearEnrollmentTokens, copyEnrollmentToken, downloadEnrollmentTokensCsv, generateEnrollmentTokens } from './features/enroll-tokens.js';
 import { closeReinstateAgentModal, closeRemoveAgentModal, closeRevokeAgentModal, closeStopAgentModal, closeUninstallAgentModal, submitReinstateAgent, submitRemoveAgent, submitRevokeAgent, submitStopAgent, submitUninstallAgent, triggerTicketingSync } from './features/agent-actions.js';
 import { closeAgentDetail, closeAgentDetailOnBackdrop, exportCompliance, filterControls, loadAgtLogs, loadAgtLogsTelemetryMetric, loadComplianceReport, openComplianceDoc, setAgentState, showAgentTab, toggleEvidence, updateLinuxDownloadCmd } from './features/agent-drawer.js';
 import { _apCancelJob, apAssetsClose, apCollectClose, apCollectViewResults, apCountTargets, apDiscoverSubnet, apScheduleClose, approveForLocalUse, approveLocalAckChanged, closeAPAbout, closeApproveLocalModal, closeExposureDetail, closeExposureDetailOnBackdrop, closeGroupPicker, closeScenarioCategoryView, copyRecommendedScenario, copyText, createAgentGroupPrompt, dispatchAPCollect, loadAgents, loadAttackPath, loadCoverageMatrix, loadExecDashboard, loadExposureAssets, loadMoreAgents, loadRecommendations, loadScenarios, manageUsersLink, onAgentSearchInput, openAPAbout, openAPAssets, openAPCollect, openAPSchedule, openAgentGroupMenuStop, openExposureDetail, openModalForScenario, openScenarioCategory, previewScenarioOverlay, renderScenarios, rowMenuAuditPack, rowMenuBoardScorecard, rowMenuDetail, rowMenuMoveGroup, rowMenuNavigator, rowMenuReinstateAgent, rowMenuRemoveAgent, rowMenuReportCsv, rowMenuReportHtml, rowMenuReportJson, rowMenuReportPdf, rowMenuRevokeAgent, rowMenuRunSimulation, rowMenuSafeScan, rowMenuStopAgent, rowMenuUninstallAgent, saveAPAsset, saveAPSchedule, scenarioCategoryKeydown, scenarioPinKeydown, scenarioSearchClear, selectAgentGroup, selectDashPref, selectTheme, setAgentFilter, showAgentDownload, showSettingsSection, showThreatPriorityDetail, showThreatPriorityList, submitApproveLocal, submitGroupPicker, toggleDesc, toggleRowMenuById, toggleScenarioPinFromEvent, toggleScenarioSrcGroup, toggleSecret, unpreviewScenarioOverlay } from './features/attack-path.js';
@@ -140,6 +141,10 @@ export const ACTIONS = {
   connectorProjectSelectChange,
   copyRaw,
   copyRecommendedScenario,
+  clearEnrollmentTokens,
+  copyEnrollmentToken,
+  downloadEnrollmentTokensCsv,
+  generateEnrollmentTokens,
   copyText,
   createAgentGroupPrompt,
   createPlanFromOpenAEV,
