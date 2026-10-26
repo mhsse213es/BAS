@@ -117,7 +117,7 @@ process exit code, so the MSI returns 1603 and the reason is logged. Deployment 
   an administrator's own value is put back. The output ends with *No agent data remains on this computer* or lists
   what could not be removed. Something an administrator put in those folders is left alone and reported. A file
   still in use is deleted at the next restart. To check a computer afterwards, run
-  `packaging\windows-msi	ools\Test-AgentTraces.ps1` (read-only; it lists any service, process, folder, registry
+  `packaging\windows-msi\tools\Test-AgentTraces.ps1` (read-only; it lists any service, process, folder, registry
   key, installed-program entry or pending delete that names the agent).
   Not removed by design: records on the server (the agent's history and audit entries stay in the dashboard).
 * **Remote *Uninstall Agent*** from the dashboard: the agent removes its service and artifacts as before and,
