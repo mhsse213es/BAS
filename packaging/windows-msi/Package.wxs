@@ -72,6 +72,13 @@
         <RegistryValue Root="HKLM" Key="Software\Audspect\Agent" Name="ProductCode" Type="string" Value="[ProductCode]" />
         <RegistryValue Root="HKLM" Key="Software\Audspect\Agent" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
+      <!-- Top-level "Audspect Agent" entry in the Start menu app list: starts the tray icon again if it
+           was closed or crashed (the service also restarts it on its own every 30 seconds). -->
+      <Component Id="TrayShortcut" Guid="*" Directory="ProgramMenuFolder">
+        <Shortcut Id="TrayShortcutLnk" Name="Audspect Agent" Description="Show the Audspect Agent tray icon"
+                  Target="[INSTALLFOLDER]bas_agent.exe" Arguments="--tray" WorkingDirectory="INSTALLFOLDER" Show="minimized" />
+        <RegistryValue Root="HKLM" Key="Software\Audspect\Agent" Name="TrayShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
     </ComponentGroup>
 
     <Feature Id="Main" Title="Audspect Agent" Level="1">

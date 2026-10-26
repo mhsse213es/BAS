@@ -122,6 +122,8 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 	agent.sendHeartbeat("idle")
 
 	ticker := time.NewTicker(heartbeatInterval)
+	trayTicker := time.NewTicker(trayWatchInterval)
+	defer trayTicker.Stop()
 	defer ticker.Stop()
 
 	status <- svc.Status{
@@ -139,6 +141,8 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 		select {
 		case <-ticker.C:
 			agent.sendHeartbeat(agent.getStatus())
+		case <-trayTicker.C:
+			watchTray()
 		case <-stopRequested:
 			// stopSelf (agent.go) already ran finalize/heartbeat/disable before
 			// signaling here — this just performs the clean SCM handshake.
@@ -237,6 +241,12 @@ func svcInstall(serverURL, envLabel, secret, enrollPort string) error {
 
 	_ = eventlog.InstallAsEventCreate(svcName, eventlog.Error|eventlog.Warning|eventlog.Info)
 	fmt.Printf("[+] Service %q installed (LocalSystem, auto-start)\n", svcName)
+	// A Start Menu entry so the tray icon can be brought back by hand.
+	if err := createTrayShortcut(exePath); err != nil {
+		log.Printf("[svc] warning: %v", err)
+	} else {
+		fmt.Printf("[+] Start Menu shortcut \"Audspect Agent\" created\n")
+	}
 
 	// Apply tamper protections — failures are non-fatal (logged, service still starts).
 	if err := ApplyServiceRecovery(); err != nil {

@@ -315,11 +315,25 @@ func launchTrayForActiveSession() {
 		log.Printf("[svc] launch tray: %v", err)
 		return
 	}
-	// Recorded before Release() so startMutatePipeListener's PID check
-	// always compares against the tray process actually spawned here,
-	// never a stale or attacker-supplied value.
-	trayPID.Store(int32(cmd.Process.Pid))
-	_ = cmd.Process.Release() // tray runs independently; we don't wait on it
+	// Wait briefly: a second instance in a session that already has a tray
+	// (for example one started from the HKLM Run key) exits at once on its own
+	// singleton check. Its PID must not replace the PID of the real tray in
+	// trayPID, because startMutatePipeListener's check compares against that
+	// value. Only a process that is still running after the probe window is
+	// recorded, so the value is always a tray this service actually started.
+	pid := int32(cmd.Process.Pid)
+	exited := make(chan struct{})
+	go func() {
+		_ = cmd.Wait() // also reaps the process whenever it ends
+		close(exited)
+	}()
+	select {
+	case <-exited:
+		log.Printf("[svc] launch tray: the new tray exited at once (one is already running in this session)")
+		noteTrayDuplicate(time.Now())
+	case <-time.After(trayProbeWindow):
+		trayPID.Store(pid)
+	}
 }
 
 // patchEnv replaces the first occurrence of key=… in env, or appends if absent.

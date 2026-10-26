@@ -42,6 +42,7 @@ var (
 	trayIsIconic         = trayUser32.NewProc("IsIconic")
 	trayShowWindow       = trayUser32.NewProc("ShowWindow")
 	trayGetModuleHandle  = trayKernel32.NewProc("GetModuleHandleW")
+	trayFreeConsole      = trayKernel32.NewProc("FreeConsole")
 	trayShellNotifyIcon  = trayShell32.NewProc("Shell_NotifyIconW")
 )
 
@@ -165,6 +166,11 @@ var (
 // the native status console (spawned as a separate --status-window process).
 func runTray() {
 	runtime.LockOSThread()
+
+	// bas_agent.exe is a console-subsystem binary. Started from the Start Menu shortcut it gets a console
+	// window, and closing that window would end the tray. The service starts the tray with no console, so
+	// there is nothing to detach there; for a shortcut launch this removes the window straight away.
+	trayFreeConsole.Call()
 
 	if trayAlreadyRunning() {
 		return
