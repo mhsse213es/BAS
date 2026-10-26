@@ -1,0 +1,94 @@
+/* Coverage page: banner button, filter row, analytics blocks, tracked threats, technique library,
+   ATT&CK heatmap and the technique drawer. Mirrors the design demo. Theme tokens only. */
+
+#hero-coverage .hero-actions .btn svg { width: 15px; height: 15px; margin-right: 6px; vertical-align: -3px; flex: none; }
+#hero-coverage .hero-actions .btn { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; font-size: 13px; width: auto; }
+
+.cov-filters { margin: 14px 0; }
+.cov-filters select { height: 36px; margin: 0; min-width: 170px; }
+.cov-filters .btn { height: 36px; width: auto; display: inline-flex; align-items: center; padding: 0 14px; font-size: 13px; }
+.cov-filters .btn:disabled { opacity: .6; cursor: not-allowed; }
+.cov-block { margin-top: 14px; }
+.cov-block > .rk-card, .cov-block .rk-grid > div > .rk-card { margin-bottom: 0; }
+#ca-root > .rk-grid { margin-bottom: 14px; }
+
+/* By tactic beside the rings and the missed list */
+.cov-side { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
+.cov-side > .rk-card { margin-bottom: 0; }
+.cov-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.cov-col > .rk-card { margin-bottom: 0; }
+.cov-rings { display: flex; gap: 20px; justify-content: space-around; flex-wrap: wrap; }
+.cov-ring { text-align: center; }
+.cov-ring-l { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.cov-legend-inline { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted-hi); }
+.cov-legend-inline i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--muted); }
+.cov-legend-inline i.tone-ok, .cov-dot.tone-ok { background: var(--success); }
+.cov-legend-inline i.tone-warn, .cov-dot.tone-warn { background: var(--warning); }
+.cov-legend-inline i.tone-bad, .cov-dot.tone-bad { background: var(--danger); }
+.cov-dot.tone-muted { background: var(--muted); }
+
+/* All-clear panel */
+.cov-ok { text-align: center; padding: 20px 12px; border-radius: 12px; border: 1px dashed color-mix(in srgb, var(--success) 45%, transparent);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--success) 12%, transparent), transparent); }
+.cov-ok svg { width: 26px; height: 26px; color: var(--success); }
+.cov-ok b { display: block; margin: 6px 0 2px; }
+.cov-ok div { font-size: 12.5px; color: var(--muted); }
+
+/* Privilege tiers */
+.cov-tiers { display: flex; gap: 22px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.cov-tier { display: flex; gap: 14px; align-items: center; }
+.cov-tier-l { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-hi); font-weight: 600; }
+.cov-tier-v { font-size: 20px; font-weight: 700; line-height: 1.2; }
+.cov-tier-s { font-size: 12px; }
+.cov-priv .tbl-wrap { margin-top: 0; }
+.cov-priv:not(.flush) .rg2-tbl { margin: 0 -4px; }
+
+/* Tracked threats */
+.cov-thr { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2, var(--surface)); min-width: 0; }
+.cov-thr:hover { border-color: var(--accent-border); }
+.cov-thr-t { flex: 1; min-width: 0; }
+.cov-thr-t b { font-weight: 600; overflow-wrap: anywhere; }
+.cov-thr-t .muted { font-size: 12px; }
+.cov-thr .rk-chip { flex: none; }
+.cov-av { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-weight: 700; font-size: 10.5px; flex: none;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 35%, transparent), color-mix(in srgb, var(--info-text) 18%, transparent));
+  border: 1px solid var(--accent-border); color: var(--accent-hi, var(--accent)); }
+.cov-lead { margin: 0 0 12px; font-size: 12.5px; color: var(--muted); }
+
+/* Unified technique library */
+.cov-utl { margin-top: 14px; }
+.cov-utl-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.cov-utl-bar select, .cov-utl-bar input { height: 32px; margin: 0; }
+.cov-utl-bar input { width: 220px; }
+.cov-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.cov-chip, .pfbtn.cov-chip { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border-hi, var(--border)); background: transparent; color: var(--muted-hi);
+  font-size: 12px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-family: inherit; font-weight: 400; }
+.cov-chip:hover { color: var(--text); }
+.cov-chip.on, .pfbtn.cov-chip.active { background: var(--accent-dim, color-mix(in srgb, var(--accent) 18%, transparent)); border-color: var(--accent-border); color: var(--accent-hi, var(--text)); font-weight: 400; }
+.cov-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.cov-utl-wrap { max-height: 520px; overflow: auto; }
+.cov-utl-wrap thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.cov-n { font-variant-numeric: tabular-nums; color: var(--muted); }
+.cov-n.strong { color: var(--text); font-weight: 700; }
+.cov-row { cursor: pointer; }
+.cov-row:hover { background: var(--row-hover, var(--surface-2)); }
+.cov-utl .rg2-note { padding: 8px 0 0; }
+
+/* Heatmap: the matrix keeps its columns; cells are tinted by the last result */
+.cov-heat { margin-top: 14px; }
+.cov-heat .rk-hd-actions { margin-left: auto; }
+.cov-heat .mx-cell.cov { background: color-mix(in srgb, var(--success) 14%, var(--surface)); }
+.cov-heat .mx-cell.part { background: color-mix(in srgb, var(--warning) 14%, var(--surface)); }
+.cov-heat .mx-cell.gap { background: color-mix(in srgb, var(--danger) 14%, var(--surface)); }
+.cov-heat .mx-cell.none { background: var(--surface); }
+.cov-heat + .rg2-foot { margin-top: 6px; }
+
+/* Technique drawer */
+#cov-drawer-overlay .drawer { width: min(560px, 94vw); }
+.cov-dr-kv { margin-top: 14px; }
+.cov-dr-desc { margin: 14px 0 0; font-size: 13px; line-height: 1.6; color: var(--muted-hi); }
+.cov-dr-link { margin: 14px 0 0; }
+.cov-dr-link a { color: var(--accent); }
+
+@media (max-width: 1000px) { .cov-side { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) { .cov-utl-bar input, .cov-filters select { width: 100%; } }

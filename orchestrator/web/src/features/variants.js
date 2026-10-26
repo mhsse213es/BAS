@@ -10,8 +10,9 @@ import { schedClassifyOS, vexFilterWindowsAgents } from './scheduled.js';
 import { ROLE } from './shell.js';
 import { VEX_POLL_MAX_FAILURES } from './variant-executor.js';
 import { setDisplay } from '../core/inline-style.js';
-import { kpi, grid, bar, chip, empty } from '../core/kit.js';
-import { chartSlot, CHART_COLORS } from '../core/charts.js';
+import { kpi, grid, chip, hbars, empty } from '../core/kit.js';
+import * as M from './var-model.js';
+import { setHeroStat } from './shell-ui.js';
 
 
 // ── Run Variants reload-survival ────────────────────────────────────────────
@@ -547,50 +548,45 @@ export function vexCoverageTotals(rows) {
   return t;
 }
 
+// renderVexHero fills the banner numbers from the coverage rows ([] / null shows em dashes).
+function renderVexHero(rows) {
+  var h = M.heroStats(rows);
+  var dash = function(v) { return v == null ? '—' : v; };
+  setHeroStat('var-hs-techniques', dash(h.techniques));
+  setHeroStat('var-hs-variants', dash(h.variants == null ? null : h.variants.toLocaleString()));
+  setHeroStat('var-hs-prevented', dash(h.prevented));
+  setHeroStat('var-hs-bypassed', dash(h.bypassed == null ? null : h.bypassed.toLocaleString()));
+}
+
 export function loadVariantCoverage() {
   var el = document.getElementById('vex-coverage');
   if (!el) return;
   el.innerHTML = empty('layers', 'Loading…');
   apicall('/api/variants/coverage').then(function(rows) {
     if (!rows || !rows.length) {
+      renderVexHero([]);
       el.innerHTML = empty('layers', 'No variant runs yet', 'Run variants on a technique to see coverage here.');
       return;
     }
-    var t = vexCoverageTotals(rows);
-    var segs = [
-      { label: 'Prevented', value: t.prevented, color: CHART_COLORS.ok },
-      { label: 'Allowed (bypass)', value: t.allowed, color: CHART_COLORS.bad },
-      { label: 'Errors', value: t.errored, color: CHART_COLORS.muted },
-    ].filter(function(g) { return g.value > 0; });
-    var preventedPct = t.tested ? Math.round(t.prevented / t.tested * 100) : 0;
-    var html = grid(4, [
-      kpi({ label: 'Techniques tested', value: t.techniques, icon: 'technique', tone: 'accent' }),
-      kpi({ label: 'Variants tested', value: t.tested.toLocaleString(), icon: 'layers', tone: 'info' }),
-      kpi({ label: 'Prevented', value: t.prevented.toLocaleString(), sub: preventedPct + '% of variants tested', icon: 'ok', tone: 'ok' }),
-      kpi({ label: 'Techniques with a bypass', value: t.bypassed, sub: t.allowed.toLocaleString() + ' variants allowed', icon: 'warn', tone: t.bypassed ? 'bad' : 'muted' }),
-    ]);
-    html += '<div class="rg2-split"><div class="rg2-split-chart">' + chartSlot({ type: 'donut', segments: segs, center: String(t.tested), centerSub: 'variants', legend: true, h: 150 }) + '</div>' +
-      '<div class="tbl-wrap"><table><thead><tr>' +
-      '<th>Technique</th><th>Tactic</th><th>Total</th><th>Prevention</th>' +
-      '<th class="u-danger">Allowed</th>' +
-      '<th class="u-muted">Errors</th>' +
-      '<th>First Bypass</th>' +
+    renderVexHero(rows);
+    var cr = M.coverageRows(rows);
+    var html = '<div class="tbl-wrap"><table><thead><tr>' +
+      '<th>Technique</th><th>Tactic</th><th class="u-center">Total</th><th class="u-center">Prevented</th>' +
+      '<th class="u-center">Allowed</th><th class="u-center">Errors</th><th>First bypass</th>' +
       '</tr></thead><tbody>';
-    rows.forEach(function(row) {
-      var tot = row.totalTested || 0;
-      var pp = tot ? Math.round((row.prevented || 0) / tot * 100) : 0;
-      var fp = row.firstBypass ? chip(row.firstBypass, 'warn') : '<span class="u-success">None</span>';
+    cr.forEach(function(r) {
       html += '<tr>' +
-        '<td><span class="rg2-mono">' + x(row.techniqueId) + '</span></td>' +
-        '<td class="u-muted">' + x(row.tactic || '—') + '</td>' +
-        '<td class="u-center">' + x(tot) + '</td>' +
-        '<td><div class="rg2-rate">' + bar(pp, pp >= 75 ? 'ok' : pp >= 40 ? 'warn' : 'bad') + '<span>' + pp + '%</span></div></td>' +
-        '<td class="u-center"><span class="rg2-num ' + (row.allowed ? 'tone-bad' : 'tone-muted') + '">' + x(row.allowed || 0) + '</span></td>' +
-        '<td class="u-center u-muted">' + x(row.errored || 0) + '</td>' +
-        '<td>' + fp + '</td>' +
+        '<td><span class="rg2-mono">' + x(r.technique) + '</span></td>' +
+        '<td>' + (r.tactic ? chip(r.tactic, 'info') : '<span class="u-muted">—</span>') + '</td>' +
+        '<td class="u-center">' + x(r.total) + '</td>' +
+        '<td class="u-center"><span class="rg2-num tone-ok">' + x(r.prevented) + '</span></td>' +
+        '<td class="u-center"><span class="rg2-num ' + (r.allowed ? 'tone-bad' : 'tone-muted') + '">' + x(r.allowed) + '</span></td>' +
+        '<td class="u-center u-muted">' + x(r.errored) + '</td>' +
+        '<td class="var-first">' + (r.firstBypass ? x(r.firstBypass) : '<span class="u-muted">—</span>') + '</td>' +
         '</tr>';
     });
-    html += '</tbody></table></div></div>';
+    html += '</tbody></table></div><div class="var-prev">' +
+      hbars(cr.map(function(r) { return [r.technique, r.pct, M.preventionTone(r.pct), r.pct + '%']; })) + '</div>';
     el.innerHTML = html;
   }).catch(function(e) {
     el.innerHTML = empty('alert', 'Error loading coverage', e.message || '');

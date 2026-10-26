@@ -1,0 +1,44 @@
+/* AD Coverage page: banner button, warning card with exports, six tiles, family/content chips and the
+   capabilities table. Mirrors the design demo. Theme tokens only. */
+
+#hero-adc .hero-actions .btn svg { width: 15px; height: 15px; margin-right: 6px; vertical-align: -3px; flex: none; }
+#hero-adc .hero-actions .btn { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; font-size: 13px; width: auto; }
+
+#adc-disclaimer, #adc-summary, #adc-filters, #adc-list, #adc-charts { margin-top: 14px; }
+#adc-inventory-note:not(:empty) { margin-top: 10px; font-size: 12px; }
+
+/* Warning card: amber left rule, icon + text, then the export buttons */
+.adc-warn { padding: 14px 16px; border: 1px solid var(--border); border-left: 3px solid var(--warning); border-radius: var(--radius-lg);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--warning) 9%, var(--surface)), var(--surface) 60%); font-size: 13px; line-height: 1.5; color: var(--text); }
+.adc-warn-row { display: flex; gap: 12px; align-items: flex-start; }
+.adc-warn-row > svg { color: var(--warning); flex: none; width: 18px; height: 18px; margin-top: 2px; }
+.adc-warn-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+/* Six summary tiles in one row */
+.adc-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); margin-bottom: 0; }
+@media (max-width: 1100px) { .adc-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .adc-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Filter chips */
+.adc-filters { display: flex; flex-direction: column; gap: 8px; }
+.adc-frow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.adc-flbl { width: 72px; flex: none; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.adc-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.adc-chips .pfbtn { height: 26px; padding: 0 10px; border-radius: 999px; font-size: 12px; }
+
+/* Capabilities table: header row + one expandable row per capability, six columns */
+.adc-table { overflow-x: auto; }
+.adc-head, .adc-cap > summary { display: grid; grid-template-columns: minmax(240px, 2.6fr) repeat(5, minmax(120px, 1fr)); gap: 10px; align-items: center; min-width: 880px; }
+.adc-head { padding: 8px 12px; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+.adc-cap { border-bottom: 1px solid var(--border); }
+.adc-cap:last-child { border-bottom: 0; }
+.adc-cap > summary { padding: 10px 12px; cursor: pointer; list-style: none; }
+.adc-cap > summary::-webkit-details-marker { display: none; }
+.adc-cap > summary:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.adc-cell-cap { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.adc-cell-cap b { font-weight: 600; font-size: 13px; }
+.adc-id { font-family: var(--font-mono, monospace); font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.adc-fam { font-size: 11px; color: var(--muted); }
+.adc-detail { padding: 4px 12px 14px; font-size: 12.5px; }
+.adc-detail ul { margin: 4px 0 0 18px; padding: 0; }
+.adc-detail > div + div { margin-top: 8px; }
