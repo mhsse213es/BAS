@@ -124,7 +124,8 @@ func (c *SettingsController) Test(candidateHost string) (TestOutcome, string) {
 	}
 	outcome, detail, err := c.client.TestServer(candidateHost)
 	if err != nil {
-		return TestOutcomeHostUnreachable, err.Error()
+		// The agent service on this computer did not answer on its local pipe: that is not a verdict on the server.
+		return TestOutcomeHostUnreachable, "The Audspect Agent service on this computer did not answer, so the server was not tested. Restart the service and try again. (" + err.Error() + ")"
 	}
 	return outcome, detail
 }

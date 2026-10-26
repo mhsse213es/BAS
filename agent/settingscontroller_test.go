@@ -2,7 +2,11 @@
 
 package main
 
-import "testing"
+import (
+	"errors"
+	"strings"
+	"testing"
+)
 
 type fakeSettingsMutateClient struct {
 	testServerCalled bool
@@ -81,5 +85,23 @@ func TestSettingsController_ConfirmSave_HostChangedSinceRequest_DoesNotCommitSta
 	}
 	if detail == "" {
 		t.Fatal("expected a non-empty detail explaining why nothing was saved")
+	}
+}
+
+// A local problem (the agent service not answering on its pipe) must not be presented as the server being unreachable.
+type failingClient struct{ fakeSettingsMutateClient }
+
+func (f *failingClient) TestServer(host string) (TestOutcome, string, error) {
+	return "", "", errors.New("connect to agent: context deadline exceeded")
+}
+
+func TestSettingsTest_ALocalAgentFailureIsNotBlamedOnTheServer(t *testing.T) {
+	c := NewSettingsController(&failingClient{})
+	_, detail := c.Test("https://192.168.10.78:9443")
+	if !strings.Contains(detail, "service on this computer") {
+		t.Errorf("detail = %q, want it to say the agent service on this computer did not answer", detail)
+	}
+	if strings.Contains(detail, "server could not be reached") {
+		t.Errorf("detail = %q must not claim the server was unreachable", detail)
 	}
 }
