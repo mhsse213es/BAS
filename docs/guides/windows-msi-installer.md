@@ -47,6 +47,17 @@ connection, Ready, Progress, Finish.
 the secret is accepted. It installs nothing. **Next** is disabled until it passes. Advanced users can set
 `SKIPPREFLIGHT=1`.
 
+## One-prompt install (the normal way)
+
+Download the Windows bundle from **Agents > Deploy Agent**, extract it, and double-click `AudspectAgent-x64.msi`.
+The bundle carries `deployment.json` and `deployment.fingerprint` beside the MSI, so the wizard asks for the agent secret
+and nothing else (Next, secret, Install). If the server issues enrolment tokens it also asks for the token for that
+computer; otherwise there is no token field. Keep the three files together. If `deployment.fingerprint` is missing or
+malformed, the wizard falls back to asking for the configuration file and fingerprint, as before.
+
+Trust: the download from your authenticated dashboard is the trust anchor, as with other endpoint agents. The
+fingerprint is still verified against `deployment.json`'s signature, and you can compare it with the one shown in the dashboard.
+
 ## Silent install
 
 From an elevated prompt, either run `install.cmd` (prompts for the confirmation and the secret), or script it:

@@ -239,4 +239,30 @@ public class InstallLogicTests
     [Fact]
     public void ConfigPathWithNothingToGoOnStaysEmptyAndFailsValidationLater()
         => Assert.Equal("", InstallLogic.ResolveConfigPath("", ""));
+
+    // One-prompt install: the fingerprint arrives in a file beside the MSI (written by the server that built the
+    // bundle), so the person installing is asked for the agent secret only.
+    const string Msi = @"C:\agent\AudspectAgent-x64.msi";
+
+    [Fact]
+    public void BundledFingerprintIsReadFromBesideTheMsi()
+        => Assert.Equal(Fp, InstallLogic.ReadBundledFingerprint(Msi, p => p == @"C:\agent\deployment.fingerprint", p => "  " + Fp.ToUpperInvariant() + "\r\n"));
+
+    [Fact]
+    public void NoBundledFingerprintFileMeansTheWizardKeepsAskingForIt()
+        => Assert.Null(InstallLogic.ReadBundledFingerprint(Msi, _ => false, _ => throw new InvalidOperationException()));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not a fingerprint")]
+    [InlineData("0123abcd")]
+    public void AMalformedBundledFingerprintIsNeverUsed(string content)
+        => Assert.Null(InstallLogic.ReadBundledFingerprint(Msi, _ => true, _ => content));
+
+    [Fact]
+    public void ATokenIsRequestedOnlyWhenTheServerSaysSo()
+    {
+        Assert.True(InstallLogic.BundleRequiresToken(Msi, p => p == @"C:\agent\enrollment-token.required"));
+        Assert.False(InstallLogic.BundleRequiresToken(Msi, _ => false));
+    }
 }

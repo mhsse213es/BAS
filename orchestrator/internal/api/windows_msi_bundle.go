@@ -76,7 +76,7 @@ func (h *Handler) serveWindowsMSI(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "could not compute the signing fingerprint: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	bundle, err := buildMSIBundle(msi, env, fp)
+	bundle, err := buildMSIBundle(msi, env, fp, h.tokenEnrollment())
 	if err != nil {
 		jsonError(w, "could not build the installer bundle: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -92,7 +92,12 @@ func (h *Handler) serveWindowsMSI(w http.ResponseWriter, r *http.Request) {
 
 // buildMSIBundle zips the MSI, the signed deployment config and the install scripts.
 // The fingerprint is embedded in scripts, so it must be exactly 64 lowercase hex characters.
-func buildMSIBundle(msi, deploymentJSON []byte, fingerprint string) ([]byte, error) {
+//
+// Beside the MSI it also carries deployment.fingerprint, so the wizard asks the person installing for the agent
+// secret only (the download itself, taken from the authenticated dashboard, is the trust anchor; the fingerprint
+// can still be compared with the dashboard's). When the server issues enrolment tokens it adds the marker file
+// enrollment-token.required, which makes the wizard show the token field and nothing else.
+func buildMSIBundle(msi, deploymentJSON []byte, fingerprint string, tokenRequired bool) ([]byte, error) {
 	if !fingerprintRe.MatchString(fingerprint) {
 		return nil, fmt.Errorf("fingerprint must be 64 lowercase hex characters")
 	}
@@ -112,9 +117,16 @@ func buildMSIBundle(msi, deploymentJSON []byte, fingerprint string) ([]byte, err
 	}{
 		{windowsMSIFile, msi},
 		{"deployment.json", deploymentJSON},
+		{"deployment.fingerprint", []byte(fingerprint + "\n")},
 		{"install.cmd", []byte(installCmd)},
 		{"install.ps1", []byte(strings.ReplaceAll(installPs1, "__FINGERPRINT__", fingerprint))},
 		{"README.txt", []byte(strings.ReplaceAll(readmeTxt, "__FINGERPRINT__", fingerprint))},
+	}
+	if tokenRequired {
+		files = append(files, struct {
+			name string
+			data []byte
+		}{"enrollment-token.required", []byte("This server issues single-use enrolment tokens; the installer asks for one.\n")})
 	}
 	for _, f := range files {
 		if err := add(f.name, f.data); err != nil {
@@ -180,7 +192,9 @@ Verify before you install
   can also replace the number printed here, so do not rely on this copy.
 
 Interactive install
-  Double-click AudspectAgent-x64.msi. The wizard asks for the fingerprint and the agent secret.
+  Double-click AudspectAgent-x64.msi (keep it in this folder, next to deployment.json and deployment.fingerprint).
+  The wizard asks for the agent secret and nothing else. If this server issues enrolment tokens it also asks
+  for the token for this computer.
 
 Silent install
   Run install.cmd from an elevated prompt. It asks you to confirm the fingerprint and to type

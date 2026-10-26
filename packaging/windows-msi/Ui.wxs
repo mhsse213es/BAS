@@ -6,6 +6,7 @@
   -->
   <Fragment>
 
+    <CustomAction Id="LoadBundledDeployment" BinaryRef="AudspectCA" DllEntry="LoadBundledDeployment" Execute="immediate" Return="check" />
     <CustomAction Id="CheckDeploymentConfig" BinaryRef="AudspectCA" DllEntry="CheckDeploymentConfig" Execute="immediate" Return="check" />
     <CustomAction Id="TestAgentConnection" BinaryRef="AudspectCA" DllEntry="TestAgentConnection" Execute="immediate" Return="check" />
     <CustomAction Id="LaunchStatusWindow" Directory="INSTALLFOLDER" ExeCommand="&quot;[INSTALLFOLDER]bas_agent.exe&quot; --status-window" Return="asyncNoWait" Impersonate="yes" />
@@ -65,17 +66,21 @@
         <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
         <Control Id="SecretLabel" Type="Text" X="25" Y="64" Width="320" Height="10" Transparent="yes" Text="Agent secret:" />
         <Control Id="SecretEdit" Type="Edit" X="25" Y="76" Width="320" Height="15" Property="AGENT_SECRET" Password="yes" />
-        <Control Id="EnvLabel" Type="Text" X="25" Y="106" Width="320" Height="10" Transparent="yes" Text="Environment label:" />
-        <Control Id="EnvEdit" Type="Edit" X="25" Y="118" Width="200" Height="15" Property="ENV_LABEL" />
-        <Control Id="TokenLabel" Type="Text" X="25" Y="148" Width="320" Height="10" Transparent="yes" Text="Enrollment token (only if your server issues them; single use, for this computer):" />
-        <Control Id="TokenEdit" Type="Edit" X="25" Y="160" Width="320" Height="15" Property="ENROLLMENT_TOKEN" Password="yes" />
+        <!-- Only the secret is asked for. The token field appears only when the server that built this download issues
+             enrolment tokens (SHOW_TOKEN, set from the bundle); the environment label keeps its default. -->
+        <Control Id="TokenLabel" Type="Text" X="25" Y="106" Width="320" Height="10" Transparent="yes" Text="Enrollment token for this computer (single use):" ShowCondition="SHOW_TOKEN" />
+        <Control Id="TokenEdit" Type="Edit" X="25" Y="118" Width="320" Height="15" Property="ENROLLMENT_TOKEN" Password="yes" ShowCondition="SHOW_TOKEN" />
         <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
         <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)">
-          <Publish Event="NewDialog" Value="ConfigDlg" />
+          <Publish Event="NewDialog" Value="LicenseAgreementDlg" Order="1" Condition="CONFIG_OK = &quot;1&quot;" />
+          <Publish Event="NewDialog" Value="ConfigDlg" Order="2" Condition="CONFIG_OK &lt;&gt; &quot;1&quot;" />
         </Control>
+        <!-- The connection is tested as soon as the secret is entered; the test page appears only to show a failure. -->
         <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)"
                  EnableCondition="AGENT_SECRET &lt;&gt; &quot;&quot;">
-          <Publish Event="NewDialog" Value="TestConnectionDlg" />
+          <Publish Event="DoAction" Value="TestAgentConnection" Order="1" />
+          <Publish Event="NewDialog" Value="VerifyReadyDlg" Order="2" Condition="PREFLIGHT_OK = &quot;1&quot; OR SKIPPREFLIGHT = &quot;1&quot;" />
+          <Publish Event="NewDialog" Value="TestConnectionDlg" Order="3" Condition="PREFLIGHT_OK &lt;&gt; &quot;1&quot; AND SKIPPREFLIGHT &lt;&gt; &quot;1&quot;" />
         </Control>
         <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
           <Publish Event="SpawnDialog" Value="CancelDlg" />
@@ -113,12 +118,18 @@
 
       <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" />
       <!-- An existing agent keeps its enrollment: no configuration, secret or test is needed. -->
-      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ConfigDlg" Order="2"
+      <!-- When the download carries deployment.json and its fingerprint, adopt them and go straight to the secret page. -->
+      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="DoAction" Value="LoadBundledDeployment" Order="1"
                Condition="LicenseAccepted = &quot;1&quot; AND NOT AGENT_PRESENT" />
+      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ConfigDlg" Order="2"
+               Condition="LicenseAccepted = &quot;1&quot; AND NOT AGENT_PRESENT AND CONFIG_OK &lt;&gt; &quot;1&quot;" />
+      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="SecretDlg" Order="4"
+               Condition="LicenseAccepted = &quot;1&quot; AND NOT AGENT_PRESENT AND CONFIG_OK = &quot;1&quot;" />
       <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Order="3"
                Condition="LicenseAccepted = &quot;1&quot; AND AGENT_PRESENT" />
 
-      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="TestConnectionDlg" Order="1" Condition="NOT Installed AND NOT AGENT_PRESENT" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="TestConnectionDlg" Order="1" Condition="NOT Installed AND NOT AGENT_PRESENT AND PREFLIGHT_OK &lt;&gt; &quot;1&quot;" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="SecretDlg" Order="4" Condition="NOT Installed AND NOT AGENT_PRESENT AND PREFLIGHT_OK = &quot;1&quot;" />
       <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg" Order="2" Condition="NOT Installed AND AGENT_PRESENT" />
       <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" Order="3" Condition="Installed AND NOT PATCH" />
 

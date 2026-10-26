@@ -36,6 +36,7 @@
     <Property Id="ENV_LABEL" Value="Production" Secure="yes" />
     <Property Id="SKIPPREFLIGHT" Secure="yes" />
     <Property Id="CONFIG_OK" Value="0" />
+    <Property Id="SHOW_TOKEN" Secure="yes" />
     <Property Id="PREFLIGHT_OK" Value="0" />
     <Property Id="CONFIG_MESSAGE" Value=" " />
     <Property Id="PREFLIGHT_MESSAGE" Value=" " />

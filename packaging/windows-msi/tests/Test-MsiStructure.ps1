@@ -101,5 +101,14 @@ if ($CaDll) {
     Check ($caText.Contains('CustomAction.config')) 'the custom action package includes CustomAction.config (runtime v4.0)'
 }
 
+# One-prompt wizard: the bundled fingerprint is loaded when the licence page is left, and the configuration page
+# (path + fingerprint) is skipped when that worked.
+$loadCa = Query 'SELECT `Action` FROM `CustomAction` WHERE `Action`=''LoadBundledDeployment'''
+Check (@($loadCa).Count -eq 1) 'LoadBundledDeployment custom action exists'
+$ev = Query 'SELECT `Dialog_`, `Control_`, `Event`, `Argument`, `Condition` FROM `ControlEvent`'
+Check (@($ev | Where-Object { $_[0] -eq 'LicenseAgreementDlg' -and $_[2] -eq 'DoAction' -and $_[3] -eq 'LoadBundledDeployment' }).Count -ge 1) 'accepting the licence loads the bundled deployment'
+Check (@($ev | Where-Object { $_[0] -eq 'LicenseAgreementDlg' -and $_[2] -eq 'NewDialog' -and $_[3] -eq 'SecretDlg' -and $_[4] -match 'CONFIG_OK' }).Count -ge 1) 'the wizard goes straight to the secret page when the bundle is complete'
+Check (@($ev | Where-Object { $_[0] -eq 'SecretDlg' -and $_[2] -eq 'DoAction' -and $_[3] -eq 'TestAgentConnection' }).Count -ge 1) 'the connection test runs automatically after the secret'
+
 if ($failures.Count -gt 0) { Write-Host "`n$($failures.Count) check(s) failed"; exit 1 }
 Write-Host "`nAll structural checks passed."

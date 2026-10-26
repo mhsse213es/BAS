@@ -39,7 +39,7 @@ func readZip(t *testing.T, b []byte) map[string]string {
 const testFP = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func TestBuildMSIBundleContents(t *testing.T) {
-	b, err := buildMSIBundle([]byte("MSIBYTES"), []byte(`{"version":1}`), testFP)
+	b, err := buildMSIBundle([]byte("MSIBYTES"), []byte(`{"version":1}`), testFP, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestBuildMSIBundleContents(t *testing.T) {
 
 func TestBuildMSIBundleRejectsBadFingerprint(t *testing.T) {
 	for _, fp := range []string{"", "abc", strings.Repeat("g", 64), testFP + "00", "x\" & calc & \""} {
-		if _, err := buildMSIBundle([]byte("m"), []byte("{}"), fp); err == nil {
+		if _, err := buildMSIBundle([]byte("m"), []byte("{}"), fp, false); err == nil {
 			t.Fatalf("fingerprint %q must be rejected (it is embedded in a script)", fp)
 		}
 	}
@@ -176,5 +176,43 @@ func TestServeWindowsMSI_RequiresManifestAndSigningKey(t *testing.T) {
 	noKey.serveWindowsMSI(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("no signing key: status %d, want 503", rec.Code)
+	}
+}
+
+
+// The wizard asks only for the agent secret: the signing fingerprint travels beside the MSI, and the token
+// field appears only when this server issues enrolment tokens.
+func TestMSIBundle_CarriesTheFingerprintFileAndTheTokenMarkerOnlyWhenNeeded(t *testing.T) {
+	read := func(b []byte) map[string]string {
+		zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]string{}
+		for _, f := range zr.File {
+			rc, _ := f.Open()
+			data, _ := io.ReadAll(rc)
+			rc.Close()
+			out[f.Name] = string(data)
+		}
+		return out
+	}
+	plain, err := buildMSIBundle([]byte("m"), []byte("{}"), testFP, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := read(plain)
+	if strings.TrimSpace(files["deployment.fingerprint"]) != testFP {
+		t.Errorf("deployment.fingerprint = %q, want the signing fingerprint", files["deployment.fingerprint"])
+	}
+	if _, ok := files["enrollment-token.required"]; ok {
+		t.Error("a secret-mode server must not ask for a token")
+	}
+	tok, err := buildMSIBundle([]byte("m"), []byte("{}"), testFP, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := read(tok)["enrollment-token.required"]; !ok {
+		t.Error("a token-mode server must mark the bundle so the wizard shows the token field")
 	}
 }

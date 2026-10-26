@@ -32,6 +32,34 @@ namespace Audspect.Installer
             return c.Length == 64 && c.All(ch => (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')) ? c : null;
         }
 
+        /// <summary>Written beside the MSI by the server that built the download: the signing-key fingerprint.</summary>
+        public const string FingerprintFile = "deployment.fingerprint";
+
+        /// <summary>Written beside the MSI only when the server issues enrolment tokens.</summary>
+        public const string TokenMarkerFile = "enrollment-token.required";
+
+        /// <summary>
+        /// The fingerprint the server wrote beside the MSI, or null when there is no such file or its content is not
+        /// a fingerprint (the wizard then asks for it as before; a bad file is never half-used).
+        /// </summary>
+        public static string ReadBundledFingerprint(string originalDatabase, Func<string, bool> exists, Func<string, string> read)
+        {
+            var dir = string.IsNullOrWhiteSpace(originalDatabase) ? null : Path.GetDirectoryName(originalDatabase);
+            if (string.IsNullOrEmpty(dir)) return null;
+            var path = Path.Combine(dir, FingerprintFile);
+            if (!exists(path)) return null;
+            try { return NormalizeFingerprint(read(path)); }
+            catch (IOException) { return null; }
+            catch (UnauthorizedAccessException) { return null; }
+        }
+
+        /// <summary>True when the server that built this download issues enrolment tokens, so the wizard must ask for one.</summary>
+        public static bool BundleRequiresToken(string originalDatabase, Func<string, bool> exists)
+        {
+            var dir = string.IsNullOrWhiteSpace(originalDatabase) ? null : Path.GetDirectoryName(originalDatabase);
+            return !string.IsNullOrEmpty(dir) && exists(Path.Combine(dir, TokenMarkerFile));
+        }
+
         public const string SecretEnvVar = "AUDSPECT_AGENT_SECRET";
 
         /// <summary>Environment variable a silent install uses for the single-use enrolment token.</summary>

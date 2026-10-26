@@ -59,6 +59,7 @@ namespace Audspect.Installer
             }
             var config = InstallLogic.ResolveConfigPath(session["DEPLOYMENT_CONFIG"], session["OriginalDatabase"]);
             var fp = session["CONFIG_FINGERPRINT"];
+            if (string.IsNullOrWhiteSpace(fp)) fp = InstallLogic.ReadBundledFingerprint(session["OriginalDatabase"], File.Exists, File.ReadAllText) ?? fp;
             var secret = InstallLogic.ResolveSecret(session["AGENT_SECRET"], Environment.GetEnvironmentVariable(InstallLogic.SecretEnvVar));
             var token = InstallLogic.ResolveToken(session["ENROLLMENT_TOKEN"], Environment.GetEnvironmentVariable(InstallLogic.TokenEnvVar));
             var problem = InstallLogic.ValidateInstallInputs(config, fp, secret, File.Exists) ?? InstallLogic.ValidateEnvLabel(session["ENV_LABEL"]) ?? InstallLogic.ValidateToken(token);
@@ -189,6 +190,29 @@ namespace Audspect.Installer
         /// operator typed, using the agent's own verifier, and shows what it points at.
         /// Sets CONFIG_OK (1/0) and CONFIG_MESSAGE.
         /// </summary>
+        /// <summary>
+        /// Immediate (UI): when the server's download put deployment.json and its fingerprint beside the MSI, adopt both
+        /// and run the normal configuration check, so the wizard can skip the configuration page and ask only for the
+        /// agent secret. Also shows the token field when that server issues tokens. Anything missing or malformed
+        /// leaves CONFIG_OK at 0 and the wizard asks as before.
+        /// </summary>
+        [CustomAction]
+        public static ActionResult LoadBundledDeployment(Session session)
+        {
+            session["CONFIG_OK"] = "0";
+            var msi = session["OriginalDatabase"];
+            if (string.IsNullOrWhiteSpace(session["CONFIG_FINGERPRINT"]))
+            {
+                var fp = InstallLogic.ReadBundledFingerprint(msi, File.Exists, File.ReadAllText);
+                if (fp == null) return ActionResult.Success;
+                session["CONFIG_FINGERPRINT"] = fp;
+            }
+            if (string.IsNullOrWhiteSpace(session["DEPLOYMENT_CONFIG"]))
+                session["DEPLOYMENT_CONFIG"] = InstallLogic.ResolveConfigPath("", msi);
+            if (InstallLogic.BundleRequiresToken(msi, File.Exists)) session["SHOW_TOKEN"] = "1";
+            return CheckDeploymentConfig(session);
+        }
+
         [CustomAction]
         public static ActionResult CheckDeploymentConfig(Session session)
         {
