@@ -8,7 +8,7 @@ import { mountHero } from './shell-ui.js';
 function svg(paths) {
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + paths + '</svg>';
 }
-var ICON = {
+export var ICON = {
   agents: svg('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>'),
   ok: svg('<path d="M5 12l4 4 10-10"/>'),
   warn: svg('<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17v.01"/>'),

@@ -60,10 +60,19 @@ test('app.css is bundled inside @layer app and the generated rules follow it unl
   const css = readFileSync(join(dist, 'assets', name), 'utf8');
   const start = css.search(/@layer app\s*\{/);
   assert.ok(start >= 0, 'no @layer app block');
-  let depth = 0, end = -1;
-  for (let i = css.indexOf('{', start); i < css.length; i++) {
-    if (css[i] === '{') depth++;
-    else if (css[i] === '}' && --depth === 0) { end = i; break; }
+  // esbuild emits one @layer app block per layered import (app.css, kit.css); the unlayered rules follow the last.
+  let end = -1, from = start;
+  for (;;) {
+    let depth = 0, blockEnd = -1;
+    for (let i = css.indexOf('{', from); i < css.length; i++) {
+      if (css[i] === '{') depth++;
+      else if (css[i] === '}' && --depth === 0) { blockEnd = i; break; }
+    }
+    assert.ok(blockEnd > from, 'unterminated @layer app block');
+    end = blockEnd;
+    const next = css.slice(end + 1).search(/^\s*(?:\/\*[\s\S]*?\*\/\s*)*@layer app\s*\{/);
+    if (next !== 0) break;
+    from = end + 1 + css.slice(end + 1).search(/@layer app\s*\{/);
   }
   assert.ok(end > start, 'unterminated @layer app block');
   const inside = css.slice(start, end);

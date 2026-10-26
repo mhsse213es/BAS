@@ -1,6 +1,7 @@
 import { ACTIONS } from './globals.js';
 import { installActions } from './core/actions.js';
 import { installCssVars } from './core/css-vars.js';
+import { installCharts } from './core/charts.js';
 import './core/api.js';
 import './core/escape.js';
 import './core/util.js';
@@ -38,6 +39,7 @@ import { mountPageHeroes } from './features/page-heroes.js';
 
 installActions(ACTIONS);
 installCssVars();
+installCharts();
 mountPageHeroes();
 __init_L5162();
 __init_L5212();
