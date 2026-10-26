@@ -60,9 +60,14 @@ Check (($hidden.Count -eq 1) -and ($hidden[0] -match '(^|;)AGENT_SECRET(;|$)')) 
 Check (($hidden.Count -eq 1) -and ($hidden[0] -match '(^|;)RunAgentInstall(;|$)')) 'the deferred action data property is hidden too'
 Check (@($props | Where-Object { $_[0] -eq 'AGENT_SECRET' -and $_[1] }).Count -eq 0) 'AGENT_SECRET has no default value in the MSI'
 Check (@($props | Where-Object { $_[0] -eq 'ENV_LABEL' -and $_[1] -eq 'Production' }).Count -eq 1) 'ENV_LABEL defaults to Production'
+Check (($hidden.Count -eq 1) -and ($hidden[0] -match '(^|;)ENROLLMENT_TOKEN(;|$)')) 'ENROLLMENT_TOKEN is listed in MsiHiddenProperties'
+Check (@($props | Where-Object { $_[0] -eq 'ENROLLMENT_TOKEN' -and $_[1] }).Count -eq 0) 'ENROLLMENT_TOKEN has no value baked into the MSI (a token is per host and single use)'
+$tokenEdit = @($ctl | Where-Object { $_[0] -eq 'SecretDlg' -and $_[3] -eq 'ENROLLMENT_TOKEN' })
+Check (($tokenEdit.Count -eq 1) -and (([int]$tokenEdit[0][2] -band 0x200000) -ne 0)) 'the enrollment token has one masked input control'
 
 # --- custom actions and sequence ----------------------------------------------------------
 $seq = Query 'SELECT `Action`, `Condition`, `Sequence` FROM `InstallExecuteSequence`'
+Check (@($seq | Where-Object { $_[1] -match 'ENROLLMENT_TOKEN' }).Count -eq 0) 'no sequence condition references the token'
 function SeqOf([string]$a) { ($seq | Where-Object { $_[0] -eq $a } | Select-Object -First 1) }
 $prepare = SeqOf 'PrepareAgentInstall'; $install = SeqOf 'RunAgentInstall'; $rollback = SeqOf 'RollbackAgentInstall'
 $uninstall = SeqOf 'RunAgentUninstall'; $refresh = SeqOf 'RefreshAgentIntegrity'

@@ -165,4 +165,64 @@ public class InstallLogicTests
         Assert.Equal("", InstallLogic.ResolveSecret("", ""));
         Assert.Equal("", InstallLogic.ResolveSecret(null, null));
     }
+
+    [Fact]
+    public void TokenComesFromThePropertyElseTheEnvironmentAndIsOptional()
+    {
+        Assert.Equal("bas_enr_a", InstallLogic.ResolveToken("bas_enr_a", "bas_enr_env"));
+        Assert.Equal("bas_enr_env", InstallLogic.ResolveToken("", "bas_enr_env"));
+        Assert.Equal("", InstallLogic.ResolveToken(null, null));
+        Assert.Equal(InstallLogic.TokenEnvVar, "AUDSPECT_ENROLLMENT_TOKEN");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("bas_enr_abcDEF-123_xyz")]
+    public void ValidOrEmptyTokenPasses(string token) => Assert.Null(InstallLogic.ValidateToken(token));
+
+    [Theory]
+    [InlineData("has space")]
+    [InlineData("line\nbreak")]
+    [InlineData("tab\there")]
+    public void MalformedTokenFailsWithoutEchoingIt(string token)
+    {
+        var msg = InstallLogic.ValidateToken(token);
+        Assert.NotNull(msg);
+        Assert.DoesNotContain(token, msg);
+    }
+
+    [Fact]
+    public void OverlongTokenFails() => Assert.NotNull(InstallLogic.ValidateToken(new string('a', 1025)));
+
+    [Fact]
+    public void RunAgentPassesTheTokenInTheEnvironmentNotTheArgumentsAndRedactsIt()
+    {
+        var ps = "-NoProfile -Command \"Write-Output ('ENV=' + $env:BAS_ENROLLMENT_TOKEN); Write-Output ('ARGS=' + ($args -join ' '))\" ";
+        var r = InstallLogic.RunAgent("powershell.exe", ps, "s3cret", 30000, "bas_enr_TOKENVALUE");
+        Assert.DoesNotContain("TOKENVALUE", r.Output);
+        Assert.Contains("ENV=***", r.Output);
+    }
+
+    [Fact]
+    public void RunAgentWithoutATokenDoesNotInheritOne()
+    {
+        Environment.SetEnvironmentVariable("BAS_ENROLLMENT_TOKEN", "bas_enr_LEAKED");
+        try
+        {
+            var r = InstallLogic.RunAgent("powershell.exe", "-NoProfile -Command \"Write-Output ('ENV=[' + $env:BAS_ENROLLMENT_TOKEN + ']')\"", "x", 30000);
+            Assert.Contains("ENV=[]", r.Output);
+        }
+        finally { Environment.SetEnvironmentVariable("BAS_ENROLLMENT_TOKEN", null); }
+    }
+
+    [Fact]
+    public void RefusedTokenAndUnreachableServerAreDescribedDifferently()
+    {
+        var refused = InstallLogic.DescribeExitCode(26);
+        var unreachable = InstallLogic.DescribeExitCode(27);
+        Assert.Contains("token", refused, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("refused", refused, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("could not be reached", unreachable, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEqual(refused, unreachable);
+    }
 }

@@ -60,7 +60,8 @@ namespace Audspect.Installer
             var config = session["DEPLOYMENT_CONFIG"];
             var fp = session["CONFIG_FINGERPRINT"];
             var secret = InstallLogic.ResolveSecret(session["AGENT_SECRET"], Environment.GetEnvironmentVariable(InstallLogic.SecretEnvVar));
-            var problem = InstallLogic.ValidateInstallInputs(config, fp, secret, File.Exists) ?? InstallLogic.ValidateEnvLabel(session["ENV_LABEL"]);
+            var token = InstallLogic.ResolveToken(session["ENROLLMENT_TOKEN"], Environment.GetEnvironmentVariable(InstallLogic.TokenEnvVar));
+            var problem = InstallLogic.ValidateInstallInputs(config, fp, secret, File.Exists) ?? InstallLogic.ValidateEnvLabel(session["ENV_LABEL"]) ?? InstallLogic.ValidateToken(token);
             if (problem != null) { Fail(session, problem); return ActionResult.Failure; }
 
             // Check connectivity, CA trust and the secret before changing anything, unless the
@@ -92,6 +93,7 @@ namespace Audspect.Installer
             data["config"] = config;
             data["fp"] = fp;
             data["secret"] = secret;
+            data["token"] = token;
             data["env"] = session["ENV_LABEL"];
             session["RunAgentInstall"] = data.ToString();
             return ActionResult.Success;
@@ -108,7 +110,7 @@ namespace Audspect.Installer
             catch (ArgumentException) { Fail(session, "The deployment configuration inputs are invalid."); return ActionResult.Failure; }
 
             session.Log("Audspect: registering the agent service (the secret is passed on stdin).");
-            var run = InstallLogic.RunAgent(d["exe"], args, secret, AgentTimeoutMs);
+            var run = InstallLogic.RunAgent(d["exe"], args, secret, AgentTimeoutMs, d["token"]);
             if (!string.IsNullOrEmpty(run.Output)) session.Log("Audspect agent output:\n" + run.Output);
             if (run.TimedOut) { Fail(session, "The agent installer did not finish in time."); return ActionResult.Failure; }
             if (run.ExitCode != 0) { Fail(session, InstallLogic.DescribeExitCode(run.ExitCode)); return ActionResult.Failure; }

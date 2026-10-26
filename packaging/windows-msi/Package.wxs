@@ -21,6 +21,8 @@
     <Property Id="DEPLOYMENT_CONFIG" Secure="yes" />
     <Property Id="CONFIG_FINGERPRINT" Secure="yes" />
     <Property Id="AGENT_SECRET" Secure="yes" Hidden="yes" />
+    <!-- Single-use, per-host enrolment token (token-mode servers). Never baked into the package; Hidden keeps it out of the MSI log. -->
+    <Property Id="ENROLLMENT_TOKEN" Secure="yes" Hidden="yes" />
     <!-- Carries the secret to the deferred action; Hidden keeps it out of the MSI log. -->
     <Property Id="RunAgentInstall" Hidden="yes" Value="-" />
 

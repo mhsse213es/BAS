@@ -34,6 +34,32 @@ namespace Audspect.Installer
 
         public const string SecretEnvVar = "AUDSPECT_AGENT_SECRET";
 
+        /// <summary>Environment variable a silent install uses for the single-use enrolment token.</summary>
+        public const string TokenEnvVar = "AUDSPECT_ENROLLMENT_TOKEN";
+
+        /// <summary>Environment variable the agent reads its enrolment token from (child process only).</summary>
+        const string AgentTokenEnvVar = "BAS_ENROLLMENT_TOKEN";
+
+        public const int MaxTokenLength = 1024;
+
+        /// <summary>
+        /// The ENROLLMENT_TOKEN property (typed in the wizard) wins; otherwise the environment variable of the
+        /// msiexec process. A token is single use and bound to one host, so the generic installer never contains one
+        /// and a silent install must supply it per host, through the environment and not a command-line property.
+        /// </summary>
+        public static string ResolveToken(string property, string environmentValue)
+            => !string.IsNullOrEmpty(property) ? property : (environmentValue ?? "");
+
+        /// <summary>Null when the token is empty (optional) or well formed; the message never contains the token.</summary>
+        public static string ValidateToken(string token)
+        {
+            if (string.IsNullOrEmpty(token)) return null;
+            if (token.Length > MaxTokenLength) return "The enrollment token is too long.";
+            if (token.Any(ch => ch <= 0x20 || ch == 0x7f))
+                return "The enrollment token must be a single word without spaces or control characters.";
+            return null;
+        }
+
         /// <summary>
         /// The AGENT_SECRET property (typed in the wizard) wins; otherwise the environment variable
         /// of the msiexec process. Silent installs should use the environment: a command-line
@@ -118,6 +144,8 @@ namespace Audspect.Installer
             return text.Replace(secret, "***");
         }
 
+        static string RedactAll(string text, string secret, string token) => Redact(Redact(text, secret), token);
+
         public static string DescribeExitCode(int code)
         {
             switch (code)
@@ -127,13 +155,15 @@ namespace Audspect.Installer
                 case 22: return "The server rejected the agent secret. Check AGENT_SECRET.";
                 case 23: return "The server's certificate is not trusted by the deployment CA. The connection was not made.";
                 case 24: return "The deployment CA is invalid.";
+                case 26: return "The server refused the enrollment token (invalid, expired, already used, or issued for a different host). Ask the administrator for a new token for this host.";
+                case 27: return "The server could not be reached to enroll (this is a connection problem, not a token problem). Check the network, firewall and the enrolment port.";
                 case 25: return "The deployment configuration was rejected: the signing key fingerprint did not match or the file is invalid. Do not install until an administrator confirms the fingerprint.";
                 default: return "The agent installer failed (exit code " + code + ").";
             }
         }
 
         /// <summary>Runs an executable, writing <paramref name="secret"/> and a newline to its stdin.</summary>
-        public static AgentRun RunAgent(string exe, string args, string secret, int timeoutMs)
+        public static AgentRun RunAgent(string exe, string args, string secret, int timeoutMs, string token = null)
         {
             var psi = new ProcessStartInfo(exe, args)
             {
@@ -145,13 +175,17 @@ namespace Audspect.Installer
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8,
             };
+            // The token goes to the child only through its own environment (never the command line); a token that
+            // happens to be set in this process's environment is not passed on unless it was given explicitly.
+            psi.EnvironmentVariables.Remove(AgentTokenEnvVar);
+            if (!string.IsNullOrEmpty(token)) psi.EnvironmentVariables[AgentTokenEnvVar] = token;
             var sb = new StringBuilder();
             object gate = new object();
             Process p;
             try { p = Process.Start(psi); }
             catch (Win32Exception ex)
             {
-                return new AgentRun { ExitCode = 1, Output = Redact("could not start " + Path.GetFileName(exe) + ": " + ex.Message, secret) };
+                return new AgentRun { ExitCode = 1, Output = RedactAll("could not start " + Path.GetFileName(exe) + ": " + ex.Message, secret, token) };
             }
             using (p)
             {
@@ -172,10 +206,10 @@ namespace Audspect.Installer
                 {
                     try { p.Kill(); } catch (InvalidOperationException) { }
                     p.WaitForExit();
-                    return new AgentRun { ExitCode = 1, TimedOut = true, Output = Redact(Snapshot(sb, gate), secret) };
+                    return new AgentRun { ExitCode = 1, TimedOut = true, Output = RedactAll(Snapshot(sb, gate), secret, token) };
                 }
                 p.WaitForExit(); // flush async readers
-                return new AgentRun { ExitCode = p.ExitCode, Output = Redact(Snapshot(sb, gate), secret) };
+                return new AgentRun { ExitCode = p.ExitCode, Output = RedactAll(Snapshot(sb, gate), secret, token) };
             }
         }
 
