@@ -126,6 +126,12 @@ check "typing yes removes everything" '[ $RC -eq 0 ] && [ ! -e "$DATA" ]' "$OUT"
 new_world; run "" --dry-run
 check "--dry-run removes nothing and says what it would remove" '[ $RC -eq 0 ] && [ -e "$DATA/pki/ca.pem" ] && [ -e "$UNITS/audspect.service" ] && grep -q audspect-postgres "$STATE/containers" && echo "$OUT" | grep -qi "dry run"' "$OUT"
 
+# 6b. the list shown before the question names the database and the CA folders explicitly
+new_world; run "" --dry-run
+check "the confirmation list shows the PostgreSQL data folder with its path" 'echo "$OUT" | grep -q "PostgreSQL database.*$DATA/data/postgres"' "$OUT"
+check "the confirmation list shows the deployment CA and signing key folders" 'echo "$OUT" | grep -q "Deployment CA.*$DATA/pki" && echo "$OUT" | grep -q "signing key.*$DATA/signing"' "$OUT"
+check "the confirmation list says the CA loss locks out enrolled agents" 'echo "$OUT" | grep -qi "locked out"' "$OUT"
+
 # 7. backup of the irreplaceable parts before removal
 new_world; mkdir -p "$WORLD/keep"; run "" --yes --backup-to "$WORLD/keep"
 ARCH="$(ls "$WORLD"/keep/audspect-final-backup-*.tar.gz 2>/dev/null | head -1)"

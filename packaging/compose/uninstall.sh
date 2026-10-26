@@ -153,12 +153,18 @@ else
   echo "  Install directory : none found (only the items below will be removed)"
 fi
 echo "  The following will be PERMANENTLY DELETED:"
-[[ -n "$INSTALL_DIR" ]] && {
-  echo "    - the database (every agent, run, report, user and audit record)"
-  echo "    - the deployment CA and the command-signing key: every already-enrolled agent is locked out until it is"
-  echo "      uninstalled and installed again against the new CA"
-  echo "    - .env (the agent secret and all settings), backups, logs"
-}
+if [[ -n "$INSTALL_DIR" ]]; then
+  sz() { du -sh "$1" 2>/dev/null | cut -f1; }
+  [[ -e "$INSTALL_DIR/data/postgres" ]] && echo "    - PostgreSQL database : $INSTALL_DIR/data/postgres  ($(sz "$INSTALL_DIR/data/postgres"))"
+  echo "      (every agent, run, report, user and audit record in it)"
+  [[ -e "$INSTALL_DIR/pki" ]]     && echo "    - Deployment CA       : $INSTALL_DIR/pki  ($(sz "$INSTALL_DIR/pki"))"
+  [[ -e "$INSTALL_DIR/signing" ]] && echo "    - Command-signing key : $INSTALL_DIR/signing  ($(sz "$INSTALL_DIR/signing"))"
+  echo "      (with the CA gone, every already-enrolled agent is locked out until it is uninstalled and installed"
+  echo "       again against the new CA)"
+  [[ -e "$INSTALL_DIR/.env" ]]    && echo "    - Settings and secrets: $INSTALL_DIR/.env  (the agent secret and all settings)"
+  [[ -e "$INSTALL_DIR/backups" ]] && echo "    - Backups             : $INSTALL_DIR/backups  ($(sz "$INSTALL_DIR/backups"))"
+  echo "    - Everything else under $INSTALL_DIR (logs, scenarios, certificates)"
+fi
 ((${#UNITS[@]}))      && echo "    - systemd units:   ${UNITS[*]}"
 ((${#CONTAINERS[@]})) && echo "    - containers:      ${CONTAINERS[*]}"
 ((${#VOLUMES[@]}))    && echo "    - Docker volumes:  ${VOLUMES[*]}"
