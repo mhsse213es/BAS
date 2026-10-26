@@ -12,7 +12,7 @@ import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
 import { setHeroStat } from './shell-ui.js';
 import { seg } from '../core/kit.js';
-import { covFilterOpts, covFilterRows, covRowsHtml, covSummary, expFilterAssets, expFilterOpts, expRowsHtml, expScoreTiles, expSection, expSummary, recRowsHtml, recSummary, sevChip, tpDetailSummaryHtml, tpFactorsHtml, tpFilterActors, tpFilterOpts, tpHistoryHtml, tpRowsHtml, tpSummary } from './rich-g4.js';
+import { covFilterOpts, covFilterRows, covRowsHtml, covSummary, tpDetailSummaryHtml, tpFactorsHtml, tpFilterActors, tpFilterOpts, tpHistoryHtml, tpRowsHtml, tpSummary } from './rich-g4.js';
 import { loadRuns, loadSIEMCorrelationPanel, openModal, viewRunResults } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
 import { describePhishingRun } from './phishing-run-view.js';
@@ -25,6 +25,7 @@ import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
 import { agentInsightsHtml, migrationPanelHtml } from './agents-insights.js';
 import { kpi, card, chip, empty as kitEmpty } from '../core/kit.js';
 import { renderExecAll, renderRangeSeg } from './dash-exec.js';
+import { recLimit, renderRecControls, renderRecError, renderRecLoading, setRecLimitState, showRecommendations } from './recommendations.js';
 
 
 // ── Attack Path Validation ─────────────────────────────────────────────────
@@ -83,39 +84,8 @@ export function apCard(label, val, col, sub) {
     '<div class="tiny muted">' + (sub || '') + '</div></div>';
 }
 
-var EXP_ASSETS = [];
-var EXP_FILTER = 'all';
-function renderExposureTable() {
-  var body = document.getElementById('exp-table-body');
-  if (!body) return;
-  var searchEl = document.getElementById('exp-search');
-  var list = expFilterAssets(EXP_ASSETS, EXP_FILTER, searchEl ? searchEl.value : '');
-  var segEl = document.getElementById('exp-seg');
-  if (segEl) segEl.innerHTML = EXP_ASSETS.length ? seg(expFilterOpts(EXP_ASSETS), EXP_FILTER, 'setExposureFilter') : '';
-  var cnt = document.getElementById('exp-count');
-  if (cnt) cnt.textContent = EXP_ASSETS.length ? list.length + ' of ' + EXP_ASSETS.length + ' assets' : '';
-  body.innerHTML = list.length
-    ? expRowsHtml(list)
-    : '<tr><td colspan="8" class="empty">' + (EXP_ASSETS.length ? 'No assets match the filter.' : 'No assets found — enroll an agent or run attack-path collection.') + '</td></tr>';
-}
-export function setExposureFilter(id) { EXP_FILTER = id; renderExposureTable(); }
-export function onExposureSearch() { renderExposureTable(); }
-
-export function loadExposureAssets() {
-  var body = document.getElementById('exp-table-body');
-  var sum = document.getElementById('exp-summary');
-  body.innerHTML = '<tr><td colspan="8" class="empty">Loading…</td></tr>';
-  apicall('/api/exposure/assets').then(function(assets) {
-    EXP_ASSETS = assets || [];
-    if (sum) sum.innerHTML = expSummary(EXP_ASSETS);
-    renderExposureTable();
-  }).catch(function(e) {
-    EXP_ASSETS = [];
-    if (sum) sum.innerHTML = '';
-    renderExposureTable();
-    body.innerHTML = '<tr><td colspan="8" class="empty u-danger">Failed to load: ' + x(e.message) + '</td></tr>';
-  });
-}
+// Exposure Explorer (table, charts and detail drawer) lives in exp-view.js; re-exported so existing imports keep working.
+export { loadExposureAssets, setExposureFilter, onExposureSearch, openExposureDetail, closeExposureDetail, closeExposureDetailOnBackdrop } from './exp-view.js';
 
 var EXEC_DAYS = '90';
 export function setExecRange(id) { EXEC_DAYS = id; renderRangeSeg(EXEC_DAYS); loadExecDashboard(); }
@@ -346,28 +316,21 @@ function renderThreatPriorityDetail(d) {
 }
 
 export function loadRecommendations() {
-  var limEl = document.getElementById('rec-limit');
-  var limit = limEl ? limEl.value : '20';
-  var body = document.getElementById('rec-table-body');
-  body.innerHTML = '<tr><td colspan="7" class="empty">Loading…</td></tr>';
-  apicall('/api/recommend/simulations?limit=' + encodeURIComponent(limit))
+  renderRecControls();
+  renderRecLoading();
+  apicall('/api/recommend/simulations?limit=' + encodeURIComponent(recLimit()))
     .then(function(data) { renderRecommendations(data); })
-    .catch(function(e) {
-      body.innerHTML = '<tr><td colspan="7" class="empty u-danger">Failed to load: ' + x(e.message) + '</td></tr>';
-    });
+    .catch(function(e) { renderRecError(e.message); });
+}
+
+export function setRecLimit(v) {
+  setRecLimitState(v);
+  loadRecommendations();
 }
 
 function renderRecommendations(data) {
-  var body = document.getElementById('rec-table-body');
-  var sum = document.getElementById('rec-summary');
-  REC_SCENARIO = data.suggestedScenario || null;
-  var list = (data && data.techniques) || [];
-  if (sum) sum.innerHTML = recSummary(list, REC_SCENARIO);
-  if (!list.length) {
-    body.innerHTML = '<tr><td colspan="7" class="empty">No recommendations yet — seed ATT&CK/ART content to rank techniques.</td></tr>';
-    return;
-  }
-  body.innerHTML = recRowsHtml(list);
+  REC_SCENARIO = (data && data.suggestedScenario) || null;
+  showRecommendations(data);
 }
 
 export function copyRecommendedScenario() {
@@ -385,65 +348,6 @@ export function copyRecommendedScenario() {
   }
 }
 
-export function openExposureDetail(hostKey) {
-  document.getElementById('exp-detail-title').textContent = hostKey;
-  var body = document.getElementById('exp-detail-body');
-  body.innerHTML = '<div class="empty">Loading…</div>';
-  document.getElementById('exposure-detail-overlay').classList.add('open');
-  apicall('/api/exposure/assets/' + encodeURIComponent(hostKey)).then(function(p) {
-    // Each of these is a pure-deficit score (100 - risk), so an asset with
-    // nothing collected scores a flawless 100 across the board. The tiles show
-    // "no data" instead when the backend says it wasn't measurable: on a
-    // "higher is safer" tile, an unmeasured 100 is the most misleading value.
-    var h = expScoreTiles(p.scores);
-
-    var recs = '<div class="tiny muted">No gaps on this asset&apos;s attack paths.</div>';
-    if (p.recommendations && p.recommendations.length) {
-      recs = '<div class="tbl-wrap"><table><thead><tr><th>From</th><th>Via</th><th>To</th><th>Priority</th><th>Reason</th></tr></thead><tbody>' +
-        p.recommendations.map(function(g) {
-          return '<tr><td>' + x(g.edge.from) + '</td><td>' + chip(g.edge.kind, 'info') + '</td><td>' + x(g.edge.to) + '</td>' +
-            '<td>' + sevChip(g.priority) + '</td><td class="tiny muted">' + x(g.reason) + '</td></tr>';
-        }).join('') + '</tbody></table></div>';
-    }
-    h += expSection('Prioritized recommendations', recs);
-
-    var vulns = '<div class="tiny muted">No mapped CVEs.</div>';
-    if (p.vulnerabilities && p.vulnerabilities.length) {
-      vulns = '<div class="tbl-wrap"><table><thead><tr><th>CVE</th><th>CVSS</th><th>KEV</th><th>EPSS</th><th>Technique</th></tr></thead><tbody>' +
-        p.vulnerabilities.map(function(v) {
-          return '<tr><td class="u-fw600">' + x(v.cveId) + '</td><td>' + x(v.cvss || '—') + '</td><td>' + (v.kev ? chip('KEV', 'bad') : '') + '</td>' +
-            '<td>' + x(v.epssScore || '—') + '</td><td>' + x(v.techniqueId) + '</td></tr>';
-        }).join('') + '</tbody></table></div>';
-    }
-    h += expSection('Vulnerabilities', vulns);
-
-    var finds;
-    if (!p.findings.collected) {
-      finds = '<div class="tiny muted">Not enrolled — no scan history.</div>';
-    } else if (p.findings.findings && p.findings.findings.length) {
-      finds = '<div class="tbl-wrap"><table><thead><tr><th>Technique</th><th>Severity</th><th>State</th></tr></thead><tbody>' +
-        p.findings.findings.map(function(f) {
-          return '<tr><td>' + x(f.techniqueName || f.techniqueId) + '</td><td>' + sevChip(f.severity) + '</td><td>' + x(f.exposureState) + '</td></tr>';
-        }).join('') + '</tbody></table></div>';
-    } else {
-      finds = '<div class="tiny muted">No open findings.</div>';
-    }
-    h += expSection('Findings', finds);
-
-    h += expSection('Threat groups', (p.threatIntel && p.threatIntel.length)
-      ? '<div class="g4-chips">' + p.threatIntel.map(function(g) { return chip(g.groupName, 'info'); }).join('') + '</div>'
-      : '<div class="tiny muted">No attributed threat groups.</div>');
-
-    body.innerHTML = h;
-  }).catch(function(e) {
-    body.innerHTML = '<div class="empty u-danger">Failed to load: ' + x(e.message) + '</div>';
-  });
-}
-
-export function closeExposureDetail() {
-  document.getElementById('exposure-detail-overlay').classList.remove('open');
-}
-export function closeExposureDetailOnBackdrop(el, event) { if (event.target === el) closeExposureDetail(); }
 // ── Attack Path Collection — job-based execution with full state machine ────────
 
 var _apCollectAgentId = null; // agentId currently being collected (for WS matching)

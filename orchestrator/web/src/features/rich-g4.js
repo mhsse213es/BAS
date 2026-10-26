@@ -9,6 +9,8 @@ import { on } from '../core/actions.js';
 import { kpi, grid, card, bar, hbars, chip, empty, kv, checkRow } from '../core/kit.js';
 import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
+import { sideHtml as apSideHtml, tilesHtml as apTilesHtml } from './ap-model.js';
+
 var C = CHART_COLORS;
 
 export function n0(v) { var n = Number(v); return isFinite(n) ? n : 0; }
@@ -59,24 +61,24 @@ export function apFindingItems(s) {
   s = s || {};
   var out = [];
   var status = s.domainCompromiseStatus;
-  if (status === 'reachable') out.push({ tone: 'bad', text: 'A path to Domain Admin exists — at least one host can reach a Domain Admin or Crown Jewel target.' });
-  else if (status === 'not-observed') out.push({ tone: 'ok', text: 'No Domain Admin path observed in the collected graph.' });
-  else out.push({ tone: 'muted', text: 'Domain Admin reachability is undetermined — Active Directory relationships were not collected.' });
+  if (status === 'reachable') out.push({ key: 'domain', tone: 'bad', text: 'A path to Domain Admin exists — at least one host can reach a Domain Admin or Crown Jewel target.' });
+  else if (status === 'not-observed') out.push({ key: 'domain', tone: 'ok', text: 'No Domain Admin path observed in the collected graph.' });
+  else out.push({ key: 'domain', tone: 'muted', text: 'Domain Admin reachability is undetermined — Active Directory relationships were not collected.' });
   var maxReach = s.maxBlastRadius || 0;
   out.push(maxReach > 0
-    ? { tone: 'warn', text: maxReach === 1 ? 'One lateral movement path exists from the highest-risk entry host.' : maxReach + ' lateral movement paths exist from the highest-risk entry host.' }
-    : { tone: 'ok', text: 'No lateral movement paths were observed.' });
+    ? { key: 'lateral', tone: 'warn', text: maxReach === 1 ? 'One lateral movement path exists from the highest-risk entry host.' : maxReach + ' lateral movement paths exist from the highest-risk entry host.' }
+    : { key: 'lateral', tone: 'ok', text: 'No lateral movement paths were observed.' });
   var rc = s.relationshipCounts || {};
   var adminEdges = rc['admin-to'] || 0;
   out.push(adminEdges > 0
-    ? { tone: 'warn', text: adminEdges === 1 ? 'One local administrator relationship identified.' : adminEdges + ' local administrator relationships identified.' }
-    : { tone: 'ok', text: 'No local administrator relationships identified.' });
+    ? { key: 'admin', tone: 'warn', text: adminEdges === 1 ? 'One local administrator relationship identified.' : adminEdges + ' local administrator relationships identified.' }
+    : { key: 'admin', tone: 'ok', text: 'No local administrator relationships identified.' });
   var missing = (s.confidence && s.confidence.missing) || [];
-  if (missing.indexOf('Active Directory relationships') !== -1) out.push({ tone: 'info', text: 'No AD relationships collected — SharpHound was not run or is unavailable.' });
+  if (missing.indexOf('Active Directory relationships') !== -1) out.push({ key: 'ad', tone: 'info', text: 'No AD relationships collected — SharpHound was not run or is unavailable.' });
   var sessionEdges = rc['has-session'] || 0;
   out.push(sessionEdges > 0
-    ? { tone: 'info', text: sessionEdges === 1 ? 'One active user session detected.' : sessionEdges + ' active user sessions detected.' }
-    : { tone: 'ok', text: 'No active user sessions detected.' });
+    ? { key: 'sessions', tone: 'info', text: sessionEdges === 1 ? 'One active user session detected.' : sessionEdges + ' active user sessions detected.' }
+    : { key: 'sessions', tone: 'ok', text: 'No active user sessions detected.' });
   return out;
 }
 
@@ -88,24 +90,6 @@ function pathChain(p) {
   var h = '<div class="g4-chain">' + node(p[0].from);
   for (var i = 0; i < p.length; i++) h += edge(p[i].kind) + node(p[i].to, i === p.length - 1);
   return h + '</div>';
-}
-
-function apScoreCard(s) {
-  var score = s.attackPathScore;
-  var tone = scoreTone(score);
-  var drivers = s.scoreDrivers || [];
-  var maxDef = 0;
-  drivers.forEach(function(d) { maxDef = Math.max(maxDef, n0(d.deficit)); });
-  var left = score != null && isFinite(Number(score))
-    ? donut([{ label: 'Score', value: n0(score), color: C[tone] }, { label: 'Points lost', value: Math.max(0, 100 - n0(score)), color: 'var(--border)' }], n0(score), 'of 100')
-    : empty('', 'No score yet');
-  var right = drivers.length
-    ? '<div class="g4-drivers"><div class="rk-hd-sub g4-cap">Score points lost per driver</div>' + hbars(drivers.map(function(d) {
-        var def = n0(d.deficit);
-        return [d.label, maxDef ? (def / maxDef) * 100 : 0, def === 0 ? 'ok' : 'warn', def === 0 ? 'none' : '-' + def.toFixed(1)];
-      })) + '</div>'
-    : '<div class="rk-hd-sub">No score driver detail available.</div>';
-  return card('Attack path score', '<div class="g4-split">' + left + right + '</div>', { sub: (s.band || '—') + ' risk · higher is safer' });
 }
 
 function apPathCard(s) {
@@ -176,18 +160,8 @@ export function apRichBody(d, corr) {
       '<div class="g4-center"><button class="btn btn-primary btn-sm" data-on-click="openAPCollect">&#9654; Run Collection</button></div>');
   }
   var s = d.summary || {};
-  var status = s.domainCompromiseStatus || (s.domainCompromise ? 'reachable' : 'not-observed');
-  var domLabel = status === 'reachable' ? 'Reachable' : status === 'not-observed' ? 'No path observed' : 'Undetermined';
-  var domTone = status === 'reachable' ? 'bad' : status === 'not-observed' ? 'ok' : 'muted';
-  var domSub = status === 'reachable' ? 'a host can reach Domain Admin' : status === 'not-observed' ? 'no path to Domain Admin in the collected graph' : 'Active Directory relationships were not collected';
-  var h = grid(4, [
-    kpi({ label: 'Attack path score', value: s.attackPathScore != null ? s.attackPathScore + ' / 100' : '—', sub: (s.band || '—') + ' risk · higher is safer', icon: 'posture', tone: scoreTone(s.attackPathScore) }),
-    kpi({ label: 'Lateral movement', value: s.lateralMovementBand || '—', sub: 'Avg reach ' + n0(s.avgBlastRadius).toFixed(1) + ' hosts · max ' + n0(s.maxBlastRadius) + ' (from ' + (s.maxBlastEntry || 'entry host') + ')', icon: 'path', tone: bandTone(s.lateralMovementBand) }),
-    kpi({ label: 'Domain compromise', value: domLabel, sub: domSub, icon: 'warn', tone: domTone }),
-    kpi({ label: 'Graph scope', value: n0(s.hosts) + ' hosts', sub: n0(s.users) + ' users · ' + n0(s.groups) + ' groups · ' + n0(s.edges) + ' edges', icon: 'agents', tone: 'accent' }),
-  ]);
-  var findings = apFindingItems(s).map(function(i) { return checkRow(i.tone, i.text); }).join('');
-  h += grid(2, [card('Findings', findings, { sub: 'what the collected graph shows' }), apScoreCard(s)]);
+  // Findings beside the score card, then the three summary tiles (design demo order).
+  var h = apSideHtml(apFindingItems(s), s) + apTilesHtml(s);
   h += apPathCard(s);
   var cc = apCoverageCards(d.coverage, s.confidence);
   h += grid(3, [cc[0], cc[1], apRelCard(s.relationshipCounts)]);
@@ -485,7 +459,7 @@ export function recRowsHtml(list) {
   }).join('');
 }
 
-export function recSummary(list, scenario) {
+export function recSummary(list, scenario, noKpi) {
   list = list || [];
   if (!list.length) return '';
   var never = count(list, function(t) { return t.coverageState === 'never-tested'; });
@@ -493,7 +467,7 @@ export function recSummary(list, scenario) {
   var kev = count(list, function(t) { return t.kev; });
   var env = count(list, function(t) { return t.environmentRisk; });
   var crit = count(list, function(t) { return t.tier === 'Critical' || t.tier === 'High'; });
-  var h = grid(4, [
+  var h = noKpi ? '' : grid(4, [
     kpi({ label: 'Techniques ranked', value: list.length, sub: crit + ' in the Critical or High tier', icon: 'technique', tone: 'accent' }),
     kpi({ label: 'Never tested', value: never, sub: stale + ' stale', icon: 'warn', tone: never ? 'bad' : 'ok' }),
     kpi({ label: 'KEV-linked', value: kev, sub: 'actively exploited in the wild', icon: 'flag', tone: kev ? 'bad' : 'ok' }),

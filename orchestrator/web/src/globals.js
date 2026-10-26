@@ -1,6 +1,9 @@
 import { x } from './core/escape.js';
 import { closeFactoryDrawerOnBackdrop, closeFactorySource, loadFactoryHealth, openFactorySource, fhTableQuery, clearFhTableQuery, setFhPer, fhPage, fhSortBy, toggleFhCols, fhColToggle, fhSelectRow, fhSelectAll, clearFhSelection, fhRowKeydown, exportFhCsv, exportFhSelected } from './features/factory-health.js';
 import { stopEvent } from './core/actions.js';
+import { toggleExpCols, setExpPer, expPage, expSortBy, expColToggle, expSelectRow, expSelectAll, clearExpSelection, expRowKeydown, exportExpCsv, exportExpSelected, clearExpTableQuery, expGo } from './features/exp-view.js';
+import { setRecLimit } from './features/attack-path.js';
+import { recTableQuery, clearRecTableQuery, setRecPer, recPage, recSortBy, toggleRecCols, recColToggle, recSelectRow, recSelectAll, clearRecSelection, exportRecCsv, exportRecSelected } from './features/recommendations.js';
 import { closeAdvDrawer, closeAdvRunModal, closeTmplRun, confirmAdversaryRun, confirmTmplRun, loadAdversariesStop, openAdvDrawer, openAdvRunModal, openTmplRun, renderAdvRunWarn, renderAdversaryLibrary, renderTmplOSCompat, setTmplFilter, setTmplTargetMode, tmplGroupChange, tmplRunModeChange, tmplSelAgentChange, toggleAdversarySection } from './features/adversaries.js';
 import { clearEnrollmentTokens, copyEnrollmentToken, downloadEnrollmentTokensCsv, generateEnrollmentTokens } from './features/enroll-tokens.js';
 import { closeReinstateAgentModal, closeRemoveAgentModal, closeRevokeAgentModal, closeStopAgentModal, closeUninstallAgentModal, submitReinstateAgent, submitRemoveAgent, submitRevokeAgent, submitStopAgent, submitUninstallAgent, triggerTicketingSync } from './features/agent-actions.js';
@@ -13,7 +16,7 @@ import { closeCovDrawer, closeCovDrawerOnBackdrop, loadCoverageAnalytics, openTe
 import { loadADCoverage, setADFilter, exportADReportPDF, exportADReportJSON } from './features/ad-coverage.js';
 import { setReportType, pickReportFormat } from './features/reports.js';
 import { rptFilter, rptClear } from './features/rpt-view.js';
-import { vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfToggleHistory, vfUploadEvidence } from './features/detection-verification.js';
+import { vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfToggleHistory, vfUploadEvidence, vfSetStatus, vfSearch, vfClearFilters, vfTableQuery, vfClearTableQuery, vfSetPer, vfPage, vfSortBy, vfToggleCols, vfColToggle, vfSelectRow, vfSelectAll, vfClearSelection, vfRowKeydown, vfExportCsv, vfExportSelected, vfDrawerBackdrop } from './features/detection-verification.js';
 import { egCancelCampaignClick, egLaunchCampaign, egRunExpectation, egToggleCampaign, egToggleRunDetail, loadEmailTab, setEmailCampaignsTab, setEmailRunsTab, openEmailScenario, openEmailCampaignDrawer, closeEmailDrawer, closeEmailDrawerOnBackdrop, setEmailTab, emailCampaignSearch, emailClearFilters, emailScenarioKeydown } from './features/email.js';
 import { _toggleEMExtraScenario, _toggleEMPreviewRow, _toggleVexPreviewRow, _toggleVexPreviewSection, cancelEMSweep, closeEMSweepModal, closeEMSweepModalOnBackdrop, closeEMSweepProgress, closeEMSweepProgressOnBackdrop, closeSweepPreview, closeSweepPreviewOnBackdrop, emGroupSelChange, emRunLayer, emSweepDispatch, openEMSweepProgress, openEMSweepReport, setEMExtraSearchFromInput, setEMSweepTargetMode, setVexPreviewSearchFromInput, setVexPreviewTacticFromSelect, startSweepFromPreview, stopEMSweep, stopEMSweepCurrent } from './features/endpoint-mastery.js';
 import { closeCreateUser, closeCreateUserOnBackdrop, closeDownloadOptions, closeEditUser, closeEditUserOnBackdrop, closeEvidence, closeEvidenceOnBackdrop, confirmRun, copyRaw, doResetPassword, downloadCampaignCSV, downloadCampaignReport, downloadEMSweepReport, downloadRunCSV, downloadRunReport, downloadSweepReport, exportRunJSON, openCampaignReport, openCmdk, openCreateUser, openDashRun, openEditUser, openEvidence, openFindingFromDashboard, openRunReport, pauseRun, resumeRun, stopRun, submitCreateUser, submitEditUser, toggleUserActive } from './features/evidence.js';
@@ -22,7 +25,7 @@ import { closeInitiativeAttachDrawer, closeInitiativeAttachDrawerOnBackdrop, clo
 import { closeConnectorForm, closeRespondModal, closeResponseConnectorForm, connectorProjectSelectChange, deleteConnector, deleteResponseConnector, fetchConnectorProjects, openAddConnector, openAddResponseConnector, openEditConnector, openEditResponseConnector, openRespondModal, renderConnectorSettings, renderRespondFields, renderResponseConnectorFields, saveConnectorForm, saveResponseConnectorForm, submitRespondAction, testConnectorById, testConnectorForm, testResponseConnectorById } from './features/integrations.js';
 import { clearIOCFilters, closeIOCAddModal, closeIOCAddOnBackdrop, closeIOCDrawer, closeIOCDrawerOnBackdrop, closeIOCImportOnBackdrop, openIOCAddModal, setIOCType, submitIOCAdd, closeIOCImportModal, closeResults, closeResultsOnBackdrop, loadIOCRegistry, loadIOCRegistryOnEnter, openIOCDetail, openIOCImportModal, setRunIOCSearchFromInput, setRunIOCTypeFilter, submitIOCImport, toggleIOCSuppressed, toggleRunIOCRow } from './features/iocs.js';
 import { closeRunLive, closeRunLiveOnBackdrop, closeSweepDrilldown, closeSweepDrilldownOnBackdrop, openRunPanelAction, openSweepDrilldown, openSweepReport, toggleLiveStepAction } from './features/live-run.js';
-import { abortExecution, abortExecutionStop, approveExStep, closeExerciseDetail, closeExerciseDetailOnBackdrop, closeOpenAEVDetail, closeOpenAEVDetailOnBackdrop, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory } from './features/openaev.js';
+import { abortExecution, abortExecutionStop, approveExStep, closeExerciseDetail, closeExerciseDetailOnBackdrop, closeOpenAEVDetail, closeOpenAEVDetailOnBackdrop, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory, toggleAPScore } from './features/openaev.js';
 import { runRansomwareDrill } from './features/ransomware.js';
 import { addStep, addlSelChange, loadStepScript, applyPicker, clearSelection, cloneScenario, closeBuilder, closeBuilderOnBackdrop, closeModal, closePicker, closeReportGen, deleteCustomScenario, downloadBuilderYaml, genAgentReport, loadRuns, moveStepBy, openBuilder, openBuilderARTPicker, openBuilderCalderaPicker, openDetailedViewForScenario, openModal, openPicker, openPickerFromModal, openReportGen, pickScenarioUploadFile, pickerSelectAll, pickerToggle, removeStep, renderBuilderMode, renderPickerList, renderRunMode, runGroupChange, saveScenario, selectAllAdditionalAgents, setPF, setTargetMode, submitReport, switchRunTab, techChangeSelection, techCopyId, techKeydown, techOnBlur, techOnInput, techSelectRow, updateVariantDepthNote, uploadScenarioFile, viewRunResults, wizardNav } from './features/reports.js';
 import { closeRerunReview, closeRerunReviewOnBackdrop, openCampaignRerunReview, openRerunReview, startRerunFromReview } from './features/rerun-review.js';
@@ -89,6 +92,19 @@ export const ACTIONS = {
   loadFactoryHealth,
   openFactorySource,
   fhTableQuery,
+  toggleExpCols,
+  setExpPer,
+  expPage,
+  expSortBy,
+  expColToggle,
+  expSelectRow,
+  expSelectAll,
+  clearExpSelection,
+  expRowKeydown,
+  exportExpCsv,
+  exportExpSelected,
+  clearExpTableQuery,
+  expGo,
   clearFhTableQuery,
   setFhPer,
   fhPage,
@@ -171,6 +187,19 @@ export const ACTIONS = {
   connectorProjectSelectChange,
   copyRaw,
   copyRecommendedScenario,
+  setRecLimit,
+  recTableQuery,
+  clearRecTableQuery,
+  setRecPer,
+  recPage,
+  recSortBy,
+  toggleRecCols,
+  recColToggle,
+  recSelectRow,
+  recSelectAll,
+  clearRecSelection,
+  exportRecCsv,
+  exportRecSelected,
   clearEnrollmentTokens,
   copyEnrollmentToken,
   downloadEnrollmentTokensCsv,
@@ -570,6 +599,7 @@ export const ACTIONS = {
   tmplRunModeChange,
   tmplSelAgentChange,
   toggleAPHistory,
+  toggleAPScore,
   toggleAdversarySection,
   toggleAllFindingChecksFromChecked,
   toggleEvidence,
@@ -604,6 +634,23 @@ export const ACTIONS = {
   vfSubmit,
   vfToggleHistory,
   vfUploadEvidence,
+  vfSetStatus,
+  vfSearch,
+  vfClearFilters,
+  vfTableQuery,
+  vfClearTableQuery,
+  vfSetPer,
+  vfPage,
+  vfSortBy,
+  vfToggleCols,
+  vfColToggle,
+  vfSelectRow,
+  vfSelectAll,
+  vfClearSelection,
+  vfRowKeydown,
+  vfExportCsv,
+  vfExportSelected,
+  vfDrawerBackdrop,
   viewRunResults,
   wizardNav,
   x,

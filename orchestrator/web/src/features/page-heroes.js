@@ -200,19 +200,30 @@ var HEROES = {
     icon: ICON.path,
     title: 'Attack Paths',
     sub: 'Fleet lateral-movement graph — reachability, blast radius, choke points, and paths to Domain Admin. Recon only: relationship mapping, no exploitation or propagation.',
-    actions: '<div class="g1-display-flex g1-s-993532d2"><button class="btn btn-outline btn-sm" data-on-click="loadAttackPath">Refresh</button><button class="btn btn-outline btn-sm" data-on-click="openAPAssets">&#9873; Tag Assets</button><button class="btn btn-outline btn-sm" data-on-click="openAPSchedule">&#8635; Schedule</button><button class="btn btn-outline btn-sm" data-on-click="openAPAbout" title="How Attack Path Validation works">&#9432; About</button><button class="btn btn-primary btn-sm" id="ap-collect-btn" data-on-click="openAPCollect">&#9654; Run Collection</button></div>',
+    actions: '<div class="g1-display-flex g1-s-993532d2"><button class="btn btn-outline btn-sm" data-on-click="loadAttackPath">Refresh</button></div>',
   },
   'hero-exposure': {
     icon: ICON.lock,
     title: 'Exposure Explorer',
-    sub: 'Per-asset attack-path exposure, detection coverage, CVE/KEV/EPSS risk, threat-group attribution, and findings — one composite Exposure Score per host.',
-    actions: '<button class="btn btn-outline btn-sm" data-on-click="loadExposureAssets">Refresh</button>',
+    sub: 'Internet-facing and internal assets with exposure and vulnerability context.',
+    actions: '<button type="button" class="btn btn-outline" data-on-click="loadExposureAssets">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh</button>',
+    stats: [
+      { id: 'exp-hs-assets', icon: ICON.lock, value: '—', label: 'Assets' },
+      { id: 'exp-hs-internet', icon: ICON.globe, value: '—', label: 'Internet-facing' },
+      { id: 'exp-hs-kev', icon: ICON.warn, value: '—', label: 'KEV-exposed' },
+      { id: 'exp-hs-findings', icon: ICON.flag, value: '—', label: 'Open findings' },
+    ],
   },
   'hero-recommendations': {
     icon: ICON.bulb,
     title: 'Recommendations',
     sub: 'What to simulate next, ranked by threat priority, how overdue the technique is for testing, and whether it traverses a real path in your environment.',
-    actions: '<div class="g1-display-flex g1-s-9b5be34d"><select id="rec-limit" data-on-change="loadRecommendations" class="g1-s-d41e6472"><option value="10">Top 10</option><option value="20" selected>Top 20</option><option value="50">Top 50</option></select><button class="btn btn-outline btn-sm" data-on-click="copyRecommendedScenario">Copy scenario techniques</button><button class="btn btn-outline btn-sm" data-on-click="loadRecommendations">Refresh</button></div>',
+    stats: [
+      { id: 'rec-hs-ranked', icon: ICON.bulb, value: '—', label: 'Techniques ranked' },
+      { id: 'rec-hs-top', icon: ICON.warn, value: '—', label: 'Critical or High tier' },
+      { id: 'rec-hs-never', icon: ICON.technique, value: '—', label: 'Never tested' },
+      { id: 'rec-hs-path', icon: ICON.path, value: '—', label: 'On a real path' },
+    ],
   },
   'hero-findings': {
     icon: ICON.flag,
@@ -243,8 +254,15 @@ var HEROES = {
   },
   'hero-verification': {
     icon: ICON.check,
-    title: 'Verification',
-    sub: 'Attest whether off-host controls (SIEM, identity, cloud, DLP, network) actually detected each simulated technique. Attestations are immutable, evidence is SHA-256 hashed at upload, and every action is written to the audit log.',
+    title: 'Detection Verification',
+    sub: 'Confirms whether detections fired as expected for each validated step.',
+    actions: '<button type="button" class="btn btn-primary" data-on-click="vfLoadQueue">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh</button>',
+    stats: [
+      { id: 'vf-hs-checks', icon: ICON.check, value: '—', label: 'Checks' },
+      { id: 'vf-hs-detected', icon: ICON.posture, value: '—', label: 'Detected' },
+      { id: 'vf-hs-outstanding', icon: ICON.warn, value: '—', label: 'Outstanding' },
+      { id: 'vf-hs-silent', icon: ICON.bad, value: '—', label: 'Silent' },
+    ],
   },
   'hero-reports': rptHero(''),
   'hero-integrations': {

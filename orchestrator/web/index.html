@@ -1603,29 +1603,29 @@
       <div id="tab-attackpath" class="is-hidden">
         <div id="hero-attackpath"></div>
         <!-- Current Graph metadata bar — always visible when data exists -->
-        <div id="ap-current-graph-bar" class="is-hidden g1-s-992b7d83">
-          <div class="dash-panel-body g1-display-flex g1-s-b7c311cc">
+        <div class="ap-actions"><button class="btn btn-primary" id="ap-collect-btn" data-on-click="openAPCollect">&#9654; Run Collection</button><button class="btn btn-outline" data-on-click="openAPAssets">&#9873; Tag Assets</button><button class="btn btn-outline" data-on-click="openAPSchedule">&#8635; Schedule</button><button class="btn btn-outline" data-on-click="openAPAbout" title="How Attack Path Validation works">&#9432; About</button><button class="btn btn-outline" data-on-click="toggleAPHistory" id="ap-history-toggle">&#128196; History</button></div>
+        <div id="ap-current-graph-bar" class="is-hidden">
+          <div class="card ap-meta">
             <div>
-              <div class="tiny muted g1-s-115854de">Last collected</div>
-              <div class="g1-s-c922bb47" id="ap-meta-ts">—</div>
+              <div class="lbl-s">LAST COLLECTED</div>
+              <b id="ap-meta-ts">—</b>
             </div>
             <div>
-              <div class="tiny muted g1-s-115854de">Agent</div>
-              <div class="g1-s-e6d8c848" id="ap-meta-agent">—</div>
+              <div class="lbl-s">AGENT</div>
+              <b id="ap-meta-agent">—</b>
             </div>
             <div>
-              <div class="tiny muted g1-s-115854de">Relationships</div>
-              <div class="g1-s-e6d8c848" id="ap-meta-edges">—</div>
+              <div class="lbl-s">RELATIONSHIPS</div>
+              <b id="ap-meta-edges">—</b>
             </div>
             <div>
-              <div class="tiny muted g1-s-115854de">Graph age</div>
-              <div class="g1-display-flex g1-s-2a5ff50e">
-                <span id="ap-meta-age">—</span>
-                <span id="ap-meta-freshness" class="g1-s-e1117d41"></span>
-              </div>
+              <div class="lbl-s">GRAPH AGE</div>
+              <div>
+                <b id="ap-meta-age">—</b>
+                              </div>
             </div>
-            <div class="g1-s-ca6fc035">
-              <button class="btn btn-outline btn-sm" data-on-click="toggleAPHistory" id="ap-history-toggle">&#128196; History</button>
+            <div class="ap-meta-end">
+              <span id="ap-meta-freshness" class="rk-chip"></span>
             </div>
           </div>
         </div>
@@ -1911,44 +1911,16 @@
       <!-- Exposure Explorer -->
       <div id="tab-exposure" class="is-hidden">
         <div id="hero-exposure"></div>
+        <div id="exp-main"><section class="rk-card"><div class="empty">Loading…</div></section></div>
         <div id="exp-summary"></div>
-        <div class="rk-filters">
-          <label class="rk-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" id="exp-search" placeholder="Search hosts, crown-jewel tags..." data-on-input="onExposureSearch"></label>
-          <span id="exp-seg"></span>
-          <span class="g4-count" id="exp-count"></span>
-        </div>
-        <div class="rk-card flush">
-          <div class="tbl-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Host</th><th>Managed</th><th>Exposure</th><th>Attack Path</th><th>Detection</th>
-                <th>Crown Jewel</th><th>Open Findings</th><th>KEV</th>
-              </tr>
-            </thead>
-            <tbody id="exp-table-body"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
-          </table>
-          </div>
-        </div>
       </div>
 
       <!-- Recommendations -->
       <div id="tab-recommendations" class="is-hidden">
         <div id="hero-recommendations"></div>
+        <div id="rec-controls"></div>
+        <div id="rec-table"><section class="rk-card runs-card rec-card"><div class="rk-hd"><h2>What to simulate next</h2></div><div class="rec-state muted">Loading…</div></section></div>
         <div id="rec-summary"></div>
-        <div class="rk-card flush">
-        <div class="tbl-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Technique</th><th>Tactic</th><th>Score</th><th>Coverage</th>
-                <th>Threat</th><th>Environment</th><th>Why</th>
-              </tr>
-            </thead>
-            <tbody id="rec-table-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
-          </table>
-        </div>
-        </div>
       </div>
 
       <!-- Findings -->
@@ -2121,13 +2093,26 @@
       <div id="tab-verification" class="is-hidden g3-page">
         <div id="hero-verification"></div>
 
-        <div class="rk-filters">
-          <select id="vf-run" data-on-change="vfLoadQueue" class="g1-s-8ce8e97e">
+        <div class="rk-card vf-info">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>
+          <span>Attest whether off-host controls (SIEM, identity, cloud, DLP, network) actually detected each simulated technique. Attestations are immutable, evidence is SHA-256 hashed at upload, and every action is written to the audit log.</span>
+        </div>
+
+        <div class="vf-flow">
+          <div class="vf-fs"><span class="vf-fs-n">1</span><span class="vf-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg></span><div><b>Select a run</b><div class="muted">Pick the run whose techniques you will attest</div></div></div>
+          <span class="vf-fs-arrow">&rarr;</span>
+          <div class="vf-fs"><span class="vf-fs-n">2</span><span class="vf-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span><div><b>Attest each technique</b><div class="muted">Detected by SIEM, identity, cloud, DLP or network?</div></div></div>
+          <span class="vf-fs-arrow">&rarr;</span>
+          <div class="vf-fs"><span class="vf-fs-n">3</span><span class="vf-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0"/></svg></span><div><b>Upload evidence</b><div class="muted">SHA-256 hashed at upload, immutable afterwards</div></div></div>
+          <span class="vf-fs-arrow">&rarr;</span>
+          <div class="vf-fs"><span class="vf-fs-n">4</span><span class="vf-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/></svg></span><div><b>Audit log</b><div class="muted">Every action is written to the audit log</div></div></div>
+        </div>
+
+        <div class="rk-card vf-run">
+          <div class="vf-run-lbl">RUN</div>
+          <select id="vf-run" data-on-change="vfLoadQueue" class="g1-s-8ce8e97e" aria-label="Run">
             <option value="">Select a run…</option>
           </select>
-          <div id="vf-domain-chips"></div>
-          <div class="u-flex1"></div>
-          <span id="vf-summary" class="rk-hd-sub"></span>
         </div>
 
         <div id="vf-queue">
@@ -3547,6 +3532,17 @@
   </div>
 </div>
 
+<!-- Verification expectation drawer -->
+<div id="vf-drawer-overlay" class="drawer-overlay" data-on-click="vfDrawerBackdrop">
+  <div class="drawer sc-drawer" role="dialog" aria-modal="true" aria-label="Expectation details">
+    <div class="drawer-header">
+      <div class="sc-dh"><span class="sc-dh-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span><div><div class="sc-dh-t" id="vf-drawer-title">Expectation</div><div class="sc-dh-s" id="vf-drawer-sub"></div></div></div>
+      <button class="drawer-close" data-on-click="vfCloseDetail" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="drawer-body"><div id="vf-detail"></div></div>
+  </div>
+</div>
+
 <!-- Results Drawer -->
 <div id="cmp-drawer-overlay" class="drawer-overlay" data-on-click="closeCampaignDrawerOnBackdrop">
   <div class="drawer sc-drawer" role="dialog" aria-modal="true" aria-label="Campaign details">
@@ -3889,12 +3885,13 @@
 </div>
 
 <div id="exposure-detail-overlay" class="drawer-overlay" data-on-click="closeExposureDetailOnBackdrop">
-  <div class="drawer g1-s-acbf48e7">
+  <div class="drawer sc-drawer" role="dialog" aria-modal="true" aria-label="Asset exposure details">
     <div class="drawer-header">
-      <h3 id="exp-detail-title">Asset</h3>
-      <button class="drawer-close" data-on-click="closeExposureDetail">&#10005;</button>
+      <div class="sc-dh"><span class="sc-dh-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0"/></svg></span><div><div class="sc-dh-t" id="exp-detail-title">Asset</div><div class="sc-dh-s" id="exp-detail-sub"></div></div></div>
+      <button class="drawer-close" data-on-click="closeExposureDetail" aria-label="Close">&#10005;</button>
     </div>
-    <div class="drawer-body g1-s-917adb93" id="exp-detail-body"></div>
+    <div class="drawer-body" id="exp-detail-body"></div>
+    <div class="sc-drawer-ft"><button type="button" class="btn btn-outline btn-sm" data-on-click="closeExposureDetail">Close</button></div>
   </div>
 </div>
 

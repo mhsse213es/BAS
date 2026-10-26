@@ -2,7 +2,8 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
-import { apColor, apFreshness } from './attack-path.js';
+import { apColor } from './attack-path.js';
+import { freshness as apAgeChip } from './ap-model.js';
 import { apRichBody, exStatusTone, exSummary } from './rich-g4.js';
 import { bar as kitBar, chip } from '../core/kit.js';
 import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js';
@@ -453,11 +454,20 @@ function _apUpdateMetaBar(d) {
   document.getElementById('ap-meta-agent').textContent = m.hostname || m.agentId || '—';
   document.getElementById('ap-meta-edges').textContent = m.edgeCount != null ? m.edgeCount : '—';
   document.getElementById('ap-meta-age').textContent = ageStr;
-  var fresh = apFreshness(ageMs);
+  var fresh = apAgeChip(ageMs);
   var freshEl = document.getElementById('ap-meta-freshness');
   freshEl.textContent = fresh.label;
-  freshEl.style.color = fresh.color;
+  freshEl.className = 'rk-chip tone-' + fresh.tone;
   setDisplay(bar, '');
+}
+
+// "Score breakdown" on the score card: reveals / hides the server-reported score drivers.
+export function toggleAPScore() {
+  var el = document.getElementById('ap-score-breakdown');
+  var btn = document.getElementById('ap-score-toggle');
+  if (!el) return;
+  var open = el.classList.toggle('is-hidden') === false;
+  if (btn) btn.textContent = 'Score breakdown ' + (open ? '▲' : '▼');
 }
 
 export function toggleAPHistory() {

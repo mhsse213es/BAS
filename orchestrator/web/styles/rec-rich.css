@@ -1,0 +1,33 @@
+/* Recommendations: Top-N control row and the "What to simulate next" table card (table chrome via .dt-*). */
+.rec-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.rec-controls-r { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rec-controls .btn { display: inline-flex; align-items: center; gap: 6px; }
+
+.rec-card { margin-bottom: 14px; }
+.rec-card > .rk-hd { padding: 14px 16px 12px; margin-bottom: 0; }
+.rec-note { font-size: 12px; }
+.rec-state { padding: 18px 16px 22px; text-align: center; font-size: 13px; }
+.rec-card > .rk-empty { padding: 22px 16px 28px; }
+
+#rec-table-wrap { border: 0; border-radius: 0; box-shadow: none; background: transparent; max-height: 560px; overflow: auto; }
+#rec-table-wrap[hidden] { display: none; }
+#rec-table-wrap thead { position: sticky; top: 0; z-index: 2; }
+#rec-table-wrap th { background: var(--elevated); box-shadow: 0 1px 0 var(--border); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; white-space: nowrap; }
+#rec-table-wrap th.dt-th { cursor: pointer; user-select: none; }
+#rec-table-wrap th.dt-th:hover { color: var(--text); }
+#rec-table-wrap th.sorted { color: var(--info-text); }
+#rec-table-wrap th.num, #rec-table-wrap td.num { text-align: right; font-variant-numeric: tabular-nums; }
+#rec-table-wrap .dt-selcol { width: 34px; padding-right: 0; }
+#rec-table-wrap tbody td { vertical-align: middle; font-size: 13px; }
+#rec-table-wrap tbody tr:has(.dt-cb:checked) td { background: var(--accent-dim); }
+#rec-table-wrap tbody tr:hover td { background: var(--hover); }
+#rec-table-wrap tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+#rec-table-wrap .rk-pill { text-transform: capitalize; }
+.rec-id { font-size: 11px; }
+.rec-scorecol { min-width: 120px; }
+.rec-score { display: flex; align-items: center; gap: 8px; min-width: 110px; }
+.rec-score .rk-bar { flex: 1; }
+.rec-score-n { width: 28px; text-align: right; font-variant-numeric: tabular-nums; }
+.rec-tier { font-size: 10.5px; font-weight: 600; margin-top: 3px; color: var(--kc, var(--muted)); }
+.rec-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rec-why { font-size: 12px; max-width: 320px; overflow-wrap: anywhere; }

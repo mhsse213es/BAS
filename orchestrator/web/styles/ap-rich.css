@@ -1,0 +1,27 @@
+/* Attack Paths page: action row under the banner, collection meta card, findings rows with tinted icon
+   squares, the centred score card and the summary tiles. Mirrors the design demo. Theme tokens only. */
+
+.ap-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 12px; }
+.ap-actions .btn { width: auto; display: inline-flex; align-items: center; height: 36px; padding: 0 14px; font-size: 13px; }
+
+#ap-current-graph-bar { margin-bottom: 14px; }
+.ap-meta { display: flex; flex-direction: row; gap: 28px; align-items: center; flex-wrap: wrap; padding: 16px; margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.ap-meta .lbl-s { font-size: 10.5px; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin-bottom: 2px; text-transform: uppercase; }
+.ap-meta b { font-size: 13px; font-weight: 600; color: var(--text); }
+
+.ap-side { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; margin-bottom: 14px; }
+.ap-side > .rk-card { margin-bottom: 0; }
+@media (max-width: 900px) { .ap-side { grid-template-columns: minmax(0, 1fr); } }
+
+.ap-find { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.ap-find:last-child { border-bottom: 0; }
+.ap-ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; flex: none; color: var(--kc); background: color-mix(in srgb, var(--kc) 15%, transparent); }
+.ap-ico svg { width: 15px; height: 15px; }
+
+.ap-score { text-align: center; }
+.ap-score .donut-wrap { justify-content: center; }
+.ap-score-val { margin-top: 8px; font-size: 22px; font-weight: 700; color: var(--kc); font-variant-numeric: tabular-nums; }
+.ap-score-cap { font-size: 12px; }
+.ap-score-btn { width: auto; margin-top: 10px; }
+.ap-bd { margin-top: 10px; text-align: left; }
+.ap-bd-cap { margin-bottom: 8px; }

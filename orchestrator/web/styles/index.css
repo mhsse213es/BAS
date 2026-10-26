@@ -15,12 +15,16 @@
 @import "./init-rich.css" layer(app);
 @import "./cmp-rich.css" layer(app);
 @import "./fh-rich.css" layer(app);
+@import "./exp-rich.css" layer(app);
+@import "./ver-rich.css" layer(app);
 @import "./cov-rich.css" layer(app);
 @import "./eml-rich.css" layer(app);
 @import "./var-rich.css" layer(app);
 @import "./adc-rich.css" layer(app);
 @import "./rpt-rich.css" layer(app);
 @import "./fnd-rich.css" layer(app);
+@import "./ap-rich.css" layer(app);
 @import "./ioc-rich.css" layer(app);
+@import "./rec-rich.css" layer(app);
 @import "./rich-g4.css" layer(app);
 @import "./inline-equivalent.css";
