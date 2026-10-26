@@ -18,6 +18,14 @@ never share a CA, so a compromise of one server cannot be used against another.
 | Files missing but agents are already enrolled | **Refuses to start.** A new CA would invalidate every enrolled agent. |
 | Deliberate replacement | Set `BAS_CONFIRM_NEW_CA=true` after removing both files. Every enrolled agent must then re-enroll. |
 
+## The server's own certificate
+
+The server presents its **own** certificate to agents and browsers (`server-cert.pem` / `server-key.pem` in `PKI_DIR`), signed by
+the deployment CA. It is not the CA certificate. It carries the names from `BAS_SERVER_SANS`, lasts a year, and is renewed
+automatically 30 days before it expires while the server runs. Changing `BAS_SERVER_SANS` issues a new server certificate and leaves
+the CA, and therefore every agent's trust, untouched. These two files can be deleted at any time: the server issues new ones.
+Only `ca-key.pem` and `ca-cert.pem` need backing up.
+
 ## Backup and restore
 
 Back up `ca-key.pem` and `ca-cert.pem` together, somewhere only administrators can read. Losing the key means

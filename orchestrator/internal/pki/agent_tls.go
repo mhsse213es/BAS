@@ -16,14 +16,14 @@ type RevocationCheck func(serialHex, agentID string) (revoked bool, err error)
 // client-auth usage), and every connection, including a resumed session, is checked against check
 // so a revoked certificate stops working at once rather than at expiry. A nil check disables only
 // the revocation step.
-func NewAgentTLSConfig(server tls.Certificate, ca *CA, check RevocationCheck) *tls.Config {
+func NewAgentTLSConfig(getServerCert func(*tls.ClientHelloInfo) (*tls.Certificate, error), ca *CA, check RevocationCheck) *tls.Config {
 	pool := x509.NewCertPool()
 	pool.AddCert(ca.Certificate())
 	return &tls.Config{
-		Certificates: []tls.Certificate{server},
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		ClientCAs:    pool,
-		MinVersion:   tls.VersionTLS12,
+		GetCertificate: getServerCert,
+		ClientAuth:     tls.RequireAndVerifyClientCert,
+		ClientCAs:      pool,
+		MinVersion:     tls.VersionTLS12,
 		VerifyConnection: func(cs tls.ConnectionState) error {
 			if check == nil {
 				return nil

@@ -70,8 +70,6 @@ func TestNewAgentTLSConfig_Handshakes(t *testing.T) {
 	foreign := clientCertSignedBy(t, other, "0123456789abcdef", now.Add(-time.Hour), now.Add(time.Hour), client)
 	serverOnly := clientCertSignedBy(t, ca, "0123456789abcdef", now.Add(-time.Hour), now.Add(time.Hour), []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
 
-
-
 	revokedSerials := map[string]bool{}
 	var checkErr error
 	check := func(serial, agentID string) (bool, error) {
@@ -80,7 +78,7 @@ func TestNewAgentTLSConfig_Handshakes(t *testing.T) {
 		}
 		return revokedSerials[serial], nil
 	}
-	cfg := NewAgentTLSConfig(server, ca, check)
+	cfg := NewAgentTLSConfig(func(*tls.ClientHelloInfo) (*tls.Certificate, error) { return &server, nil }, ca, check)
 	serialOf := func(c tls.Certificate) string {
 		leaf, _ := x509.ParseCertificate(c.Certificate[0])
 		return leaf.SerialNumber.Text(16)

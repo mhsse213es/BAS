@@ -211,15 +211,24 @@ CA only (`ClientCAs` has a single entry) and its TLS identity is the CA certific
 * **Regression tests to write with it:** an agent with both roots accepts a server certificate from either; an unsigned or
   wrongly signed trust update is refused; a root whose fingerprint does not match the update is refused.
 
-#### F-10 The server's TLS certificate is the CA certificate. Medium. Design limit.
+#### F-10 The server's TLS certificate is the CA certificate. Medium. Design limit. **FIXED**
 
 * **Evidence (code):** `CA.TLSCertificate()` presents the CA certificate and key as the server identity (and the dashboard's
   fallback certificate).
 * **Impact:** the CA signing key is used in every TLS handshake, so it must stay online, and the server certificate cannot be
   rotated or have its names changed without replacing the CA (which is the fleet-wide event in F-09).
-* **Recommended change (not built):** issue a separate server leaf certificate from the CA, with the SANs, a short lifetime and
-  automatic renewal. Agents already verify the server by chain to the pinned CA, so no agent change should be needed, but this
-  needs a live test against real agents before release because the agent's server check is hand-written (`verifyServerCertChain`).
+* **Fix:** `pki.ServerCertSource` (`internal/pki/server_cert.go`) issues the server its own leaf certificate (`server-cert.pem`,
+  `server-key.pem` in `PKI_DIR`): ECDSA P-256, not a CA, server-authentication usage only, the configured DNS/IP names, one year,
+  renewed 30 days before expiry *while the server runs* (`GetCertificate`). It is used for the agent listener, the enrolment listener
+  and the dashboard fallback. A stored leaf that is damaged, signed by a different CA, due for renewal or has other names is replaced;
+  that is safe because agents trust the CA, not the leaf, and the leaf is only ever signed by the CA that is loaded, so nothing here
+  can introduce a new trust anchor. The CA key is no longer used in TLS handshakes.
+* **Agent compatibility (verified in code, not on a live fleet):** the agent verifies the server by chain to its pinned CA with the
+  server-authentication usage and the validity period, and does not check names (`verifyServerCertChain`), so a leaf signed by the
+  same CA is accepted without an agent change. `TestServerCert_AgentStyleChainVerificationOverARealHandshake` does a real handshake
+  with that exact check. Not yet confirmed against real agents: it is part of the staging runbook.
+* **Tests:** `server_cert_test.go` (leaf is distinct from the CA and not a CA; reuse across restarts; new names reissue the leaf only;
+  renewal while running without touching the CA; damaged or missing files; a leaf from another CA is replaced).
 
 ## Incidental observations (status after the trace above)
 

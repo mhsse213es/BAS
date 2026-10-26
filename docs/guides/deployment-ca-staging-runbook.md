@@ -69,6 +69,8 @@ docker logs audspect-orchestrator 2>&1 | grep -i -E 'new deployment CA|CA expire
 | Ownership | unchanged (`65532:65532 600`) |
 | Logs | no "new deployment CA was just generated" |
 | Agent | the enrolled test agent is still connected without re-enrollment (check the dashboard, or restart the agent service and see it reconnect) |
+| Server certificate | `server-cert.pem` and `server-key.pem` now exist in `pki/`, owned `65532:65532`; `openssl x509 -in "$D/pki/server-cert.pem" -noout -issuer -subject -ext extendedKeyUsage,basicConstraints` shows the CA as issuer, `TLS Web Server Authentication` only and `CA:FALSE`; the CA fingerprint is still **FP1** |
+| Agents after the server-certificate change | the agent reconnects after the upgrade **without** any change on the agent. This is the check that confirms the leaf certificate is accepted by real agents (the unit tests only simulate it) |
 
 ## 3. Missing key fails closed (disposable installation only)
 

@@ -96,7 +96,7 @@ func runHealthcheck() int {
 		Timeout: 3 * time.Second,
 		Transport: &http.Transport{
 			// The enrollment listener's server identity is the deployment
-			// CA's own self-signed certificate (see ca.TLSCertificate()) --
+			// server certificate (see pki.ServerCertSource) --
 			// this is a loopback liveness probe, not a security boundary,
 			// so skipping verification here is correct, not a shortcut.
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -1266,9 +1266,15 @@ func main() {
 		log.Println("[smtpsink] disabled via SMTP_SINK_ENABLED=false")
 	}
 
-	serverTLSCert, err := ca.TLSCertificate()
+	// The server's TLS identity is its own certificate signed by the CA (audit F-10), not the CA certificate
+	// itself. It renews while the server runs and never changes the CA agents trust.
+	serverCerts, err := pki.NewServerCertSource(ca, cfg.PKIDir, splitServerSANs(cfg.ServerSANs))
 	if err != nil {
-		log.Fatalf("[FATAL] build server TLS identity from CA: %v", err)
+		log.Fatalf("[FATAL] build server TLS identity: %v", err)
+	}
+	serverTLSCert, err := serverCerts.GetCertificate(nil)
+	if err != nil {
+		log.Fatalf("[FATAL] build server TLS identity: %v", err)
 	}
 
 	// 9443 — mandatory mTLS, canonical secure endpoint for enrolled agents
@@ -1278,7 +1284,7 @@ func main() {
 	mtlsSrv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
 		Handler: mtlsHandler,
-		TLSConfig: pki.NewAgentTLSConfig(serverTLSCert, ca, func(serial, agentID string) (bool, error) {
+		TLSConfig: pki.NewAgentTLSConfig(serverCerts.GetCertificate, ca, func(serial, agentID string) (bool, error) {
 			// Fail closed: a database error refuses the connection (see pki.NewAgentTLSConfig).
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
@@ -1297,8 +1303,9 @@ func main() {
 		Addr:    fmt.Sprintf(":%d", cfg.EnrollHTTPPort),
 		Handler: api.MountEnrollment(handler), // enrollment + /health ONLY, never the full router
 		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{serverTLSCert},
-			ClientAuth:   tls.NoClientCert,
+			GetCertificate: serverCerts.GetCertificate,
+			MinVersion:     tls.VersionTLS12,
+			ClientAuth:     tls.NoClientCert,
 		},
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 90 * time.Second,
@@ -1327,17 +1334,19 @@ func main() {
 	// otherwise -- browsers show a warning for the self-signed fallback,
 	// which is expected and documented in docs/guides/upgrade-guide.md,
 	// not a bug.
-	dashboardTLSCert, err := resolveDashboardTLSCert(*cfg, serverTLSCert)
+	dashboardTLSCert, err := resolveDashboardTLSCert(*cfg, *serverTLSCert)
 	if err != nil {
 		log.Fatalf("[FATAL] load dashboard TLS cert/key (TLS_CERT=%s, TLS_KEY=%s): %v", cfg.DashboardTLSCertPath, cfg.DashboardTLSKeyPath, err)
 	}
+	dashboardTLS := &tls.Config{Certificates: []tls.Certificate{dashboardTLSCert}, ClientAuth: tls.NoClientCert}
+	if cfg.DashboardTLSCertPath == "" || cfg.DashboardTLSKeyPath == "" {
+		// No operator certificate: present the server certificate, which renews while the server runs.
+		dashboardTLS = &tls.Config{GetCertificate: serverCerts.GetCertificate, ClientAuth: tls.NoClientCert}
+	}
 	dashboardSrv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.DashboardHTTPPort),
-		Handler: router,
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{dashboardTLSCert},
-			ClientAuth:   tls.NoClientCert,
-		},
+		Addr:      fmt.Sprintf(":%d", cfg.DashboardHTTPPort),
+		Handler:   router,
+		TLSConfig: dashboardTLS,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 90 * time.Second,
 		IdleTimeout:  120 * time.Second,
