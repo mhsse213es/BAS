@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/ws"
 )
@@ -82,4 +83,54 @@ func TestAgentRoutes_RefuseAnotherAgentsCertificate(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Run-scoped agent routes carry a run ID, not an agent ID. The run's owner must match the certificate.
+func TestRunRoutes_RefuseAnotherAgentsRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, "").WithAgentSecret("s")
+		const owner, other = "abc123deadbeef01", "abc123deadbeef02"
+		seedAgentRow(t, pool, owner)
+		var runID string
+		if err := pool.QueryRow(context.Background(),
+			`INSERT INTO scenario_runs (scenario_id, agent_id, status, execution_kind) VALUES ('scn-1', $1, 'running', 'legacy') RETURNING id`, owner).Scan(&runID); err != nil {
+			t.Fatal(err)
+		}
+		router := chi.NewRouter()
+		router.Post("/api/scenarios/events", h.SubmitRunEvents)
+		router.Post("/api/scenarios/runs/{runId}/detections", h.SubmitRunDetections)
+
+		call := func(path, body, certID string) int {
+			req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
+			req.Header.Set("X-Agent-Token", "s")
+			if certID != "" {
+				req = withCertIdentity(req, certID)
+			}
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			return rec.Code
+		}
+		events := `[{"runId":"` + runID + `","seq":1,"type":"started","ts":"2026-10-26T00:00:00Z"}]`
+		detections := `{"alerts":[]}`
+		detPath := "/api/scenarios/runs/" + runID + "/detections"
+
+		if c := call("/api/scenarios/events", events, other); c != http.StatusUnauthorized {
+			t.Errorf("events for another agent's run = %d, want 401", c)
+		}
+		if c := call(detPath, detections, other); c != http.StatusUnauthorized {
+			t.Errorf("detections for another agent's run = %d, want 401", c)
+		}
+		if c := call("/api/scenarios/events", events, owner); c != http.StatusOK {
+			t.Errorf("events from the run's own agent = %d, want 200", c)
+		}
+		if c := call(detPath, detections, owner); c == http.StatusUnauthorized {
+			t.Errorf("detections from the run's own agent = 401, want it accepted")
+		}
+		if c := call("/api/scenarios/events", events, ""); c != http.StatusOK {
+			t.Errorf("events with no certificate (legacy listener) = %d, want 200 (unchanged)", c)
+		}
+	})
 }

@@ -55,8 +55,7 @@ Progress: all six areas assessed. Fixed: F-01, F-02, F-04, F-05, F-06, F-07; par
   acts on must equal the certificate's identity, otherwise 401. Applied to heartbeat, enroll, unenroll, uninstall-result, log events
   (the whole batch is refused), host events, SharpHound upload, attack-path collection and scenario results.
 * Correction to the finding: `SubmitScenarioResult` already refused a result naming an agent other than the one the run was
-  dispatched to. It now also checks the certificate. `SubmitRunEvents` and `SubmitRunDetections` carry no agent ID (only run IDs),
-  so they are not covered; binding a run to its agent there is still open.
+  dispatched to. It now also checks the certificate. `SubmitRunEvents` and `SubmitRunDetections` carry only run IDs; they are now bound too (`runsBelongToCertificateAgent`: with a certificate present, a run owned by another agent gives 401, and a batch is refused whole). Test: `TestRunRoutes_RefuseAnotherAgentsRun`.
 * Not done: requests with **no** certificate (the plaintext legacy listener) are unchanged, so an agent holding only the shared
   secret can still claim any ID there. Making the certificate mandatory depends on retiring that listener.
 * Tests: `TestAgentMatchesCertificate`, `TestAgentRoutes_RefuseAnotherAgentsCertificate` (8 routes, written first and failing).
