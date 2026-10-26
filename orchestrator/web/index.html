@@ -743,10 +743,7 @@
 
       <!-- Settings (admin only) -->
       <div id="tab-settings" class="is-hidden">
-        <div class="u-mb-1">
-          <h1 class="g1-s-f7a002ca">Settings</h1>
-          <div class="g1-s-2134bc46">Manage team access, the simulation engine, threat-intel sync, and content.</div>
-        </div>
+        <div id="hero-settings"></div>
         <!-- ── Simulation Coverage KPI card ────────────────────────────────── -->
         <div id="sim-cov-card" class="conn-cfg-card g1-s-a9785b97" data-on-click="toggleSimCoverage"
              data-on-mouseenter="simCovHoverOn"
@@ -1258,10 +1255,7 @@
 
       <!-- Profile -->
       <div id="tab-profile" class="is-hidden">
-        <div class="g1-s-20ce54f7">
-          <h1 class="g1-s-f7a002ca">My Profile</h1>
-          <div class="g1-s-2134bc46">Your account details and access.</div>
-        </div>
+        <div id="hero-profile"></div>
 
         <div class="conn-cfg-card g1-s-a8e567d9">
           <div class="g1-display-flex g1-s-f769ee49">
@@ -1470,10 +1464,7 @@
 
       <!-- Runs -->
       <div id="tab-runs" class="is-hidden">
-        <div class="sec-hdr">
-          <h2>Scenario Runs <span id="runs-cnt" class="cnt">0</span></h2>
-          <button class="btn btn-outline btn-sm" data-on-click="loadRuns">Refresh</button>
-        </div>
+        <div id="hero-runs"></div>
         <div class="tbl-wrap">
           <table>
             <thead><tr>
@@ -1489,10 +1480,7 @@
 
       <!-- Scheduled Assessments -->
       <div id="tab-k8s-scenarios" class="is-hidden">
-        <div class="sec-hdr">
-          <h2>Kubernetes Scenarios <span id="k8s-cnt" class="cnt">0</span></h2>
-          <button class="btn btn-outline btn-sm" data-k8s-refresh="1">Refresh</button>
-        </div>
+        <div id="hero-k8s"></div>
 
         <div class="card k8s-card">
           <div class="card-title">New run</div>
@@ -1545,13 +1533,7 @@
       </div>
 
       <div id="tab-scheduled-assessments" class="is-hidden">
-        <div class="sec-hdr">
-          <h2>Scheduled Assessments <span id="sched-cnt" class="cnt">0</span></h2>
-          <div class="g1-display-flex g1-s-99b36ba4">
-            <button class="btn btn-outline btn-sm" data-on-click="loadScheduledAssessments">Refresh</button>
-            <button class="btn btn-primary btn-sm" data-on-click="openSchedWizard">+ New Schedule</button>
-          </div>
-        </div>
+        <div id="hero-scheduled"></div>
         <div class="tbl-wrap">
           <table>
             <thead><tr>
@@ -1567,19 +1549,7 @@
 
       <!-- Initiatives -->
       <div id="tab-initiatives" class="is-hidden">
-        <div class="sec-hdr">
-          <h2>Initiatives <span id="init-cnt" class="cnt">0</span></h2>
-          <div class="g1-display-flex g1-s-9b5be34d">
-            <div id="init-filter" class="g1-display-flex g1-s-48b783bb">
-              <button class="btn btn-outline btn-sm active" data-init-filter="active" data-on-click="initiativeSetFilter" data-args="[&quot;active&quot;]">Active</button>
-              <button class="btn btn-outline btn-sm" data-init-filter="closed" data-on-click="initiativeSetFilter" data-args="[&quot;closed&quot;]">Closed</button>
-              <button class="btn btn-outline btn-sm" data-init-filter="archived" data-on-click="initiativeSetFilter" data-args="[&quot;archived&quot;]">Archived</button>
-              <button class="btn btn-outline btn-sm" data-init-filter="all" data-on-click="initiativeSetFilter" data-args="[&quot;all&quot;]">All</button>
-            </div>
-            <button class="btn btn-outline btn-sm" data-on-click="loadInitiatives">Refresh</button>
-            <button class="btn btn-primary btn-sm" data-on-click="openInitiativeCreateDrawer">+ New Initiative</button>
-          </div>
-        </div>
+        <div id="hero-initiatives"></div>
         <div class="tbl-wrap">
           <table>
             <thead><tr>
@@ -1594,6 +1564,7 @@
 
       <!-- Factory Health -->
       <div id="tab-factory-health" class="is-hidden">
+        <div id="hero-factory"></div>
         <div id="factory-health-tiles" class="kpi-row"></div>
         <div id="factory-health-ingestion"></div>
         <div id="factory-health-funnel" class="kpi-row"></div>
@@ -1605,17 +1576,7 @@
       <!-- Campaigns -->
       <div id="tab-campaigns" class="is-hidden">
         <div id="campaigns-list">
-          <div class="g1-display-flex g1-s-21cf47f4">
-            <div>
-              <h1 class="g1-s-f7a002ca">Campaigns <span id="campaign-cnt" class="cnt">0</span></h1>
-              <div class="g1-s-2134bc46">One scenario fanned out across many agents. Open a campaign for the per-agent breakdown and result mix.</div>
-            </div>
-            <div class="g1-display-flex g1-s-993532d2">
-              <button class="btn btn-outline btn-sm g1-s-ddf6ed84" disabled title="Scheduled campaigns — coming soon">Schedule · soon</button>
-              <button class="btn btn-outline btn-sm" data-on-click="loadCampaigns">Refresh</button>
-              <button class="btn btn-primary btn-sm" id="campaign-new-btn" data-on-click="openCampaignLaunch">&#9654; New campaign</button>
-            </div>
-          </div>
+          <div id="hero-campaigns"></div>
           <div id="campaign-toolbar" class="g1-s-462c8de6"></div>
           <div class="tbl-wrap">
             <table>
@@ -1819,19 +1780,7 @@
 
       <!-- Attack Paths -->
       <div id="tab-attackpath" class="is-hidden">
-        <div class="g1-display-flex g1-s-21cf47f4">
-          <div>
-            <h1 class="g1-s-f7a002ca">Attack Path Validation</h1>
-            <div class="g1-s-2134bc46">Fleet lateral-movement graph — reachability, blast radius, choke points, and paths to Domain Admin. Recon only: relationship mapping, no exploitation or propagation.</div>
-          </div>
-          <div class="g1-display-flex g1-s-993532d2">
-            <button class="btn btn-outline btn-sm" data-on-click="loadAttackPath">Refresh</button>
-            <button class="btn btn-outline btn-sm" data-on-click="openAPAssets">&#9873; Tag Assets</button>
-            <button class="btn btn-outline btn-sm" data-on-click="openAPSchedule">&#8635; Schedule</button>
-            <button class="btn btn-outline btn-sm" data-on-click="openAPAbout" title="How Attack Path Validation works">&#9432; About</button>
-            <button class="btn btn-primary btn-sm" id="ap-collect-btn" data-on-click="openAPCollect">&#9654; Run Collection</button>
-          </div>
-        </div>
+        <div id="hero-attackpath"></div>
         <!-- Current Graph metadata bar — always visible when data exists -->
         <div id="ap-current-graph-bar" class="is-hidden g1-s-992b7d83">
           <div class="dash-panel-body g1-display-flex g1-s-b7c311cc">
@@ -2140,13 +2089,7 @@
 
       <!-- Exposure Explorer -->
       <div id="tab-exposure" class="is-hidden">
-        <div class="g1-display-flex g1-s-21cf47f4">
-          <div>
-            <h1 class="g1-s-f7a002ca">Exposure Explorer</h1>
-            <div class="g1-s-2134bc46">Per-asset attack-path exposure, detection coverage, CVE/KEV/EPSS risk, threat-group attribution, and findings — one composite Exposure Score per host.</div>
-          </div>
-          <button class="btn btn-outline btn-sm" data-on-click="loadExposureAssets">Refresh</button>
-        </div>
+        <div id="hero-exposure"></div>
         <div class="tbl-wrap">
           <table>
             <thead>
@@ -2162,21 +2105,7 @@
 
       <!-- Recommendations -->
       <div id="tab-recommendations" class="is-hidden">
-        <div class="g1-display-flex g1-s-21cf47f4">
-          <div>
-            <h1 class="g1-s-f7a002ca">Recommendations</h1>
-            <div class="g1-s-2134bc46">What to simulate next, ranked by threat priority, how overdue the technique is for testing, and whether it traverses a real path in your environment.</div>
-          </div>
-          <div class="g1-display-flex g1-s-9b5be34d">
-            <select id="rec-limit" data-on-change="loadRecommendations" class="g1-s-d41e6472">
-              <option value="10">Top 10</option>
-              <option value="20" selected>Top 20</option>
-              <option value="50">Top 50</option>
-            </select>
-            <button class="btn btn-outline btn-sm" data-on-click="copyRecommendedScenario">Copy scenario techniques</button>
-            <button class="btn btn-outline btn-sm" data-on-click="loadRecommendations">Refresh</button>
-          </div>
-        </div>
+        <div id="hero-recommendations"></div>
         <div class="tbl-wrap">
           <table>
             <thead>
@@ -2192,16 +2121,7 @@
 
       <!-- Findings -->
       <div id="tab-findings" class="is-hidden">
-        <div class="g1-display-flex g1-s-21cf47f4">
-          <div>
-            <h1 class="g1-s-f7a002ca">Findings</h1>
-            <div class="g1-s-2134bc46">Security gaps surfaced by simulations — each is a technique that executed without being prevented. Triage and re-validate.</div>
-          </div>
-          <div class="g1-display-flex g1-s-993532d2">
-            <button class="btn btn-outline btn-sm is-hidden" id="findings-bulk-btn" data-on-click="bulkPushSelectedFindings">Push to ITSM</button>
-            <button class="btn btn-outline btn-sm" data-on-click="loadFindings">Refresh</button>
-          </div>
-        </div>
+        <div id="hero-findings"></div>
         <div class="kpi-row" id="findings-tiles"></div>
         <div id="findings-toolbar" class="g1-s-462c8de6"></div>
         <div class="tbl-wrap">
@@ -2214,16 +2134,7 @@
 
       <!-- IOC Registry -->
       <div id="tab-iocs" class="is-hidden">
-        <div class="g1-display-flex g1-s-21cf47f4">
-          <div>
-            <h1 class="g1-s-f7a002ca">IOC Registry</h1>
-            <div class="g1-s-2134bc46">Indicators observed across every run, deduplicated and cross-referenced against scenarios, agents, and ATT&amp;CK techniques.</div>
-          </div>
-          <div class="g1-display-flex g1-s-993532d2">
-            <button class="btn btn-outline btn-sm is-hidden" id="ioc-import-btn" data-on-click="openIOCImportModal">Import</button>
-            <button class="btn btn-outline btn-sm" data-on-click="loadIOCRegistry">Refresh</button>
-          </div>
-        </div>
+        <div id="hero-iocs"></div>
 
         <div class="kpi-row u-mb-1" id="ioc-analytics-tiles"></div>
 
@@ -2308,26 +2219,14 @@
 
       <!-- Remediation -->
       <div id="tab-remediation" class="is-hidden">
-        <div class="g1-display-flex g1-s-21cf47f4">
-          <div>
-            <h1 class="g1-s-f7a002ca">Remediation</h1>
-            <div class="g1-s-2134bc46">Prioritized fixes from your open findings, with authoritative MITRE ATT&amp;CK mitigations. Re-validate after applying a fix.</div>
-          </div>
-          <div id="rem-ticket-actions" class="is-hidden g1-s-993532d2">
-            <button class="btn btn-outline btn-sm" data-on-click="remBulkTicket" data-args="[&quot;critical&quot;]">Create Tickets for All Critical</button>
-            <button class="btn btn-outline btn-sm" data-on-click="remBulkTicket" data-args="[&quot;all&quot;]">Create Tickets for All</button>
-          </div>
-        </div>
+        <div id="hero-remediation"></div>
         <div class="kpi-row" id="rem-tiles"></div>
         <div id="rem-list"><div class="empty g1-s-be6df18e">Loading…</div></div>
       </div>
 
       <!-- Reports -->
       <div id="tab-verification" class="is-hidden">
-        <div class="u-mb-1">
-          <h1 class="g1-s-f7a002ca">Detection Verification</h1>
-          <div class="g1-s-2134bc46">Attest whether off-host controls (SIEM, identity, cloud, DLP, network) actually detected each simulated technique. Attestations are immutable, evidence is SHA-256 hashed at upload, and every action is written to the audit log.</div>
-        </div>
+        <div id="hero-verification"></div>
 
         <div class="g1-display-flex g1-s-90850d7f">
           <select id="vf-run" data-on-change="vfLoadQueue" class="g1-s-8ce8e97e">
@@ -2344,10 +2243,7 @@
       </div>
 
       <div id="tab-reports" class="is-hidden">
-        <div class="u-mb-1">
-          <h1 class="g1-s-f7a002ca">Reports</h1>
-          <div class="g1-s-2134bc46">Generate evidence reports from your validated results. History re-generates on download — no stale copies.</div>
-        </div>
+        <div id="hero-reports"></div>
         <div class="dash-grid g1-s-574c7653">
           <div class="dash-panel u-pointer" data-on-click="openReportGen" data-args="[&quot;posture&quot;]"><div class="dash-panel-body"><div class="kpi-label">Posture report</div><div class="g1-s-a4c2a7d4">Full per-agent posture</div><div class="tiny muted">Prevention, detection, kill-chain — HTML report</div></div></div>
           <div class="dash-panel u-pointer" data-on-click="openReportGen" data-args="[&quot;audit&quot;]"><div class="dash-panel-body"><div class="kpi-label">Audit pack</div><div class="g1-s-a4c2a7d4">Evidence bundle</div><div class="tiny muted">Per-agent audit-ready package</div></div></div>
@@ -2368,16 +2264,7 @@
 
       <!-- Integrations (admin only — ITSM connector management) -->
       <div id="tab-integrations" class="is-hidden">
-        <div class="g1-display-flex g1-s-21cf47f4">
-          <div>
-            <h1 class="g1-s-f7a002ca">Integrations</h1>
-            <div class="g1-s-2134bc46">Configure ITSM connectors. Analysts create tickets from the Findings tab; BAS can auto-create tickets for critical exposures based on policy.</div>
-          </div>
-          <div class="g1-display-flex g1-s-993532d2" id="integrations-admin-actions">
-            <button class="btn btn-outline btn-sm" data-on-click="triggerTicketingSync">Sync Now</button>
-            <button class="btn btn-primary btn-sm" data-on-click="openAddConnector">+ Add Connector</button>
-          </div>
-        </div>
+        <div id="hero-integrations"></div>
 
         <!-- Connector list -->
         <div id="integrations-list"><div class="empty g1-s-be6df18e">Loading connectors…</div></div>
@@ -2533,6 +2420,7 @@
       </div>
 
       <div id="tab-exercises" class="is-hidden">
+        <div id="hero-exercises"></div>
         <!-- OpenAEV Scenarios — synced content library, feeds "Create Exercise Plan" below -->
         <div class="card g1-s-f9a62d25">
           <div class="card-title">OpenAEV Scenarios</div>
@@ -2577,6 +2465,7 @@
       </div>
 
       <div id="tab-attack-coverage" class="is-hidden">
+        <div id="hero-attack-coverage"></div>
         <div class="card g1-s-f9a62d25">
           <div class="card-title">Technique Coverage</div>
           <div class="g1-display-flex g1-s-de1b2a08">
@@ -2606,6 +2495,7 @@
 
       <!-- Threat Prioritization -->
       <div id="tab-threat-priority" class="is-hidden">
+        <div id="hero-threat-priority"></div>
         <div id="tp-list-view">
           <div class="card g1-s-f9a62d25">
             <div class="card-title">Threat Prioritization</div>
@@ -2676,21 +2566,7 @@
 
       <!-- Compliance (reached from the Reports hub) -->
       <div id="tab-compliance" class="is-hidden">
-        <div class="g1-s-2fc766d7">
-          <a class="tiny g1-s-93cfea45" data-on-click="showTab" data-args="[&quot;reports&quot;]">&lsaquo; Reports</a>
-        </div>
-        <div class="sec-hdr">
-          <h2>Compliance Report</h2>
-          <div class="g1-display-flex g1-s-377dd6f6">
-            <select id="cmp-agent-sel" class="btn btn-outline g1-s-4f2248ba"></select>
-            <select id="cmp-fw-sel" class="btn btn-outline g1-s-0eddd0ab"></select>
-            <button class="btn btn-primary btn-sm" data-on-click="loadComplianceReport">Generate</button>
-            <button class="btn btn-outline btn-sm is-hidden" data-on-click="openComplianceDoc" data-args="[&quot;html&quot;]" id="cmp-export-html">↗ HTML</button>
-            <button class="btn btn-outline btn-sm is-hidden" data-on-click="openComplianceDoc" data-args="[&quot;pdf&quot;]" id="cmp-export-pdf">↓ PDF</button>
-            <button class="btn btn-outline btn-sm is-hidden" data-on-click="exportCompliance" data-args="[&quot;json&quot;]" id="cmp-export-json">↓ JSON</button>
-            <button class="btn btn-outline btn-sm is-hidden" data-on-click="exportCompliance" data-args="[&quot;csv&quot;]" id="cmp-export-csv">↓ CSV</button>
-          </div>
-        </div>
+                <div id="hero-compliance"></div>
 
         <div id="cmp-placeholder" class="g1-s-1851fb03">
           Select an agent and framework, then click Generate.
@@ -2734,13 +2610,7 @@
 
       <!-- ── SLA Compliance Report ─────────────────────────────────────── -->
       <div id="tab-sla-report" class="is-hidden">
-        <div class="g1-s-2fc766d7">
-          <a class="tiny g1-s-93cfea45" data-on-click="showTab" data-args="[&quot;reports&quot;]">&lsaquo; Reports</a>
-        </div>
-        <div class="sec-hdr">
-          <h2>SLA Compliance</h2>
-          <button class="btn btn-outline btn-sm" data-on-click="loadSLAReport">&#x21bb; Refresh</button>
-        </div>
+                <div id="hero-sla"></div>
         <div id="sla-rpt-empty" class="empty is-hidden g1-s-be6df18e">No SLA data yet.</div>
         <div id="sla-rpt-body">
           <div class="kpi-row" id="sla-rpt-kpis"></div>
@@ -2765,12 +2635,7 @@
 
       <!-- ── Variant Executor ──────────────────────────────────────────── -->
       <div id="tab-variants" class="is-hidden">
-        <div class="sec-hdr">
-          <h2>Variant Executor</h2>
-          <div class="g1-display-flex g1-s-9b5be34d">
-            <button class="btn btn-outline btn-sm" data-on-click="loadVariantTab">&#x21bb; Refresh</button>
-          </div>
-        </div>
+        <div id="hero-variants"></div>
 
         <!-- Stats row -->
         <div id="vex-stats" class="score-grid u-mb-1"></div>
@@ -2914,15 +2779,7 @@
       </div>
 
       <div id="tab-email" class="is-hidden">
-        <div class="sec-hdr">
-          <div>
-            <h2>Email</h2>
-            <div class="tiny muted">Email security-effectiveness validation — SPF/DKIM/DMARC, phishing, attachments, outbound DLP, mailbox/identity security</div>
-          </div>
-          <div class="email-launch-buttons">
-            <button class="btn btn-outline btn-sm" data-on-click="loadEmailTab">&#x21bb; Refresh</button>
-          </div>
-        </div>
+        <div id="hero-email"></div>
 
         <!-- Coverage -->
         <div class="dash-panel u-mb-1">

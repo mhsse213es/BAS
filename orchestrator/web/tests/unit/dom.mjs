@@ -29,6 +29,12 @@ export async function load(names) {
     for (const n of names) if (typeof mod[n] === 'function' && !found[n]) found[n] = mod[n];
   }
   for (const n of names) if (!found[n]) throw new Error(`no module exports ${n}`);
+  // main.js mounts the page banners at boot; main.js is skipped above, so do the same here once per DOM.
+  if (document.body && !document.body.dataset.heroesMounted) {
+    const heroes = await import(pathToFileURL(join(web, 'src', 'features', 'page-heroes.js')).href);
+    heroes.mountPageHeroes();
+    document.body.dataset.heroesMounted = '1';
+  }
   return found;
 }
 
