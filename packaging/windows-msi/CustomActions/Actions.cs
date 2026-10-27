@@ -168,8 +168,19 @@ namespace Audspect.Installer
         /// <summary>Writes the agent embedded in the MSI (Binary table) to a private temp directory.</summary>
         static string ExtractAgent(Session session, out string dir)
         {
-            dir = Path.Combine(Path.GetTempPath(), "audspect-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(dir);
+            // One fixed parent folder (not a random temp path) so a security product can be told once to skip it:
+            // C:\ProgramData\Audspect\preflight. Falls back to the temp folder if that cannot be created.
+            var name = Guid.NewGuid().ToString("N");
+            try
+            {
+                dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Audspect", "preflight", name);
+                Directory.CreateDirectory(dir);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                dir = Path.Combine(Path.GetTempPath(), "audspect-" + name);
+                Directory.CreateDirectory(dir);
+            }
             var exe = Path.Combine(dir, "bas_agent.exe");
             using (var view = session.Database.OpenView("SELECT `Data` FROM `Binary` WHERE `Name`='AgentForPreflight'"))
             {

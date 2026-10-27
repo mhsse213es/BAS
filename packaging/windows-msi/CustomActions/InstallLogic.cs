@@ -234,7 +234,10 @@ namespace Audspect.Installer
             try { p = Process.Start(psi); }
             catch (Win32Exception ex)
             {
-                return new AgentRun { ExitCode = 1, Output = RedactAll("could not start " + Path.GetFileName(exe) + ": " + ex.Message, secret, token) };
+                var hint = ex.NativeErrorCode == 225
+                    ? " Security software blocked the check. Allow the folder " + Path.GetDirectoryName(Path.GetDirectoryName(exe)) + " (or ask your administrator to), then press Verify again."
+                    : "";
+                return new AgentRun { ExitCode = 1, Output = RedactAll("could not start " + Path.GetFileName(exe) + ": " + ex.Message + hint, secret, token) };
             }
             using (p)
             {
