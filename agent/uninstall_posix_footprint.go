@@ -4,11 +4,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // keepDataEnv is set by an installer that replaces the agent (an upgrade): the service and binary are swapped but
 // the enrolment, certificates and configuration must survive.
 const keepDataEnv = "BAS_UNINSTALL_KEEP_DATA"
+
+// purgeLogsEnv makes an uninstall remove the agent's diagnostic log (agent.log and its rotations) as well. Without
+// it the log is kept: it is the evidence of why an install or an uninstall went wrong.
+const purgeLogsEnv = "BAS_UNINSTALL_PURGE_LOGS"
+
+func purgeAgentLogs() bool { return os.Getenv(purgeLogsEnv) == "1" }
 
 func keepAgentData() bool { return os.Getenv(keepDataEnv) == "1" }
 
@@ -26,8 +33,17 @@ func posixFootprint(root, tempDir string, glob func(pattern string) []string) (t
 		at("/etc/bas-agent"),
 		at("/etc/audspect/certs"),
 		at("/etc/audspect-agent"),
-		at("/var/log/bas-agent"),
 		at("/var/lib/bas-agent"),
+	}
+	if glob != nil && !purgeAgentLogs() {
+		// the log folder goes, except the diagnostic log and its rotations
+		for _, m := range glob(at("/var/log/bas-agent/*")) {
+			if !strings.HasPrefix(filepath.Base(m), logFileName) {
+				trees = append(trees, m)
+			}
+		}
+	} else {
+		trees = append(trees, at("/var/log/bas-agent"))
 	}
 	if glob != nil {
 		trees = append(trees, glob(at("/etc/audspect/certs.replaced-*"))...)

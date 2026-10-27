@@ -40,7 +40,7 @@ func TestCleanPosixFootprint_RemovesEveryTraceAndNothingElse(t *testing.T) {
 
 	for _, gone := range []string{
 		"usr/local/bin/bas-agent", "etc/bas-agent", "etc/audspect/certs", "etc/audspect/certs.replaced-20261024T082304Z",
-		"etc/audspect-agent", "var/log/bas-agent", "var/lib/bas-agent", "etc/systemd/system/bas-agent.service",
+		"etc/audspect-agent", "var/lib/bas-agent", "etc/systemd/system/bas-agent.service",
 		"etc/systemd/system/bas-agent.service.d", "Library/LaunchDaemons/com.audspect.bas-agent.plist", "tmp/BASAgent",
 	} {
 		if exists(filepath.Join(root, filepath.FromSlash(gone))) {
@@ -99,4 +99,27 @@ func TestCleanPosixFootprint_NeverTouchesAnythingOutsideTheRoot(t *testing.T) {
 		t.Error("a path outside the given root was removed")
 	}
 	_ = os.Stdout
+}
+
+// The diagnostic log is the evidence of why an install or uninstall went wrong, so a normal uninstall keeps it.
+func TestCleanPosixFootprint_KeepsTheAgentLogUnlessPurgeIsAsked(t *testing.T) {
+	root := posixFixture(t)
+	mkfile(t, filepath.Join(root, "var", "log", "bas-agent", "agent.log.1"))
+	mkfile(t, filepath.Join(root, "var", "log", "bas-agent", "op_log-2026-10-28.log"))
+	cleanPosixFootprint(root, "", func(string, ...any) {})
+	for _, kept := range []string{"var/log/bas-agent/agent.log", "var/log/bas-agent/agent.log.1"} {
+		if !exists(filepath.Join(root, filepath.FromSlash(kept))) {
+			t.Errorf("%s must survive an uninstall", kept)
+		}
+	}
+	if exists(filepath.Join(root, "var", "log", "bas-agent", "op_log-2026-10-28.log")) {
+		t.Error("the structured log is agent data and should be removed")
+	}
+
+	t.Setenv(purgeLogsEnv, "1")
+	root = posixFixture(t)
+	cleanPosixFootprint(root, "", func(string, ...any) {})
+	if exists(filepath.Join(root, "var", "log", "bas-agent")) {
+		t.Error("with BAS_UNINSTALL_PURGE_LOGS=1 the log folder must be removed too")
+	}
 }

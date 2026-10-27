@@ -43,6 +43,10 @@ func cleanAgentFootprint(installDirs []string, logf func(format string, a ...any
 		m, _ := filepath.Glob(p)
 		return m
 	})
+	// The diagnostic log (agent.log under Program Files, in the Audspect folder) is kept unless the operator asks for it to go.
+	if purgeAgentLogs() {
+		trees = append(trees, agentLogDir())
+	}
 	rep := purgeAgentFiles(trees, parents, osPurgeOps(scheduleBinaryDeleteOnReboot))
 	rep.print(logf)
 	return rep

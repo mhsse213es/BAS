@@ -39,9 +39,12 @@ func exportDiagnosticBundle() (string, error) {
 		fmt.Fprintf(sw, "Agent ver : %s\n", version)
 	}
 
-	// All agent log files
-	dir := logDir()
-	if entries, err := os.ReadDir(dir); err == nil {
+	// All agent log files: the diagnostic log (agent.log and its rotations) and the structured daily logs.
+	for _, dir := range []string{agentLogDir(), logDir()} {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
 		for _, e := range entries {
 			if e.IsDir() {
 				continue

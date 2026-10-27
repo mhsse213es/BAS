@@ -290,7 +290,7 @@ func trayWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 				revealInExplorer(path)
 			}
 		case tIDM_LOGS:
-			revealInExplorer(logDir())
+			revealInExplorer(agentLogDir()) // where agent.log is; the structured logs are in logDir()
 		case tIDM_EXIT:
 			trayRemoveIcon()
 			trayPostQuitMessage.Call(0)
