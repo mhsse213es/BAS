@@ -305,3 +305,48 @@ func TestEnrollmentTokenBulk_CSVForHandingOut(t *testing.T) {
 		}
 	})
 }
+
+func TestEnrollmentToken_IssuingAgainRevokesTheEarlierUnusedToken(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := tokenHandler(t, pool)
+		first, _ := issueToken(t, h, map[string]any{"agentId": revAgentA})
+		other, _ := issueToken(t, h, map[string]any{"agentId": revAgentB})
+		second, code := issueToken(t, h, map[string]any{"agentId": revAgentA})
+		if code != http.StatusOK || second.Token == "" || second.Token == first.Token {
+			t.Fatalf("second issue = %d, token %q", code, second.Token)
+		}
+		// Only the newest token for a host stays live.
+		if c := enrollWith(t, h, revAgentA, first.Token, ""); c != http.StatusUnauthorized {
+			t.Errorf("earlier token after a new one was issued = %d, want 401", c)
+		}
+		// Another host's token is untouched.
+		var otherRevoked bool
+		pool.QueryRow(context.Background(), `SELECT revoked FROM agent_enrollment_tokens WHERE id::text = $1`, other.ID).Scan(&otherRevoked)
+		if otherRevoked {
+			t.Error("issuing for agent A revoked agent B's token")
+		}
+		if c := enrollWith(t, h, revAgentA, second.Token, ""); c != http.StatusOK {
+			t.Errorf("newest token = %d, want 200", c)
+		}
+	})
+}
+
+func TestEnrollmentTokenBulk_IssuingAgainRevokesTheEarlierUnusedToken(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := tokenHandler(t, pool)
+		first, _ := issueToken(t, h, map[string]any{"hostname": "bulk-host-1"})
+		rec := bulkRequest(h, map[string]any{"hostnames": []string{"bulk-host-1"}}, "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("bulk issue = %d: %s", rec.Code, rec.Body.String())
+		}
+		if c := enrollWith(t, h, first.AgentID, first.Token, ""); c != http.StatusUnauthorized {
+			t.Errorf("single token after a bulk re-issue = %d, want 401", c)
+		}
+	})
+}

@@ -117,7 +117,8 @@ func clientIP(r *http.Request) string {
 }
 
 // POST /api/enrollment-tokens -- issues a single-use enrolment token for one agent. The token is shown
-// once; only its SHA-256 is stored. Admin-only (the route group enforces the permission).
+// once; only its SHA-256 is stored. Issuing again for the same agent revokes that agent's earlier unused tokens,
+// so each host has at most one live token. Admin-only (the route group enforces the permission).
 func (h *Handler) CreateEnrollmentToken(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		AgentID  string `json:"agentId"`
@@ -174,6 +175,10 @@ func (h *Handler) CreateEnrollmentToken(w http.ResponseWriter, r *http.Request) 
 	var id string
 	var expires time.Time
 	err = h.db.QueryRow(r.Context(), `
+		WITH superseded AS (
+			UPDATE agent_enrollment_tokens SET revoked = true
+			 WHERE agent_id = $2 AND used_at IS NULL AND revoked = false AND expires_at > NOW()
+		)
 		INSERT INTO agent_enrollment_tokens (token_hash, agent_id, note, created_by, expires_at)
 		VALUES ($1, $2, $3, $4, NOW() + make_interval(secs => $5))
 		RETURNING id, expires_at`,

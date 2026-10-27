@@ -89,6 +89,13 @@ func (h *Handler) BulkCreateEnrollmentTokens(w http.ResponseWriter, r *http.Requ
 		agentID := agentIDForHostname(hn)
 		var id string
 		var expires time.Time
+		// A host has at most one live token: issuing again retires the earlier unused ones.
+		if _, err := tx.Exec(ctx, `
+			UPDATE agent_enrollment_tokens SET revoked = true
+			 WHERE agent_id = $1 AND used_at IS NULL AND revoked = false AND expires_at > NOW()`, agentID); err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		if err := tx.QueryRow(ctx, `
 			INSERT INTO agent_enrollment_tokens (token_hash, agent_id, note, created_by, expires_at)
 			VALUES ($1, $2, $3, $4, NOW() + make_interval(secs => $5))
