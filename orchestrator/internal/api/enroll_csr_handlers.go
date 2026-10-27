@@ -118,6 +118,7 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tokenAccepted := false
 	if tokenMode {
 		token := r.Header.Get("X-Enrollment-Token")
 		consumed := false
@@ -140,6 +141,7 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "enrolment token invalid, expired, already used, or issued for a different agent", http.StatusUnauthorized)
 			return
 		}
+		tokenAccepted = true
 	}
 
 	var agentRevoked bool
@@ -154,6 +156,7 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var previousCerts int64
+	superseded := false
 	if mtlsID != "" {
 		serial := r.TLS.PeerCertificates[0].SerialNumber.Text(16)
 		var revoked bool
@@ -182,8 +185,32 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if alreadyValid {
-			jsonError(w, "agent already holds a valid certificate — renew via mTLS instead of re-bootstrapping", http.StatusConflict)
-			return
+			// A host that is still active keeps its identity: the shared secret must not be able to replace it.
+			// It may be replaced when an administrator vouched for the new install (an operator-issued token), or when
+			// the host is known to be gone: it confirmed its own uninstall, or an administrator removed it.
+			var priorState string
+			if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT state FROM agents WHERE agent_id = $1), '')`, req.AgentID).Scan(&priorState); err != nil {
+				jsonError(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			gone := priorState == "uninstalled" || priorState == "retired"
+			if !tokenAccepted && !gone {
+				jsonError(w, "agent already holds a valid certificate — renew via mTLS instead of re-bootstrapping", http.StatusConflict)
+				return
+			}
+			// One live identity per host: the earlier certificates stop working, so a copy of the old install is dead.
+			if _, err := tx.Exec(ctx, `UPDATE agent_certificates SET revoked = true WHERE agent_id = $1 AND revoked = false`, req.AgentID); err != nil {
+				jsonError(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			superseded = true
+			if priorState == "uninstalled" {
+				// It confirmed it was uninstalled; a new install is a fresh start. A removal by an administrator stays in force.
+				if _, err := tx.Exec(ctx, `UPDATE agents SET state = 'active' WHERE agent_id = $1 AND state = 'uninstalled'`, req.AgentID); err != nil {
+					jsonError(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+			}
 		}
 		// The shared secret is the only proof of identity here (audit F-03): count earlier certificates so
 		// the audit trail can tell a first enrolment from a re-enrolment of a known AgentID.
@@ -229,7 +256,7 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 			action = "agent.reenroll"
 		}
 		h.auditLogAs(r, "agent:"+req.AgentID, action, req.AgentID,
-			map[string]any{"previousCertificates": previousCerts, "serial": issued.SerialNumber}, "ok")
+			map[string]any{"previousCertificates": previousCerts, "serial": issued.SerialNumber, "supersededLiveCertificates": superseded}, "ok")
 	}
 
 	resp := enrollCSRResponse{
