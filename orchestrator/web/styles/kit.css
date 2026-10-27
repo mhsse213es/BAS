@@ -60,6 +60,7 @@
 .rk-seg button:hover:not(.on) { color: var(--text); background: var(--hover); }
 .rk-seg button.on { background: var(--accent); color: var(--on-accent, #fff); }
 .rk-seg-n { font-size: 10.5px; opacity: .75; margin-left: 2px; font-variant-numeric: tabular-nums; }
+@media (max-width: 700px) { .rk-seg { flex-wrap: wrap; max-width: 100%; } }
 .rk-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 16px; overflow-x: auto; }
 .rk-tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px; color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; white-space: nowrap; }
 .rk-tabs button:hover { color: var(--text); }
