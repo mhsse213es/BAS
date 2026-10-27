@@ -92,6 +92,7 @@ func TestEnrollAtInstall_DistinguishesRefusalFromConnectionFailure(t *testing.T)
 	}{
 		{"unauthorized", http.StatusUnauthorized, preflight.CodeEnrollmentRejected},
 		{"forbidden", http.StatusForbidden, preflight.CodeEnrollmentRejected},
+		{"host already enrolled", http.StatusConflict, preflight.CodeAlreadyEnrolled},
 		{"server error", http.StatusInternalServerError, preflight.CodeServerUnreachable},
 		{"not found", http.StatusNotFound, preflight.CodeServerUnreachable},
 	}

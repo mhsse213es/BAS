@@ -47,6 +47,11 @@ const (
 	// failed (network, TLS, 5xx, unexpected response), as opposed to CodeEnrollmentRejected where the server
 	// answered and refused the credentials.
 	CodeServerUnreachable = 27
+
+	// CodeAlreadyEnrolled: the server answered 409, so it already holds a live identity for this host and will not
+	// let a new install replace it on the shared secret alone. An administrator must Force Remove the host in the
+	// console or issue an enrolment token for it.
+	CodeAlreadyEnrolled = 28
 )
 
 const defaultEnrollPort = "9444"

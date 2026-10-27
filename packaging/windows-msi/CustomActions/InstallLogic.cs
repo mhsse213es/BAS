@@ -204,6 +204,7 @@ namespace Audspect.Installer
                 case 24: return "The deployment CA is invalid.";
                 case 26: return "The server refused the enrollment token (invalid, expired, already used, or issued for a different host). Ask the administrator for a new token for this host.";
                 case 27: return "The server could not be reached to enroll (this is a connection problem, not a token problem). Check the network, firewall and the enrolment port.";
+                case 28: return "The server already has an active agent for this host and will not replace it on the shared secret alone. Ask an administrator to use Force Remove Agent for this host in the console, or to issue an enrollment token for it, then install again.";
                 case 25: return "The deployment configuration was rejected: the signing key fingerprint did not match or the file is invalid. Do not install until an administrator confirms the fingerprint.";
                 default: return "The agent installer failed (exit code " + code + ").";
             }

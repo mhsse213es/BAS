@@ -45,6 +45,7 @@ describe() {
 	25) echo "The deployment configuration was rejected: it was not signed by this server's key. Do not install; ask an administrator for a new copy." ;;
 	26) echo "The server refused the enrollment token (invalid, expired, already used, or issued for a different computer). Ask the administrator for a new token." ;;
 	27) echo "The server could not be reached to enroll (this is a connection problem, not a token problem). Check the network, the firewall and the enrollment port." ;;
+	28) echo "The server already has an active agent for this computer and will not replace it on the shared secret alone. Ask the administrator to use Force Remove Agent for this computer in the console, or to issue an enrollment token for it, then install again." ;;
 	*) echo "The agent installer failed (exit code $1)." ;;
 	esac
 }

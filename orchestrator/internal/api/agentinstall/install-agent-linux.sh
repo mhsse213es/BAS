@@ -220,5 +220,6 @@ case "$RC" in
   0) ;;
   26) echo "ERROR: the server refused the enrolment token (invalid, expired, already used, or issued for a different host). Ask the administrator for a new token for this host." >&2; exit 26 ;;
   27) echo "ERROR: could not reach the server to enrol (${HOST}, enrolment port ${PORT}). This is a connection problem, not a token problem: check the network, firewall and port." >&2; exit 27 ;;
+  28) echo "ERROR: the server already has an active agent for this host and will not replace it on the shared secret alone. Ask the administrator to use Force Remove Agent for this host in the console, or to issue an enrolment token for it, then run the install again." >&2; exit 28 ;;
   *) exit "$RC" ;;
 esac

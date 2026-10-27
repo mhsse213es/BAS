@@ -71,6 +71,7 @@ public class InstallLogicTests
     [InlineData(23, "certificate")]
     [InlineData(24, "CA")]
     [InlineData(25, "fingerprint")]
+    [InlineData(28, "Force Remove")]
     public void ExitCodesHaveDistinctActionableMessages(int code, string fragment)
         => Assert.Contains(fragment, InstallLogic.DescribeExitCode(code), StringComparison.OrdinalIgnoreCase);
 

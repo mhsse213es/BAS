@@ -15,8 +15,9 @@ import (
 // installEnrollError is a failed install-time enrolment, kept distinct from other install failures so the
 // installer can tell an operator whether the server refused the credentials or could not be reached.
 type installEnrollError struct {
-	err      error
-	rejected bool // the server answered and refused the credentials
+	err             error
+	rejected        bool // the server answered and refused the credentials
+	alreadyEnrolled bool // the server answered 409: it already has an active identity for this host
 }
 
 func (e *installEnrollError) Error() string { return e.err.Error() }
@@ -28,6 +29,9 @@ func (e *installEnrollError) Unwrap() error { return e.err }
 // problem and says nothing about the token. The token itself never appears in the message.
 func classifyEnrollError(err error) error {
 	var se *protocol.StatusError
+	if errors.As(err, &se) && se.Code == 409 {
+		return &installEnrollError{alreadyEnrolled: true, err: errors.New("the server already has an active agent for this host and will not replace it with a new install on the shared secret alone. Ask an administrator to use Force Remove Agent for this host in the console, or to issue an enrolment token for it, then run the install again")}
+	}
 	if errors.As(err, &se) && (se.Code == 401 || se.Code == 403) {
 		return &installEnrollError{rejected: true, err: fmt.Errorf("the server refused the enrolment (HTTP %d): the enrolment token is invalid, expired, already used, or was issued for a different host", se.Code)}
 	}
@@ -39,6 +43,9 @@ func installExitCode(err error) int {
 	var ie *installEnrollError
 	if !errors.As(err, &ie) {
 		return 1
+	}
+	if ie.alreadyEnrolled {
+		return preflight.CodeAlreadyEnrolled
 	}
 	if ie.rejected {
 		return preflight.CodeEnrollmentRejected
