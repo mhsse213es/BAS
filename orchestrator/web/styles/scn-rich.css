@@ -158,3 +158,6 @@
 .sc-seg svg { width: 14px; height: 14px; }
 .sc-actions .btn, .sc-drawer-ft .btn { width: auto; }
 #hero-scenarios .hero-actions .btn-outline { border: 1px solid var(--border-hi); background: var(--elevated); }
+
+/* Mid-width windows: three narrower cards per row, as in the design demo. */
+@media (min-width: 901px) and (max-width: 1280px) { .sc-grid { grid-template-columns: repeat(auto-fill, minmax(225px, 1fr)); } }
