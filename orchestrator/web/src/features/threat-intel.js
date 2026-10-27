@@ -21,7 +21,7 @@ export function loadThreatIntelConfig(name) {
   apicall('/api/threat-intel/' + name + '/config').then(function(cfg) {
     TI_CONNECTOR_LOADED[name] = { baseUrl: cfg.baseUrl || '', enabled: !!cfg.enabled, insecureTls: !!cfg.insecureTls, configured: !!cfg.configured };
     var urlField = name === 'otx' ? '' :
-      '<input id="ti-' + name + '-url" type="text" placeholder="Base URL" value="' + x(cfg.baseUrl || '') + '" class="inp-sm u-flex1">';
+      '<div class="field"><label for="ti-' + name + '-url">Server URL</label><input id="ti-' + name + '-url" type="text" placeholder="https://' + (name === 'misp' ? 'misp' : 'opencti') + '.example.local" value="' + x(cfg.baseUrl || '') + '" class="inp-sm u-flex1"></div>';
     // MISP is the only curated source whose client honours this -- OTX is a
     // hosted service with a valid cert, and the OpenCTI client always verifies.
     var insecureField = name !== 'misp' ? '' :
@@ -29,7 +29,7 @@ export function loadThreatIntelConfig(name) {
     panel.innerHTML =
       '<div class="kpi-row">' +
         urlField +
-        '<input id="ti-' + name + '-key" type="password" placeholder="API key (leave blank to keep current)" class="inp-sm u-flex1">' +
+        '<div class="field"><label for="ti-' + name + '-key">' + (name === 'opencti' ? 'API token' : name === 'otx' ? 'OTX API key' : 'API key') + '</label><input id="ti-' + name + '-key" type="password" placeholder="Leave blank to keep current" class="inp-sm u-flex1"></div>' +
         insecureField +
         '<label class="tiny muted g1-display-flex g1-s-4f83cf12"><input type="checkbox" id="ti-' + name + '-enabled" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' +
       '</div>' +

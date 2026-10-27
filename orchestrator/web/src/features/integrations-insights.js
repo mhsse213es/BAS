@@ -1,5 +1,5 @@
-// Integrations page: KPI strip and charts over the ITSM and EPP connector lists the page already loads.
-import { kpi, grid, card, hbars } from '../core/kit.js';
+// Integrations page: charts (the KPI figures are the banner stats, see int-model.js) over the ITSM and EPP connector lists the page already loads.
+import { grid, card, hbars } from '../core/kit.js';
 import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
 var itsm = null, epp = null;
@@ -25,12 +25,6 @@ export function connectorStats(itsmList, eppList) {
 export function integrationsInsightsHtml(itsmList, eppList) {
   var s = connectorStats(itsmList, eppList);
   if (!s.itsm && !s.epp) return '';
-  var tiles = [
-    kpi({ label: 'ITSM connectors', value: s.itsm, sub: s.connected + ' connected', icon: 'plug', tone: s.itsm ? 'accent' : 'muted' }),
-    kpi({ label: 'Needs attention', value: s.failed + s.untested, sub: s.failed + ' test failed, ' + s.untested + ' not tested', icon: 'alert', tone: s.failed ? 'bad' : s.untested ? 'warn' : 'ok' }),
-    kpi({ label: 'Auto-create tickets', value: s.auto, sub: 'connectors creating tickets by policy', icon: 'bolt', tone: 'info' }),
-    kpi({ label: 'EPP response connectors', value: s.eppEnabled + ' / ' + s.epp, sub: 'enabled', icon: 'shield', tone: s.eppEnabled ? 'ok' : 'muted' }),
-  ];
   var segs = [
     { label: 'Connected', value: s.connected, color: CHART_COLORS.ok },
     { label: 'Not tested', value: s.untested, color: CHART_COLORS.warn },
@@ -40,7 +34,7 @@ export function integrationsInsightsHtml(itsmList, eppList) {
   var cards = [];
   if (segs.length) cards.push(card('ITSM connector health', chartSlot({ type: 'donut', segments: segs, center: String(s.itsm), centerSub: 'connectors', h: 140, legend: true })));
   cards.push(card('Connectors by provider', hbars(s.prov.map(function(r) { return [r[0], r[1] / s.prov[0][1] * 100, 'accent', String(r[1])]; }))));
-  return grid(4, tiles) + grid(2, cards);
+  return grid(2, cards);
 }
 
 function paint() {

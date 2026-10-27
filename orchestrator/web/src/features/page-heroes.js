@@ -119,12 +119,16 @@ var HEROES = {
   'hero-settings': {
     icon: ICON.gear,
     title: 'Settings',
-    sub: 'Manage team access, the simulation engine, threat-intel sync, and content.',
+    sub: 'Platform configuration, identity, integrations and maintenance.',
   },
   'hero-profile': {
     icon: ICON.user,
     title: 'My Profile',
-    sub: 'Your account details and access.',
+    sub: 'Your account, sign-in and preferences.',
+    stats: [
+      { id: 'hs-profile-last', icon: ICON.clock, value: '—', label: 'Last sign-in' },
+      { id: 'hs-profile-role', icon: ICON.user, value: '—', label: 'Role' },
+    ],
   },
   'hero-runs': {
     icon: ICON.runs,
@@ -269,8 +273,14 @@ var HEROES = {
   'hero-integrations': {
     icon: ICON.plug,
     title: 'Integrations',
-    sub: 'Configure ITSM connectors. Analysts create tickets from the Findings tab; BAS can auto-create tickets for critical exposures based on policy.',
-    actions: '<div class="g1-display-flex g1-s-993532d2" id="integrations-admin-actions"><button class="btn btn-outline btn-sm" data-on-click="triggerTicketingSync">Sync Now</button><button class="btn btn-primary btn-sm" data-on-click="openAddConnector">+ Add Connector</button></div>',
+    sub: 'Connect security tooling, threat intel and response platforms.',
+    actions: '<button type="button" class="btn btn-primary" id="integrations-admin-actions" data-on-click="openTAXIIConnectorModal" data-args="[null]">' + svg('<path d="M12 5v14M5 12h14"/>') + 'Add TAXII connector</button>',
+    stats: [
+      { id: 'int-hs-total', icon: ICON.plug, value: '—', label: 'Integrations' },
+      { id: 'int-hs-connected', icon: ICON.ok, tone: 'ok', value: '—', label: 'Connected' },
+      { id: 'int-hs-attention', icon: ICON.warn, tone: 'warn', value: '—', label: 'Need attention' },
+      { id: 'int-hs-fresh', icon: ICON.clock, value: '—', label: 'Freshest test' },
+    ],
   },
   'hero-compliance': rptHero('-c'),
   'hero-sla': rptHero('-s'),

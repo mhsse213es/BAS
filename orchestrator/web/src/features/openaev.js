@@ -25,8 +25,8 @@ export function loadOpenAEVConfig() {
       OAEV_CONFIG_LOADED = { baseUrl: cfg.baseUrl || '', enabled: !!cfg.enabled, configured: !!cfg.configured };
       configPanel.innerHTML =
         '<div class="kpi-row">' +
-          '<input id="oaev-url" type="text" placeholder="https://openaev.example.local" value="' + x(cfg.baseUrl || '') + '" class="inp-sm u-flex1">' +
-          '<input id="oaev-token" type="password" placeholder="Bearer token (leave blank to keep current)" class="inp-sm u-flex1">' +
+          '<div class="field"><label for="oaev-url">Server URL</label><input id="oaev-url" type="text" placeholder="https://openaev.example.local" value="' + x(cfg.baseUrl || '') + '" class="inp-sm u-flex1"></div>' +
+          '<div class="field"><label for="oaev-token">API token</label><input id="oaev-token" type="password" placeholder="Leave blank to keep current" class="inp-sm u-flex1"></div>' +
           '<label class="tiny muted" style="display:flex;align-items:center;gap:0.3rem"><input type="checkbox" id="oaev-enabled" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' +
         '</div>' +
         '<div class="kpi-row" style="margin-top:0.5rem">' +

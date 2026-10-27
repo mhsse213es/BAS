@@ -2,6 +2,7 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
+import { pill, empty } from '../core/kit.js';
 import { buildReportFilename } from './evidence.js';
 import { cssVars } from '../core/css-vars.js';
 import { renderAuditInsights, renderBackupInsights, renderLicenseInsights } from './settings-insights.js';
@@ -227,13 +228,12 @@ function fetchAuditPage() {
     var tbody = document.getElementById('audit-body');
     if (!tbody) return;
     if (!entries.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="g1-s-5b31a60f">No audit records found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6">' + empty('search', 'No entries match', 'Clear the filters.') + '</td></tr>';
     } else {
       tbody.innerHTML = entries.map(function(e) {
         var ts = new Date(e.ts);
         var tsStr = ts.toLocaleDateString() + ' ' + ts.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
         var actionLabel = AUDIT_ACTION_LABELS[e.action] || e.action;
-        var outcomeClass = e.outcome === 'ok' ? 'g1-display-inline-block g1-s-8e6255cd' : 'g1-display-inline-block g1-s-55cda534';
         var detail = '';
         try {
           var d2 = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail;
@@ -265,12 +265,12 @@ function fetchAuditPage() {
           if (!detail && e.resource) detail = e.resource;
         } catch(ex) { detail = e.resource || ''; }
         return '<tr>' +
-          '<td class="g1-s-a6cceef3">' + tsStr + '</td>' +
-          '<td class="g1-s-42bb765b">' + x(e.actorName) + '</td>' +
-          '<td class="g1-s-51a7b72a">' + x(actionLabel) + '</td>' +
-          '<td class="g1-s-dc3f58e3">' + x(detail) + '</td>' +
-          '<td class="g1-s-e787dcbc">' + x(e.ip || '') + '</td>' +
-          '<td><span class="' + outcomeClass + '">' + x(e.outcome) + '</span></td>' +
+          '<td class="mono muted">' + x(tsStr) + '</td>' +
+          '<td>' + x(e.actorName) + '</td>' +
+          '<td class="mono">' + x(actionLabel) + '</td>' +
+          '<td>' + x(detail) + '</td>' +
+          '<td class="mono muted">' + x(e.ip || '') + '</td>' +
+          '<td>' + pill(e.outcome === 'ok' ? 'Passed' : e.outcome === 'warn' ? 'Warning' : 'Failed', e.outcome === 'ok' ? 'ok' : e.outcome === 'warn' ? 'warn' : 'bad') + '</td>' +
         '</tr>';
       }).join('');
     }

@@ -596,30 +596,28 @@
 
         <div class="settings-layout">
           <div class="settings-nav">
-            <a class="sset active" data-set="users" data-on-click="showSettingsSection" data-args="[&quot;users&quot;]">Users &amp; roles</a>
-            <a class="sset" data-set="engine" data-on-click="showSettingsSection" data-args="[&quot;engine&quot;]">Caldera engine</a>
-            <a class="sset" data-set="intel" data-on-click="showSettingsSection" data-args="[&quot;intel&quot;]">Threat intel</a>
-            <a class="sset" data-set="art" data-on-click="showSettingsSection" data-args="[&quot;art&quot;]">ART content</a>
-            <a class="sset" data-set="audit" data-on-click="showSettingsSection" data-args="[&quot;audit&quot;]">Audit logs</a>
-            <a class="sset" data-set="theme" data-on-click="showSettingsSection" data-args="[&quot;theme&quot;]">Theme &amp; display</a>
-            <a class="sset" data-set="dashprefs" data-on-click="showSettingsSection" data-args="[&quot;dashprefs&quot;]">Dashboard</a>
-            <a class="sset" data-set="license" data-on-click="showSettingsSection" data-args="[&quot;license&quot;]">License</a>
-            <a class="sset" data-set="backup" data-on-click="showSettingsSection" data-args="[&quot;backup&quot;]">Backup &amp; Recovery</a>
+            <a class="sset active" data-set="users" data-on-click="showSettingsSection" data-args="[&quot;users&quot;]"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/></svg><span>Users &amp; roles</span></a>
+            <a class="sset" data-set="engine" data-on-click="showSettingsSection" data-args="[&quot;engine&quot;]"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg><span>Caldera Engine</span></a>
+            <a class="sset" data-set="intel" data-on-click="showSettingsSection" data-args="[&quot;intel&quot;]"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9h14M5 15h14M10 4L8 20M16 4l-2 16"/></svg><span>Threat Intel Connector</span></a>
+            <a class="sset" data-set="taxii" data-on-click="showSettingsSection" data-args="[&quot;taxii&quot;]"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v5M15 3v5M7 8h10v4a5 5 0 01-10 0zM12 17v4"/></svg><span>TAXII Connectors</span></a>
+            <a class="sset" data-set="art" data-on-click="showSettingsSection" data-args="[&quot;art&quot;]"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a3 3 0 013 3v13H8a3 3 0 01-3-3zM5 17a3 3 0 013-3h11"/></svg><span>ART Content Library</span></a>
+            <a class="sset" data-set="audit" data-on-click="showSettingsSection" data-args="[&quot;audit&quot;]"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4"/></svg><span>Audit Logs</span></a>
+            <a class="sset" data-set="theme" data-on-click="showSettingsSection" data-args="[&quot;theme&quot;]"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg><span>Theme &amp; Display</span></a>
+            <a class="sset" data-set="dashprefs" data-on-click="showSettingsSection" data-args="[&quot;dashprefs&quot;]"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg><span>Dashboard Preferences</span></a>
+            <a class="sset" data-set="license" data-on-click="showSettingsSection" data-args="[&quot;license&quot;]"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg><span>License</span></a>
+            <a class="sset" data-set="backup" data-on-click="showSettingsSection" data-args="[&quot;backup&quot;]"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16v4H4zM6 11v9h12v-9M10 15h4"/></svg><span>Backup &amp; Recovery</span></a>
           </div>
           <div class="settings-body">
 
           <!-- Users & roles -->
           <div id="set-users" class="set-section">
-            <div class="sec-hdr">
-              <h2>Users &amp; roles <span id="users-cnt" class="cnt">0</span></h2>
-              <button class="btn btn-outline-green btn-sm" data-on-click="openCreateUser">+ New User</button>
-            </div>
             <div id="users-insights"></div>
-            <div class="tbl-wrap">
-              <table>
-                <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Created</th><th>Last Login</th><th>Actions</th></tr></thead>
-                <tbody id="users-body"><tr><td colspan="6" class="empty">Loading...</td></tr></tbody>
-              </table>
+            <div class="rk-card flush set-card">
+              <div class="sec-hdr">
+                <h2>Users &amp; roles <span id="users-cnt" class="cnt">0</span></h2>
+                <button class="btn btn-primary btn-sm" data-on-click="openCreateUser">+ New user</button>
+              </div>
+              <div id="users-box"><div class="empty">Loading...</div></div>
             </div>
           </div>
 
@@ -674,7 +672,7 @@
           </div>
           <div class="g1-display-grid g1-s-30f80bb9">
             <div class="conn-cfg-card" id="cs-misp-card">
-              <div class="g1-s-2efe2454">MISP</div>
+              <div class="set-ch"><b>MISP</b><span class="muted">Events and threat actors</span></div>
               <div id="ti-misp-config-panel"></div>
               <div class="conn-cfg-row">
                 <span class="conn-cfg-label">Status</span>
@@ -695,7 +693,7 @@
               <div id="cs-misp-error" class="is-hidden g1-s-c4c21b2e"></div>
             </div>
             <div class="conn-cfg-card" id="cs-opencti-card">
-              <div class="g1-s-2efe2454">OpenCTI</div>
+              <div class="set-ch"><b>OpenCTI</b><span class="muted">Threat actor knowledge graph</span></div>
               <div id="ti-opencti-config-panel"></div>
               <div class="conn-cfg-row">
                 <span class="conn-cfg-label">Status</span>
@@ -717,7 +715,7 @@
             </div>
             <div class="conn-cfg-card" id="cs-openaev-card">
               <div class="g1-display-flex g1-s-2c4c0724">
-                <div class="g1-s-c17d0834">OpenAEV</div>
+                <div class="set-ch"><b>OpenAEV</b><span class="muted">Scenarios and exercises</span></div>
                 <span id="openaev-status-badge" class="badge"></span>
               </div>
               <div id="openaev-config-panel"></div>
@@ -751,7 +749,7 @@
                (say) OpenCTI's count is correct data under the wrong-looking
                header if this card is read as "OTX's numbers." -->
           <div class="conn-cfg-card" id="connector-status-card">
-            <div class="g1-s-2efe2454">OTX Sync Overview</div>
+            <div class="set-ch"><b>OTX Sync Overview</b><span class="muted">AlienVault OTX · pulses</span></div>
             <div id="ti-otx-config-panel"></div>
             <div class="conn-cfg-row">
               <span class="conn-cfg-label">OTX (AlienVault)</span>
@@ -781,7 +779,11 @@
           </div>
         </div>
 
-        <!-- TAXII 2.1 Connectors (generic -- FS-ISAC, HC-ISAC, Auto-ISAC, any TAXII 2.1 server) -->
+          </div>
+
+          <!-- TAXII 2.1 Connectors (generic -- FS-ISAC, HC-ISAC, Auto-ISAC, any TAXII 2.1 server): its own settings section -->
+          <div id="set-taxii" class="set-section is-hidden">
+        <div class="rk-card flush set-card">
         <div class="sec-hdr g1-s-5012029f">
           <h2>TAXII Connectors</h2>
           <div class="g1-display-flex g1-s-99b36ba4">
@@ -798,6 +800,7 @@
               <tr><td colspan="6" class="empty">Loading…</td></tr>
             </tbody>
           </table>
+        </div>
         </div>
 
           </div>
@@ -866,14 +869,20 @@
 
           <!-- Audit Logs -->
           <div id="set-audit" class="set-section is-hidden">
-            <div class="sec-hdr g1-s-9ee605ef">
+            <div id="audit-insights"></div>
+            <div class="rk-card flush set-card">
+            <div class="sec-hdr">
               <h2>Audit Logs</h2>
               <div class="g1-display-flex g1-s-9b5be34d">
-                <input id="audit-search-actor" type="search" placeholder="Filter by user…"
-                       class="g1-s-4de8f863"
-                       data-on-input="loadAuditLogs">
-                <select id="audit-filter-action"
-                        class="g1-s-5a21543b"
+                <button class="btn btn-outline btn-sm" data-on-click="loadAuditLogs">Refresh</button>
+                <button class="btn btn-outline btn-sm" data-on-click="exportAuditLogs">&#8659; Export CSV</button>
+              </div>
+            </div>
+            <div class="rk-filters set-filters">
+                <label class="rk-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="audit-search-actor" type="search" placeholder="Search audit trail by user…" aria-label="Filter by user"
+                       data-on-input="loadAuditLogs"></label>
+                <select id="audit-filter-action" aria-label="Filter by action"
+                        class="set-sel"
                         data-on-change="loadAuditLogs">
                   <option value="">All actions</option>
                   <option value="user.login">Login</option>
@@ -900,11 +909,7 @@
                   <option value="connector.sync">Connector sync</option>
                   <option value="art.reseed">ART reseed</option>
                 </select>
-                <button class="btn btn-outline btn-sm" data-on-click="loadAuditLogs">Refresh</button>
-                <button class="btn btn-outline btn-sm" data-on-click="exportAuditLogs">&#8659; Export CSV</button>
-              </div>
             </div>
-            <div id="audit-insights"></div>
             <div class="tbl-wrap">
               <table>
                 <thead>
@@ -924,6 +929,7 @@
               <span id="audit-range-label" class="g1-s-6bbebbc3"></span>
               <button class="btn btn-outline btn-sm" id="audit-prev-btn" data-on-click="auditPage" data-args="[-1]" disabled>&#8249; Prev</button>
               <button class="btn btn-outline btn-sm" id="audit-next-btn" data-on-click="auditPage" data-args="[1]" disabled>Next &#8250;</button>
+            </div>
             </div>
           </div>
 
@@ -1064,34 +1070,33 @@
       <div id="tab-profile" class="is-hidden">
         <div id="hero-profile"></div>
 
-        <div class="rk-grid g2">
-        <div class="conn-cfg-card g1-s-a8e567d9">
-          <div class="g1-display-flex g1-s-f769ee49">
-            <div class="user-avatar g1-s-92141dba" id="profile-avatar"></div>
-            <div class="g1-s-22a08c80">
-              <div class="g1-s-408f5ac4" id="profile-username">—</div>
-              <div class="g1-display-flex g1-s-d9105592">
+        <div class="rk-grid g2 prof-grid">
+        <div class="rk-card prof-card">
+          <div class="rk-hd"><h2>Account</h2></div>
+          <div class="prof-id">
+            <div class="user-avatar" id="profile-avatar"></div>
+            <div>
+              <div class="prof-name" id="profile-username">—</div>
+              <div class="prof-badges">
                 <span class="role-chip" id="profile-role-chip">—</span>
                 <span class="sbadge" id="profile-status-badge">—</span>
               </div>
             </div>
           </div>
-        </div>
-
-        <div class="conn-cfg-card g1-s-a8e567d9">
-          <div class="g1-s-68ba3aaa">Account</div>
-          <div class="conn-cfg-row"><span class="conn-cfg-label">Member since</span><span id="profile-created" class="conn-cfg-val">—</span></div>
-          <div class="conn-cfg-row"><span class="conn-cfg-label">Last login</span><span id="profile-last-login" class="conn-cfg-val">—</span></div>
-          <div class="conn-cfg-row"><span class="conn-cfg-label">Sign-in method</span><span id="profile-auth-source" class="conn-cfg-val">—</span></div>
-          <div class="g1-s-5ec12015">
-            <button class="btn btn-outline btn-sm" data-on-click="openChangePassword">Change Password</button>
+          <dl class="prof-kv">
+            <dt>Member since</dt><dd id="profile-created">—</dd>
+            <dt>Last login</dt><dd id="profile-last-login">—</dd>
+            <dt>Sign-in method</dt><dd id="profile-auth-source">—</dd>
+          </dl>
+          <div class="prof-actions">
+            <button class="btn btn-outline" data-on-click="openChangePassword">Change password</button>
           </div>
         </div>
-        </div>
 
-        <div class="conn-cfg-card g1-s-a8e567d9">
-          <div class="g1-s-68ba3aaa">Your Access</div>
-          <div id="profile-permissions" class="tiny muted">Loading…</div>
+        <div class="rk-card prof-card">
+          <div class="rk-hd"><h2>Your access</h2></div>
+          <div id="profile-permissions" class="tiny muted prof-perms">Loading…</div>
+        </div>
         </div>
 
         <div id="profile-admin-shortcut" class="is-hidden g1-s-15967002">
@@ -2150,9 +2155,35 @@
       <div id="tab-integrations" class="is-hidden">
         <div id="hero-integrations"></div>
 
-        <!-- Connector list -->
-        <div id="integrations-insights"></div>
-        <div id="integrations-list"><div class="empty g1-s-be6df18e">Loading connectors…</div></div>
+        <!-- ITSM + EPP response connector boxes (add / sync); the connectors themselves are the cards below -->
+        <div class="rk-grid g2 int-boxes">
+          <section class="rk-card int-box">
+            <div class="rk-hd"><h2>ITSM connectors</h2><div class="rk-hd-actions">
+              <button type="button" class="btn btn-outline btn-sm" data-on-click="triggerTicketingSync">Sync Now</button>
+              <button type="button" class="btn btn-primary btn-sm" data-on-click="openAddConnector">+ Add Connector</button>
+            </div></div>
+            <p class="int-sub muted">Configure ITSM connectors. Analysts create tickets from Findings; BAS can auto-create tickets for critical exposures based on policy.</p>
+            <div id="int-itsm-empty" hidden><div class="rk-empty"><span class="rk-empty-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 01-10 0zM12 16v5"/></svg></span><b>No connectors configured</b><div>Add a ServiceNow, Jira, or webhook connector to push findings to your ITSM.</div></div></div>
+            <div class="int-adds">
+              <button type="button" class="btn btn-outline" data-on-click="openAddConnectorFor" data-args="[&quot;servicenow&quot;]">+ ServiceNow</button>
+              <button type="button" class="btn btn-outline" data-on-click="openAddConnectorFor" data-args="[&quot;jira&quot;]">+ Jira</button>
+              <button type="button" class="btn btn-outline" data-on-click="openAddConnectorFor" data-args="[&quot;webhook&quot;]">+ Webhook</button>
+            </div>
+          </section>
+          <section class="rk-card int-box">
+            <div class="rk-hd"><h2>EPP response connectors</h2><div class="rk-hd-actions">
+              <button type="button" class="btn btn-outline btn-sm" data-on-click="refreshResponseConnectors">Sync Now</button>
+              <button type="button" class="btn btn-primary btn-sm" data-on-click="openAddResponseConnector">+ Add Connector</button>
+            </div></div>
+            <p class="int-sub muted">CrowdStrike / Defender credentials for isolate, kill process and quarantine actions from the Findings tab.</p>
+            <div id="int-epp-empty" hidden><div class="rk-empty"><span class="rk-empty-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 01-10 0zM12 16v5"/></svg></span><b>No response connectors configured</b><div>Add a CrowdStrike or Defender connector to enable Respond actions from Findings.</div></div></div>
+            <div class="int-adds">
+              <button type="button" class="btn btn-outline" data-on-click="openAddResponseConnectorFor" data-args="[&quot;crowdstrike&quot;]">+ CrowdStrike</button>
+              <button type="button" class="btn btn-outline" data-on-click="openAddResponseConnectorFor" data-args="[&quot;microsoft_defender&quot;]">+ Defender</button>
+              <button type="button" class="btn btn-outline" data-on-click="openAddResponseConnectorFor" data-args="[&quot;sentinelone&quot;]">+ SentinelOne</button>
+            </div>
+          </section>
+        </div>
 
         <!-- Add / Edit connector drawer (inline form) -->
         <div id="connector-form-wrap" class="is-hidden g1-s-5012029f">
@@ -2220,17 +2251,6 @@
             <button class="btn btn-outline btn-sm g1-s-ca6fc035" data-on-click="showTab" data-args="[&quot;findings&quot;]">View Findings →</button>
           </div>
         </div>
-
-        <!-- EPP Response Connectors — separate from the ITSM connectors above:
-             these are write-capable (isolate/kill/quarantine), not read-only. -->
-        <div class="g1-display-flex g1-s-14155547">
-          <div>
-            <h2 class="g1-s-8c323391">EPP Response Connectors</h2>
-            <div class="g1-s-2134bc46">CrowdStrike / Defender credentials for isolate, kill process, and quarantine actions from the Findings tab.</div>
-          </div>
-          <button class="btn btn-primary btn-sm" data-on-click="openAddResponseConnector">+ Add Connector</button>
-        </div>
-        <div id="response-connectors-list"><div class="empty g1-s-be6df18e">Loading connectors…</div></div>
 
         <!-- Add / Edit response connector (inline form) -->
         <div id="response-connector-form-wrap" class="is-hidden g1-s-5012029f">
@@ -2302,6 +2322,15 @@
             </div>
           </div>
         </div>
+
+        <div id="int-filters" class="int-filters"></div>
+        <div id="int-grid"></div>
+        <div id="integrations-insights"></div>
+
+        <section class="rk-card flush int-taxii">
+          <div class="rk-hd"><h2>TAXII Connectors</h2><div class="rk-hd-actions"><span class="muted int-taxii-note">Manage in Settings &rarr; TAXII Connectors</span></div></div>
+          <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Endpoint</th><th>Status</th><th>Last poll</th></tr></thead><tbody id="int-taxii-body"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table></div>
+        </section>
       </div>
 
       <div id="tab-exercises" class="is-hidden">
@@ -3800,22 +3829,22 @@
 <!-- Create User Modal -->
 <div id="create-user-overlay" class="overlay" data-on-click="closeCreateUserOnBackdrop">
   <div class="modal">
-    <h3>Create User</h3>
+    <h3>Create user</h3>
     <p class="sub2">New users must change their password on first login.</p>
     <div class="form-group"><label>Username</label><input type="text" id="cu-username" autocomplete="off"></div>
-    <div class="form-group"><label>Temporary Password</label><input type="password" id="cu-password" autocomplete="new-password"></div>
+    <div class="form-group"><label>Initial password</label><input type="password" id="cu-password" autocomplete="new-password"><div class="tiny muted">Share it with the user securely. They are asked to change it at first sign-in.</div></div>
     <div class="form-group">
       <label>Role</label>
       <select id="cu-role">
-        <option value="analyst">Analyst — run scenarios, view reports</option>
-        <option value="viewer">Viewer — read-only</option>
-        <option value="admin">Admin — full access</option>
+        <option value="analyst">Analyst: run scenarios, manage agents, view reports</option>
+        <option value="viewer">Viewer: read-only, view dashboards and reports</option>
+        <option value="admin">Admin: full access, manage users, agents, integrations and settings</option>
       </select>
     </div>
     <div id="cu-err" class="error-msg"></div>
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" data-on-click="closeCreateUser">Cancel</button>
-      <button class="btn btn-outline-green btn-sm" data-on-click="submitCreateUser">Create</button>
+      <button class="btn btn-primary btn-sm" data-on-click="submitCreateUser">Create user</button>
     </div>
   </div>
 </div>

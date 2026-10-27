@@ -159,7 +159,7 @@ test('agent-drawer: loadAgtLogs keeps payloads inside data-args', async () => {
 test('integrations: renderResponseConnectorList keeps payloads inside data-args', () => {
   for (const p of PAYLOADS) {
     renderResponseConnectorList([{ id: p, name: p, provider: 'crowdstrike', enabled: true }]);
-    const div = document.getElementById('response-connectors-list');
+    const div = document.getElementById('int-grid');
     assertInert(div, 'renderResponseConnectorList');
     assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
     const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');

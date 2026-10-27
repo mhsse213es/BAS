@@ -6,6 +6,7 @@ import { toggleExpCols, setExpPer, expPage, expSortBy, expColToggle, expSelectRo
 import { setRecLimit } from './features/attack-path.js';
 import { setCoverageActor, covSearch, covSetResult, covClearFilters, tcvTableQuery, clearTcvTableQuery, setTcvPer, tcvPage, tcvSortBy, toggleTcvCols, tcvColToggle, tcvSelectRow, tcvSelectAll, clearTcvSelection, exportTcvCsv, exportTcvSelected } from './features/tcv-view.js';
 import { recTableQuery, clearRecTableQuery, setRecPer, recPage, recSortBy, toggleRecCols, recColToggle, recSelectRow, recSelectAll, clearRecSelection, exportRecCsv, exportRecSelected } from './features/recommendations.js';
+import { setTblQuery, setTblClear, setTblPer, setTblPage, setTblSort, setTblCols, setTblColToggle, setTblSelectRow, setTblSelectAll, setTblClearSel, setTblExport, setTblExportSel } from './features/set-view.js';
 import { exTblQuery, exTblClear, exTblPer, exTblPage, exTblSort, exTblCols, exTblColToggle, exTblSelectRow, exTblSelectAll, exTblClearSel, exTblExport, exTblExportSel, exRowKeydown } from './features/ex-view.js';
 import { closeAdvDrawer, closeAdvRunModal, closeTmplRun, confirmAdversaryRun, confirmTmplRun, loadAdversariesStop, openAdvDrawer, openAdvRunModal, openTmplRun, renderAdvRunWarn, renderAdversaryLibrary, renderTmplOSCompat, setTmplFilter, setTmplTargetMode, tmplGroupChange, tmplRunModeChange, tmplSelAgentChange, toggleAdversarySection } from './features/adversaries.js';
 import { clearEnrollmentTokens, copyEnrollmentToken, downloadEnrollmentTokensCsv, generateEnrollmentTokens } from './features/enroll-tokens.js';
@@ -25,7 +26,7 @@ import { _toggleEMExtraScenario, _toggleEMPreviewRow, _toggleVexPreviewRow, _tog
 import { closeCreateUser, closeCreateUserOnBackdrop, closeDownloadOptions, closeEditUser, closeEditUserOnBackdrop, closeEvidence, closeEvidenceOnBackdrop, confirmRun, copyRaw, doResetPassword, downloadCampaignCSV, downloadCampaignReport, downloadEMSweepReport, downloadRunCSV, downloadRunReport, downloadSweepReport, exportRunJSON, openCampaignReport, openCmdk, openCreateUser, openDashRun, openEditUser, openEvidence, openFindingFromDashboard, openRunReport, pauseRun, resumeRun, stopRun, submitCreateUser, submitEditUser, toggleUserActive } from './features/evidence.js';
 import { bulkPushSelectedFindings, loadFindings, loadSLAReport, openFinding, openRemediation, pushFindingToITSM, quickTriageFinding, remBulkTicket, remSingleTicket, revalidateRemediation, exportFindings, fndGo, fndTech, setFindingSearch, setFindingSev, setFindingStatus, setFindingTab, setRemFilter, setRemSearch, toggleAllFindingChecksFromChecked, toggleFindingCheck } from './features/findings.js';
 import { closeInitiativeAttachDrawer, closeInitiativeAttachDrawerOnBackdrop, closeInitiativeCreateDrawer, closeInitiativeCreateDrawerOnBackdrop, closeInitiativeDrawer, closeInitiativeDrawerOnBackdrop, initiativeArchiveAction, initiativeAttachSelect, initiativeCloseAction, initiativeDeleteFromMenu, initiativeDetachJob, initiativeRenderAttachList, initiativeSetFilter, initiativeSearch, initiativeClearFilters, initiativeCardKeydown, loadInitiatives, openInitiativeAttachDrawer, openInitiativeCreateDrawer, openInitiativeDrawer, submitInitiativeAttach, submitInitiativeCreate } from './features/initiatives.js';
-import { closeConnectorForm, closeRespondModal, closeResponseConnectorForm, connectorProjectSelectChange, deleteConnector, deleteResponseConnector, fetchConnectorProjects, openAddConnector, openAddResponseConnector, openEditConnector, openEditResponseConnector, openRespondModal, renderConnectorSettings, renderRespondFields, renderResponseConnectorFields, saveConnectorForm, saveResponseConnectorForm, submitRespondAction, testConnectorById, testConnectorForm, testResponseConnectorById } from './features/integrations.js';
+import { openAddConnectorFor, openAddResponseConnectorFor, refreshResponseConnectors, closeConnectorForm, closeRespondModal, closeResponseConnectorForm, connectorProjectSelectChange, deleteConnector, deleteResponseConnector, fetchConnectorProjects, openAddConnector, openAddResponseConnector, openEditConnector, openEditResponseConnector, openRespondModal, renderConnectorSettings, renderRespondFields, renderResponseConnectorFields, saveConnectorForm, saveResponseConnectorForm, submitRespondAction, testConnectorById, testConnectorForm, testResponseConnectorById } from './features/integrations.js';
 import { clearIOCFilters, closeIOCAddModal, closeIOCAddOnBackdrop, closeIOCDrawer, closeIOCDrawerOnBackdrop, closeIOCImportOnBackdrop, openIOCAddModal, setIOCType, submitIOCAdd, closeIOCImportModal, closeResults, closeResultsOnBackdrop, loadIOCRegistry, loadIOCRegistryOnEnter, openIOCDetail, openIOCImportModal, setRunIOCSearchFromInput, setRunIOCTypeFilter, submitIOCImport, toggleIOCSuppressed, toggleRunIOCRow } from './features/iocs.js';
 import { closeRunLive, closeRunLiveOnBackdrop, closeSweepDrilldown, closeSweepDrilldownOnBackdrop, openRunPanelAction, openSweepDrilldown, openSweepReport, toggleLiveStepAction } from './features/live-run.js';
 import { abortExecution, abortExecutionStop, approveExStep, closeExerciseDetail, closeExerciseDetailOnBackdrop, closeOpenAEVDetail, closeOpenAEVDetailOnBackdrop, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory, toggleAPScore } from './features/openaev.js';
@@ -36,7 +37,8 @@ import { cancelScheduledAssessment, closeSchedWizard, loadScheduledAssessments, 
 import { toggleNavPin } from './features/nav-extras.js';
 import { k8sSearch, k8sPickCluster, k8sSetCluster, k8sSetState, k8sClearFilters, k8sNewRun, k8sOpenRun, k8sRowKeydown, closeK8sDrawer, closeK8sDrawerOnBackdrop, k8sFilterClusterFromDrawer, k8sOpenCoverage } from './features/k8s-scenarios.js';
 import { setAgentsViewRich as setAgentsView } from './features/agents-risk-view.js';
-import { agtQuery, clearAgtQuery, setAgtPer, agtPage, agtSortBy, toggleAgtCols, agtColToggle, agtSelectRow, agtSelectAll, clearAgtSelection, exportAgtCsv, exportAgtSelected } from './features/agt-view.js';
+import { intQuery, setIntKind, intCardOpen } from './features/int-view.js';
+import { agtQuery,clearAgtQuery, setAgtPer, agtPage, agtSortBy, toggleAgtCols, agtColToggle, agtSelectRow, agtSelectAll, clearAgtSelection, exportAgtCsv, exportAgtSelected } from './features/agt-view.js';
 import { setAgentStatusSelect, setAgentOsSelect, clearAgentFilters, agentRowKeydown, showConnectionConfig } from './features/attack-path.js';
 import { _dismissLicenseGraceBanner, ackAllTamperEvents, doLogin, doLogoutFromMenu, goToProfileFromMenu, togglePasswordVisibility, licenseBannerDismissHoverOff, licenseBannerDismissHoverOn, openAgentDetailRiskTab, openSettingsFromMenu, setDashView, showTab, tamperAckHoverOff, tamperAckHoverOn, toggleSidebarCollapsed, toggleUserMenuFromEvent } from './features/shell.js';
 import { saveExecutionPolicyDefault } from './features/execution-policy.js';
@@ -221,6 +223,18 @@ export const ACTIONS = {
   clearRecSelection,
   exportRecCsv,
   exportRecSelected,
+  setTblQuery,
+  setTblClear,
+  setTblPer,
+  setTblPage,
+  setTblSort,
+  setTblCols,
+  setTblColToggle,
+  setTblSelectRow,
+  setTblSelectAll,
+  setTblClearSel,
+  setTblExport,
+  setTblExportSel,
   exTblQuery,
   exTblClear,
   exTblPer,
@@ -367,6 +381,12 @@ export const ACTIONS = {
   openAPCollect,
   openAPSchedule,
   openAddConnector,
+  openAddConnectorFor,
+  openAddResponseConnectorFor,
+  refreshResponseConnectors,
+  intQuery,
+  setIntKind,
+  intCardOpen,
   openAddResponseConnector,
   openAdvDrawer,
   openAdvRunModal,

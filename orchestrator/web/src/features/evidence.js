@@ -18,6 +18,7 @@ import { effectiveness as dashEffectiveness } from './dash-model.js';
 import { displayOf, replaceClasses, setDisplay } from '../core/inline-style.js';
 import { empty } from '../core/kit.js';
 import { renderUsersInsights } from './settings-insights.js';
+import { setUsersRows } from './set-view.js';
 
 
 // ── Evidence Panel ────────────────────────────────────────────────────────────
@@ -998,29 +999,12 @@ export function openCmdk() {
   setTimeout(function() { input.focus(); }, 20);
 }
 
-var ROLE_LABELS = { admin: 'Admin', analyst: 'Analyst', viewer: 'Viewer' };
 
 export function loadUsers() {
   apicall('/api/users').then(function(data) {
     document.getElementById('users-cnt').textContent = data.length;
     renderUsersInsights(data);
-    var tbody = document.getElementById('users-body');
-    if (!data.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">No users found.</td></tr>'; return; }
-    tbody.innerHTML = data.map(function(u) {
-      var statusBadge = u.isActive ? '<span class="sbadge s-completed">Active</span>' : '<span class="sbadge s-offline">Disabled</span>';
-      var mustPw = u.mustChangePw ? ' <span class="tag u-warning">pw reset</span>' : '';
-      var actions =
-        '<button class="btn btn-outline btn-sm"' + on('click', 'openEditUser', u.id, u.username, u.role) + '>Edit</button>' +
-        ' <button class="btn btn-outline btn-sm"' + on('click', 'doResetPassword', u.id, u.username) + ' style="margin-left:0.3rem">Reset PW</button>' +
-        ' <button class="btn btn-outline-' + (u.isActive ? 'red' : 'green') + ' btn-sm"' + on('click', 'toggleUserActive', u.id, !u.isActive) + ' style="margin-left:0.3rem">' + (u.isActive ? 'Disable' : 'Enable') + '</button>';
-      return '<tr>' +
-        '<td><strong>' + x(u.username) + '</strong>' + mustPw + '</td>' +
-        '<td>' + (ROLE_LABELS[u.role] || x(u.role)) + '</td>' +
-        '<td>' + statusBadge + '</td>' +
-        '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(u.createdAt) + '</td>' +
-        '<td style="color:var(--muted);font-size:0.78rem">' + (u.lastLogin ? fmtDate(u.lastLogin) : 'Never') + '</td>' +
-        '<td>' + actions + '</td></tr>';
-    }).join('');
+    setUsersRows(data);
   }).catch(function(e) { showToast('Failed to load users: ' + e.message, 'err'); });
 }
 

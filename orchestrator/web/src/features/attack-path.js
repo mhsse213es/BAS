@@ -636,7 +636,7 @@ export function saveAPSchedule() {
 // Settings sub-section switcher — toggles the body panels + lazily loads each.
 export function showSettingsSection(name) {
   state.SETTINGS_SECTION = name;
-  ['users', 'engine', 'intel', 'art', 'audit', 'theme', 'dashprefs', 'license', 'backup'].forEach(function(s) {
+  ['users', 'engine', 'intel', 'taxii', 'art', 'audit', 'theme', 'dashprefs', 'license', 'backup'].forEach(function(s) {
     var el = document.getElementById('set-' + s);
     if (el) setDisplay(el, s === name ? '' : 'none');
     var nav = document.querySelector('[data-set="' + s + '"]');
@@ -645,6 +645,7 @@ export function showSettingsSection(name) {
   if (name === 'users') loadUsers();
   else if (name === 'engine') loadCalderaStatus();
   else if (name === 'intel') { loadConnectorStatus(); loadThreatIntelConfig('misp'); loadThreatIntelConfig('opencti'); loadThreatIntelConfig('otx'); loadTAXIIConnectors(); loadOpenAEVConfig(); }
+  else if (name === 'taxii') loadTAXIIConnectors();
   else if (name === 'art') loadARTContentStatus();
   else if (name === 'audit') loadAuditLogs();
   else if (name === 'license') loadLicenseInfo();

@@ -1,0 +1,115 @@
+/* Settings and Profile pages (design demo): left rail of tree items, table cards with the shared .dt-* chrome
+   (rules live in runs-rich.css), section cards, form fields, option cards and the profile account cards.
+   Rules that must beat the unlayered g1-s-* equivalents carry !important. */
+
+/* ── Settings rail: the demo's .split-240 card of .tree-item rows ── */
+#tab-settings .settings-layout { grid-template-columns: 240px minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+#tab-settings .settings-nav { padding: 10px; gap: 2px; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+#tab-settings .sset { gap: 8px; padding: 7px 9px; border-radius: 6px; border-left: 0; color: var(--muted-hi); font-size: 13px; line-height: 1.4; text-decoration: none; transition: background-color .15s, color .15s; }
+#tab-settings .sset svg { flex: none; }
+#tab-settings .sset:hover { background: var(--hover); color: var(--text); }
+#tab-settings .sset.active { background: var(--accent-dim); color: var(--text); font-weight: 400; }
+#tab-settings .sset:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (max-width: 900px) {
+  #tab-settings .settings-layout { grid-template-columns: minmax(0, 1fr); }
+  #tab-settings .sset.active { border-bottom: 0; }
+}
+
+/* ── Section headers and table cards ── */
+#tab-settings .sec-hdr { gap: 10px; flex-wrap: wrap; margin-bottom: 12px; min-height: 28px; }
+#tab-settings .sec-hdr h2 { font-size: 15px; font-weight: 600; letter-spacing: 0; }
+#tab-settings .sec-hdr .cnt { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px; background: var(--elevated); color: var(--muted-hi); }
+#tab-settings .set-card { margin-bottom: 14px; }
+#tab-settings .set-card > .sec-hdr { padding: 14px 16px 0; }
+#tab-settings .set-card .tbl-wrap { border: 0; border-radius: 0; }
+#tab-settings .set-card > #users-box .runs-dt > .dt-toolbar { border-top: 0; }
+#tab-settings .set-filters { padding: 0 16px; margin-bottom: 12px; }
+#tab-settings .set-sel { height: 34px; padding: 0 11px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; min-width: 0; }
+#tab-settings .set-sel:hover { border-color: var(--border-hi); }
+#tab-settings .set-sel:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+#tab-settings .set-card > .g1-display-flex:last-child { padding: 12px 16px 14px; margin-top: 0; }
+#tab-settings #users-box .empty, #tab-settings #users-box .rk-empty { padding: 28px 16px; }
+.set-user { display: flex; align-items: center; gap: 8px; }
+.set-user .avatar { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff; background: linear-gradient(140deg, #2563eb, #7c3aed); box-shadow: 0 0 0 2px rgba(255,255,255,.08); }
+.set-user b { font-weight: 500; }
+td.set-acts { text-align: right; white-space: nowrap; }
+td.set-acts .btn + .btn { margin-left: 6px; }
+
+/* ── Section cards, key/value rows and form fields ── */
+#tab-settings .set-section > .conn-cfg-card, #tab-settings .set-section .conn-cfg-card { padding: 16px; margin-bottom: 14px; gap: 10px; box-shadow: var(--shadow-sm); }
+#tab-settings .set-section .conn-cfg-card > .g1-s-2efe2454, #tab-settings .set-section .conn-cfg-card > .g1-s-95331d7e { font-size: 14px !important; font-weight: 600 !important; text-transform: none !important; letter-spacing: 0 !important; color: var(--text) !important; margin-bottom: 4px !important; }
+#tab-settings .conn-cfg-row { gap: 14px; font-size: 13px; }
+#tab-settings .conn-cfg-label { min-width: 150px; font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
+#tab-settings .conn-cfg-val { background: none; border: 0; border-radius: 0; padding: 0; color: var(--text); font-family: inherit; font-size: 13px; }
+#tab-settings .conn-cfg-val.secret-hidden { color: var(--muted); }
+#tab-settings .inp-sm, #tab-settings .set-section input[type="text"], #tab-settings .set-section input[type="password"], #tab-settings .set-section input[type="url"], #tab-settings .set-section input[type="number"], #tab-settings .set-section select {
+  height: 34px; padding: 0 11px; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-family: inherit; font-size: 13px; min-width: 0; box-sizing: border-box; transition: border-color .15s, box-shadow .15s; }
+#tab-settings .set-section textarea { padding: 8px 11px; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-family: inherit; font-size: 13px; box-sizing: border-box; }
+#tab-settings .inp-sm:hover, #tab-settings .set-section input:hover:not(:focus), #tab-settings .set-section select:hover:not(:focus) { border-color: var(--border-hi); }
+#tab-settings .inp-sm:focus, #tab-settings .set-section input:focus, #tab-settings .set-section select:focus, #tab-settings .set-section textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+#tab-settings .set-section label { font-size: 12px; color: var(--muted-hi); }
+#tab-settings .set-section .tiny.muted, #tab-settings .set-section .u-muted { font-size: 12px; }
+
+/* ── Option cards: theme and dashboard-view pickers (the demo's .radio-card) ── */
+#set-theme, #set-dashprefs { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; box-shadow: var(--shadow-sm); }
+#set-theme .g1-s-a8621e09, #set-dashprefs .g1-s-a8621e09 { margin-top: 0; margin-bottom: 16px !important; font-size: 12.5px !important; }
+#set-theme .sec-hdr, #set-dashprefs .sec-hdr { margin-bottom: 8px; }
+#set-theme .theme-card, #set-dashprefs .theme-card { border: 1px solid var(--border-hi); border-radius: 9px; background: var(--surface); box-shadow: none; transform: none; }
+#set-theme .theme-card:hover, #set-dashprefs .theme-card:hover { border-color: var(--accent); transform: none; box-shadow: none; }
+#set-theme .theme-card.active, #set-dashprefs .theme-card.active { border-color: var(--accent); background: var(--accent-dim); box-shadow: none; }
+#set-dashprefs .theme-card { padding: 12px 14px; }
+#set-dashprefs .theme-name { text-align: left; font-size: 13px; font-weight: 600; color: var(--text); }
+#set-dashprefs .theme-card.active .theme-name { color: var(--text); }
+#set-dashprefs .theme-card .g1-s-98d234b9 { text-align: left !important; font-size: 12px !important; margin-top: 2px !important; }
+#set-theme .theme-name { color: var(--text); }
+#set-theme .theme-card.active .theme-name { color: var(--text); }
+
+/* ── Backup note ── */
+#set-backup > .g1-s-55afbc76 { font-size: 12.5px; }
+
+/* ── Profile: account and access cards ── */
+#tab-profile .prof-grid { gap: 14px; align-items: start; margin-top: 14px; }
+#tab-profile .prof-card { margin-bottom: 0; }
+#tab-profile .prof-id { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+#tab-profile .user-avatar { width: 56px; height: 56px; font-size: 20px; flex: none; cursor: default; border: 0; box-shadow: 0 0 0 2px rgba(255,255,255,.08); }
+#tab-profile .user-avatar:hover { border: 0; box-shadow: 0 0 0 2px rgba(255,255,255,.08); }
+#tab-profile .prof-name { font-size: 15px; font-weight: 600; }
+#tab-profile .prof-badges { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+#tab-profile .role-chip { font-size: 11.5px; font-weight: 600; text-transform: none; letter-spacing: 0; padding: 2px 9px; border: 0; border-radius: 999px; color: #a371f7; background: color-mix(in srgb, #a371f7 14%, transparent); }
+#tab-profile .prof-kv { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 9px 14px; margin: 0; font-size: 13px; }
+#tab-profile .prof-kv dt { color: var(--muted); }
+#tab-profile .prof-kv dd { margin: 0; }
+#tab-profile .prof-actions { margin-top: 16px; }
+#tab-profile .prof-perms { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12.5px; }
+#tab-profile #profile-admin-shortcut { margin-top: 14px; }
+@media (max-width: 700px) { #tab-profile .prof-kv { grid-template-columns: minmax(0, 1fr); gap: 2px; } #tab-profile .prof-kv dd { margin-bottom: 8px; } }
+
+/* .btn-primary is full-width by default (login card); inside settings it is a normal button. */
+#tab-settings .btn-primary, #tab-profile .btn-primary { width: auto; }
+#users-body td.muted { white-space: nowrap; }
+#audit-body td:first-child, #audit-body td:nth-child(5) { white-space: nowrap; font-size: 12.5px; }
+
+/* ── Threat intel: the demo's connector cards (title + subtitle, stacked labelled fields, 2-up stat grid) ── */
+#set-intel > #connector-status-wrap > .sec-hdr { margin-bottom: 12px; }
+#set-intel .g1-s-30f80bb9 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 14px !important; margin-bottom: 14px !important; align-items: start; }
+#set-intel .conn-cfg-card { display: flex; flex-flow: row wrap; align-content: flex-start; gap: 0 16px; }
+#set-intel .conn-cfg-card > * { flex: 0 0 100%; min-width: 0; }
+#set-intel .conn-cfg-card > .conn-cfg-row { flex: 0 0 calc(50% - 8px); flex-direction: column; align-items: flex-start; gap: 2px; margin-top: 12px; }
+#set-intel .conn-cfg-card > .conn-cfg-row .conn-cfg-label { min-width: 0; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+#set-intel .conn-cfg-card > .conn-cfg-row .conn-cfg-val { font-size: 13px; font-weight: 600; }
+#set-intel .conn-cfg-card > .conn-cfg-row:first-of-type { margin-top: 16px; }
+.set-ch { display: flex; flex-direction: column; gap: 1px; margin-bottom: 4px; }
+.set-ch b { font-size: 14px; font-weight: 600; color: var(--text); }
+.set-ch .muted { font-size: 11.5px; }
+#set-intel .kpi-row, #set-engine .kpi-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0; }
+#set-intel .kpi-row > .field { flex: 0 0 100%; display: flex; flex-direction: column; gap: 5px; margin-top: 4px; }
+#set-intel .kpi-row > .field label { font-size: 12.5px; font-weight: 500; color: var(--muted-hi); }
+#set-intel .kpi-row > .field input { width: 100%; }
+#set-intel .kpi-row.g1-s-acd4d170 { margin-top: 12px; }
+#set-intel .kpi-row .btn { width: auto; flex: none; }
+#set-intel .kpi-row label.tiny { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
+#execution-policy-panel .kpi-row { flex-wrap: nowrap; }
+#execution-policy-panel .kpi-row select { flex: 1; max-width: 560px; }
+#execution-policy-panel .tiny { margin-top: 8px; font-size: 12px; }
+#set-intel .kpi-row > .field input { flex: none; height: 34px; }
+#tab-profile .role-chip { text-transform: capitalize; }

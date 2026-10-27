@@ -6,12 +6,13 @@ import { showToast } from '../core/util.js';
 import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js';
 import { _ticketingConfigs, loadTicketingConfigs } from './findings.js';
 import { displayOf, setDisplay } from '../core/inline-style.js';
-import { cssVars } from '../core/css-vars.js';
 import { setEppConnectors, setItsmConnectors } from './integrations-insights.js';
+import { setIntItsm, setIntEpp, loadIntTaxii } from './int-view.js';
 
 
 // ── Integrations tab ────────────────────────────────────────────────────────
 export function loadIntegrations() {
+  loadIntTaxii();
   loadTicketingConfigs(function(list) {
     renderConnectorList(list);
   });
@@ -30,68 +31,10 @@ export function loadIntegrations() {
 }
 
 var PROVIDER_LABELS = { servicenow: 'ServiceNow', jira: 'Jira', webhook: 'Webhook' };
-var PROVIDER_ICONS = {
-  servicenow: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1 14.5v-5l4 2.5-4 2.5z"/></svg>',
-  jira:       '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 11.513H0a5.218 5.218 0 005.232 5.215l2.345.01v2.31A5.215 5.215 0 0012.79 24V12.518a1.005 1.005 0 00-1.22-.005zM12.426.005H.855a5.218 5.218 0 005.232 5.215l2.345.01v2.31A5.215 5.215 0 0013.645 12.8V1.21A1.005 1.005 0 0012.426.005z"/></svg>',
-  webhook:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>'
-};
 
 function renderConnectorList(list) {
   setItsmConnectors(list || []);
-  var el = document.getElementById('integrations-list');
-  if (!el) return;
-  if (!list || !list.length) {
-    el.innerHTML = '<div class="conn-cfg-card g1-s-87670393">' +
-      '<div class="g1-s-04f181fe">No connectors configured.</div>' +
-      '<div class="tiny">Add a ServiceNow, Jira, or webhook connector to push findings to your ITSM.</div></div>';
-    return;
-  }
-  el.innerHTML = list.map(function(c) {
-    var ac = c.autoCreate === 'off' || !c.autoCreate ? 'Manual only' : c.autoCreate.replace('_', '+');
-
-    // Honest connection status — 4 states, not just enabled/disabled
-    var statusColor, statusLabel, statusTitle;
-    if (!c.enabled) {
-      statusColor = 'var(--muted)';
-      statusLabel = 'Disabled';
-      statusTitle = 'Connector is turned off';
-    } else if (c.lastTestOk === null || c.lastTestOk === undefined) {
-      statusColor = 'var(--warning)';
-      statusLabel = 'Not tested';
-      statusTitle = 'Click Test to verify connectivity';
-    } else if (c.lastTestOk === true) {
-      statusColor = 'var(--success)';
-      statusLabel = 'Connected';
-      statusTitle = 'Last test passed' + (c.lastTestAt ? ' at ' + new Date(c.lastTestAt).toLocaleString() : '');
-    } else {
-      statusColor = 'var(--danger)';
-      statusLabel = 'Connection error';
-      statusTitle = c.lastTestError || 'Last test failed';
-    }
-    var statusDot = '<span class="g1-display-inline-block g1-s-aab81e99"' + cssVars(['g1-v-9ffd39ba', statusColor]) + '></span>' + statusLabel;
-
-    // Error detail row (only shown when last test failed)
-    var errorRow = (c.enabled && c.lastTestOk === false && c.lastTestError)
-      ? '<div class="g1-s-dc6ac68b">' + x(c.lastTestError) + '</div>'
-      : '';
-
-    return '<div class="conn-cfg-card g1-s-2fc766d7">' +
-      '<div class="g1-display-flex g1-s-0bdc41ee">' +
-        '<div class="g1-display-flex g1-s-56a8386c">' +
-          '<div class="g1-display-flex g1-s-898cff8a">' + (PROVIDER_ICONS[c.provider] || '') + '</div>' +
-          '<div><div class="g1-s-ab03ec3f">' + x(c.name) + '</div>' +
-            '<div class="tiny muted">' + (PROVIDER_LABELS[c.provider] || x(c.provider)) + ' &nbsp;·&nbsp; Auto-create: ' + x(ac) + '</div></div>' +
-        '</div>' +
-        '<div class="g1-display-flex g1-s-76f7b01e">' +
-          '<span class="tiny"' + cssVars(['g1-v-7d75dfc9', statusColor]) + ' title="' + x(statusTitle) + '">' + statusDot + '</span>' +
-          '<button class="btn btn-outline btn-sm"' + on('click', 'testConnectorById', c.id) + '>Test</button>' +
-          '<button class="btn btn-outline btn-sm"' + on('click', 'openEditConnector', c.id) + '>Edit</button>' +
-          '<button class="btn btn-sm g1-s-18a8eb32"' + on('click', 'deleteConnector', c.id, c.name) + '>Delete</button>' +
-        '</div>' +
-      '</div>' +
-      errorRow +
-    '</div>';
-  }).join('');
+  setIntItsm(list || []);
 }
 
 var TICKET_CONNECTOR_LOADED = null; // the record being edited (null for Add), for the save confirmation diff
@@ -110,6 +53,13 @@ export function openAddConnector() {
   renderConnectorSettings();
   setDisplay(document.getElementById('connector-form-wrap'), '');
   document.getElementById('connector-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// "+ ServiceNow" / "+ Jira" / "+ Webhook" in the ITSM box: the same Add form with the provider chosen.
+export function openAddConnectorFor(provider) {
+  openAddConnector();
+  var sel = document.getElementById('cf-provider');
+  if (sel) { sel.value = provider; renderConnectorSettings(); }
 }
 
 export function openEditConnector(id) {
@@ -373,32 +323,7 @@ export function loadResponseConnectors(cb) {
 
 export function renderResponseConnectorList(list) {
   setEppConnectors(list || []);
-  var el = document.getElementById('response-connectors-list');
-  if (!el) return;
-  if (!list || !list.length) {
-    el.innerHTML = '<div class="conn-cfg-card g1-s-87670393">' +
-      '<div class="g1-s-04f181fe">No response connectors configured.</div>' +
-      '<div class="tiny">Add a CrowdStrike or Defender connector to enable Respond actions from Findings.</div></div>';
-    return;
-  }
-  var providerLabels = { crowdstrike: 'CrowdStrike Falcon', microsoft_defender: 'Microsoft Defender for Endpoint', sentinelone: 'SentinelOne' };
-  el.innerHTML = list.map(function(c) {
-    var statusColor = c.enabled ? 'var(--success)' : 'var(--muted)';
-    var statusLabel = c.enabled ? 'Enabled' : 'Disabled';
-    var statusDot = '<span class="g1-display-inline-block g1-s-aab81e99"' + cssVars(['g1-v-9ffd39ba', statusColor]) + '></span>' + statusLabel;
-    return '<div class="conn-cfg-card g1-s-2fc766d7">' +
-      '<div class="g1-display-flex g1-s-0bdc41ee">' +
-        '<div><div class="g1-s-ab03ec3f">' + x(c.name) + '</div>' +
-          '<div class="tiny muted">' + (providerLabels[c.provider] || x(c.provider)) + '</div></div>' +
-        '<div class="g1-display-flex g1-s-76f7b01e">' +
-          '<span class="tiny"' + cssVars(['g1-v-7d75dfc9', statusColor]) + '>' + statusDot + '</span>' +
-          '<button class="btn btn-outline btn-sm"' + on('click', 'testResponseConnectorById', c.id) + '>Test</button>' +
-          '<button class="btn btn-outline btn-sm"' + on('click', 'openEditResponseConnector', c.id) + '>Edit</button>' +
-          '<button class="btn btn-sm g1-s-18a8eb32"' + on('click', 'deleteResponseConnector', c.id, c.name) + '>Delete</button>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
-  }).join('');
+  setIntEpp(list || []);
 }
 
 export function renderResponseConnectorFields() {
@@ -427,6 +352,18 @@ export function openAddResponseConnector() {
   renderResponseConnectorFields();
   setDisplay(document.getElementById('response-connector-form-wrap'), '');
   document.getElementById('response-connector-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// "+ CrowdStrike" / "+ Defender" / "+ SentinelOne" in the EPP box.
+export function openAddResponseConnectorFor(provider) {
+  openAddResponseConnector();
+  var sel = document.getElementById('rc-provider');
+  if (sel) { sel.value = provider; renderResponseConnectorFields(); }
+}
+
+// "Sync Now" on the EPP box: re-read the connector list from the server.
+export function refreshResponseConnectors() {
+  loadResponseConnectors(function(list) { renderResponseConnectorList(list); showToast('Connector state refreshed', 'ok'); });
 }
 
 export function openEditResponseConnector(id) {

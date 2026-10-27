@@ -31,7 +31,7 @@ import { loadK8sRuns } from './k8s-scenarios.js';
 import { loadVariantTab } from './variant-executor.js';
 import { displayOf, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
-import { renderBreadcrumb } from './shell-ui.js';
+import { renderBreadcrumb, setHeroStat } from './shell-ui.js';
 export function __init_L5162() {
 (function() {
   var t = localStorage.getItem('audspect_theme') || 'dark';
@@ -428,6 +428,8 @@ export function goToProfile() {
     document.getElementById('profile-created').textContent = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—';
     document.getElementById('profile-last-login').textContent = u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'Never';
     document.getElementById('profile-auth-source').textContent = u.authSource === 'sso' ? 'Single sign-on (SSO)' : 'Username & password';
+    setHeroStat('hs-profile-last', u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'Never');
+    setHeroStat('hs-profile-role', u.role ? u.role.charAt(0).toUpperCase() + u.role.slice(1) : '—');
     setDisplay(document.getElementById('profile-admin-shortcut'), u.role === 'admin' ? '' : 'none');
   }).catch(function() {
     document.getElementById('profile-username').textContent = 'Failed to load profile';
@@ -437,7 +439,7 @@ export function goToProfile() {
     if (!d || !Array.isArray(d.permissions)) { el.textContent = 'Unable to load permissions.'; return; }
     if (!d.permissions.length) { el.textContent = 'No permissions granted.'; return; }
     el.innerHTML = d.permissions.slice().sort().map(function(p) {
-      return '<span class="tag g1-display-inline-block g1-s-cbab8d6c">' + x(p) + '</span>';
+      return '<span class="rk-chip tone-info">' + x(p) + '</span>';
     }).join('');
   }).catch(function() {
     document.getElementById('profile-permissions').textContent = 'Unable to load permissions.';

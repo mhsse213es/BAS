@@ -30,5 +30,7 @@
 @import "./ex-rich.css" layer(app);
 @import "./tcv-rich.css" layer(app);
 @import "./agt-rich.css" layer(app);
+@import "./int-rich.css" layer(app);
+@import "./set-rich.css" layer(app);
 @import "./rich-g4.css" layer(app);
 @import "./inline-equivalent.css";
