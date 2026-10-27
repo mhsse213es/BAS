@@ -311,3 +311,46 @@ export function topRisks(findings, n) {
     .sort(function(a, b) { return rank[String(a.severity).toLowerCase()] - rank[String(b.severity).toLowerCase()]; })
     .slice(0, n || 4);
 }
+
+// ── Weekly trend series for the KPI tiles ───────────────────────────────────
+// weekBoundaries: n timestamps, one per week, oldest first; the last one is `nowMs`.
+function weekBoundaries(nowMs, n) {
+  var out = [];
+  for (var i = n - 1; i >= 0; i--) out.push(nowMs - i * 7 * 86400000);
+  return out;
+}
+// wasOpenAt: the finding existed at `t` and had not been resolved by then.
+function wasOpenAt(f, t) {
+  var first = Date.parse(f.firstSeen);
+  if (!isFinite(first) || first > t) return false;
+  if (f.status === 'open') return true;
+  var res = Date.parse(f.resolvedAt);
+  return isFinite(res) && res > t;
+}
+function anyPositive(series) { return series.some(function(v) { return v > 0; }); }
+
+// openFindingsSeries: how many findings were open at each weekly boundary (null when there is nothing to draw).
+export function openFindingsSeries(findings, nowMs, weeks) {
+  if (!findings || !findings.length) return null;
+  var s = weekBoundaries(nowMs, weeks || 8).map(function(t) { return findings.filter(function(f) { return wasOpenAt(f, t); }).length; });
+  return anyPositive(s) ? s : null;
+}
+// oldestOpenAgeSeries: age in days of the oldest open finding at each weekly boundary.
+export function oldestOpenAgeSeries(findings, nowMs, weeks) {
+  if (!findings || !findings.length) return null;
+  var s = weekBoundaries(nowMs, weeks || 8).map(function(t) {
+    var oldest = null;
+    findings.forEach(function(f) { if (wasOpenAt(f, t)) { var a = Date.parse(f.firstSeen); if (oldest == null || a < oldest) oldest = a; } });
+    return oldest == null ? 0 : Math.max(0, Math.floor((t - oldest) / 86400000));
+  });
+  return anyPositive(s) ? s : null;
+}
+// startedPerWeek: campaigns started in each of the last `weeks` weekly buckets, oldest first.
+export function startedPerWeek(campaigns, nowMs, weeks) {
+  if (!campaigns || !campaigns.length) return null;
+  var b = weekBoundaries(nowMs, weeks || 8);
+  var s = b.map(function(t) {
+    return campaigns.filter(function(c) { var st = Date.parse(c.startedAt); return isFinite(st) && st <= t && st > t - 7 * 86400000; }).length;
+  });
+  return anyPositive(s) ? s : null;
+}

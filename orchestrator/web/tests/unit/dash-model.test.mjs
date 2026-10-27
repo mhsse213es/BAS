@@ -107,3 +107,44 @@ test('scheduleWhen words recurring and one-off schedules', () => {
   assert.equal(R.scheduleWhen({ RecurrenceType: 'weekly', DayOfWeek: 1, TimeOfDay: '02:00' }, now), 'Weekly · Mon · 02:00');
   assert.equal(R.scheduleWhen({ RecurrenceType: 'once', RunAt: '2026-10-27T01:00:00Z' }, now), 'in 1 d 1 h');
 });
+
+// ── weekly trend series for the KPI tiles ───────────────────────────────────
+const NOW = Date.parse('2026-10-27T12:00:00Z');
+const dayAgo = (d) => new Date(NOW - d * 86400000).toISOString();
+
+test('openFindingsSeries: open count at each weekly boundary, last point is the current open count', () => {
+  const f = [
+    { status: 'open', firstSeen: dayAgo(40) },
+    { status: 'open', firstSeen: dayAgo(10) },
+    { status: 'remediated', firstSeen: dayAgo(30), resolvedAt: dayAgo(12) },
+    { status: 'open', firstSeen: dayAgo(2) },
+  ];
+  const s = M.openFindingsSeries(f, NOW, 8);
+  assert.equal(s.length, 8);
+  assert.equal(s[s.length - 1], 3);
+  assert.equal(s[0], 0);
+  assert.equal(s[2], 1);
+  assert.equal(s[3], 2);
+});
+
+test('openFindingsSeries: empty or all-zero history gives no series', () => {
+  assert.equal(M.openFindingsSeries([], NOW, 8), null);
+  assert.equal(M.openFindingsSeries(null, NOW, 8), null);
+});
+
+test('oldestOpenAgeSeries: age in days of the oldest open finding at each boundary', () => {
+  const f = [{ status: 'open', firstSeen: dayAgo(40) }, { status: 'open', firstSeen: dayAgo(3) }];
+  const s = M.oldestOpenAgeSeries(f, NOW, 8);
+  assert.equal(s[s.length - 1], 40);
+  assert.equal(s[0], 0);
+  assert.ok(s[s.length - 1] > s[s.length - 2]);
+});
+
+test('startedPerWeek: campaigns started in each weekly bucket, oldest first', () => {
+  const c = [{ startedAt: dayAgo(1) }, { startedAt: dayAgo(2) }, { startedAt: dayAgo(10) }];
+  const s = M.startedPerWeek(c, NOW, 8);
+  assert.equal(s.length, 8);
+  assert.equal(s[s.length - 1], 2);
+  assert.equal(s[s.length - 2], 1);
+  assert.equal(M.startedPerWeek([], NOW, 8), null);
+});

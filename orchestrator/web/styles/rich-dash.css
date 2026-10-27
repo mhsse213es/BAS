@@ -17,7 +17,9 @@
 .dp-col > .dp-cell > .rk-card { height: auto; }
 .dp-full { margin-bottom: 14px; }
 #tab-dashboard .rk-grid { margin-bottom: 14px; }
-@media (max-width: 1100px) { .dp-g5 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dp-side { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1100px) { .dp-g5 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Side panels stack (every card gets the full width, as in the design demo) before the main card gets squeezed. */
+@media (max-width: 1500px) { .dp-side { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) { .dp-g5 { grid-template-columns: minmax(0, 1fr); } }
 
 /* Section label with an optional link on the right */
@@ -164,3 +166,7 @@ a.dp-feed:hover b, a.dp-insight:hover b { color: var(--accent); }
 .sidebar-brand .brand-full.logo-onlight { display: block; height: 46px; max-width: calc(100% - 8px); box-sizing: border-box; background: #fff; border-radius: 12px; padding: 6px 12px; box-shadow: 0 4px 14px rgba(0, 0, 0, .25); }
 body.theme-light .sidebar-brand .brand-full.logo-onlight { box-shadow: 0 1px 4px rgba(15, 23, 42, .15); border: 1px solid var(--border); }
 .rk-kpi-ico svg, .rk-empty-ico svg { width: 16px; height: 16px; }
+
+/* Wide, stacked cards: keep the donut legend close to its donut instead of stretching across the card. */
+#dop-ce .donut-wrap, #dop-kev .donut-wrap { justify-content: flex-start; gap: 40px; }
+#dop-ce .donut-legend, #dop-kev .donut-legend { flex: 0 1 460px; }

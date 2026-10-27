@@ -52,14 +52,16 @@ function renderKpis() {
   var f = D.findings, open = f ? f.filter(function(r) { return r.status === 'open'; }) : null;
   var sevN = function(r, s) { return String(r.severity || '').toLowerCase() === s; };
   tiles.push(kpi({ label: 'Open findings', value: open ? open.length : '—', icon: 'flag', tone: open && open.length ? 'bad' : 'ok', action: 'showTab', args: ['findings'],
-    sub: open ? (open.length ? open.filter(function(r) { return sevN(r, 'critical') || sevN(r, 'high'); }).length + ' critical / high' : 'none open') : 'loading' }));
+    sub: open ? (open.length ? open.filter(function(r) { return sevN(r, 'critical') || sevN(r, 'high'); }).length + ' critical / high' : 'none open') : 'loading',
+    spark: f ? M.openFindingsSeries(f, Date.now(), 8) : null }));
   var maxAge = 0, oldest = null;
   (open || []).forEach(function(r) {
     var age = Math.max(0, Math.floor((Date.now() - new Date(r.firstSeen)) / 86400000));
     if (age >= maxAge) { maxAge = age; oldest = r; }
   });
   tiles.push(kpi({ label: 'Attack surface age', value: open ? maxAge + 'd' : '—', icon: 'clock', tone: maxAge >= 90 ? 'bad' : maxAge >= 30 ? 'warn' : 'ok', action: 'showTab', args: ['findings'],
-    sub: open ? (open.length && oldest ? 'oldest open weakness: ' + (oldest.techniqueId || 'unknown') : 'no open weaknesses') : 'oldest open weakness' }));
+    sub: open ? (open.length && oldest ? 'oldest open weakness: ' + (oldest.techniqueId || 'unknown') : 'no open weaknesses') : 'oldest open weakness',
+    spark: f ? M.oldestOpenAgeSeries(f, Date.now(), 8) : null }));
   var pw = M.postureWindow(runs, 8);
   var caveat = pw && M.testedTactics(runs) / M.ENTERPRISE_TACTICS.length < 0.5;
   tiles.push(kpi({ label: 'Prevention score', value: pw ? pw.pct + '%' : '—', icon: 'shield', tone: pw ? toneOf(pw.pct) : 'muted', action: 'showTab', args: ['runs'],
@@ -71,7 +73,8 @@ function renderKpis() {
     sub: cv.tested + ' technique' + (cv.tested === 1 ? '' : 's') + ' tested', spark: cv.tested ? cv.series : null }));
   var live = (D.campaigns || []).filter(function(c) { return c.summary && c.summary.status === 'running'; });
   tiles.push(kpi({ label: 'Active campaigns', value: D.campaigns ? live.length : '—', icon: 'campaign', tone: live.length ? 'info' : 'muted', action: 'showTab', args: ['campaigns'],
-    sub: live.length ? '● ' + live[0].name + (live.length > 1 ? ' +' + (live.length - 1) : '') + ' running' : 'none running' }));
+    sub: live.length ? '● ' + live[0].name + (live.length > 1 ? ' +' + (live.length - 1) : '') + ' running' : 'none running',
+    spark: D.campaigns ? M.startedPerWeek(D.campaigns, Date.now(), 8) : null }));
   cell('dop-kpis', tiles.join(''));
 }
 
@@ -106,6 +109,8 @@ var tierTone = function(t) { return t === 'Critical' ? 'bad' : t === 'High' ? 'w
 function renderActors() {
   var ti = D.ti, actors = ti ? (ti.topActors || []).slice(0, 5) : [];
   var head = tab('Prioritization →', 'threat-priority');
+  var hist = {};
+  ((D.readiness && D.readiness.trends) || []).forEach(function(t) { hist[String(t.actorName).toLowerCase()] = M.actorHistory(t); });
   if (!actors.length) { cell('dop-actors', emptyCard('Top threat actors', 'users', ti ? 'No prioritised threat actors yet' : 'Loading…', ti ? 'Scores appear once threat-intel connectors have synced.' : '', { actions: head })); return; }
   cell('dop-actors', card('Top threat actors', actors.map(function(a, i) {
     var hi = a.tier === 'Critical' || a.tier === 'High';
@@ -115,7 +120,11 @@ function renderActors() {
       '<div class="ta-main"><div class="ta-name"><b>' + x(a.actorName) + '</b>' + chip(a.tier || '—', tierTone(a.tier)) + '</div>' +
       '<div class="muted tiny">' + x(a.canonicalGroupId ? 'MITRE ' + a.canonicalGroupId : 'Prioritised threat actor') + '</div>' +
       '<div class="ta-meta"><span>' + icon('mapped') + ' ' + (a.techniqueCount || 0) + ' techniques</span><span class="ta-gap">' + icon('alert') + ' ' + (a.coverageGapCount || 0) + ' validated gaps</span></div></div>' +
-      '<div class="ta-spark"><span class="muted">' + x(tr ? 'priority trend' : '') + '</span><b class="ta-tr">' + x(tr || '—') + '</b></div>' +
+      '<div class="ta-spark">' + (function() {
+        var h = hist[String(a.actorName).toLowerCase()] || [];
+        if (h.length > 1) return miniLine(h, colorOf(hi ? 'warn' : 'accent')) + '<span class="muted">prevention history</span>';
+        return '<span class="muted">' + x(tr ? 'priority trend' : '') + '</span><b class="ta-tr">' + x(tr || '—') + '</b>';
+      })() + '</div>' +
       '<div class="ta-score"><div class="ta-bar"><i data-w="' + Math.min(100, Math.round(a.score)) + '" data-bg="' + colorOf(hi ? 'warn' : 'accent') + '"></i></div><b>' + x(a.score) + '</b><span class="muted">relevance</span></div>' +
       icon('chevron') + '</div>';
   }).join(''), { actions: head, cls: 'dp-actors' }));
@@ -397,7 +406,7 @@ export function setDashCompliance(s) { D.compliance = s || []; renderCompliance(
 export function setDashPosture(p) { D.posture = p || { totalAgents: 0 }; renderEndpoint(); }
 export function setDashKev(k, ti) { D.kev = k || { hasData: false }; D.ti = ti || D.ti || { topActors: [] }; renderKev(); renderActors(); }
 export function setDashTI(ti) { D.ti = ti || { topActors: [] }; renderActors(); renderKev(); }
-export function setDashReadiness(r) { D.readiness = r || { trends: [] }; renderReadiness(); renderPrevTrend(); }
+export function setDashReadiness(r) { D.readiness = r || { trends: [] }; renderReadiness(); renderPrevTrend(); renderActors(); }
 export function setDashAlerts(a) { D.alerts = a || []; renderAlerts(); }
 export function setDashSchedules(s) { D.schedules = s || []; renderNext(); }
 export function setDashITSM(s) { D.itsm = s; renderITSM(); }
