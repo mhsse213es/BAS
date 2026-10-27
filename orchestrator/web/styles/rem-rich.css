@@ -34,6 +34,7 @@
 .rem-missed { color: var(--danger-text, var(--danger)); }
 .rem-fix-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .rem-fix-acts .btn[disabled] { opacity: .65; cursor: default; }
+.rem-fix-acts .btn { width: auto; flex: 0 0 auto; }
 
 /* Detail drawer */
 .rem-dr-sub { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }

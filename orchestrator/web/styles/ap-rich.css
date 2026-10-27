@@ -11,7 +11,7 @@
 
 .ap-side { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; margin-bottom: 14px; }
 .ap-side > .rk-card { margin-bottom: 0; }
-@media (max-width: 900px) { .ap-side { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1500px) { .ap-side { grid-template-columns: minmax(0, 1fr); } }
 
 .ap-find { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
 .ap-find:last-child { border-bottom: 0; }
@@ -25,3 +25,6 @@
 .ap-score-btn { width: auto; margin-top: 10px; }
 .ap-bd { margin-top: 10px; text-align: left; }
 .ap-bd-cap { margin-bottom: 8px; }
+
+/* The score is already printed under the donut; the demo shows the donut alone. */
+.ap-score .donut-legend { display: none; }

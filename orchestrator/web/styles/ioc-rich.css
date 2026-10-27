@@ -10,7 +10,7 @@
 #ioc-side, #ioc-insights { margin-bottom: 14px; }
 #ioc-side:empty, #ioc-insights:empty { display: none; }
 .rk-grid.ioc-side { grid-template-columns: minmax(0, 1fr) 300px; }
-@media (max-width: 900px) { .rk-grid.ioc-side { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1500px) { .rk-grid.ioc-side { grid-template-columns: minmax(0, 1fr); } }
 
 .ioc-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .ioc-chip { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border-hi, var(--border)); background: transparent; color: var(--muted-hi); font-size: 12px; font-family: inherit; cursor: pointer; display: inline-flex; align-items: center; }

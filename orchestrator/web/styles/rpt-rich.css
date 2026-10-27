@@ -35,7 +35,7 @@ td.rpt-acts { display: table-cell; white-space: nowrap; text-align: right; }
 .rpt-side { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
 .rpt-side > .rk-card { margin-bottom: 0; }
 .rpt-side .rk-empty { padding: 18px 8px; }
-@media (max-width: 1000px) { .rpt-side { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1500px) { .rpt-side { grid-template-columns: minmax(0, 1fr); } }
 
 /* Compliance report: framework cards, then the per-agent report toolbar */
 #cmp-fw-cards { margin-bottom: 14px; }

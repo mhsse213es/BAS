@@ -23,7 +23,7 @@
 
 /* Result by control + outcome */
 .rk-grid.vf-side { grid-template-columns: minmax(0, 1fr) 300px; margin-bottom: 14px; }
-@media (max-width: 900px) { .rk-grid.vf-side { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1500px) { .rk-grid.vf-side { grid-template-columns: minmax(0, 1fr); } }
 
 /* Filter row */
 .vf-filters { margin: 0 0 14px; }
