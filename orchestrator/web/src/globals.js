@@ -10,9 +10,9 @@ import { setTblQuery, setTblClear, setTblPer, setTblPage, setTblSort, setTblCols
 import { exTblQuery, exTblClear, exTblPer, exTblPage, exTblSort, exTblCols, exTblColToggle, exTblSelectRow, exTblSelectAll, exTblClearSel, exTblExport, exTblExportSel, exRowKeydown } from './features/ex-view.js';
 import { closeAdvDrawer, closeAdvRunModal, closeTmplRun, confirmAdversaryRun, confirmTmplRun, loadAdversariesStop, openAdvDrawer, openAdvRunModal, openTmplRun, renderAdvRunWarn, renderAdversaryLibrary, renderTmplOSCompat, setTmplFilter, setTmplTargetMode, tmplGroupChange, tmplRunModeChange, tmplSelAgentChange, toggleAdversarySection } from './features/adversaries.js';
 import { clearEnrollmentTokens, copyEnrollmentToken, downloadEnrollmentTokensCsv, generateEnrollmentTokens } from './features/enroll-tokens.js';
-import { closeReinstateAgentModal, closeRemoveAgentModal, closeRevokeAgentModal, closeStopAgentModal, closeUninstallAgentModal, submitReinstateAgent, submitRemoveAgent, submitRevokeAgent, submitStopAgent, submitUninstallAgent, triggerTicketingSync } from './features/agent-actions.js';
+import { closeAllowReinstallModal, closeReinstateAgentModal, closeRemoveAgentModal, closeRevokeAgentModal, closeStopAgentModal, closeUninstallAgentModal, submitAllowReinstall, submitReinstateAgent, submitRemoveAgent, submitRevokeAgent, submitStopAgent, submitUninstallAgent, triggerTicketingSync } from './features/agent-actions.js';
 import { closeAgentDetail, closeAgentDetailOnBackdrop, exportCompliance, filterControls, loadAgtLogs, loadAgtLogsTelemetryMetric, loadComplianceReport, openComplianceDoc, setAgentState, showAgentTab, toggleEvidence, updateLinuxDownloadCmd } from './features/agent-drawer.js';
-import { _apCancelJob, apAssetsClose, apCollectClose, apCollectViewResults, apCountTargets, apDiscoverSubnet, apScheduleClose, approveForLocalUse, approveLocalAckChanged, closeAPAbout, closeApproveLocalModal, closeExposureDetail, closeExposureDetailOnBackdrop, closeGroupPicker, copyRecommendedScenario, copyText, createAgentGroupPrompt, dispatchAPCollect, loadAgents, loadAttackPath, loadCoverageMatrix, loadExecDashboard, setExecRange, loadExposureAssets, loadMoreAgents, loadRecommendations, loadScenarios, manageUsersLink, onAgentSearchInput, openAPAbout, openAPAssets, openAPCollect, openAPSchedule, openAgentGroupMenuStop, openExposureDetail, openScenarioCategory, rowMenuAuditPack, rowMenuBoardScorecard, rowMenuDetail, rowMenuMoveGroup, rowMenuNavigator, rowMenuReinstateAgent, rowMenuRemoveAgent, rowMenuReportCsv, rowMenuReportHtml, rowMenuReportJson, rowMenuReportPdf, rowMenuRevokeAgent, rowMenuRunSimulation, rowMenuSafeScan, rowMenuStopAgent, rowMenuUninstallAgent, saveAPAsset, saveAPSchedule, scenarioCategoryKeydown, scenarioSearchClear, selectAgentGroup, selectDashPref, selectTheme, setAgentFilter, setCoverageFilter, setExposureFilter, setThreatPriorityTier, onExposureSearch, showAgentDownload, showSettingsSection, showThreatPriorityDetail, showThreatPriorityList, submitApproveLocal, submitGroupPicker, toggleRowMenuById, toggleSecret, refreshScenarioView, setScenarioView, setScenarioSort, setScenarioCatOff, clearScenarioFilters, openScenarioDrawer, closeScenarioDrawer, closeScenarioDrawerOnBackdrop, scenarioDrawerTab, scenarioCardKeydown, runScenarioCard, runScenarioFromDrawer, openScenarioRun } from './features/attack-path.js';
+import { _apCancelJob, apAssetsClose, apCollectClose, apCollectViewResults, apCountTargets, apDiscoverSubnet, apScheduleClose, approveForLocalUse, approveLocalAckChanged, closeAPAbout, closeApproveLocalModal, closeExposureDetail, closeExposureDetailOnBackdrop, closeGroupPicker, copyRecommendedScenario, copyText, createAgentGroupPrompt, dispatchAPCollect, loadAgents, loadAttackPath, loadCoverageMatrix, loadExecDashboard, setExecRange, loadExposureAssets, loadMoreAgents, loadRecommendations, loadScenarios, manageUsersLink, onAgentSearchInput, openAPAbout, openAPAssets, openAPCollect, openAPSchedule, openAgentGroupMenuStop, openExposureDetail, openScenarioCategory, rowMenuAuditPack, rowMenuBoardScorecard, rowMenuDetail, rowMenuMoveGroup, rowMenuNavigator, rowMenuAllowReinstall, rowMenuReinstateAgent, rowMenuRemoveAgent, rowMenuReportCsv, rowMenuReportHtml, rowMenuReportJson, rowMenuReportPdf, rowMenuRevokeAgent, rowMenuRunSimulation, rowMenuSafeScan, rowMenuStopAgent, rowMenuUninstallAgent, saveAPAsset, saveAPSchedule, scenarioCategoryKeydown, scenarioSearchClear, selectAgentGroup, selectDashPref, selectTheme, setAgentFilter, setCoverageFilter, setExposureFilter, setThreatPriorityTier, onExposureSearch, showAgentDownload, showSettingsSection, showThreatPriorityDetail, showThreatPriorityList, submitApproveLocal, submitGroupPicker, toggleRowMenuById, toggleSecret, refreshScenarioView, setScenarioView, setScenarioSort, setScenarioCatOff, clearScenarioFilters, openScenarioDrawer, closeScenarioDrawer, closeScenarioDrawerOnBackdrop, scenarioDrawerTab, scenarioCardKeydown, runScenarioCard, runScenarioFromDrawer, openScenarioRun } from './features/attack-path.js';
 import { auditPage, backupNow, exportAuditLogs, loadAuditLogs, loadBackups, loadLicenseInfo, prepareRestore } from './features/audit-logs.js';
 import { campaignClearFilters, campaignOpenFindings, campaignSearch, closeCampaignDetail, closeCampaignDrawerOnBackdrop, closeCampaignLaunch, cmpAllConfirmChange, cmpOnExistingScenarioChange, cmpOnGroupChange, cmpOnTargetTypeChange, cmpSelChange, cmpSelectAllFiltered, cmpToggleExclusionFromChecked, generateTIScenario, loadCampaigns, loadKEVPack, openCampaignDetail, openCampaignLaunch, openRunFromCampaign, openThreatPriorityActor, pauseCampaign, renderCampaignTargets, resumeCampaign, selectTIPack, setCampaignSource, setCampaignTab, stopCampaign, submitCampaign } from './features/campaigns.js';
 import { closeChangePassword, closeChangePasswordOnBackdrop, closeConfirmDiffModal, loadCalderaStatus, openChangePassword, openComplianceDetail, runConfirmDiffModal, submitChangePassword } from './features/compliance.js';
@@ -185,6 +185,7 @@ export const ACTIONS = {
   closeReinstateAgentModal,
   closeRevokeAgentModal,
   closeUninstallAgentModal,
+  closeAllowReinstallModal,
   cmpAllConfirmChange,
   cmpOnExistingScenarioChange,
   cmpOnGroupChange,
@@ -520,6 +521,7 @@ export const ACTIONS = {
   rowMenuReinstateAgent,
   rowMenuRevokeAgent,
   rowMenuUninstallAgent,
+  rowMenuAllowReinstall,
   runConfirmDiffModal,
   runGroupChange,
   runRansomwareDrill,
@@ -666,6 +668,7 @@ export const ACTIONS = {
   submitReinstateAgent,
   submitRevokeAgent,
   submitUninstallAgent,
+  submitAllowReinstall,
   switchRunTab,
   syncOpenAEVNow,
   syncTAXIIConnectorNow,

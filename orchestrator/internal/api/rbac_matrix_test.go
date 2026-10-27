@@ -423,6 +423,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/agents/{agentId}/stop", tierPermission, auth.CanStopAgent},
 	{http.MethodPost, "/api/agents/{agentId}/remove", tierPermission, auth.CanRemoveAgent},
 	{http.MethodPost, "/api/agents/{agentId}/uninstall", tierPermission, auth.CanRemoveAgent},
+	{http.MethodPost, "/api/agents/{agentId}/allow-reinstall", tierPermission, auth.CanRemoveAgent},
 	{http.MethodPost, "/api/agents/{agentId}/revoke", tierPermission, auth.CanRemoveAgent},
 	{http.MethodPost, "/api/enrollment-tokens", tierPermission, auth.CanRemoveAgent},
 	{http.MethodPost, "/api/enrollment-tokens/bulk", tierPermission, auth.CanRemoveAgent},

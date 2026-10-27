@@ -130,6 +130,7 @@ function overviewHtml(a) {
       : actBtn('Revoke…', 'x', 'rowMenuRevokeAgent', [id, host], 'agt-danger'));
   }
   if (admin) {
+    if (life !== 'revoked' && life !== 'retired' && life !== 'uninstalled') acts.push(actBtn('Allow reinstall…', 'refresh', 'rowMenuAllowReinstall', [id, host]));
     acts.push(actBtn('Uninstall Agent', 'x', 'rowMenuUninstallAgent', [id, host], 'agt-danger'));
     acts.push(actBtn('Force Remove Agent', 'alert', 'rowMenuRemoveAgent', [id, host], 'agt-danger'));
   }

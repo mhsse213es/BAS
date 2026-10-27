@@ -27,6 +27,8 @@ func EnsureAgentUninstallSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS uninstall_prior_state text`,
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS uninstall_error text`,
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS uninstall_error_at timestamptz`,
+		// An administrator's one-time approval for a fresh install over a host the server still shows as live.
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS reinstall_allowed_until timestamptz`,
 	}
 	for _, s := range stmts {
 		if _, err := pool.Exec(ctx, s); err != nil {

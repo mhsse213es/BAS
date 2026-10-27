@@ -3052,6 +3052,28 @@
   </div>
 </div>
 
+<!-- Allow Reinstall Modal -->
+<div id="allow-reinstall-agent-overlay" class="overlay">
+  <div class="modal g1-s-779f6e95">
+    <h3>Allow Reinstall</h3>
+    <p class="sub2" id="allow-reinstall-agent-target-sub"></p>
+
+    <div class="g1-s-2c7ed8f1">
+      &#9888; Use this when the agent on this host is broken and a fresh install is the only fix. For the next 24 hours, ONE install on this host with the shared secret will replace this agent's identity (its old certificates stop working). It works once, for this host only, then closes by itself.
+    </div>
+
+    <label class="modal-lbl">Reason <span class="tiny muted">(required)</span></label>
+    <input type="text" id="allow-reinstall-agent-reason" placeholder="e.g. agent broken, disk reimaged"
+           class="g1-s-99573e36">
+
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" data-on-click="closeAllowReinstallModal">Cancel</button>
+      <span class="u-flex1"></span>
+      <button id="allow-reinstall-agent-submit-btn" class="btn btn-sm g1-s-19a27a33" data-on-click="submitAllowReinstall">&#8635; Allow Reinstall</button>
+    </div>
+  </div>
+</div>
+
 <!-- Revoke Agent Modal -->
 <div id="revoke-agent-overlay" class="overlay">
   <div class="modal g1-s-779f6e95">

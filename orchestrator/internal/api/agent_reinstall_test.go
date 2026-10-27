@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -137,6 +138,93 @@ func TestReinstall_TokenReplacesTheCertificatesOfAnActiveHost(t *testing.T) {
 		}
 		if n := liveCerts(t, pool, revAgentA); n != 1 {
 			t.Errorf("live certificates = %d, want exactly the new one", n)
+		}
+	})
+}
+
+func reinstallRouter(h *Handler) http.Handler {
+	r := chi.NewRouter()
+	r.Post("/api/agents/{agentId}/allow-reinstall", h.AllowAgentReinstall)
+	return r
+}
+
+func TestAllowReinstall_AdminApprovalLetsTheSecretReplaceAnActiveHostOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h, _ := newTestHandlerWithPKI(t, pool)
+		enrollForTest(t, h, revAgentA)
+		enrollForTest(t, h, revAgentB)
+		setAgentState(t, pool, revAgentA, "active")
+		setAgentState(t, pool, revAgentB, "active")
+
+		// Not approved yet: still refused.
+		if _, st := enrollForTest(t, h, revAgentA); st != http.StatusConflict {
+			t.Fatalf("before approval = %d, want 409", st)
+		}
+		rec := postJSON(reinstallRouter(h), "/api/agents/"+revAgentA+"/allow-reinstall", map[string]any{"reason": "disk was reimaged"})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("allow-reinstall = %d: %s", rec.Code, rec.Body.String())
+		}
+		// Approval for A does nothing for B.
+		if _, st := enrollForTest(t, h, revAgentB); st != http.StatusConflict {
+			t.Errorf("another host after A was approved = %d, want 409", st)
+		}
+		if _, st := enrollForTest(t, h, revAgentA); st != http.StatusOK {
+			t.Fatalf("approved reinstall = %d, want 200", st)
+		}
+		if n := liveCerts(t, pool, revAgentA); n != 1 {
+			t.Errorf("live certificates = %d, want exactly the new one", n)
+		}
+		if s := agentStateOf(t, pool, revAgentA); s != "active" {
+			t.Errorf("state = %q, want active", s)
+		}
+		// One use only.
+		if _, st := enrollForTest(t, h, revAgentA); st != http.StatusConflict {
+			t.Errorf("second reinstall on the same approval = %d, want 409", st)
+		}
+	})
+}
+
+func TestAllowReinstall_ExpiredApprovalIsRefused(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h, _ := newTestHandlerWithPKI(t, pool)
+		enrollForTest(t, h, revAgentA)
+		setAgentState(t, pool, revAgentA, "active")
+		if rec := postJSON(reinstallRouter(h), "/api/agents/"+revAgentA+"/allow-reinstall", map[string]any{"reason": "x"}); rec.Code != http.StatusOK {
+			t.Fatalf("allow-reinstall = %d", rec.Code)
+		}
+		pool.Exec(context.Background(), `UPDATE agents SET reinstall_allowed_until = NOW() - interval '1 minute' WHERE agent_id = $1`, revAgentA)
+		if _, st := enrollForTest(t, h, revAgentA); st != http.StatusConflict {
+			t.Errorf("after the approval expired = %d, want 409", st)
+		}
+	})
+}
+
+func TestAllowReinstall_Validation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h, _ := newTestHandlerWithPKI(t, pool)
+		setAgentState(t, pool, revAgentA, "active")
+		rt := reinstallRouter(h)
+		if rec := postJSON(rt, "/api/agents/"+revAgentA+"/allow-reinstall", map[string]any{"reason": "  "}); rec.Code != http.StatusBadRequest {
+			t.Errorf("no reason = %d, want 400", rec.Code)
+		}
+		if rec := postJSON(rt, "/api/agents/"+revAgentB+"/allow-reinstall", map[string]any{"reason": "x"}); rec.Code != http.StatusNotFound {
+			t.Errorf("unknown agent = %d, want 404", rec.Code)
+		}
+		if rec := postJSON(rt, "/api/agents/"+revAgentA+"/allow-reinstall", map[string]any{"reason": "x", "hours": 500}); rec.Code != http.StatusBadRequest {
+			t.Errorf("hours out of range = %d, want 400", rec.Code)
+		}
+		setAgentState(t, pool, revAgentA, AgentStateRevoked)
+		if rec := postJSON(rt, "/api/agents/"+revAgentA+"/allow-reinstall", map[string]any{"reason": "x"}); rec.Code != http.StatusConflict {
+			t.Errorf("revoked host = %d, want 409 (reinstate it first)", rec.Code)
 		}
 	})
 }

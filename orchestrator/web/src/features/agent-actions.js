@@ -106,6 +106,20 @@ export function closeRevokeAgentModal() {
 export var submitRevokeAgent = agentStateAction('revoke-agent', 'revoke', function() { return _revokeAgentTargetId; },
   'Agent revoked', 'Revoke this agent? It will be disconnected and refused until reinstated.', closeRevokeAgentModal);
 
+// Allow reinstall: an administrator approves ONE fresh install over a host the server still shows as live (its agent
+// broke or lost its keys). The next install on that host with the shared secret then succeeds once; see the server's
+// AllowAgentReinstall.
+var _allowReinstallTargetId = null;
+export function openAllowReinstallModal(agentId, hostname) {
+  _allowReinstallTargetId = agentId;
+  _openAgentActionModal(hostname, 'allow-reinstall-agent');
+}
+export function closeAllowReinstallModal() {
+  document.getElementById('allow-reinstall-agent-overlay').classList.remove('open');
+}
+export var submitAllowReinstall = agentStateAction('allow-reinstall-agent', 'allow-reinstall', function() { return _allowReinstallTargetId; },
+  'Reinstall approved for 24 hours', 'Approve ONE fresh install on this host? The next install with the shared secret will replace the identity of this agent. It works once and expires after 24 hours.', closeAllowReinstallModal);
+
 var _reinstateAgentTargetId = null;
 export function openReinstateAgentModal(agentId, hostname) {
   _reinstateAgentTargetId = agentId;

@@ -194,7 +194,13 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			gone := priorState == "uninstalled" || priorState == "retired"
-			if !tokenAccepted && !gone {
+			// An administrator's one-time approval (allow-reinstall) is spent by this enrolment.
+			var approved bool
+			if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT reinstall_allowed_until > NOW() FROM agents WHERE agent_id = $1), false)`, req.AgentID).Scan(&approved); err != nil {
+				jsonError(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if !tokenAccepted && !gone && !approved {
 				jsonError(w, "agent already holds a valid certificate — renew via mTLS instead of re-bootstrapping", http.StatusConflict)
 				return
 			}
@@ -204,6 +210,10 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			superseded = true
+			if _, err := tx.Exec(ctx, `UPDATE agents SET reinstall_allowed_until = NULL WHERE agent_id = $1`, req.AgentID); err != nil {
+				jsonError(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			if priorState == "uninstalled" {
 				// It confirmed it was uninstalled; a new install is a fresh start. A removal by an administrator stays in force.
 				if _, err := tx.Exec(ctx, `UPDATE agents SET state = 'active' WHERE agent_id = $1 AND state = 'uninstalled'`, req.AgentID); err != nil {
