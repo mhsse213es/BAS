@@ -52,7 +52,11 @@ import { filterRuns, setRunsStatusFilter, setRunsTargetFilter, clearRunsFilters,
 // Explicit list: core/actions.js dispatches only through this object, never
 // through window. scripts/g1d-check-actions.py fails on unregistered or unused
 // names.
+import { setAccentColour, toggleDisplayPref } from './features/display-prefs.js';
+
 export const ACTIONS = {
+  setAccentColour,
+  toggleDisplayPref,
   _apCancelJob,
   _dismissLicenseGraceBanner,
   _toggleEMExtraScenario,

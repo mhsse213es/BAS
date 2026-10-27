@@ -113,3 +113,32 @@ td.set-acts .btn + .btn { margin-left: 6px; }
 #execution-policy-panel .tiny { margin-top: 8px; font-size: 12px; }
 #set-intel .kpi-row > .field input { flex: none; height: 34px; }
 #tab-profile .role-chip { text-transform: capitalize; }
+
+/* ── Theme & Display: preference rows, switches and accent swatches (the demo's .check-row / .switch / .swatch) ── */
+.set-pref { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--row-line); }
+.set-pref-text { flex: 1; min-width: 0; }
+.set-pref-text b { font-weight: 600; }
+.set-pref-text .muted { font-size: 12px; margin-top: 2px; }
+.set-switch { width: 36px; height: 20px; border-radius: 999px; background: var(--border-hi); position: relative; cursor: pointer; flex: none; border: 0; padding: 0; transition: background-color .15s; }
+.set-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .15s; }
+.set-switch.on { background: var(--accent); }
+.set-switch.on::after { left: 19px; }
+.set-swatches { display: flex; gap: 10px; align-items: center; }
+.set-swatch { width: 24px; height: 24px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; box-shadow: 0 0 0 1px var(--border-hi); transition: transform .12s, box-shadow .15s; }
+.set-swatch:hover { transform: scale(1.12); }
+.set-swatch.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); }
+.set-swatch[data-accent="#3b82f6"] { background: #3b82f6; }
+.set-swatch[data-accent="#22d3ee"] { background: #22d3ee; }
+.set-swatch[data-accent="#10b981"] { background: #10b981; }
+.set-swatch[data-accent="#a78bfa"] { background: #a78bfa; }
+.set-swatch[data-accent="#ff007f"] { background: #ff007f; }
+
+/* ── Display preferences applied app-wide ── */
+body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after { animation: none !important; transition: none !important; }
+body.compact td { padding-top: 6px; padding-bottom: 6px; }
+body.compact th { padding-top: 7px; padding-bottom: 7px; }
+body.compact .rk-card { padding: 12px; }
+body.compact .rk-card.flush { padding: 0; }
+body.compact .rk-kpi { padding: 10px 14px; }
+body.compact .nav-item { padding-top: 6px; padding-bottom: 6px; min-height: 32px; }
+body.compact .sc-card { padding: 11px 12px 10px; gap: 7px; }

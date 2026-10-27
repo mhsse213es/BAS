@@ -8,6 +8,7 @@ import { _agtDetailId, downloadAuditPack, downloadBoardScorecard, downloadFullRe
 import { openReinstateAgentModal, openRemoveAgentModal, openRevokeAgentModal, openStopAgentModal, openUninstallAgentModal } from './agent-actions.js';
 import { loadAuditLogs, loadBackups, loadLicenseInfo } from './audit-logs.js';
 import { loadCalderaStatus } from './compliance.js';
+import { syncDisplayPrefControls } from './display-prefs.js';
 import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
 import { setHeroStat } from './shell-ui.js';
@@ -649,6 +650,7 @@ export function showSettingsSection(name) {
   else if (name === 'art') loadARTContentStatus();
   else if (name === 'audit') loadAuditLogs();
   else if (name === 'license') loadLicenseInfo();
+  else if (name === 'theme') syncDisplayPrefControls();
   else if (name === 'dashprefs') syncDashPrefCards();
   else if (name === 'backup') loadBackups();
 }

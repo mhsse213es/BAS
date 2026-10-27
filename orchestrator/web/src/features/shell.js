@@ -32,10 +32,12 @@ import { loadVariantTab } from './variant-executor.js';
 import { displayOf, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
 import { renderBreadcrumb, setHeroStat } from './shell-ui.js';
+import { applyDisplayPrefs } from './display-prefs.js';
 export function __init_L5162() {
 (function() {
   var t = localStorage.getItem('audspect_theme') === 'light' ? 'light' : 'dark';
   if (t === 'light') document.body.classList.add('theme-light');
+  applyDisplayPrefs();
   try {
     if (localStorage.getItem('bas_sidebar_collapsed') === '1') {
       document.getElementById('app').classList.add('sidebar-collapsed');
