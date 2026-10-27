@@ -167,3 +167,26 @@ func TestAgentDataTargets_NeverProducesARelativeTarget(t *testing.T) {
 		t.Errorf("parents = %v, want none without a ProgramData path", parents)
 	}
 }
+
+// The agent's diagnostic log folder survives an uninstall unless the operator asks for it to be purged.
+func TestAgentLogPurge_KeptByDefaultRemovedOnRequest(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "Audspect")
+	mkfile(t, filepath.Join(dir, logFileName))
+	mkfile(t, filepath.Join(dir, logFileName+".1"))
+
+	if got := logPurgeTrees(false, dir); len(got) != 0 {
+		t.Fatalf("without the purge request nothing may be targeted, got %v", got)
+	}
+	purgeAgentFiles(logPurgeTrees(false, dir), nil, osPurgeOps(nil))
+	if !exists(filepath.Join(dir, logFileName)) {
+		t.Error("agent.log must survive a normal uninstall")
+	}
+
+	purgeAgentFiles(logPurgeTrees(true, dir), nil, osPurgeOps(nil))
+	if exists(dir) {
+		t.Error("with the purge request the log folder must be removed")
+	}
+	if got := logPurgeTrees(true, ""); len(got) != 0 {
+		t.Errorf("an empty folder name must never become a target (it would resolve against the current folder), got %v", got)
+	}
+}

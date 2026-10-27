@@ -65,6 +65,15 @@ func agentDataTargets(programData string, installDirs []string, userConfigDir, t
 	return trees, parents
 }
 
+// logPurgeTrees is the diagnostic log folder as an uninstall target, only when the operator asked for the log to be
+// purged (BAS_UNINSTALL_PURGE_LOGS=1). By default the log is kept: it is the evidence of why an install failed.
+func logPurgeTrees(purge bool, dir string) []string {
+	if !purge || dir == "" {
+		return nil
+	}
+	return []string{dir}
+}
+
 // purgeAgentFiles removes the trees, then each parent if it is empty. A tree that cannot be removed now (a file in
 // use) is scheduled for deletion at the next boot, files before folders and the deepest first so each folder is
 // empty when its turn comes. Nothing is reported as removed that is not gone.
