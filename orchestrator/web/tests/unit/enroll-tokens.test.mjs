@@ -104,3 +104,16 @@ test('the CSV has a header, one line per token, and neutralises spreadsheet form
   assert.ok(lines[2].startsWith("\"'=HYPERLINK") || lines[2].startsWith("'=HYPERLINK"), lines[2]);
   assert.ok(lines[3].startsWith('"has,comma"'), lines[3]);
 });
+
+test('the generated tokens are collapsed until the operator opens them', async () => {
+  stubNetwork(RESPONSE);
+  document.getElementById('enroll-tok-hosts').value = 'FIN-01';
+  fns.generateEnrollmentTokens();
+  await flush();
+  const box = document.getElementById('enroll-tok-results');
+  const d = box.querySelector('details');
+  assert.ok(d, 'the results are not inside a <details>');
+  assert.equal(d.hasAttribute('open'), false, 'the list must start collapsed');
+  assert.ok(d.querySelector('summary').textContent.includes('2 tokens'), d.querySelector('summary').textContent);
+  assert.ok(d.textContent.includes('bas_enr_one'), 'tokens must still be inside, ready to expand');
+});

@@ -50,7 +50,13 @@ function renderResults(duplicates) {
     tr.appendChild(td);
     table.appendChild(tr);
   });
-  box.appendChild(table);
+  // Collapsed by default so a large batch does not take over the page; Download CSV and Clear work either way.
+  var details = document.createElement('details');
+  var summary = document.createElement('summary');
+  summary.textContent = _tokens.length + (_tokens.length === 1 ? ' token' : ' tokens') + ' generated (click to show)';
+  details.appendChild(summary);
+  details.appendChild(table);
+  box.appendChild(details);
   if (duplicates && duplicates.length) {
     var d = document.createElement('div');
     d.textContent = 'Listed more than once, one token issued: ' + duplicates.join(', ');
