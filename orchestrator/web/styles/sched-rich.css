@@ -62,3 +62,6 @@
 #sched-overlay .wz-pip-n { width: 22px; height: 22px; }
 @media (max-width: 600px) { #sched-overlay .wz-pip > span:last-child { display: none; } #sched-overlay .wz-pip.active > span:last-child { display: inline; } }
 #sched-table-wrap td.sched-name { min-width: 190px; }
+
+/* Wizard footer buttons keep their natural width (no clipping in either theme). */
+.wz-actions .btn { width: auto; flex: none; white-space: nowrap; }

@@ -6,7 +6,7 @@
 
 /* Filter row: chips left, search and the disabled Schedule button right */
 .cmp-filters .rk-search { flex: 0 1 260px; }
-.cmp-filters .cmp-sched { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; font-size: 13px; width: auto; }
+.cmp-filters .cmp-sched { flex: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; font-size: 13px; width: auto; }
 .cmp-filters .cmp-sched svg { width: 15px; height: 15px; flex: none; }
 .cmp-filters .cmp-sched:disabled { opacity: .6; cursor: not-allowed; }
 #campaigns-body[hidden], #campaigns-empty[hidden] { display: none; }
