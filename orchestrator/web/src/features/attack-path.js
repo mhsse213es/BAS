@@ -668,7 +668,9 @@ function syncDashPrefCards() {
 }
 
 export function selectTheme(themeName) {
-  document.body.classList.remove('theme-light', 'theme-cyberpunk', 'theme-slate');
+  // Only Dark and Light exist; a theme saved by an older build (cyberpunk, slate) falls back to Dark.
+  if (themeName !== 'light') themeName = 'dark';
+  document.body.classList.remove('theme-light');
   if (themeName !== 'dark') {
     document.body.classList.add('theme-' + themeName);
   }
