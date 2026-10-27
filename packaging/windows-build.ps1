@@ -50,7 +50,12 @@ param(
     # A customer build signs it with the trusted certificate and needs the owner-approved licence text
     # (-MsiEulaRtf); any other build dev-signs it with a clearly marked, untrusted certificate.
     [switch] $BuildMsi,
-    [string] $MsiEulaRtf = ""
+    [string] $MsiEulaRtf = "",
+
+    # The server may be air-gapped, so install.sh installs cosign and (when missing) Docker from files
+    # inside this bundle (tools\). A customer build refuses to run without them; this switch is the
+    # explicit dev-only escape hatch. Fetch/verify them with packaging\fetch-docker-static.ps1.
+    [switch] $AllowMissingOfflinePrereqs
 )
 
 $IsCustomerBuild = ($Customer -ne "" -and $CustomerID -ne "")
@@ -898,10 +903,52 @@ Log "Copying installer files..."
 $ComposeDir = Join-Path $RepoRoot "packaging\compose"
 Copy-Item "$ComposeDir\install.sh"              "$OutDir\install.sh"
 Copy-Item "$ComposeDir\uninstall.sh"            "$OutDir\uninstall.sh"
+Copy-Item "$ComposeDir\docker-offline-lib.sh"    "$OutDir\docker-offline-lib.sh"
 Copy-Item "$ComposeDir\setup.conf.template"     "$OutDir\setup.conf.template"
 # Ship setup.conf as a ready-to-edit copy of the template so operators can
 # run 'nano setup.conf' immediately without a manual cp step first.
 Copy-Item "$ComposeDir\setup.conf.template"     "$OutDir\setup.conf"
+
+# -- 5d. Offline prerequisites (tools\): cosign + Docker ----------------------
+# install.sh never downloads anything for these: cosign comes from tools\cosign-linux-<cpu>, and when
+# Docker is missing it is installed from tools\docker\ (static Docker + Compose, SHA-256 pinned in
+# packaging\docker-static.pin and again inside docker-offline-lib.sh). Every file is verified against
+# the pin here, so a stale or tampered copy under packaging\tools can never reach a customer bundle.
+Log "Staging offline prerequisites (cosign + Docker)..."
+$ToolsSrc = Join-Path $RepoRoot "packaging\tools"
+$ToolsOut = Join-Path $OutDir "tools"
+New-Item -ItemType Directory -Force -Path "$ToolsOut\docker" | Out-Null
+$dockerPin = @{}
+foreach ($pl in (Get-Content -LiteralPath (Join-Path $RepoRoot "packaging\docker-static.pin"))) {
+    if ($pl -match '^\s*#' -or $pl.Trim() -eq "") { continue }
+    if ($pl -cmatch '^([A-Z0-9_]+)=(\S+)$') { $dockerPin[$Matches[1]] = $Matches[2] }
+}
+$dv = $dockerPin.DOCKER_VERSION
+$offlineFiles = @(
+    @{ Rel = "cosign-linux-amd64";                 Sha = $null },
+    @{ Rel = "cosign-linux-arm64";                 Sha = $null },
+    @{ Rel = "docker\docker-$dv-x86_64.tgz";       Sha = $dockerPin.DOCKER_SHA256_X86_64 },
+    @{ Rel = "docker\docker-$dv-aarch64.tgz";      Sha = $dockerPin.DOCKER_SHA256_AARCH64 },
+    @{ Rel = "docker\docker-compose-linux-x86_64";  Sha = $dockerPin.COMPOSE_SHA256_X86_64 },
+    @{ Rel = "docker\docker-compose-linux-aarch64"; Sha = $dockerPin.COMPOSE_SHA256_AARCH64 }
+)
+$offlineMissing = @()
+foreach ($f in $offlineFiles) {
+    $src = Join-Path $ToolsSrc $f.Rel
+    if (-not (Test-Path -LiteralPath $src -PathType Leaf)) { $offlineMissing += $f.Rel; continue }
+    if ($f.Sha) {
+        $got = (Get-FileHash -LiteralPath $src -Algorithm SHA256).Hash.ToLower()
+        if ($got -ne $f.Sha) { Err "packaging\tools\$($f.Rel) does not match the SHA-256 pinned in packaging\docker-static.pin. Re-run packaging\fetch-docker-static.ps1." }
+    }
+    Copy-Item -LiteralPath $src -Destination (Join-Path $ToolsOut $f.Rel) -Force
+}
+if ($offlineMissing.Count -gt 0) {
+    $msg = "Offline prerequisites missing from packaging\tools: $($offlineMissing -join ', '). The server installer would need the internet. Run packaging\fetch-docker-static.ps1 and place cosign-linux-amd64/arm64 in packaging\tools."
+    if ($IsCustomerBuild -and -not $AllowMissingOfflinePrereqs) { Err $msg }
+    Warn "  $msg (continuing: not a customer build, or -AllowMissingOfflinePrereqs)"
+} else {
+    Log "  tools\: cosign + Docker $dv / Compose $($dockerPin.COMPOSE_VERSION) staged and verified"
+}
 Copy-Item "$ComposeDir\docker-compose.yml"      "$OutDir\docker-compose.yml"
 # Stamp the real release version into the shipped .env.example so it never
 # shows a stale placeholder inside a versioned bundle (was hardcoded 1.7.1

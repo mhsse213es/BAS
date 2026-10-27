@@ -166,6 +166,7 @@ cp "${REPO_ROOT}/packaging/compose/docker-compose.prod.yml" "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/compose/.env.example"            "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/compose/setup.sh"                "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/compose/uninstall.sh"            "${BUILD_DIR}/"
+cp "${REPO_ROOT}/packaging/compose/docker-offline-lib.sh"    "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/compose/systemd/bas-compose.service" "${BUILD_DIR}/systemd/"
 
 chmod +x "${BUILD_DIR}/setup.sh" "${BUILD_DIR}/uninstall.sh"
@@ -295,6 +296,22 @@ for arch in amd64 arm64; do
   [[ -n "$pin" ]] || { err "no COSIGN_SHA256_${arch^^} pin found in compose/install.sh"; exit 1; }
   echo "${pin}  ${src}" | sha256sum -c --status - || { err "${src} does not match the SHA-256 pinned in compose/install.sh"; exit 1; }
   cp "$src" "${BUILD_DIR}/tools/cosign-linux-${arch}"
+done
+
+# Docker + Compose for servers that have neither (static builds, any systemd Linux). Every file must match the
+# SHA-256 pinned in compose/docker-offline-lib.sh; fetch them with packaging/fetch-docker-static.ps1.
+mkdir -p "${BUILD_DIR}/tools/docker"
+_dl="${REPO_ROOT}/packaging/compose/docker-offline-lib.sh"
+_dver=$(grep -oP 'readonly DOCKER_STATIC_VERSION="\K[^"]+' "$_dl")
+for a in x86_64 aarch64; do
+  for f in "docker-${_dver}-${a}.tgz" "docker-compose-linux-${a}"; do
+    src="${COSIGN_TOOLS_DIR}/docker/${f}"
+    [[ -f "$src" ]] || { err "missing ${src} -- run packaging/fetch-docker-static.ps1 before building the release."; exit 1; }
+    case "$f" in docker-*.tgz) key="DOCKER_SHA256_${a^^}" ;; *) key="COMPOSE_SHA256_${a^^}" ;; esac
+    pin=$(grep -oP "readonly ${key}=\"\K[0-9a-f]{64}" "$_dl")
+    echo "${pin}  ${src}" | sha256sum -c --status - || { err "${src} does not match the SHA-256 pinned in docker-offline-lib.sh"; exit 1; }
+    cp "$src" "${BUILD_DIR}/tools/docker/${f}"
+  done
 done
 
 # Postgres: pulled BY DIGEST (packaging/images.pin; a digest mismatch is fatal),
