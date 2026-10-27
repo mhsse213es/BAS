@@ -30,4 +30,5 @@
 .ex-plan:last-child { margin-bottom: 0; }
 .ex-plan:hover { border-color: var(--accent-border); }
 .ex-plan .grow { flex: 1; min-width: 0; }
+.ex-plan .btn { width: auto; flex: 0 0 auto; }
 .ex-plan-sub { font-size: 12px; }

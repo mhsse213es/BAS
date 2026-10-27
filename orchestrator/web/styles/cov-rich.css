@@ -90,5 +90,5 @@
 .cov-dr-link { margin: 14px 0 0; }
 .cov-dr-link a { color: var(--accent); }
 
-@media (max-width: 1000px) { .cov-side { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1500px) { .cov-side { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 600px) { .cov-utl-bar input, .cov-filters select { width: 100%; } }

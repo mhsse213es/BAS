@@ -58,4 +58,4 @@
 .eml-exp-l { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; overflow-wrap: anywhere; }
 #eml-drawer-foot { display: flex; align-items: center; gap: 8px; }
 
-@media (max-width: 1000px) { .eml-top { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1500px) { .eml-top { grid-template-columns: minmax(0, 1fr); } }
