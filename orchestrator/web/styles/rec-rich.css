@@ -30,4 +30,4 @@
 .rec-score-n { width: 28px; text-align: right; font-variant-numeric: tabular-nums; }
 .rec-tier { font-size: 10.5px; font-weight: 600; margin-top: 3px; color: var(--kc, var(--muted)); }
 .rec-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.rec-why { font-size: 12px; max-width: 320px; overflow-wrap: anywhere; }
+.rec-why { font-size: 12px; min-width: 220px; max-width: 320px; overflow-wrap: break-word; }

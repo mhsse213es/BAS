@@ -129,3 +129,6 @@ header.rk-hd { position: static; height: auto; z-index: auto; background: none; 
 .rk-hd h2::before, .dash-panel-hdr > :first-child::before { content: ""; position: absolute; left: 0; top: 50%; width: 3px; height: 13px; margin-top: -6.5px; border-radius: 2px; background: var(--accent); opacity: .85; }
 .dash-section-label { display: flex; align-items: center; gap: 12px; }
 .dash-section-label::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--border), transparent); }
+
+/* Phones: tables keep a readable width and scroll sideways inside their card instead of crushing every column. */
+@media (max-width: 700px) { .tbl-wrap > table, [id$="-table-wrap"] > table { min-width: 640px; } }
