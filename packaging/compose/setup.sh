@@ -26,6 +26,14 @@ readonly DEFAULT_PORT="9000"
 readonly MIN_RAM_MB=3800
 readonly MIN_DISK_MB=5120
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Bundled (offline) Docker installer, shared with install.sh.
+# shellcheck source=docker-offline-lib.sh
+if [[ -f "${SCRIPT_DIR}/docker-offline-lib.sh" ]]; then
+  . "${SCRIPT_DIR}/docker-offline-lib.sh"
+else
+  _bundled_has() { return 1; }
+fi
 readonly SCRIPT_DIR
 
 # RECONCILE NOTE (TCF Phase 8 x main airgap-r11): FRESH/INTERRUPTED/COMPLETE
@@ -163,7 +171,13 @@ require_root() {
 # ── whiptail availability ──────────────────────────────────────────────────────
 ensure_whiptail() {
   if command -v whiptail &>/dev/null; then return; fi
-  warn "whiptail not found — installing..."
+  # whiptail is a convenience for this text wizard, not a prerequisite of the product. Never reach for the
+  # network behind the operator's back: ask first, and point at the plain installer that needs nothing.
+  warn "whiptail (the text-wizard screen library) is not installed."
+  echo "  Installing it needs the internet (package manager). The plain installer needs nothing extra:"
+  echo "      sudo bash install.sh --install"
+  read -rp "  Download and install whiptail from the internet now? [yes/N] " _wt
+  [[ "$_wt" == "yes" ]] || { err "whiptail not installed. Use install.sh --install, or install whiptail yourself and re-run."; exit 1; }
   if command -v apt-get &>/dev/null; then
     apt-get install -y -qq whiptail
   elif command -v dnf &>/dev/null; then
@@ -509,6 +523,11 @@ verify_bundle_signatures() {
 
 # ── Docker CE installation (Ubuntu/Debian) ─────────────────────────────────────
 install_docker() {
+  # Prefer the copy inside this release bundle: no internet, any systemd Linux.
+  if _bundled_has docker && _bundled_has compose; then
+    _install_bundled_docker && _install_bundled_compose
+    return
+  fi
   log "Installing Docker CE..."
   apt-get update -qq
   apt-get install -y -qq ca-certificates curl gnupg lsb-release

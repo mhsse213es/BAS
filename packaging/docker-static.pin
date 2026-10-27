@@ -1,0 +1,11 @@
+# Pinned, offline Docker prerequisites bundled into the release at tools/docker (see fetch-docker-static.ps1).
+# install.sh carries the same four hashes; compose/tests/offline_prereqs_test.sh fails if the two ever differ.
+# Docker publishes no checksums for its static archives: those two hashes were recorded from the official
+# https://download.docker.com/linux/static/stable/ download on 2026-10-27. The Compose hashes are the
+# publisher checksums from the docker/compose GitHub release.
+DOCKER_VERSION=29.9.2
+COMPOSE_VERSION=v5.6.1
+DOCKER_SHA256_X86_64=9ac225999fd5e863f7694c728ef23d480616b1e5639328fa309befd4243d69eb
+DOCKER_SHA256_AARCH64=873b3e0207857c3b2f28392fb922f3ea6efe37620c16d4d4aaf2fef409c90b73
+COMPOSE_SHA256_X86_64=47737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0
+COMPOSE_SHA256_AARCH64=42cfa75f51ad0ccf290bad37899e0038a8c10a0069e85233ecc1d53e3ff1347d

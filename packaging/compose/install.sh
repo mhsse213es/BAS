@@ -61,6 +61,14 @@ unset CDPATH
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 
+# Bundled (offline) Docker installer, shared with setup.sh.
+# shellcheck source=docker-offline-lib.sh
+if [[ -f "${SCRIPT_DIR}/docker-offline-lib.sh" ]]; then
+  . "${SCRIPT_DIR}/docker-offline-lib.sh"
+else
+  _bundled_has() { return 1; }   # older/incomplete bundle: fall back to the ask-first online path
+fi
+
 # Read version from bundle VERSION file (written by windows-build.ps1).
 _ver="$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null || true)"
 _ver="${_ver#$'\xEF\xBB\xBF'}"; _ver="${_ver//$'\r'/}"; _ver="${_ver//[[:space:]]/}"
@@ -550,7 +558,7 @@ _check_os() {
 # subshell, so it cannot set NEED_DOCKER itself; mode_install sets it directly.
 _check_docker() {
   if ! command -v docker &>/dev/null; then
-    echo "INST:Docker -not installed (installer can install it with your consent)"; return
+    echo "INST:Docker -not installed (installer can install it from the bundle with your consent)"; return
   fi
   if ! docker info &>/dev/null 2>&1; then
     echo "FAIL:Docker -daemon not running (start it before install)"; return
@@ -1157,16 +1165,34 @@ mode_install() {
   if $NEED_DOCKER || $NEED_COMPOSE; then
     echo ""
     echo "  Docker and/or Docker Compose are not installed on this host."
-    echo "  The installer can download and install Docker CE from Docker's official"
-    echo "  repository (download.docker.com) and enable it as a system service."
-    echo ""
-    if ! $YES; then
-      read -rp "  Install Docker CE now from the official Docker repository? [yes/N] " confirm
-      [[ "$confirm" == "yes" ]] || { err "Docker is required to continue. Install it manually (or re-run with --yes) and re-run --install."; exit 1; }
+    local need_engine=false need_compose=false
+    $NEED_DOCKER && need_engine=true
+    { $NEED_DOCKER || $NEED_COMPOSE; } && need_compose=true
+    if { ! $need_engine || _bundled_has docker; } && { ! $need_compose || _bundled_has compose; }; then
+      # Everything missing ships inside this bundle: no network, no package manager.
+      echo "  The installer will install them from the copy inside this release bundle"
+      echo "  (Docker ${DOCKER_STATIC_VERSION}, Compose ${COMPOSE_STATIC_VERSION}; SHA-256 verified; no internet needed)."
+      echo ""
+      if ! $YES; then
+        read -rp "  Install Docker from the bundle now? [yes/N] " confirm
+        [[ "$confirm" == "yes" ]] || { err "Docker is required to continue. Install it manually (or re-run with --yes) and re-run --install."; exit 1; }
+      fi
+      $need_engine && _install_bundled_docker
+      $need_compose && _install_bundled_compose
+      docker compose version &>/dev/null || { err "Docker Compose is still unavailable after the bundled install."; exit 1; }
+      DOCKER_AUTO_INSTALLED=true
+      log "Docker installed from the bundle: $(docker --version)"
+    else
+      echo "  This bundle does not contain Docker for this CPU (${HOSTTYPE:-$(uname -m)}), so the installer would have to"
+      echo "  download Docker CE from Docker's official repository (download.docker.com)."
+      echo "  THIS NEEDS INTERNET ACCESS. Nothing is downloaded unless you answer yes."
+      echo ""
+      read -rp "  Download and install Docker CE from the internet now? [yes/N] " confirm
+      [[ "$confirm" == "yes" ]] || { err "Docker is required to continue. Install it manually and re-run --install."; exit 1; }
+      _install_docker
+      DOCKER_AUTO_INSTALLED=true
+      log "Docker CE installed: $(docker --version)"
     fi
-    _install_docker
-    DOCKER_AUTO_INSTALLED=true
-    log "Docker CE installed: $(docker --version)"
   else
     log "Docker already present -skipping"
   fi
