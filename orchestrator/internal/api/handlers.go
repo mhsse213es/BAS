@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/actions"
+	"github.com/audspect/bas/internal/admatrix"
 	"github.com/audspect/bas/internal/analytics"
 	"github.com/audspect/bas/internal/artifactgen"
 	"github.com/audspect/bas/internal/auth"
@@ -212,7 +213,7 @@ type Handler struct {
 }
 
 // New creates a Handler.
-func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) *Handler {
+func New(pool *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) *Handler {
 	// Wire the Phase C artifact-curation hook once per process -- see
 	// internal/scenario/art.go's ArtifactCuratedLookup doc comment for why this
 	// is a settable hook instead of a direct import.
@@ -220,7 +221,18 @@ func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) 
 		_, ok := artifactgen.Lookup(techniqueID, testName, argName)
 		return ok
 	}
-	return &Handler{db: db, hub: hub, engine: engine, secret: secret, cancelGracePeriod: 60 * time.Second, emailgwEnvironment: emailgwrun.EnvironmentLab}
+	// Wire admatrix's real evidence lookup the same way -- see
+	// admatrix.LookupADControlVerification's doc comment for why this is a
+	// settable hook rather than admatrix importing internal/db directly.
+	admatrix.LookupADControlVerification = func(primitiveID string) (result string, correlated, found bool) {
+		d, found, err := db.LatestADControlVerification(context.Background(), pool, primitiveID)
+		if err != nil {
+			log.Printf("[admatrix] ad_control_verifications lookup failed for primitive %s: %v", primitiveID, err)
+			return "", false, false
+		}
+		return d.DRSUAPIResult, d.Correlated, found
+	}
+	return &Handler{db: pool, hub: hub, engine: engine, secret: secret, cancelGracePeriod: 60 * time.Second, emailgwEnvironment: emailgwrun.EnvironmentLab}
 }
 
 // WithCompliance attaches the compliance mapper.

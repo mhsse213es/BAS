@@ -400,3 +400,77 @@ func TestReport_ExposesCapabilityStatesAsTheAuthoritativeModel(t *testing.T) {
 		t.Fatalf("ContentStates must still cover all 28 primitives, got %d", len(r.ContentStates))
 	}
 }
+
+func TestCapabilityStates_RealDCSyncEvidenceUpgradesExecutionValidation(t *testing.T) {
+	orig := LookupADControlVerification
+	t.Cleanup(func() { LookupADControlVerification = orig })
+
+	t.Run("no evidence stays at the honest not_executed default", func(t *testing.T) {
+		LookupADControlVerification = func(primitiveID string) (result string, correlated, found bool) {
+			return "", false, false
+		}
+		for _, cs := range CapabilityStates() {
+			if cs.PrimitiveID == "dcsync" {
+				if cs.ExecutionValidation != ExecNotExecuted {
+					t.Fatalf("ExecutionValidation = %q, want not_executed", cs.ExecutionValidation)
+				}
+				return
+			}
+		}
+		t.Fatal("dcsync primitive not found")
+	})
+
+	t.Run("a succeeded, correlated positive-control result verifies the postcondition", func(t *testing.T) {
+		LookupADControlVerification = func(primitiveID string) (result string, correlated, found bool) {
+			if primitiveID != "dcsync" {
+				return "", false, false
+			}
+			return "succeeded", true, true
+		}
+		for _, cs := range CapabilityStates() {
+			if cs.PrimitiveID == "dcsync" {
+				if cs.ExecutionValidation != ExecPostconditionVerified {
+					t.Fatalf("ExecutionValidation = %q, want postcondition_verified", cs.ExecutionValidation)
+				}
+				return
+			}
+		}
+		t.Fatal("dcsync primitive not found")
+	})
+
+	t.Run("an access_denied (negative control) result is a real attempt, not a verified postcondition", func(t *testing.T) {
+		LookupADControlVerification = func(primitiveID string) (result string, correlated, found bool) {
+			return "access_denied", true, true
+		}
+		for _, cs := range CapabilityStates() {
+			if cs.PrimitiveID == "dcsync" {
+				if cs.ExecutionValidation != ExecAttempted {
+					t.Fatalf("ExecutionValidation = %q, want execution_attempted", cs.ExecutionValidation)
+				}
+				if cs.DetectionValidation != DetNotValidated {
+					t.Fatalf("DetectionValidation = %q, want not_validated -- no real detection source is wired yet", cs.DetectionValidation)
+				}
+				return
+			}
+		}
+		t.Fatal("dcsync primitive not found")
+	})
+
+	t.Run("evidence under a different primitive ID never leaks onto dcsync", func(t *testing.T) {
+		LookupADControlVerification = func(primitiveID string) (result string, correlated, found bool) {
+			if primitiveID == "dcsync" {
+				return "", false, false
+			}
+			return "succeeded", true, true
+		}
+		for _, cs := range CapabilityStates() {
+			if cs.PrimitiveID == "dcsync" {
+				if cs.ExecutionValidation != ExecNotExecuted {
+					t.Fatalf("ExecutionValidation = %q, want not_executed", cs.ExecutionValidation)
+				}
+				return
+			}
+		}
+		t.Fatal("dcsync primitive not found")
+	})
+}
