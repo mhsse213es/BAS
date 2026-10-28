@@ -402,10 +402,7 @@ an explicit isolation test proving exactly three of the four scenarios carry EIC
 `internal/emailgwefficacy` suite, the `internal/api` email-gateway tests, and `go build ./...`/`go vet ./...`
 all pass unchanged.
 
-**Still open:** the console panel (`web/src/features/email.js`) was already stale before this work -- it lists
-only EG-001 through EG-010 and was never updated for EG-011 through EG-016 either. EG-017..020 are not added to
-it. This is a pre-existing gap, not introduced here, and is flagged rather than silently fixed as part of an
-unrelated task.
+**Resolved 2026-10-24:** the console panel (`web/src/features/email.js`) was stale when this item was written - it listed only EG-001 through EG-010. Item 21 below brought it up to EG-020 (commit `a764bd67`), so EG-011 through EG-020, including these four, are now in the console catalog.
 
 ### Correction: no "Email" console UI page exists
 
