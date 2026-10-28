@@ -1,0 +1,174 @@
+id: dcsync-replication-rights-live-verification
+product_line: ad
+name: DCSync Replication Rights — Live Control Verification (Positive/Negative Pair)
+description: >
+  Two-stage, lab-only verification of whether Active Directory's native
+  replication-rights control actually governs who can retrieve directory
+  account secrets through the standard replication API (DRSUAPI /
+  MS-DRSR), the mechanism underlying DCSync (T1003.006).
+
+  Stage 1 (negative control) attempts the replication request as a principal
+  that holds NEITHER of the two replication extended rights
+  (DS-Replication-Get-Changes / DS-Replication-Get-Changes-All). The expected,
+  correct outcome is that the directory refuses the request.
+
+  Stage 2 (positive control) attempts the identical request as a principal
+  that DOES hold both rights (granted deliberately, for this verification
+  only). The expected, correct outcome is that the directory honours the
+  request and returns replication data.
+
+  A verification is only meaningful when both outcomes are observed in the
+  SAME run: a refusal with no matching acceptance proves nothing about
+  whether the control actually discriminates by rights, and an acceptance
+  with no matching refusal proves nothing about whether the rights were the
+  reason. Each stage reports its own outcome independently; nothing here
+  infers one stage's result from the other.
+
+  REQUIRES LOCAL CONFIGURATION: both stages read connection details from a
+  JSON file on the executing host, never from this scenario text, since this
+  file is version-controlled. See the "requires_priv" note on each step for
+  the exact path and schema. Missing or malformed configuration SKIPs the
+  stage; it never substitutes a guess.
+
+  SAFETY: this reads account secret material (password hashes) over the
+  replication protocol from a principal explicitly provisioned for exactly
+  this test, inside a lab domain with no production trust. It writes nothing
+  to the directory and modifies no account. Intended ONLY for a throwaway lab
+  domain, never a production or customer-managed directory. Windows only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - dcsync
+  - active-directory
+  - credential-access
+  - replication
+  - t1003
+  - mitre
+  - control-verification
+  - lab-only
+mitre_phases:
+  - credential-access
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+  - name: "Stage 1 — Negative Control: Replication Request Without Rights (T1003.006)"
+    technique_id: T1003.006
+    detection_profiles:
+      - windows_dcsync_replication
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Reads directory account secrets over the replication protocol as a lab-only principal with no replication rights. No write, no account modified. Intended for an isolated lab domain only."
+    reversible: true
+    telemetry:
+      - "Security EID 4662 on the domain NC head (Directory Service Access), if SACL-audited"
+      - "DRSUAPI/MS-DRSR replication request to the domain controller"
+    detection:
+      - "AD: DRSUAPI replication request from a principal lacking DS-Replication-Get-Changes[-All]"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $cfgPath = 'C:\ProgramData\Audspect\lab\dcsync-verification.json'
+      if (-not (Test-Path $cfgPath)) {
+        Write-Output "SKIP T1003.006: no local lab configuration found at $cfgPath. [BAS-SIM-DCSYNC-NEG]"
+        exit 0
+      }
+      try { $cfg = Get-Content -Raw $cfgPath | ConvertFrom-Json } catch {
+        Write-Output "SKIP T1003.006: local lab configuration could not be parsed. [BAS-SIM-DCSYNC-NEG]"
+        exit 0
+      }
+      if (-not $cfg.dcTarget -or -not $cfg.negative.username -or -not $cfg.negative.password) {
+        Write-Output "SKIP T1003.006: local lab configuration is missing dcTarget or negative.username/password. [BAS-SIM-DCSYNC-NEG]"
+        exit 0
+      }
+      if (-not (Get-Module -ListAvailable -Name DSInternals)) {
+        Write-Output "SKIP T1003.006: the DSInternals PowerShell module is not installed on this host. [BAS-SIM-DCSYNC-NEG]"
+        exit 0
+      }
+      Import-Module DSInternals -ErrorAction Stop
+      $sec = ConvertTo-SecureString $cfg.negative.password -AsPlainText -Force
+      $cred = New-Object System.Management.Automation.PSCredential($cfg.negative.username, $sec)
+      try {
+        $acct = Get-ADReplAccount -SamAccountName krbtgt -Server $cfg.dcTarget -Credential $cred -ErrorAction Stop
+        if ($acct) {
+          Write-Output "EXEC T1003.006: replication request as the rights-less principal returned account data -- the control did NOT refuse it. [BAS-SIM-DCSYNC-NEG]"
+        } else {
+          Write-Output "EXEC T1003.006: replication request as the rights-less principal returned no data; outcome inconclusive. [BAS-SIM-DCSYNC-NEG]"
+        }
+      } catch {
+        $msg = $_.Exception.Message
+        if ($msg -match 'access is denied|0x80070005|insufficient|denied') {
+          Write-Output "EXEC T1003.006: replication request as the rights-less principal was refused (access denied), as expected of the control. [BAS-SIM-DCSYNC-NEG]"
+        } else {
+          Write-Output "EXEC T1003.006: replication request as the rights-less principal errored without a clear refusal signal ($msg); outcome inconclusive. [BAS-SIM-DCSYNC-NEG]"
+        }
+      }
+    cleanup: ""
+
+  - name: "Stage 2 — Positive Control: Replication Request With Rights Granted (T1003.006)"
+    technique_id: T1003.006
+    detection_profiles:
+      - windows_dcsync_replication
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Reads directory account secrets over the replication protocol as a lab-only principal deliberately granted replication rights for this verification. No write, no account modified. Intended for an isolated lab domain only."
+    reversible: true
+    telemetry:
+      - "Security EID 4662 on the domain NC head (Directory Service Access), if SACL-audited"
+      - "DRSUAPI/MS-DRSR replication request to the domain controller"
+    detection:
+      - "AD: DRSUAPI replication request from a principal holding DS-Replication-Get-Changes[-All]"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $cfgPath = 'C:\ProgramData\Audspect\lab\dcsync-verification.json'
+      if (-not (Test-Path $cfgPath)) {
+        Write-Output "SKIP T1003.006: no local lab configuration found at $cfgPath. [BAS-SIM-DCSYNC-POS]"
+        exit 0
+      }
+      try { $cfg = Get-Content -Raw $cfgPath | ConvertFrom-Json } catch {
+        Write-Output "SKIP T1003.006: local lab configuration could not be parsed. [BAS-SIM-DCSYNC-POS]"
+        exit 0
+      }
+      if (-not $cfg.dcTarget -or -not $cfg.positive.username -or -not $cfg.positive.password) {
+        Write-Output "SKIP T1003.006: local lab configuration is missing dcTarget or positive.username/password. [BAS-SIM-DCSYNC-POS]"
+        exit 0
+      }
+      if (-not (Get-Module -ListAvailable -Name DSInternals)) {
+        Write-Output "SKIP T1003.006: the DSInternals PowerShell module is not installed on this host. [BAS-SIM-DCSYNC-POS]"
+        exit 0
+      }
+      Import-Module DSInternals -ErrorAction Stop
+      $sec = ConvertTo-SecureString $cfg.positive.password -AsPlainText -Force
+      $cred = New-Object System.Management.Automation.PSCredential($cfg.positive.username, $sec)
+      try {
+        $acct = Get-ADReplAccount -SamAccountName krbtgt -Server $cfg.dcTarget -Credential $cred -ErrorAction Stop
+        if ($acct) {
+          Write-Output "EXEC T1003.006: replication request as the rights-holding principal returned account data, as expected when the control correctly honours granted rights. [BAS-SIM-DCSYNC-POS]"
+        } else {
+          Write-Output "EXEC T1003.006: replication request as the rights-holding principal returned no data; outcome inconclusive. [BAS-SIM-DCSYNC-POS]"
+        }
+      } catch {
+        $msg = $_.Exception.Message
+        if ($msg -match 'access is denied|0x80070005|insufficient|denied') {
+          Write-Output "EXEC T1003.006: replication request as the rights-holding principal was refused despite the granted rights -- unexpected, check the grant landed. [BAS-SIM-DCSYNC-POS]"
+        } else {
+          Write-Output "EXEC T1003.006: replication request as the rights-holding principal errored without a clear signal ($msg); outcome inconclusive. [BAS-SIM-DCSYNC-POS]"
+        }
+      }
+    cleanup: ""
