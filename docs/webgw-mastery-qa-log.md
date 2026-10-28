@@ -126,3 +126,26 @@ This is the single place to check before claiming WebGW Mastery is "done" or mak
 - No endpoint-executed scenario exists for these destinations yet. Running them from a real endpoint through a real gateway needs a lab gateway and is a staging task.
 - The safe-file destinations name the EICAR anti-virus test file and a benign text file. Nothing was downloaded.
 - Known limitation: `VerifyHTTPExpectation` sets Detection to Pass whenever any gateway evidence exists. That is pre-existing behaviour and is not changed here, so detection is not independently scored by these tests.
+
+## Category breadth and file-type downloads (internal/webgwefficacy/destinations.go) — 2026-10-28
+
+From `docs/cymulate-comparison-gap-analysis.md`, web gateway gaps 2 and 3. The catalog grows from 10 to 43 destinations.
+
+- **URL filtering: 2 -> 16 categories.** Blocked: gambling, adult, anonymizer, peer-to-peer, malware-hosting, cryptomining, hacking,
+  newly-registered-domain, illegal-drugs. Allowed: news, education, government, health, search-engines, software-updates, finance.
+  Policy-dependent categories (social media, streaming, webmail, shopping) are deliberately not catalogued, because the expected
+  action depends on the customer's own policy and would produce false failures.
+- **File downloads: 2 -> 22.** Twelve blocked-by-file-type downloads (`sample.exe`, `.scr`, `.bat`, `.cmd`, `.ps1`, `.vbs`, `.js`, `.jar`,
+  `.msi`, `.dll`, `.iso`, `.lnk`), five allowed ordinary types (`.pdf`, `.docx`, `.xlsx`, `.csv`, `.png`, with the existing `.txt`), and the
+  three published EICAR names (`eicar.com`, `eicar.com.txt`, `eicarcom2.zip`).
+- **Safety rule widened, not removed.** A catalogued file name must now be an EICAR name or `sample.<ext>` for an extension in a fixed
+  set (`permittedFileName`). `payload.exe`, `mimikatz.exe`, `eicar.exe`, `sample.exe.php` and anything else is still rejected at
+  construction. Every host stays under a reserved test TLD, so no entry can reach a real site.
+- **Verified:** `destinations_breadth_test.go` (written first; it did not compile before `permittedFileName` existed) pins the category
+  and file-type coverage, the EICAR variants, and the name rules. Every destination is checked in both directions by the existing
+  verifier test. The `webgwefficacy` package passes.
+
+**Still open:** this is a catalog of URLs with expected actions, checked against fixtures. No request is sent through a real gateway,
+so none of the 43 has been shown blocked or allowed by a product, and `.test` names do not resolve anywhere, so a live run needs a lab
+gateway with DNS and a file server for these names (the endpoint-executed scenario, a staging task). The export lists 154 categories
+and about 450 file kinds; this is a representative set, not a corpus.

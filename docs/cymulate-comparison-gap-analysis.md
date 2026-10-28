@@ -75,10 +75,12 @@ under that rule; adding real malware samples is not.
 
 | | Cymulate export | Audspect now |
 |---|---|---|
-| Size | 28,979 results | 10 categorized destinations (`internal/webgwefficacy`) |
+| Size | 28,979 results | 43 categorized destinations (`internal/webgwefficacy`) |
 | Types | phishing 22,826; policy 4,036; files 1,345; command-and-control 598; file policy 174 | phishing 3; command-and-control 3; URL filtering 2; safe file download 2 |
 | Categories | 154 threat and category labels (adult, sports, social, shopping, news, and so on) | 2 URL-filtering destinations |
 | File vectors | about 450 file kinds delivered by download | 2 (`eicar.com`, `sample.txt`) |
+
+**Closed 2026-10-28 (gaps 2 and 3, in part):** 14 more URL-filtering categories and 20 more file downloads (blocked file types, ordinary allowed types, the three EICAR names), 43 destinations in all; see `docs/webgw-mastery-qa-log.md`. Still fixture-only: nothing is sent through a real gateway.
 
 **Still missing**
 1. **Endpoint-executed scenario.** The ten destinations are checked only against fixtures; no request is sent from an endpoint

@@ -27,12 +27,31 @@ const (
 // infrastructure, whatever the gateway does with it.
 var reservedTLDs = []string{".test", ".example", ".invalid", ".localhost"}
 
-// safeFileNames are the only file basenames a safe-file-download destination
-// may use. Only the EICAR anti-virus test file and a benign text file are
-// permitted; no other payload name can be catalogued.
-var safeFileNames = map[string]bool{
-	"eicar.com":  true,
-	"sample.txt": true,
+// eicarFileNames are the EICAR anti-virus test file's own published names: the plain file, the .txt copy and the
+// zipped copy. Each can only ever contain the EICAR test string.
+var eicarFileNames = map[string]bool{
+	"eicar.com":     true,
+	"eicar.com.txt": true,
+	"eicarcom2.zip": true,
+}
+
+// sampleExtensions are the extensions a benign placeholder download may carry. The name sample.<ext> is a convention:
+// whatever serves it serves plain placeholder text, so a gateway that blocks sample.exe is blocking the file type, not
+// any content. Nothing outside this set and eicarFileNames can be catalogued.
+var sampleExtensions = map[string]bool{
+	"txt": true, "pdf": true, "docx": true, "xlsx": true, "csv": true, "png": true,
+	"exe": true, "scr": true, "bat": true, "cmd": true, "ps1": true, "vbs": true, "js": true,
+	"jar": true, "msi": true, "dll": true, "iso": true, "lnk": true,
+}
+
+// permittedFileName reports whether a download's file name is an EICAR name or a benign sample.<ext> name.
+func permittedFileName(name string) bool {
+	name = strings.ToLower(name)
+	if eicarFileNames[name] {
+		return true
+	}
+	ext, ok := strings.CutPrefix(name, "sample.")
+	return ok && sampleExtensions[ext]
 }
 
 // TestDestination is one categorized web-gateway test destination.
@@ -85,8 +104,8 @@ func NewTestDestination(id string, category DestinationCategory, rawURL, urlCate
 	if !hasReservedTLD(host) {
 		return TestDestination{}, fmt.Errorf("webgw destination %s: host %q is not under a reserved test TLD (%s)", id, host, strings.Join(reservedTLDs, ", "))
 	}
-	if category == CategorySafeFile && !safeFileNames[path.Base(u.Path)] {
-		return TestDestination{}, fmt.Errorf("webgw destination %s: safe-file destination must end in one of the permitted benign or EICAR file names, got %q", id, path.Base(u.Path))
+	if category == CategorySafeFile && !permittedFileName(path.Base(u.Path)) {
+		return TestDestination{}, fmt.Errorf("webgw destination %s: safe-file destination must end in an EICAR file name or a benign sample.<ext> name, got %q", id, path.Base(u.Path))
 	}
 
 	return TestDestination{
@@ -142,6 +161,42 @@ func AudspectWebGWDestinationCatalog() ([]TestDestination, error) {
 
 		{"WG-SF-001", "https://files.download-lab.test/eicar.com", "file-download", "EICAR anti-virus test file download: must be blocked", CategorySafeFile, ExpectedBlock},
 		{"WG-SF-000", "https://files.download-lab.test/sample.txt", "file-download", "benign plain-text file download: must be allowed", CategorySafeFile, ExpectedAllow},
+
+		{"WG-UF-003", "https://adult.urlfilter-lab.test/", "adult", "adult content category, blocked by URL-filtering policy", CategoryURLFilter, ExpectedBlock},
+		{"WG-UF-004", "https://anonymizer.urlfilter-lab.test/", "anonymizer", "anonymizer and proxy-avoidance category, blocked because it hides traffic from the gateway", CategoryURLFilter, ExpectedBlock},
+		{"WG-UF-005", "https://peer-to-peer.urlfilter-lab.test/", "peer-to-peer", "peer-to-peer file sharing category, blocked by URL-filtering policy", CategoryURLFilter, ExpectedBlock},
+		{"WG-UF-006", "https://malware-hosting.urlfilter-lab.test/", "malware-hosting", "site category used for malware distribution, blocked", CategoryURLFilter, ExpectedBlock},
+		{"WG-UF-007", "https://cryptomining.urlfilter-lab.test/", "cryptomining", "browser cryptomining category, blocked", CategoryURLFilter, ExpectedBlock},
+		{"WG-UF-008", "https://hacking.urlfilter-lab.test/", "hacking", "hacking-tools category, blocked", CategoryURLFilter, ExpectedBlock},
+		{"WG-UF-009", "https://newly-registered-domain.urlfilter-lab.test/", "newly-registered-domain", "newly registered domain category, blocked or challenged because most attack infrastructure is days old", CategoryURLFilter, ExpectedBlock},
+		{"WG-UF-010", "https://illegal-drugs.urlfilter-lab.test/", "illegal-drugs", "illegal-drugs category, blocked by URL-filtering policy", CategoryURLFilter, ExpectedBlock},
+		{"WG-UF-011", "https://education.example-lab.test/", "education", "education category, permitted by default policy", CategoryURLFilter, ExpectedAllow},
+		{"WG-UF-012", "https://government.example-lab.test/", "government", "government category, permitted by default policy", CategoryURLFilter, ExpectedAllow},
+		{"WG-UF-013", "https://health.example-lab.test/", "health", "health category, permitted by default policy", CategoryURLFilter, ExpectedAllow},
+		{"WG-UF-014", "https://search-engines.example-lab.test/", "search-engines", "search-engine category, permitted by default policy", CategoryURLFilter, ExpectedAllow},
+		{"WG-UF-015", "https://software-updates.example-lab.test/", "software-updates", "software-update category, permitted by default policy", CategoryURLFilter, ExpectedAllow},
+		{"WG-UF-016", "https://finance.example-lab.test/", "finance", "finance and banking category, permitted by default policy", CategoryURLFilter, ExpectedAllow},
+
+		{"WG-SF-002", "https://files.download-lab.test/eicar.com.txt", "file-download", "EICAR test string saved with a .txt extension: content scanning must still catch it", CategorySafeFile, ExpectedBlock},
+		{"WG-SF-003", "https://files.download-lab.test/eicarcom2.zip", "file-download", "EICAR test file inside a zip archive: the gateway must open the archive", CategorySafeFile, ExpectedBlock},
+		{"WG-SF-004", "https://files.download-lab.test/sample.exe", "file-download", "benign placeholder served as a .exe (executable): blocked by file-type policy alone, with no content to scan", CategorySafeFile, ExpectedBlock},
+		{"WG-SF-005", "https://files.download-lab.test/sample.scr", "file-download", "benign placeholder served as a .scr (screensaver executable): blocked by file-type policy alone, with no content to scan", CategorySafeFile, ExpectedBlock},
+		{"WG-SF-006", "https://files.download-lab.test/sample.bat", "file-download", "benign placeholder served as a .bat (batch script): blocked by file-type policy alone, with no content to scan", CategorySafeFile, ExpectedBlock},
+		{"WG-SF-007", "https://files.download-lab.test/sample.cmd", "file-download", "benign placeholder served as a .cmd (command script): blocked by file-type policy alone, with no content to scan", CategorySafeFile, ExpectedBlock},
+		{"WG-SF-008", "https://files.download-lab.test/sample.ps1", "file-download", "benign placeholder served as a .ps1 (PowerShell script): blocked by file-type policy alone, with no content to scan", CategorySafeFile, ExpectedBlock},
+		{"WG-SF-009", "https://files.download-lab.test/sample.vbs", "file-download", "benign placeholder served as a .vbs (VBScript): blocked by file-type policy alone, with no content to scan", CategorySafeFile, ExpectedBlock},
+		{"WG-SF-010", "https://files.download-lab.test/sample.js", "file-download", "benign placeholder served as a .js (JScript): blocked by file-type policy alone, with no content to scan", CategorySafeFile, ExpectedBlock},
+		{"WG-SF-011", "https://files.download-lab.test/sample.jar", "file-download", "benign placeholder served as a .jar (Java archive): blocked by file-type policy alone, with no content to scan", CategorySafeFile, ExpectedBlock},
+		{"WG-SF-012", "https://files.download-lab.test/sample.msi", "file-download", "benign placeholder served as a .msi (installer package): blocked by file-type policy alone, with no content to scan", CategorySafeFile, ExpectedBlock},
+		{"WG-SF-013", "https://files.download-lab.test/sample.dll", "file-download", "benign placeholder served as a .dll (dynamic library): blocked by file-type policy alone, with no content to scan", CategorySafeFile, ExpectedBlock},
+		{"WG-SF-014", "https://files.download-lab.test/sample.iso", "file-download", "benign placeholder served as a .iso (disk image): blocked by file-type policy alone, with no content to scan", CategorySafeFile, ExpectedBlock},
+		{"WG-SF-015", "https://files.download-lab.test/sample.lnk", "file-download", "benign placeholder served as a .lnk (shortcut file): blocked by file-type policy alone, with no content to scan", CategorySafeFile, ExpectedBlock},
+
+		{"WG-SF-016", "https://files.download-lab.test/sample.pdf", "file-download", "benign placeholder served as a .pdf (PDF document): ordinary business file type, must be allowed", CategorySafeFile, ExpectedAllow},
+		{"WG-SF-017", "https://files.download-lab.test/sample.docx", "file-download", "benign placeholder served as a .docx (Word document): ordinary business file type, must be allowed", CategorySafeFile, ExpectedAllow},
+		{"WG-SF-018", "https://files.download-lab.test/sample.xlsx", "file-download", "benign placeholder served as a .xlsx (Excel workbook): ordinary business file type, must be allowed", CategorySafeFile, ExpectedAllow},
+		{"WG-SF-019", "https://files.download-lab.test/sample.csv", "file-download", "benign placeholder served as a .csv (CSV file): ordinary business file type, must be allowed", CategorySafeFile, ExpectedAllow},
+		{"WG-SF-020", "https://files.download-lab.test/sample.png", "file-download", "benign placeholder served as a .png (PNG image): ordinary business file type, must be allowed", CategorySafeFile, ExpectedAllow},
 	}
 
 	out := make([]TestDestination, 0, len(specs))

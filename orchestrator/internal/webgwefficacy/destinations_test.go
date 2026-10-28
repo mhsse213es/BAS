@@ -15,8 +15,8 @@ func mustCatalog(t *testing.T) []TestDestination {
 }
 
 func TestWebGWCatalog_BuildsWithoutError(t *testing.T) {
-	if n := len(mustCatalog(t)); n != 10 {
-		t.Fatalf("catalog has %d destinations, want 10", n)
+	if n := len(mustCatalog(t)); n != 43 {
+		t.Fatalf("catalog has %d destinations, want 43", n)
 	}
 }
 
