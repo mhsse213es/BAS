@@ -144,6 +144,26 @@ var EG_CATALOG = [
     { id: 'EG-025.script-extension-com.known-bad', label: '.com — known-bad' },
     { id: 'EG-025.script-extension-cmd.known-good', label: '.cmd — known-good' },
     { id: 'EG-025.script-extension-cmd.known-bad', label: '.cmd — known-bad' }
+  ] },
+  { id: 'EG-026', name: 'Attachment inside a 7z archive', expectations: [
+    { id: 'EG-026.archive-7z.known-good', label: 'Known-good' },
+    { id: 'EG-026.archive-7z.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-027', name: 'Attachment inside a Windows cabinet', expectations: [
+    { id: 'EG-027.archive-cab.known-good', label: 'Known-good' },
+    { id: 'EG-027.archive-cab.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-028', name: 'Attachment inside a password-protected ZIP', expectations: [
+    { id: 'EG-028.archive-protected-zip.known-good', label: 'Known-good' },
+    { id: 'EG-028.archive-protected-zip.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-029', name: 'Macro-enabled Office file types', expectations: [
+    { id: 'EG-029.macro-enabled-docm.known-good', label: '.docm — known-good' },
+    { id: 'EG-029.macro-enabled-docm.known-bad', label: '.docm — known-bad' },
+    { id: 'EG-029.macro-enabled-xlsm.known-good', label: '.xlsm — known-good' },
+    { id: 'EG-029.macro-enabled-xlsm.known-bad', label: '.xlsm — known-bad' },
+    { id: 'EG-029.macro-enabled-pptm.known-good', label: '.pptm — known-good' },
+    { id: 'EG-029.macro-enabled-pptm.known-bad', label: '.pptm — known-bad' }
   ] }
 ];
 

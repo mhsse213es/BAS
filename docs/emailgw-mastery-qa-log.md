@@ -451,3 +451,23 @@ email-gateway `internal/api` tests pass; the console unit tests pass (506).
 - Not run against a live gateway: like every scenario here these are verified at the message-construction level. Whether a given
   gateway quarantines each one needs a tenant or lab gateway.
 - The injector sends the archive as a base64 MIME attachment exactly as it does for EG-017..020. That path was not changed.
+
+## Second container matrix (EG-026..EG-029) — 2026-10-28
+
+Continues item 22 (EG-021..025). Gap analysis: email gap, the archive and Office file types a gateway must handle.
+
+**Built (9 expectation pairs = 18 scenarios):** EG-026 EICAR in a 7z; EG-027 EICAR in a Windows cabinet; EG-028 EICAR in an AES-256
+password-protected ZIP with the password in the message body (tests policy for content a gateway cannot scan); EG-029 `.docm`, `.xlsm`
+and `.pptm`. Registered in `internal/emailgwefficacy/containermatrix2.go` and in the console catalog (`email.js`, drift-tested).
+
+**How the files were made:** Go's standard library cannot write these, so each was generated once offline and embedded from
+`testdata/` (6 files, under 30 KB). Each was round-tripped with a real extractor when generated (py7zr for 7z, `makecab`/`expand` for CAB, pyzipper
+for the protected ZIP). The SHA-256 of every file is pinned in `containermatrix2_test.go`, so a change is deliberate.
+
+**Macro-enabled files carry no macro.** They are the fabricated carrier documents with the main part's content type switched to the
+macro-enabled one; a test asserts there is no `vba` part. They test type-based policy only, never macro detection. A gateway that scans
+for malicious macro code has nothing to find here.
+
+**Not built:** RAR and ARJ. No free writer exists for them, and checking in a binary produced by a proprietary tool is a licence
+question for the owner. **Not verified:** none of this has been delivered to a real gateway; the CAB and 7z are valid to the tools named, not
+proven to be opened by any particular product.
