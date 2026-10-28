@@ -157,6 +157,7 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 				agent.shutdownFinalize(shutdownGrace)
 				agent.sendHeartbeat("offline")
 				RestoreSystemDialogs()
+				stopTrayForActiveSession()
 				return false, 0
 			case svc.SessionChange:
 				// WTS_SESSION_LOGON (5): a user has just logged on to a session.
