@@ -32,6 +32,32 @@ func (s attemptContextSource) AttemptContextFor(ctx context.Context, key rwevide
 	return resolveAttemptContext(rec, found), nil
 }
 
+// inlineAttemptContextSource resolves an attempt whose result is still being
+// submitted, so it is not yet in scenario_runs.results. The step's own
+// execution record stands in for the stored one, and the same provenance rules
+// apply: a fallback timestamp stays a fallback.
+type inlineAttemptContextSource struct {
+	pool *pgxpool.Pool
+	sim  models.SimulationResult
+}
+
+var _ rwdetect.ContextSource = inlineAttemptContextSource{}
+
+func (s inlineAttemptContextSource) AttemptContextFor(ctx context.Context, key rwevidence.AttemptKey) (rwdetect.AttemptContext, error) {
+	rec, found, err := db.LoadAttemptRecord(ctx, s.pool, key.RunID, key.Action)
+	if err != nil {
+		return rwdetect.AttemptContext{}, err
+	}
+	rec.Executions = nil
+	if !s.sim.ExecutedAt.IsZero() || s.sim.ExecutedAtSource != "" {
+		rec.Executions = []db.AttemptExecution{{
+			ExecutedAt: s.sim.ExecutedAt.UTC().Format(time.RFC3339Nano),
+			Source:     s.sim.ExecutedAtSource,
+		}}
+	}
+	return resolveAttemptContext(rec, found), nil
+}
+
 func resolveAttemptContext(rec db.AttemptRecord, found bool) rwdetect.AttemptContext {
 	var out rwdetect.AttemptContext
 	if !found {

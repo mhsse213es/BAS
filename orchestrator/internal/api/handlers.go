@@ -210,6 +210,9 @@ type Handler struct {
 	// called -- a run then fails with a clear "no evidence" NotTested
 	// result (see executePHDET002), never a fabricated Pass/Fail.
 	phishingReportTicketProvider phishbridge.ReportTicketEvidenceProvider
+	// detectionConnector backs the ransomware Detection capability. Nil keeps
+	// it honestly NotTested (see rwdetectionLookup).
+	detectionConnector detectverify.Connector
 }
 
 // New creates a Handler.
@@ -236,6 +239,13 @@ func New(pool *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string
 }
 
 // WithCompliance attaches the compliance mapper.
+// WithDetectionConnector attaches the vendor connector that verifies the
+// ransomware Detection capability. Without it, that capability stays NotTested.
+func (h *Handler) WithDetectionConnector(c detectverify.Connector) *Handler {
+	h.detectionConnector = c
+	return h
+}
+
 func (h *Handler) WithCompliance(m *compliance.Mapper) *Handler {
 	h.complianceMapper = m
 	return h

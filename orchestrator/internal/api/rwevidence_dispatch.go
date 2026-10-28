@@ -7,6 +7,7 @@ import (
 	"github.com/audspect/bas/internal/controlval"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/rwdetect"
 	"github.com/audspect/bas/internal/rwevidence"
 	"github.com/audspect/bas/internal/scenario"
 )
@@ -57,7 +58,7 @@ func (h *Handler) recordRWEvidence(ctx context.Context, runID, scenarioID string
 		Prevention:     &controlval.FakeProvider{},
 		Recovery:       &rwevidence.FakeRecoveryObserver{},
 		Containment:    &rwevidence.FakeContainmentObserver{},
-		Detection:      &rwevidence.FakeDetectionLookup{},
+		Detection:      h.detectionLookupFor(sim),
 		DataProtection: &rwevidence.FakeDataProtectionLookup{},
 	}
 	results := rwevidence.EvaluateStep(in, deps)
@@ -68,4 +69,13 @@ func (h *Handler) recordRWEvidence(ctx context.Context, runID, scenarioID string
 		// package doesn't have.
 		log.Printf("[rwevidence] rw_capability_results write failed for run %s action %s technique %s: %v", runID, in.Action, in.TechniqueID, err)
 	}
+}
+
+// detectionLookupFor backs the Detection capability with the configured
+// connector, or leaves it honestly NotTested when none is configured.
+func (h *Handler) detectionLookupFor(sim models.SimulationResult) rwevidence.DetectionLookup {
+	if h.detectionConnector == nil {
+		return &rwevidence.FakeDetectionLookup{}
+	}
+	return rwdetect.NewConnectorLookup(h.detectionConnector, inlineAttemptContextSource{pool: h.db, sim: sim})
 }
