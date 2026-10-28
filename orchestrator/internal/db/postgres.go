@@ -1944,6 +1944,25 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			CONSTRAINT rw_capres_identity UNIQUE (run_id, action, capability)
 		)`,
 
+		// ── AD Mastery: native control-decision evidence (DCSync vertical) ────
+		// Persists adefficacy.ControlDecision for a real, attributable run so
+		// admatrix can eventually report execution/detection validation from
+		// genuine evidence instead of the honest "not_executed" default.
+		`CREATE TABLE IF NOT EXISTS ad_control_verifications (
+			id              text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			run_id          text        NOT NULL,
+			primitive_id    text        NOT NULL,
+			technique_id    text        NOT NULL,
+			action          text        NOT NULL,
+			drsuapi_result  text        NOT NULL CHECK (drsuapi_result IN ('access_denied','succeeded','indeterminate')),
+			corroboration   text        NOT NULL DEFAULT 'unknown',
+			correlated      boolean     NOT NULL DEFAULT false,
+			detail          text        NOT NULL DEFAULT '',
+			observed_at     timestamptz NOT NULL DEFAULT NOW(),
+
+			CONSTRAINT ad_ctrlver_identity UNIQUE (run_id, action)
+		)`,
+
 		// ── Backup Assurance Engine (sub-project #4) ──────────────────────────
 		// Standalone infrastructure-posture assessments -- independent of
 		// scenario_runs/rw_capability_results (these 6 checks are not outcomes

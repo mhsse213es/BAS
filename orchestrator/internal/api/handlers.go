@@ -3161,6 +3161,7 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 			sim := scenario.Interpret(step, execResult)
 			simResults = append(simResults, sim)
 			h.recordRWEvidence(r.Context(), raw.RunID, raw.ScenarioID, step, sim)
+			h.recordADEvidence(r.Context(), raw.RunID, raw.ScenarioID, step, sim)
 		}
 	}
 
