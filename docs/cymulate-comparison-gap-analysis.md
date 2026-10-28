@@ -155,3 +155,14 @@ By value to a customer and how safe each is to build here:
 Several things Audspect has that none of the four exports show: AI-prompt and database-export DLP channels, India-specific data
 types, relay-path and reply-chain email cases, and detection-to-response and evidence-completeness checks. Those are Audspect's
 own directions and are not part of this comparison.
+
+## Re-enrolling over an agent from an old CA, by installer (checked 2026-10-28)
+
+- **All three installers** end in the agent's own `--install`, which calls `clearStaleIdentity` (`agent/identity_reset.go`, unit-tested in
+  `identity_reset_test.go`): an identity whose certificate does not chain to the CA being installed is moved aside and the agent enrols again.
+  So a fresh install over leftover certificates from an old CA works on Windows, macOS and Linux.
+- **Gap:** the Windows MSI (`PrepareAgentInstall`) and the macOS app (`mac-setup.sh`) skip `--install` entirely when the agent service or
+  launch daemon already exists ("keeping its enrollment"; "Nothing was changed"). Re-running either over a still-installed agent from an old CA
+  does not re-enrol it. Only the Linux script runs the check before reinstalling. Workaround: uninstall (which removes the certificates), then install.
+  For a fleet, the signed CA-delivery command (audit F-09) is the intended path. Not changed: whether an installer should override an existing enrolment is a
+  product decision, and the live behaviour has not been run on a Windows or macOS machine.
