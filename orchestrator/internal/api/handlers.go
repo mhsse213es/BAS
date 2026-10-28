@@ -1,7 +1,6 @@
 package api
 
 import (
-	"github.com/audspect/bas/internal/injectionapproval"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -11,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/audspect/bas/internal/injectionapproval"
 	"io"
 	"log"
 	"net/http"
@@ -34,16 +34,15 @@ import (
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/cloudgraph"
 	"github.com/audspect/bas/internal/cmdsigning"
-	"github.com/audspect/bas/internal/deployconfig"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
-	"github.com/audspect/bas/internal/detectverify"
-	"github.com/audspect/bas/internal/rwcontain"
 	"github.com/audspect/bas/internal/dbsim/dbadmin"
+	"github.com/audspect/bas/internal/deployconfig"
+	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/emailgwefficacy"
 	"github.com/audspect/bas/internal/emailgwrun"
 	"github.com/audspect/bas/internal/emsweep"
@@ -67,6 +66,7 @@ import (
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/rulelib"
+	"github.com/audspect/bas/internal/rwcontain"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/taxii"
 	"github.com/audspect/bas/internal/threatcontent"
@@ -152,8 +152,8 @@ type Handler struct {
 	publicBaseURL        string                 // orchestrator's externally-reachable base URL; used for {{SINK_URL}} substitution and exercise tracker links
 	exerciseStore        *exercise.Store
 	exerciseExecutor     *exercise.Executor
-	k8sScenario *K8sScenarioService
-	k8sAnalysis K8sAnalysisRunner
+	k8sScenario          *K8sScenarioService
+	k8sAnalysis          K8sAnalysisRunner
 	exerciseChain        *exercise.EvidenceChain
 	verification         *verification.Store    // nil when not loaded — SP2 verification store
 	relationships        *relationships.Store   // nil when not loaded — CVE-ATT&CK Relationship Store
@@ -736,12 +736,12 @@ func (h *Handler) GetLicenseInfo(w http.ResponseWriter, r *http.Request) {
 	// The tier and its product lines come from the verified licence, never from the UI.
 	productLines, _ := license.ProductLinesFor(lic.EffectiveTier())
 	respond(w, map[string]any{
-		"customer":      lic.Customer,
-		"customerId":    lic.CustomerID,
-		"issuedAt":      lic.IssuedAt,
-		"expiresAt":     lic.ExpiresAt,
-		"features":      lic.Features,
-		"tier":          string(lic.EffectiveTier()),
+		"customer":   lic.Customer,
+		"customerId": lic.CustomerID,
+		"issuedAt":   lic.IssuedAt,
+		"expiresAt":  lic.ExpiresAt,
+		"features":   lic.Features,
+		"tier":       string(lic.EffectiveTier()),
 		// A warning (never an error) when the licence grants more than this package was built to contain.
 		"buildTier":     license.BuildTier(),
 		"buildMismatch": license.BuildMismatch(license.BuildTier(), lic.EffectiveTier()),
@@ -3148,6 +3148,7 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 					TechniqueID: m.TechniqueID,
 					Name:        m.Name,
 					Framework:   m.Framework,
+					ActionKey:   m.ActionKey,
 				}
 			}
 		}

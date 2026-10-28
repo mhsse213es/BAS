@@ -79,6 +79,8 @@ type StepMeta struct {
 	BaseTaskID       string       `json:"baseTaskId,omitempty"`
 	VariantSpec      *VariantSpec `json:"variantSpec,omitempty"`
 	ProxyTechniqueID string       `json:"proxyTechniqueId,omitempty"`
+	// ActionKey is the authorized action this step belongs to (see execclass.go).
+	ActionKey string `json:"actionKey,omitempty"`
 }
 
 type ComponentVersions struct {
@@ -129,6 +131,7 @@ func BuildStepMeta(steps []ScenarioStep, resolved map[string]string, cv Componen
 			Name:             st.Name,
 			Framework:        st.Framework,
 			BaseTaskID:       st.BaseTaskID,
+			ActionKey:        st.ActionKey,
 			VariantSpec:      st.VariantSpecRef,
 			ProxyTechniqueID: st.ProxyTechniqueID,
 		}
