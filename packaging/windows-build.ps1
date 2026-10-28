@@ -13,7 +13,7 @@
 # Output:
 #   dist\bas-install-<version>\         delivery folder
 #   dist\bas-install-<version>.zip      zip to send to client
-#   <customer-id>.lic                   license to send to client
+#   <customer>-<tier>-<number>.lic      license to send to client (e.g. hdfc-enterprise-001.lic)
 #
 # Prerequisites: Docker Desktop running, Go installed (for licensegen)
 
@@ -1131,25 +1131,27 @@ if ($Customer -ne "" -and $CustomerID -ne "") {
         Warn "Run: bash packaging/licensing/keygen.sh"
     } else {
         Push-Location $RepoRoot
+        # The file is named <customer>-<tier>-<number>.lic (hdfc-enterprise-001.lic); licensegen owns that rule.
+        $LicFileName = (go run "$LicGenDir\main.go" -id $CustomerID "-tier=$LicenseType" -name-only | Select-Object -First 1).Trim()
         go run "$LicGenDir\main.go" `
             -customer $Customer `
             -id       $CustomerID `
             -days     $Days `
-            -tier     $LicenseType `
+            "-tier=$LicenseType" `
             -key      $LicPrivKey `
-            -out      "$CustomerID.lic"
+            -out      $LicFileName
         Pop-Location
-        $LicensePath = Join-Path $RepoRoot "$CustomerID.lic"
+        $LicensePath = Join-Path $RepoRoot $LicFileName
         if (Test-Path $LicensePath) {
             Log "  License: $LicensePath"
-            Copy-Item $LicensePath "$OutDir\$CustomerID.lic"
+            Copy-Item $LicensePath "$OutDir\$LicFileName"
             # Shipped under its own customer-ID filename only -- no bas.lic
             # duplicate needed. docker-compose.yml now derives its mount and
             # BAS_LICENSE_PATH from LICENSE_FILE (install.sh's
             # _resolve_license_file sets this automatically from whatever
             # LIC_PATH the operator points at in setup.conf, e.g. this exact
             # $CustomerID.lic file), so there's nothing to hardcode here.
-            Log "  License shipped as $CustomerID.lic"
+            Log "  License shipped as $LicFileName"
         }
     }
 } else {
