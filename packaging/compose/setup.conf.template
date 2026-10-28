@@ -167,6 +167,15 @@ AGENT_SECRET=                     # Auto-generated if blank  (recommended)
 ADMIN_EMAIL=                      # ← REQUIRED  e.g. bas-admin@corp.internal
 ADMIN_PASSWORD=                   # ← REQUIRED  min 10 chars
 
+# Recovery passphrase: exactly 14 letters and digits (A-Z a-z 0-9, no spaces or symbols).
+# If the administrator password is ever forgotten, "Forgot password?" on the login page
+# resets it for a local administrator account, but only with this passphrase. Keep it
+# somewhere safe and separate from the admin password: anyone holding it can take over an
+# administrator account. Required on a fresh install; on --upgrade, blank keeps the value
+# already installed. Only a hash is stored in the database. To change it, edit the value here
+# and run --upgrade. Five wrong attempts lock recovery for 15 minutes.
+RECOVERY_PASSPHRASE=              # ← REQUIRED  exactly 14 letters and digits
+
 # ── [licence] ──────────────────────────────────────────────────────────────────
 # Path to the Audspect licence file (.lic) delivered with the bundle -- kept
 # under its own issued filename (e.g. hdfc-prod-001.lic for customer ID

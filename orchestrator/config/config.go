@@ -61,20 +61,21 @@ type Config struct {
 	// protection layer in front of it, so "unset" must mean "off", not
 	// "open". One shared secret per deployment: this is a single-tenant
 	// on-prem product, so there is no per-customer key to manage.
-	IngestAPIKey      string `json:"-"`
-	HTTPPort          int    `json:"http_port"`
-	ScenariosDir      string `json:"scenarios_dir"`
-	ARTDir            string `json:"art_dir,omitempty"`
-	ARTPayloadDir     string `json:"art_payload_dir,omitempty"`     // server-side store of ART external payloads (operator-provided)
-	ARTContentVersion string `json:"art_content_version,omitempty"` // content-pack version; reseed is skipped when unchanged
-	KEVFile           string `json:"kev_file,omitempty"`            // CISA KEV catalog JSON (baked into image); seeds the cves table
-	EPSSFile          string `json:"epss_file,omitempty"`           // FIRST EPSS CSV/CSV.GZ (optional); seeds cve_epss for KEV-linked CVEs
-	CalderaURL        string `json:"caldera_url,omitempty"`
-	CalderaAPIKey     string `json:"caldera_api_key,omitempty"`
-	OTXAPIKey         string `json:"otx_api_key,omitempty"`
-	LicensePath       string `json:"license_path,omitempty"`
-	AdminPassword     string `json:"admin_password,omitempty"`
-	AdminEmail        string `json:"admin_email,omitempty"` // used as the admin username on first-run seed
+	IngestAPIKey       string `json:"-"`
+	HTTPPort           int    `json:"http_port"`
+	ScenariosDir       string `json:"scenarios_dir"`
+	ARTDir             string `json:"art_dir,omitempty"`
+	ARTPayloadDir      string `json:"art_payload_dir,omitempty"`     // server-side store of ART external payloads (operator-provided)
+	ARTContentVersion  string `json:"art_content_version,omitempty"` // content-pack version; reseed is skipped when unchanged
+	KEVFile            string `json:"kev_file,omitempty"`            // CISA KEV catalog JSON (baked into image); seeds the cves table
+	EPSSFile           string `json:"epss_file,omitempty"`           // FIRST EPSS CSV/CSV.GZ (optional); seeds cve_epss for KEV-linked CVEs
+	CalderaURL         string `json:"caldera_url,omitempty"`
+	CalderaAPIKey      string `json:"caldera_api_key,omitempty"`
+	OTXAPIKey          string `json:"otx_api_key,omitempty"`
+	LicensePath        string `json:"license_path,omitempty"`
+	AdminPassword      string `json:"admin_password,omitempty"`
+	RecoveryPassphrase string `json:"-"`
+	AdminEmail         string `json:"admin_email,omitempty"` // used as the admin username on first-run seed
 
 	// PBKDF2Iterations controls the PBKDF2-HMAC-SHA256 iteration count for
 	// password hashing. Minimum enforced at runtime: 310000 (NIST SP 800-132).
@@ -383,6 +384,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("BAS_ADMIN_PASSWORD"); v != "" {
 		cfg.AdminPassword = v
+	}
+	if v := os.Getenv("BAS_RECOVERY_PASSPHRASE"); v != "" {
+		cfg.RecoveryPassphrase = v
 	}
 	if v := os.Getenv("BAS_ADMIN_EMAIL"); v != "" {
 		cfg.AdminEmail = v

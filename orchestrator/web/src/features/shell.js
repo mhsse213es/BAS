@@ -5,6 +5,7 @@ import { showToast } from '../core/util.js';
 import { loadAdversaries, loadAdversaryTemplates } from './adversaries.js';
 import { initComplianceTab, openAgentDetail, showAgentTab } from './agent-drawer.js';
 import { on } from '../core/actions.js';
+import { checkRecoveryForm } from './recovery-model.js';
 import { closeScenarioOverlay, injectServerURL, loadAgentGroupTree, loadAgents, loadAttackPath, loadCatalogs, loadConnectionConfig, loadCoverageActors, loadCoverageMatrix, loadExecDashboard, loadExposureAssets, loadRecommendations, loadScenarios, loadThreatPriorityActors, renderScenarios, selectTheme, showSettingsSection, showThreatPriorityList } from './attack-path.js';
 import { loadAuditLogs } from './audit-logs.js';
 import { closeCampaignDetail } from './campaigns.js';
@@ -270,6 +271,54 @@ export function doLogin() {
     }
   })
   .catch(function(e) { document.getElementById('login-err').textContent = e.message; });
+}
+
+// ── Forgotten administrator password ──────────────────────────────────────────────────────────────
+// Needs the RECOVERY_PASSPHRASE from setup.conf. The server only recovers local, enabled administrator accounts.
+export function showRecovery() {
+  document.getElementById('login-main').hidden = true;
+  document.getElementById('recovery-panel').hidden = false;
+  document.getElementById('rec-err').textContent = '';
+  var user = document.getElementById('inp-user').value.trim();
+  if (user && !document.getElementById('rec-user').value) document.getElementById('rec-user').value = user;
+  document.getElementById('rec-user').focus();
+}
+
+export function hideRecovery() {
+  ['rec-pass', 'rec-new', 'rec-new2'].forEach(function(id) { document.getElementById(id).value = ''; });
+  document.getElementById('recovery-panel').hidden = true;
+  document.getElementById('login-main').hidden = false;
+  document.getElementById('login-err').textContent = '';
+}
+
+export function doRecover() {
+  var err = document.getElementById('rec-err');
+  var form = {
+    username: document.getElementById('rec-user').value,
+    passphrase: document.getElementById('rec-pass').value,
+    next: document.getElementById('rec-new').value,
+    again: document.getElementById('rec-new2').value
+  };
+  var problem = checkRecoveryForm(form);
+  if (problem) { err.textContent = problem; return; }
+  err.textContent = '';
+  fetch('/api/auth/recover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: form.username.trim(), passphrase: form.passphrase, newPassword: form.next })
+  })
+  .then(function(r) { return r.json().catch(function() { return {}; }).then(function(d) { return { ok: r.ok, status: r.status, d: d }; }); })
+  .then(function(res) {
+    if (res.status === 404) throw new Error('Password recovery is not set up on this server. Ask whoever installed it to add RECOVERY_PASSPHRASE to setup.conf and run the upgrade.');
+    if (res.status === 429) throw new Error('Too many failed attempts. Wait 15 minutes and try again.');
+    if (!res.ok) throw new Error(res.d.error || 'Could not reset the password.');
+    var typed = form.username.trim();
+    hideRecovery();
+    document.getElementById('inp-user').value = typed;
+    document.getElementById('inp-pass').value = '';
+    document.getElementById('login-err').textContent = 'Password reset. Sign in with the new password.';
+  })
+  .catch(function(e) { err.textContent = e.message; });
 }
 
 export function doLogout() {

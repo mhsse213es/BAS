@@ -217,6 +217,7 @@ services:
       CALDERA_API_KEY:  ${CALDERA_API_KEY:-BASPlatform2024}
       BAS_ADMIN_EMAIL:    ${BAS_ADMIN_EMAIL:-}
       BAS_ADMIN_PASSWORD: ${BAS_ADMIN_PASSWORD:-}
+      BAS_RECOVERY_PASSPHRASE: ${BAS_RECOVERY_PASSPHRASE:-}
       # Headless-Chromium sidecar for HTML→PDF report rendering (CDP). Falls back
       # to the built-in PDF renderer if unset/unreachable.
       CHROME_WS_URL:    "${CHROME_WS_URL:-http://chrome:9222}"

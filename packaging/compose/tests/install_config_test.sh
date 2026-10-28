@@ -29,6 +29,8 @@ run_case() {
     eval "$(extract _write_env)"
     eval "$(extract validate_phish_scope)"
     eval "$(extract validate_emailgw_config)"
+    MODE="${RUN_MODE:-}"
+    if [[ -n "${PRE_ENV:-}" ]]; then echo "$PRE_ENV" > "$tmp/.env"; fi
     load_config "$tmp/setup.conf" && validate_phish_scope && validate_emailgw_config && _write_env && cat "$tmp/.env"
   ) 2>&1
   echo "rc=$?"
@@ -148,6 +150,29 @@ grep -q 'rc=0' <<<"$out" && pass "EmailGW valid injection hostname accepted" || 
 
 out="$(run_case '')"
 grep -q 'AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET: ${AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET:-}' "${here}/../docker-compose.yml" && pass "compose passes the EmailGW secret through from .env" || fail "compose does not pass the EmailGW secret"
+
+# ── RECOVERY_PASSPHRASE (forgotten-password recovery) ───────────────────────────
+out="$(RUN_MODE=install run_case '')"
+if grep -q 'ERR: .*RECOVERY_PASSPHRASE is required' <<<"$out" && ! grep -q '^rc=0$' <<<"$out"; then pass "fresh install without a recovery passphrase is refused"; else fail "install without passphrase accepted: $out"; fi
+
+out="$(RUN_MODE=install run_case 'RECOVERY_PASSPHRASE=Ab3dEf6hIj9LmN')"
+grep -q '^BAS_RECOVERY_PASSPHRASE=Ab3dEf6hIj9LmN$' <<<"$out" && grep -q 'rc=0' <<<"$out" && pass "valid recovery passphrase reaches .env" || fail "valid passphrase: $out"
+
+for bad in 'Ab3dEf6hIj9Lm' 'Ab3dEf6hIj9LmNp' 'Ab3dEf6hIj9Lm-' 'Ab3dEf6hIj 9LmN'; do
+  out="$(RUN_MODE=install run_case "RECOVERY_PASSPHRASE=${bad}")"
+  if grep -q 'ERR: RECOVERY_PASSPHRASE must be exactly 14' <<<"$out" && ! grep -q '^rc=0$' <<<"$out"; then pass "malformed passphrase refused: '${bad}'"; else fail "malformed passphrase accepted '${bad}': $out"; fi
+done
+
+out="$(RUN_MODE=upgrade PRE_ENV='BAS_RECOVERY_PASSPHRASE=Qq1wWe2rRt3tYy' run_case '')"
+grep -q '^BAS_RECOVERY_PASSPHRASE=Qq1wWe2rRt3tYy$' <<<"$out" && pass "upgrade with a blank value keeps the installed passphrase" || fail "upgrade did not keep it: $out"
+
+out="$(RUN_MODE=upgrade run_case '')"
+grep -q 'rc=0' <<<"$out" && pass "upgrade of an install that never had one still proceeds" || fail "upgrade without passphrase blocked: $out"
+
+out="$(RUN_MODE=upgrade PRE_ENV='BAS_RECOVERY_PASSPHRASE=Qq1wWe2rRt3tYy' run_case 'RECOVERY_PASSPHRASE=Zz9yXx8wVv7UuT')"
+grep -q '^BAS_RECOVERY_PASSPHRASE=Zz9yXx8wVv7UuT$' <<<"$out" && pass "a new value in setup.conf replaces the installed one" || fail "rotation: $out"
+
+grep -q 'BAS_RECOVERY_PASSPHRASE: ${BAS_RECOVERY_PASSPHRASE:-}' "${here}/../docker-compose.yml" && pass "compose passes the recovery passphrase through" || fail "compose does not pass the recovery passphrase"
 
 echo
 [[ $fails -eq 0 ]] && echo "ALL PASS" || { echo "${fails} FAILED"; exit 1; }

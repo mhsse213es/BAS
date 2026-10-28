@@ -599,6 +599,7 @@ var publicRoutes = map[string]bool{
 	"GET /api/license/status":                     true,
 	"POST /api/auth/login":                        true,
 	"POST /api/auth/logout":                       true,
+	"POST /api/auth/recover":                      true,
 	"POST /api/auth/setup":                        true,
 	"GET /login/{tenantSlug}/sso":                 true,
 	"GET /api/auth/sso/callback":                  true,

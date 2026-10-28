@@ -40,7 +40,7 @@ import { setAgentsViewRich as setAgentsView } from './features/agents-risk-view.
 import { intQuery, setIntKind, intCardOpen } from './features/int-view.js';
 import { agtQuery,clearAgtQuery, setAgtPer, agtPage, agtSortBy, toggleAgtCols, agtColToggle, agtSelectRow, agtSelectAll, clearAgtSelection, exportAgtCsv, exportAgtSelected } from './features/agt-view.js';
 import { setAgentStatusSelect, setAgentOsSelect, clearAgentFilters, agentRowKeydown, showConnectionConfig } from './features/attack-path.js';
-import { _dismissLicenseGraceBanner, ackAllTamperEvents, doLogin, doLogoutFromMenu, goToProfileFromMenu, togglePasswordVisibility, licenseBannerDismissHoverOff, licenseBannerDismissHoverOn, openAgentDetailRiskTab, openSettingsFromMenu, setDashView, showTab, tamperAckHoverOff, tamperAckHoverOn, toggleSidebarCollapsed, toggleUserMenuFromEvent } from './features/shell.js';
+import { _dismissLicenseGraceBanner, ackAllTamperEvents, doLogin, doRecover, hideRecovery, showRecovery, doLogoutFromMenu, goToProfileFromMenu, togglePasswordVisibility, licenseBannerDismissHoverOff, licenseBannerDismissHoverOn, openAgentDetailRiskTab, openSettingsFromMenu, setDashView, showTab, tamperAckHoverOff, tamperAckHoverOn, toggleSidebarCollapsed, toggleUserMenuFromEvent } from './features/shell.js';
 import { saveExecutionPolicyDefault } from './features/execution-policy.js';
 import { closeTAXIIConnectorModal, deleteTAXIIConnector, loadARTContentStatus, loadTAXIIConnectors, openTAXIIConnectorModal, removeConnectorConfig, reseedART, saveConnectorConfig, saveTAXIIConnectorForm, simCovHoverOff, simCovHoverOn, syncTAXIIConnectorNow, taxiiToggleAuthFields, testConnectorConfig, testTAXIIConnectorForm, toggleSimCoverage, triggerConnectorSync } from './features/threat-intel.js';
 import { loadVariantTab } from './features/variant-executor.js';
@@ -266,6 +266,9 @@ export const ACTIONS = {
   deleteTAXIIConnector,
   dispatchAPCollect,
   doLogin,
+  doRecover,
+  hideRecovery,
+  showRecovery,
   doLogoutFromMenu,
   togglePasswordVisibility,
   doResetPassword,

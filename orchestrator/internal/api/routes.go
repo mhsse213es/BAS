@@ -74,6 +74,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	r.Get("/api/license/status", h.GetLicenseStatus)
 	r.Post("/api/auth/login", h.Login)
 	r.Post("/api/auth/logout", h.Logout)
+	r.Post("/api/auth/recover", h.RecoverPassword) // forgotten administrator password: needs the setup.conf recovery passphrase
 	r.Post("/api/auth/setup", h.Setup) // first-run admin provisioning (installer)
 	r.Get("/login/{tenantSlug}/sso", h.InitiateSSOLogin)
 	r.Get("/api/auth/sso/callback", h.SSOCallback)

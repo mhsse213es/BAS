@@ -291,6 +291,9 @@ func main() {
 	if err := db.EnsureAgentUninstallSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] agent uninstall schema bootstrap: %v", err)
 	}
+	if err := db.EnsureRecoverySchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] recovery schema bootstrap: %v", err)
+	}
 	if err := db.EnsureExerciseSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] exercise schema: %v", err)
 	}
@@ -446,6 +449,9 @@ func main() {
 		log.Printf("[+] EPSS scores seeded: %d CVE entries", n)
 	}
 
+	if err := api.SeedRecoveryPassphrase(context.Background(), pool, cfg.RecoveryPassphrase); err != nil {
+		log.Printf("[!] recovery passphrase not stored: %v", err)
+	}
 	if err := ensureAdminUser(pool, cfg.AdminEmail, cfg.AdminPassword); err != nil {
 		log.Printf("[!] admin sync: %v", err)
 	}

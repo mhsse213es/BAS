@@ -119,6 +119,7 @@ load_config() {
       DB_PASSWORD)    DB_PASSWORD="$val"    ;;
       ADMIN_EMAIL)    ADMIN_EMAIL="$val"    ;;
       ADMIN_PASSWORD) ADMIN_PASSWORD="$val" ;;
+      RECOVERY_PASSPHRASE) RECOVERY_PASSPHRASE="$val" ;;
       LIC_PATH)       LIC_PATH="$val"       ;;
     esac
   done < "$cfg"
@@ -138,6 +139,9 @@ load_config() {
 
   [[ ${#DB_PASSWORD}    -lt 8  ]] && { err "DB_PASSWORD must be at least 8 characters.";     exit 1; }
   [[ ${#ADMIN_PASSWORD} -lt 10 ]] && { err "ADMIN_PASSWORD must be at least 10 characters."; exit 1; }
+  if [[ -n "${RECOVERY_PASSPHRASE:-}" ]] && ! [[ "$RECOVERY_PASSPHRASE" =~ ^[A-Za-z0-9]{14}$ ]]; then
+    err "RECOVERY_PASSPHRASE must be exactly 14 letters and digits (no spaces or symbols)."; exit 1
+  fi
 
   JWT_SECRET=$(openssl rand -hex 32)
   AGENT_SECRET=$(openssl rand -hex 24)
@@ -822,6 +826,7 @@ _do_install_steps() {
           CALDERA_API_KEY_BLUE) CALDERA_API_KEY_BLUE="$_v" ;;
           BAS_ADMIN_EMAIL)      ADMIN_EMAIL="$_v" ;;
           BAS_ADMIN_PASSWORD)   ADMIN_PASSWORD="$_v" ;;
+          BAS_RECOVERY_PASSPHRASE) RECOVERY_PASSPHRASE="$_v" ;;
           DASHBOARD_PORT)       DASHBOARD_PORT="$_v" ;;
         esac
       done < "${INSTALL_DIR}/.env"
@@ -899,6 +904,7 @@ CALDERA_API_KEY=${CALDERA_API_KEY}
 CALDERA_API_KEY_BLUE=${CALDERA_API_KEY_BLUE}
 BAS_ADMIN_EMAIL=${ADMIN_EMAIL}
 BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
+BAS_RECOVERY_PASSPHRASE=${RECOVERY_PASSPHRASE:-}
 EOF
   chmod 640 "${INSTALL_DIR}/.env"
   chown root:root "${INSTALL_DIR}/.env"

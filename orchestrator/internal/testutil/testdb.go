@@ -123,6 +123,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureAgentUninstallSchema: %w", err)
 	}
+	if err := db.EnsureRecoverySchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureRecoverySchema: %w", err)
+	}
 	if err := db.EnsureContentRegistrySchema(ctx, pool); err != nil {
 		pool.Close()
 		_ = container.Terminate(context.Background())

@@ -190,6 +190,7 @@ TLS_KEY=""
 DB_PASSWORD=""
 ADMIN_EMAIL=""
 ADMIN_PASSWORD=""
+RECOVERY_PASSPHRASE=""
 LOG_RETENTION_DAYS=""
 JWT_SECRET=""
 AGENT_SECRET=""
@@ -360,6 +361,7 @@ load_config() {
       DB_PASSWORD)          DB_PASSWORD="$val"          ;;
       ADMIN_EMAIL)          ADMIN_EMAIL="$val"          ;;
       ADMIN_PASSWORD)       ADMIN_PASSWORD="$val"       ;;
+      RECOVERY_PASSPHRASE)  RECOVERY_PASSPHRASE="$val"  ;;
       LOG_RETENTION_DAYS)   LOG_RETENTION_DAYS="$val"  ;;
       JWT_SECRET)              JWT_SECRET="$val"              ;;
       AGENT_SECRET)            AGENT_SECRET="$val"            ;;
@@ -447,6 +449,23 @@ load_config() {
   [[ ${#DB_PASSWORD}    -lt 8  ]] && { err "DB_PASSWORD must be at least 8 characters.";      exit 1; }
   [[ ${#ADMIN_PASSWORD} -lt 10 ]] && { err "ADMIN_PASSWORD must be at least 10 characters.";  exit 1; }
   [[ "$ADMIN_EMAIL" != *@*     ]] && { err "ADMIN_EMAIL must be a valid email address.";       exit 1; }
+
+  # Recovery passphrase: lets an operator who forgot the administrator password set a new one from the login page.
+  # Blank on an upgrade keeps the value already installed; a fresh install must set one.
+  if [[ -z "$RECOVERY_PASSPHRASE" && -f "${DATA_DIR}/.env" ]]; then
+    RECOVERY_PASSPHRASE=$(grep -oP '(?<=^BAS_RECOVERY_PASSPHRASE=).+' "${DATA_DIR}/.env" 2>/dev/null || true)
+  fi
+  if [[ -z "$RECOVERY_PASSPHRASE" ]]; then
+    if [[ "$MODE" == "install" ]]; then
+      err "setup.conf: RECOVERY_PASSPHRASE is required (exactly 14 letters and digits). It is the only way to reset the administrator password if it is forgotten."
+      exit 1
+    elif [[ "$MODE" == "upgrade" ]]; then
+      warn "setup.conf has no RECOVERY_PASSPHRASE: password recovery from the login page stays unavailable until you add one (14 letters and digits) and run --upgrade again."
+    fi
+  elif ! [[ "$RECOVERY_PASSPHRASE" =~ ^[A-Za-z0-9]{14}$ ]]; then
+    err "RECOVERY_PASSPHRASE must be exactly 14 letters and digits (no spaces or symbols)."
+    exit 1
+  fi
   [[ -z "$DNS_SINK_BIND_IP"    ]] && { err "Could not auto-detect a host IP for DNS_SINK_BIND_IP (hostname -I returned nothing). Set DNS_SINK_BIND_IP explicitly in setup.conf."; exit 1; }
 
   [[ -z "$SINK_SFTP_PORT" ]] && SINK_SFTP_PORT="2222"
@@ -1809,6 +1828,7 @@ CALDERA_API_KEY=${_CALDERA_KEY:-$(openssl rand -hex 20)}
 CALDERA_API_KEY_BLUE=${_CALDERA_KEY_BLUE:-$(openssl rand -hex 20)}
 BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
 BAS_ADMIN_EMAIL=${ADMIN_EMAIL}
+BAS_RECOVERY_PASSPHRASE=${RECOVERY_PASSPHRASE}
 LICENSE_FILE=${LICENSE_FILE:-bas.lic}
 BAS_PORT=${BAS_PORT}
 BAS_ENROLL_PORT=${BAS_ENROLL_PORT}
@@ -2263,6 +2283,9 @@ _print_access_info() {
     echo "                     setup.conf to use a properly-trusted certificate instead.)"
   fi
   echo "  Admin login      : ${ADMIN_EMAIL}"
+  if [[ -n "${RECOVERY_PASSPHRASE:-}" ]]; then
+    echo "  Forgot password  : use \"Forgot password?\" on the login page with the RECOVERY_PASSPHRASE from setup.conf"
+  fi
   echo "  Install log      : ${DATA_DIR}/install.log"
   echo ""
   echo "  Status check     : sudo bash install.sh --status"
