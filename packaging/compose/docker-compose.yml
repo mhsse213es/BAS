@@ -182,6 +182,9 @@ services:
       # the same way it resolves DNS_SINK_BIND_IP. See
       # orchestrator/internal/pki/ca.go's LoadOrGenerateCAWithSANs.
       BAS_SERVER_SANS:  ${BAS_SERVER_SANS:-}
+      # Base URL agents use to reach this orchestrator. Sink placeholders
+      # ({{SINK_URL}} and friends) are built from it. Set in setup.conf.
+      PUBLIC_BASE_URL:  ${PUBLIC_BASE_URL:-}
       SCENARIOS_DIR:    /scenarios
       BAS_LICENSE_PATH: /etc/bas/${LICENSE_FILE:-bas.lic}
       # In-container paths for the operator-supplied dashboard TLS cert

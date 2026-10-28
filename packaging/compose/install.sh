@@ -177,6 +177,7 @@ SINK_SFTP_PORT=""
 SINK_SFTP_HOST=""
 SINK_SMTP_PORT=""
 SINK_SMTP_HOST=""
+PUBLIC_BASE_URL=""
 LIC_PATH=""
 # LICENSE_FILE is never set directly by the operator's config -- it's
 # derived from LIC_PATH's own basename (see _resolve_license_file) so the
@@ -235,6 +236,7 @@ load_config() {
       SINK_SFTP_HOST)          SINK_SFTP_HOST="$val"          ;;
       SINK_SMTP_PORT)          SINK_SMTP_PORT="$val"          ;;
       SINK_SMTP_HOST)          SINK_SMTP_HOST="$val"          ;;
+      PUBLIC_BASE_URL)         PUBLIC_BASE_URL="$val"         ;;
       LIC_PATH)                LIC_PATH="$val"                ;;
       BACKUP_RETENTION_DAILY)   BACKUP_RETENTION_DAILY="$val"   ;;
       BACKUP_RETENTION_WEEKLY)  BACKUP_RETENTION_WEEKLY="$val"  ;;
@@ -310,6 +312,7 @@ load_config() {
   # collision risk (a host's local MTA, if any, conventionally listens on
   # 25, not 587), so this needs only a default, no rejection check.
   [[ -z "$SINK_SMTP_PORT" ]] && SINK_SMTP_PORT="587"
+  [[ -z "$PUBLIC_BASE_URL" ]] && info "PUBLIC_BASE_URL is not set: DLP sink-verified steps need it set to the URL agents use, for example https://<host>:9543."
 
   # TLS cert paths
   if [[ "$BAS_TLS" == "true" ]]; then
@@ -1512,6 +1515,7 @@ SINK_SFTP_PORT=${SINK_SFTP_PORT}
 SINK_SFTP_HOST=${SINK_SFTP_HOST}
 SINK_SMTP_PORT=${SINK_SMTP_PORT}
 SINK_SMTP_HOST=${SINK_SMTP_HOST}
+PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
 CALDERA_API_KEY=${_CALDERA_KEY:-$(openssl rand -hex 20)}
 CALDERA_API_KEY_BLUE=${_CALDERA_KEY_BLUE:-$(openssl rand -hex 20)}
 BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}

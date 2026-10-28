@@ -488,3 +488,27 @@ func TestLoad_IngestAPIKeyDefaultsEmpty(t *testing.T) {
 		t.Errorf("IngestAPIKey = %q, want empty (disabled by default)", cfg.IngestAPIKey)
 	}
 }
+
+// PUBLIC_BASE_URL is what {{SINK_URL}} and the other sink placeholders are
+// built from. If it is not passed into the orchestrator, every sink-verified
+// DLP step gets a relative URL. This test pins the env-to-config path.
+func TestLoad_PublicBaseURLFromEnv(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	os.Setenv("PUBLIC_BASE_URL", "https://192.168.10.78:9543")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
+	defer os.Unsetenv("JWT_SECRET")
+	defer os.Unsetenv("PUBLIC_BASE_URL")
+
+	cfg, err := Load("/nonexistent/config.json")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.PublicBaseURL != "https://192.168.10.78:9543" {
+		t.Errorf("PublicBaseURL = %q, want https://192.168.10.78:9543", cfg.PublicBaseURL)
+	}
+}

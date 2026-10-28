@@ -83,6 +83,14 @@ DNS_SINK_BIND_IP=                 # Auto-detected if blank (recommended)
 # BAS_SERVER_SANS=192.168.10.78,bas.internal.example.com
 BAS_SERVER_SANS=                  # Auto-detected if blank (recommended)
 
+# PUBLIC_BASE_URL is the URL agents use to reach this orchestrator, including
+# the port. DLP sink-verified scenario steps are built from it: {{SINK_URL}}
+# becomes PUBLIC_BASE_URL + /api/dlp/sink. Left blank, the sink URL is a
+# relative path and every sink-verified step fails. Use the HTTPS port the
+# agents enrol against and a name or IP listed in BAS_SERVER_SANS.
+# Example: PUBLIC_BASE_URL=https://192.168.10.78:9543
+PUBLIC_BASE_URL=                  # Required for DLP sink-verified scenarios
+
 # ── [tls] ──────────────────────────────────────────────────────────────────────
 # Required only when BAS_TLS=true. Paths are on the SERVER (not the bundle).
 # The installer copies these files into ${DATA_DIR}/certs/ and sets chmod 640.
