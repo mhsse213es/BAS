@@ -62,3 +62,21 @@ test('toggleNavPin ignores a malformed id', () => {
   nav.toggleNavPin('"><img src=x>');
   assert.equal(document.getElementById('nav-pinned'), null);
 });
+
+test('the Findings count is loaded without opening the Findings page', async () => {
+  const st = {};
+  await nav.refreshBadgeData(() => Promise.resolve([{ status: 'open', severity: 'high' }, { status: 'open', severity: 'critical' }, { status: 'remediated' }]), st, () => true);
+  assert.equal(st._findings.length, 3);
+  assert.deepEqual(nav.navBadgeCounts(st).findings, { n: 2, tone: 'bad', label: '2 open findings' });
+});
+
+test('nothing is fetched while signed out, and a bad or failed answer changes nothing', async () => {
+  let calls = 0;
+  const st = { _findings: [{ status: 'open' }] };
+  await nav.refreshBadgeData(() => { calls++; return Promise.resolve([]); }, st, () => false);
+  assert.equal(calls, 0, 'no request on the login screen');
+  await nav.refreshBadgeData(() => Promise.resolve({ error: 'x' }), st, () => true);
+  assert.equal(st._findings.length, 1, 'a non-list answer is ignored');
+  await nav.refreshBadgeData(() => Promise.reject(new Error('down')), st, () => true);
+  assert.equal(st._findings.length, 1, 'a failed request keeps the last known list');
+});

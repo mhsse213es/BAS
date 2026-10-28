@@ -13,7 +13,7 @@ import { loadCalderaStatus, refreshDashboardCampaigns } from './compliance.js';
 import { loadCoverage, loadCoverageAnalytics, loadUnifiedTechniques, loadThreatExposure } from './coverage.js';
 import { loadVerificationTab } from './detection-verification.js';
 import { loadEmTab } from './endpoint-mastery.js';
-import { initNavExtras, navTabActivated } from './nav-extras.js';
+import { initNavExtras, navTabActivated, startBadgeDataRefresh } from './nav-extras.js';
 import { loadADCoverage } from './ad-coverage.js';
 import { loadEmailTab } from './email.js';
 import { connectWS, loadDashboard, openCmdk } from './evidence.js';
@@ -323,6 +323,7 @@ export function doRecover() {
 
 export function doLogout() {
   TOKEN = ''; ROLE = '';
+  state._findings = undefined; // the next person who signs in must not see this person's count
   localStorage.removeItem('bas_role');
   try { localStorage.removeItem('bas_user_id'); } catch (e) {}
   if (state.socket) state.socket.close();
@@ -377,6 +378,7 @@ function bootApp() {
   var remTicketActions = document.getElementById('rem-ticket-actions');
   if (remTicketActions) setDisplay(remTicketActions, (ROLE === 'admin' || ROLE === 'analyst') ? 'flex' : 'none');
   connectWS();
+  startBadgeDataRefresh(apicall);
   loadAgents();
   loadAgentGroupTree();
   loadCatalogs();

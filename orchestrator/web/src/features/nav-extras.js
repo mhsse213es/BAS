@@ -180,6 +180,24 @@ export function initNavExtras() {
   refreshNavBadges();
 }
 
+// refreshBadgeData loads what a badge counts, so the number shows from sign-in on instead of only after the page that
+// owns the data has been opened. isActive says whether anyone is signed in; a failed or odd answer keeps the last list.
+export function refreshBadgeData(fetchJson, st, isActive) {
+  if (!isActive()) return Promise.resolve();
+  return fetchJson('/api/findings').then(function(list) {
+    if (Array.isArray(list)) st._findings = list;
+    refreshNavBadges();
+  }).catch(function() { /* keep the last known list */ });
+}
+
+var badgeDataTimer = null;
+// startBadgeDataRefresh loads the badge data now and then once a minute. Safe to call on every sign-in.
+export function startBadgeDataRefresh(fetchJson) {
+  var active = function() { var app = document.getElementById('app'); return !!app && app.style.display !== 'none'; };
+  refreshBadgeData(fetchJson, state, active);
+  if (!badgeDataTimer) badgeDataTimer = setInterval(function() { refreshBadgeData(fetchJson, state, active); }, 60000);
+}
+
 // startNavBadgePolling re-reads the badges every few seconds. Called from main.js only, so it never
 // runs (and never keeps a process alive) where only a single module is loaded, such as the unit tests.
 export function startNavBadgePolling() {
