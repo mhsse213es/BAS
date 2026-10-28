@@ -210,6 +210,27 @@ namespace Audspect.Installer
             }
         }
 
+        const int MaxDetailLength = 300;
+
+        /// <summary>
+        /// The text of the dialog shown when the pre-install check fails: the generic line for the exit code, then what the
+        /// agent itself reported (it names the host and port it could not reach), cut to its first line and bounded. For an
+        /// unreachable server it also says that antivirus or endpoint protection can block the check.
+        /// </summary>
+        public static string PreflightFailureMessage(int exitCode, string agentOutput, bool timedOut)
+        {
+            if (timedOut) return "Pre-install check failed: the check did not finish in time. Check the network and firewall, then try again.";
+            var msg = "Pre-install check failed (preflight exit code " + exitCode + "): " + DescribeExitCode(exitCode);
+            var detail = (agentOutput ?? "").Trim();
+            var eol = detail.IndexOfAny(new[] { '\r', '\n' });
+            if (eol >= 0) detail = detail.Substring(0, eol).Trim();
+            if (detail.Length > MaxDetailLength) detail = detail.Substring(0, MaxDetailLength) + "...";
+            if (detail.Length > 0) msg += " Detail: " + detail;
+            if (exitCode == 21)
+                msg += " If antivirus or other endpoint protection is running on this computer, it can also block the check: allow the folder C:\\ProgramData\\Audspect (or ask your administrator to), then try again.";
+            return msg;
+        }
+
         /// <summary>Runs an executable, writing <paramref name="secret"/> and a newline to its stdin.</summary>
         public static AgentRun RunAgent(string exe, string args, string secret, int timeoutMs, string token = null, bool msiRemoving = false)
         {

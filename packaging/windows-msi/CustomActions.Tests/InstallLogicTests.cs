@@ -75,6 +75,48 @@ public class InstallLogicTests
     public void ExitCodesHaveDistinctActionableMessages(int code, string fragment)
         => Assert.Contains(fragment, InstallLogic.DescribeExitCode(code), StringComparison.OrdinalIgnoreCase);
 
+    // The wizard dialog must show what the agent itself reported (it names the host and port it could not reach),
+    // not only the generic line for the exit code.
+    [Fact]
+    public void PreflightFailureMessageShowsTheAgentsOwnDetail()
+    {
+        var m = InstallLogic.PreflightFailureMessage(21, "cannot reach the server at audspecterver:9444: check the URL, port and firewall", false);
+        Assert.Contains("exit code 21", m);
+        Assert.Contains("audspecterver:9444", m);
+        Assert.Contains("could not be reached", m, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PreflightFailureMessageForAnUnreachableServerMentionsSecuritySoftware()
+    {
+        var m = InstallLogic.PreflightFailureMessage(21, "", false);
+        Assert.Contains("antivirus", m, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ProgramData", m);
+    }
+
+    [Fact]
+    public void PreflightFailureMessageOmitsTheDetailWhenThereIsNone()
+    {
+        var m = InstallLogic.PreflightFailureMessage(22, "", false);
+        Assert.DoesNotContain("Detail", m);
+        Assert.Contains("secret", m, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PreflightFailureMessageKeepsLongOutputBounded()
+    {
+        var m = InstallLogic.PreflightFailureMessage(21, new string('x', 5000) + Environment.NewLine + "second line", false);
+        Assert.True(m.Length < 1200, "message length " + m.Length);
+        Assert.DoesNotContain("second line", m);
+    }
+
+    [Fact]
+    public void PreflightFailureMessageSaysSoWhenTheCheckTimedOut()
+    {
+        var m = InstallLogic.PreflightFailureMessage(-1, "", true);
+        Assert.Contains("did not finish", m, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void RunAgentPassesSecretOnStdinAndRedactsOutput()
     {

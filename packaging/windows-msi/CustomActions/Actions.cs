@@ -77,7 +77,7 @@ namespace Audspect.Installer
                     if (!string.IsNullOrEmpty(run.Output)) session.Log("Audspect preflight: " + run.Output);
                     if (run.TimedOut || !InstallLogic.PreflightPassed(run.ExitCode))
                     {
-                        Fail(session, "Pre-install check failed (preflight exit code " + run.ExitCode + "): " + InstallLogic.DescribeExitCode(run.ExitCode));
+                        Fail(session, InstallLogic.PreflightFailureMessage(run.ExitCode, run.Output, run.TimedOut));
                         return ActionResult.Failure;
                     }
                 }
