@@ -101,3 +101,41 @@ func TestStore_CheckGrant(t *testing.T) {
 		}
 	})
 }
+
+func TestStore_Revoke(t *testing.T) {
+	g1 := Grant{AgentID: "agent-1", Action: "T1003.006:default", IssuedAt: fixedNow, ExpiresAt: fixedNow.Add(time.Hour)}
+	g2 := Grant{AgentID: "agent-1", Action: "T1003.006:default", ScenarioID: "dcsync-live", IssuedAt: fixedNow, ExpiresAt: fixedNow.Add(time.Hour)}
+	g3 := Grant{AgentID: "agent-1", Action: "T1490:vss_delete", IssuedAt: fixedNow, ExpiresAt: fixedNow.Add(time.Hour)}
+
+	t.Run("removes every grant matching agent+action when no scenario filter is given", func(t *testing.T) {
+		s := Store{Grants: []Grant{g1, g2, g3}}
+		removed := s.Revoke("agent-1", "T1003.006:default", "")
+		if removed != 2 {
+			t.Fatalf("removed = %d, want 2", removed)
+		}
+		if len(s.Grants) != 1 || s.Grants[0].Action != "T1490:vss_delete" {
+			t.Fatalf("remaining = %+v", s.Grants)
+		}
+	})
+
+	t.Run("a scenario filter narrows revocation to the matching scope only", func(t *testing.T) {
+		s := Store{Grants: []Grant{g1, g2, g3}}
+		removed := s.Revoke("agent-1", "T1003.006:default", "dcsync-live")
+		if removed != 1 {
+			t.Fatalf("removed = %d, want 1", removed)
+		}
+		if len(s.Grants) != 2 {
+			t.Fatalf("remaining = %+v", s.Grants)
+		}
+	})
+
+	t.Run("a non-matching agent removes nothing", func(t *testing.T) {
+		s := Store{Grants: []Grant{g1}}
+		if removed := s.Revoke("agent-999", "T1003.006:default", ""); removed != 0 {
+			t.Fatalf("removed = %d, want 0", removed)
+		}
+		if len(s.Grants) != 1 {
+			t.Fatal("expected the grant to survive")
+		}
+	})
+}

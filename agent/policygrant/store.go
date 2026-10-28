@@ -83,3 +83,22 @@ func (s Store) CheckGrant(agentID, action, scenarioID string, now time.Time) (ok
 	}
 	return false, bestStatus
 }
+
+// Revoke removes every grant matching agentID+action, narrowed to
+// scenarioID when non-empty (an empty scenarioID matches ANY grant for that
+// agent+action, scoped or not -- "revoke everything for this action").
+// Returns how many grants were removed.
+func (s *Store) Revoke(agentID, action, scenarioID string) int {
+	kept := s.Grants[:0]
+	removed := 0
+	for _, g := range s.Grants {
+		match := g.AgentID == agentID && g.Action == action && (scenarioID == "" || g.ScenarioID == scenarioID)
+		if match {
+			removed++
+			continue
+		}
+		kept = append(kept, g)
+	}
+	s.Grants = kept
+	return removed
+}

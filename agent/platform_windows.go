@@ -60,6 +60,12 @@ func platformHandleFlags() bool {
 	if *flagPolicyGrant {
 		os.Exit(runPolicyGrantCLI(*flagPolicyScope, *flagPolicyScenarioID, *flagPolicyReason, *flagPolicyExpires))
 	}
+	if *flagPolicyList {
+		os.Exit(runPolicyListCLI())
+	}
+	if *flagPolicyRevoke {
+		os.Exit(runPolicyRevokeCLI(*flagPolicyScope, *flagPolicyScenarioID))
+	}
 	// UI modes run unprivileged in the user session and must be handled before
 	// any elevation logic in platformPreStart.
 	if *flagStatusWindow {

@@ -22,6 +22,8 @@ import (
 
 var (
 	flagPolicyGrant      *bool
+	flagPolicyList       *bool
+	flagPolicyRevoke     *bool
 	flagPolicyScope      *string
 	flagPolicyScenarioID *string
 	flagPolicyReason     *string
@@ -30,10 +32,12 @@ var (
 
 func registerPolicyGrantFlags() {
 	flagPolicyGrant = flag.Bool("policy-grant", false, "Issue a local policy grant authorizing one destructive-classified action on this agent (requires an elevated/Administrator process)")
-	flagPolicyScope = flag.String("scope", "", "The action to authorize, shaped \"technique_id:action_key\" (e.g. T1003.006:default)")
-	flagPolicyScenarioID = flag.String("scenario-id", "", "Optional: narrow the grant to this scenario only (omit to cover the action regardless of which scenario invokes it)")
-	flagPolicyReason = flag.String("reason", "", "Required: why this grant is being issued, recorded in the audit trail")
-	flagPolicyExpires = flag.String("expires", "", "Required: how long the grant is valid, as a Go duration (e.g. 30m, 2h). No permanent grants are supported")
+	flagPolicyList = flag.Bool("policy-list", false, "List this agent's current local policy grants")
+	flagPolicyRevoke = flag.Bool("policy-revoke", false, "Revoke this agent's local policy grant(s) for --scope [--scenario-id] (requires an elevated/Administrator process)")
+	flagPolicyScope = flag.String("scope", "", "The action to authorize/revoke, shaped \"technique_id:action_key\" (e.g. T1003.006:default)")
+	flagPolicyScenarioID = flag.String("scenario-id", "", "Optional: narrow the grant/revoke to this scenario only (omit to cover the action regardless of which scenario invokes it)")
+	flagPolicyReason = flag.String("reason", "", "Required for --policy-grant: why this grant is being issued, recorded in the audit trail")
+	flagPolicyExpires = flag.String("expires", "", "Required for --policy-grant: how long the grant is valid, as a Go duration (e.g. 30m, 2h). No permanent grants are supported")
 }
 
 func init() {
@@ -186,5 +190,71 @@ func runPolicyGrantCLI(action, scenarioID, reason, expiresStr string) int {
 		scenarioDesc = "(any)"
 	}
 	fmt.Printf("[+] grant issued: action=%s scenario=%s expires=%s\n", action, scenarioDesc, g.ExpiresAt.Format(time.RFC3339))
+	return 0
+}
+
+// runPolicyListCLI is the "bas-agent --policy-list" entry point. Read-only,
+// no elevation required -- listing what's granted isn't itself a privileged
+// action, only issuing or revoking one is.
+func runPolicyListCLI() int {
+	store, err := loadGrantStore()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[!] load grant store: %v\n", err)
+		return 1
+	}
+	agentID := collectIdentity().AgentID
+	now := time.Now()
+	var mine []policygrant.Grant
+	for _, g := range store.Grants {
+		if g.AgentID == agentID {
+			mine = append(mine, g)
+		}
+	}
+	if len(mine) == 0 {
+		fmt.Println("[*] no local policy grants on this agent")
+		return 0
+	}
+	for _, g := range mine {
+		state := "active"
+		if !now.Before(g.ExpiresAt) {
+			state = "expired"
+		}
+		scenarioDesc := g.ScenarioID
+		if scenarioDesc == "" {
+			scenarioDesc = "(any)"
+		}
+		fmt.Printf("[%s] action=%s scenario=%s reason=%q issued=%s expires=%s\n",
+			state, g.Action, scenarioDesc, g.Reason, g.IssuedAt.Format(time.RFC3339), g.ExpiresAt.Format(time.RFC3339))
+	}
+	return 0
+}
+
+// runPolicyRevokeCLI is the "bas-agent --policy-revoke" entry point.
+func runPolicyRevokeCLI(action, scenarioID string) int {
+	if !isElevated() {
+		fmt.Fprintln(os.Stderr, "[!] policy revoke requires an elevated (Administrator) process")
+		return 1
+	}
+	if action == "" {
+		fmt.Fprintln(os.Stderr, "[!] --scope is required")
+		return 1
+	}
+	store, err := loadGrantStore()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[!] load grant store: %v\n", err)
+		return 1
+	}
+	agentID := collectIdentity().AgentID
+	removed := store.Revoke(agentID, action, scenarioID)
+	if removed == 0 {
+		fmt.Println("[*] no matching grant found")
+		return 0
+	}
+	if err := saveGrantStore(store); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] save grant store: %v\n", err)
+		return 1
+	}
+	auditGrantEvent("grant_revoked", action, scenarioID, "", fmt.Sprintf("removed=%d", removed))
+	fmt.Printf("[+] revoked %d grant(s) for action=%s\n", removed, action)
 	return 0
 }
