@@ -42,6 +42,7 @@ import (
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detectverify"
+	"github.com/audspect/bas/internal/rwcontain"
 	"github.com/audspect/bas/internal/dbsim/dbadmin"
 	"github.com/audspect/bas/internal/emailgwefficacy"
 	"github.com/audspect/bas/internal/emailgwrun"
@@ -213,6 +214,9 @@ type Handler struct {
 	// detectionConnector backs the ransomware Detection capability. Nil keeps
 	// it honestly NotTested (see rwdetectionLookup).
 	detectionConnector detectverify.Connector
+	// containmentDevices backs the ransomware Containment capability. Nil keeps
+	// it honestly NotTested (see containmentObserverFor).
+	containmentDevices rwcontain.DeviceSource
 }
 
 // New creates a Handler.
@@ -243,6 +247,13 @@ func New(pool *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string
 // ransomware Detection capability. Without it, that capability stays NotTested.
 func (h *Handler) WithDetectionConnector(c detectverify.Connector) *Handler {
 	h.detectionConnector = c
+	return h
+}
+
+// WithContainmentDevices attaches the EDR device source that verifies the
+// ransomware Containment capability. Without it, that capability stays NotTested.
+func (h *Handler) WithContainmentDevices(d rwcontain.DeviceSource) *Handler {
+	h.containmentDevices = d
 	return h
 }
 

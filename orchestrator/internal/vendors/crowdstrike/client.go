@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -56,14 +57,15 @@ const deviceCacheTTL = 15 * time.Minute
 // tests outside this package (internal/detectverify) can point them at an
 // httptest.Server.
 type Client struct {
-	QueryURL       string // defaults to <baseURL>/alerts/queries/alerts/v2
-	DetailURL      string // defaults to <baseURL>/alerts/entities/alerts/v2
-	DeviceQueryURL string // defaults to <baseURL>/devices/queries/devices/v1
-	ActionURL      string // defaults to <baseURL>/devices/entities/devices-actions/v2
-	RTRSessionURL  string // defaults to <baseURL>/real-time-response/entities/sessions/v1
-	RTRCommandURL  string // defaults to <baseURL>/real-time-response/entities/active-responder-command/v1
-	tokens         *tokenSource
-	httpClient     *http.Client
+	QueryURL         string // defaults to <baseURL>/alerts/queries/alerts/v2
+	DetailURL        string // defaults to <baseURL>/alerts/entities/alerts/v2
+	DeviceQueryURL   string // defaults to <baseURL>/devices/queries/devices/v1
+	DeviceDetailsURL string // defaults to <baseURL>/devices/entities/devices/v2
+	ActionURL        string // defaults to <baseURL>/devices/entities/devices-actions/v2
+	RTRSessionURL    string // defaults to <baseURL>/real-time-response/entities/sessions/v1
+	RTRCommandURL    string // defaults to <baseURL>/real-time-response/entities/active-responder-command/v1
+	tokens           *tokenSource
+	httpClient       *http.Client
 
 	deviceCacheMu sync.Mutex
 	deviceCache   map[string]deviceCacheEntry
@@ -72,15 +74,16 @@ type Client struct {
 func New(cfg Config) *Client {
 	base := strings.TrimRight(cfg.BaseURL, "/")
 	return &Client{
-		QueryURL:       base + "/alerts/queries/alerts/v2",
-		DetailURL:      base + "/alerts/entities/alerts/v2",
-		DeviceQueryURL: base + "/devices/queries/devices/v1",
-		ActionURL:      base + "/devices/entities/devices-actions/v2",
-		RTRSessionURL:  base + "/real-time-response/entities/sessions/v1",
-		RTRCommandURL:  base + "/real-time-response/entities/active-responder-command/v1",
-		tokens:         newTokenSource(cfg.BaseURL, cfg.ClientID, cfg.ClientSecret),
-		httpClient:     &http.Client{Timeout: 30 * time.Second},
-		deviceCache:    make(map[string]deviceCacheEntry),
+		QueryURL:         base + "/alerts/queries/alerts/v2",
+		DetailURL:        base + "/alerts/entities/alerts/v2",
+		DeviceQueryURL:   base + "/devices/queries/devices/v1",
+		DeviceDetailsURL: base + "/devices/entities/devices/v2",
+		ActionURL:        base + "/devices/entities/devices-actions/v2",
+		RTRSessionURL:    base + "/real-time-response/entities/sessions/v1",
+		RTRCommandURL:    base + "/real-time-response/entities/active-responder-command/v1",
+		tokens:           newTokenSource(cfg.BaseURL, cfg.ClientID, cfg.ClientSecret),
+		httpClient:       &http.Client{Timeout: 30 * time.Second},
+		deviceCache:      make(map[string]deviceCacheEntry),
 	}
 }
 
@@ -148,7 +151,7 @@ func (c *Client) ResolveDevice(ctx context.Context, hostname string) (string, er
 		return "", fmt.Errorf("crowdstrike: parse device query response: %w", err)
 	}
 	if len(out.Resources) == 0 {
-		return "", fmt.Errorf("crowdstrike: no device found for hostname %q", hostname)
+		return "", fmt.Errorf("%w: hostname %q", ErrDeviceNotFound, hostname)
 	}
 	deviceID := out.Resources[0]
 
@@ -451,4 +454,46 @@ func parseAlerts(data []byte) ([]Alert, error) {
 
 func escapeFQL(s string) string {
 	return strings.ReplaceAll(s, `'`, `\'`)
+}
+
+// ErrDeviceNotFound is returned when no Falcon device matches a hostname or
+// device ID. It is an inconclusive answer, not a transport failure, so callers
+// can tell the two apart with errors.Is.
+var ErrDeviceNotFound = errors.New("crowdstrike: device not found")
+
+// DeviceContainmentStatus returns Falcon's current containment status for
+// deviceID: "normal", "containment_pending", "contained", or
+// "lift_containment_pending". This is a point-in-time read of the device
+// record; it says nothing about when containment happened.
+func (c *Client) DeviceContainmentStatus(ctx context.Context, deviceID string) (string, error) {
+	token, err := c.tokens.Token(ctx)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.DeviceDetailsURL+"?"+url.Values{"ids": {deviceID}}.Encode(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("crowdstrike device status: %w", err)
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("crowdstrike device status: HTTP %d: %s", resp.StatusCode, data)
+	}
+	var out struct {
+		Resources []struct {
+			Status string `json:"status"`
+		} `json:"resources"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return "", fmt.Errorf("crowdstrike: parse device status response: %w", err)
+	}
+	if len(out.Resources) == 0 {
+		return "", fmt.Errorf("%w: device id %q", ErrDeviceNotFound, deviceID)
+	}
+	return out.Resources[0].Status, nil
 }

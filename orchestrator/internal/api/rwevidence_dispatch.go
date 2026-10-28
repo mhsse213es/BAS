@@ -7,6 +7,7 @@ import (
 	"github.com/audspect/bas/internal/controlval"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/rwcontain"
 	"github.com/audspect/bas/internal/rwdetect"
 	"github.com/audspect/bas/internal/rwevidence"
 	"github.com/audspect/bas/internal/scenario"
@@ -57,7 +58,7 @@ func (h *Handler) recordRWEvidence(ctx context.Context, runID, scenarioID string
 	deps := rwevidence.StepDependencies{
 		Prevention:     &controlval.FakeProvider{},
 		Recovery:       &rwevidence.FakeRecoveryObserver{},
-		Containment:    &rwevidence.FakeContainmentObserver{},
+		Containment:    h.containmentObserverFor(sim),
 		Detection:      h.detectionLookupFor(sim),
 		DataProtection: &rwevidence.FakeDataProtectionLookup{},
 	}
@@ -78,4 +79,13 @@ func (h *Handler) detectionLookupFor(sim models.SimulationResult) rwevidence.Det
 		return &rwevidence.FakeDetectionLookup{}
 	}
 	return rwdetect.NewConnectorLookup(h.detectionConnector, inlineAttemptContextSource{pool: h.db, sim: sim})
+}
+
+// containmentObserverFor backs the Containment capability with the configured
+// EDR device source, or leaves it honestly NotTested when none is configured.
+func (h *Handler) containmentObserverFor(sim models.SimulationResult) rwevidence.ContainmentObserver {
+	if h.containmentDevices == nil {
+		return &rwevidence.FakeContainmentObserver{}
+	}
+	return rwcontain.Observer{Devices: h.containmentDevices, Context: inlineAttemptContextSource{pool: h.db, sim: sim}}
 }
