@@ -78,10 +78,20 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1003.006": {
-		"default": {
+		// Distinct action_keys for the negative (no rights) and positive
+		// (rights granted) control stages -- each is a separately
+		// authorizable local policy grant, since they're genuinely
+		// different requests (different principal, different expected
+		// outcome), not one action run twice.
+		"negative": {
 			Class:             ClassDestructive,
 			DestructiveAction: "dcsync_replication_read",
-			BlastRadius:       "DRSUAPI replication request (DCSync) -- genuinely retrieves real directory account secret material (password hashes) from a domain controller over the standard replication protocol. Lab-only; requires a local policy grant.",
+			BlastRadius:       "DRSUAPI replication request (DCSync) as a principal WITHOUT replication rights -- genuinely attempts to retrieve real directory account secret material (password hashes) from a domain controller over the standard replication protocol. Lab-only; requires a local policy grant.",
+		},
+		"positive": {
+			Class:             ClassDestructive,
+			DestructiveAction: "dcsync_replication_read",
+			BlastRadius:       "DRSUAPI replication request (DCSync) as a principal WITH replication rights deliberately granted for this verification -- genuinely retrieves real directory account secret material (password hashes) from a domain controller over the standard replication protocol. Lab-only; requires a local policy grant.",
 		},
 	},
 	"T1003.002": {

@@ -61,6 +61,7 @@ live_policy:
 steps:
   - name: "Stage 1 — Negative Control: Replication Request Without Rights (T1003.006)"
     technique_id: T1003.006
+    action_key: negative
     detection_profiles:
       - windows_dcsync_replication
     framework: custom
@@ -118,6 +119,7 @@ steps:
 
   - name: "Stage 2 — Positive Control: Replication Request With Rights Granted (T1003.006)"
     technique_id: T1003.006
+    action_key: positive
     detection_profiles:
       - windows_dcsync_replication
     framework: custom
