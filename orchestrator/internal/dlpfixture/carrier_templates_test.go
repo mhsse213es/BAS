@@ -49,7 +49,7 @@ func loadCarrierSteps(t *testing.T) map[string]carrierStep {
 			continue
 		}
 		var format string
-		for _, f := range []string{"DOCX", "XLSX", "PDF", "PNG"} {
+		for _, f := range []string{"DOCX", "XLSX", "PDF", "PNG", "PPTX", "ZIP"} {
 			if strings.Contains(step.Name, f) {
 				format = strings.ToLower(f)
 			}
@@ -69,8 +69,8 @@ func loadCarrierSteps(t *testing.T) map[string]carrierStep {
 		}
 		out[format] = carrierStep{format: format, data: data, sha: sha[1], expected: exp[1]}
 	}
-	if len(out) != 4 {
-		t.Fatalf("found %d carrier steps, want 4 (docx, xlsx, pdf, png)", len(out))
+	if len(out) != 6 {
+		t.Fatalf("found %d carrier steps, want 6 (docx, xlsx, pdf, png, pptx, zip)", len(out))
 	}
 	return out
 }
@@ -102,6 +102,17 @@ func TestCarrierTemplates_ParseAndContainExpectedText(t *testing.T) {
 	}
 	if !bytes.Contains(pdf.data, []byte("("+want+")")) {
 		t.Errorf("pdf: text stream does not contain %q", want)
+	}
+	pptx := steps["pptx"]
+	if got := zipEntry(t, pptx.data, "ppt/slides/slide1.xml"); !strings.Contains(got, want) {
+		t.Errorf("pptx: ppt/slides/slide1.xml does not contain %q", want)
+	}
+	if got := zipEntry(t, pptx.data, "[Content_Types].xml"); !strings.Contains(got, "presentationml.presentation.main+xml") {
+		t.Errorf("pptx: [Content_Types].xml does not declare a presentation part")
+	}
+	plain := steps["zip"]
+	if got := zipEntry(t, plain.data, "regulated-record.txt"); !strings.Contains(got, want) {
+		t.Errorf("zip: regulated-record.txt does not contain %q", want)
 	}
 	img, err := png.Decode(bytes.NewReader(steps["png"].data))
 	if err != nil {

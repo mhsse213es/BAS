@@ -122,6 +122,8 @@ plus 20-odd HTTP content types. Audspect's `dlp-exfiltration-file-carriers` has 
 archive (which reports "operation unknown" without 7-Zip). **Missing: PowerPoint, a plain zip, an OCR text-in-image carrier, and the
 range of HTTP content types.**
 
+**Closed 2026-10-28 (gap 2, in part):** `dlp-exfiltration-data-types` adds JavaScript, C++ and MySQL source code, IPv6 addresses, MAC addresses, a names/addresses/e-mail record and a medical progress note; the carriers scenario now also has a PowerPoint and a plain ZIP. Local file operations only, nothing proves a product detects them; see `docs/dlp-mastery-qa-log.md`. Still missing: an OCR text-in-image carrier and the HTTP content types.
+
 **Still missing**
 1. The four channels above (ICMP, open ports, browser upload, Gmail append).
 2. The nine data types above and the PowerPoint, zip, OCR and content-type carriers.

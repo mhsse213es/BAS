@@ -121,3 +121,25 @@ This is the single place to check before claiming either DLP vendor connector is
 - `TestAllFixtures_TotalOccurrenceCountMatchesRealStepCount`: 62 → 75 real steps (62 previously catalogued + 5 carrier steps + the 8 drift repairs above).
 - `TestRealDLPScenarioIDs_ReturnsExactlyTheElevenRealIDs`: 10 → 11 IDs.
 - `TestBuiltinScenarios_AllHaveValidProductLine`: 107 → 108 built-in scenarios.
+
+## Additional data types and carriers (dlp-exfiltration-data-types, PPTX and ZIP carriers) — 2026-10-28
+
+From `docs/cymulate-comparison-gap-analysis.md`, DLP gap 2.
+
+- **New scenario `scenarios/dlp-exfiltration-data-types.yaml`** (Windows, PowerShell, signed): seven steps, one per type the other
+  scenarios do not carry: JavaScript source code, C++ source code, MySQL source code, IPv6 addresses, MAC addresses, a record of
+  names, addresses and e-mail addresses, and a medical progress note. Each step writes its fabricated record to `%TEMP%`, reads it
+  back, reports `OperationSucceeded`, `OperationBlocked` or `OperationUnknown`, and deletes its workspace. There is no network step.
+- **Two carriers added to `dlp-exfiltration-file-carriers`:** a PowerPoint PPTX and a plain ZIP, as deterministic SHA-256-pinned
+  templates like the existing four. The PPTX was built with python-pptx and re-opened with it to read the text back; the ZIP was
+  built with `zipfile`. Both regenerate to identical bytes. The scenario now has seven steps (it was five).
+- **Fixtures:** seven new (36 in total) and two new occurrences on the carrier fixture. The drift tests tie each value to its step.
+- **Fabricated on purpose:** IPv6 values are in `2001:db8::/32`, MAC values are RFC 7042 documentation or locally administered
+  addresses, the mailbox uses the reserved `.test` domain, and the person and patient are invented. `datatypes_test.go` enforces all
+  of this and that no step has a network or process call.
+- **Verified:** `dlpfixture`, `dlpprofile`, `dlpreport`, `dlpcorrelate`, `integrity`, `scenario` (now 120 scenarios) and the
+  `internal/api` scenario and library tests pass; `signer verify-all` reports 149 ok, 0 failed. Both changed files were re-signed.
+
+**Still open:** these report local file operations only. Whether a DLP product detects the content in any of the seven records or
+nine carriers needs a live run with that product enabled (the staging validation). The plain ZIP and the PPTX were checked by
+parsers, not opened in Office. OCR (text inside an image) and the range of HTTP content types are still not covered.

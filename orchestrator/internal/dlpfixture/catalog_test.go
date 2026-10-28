@@ -2,13 +2,13 @@ package dlpfixture
 
 import "testing"
 
-func TestAllFixtures_ReturnsTwentyNineFixtures(t *testing.T) {
+func TestAllFixtures_ReturnsThirtySixFixtures(t *testing.T) {
 	fixtures, err := AllFixtures()
 	if err != nil {
 		t.Fatalf("AllFixtures: %v", err)
 	}
-	if len(fixtures) != 29 {
-		t.Fatalf("len(fixtures) = %d, want 29", len(fixtures))
+	if len(fixtures) != 36 {
+		t.Fatalf("len(fixtures) = %d, want 36", len(fixtures))
 	}
 }
 
@@ -36,7 +36,7 @@ func TestAllFixtures_TotalOccurrenceCountMatchesRealStepCount(t *testing.T) {
 	for _, f := range fixtures {
 		total += len(f.Occurrences)
 	}
-	const wantTotalRealSteps = 75
+	const wantTotalRealSteps = 84 // 75 + PPTX and ZIP carriers + the seven data-type steps
 	if total != wantTotalRealSteps {
 		t.Errorf("total occurrences = %d, want %d", total, wantTotalRealSteps)
 	}
