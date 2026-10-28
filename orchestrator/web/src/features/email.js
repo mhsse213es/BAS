@@ -110,6 +110,40 @@ var EG_CATALOG = [
   { id: 'EG-020', name: 'Blocked-extension policy', expectations: [
     { id: 'EG-020.blocked-extension-policy.known-good', label: 'Known-good' },
     { id: 'EG-020.blocked-extension-policy.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-021', name: 'Attachment in a ZIP archive', expectations: [
+    { id: 'EG-021.archive-zip.known-good', label: 'Known-good' },
+    { id: 'EG-021.archive-zip.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-022', name: 'Attachment nested three archives deep', expectations: [
+    { id: 'EG-022.nested-archive.known-good', label: 'Known-good' },
+    { id: 'EG-022.nested-archive.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-023', name: 'Attachment in a tar.gz archive', expectations: [
+    { id: 'EG-023.archive-targz.known-good', label: 'Known-good' },
+    { id: 'EG-023.archive-targz.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-024', name: 'Attachment inside an attached email', expectations: [
+    { id: 'EG-024.attached-message.known-good', label: 'Known-good' },
+    { id: 'EG-024.attached-message.known-bad', label: 'Known-bad' }
+  ] },
+  { id: 'EG-025', name: 'Blocked script and executable extensions', expectations: [
+    { id: 'EG-025.script-extension-bat.known-good', label: '.bat — known-good' },
+    { id: 'EG-025.script-extension-bat.known-bad', label: '.bat — known-bad' },
+    { id: 'EG-025.script-extension-scr.known-good', label: '.scr — known-good' },
+    { id: 'EG-025.script-extension-scr.known-bad', label: '.scr — known-bad' },
+    { id: 'EG-025.script-extension-pif.known-good', label: '.pif — known-good' },
+    { id: 'EG-025.script-extension-pif.known-bad', label: '.pif — known-bad' },
+    { id: 'EG-025.script-extension-wsf.known-good', label: '.wsf — known-good' },
+    { id: 'EG-025.script-extension-wsf.known-bad', label: '.wsf — known-bad' },
+    { id: 'EG-025.script-extension-jse.known-good', label: '.jse — known-good' },
+    { id: 'EG-025.script-extension-jse.known-bad', label: '.jse — known-bad' },
+    { id: 'EG-025.script-extension-vbe.known-good', label: '.vbe — known-good' },
+    { id: 'EG-025.script-extension-vbe.known-bad', label: '.vbe — known-bad' },
+    { id: 'EG-025.script-extension-com.known-good', label: '.com — known-good' },
+    { id: 'EG-025.script-extension-com.known-bad', label: '.com — known-bad' },
+    { id: 'EG-025.script-extension-cmd.known-good', label: '.cmd — known-good' },
+    { id: 'EG-025.script-extension-cmd.known-bad', label: '.cmd — known-bad' }
   ] }
 ];
 

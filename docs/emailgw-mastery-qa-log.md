@@ -420,3 +420,34 @@ Found and verified intact 2026-10-18 (file present, diffs matched the original w
 - Verified: the catalog parses in Node with no array holes, and `node --check` passes. This is structural verification only.
 - Not verified: the page has not been loaded in a browser against a running orchestrator, so the rendered layout and run dispatch from the console are unconfirmed. This needs a running stack.
 - Pre-existing, left as-is: the console keeps EG-007 with known-good/known-bad rows. EG-007 is deliberately absent from the dispatch table because it is a mailbox-rule check, not an SMTP injection, so those console rows have no matching backend expectation.
+
+### 22. Container matrix (EG-021..025): the attachment content wrapped in archives and a forwarded message -- 2026-10-28
+
+Picked from `docs/cymulate-comparison-gap-analysis.md` (email, gap 1 and 2): the Cymulate email export is mostly attachments
+inside other files (about 13,300 of 14,683 messages have two or more levels), and Audspect sent only bare attachments.
+
+**Built (`containermatrix.go`), all from the Go standard library, EICAR or the benign placeholder only:**
+
+- **EG-021** `archive-zip` -- EICAR inside a ZIP (one level).
+- **EG-022** `nested-archive` -- EICAR inside a ZIP inside a ZIP inside a ZIP (three levels).
+- **EG-023** `archive-targz` -- EICAR inside a gzip-compressed tarball.
+- **EG-024** `attached-message` -- EICAR attached to an email that is itself attached (`message/rfc822`).
+- **EG-025** `script-extension-<ext>` -- eight scenarios (`bat`, `scr`, `pif`, `wsf`, `jse`, `vbe`, `com`, `cmd`), each a benign
+  placeholder, so only the extension policy is tested. EG-020 already covers `.vbs`.
+
+Each has a known-good (quarantined) and known-bad (delivered) expectation, wired for real injection like EG-017..020 and runnable
+through the existing `ExpectationByID` lookup (the run API, the report and the phishing mapping all use it). 24 expectations in total.
+
+**Proven:** `containermatrix_test.go` opens every container the way a scanner would. The ZIP has one entry that is the EICAR
+string; the nested ZIP is exactly three levels deep with EICAR at the bottom; the tarball has one file; the attached message parses
+and its inner attachment decodes to EICAR; each EG-025 file ends in its extension and carries the placeholder, not EICAR.
+`console_catalog_test.go` is new and fails the build if the server can run an expectation that is not in the console's `EG_CATALOG`
+(the console copy had fallen behind once already). The console catalog now lists 25 scenarios. The `emailgwefficacy` and the
+email-gateway `internal/api` tests pass; the console unit tests pass (506).
+
+**Still open:**
+- Not built, because the Go standard library cannot write them: RAR, 7z, CAB, ARJ, password-protected ZIP, and macro-enabled Office
+  files. Doing them needs either a writer library or checked-in templates, as `dlpfixture` does for DOCX/XLSX/PDF/PNG.
+- Not run against a live gateway: like every scenario here these are verified at the message-construction level. Whether a given
+  gateway quarantines each one needs a tenant or lab gateway.
+- The injector sends the archive as a base64 MIME attachment exactly as it does for EG-017..020. That path was not changed.

@@ -67,6 +67,8 @@ under that rule; adding real malware samples is not.
 
 **Already closed:** the attachment-type matrix EG-017 to EG-020 (`b13a4e0c`) and its console entries (`a764bd67`).
 
+**Closed 2026-10-28 (gap 1, 2 and part of 3 above):** EG-021 to EG-025 -- ZIP, three-level nested ZIP, tar.gz, an attached email, and eight more script and executable extensions (`bat`, `scr`, `pif`, `wsf`, `jse`, `vbe`, `com`, `cmd`). Still missing from this list: RAR, 7z, CAB and ARJ containers, password-protected archives, macro-enabled Office files, exploit documents, and links and policy batches. See `docs/emailgw-mastery-qa-log.md` item 22.
+
 ## 3. Web gateway
 
 | | Cymulate export | Audspect now |
@@ -129,7 +131,8 @@ range of HTTP content types.**
 By value to a customer and how safe each is to build here:
 
 1. **Email: nested and archive containers, other script extensions, macro documents** (EICAR or placeholder only). Largest
-   gap, fully buildable and testable in this repo.
+   gap, fully buildable and testable in this repo. *Done 2026-10-28 for ZIP, nested ZIP, tar.gz, attached email and eight more
+   script extensions; RAR/7z/CAB/ARJ, password-protected archives and macro documents remain.*
 2. **WAF: payload depth** in SQL injection, path traversal, command injection and XSS, using the existing vector contract.
 3. **DLP: the nine missing data types and the PowerPoint, zip and OCR carriers.** Small, same pattern as the fixtures already there.
 4. **Web gateway: category breadth and a file-type download matrix**, still fixture-only until a lab gateway exists.
