@@ -77,6 +77,13 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			BlastRadius:       "rundll32 comsvcs.dll MiniDump of REAL lsass process -- genuinely extracts credential material to a temp file (briefly, then deleted) -- real risk if a race/crash prevents cleanup",
 		},
 	},
+	"T1003.006": {
+		"default": {
+			Class:             ClassDestructive,
+			DestructiveAction: "dcsync_replication_read",
+			BlastRadius:       "DRSUAPI replication request (DCSync) -- genuinely retrieves real directory account secret material (password hashes) from a domain controller over the standard replication protocol. Lab-only; requires a local policy grant.",
+		},
+	},
 	"T1003.002": {
 		"enumerate": {
 			Class:             ClassNonDestructive,
