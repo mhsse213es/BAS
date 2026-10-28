@@ -4,15 +4,29 @@
 // command text, most-restrictive-wins. See
 // docs/superpowers/specs/2026-09-29-destructive-action-guardrail-b5-design.md.
 //
-// Phase 1 has no grant mechanism (that's Phase 2) -- a step this gate
-// classifies as destructive is unconditionally vetoed. Do not add a
-// bypass here; the absence of one is this phase's correct behavior.
+// Phase 2 (the Local Policy Grant Mechanism, agent/policygrant) is the
+// ONLY escape hatch for a destructive-classified step: an unexpired,
+// matching grant bound to this agent's own identity. Nothing else --
+// not the signed envelope, not scenario metadata, not an environment
+// variable -- ever authorizes one (see the design doc's No-Bypass
+// Invariant). checkDestructiveGrant's default here is deliberately
+// fail-closed (always "absent"); only the Windows build
+// (policygrant_windows.go's init) wires in the real grant store.
 package main
 
 import (
 	"audspect/agent/destructiveguard"
 	"audspect/agent/protocol"
 )
+
+// checkDestructiveGrant reports whether an unexpired, matching local policy
+// grant authorizes action (e.g. "T1003.006:default") for this agent,
+// optionally scoped to scenarioID. Overridden by policygrant_windows.go's
+// init() on Windows; stays fail-closed (always "absent") on any platform
+// without a real grant store wired in yet.
+var checkDestructiveGrant = func(action, scenarioID string) (ok bool, status string) {
+	return false, "absent"
+}
 
 // classRank orders classes for most-restrictive-wins comparison. An
 // empty/unrecognized ExecutionClass ranks as destructive (fail closed) --
@@ -45,7 +59,7 @@ func classRank(c string) int {
 // $env:BAS_PAYLOAD_DIR\x.ps1`); neither is independently catalog-
 // classified, only the step's primary action is (final whole-branch
 // review, C3).
-func evaluateB5Gate(step protocol.ScenarioStep) (vetoed bool, blockSource string) {
+func evaluateB5Gate(step protocol.ScenarioStep, scenarioID string) (vetoed bool, blockSource string) {
 	signedRank := classRank(step.ExecutionClass)
 
 	localRank := classRank(string(destructiveguard.Classify(step.Command)))
@@ -61,16 +75,32 @@ func evaluateB5Gate(step protocol.ScenarioStep) (vetoed bool, blockSource string
 	signedDestructive := signedRank >= classRank("destructive")
 	localDestructive := localRank >= classRank("destructive")
 
+	var source string
 	switch {
 	case signedDestructive && localDestructive:
-		return true, "both"
+		source = "both"
 	case signedDestructive:
-		return true, "catalog"
+		source = "catalog"
 	case localDestructive:
-		return true, "local_backstop"
+		source = "local_backstop"
 	default:
 		return false, ""
 	}
+
+	// A local grant authorizes a specific catalog-defined action; it never
+	// suppresses the local backstop's own detection above -- an active grant
+	// means that, once classified destructive, execution is allowed to
+	// proceed, not that the command stops being recognized as destructive.
+	action := step.TechniqueID + ":"
+	if step.ActionKey != "" {
+		action += step.ActionKey
+	} else {
+		action += "default"
+	}
+	if ok, _ := checkDestructiveGrant(action, scenarioID); ok {
+		return false, source
+	}
+	return true, source
 }
 
 // isElevatedTelemetryStep reports whether a step the gate has already

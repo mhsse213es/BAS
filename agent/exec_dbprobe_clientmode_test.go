@@ -59,7 +59,7 @@ func TestClientRunWithMutationScenarioRefusedAtEveryLayer(t *testing.T) {
 			bf := setupBinderFake(t)
 			step := clientStep(def)
 			// B5 itself passes the (correctly signed) step: the refusal below is the dbsim gate.
-			if v := gateStep(step); v != nil {
+			if v := gateStep(step, "test-run"); v != nil {
 				t.Fatalf("%s: unexpectedly vetoed by B5: %s %s", id, v.source, v.reason)
 			}
 			out, err := executeDBProbe(context.Background(), step)

@@ -21,7 +21,7 @@ func TestTask15StepsPassRealGateThenExecutor(t *testing.T) {
 		if def.Class == dbprobe.ClassMutation {
 			t.Fatalf("%s must not be class mutation", id)
 		}
-		if v := gateStep(step); v != nil {
+		if v := gateStep(step, "test-run"); v != nil {
 			t.Fatalf("%s vetoed by real gateStep: %s %s", id, v.source, v.reason)
 		}
 		// The agent-local allowance is required after B5, even for the read_only

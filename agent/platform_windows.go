@@ -53,9 +53,13 @@ func registerPlatformFlags() {
 	flagSettingsWindow = flag.Bool("settings-window", false, "Open the Settings window to change the server host (user session)")
 	flagTroubleshootWindow = flag.Bool("troubleshoot-window", false, "Open the Troubleshoot window (user session)")
 	flagRefreshIntegrity = flag.Bool("refresh-integrity", false, "Re-store this binary's hash for the startup self-check (used by the MSI after it replaces the binary)")
+	registerPolicyGrantFlags()
 }
 
 func platformHandleFlags() bool {
+	if *flagPolicyGrant {
+		os.Exit(runPolicyGrantCLI(*flagPolicyScope, *flagPolicyScenarioID, *flagPolicyReason, *flagPolicyExpires))
+	}
 	// UI modes run unprivileged in the user session and must be handled before
 	// any elevation logic in platformPreStart.
 	if *flagStatusWindow {

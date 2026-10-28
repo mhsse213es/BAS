@@ -592,7 +592,7 @@ func TestDBProbePreGateRefusesShellBaggage(t *testing.T) {
 
 func TestDBProbeB5NonDestructiveStepPasses(t *testing.T) {
 	s := testDBProbeStep(nil)
-	if v, src := evaluateB5Gate(protocol.ScenarioStep{ExecutionClass: s.ExecutionClass, Command: s.Command, Cleanup: s.Cleanup, Payloads: s.Payloads}); v {
+	if v, src := evaluateB5Gate(protocol.ScenarioStep{ExecutionClass: s.ExecutionClass, Command: s.Command, Cleanup: s.Cleanup, Payloads: s.Payloads}, "test-run"); v {
 		t.Fatalf("non_destructive dbprobe step vetoed by B5 (%s)", src)
 	}
 }
@@ -600,7 +600,7 @@ func TestDBProbeB5NonDestructiveStepPasses(t *testing.T) {
 func TestDBProbeB5UnknownOrMissingClassStillVetoed(t *testing.T) {
 	s := testDBProbeStep(nil)
 	for _, class := range []string{"", "bogus", "destructive", "NON_DESTRUCTIVE"} {
-		if v, _ := evaluateB5Gate(protocol.ScenarioStep{ExecutionClass: class, Command: s.Command}); !v {
+		if v, _ := evaluateB5Gate(protocol.ScenarioStep{ExecutionClass: class, Command: s.Command}, "test-run"); !v {
 			t.Errorf("class %q must stay vetoed by B5 for a dbprobe step", class)
 		}
 	}

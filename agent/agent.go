@@ -976,7 +976,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 				// Pre-execution gates: the dbsim step-shape pre-gate, then B5 (see
 				// gateStep). Both run BEFORE payload staging so nothing is written
 				// to disk for a step that is about to be vetoed.
-				if v := gateStep(step); v != nil {
+				if v := gateStep(step, cmd.ScenarioID); v != nil {
 					log.Printf("[!]   [%d/%d] %s VETOED -- %s (class=%s, action=%s, source=%s)",
 						i+1, total, step.TechniqueID, v.reason, step.ExecutionClass, step.ActionKey, v.source)
 					a.logger.Sec("warn", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
@@ -1525,7 +1525,7 @@ type stepVeto struct {
 // The dbsim gate never replaces or weakens B5; executeDBProbe applies the
 // remaining dbsim gates (policy, identity) before any probe SQL. Returns nil
 // when the step may proceed.
-func gateStep(step ScenarioStep) *stepVeto {
+func gateStep(step ScenarioStep, scenarioID string) *stepVeto {
 	if msg := dbprobeStepShapeRefusal(step); msg != "" {
 		return &stepVeto{source: "dbsim_gate", category: "dbsim_veto", reason: "dbsim gate: " + msg,
 			result: protocol.ExecResult{
@@ -1548,7 +1548,7 @@ func gateStep(step ScenarioStep) *stepVeto {
 		Command:        step.Command,
 		Cleanup:        step.Cleanup,
 		Payloads:       step.Payloads,
-	}); vetoed {
+	}, scenarioID); vetoed {
 		return &stepVeto{source: source, category: "b5_veto", reason: "destructive-action policy",
 			result: protocol.ExecResult{
 				TaskID:               step.TaskID,
