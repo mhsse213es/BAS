@@ -143,3 +143,32 @@ From `docs/cymulate-comparison-gap-analysis.md`, DLP gap 2.
 **Still open:** these report local file operations only. Whether a DLP product detects the content in any of the seven records or
 nine carriers needs a live run with that product enabled (the staging validation). The plain ZIP and the PPTX were checked by
 parsers, not opened in Office. OCR (text inside an image) and the range of HTTP content types are still not covered.
+
+## Browser-style upload, and the channels not built — 2026-10-28
+
+From `docs/cymulate-comparison-gap-analysis.md`, DLP gap 1 (the four missing channels) and the HTTP content types.
+
+**Built: browser-style multipart upload.**
+- **Sink (`internal/api/dlp_sink.go`, `parseSinkRequest`):** the sink used to decode every body as JSON. It now also reads
+  `multipart/form-data` (the file part named `payload` is the payload), urlencoded fields, and raw bodies (text, CSV, XML,
+  octet-stream) with the token and channel in `X-Sink-Token` and `X-Sink-Channel`. JSON is read exactly as before, including a JSON body
+  labelled `text/plain` or sent with no Content-Type. A header token wins. The body is capped at 1 MiB (the excess is dropped, not
+  rejected), and garbage yields an empty token and never panics. Ten unit tests plus one database test (a multipart upload leaves a
+  receipt whose hash and size are the uploaded file's) pin this.
+- **Scenario `dlp-exfiltration-browser-upload` (signed, Windows):** one step uploads the same fabricated record as a multipart file
+  `customer-records.csv` with a desktop Chrome User-Agent, verified by the sink receipt like `dlp-exfiltration-sink-https`.
+  It is deliberately a single step in its own scenario (see below). Fixture registered under `bfsi-india-anchor`.
+
+**Not built, with the reason:**
+- **HTTP content-type matrix** (the export has about 20 content types). The sink now accepts the types, but verification results are keyed
+  by technique ID (`verifysync.annotateSinkReceipts` writes `observed[techniqueID]`, and `SimulationResult.ID` is the technique), so
+  several sink steps with the same technique in one run cannot be reported separately. A matrix would give one blended verdict, which would
+  be misleading. This is a pre-existing limit that also affects the seven cloud-storage steps (all T1567.002). A per-step result key is a data-model
+  change and needs its own decision.
+- **ICMP tunneling:** still deferred. Receiving ICMP needs raw-socket privileges the sink does not have; the earlier decision stands.
+- **Open ports (raw TCP to an arbitrary port) and Gmail append (IMAP APPEND):** each needs a new listener, a new port and a firewall decision, or an IMAP
+  server, none of which this repo has. These are architecture decisions, not code gaps.
+
+**Verified:** the `internal/api` sink, DLP, scenario and library tests, `dlpfixture`, `dlpprofile` and `scenario` pass (121 scenarios);
+`signer verify-all` reports 150 ok, 0 failed. **Not verified:** a run against a real DLP proxy; the PowerShell step has not been executed
+on a Windows endpoint here, so please run it once on staging.

@@ -126,8 +126,10 @@ range of HTTP content types.**
 
 **Closed 2026-10-28 (gap 2, in part):** `dlp-exfiltration-data-types` adds JavaScript, C++ and MySQL source code, IPv6 addresses, MAC addresses, a names/addresses/e-mail record and a medical progress note; the carriers scenario now also has a PowerPoint and a plain ZIP. Local file operations only, nothing proves a product detects them; see `docs/dlp-mastery-qa-log.md`. Still missing: an OCR text-in-image carrier and the HTTP content types.
 
+**Closed 2026-10-28 (gap 1, in part):** browser-style multipart upload (`dlp-exfiltration-browser-upload`, with the sink now reading multipart, form and raw bodies). Not built, with reasons in `docs/dlp-mastery-qa-log.md`: the HTTP content-type matrix (results are keyed by technique, so several sink steps cannot be reported separately), ICMP (raw sockets), open ports and Gmail append (new listeners).
+
 **Still missing**
-1. The four channels above (ICMP, open ports, browser upload, Gmail append).
+1. Three of the four channels above (ICMP, open ports, Gmail append).
 2. The nine data types above and the PowerPoint, zip, OCR and content-type carriers.
 3. **A live run with DLP enabled.** Everything is verified only as local file operations; no product detection has been shown.
    This is the staging validation, and it is yours to run.

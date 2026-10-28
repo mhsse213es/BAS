@@ -5,20 +5,21 @@ import "fmt"
 // scenarioID constants name every real scenario this catalog references,
 // matching scenarios/dlp-exfiltration-*.yaml's own id: fields exactly.
 const (
-	scenarioValidation   = "dlp-exfiltration-validation"
-	scenarioSinkHTTPS    = "dlp-exfiltration-sink-https"
-	scenarioDNSTunnel    = "dlp-exfiltration-dns-tunnel"
-	scenarioSFTP         = "dlp-exfiltration-sftp"
-	scenarioSMTP         = "dlp-exfiltration-smtp"
-	scenarioCloudStorage = "dlp-exfiltration-cloud-storage"
-	scenarioWebhook      = "dlp-exfiltration-webhook"
-	scenarioCodeRepo     = "dlp-exfiltration-coderepo"
-	scenarioTelnet       = "dlp-exfiltration-telnet"
-	scenarioMultichannel = "dlp-exfiltration-multichannel"
-	scenarioFileCarriers = "dlp-exfiltration-file-carriers"
-	scenarioAIPrompt     = "dlp-exfiltration-ai-prompt"
-	scenarioDBExport     = "dlp-exfiltration-db-export"
-	scenarioDataTypes    = "dlp-exfiltration-data-types"
+	scenarioValidation    = "dlp-exfiltration-validation"
+	scenarioSinkHTTPS     = "dlp-exfiltration-sink-https"
+	scenarioDNSTunnel     = "dlp-exfiltration-dns-tunnel"
+	scenarioSFTP          = "dlp-exfiltration-sftp"
+	scenarioSMTP          = "dlp-exfiltration-smtp"
+	scenarioCloudStorage  = "dlp-exfiltration-cloud-storage"
+	scenarioWebhook       = "dlp-exfiltration-webhook"
+	scenarioCodeRepo      = "dlp-exfiltration-coderepo"
+	scenarioTelnet        = "dlp-exfiltration-telnet"
+	scenarioMultichannel  = "dlp-exfiltration-multichannel"
+	scenarioFileCarriers  = "dlp-exfiltration-file-carriers"
+	scenarioAIPrompt      = "dlp-exfiltration-ai-prompt"
+	scenarioDBExport      = "dlp-exfiltration-db-export"
+	scenarioDataTypes     = "dlp-exfiltration-data-types"
+	scenarioBrowserUpload = "dlp-exfiltration-browser-upload"
 )
 
 // AllFixtures returns Audspect's real, current seed catalog of every
@@ -61,6 +62,7 @@ func AllFixtures() ([]Fixture, error) {
 			{scenarioMultichannel, "DLP Validation — SFTP Exfiltration (T1048.002)"},
 			{scenarioMultichannel, "DLP Validation — SMTP Exfiltration (T1048.003)"},
 			{scenarioSinkHTTPS, "DLP Validation — Sink-Verified HTTPS Exfiltration (T1567)"},
+			{scenarioBrowserUpload, "DLP Validation — Browser-Style Multipart Upload (T1567)"},
 			{scenarioDNSTunnel, "DLP Validation — DNS Tunneling Exfiltration (T1071.004)"},
 			{scenarioSFTP, "DLP Validation — SFTP Exfiltration (T1048.002)"},
 			{scenarioSMTP, "DLP Validation — SMTP Exfiltration (T1048.003)"},

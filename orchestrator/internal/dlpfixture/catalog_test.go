@@ -36,7 +36,7 @@ func TestAllFixtures_TotalOccurrenceCountMatchesRealStepCount(t *testing.T) {
 	for _, f := range fixtures {
 		total += len(f.Occurrences)
 	}
-	const wantTotalRealSteps = 84 // 75 + PPTX and ZIP carriers + the seven data-type steps
+	const wantTotalRealSteps = 85 // 75 + PPTX and ZIP carriers + seven data-type steps + the browser upload
 	if total != wantTotalRealSteps {
 		t.Errorf("total occurrences = %d, want %d", total, wantTotalRealSteps)
 	}
