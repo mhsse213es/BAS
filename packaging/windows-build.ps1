@@ -229,6 +229,7 @@ if (-not $SkipBuild) {
         $imageRemoved = Keep-TierScenarios $scenarioStage $LicenseType
         Log "  ${LicenseType}: image scenarios filtered ($imageRemoved excluded)"
         $buildExtraArgs += @("--build-arg", "SCENARIOS_DIR=.build-scenarios")
+        $buildExtraArgs += @("--build-arg", "BAS_BUILD_TIER=$LicenseType")
     }
     # docker build (BuildKit) writes routine progress to stderr; with
     # $ErrorActionPreference='Stop' (set above) PowerShell turns that into a

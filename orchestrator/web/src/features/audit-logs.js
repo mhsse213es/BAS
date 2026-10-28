@@ -68,10 +68,20 @@ export function loadLicenseInfo() {
         _licRow('Expires',     '<span class="g1-s-6e8bcfac"' + cssVars(['g1-v-7d75dfc9', statusColor]) + '>' + x(lic.expiresAt || '-') + '</span>') +
         (lic.status === 'grace' ? _licRow('Grace Period', '<span class="g1-s-adc02b25">' + lic.daysRemaining + ' day(s) remaining — access disabled on ' + x(lic.lockoutAt) + '</span>') : '') +
         (lic.tier ? _licRow('Tier', '<span class="g1-s-6e8bcfac">' + x(lic.tier) + '</span>') : '') +
+        licenseBuildNotice(lic) +
         (lic.productLines && lic.productLines.length ? '<div class="g1-display-flex g1-s-17f7ed50"><span class="g1-s-39e35912">Products</span><div>' + licenseProductChips(lic.productLines) + '</div></div>' : '') +
         (features ? '<div class="g1-display-flex g1-s-17f7ed50"><span class="g1-s-39e35912">Features</span><div>' + features + '</div></div>' : '') +
       '</div>';
   }).catch(function(e) { wrap.innerHTML = '<div class="empty g1-s-8e56e4c3">' + x(e.message) + '</div>'; });
+}
+
+// licenseBuildNotice is the warning shown when the licence grants more than the installed package was built to
+// contain (for example an Enterprise licence on a Core build). The text comes from the server; it is escaped here.
+// Empty when there is nothing to warn about. It is a notice only: the licence still decides what is permitted.
+export function licenseBuildNotice(lic) {
+  if (!lic || !lic.buildMismatch) return '';
+  return '<div class="g1-display-flex g1-s-17f7ed50"><span class="g1-s-39e35912">Package mismatch</span>' +
+    '<span class="g1-s-adc02b25">' + x(lic.buildMismatch) + '</span></div>';
 }
 
 // licenseProductChips renders each licensed product as a badge with its readable name. An unknown

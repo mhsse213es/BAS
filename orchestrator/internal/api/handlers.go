@@ -709,6 +709,9 @@ func (h *Handler) GetLicenseInfo(w http.ResponseWriter, r *http.Request) {
 		"expiresAt":     lic.ExpiresAt,
 		"features":      lic.Features,
 		"tier":          string(lic.EffectiveTier()),
+		// A warning (never an error) when the licence grants more than this package was built to contain.
+		"buildTier":     license.BuildTier(),
+		"buildMismatch": license.BuildMismatch(license.BuildTier(), lic.EffectiveTier()),
 		"productLines":  productLines,
 		"status":        string(info.State),
 		"daysRemaining": info.DaysRemaining,

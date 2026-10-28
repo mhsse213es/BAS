@@ -246,6 +246,9 @@ func main() {
 			log.Fatalf("[FATAL] %v", licErr)
 		}
 		license.SetInitial(initialLicenseInfo)
+		if msg := license.BuildMismatch(license.BuildTier(), lic.EffectiveTier()); msg != "" {
+			log.Printf("[license] WARNING: %s", msg)
+		}
 		switch initialLicenseInfo.State {
 		case license.StateLocked:
 			log.Printf("[license] LOCKED — grace period expired on %s. Serving lockout-only mode.", initialLicenseInfo.LockoutAt.Format(time.RFC3339))

@@ -169,3 +169,42 @@ func TestGetLicenseInfo_ReportsSignedTier(t *testing.T) {
 		}
 	})
 }
+
+// A licence that grants more than the package was built to contain is reported as a warning; nothing is blocked.
+func TestGetLicenseInfo_WarnsWhenTheLicenceIsHigherThanTheBuild(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		priv, pubPEM := license.GenerateTestKeypair()
+		origKey := license.PublicKeyPEM
+		license.PublicKeyPEM = pubPEM
+		defer func() { license.PublicKeyPEM = origKey }()
+		defer license.SetBuildTierForTest("Core")()
+
+		licPath := filepath.Join(t.TempDir(), "bas.lic")
+		lic := license.SignForTest(priv, license.License{
+			Customer: "Acme Corp", CustomerID: "acme-1", IssuedAt: "2026-01-01", ExpiresAt: "2099-01-01", Tier: "Enterprise",
+		})
+		data, _ := json.Marshal(lic)
+		if err := os.WriteFile(licPath, data, 0644); err != nil {
+			t.Fatalf("write license: %v", err)
+		}
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithLicensePath(licPath)
+		license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise})
+		defer license.SetInitial(license.Info{State: license.StateValid, Tier: license.TierEnterprise})
+
+		rec := httptest.NewRecorder()
+		h.GetLicenseInfo(rec, httptest.NewRequest(http.MethodGet, "/api/license", nil))
+		var body map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("bad JSON: %v", err)
+		}
+		if body["buildTier"] != "Core" {
+			t.Errorf("buildTier = %v, want Core", body["buildTier"])
+		}
+		if msg, _ := body["buildMismatch"].(string); msg == "" {
+			t.Error("a Core build with an Enterprise licence must carry a buildMismatch warning")
+		}
+		if body["status"] != "valid" || body["tier"] != "Enterprise" {
+			t.Errorf("the licence itself must be unaffected: status=%v tier=%v", body["status"], body["tier"])
+		}
+	})
+}

@@ -43,3 +43,11 @@ func SignForTest(priv *rsa.PrivateKey, lic License) License {
 	lic.Signature = base64.StdEncoding.EncodeToString(sig)
 	return lic
 }
+
+// SetBuildTierForTest sets the compiled-in build tier for a test and returns the function that restores it. The real
+// value is stamped at link time and cannot be changed on a running server.
+func SetBuildTierForTest(tier string) (restore func()) {
+	old := buildTier
+	buildTier = tier
+	return func() { buildTier = old }
+}
