@@ -18,6 +18,11 @@ type AttemptContext struct {
 	HostName   string
 	HostIP     string
 	ExecutedAt time.Time
+	// HostProblem and TimeProblem explain why a value is unavailable. They are
+	// set by the source and carried into the inconclusive reason unchanged, so a
+	// reader can tell missing host identity from unreliable event time.
+	HostProblem string
+	TimeProblem string
 }
 
 // ContextSource resolves an attempt's host and execution timing. Production
@@ -59,6 +64,15 @@ func NewConnectorLookup(conn detectverify.Connector, src ContextSource) *Connect
 	return &ConnectorLookup{Connector: conn, Context: src, Window: DefaultWindowPolicy, Now: time.Now}
 }
 
+// inconclusive builds a tested=false reason. The specific problem, when the
+// source supplied one, replaces the generic wording so the reader sees why.
+func inconclusive(generic, problem, note string) string {
+	if problem == "" {
+		return generic + "; evidence inconclusive (" + note + ")"
+	}
+	return generic + ": " + problem + "; evidence inconclusive (" + note + ")"
+}
+
 // LookupDetection implements rwevidence.DetectionLookup.
 func (l *ConnectorLookup) LookupDetection(ctx context.Context, key rwevidence.AttemptKey) (tested bool, verified bool, reason string, err error) {
 	ac, err := l.Context.AttemptContextFor(ctx, key)
@@ -66,14 +80,14 @@ func (l *ConnectorLookup) LookupDetection(ctx context.Context, key rwevidence.At
 		return false, false, "", err
 	}
 	if ac.HostName == "" && ac.HostIP == "" {
-		return false, false, "host identity missing from the agent registration record; evidence inconclusive", nil
+		return false, false, inconclusive("host identity unavailable", ac.HostProblem, "no host to query"), nil
 	}
 	if ac.ExecutedAt.IsZero() {
-		return false, false, "step execution timestamp missing; evidence inconclusive, no window inferred", nil
+		return false, false, inconclusive(fmt.Sprintf("event time unavailable (host=%s ip=%s)", ac.HostName, ac.HostIP), ac.TimeProblem, "no window inferred"), nil
 	}
 	exec := ac.ExecutedAt.UTC()
 	if exec.After(l.Now().UTC().Add(maxFutureSkew)) {
-		return false, false, fmt.Sprintf("step execution timestamp %s is ahead of the orchestrator clock beyond tolerance; evidence inconclusive", exec.Format(time.RFC3339)), nil
+		return false, false, fmt.Sprintf("event time %s is ahead of the orchestrator clock beyond tolerance; evidence inconclusive [host=%s ip=%s]", exec.Format(time.RFC3339), ac.HostName, ac.HostIP), nil
 	}
 
 	expectationID := key.RunID + "/" + key.Action

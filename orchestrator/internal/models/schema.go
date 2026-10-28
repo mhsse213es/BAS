@@ -40,6 +40,13 @@ type AttackTechnique struct {
 	Description string `json:"description,omitempty"`
 }
 
+// Closed set of ExecutedAtSource values. Anything else (including the empty
+// legacy value) is treated as unknown provenance.
+const (
+	ExecutedAtSourceAgent                = "agent"
+	ExecutedAtSourceOrchestratorFallback = "orchestrator_fallback"
+)
+
 // SimulationResult is the normalised output of a single technique execution.
 // Every framework (ART, Caldera, Sigma, custom) produces this format.
 type SimulationResult struct {
@@ -68,18 +75,22 @@ type SimulationResult struct {
 	// of silent -- a parser (e.g. Application Risk's installed-software
 	// parser) can detect incomplete evidence rather than unknowingly working
 	// with a partial list.
-	Truncated           bool             `json:"truncated,omitempty"`
-	OriginalOutputBytes int              `json:"originalOutputBytes,omitempty"`
-	DurationMs          int64            `json:"durationMs"`
-	ExecutedAt          time.Time        `json:"executedAt"`
-	Framework           string           `json:"framework"`                  // art | caldera | sigma | custom
-	Events              []string         `json:"events,omitempty"`           // Windows Event IDs observed (per-step tokens)
-	DetectionVerdict    string           `json:"detectionVerdict,omitempty"` // prevented | detected | undetected (populated after agent posts detections)
-	DetectionAlert      *DetectionAlert  `json:"detectionAlert,omitempty"`   // matched EDR/AV alert when DetectionVerdict=detected
-	CleanupVerdict      string           `json:"cleanupVerdict,omitempty"`   // reverted | partial | leaked (populated from agent cleanup exit code)
-	CleanupResidual     []string         `json:"cleanupResidual,omitempty"`  // normalized snapshot-diff keys still present after the step's own cleanup ran
-	CleanupError        string           `json:"cleanupError,omitempty"`     // the cleanup command's own stderr+exit code when CleanupVerdict is partial/leaked
-	BlockingControl     *BlockingControl `json:"blockingControl,omitempty"`  // specific control that prevented the technique (populated when DetectionVerdict=prevented)
+	Truncated           bool      `json:"truncated,omitempty"`
+	OriginalOutputBytes int       `json:"originalOutputBytes,omitempty"`
+	DurationMs          int64     `json:"durationMs"`
+	ExecutedAt          time.Time `json:"executedAt"`
+	// ExecutedAtSource records who supplied ExecutedAt. Empty means unknown:
+	// results stored before this field existed never say where their timestamp
+	// came from, so they must not be read as agent-observed.
+	ExecutedAtSource string           `json:"executedAtSource,omitempty"`
+	Framework        string           `json:"framework"`                  // art | caldera | sigma | custom
+	Events           []string         `json:"events,omitempty"`           // Windows Event IDs observed (per-step tokens)
+	DetectionVerdict string           `json:"detectionVerdict,omitempty"` // prevented | detected | undetected (populated after agent posts detections)
+	DetectionAlert   *DetectionAlert  `json:"detectionAlert,omitempty"`   // matched EDR/AV alert when DetectionVerdict=detected
+	CleanupVerdict   string           `json:"cleanupVerdict,omitempty"`   // reverted | partial | leaked (populated from agent cleanup exit code)
+	CleanupResidual  []string         `json:"cleanupResidual,omitempty"`  // normalized snapshot-diff keys still present after the step's own cleanup ran
+	CleanupError     string           `json:"cleanupError,omitempty"`     // the cleanup command's own stderr+exit code when CleanupVerdict is partial/leaked
+	BlockingControl  *BlockingControl `json:"blockingControl,omitempty"`  // specific control that prevented the technique (populated when DetectionVerdict=prevented)
 	// VetoedActionKey/VetoedExecutionClass/VetoedBlockSource are populated
 	// only when Result == ResultVetoed -- structured mirrors of the free-
 	// text explanation already embedded in Details, so a report/UI/export

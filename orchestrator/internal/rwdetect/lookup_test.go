@@ -241,3 +241,63 @@ func TestConnectorLookup_ConnectorErrorPropagates(t *testing.T) {
 		t.Fatalf("err = %v, want the connector's error", err)
 	}
 }
+
+func TestConnectorLookup_ReasonCarriesHostProblemWhenHostUnavailable(t *testing.T) {
+	ac := validContext()
+	ac.HostName, ac.HostIP = "", ""
+	ac.HostProblem = "agent registration record has no hostname or IP"
+	conn := &fakeConnector{}
+	l := newTestLookup(conn, fakeContextSource{ctx: ac})
+
+	_, _, reason, err := l.LookupDetection(context.Background(), lookupKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conn.calls != 0 {
+		t.Fatal("no query without host identity")
+	}
+	if !strings.Contains(reason, "agent registration record has no hostname or IP") {
+		t.Fatalf("reason %q must carry the specific host problem", reason)
+	}
+}
+
+func TestConnectorLookup_ReasonCarriesTimeProblemAndKeepsHostContext(t *testing.T) {
+	ac := validContext()
+	ac.ExecutedAt = time.Time{}
+	ac.TimeProblem = "orchestrator fallback timestamp recorded for this step; it is submission time, not agent-observed execution time"
+	conn := &fakeConnector{}
+	l := newTestLookup(conn, fakeContextSource{ctx: ac})
+
+	_, _, reason, err := l.LookupDetection(context.Background(), lookupKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conn.calls != 0 {
+		t.Fatal("no query without a trustworthy event time")
+	}
+	if !strings.Contains(reason, "not agent-observed") {
+		t.Fatalf("reason %q must carry the specific time problem", reason)
+	}
+	if !strings.Contains(reason, "HOST01") {
+		t.Fatalf("reason %q must retain the valid host context", reason)
+	}
+}
+
+func TestConnectorLookup_ReasonDistinguishesMissingStepMetadataFromAmbiguousTime(t *testing.T) {
+	ac := validContext()
+	ac.ExecutedAt = time.Time{}
+	ac.TimeProblem = "step metadata missing for this attempt"
+	l := newTestLookup(&fakeConnector{}, fakeContextSource{ctx: ac})
+
+	_, _, reason, _ := l.LookupDetection(context.Background(), lookupKey())
+	if !strings.Contains(reason, "step metadata missing") {
+		t.Fatalf("reason %q must name missing step metadata", reason)
+	}
+
+	ac.TimeProblem = "2 distinct execution timestamps recorded for this step; the event cannot be identified"
+	l = newTestLookup(&fakeConnector{}, fakeContextSource{ctx: ac})
+	_, _, reason, _ = l.LookupDetection(context.Background(), lookupKey())
+	if !strings.Contains(reason, "2 distinct execution timestamps") {
+		t.Fatalf("reason %q must name the duplicate executions", reason)
+	}
+}

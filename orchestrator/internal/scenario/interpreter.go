@@ -24,9 +24,14 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		sev = "Medium"
 	}
 
+	// A missing agent timestamp falls back to submission time for
+	// compatibility, but the fallback is labelled so it is never read as an
+	// agent-observed execution time.
 	execAt := result.ExecutedAt
+	execSource := models.ExecutedAtSourceAgent
 	if execAt.IsZero() {
 		execAt = time.Now()
+		execSource = models.ExecutedAtSourceOrchestratorFallback
 	}
 
 	combined := strings.TrimSpace(result.Stdout + "\n" + result.Stderr)
@@ -136,6 +141,7 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		OriginalOutputBytes:  len(combined),
 		DurationMs:           result.DurationMs,
 		ExecutedAt:           execAt,
+		ExecutedAtSource:     execSource,
 		Framework:            framework,
 		Events:               result.Events,
 		CleanupVerdict:       result.CleanupVerdict,
