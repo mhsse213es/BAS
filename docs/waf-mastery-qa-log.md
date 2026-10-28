@@ -118,3 +118,34 @@ execution gate individually (not lab-capable, unauthorized, off-allow-list, publ
 missing timeout, missing request limit, no prober, probe timeout vs. probe error vs. an invalid probe result,
 fail-closed audit on the first write). Full WAF regression suite (`wafcatalog`/`wafassessment`/`wafevasion`/
 `wafpolicygap`/`wafprofile`/`wafval`/`waforigin`) and `go build ./...`/`go vet ./...` all pass unchanged.
+
+### 12. Payload depth for SQL injection, XSS, path traversal and command injection -- 2026-10-28
+
+Picked from `docs/cymulate-comparison-gap-analysis.md` (WAF, gap 1). The catalog had 3 SQL injection, 6 XSS, 2 path traversal and
+2 command injection vectors, so a family counted as covered after one string.
+
+**Added (`catalog_depth.go`), 25 vectors, catalog now 62:**
+
+- **SQLI-004..010** -- time-based blind (MySQL `SLEEP`), stacked queries (MSSQL `WAITFOR`), Oracle error-based, inline-comment
+  obfuscated UNION, case-mixed keywords, a JSON body field, and an HTTP header.
+- **XSS-007..012** -- polyglot, SVG, iframe `srcdoc`, JSON-response script breakout, client-side template expression, double URL encoding.
+- **PATHTRAV-003..008** -- Windows backslash to `win.ini`, single URL encoding, overlong UTF-8 `%c0%af`, null-byte extension bypass,
+  absolute path, nested `....//` that survives one-pass stripping.
+- **CMDI-003..008** -- pipe, `&&` and `||`, `$()`, encoded newline `%0a`, Windows `&` with `whoami`, time-based `sleep`.
+
+Every vector has a benign twin on the same endpoint and location, and maps to the family's CWE (89, 79, 22, 78).
+
+**Proven (`catalog_depth_test.go`, written first, 5 of the 10 tests failed before the vectors existed):** per-family minimum counts;
+each family names the techniques a WAF must recognise (the test lists them); path traversal covers Unix, Windows and six encodings;
+command injection covers both shells' operators; every vector has a twin on the same method and location; no two vectors send the
+same request; every vector maps to its family's CWE; IDs are sequential; and a deny-list test fails the build if any payload could
+change or delete data, fetch code or open a shell (`DROP`, `DELETE`, `rm -rf`, `wget`, `powershell`, `xp_cmdshell` and so on). The
+`wafcatalog`, `wafassessment`, `wafefficacy`, `wafval`, `wafverify`, `wafprofile`, `wafdetection` and `wafevasion` tests pass.
+
+**Still open (and the part that matters most):**
+- The WAF side is a catalog graded against fixtures. **Nothing here sends a request to a WAF**, so none of the 62 vectors has been
+  shown to be blocked or allowed by a real product (item 1 above: the vendor adapter is deferred by design).
+- The new vectors are in the catalog but **not in any scoring scenario**: `WAFSCENARIO-EXPLOIT-PREVENTION` lists its eight vector IDs
+  explicitly. Adding them needs fixtures, and inventing fixtures would be fake evidence.
+- Per-request method and platform are still not tracked as separate fields (they are only visible in the request and its name).
+- XSS payload depth is still modest next to Cymulate's roughly 7,800 requests; these are representative variants, not a corpus.

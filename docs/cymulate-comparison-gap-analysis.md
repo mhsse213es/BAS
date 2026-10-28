@@ -27,7 +27,7 @@ means a missing kind of test, not a missing number of rows.
 
 | | Cymulate export | Audspect now |
 |---|---|---|
-| Size | 11,103 requests, 8 attack types, 48 sub-categories | 37 vectors in 17 families (`internal/wafcatalog`) |
+| Size | 11,103 requests, 8 attack types, 48 sub-categories | 62 vectors in 17 families (`internal/wafcatalog`) |
 | Attack types | XSS 7,806; path traversal 1,604; file inclusion 618; command injection 574; SQL injection 294; SSRF 119; NoSQL 53; XML 35 | All eight present, plus LDAP and XPath injection, file upload, HTTP parser discrepancy, API and auth abuse, rate limit, cache, policy misconfiguration |
 | Methods | POST 8,941; GET 2,162 | not tracked per vector |
 | Platform tag | OS agnostic, Linux, Windows | not tracked per vector |
@@ -40,6 +40,8 @@ means a missing kind of test, not a missing number of rows.
 2. **Per-request method and platform.** Audspect does not record whether a vector is GET or POST, or Windows or Unix specific.
 3. **CVE-specific simulations.** One CVE (Log4Shell) exists in `internal/cvecatalog`, and its live prober is deliberately not
    built (no lab to test it against). This belongs to the earlier "priority 2".
+
+**Closed 2026-10-28 (gap 1, in part):** 25 more vectors for SQL injection (now 10), XSS (12), path traversal (8) and command injection (8), each with a benign twin and a safety deny-list test; see `docs/waf-mastery-qa-log.md` item 12. They are catalog entries graded against fixtures: no request is sent to a real WAF, and they are not yet in a scoring scenario.
 
 **Already closed since the first comparison:** the six missing families (command injection, file inclusion, XXE, NoSQL, LDAP, XPath)
 and three XSS variants (commit `8b70131a`); the CVE catalog, verdict contract and lab-execution gate (`fa1756ce`).
@@ -133,7 +135,7 @@ By value to a customer and how safe each is to build here:
 1. **Email: nested and archive containers, other script extensions, macro documents** (EICAR or placeholder only). Largest
    gap, fully buildable and testable in this repo. *Done 2026-10-28 for ZIP, nested ZIP, tar.gz, attached email and eight more
    script extensions; RAR/7z/CAB/ARJ, password-protected archives and macro documents remain.*
-2. **WAF: payload depth** in SQL injection, path traversal, command injection and XSS, using the existing vector contract.
+2. **WAF: payload depth** in SQL injection, path traversal, command injection and XSS, using the existing vector contract. *Done 2026-10-28 (25 vectors); live WAF traffic and scoring-scenario use remain.*
 3. **DLP: the nine missing data types and the PowerPoint, zip and OCR carriers.** Small, same pattern as the fixtures already there.
 4. **Web gateway: category breadth and a file-type download matrix**, still fixture-only until a lab gateway exists.
 5. **DLP: ICMP, browser-upload, open-ports and Gmail-append channels.**
