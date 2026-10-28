@@ -3569,7 +3569,7 @@
 </div>
 
 <div id="run-live-overlay" class="drawer-overlay" data-on-click="closeRunLiveOnBackdrop">
-  <div class="drawer g1-s-6c4b3a0c">
+  <div class="drawer lv-drawer">
     <div class="drawer-header g1-s-27ecf148">
       <div class="g1-display-flex g1-s-0c672a32">
         <h3 id="run-live-title">Live Run</h3>
@@ -3578,9 +3578,16 @@
       <div id="run-live-subtitle" class="g1-s-007f626a"></div>
     </div>
     <div class="drawer-body">
-      <div id="run-live-progress"></div>
+      <div class="lv-pin">
+        <div id="run-live-status" class="lv-status"></div>
+        <div id="run-live-progress"></div>
+      </div>
+      <h4 class="sec-label">Execution timeline</h4>
       <ul id="run-live-timeline" class="g1-s-79e581e0"></ul>
+      <h4 class="sec-label">Live log</h4>
+      <div id="run-live-log" class="lv-log"></div>
     </div>
+    <div id="run-live-footer" class="lv-footer"></div>
   </div>
 </div>
 

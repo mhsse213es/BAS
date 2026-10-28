@@ -137,3 +137,40 @@
 #results-overlay .run-tab-grid > * { min-width: 0; }
 .killchain { overflow-x: auto; }
 .res-t .rk-kpi-val.tone-muted { color: var(--text); }
+
+/* Live run drawer: status row, progress, started/duration cards, timeline, log, footer */
+.lv-drawer { width: min(720px, 94vw); }
+.lv-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.lv-actions { display: flex; gap: 8px; }
+.lv-actions .btn svg, .lv-footer .btn svg { width: 13px; height: 13px; flex: none; margin-right: 5px; vertical-align: -2px; }
+.lv-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.lv-bar-row .rk-bar { flex: 1; }
+.lv-bar-row .mono { font-size: 12px; color: var(--muted-hi); min-width: 36px; text-align: right; }
+.lv-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.lv-card { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); padding: 10px 12px; }
+.lv-card .lv-k { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.lv-card b { font-size: 15px; font-weight: 600; }
+.lv-step { display: flex; gap: 12px; padding: 9px 0; cursor: pointer; position: relative; }
+.lv-step:not(:last-child)::before { content: ""; position: absolute; left: 10px; top: 31px; bottom: -9px; width: 1px; background: var(--border); }
+.lv-step:hover .lv-t { color: var(--accent); }
+.lv-mark { flex: none; width: 21px; height: 21px; border-radius: 50%; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; line-height: 1; background: var(--surface); z-index: 1; }
+.lv-mark.done { border-color: var(--success); color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+.lv-mark.done::after { content: "\2713"; }
+.lv-mark.fail { border-color: var(--danger); color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.lv-mark.fail::after { content: "!"; }
+.lv-mark.warn { border-color: var(--warning); color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, transparent); }
+.lv-mark.warn::after { content: "!"; }
+.lv-mark.run { border-color: var(--accent); color: var(--accent); }
+.lv-mark.run::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: blink 1.5s infinite; }
+.lv-body { min-width: 0; flex: 1; }
+.lv-t { font-size: 13px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.lv-t .mono { font-weight: 600; }
+.lv-d { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.lv-log { font-family: var(--font-mono); font-size: 12px; line-height: 1.6; max-height: 220px; overflow: auto; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--elevated); }
+.lv-l { overflow-wrap: anywhere; color: var(--muted-hi); }
+.lv-l .lv-time { color: var(--muted); margin-right: 8px; }
+.lv-l.ok { color: var(--success); }
+.lv-l.bad { color: var(--danger); }
+.lv-l.warn { color: var(--warning); }
+.lv-l.inf { color: var(--text); }
+.lv-footer { display: flex; align-items: center; gap: 8px; padding: 12px 1.25rem; border-top: 1px solid var(--border); flex-shrink: 0; }

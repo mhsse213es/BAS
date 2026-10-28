@@ -7,6 +7,11 @@ import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { MODE_LABELS, verdictBadge, verdictCounts } from './reports.js';
 import { cssVars } from '../core/css-vars.js';
+import { icon, bar } from '../core/kit.js';
+import { findRun } from './runs-rich.js';
+import { fmtWhen } from './runs-model.js';
+import * as L from './live-run-model.js';
+import { openDrawer as openScnDrawer } from './scn-rich.js';
 
 
 // ── Live Run Panel ────────────────────────────────────────────────────────────
@@ -19,9 +24,12 @@ import { cssVars } from '../core/css-vars.js';
 // Assigned by the Live Run IIFE below (__init_L16159) and called through the
 // module-level exports at the bottom; never published on window.
 let _toggleLiveStep, _openRunPanel, _onRunEvent;
+// The once-a-second clock behind the Duration card; module level so closeRunLive (outside the IIFE) can stop it.
+let _liveTimer = null;
+function stopLiveTimer() { if (_liveTimer) { clearInterval(_liveTimer); _liveTimer = null; } }
 export function __init_L16159() {
 (function () {
-  var state = { runId: null, steps: new Map(), total: 0, done: 0, failed: 0, running: 0 };
+  var state = { runId: null, steps: new Map(), total: 0, done: 0, failed: 0, running: 0, paused: null, log: [] };
 
   var STEP_COLOR = {
     queued:  'var(--muted)',
@@ -62,6 +70,8 @@ export function __init_L16159() {
     return 'https://attack.mitre.org/techniques/' + id.replace('.', '/') + '/';
   }
 
+  function sm(name) { return icon(name).replace('width="16" height="16"', 'width="13" height="13"'); }
+
   function statCell(value, label, color) {
     return '<div class="g1-s-f89e8d63">' +
       '<div class="g1-s-3c237332"' + cssVars(['g1-v-7d75dfc9', color]) + '>' + value + '</div>' +
@@ -69,17 +79,74 @@ export function __init_L16159() {
     '</div>';
   }
 
+  var lastStatusKey = '';
+
+  function currentStatus() { return L.liveStatus(findRun(state.runId), state); }
+
+  // Chip + the buttons that act on the run. Pause/Resume/Stop are the same actions the Live Runs table calls; they are
+  // offered only when a run record is known and the run is in flight (a queued run has nothing to pause or stop yet).
+  function renderStatus() {
+    var run = findRun(state.runId), st = L.liveStatus(run, state);
+    lastStatusKey = st.key;
+    var acts = '';
+    if (run && st.live && st.key !== 'queued') {
+      acts = (st.key === 'paused'
+        ? '<button class="btn btn-outline btn-sm"' + on('click', 'resumeRun', state.runId) + '>' + sm('play') + 'Resume</button>'
+        : '<button class="btn btn-outline btn-sm"' + on('click', 'pauseRun', state.runId) + '>' + sm('pause') + 'Pause</button>') +
+        '<button class="btn btn-outline-red btn-sm"' + on('click', 'stopRun', state.runId) + ' title="Stop this run — keeps completed steps, marks the run partial">' + sm('stop') + 'Stop</button>';
+    }
+    document.getElementById('run-live-status').innerHTML =
+      '<span class="rk-pill tone-' + st.tone + '">' + x(st.label) + '</span>' +
+      (acts ? '<div class="lv-actions">' + acts + '</div>' : '');
+    return st;
+  }
+
+  function renderFooter() {
+    var run = findRun(state.runId);
+    document.getElementById('run-live-footer').innerHTML =
+      '<button class="btn btn-outline"' + on('click', 'closeRunLive') + '>Close</button>' +
+      '<span class="u-flex1"></span>' +
+      (run && run.scenarioId ? '<button class="btn btn-outline"' + on('click', 'openRunScenarioAction', run.scenarioId) + ' title="Open the scenario this run executes">' + sm('target') + 'Scenario</button>' : '') +
+      '<button class="btn btn-outline"' + on('click', 'downloadRunReport', state.runId) + ' title="Download the report as a PDF file">' + sm('report') + 'Report</button>';
+  }
+
+  function renderLog() {
+    var el = document.getElementById('run-live-log');
+    if (!state.log.length) { el.innerHTML = '<div class="lv-l muted">Waiting for the first event…</div>'; return; }
+    var nearEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    el.innerHTML = state.log.map(function (l) {
+      return '<div class="lv-l ' + l.tone + '">' + (l.time ? '<span class="lv-time">' + x(l.time) + '</span>' : '') + x(l.text) + '</div>';
+    }).join('');
+    if (nearEnd) el.scrollTop = el.scrollHeight;
+  }
+
+  // The Duration card ticks once a second; the chip and buttons are rebuilt only when the run's status changes
+  // (a pause, a finish, the agent dropping), so the bar is not redrawn every second.
+  function tick() {
+    if (!document.getElementById('run-live-overlay').classList.contains('open')) { stopLiveTimer(); return; }
+    var st = currentStatus();
+    if (st.key !== lastStatusKey) { render(); }
+    var d = document.getElementById('run-live-duration');
+    if (d) d.textContent = L.runDuration(findRun(state.runId));
+    if (!st.live) stopLiveTimer();
+  }
+
   function render() {
-    var pct = state.total ? Math.round((state.done / state.total) * 100) : 0;
+    var run = findRun(state.runId), st = renderStatus();
+    var pct = L.progressPct(state);
     document.getElementById('run-live-progress').innerHTML =
+      '<div class="lv-bar-row">' + bar(pct, st.tone === 'bad' ? 'bad' : st.tone === 'ok' ? 'ok' : 'info', true) + '<span id="run-live-pct" class="mono">' + pct + '%</span></div>' +
+      '<div class="lv-cards">' +
+        '<div class="lv-card"><div class="lv-k">Started</div><b id="run-live-started">' + x(run ? fmtWhen(run.startedAt) : '—') + '</b></div>' +
+        '<div class="lv-card"><div class="lv-k">Duration</div><b id="run-live-duration">' + x(L.runDuration(run)) + '</b></div>' +
+      '</div>' +
       '<div class="g1-display-flex g1-s-d3e598d0">' +
         statCell(state.done + '/' + state.total, 'completed', 'var(--accent)') +
         statCell(state.failed, 'failed', state.failed ? 'var(--danger)' : 'var(--muted)') +
         statCell(state.running, 'running', state.running ? 'var(--accent)' : 'var(--muted)') +
-      '</div>' +
-      '<div class="g1-s-e6e1105c">' +
-        '<div class="g1-s-1f095c2b"' + cssVars(['g1-v-9b890877', pct]) + '></div>' +
       '</div>';
+    renderFooter();
+    renderLog();
 
     var ul = document.getElementById('run-live-timeline');
     if (!state.steps.size) {
@@ -107,7 +174,6 @@ export function __init_L16159() {
     entries.forEach(function (entry) {
       var task = entry[0], s = entry[1];
       var color  = STEP_COLOR[s.state] || 'var(--muted)';
-      var blink  = s.state === 'running' ? ';animation:blink 1.5s infinite' : '';
       var techId = s.tech || task;
 
       // s.techName (from lookupTech/artCatalog) is deliberately NOT used for
@@ -121,22 +187,10 @@ export function __init_L16159() {
       // reading "Test 1: Gsecdump" regardless of which of the 7 it actually
       // is). s.stepName is what the agent actually reported running.
 
-      // Verdict badge
       var vColor = (s.verdict && VERDICT_COLOR[s.verdict]) || color;
       var vLabel = (s.verdict && VERDICT_LABEL[s.verdict]) || '';
-      var verdictHtml = vLabel
-        ? ' <span class="g1-s-e493f968"' + cssVars(['g1-v-9a515764', vColor], ['g1-v-7d75dfc9', vColor], ['g1-v-1978c967', vColor]) + '>' + x(vLabel) + '</span>'
-        : '';
 
-      // Tactic badge
-      var tacticHtml = s.tactic
-        ? '<span class="g1-s-203779fe">' + x(humanTactic(s.tactic)) + '</span>'
-        : '';
-
-      // Duration (only when completed)
-      var durHtml = (s.durationMs != null && (s.state === 'done' || s.state === 'timeout'))
-        ? '<span class="g1-s-a9b4215f">∼' + s.durationMs + ' ms</span>'
-        : '';
+      var tacticHtml = s.tactic ? ' <span class="g1-s-203779fe">' + x(humanTactic(s.tactic)) + '</span>' : '';
 
       // Expandable detail block
       var detailHtml = '';
@@ -145,35 +199,22 @@ export function __init_L16159() {
         if (s.stepName) dl.push('<b>Test:</b> ' + x(s.stepName));
         if (s.tactic)   dl.push('<b>Tactic:</b> ' + x(humanTactic(s.tactic)));
         if (vLabel)     dl.push('<b>Verdict:</b> <span' + cssVars(['g1-v-7d75dfc9', vColor]) + '>' + x(vLabel) + '</span>');
-        if (s.durationMs != null) dl.push('<b>Duration:</b> ' + s.durationMs + ' ms');
+        if (s.durationMs != null) dl.push('<b>Duration:</b> ' + s.durationMs + ' ms');
         if (s.exitCode  != null)  dl.push('<b>Exit&nbsp;code:</b> ' + s.exitCode);
         if (s.tech)     dl.push('<b>ATT&amp;CK:</b> <a href="' + attackUrl(s.tech) + '" target="_blank" class="g1-s-097ae647">' + x(s.tech) + ' &#8599;</a>');
-        detailHtml = '<div class="g1-s-9111be16">' +
-          dl.join('<br>') + '</div>';
+        detailHtml = '<div class="g1-s-9111be16">' + dl.join('<br>') + '</div>';
       }
 
+      // Row: marker, then "ID — name", then one result line (verdict, duration) with the tactic. The name wraps rather
+      // than truncating, so the complete title is always visible.
       rows.push(
-        '<li class="g1-s-bb89a7c6"' + on('click', 'toggleLiveStepAction', task) + '>' +
-          // Main line: dot · ID · name · state. name wraps onto additional
-          // lines rather than truncating with an ellipsis, so the complete
-          // title (including its own technique-ID prefix, when the real ART
-          // atomic name has one) is always fully visible.
-          '<div class="g1-display-flex g1-s-3e257d5f">' +
-            '<span class="g1-s-59566913' + (blink ? ' g1-s-5302a419' : '') + '"' + cssVars(['g1-v-9ffd39ba', color]) + '></span>' +
-            '<span class="g1-s-f5447c1a">' + x(techId) + '</span>' +
-            '<span class="g1-s-7158533f">' + x(s.stepName || techId) + '</span>' +
-            '<span class="g1-s-bacb7a09"' + cssVars(['g1-v-7d75dfc9', color]) + '>' + x(s.state === 'done' ? 'done' : s.state) + '</span>' +
-            verdictHtml +
+        '<li class="lv-step"' + on('click', 'toggleLiveStepAction', task) + '>' +
+          '<span class="lv-mark ' + L.stepMark(s) + '"></span>' +
+          '<div class="lv-body">' +
+            '<div class="lv-t"><span class="mono">' + x(techId) + '</span>' + (s.stepName && s.stepName !== techId ? ' — ' + x(s.stepName) : '') + '</div>' +
+            '<div class="lv-d">' + x(L.stepNote(s)) + tacticHtml + '</div>' +
+            detailHtml +
           '</div>' +
-          // Sub-line: tactic badge · duration (step name is already the main-line title above)
-          (s.tactic || durHtml
-            ? '<div class="g1-display-flex g1-s-5282dde1">' +
-                tacticHtml +
-                '<span class="u-flex1"></span>' +
-                durHtml +
-              '</div>'
-            : '') +
-          detailHtml +
         '</li>');
     });
     ul.innerHTML = rows.join('');
@@ -189,6 +230,9 @@ export function __init_L16159() {
   };
 
   function applyEvent(e) {
+    state.log = L.appendLog(state.log, L.logLine(e));
+    if (e.type === 'paused') state.paused = true;
+    else if (e.type === 'resumed') state.paused = false;
     if (e.type === 'run_started') {
       state.total = (e.payload && e.payload.stepsTotal) || state.total;
     } else if (e.type === 'queued') {
@@ -249,7 +293,8 @@ export function __init_L16159() {
   // attribute early.
   _openRunPanel = async function (runId, name, knownStepsTotal, mode, maxPrivilege) {
     state.runId = runId; state.steps = new Map(); state.total = knownStepsTotal || 0;
-    state.done = 0; state.failed = 0; state.running = 0;
+    state.done = 0; state.failed = 0; state.running = 0; state.paused = null; state.log = [];
+    stopLiveTimer();
     document.getElementById('run-live-title').textContent = (name || 'Run') + ' — Live';
     // Run Settings subtitle — same "what was selected" answer the Results
     // drawer shows post-completion, so an in-flight run isn't a blind spot.
@@ -258,6 +303,8 @@ export function __init_L16159() {
       : '';
     document.getElementById('run-live-overlay').classList.add('open');
     render();
+    _liveTimer = setInterval(tick, 1000);
+    if (_liveTimer && _liveTimer.unref) _liveTimer.unref();
     try {
       var r = await fetch('/api/scenarios/runs/' + encodeURIComponent(runId) + '/events', { credentials: 'include' });
       if (r.ok) (await r.json()).forEach(applyEvent);
@@ -284,7 +331,9 @@ export function toggleLiveStepAction(taskId) { toggleLiveStep(taskId); }
 export function openRunPanelAction(runId, name, knownStepsTotal, mode, maxPrivilege) { return openRunPanel(runId, name, knownStepsTotal, mode, maxPrivilege); }
 export function openSweepReport(sweepId) { window.open('/api/vex/sweeps/' + encodeURIComponent(sweepId) + '/report', '_blank'); }
 
-export function closeRunLive() { document.getElementById('run-live-overlay').classList.remove('open'); }
+export function closeRunLive() { stopLiveTimer(); document.getElementById('run-live-overlay').classList.remove('open'); }
+// Footer Scenario button: leave the live panel, then open the scenario's own drawer.
+export function openRunScenarioAction(scenarioId) { closeRunLive(); openScnDrawer(scenarioId); }
 export function closeRunLiveOnBackdrop(el, event) { if (event.target === el) closeRunLive(); }
 
 // openSweepDrilldown lists every technique a Full Variant Sweep dispatched --

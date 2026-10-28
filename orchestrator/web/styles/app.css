@@ -866,7 +866,7 @@ button:not([class]) { color:var(--text); }
    so this reaches the true top/sides of the scrollport before sticking, and
    an opaque background + bottom border keep timeline rows from showing
    through underneath it once stuck. */
-#run-live-progress {
+.lv-pin {
   position: sticky; top: -1.25rem; z-index: 2;
   margin: -1.25rem -1.25rem 0.6rem; padding: 1.25rem 1.25rem 0.6rem;
   background: var(--surface); border-bottom: 1px solid var(--border);

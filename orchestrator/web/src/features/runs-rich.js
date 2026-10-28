@@ -97,6 +97,12 @@ function refreshLive() {
   if (el) el.innerHTML = inFlightHtml(lastRuns, F, agents());
 }
 
+// findRun: the run record the Live Runs page last loaded for this id (null if it is not in that list).
+export function findRun(id) {
+  for (var i = 0; i < lastRuns.length; i++) if (lastRuns[i] && lastRuns[i].id === id) return lastRuns[i];
+  return null;
+}
+
 export function renderRunsSummary(runs) {
   lastRuns = runs || [];
   renderColsMenu();
