@@ -10,6 +10,7 @@ import (
 	"github.com/audspect/bas/internal/rwcontain"
 	"github.com/audspect/bas/internal/rwdetect"
 	"github.com/audspect/bas/internal/rwevidence"
+	"github.com/audspect/bas/internal/rwrecover"
 	"github.com/audspect/bas/internal/scenario"
 )
 
@@ -44,6 +45,10 @@ var ransomwareScenarioIDs = map[string]bool{
 // real-observer wiring is a later, separate piece of work. A no-op for any
 // scenario outside ransomwareScenarioIDs.
 func (h *Handler) recordRWEvidence(ctx context.Context, runID, scenarioID string, step scenario.Step, sim models.SimulationResult) {
+	h.recordRWEvidenceWith(ctx, runID, scenarioID, step, sim, &rwevidence.FakeRecoveryObserver{})
+}
+
+func (h *Handler) recordRWEvidenceWith(ctx context.Context, runID, scenarioID string, step scenario.Step, sim models.SimulationResult, recovery rwevidence.RecoveryObserver) {
 	if !ransomwareScenarioIDs[scenarioID] {
 		return
 	}
@@ -57,7 +62,7 @@ func (h *Handler) recordRWEvidence(ctx context.Context, runID, scenarioID string
 	}
 	deps := rwevidence.StepDependencies{
 		Prevention:     &controlval.FakeProvider{},
-		Recovery:       &rwevidence.FakeRecoveryObserver{},
+		Recovery:       recovery,
 		Containment:    h.containmentObserverFor(sim),
 		Detection:      h.detectionLookupFor(sim),
 		DataProtection: &rwevidence.FakeDataProtectionLookup{},
@@ -88,4 +93,46 @@ func (h *Handler) containmentObserverFor(sim models.SimulationResult) rwevidence
 		return &rwevidence.FakeContainmentObserver{}
 	}
 	return rwcontain.Observer{Devices: h.containmentDevices, Context: inlineAttemptContextSource{pool: h.db, sim: sim}}
+}
+
+// rwStep pairs a dispatched step with its interpreted result, so the whole
+// run's results can be read together once every step is in hand.
+type rwStep struct {
+	Step scenario.Step
+	Sim  models.SimulationResult
+}
+
+// recordRecoveryBatch grades Recovery for a VSS deletion attempt from the same
+// run's enumeration and survival steps. Those steps may be submitted after the
+// deletion, so this runs once all results are known and overwrites the
+// deletion's Recovery row. Scoped to ransomwareScenarioIDs and to steps that
+// carry the enumerate, vss_delete and survival action keys.
+func (h *Handler) recordRecoveryBatch(ctx context.Context, runID, scenarioID string, batch []rwStep) {
+	if !ransomwareScenarioIDs[scenarioID] {
+		return
+	}
+	var enumerate, deletion, survival *rwStep
+	for i := range batch {
+		s := &batch[i]
+		if models.NormalizeID(s.Step.TechniqueID) != "T1490" {
+			continue
+		}
+		switch s.Step.ActionKey {
+		case "enumerate":
+			enumerate = s
+		case "vss_delete":
+			deletion = s
+		case "survival":
+			survival = s
+		}
+	}
+	if deletion == nil || survival == nil {
+		return
+	}
+	enumerateOut := ""
+	if enumerate != nil {
+		enumerateOut = enumerate.Sim.RawOutput
+	}
+	grade := rwrecover.Grade(deletion.Sim.Result == models.ResultFail, enumerateOut, survival.Sim.RawOutput)
+	h.recordRWEvidenceWith(ctx, runID, scenarioID, deletion.Step, deletion.Sim, rwevidence.FixedRecoveryObserver{Result: grade})
 }

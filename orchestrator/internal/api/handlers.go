@@ -3187,6 +3187,7 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		simResults = make([]models.SimulationResult, 0, len(raw.Results))
+		var rwBatch []rwStep
 		for _, execResult := range raw.Results {
 			step, found := stepMap[execResult.TaskID]
 			if !found {
@@ -3196,7 +3197,9 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 			simResults = append(simResults, sim)
 			h.recordRWEvidence(r.Context(), raw.RunID, raw.ScenarioID, step, sim)
 			h.recordADEvidence(r.Context(), raw.RunID, raw.ScenarioID, step, sim)
+			rwBatch = append(rwBatch, rwStep{Step: step, Sim: sim})
 		}
+		h.recordRecoveryBatch(r.Context(), raw.RunID, raw.ScenarioID, rwBatch)
 	}
 
 	// Merge in any steps the server itself excluded before dispatch under a

@@ -368,6 +368,38 @@ steps:
     cleanup: ""
 
   # ---------------------------------------------------------------------------
+  # Stage 8b — Post-deletion survival check (read-only, T1490)
+  # ---------------------------------------------------------------------------
+  - name: "Akira Stage 8b — Post-Deletion VSS Survival Check (T1490)"
+    technique_id: T1490
+    action_key: survival
+    detection_profiles:
+      - windows_vss_inhibition
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Read-only: counts VSS shadow copies after the deletion stage with vssadmin list shadows. Changes nothing. Used to tell whether the copies targeted by the deletion survived."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: vssadmin.exe list shadows (post-step survival check)"
+    detection:
+      - "EDR: vssadmin.exe list invoked from PowerShell (read-only)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $vssOut = & vssadmin.exe list shadows 2>&1 | Out-String
+      if ($LASTEXITCODE -ne 0) {
+        Write-Output "SKIP T1490: survival check could not read VSS state (vssadmin exit $LASTEXITCODE). [BAS-SIM-AKIRA-S8B]"
+        return
+      }
+      $count = ([regex]::Matches($vssOut, 'Shadow Copy ID')).Count
+      Write-Output "EXEC T1490: survival check -- $count VSS shadow copy(ies) present after the deletion step. [BAS-SIM-AKIRA-S8B]"
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
   # Stage 9 — Indicator Removal: Event Log Clearing Attempt (T1070.001)
   # ---------------------------------------------------------------------------
   - name: "Akira Stage 9 — Event Log Clearing Attempt (T1070.001)"

@@ -891,6 +891,11 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "Read-only query of VSS service status and scheduled backup tasks (Get-Service, Get-ScheduledTask). No state changed.",
 		},
+		"survival": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "Read-only count of VSS shadow copies after the deletion stage (vssadmin list shadows). No state changed.",
+		},
 		"vss_delete": {
 			Class:             ClassDestructive,
 			DestructiveAction: "vss_delete",
