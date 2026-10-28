@@ -244,6 +244,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --preflight) mode=preflight ;;
     --install) mode=install ;;
+    --identity-status) mode=identity-status ;;
+    --reset-identity) mode=reset-identity ;;
     --enrollment-token-file) tokfile="$2"; shift ;;
   esac
   shift
@@ -252,6 +254,8 @@ secret=$(cat)
 printf 'STDIN %s %s\n' "$mode" "$secret" >> "$AGENT_LOG"
 if [ -n "$tokfile" ]; then printf 'TOKENFILE %s\n' "$(cat "$tokfile")" >> "$AGENT_LOG"; rm -f "$tokfile"; fi
 if [ "$mode" = preflight ]; then exit "${FAKE_PREFLIGHT_EXIT:-0}"; fi
+if [ "$mode" = identity-status ]; then exit "${FAKE_IDENTITY_EXIT:-0}"; fi
+if [ "$mode" = reset-identity ]; then exit "${FAKE_RESET_EXIT:-0}"; fi
 exit "${FAKE_INSTALL_EXIT:-0}"
 `
 
@@ -402,8 +406,11 @@ func TestMacSetupScript_AlreadyInstalledAsksForNothingAndChangesNothing(t *testi
 	root := t.TempDir()
 	_ = root
 	r2 := runMacScriptWithPlist(t)
-	if strings.Contains(r2.log, "hidden answer") || r2.agentLog != "" {
-		t.Errorf("an installed agent keeps its enrolment: no prompt and no agent run expected\nlog:\n%s\nagent:\n%s", r2.log, r2.agentLog)
+	if strings.Contains(r2.log, "hidden answer") || strings.Contains(r2.agentLog, "--install") || strings.Contains(r2.agentLog, "--reset-identity") {
+		t.Errorf("an installed agent with a current identity keeps its enrolment: no secret prompt, no install, no reset expected\nlog:\n%s\nagent:\n%s", r2.log, r2.agentLog)
+	}
+	if !strings.Contains(r2.agentLog, "--identity-status") {
+		t.Errorf("the installed identity must be checked:\n%s", r2.agentLog)
 	}
 	if !strings.Contains(strings.ToLower(r2.log), "already installed") {
 		t.Errorf("the user must be told it is already installed:\n%s", r2.log)
@@ -416,6 +423,41 @@ func runMacScriptWithPlist(t *testing.T) macRun {
 	plist := filepath.Join(t.TempDir(), "present.plist")
 	_ = os.WriteFile(plist, []byte("x"), 0o644)
 	return runMacScript(t, false, "arm64", map[string]string{"BAS_SETUP_PLIST": plist}, nil)
+}
+
+// An installed agent whose identity belongs to a different CA is enrolled again: the secret is asked, the reset (not a
+// fresh install) runs, the secret never reaches a command line, and nothing is left behind.
+func TestMacSetupScript_InstalledAgentFromAnotherCAIsReEnrolled(t *testing.T) {
+	plist := filepath.Join(t.TempDir(), "present.plist")
+	_ = os.WriteFile(plist, []byte("x"), 0o644)
+	r := runMacScript(t, false, "arm64", map[string]string{"BAS_SETUP_PLIST": plist, "FAKE_IDENTITY_EXIT": "29"}, nil)
+	if r.code != 0 {
+		t.Fatalf("exit %d\nlog:\n%s\nagent:\n%s\nout:\n%s", r.code, r.log, r.agentLog, r.out)
+	}
+	if !strings.Contains(r.agentLog, "--reset-identity") || strings.Contains(r.agentLog, "--install") {
+		t.Errorf("a stale identity must be reset, not reinstalled:\n%s", r.agentLog)
+	}
+	if !strings.Contains(r.agentLog, "STDIN reset-identity "+macSecretValue) {
+		t.Errorf("the secret must reach the reset on stdin:\n%s", r.agentLog)
+	}
+	for _, line := range strings.Split(r.agentLog, "\n") {
+		if strings.HasPrefix(line, "AGENT ") && strings.Contains(line, macSecretValue) {
+			t.Errorf("the secret is on a command line: %s", line)
+		}
+	}
+	assertNothingLeftBehind(t, r)
+}
+
+func TestMacSetupScript_AFailedReEnrolmentIsExplained(t *testing.T) {
+	plist := filepath.Join(t.TempDir(), "present.plist")
+	_ = os.WriteFile(plist, []byte("x"), 0o644)
+	r := runMacScript(t, false, "arm64", map[string]string{"BAS_SETUP_PLIST": plist, "FAKE_IDENTITY_EXIT": "29", "FAKE_RESET_EXIT": "28"}, nil)
+	if r.code == 0 {
+		t.Error("a failed re-enrolment must not exit 0")
+	}
+	if !strings.Contains(r.log, "Force Remove") {
+		t.Errorf("exit 28 must be explained:\n%s", r.log)
+	}
 }
 
 func TestMacSetupScript_ARejectedSecretIsExplainedAndNothingIsInstalled(t *testing.T) {

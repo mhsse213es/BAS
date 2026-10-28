@@ -160,6 +160,24 @@ public class InstallLogicTests
     }
 
     [Fact]
+    public void IdentityStatusAndResetArgsUseTheConfigAndNeverTheSecretOnTheCommandLine()
+    {
+        Assert.Equal("--identity-status --config \"d.json\" --config-fingerprint " + Fp, InstallLogic.BuildIdentityStatusArgs("d.json", Fp));
+        var r = InstallLogic.BuildResetIdentityArgs("d.json", Fp);
+        Assert.Equal("--reset-identity --config \"d.json\" --config-fingerprint " + Fp + " --secret-stdin", r);
+        Assert.DoesNotContain("--secret ", r);
+        Assert.Throws<ArgumentException>(() => InstallLogic.BuildResetIdentityArgs("a\"b.json", Fp));
+    }
+
+    [Theory]
+    [InlineData(29, true)]
+    [InlineData(0, false)]
+    [InlineData(25, false)]
+    [InlineData(1, false)]
+    public void OnlyExitCode29MeansTheIdentityIsStale(int code, bool stale)
+        => Assert.Equal(stale, InstallLogic.IdentityIsStale(code));
+
+    [Fact]
     public void VerifyAndPreflightArgsUseTheConfigAndNeverTheSecret()
     {
         var v = InstallLogic.BuildVerifyArgs("d.json", Fp);

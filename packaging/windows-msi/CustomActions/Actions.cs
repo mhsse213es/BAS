@@ -53,8 +53,10 @@ namespace Audspect.Installer
         {
             if (AgentServiceExists())
             {
-                session.Log("Audspect: an agent service is already registered; keeping its enrollment and configuration.");
                 session["AGENT_SERVICE_EXISTS"] = "1";
+                StageIdentityResetIfStale(session);
+                if (session["IDENTITY_STALE"] != "1")
+                    session.Log("Audspect: an agent service is already registered; keeping its enrollment and configuration.");
                 return ActionResult.Success;
             }
             var config = InstallLogic.ResolveConfigPath(session["DEPLOYMENT_CONFIG"], session["OriginalDatabase"]);
@@ -97,6 +99,55 @@ namespace Audspect.Installer
             data["token"] = token;
             data["env"] = session["ENV_LABEL"];
             session["RunAgentInstall"] = data.ToString();
+            return ActionResult.Success;
+        }
+
+        /// <summary>
+        /// An agent is already installed. If the bundle carries a different deployment CA than the one the installed agent
+        /// enrolled under, the old identity can never connect, so stage a re-enrolment (RunIdentityReset) instead of keeping
+        /// it. Any problem checking leaves the existing behaviour: keep the enrolment.
+        /// </summary>
+        static void StageIdentityResetIfStale(Session session)
+        {
+            string dir = null;
+            try
+            {
+                var config = InstallLogic.ResolveConfigPath(session["DEPLOYMENT_CONFIG"], session["OriginalDatabase"]);
+                var fp = session["CONFIG_FINGERPRINT"];
+                if (string.IsNullOrWhiteSpace(fp)) fp = InstallLogic.ReadBundledFingerprint(session["OriginalDatabase"], File.Exists, File.ReadAllText) ?? fp;
+                if (InstallLogic.ValidateInstallInputs(config, fp, "x", File.Exists) != null) return;
+                var exe = ExtractAgent(session, out dir);
+                var run = InstallLogic.RunAgent(exe, InstallLogic.BuildIdentityStatusArgs(config, fp), "", 30000);
+                if (run.TimedOut || !InstallLogic.IdentityIsStale(run.ExitCode)) return;
+                session.Log("Audspect: the installed agent's identity was issued by a different deployment CA; it will be re-enrolled.");
+                var data = new CustomActionData();
+                data["exe"] = AgentExe(session["INSTALLFOLDER"]);
+                data["config"] = config;
+                data["fp"] = fp;
+                data["secret"] = InstallLogic.ResolveSecret(session["AGENT_SECRET"], Environment.GetEnvironmentVariable(InstallLogic.SecretEnvVar));
+                data["token"] = InstallLogic.ResolveToken(session["ENROLLMENT_TOKEN"], Environment.GetEnvironmentVariable(InstallLogic.TokenEnvVar));
+                session["RunIdentityReset"] = data.ToString();
+                session["IDENTITY_STALE"] = "1";
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is IOException || ex is ArgumentException)
+            {
+                session.Log("Audspect: could not check the installed agent's identity (" + ex.Message + "); keeping it.");
+            }
+            finally { if (dir != null) TryDelete(dir); }
+        }
+
+        /// <summary>Deferred (SYSTEM): re-enrols an installed agent whose identity belongs to a different CA. Service and files untouched.</summary>
+        [CustomAction]
+        public static ActionResult RunIdentityReset(Session session)
+        {
+            var d = session.CustomActionData;
+            string args;
+            try { args = InstallLogic.BuildResetIdentityArgs(d["config"], d["fp"]); }
+            catch (ArgumentException) { Fail(session, "The deployment configuration inputs are invalid."); return ActionResult.Failure; }
+            var run = InstallLogic.RunAgent(d["exe"], args, d["secret"], AgentTimeoutMs, d["token"]);
+            if (!string.IsNullOrEmpty(run.Output)) session.Log("Audspect agent output:" + Environment.NewLine + run.Output);
+            if (run.TimedOut) { Fail(session, "Re-enrolling the agent did not finish in time."); return ActionResult.Failure; }
+            if (run.ExitCode != 0) { Fail(session, InstallLogic.DescribeExitCode(run.ExitCode)); return ActionResult.Failure; }
             return ActionResult.Success;
         }
 

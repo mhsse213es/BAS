@@ -161,6 +161,17 @@ namespace Audspect.Installer
             return null;
         }
 
+        /// <summary>Asks the agent whether its installed identity belongs to the CA in the bundle; changes nothing.</summary>
+        public static string BuildIdentityStatusArgs(string configPath, string fingerprint)
+            => "--identity-status --config \"" + Checked(configPath) + "\" --config-fingerprint " + Fp(fingerprint);
+
+        /// <summary>Re-enrols an installed agent whose identity belongs to a different CA; the secret goes on stdin.</summary>
+        public static string BuildResetIdentityArgs(string configPath, string fingerprint)
+            => "--reset-identity --config \"" + Checked(configPath) + "\" --config-fingerprint " + Fp(fingerprint) + " --secret-stdin";
+
+        /// <summary>--identity-status exit code 29: the installed identity was not issued by the bundle's CA.</summary>
+        public static bool IdentityIsStale(int exitCode) => exitCode == 29;
+
         public static string BuildVerifyArgs(string configPath, string fingerprint)
             => "--verify-config --config \"" + Checked(configPath) + "\" --config-fingerprint " + Fp(fingerprint);
 

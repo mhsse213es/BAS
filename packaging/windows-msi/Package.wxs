@@ -90,6 +90,7 @@
     <CustomAction Id="PrepareAgentRemoval" BinaryRef="AudspectCA" DllEntry="PrepareAgentRemoval" Execute="immediate" Return="check" />
     <CustomAction Id="RunAgentInstall" BinaryRef="AudspectCA" DllEntry="RunAgentInstall" Execute="deferred" Impersonate="no" Return="check" />
     <CustomAction Id="RollbackAgentInstall" BinaryRef="AudspectCA" DllEntry="RollbackAgentInstall" Execute="rollback" Impersonate="no" Return="ignore" />
+    <CustomAction Id="RunIdentityReset" BinaryRef="AudspectCA" DllEntry="RunIdentityReset" Execute="deferred" Impersonate="no" Return="check" />
     <CustomAction Id="RunAgentUninstall" BinaryRef="AudspectCA" DllEntry="RunAgentUninstall" Execute="deferred" Impersonate="no" Return="check" />
     <CustomAction Id="RefreshAgentIntegrity" BinaryRef="AudspectCA" DllEntry="RefreshAgentIntegrity" Execute="deferred" Impersonate="no" Return="ignore" />
 
@@ -105,6 +106,9 @@
 
       <!-- Upgrade or repair: the files were replaced, so re-store the integrity hash. -->
       <Custom Action="RefreshAgentIntegrity" After="InstallFiles" Condition="REMOVE&lt;&gt;&quot;ALL&quot; AND AGENT_SERVICE_EXISTS" />
+
+      <!-- Upgrade or repair over an agent enrolled under a different CA: re-enrol it. Service and files are untouched. -->
+      <Custom Action="RunIdentityReset" After="RefreshAgentIntegrity" Condition="REMOVE&lt;&gt;&quot;ALL&quot; AND AGENT_SERVICE_EXISTS AND IDENTITY_STALE" />
 
       <!-- Real uninstall only, never during a major upgrade of this product. -->
       <Custom Action="RunAgentUninstall" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />

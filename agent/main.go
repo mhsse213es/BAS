@@ -42,6 +42,8 @@ func main() {
 
 	flagConfig := flag.String("config", "", "Path to the signed deployment.json; replaces --server, --enroll-port and --ca-root. Requires --config-fingerprint")
 	flagConfigFingerprint := flag.String("config-fingerprint", "", "SHA-256 fingerprint of the deployment signing certificate, obtained from the dashboard (not from the downloaded files)")
+	flagIdentityStatus := flag.Bool("identity-status", false, "Report, without changing anything, whether the installed agent identity belongs to the CA in --config; exit 29 if it is stale. Installers use it to decide to re-enrol")
+	flagResetIdentity := flag.Bool("reset-identity", false, "Re-enrol an installed agent whose identity belongs to a different CA than --config: moves the old identity aside, stores the new CA and spends the enrolment token. Leaves the service and files alone; exit 0 if nothing needed doing")
 	flagVerifyConfig := flag.Bool("verify-config", false, "Verify --config against --config-fingerprint and print the verified target; exit 25 if rejected")
 
 	registerPlatformFlags()
@@ -49,6 +51,15 @@ func main() {
 
 	if *flagVerifyConfig {
 		os.Exit(runVerifyConfigCLI(deployFlags{ConfigPath: *flagConfig, Fingerprint: *flagConfigFingerprint}, time.Now(), os.Stdout))
+	}
+
+	if *flagIdentityStatus {
+		os.Exit(runIdentityStatusCLI(deployFlags{ConfigPath: *flagConfig, Fingerprint: *flagConfigFingerprint}, time.Now(), os.Stdout))
+	}
+
+	if *flagResetIdentity {
+		os.Exit(runResetIdentityCLI(deployFlags{ConfigPath: *flagConfig, Fingerprint: *flagConfigFingerprint},
+			*flagSecret, *flagSecretStdin, *flagTokenFile, *flagTokenStdin, *flagEnv))
 	}
 
 	if *flagPreflight {

@@ -52,6 +52,10 @@ const (
 	// let a new install replace it on the shared secret alone. An administrator must Force Remove the host in the
 	// console or issue an enrolment token for it.
 	CodeAlreadyEnrolled = 28
+
+	// CodeIdentityStale: --identity-status found an agent certificate that was not issued by the deployment CA in the
+	// supplied configuration. An installer reads this to decide to re-enrol instead of keeping the old identity.
+	CodeIdentityStale = 29
 )
 
 const defaultEnrollPort = "9444"

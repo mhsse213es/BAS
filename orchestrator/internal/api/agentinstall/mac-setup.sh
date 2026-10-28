@@ -84,15 +84,38 @@ if [ "${1:-}" = "--do-install" ]; then
 	exit 0 # the outcome is reported through the result file; a non-zero exit here would hide it
 fi
 
+# ---- root phase: only look at the installed identity; changes nothing ----------------------------------------------
+if [ "${1:-}" = "--do-check" ]; then
+	FP="$(tr -d ' 
+' <"$RES/deployment.fingerprint")"
+	"$AGENT" --identity-status --config "$RES/deployment.json" --config-fingerprint "$FP" </dev/null >/dev/null 2>&1
+	echo $? >"$2"
+	exit 0
+fi
+
+# ---- root phase: re-enrol an installed agent whose identity belongs to a different CA ---------------------------------
+if [ "${1:-}" = "--do-reset" ]; then
+	SECRETFILE="$2"
+	TOKENFILE="${3:-}"
+	RESULT="$4"
+	FP="$(tr -d ' 
+' <"$RES/deployment.fingerprint")"
+	if [ -n "$TOKENFILE" ]; then
+		"$AGENT" --reset-identity --config "$RES/deployment.json" --config-fingerprint "$FP" 			--enrollment-token-file "$TOKENFILE" --secret-stdin <"$SECRETFILE" >"$RESULT.log" 2>&1
+	else
+		"$AGENT" --reset-identity --config "$RES/deployment.json" --config-fingerprint "$FP" 			--secret-stdin <"$SECRETFILE" >"$RESULT.log" 2>&1
+	fi
+	RC=$?
+	echo $RC >"$RESULT"
+	# the running agent still holds the old identity in memory: restart it so it connects with the new one
+	if [ "$RC" -eq 0 ]; then launchctl kickstart -k system/com.audspect.bas-agent >/dev/null 2>&1; fi
+	exit 0
+fi
+
 # ---- first phase: runs as the logged-in user --------------------------------------------------------------------
 if [ -z "$RES" ] || [ ! -f "$AGENT" ] || [ ! -f "$RES/deployment.json" ] || [ ! -f "$RES/deployment.fingerprint" ]; then
 	dialog "This copy of the setup is incomplete. Download it again from the Audspect dashboard." stop
 	exit 1
-fi
-
-if [ -e "$PLIST" ]; then
-	dialog "The Audspect Agent is already installed on this Mac. Nothing was changed." note
-	exit 0
 fi
 
 # The app is for one kind of Mac; running the other kind's agent would fail late and confusingly.
@@ -121,6 +144,21 @@ xattr -dr com.apple.quarantine "$RES" >/dev/null 2>&1
 umask 077
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/audspect-setup.XXXXXX")" || { dialog "Could not create a private working folder." stop; exit 1; }
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
+
+# An agent is already installed. Keep it, unless it was enrolled under a different deployment CA than this app carries:
+# such an identity can never connect, so re-enrol it. The identity is readable only by root, hence the prompt.
+PHASE="--do-install"
+if [ -e "$PLIST" ]; then
+	CHK="/bin/sh $(quote "$SELF") --do-check $(quote "$WORK/check")"
+	osascript -e 'on run argv' 		-e 'do shell script (item 1 of argv) with administrator privileges with prompt "The Audspect Agent needs administrator access to check the agent already installed on this Mac."' 		-e 'end run' "$CHK" >/dev/null 2>&1
+	if [ "$(cat "$WORK/check" 2>/dev/null)" = "29" ]; then
+		PHASE="--do-reset"
+		dialog "The Audspect Agent on this Mac was set up for a different Audspect server certificate and cannot connect. This setup will enroll it again." note
+	else
+		dialog "The Audspect Agent is already installed on this Mac. Nothing was changed." note
+		exit 0
+	fi
+fi
 
 SECRET="$(ask "Enter the agent secret provided by your administrator. It is checked with your Audspect server and is never shown or stored in a command." "Install")" || exit 0
 if [ -z "$SECRET" ]; then
@@ -152,7 +190,7 @@ if [ "$RC" -ne 0 ]; then
 	exit 1
 fi
 
-CMD="/bin/sh $(quote "$SELF") --do-install $(quote "$WORK/secret") $(quote "$TOKENFILE") $(quote "$WORK/result")"
+CMD="/bin/sh $(quote "$SELF") $PHASE $(quote "$WORK/secret") $(quote "$TOKENFILE") $(quote "$WORK/result")"
 OUT="$(osascript -e 'on run argv' \
 	-e 'do shell script (item 1 of argv) with administrator privileges with prompt "The Audspect Agent needs administrator access to install."' \
 	-e 'end run' "$CMD" 2>&1)"
@@ -167,7 +205,11 @@ fi
 
 RC="$(cat "$WORK/result" 2>/dev/null)"
 if [ "$RC" = "0" ]; then
-	dialog "The Audspect Agent is installed and running. It will appear in the dashboard within about a minute." note
+	if [ "$PHASE" = "--do-reset" ]; then
+		dialog "The Audspect Agent was enrolled again and restarted. It will reconnect within about a minute." note
+	else
+		dialog "The Audspect Agent is installed and running. It will appear in the dashboard within about a minute." note
+	fi
 	exit 0
 fi
 dialog "$(describe "${RC:-1}")" stop

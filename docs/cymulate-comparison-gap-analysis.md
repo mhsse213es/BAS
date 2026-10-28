@@ -161,8 +161,14 @@ own directions and are not part of this comparison.
 - **All three installers** end in the agent's own `--install`, which calls `clearStaleIdentity` (`agent/identity_reset.go`, unit-tested in
   `identity_reset_test.go`): an identity whose certificate does not chain to the CA being installed is moved aside and the agent enrols again.
   So a fresh install over leftover certificates from an old CA works on Windows, macOS and Linux.
-- **Gap:** the Windows MSI (`PrepareAgentInstall`) and the macOS app (`mac-setup.sh`) skip `--install` entirely when the agent service or
-  launch daemon already exists ("keeping its enrollment"; "Nothing was changed"). Re-running either over a still-installed agent from an old CA
-  does not re-enrol it. Only the Linux script runs the check before reinstalling. Workaround: uninstall (which removes the certificates), then install.
-  For a fleet, the signed CA-delivery command (audit F-09) is the intended path. Not changed: whether an installer should override an existing enrolment is a
-  product decision, and the live behaviour has not been run on a Windows or macOS machine.
+- **Gap closed 2026-10-28 (owner decision: an installer should override an enrolment from an old CA).** The agent gained two modes:
+  `--identity-status` (read-only; exit 29 when the installed certificate does not chain to the bundle's CA; an unreadable certificate is
+  never called stale) and `--reset-identity` (moves the old identity aside, stores the new CA, spends the enrolment token; leaves the service and
+  files alone; exit 28 if the server refuses to replace the active agent). The **MSI** checks on upgrade/repair and, if stale, runs
+  `RunIdentityReset` after the files are copied; the **macOS app** checks as root, tells the person, asks for the secret (and token) and runs the reset,
+  then restarts the daemon. An agent whose identity still matches the CA is left exactly as before. Deliberately not done: calling `--uninstall` first, because it
+  purges the install folder and schedules binary deletion on reboot.
+- **Tests run:** agent suite (new: status, reset, unreadable certificate), MSI C# tests (66 pass, includes the new argument builders), and the macOS
+  script behaviour tests (current identity left alone; stale identity re-enrolled with the secret on stdin only; exit 28 explained).
+  **Not run:** the MSI itself (Package.wxs sequencing was edited but the package has not been built or installed), a real macOS machine, and a live old-CA agent.
+  The Windows silent upgrade needs `AUDSPECT_AGENT_SECRET` (and `AUDSPECT_ENROLLMENT_TOKEN` when the server issues tokens) set; the wizard does not ask for them on an upgrade.

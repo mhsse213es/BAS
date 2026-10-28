@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"audspect/agent/preflight"
 	"time"
 )
 
@@ -116,5 +118,90 @@ func TestClearStaleIdentity_NoIdentityIsNoop(t *testing.T) {
 	moved, err := clearStaleIdentity(caA)
 	if err != nil || moved {
 		t.Fatalf("moved=%v err=%v, want no-op", moved, err)
+	}
+}
+
+func TestIdentityStatus_ReportsStaleWithoutMovingAnything(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	_, keyA, certA := newCA(t, "A")
+	caB, _, _ := newCA(t, "B")
+	writeLeaf(t, dir, keyA, certA)
+	if got := identityStatus(caB); got != preflight.CodeIdentityStale {
+		t.Fatalf("identityStatus = %d, want %d (stale)", got, preflight.CodeIdentityStale)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "agent-cert.pem")); err != nil {
+		t.Fatalf("a status check must not move the identity: %v", err)
+	}
+}
+
+func TestIdentityStatus_CurrentOrAbsentIsOK(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	caA, keyA, certA := newCA(t, "A")
+	if got := identityStatus(caA); got != 0 {
+		t.Fatalf("no identity: identityStatus = %d, want 0", got)
+	}
+	writeLeaf(t, dir, keyA, certA)
+	if got := identityStatus(caA); got != 0 {
+		t.Fatalf("matching identity: identityStatus = %d, want 0", got)
+	}
+}
+
+func TestResetIdentity_StaleIsMovedCAUpdatedAndTokenSpent(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	_, keyA, certA := newCA(t, "A")
+	caB, _, _ := newCA(t, "B")
+	writeLeaf(t, dir, keyA, certA)
+	spent := ""
+	reset, err := resetIdentity(deployment{Server: "https://s:9443", CARootPEM: caB}, "tok-1", func(tok string) error { spent = tok; return nil })
+	if err != nil || !reset {
+		t.Fatalf("reset=%v err=%v, want true,nil", reset, err)
+	}
+	if spent != "tok-1" {
+		t.Errorf("token spent = %q, want tok-1", spent)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "agent-cert.pem")); !os.IsNotExist(err) {
+		t.Error("the stale certificate is still in place")
+	}
+}
+
+func TestResetIdentity_CurrentIdentityChangesNothingAndSpendsNoToken(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	caA, keyA, certA := newCA(t, "A")
+	writeLeaf(t, dir, keyA, certA)
+	reset, err := resetIdentity(deployment{CARootPEM: caA}, "tok-2", func(string) error { t.Fatal("token spent for a current identity"); return nil })
+	if err != nil || reset {
+		t.Fatalf("reset=%v err=%v, want false,nil", reset, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "agent-cert.pem")); err != nil {
+		t.Errorf("a current identity was touched: %v", err)
+	}
+}
+
+func TestResetIdentity_EnrollFailureIsReturned(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	_, keyA, certA := newCA(t, "A")
+	caB, _, _ := newCA(t, "B")
+	writeLeaf(t, dir, keyA, certA)
+	_, err := resetIdentity(deployment{CARootPEM: caB}, "t", func(string) error { return os.ErrPermission })
+	if err == nil {
+		t.Fatal("an enrolment failure must be returned, not hidden")
+	}
+}
+
+func TestIdentityStatus_UnreadableCertificateIsKeptNotCalledStale(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	caB, _, _ := newCA(t, "B")
+	// a directory where the certificate file should be: it exists but cannot be read as a file
+	if err := os.Mkdir(filepath.Join(dir, "agent-cert.pem"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if got := identityStatus(caB); got != 0 {
+		t.Fatalf("identityStatus = %d, want 0: an identity that cannot be read must never trigger a reset", got)
 	}
 }
