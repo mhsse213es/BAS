@@ -41,12 +41,21 @@ func runOpenAEVSync(ctx context.Context, pool *pgxpool.Pool) (*openaev.SyncResul
 	} else if result != nil {
 		created, updated, skipped, errored = result.Created, result.Updated, result.Skipped, result.Errored
 	}
-	_, _ = pool.Exec(ctx,
+	if err := recordOpenAEVSyncOutcome(ctx, pool, status, lastErr, created, updated, skipped, errored); err != nil {
+		log.Printf("[openaev] could not record sync outcome: %v", err)
+	}
+	return result, syncErr
+}
+
+// recordOpenAEVSyncOutcome writes the last-sync timestamp, status and counts to the
+// config row. It returns the write's error so a failed write is never silent.
+func recordOpenAEVSyncOutcome(ctx context.Context, pool *pgxpool.Pool, status, lastErr string, created, updated, skipped, errored int) error {
+	_, err := pool.Exec(ctx,
 		`UPDATE openaev_config SET last_sync_at = NOW(), last_sync_status = $1, last_error = $2,
 		   last_sync_created = $3, last_sync_updated = $4, last_sync_skipped = $5, last_sync_errored = $6
 		 WHERE id = 1`,
 		status, lastErr, created, updated, skipped, errored)
-	return result, syncErr
+	return err
 }
 
 // openAEVSyncDue reports whether an automatic sync should run now. It runs when the
@@ -115,4 +124,9 @@ func resultCount(r *openaev.SyncResult, created bool) int {
 		return r.Created
 	}
 	return r.Errored
+}
+
+// RecordOpenAEVSyncOutcome is the exported form for the background poller in main.
+func RecordOpenAEVSyncOutcome(ctx context.Context, pool *pgxpool.Pool, status, lastErr string, created, updated, skipped, errored int) error {
+	return recordOpenAEVSyncOutcome(ctx, pool, status, lastErr, created, updated, skipped, errored)
 }

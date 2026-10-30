@@ -74,3 +74,30 @@ func TestRunOpenAEVSync_FailureRecordedOnConfig(t *testing.T) {
 		}
 	})
 }
+
+// The outcome write must report its error. A swallowed write would leave the status
+// page showing an old sync while the sync itself reported success.
+func TestRecordOpenAEVSyncOutcome_ReturnsWriteError(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		setOpenAEVConfig(t, pool, "http://127.0.0.1:1", true, 24, nil)
+
+		canceled, cancel := context.WithCancel(context.Background())
+		cancel()
+		if err := recordOpenAEVSyncOutcome(canceled, pool, "ok", "", 1, 2, 3, 0); err == nil {
+			t.Fatal("expected an error from a canceled write, got nil")
+		}
+
+		if err := recordOpenAEVSyncOutcome(context.Background(), pool, "ok", "", 1, 2, 3, 0); err != nil {
+			t.Fatalf("live write returned error: %v", err)
+		}
+		var status string
+		var created int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT last_sync_status, last_sync_created FROM openaev_config WHERE id = 1`).Scan(&status, &created); err != nil {
+			t.Fatalf("read back: %v", err)
+		}
+		if status != "ok" || created != 1 {
+			t.Errorf("status=%q created=%d, want ok and 1", status, created)
+		}
+	})
+}
