@@ -16,7 +16,7 @@ import { seg } from '../core/kit.js';
 import { loadRuns, loadSIEMCorrelationPanel, openModal, viewRunResults } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
 import { describePhishingRun } from './phishing-run-view.js';
-import { LIBRARY_TYPE_PHISHING, buildDispatchFields, buildPhishingRunRequest, libraryEntryRoute, phishingLibraryCounts, showNoScenariosMessage } from './scenario-library-route.js';
+import { LIBRARY_TYPE_PHISHING, buildDispatchFields, buildPhishingRunRequest, withExecutionLink, libraryEntryRoute, phishingLibraryCounts, showNoScenariosMessage } from './scenario-library-route.js';
 import { ROLE, setAgentsView, showTab } from './shell.js';
 import { sourceOf as scnSourceOf, heroStats as scnHeroStats, filterList as scnFilterList, sortList as scnSortList, categoryRows as scnCategoryRows, showing as scnShowing } from './scn-model.js';
 import { catsHtml as scnCatsHtml, toolbarHtml as scnToolbarHtml, gridHtml as scnGridHtml, emptyHtml as scnEmptyHtml, scnUi, setScenarioViewMode, setScenarioSortMode, setScenarioCatOffMode, hideFilterSelects, openDrawer as openScnDrawer, closeDrawer as closeScnDrawer, drawerTab, drawerScenarioId, paintDrawer, bindApproveButton, runById as scnRunById } from './scn-rich.js';
@@ -1818,7 +1818,9 @@ function phishingFormHTML(entry) {
     '<label class="sc-param">Test window ends<input type="datetime-local" data-dispatch="testWindowEnd"></label>' +
     '<label class="sc-param">Campaign (optional)<input type="text" data-dispatch="campaignId"></label>' +
     '</fieldset>';
-  return '<div class="sc-phishing-form" data-form-for="' + x(entry.id) + '">' + fields + dispatch +
+  // Optional: the exercise execution this run belongs to. Left empty, the run is unlinked.
+  var link = '<label class="sc-param">Test execution ID (optional)<input type="text" data-execution-link></label>';
+  return '<div class="sc-phishing-form" data-form-for="' + x(entry.id) + '">' + fields + link + dispatch +
     '<button type="button" data-library-submit>Run</button> ' +
     '<button type="button" data-library-cancel>Cancel</button></div>';
 }
@@ -1860,7 +1862,8 @@ function submitPhishingForm() {
   el.querySelectorAll('[data-param]').forEach(function(input) {
     values[input.getAttribute('data-param')] = input.value;
   });
-  var built = buildPhishingRunRequest(entry, values);
+  var linkInput = el.querySelector('[data-execution-link]');
+  var built = withExecutionLink(buildPhishingRunRequest(entry, values), linkInput ? linkInput.value : '');
   if (!built.ok) {
     showToast('Check these fields: ' + built.errors.join(', '), 'err');
     return;

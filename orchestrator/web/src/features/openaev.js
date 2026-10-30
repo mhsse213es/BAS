@@ -8,6 +8,7 @@ import { apRichBody } from './rich-g4.js';
 import { setExRows, setExError, setExPlans, setExPlansError } from './ex-view.js';
 import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js';
 import { ROLE, showTab } from './shell.js';
+import { describePhishingRun } from './phishing-run-view.js';
 import { displayOf, setDisplay } from '../core/inline-style.js';
 
 
@@ -245,7 +246,12 @@ export function launchExercisePrompt(planId) {
 var _exDetailOpenId = null;
 export function openExerciseDetail(id) {
   _exDetailOpenId = id;
-  apicall('/api/exercises/executions/' + encodeURIComponent(id)).then(function(d) {
+  Promise.all([
+    apicall('/api/exercises/executions/' + encodeURIComponent(id)),
+    apicall('/api/exercises/executions/' + encodeURIComponent(id) + '/phishing-runs').catch(function() { return []; })
+  ]).then(function(res) {
+    var d = res[0];
+    var phishing = Array.isArray(res[1]) ? res[1] : [];
     var ex = d.execution || {}, steps = d.steps || [];
     document.getElementById('exercise-detail-title').textContent = ex.name || ex.plan_id || 'Execution';
     var sc = ex.score;
@@ -322,7 +328,15 @@ export function openExerciseDetail(id) {
     }).join('');
     var actions = (ex.status === 'running' || ex.status === 'paused') ?
       '<button class="btn btn-outline btn-sm"' + on('click', 'abortExecution', id) + '>Abort</button>' : '';
-    document.getElementById('exercise-detail-body').innerHTML = scoreHtml + stepsHtml + '<div style="margin-top:0.75rem">' + actions + '</div>';
+    // Phishing runs linked to this execution, described by the same view as the library.
+    var phishingHtml = phishing.length ? '<div style="margin-bottom:0.75rem"><div class="tiny muted">Phishing runs linked to this execution</div>' +
+      phishing.map(function(run) {
+        var v = describePhishingRun(run);
+        var rows = (v.rows || []).map(function(r) { return '<div class="tiny">' + x(r.label) + ': ' + x(r.text) + '</div>'; }).join('');
+        return '<div style="padding:0.4rem 0;border-bottom:1px solid var(--border)"><span>' + x(v.scenarioId) + '</span> <span class="badge">' + x(v.status) + '</span>' +
+          (v.note ? '<div class="tiny muted">' + x(v.note) + '</div>' : '') + rows + '</div>';
+      }).join('') + '</div>' : '';
+    document.getElementById('exercise-detail-body').innerHTML = scoreHtml + stepsHtml + phishingHtml + '<div style="margin-top:0.75rem">' + actions + '</div>';
     document.getElementById('exercise-detail-overlay').classList.add('open');
   }).catch(function() {});
 }
