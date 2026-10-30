@@ -92,6 +92,7 @@ func TestPhishingRunPipeline_EndToEnd(t *testing.T) {
 // evidence must never be reported as a passing control.
 func TestPhishingRunPipeline_NoEvidence_ReportShowsNotTestedNeverPass(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedExecutionID(t, pool, "exec-1")
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
 			WithPhishingRun(phishbridge.NewFixtureReportTicketProvider(nil))
 
@@ -135,6 +136,7 @@ func TestPhishingRunPipeline_NoEvidence_ReportShowsNotTestedNeverPass(t *testing
 // finish. No run row may exist afterwards.
 func TestPhishingRunPipeline_UnconfiguredProvider_RefusedBeforeRun(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedExecutionID(t, pool, "exec-1")
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret) // no WithPhishingRun
 
 		triggerRec := callAuthed(h.TriggerPhishingRun, triggerPhishingRunReq(t, pool, map[string]any{
@@ -165,6 +167,7 @@ func TestPhishingRunPipeline_Unauthorized_401Then403(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedExecutionID(t, pool, "exec-1")
 		router := mountTestRouter(t)
 		body, _ := json.Marshal(map[string]any{"scenarioId": "PH-DET-002", "parameters": map[string]any{"executionId": "exec-1", "targetId": "target-1"}})
 

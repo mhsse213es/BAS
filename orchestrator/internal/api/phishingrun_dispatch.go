@@ -131,6 +131,7 @@ func startPhishingDispatch(ctx context.Context, pool *pgxpool.Pool, env Phishing
 	run := &phishingrun.PhishingRun{
 		ID: newID(), ScenarioID: req.ScenarioID, Status: phishingrun.StatusPending,
 		Result: pending, InitiatedBy: req.InitiatedBy, StartedAt: time.Now().UTC(),
+		ExecutionID: executionIDFromParams(req.Parameters),
 	}
 	if err := db.InsertPhishingRun(ctx, pool, run); err != nil {
 		var pgErr *pgconn.PgError

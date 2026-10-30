@@ -41,6 +41,13 @@ func (h *Handler) TriggerPhishingRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A run may name the exercise execution it belongs to. An unknown one is refused
+	// here, before any row exists, so no run is ever linked to nothing.
+	if err := h.checkExecutionLink(r.Context(), req.Parameters); err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
 		req.InitiatedBy = c.UserID
 	}
