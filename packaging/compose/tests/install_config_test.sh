@@ -174,5 +174,45 @@ grep -q '^BAS_RECOVERY_PASSPHRASE=Zz9yXx8wVv7UuT$' <<<"$out" && pass "a new valu
 
 grep -q 'BAS_RECOVERY_PASSPHRASE: ${BAS_RECOVERY_PASSPHRASE:-}' "${here}/../docker-compose.yml" && pass "compose passes the recovery passphrase through" || fail "compose does not pass the recovery passphrase"
 
+# Aleef secret references: setup.conf ALEEF_SECRET_* -> load_config -> _write_env -> aleef-secrets.env.
+# Prints "rc=<n>", "mode=<octal>" and the file ("none" if absent), or the error. chown is stubbed (needs root).
+run_aleef() {
+  local tmp; tmp="$(mktemp -d)"
+  printf 'DATA_DIR=%s\nDNS_SINK_BIND_IP=10.0.0.1\nDB_PASSWORD=db-pw-test-only\nADMIN_EMAIL=admin@example.com\nADMIN_PASSWORD=admin-pw-test-only-1\nLIC_PATH=/dev/null\n%b\n' \
+    "$tmp" "$1" > "$tmp/setup.conf"
+  (
+    err() { echo "ERR: $*"; }; log() { :; }; warn() { :; }; chown() { :; }
+    DEFAULT_DATA_DIR="$tmp"; DEFAULT_PORT=9443; DEFAULT_ENROLL_PORT=9444
+    DEFAULT_LEGACY_PORT=9000; DEFAULT_DASHBOARD_PORT=9543
+    BAS_VERSION=test; COMPOSE_PROJECT=audspect
+    eval "$(grep -E '^[A-Z_][A-Z0-9_]*=""$' "$install_sh")"
+    eval "$(grep -E '^ALEEF_SECRET_LINES=\(\)' "$install_sh" | sed 's/#.*//')"
+    info() { :; }
+    for f in load_config validate_phish_scope validate_emailgw_config validate_k8s_scenario_config validate_k8s_discovery_config _write_aleef_secrets _write_env; do eval "$(extract "$f")"; done
+    MODE="${RUN_MODE:-}"
+    load_config "$tmp/setup.conf" && validate_phish_scope && validate_emailgw_config && validate_k8s_scenario_config && validate_k8s_discovery_config && _write_aleef_secrets && { echo "mode=$(stat -c %a "$tmp/aleef-secrets.env")"; cat "$tmp/aleef-secrets.env"; if [[ -n "${TWICE:-}" ]]; then _write_aleef_secrets; echo "again:"; cat "$tmp/aleef-secrets.env"; fi; }
+  ) 2>&1
+  echo "rc=$?"
+  rm -rf "$tmp"
+}
+
+out="$(run_aleef '')"
+grep -Eq '^mode=(600|644)$' <<<"$out" && grep -q 'rc=0' <<<"$out" && ! grep -q 'ALEEF' <<<"$out" && pass "aleef: no secrets -> empty 0600 file" || fail "aleef empty: $out"
+
+out="$(TWICE=1 run_aleef 'ALEEF_SECRET_LAB_ALICE=tok-alice\n# c\nALEEF_SECRET_LAB_BOB=tok=bob   # inline note')"
+grep -q '^ALEEF_SECRET_LAB_ALICE=tok-alice$' <<<"$out" && grep -q '^ALEEF_SECRET_LAB_BOB=tok=bob$' <<<"$out" && pass "aleef: two refs written (0600 on Linux; NTFS cannot show it)" || fail "aleef write: $out"
+[[ "$(grep -c '^ALEEF_SECRET_LAB_ALICE=' <<<"$out")" == 2 ]] && pass "aleef: rewrite is idempotent (no duplicates)" || fail "aleef idempotent: $out"
+
+for bad in 'ALEEF_SECRET_X="has\\"quote"' "ALEEF_SECRET_X=has'quote" 'ALEEF_SECRET_X=back\\slash' 'ALEEF_SECRET_lower=abc' 'ALEEF_SECRET_=abc'; do
+  out="$(run_aleef "$bad")"
+  if grep -q 'ERR: ' <<<"$out" && ! grep -q 'rc=0' <<<"$out" && ! grep -Eq 'quote"|has.quote|back.?slash$|=abc' <<<"$out"; then
+    pass "aleef: refused without printing the value ($bad)"
+  else
+    fail "aleef bad value not refused cleanly ($bad): $out"
+  fi
+done
+
+grep -q 'ALEEF_SECRETS_FILE: /etc/bas/aleef-secrets.env' "${here}/../docker-compose.yml" && grep -q 'aleef-secrets.env:/etc/bas/aleef-secrets.env:ro' "${here}/../docker-compose.yml" && pass "compose mounts the aleef secrets file read-only" || fail "compose aleef mount missing"
+
 echo
 [[ $fails -eq 0 ]] && echo "ALL PASS" || { echo "${fails} FAILED"; exit 1; }

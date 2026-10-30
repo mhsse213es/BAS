@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -734,5 +736,88 @@ func TestAleefEnvSecrets(t *testing.T) {
 		if _, err := (AleefEnvSecrets{}).Resolve(ref); err == nil || strings.Contains(err.Error(), ref+"x") {
 			t.Fatalf("ref %q: %v", ref, err)
 		}
+	}
+}
+
+func writeAleefSecretsFile(t *testing.T, body string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "aleef-secrets.env")
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestParseAleefSecretsFile(t *testing.T) {
+	t.Run("valid with comments and blanks", func(t *testing.T) {
+		p := writeAleefSecretsFile(t, "# lab\n\nALEEF_SECRET_LAB_ALICE=tok-a\r\n  # indented comment\nALEEF_SECRET_LAB_BOB=tok=b==\n")
+		m, err := parseAleefSecretsFile(p)
+		if err != nil || len(m) != 2 || m["ALEEF_SECRET_LAB_ALICE"] != "tok-a" || m["ALEEF_SECRET_LAB_BOB"] != "tok=b==" {
+			t.Fatalf("got %d entries, err %v", len(m), err)
+		}
+	})
+	t.Run("empty file", func(t *testing.T) {
+		m, err := parseAleefSecretsFile(writeAleefSecretsFile(t, ""))
+		if err != nil || len(m) != 0 {
+			t.Fatalf("got %d, %v", len(m), err)
+		}
+	})
+	t.Run("missing file is not an error", func(t *testing.T) {
+		m, err := parseAleefSecretsFile(filepath.Join(t.TempDir(), "absent"))
+		if err != nil || len(m) != 0 {
+			t.Fatalf("got %d, %v", len(m), err)
+		}
+	})
+	for name, body := range map[string]string{
+		"no equals":    "ALEEF_SECRET_X topsecretvalue\n",
+		"bad name":     "lab_alice=topsecretvalue\n",
+		"wrong prefix": "OTHER_X=topsecretvalue\n",
+		"empty value":  "ALEEF_SECRET_X=\n",
+		"quote":        "ALEEF_SECRET_X=\"topsecretvalue\"\n",
+		"backslash":    "ALEEF_SECRET_X=top\\secret\n",
+	} {
+		t.Run("malformed "+name, func(t *testing.T) {
+			_, err := parseAleefSecretsFile(writeAleefSecretsFile(t, "ALEEF_SECRET_OK=fine\n"+body))
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !strings.Contains(err.Error(), "line 2") || strings.Contains(err.Error(), "topsecret") {
+				t.Fatalf("error must name the line only: %v", err)
+			}
+		})
+	}
+}
+
+func TestAleefSecretsResolveFile(t *testing.T) {
+	t.Setenv(aleefSecretsFileEnv, writeAleefSecretsFile(t, "ALEEF_SECRET_LAB_ALICE=from-file\n"))
+	t.Setenv("ALEEF_SECRET_LAB_ALICE", "from-env")
+	t.Setenv("ALEEF_SECRET_LAB_CAROL", "env-only")
+	r := AleefEnvSecrets{}
+	// Precedence: the file wins over the process environment when both define the name.
+	if v, err := r.Resolve("lab/alice"); err != nil || v != "from-file" {
+		t.Fatalf("file precedence: %q %v", v, err)
+	}
+	// Env fallback when the file does not define it.
+	if v, err := r.Resolve("lab/carol"); err != nil || v != "env-only" {
+		t.Fatalf("env fallback: %q %v", v, err)
+	}
+	// Missing file: env only, no error.
+	t.Setenv(aleefSecretsFileEnv, filepath.Join(t.TempDir(), "absent"))
+	if v, err := r.Resolve("lab/alice"); err != nil || v != "from-env" {
+		t.Fatalf("missing file: %q %v", v, err)
+	}
+	// Malformed file is ignored (logged), env still works.
+	t.Setenv(aleefSecretsFileEnv, writeAleefSecretsFile(t, "garbage\n"))
+	if v, err := r.Resolve("lab/alice"); err != nil || v != "from-env" {
+		t.Fatalf("malformed file: %q %v", v, err)
+	}
+}
+
+func TestAleefSecretsGenericError(t *testing.T) {
+	t.Setenv(aleefSecretsFileEnv, writeAleefSecretsFile(t, "ALEEF_SECRET_LAB_ALICE=v\n"))
+	_, missing := (AleefEnvSecrets{}).Resolve("lab/nobody")
+	_, disallowed := (AleefEnvSecrets{}).Resolve("has space")
+	if missing == nil || disallowed == nil || missing.Error() != disallowed.Error() {
+		t.Fatalf("errors differ: %v / %v", missing, disallowed)
 	}
 }

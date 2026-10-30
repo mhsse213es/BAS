@@ -275,6 +275,7 @@ services:
       # violations (POST /api/csp-report -> orchestrator log) -- a temporary
       # escape hatch if a client hits a violation. No "off" value exists.
       BAS_CSP_MODE: ${BAS_CSP_MODE:-enforce}
+      ALEEF_SECRETS_FILE: /etc/bas/aleef-secrets.env
       # Install-wide phishing target allowlists (orchestrator phishscope). Blank
       # means unconfigured, so PH-ID-002 and PH-ID-003 stay unavailable.
       AUDSPECT_PHISH_IDENTITY_TARGET_USERS: ${AUDSPECT_PHISH_IDENTITY_TARGET_USERS:-}
@@ -310,6 +311,10 @@ services:
       - ./certs:/etc/bas/certs:ro
       - ${DATA_DIR}/k8s-scenario:/run/k8s-scenario:ro
       - ${DATA_DIR}/k8s-discovery:/run/k8s-discovery:ro
+      # Aleef token references. install.sh writes it from the ALEEF_SECRET_* lines in setup.conf
+      # (mode 0600, always present, possibly empty). One file is mounted, not env_file, so no other
+      # .env secret reaches the container.
+      - ${DATA_DIR}/aleef-secrets.env:/etc/bas/aleef-secrets.env:ro
       # scenarios is read-write: the threat-intel connector writes generated
       # YAMLs into scenarios/intel/. Keep writable even if connector is unused.
       - ./scenarios:/scenarios

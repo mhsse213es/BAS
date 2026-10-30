@@ -19,6 +19,14 @@
 # confirmation before installing Docker CE from Docker's official
 # repository. --yes also grants that consent, for unattended runs.
 #
+# Aleef API token references: put one line per reference in setup.conf,
+#   ALEEF_SECRET_<NAME>=<token>      e.g. ALEEF_SECRET_LAB_ALICE=...
+# <NAME> is A-Z 0-9 _ ; the reference "lab/alice" resolves to ALEEF_SECRET_LAB_ALICE
+# (upper-case, / - . become _). Values are written (never printed) to
+# ${DATA_DIR}/aleef-secrets.env (mode 0600, always present, empty when none are set) on
+# both --install and --upgrade, and mounted read-only into the orchestrator only
+# (ALEEF_SECRETS_FILE). A value may not contain a quote, a backslash, or a newline/NUL.
+#
 # All secrets not supplied in setup.conf are auto-generated and written to
 # ${DATA_DIR}/.env which is readable only by root. setup.conf is the
 # change-management artefact approved before the maintenance window.
@@ -167,6 +175,7 @@ fi
 
 # ── Config variables (populated by load_config) ───────────────────────────────
 DATA_DIR=""
+ALEEF_SECRET_LINES=()   # validated ALEEF_SECRET_<NAME>=<value> lines from setup.conf (never logged)
 BAS_PORT=""
 BAS_ENROLL_PORT=""
 BAS_LEGACY_PORT=""
@@ -335,6 +344,17 @@ load_config() {
     # trim whitespace
     key="${key#"${key%%[![:space:]]*}"}"; key="${key%"${key##*[![:space:]]}"}"
     val="${val#"${val%%[![:space:]]*}"}"; val="${val%"${val##*[![:space:]]}"}"
+    # Aleef token references: validate here (before quotes are stripped, so a quote is
+    # rejected, not silently trimmed) and collect. Messages never contain the value.
+    if [[ "$key" == ALEEF_SECRET_* ]]; then
+      [[ "$key" =~ ^ALEEF_SECRET_[A-Z0-9_]+$ ]] || { err "setup.conf: '${key}' is not a valid Aleef secret name (use ALEEF_SECRET_ then A-Z, 0-9, _ only)."; exit 1; }
+      [[ -z "$val" ]] && continue
+      case "$val" in
+        *\"*|*\'*|*\\*) err "setup.conf: ${key} contains a quote or backslash, which is not allowed. The value was not printed."; exit 1 ;;
+      esac
+      ALEEF_SECRET_LINES+=("${key}=${val}")
+      continue
+    fi
     # strip surrounding quotes
     val="${val#\'}"; val="${val%\'}"; val="${val#\"}"; val="${val%\"}"
     case "$key" in
@@ -393,6 +413,11 @@ load_config() {
       KUBE_DISCOVERY_CA_FILE)  KUBE_DISCOVERY_CA_FILE="$val"  ;;
     esac
   done < "$cfg"
+
+  # A NUL byte is dropped by `read`, so check the raw file for one on an Aleef secret line.
+  if LC_ALL=C grep -qaP '^[[:space:]]*ALEEF_SECRET_[^\n]*\x00' "$cfg" 2>/dev/null; then
+    err "setup.conf: an ALEEF_SECRET_ line contains a NUL byte, which is not allowed. The value was not printed."; exit 1
+  fi
 
   # Defaults
   [[ -z "$DATA_DIR"           ]] && DATA_DIR="$DEFAULT_DATA_DIR"
@@ -1791,9 +1816,32 @@ _stage_k8s_discovery() {
   fi
 }
 
+# Writes the Aleef token references from setup.conf to ${DATA_DIR}/aleef-secrets.env: always
+# present (empty when none are set), mode 0600, owned by the orchestrator user (UID 65532, the
+# only account in the container that must read it; other host users cannot). Rewritten in place
+# only when the content changed, so the inode (and the container's bind mount) stays stable and a
+# re-run is a no-op. Values are never echoed.
+_write_aleef_secrets() {
+  local f="${DATA_DIR}/aleef-secrets.env" want="" line
+  for line in ${ALEEF_SECRET_LINES[@]+"${ALEEF_SECRET_LINES[@]}"}; do
+    want+="${line}"$'\n'
+  done
+  mkdir -p "$DATA_DIR"
+  if [[ ! -f "$f" ]]; then
+    ( umask 077; : > "$f" )
+  fi
+  if [[ "$(cat "$f")" != "${want%$'\n'}" ]]; then
+    printf '%s' "$want" > "$f"
+  fi
+  chown 65532:65532 "$f"
+  chmod 600 "$f"
+  log "Aleef secret references staged: ${#ALEEF_SECRET_LINES[@]} (${f}, mode 600)"
+}
+
 _write_env() {
   _stage_k8s_scenario
   _stage_k8s_discovery
+  _write_aleef_secrets
   local env_file="${DATA_DIR}/.env"
   # In-container paths for the operator-supplied dashboard TLS cert -- only
   # set when BAS_TLS=true, so docker-compose.yml's TLS_CERT/TLS_KEY env vars

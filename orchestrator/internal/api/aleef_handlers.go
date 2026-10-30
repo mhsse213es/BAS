@@ -198,16 +198,30 @@ func aleefEnvName(ref string) string {
 	}, ref)
 }
 
-// Resolve returns the token behind ref.
+// errAleefSecret is the only error Resolve returns. A refused reference and a reference with no
+// configured secret are indistinguishable to the caller, so a ref's existence is not revealed.
+var errAleefSecret = errors.New("secret reference could not be resolved")
+
+// Resolve returns the token behind ref. When ALEEF_SECRETS_FILE is set and readable the file is
+// consulted first (file wins over the process environment when both define the name); the
+// ALEEF_SECRET_* process environment is the fallback. A missing file means no file secrets.
 func (AleefEnvSecrets) Resolve(ref string) (string, error) {
 	if !aleefRefRe.MatchString(ref) {
-		return "", errors.New("invalid secret reference")
+		return "", errAleefSecret
 	}
-	v := os.Getenv(aleefEnvName(ref))
-	if v == "" {
-		return "", errors.New("no secret configured for the reference")
+	name := aleefEnvName(ref)
+	if path := os.Getenv(aleefSecretsFileEnv); path != "" {
+		m, err := parseAleefSecretsFile(path)
+		if err != nil {
+			log.Printf("[aleef] %v; ignoring the file", err)
+		} else if v := m[name]; v != "" {
+			return v, nil
+		}
 	}
-	return v, nil
+	if v := os.Getenv(name); v != "" {
+		return v, nil
+	}
+	return "", errAleefSecret
 }
 
 func (h *Handler) aleefReady(w http.ResponseWriter) bool {

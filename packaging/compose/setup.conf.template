@@ -220,3 +220,12 @@ KUBE_DISCOVERY_API=               # e.g. https://127.0.0.1:61567 (must be reacha
 KUBE_DISCOVERY_CLUSTER=kind-bas-lab
 KUBE_DISCOVERY_TOKEN=             # paste the read-only token only
 KUBE_DISCOVERY_CA_FILE=           # path on this server to the cluster CA (PEM)
+
+# Aleef API token references (optional). One line per reference:
+#   ALEEF_SECRET_<NAME>=<token>
+# <NAME> uses A-Z, 0-9 and _ only. The reference "lab/alice" is read from ALEEF_SECRET_LAB_ALICE
+# (upper-case; / - . become _). The value is taken literally: no quotes, no backslash, one line.
+# install.sh writes these to <DATA_DIR>/aleef-secrets.env (mode 0600) on --install and --upgrade
+# and mounts that single file read-only into the orchestrator; values are never printed or logged.
+# Removing a line and running --upgrade removes the secret. Example (placeholder, not a real token):
+#ALEEF_SECRET_LAB_ALICE=paste-the-token-here
