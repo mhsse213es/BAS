@@ -65,7 +65,7 @@ func (h *Handler) recordRWEvidenceWith(ctx context.Context, runID, scenarioID st
 		Recovery:       recovery,
 		Containment:    h.containmentObserverFor(sim),
 		Detection:      h.detectionLookupFor(sim),
-		DataProtection: &rwevidence.FakeDataProtectionLookup{},
+		DataProtection: sinkDataProtectionSource{pool: h.db},
 	}
 	results := rwevidence.EvaluateStep(in, deps)
 	if err := db.WriteRWCapabilityResults(ctx, h.db, runID, in.Action, results); err != nil {
