@@ -334,12 +334,26 @@ func showTroubleshootWindow(deps diagnosticsDeps) error {
 		}
 	}
 
-	// render runs a check and applies it synchronously -- only used for
-	// the initial population below, which happens before RunAsMain starts
-	// this window's message loop, so there's nothing to freeze yet.
-	render := func(n int) {
-		applyCheck(n, RunDiagnosticCheck(n+1, deps))
-	}
+	// Initial population runs from WmCreate, not before RunAsMain. windigo
+	// creates each control's native window only when the parent window is
+	// created, so SetTextAndResize on a control before that is a no-op and
+	// the rows stay blank (buttons looked fine only because their text is
+	// passed at creation). WmCreate runs after the controls exist; the checks
+	// run off the UI thread so the window opens at once and each row fills
+	// in as its check finishes.
+	wnd.On().WmCreate(func(p ui.WmCreate) int {
+		for i := range rows {
+			rows[i].result.SetTextAndResize("Checking...")
+		}
+		go func() {
+			for i := range rows {
+				n := i
+				check := RunDiagnosticCheck(n+1, deps)
+				wnd.UiThread(func() { applyCheck(n, check) })
+			}
+		}()
+		return 0
+	})
 
 	for i := range rows {
 		n := i
@@ -364,10 +378,6 @@ func showTroubleshootWindow(deps diagnosticsDeps) error {
 				rows[n].current.ActionButton.Action()
 			}
 		})
-	}
-
-	for i := range rows {
-		render(i)
 	}
 
 	wnd.RunAsMain()
