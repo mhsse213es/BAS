@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -174,6 +175,12 @@ func TestBuild_SectorRegionRelevantOutranksNonRelevant(t *testing.T) {
 	})
 }
 
+// recentStamp is one day ago. The coverage tests need a test to count as recent, and the
+// recent/stale bands are measured from now, so a fixed date would go stale over time.
+func recentStamp() string {
+	return time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
+}
+
 // TestBuild_NeverTestedOutranksRecentlyTested: identical threat signals, but one
 // was tested today. The untested one must rank first.
 func TestBuild_NeverTestedOutranksRecentlyTested(t *testing.T) {
@@ -185,7 +192,7 @@ func TestBuild_NeverTestedOutranksRecentlyTested(t *testing.T) {
 			INSERT INTO scenario_runs (scenario_id, agent_id, status, results, completed_at)
 			VALUES ('s1', 'a1', 'completed', $1::jsonb, NOW())`,
 			`[{"technique":{"id":"T1055","name":"Process Injection","tactic":"defense-evasion"},
-			   "result":"pass","executedAt":"2026-07-17T10:00:00Z"}]`)
+			   "result":"pass","executedAt":"`+recentStamp()+`"}]`)
 
 		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil, nil)
 		if err != nil {
@@ -219,7 +226,7 @@ func TestBuild_ErroredRunsCountAsNeverTested(t *testing.T) {
 			INSERT INTO scenario_runs (scenario_id, agent_id, status, results, completed_at)
 			VALUES ('s1', 'a1', 'completed', $1::jsonb, NOW())`,
 			`[{"technique":{"id":"T1055","name":"Process Injection","tactic":"defense-evasion"},
-			   "result":"error","executedAt":"2026-07-17T10:00:00Z"}]`)
+			   "result":"error","executedAt":"`+recentStamp()+`"}]`)
 
 		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil, nil)
 		if err != nil {
@@ -247,7 +254,7 @@ func TestBuild_VetoedRunsCountAsNeverTested(t *testing.T) {
 			INSERT INTO scenario_runs (scenario_id, agent_id, status, results, completed_at)
 			VALUES ('s1', 'a1', 'completed', $1::jsonb, NOW())`,
 			`[{"technique":{"id":"T1490","name":"Inhibit System Recovery","tactic":"impact"},
-			   "result":"vetoed","executedAt":"2026-07-17T10:00:00Z"}]`)
+			   "result":"vetoed","executedAt":"`+recentStamp()+`"}]`)
 
 		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil, nil)
 		if err != nil {
