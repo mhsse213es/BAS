@@ -1481,3 +1481,5 @@ body.theme-light {
 .rem-ep-list { border-top: 1px solid var(--border); padding: 0.5rem 1rem 0.75rem; display: grid; gap: 0.6rem; }
 .rem-ep-f { font-size: 0.84rem; }
 .rem-ep-mit { font-size: 0.78rem; margin-top: 0.15rem; line-height: 1.5; }
+.rem-ep-h { font-size: 0.78rem; font-weight: 600; color: var(--muted-hi); }
+.rem-ep-err { color: var(--danger); font-size: 0.78rem; }

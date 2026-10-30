@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
-	"github.com/audspect/bas/internal/reporting/attackdata"
+	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/findings"
+	"github.com/audspect/bas/internal/reporting/attackdata"
 )
 
 // ListRemediationsByEndpoint returns the endpoint-wise remediation view (Phase 1):
@@ -60,7 +62,49 @@ func (h *Handler) ListRemediationsByEndpoint(w http.ResponseWriter, r *http.Requ
 	}
 	reqRows.Close()
 
-	respond(w, findings.GroupByEndpoint(agents, open, requested))
+	eps := findings.GroupByEndpoint(agents, open, requested)
+
+	// Phase 2: request details (who requested, errors, run references) are shown
+	// only to roles that can execute remediation. Others get the Phase 1 view.
+	if claims, ok := auth.ClaimsFrom(ctx); ok && auth.HasPermission(claims.Role, auth.CanExecuteRemediation) {
+		reqs, err := h.remediationRequestsForEndpoints(ctx)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		eps = findings.AttachRequests(eps, reqs)
+	}
+	respond(w, eps)
+}
+
+// remediationRequestsForEndpoints loads every remediation request with its latest
+// independent verification run, newest first.
+func (h *Handler) remediationRequestsForEndpoints(ctx context.Context) ([]findings.RemediationRequest, error) {
+	rows, err := h.db.Query(ctx, `
+		SELECT rr.id, rr.agent_id, rr.remediation_id, rr.check_id, rr.status, rr.error,
+		       rr.requested_by, rr.requested_at, rr.completed_at, rr.fix_run_id, rr.verify_run_id,
+		       COALESCE(tv.status, ''), COALESCE(tv.reason, ''), tv.completed_at
+		  FROM remediation_requests rr
+		  LEFT JOIN LATERAL (
+		        SELECT status, reason, completed_at FROM technique_verification_runs t
+		         WHERE t.request_id = rr.id ORDER BY t.requested_at DESC LIMIT 1
+		  ) tv ON true
+		 ORDER BY rr.requested_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []findings.RemediationRequest
+	for rows.Next() {
+		var r findings.RemediationRequest
+		if err := rows.Scan(&r.ID, &r.AgentID, &r.RemediationID, &r.CheckID, &r.Status, &r.Error,
+			&r.RequestedBy, &r.RequestedAt, &r.CompletedAt, &r.FixRunID, &r.VerifyRunID,
+			&r.VerificationStatus, &r.VerificationReason, &r.VerificationAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // mitigationNames returns the ATT&CK mitigation names for a technique, or nil when

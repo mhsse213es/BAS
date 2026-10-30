@@ -380,6 +380,7 @@ function endpointCard(e) {
     '<div class="rem-ep-sum">' +
       '<span><b>' + x(String(e.openFindings)) + '</b> open findings</span>' +
       '<span><b>' + x(String(e.techniqueCount)) + '</b> techniques</span>' +
+      (e.requests ? '<span><b>' + x(String(e.requests.length)) + '</b> requests</span>' : '') +
       '<span class="rem-ep-sev">' + sevLine + '</span>' +
     '</div>';
   if (open) {
@@ -390,8 +391,27 @@ function endpointCard(e) {
         '<div class="muted rem-ep-mit">Recommended: ' + x(mit) + '</div>' +
       '</div>';
     }).join('') + '</div>';
+    if (e.requests && e.requests.length) body += endpointRequestsHtml(e.requests);
   }
   return '<section class="rk-card rem-ep">' + head + body + '</section>';
+}
+// Phase 2: remediation requests on this endpoint, newest first. Status is the mapped execution
+// status. Closure reads "verified" only when an independent verification run passed; a completed
+// execution alone is not shown as a closed finding. The API omits this list for roles without
+// remediation access.
+function endpointRequestsHtml(reqs) {
+  return '<div class="rem-ep-list"><div class="rem-ep-h">Remediation requests</div>' + reqs.map(function(r) {
+    var closure = r.closureVerified ? 'Finding closure: verified by an independent check' : 'Finding closure: not verified';
+    var evidence = r.verificationStatus
+      ? 'Verification: ' + r.verificationStatus + (r.verificationReason ? ' — ' + r.verificationReason : '')
+      : 'Verification: no independent run yet';
+    return '<div class="rem-ep-f">' +
+      '<div><b>' + x(r.checkId) + '</b> <span class="muted">· ' + x(r.status) + ' · execution ' + x(r.executionStatus) + '</span></div>' +
+      (r.error ? '<div class="rem-ep-err">' + x(r.error) + '</div>' : '') +
+      '<div class="muted rem-ep-mit">' + x(evidence) + ' · ' + x(closure) + '</div>' +
+      '<div class="muted rem-ep-mit">Requested ' + x(fmtDate(r.requestedAt)) + (r.requestedBy ? ' by ' + x(r.requestedBy) : '') + ' · request ' + x(r.requestId) + '</div>' +
+    '</div>';
+  }).join('') + '</div>';
 }
 // One prioritized-fix card per remediation, three to a row like the design demo.
 function renderRemList() {

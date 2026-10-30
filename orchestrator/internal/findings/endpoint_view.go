@@ -20,14 +20,14 @@ type EndpointAgent struct {
 
 // EndpointFinding is one open finding with the endpoint it was raised on.
 type EndpointFinding struct {
-	ID            string   `json:"id"`
-	AgentID       string   `json:"agentId"`
-	TechniqueID   string   `json:"techniqueId"`
-	TechniqueName string   `json:"techniqueName"`
-	Tactic        string   `json:"tactic"`
-	Severity      string   `json:"severity"`
-	ExposureState string   `json:"exposureState"`
-	ControlClass  string   `json:"controlClass"`
+	ID            string `json:"id"`
+	AgentID       string `json:"agentId"`
+	TechniqueID   string `json:"techniqueId"`
+	TechniqueName string `json:"techniqueName"`
+	Tactic        string `json:"tactic"`
+	Severity      string `json:"severity"`
+	ExposureState string `json:"exposureState"`
+	ControlClass  string `json:"controlClass"`
 	// Mitigations are the ATT&CK mitigations for the technique: the recommended
 	// remediation for this finding. Filled by the API layer from the ATT&CK data.
 	Mitigations []string `json:"mitigations"`
@@ -42,6 +42,9 @@ type EndpointRemediation struct {
 	Severity       map[string]int    `json:"severity"`
 	TechniqueCount int               `json:"techniqueCount"`
 	Findings       []EndpointFinding `json:"findings"`
+	// Requests are the Phase 2 remediation requests on this endpoint. The API leaves
+	// them out for roles without remediation access.
+	Requests []EndpointRequest `json:"requests,omitempty"`
 }
 
 // GroupByEndpoint groups open findings by endpoint. Every agent in agents appears,
