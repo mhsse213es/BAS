@@ -1628,13 +1628,11 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 			hb.AgentID, *hb.DomainJoined)
 	}
 
-	// Quarantine if manifest is loaded and the binary hash is not recognised.
-	// Only transition active→quarantined, never overwrite an already-quarantined agent.
-	if hb.BinaryHash != "" && h.manifest != nil && h.manifest.Loaded() && !trusted {
-		_, _ = h.db.Exec(r.Context(),
-			`UPDATE agents SET state = 'quarantined' WHERE agent_id = $1 AND state = 'active'`,
-			hb.AgentID)
-		log.Printf("[!] agent %s QUARANTINED — binary hash unrecognised", hb.AgentID)
+	// Binary trust drives the agent state (see integrity.NextAgentState): a current
+	// binary returns an outdated agent to active, a previous signed release degrades
+	// it, and an unknown binary quarantines it. Quarantine is never lifted here.
+	if hb.BinaryHash != "" && h.manifest != nil && h.manifest.Loaded() {
+		h.applyBinaryTrustState(r.Context(), hb.AgentID, hb.BinaryHash, trusted)
 	}
 
 	// Fetch current state and policy to return to the agent.

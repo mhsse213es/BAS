@@ -693,6 +693,19 @@ if ($LASTEXITCODE -ne 0) {
         $entryCount = (Get-Content $BinManifestPath | Where-Object { $_ -ne "" }).Count
         Log "  $entryCount entries extracted from image"
 
+        # Carry the previous signed release's hashes into the manifest (as #prev lines),
+        # so agents still on it degrade to outdated instead of being quarantined. The
+        # previous manifest is the last committed one. Must run before the signing below.
+        $prevManifest = Join-Path $env:TEMP 'bas-prev-BINARIES.sha256'
+        & git -C $RepoRoot show 'HEAD:orchestrator/agents/BINARIES.sha256' | Set-Content -LiteralPath $prevManifest -Encoding ascii
+        if ($LASTEXITCODE -eq 0 -and (Test-Path $prevManifest) -and (Get-Item $prevManifest).Length -gt 0) {
+            $carriedCount = & (Join-Path $RepoRoot 'packaging\carry-previous-manifest.ps1') -Manifest $BinManifestPath -Previous $prevManifest
+            Log "  carried $carriedCount previous-release hash(es) into the manifest"
+        } else {
+            Warn "  No committed BINARIES.sha256 to carry previous releases from - agents on the last release will be quarantined."
+        }
+        Remove-Item $prevManifest -ErrorAction SilentlyContinue
+
         # RSA-sign so the orchestrator verifies the manifest was not tampered in transit.
         Push-Location $OrchestratorDir
         go run scripts/signer.go sign private_key.pem $BinManifestPath

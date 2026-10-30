@@ -16,26 +16,59 @@ import (
 // Manifest holds expected SHA-256 hashes for all shipped binaries.
 type Manifest struct {
 	hashes map[string]string // basename → lowercase hex sha256
+	// prev holds hashes of earlier signed releases, listed on "#prev <hash>  <file>"
+	// lines. An agent on one of these is outdated, not untrusted: it degrades until
+	// it is upgraded, and it is never counted as a current trusted hash.
+	prev map[string]bool
 }
 
 // LoadManifest reads BINARIES.sha256 from path.
 // Returns an empty (non-nil) manifest if the file is absent — callers treat
 // missing manifest as "hash verification disabled" rather than an error.
 func LoadManifest(path string) *Manifest {
-	m := &Manifest{hashes: make(map[string]string)}
 	f, err := os.Open(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			log.Printf("[integrity] manifest open: %v", err)
 		}
-		return m
+		return &Manifest{hashes: make(map[string]string), prev: make(map[string]bool)}
 	}
 	defer f.Close()
 
+	var lines []string
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		lines = append(lines, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("[integrity] manifest read: %v", err)
+	}
+	m := parseManifestLines(lines)
+	log.Printf("[integrity] manifest loaded: %d entries (%d previous-release) from %s", len(m.hashes), len(m.prev), path)
+	return m
+}
+
+// parseManifestLines is the single parser for BINARIES.sha256 content, shared by
+// LoadManifest and the signature-checked LoadManifestVerified so they can't disagree.
+//
+//	<sha256hex>  <filename>            current release
+//	#prev <sha256hex>  <filename>      previous signed release (outdated, not trusted)
+//	# ...                              comment
+func parseManifestLines(lines []string) *Manifest {
+	m := &Manifest{hashes: make(map[string]string), prev: make(map[string]bool)}
+	for _, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "#prev ") {
+			parts := strings.Fields(strings.TrimPrefix(line, "#prev "))
+			if len(parts) >= 2 {
+				m.prev[strings.ToLower(parts[0])] = true
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "#") {
 			continue
 		}
 		// Format: "<sha256hex>  <filename>"
@@ -43,17 +76,16 @@ func LoadManifest(path string) *Manifest {
 		if len(parts) < 2 {
 			continue
 		}
-		hashHex := strings.ToLower(parts[0])
-		filename := parts[1]
 		// Strip any leading "./" the manifest writer may have included
-		filename = strings.TrimPrefix(filename, "./")
-		m.hashes[filename] = hashHex
+		filename := strings.TrimPrefix(parts[1], "./")
+		m.hashes[filename] = strings.ToLower(parts[0])
 	}
-	if err := scanner.Err(); err != nil {
-		log.Printf("[integrity] manifest read: %v", err)
-	}
-	log.Printf("[integrity] manifest loaded: %d entries from %s", len(m.hashes), path)
 	return m
+}
+
+// HashPreviousRelease reports whether hexHash is a previous signed release (outdated).
+func (m *Manifest) HashPreviousRelease(hexHash string) bool {
+	return m.prev[strings.ToLower(hexHash)]
 }
 
 // KnownHash returns the expected SHA-256 hex for a binary filename.

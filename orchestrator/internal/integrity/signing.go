@@ -154,20 +154,8 @@ func LoadManifestVerified(path string) (*Manifest, error) {
 		return nil, errors.New("BINARIES.sha256 signature verification FAILED — manifest may be tampered")
 	}
 
-	// Signature valid — now parse the (already-read) content.
-	m := &Manifest{hashes: make(map[string]string)}
-	for _, line := range splitLines(string(content)) {
-		if line == "" || line[0] == '#' {
-			continue
-		}
-		parts := splitFields(line)
-		if len(parts) < 2 {
-			continue
-		}
-		filename := trimPrefix(parts[1], "./")
-		m.hashes[filename] = toLower(parts[0])
-	}
-	return m, nil
+	// Signature valid — now parse the (already-read) content with the shared parser.
+	return parseManifestLines(splitLines(string(content))), nil
 }
 
 // ── minimal string helpers to avoid importing bufio/strings in this file ─────
