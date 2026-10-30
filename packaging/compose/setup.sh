@@ -414,6 +414,35 @@ check_port() {
   fi
 }
 
+# Surfaces an existing INTERRUPTED/COMPLETE install through the same
+# PASS/FAIL prereq-check display an operator already reads before "READY
+# TO INSTALL" -- without this, that message is shown first and the
+# install-state abort inside _do_install_steps only happens after the
+# operator has already clicked past it.
+check_install_state() {
+  local state
+  state=$(detect_install_state "${INSTALL_DIR}")
+  case "$state" in
+    FRESH)
+      echo "PASS:Install state — fresh install"
+      ;;
+    INTERRUPTED)
+      if $RESUME_INSTALL; then
+        echo "PASS:Install state — resuming interrupted install, existing credentials preserved"
+      else
+        echo "FAIL:Install state — $(install_state_message INTERRUPTED)"
+      fi
+      ;;
+    COMPLETE)
+      if $REINSTALL; then
+        echo "PASS:Install state — reinstalling over a completed install"
+      else
+        echo "FAIL:Install state — $(install_state_message COMPLETE)"
+      fi
+      ;;
+  esac
+}
+
 # ── Binary manifest verification ──────────────────────────────────────────────
 # GPG key selection (precedence): --gpg-pub flag, BAS_GPG_PUB env, then the
 # bundle's agents/pubkey.asc. An external key is used EXCLUSIVELY (the bundled
@@ -654,6 +683,7 @@ page_prereqs() {
     check_docker
     check_compose
     check_cosign
+    check_install_state
     check_port "9000"
     check_port "5432"
   )
@@ -1411,6 +1441,7 @@ main() {
       check_docker
       check_compose
       check_cosign
+      check_install_state
       check_port "$DASHBOARD_PORT"
       check_port "5432"
     )
@@ -1463,4 +1494,6 @@ Edit setup.conf, update LIC_PATH, and re-run." 14 64; } 2>/dev/null || \
   start_web_wizard
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
