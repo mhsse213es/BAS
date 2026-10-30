@@ -17,6 +17,8 @@
     <SummaryInformation Description="Audspect Agent installer" />
     <MajorUpgrade DowngradeErrorMessage="A newer version of the Audspect Agent is already installed." />
     <MediaTemplate EmbedCab="yes" />
+    <Icon Id="AudspectAgent.ico" SourceFile="$(sys.SOURCEFILEDIR)assets/AudspectAgent.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AudspectAgent.ico" />
 
     <Property Id="DEPLOYMENT_CONFIG" Secure="yes" />
     <Property Id="CONFIG_FINGERPRINT" Secure="yes" />
