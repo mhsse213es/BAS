@@ -1033,6 +1033,10 @@ func main() {
 		go api.RunPhishingDispatchPoller(context.Background(), pool, time.Minute)
 	}
 
+	// OpenAEV scenarios sync on a timer, so new scenarios appear without a manual sync.
+	// A disabled connector is skipped quietly.
+	go api.StartOpenAEVAutoSync(context.Background(), pool, time.Hour)
+
 	// Content registry migration marker: only after a clean scenario load with zero intake
 	// infrastructure failures, so a partial intake never ends custom-file grandfathering. A failure here is
 	// logged and retried next boot (marker stays absent); it never blocks boot.

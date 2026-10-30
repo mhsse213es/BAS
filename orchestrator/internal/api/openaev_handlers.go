@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/audspect/bas/internal/openaev"
@@ -114,41 +115,14 @@ func (h *Handler) TestOpenAEVConfig(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/openaev/sync — Admin. Manual sync trigger.
 func (h *Handler) SyncOpenAEV(w http.ResponseWriter, r *http.Request) {
-	var baseURL, token string
-	var enabled bool
-	err := h.db.QueryRow(r.Context(), `SELECT base_url, bearer_token, enabled FROM openaev_config WHERE id = 1`).
-		Scan(&baseURL, &token, &enabled)
-	if err != nil || !enabled {
-		jsonError(w, "openaev is not configured/enabled", http.StatusConflict)
+	result, err := runOpenAEVSync(r.Context(), h.db)
+	if errors.Is(err, errOpenAEVNotEnabled) {
+		jsonError(w, err.Error(), http.StatusConflict)
 		return
 	}
-
-	store := openaev.NewSQLStore(h.db)
-	importer := openaev.NewImporter(store)
-	provider := openaev.NewCompositeProvider(
-		openaev.NewRESTProvider(baseURL, token),
-		openaev.NewExerciseRESTProvider(baseURL, token),
-	)
-
-	result, syncErr := importer.SyncAll(r.Context(), provider)
-	status := "ok"
-	lastErr := ""
-	created, updated, skipped, errored := 0, 0, 0, 0
-	if syncErr != nil {
-		status = "error"
-		lastErr = syncErr.Error()
-	} else {
-		created, updated, skipped, errored = result.Created, result.Updated, result.Skipped, result.Errored
-	}
-	h.db.Exec(r.Context(),
-		`UPDATE openaev_config SET last_sync_at = NOW(), last_sync_status = $1, last_error = $2,
-		   last_sync_created = $3, last_sync_updated = $4, last_sync_skipped = $5, last_sync_errored = $6
-		 WHERE id = 1`,
-		status, lastErr, created, updated, skipped, errored)
-
 	h.auditLog(r, "openaev.sync", "", map[string]any{"result": result}, "ok")
-	if syncErr != nil {
-		jsonError(w, syncErr.Error(), http.StatusInternalServerError)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	respond(w, result)

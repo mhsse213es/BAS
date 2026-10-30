@@ -1640,7 +1640,7 @@ function paintScenarios() {
   hideFilterSelects(special);
   tools.innerHTML = scnToolbarHtml(special);
 
-  if (view === 'phishing') { renderPhishingLibrary(); return; }
+  if (view === 'phishing') { renderPhishingLibrary(true); return; }
   if (view === 'templates') {
     setDisplay(document.getElementById('sc-tmpl-filters'), 'flex');
     renderTemplateGrid();
@@ -1754,7 +1754,9 @@ function phishingLibraryTileHTML(entry, index) {
     '</div>';
 }
 
-function renderPhishingLibrary() {
+// fresh is true only when the library is first shown. Clicks re-render without the
+// fade, so each click does not replay the fade-in animation on every tile.
+function renderPhishingLibrary(fresh) {
   if (state.scenarioView !== 'phishing') return;
   var grid = document.getElementById('sc-tile-grid');
   if (!grid) return;
@@ -1767,9 +1769,9 @@ function renderPhishingLibrary() {
   var open = _libraryEntries[_phishingFormIndex];
   var form = open && libraryEntryRoute(open).kind === LIBRARY_TYPE_PHISHING ? phishingFormHTML(open) : '';
   grid.innerHTML = tiles.length
-    ? '<div class="sc-fade"><div class="sc-grid">' + tiles.join('') + '</div>' + form + '</div>'
+    ? '<div class="' + (fresh ? 'sc-fade' : '') + '"><div class="sc-grid">' + tiles.join('') + '</div>' + form + '</div>'
     : '<p class="empty">No phishing scenarios are catalogued.</p>';
-  renderPhishingRunResults(grid);
+  if (fresh) renderPhishingRunResults(grid);
 }
 
 // Recent phishing runs, below the library. Each run is described by
@@ -1881,7 +1883,7 @@ function submitPhishingForm() {
       showToast('Phishing run started: ' + built.body.scenarioId, 'ok');
       _dispatchKey = null;
       _phishingFormIndex = null;
-      renderPhishingLibrary();
+      renderPhishingLibrary(true);
     })
     .catch(function(err) {
       showToast('Phishing run failed: ' + (err && err.message ? err.message : String(err)), 'err');
