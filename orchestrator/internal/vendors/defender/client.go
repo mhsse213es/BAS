@@ -80,6 +80,8 @@ type Client struct {
 	LiveResponseURL       string // defaults to "" — see New(), it's built from ActionBaseURL per machine ID, not a fixed URL; kept as an explicit override point for tests
 	tokens                *msauth.EntraTokenSource
 	actionTokens          *msauth.EntraTokenSource
+	huntTokens            *msauth.EntraTokenSource
+	HuntBaseURL           string // defaults to https://api.security.microsoft.com/api (Advanced Hunting)
 	httpClient            *http.Client
 	killProcessScriptName string
 
@@ -100,6 +102,9 @@ func New(cfg Config) *Client {
 			"https://graph.microsoft.com/.default"),
 		actionTokens: msauth.NewEntraTokenSource(cfg.TenantID, cfg.ClientID, cfg.ClientSecret,
 			"https://api.securitycenter.microsoft.com/.default"),
+		huntTokens: msauth.NewEntraTokenSource(cfg.TenantID, cfg.ClientID, cfg.ClientSecret,
+			"https://api.security.microsoft.com/.default"),
+		HuntBaseURL: "https://api.security.microsoft.com/api",
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
 		deviceCache: make(map[string]deviceCacheEntry),
 	}
@@ -112,6 +117,11 @@ func (c *Client) TokenURL() *string { return &c.tokens.TokenURL }
 // for tests — separate from TokenURL because it is a different token
 // source with a different OAuth scope.
 func (c *Client) ActionTokenURL() *string { return &c.actionTokens.TokenURL }
+
+// HuntTokenURL exposes the Advanced Hunting token source's overridable URL for
+// tests. It has its own scope, api.security.microsoft.com, separate from both
+// the alerts and machine-actions sources.
+func (c *Client) HuntTokenURL() *string { return &c.huntTokens.TokenURL }
 
 type graphAlert struct {
 	ID              string `json:"id"`

@@ -9,6 +9,7 @@ import (
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/rwcontain"
 	"github.com/audspect/bas/internal/rwdetect"
+	"github.com/audspect/bas/internal/rwprevent"
 	"github.com/audspect/bas/internal/rwevidence"
 	"github.com/audspect/bas/internal/rwrecover"
 	"github.com/audspect/bas/internal/scenario"
@@ -61,7 +62,7 @@ func (h *Handler) recordRWEvidenceWith(ctx context.Context, runID, scenarioID st
 		Details:     sim.Details + " " + sim.RawOutput,
 	}
 	deps := rwevidence.StepDependencies{
-		Prevention:     &controlval.FakeProvider{},
+		Prevention:     h.preventionObserverFor(sim),
 		Recovery:       recovery,
 		Containment:    h.containmentObserverFor(sim),
 		Detection:      h.detectionLookupFor(sim),
@@ -75,6 +76,16 @@ func (h *Handler) recordRWEvidenceWith(ctx context.Context, runID, scenarioID st
 		// package doesn't have.
 		log.Printf("[rwevidence] rw_capability_results write failed for run %s action %s technique %s: %v", runID, in.Action, in.TechniqueID, err)
 	}
+}
+
+// preventionObserverFor backs the Prevention capability with the Defender
+// block-event source. With no source configured it returns the canned fake,
+// which yields an unknown observation: skipped, never a guessed verdict.
+func (h *Handler) preventionObserverFor(sim models.SimulationResult) rwevidence.PreventionObserver {
+	if h.preventionBlocks == nil {
+		return rwevidence.ProviderPrevention{Provider: &controlval.FakeProvider{}}
+	}
+	return rwprevent.Observer{Blocks: h.preventionBlocks, Context: inlineAttemptContextSource{pool: h.db, sim: sim}, Window: rwdetect.DefaultWindowPolicy}
 }
 
 // detectionLookupFor backs the Detection capability with the configured

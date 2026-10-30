@@ -67,6 +67,7 @@ import (
 	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/rwcontain"
+	"github.com/audspect/bas/internal/rwprevent"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/taxii"
 	"github.com/audspect/bas/internal/threatcontent"
@@ -214,6 +215,9 @@ type Handler struct {
 	// detectionConnector backs the ransomware Detection capability. Nil keeps
 	// it honestly NotTested (see rwdetectionLookup).
 	detectionConnector detectverify.Connector
+	// preventionBlocks backs the ransomware Prevention capability with Defender
+	// block events. Nil keeps Prevention as an unknown (skipped) observation.
+	preventionBlocks rwprevent.BlockSource
 	// containmentDevices backs the ransomware Containment capability. Nil keeps
 	// it honestly NotTested (see containmentObserverFor).
 	containmentDevices rwcontain.DeviceSource
@@ -247,6 +251,13 @@ func New(pool *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string
 // ransomware Detection capability. Without it, that capability stays NotTested.
 func (h *Handler) WithDetectionConnector(c detectverify.Connector) *Handler {
 	h.detectionConnector = c
+	return h
+}
+
+// WithPreventionBlocks attaches the Defender block-event source that grades
+// the ransomware Prevention capability.
+func (h *Handler) WithPreventionBlocks(b rwprevent.BlockSource) *Handler {
+	h.preventionBlocks = b
 	return h
 }
 

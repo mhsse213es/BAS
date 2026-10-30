@@ -58,7 +58,7 @@ func TestToAttemptRows_BehaviorIsNeverDerivedFromControlEfficacy(t *testing.T) {
 func clopShapedDeps(runID, action, techniqueID string) rwevidence.StepDependencies {
 	key := runID + "/" + techniqueID + "/" + action
 	return rwevidence.StepDependencies{
-		Prevention:     &controlval.FakeProvider{},
+		Prevention:     rwevidence.ProviderPrevention{Provider: &controlval.FakeProvider{}},
 		Recovery:       &rwevidence.FakeRecoveryObserver{},
 		Containment:    &rwevidence.FakeContainmentObserver{},
 		Detection:      &rwevidence.FakeDetectionLookup{},

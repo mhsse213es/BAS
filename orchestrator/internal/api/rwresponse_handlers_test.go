@@ -19,7 +19,7 @@ import (
 
 func rwResponseTestDeps() rwevidence.StepDependencies {
 	return rwevidence.StepDependencies{
-		Prevention:     &controlval.FakeProvider{},
+		Prevention:     rwevidence.ProviderPrevention{Provider: &controlval.FakeProvider{}},
 		Recovery:       &rwevidence.FakeRecoveryObserver{},
 		Containment:    &rwevidence.FakeContainmentObserver{},
 		Detection:      &rwevidence.FakeDetectionLookup{},

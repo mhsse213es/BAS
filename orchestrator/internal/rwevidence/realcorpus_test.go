@@ -59,7 +59,7 @@ func TestRealCorpus_EveryTechniqueTaggedStepIsAccountedFor(t *testing.T) {
 			// lookups in Go return the zero value with ok=false, so Observe
 			// returns Observation{}, nil for any key. Confirmed against
 			// controlval/provider.go rather than assumed.
-			results := EvaluateStep(in, StepDependencies{Prevention: &controlval.FakeProvider{}, Recovery: &FakeRecoveryObserver{}, Containment: &FakeContainmentObserver{}, Detection: &FakeDetectionLookup{}, DataProtection: &FakeDataProtectionLookup{}})
+			results := EvaluateStep(in, StepDependencies{Prevention: ProviderPrevention{Provider: &controlval.FakeProvider{}}, Recovery: &FakeRecoveryObserver{}, Containment: &FakeContainmentObserver{}, Detection: &FakeDetectionLookup{}, DataProtection: &FakeDataProtectionLookup{}})
 			if len(results) != 5 {
 				t.Errorf("%s / %q (technique %s): got %d results, want 5 -- every technique-tagged step must be fully accounted for", file, step.Name, step.TechniqueID, len(results))
 			}
@@ -91,7 +91,7 @@ func TestRealCorpus_EM07ThreeT1490StepsStayIndependent(t *testing.T) {
 
 	for i, s := range t1490Steps {
 		in := StepInput{RunID: "r1", Action: actions[i], TechniqueID: s.TechniqueID, StepName: s.Name, CheckResult: "fail"}
-		deps := StepDependencies{Prevention: &controlval.FakeProvider{}, Recovery: recoveryObs, Containment: &FakeContainmentObserver{}, Detection: &FakeDetectionLookup{}, DataProtection: &FakeDataProtectionLookup{}}
+		deps := StepDependencies{Prevention: ProviderPrevention{Provider: &controlval.FakeProvider{}}, Recovery: recoveryObs, Containment: &FakeContainmentObserver{}, Detection: &FakeDetectionLookup{}, DataProtection: &FakeDataProtectionLookup{}}
 		results := EvaluateStep(in, deps)
 		var recovery CapabilityResult
 		for _, r := range results {
