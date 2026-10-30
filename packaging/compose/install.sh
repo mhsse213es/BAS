@@ -1827,14 +1827,18 @@ _write_aleef_secrets() {
     want+="${line}"$'\n'
   done
   mkdir -p "$DATA_DIR"
+  if [[ -d "$f" ]]; then
+    err "${f} is a directory (Docker created it before the file existed). Remove it and re-run."
+  fi
   if [[ ! -f "$f" ]]; then
     ( umask 077; : > "$f" )
   fi
+  # Lock the mode before any secret is written, so an existing file is never world-readable.
+  chown 65532:65532 "$f"
+  chmod 600 "$f"
   if [[ "$(cat "$f")" != "${want%$'\n'}" ]]; then
     printf '%s' "$want" > "$f"
   fi
-  chown 65532:65532 "$f"
-  chmod 600 "$f"
   log "Aleef secret references staged: ${#ALEEF_SECRET_LINES[@]} (${f}, mode 600)"
 }
 

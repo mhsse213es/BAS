@@ -38,7 +38,7 @@ func parseAleefSecretsFile(path string) (map[string]string, error) {
 			continue
 		}
 		k, v, ok := strings.Cut(line, "=")
-		if !ok || !aleefSecretKeyRe.MatchString(k) || v == "" || strings.ContainsAny(v, "\"'\\x00") {
+		if !ok || !aleefSecretKeyRe.MatchString(k) || v == "" || strings.ContainsAny(v, "\"'\\\x00") {
 			return nil, fmt.Errorf("aleef secrets file: malformed line %d", n)
 		}
 		out[k] = v

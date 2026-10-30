@@ -762,6 +762,12 @@ func TestParseAleefSecretsFile(t *testing.T) {
 			t.Fatalf("got %d, %v", len(m), err)
 		}
 	})
+	t.Run("values containing x and 0 are accepted", func(t *testing.T) {
+		m, err := parseAleefSecretsFile(writeAleefSecretsFile(t, "ALEEF_SECRET_X=abc0xyz\n"))
+		if err != nil || m["ALEEF_SECRET_X"] != "abc0xyz" {
+			t.Fatalf("got %v, %v", m, err)
+		}
+	})
 	t.Run("missing file is not an error", func(t *testing.T) {
 		m, err := parseAleefSecretsFile(filepath.Join(t.TempDir(), "absent"))
 		if err != nil || len(m) != 0 {
