@@ -18,8 +18,8 @@ Last updated: 2026-10-30. Head: `74b376ec`.
   - The tenant needs an API client with read access to hosts. Add the containment scope if the isolate and release actions are used.
 
 ## Open: still fake
-- **Prevention:** needs a real control-response source (EDR or agent evidence).
-- **DataProtection:** now wired to the DLP sink (`550dbcd6`). A receipt gives NotDetected. No receipt stays Unknown, because transport failure looks the same as a block. Akira Stage 5b is the only ransomware step that uses the sink. Needs a live run to confirm the receipt path end to end.
+- **Prevention:** wired to Defender Advanced Hunting (`8d319e9f`). A ControlledFolderAccessViolationBlocked event gives Blocked (High). An Asr*Blocked event gives Blocked (Medium), which the High expectation skips. No event gives Unknown, never Allowed. Needs a tenant with AdvancedHunting.Read.All. Action names, the token scope and field names are unverified live.
+- **DataProtection:** now wired to the DLP sink (`550dbcd6`). A receipt gives NotDetected. No receipt stays Unknown, because transport failure looks the same as a block. Akira Stage 5b is the only ransomware step that uses the sink. Reachability probe (`f5af7610`): a probe receipt with no data receipt gives Detected. The verifysync receipt check ignores probes. Needs a live run to confirm the probe and data receipts.
 
 ## Known limits (by design, documented)
 - Containment is a point-in-time read of device status, not state at attempt time.
