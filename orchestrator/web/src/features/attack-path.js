@@ -1102,6 +1102,13 @@ export function toggleRowMenu(btn, id) {
   var wasOpen = panel.classList.contains('open');
   closeAllRowMenus();
   if (wasOpen) return;
+  panel.classList.add('open');
+  placeRowMenu(btn, panel);
+}
+
+// Places an open row menu under its trigger button, clamped to the viewport.
+// Called when it opens and again on every scroll, so it follows its button.
+function placeRowMenu(btn, panel) {
   // Position as fixed viewport coordinates from the trigger button's own
   // rect (see the .row-menu-panel CSS comment for why fixed instead of
   // absolute), right-aligned under the button like a standard menu.
@@ -1138,10 +1145,34 @@ document.addEventListener('click', function(e) {
 });
 }
 
-// A fixed-position panel doesn't track its trigger button on scroll -- close
-// it instead of letting it visually drift away from the row it belongs to.
+// A fixed-position panel doesn't track its trigger button when the list scrolls,
+// so each open panel is re-placed under its button on every scroll. It closes only
+// when its button has scrolled out of view or is clipped by its list. Scrolling the
+// list is not a reason to close the menu.
 export function __init_L8490() {
-window.addEventListener('scroll', closeAllRowMenus, true);
+window.addEventListener('scroll', repositionOpenRowMenus, true);
+}
+
+function triggerVisible(btn) {
+  var r = btn.getBoundingClientRect();
+  if (r.width === 0 && r.height === 0) return false;
+  if (r.bottom < 0 || r.top > window.innerHeight) return false;
+  for (var el = btn.parentElement; el && el !== document.body; el = el.parentElement) {
+    var cs = getComputedStyle(el);
+    if (/(auto|hidden|scroll)/.test(cs.overflowY + cs.overflowX)) {
+      var c = el.getBoundingClientRect();
+      if (r.bottom < c.top || r.top > c.bottom || r.right < c.left || r.left > c.right) return false;
+    }
+  }
+  return true;
+}
+
+function repositionOpenRowMenus() {
+  document.querySelectorAll('.row-menu-panel.open').forEach(function(panel) {
+    var btn = panel.parentElement && panel.parentElement.querySelector('.row-menu-btn');
+    if (!btn || !triggerVisible(btn)) { panel.classList.remove('open'); return; }
+    placeRowMenu(btn, panel);
+  });
 }
 
 // Connection Config (hero button, admin only): open the Operational view at the connection settings.
