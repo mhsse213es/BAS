@@ -106,3 +106,21 @@ node_modules/
 # and held by the owner and must never be committed (see docs/aleef-benchmark-spec.md).
 orchestrator/internal/aleef/bank/sealed/sealed_defects.go
 **/labels.json
+
+# Local build outputs and screenshots (not source)
+/agent/agent
+/queryex
+/installer/installer
+/orchestrator/secretbackfill
+/orchestrator/staging-loadtest-linux
+/Capture.PNG
+/agentSet.PNG
+/agentSet1.PNG
+/agnt.PNG
+/console.PNG
+/phising.PNG
+/scen.PNG
+/section.PNG
+/user.PNG
+/wizard.PNG
+/clean_logo.png
