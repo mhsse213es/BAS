@@ -1468,3 +1468,16 @@ body.theme-light {
 .aleef-confirm { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.5rem; padding: 0.5rem; border: 1px solid var(--danger-border); background: var(--danger-dim); border-radius: var(--radius); }
 .aleef-findings-section { margin-bottom: 1.2rem; }
 .aleef-textarea { width: 100%; min-height: 8rem; font-family: var(--font-mono); font-size: 0.75rem; }
+
+/* Endpoint-wise remediation view (By endpoint). */
+.rem-ep { padding: 0; }
+.rem-ep-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 0.9rem; width: 100%; padding: 0.75rem 1rem; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.rem-ep-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius); }
+.rem-ep-name { font-weight: 600; }
+.rem-ep-id { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.75rem; }
+.rem-ep-stat { margin-left: auto; font-size: 0.78rem; padding: 0.1rem 0.5rem; border: 1px solid var(--border); border-radius: 999px; }
+.rem-ep-sum { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; padding: 0 1rem 0.75rem; font-size: 0.82rem; color: var(--muted-hi); }
+.rem-ep-sev { display: flex; gap: 0.6rem; }
+.rem-ep-list { border-top: 1px solid var(--border); padding: 0.5rem 1rem 0.75rem; display: grid; gap: 0.6rem; }
+.rem-ep-f { font-size: 0.84rem; }
+.rem-ep-mit { font-size: 0.78rem; margin-top: 0.15rem; line-height: 1.5; }

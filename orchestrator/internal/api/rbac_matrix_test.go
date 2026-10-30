@@ -175,6 +175,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/findings/{id}", tierAny, ""},
 	{http.MethodGet, "/api/findings/{id}/tickets", tierAny, ""},
 	{http.MethodGet, "/api/remediations", tierAny, ""},
+	{http.MethodGet, "/api/remediations/by-endpoint", tierAny, ""},
 	{http.MethodGet, "/api/ticketing/candidates", tierAny, ""},
 	{http.MethodGet, "/api/ticketing/revalidation", tierAny, ""},
 	{http.MethodGet, "/api/ticketing/summary", tierAny, ""},

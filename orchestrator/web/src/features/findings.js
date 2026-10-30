@@ -297,8 +297,9 @@ export function setFindingStatus(id, status) {
 
 // ── Remediation ──────────────────────────────────────────────────────────────
 export function loadRemediations() {
-  apicall('/api/remediations').then(function(list) {
-    state._rems = list || [];
+  Promise.all([apicall('/api/remediations'), apicall('/api/remediations/by-endpoint')]).then(function(res) {
+    state._rems = res[0] || [];
+    state._remEps = res[1] || [];
     var hs = RM.heroStats(state._rems);
     setHeroStat('rem-hs-open', hs.open);
     setHeroStat('rem-hs-critical', hs.critical);
@@ -315,6 +316,9 @@ function renderRemTiles() {
 }
 var REM_SEV = 'all';
 var REM_Q = '';
+// Remediation views: 'endpoint' (default, one row per endpoint) or 'technique' (the original view).
+var REM_VIEW = 'endpoint';
+var REM_OPEN_EP = {};
 // Section row ("Prioritized fixes" + Showing N of M) and the filter row. The search and severity
 // filters are real (client-side over the loaded list); the row is rebuilt without touching the box
 // the user is typing in.
@@ -322,24 +326,76 @@ function renderRemToolbar() {
   var el = document.getElementById('rem-toolbar');
   if (!el) return;
   var l = state._rems || [];
-  if (!l.length) { el.innerHTML = ''; return; }
+  var eps = state._remEps || [];
+  var views = seg([{ id: 'endpoint', label: 'By endpoint' }, { id: 'technique', label: 'By technique' }], REM_VIEW, 'setRemView');
+  if (REM_VIEW === 'endpoint') {
+    el.innerHTML =
+      '<div class="rem-sec"><h4 class="sec-label rem-sec-h">Endpoints</h4><span class="muted rem-sec-n">' + x(eps.length + (eps.length === 1 ? ' endpoint' : ' endpoints')) + '</span></div>' +
+      '<div class="rem-filters">' + views + '</div>';
+    return;
+  }
+  if (!l.length) { el.innerHTML = '<div class="rem-filters">' + views + '</div>'; return; }
   var c = RM.sevCounts(l);
   var opts = [['all', 'All'], ['Critical', 'Critical'], ['High', 'High'], ['Medium', 'Medium'], ['Low', 'Low']]
     .map(function(o) { return { id: o[0], label: o[1], count: c[o[0]] }; });
   var shown = RM.filterRems(l, REM_SEV, REM_Q).length;
   el.innerHTML =
     '<div class="rem-sec"><h4 class="sec-label rem-sec-h">Prioritized fixes</h4><span class="muted rem-sec-n" id="rem-showing">' + x(RM.showingText(shown, l.length)) + '</span></div>' +
-    '<div class="rem-filters">' + searchBox('rem-search', 'Search technique or control\u2026', 'setRemSearch') + seg(opts, REM_SEV, 'setRemFilter') + '</div>';
+    '<div class="rem-filters">' + views + searchBox('rem-search', 'Search technique or control…', 'setRemSearch') + seg(opts, REM_SEV, 'setRemFilter') + '</div>';
   var q = document.getElementById('rem-search');
   if (q) q.value = REM_Q;
 }
+export function setRemView(v) { REM_VIEW = v === 'technique' ? 'technique' : 'endpoint'; renderRemToolbar(); renderRemList(); }
+export function toggleRemEndpoint(id) { REM_OPEN_EP[id] = !REM_OPEN_EP[id]; renderEndpointList(); }
 export function setRemFilter(v) { REM_SEV = v; renderRemToolbar(); renderRemList(); }
 export function setRemSearch(el) { REM_Q = (el && el.value) || ''; renderRemList(); }
 // Techniques whose tickets were pushed in this session (the ticketing API returns no per-technique
 // state to read back, so the card can only show what this browser tab did).
 var REM_TICKETED = {};
+// Endpoint view (default). One row per endpoint from /api/remediations/by-endpoint. The status
+// is Open, Phase 2 (a remediation request exists) or No remediation required. A request is never
+// shown as a fix: closure is verified by revalidation, not by this view.
+var EP_STATUS = { 'Open': 'Open', 'Phase 2': 'Phase 2', 'No remediation required': 'No remediation required' };
+function renderEndpointList() {
+  var el = document.getElementById('rem-list');
+  var eps = state._remEps || [];
+  if (!eps.length) { el.innerHTML = card('', empty('ok', 'No endpoints', 'No agents are registered yet.')); return; }
+  el.innerHTML = '<div class="rk-grid g2 rem-grid">' + eps.map(endpointCard).join('') + '</div>';
+}
+function endpointCard(e) {
+  var key = e.agentId;
+  var open = !!REM_OPEN_EP[key];
+  var name = e.hostname || e.agentId;
+  var sev = e.severity || {};
+  var sevLine = ['critical', 'high', 'medium', 'low'].map(function(k) {
+    return '<span>' + k.charAt(0).toUpperCase() + k.slice(1) + ' ' + (sev[k] || 0) + '</span>';
+  }).join('');
+  var head =
+    '<button type="button" class="rem-ep-head"' + on('click', 'toggleRemEndpoint', key) + ' aria-expanded="' + open + '">' +
+      '<span class="rem-ep-name">' + x(name) + (e.hostname ? '' : ' <span class="muted">(hostname unknown)</span>') + '</span>' +
+      '<span class="muted rem-ep-id">' + x(e.agentId) + '</span>' +
+      '<span class="rem-ep-stat">' + x(EP_STATUS[e.status] || e.status) + '</span>' +
+    '</button>';
+  var body =
+    '<div class="rem-ep-sum">' +
+      '<span><b>' + x(String(e.openFindings)) + '</b> open findings</span>' +
+      '<span><b>' + x(String(e.techniqueCount)) + '</b> techniques</span>' +
+      '<span class="rem-ep-sev">' + sevLine + '</span>' +
+    '</div>';
+  if (open) {
+    body += '<div class="rem-ep-list">' + (e.findings || []).map(function(f) {
+      var mit = (f.mitigations && f.mitigations.length) ? f.mitigations.join('; ') : 'No ATT&CK mitigation recorded for this technique.';
+      return '<div class="rem-ep-f">' +
+        '<div><b>' + x(f.techniqueId) + '</b> ' + x(f.techniqueName || '') + ' <span class="muted">· ' + x(f.severity) + ' · ' + x(f.exposureState === 'detected_only' ? 'Detected only' : 'Missed') + '</span></div>' +
+        '<div class="muted rem-ep-mit">Recommended: ' + x(mit) + '</div>' +
+      '</div>';
+    }).join('') + '</div>';
+  }
+  return '<section class="rk-card rem-ep">' + head + body + '</section>';
+}
 // One prioritized-fix card per remediation, three to a row like the design demo.
 function renderRemList() {
+  if (REM_VIEW === 'endpoint') { renderEndpointList(); return; }
   var l = state._rems || [];
   var el = document.getElementById('rem-list');
   if (!l.length) { el.innerHTML = card('', empty('ok', 'No open remediations', 'Nothing to fix right now.')); return; }
