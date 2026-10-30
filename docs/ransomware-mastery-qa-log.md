@@ -19,7 +19,7 @@ Last updated: 2026-10-30. Head: `74b376ec`.
 
 ## Open: still fake
 - **Prevention:** needs a real control-response source (EDR or agent evidence).
-- **DataProtection:** needs a real DLP result source.
+- **DataProtection:** now wired to the DLP sink (`550dbcd6`). A receipt gives NotDetected. No receipt stays Unknown, because transport failure looks the same as a block. Akira Stage 5b is the only ransomware step that uses the sink. Needs a live run to confirm the receipt path end to end.
 
 ## Known limits (by design, documented)
 - Containment is a point-in-time read of device status, not state at attempt time.
