@@ -7,23 +7,26 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// SinkEvidenceForStep counts the DLP sink tokens issued for one run and technique,
-// and how many of those tokens have at least one receipt. It reads only the
-// run's own rows, so another run's receipts cannot satisfy this step.
-func SinkEvidenceForStep(ctx context.Context, pool *pgxpool.Pool, runID, techniqueID string) (tokens, receipts int, err error) {
-	if err = pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM dlp_sink_tokens WHERE run_id = $1 AND technique_id = $2`,
+// SinkEvidenceForStep counts, for one run and technique, the sink tokens issued
+// and how many of those tokens have a data receipt and how many have a
+// reachability-probe receipt. A probe carries no sensitive content, so it is
+// reported separately and never counted as data. It reads only the run's own
+// rows, so another run's receipts cannot satisfy this step.
+func SinkEvidenceForStep(ctx context.Context, pool *pgxpool.Pool, runID, techniqueID string) (tokens, dataReceipts, probeReceipts int, err error) {
+	err = pool.QueryRow(ctx, `
+		SELECT
+		  (SELECT COUNT(*) FROM dlp_sink_tokens
+		    WHERE run_id = $1 AND technique_id = $2),
+		  (SELECT COUNT(DISTINCT t.token) FROM dlp_sink_tokens t
+		     JOIN dlp_sink_receipts r ON r.token = t.token
+		    WHERE t.run_id = $1 AND t.technique_id = $2 AND r.channel <> 'reachability'),
+		  (SELECT COUNT(DISTINCT t.token) FROM dlp_sink_tokens t
+		     JOIN dlp_sink_receipts r ON r.token = t.token
+		    WHERE t.run_id = $1 AND t.technique_id = $2 AND r.channel = 'reachability')`,
 		runID, techniqueID,
-	).Scan(&tokens); err != nil {
-		return 0, 0, fmt.Errorf("count sink tokens: %w", err)
+	).Scan(&tokens, &dataReceipts, &probeReceipts)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("sink evidence for step: %w", err)
 	}
-	if err = pool.QueryRow(ctx,
-		`SELECT COUNT(DISTINCT t.token) FROM dlp_sink_tokens t
-		   JOIN dlp_sink_receipts r ON r.token = t.token
-		  WHERE t.run_id = $1 AND t.technique_id = $2`,
-		runID, techniqueID,
-	).Scan(&receipts); err != nil {
-		return 0, 0, fmt.Errorf("count sink receipts: %w", err)
-	}
-	return tokens, receipts, nil
+	return tokens, dataReceipts, probeReceipts, nil
 }

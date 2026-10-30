@@ -21,10 +21,10 @@ func (s sinkDataProtectionSource) LookupDataProtection(ctx context.Context, key 
 	if s.pool == nil {
 		return "", "", nil
 	}
-	tokens, receipts, err := db.SinkEvidenceForStep(ctx, s.pool, key.RunID, key.TechniqueID)
+	tokens, data, probe, err := db.SinkEvidenceForStep(ctx, s.pool, key.RunID, key.TechniqueID)
 	if err != nil {
 		return "", "", err
 	}
-	status, reason := rwevidence.SinkDataProtectionStatus(tokens, receipts)
+	status, reason := rwevidence.SinkDataProtectionStatus(tokens, data, probe)
 	return status, reason, nil
 }

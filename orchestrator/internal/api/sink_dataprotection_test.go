@@ -73,3 +73,31 @@ func TestSinkDataProtectionSource_TokenWithoutReceiptIsUnknownNotBlocked(t *test
 		}
 	})
 }
+
+// A probe that reached the sink while the payload did not is a block, so the
+// adapter reports Detected. This is the only path to a Detected verdict.
+func TestSinkDataProtectionSource_ProbeOnlyIsDetected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO dlp_sink_tokens (token, run_id, technique_id, expires_at) VALUES ($1, $2, $3, $4)`,
+			"dp-tok-probe", "dp-run-probe", "T1567", time.Now().Add(time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO dlp_sink_receipts (token, channel) VALUES ($1, 'reachability')`, "dp-tok-probe"); err != nil {
+			t.Fatal(err)
+		}
+
+		status, _, err := sinkDataProtectionSource{pool: pool}.LookupDataProtection(ctx,
+			rwevidence.AttemptKey{RunID: "dp-run-probe", TechniqueID: "T1567"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if status != "Detected" {
+			t.Fatalf("probe-only: status=%q, want Detected", status)
+		}
+	})
+}

