@@ -73,7 +73,7 @@ fi
 # literally at the call site keeps bash's own quoting intact, so the
 # expansion stays one word regardless of the value's internal spaces.
 LDFLAGS_ORCH="-s -w -X main.Version=${VERSION}"
-LDFLAGS_AGENT="-s -w"
+LDFLAGS_AGENT="-s -w -X main.version=${VERSION}"
 
 # ── 1. Build orchestrator binary ───────────────────────────────────────────────
 log "Building bas-orchestrator ${VERSION} for linux/amd64..."

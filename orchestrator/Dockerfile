@@ -35,6 +35,7 @@ RUN mkdir -p /content && \
 
 # ── Agent + Installer Builder ────────────────────────────────────────────────
 FROM golang:1.26-alpine AS agent-builder
+ARG AGENT_VERSION=dev
 # Pinned to the same v0.17.0 used by the orchestrator's own builder stage
 # below -- v0.18.0 requires go >= 1.27, which this image's go1.26.7 cannot
 # satisfy under GOTOOLCHAIN=local (see that stage's comment for the full
@@ -53,11 +54,11 @@ COPY agent/ .
 # dependency's reflection/assembly code is never garble's business to
 # rewrite). All platform binaries.
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-linux-amd64   . && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-linux-arm64   . && \
-    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-windows-amd64.exe . && \
-    CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-darwin-amd64  . && \
-    CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-darwin-arm64  .
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w -X main.version=${AGENT_VERSION}" -o /agents/bas-agent-linux-amd64   . && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w -X main.version=${AGENT_VERSION}" -o /agents/bas-agent-linux-arm64   . && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w -X main.version=${AGENT_VERSION}" -o /agents/bas-agent-windows-amd64.exe . && \
+    CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w -X main.version=${AGENT_VERSION}" -o /agents/bas-agent-darwin-amd64  . && \
+    CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w -X main.version=${AGENT_VERSION}" -o /agents/bas-agent-darwin-arm64  .
 # BINARIES.sha256 is generated later, in the binaries-manifest stage, once
 # both this stage's and agent-legacy-builder's binaries exist to hash together.
 # Windows GUI installer — embeds the single Windows agent binary built above

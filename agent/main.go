@@ -17,10 +17,11 @@ import (
 	"audspect/agent/preflight"
 )
 
-const (
-	version           = "2.1.0"
-	heartbeatInterval = 30 * time.Second
-)
+// version is the release version, stamped at link time (-X main.version=...) by the
+// build scripts. An unstamped build reports "dev", never a release number.
+var version = "dev"
+
+const heartbeatInterval = 30 * time.Second
 
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmsgprefix)

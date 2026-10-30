@@ -222,7 +222,7 @@ if (-not $SkipBuild) {
     # dashboard file at startup. BAS_SIGNING_KEY is not needed  -  the public key
     # was already compiled into signing.go by step 0b-i above.
     Log "Building $OrchestratorTag (garble -literals -tiny - this takes 5-10 min)..."
-    $buildExtraArgs = @("--build-arg", "BAS_VERSION=$Version")
+    $buildExtraArgs = @("--build-arg", "BAS_VERSION=$Version", "--build-arg", "AGENT_VERSION=$Version")
     # A tiered build must not put other tiers' scenarios in the image. The image is built from the
     # repo root, so give it a filtered copy of the scenarios inside the build context.
     $scenarioStage = $null
@@ -400,7 +400,7 @@ $env:GOGARBLE = "audspect/*"
 # windigo, and sspi un-obfuscated (same reasoning as the Dockerfile's
 # agent-builder stage).
 if (Test-Path "$InstallerDir\bas_agent.exe") { Remove-Item -Force "$InstallerDir\bas_agent.exe" }
-garble -literals build -ldflags="-s -w -H windowsgui" -o "$InstallerDir\bas_agent.exe" . 2>&1
+garble -literals build -ldflags="-s -w -H windowsgui -X main.version=$Version" -o "$InstallerDir\bas_agent.exe" . 2>&1
 if ($LASTEXITCODE -ne 0) { Err "Agent build failed." }
 $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""; $env:GOGARBLE = ""
 Pop-Location
@@ -646,7 +646,7 @@ Push-Location $AgentDir
 # agent under a name the manifest/signing flow treats as already-hardened.
 $env:GOOS = "linux"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
 $env:GOGARBLE = "audspect/*"
-garble -literals build -ldflags="-s -w" -o "$OutDir\bas-agent-linux-amd64" . 2>&1
+garble -literals build -ldflags="-s -w -X main.version=$Version" -o "$OutDir\bas-agent-linux-amd64" . 2>&1
 if ($LASTEXITCODE -ne 0) {
     Warn "Linux amd64 agent build failed."
 } else {
