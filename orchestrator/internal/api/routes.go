@@ -623,6 +623,14 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// API BAS stored results (read-only). Authorization is the permission; installs are isolated by database.
 		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/runs", h.ListAPIBASRuns)
 		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/runs/{id}", h.GetAPIBASRun)
+		// Aleef API discovery (separate licence add-on, license.ProductAleef via productPrefixes).
+		r.With(auth.RequirePermission(auth.CanAuthorizeAleef)).Post("/api/aleef/engagements", h.CreateAleefEngagement)
+		r.With(auth.RequirePermission(auth.CanRunAleef)).Post("/api/aleef/runs", h.StartAleefRun)
+		r.With(auth.RequirePermission(auth.CanViewAleef)).Get("/api/aleef/runs/{id}", h.GetAleefRun)
+		r.With(auth.RequirePermission(auth.CanRunAleef)).Post("/api/aleef/runs/{id}/stop", h.StopAleefRun)
+		r.With(auth.RequirePermission(auth.CanViewAleef)).Get("/api/aleef/findings", h.ListAleefFindings)
+		r.With(auth.RequirePermission(auth.CanViewAleef)).Get("/api/aleef/findings/{id}/regression", h.GetAleefRegression)
+		r.With(auth.RequirePermission(auth.CanRunAleef)).Post("/api/aleef/findings/{id}/prior-knowledge", h.SetAleefPriorKnowledge)
 		r.With(auth.RequirePermission(auth.CanViewVariantStats)).Get("/api/variants/stats", h.GetVariantStats)
 
 		// Full Variant Sweep — server-owned orchestration

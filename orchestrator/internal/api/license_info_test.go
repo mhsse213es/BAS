@@ -208,3 +208,32 @@ func TestGetLicenseInfo_WarnsWhenTheLicenceIsHigherThanTheBuild(t *testing.T) {
 		}
 	})
 }
+
+// The licence info lists licensed add-ons under the "special" category, from the verified licence.
+func TestGetLicenseInfo_ListsSpecialAddons(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		priv, pubPEM := license.GenerateTestKeypair()
+		origKey := license.PublicKeyPEM
+		license.PublicKeyPEM = pubPEM
+		defer func() { license.PublicKeyPEM = origKey }()
+		licPath := filepath.Join(t.TempDir(), "bas.lic")
+		lic := license.SignForTest(priv, license.License{Customer: "Acme", CustomerID: "acme-1", IssuedAt: "2026-01-01",
+			ExpiresAt: "2999-01-01", Features: []string{"full", "addon:aleef"}, Tier: "Core"})
+		data, _ := json.Marshal(lic)
+		if err := os.WriteFile(licPath, data, 0644); err != nil {
+			t.Fatal(err)
+		}
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithLicensePath(licPath)
+		rec := httptest.NewRecorder()
+		h.GetLicenseInfo(rec, httptest.NewRequest(http.MethodGet, "/api/license", nil))
+		var body struct {
+			SpecialAddons []map[string]string `json:"specialAddons"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body.SpecialAddons) != 1 || body.SpecialAddons[0]["name"] != "aleef" || body.SpecialAddons[0]["category"] != "special" {
+			t.Fatalf("specialAddons = %v", body.SpecialAddons)
+		}
+	})
+}

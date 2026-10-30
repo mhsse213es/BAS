@@ -353,3 +353,21 @@ func TestContentRegistryPermissions(t *testing.T) {
 		}
 	}
 }
+
+// Aleef: admin and analyst may view and run; viewer holds neither (least privilege).
+func TestAleefPermissions(t *testing.T) {
+	for _, p := range []Permission{CanViewAleef, CanRunAleef} {
+		if !HasPermission(RoleAdmin, p) || !HasPermission(RoleAnalyst, p) {
+			t.Fatalf("admin and analyst must hold %s", p)
+		}
+		if HasPermission(RoleViewer, p) {
+			t.Fatalf("viewer must not hold %s", p)
+		}
+	}
+	if !HasPermission(RoleAdmin, CanAuthorizeAleef) || HasPermission(RoleAnalyst, CanAuthorizeAleef) || HasPermission(RoleViewer, CanAuthorizeAleef) {
+		t.Fatal("aleef:authorize must be admin only")
+	}
+	if CanViewAleef != "aleef:view" || CanRunAleef != "aleef:run" {
+		t.Fatal("permission values changed")
+	}
+}

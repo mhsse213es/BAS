@@ -29,6 +29,7 @@ import { loadScheduledAssessments } from './scheduled.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { loadExecutionPolicyDefault } from './execution-policy.js';
 import { loadK8sRuns } from './k8s-scenarios.js';
+import { initAleefNav, loadAleef, resetAleefState, stopAleefPolling } from './aleef.js';
 import { loadVariantTab } from './variant-executor.js';
 import { displayOf, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
@@ -61,7 +62,7 @@ export function toggleSidebarCollapsed() {
   try { localStorage.setItem('bas_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
   document.getElementById('sidebar-collapse-btn').title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
 }
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'k8s-scenarios':'Kubernetes Scenarios', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variants', em:'Endpoint Mastery', 'ad-coverage':'AD Coverage', email:'Email', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance', 'factory-health':'Factory Health', attackpath:'Attack Paths', integrations:'Integrations' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'k8s-scenarios':'Kubernetes Scenarios', aleef:'Aleef API discovery', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variants', em:'Endpoint Mastery', 'ad-coverage':'AD Coverage', email:'Email', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance', 'factory-health':'Factory Health', attackpath:'Attack Paths', integrations:'Integrations' };
 export var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -324,6 +325,7 @@ export function doRecover() {
 export function doLogout() {
   TOKEN = ''; ROLE = '';
   state._findings = undefined; // the next person who signs in must not see this person's count
+  resetAleefState(); // stop the run poll and drop the previous session's Aleef data
   localStorage.removeItem('bas_role');
   try { localStorage.removeItem('bas_user_id'); } catch (e) {}
   if (state.socket) state.socket.close();
@@ -350,6 +352,7 @@ function bootApp() {
   // Kubernetes scenarios belong to the Enterprise cloud product: hidden unless the licence grants it.
   var k8sLicensed = !!(LICENSE_INFO && LICENSE_INFO.kubernetesScenarios);
   if (navK8s) setDisplay(navK8s, (k8sLicensed && (ROLE === 'admin' || ROLE === 'analyst')) ? '' : 'none');
+  initAleefNav(ROLE); // shown only when the licence lists the aleef special add-on
   if (ROLE === 'admin') {
     document.querySelectorAll('.settings-nav a').forEach(function(el) {
       if (el.getAttribute('data-set') !== 'theme') setDisplay(el, '');
@@ -508,12 +511,13 @@ export function doLogoutFromMenu() { closeUserMenu(); doLogout(); }
 export function activateTab(name) {
   var appEl = document.getElementById('app');
   if (appEl) appEl.classList.remove('sidebar-open');
-  ['dashboard','agents','scenarios','runs','k8s-scenarios','scheduled-assessments','initiatives','campaigns','factory-health','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','ad-coverage','email','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','k8s-scenarios','aleef','scheduled-assessments','initiatives','campaigns','factory-health','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','ad-coverage','email','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) setDisplay(el, t === name ? '' : 'none');
     var nav = document.querySelector('[data-tab="' + t + '"]');
     if (nav) nav.classList.toggle('active', t === name);
   });
+  if (name !== 'aleef') stopAleefPolling(); // clean up the run poll timer on any tab switch
   var titleEl = document.getElementById('header-page-title');
   if (titleEl) titleEl.textContent = TAB_TITLES[name] || name;
   renderBreadcrumb(name, TAB_TITLES[name] || name);
@@ -629,6 +633,7 @@ export function showTab(name) {
   if (name === 'campaigns') closeCampaignDetail();
   if (name === 'scheduled-assessments') loadScheduledAssessments();
   if (name === 'k8s-scenarios') loadK8sRuns();
+  if (name === 'aleef') loadAleef();
   if (name === 'initiatives') loadInitiatives();
   if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); loadThreatExposure(); }
   if (name === 'attack-coverage') { loadCoverageActors(); loadCoverageMatrix(); }

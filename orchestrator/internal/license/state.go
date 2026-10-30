@@ -49,6 +49,9 @@ type Info struct {
 	// Tier is the licence tier the state grants. Empty grants nothing, so a state built without a
 	// tier fails closed in PermitsNow.
 	Tier Tier
+	// Addons are the recognised add-on products the verified licence carries (see HasAddon). A
+	// state built without them grants no add-on product.
+	Addons []string
 }
 
 // Evaluate computes the enforcement state of lic as of now. now is an
@@ -74,6 +77,7 @@ func Evaluate(lic *License, now time.Time) (Info, error) {
 	info := Info{
 		Customer:  lic.Customer,
 		Tier:      lic.EffectiveTier(),
+		Addons:    lic.Addons(),
 		ExpiresAt: expiresAt,
 		LockoutAt: lockoutAt,
 	}

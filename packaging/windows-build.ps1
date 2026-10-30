@@ -8,7 +8,8 @@
 #       -Version    1.6.0 `
 #       -Customer   "HDFC Bank" `
 #       -CustomerID "hdfc-prod-001" `
-#       -Days       365
+#       -Days       365 `
+#       [-LicenseType Core|Advanced|Enterprise] [-Addons aleef]
 #
 # Output:
 #   dist\bas-install-<version>\         delivery folder
@@ -27,6 +28,9 @@ param(
     # (Enterprise), as before tiers existed.
     [ValidateSet("", "Core", "Advanced", "Enterprise")]
     [string] $LicenseType = "",
+    # Add-on products sold outside the tiers, as a comma list. Empty issues none. Today only "aleef"
+    # (Aleef API discovery). The add-on works with any tier or none; the tier applies independently.
+    [string] $Addons = "",
     [switch] $SkipBuild,         # pass -SkipBuild to repackage without rebuilding image
 
     # -- D1 release signing (docs/superpowers/specs/2026-09-30-d1-release-signing-architecture-design.md) --
@@ -1131,6 +1135,10 @@ if ($Customer -ne "" -and $CustomerID -ne "") {
         Warn "License private key not found at $LicPrivKey - skipping license generation."
         Warn "Run: bash packaging/licensing/keygen.sh"
     } else {
+        $addonList = @($Addons -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" })
+        foreach ($a in $addonList) { if ($a -ne "aleef") { Err "Unknown -Addons value $a (recognised: aleef)" } }
+        $addonArgs = @()
+        if ($addonList.Count -gt 0) { $addonArgs = @("-addons", ($addonList -join ",")) }
         Push-Location $RepoRoot
         # The file is named <customer>-<tier>-<number>.lic (hdfc-enterprise-001.lic); licensegen owns that rule.
         $LicFileName = (go run "$LicGenDir\main.go" -id $CustomerID "-tier=$LicenseType" -name-only | Select-Object -First 1).Trim()
@@ -1140,7 +1148,8 @@ if ($Customer -ne "" -and $CustomerID -ne "") {
             -days     $Days `
             "-tier=$LicenseType" `
             -key      $LicPrivKey `
-            -out      $LicFileName
+            -out      $LicFileName `
+            @addonArgs
         Pop-Location
         $LicensePath = Join-Path $RepoRoot $LicFileName
         if (Test-Path $LicensePath) {

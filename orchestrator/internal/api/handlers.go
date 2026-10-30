@@ -221,6 +221,8 @@ type Handler struct {
 	// containmentDevices backs the ransomware Containment capability. Nil keeps
 	// it honestly NotTested (see containmentObserverFor).
 	containmentDevices rwcontain.DeviceSource
+	// aleef is the Aleef API discovery state; nil until WithAleef.
+	aleef *aleefState
 }
 
 // New creates a Handler.
@@ -757,6 +759,7 @@ func (h *Handler) GetLicenseInfo(w http.ResponseWriter, r *http.Request) {
 		"buildTier":     license.BuildTier(),
 		"buildMismatch": license.BuildMismatch(license.BuildTier(), lic.EffectiveTier()),
 		"productLines":  productLines,
+		"specialAddons": lic.SpecialAddons(),
 		"status":        string(info.State),
 		"daysRemaining": info.DaysRemaining,
 		"lockoutAt":     info.LockoutAt.Format("2006-01-02"),

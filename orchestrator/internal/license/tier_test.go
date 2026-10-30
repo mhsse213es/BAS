@@ -204,3 +204,118 @@ func TestDBSimProductLineTiers(t *testing.T) {
 		}
 	}
 }
+// Aleef is a separate product outside the three tiers: no tier table entry may include it.
+func TestNoTierIncludesAleef(t *testing.T) {
+	for tier, lines := range tierProductLines {
+		for _, l := range lines {
+			if l == ProductAleef {
+				t.Fatalf("tier %s includes %s", tier, ProductAleef)
+			}
+		}
+		products, err := TierProducts(tier)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if products[ProductAleef] {
+			t.Fatalf("TierProducts(%s) includes %s", tier, ProductAleef)
+		}
+	}
+}
+
+func TestAleefAddOnGrantsOnEveryTier(t *testing.T) {
+	for _, tier := range []string{string(TierCore), string(TierAdvanced), string(TierEnterprise), ""} {
+		with := &License{Tier: tier, Features: []string{"api-bas", "addon:aleef"}}
+		if !with.Permits(ProductAleef) {
+			t.Fatalf("tier %q with the add-on refused Aleef", tier)
+		}
+		without := &License{Tier: tier, Features: []string{"api-bas", "aleef", "all"}}
+		if without.Permits(ProductAleef) {
+			t.Fatalf("tier %q without the add-on permitted Aleef", tier)
+		}
+	}
+	// An Enterprise tier alone does not grant it, and a pre-tier licence keeps everything else.
+	ent := &License{Tier: string(TierEnterprise)}
+	if ent.Permits(ProductAleef) {
+		t.Fatal("Enterprise alone granted Aleef")
+	}
+	legacy := &License{}
+	if legacy.Permits(ProductAleef) || !legacy.Permits(ProductDLP) {
+		t.Fatal("pre-tier licence: Aleef must be refused and other products kept")
+	}
+}
+
+func TestHasAddon_ExactMatchOnly(t *testing.T) {
+	for _, bad := range []string{"addon:aleef2", "ADDON:ALEEF", "addon:ALEEF", "aleef", " addon:aleef", "addon:aleef ", "addon:aleef,addon:x", "xaddon:aleef", "addon:ale", ""} {
+		l := &License{Tier: string(TierEnterprise), Features: []string{bad}}
+		if l.HasAddon("aleef") || l.Permits(ProductAleef) {
+			t.Fatalf("near-miss token %q granted the add-on", bad)
+		}
+		info, err := Evaluate(&License{ExpiresAt: "2999-01-01", Features: []string{bad}}, time.Now())
+		if err != nil || len(info.Addons) != 0 {
+			t.Fatalf("near-miss token %q produced addons %v (%v)", bad, info.Addons, err)
+		}
+	}
+	if !(&License{Features: []string{"addon:aleef"}}).HasAddon("aleef") {
+		t.Fatal("exact token not recognised")
+	}
+	if (&License{Features: []string{"addon:other"}}).HasAddon("aleef") {
+		t.Fatal("other add-on matched")
+	}
+	// Unrecognised add-on names are not exposed.
+	if got := (&License{Features: []string{"addon:other", "addon:aleef"}}).Addons(); len(got) != 1 || got[0] != "aleef" {
+		t.Fatalf("Addons() = %v, want [aleef]", got)
+	}
+}
+
+func TestPermitsNow_Aleef(t *testing.T) {
+	defer SetInitial(Current())
+	exp := time.Now().UTC().AddDate(1, 0, 0).Format("2006-01-02")
+	for _, tier := range []Tier{TierCore, TierAdvanced, TierEnterprise} {
+		with, err := Evaluate(&License{Tier: string(tier), ExpiresAt: exp, Features: []string{"addon:aleef"}}, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		SetInitial(with)
+		if !PermitsNow(ProductAleef) {
+			t.Fatalf("%s with add-on: refused", tier)
+		}
+		without, _ := Evaluate(&License{Tier: string(tier), ExpiresAt: exp}, time.Now())
+		SetInitial(without)
+		if PermitsNow(ProductAleef) {
+			t.Fatalf("%s without add-on: permitted", tier)
+		}
+	}
+	// Blocked states refuse even with the add-on.
+	for _, st := range []State{StateLocked, StateInvalid} {
+		SetInitial(Info{State: st, Tier: TierEnterprise, Addons: []string{"aleef"}})
+		if PermitsNow(ProductAleef) {
+			t.Fatalf("%s licence permitted Aleef", st)
+		}
+	}
+	// A state with no add-on list (an unseeded or Info{} state) fails closed.
+	SetInitial(Info{State: StateValid, Tier: TierEnterprise})
+	if PermitsNow(ProductAleef) {
+		t.Fatal("state without add-ons permitted Aleef")
+	}
+	// An expired-past-grace licence evaluates to locked and refuses.
+	locked, _ := Evaluate(&License{Tier: string(TierEnterprise), ExpiresAt: "2000-01-01", Features: []string{"addon:aleef"}}, time.Now())
+	SetInitial(locked)
+	if PermitsNow(ProductAleef) {
+		t.Fatal("locked licence permitted Aleef")
+	}
+}
+
+func TestValidProductLine_Aleef(t *testing.T) {
+	if !ValidProductLine("aleef") {
+		t.Fatal("aleef is not a valid product line")
+	}
+}
+
+// The add-on token is covered by the signature: editing Features after signing breaks verification.
+func TestAleefAddOnIsInsideSignedPayload(t *testing.T) {
+	a := (&License{CustomerID: "c", IssuedAt: "i", ExpiresAt: "e", Features: []string{"x"}}).payload()
+	b := (&License{CustomerID: "c", IssuedAt: "i", ExpiresAt: "e", Features: []string{"x", "addon:aleef"}}).payload()
+	if a == b {
+		t.Fatal("add-on token not part of the signed payload")
+	}
+}

@@ -33,6 +33,7 @@ import { __init_L19932, __init_L5162, __init_L5212, __init_L5490, __init_L5494 }
 import './features/threat-intel.js';
 import './features/execution-policy.js';
 import './features/k8s-scenarios.js';
+import './features/aleef.js';
 import './features/variant-executor.js';
 import './features/variant-report.js';
 import './features/variants.js';

@@ -72,6 +72,8 @@ var TechniqueDomain = map[string]Domain{
 	// Impair Defenses: Modify Authentication Process (CVE-2020-1472 Zerologon)
 	"T1556": DomainDefenseEvasion,
 	// Exfiltration to Cloud Storage
+	// Exfiltration Over Web Service / generic HTTPS staging (Akira Stage 5b, sink-backed)
+	"T1567": DomainExfiltration,
 	"T1567.002": DomainExfiltration,
 }
 

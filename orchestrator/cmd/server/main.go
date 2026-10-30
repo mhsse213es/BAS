@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/config"
+	aleefstore "github.com/audspect/bas/internal/aleef/store"
 	"github.com/audspect/bas/internal/api"
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/cmdsigning"
@@ -326,6 +327,9 @@ func main() {
 	}
 	if err := db.EnsureAPIBASRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] apibas run schema: %v", err)
+	}
+	if err := aleefstore.EnsureSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] aleef schema: %v", err)
 	}
 	if err := db.EnsureEmailGWRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] email gw run schema: %v", err)
@@ -989,6 +993,8 @@ func main() {
 		WithVexSweep(vexSweepStore, vexSweepDispatcher).
 		WithEMSweep(emSweepStore, emSweepDispatcher).
 		WithTAXII(taxiiStore, taxiiManager).
+		// Aleef API discovery. Token references resolve from ALEEF_SECRET_* environment variables (api.AleefEnvSecrets).
+		WithAleef(aleefstore.New(pool), nil).
 		WithIOCProvider(iocProvider).
 		WithNetworkVantagePoint(networkVP).
 		WithEmailGWRun(emailgwProvider, emailgwInjectionTarget, emailgwEnvironment).
@@ -1001,6 +1007,12 @@ func main() {
 			FromAddr: cfg.SMTPFrom,
 			FromName: cfg.SMTPFromName,
 		})
+
+	// Aleef campaigns this process did not finish (killed or crashed) are marked interrupted before any
+	// new run can start. Their target objects may remain; the run records say so.
+	if err := handler.RecoverAleefRuns(context.Background()); err != nil {
+		log.Printf("[!] aleef run recovery: %v", err)
+	}
 
 	// Resume every EmailGW run a previous process restart abandoned
 	// mid-wait (see internal/api.RecoverEmailGWRuns's own doc comment).
@@ -1421,6 +1433,9 @@ func main() {
 	log.Println("[*] Shutting down gracefully...")
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutCancel()
+	// Cancel in-flight Aleef campaigns first and give their cleanup sweeps time to compensate what they
+	// created on the target, while the rest of shutCtx remains for the servers.
+	handler.ShutdownAleef(8 * time.Second)
 	for _, s := range []*http.Server{mtlsSrv, enrollSrv, legacySrv, dashboardSrv} {
 		if err := s.Shutdown(shutCtx); err != nil {
 			log.Printf("[!] shutdown error: %v", err)

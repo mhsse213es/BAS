@@ -26,6 +26,8 @@ var categories = map[string]bool{
 	"AUTHN": true, "AUTHZ": true, "GWAY": true, "INJ": true, "BIZ": true,
 	"DATA": true, "ABUSE": true, "INTEG": true, "DISC": true, "DET": true,
 	"REPORT": true,
+	// ALEEF marks scenarios generated or registered by the ALEEF engine.
+	"ALEEF": true,
 }
 
 // Side-effect classes from blueprint section 6. Phase 2 supports READ_ONLY and
@@ -67,6 +69,27 @@ var groundTruthAdapters = map[string]bool{"state": true, "response": true, "repo
 var authModes = map[string]bool{"valid": true, "none": true, "revoked": true, "alg_none": true}
 
 var idPattern = regexp.MustCompile(`^API-BAS-([A-Z]+)-(\d{3})$`)
+
+// ALEEF ids: generated tests carry a content hash, registered ones a serial.
+var (
+	aleefGenPattern = regexp.MustCompile(`^ALEEF-GEN-[A-Z0-9-]+-[0-9a-f]{8}(-OC|-NC)?$`)
+	aleefRegPattern = regexp.MustCompile(`^ALEEF-REG-\d{4}(-OC|-NC)?$`)
+)
+
+// idCategory returns the category segment an id implies. ALEEF ids always
+// imply category ALEEF.
+func idCategory(id string) (string, error) {
+	if m := idPattern.FindStringSubmatch(id); m != nil {
+		return m[1], nil
+	}
+	if aleefGenPattern.MatchString(id) || aleefRegPattern.MatchString(id) {
+		return "ALEEF", nil
+	}
+	if strings.HasPrefix(id, "ALEEF-") {
+		return "", fmt.Errorf("contract: id %q must match ALEEF-GEN-<PROPERTY>-<8 hex> or ALEEF-REG-<NNNN>[-OC|-NC]", id)
+	}
+	return "", fmt.Errorf("contract: id %q must match API-BAS-<CAT>-<NNN>", id)
+}
 
 // Scenario is one API BAS scenario: a campaign of ordered steps with an
 // explicit hypothesis, expected control and ground truth.
@@ -235,15 +258,15 @@ func Parse(data []byte) (Scenario, error) {
 // Validate enforces the contract. It is strict on purpose: an incomplete
 // scenario must fail to load rather than run with a weaker claim.
 func (s Scenario) Validate() error {
-	m := idPattern.FindStringSubmatch(s.ID)
-	if m == nil {
-		return fmt.Errorf("contract: id %q must match API-BAS-<CAT>-<NNN>", s.ID)
+	idCat, err := idCategory(s.ID)
+	if err != nil {
+		return err
 	}
-	if !categories[m[1]] {
-		return fmt.Errorf("contract: %s: unknown category %q", s.ID, m[1])
+	if !categories[idCat] {
+		return fmt.Errorf("contract: %s: unknown category %q", s.ID, idCat)
 	}
-	if s.Category != m[1] {
-		return fmt.Errorf("contract: %s: category %q does not match id segment %q", s.ID, s.Category, m[1])
+	if s.Category != idCat {
+		return fmt.Errorf("contract: %s: category %q does not match id segment %q", s.ID, s.Category, idCat)
 	}
 	if !claims[s.Claim] {
 		return fmt.Errorf("contract: %s: unknown claim %q", s.ID, s.Claim)

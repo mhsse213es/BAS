@@ -1,0 +1,43 @@
+{
+  "openapi": "3.0.3",
+  "info": {"title": "Odd", "version": "1"},
+  "paths": {
+    "/a": {
+      "post": {
+        "operationId": "postA",
+        "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Missing"}}}},
+        "responses": {"200": {"description": "ok"}}
+      }
+    },
+    "/b": {
+      "post": {
+        "operationId": "postB",
+        "requestBody": {"content": {"application/json": {"schema": {"$ref": "https://example.com/x.json#/Y"}}}},
+        "callbacks": {"onEvent": {}},
+        "responses": {"200": {"description": "ok"}}
+      }
+    },
+    "/c": {
+      "post": {
+        "operationId": "postC",
+        "requestBody": {"content": {"application/json": {"schema": {"oneOf": [{"type": "string"}, {"type": "integer"}]}}}},
+        "responses": {"200": {"description": "ok"}}
+      }
+    },
+    "/d": {
+      "get": {
+        "operationId": "getD",
+        "parameters": [{"$ref": "#/components/parameters/Nope"}],
+        "responses": {"200": {"description": "ok"}}
+      }
+    },
+    "/e": {
+      "post": {
+        "operationId": "postE",
+        "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Loop"}}}},
+        "responses": {"200": {"description": "ok"}}
+      }
+    }
+  },
+  "components": {"schemas": {"Loop": {"type": "object", "properties": {"next": {"$ref": "#/components/schemas/Loop"}}}}}
+}
