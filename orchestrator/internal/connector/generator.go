@@ -25,6 +25,7 @@ import (
 	"github.com/audspect/bas/internal/evidence"
 	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/tcv"
 	"github.com/audspect/bas/internal/threatidentity"
 )
 
@@ -218,6 +219,23 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 			res.Skipped++
 			g.recordAttempt(cycleID, &threatID, nil, "skipped", "below_min_techniques", nil, nil, startedAt)
 			continue
+		}
+
+		// The threat cleared minTechniques this cycle: record the SLA
+		// admission (threat_eligible), the start of the measurable processing
+		// stage. Write-once per threat (SourcePK=threatID), log-and-continue --
+		// this is a real decision, never a fabricated timestamp (spec §5, §14).
+		if g.evidence != nil {
+			if err := g.evidence.RecordPipelineEvent(context.Background(), tcv.Event{
+				Type:        tcv.EventThreatEligible,
+				ThreatID:    threatID,
+				EventTime:   startedAt,
+				SourceTable: "content_generation_cycle",
+				SourcePK:    threatID,
+				Payload:     map[string]any{"cycle_id": cycleID},
+			}); err != nil {
+				log.Printf("[connector/tcv] record threat_eligible %s: %v", threatID, err)
+			}
 		}
 
 		id := threatidentity.ContentID(actor.ThreatID)
