@@ -4,7 +4,7 @@ These cannot be completed from the repository. Each needs input or access that o
 
 1. **1.9.0 build provenance.** Needs the `verification.json` file for the 1.9.0 build.
 2. **Staging database state.** Unknown whether the staging database was wiped during the earlier UFW incident. Confirm the current state before any deployment. Do not wipe it.
-3. **Staging `setup.test.sh` command name.** The message was cut off, so the command name is unconfirmed. Send the full command name.
+3. **Staging `setup.test.sh` command name.** Resolved. The test is `bash packaging/compose/setup.test.sh`, run from a Linux checkout as root. It is not in the 1.9.7 bundle. It passes in an Ubuntu container (fix in `fe5b3bc7`).
 
 4. **Tenant-admin consent for `Policy.Read.ConditionalAccess`.** A tenant administrator must grant admin consent in Entra ID for the app registration. Needed by PH-ID-003 to read Conditional Access policies. Until granted, PH-ID-003 returns Unknown rather than Blocked, and it stays unavailable.
 
