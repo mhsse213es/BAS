@@ -124,3 +124,4 @@ orchestrator/internal/aleef/bank/sealed/sealed_defects.go
 /user.PNG
 /wizard.PNG
 /clean_logo.png
+!orchestrator/internal/emailgwefficacy/testdata/eicar-protected.zip
