@@ -206,6 +206,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/analytics/threat-intel-summary", tierAny, ""},
 	{http.MethodGet, "/api/analytics/factory-health", tierAny, ""},
 	{http.MethodGet, "/api/intel/threats/{id}/tcv", tierAny, ""},
+	{http.MethodGet, "/api/intel/factory/sla", tierAny, ""},
 	{http.MethodGet, "/api/analytics/endpoint-posture", tierAny, ""},
 	{http.MethodGet, "/api/iocs", tierAny, ""},
 	{http.MethodGet, "/api/analytics/iocs", tierAny, ""},
