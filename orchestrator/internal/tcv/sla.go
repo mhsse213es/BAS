@@ -128,12 +128,24 @@ legdur AS (
 		CASE WHEN val.t IS NOT NULL THEN 'validated'
 			 WHEN fail.threat_id IS NOT NULL THEN 'failed'
 			 ELSE 'open' END AS cohort,
-		(obs.t IS NOT NULL AND elig.t IS NULL) AS incomplete,
+		-- Incomplete = a backfill gap: the leg has downstream content/coverage
+		-- but the eligible that should precede it was never recorded. A threat
+		-- merely still queuing (observed, no content yet) is open, not incomplete.
+		((cre.t IS NOT NULL OR val.t IS NOT NULL) AND elig.t IS NULL) AS incomplete,
+		-- Anomalous = an implausible ordering (a negative stage duration), e.g. a
+		-- post-upgrade fabricated eligible stamped after a backfilled created.
+		-- Such a leg's timings are untrustworthy and are kept out of percentiles.
+		(COALESCE(EXTRACT(EPOCH FROM (elig.t - obs.t)), 0) < 0
+		 OR COALESCE(EXTRACT(EPOCH FROM (cre.t - elig.t)), 0) < 0
+		 OR COALESCE(EXTRACT(EPOCH FROM (val.t - cre.t)), 0) < 0
+		 OR COALESCE(EXTRACT(EPOCH FROM (val.t - obs.t)), 0) < 0) AS anomalous,
 		EXTRACT(EPOCH FROM (elig.t - obs.t))::double precision AS queue_sec,
 		EXTRACT(EPOCH FROM (cre.t - elig.t))::double precision AS gen_sec,
 		EXTRACT(EPOCH FROM (val.t - cre.t))::double precision AS val_sec,
 		EXTRACT(EPOCH FROM (val.t - obs.t))::double precision AS e2e_sec,
-		obs.t AS observed_at,
+		obs.t  AS observed_at,
+		elig.t AS eligible_at,
+		cre.t  AS created_at,
 		COALESCE(obs.t, cre.t, val.t) AS anchor_at
 	FROM all_legs l
 	LEFT JOIN obs  ON obs.threat_id  = l.threat_id
@@ -156,6 +168,22 @@ func stageColumn(stage Stage) string {
 	}
 }
 
+// startColumn is the presence of the stage's STARTING milestone -- a leg that
+// has it entered the stage, whether or not it finished. Failed/open cohort
+// counts use this (so a leg that failed or is still in the stage is visible,
+// not hidden by survivor bias), while the validated percentile uses the full
+// duration column.
+func startColumn(stage Stage) string {
+	switch stage {
+	case StageGeneration:
+		return "eligible_at"
+	case StageValidation:
+		return "created_at"
+	default: // queue, end_to_end both start at threat_observed
+		return "observed_at"
+	}
+}
+
 // SLA is the internal factory-SLA projection for one stage and window
 // (spec §9/§15). Percentiles are over the validated cohort of the stage's own
 // population (legs with both of the stage's bounding events, not incomplete);
@@ -165,6 +193,7 @@ func stageColumn(stage Stage) string {
 // their sum) with the largest validated P95.
 func (s *Store) SLA(ctx context.Context, stage Stage, since time.Time) (SLAReport, error) {
 	col := stageColumn(stage)
+	startCol := startColumn(stage)
 	rep := SLAReport{Stage: stage}
 
 	vq := legDurationsCTE + `
@@ -172,7 +201,7 @@ func (s *Store) SLA(ctx context.Context, stage Stage, since time.Time) (SLARepor
 			percentile_cont(0.5)  WITHIN GROUP (ORDER BY ` + col + `) AS p50,
 			percentile_cont(0.95) WITHIN GROUP (ORDER BY ` + col + `) AS p95
 		FROM legdur
-		WHERE anchor_at >= $1 AND cohort='validated' AND NOT incomplete AND ` + col + ` IS NOT NULL
+		WHERE anchor_at >= $1 AND cohort='validated' AND NOT incomplete AND NOT anomalous AND ` + col + ` IS NOT NULL
 		GROUP BY source, content_type`
 	rows, err := s.pool.Query(ctx, vq, since)
 	if err != nil {
@@ -194,7 +223,7 @@ func (s *Store) SLA(ctx context.Context, stage Stage, since time.Time) (SLARepor
 	cq := legDurationsCTE + `
 		SELECT source, content_type, cohort, count(*) AS n
 		FROM legdur
-		WHERE anchor_at >= $1 AND cohort IN ('failed','open') AND NOT incomplete AND ` + col + ` IS NOT NULL
+		WHERE anchor_at >= $1 AND cohort IN ('failed','open') AND ` + startCol + ` IS NOT NULL
 		GROUP BY source, content_type, cohort`
 	rows2, err := s.pool.Query(ctx, cq, since)
 	if err != nil {
@@ -221,7 +250,7 @@ func (s *Store) SLA(ctx context.Context, stage Stage, since time.Time) (SLARepor
 		return rep, fmt.Errorf("tcv: sla open: %w", err)
 	}
 
-	iq := legDurationsCTE + ` SELECT COALESCE(bool_or(incomplete), false) FROM legdur WHERE anchor_at >= $1`
+	iq := legDurationsCTE + ` SELECT COALESCE(bool_or(incomplete OR anomalous), false) FROM legdur WHERE anchor_at >= $1`
 	if err := s.pool.QueryRow(ctx, iq, since).Scan(&rep.IncompleteWindow); err != nil {
 		return rep, fmt.Errorf("tcv: sla incomplete: %w", err)
 	}
@@ -230,9 +259,9 @@ func (s *Store) SLA(ctx context.Context, stage Stage, since time.Time) (SLARepor
 	// whole-pipeline total and would dominate by construction, so it is excluded.
 	bq := legDurationsCTE + `
 		SELECT
-			percentile_cont(0.95) WITHIN GROUP (ORDER BY CASE WHEN cohort='validated' AND NOT incomplete THEN queue_sec END),
-			percentile_cont(0.95) WITHIN GROUP (ORDER BY CASE WHEN cohort='validated' AND NOT incomplete THEN gen_sec END),
-			percentile_cont(0.95) WITHIN GROUP (ORDER BY CASE WHEN cohort='validated' AND NOT incomplete THEN val_sec END)
+			percentile_cont(0.95) WITHIN GROUP (ORDER BY CASE WHEN cohort='validated' AND NOT incomplete AND NOT anomalous THEN queue_sec END),
+			percentile_cont(0.95) WITHIN GROUP (ORDER BY CASE WHEN cohort='validated' AND NOT incomplete AND NOT anomalous THEN gen_sec END),
+			percentile_cont(0.95) WITHIN GROUP (ORDER BY CASE WHEN cohort='validated' AND NOT incomplete AND NOT anomalous THEN val_sec END)
 		FROM legdur WHERE anchor_at >= $1`
 	var pq, pg, pv *float64
 	if err := s.pool.QueryRow(ctx, bq, since).Scan(&pq, &pg, &pv); err != nil {

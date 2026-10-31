@@ -1456,17 +1456,27 @@ func main() {
 
 // runPipelineEventReconciler heals gaps in the TCF SLA event ledger. The
 // forward writers emit log-and-continue outside the source transaction, so a
-// crash between a source write and its ledger insert leaves a gap. It runs
-// once at boot (backfill) and every 5 minutes thereafter; every emit is
-// idempotent, so a healthy ledger is a no-op.
+// crash between a source write and its ledger insert leaves a gap. It runs a
+// one-time full backfill at boot (since=zero), then every 5 minutes heals only
+// the last 24h so the periodic pass stays O(window) rather than O(history); a
+// forward gap is healed within one tick. Each pass is bounded by a timeout, and
+// every emit is idempotent, so a healthy ledger is a no-op.
 func runPipelineEventReconciler(pool *pgxpool.Pool) {
-	if err := tcv.ReconcilePipelineEvents(context.Background(), pool); err != nil {
+	const passTimeout = 5 * time.Minute
+	const periodicLookback = 24 * time.Hour
+
+	reconcile := func(since time.Time) error {
+		ctx, cancel := context.WithTimeout(context.Background(), passTimeout)
+		defer cancel()
+		return tcv.ReconcilePipelineEvents(ctx, pool, since)
+	}
+	if err := reconcile(time.Time{}); err != nil {
 		log.Printf("[tcv] pipeline-event backfill at boot: %v", err)
 	}
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 	for range ticker.C {
-		if err := tcv.ReconcilePipelineEvents(context.Background(), pool); err != nil {
+		if err := reconcile(time.Now().Add(-periodicLookback)); err != nil {
 			log.Printf("[tcv] pipeline-event reconcile: %v", err)
 		}
 	}

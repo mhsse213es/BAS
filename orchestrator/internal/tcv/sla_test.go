@@ -152,16 +152,88 @@ func TestSLA_IndependentStagePopulations(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Generation population excludes the queue-only leg entirely.
-		if s := findSeg(g.Segments, "", "open"); s != nil {
-			t.Fatalf("queue-only leg must be absent from generation, got %+v", s)
+		// Leg A is the only validated generation sample.
+		if s := findSeg(g.Segments, "emulates", "validated"); s == nil || s.N != 1 {
+			t.Fatalf("generation validated emulates N: %+v", g.Segments)
 		}
-		total := 0
-		for _, s := range g.Segments {
-			total += s.N
+		// The queue-only leg is eligible, so it entered generation and shows in
+		// generation's OPEN cohort -- but never in a validated percentile sample.
+		if s := findSeg(g.Segments, "", "open"); s == nil || s.N != 1 {
+			t.Fatalf("queue-only leg should be open-in-generation: %+v", g.Segments)
 		}
-		if total != 1 {
-			t.Fatalf("generation total N = %d, want 1 (only leg A)", total)
+		if s := findSeg(g.Segments, "", "validated"); s != nil {
+			t.Fatalf("queue-only leg must not be a validated generation sample: %+v", s)
+		}
+	})
+}
+
+// Finding 2: a threat merely still in the queue (observed, not yet eligible,
+// no content) is open, NOT a backfill gap -- it must not flag IncompleteWindow.
+func TestSLA_QueueOpenNotFlaggedIncomplete(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		base := slaSince.Add(time.Hour)
+		th := seedThreat(t, "APT-queueopen")
+		seedThreatClock(t, pool, th, "misp", base, nil) // observed only, no eligible, no content
+		rep, err := NewStore(pool).SLA(ctx, StageQueue, slaSince)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rep.IncompleteWindow {
+			t.Fatalf("a normally-queuing threat must not set IncompleteWindow")
+		}
+	})
+}
+
+// Finding 1: a leg with an implausible ordering (eligible stamped after
+// created -> negative generation duration, e.g. a post-upgrade fabricated
+// eligible) is excluded from percentiles and flags the window.
+func TestSLA_NegativeDurationLegExcludedAndFlagged(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		base := slaSince.Add(time.Hour)
+		// A clean validated leg.
+		tg := seedThreat(t, "APT-neg-good")
+		vg := seedContentVersion(t, "cv-neg-good")
+		seedThreatClock(t, pool, tg, "misp", base, tp(base, 10))
+		seedLeg(t, pool, tg, "emulates", vg, tp(base, 100), tp(base, 300), false)
+		// Anomalous: eligible@5000 is AFTER created@100 -> gen_sec < 0.
+		tb := seedThreat(t, "APT-neg-bad")
+		vb := seedContentVersion(t, "cv-neg-bad")
+		seedThreatClock(t, pool, tb, "misp", base, tp(base, 5000))
+		seedLeg(t, pool, tb, "emulates", vb, tp(base, 100), tp(base, 6000), false)
+
+		rep, err := NewStore(pool).SLA(ctx, StageGeneration, slaSince)
+		if err != nil {
+			t.Fatal(err)
+		}
+		v := findSeg(rep.Segments, "emulates", "validated")
+		if v == nil || v.N != 1 {
+			t.Fatalf("generation validated N = %+v, want 1 (anomalous leg excluded)", rep.Segments)
+		}
+		if !rep.IncompleteWindow {
+			t.Fatalf("an anomalous (negative-duration) leg must set IncompleteWindow")
+		}
+	})
+}
+
+// Finding 3: failed legs are visible in the validation stage (they entered it
+// via content_created) rather than hidden by survivor bias.
+func TestSLA_FailedVisibleInValidationStage(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		base := slaSince.Add(time.Hour)
+		tf := seedThreat(t, "APT-valfail")
+		vf := seedContentVersion(t, "cv-valfail")
+		seedThreatClock(t, pool, tf, "misp", base, tp(base, 10))
+		seedLeg(t, pool, tf, "emulates", vf, tp(base, 100), nil, true) // created, FAIL, no coverage
+
+		rep, err := NewStore(pool).SLA(ctx, StageValidation, slaSince)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f := findSeg(rep.Segments, "emulates", "failed"); f == nil || f.N != 1 {
+			t.Fatalf("failed cohort must be visible in the validation stage: %+v", rep.Segments)
 		}
 	})
 }
