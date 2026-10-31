@@ -25,6 +25,7 @@ import (
 	"github.com/audspect/bas/internal/evidence"
 	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/tcv"
 	"github.com/audspect/bas/internal/threatidentity"
 )
 
@@ -220,6 +221,23 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 			continue
 		}
 
+		// The threat cleared minTechniques this cycle: record the SLA
+		// admission (threat_eligible), the start of the measurable processing
+		// stage. Write-once per threat (SourcePK=threatID), log-and-continue --
+		// this is a real decision, never a fabricated timestamp (spec §5, §14).
+		if g.evidence != nil {
+			if err := g.evidence.RecordPipelineEvent(context.Background(), tcv.Event{
+				Type:        tcv.EventThreatEligible,
+				ThreatID:    threatID,
+				EventTime:   startedAt,
+				SourceTable: "content_generation_cycle",
+				SourcePK:    threatID,
+				Payload:     map[string]any{"cycle_id": cycleID},
+			}); err != nil {
+				log.Printf("[connector/tcv] record threat_eligible %s: %v", threatID, err)
+			}
+		}
+
 		id := threatidentity.ContentID(actor.ThreatID)
 		body := g.buildYAML(actor, id)
 		fname := filepath.Join(g.intelDir, id+".yaml")
@@ -321,13 +339,49 @@ func (g *Generator) recordAttempt(cycleID string, threatID, contentID *string, o
 	if len(versionID) > 0 && versionID[0] != "" {
 		versionIDPtr = &versionID[0]
 	}
+	attemptID := "cga-" + uuid.New().String()
 	if err := g.evidence.RecordGenerationAttempt(context.Background(), evidence.GenerationAttempt{
+		ID:      attemptID,
 		CycleID: cycleID, ThreatID: threatID, ContentID: contentID, ContentVersionID: versionIDPtr,
 		Outcome: outcome, ReasonCode: reasonCode, Detail: detail,
 		GeneratorVersion: generatorVersion, Fingerprint: fingerprint, StartedAt: startedAt,
 	}); err != nil {
 		log.Printf("[connector/gen] record generation attempt (cycle=%s, outcome=%s): %v", cycleID, outcome, err)
+		return
 	}
+	g.recordGenerationEvents(attemptID, threatID, versionIDPtr, outcome, reasonCode, startedAt)
+}
+
+// recordGenerationEvents emits the SLA ledger events for one generation
+// attempt (spec §5), keyed by the attempt row id so the Task-6 reconciler --
+// reading the same content_generation_attempts rows -- produces identical
+// idempotency keys. content_created fires only on 'created' (a new version),
+// never 'changed' (a file rewrite of an existing version, no new version id).
+func (g *Generator) recordGenerationEvents(attemptID string, threatID, versionID *string, outcome, reasonCode string, startedAt time.Time) {
+	tid, cvid := derefOr(threatID), derefOr(versionID)
+	emit := func(typ tcv.EventType, eventTime time.Time) {
+		if err := g.evidence.RecordPipelineEvent(context.Background(), tcv.Event{
+			Type: typ, ThreatID: tid, ContentVersionID: cvid, GenerationAttemptID: attemptID,
+			EventTime: eventTime, SourceTable: "content_generation_attempts", SourcePK: attemptID,
+			Payload: map[string]any{"outcome": outcome, "reason_code": reasonCode},
+		}); err != nil {
+			log.Printf("[connector/tcv] record %s for attempt %s: %v", typ, attemptID, err)
+		}
+	}
+	emit(tcv.EventGenerationAttempted, startedAt)
+	switch outcome {
+	case "failed":
+		emit(tcv.EventGenerationFailed, time.Now())
+	case "created":
+		emit(tcv.EventContentCreated, time.Now())
+	}
+}
+
+func derefOr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // ── YAML builder ──────────────────────────────────────────────────────────────

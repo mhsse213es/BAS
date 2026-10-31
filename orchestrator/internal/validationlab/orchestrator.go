@@ -14,6 +14,7 @@ import (
 
 	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/tcv"
 )
 
 // dispatcher is the one entry point into dispatchRun this package needs --
@@ -171,14 +172,31 @@ func (o *Orchestrator) recordExecutionOutcome(ctx context.Context, versionID, ru
 		log.Printf("[validationlab] update outcome for %s: %v", versionID, err)
 		return
 	}
-	if tag.RowsAffected() > 0 {
-		return
-	}
-	if _, err := o.pool.Exec(ctx,
-		`INSERT INTO content_validations (content_version_id, level, outcome, run_id, validator, validator_version, detail)
+	if tag.RowsAffected() == 0 {
+		if _, err := o.pool.Exec(ctx,
+			`INSERT INTO content_validations (content_version_id, level, outcome, run_id, validator, validator_version, detail)
 		 VALUES ($1, 'EXECUTION', $2, $3, 'validationlab', '1', $4)`,
-		versionID, outcome, runIDArg, d); err != nil {
-		log.Printf("[validationlab] insert outcome for %s: %v", versionID, err)
+			versionID, outcome, runIDArg, d); err != nil {
+			log.Printf("[validationlab] insert outcome for %s: %v", versionID, err)
+			return
+		}
+	}
+	// SLA ledger: validation_resulted mirrors each terminal EXECUTION outcome
+	// (never the in-flight NO_DATA placeholder). Emitted only here, so by
+	// construction it is a factory run; the Task-6 reconciler enforces the
+	// factory_validation join when healing from content_validations directly.
+	if outcome != "NO_DATA" {
+		if err := tcv.RecordPipelineEvent(ctx, o.pool, tcv.Event{
+			Type:             tcv.EventValidationResulted,
+			ContentVersionID: versionID,
+			ValidationRunID:  runID,
+			EventTime:        time.Now(),
+			SourceTable:      "content_validations",
+			SourcePK:         runID,
+			Payload:          map[string]any{"outcome": outcome, "run_id": runID},
+		}); err != nil {
+			log.Printf("[validationlab] record validation_resulted for %s: %v", versionID, err)
+		}
 	}
 }
 

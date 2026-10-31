@@ -57,6 +57,7 @@ import (
 	"github.com/audspect/bas/internal/sftpsink"
 	"github.com/audspect/bas/internal/smtpsink"
 	"github.com/audspect/bas/internal/taxii"
+	"github.com/audspect/bas/internal/tcv"
 	"github.com/audspect/bas/internal/threatidentity"
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
@@ -318,6 +319,9 @@ func main() {
 	}
 	if err := db.EnsureTCVSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] TCV schema: %v", err)
+	}
+	if err := db.EnsureTCFPipelineEventsSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] TCF pipeline events schema: %v", err)
 	}
 	if err := db.EnsureCloudRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] cloud run schema: %v", err)
@@ -1167,6 +1171,12 @@ func main() {
 	// broadcasts the change so the dashboard updates in real time.
 	go runStalenessMonitor(pool, hub)
 
+	// ── TCF SLA Pipeline-Event Reconciler ─────────────────────────────────
+	// Backfills at boot and heals gaps every 5 minutes: forward ledger writes
+	// are log-and-continue outside the source transaction, so a crash between
+	// a source write and its ledger insert leaves a gap. Idempotent.
+	go runPipelineEventReconciler(pool)
+
 	// ── ITSM Auto-Revalidation Loop ───────────────────────────────────────
 	// Every 2 minutes: checks for findings whose ITSM ticket was resolved but
 	// BAS has not yet re-confirmed. Dispatches a targeted single-technique
@@ -1442,6 +1452,34 @@ func main() {
 		}
 	}
 	log.Println("[*] Server stopped.")
+}
+
+// runPipelineEventReconciler heals gaps in the TCF SLA event ledger. The
+// forward writers emit log-and-continue outside the source transaction, so a
+// crash between a source write and its ledger insert leaves a gap. It runs a
+// one-time full backfill at boot (since=zero), then every 5 minutes heals only
+// the last 24h so the periodic pass stays O(window) rather than O(history); a
+// forward gap is healed within one tick. Each pass is bounded by a timeout, and
+// every emit is idempotent, so a healthy ledger is a no-op.
+func runPipelineEventReconciler(pool *pgxpool.Pool) {
+	const passTimeout = 5 * time.Minute
+	const periodicLookback = 24 * time.Hour
+
+	reconcile := func(since time.Time) error {
+		ctx, cancel := context.WithTimeout(context.Background(), passTimeout)
+		defer cancel()
+		return tcv.ReconcilePipelineEvents(ctx, pool, since)
+	}
+	if err := reconcile(time.Time{}); err != nil {
+		log.Printf("[tcv] pipeline-event backfill at boot: %v", err)
+	}
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		if err := reconcile(time.Now().Add(-periodicLookback)); err != nil {
+			log.Printf("[tcv] pipeline-event reconcile: %v", err)
+		}
+	}
 }
 
 // runStalenessMonitor ticks every 30s and marks agents offline when their

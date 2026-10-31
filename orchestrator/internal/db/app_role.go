@@ -96,6 +96,10 @@ func EnsureAppRole(ctx context.Context, pool *pgxpool.Pool, appPassword string) 
 		`REVOKE UPDATE, DELETE ON content_validations FROM ` + appRole,
 		`REVOKE UPDATE, DELETE ON content_registry_state FROM ` + appRole,
 
+		// TCV SLA event ledger (spec 2026-10-31 §6): append-only -- INSERT and
+		// SELECT only for bas_app; corrections are new rows, never overwrites.
+		`REVOKE UPDATE, DELETE ON tcf_pipeline_events FROM ` + appRole,
+
 		// TCF Phase 2A identity (spec 2026-10-06 §12). Append-only evidence of
 		// identity decisions; candidates change only through Decide's columns;
 		// actor ids are immutable (no UPDATE on id).

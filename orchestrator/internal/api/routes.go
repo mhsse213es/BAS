@@ -451,6 +451,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/analytics/threat-intel-summary", h.GetThreatIntelSummary)
 		r.Get("/api/analytics/factory-health", h.GetFactoryHealth)
 		r.Get("/api/intel/threats/{id}/tcv", h.GetThreatTCV)
+		r.Get("/api/intel/factory/sla", h.GetFactorySLA)
 
 		// Endpoint Posture -- fleet-wide agent health + derived EPP isolation
 		// state, for dashboard consumption. Last of the 7 analytics categories.
