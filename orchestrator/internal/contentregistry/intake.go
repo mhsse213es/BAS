@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -351,14 +352,23 @@ func (r *Registry) Transition(ctx context.Context, versionID string, to Lifecycl
 		versionID, string(to), string(newTrust)); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx,
+	var eventID string
+	var eventAt time.Time
+	if err := tx.QueryRow(ctx,
 		`INSERT INTO content_version_events (content_version_id, from_lifecycle, to_lifecycle, from_trust, to_trust, actor, reason)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-		versionID, lc, string(to), trust, string(newTrust), actor, reason); err != nil {
+		 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, at`,
+		versionID, lc, string(to), trust, string(newTrust), actor, reason).Scan(&eventID, &eventAt); err != nil {
 		return err
 	}
 	if err := r.recordCoverageIfExecutable(ctx, tx, versionID, Origin(origin), newTrust, to); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	// SLA ledger: emit the lifecycle milestone post-commit and log-and-continue
+	// -- a telemetry failure must never roll back a real transition; the Task-6
+	// reconciler heals any gap by reading content_version_events directly.
+	r.recordLifecycleEvent(ctx, versionID, to, eventID, eventAt)
+	return nil
 }

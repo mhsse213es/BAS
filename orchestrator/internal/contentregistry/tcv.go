@@ -2,10 +2,47 @@ package contentregistry
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/audspect/bas/internal/tcv"
 )
+
+// recordLifecycleEvent emits the SLA ledger event for one lifecycle
+// transition (spec §5), keyed by the content_version_events row id so the
+// Task-6 reconciler -- reading the same rows -- produces identical
+// idempotency keys. Only milestone targets map to an event; DRAFT/APPROVED
+// transitions (and VALIDATING->DRAFT validation failures) map to none.
+// published_executable fires on publish regardless of validation, but
+// validated_coverage fires ONLY on ->VALIDATED, so a hand-authored
+// PUBLISHED_LOCAL version is never recorded as validated coverage.
+func (r *Registry) recordLifecycleEvent(ctx context.Context, versionID string, to Lifecycle, eventID string, at time.Time) {
+	var typ tcv.EventType
+	switch to {
+	case LifecycleValidating:
+		typ = tcv.EventValidationDispatched
+	case LifecycleValidated:
+		typ = tcv.EventValidatedCoverage
+	case LifecyclePublished, LifecyclePublishedLocal:
+		typ = tcv.EventPublishedExecutable
+	case LifecycleRetired:
+		typ = tcv.EventRetired
+	case LifecycleRejected:
+		typ = tcv.EventRejected
+	default:
+		return
+	}
+	if err := tcv.RecordPipelineEvent(ctx, r.pool, tcv.Event{
+		Type:             typ,
+		ContentVersionID: versionID,
+		EventTime:        at,
+		SourceTable:      "content_version_events",
+		SourcePK:         eventID,
+		Payload:          map[string]any{"to_lifecycle": string(to)},
+	}); err != nil {
+		log.Printf("[contentregistry/tcv] record %s for %s: %v", typ, versionID, err)
+	}
+}
 
 // qualifiesForTCVStop reports whether this origin/trust/lifecycle
 // combination should stop a TCV clock (spec §10.3-§10.4). This is a
