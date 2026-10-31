@@ -57,6 +57,7 @@ import (
 	"github.com/audspect/bas/internal/sftpsink"
 	"github.com/audspect/bas/internal/smtpsink"
 	"github.com/audspect/bas/internal/taxii"
+	"github.com/audspect/bas/internal/tcv"
 	"github.com/audspect/bas/internal/threatidentity"
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
@@ -1170,6 +1171,12 @@ func main() {
 	// broadcasts the change so the dashboard updates in real time.
 	go runStalenessMonitor(pool, hub)
 
+	// ── TCF SLA Pipeline-Event Reconciler ─────────────────────────────────
+	// Backfills at boot and heals gaps every 5 minutes: forward ledger writes
+	// are log-and-continue outside the source transaction, so a crash between
+	// a source write and its ledger insert leaves a gap. Idempotent.
+	go runPipelineEventReconciler(pool)
+
 	// ── ITSM Auto-Revalidation Loop ───────────────────────────────────────
 	// Every 2 minutes: checks for findings whose ITSM ticket was resolved but
 	// BAS has not yet re-confirmed. Dispatches a targeted single-technique
@@ -1445,6 +1452,24 @@ func main() {
 		}
 	}
 	log.Println("[*] Server stopped.")
+}
+
+// runPipelineEventReconciler heals gaps in the TCF SLA event ledger. The
+// forward writers emit log-and-continue outside the source transaction, so a
+// crash between a source write and its ledger insert leaves a gap. It runs
+// once at boot (backfill) and every 5 minutes thereafter; every emit is
+// idempotent, so a healthy ledger is a no-op.
+func runPipelineEventReconciler(pool *pgxpool.Pool) {
+	if err := tcv.ReconcilePipelineEvents(context.Background(), pool); err != nil {
+		log.Printf("[tcv] pipeline-event backfill at boot: %v", err)
+	}
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		if err := tcv.ReconcilePipelineEvents(context.Background(), pool); err != nil {
+			log.Printf("[tcv] pipeline-event reconcile: %v", err)
+		}
+	}
 }
 
 // runStalenessMonitor ticks every 30s and marks agents offline when their
