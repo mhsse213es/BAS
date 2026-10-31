@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security Posture · Audspect</title>
+<meta name="description" content="Audspect console redesign proposal — security posture dashboard (Executive and Operations views).">
+<script src="assets/theme-init.js"></script>
+<link rel="stylesheet" href="assets/ds.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="Primary navigation"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <main class="content" id="content">
+
+      <div class="review-banner"><span data-icon="note"></span><span><b>Design proposal v0.3</b> · sample data for a fictional bank. Press <span class="kbd">N</span> for design notes, <span class="kbd">T</span> to switch theme.</span><span class="spacer"></span><a href="index.html">Proposal index</a></div>
+
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Security posture</h1>
+          <p class="page-sub">How well your controls prevent and detect real attacker behaviour, validated continuously across every in-scope endpoint.</p>
+        </div>
+        <div class="page-actions">
+          <div class="seg" role="tablist" aria-label="Dashboard view" id="view-seg">
+            <button type="button" class="on" role="tab" aria-selected="true" data-view="exec">Executive</button>
+            <button type="button" role="tab" aria-selected="false" data-view="ops">Operations</button>
+          </div>
+          <a class="btn" href="#"><span data-icon="share"></span>Share</a>
+          <a class="btn" href="08-reports.html"><span data-icon="download"></span>Board report</a>
+          <a class="btn btn-primary" href="03-assessments.html"><span data-icon="play"></span>Run assessment</a>
+        </div>
+      </div>
+
+      <div class="filter-bar" id="filters">
+        <button class="chip" type="button"><span data-icon="calendar"></span><span class="k">Period</span>Last 30 days<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span data-icon="building"></span><span class="k">Site</span>All sites<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span data-icon="layers"></span><span class="k">Asset group</span>All endpoints<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span data-icon="target"></span><span class="k">Threat profile</span>BFSI · India<span data-icon="chevDown"></span></button>
+        <span class="spacer"></span>
+        <span class="freshness" id="freshness"></span>
+      </div>
+
+      <!-- ===================== EXECUTIVE VIEW ===================== -->
+      <div id="view-exec">
+
+        <!-- Hero: the whole "how are we doing" answer, in one band -->
+        <section class="hero-band" id="hero" aria-label="Security posture summary">
+          <div class="gauge-wrap">
+            <div id="gauge"></div>
+            <div class="gauge-meta" id="gauge-meta"></div>
+            <button class="btn btn-ghost btn-sm" type="button" id="how-btn" aria-expanded="false"><span data-icon="info"></span>How it's scored</button>
+          </div>
+          <div class="hero-verdict">
+            <div class="lead" id="hero-lead"></div>
+            <p class="say" id="hero-say"></p>
+            <div class="hero-stats" id="hero-stats"></div>
+            <div class="hero-cta">
+              <a class="btn btn-primary" href="03-assessments.html"><span data-icon="play"></span>Run assessment</a>
+              <a class="btn" href="08-reports.html"><span data-icon="file"></span>Board report</a>
+              <a class="btn btn-ghost" href="04-findings.html">See what to fix<span data-icon="arrowRight" class="sm"></span></a>
+            </div>
+          </div>
+        </section>
+        <div id="hero-calc-wrap"></div>
+
+        <!-- Module scores: one ranked chart, not 16 boxes -->
+        <section class="sec" id="modules">
+          <div class="sec-h">
+            <h2>Scores by module</h2><span class="sub">Every area scored 0–100 · the posture score is their weighted average</span>
+            <span class="act"><div class="seg" id="mod-sort" role="tablist" aria-label="Sort"><button class="on" type="button" data-sort="group">By area</button><button type="button" data-sort="weak">Weakest first</button></div><button class="btn btn-ghost btn-sm" type="button" id="mod-tbl"><span data-icon="table"></span>Table</button></span>
+          </div>
+          <div id="mod-viz"></div>
+        </section>
+
+        <!-- Two focused blocks: what to fix, and the one trend that matters -->
+        <div class="grid" style="margin-top:36px">
+          <section class="c-6 lg-12" id="actions">
+            <div class="sec-h"><h2>Fix these first</h2><span class="sub">Most score gained</span><span class="act"><a class="link-more" href="04-findings.html">All findings<span data-icon="arrowRight" class="sm"></span></a></span></div>
+            <div class="list" id="actions-list"></div>
+            <div class="mt-4" id="proj"></div>
+          </section>
+          <section class="c-6 lg-12" id="trend">
+            <div class="sec-h"><h2>Posture over time</h2><span class="sub">Last 12 weeks</span><span class="act"><button class="btn btn-ghost btn-sm" type="button" id="trend-tbl"><span data-icon="table"></span>Table</button></span></div>
+            <div class="legend mb-2" id="trend-legend"></div>
+            <div id="trend-viz"></div>
+          </section>
+        </div>
+
+        <!-- Go deeper: launchpad to the detail pages, not embedded widgets -->
+        <section class="sec" id="deeper-sec">
+          <div class="sec-h"><h2>Go deeper</h2><span class="sub">The full analysis lives on its own page</span></div>
+          <div class="deeper" id="deeper"></div>
+        </section>
+      </div>
+
+      <!-- ===================== OPERATIONS VIEW ===================== -->
+      <div id="view-ops" hidden>
+        <div class="grid">
+          <section class="c-12 kpi-grid ops-kpis" id="ops-kpis" aria-label="Operational indicators"></section>
+
+          <section class="card c-7 lg-12" id="ops-live">
+            <div class="card-h">
+              <div class="titles"><h2 class="card-title row"><span class="live-dot"></span>Live now</h2><div class="card-sub" id="ops-live-sub"></div></div>
+              <div class="card-actions"><button class="btn btn-sm" type="button"><span data-icon="pause"></span>Pause</button><a class="btn btn-sm" href="03-assessments.html">Open run</a></div>
+            </div>
+            <div class="card-b" id="ops-live-b"></div>
+          </section>
+
+          <section class="card c-5 lg-12" id="ops-agents">
+            <div class="card-h">
+              <div class="titles"><h2 class="card-title">Endpoint fleet</h2><div class="card-sub">Agent states, and the endpoints that need someone today</div></div>
+              <div class="card-actions"><a class="link-more" href="07-endpoints.html">Fleet<span data-icon="arrowRight" class="sm"></span></a></div>
+            </div>
+            <div class="card-b"><div id="fleet-b"></div><div class="block-title">Needs attention</div><div class="list" id="ops-agents-list"></div></div>
+          </section>
+
+          <section class="card c-6 lg-12" id="ops-conn">
+            <div class="card-h">
+              <div class="titles"><h2 class="card-title">Detection &amp; integration pipeline</h2><div class="card-sub">If a connector is down, detection results are unknown, not missed</div></div>
+              <div class="card-actions"><a class="link-more" href="#">Integrations<span data-icon="arrowRight" class="sm"></span></a></div>
+            </div>
+            <div class="card-b"><div class="list" id="ops-conn-list"></div></div>
+          </section>
+
+          <section class="card c-6 lg-12" id="ops-content">
+            <div class="card-h">
+              <div class="titles"><h2 class="card-title">Content &amp; schedule</h2><div class="card-sub">Air-gapped content freshness and what runs next</div></div>
+              <div class="card-actions"><a class="link-more" href="03-assessments.html#scheduled">Schedules<span data-icon="arrowRight" class="sm"></span></a></div>
+            </div>
+            <div class="card-b"><div class="list" id="ops-content-list"></div><div class="block-title">Up next</div><div class="list" id="ops-next-list"></div></div>
+          </section>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<script src="assets/data.js"></script>
+<script src="assets/shell.js"></script>
+<script src="assets/pages/dashboard.js"></script>
+</body>
+</html>

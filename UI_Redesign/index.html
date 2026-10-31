@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Console Redesign Proposal · Audspect</title>
+<meta name="description" content="Audspect console UI/UX redesign proposal v0.1 — findings, principles, information architecture, page designs, rollout plan and open decisions.">
+<script src="assets/theme-init.js"></script>
+<link rel="stylesheet" href="assets/ds.css">
+</head>
+<body data-doc="index">
+<header class="doc-top" id="doc-top"></header>
+
+<main class="doc">
+
+  <!-- Hero -->
+  <section class="doc-hero">
+    <div>
+      <span class="eyebrow">Design proposal · v0.3 · 31 Oct 2026 · draft for review</span>
+      <h1>A console that tells a bank how secure it is, at a glance</h1>
+      <p>A redesign of the Audspect console so a CISO can read the organisation's security posture in five seconds, an analyst knows what to fix next, and an auditor gets signed evidence. It is built on one design system, one navigation model and one set of metric definitions.</p>
+      <div class="row wrap mt-4">
+        <a class="btn btn-primary" href="02-dashboard.html"><span data-icon="gauge"></span>Open the new dashboard</a>
+        <a class="btn" href="01-design-system.html"><span data-icon="layers"></span>Design system</a>
+        <a class="btn btn-ghost" href="#decisions"><span data-icon="note"></span>Decisions for discussion</a>
+      </div>
+    </div>
+    <img class="shot" src="assets/img/thumb-02.png" alt="Preview of the redesigned security posture dashboard">
+  </section>
+
+  <div class="tldr">
+    <div class="card"><h3><span data-icon="gauge"></span>One number, then the why</h3><p>A single posture score (higher is always better) with a band, a target and a plain-language summary, followed by the drivers: kill chain, control domains, threats, compliance and fix-first actions.</p></div>
+    <div class="card"><h3><span data-icon="layers"></span>27 menu items become 15</h3><p>Navigation is grouped by job (Validate, Analyze, Remediate, Govern, Manage). Every page uses the same anatomy, the same table and detail panel, and the same status language.</p></div>
+    <div class="card"><h3><span data-icon="badge"></span>Built on what Audspect already has</h3><p>Most of the dashboard is served by existing APIs. The biggest gap, “posture by control domain”, is already built in the backend (<code class="mono">/api/controlhealth/summary</code>) and simply unused.</p></div>
+  </div>
+
+  <div class="callout good mt-4"><span data-icon="sparkles"></span><div><b>New in v0.3</b> (from your “too many boxes / nothing at a glance” review): the <a href="02-dashboard.html">dashboard</a> is rebuilt around <b>one focal point</b> — a radial posture gauge with a plain-language verdict and the four numbers that matter — and then just the <b>module scores as a single ranked chart</b> (not a grid of tiles), the three fixes, one trend, and a “go deeper” launchpad to the detail pages. The whole thing is now about <b>half the length</b> and readable in five seconds. Across every page the hard card borders are gone — content floats on whitespace instead of sitting in boxes. <span class="muted">(v0.2 added the softer palette and per-module scores; v0.1 set up the IA and page set.)</span></div></div>
+
+  <div class="callout info mt-4"><span data-icon="info"></span><div><b>How to review.</b> Open the pages in order. On any page press <span class="kbd">N</span> to show the numbered <b>design notes</b>; each note covers why the element exists, which API feeds it, what it replaces today and what it needs to be built. Press <span class="kbd">T</span> to switch theme, or add <code class="mono">?theme=light</code> to a URL. The sidebar, command palette (<span class="kbd">Ctrl K</span>), notifications and account menus are all live. All data is fictional (“Contoso Bank”). Nothing in the product or the repository has changed: these files live only in <code class="mono">E:\Tausif_Audspect\UI_Redesign</code>.</div></div>
+
+  <!-- Findings -->
+  <h2><span class="eyebrow">01</span>Why the console feels “all over the place”</h2>
+  <p class="lede">Taken from a read-only audit of <code class="mono">orchestrator/web</code> and the API routes on <code class="mono">main</code>. The product has a lot of capability; the problem is breadth without hierarchy, the same concept living in several places, and numbers that disagree.</p>
+  <div class="stat-grid">
+    <div class="stat"><b>27</b><span>sidebar items in 4 loose groups, reaching 30 pages, plus 10 Settings sections</span></div>
+    <div class="stat"><b>~25 + 17</b><span>cards and tiles on one dashboard scroll; only 4 of 16 rows have headings</span></div>
+    <div class="stat"><b>~15</b><span>differently defined scores, some “higher is better”, some “higher is worse”</span></div>
+    <div class="stat"><b>12+</b><span>API calls and 3 polling timers per dashboard load, with most maths done in the browser</span></div>
+    <div class="stat"><b>51</b><span>modals and drawers, from 520 px to full width, with up to 12 tabs inside a drawer</span></div>
+    <div class="stat"><b>7+</b><span>tab styles, 3 table behaviours and 3 icon styles (including emoji)</span></div>
+    <div class="stat"><b>838 + 833</b><span>raw inline styles in JS, plus uses of 439 one-off generated classes</span></div>
+    <div class="stat"><b>301</b><span>hard-coded colours from two palettes, 67 font sizes and 14 radii, with no spacing or type scale</span></div>
+  </div>
+  <div class="grid mt-4">
+    <div class="card pad c-6 md-12">
+      <h3>Same concept, many places</h3>
+      <ul class="bul">
+        <li><b>Coverage</b> appears in 5 places and <b>run lists</b> in 6.</li>
+        <li><b>Scheduling</b> is in 4 places, <b>threat intel</b> in 6 and <b>integrations</b> in 3.</li>
+        <li><b>Compliance</b>, the headline of the login page, has no sidebar entry.</li>
+        <li><b>Board scorecard and Navigator exports</b> are hidden in each agent's row menu.</li>
+        <li>“Soon / not available” placeholders appear where the backend already works (report schedules, Navigator export).</li>
+      </ul>
+    </div>
+    <div class="card pad c-6 md-12">
+      <h3>Numbers that mislead</h3>
+      <ul class="bul">
+        <li>The two dashboard views show two “posture” scores pointing in opposite directions.</li>
+        <li>“ATT&amp;CK coverage” is really a prevention share, and “Detection rate” is prevented + detected.</li>
+        <li>Fleet compliance tiles show the <b>worst agent</b>, and readiness widgets use only the <b>first agent</b>; neither is explained.</li>
+        <li>The executive exposure trend is coloured backwards (a rise is shown as bad, but higher is safer).</li>
+        <li>“Updated hh:mm:ss” is the time the page opened, not the age of the data.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Benchmark -->
+  <h2><span class="eyebrow">02</span>What the global leaders get right</h2>
+  <p class="lede">Platforms such as Cymulate, Picus, Pentera, AttackIQ and SafeBreach converge on the same handful of patterns. We adopt the patterns, not anyone's look, and add what only an on-prem, compliance-native product can offer.</p>
+  <div class="table-wrap">
+    <table class="t">
+      <thead><tr><th>Pattern</th><th>Why it works</th><th>Where it lives in this proposal</th></tr></thead>
+      <tbody>
+        <tr><td class="t-title">One posture score with trend and target</td><td>A board can track one number over time</td><td>Dashboard hero, with band, target and summary</td></tr>
+        <tr><td class="t-title">Scores per control area / attack vector</td><td>Shows which team or tool to fund</td><td>Posture by control domain (existing <span class="mono">/api/controlhealth/summary</span>)</td></tr>
+        <tr><td class="t-title">Prevention and detection measured separately</td><td>“Blocked” and “seen” are different failures with different owners</td><td>Kill-chain bars; per-domain prevention and detection</td></tr>
+        <tr><td class="t-title">Threat-centric readiness</td><td>“Are we ready for the groups that target banks like us?”</td><td>Threat readiness on the dashboard; Threat groups tab on Coverage</td></tr>
+        <tr><td class="t-title">Prioritised remediation with projected impact</td><td>Turns findings into a plan, then proves the fix</td><td>“Fix these first” (+ points); re-test to verify on Findings</td></tr>
+        <tr><td class="t-title">ATT&amp;CK heatmap and Navigator export</td><td>Speaks the SOC's language</td><td>Mini matrix on the dashboard; full matrix on Coverage</td></tr>
+        <tr><td class="t-title">Attack paths to crown jewels</td><td>Business impact, not technique IDs</td><td>Paths to DC01, core banking and SWIFT, with choke points</td></tr>
+        <tr><td class="t-title">Board-ready reporting</td><td>Executives read PDFs, not consoles</td><td>Reports centre: scorecard, signed compliance, schedules</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="grid mt-4">
+    <div class="card pad c-3 md-6"><h3 class="row"><span data-icon="lock" class="tx-accent"></span>On-prem by design</h3><p class="small">Air-gapped operation, offline signed content bundles and no telemetry leaving the bank. Shown in the UI, not hidden.</p></div>
+    <div class="card pad c-3 md-6"><h3 class="row"><span data-icon="scale" class="tx-accent"></span>BFSI compliance native</h3><p class="small">RBI, SEBI CSCRF, CERT-In and IRDAI sit next to PCI DSS, ISO 27001 and NIST CSF, mapped to evidence.</p></div>
+    <div class="card pad c-3 md-6"><h3 class="row"><span data-icon="badge" class="tx-accent"></span>Tamper-evident evidence</h3><p class="small">Signed reports and audit packs that an auditor can verify independently.</p></div>
+    <div class="card pad c-3 md-6"><h3 class="row"><span data-icon="target" class="tx-accent"></span>Local threat context</h3><p class="small">Default threat profile for Indian banking, with group readiness that is relevant on day one.</p></div>
+  </div>
+
+  <!-- Principles -->
+  <h2><span class="eyebrow">03</span>Design principles</h2>
+  <div class="grid">
+    <div class="card pad c-4 md-12"><h3>1 · Five-second answer</h3><p class="small">Every overview page answers its main question above the fold: how secure, which direction, what to do next.</p></div>
+    <div class="card pad c-4 md-12"><h3>2 · Every number is a link</h3><p class="small">KPIs open the evidence behind them. Each metric has one definition, written once and reused in tooltips and reports.</p></div>
+    <div class="card pad c-4 md-12"><h3>3 · One direction</h3><p class="small">Scores are always “higher is better”. Risk-style numbers are converted, never mixed on one screen.</p></div>
+    <div class="card pad c-4 md-12"><h3>4 · Same anatomy everywhere</h3><p class="small">Page header → one filter row → content → detail panel. Same table, same status words, same buttons.</p></div>
+    <div class="card pad c-4 md-12"><h3>5 · Honest states</h3><p class="small">“No evidence yet” instead of 0% or 100%; real data freshness; unknown detection is never shown as missed.</p></div>
+    <div class="card pad c-4 md-12"><h3>6 · Dark-first, print-perfect</h3><p class="small">A navy dark theme matching the logo, a light theme for executives and print, and WCAG AA contrast computed for every token.</p></div>
+  </div>
+
+  <!-- IA -->
+  <h2 id="ia"><span class="eyebrow">04</span>Information architecture: 27 items become 15</h2>
+  <p class="lede">The sidebar is grouped by the job the user is doing. Add-ons and attack vectors become <b>assessment types</b> or <b>coverage views</b> instead of separate menu items. Every old tab id keeps working as a route alias, so the 24 tab ids in the smoke tests and existing bookmarks still resolve.</p>
+  <div class="ia">
+    <div class="ia-col">
+      <h3><span class="pill critical">Today</span>4 groups · 27 items</h3>
+      <div class="ia-group"><b>Operations (13)</b>
+        <div class="ia-item dim">Dashboard · Scenarios · Live Runs · Kubernetes · Aleef add-on · Scheduled Assessments · Initiatives · Campaigns · Factory Health · Coverage · Variants · AD Coverage · Email</div></div>
+      <div class="ia-group"><b>Visibility (11)</b>
+        <div class="ia-item dim">Findings · IOC Registry · Remediation · Reports · Verification · Attack Paths · Exposure Explorer · Recommendations · Exercises · Technique Coverage · Threat Prioritization</div></div>
+      <div class="ia-group"><b>Infrastructure (2)</b><div class="ia-item dim">Agents · Integrations</div></div>
+      <div class="ia-group"><b>Administration (1)</b><div class="ia-item dim">Settings (10 sections, including Audit Logs and License)</div></div>
+      <div class="ia-group"><b>Not in the sidebar</b><div class="ia-item dim">Compliance · SLA report · Profile</div></div>
+    </div>
+    <div class="ia-arrow"><span data-icon="arrowRight" class="lg"></span></div>
+    <div class="ia-col">
+      <h3><span class="pill good">Proposed</span>6 groups · 15 items</h3>
+      <div class="ia-group"><b>Overview</b><div class="ia-item"><span data-icon="gauge"></span>Security posture<small>Executive · Operations</small></div></div>
+      <div class="ia-group"><b>Validate</b>
+        <div class="ia-item"><span data-icon="play"></span>Assessments<small>runs, schedules, campaigns, sweeps, vectors</small></div>
+        <div class="ia-item"><span data-icon="library"></span>Threat library<small>scenarios, actors, ART content</small></div>
+        <div class="ia-item"><span data-icon="users"></span>Purple-team exercises</div></div>
+      <div class="ia-group"><b>Analyze</b>
+        <div class="ia-item"><span data-icon="grid"></span>ATT&amp;CK coverage<small>matrix, techniques, AD, email</small></div>
+        <div class="ia-item"><span data-icon="radar"></span>Detection validation</div>
+        <div class="ia-item"><span data-icon="route"></span>Attack paths<small>+ exposure explorer</small></div>
+        <div class="ia-item"><span data-icon="target"></span>Threat intelligence<small>groups, IOCs, KEV, test next</small></div></div>
+      <div class="ia-group"><b>Remediate</b>
+        <div class="ia-item"><span data-icon="alert"></span>Findings<small>+ recommendations</small></div>
+        <div class="ia-item"><span data-icon="wrench"></span>Remediation plans<small>initiatives, SLA</small></div></div>
+      <div class="ia-group"><b>Govern</b>
+        <div class="ia-item"><span data-icon="scale"></span>Compliance<small>promoted to the sidebar</small></div>
+        <div class="ia-item"><span data-icon="file"></span>Reports<small>generate, schedule, verify</small></div></div>
+      <div class="ia-group"><b>Manage</b>
+        <div class="ia-item"><span data-icon="monitor"></span>Endpoints<small>agents + deployment</small></div>
+        <div class="ia-item"><span data-icon="plug"></span>Integrations<small>SIEM, EDR, ITSM, TI, TAXII, Caldera</small></div>
+        <div class="ia-item"><span data-icon="settings"></span>Settings<small>users, SSO, audit log, licence, content, backup</small></div></div>
+    </div>
+  </div>
+
+  <div class="table-wrap mt-4">
+    <table class="t">
+      <thead><tr><th>Today</th><th>Proposed home</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td>Dashboard (Operational / Executive)</td><td>Overview › Security posture</td><td class="soft">One score; duplicate widgets removed</td></tr>
+        <tr><td>Live Runs · Scheduled Assessments · Campaigns · Variants</td><td>Validate › Assessments</td><td class="soft">One list; type and status are filters</td></tr>
+        <tr><td>Email · Kubernetes · Aleef add-on</td><td>Validate › Assessments (vector) and Analyze › Coverage</td><td class="soft">Licensed vectors appear as assessment types</td></tr>
+        <tr><td>Scenarios</td><td>Validate › Threat library</td><td class="soft">Includes the Threat Actor library and ART content</td></tr>
+        <tr><td>Exercises</td><td>Validate › Purple-team exercises</td><td class="soft">—</td></tr>
+        <tr><td>Coverage · Technique Coverage · AD Coverage</td><td>Analyze › ATT&amp;CK coverage (tabs)</td><td class="soft">Navigator export goes live (the API exists)</td></tr>
+        <tr><td>Verification</td><td>Analyze › Detection validation</td><td class="soft">—</td></tr>
+        <tr><td>Attack Paths · Exposure Explorer</td><td>Analyze › Attack paths (tabs)</td><td class="soft">Standard page anatomy replaces the bespoke button row</td></tr>
+        <tr><td>Threat Prioritization · IOC Registry · Recommendations (what to test next)</td><td>Analyze › Threat intelligence (tabs)</td><td class="soft">Fleet-wide readiness</td></tr>
+        <tr><td>Findings · Recommendations (what to fix)</td><td>Remediate › Findings</td><td class="soft">Paginated; master–detail; re-test to verify</td></tr>
+        <tr><td>Remediation · Initiatives · SLA report</td><td>Remediate › Remediation plans (tabs)</td><td class="soft">—</td></tr>
+        <tr><td>Compliance (hidden) · Reports</td><td>Govern › Compliance · Govern › Reports</td><td class="soft">Compliance becomes a first-class page; schedules wired up</td></tr>
+        <tr><td>Agents</td><td>Manage › Endpoints</td><td class="soft">Deployment is a guided flow, not a long page</td></tr>
+        <tr><td>Integrations · Settings › Caldera / Threat Intel / TAXII</td><td>Manage › Integrations</td><td class="soft">All connectors in one place</td></tr>
+        <tr><td>Factory Health · Settings › ART library</td><td>Manage › Settings › Content &amp; updates</td><td class="soft">Freshness is also shown on the Operations view</td></tr>
+        <tr><td>Settings (10 sections)</td><td>Manage › Settings (7 sections)</td><td class="soft">Theme and dashboard preferences merge into Appearance</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pages -->
+  <h2 id="pages"><span class="eyebrow">05</span>Pages in this proposal</h2>
+  <p class="lede">Each page is a working, clickable HTML mock-up built only from the shared design system in <code class="mono">assets/</code>. Hover charts for values, use the table toggle on every chart, and press <span class="kbd">N</span> for design notes.</p>
+  <div class="page-cards">
+    <a class="page-card" href="01-design-system.html"><img src="assets/img/thumb-01.png" alt=""><div><h3><span class="num-badge">01</span>Design system</h3><p>Tokens for both themes with computed contrast, type and spacing scales, components, chart rules, status language and the token migration table.</p></div></a>
+    <a class="page-card" href="02-dashboard.html"><img src="assets/img/thumb-02.png" alt=""><div><h3><span class="num-badge">02</span>Security posture dashboard <span class="pill accent">Key page</span></h3><p>Executive view (score, KPIs, trend, fix-first, kill chain, control domains, ATT&amp;CK, threat groups, attack paths, compliance) and an Operations view.</p></div></a>
+    <a class="page-card" href="03-assessments.html"><img src="assets/img/thumb-03.png" alt=""><div><h3><span class="num-badge">03</span>Assessments</h3><p>One list for runs, schedules, campaigns, emulations and re-tests, a run detail panel and the four-step “New assessment” flow.</p></div></a>
+    <a class="page-card" href="04-findings.html"><img src="assets/img/thumb-04.png" alt=""><div><h3><span class="num-badge">04</span>Findings</h3><p>Prioritised findings with severity, SLA and owner. The detail panel shows evidence, vendor-specific fixes and re-test to verify.</p></div></a>
+    <a class="page-card" href="05-coverage.html"><img src="assets/img/thumb-05.png" alt=""><div><h3><span class="num-badge">05</span>ATT&amp;CK coverage</h3><p>The full matrix for the active threat profile, technique detail and threat-group readiness, plus Navigator export.</p></div></a>
+    <a class="page-card" href="06-compliance.html"><img src="assets/img/thumb-06.png" alt=""><div><h3><span class="num-badge">06</span>Compliance</h3><p>Seven frameworks, control-level status backed by evidence, an explicit aggregation rule and signed, verifiable reports.</p></div></a>
+    <a class="page-card" href="07-endpoints.html"><img src="assets/img/thumb-07.png" alt=""><div><h3><span class="num-badge">07</span>Endpoints</h3><p>Fleet health, posture per endpoint, a detail panel and a guided, secret-safe agent deployment flow.</p></div></a>
+    <a class="page-card" href="08-reports.html"><img src="assets/img/thumb-08.png" alt=""><div><h3><span class="num-badge">08</span>Reports</h3><p>Report centre for board, executive, compliance, technical and Navigator outputs; schedules and signature verification.</p></div></a>
+    <a class="page-card" href="09-module.html?m=email"><img src="assets/img/thumb-09.png" alt=""><div><h3><span class="num-badge">09</span>Module detail <span class="pill accent">New</span></h3><p>One template behind every module tile: score, trend, KPIs, results by test and the open findings for that module.</p></div></a>
+    <a class="page-card" href="10-threat-library.html"><img src="assets/img/thumb-10.png" alt=""><div><h3><span class="num-badge">10</span>Threat library</h3><p>Scenario catalogue — group emulations, packs, technique sets and custom scenarios — with a detail panel.</p></div></a>
+    <a class="page-card" href="11-purple-team.html"><img src="assets/img/thumb-11.png" alt=""><div><h3><span class="num-badge">11</span>Purple-team exercises</h3><p>Live red-vs-blue timeline, detection scorecard and conversion of missed steps into findings.</p></div></a>
+    <a class="page-card" href="12-detection.html"><img src="assets/img/thumb-12.png" alt=""><div><h3><span class="num-badge">12</span>Detection validation</h3><p>Expected vs fired alerts per SIEM/EDR, silent failures and rule-level results with time-to-detect.</p></div></a>
+    <a class="page-card" href="13-attack-paths.html"><img src="assets/img/thumb-13.png" alt=""><div><h3><span class="num-badge">13</span>Attack paths &amp; exposure</h3><p>Paths to crown jewels, the choke points that break the most paths, and the exposure explorer.</p></div></a>
+    <a class="page-card" href="14-threat-intel.html"><img src="assets/img/thumb-14.png" alt=""><div><h3><span class="num-badge">14</span>Threat intelligence</h3><p>Threat groups, what to test next, KEV exposure validated by simulation, and the IOC registry.</p></div></a>
+    <a class="page-card" href="15-remediation.html"><img src="assets/img/thumb-15.png" alt=""><div><h3><span class="num-badge">15</span>Remediation plans</h3><p>Findings grouped into owned initiatives with projected uplift, plus the SLA report.</p></div></a>
+    <a class="page-card" href="16-integrations.html"><img src="assets/img/thumb-16.png" alt=""><div><h3><span class="num-badge">16</span>Integrations</h3><p>Every connector — SIEM, EDR, ITSM, threat intel, engine — in one place with health states.</p></div></a>
+    <a class="page-card" href="17-settings.html"><img src="assets/img/thumb-17.png" alt=""><div><h3><span class="num-badge">17</span>Settings</h3><p>Users &amp; roles, SSO, audit log, licence, content, backup, appearance and notifications.</p></div></a>
+    <a class="page-card" href="00-login.html"><img src="assets/img/thumb-00.png" alt=""><div><h3><span class="num-badge">00</span>Sign in</h3><p>The entry screen: SSO-first, with local break-glass access and the on-prem positioning.</p></div></a>
+  </div>
+
+  <!-- Backend -->
+  <h2><span class="eyebrow">06</span>What the backend needs: mostly wiring</h2>
+  <p class="lede">Most of the redesign uses endpoints that already exist. The new pieces are small and keep the maths on the server, where reports already compute it.</p>
+  <div class="table-wrap">
+    <table class="t">
+      <thead><tr><th>Change</th><th>Why</th><th>Size</th></tr></thead>
+      <tbody>
+        <tr><td class="t-title">New <span class="mono">GET /api/posture/summary?window=30d&amp;scope=…</span></td><td>One cached call for the whole dashboard: score, components, KPIs, tactics, domains, readiness, compliance, paths and freshness. Replaces 12+ calls and the browser-side maths.</td><td><span class="pill warning">M</span></td></tr>
+        <tr><td class="t-title">Wire <span class="mono">/api/controlhealth/summary</span></td><td>Already built (10 control domains) and currently unused</td><td><span class="pill good">S</span></td></tr>
+        <tr><td class="t-title">Shared posture formula package</td><td>The same score in the dashboard, board scorecard and PDF; the score points one way everywhere</td><td><span class="pill good">S</span></td></tr>
+        <tr><td class="t-title">Fleet MTTD aggregate</td><td>From <span class="mono">detection_summary.mttdMs</span>; no fleet MTTD exists today</td><td><span class="pill good">S</span></td></tr>
+        <tr><td class="t-title">Projected uplift per finding</td><td>Re-score with the verdict set to prevented; powers “Fix these first”</td><td><span class="pill warning">M</span></td></tr>
+        <tr><td class="t-title">Unified <span class="mono">GET /api/assessments</span></td><td>Runs, campaigns, schedules and re-tests in one paginated list</td><td><span class="pill warning">M</span></td></tr>
+        <tr><td class="t-title">Compliance aggregation parameter + JSON trend</td><td>Make “all endpoints / worst endpoint” explicit; expose <span class="mono">compliance_history</span></td><td><span class="pill good">S</span></td></tr>
+        <tr><td class="t-title">Fleet-wide threat readiness</td><td>Use <span class="mono">/api/threat-priority/actors</span> instead of first-agent readiness calls</td><td><span class="pill good">S</span></td></tr>
+        <tr><td class="t-title">Pagination on <span class="mono">/api/findings</span></td><td>The findings table is unpaginated today</td><td><span class="pill good">S</span></td></tr>
+        <tr><td class="t-title">Quick fixes</td><td>Exposure trend colour direction; real data-freshness timestamp; dead routes (<span class="mono">em</span>, <span class="mono">users</span>)</td><td><span class="pill good">S</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Plan -->
+  <h2><span class="eyebrow">07</span>Rollout plan</h2>
+  <p class="lede">Incremental, behind the existing build. Each phase ships on its own, keeps the CSP (<span class="mono">script-src 'self'</span>, self-hosted fonts), uses the <span class="mono">data-on-click</span> actions registry, and keeps smoke and visual-regression tests green. Estimates are rough, assuming two frontend engineers and one backend engineer.</p>
+  <div class="card pad">
+    <div class="phase"><div class="when"><b>Phase 0</b>1–2 weeks</div><div><h3>Foundations</h3><p class="small">New tokens for light and dark, with the old tokens aliased so nothing breaks; type, spacing, radius and z-index scales; status, outcome and chart palettes (replace <span class="mono">CHART_COLORS</span> and the second palette in JS); one icon set (no emoji); define <span class="mono">.btn-ghost</span>.</p></div><div><span class="pill good">Low risk</span></div></div>
+    <div class="phase"><div class="when"><b>Phase 1</b>1–2 weeks</div><div><h3>Shell and navigation</h3><p class="small">15-item sidebar; route aliases for every old tab id; one page-header pattern (title = menu label); one filter-bar component; remove the triple titles; keep the Ctrl K palette.</p></div><div><span class="pill warning">Medium</span></div></div>
+    <div class="phase"><div class="when"><b>Phase 2</b>2–3 weeks</div><div><h3>Posture dashboard</h3><p class="small"><span class="mono">/api/posture/summary</span>, control-health wiring and fleet MTTD; Executive and Operations views; retire about 20 duplicate widgets; fix the exposure-trend bug.</p></div><div><span class="pill warning">Medium</span></div></div>
+    <div class="phase"><div class="when"><b>Phase 3</b>~3 weeks</div><div><h3>Core list pages</h3><p class="small">Findings, Assessments and Endpoints on one table + detail-panel component; at most two drawer widths; at most five tabs in any panel.</p></div><div><span class="pill warning">Medium</span></div></div>
+    <div class="phase"><div class="when"><b>Phase 4</b>~2 weeks</div><div><h3>Govern</h3><p class="small">Compliance in the sidebar with explicit aggregation and trend; Reports centre with schedules, verification and Navigator export.</p></div><div><span class="pill good">Low risk</span></div></div>
+    <div class="phase"><div class="when"><b>Phase 5</b>ongoing</div><div><h3>Debt burn-down</h3><p class="small">Inline styles 838 → 0 through the existing g1d ratchet; retire <span class="mono">inline-equivalent.css</span> and the <span class="mono">rich-g*</span> files; WCAG 2.2 AA audit; refresh visual baselines.</p></div><div><span class="pill outline">Continuous</span></div></div>
+  </div>
+
+  <!-- Decisions -->
+  <h2 id="decisions"><span class="eyebrow">08</span>Decisions for discussion</h2>
+  <p class="lede">These need your call before anything is applied to <span class="mono">orchestrator/web</span>. My recommendation is listed first in each.</p>
+  <div class="qs">
+    <div class="q"><b>Posture score definition</b><p>Use the transparent composite (45% prevention, 30% detection, 15% ATT&amp;CK coverage, 10% attack-path resilience), or keep 100 − riskScore? Who sets the target (default 80)?</p><div class="opts"><span class="pill accent">Composite (recommended)</span><span class="pill outline">100 − riskScore</span></div></div>
+    <div class="q"><b>Default theme</b><p>Dark-first (matches the logo and SOC use), with light for executives and print, or follow the OS setting?</p><div class="opts"><span class="pill accent">Dark-first (recommended)</span><span class="pill outline">Follow OS</span></div></div>
+    <div class="q"><b>Compliance aggregation</b><p>Does a control pass only if it passes on every in-scope endpoint, on the worst endpoint (today's behaviour, unexplained), or on the median?</p><div class="opts"><span class="pill accent">All endpoints (recommended)</span><span class="pill outline">Worst</span><span class="pill outline">Median</span></div></div>
+    <div class="q"><b>Naming</b><p>“Assessments” (not Runs/Campaigns), “Threat library” (not Scenarios), “Endpoints” (not Agents), and sentence case everywhere?</p><div class="opts"><span class="pill accent">Adopt (recommended)</span><span class="pill outline">Keep current names</span></div></div>
+    <div class="q"><b>Brand accent and fonts</b><p>Move the accent from <span class="mono">#4f8ef7</span> to the logo's azure, and drop Space Grotesk so Inter is used everywhere (JetBrains Mono stays for IDs)?</p><div class="opts"><span class="pill accent">Yes (recommended)</span><span class="pill outline">Keep current</span></div></div>
+    <div class="q"><b>Default view per role</b><p>Viewers and executives land on Executive; analysts and operators on Operations?</p><div class="opts"><span class="pill accent">By role (recommended)</span><span class="pill outline">Always Executive</span></div></div>
+    <div class="q"><b>Industry benchmark</b><p>An anonymised “you vs BFSI peers” comparison would have to ship inside the offline content bundles (opt-in, since no data leaves the bank). Worth pursuing?</p><div class="opts"><span class="pill outline">Later (recommended)</span><span class="pill outline">Now</span><span class="pill outline">No</span></div></div>
+    <div class="q"><b>Add-ons in navigation</b><p>Show licensed add-ons (Kubernetes, Aleef, Email) as assessment types and coverage tabs rather than menu items?</p><div class="opts"><span class="pill accent">As types (recommended)</span><span class="pill outline">Keep as menu items</span></div></div>
+  </div>
+
+  <p class="small muted mt-6">Prepared from a read-only audit of the console and API on <span class="mono">main</span>. Palette checked with the data-viz validator (colour-blind separation and contrast on both surfaces); every text token is at least 4.5:1 on every surface. Logo and fonts are the product's own assets.</p>
+</main>
+
+<script src="assets/data.js"></script>
+<script src="assets/shell.js"></script>
+<script src="assets/pages/doc.js"></script>
+</body>
+</html>

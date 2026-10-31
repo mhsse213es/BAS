@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ATT&amp;CK Coverage · Audspect</title>
+<meta name="description" content="Audspect console redesign proposal — ATT&CK coverage matrix, technique detail and threat-group readiness.">
+<script src="assets/theme-init.js"></script>
+<link rel="stylesheet" href="assets/ds.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="Primary navigation"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <main class="content" id="content">
+
+      <div class="review-banner"><span data-icon="note"></span><span><b>Design proposal v0.3</b> · sample data. Press <span class="kbd">N</span> for design notes. Click any technique to see its detail.</span><span class="spacer"></span><a href="index.html">Proposal index</a></div>
+
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">ATT&amp;CK coverage</h1>
+          <p class="page-sub">What your controls do against every technique in your threat profile. Each cell shows the worst outcome across in-scope endpoints.</p>
+        </div>
+        <div class="page-actions">
+          <a class="btn" href="#"><span data-icon="download"></span>Navigator layer</a>
+          <a class="btn btn-primary" href="03-assessments.html#new"><span data-icon="play"></span>Test the 25 gaps</a>
+        </div>
+      </div>
+
+      <nav class="tabs" aria-label="Coverage views">
+        <a class="tab active" href="#">Matrix</a>
+        <a class="tab" href="#actors">Threat groups <span class="count">6</span></a>
+        <a class="tab" href="#">By control domain</a>
+        <a class="tab" href="#">Technique list</a>
+      </nav>
+
+      <div class="filter-bar" id="c-filters">
+        <button class="chip on" type="button"><span data-icon="target"></span><span class="k">Threat profile</span>BFSI · India<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span class="k">Platform</span>All<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span class="k">Outcome</span>Any<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span class="k">Site</span>All sites<span data-icon="chevDown"></span></button>
+        <span class="row small soft"><span class="toggle"></span>Sub-techniques</span>
+        <span class="spacer"></span>
+        <button class="chip" type="button"><span data-icon="calendar"></span><span class="k">Period</span>Last 30 days<span data-icon="chevDown"></span></button>
+      </div>
+
+      <section class="card mb-4" id="mx-card">
+        <div class="card-h">
+          <div class="titles"><h2 class="card-title">Enterprise matrix · BFSI · India profile</h2><div class="card-sub" id="mx-sub"></div></div>
+          <div class="card-actions"><div class="legend" id="mx-legend"></div></div>
+        </div>
+        <div class="card-b"><div class="mx" id="mx"></div></div>
+        <div class="card-f"><span>Exports as an ATT&amp;CK Navigator layer (v4.5) with the same colours, ready to combine with your detection layers</span><a class="link-more" href="#">Export layer<span data-icon="download" class="sm"></span></a></div>
+      </section>
+
+      <div class="grid">
+        <section class="card c-7 lg-12" id="tech"></section>
+        <section class="card c-5 lg-12" id="actors">
+          <div class="card-h">
+            <div class="titles"><h2 class="card-title">Threat groups in your profile</h2><div class="card-sub">Share of each group's known techniques you prevent, fleet-wide</div></div>
+            <div class="card-actions"><a class="link-more" href="#">Manage profile<span data-icon="arrowRight" class="sm"></span></a></div>
+          </div>
+          <div class="card-b"><div class="list" id="groups"></div></div>
+        </section>
+      </div>
+
+    </main>
+  </div>
+</div>
+<script src="assets/data.js"></script>
+<script src="assets/shell.js"></script>
+<script src="assets/pages/coverage.js"></script>
+</body>
+</html>

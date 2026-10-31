@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compliance · Audspect</title>
+<meta name="description" content="Audspect console redesign proposal — compliance readiness per framework, control-level evidence and signed reports.">
+<script src="assets/theme-init.js"></script>
+<link rel="stylesheet" href="assets/ds.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="Primary navigation"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <main class="content" id="content">
+
+      <div class="review-banner"><span data-icon="note"></span><span><b>Design proposal v0.3</b> · sample data. Press <span class="kbd">N</span> for design notes. Click a framework card to switch the control table.</span><span class="spacer"></span><a href="index.html">Proposal index</a></div>
+
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Compliance</h1>
+          <p class="page-sub">Readiness for each framework, backed by simulation evidence. Every report is signed, so an auditor can verify it independently.</p>
+        </div>
+        <div class="page-actions">
+          <a class="btn" href="08-reports.html"><span data-icon="download"></span>Audit evidence pack</a>
+          <a class="btn btn-primary" href="08-reports.html"><span data-icon="badge"></span>Generate signed report</a>
+        </div>
+      </div>
+
+      <div class="filter-bar" id="cm-filters">
+        <span class="small soft">Aggregation</span>
+        <div class="seg" role="tablist" aria-label="Aggregation rule">
+          <button type="button" class="on" role="tab" aria-selected="true">All endpoints must pass</button>
+          <button type="button" role="tab" aria-selected="false">Worst endpoint</button>
+          <button type="button" role="tab" aria-selected="false">Per endpoint</button>
+        </div>
+        <button class="chip" type="button"><span class="k">Site</span>All sites<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span class="k">Asset group</span>In regulatory scope<span data-icon="chevDown"></span></button>
+        <span class="spacer"></span>
+        <button class="chip" type="button"><span data-icon="calendar"></span><span class="k">Evidence window</span>Last 90 days<span data-icon="chevDown"></span></button>
+      </div>
+
+      <section class="grid mb-4" id="fw-cards" aria-label="Frameworks"></section>
+
+      <div class="grid">
+        <section class="card c-8 lg-12" id="controls">
+          <div class="card-h">
+            <div class="titles"><h2 class="card-title" id="ctl-title"></h2><div class="card-sub" id="ctl-sub"></div></div>
+            <div class="card-actions"><a class="btn btn-sm" href="#"><span data-icon="download"></span>CSV</a></div>
+          </div>
+          <div class="card-b"><div class="row wrap mb-4" id="ctl-filter"></div><div class="table-wrap" id="ctl-table"></div></div>
+        </section>
+        <div class="c-4 lg-12 stack gap-4">
+          <section class="card" id="trend">
+            <div class="card-h"><div class="titles"><h2 class="card-title">Readiness trend</h2><div class="card-sub" id="trend-sub"></div></div></div>
+            <div class="card-b"><div id="trend-viz"></div></div>
+          </section>
+          <section class="card" id="signed">
+            <div class="card-h"><div class="titles"><h2 class="card-title">Signed reports</h2><div class="card-sub">Tamper-evident and verifiable offline</div></div><div class="card-actions"><a class="link-more" href="08-reports.html">All<span data-icon="arrowRight" class="sm"></span></a></div></div>
+            <div class="card-b"><div class="list" id="signed-list"></div>
+              <div class="block-title">How verification works</div>
+              <ol class="steps">
+                <li>Each report carries a manifest with a SHA-256 hash of every file and figure.</li>
+                <li>The manifest is signed with this installation's attestation key.</li>
+                <li><span>An auditor checks it on <a href="08-reports.html">Reports › Verify</a> or with the CLI. Any edit breaks the signature.</span></li>
+              </ol>
+            </div>
+          </section>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+<script src="assets/data.js"></script>
+<script src="assets/shell.js"></script>
+<script src="assets/pages/compliance.js"></script>
+</body>
+</html>

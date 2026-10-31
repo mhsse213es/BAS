@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design System · Audspect</title>
+<meta name="description" content="Audspect console redesign proposal — design system: tokens, type, layout, components, status language, writing and token migration.">
+<script src="assets/theme-init.js"></script>
+<link rel="stylesheet" href="assets/ds.css">
+</head>
+<body data-doc="ds">
+<header class="doc-top" id="doc-top"></header>
+
+<main class="doc">
+  <section class="doc-hero">
+    <div>
+      <span class="eyebrow">01 · Design system · v0.2</span>
+      <h1>One set of tokens and components for every screen</h1>
+      <p>Everything on this page is read live from <code class="mono">assets/ds.css</code>. Switch theme with <span class="kbd">T</span> to see the dark and light steps; they are chosen separately, not inverted. <b>v0.2 softened the whole palette</b> — status and chart colours are desaturated, surfaces are calmer and the accent is gentler — while keeping every colour-blind and contrast check passing. Contrast ratios are computed in the page.</p>
+    </div>
+    <div class="card pad">
+      <h3>Rules that stop the drift</h3>
+      <ul class="bul">
+        <li><b>No raw colours.</b> Every colour is a token (today there are 301 hard-coded hex values).</li>
+        <li><b>No inline styles.</b> Components and utilities only, enforced by the existing g1d ratchet.</li>
+        <li><b>One component per job.</b> One button, one tab, one table and one panel.</li>
+        <li><b>Status colours mean status.</b> They are never used as a decorative series colour.</li>
+      </ul>
+    </div>
+  </section>
+
+  <h2><span class="eyebrow">Colour</span>Surfaces and ink</h2>
+  <p class="lede">Navy surfaces sampled to match the logo. Text tokens are measured against <span class="mono">--surface-1</span>; all clear WCAG AA (4.5:1) on every surface in both themes.</p>
+  <div class="swatch-grid" id="sw-surface"></div>
+
+  <h2><span class="eyebrow">Colour</span>Brand and interaction</h2>
+  <p class="lede">The accent comes from the shield logo's azure. It is used for interaction only (buttons, links, focus, selection), never to encode data.</p>
+  <div class="swatch-grid" id="sw-brand"></div>
+  <div class="swatch-grid mt-3" id="sw-ramp"></div>
+
+  <h2><span class="eyebrow">Colour</span>Status and outcomes</h2>
+  <p class="lede">A fixed four-step status scale with reserved meaning, always paired with an icon and a label (warning and serious sit below 3:1 on white by design). BAS outcomes map onto it, so “prevented” looks the same on every screen and in every report.</p>
+  <div class="swatch-grid" id="sw-status"></div>
+  <div class="card pad mt-4">
+    <div class="spec"><span>Outcome language</span><div class="demo-row" id="demo-outcome"></div></div>
+    <div class="spec"><span>Severity</span><div class="demo-row" id="demo-sev"></div></div>
+    <div class="spec"><span>Status pills</span><div class="demo-row" id="demo-pills"></div></div>
+    <div class="spec"><span>Deltas</span><div class="demo-row" id="demo-delta"></div></div>
+  </div>
+
+  <h2><span class="eyebrow">Colour</span>Data visualisation</h2>
+  <p class="lede">The categorical slots come from a palette checked with a colour-vision validator: lightness band, chroma floor, separation under protanopia and deuteranopia, a normal-vision floor, and contrast against both surfaces. Single series use slot 1; outcome charts use the status scale; there is never a second y-axis.</p>
+  <div class="grid">
+    <div class="c-6 md-12"><div class="swatch-grid" id="sw-viz"></div></div>
+    <div class="c-6 md-12">
+      <div class="table-wrap">
+        <table class="t">
+          <thead><tr><th>Outcome colours — prevented / detected / missed (all pairs)</th><th class="r">Light</th><th class="r">Dark</th></tr></thead>
+          <tbody>
+            <tr><td>Worst colour-blind separation (ΔE, target ≥ 8)</td><td class="r">9.1</td><td class="r">9.2</td></tr>
+            <tr><td>Worst normal-vision separation (ΔE, floor ≥ 15)</td><td class="r">20.5</td><td class="r">15.6</td></tr>
+            <tr><td>Contrast vs surface (≥ 3:1)</td><td class="r">detected 2.25: labels required</td><td class="r">all pass</td></tr>
+            <tr><td>Result</td><td class="r"><span class="pill good">Pass</span></td><td class="r"><span class="pill good">Pass</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul class="bul small">
+        <li>Thin marks: bars ≤ 24 px with 4 px rounded data ends, 2 px lines, ≥ 8 px markers.</li>
+        <li>A legend whenever there are two or more series; a table view for every chart.</li>
+        <li>Hover and keyboard tooltips on every chart; text never wears the series colour.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2><span class="eyebrow">Type</span>Inter everywhere, JetBrains Mono for identifiers</h2>
+  <p class="lede">Space Grotesk is retired; one sans for UI and numbers keeps hierarchy coming from size and weight, not from mixed faces. Large numbers use proportional figures; tables and axes use tabular figures.</p>
+  <div class="card pad" id="type-scale"></div>
+
+  <h2><span class="eyebrow">Layout</span>Space, radius, elevation and page anatomy</h2>
+  <div class="grid">
+    <div class="card pad c-6 md-12">
+      <h3>Scales</h3>
+      <div class="spec"><span>Spacing (4 px base)</span><div class="demo-row" id="demo-space"></div></div>
+      <div class="spec"><span>Radius</span><div class="demo-row" id="demo-radius"></div></div>
+      <div class="spec"><span>Elevation</span><div class="demo-row" id="demo-shadow"></div></div>
+      <div class="spec"><span>Grid</span><div class="small soft">12 columns, 16 px gutters; sidebar 244 px (68 px collapsed); top bar 56 px; content max 1,640 px. Cards reflow by <b>container</b> width, so they also adapt when a side panel opens.</div></div>
+    </div>
+    <div class="card pad c-6 md-12">
+      <h3>Page anatomy (every page)</h3>
+      <div class="anatomy mt-3">
+        <div class="an-side">Sidebar<br><small>6 groups · 15 items</small></div>
+        <div class="an-main">
+          <div class="an-top">Top bar · breadcrumb · Ctrl K search · health · notifications · theme · user</div>
+          <div class="an-head">Page header · title = menu label · one-line purpose · primary action on the right</div>
+          <div class="an-filter">One filter row · period first · scopes everything below</div>
+          <div class="an-body"><div>Content<br><small>cards grid or table</small></div><div>Detail panel<br><small>evidence → why → fix → verify</small></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2><span class="eyebrow">Components</span>The kit</h2>
+  <p class="lede">One implementation of each, built with the existing actions registry (<span class="mono">data-on-click</span>) and CSP-safe external modules.</p>
+  <div class="card pad">
+    <div class="spec"><span>Buttons</span><div class="demo-row"><button class="btn btn-primary" type="button"><span data-icon="play"></span>Run assessment</button><button class="btn" type="button">Secondary</button><button class="btn btn-ghost" type="button">Ghost</button><button class="btn btn-danger" type="button"><span data-icon="ban"></span>Quarantine</button><button class="btn btn-sm" type="button">Small</button><button class="btn btn-icon" type="button" aria-label="More"><span data-icon="more"></span></button><button class="btn" type="button" disabled>Disabled</button></div></div>
+    <div class="spec"><span>Inputs and filters</span><div class="demo-row"><span class="input-icon"><span data-icon="search"></span><input class="input search-input" type="search" placeholder="Search" aria-label="Search demo"></span><button class="chip" type="button"><span data-icon="calendar"></span><span class="k">Period</span>Last 30 days<span data-icon="chevDown"></span></button><button class="chip on" type="button"><span class="k">Severity</span>Critical<span data-icon="x"></span></button><span class="toggle on"></span><span class="checkbox on"><span data-icon="check" class="sm"></span></span><span class="checkbox"></span></div></div>
+    <div class="spec"><span>Tabs</span><div><nav class="tabs mt-0" aria-label="Tabs demo"><a class="tab active" href="#">Open <span class="count">145</span></a><a class="tab" href="#">In progress <span class="count">23</span></a><a class="tab" href="#">All</a></nav></div></div>
+    <div class="spec"><span>Segmented control</span><div class="demo-row"><div class="seg"><button class="on" type="button">Executive</button><button type="button">Operations</button></div></div></div>
+    <div class="spec"><span>KPI tile</span><div class="demo-row" id="demo-kpi"></div></div>
+    <div class="spec"><span>Meters and bars</span><div class="stack" id="demo-meter"></div></div>
+    <div class="spec"><span>Callouts</span><div class="stack"><div class="callout info"><span data-icon="info"></span><div class="small">Information · neutral guidance</div></div><div class="callout warning"><span data-icon="alert"></span><div class="small">Warning · needs attention</div></div><div class="callout good"><span data-icon="checkCircle"></span><div class="small">Success · verified outcome</div></div></div></div>
+    <div class="spec"><span>Empty state</span><div class="empty" style="padding:12px"><span data-icon="minus"></span><b>No evidence yet</b><span class="small">Say what is missing and offer the next step, never a fake 0% or 100%.</span></div></div>
+    <div class="spec"><span>Table</span><div class="table-wrap" id="demo-table"></div></div>
+  </div>
+
+  <h2><span class="eyebrow">Writing</span>One name per concept</h2>
+  <div class="table-wrap">
+    <table class="t">
+      <thead><tr><th>Term</th><th>Meaning</th><th>Replaces</th></tr></thead>
+      <tbody>
+        <tr><td class="t-title">Assessment</td><td>Any execution against a scope: on demand, scheduled, campaign, emulation, re-test</td><td class="soft">Run, Live run, Campaign run, Sweep</td></tr>
+        <tr><td class="t-title">Simulation</td><td>One technique executed on one endpoint</td><td class="soft">Test, validation, atomic</td></tr>
+        <tr><td class="t-title">Scenario</td><td>A reusable test definition in the Threat library</td><td class="soft">Playbook, template (in some places)</td></tr>
+        <tr><td class="t-title">Finding</td><td>A validated control gap with owner, SLA and status</td><td class="soft">Gap, exposure gap, issue</td></tr>
+        <tr><td class="t-title">Prevented · Detected only · Missed · Not tested</td><td>The only four outcome words, everywhere</td><td class="soft">Pass/Fail, Blocked, Evaded, Undetected, Unknown</td></tr>
+        <tr><td class="t-title">Posture score</td><td>0–100, higher is better; one formula for the dashboard and reports</td><td class="soft">Risk score, posture, health, exposure (as headline numbers)</td></tr>
+        <tr><td class="t-title">Endpoint</td><td>A machine running the agent</td><td class="soft">Agent, asset, host (in navigation)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul class="bul mt-3">
+    <li><b>Sentence case</b> for every title, label and button. Buttons are verbs: “Run assessment”, “Create ticket”, “Re-test”.</li>
+    <li><b>Indian number grouping</b> (1,23,456), dates as “31 Oct 2026”, times in IST with the zone shown.</li>
+    <li><b>Say what is unknown.</b> “Detection unknown: connector offline” rather than “Missed”.</li>
+  </ul>
+
+  <h2><span class="eyebrow">Migration</span>Old token → new token</h2>
+  <p class="lede">Phase 0 adds the new tokens and aliases the old names to them, so existing screens keep rendering while pages move over.</p>
+  <div class="table-wrap">
+    <table class="t">
+      <thead><tr><th>Today (app.css)</th><th>Proposed</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">--bg #080d18</td><td class="mono">--bg</td><td class="soft">Dark #0a0f18 · light #f4f6f9</td></tr>
+        <tr><td class="mono">--surface / --elevated / --hover</td><td class="mono">--surface-1 / -2 / -3</td><td class="soft">Three steps, the same in every component</td></tr>
+        <tr><td class="mono">--border / --border-hi</td><td class="mono">--border / --border-strong</td><td class="soft">Translucent in dark so they sit on any surface</td></tr>
+        <tr><td class="mono">--text / --text-dim / --muted / --muted-hi</td><td class="mono">--text-1 / --text-2 / --text-3</td><td class="soft">Three levels with real contrast steps (today --text and --text-dim are nearly identical)</td></tr>
+        <tr><td class="mono">--accent #4f8ef7 (+ dim, glow, border)</td><td class="mono">--accent, --accent-hover, --accent-soft, --focus-ring</td><td class="soft">Logo azure; the 5 accent swatches in Settings become one brand colour</td></tr>
+        <tr><td class="mono">--success #22d3a6 · --teal</td><td class="mono">--good · --prevented</td><td class="soft">Teal success becomes the validated status green</td></tr>
+        <tr><td class="mono">--warning #f59e0b · --danger #ef4444</td><td class="mono">--warning · --serious · --critical</td><td class="soft">Adds “serious” for High severity</td></tr>
+        <tr><td class="mono">--*-text variants</td><td class="mono">--success-text · --warning-text · --danger-text</td><td class="soft">Text-safe steps per theme (≥ 4.5:1)</td></tr>
+        <tr><td class="mono">--purple #a78bfa</td><td class="soft">removed</td><td class="soft">Not a status; reserved for review annotations only</td></tr>
+        <tr><td class="mono">CHART_COLORS + the second palette in JS</td><td class="mono">--series-1..3 + status tokens</td><td class="soft">Removes about 143 hex literals from JS</td></tr>
+        <tr><td class="mono">--font-display (Space Grotesk)</td><td class="soft">removed</td><td class="soft">Inter for all text and numbers</td></tr>
+        <tr><td class="mono">--radius 8 / 12 / 16 + 14 literal radii</td><td class="mono">--r-sm 6 · --r-md 8 · --r-lg 12 · --r-pill</td><td class="soft">Four values only</td></tr>
+        <tr><td class="soft">none</td><td class="mono">--s-1…--s-10, type scale, z-index scale</td><td class="soft">Replaces 67 literal font sizes and ad-hoc spacing</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script src="assets/data.js"></script>
+<script src="assets/shell.js"></script>
+<script src="assets/pages/doc.js"></script>
+<script src="assets/pages/design-system.js"></script>
+</body>
+</html>

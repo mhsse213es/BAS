@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Assessments · Audspect</title>
+<meta name="description" content="Audspect console redesign proposal — assessments: unified run list, run detail and the new-assessment flow.">
+<script src="assets/theme-init.js"></script>
+<link rel="stylesheet" href="assets/ds.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="Primary navigation"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <main class="content" id="content">
+
+      <div class="review-banner"><span data-icon="note"></span><span><b>Design proposal v0.3</b> · sample data. Press <span class="kbd">N</span> for design notes. Click a row to change the run detail.</span><span class="spacer"></span><a href="index.html">Proposal index</a></div>
+
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Assessments</h1>
+          <p class="page-sub">Every simulation run in one place: on demand, scheduled, campaigns, threat-group emulations, detection validations and re-tests.</p>
+        </div>
+        <div class="page-actions">
+          <a class="btn" href="#"><span data-icon="upload"></span>Import scenario</a>
+          <a class="btn btn-primary" href="#new"><span data-icon="plus"></span>New assessment</a>
+        </div>
+      </div>
+
+      <section class="kpi-grid four mb-4" id="a-kpis" aria-label="Assessment summary"></section>
+
+      <nav class="tabs" aria-label="Assessment views">
+        <a class="tab active" href="#">All <span class="count">6</span></a>
+        <a class="tab" href="#">Running <span class="count">1</span></a>
+        <a class="tab" href="#">Scheduled <span class="count">4</span></a>
+        <a class="tab" href="#">Campaigns <span class="count">3</span></a>
+        <a class="tab" href="#">Threat emulations <span class="count">5</span></a>
+        <a class="tab" href="#">Re-tests <span class="count">12</span></a>
+        <a class="tab" href="#">Templates</a>
+      </nav>
+
+      <div class="filter-bar" id="a-filters">
+        <span class="input-icon"><span data-icon="search"></span><input class="input search-input" type="search" placeholder="Search assessments" aria-label="Search assessments"></span>
+        <button class="chip" type="button"><span class="k">Type</span>Any<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span class="k">Status</span>Any<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span class="k">Scope</span>All endpoints<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span class="k">Vector</span>Endpoint, Email, AD<span data-icon="chevDown"></span></button>
+        <span class="spacer"></span>
+        <button class="chip" type="button"><span data-icon="calendar"></span><span class="k">Period</span>Last 30 days<span data-icon="chevDown"></span></button>
+      </div>
+
+      <div class="split">
+        <section class="table-wrap" id="a-table" aria-label="Assessments"></section>
+        <aside class="panel" id="a-panel" aria-label="Run detail"></aside>
+      </div>
+
+      <h2 class="section-title" id="new">New assessment flow</h2>
+      <section class="card" id="wizard">
+        <div class="card-h">
+          <div class="titles"><h2 class="card-title">New assessment</h2><div class="card-sub">Four steps, safe by default. Shown here in place; in the product it opens as a full-height panel.</div></div>
+          <div class="card-actions"><div class="stepper" id="stepper"></div></div>
+        </div>
+        <div class="card-b">
+          <div class="grid">
+            <div class="c-8 lg-12"><div class="block-title mt-0">1 · What do you want to test?</div><div class="tpl-grid" id="tpls"></div></div>
+            <div class="c-4 lg-12"><div class="proj" id="w-summary"></div></div>
+          </div>
+        </div>
+        <div class="card-f"><span class="row gap-1"><span data-icon="lock" class="sm"></span>Payloads are signed and verified by the agent before execution</span>
+          <span class="row"><button class="btn btn-ghost" type="button">Cancel</button><button class="btn" type="button">Save as template</button><button class="btn btn-primary" type="button">Next: choose scope<span data-icon="arrowRight" class="sm"></span></button></span></div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="assets/data.js"></script>
+<script src="assets/shell.js"></script>
+<script src="assets/pages/assessments.js"></script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Findings · Audspect</title>
+<meta name="description" content="Audspect console redesign proposal — findings and remediation (master–detail).">
+<script src="assets/theme-init.js"></script>
+<link rel="stylesheet" href="assets/ds.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="Primary navigation"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <main class="content" id="content">
+
+      <div class="review-banner"><span data-icon="note"></span><span><b>Design proposal v0.3</b> · sample data. Press <span class="kbd">N</span> for design notes, <span class="kbd">T</span> to switch theme. Click any row to change the detail panel.</span><span class="spacer"></span><a href="index.html">Proposal index</a></div>
+
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Findings</h1>
+          <p class="page-sub">Validated control gaps, ranked by how much fixing them would raise your posture score. A finding closes only when a re-test proves the fix.</p>
+        </div>
+        <div class="page-actions">
+          <a class="btn" href="#"><span data-icon="download"></span>Export CSV</a>
+          <a class="btn" href="#"><span data-icon="ticket"></span>Create tickets</a>
+          <a class="btn btn-primary" href="#"><span data-icon="refresh"></span>Re-test selected</a>
+        </div>
+      </div>
+
+      <section class="kpi-grid four mb-4" id="f-kpis" aria-label="Findings summary"></section>
+
+      <nav class="tabs" id="f-tabs" aria-label="Finding status">
+        <a class="tab active" href="#">Open <span class="count">145</span></a>
+        <a class="tab" href="#">In progress <span class="count">23</span></a>
+        <a class="tab" href="#">Risk accepted <span class="count">9</span></a>
+        <a class="tab" href="#">Verified fixed <span class="count">312</span></a>
+        <a class="tab" href="#">All</a>
+      </nav>
+
+      <div class="filter-bar" id="f-filters">
+        <span class="input-icon"><span data-icon="search"></span><input class="input search-input" type="search" placeholder="Search findings, techniques, hosts" aria-label="Search findings"></span>
+        <button class="chip on" type="button"><span class="k">Threat profile</span>BFSI · India<span class="x" data-icon="x"></span></button>
+        <button class="chip" type="button"><span class="k">Severity</span>Any<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span class="k">Tactic</span>Any<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span class="k">Control domain</span>Any<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span class="k">Owner</span>Any<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span class="k">SLA</span>Any<span data-icon="chevDown"></span></button>
+        <span class="spacer"></span>
+        <button class="chip" type="button"><span data-icon="list"></span><span class="k">View</span>Ranked by score gain<span data-icon="chevDown"></span></button>
+      </div>
+
+      <div class="split">
+        <section class="table-wrap" id="f-table" aria-label="Findings"></section>
+        <aside class="panel" id="f-panel" aria-label="Finding detail"></aside>
+      </div>
+
+    </main>
+  </div>
+</div>
+<script src="assets/data.js"></script>
+<script src="assets/shell.js"></script>
+<script src="assets/pages/findings.js"></script>
+</body>
+</html>

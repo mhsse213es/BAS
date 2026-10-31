@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Endpoints · Audspect</title>
+<meta name="description" content="Audspect console redesign proposal — endpoint fleet, per-endpoint posture and guided agent deployment.">
+<script src="assets/theme-init.js"></script>
+<link rel="stylesheet" href="assets/ds.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="Primary navigation"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <main class="content" id="content">
+
+      <div class="review-banner"><span data-icon="note"></span><span><b>Design proposal v0.3</b> · sample data. Press <span class="kbd">N</span> for design notes. Click a row to change the endpoint detail.</span><span class="spacer"></span><a href="index.html">Proposal index</a></div>
+
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Endpoints</h1>
+          <p class="page-sub">The agents that run simulations: health, evidence coverage and posture for every endpoint.</p>
+        </div>
+        <div class="page-actions">
+          <a class="btn" href="#deploy"><span data-icon="download"></span>Download agent</a>
+          <a class="btn btn-primary" href="#deploy"><span data-icon="plus"></span>Deploy agents</a>
+        </div>
+      </div>
+
+      <section class="kpi-grid four mb-4" id="e-kpis" aria-label="Fleet summary"></section>
+
+      <nav class="tabs" aria-label="Endpoint status">
+        <a class="tab active" href="#">All <span class="count">214</span></a>
+        <a class="tab" href="#">Online <span class="count">194</span></a>
+        <a class="tab" href="#">Offline <span class="count">13</span></a>
+        <a class="tab" href="#">Quarantined <span class="count">3</span></a>
+        <a class="tab" href="#">Update needed <span class="count">4</span></a>
+      </nav>
+
+      <div class="filter-bar" id="e-filters">
+        <span class="input-icon"><span data-icon="search"></span><input class="input search-input" type="search" placeholder="Search host, IP or tag" aria-label="Search endpoints"></span>
+        <button class="chip" type="button"><span class="k">Site</span>All<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span class="k">Group</span>All<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span class="k">OS</span>All<span data-icon="chevDown"></span></button>
+        <button class="chip" type="button"><span class="k">Posture</span>Any band<span data-icon="chevDown"></span></button>
+        <span class="spacer"></span>
+        <button class="chip" type="button"><span data-icon="layers"></span><span class="k">Group by</span>None<span data-icon="chevDown"></span></button>
+      </div>
+
+      <div class="split">
+        <section class="table-wrap" id="e-table" aria-label="Endpoints"></section>
+        <aside class="panel" id="e-panel" aria-label="Endpoint detail"></aside>
+      </div>
+
+      <h2 class="section-title" id="deploy">Deploy agents</h2>
+      <section class="card" id="deploy-card">
+        <div class="card-h">
+          <div class="titles"><h2 class="card-title">Add endpoints in three steps</h2><div class="card-sub">Replaces today's long Deploy Agent page. Secrets are shown once, masked by default and expire on their own.</div></div>
+        </div>
+        <div class="card-b">
+          <div class="grid">
+            <div class="c-4 md-12">
+              <div class="block-title mt-0">1 · Platform</div>
+              <div class="seg" role="tablist" aria-label="Platform"><button type="button" class="on">Windows</button><button type="button">Linux</button><button type="button">macOS</button></div>
+              <ul class="check-list mt-3">
+                <li><span data-icon="checkCircle" class="sm"></span>Windows 10 / 11 and Server 2016 or later, x64</li>
+                <li><span data-icon="checkCircle" class="sm"></span>Runs as a service; optional tray status window</li>
+                <li><span data-icon="checkCircle" class="sm"></span>Outbound HTTPS to the orchestrator only</li>
+              </ul>
+            </div>
+            <div class="c-4 md-12">
+              <div class="block-title mt-0">2 · Signed installer</div>
+              <div class="file-row">
+                <span data-icon="file" class="lg tx-muted"></span>
+                <div class="grow"><div class="list-title">BASAgent-Setup.exe</div><div class="list-sub">v3.0.2 · 14.2 MB · SHA-256 <span class="mono">a1b2…f09c</span></div></div>
+                <a class="btn btn-sm" href="#"><span data-icon="download"></span>Download</a>
+              </div>
+              <div class="row mt-3"><span class="pill good"><span data-icon="badge"></span>Authenticode signed</span><span class="pill good"><span data-icon="lock"></span>Hash in signed manifest</span></div>
+            </div>
+            <div class="c-4 md-12">
+              <div class="block-title mt-0">3 · One-time enrolment token</div>
+              <div class="secret" aria-label="Enrolment token, hidden"><span>••••••••••••7Q2F</span><span class="spacer"></span><button class="btn btn-sm btn-ghost btn-icon" type="button" aria-label="Reveal token" title="Reveal"><span data-icon="eye"></span></button><button class="btn btn-sm" type="button"><span data-icon="copy"></span>Copy</button></div>
+              <div class="small muted mt-2">Single use · expires in 24 h · <a href="#">revoke</a></div>
+              <div class="block-title">Silent install (example)</div>
+              <pre class="code">BASAgent-Setup.exe /S /TOKEN=&lt;one-time-token&gt;</pre>
+            </div>
+          </div>
+          <div class="callout info mt-4"><span data-icon="info"></span><div class="small">After enrolment the agent authenticates with mutual TLS; the token cannot be reused. New endpoints appear above within a minute and are validated by the next scheduled assessment.</div></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="assets/data.js"></script>
+<script src="assets/shell.js"></script>
+<script src="assets/pages/endpoints.js"></script>
+</body>
+</html>
