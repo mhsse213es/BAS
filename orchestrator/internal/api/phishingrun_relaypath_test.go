@@ -31,6 +31,18 @@ func relayLegRun(t *testing.T, pool *pgxpool.Pool, id, expID string, exp emailgw
 		t.Fatalf("marshal efficacy result: %v", err)
 	}
 	seedEmailGWRun(t, pool, id, expID, raw)
+	// Both legs of one PH-EVA-002 grade belong to one campaign unless a test says otherwise.
+	setRelayRunCampaign(t, pool, id, "camp-eva")
+}
+
+// setRelayRunCampaign sets the campaign an EmailGW run belongs to. An empty campaign
+// leaves the run with no campaign at all.
+func setRelayRunCampaign(t *testing.T, pool *pgxpool.Pool, id, campaign string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE email_gw_runs SET campaign_id = NULLIF($2, '') WHERE id = $1`, id, campaign); err != nil {
+		t.Fatalf("set campaign of %s: %v", id, err)
+	}
 }
 
 func runRelayPath(t *testing.T, pool *pgxpool.Pool, direct, relay string) (phishval.Outcome, error) {
@@ -164,6 +176,55 @@ func TestExecutePHEVA002_RecordsProvenanceForBothLegs(t *testing.T) {
 		}
 		if outcome.RelayProvenance == nil || outcome.RelayProvenance.EmailGWRunID != "eva-prov-relay" {
 			t.Errorf("RelayProvenance = %+v, want the relay run eva-prov-relay", outcome.RelayProvenance)
+		}
+	})
+}
+
+// Both legs must belong to the same campaign. Two runs from different campaigns are
+// refused, with no grade.
+func TestExecutePHEVA002_DifferentCampaigns_Refused(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		relayLegRun(t, pool, "eva-camp-direct", "EG-016.relay-path.direct.known-good", emailgwefficacy.RelayPathBypassDirectExpectation(true), "quarantine")
+		relayLegRun(t, pool, "eva-camp-relay", "EG-016.relay-path.relay.known-good", emailgwefficacy.RelayPathBypassRelayExpectation(true), "quarantine")
+		setRelayRunCampaign(t, pool, "eva-camp-relay", "camp-other")
+
+		if _, err := runRelayPath(t, pool, "eva-camp-direct", "eva-camp-relay"); err == nil {
+			t.Fatal("expected refusal for legs from different campaigns, got a grade")
+		} else if !strings.Contains(err.Error(), "same campaign") {
+			t.Errorf("error = %v, want it to name the same-campaign rule", err)
+		}
+	})
+}
+
+// A leg whose run has no campaign cannot be matched to the other leg, so it is refused.
+func TestExecutePHEVA002_LegWithoutCampaign_Refused(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		relayLegRun(t, pool, "eva-nocamp-direct", "EG-016.relay-path.direct.known-good", emailgwefficacy.RelayPathBypassDirectExpectation(true), "quarantine")
+		relayLegRun(t, pool, "eva-nocamp-relay", "EG-016.relay-path.relay.known-good", emailgwefficacy.RelayPathBypassRelayExpectation(true), "quarantine")
+		setRelayRunCampaign(t, pool, "eva-nocamp-direct", "")
+
+		if _, err := runRelayPath(t, pool, "eva-nocamp-direct", "eva-nocamp-relay"); err == nil {
+			t.Fatal("expected refusal for a leg with no campaign, got a grade")
+		}
+	})
+}
+
+// Same campaign: both legs are graded, and each leg's provenance records its role and
+// the shared campaign.
+func TestExecutePHEVA002_SameCampaign_RecordsRolesAndCampaign(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		relayLegRun(t, pool, "eva-role-direct", "EG-016.relay-path.direct.known-good", emailgwefficacy.RelayPathBypassDirectExpectation(true), "quarantine")
+		relayLegRun(t, pool, "eva-role-relay", "EG-016.relay-path.relay.known-good", emailgwefficacy.RelayPathBypassRelayExpectation(true), "quarantine")
+
+		outcome, err := runRelayPath(t, pool, "eva-role-direct", "eva-role-relay")
+		if err != nil {
+			t.Fatalf("executor: %v", err)
+		}
+		if outcome.Provenance == nil || outcome.Provenance.Role != "direct_path" || outcome.Provenance.CampaignID != "camp-eva" {
+			t.Errorf("Provenance = %+v, want role direct_path in camp-eva", outcome.Provenance)
+		}
+		if outcome.RelayProvenance == nil || outcome.RelayProvenance.Role != "relay_path" || outcome.RelayProvenance.CampaignID != "camp-eva" {
+			t.Errorf("RelayProvenance = %+v, want role relay_path in camp-eva", outcome.RelayProvenance)
 		}
 	})
 }

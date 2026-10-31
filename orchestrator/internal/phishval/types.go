@@ -303,4 +303,8 @@ type Provenance struct {
 	EmailGWScenarioID  string     `json:"emailGwScenarioId"`
 	EmailGWEnvironment string     `json:"emailGwEnvironment"`
 	EmailGWCompletedAt *time.Time `json:"emailGwCompletedAt,omitempty"`
+	// CampaignID is the campaign the run belongs to. PH-EVA-002 requires both legs to share one.
+	CampaignID string `json:"campaignId,omitempty"`
+	// Role names the leg this run grades: "direct_path" or "relay_path". Empty for a single-run grade.
+	Role string `json:"role,omitempty"`
 }
