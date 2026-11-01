@@ -359,23 +359,31 @@ export var LEGACY_TREND_NOTE = 'Historical trend unavailable due to legacy measu
 
 // exposureKpi: the Exposure score tile. Higher is better (100 minus weighted risk). The figure is the mean over
 // MEASURED assets only; the sub-line states how many of the fleet that is. No trend is drawn.
-export function exposureKpi(current) {
+// A trend is drawn only from daily points stamped as measured (flag === true). Legacy rows (null) and
+// unmeasurable days (false) are never interpolated or counted; fewer than two measured points means no trend.
+function measuredSeries(trends, valueKey, flagKey) {
+  return (trends || []).filter(function(p) { return p && p[flagKey] === true && typeof p[valueKey] === 'number'; })
+    .map(function(p) { return p[valueKey]; });
+}
+export function exposureKpi(current, trends) {
   if (!current || current.exposureMeasurable !== true) {
     return { value: '—', sub: 'Not measurable: no asset has measured exposure', tone: 'muted', spark: null, measurable: false };
   }
   var measured = current.exposureMeasuredAssets, total = current.assetCount;
   var scope = (typeof measured === 'number' && typeof total === 'number') ? 'from ' + measured + ' of ' + total + ' assets' : '';
-  return { value: current.exposureScore, sub: [scope, LEGACY_TREND_NOTE].filter(Boolean).join(' · '), tone: 'accent',
-    spark: null, measurable: true, label: 'Exposure score (higher is better)' };
+  var series = measuredSeries(trends, 'exposureScore', 'exposureMeasurable');
+  var d = series.length >= 2 ? trendDelta(series, false) : null;
+  return { value: current.exposureScore, sub: [scope, d ? d.text : LEGACY_TREND_NOTE].filter(Boolean).join(' · '),
+    tone: d && d.tone !== 'muted' ? d.tone : 'accent', spark: d ? series : null, measurable: true, label: 'Exposure score (higher is better)' };
 }
-
-// detectionKpi: the Detection coverage tile. A placeholder 100 with no weighted attack paths is shown as
-// not measurable, never as a percentage. No trend is drawn.
-export function detectionKpi(current) {
+export function detectionKpi(current, trends) {
   if (!current || current.detectionMeasurable !== true) {
     return { value: '—', sub: 'Not measurable: no weighted attack paths', tone: 'muted', spark: null, measurable: false };
   }
-  return { value: current.detectionCoverage + '%', sub: LEGACY_TREND_NOTE, tone: 'accent', spark: null, measurable: true };
+  var series = measuredSeries(trends, 'detectionCoverage', 'detectionMeasurable');
+  var d = series.length >= 2 ? trendDelta(series, false) : null;
+  return { value: current.detectionCoverage + '%', sub: d ? d.text : LEGACY_TREND_NOTE,
+    tone: d && d.tone !== 'muted' ? d.tone : 'accent', spark: d ? series : null, measurable: true };
 }
 
 // heroValues: the two header figures on the Executive page. Same rule as the tiles: unmeasurable is a dash.

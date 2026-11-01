@@ -28,6 +28,12 @@ type DashboardTrendPoint struct {
 	ExposureScore     int    `json:"exposureScore"`
 	DetectionCoverage int    `json:"detectionCoverage"`
 	AssetCount        int    `json:"assetCount"`
+	// Measurement validity of this day's point. nil (JSON null) marks a legacy row recorded before validity was
+	// tracked: its exposure and detection figures cannot be trusted and must not be trended. false means nothing
+	// was measurable that day. true means the figure was measured.
+	ExposureMeasurable     *bool `json:"exposureMeasurable"`
+	DetectionMeasurable    *bool `json:"detectionMeasurable"`
+	ExposureMeasuredAssets *int  `json:"exposureMeasuredAssets"`
 }
 
 // GetDashboardTrends returns stored daily snapshots for the requested range.
@@ -41,7 +47,8 @@ func (h *Handler) GetDashboardTrends(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	rows, err := h.db.Query(r.Context(), `
-		SELECT snapshot_date, avg_risk_score, exposure_score, detection_coverage, asset_count
+		SELECT snapshot_date, avg_risk_score, exposure_score, detection_coverage, asset_count,
+		       exposure_measurable, detection_measurable, exposure_measured_assets
 		FROM dashboard_snapshots
 		WHERE snapshot_date >= CURRENT_DATE - $1::int
 		ORDER BY snapshot_date ASC`, days)
@@ -54,7 +61,8 @@ func (h *Handler) GetDashboardTrends(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var p DashboardTrendPoint
 		var d time.Time
-		if rows.Scan(&d, &p.AvgRiskScore, &p.ExposureScore, &p.DetectionCoverage, &p.AssetCount) != nil {
+		if rows.Scan(&d, &p.AvgRiskScore, &p.ExposureScore, &p.DetectionCoverage, &p.AssetCount,
+			&p.ExposureMeasurable, &p.DetectionMeasurable, &p.ExposureMeasuredAssets) != nil {
 			continue
 		}
 		p.Date = d.Format("2006-01-02")

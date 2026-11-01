@@ -122,6 +122,35 @@ test('exposureKpi: unmeasurable is never a number; measured shows its denominato
   assert.equal(ok.label, 'Exposure score (higher is better)');
 });
 
+test('KPI trends use only points stamped measured; legacy (null) and unmeasurable (false) points are ignored', () => {
+  const cur = { exposureScore: 72, exposureMeasurable: true, exposureMeasuredAssets: 3, assetCount: 5, detectionCoverage: 64, detectionMeasurable: true };
+  const pts = [
+    { exposureScore: 100, detectionCoverage: 100, exposureMeasurable: null, detectionMeasurable: null }, // legacy placeholder
+    { exposureScore: 0, detectionCoverage: 100, exposureMeasurable: false, detectionMeasurable: false }, // nothing measurable
+    { exposureScore: 60, detectionCoverage: 50, exposureMeasurable: true, detectionMeasurable: true },
+    { exposureScore: 72, detectionCoverage: 64, exposureMeasurable: true, detectionMeasurable: true },
+  ];
+  const ex = M.exposureKpi(cur, pts);
+  assert.deepEqual(ex.spark, [60, 72], 'only measured points are plotted, no interpolation');
+  assert.match(ex.sub, /▲ 12/);
+  assert.doesNotMatch(ex.sub, /legacy/);
+  assert.equal(ex.tone, 'ok', 'higher exposure score is better');
+  const det = M.detectionKpi(cur, pts);
+  assert.deepEqual(det.spark, [50, 64]);
+  assert.match(det.sub, /▲ 14/);
+  // A genuine 0 is a measured point, not a missing one.
+  const zero = M.detectionKpi({ detectionCoverage: 0, detectionMeasurable: true }, [
+    { detectionCoverage: 20, detectionMeasurable: true }, { detectionCoverage: 0, detectionMeasurable: true }]);
+  assert.deepEqual(zero.spark, [20, 0]);
+  assert.equal(zero.tone, 'bad');
+  // One measured point is not a trend: fall back to the legacy note.
+  const one = M.exposureKpi(cur, [{ exposureScore: 72, exposureMeasurable: true }]);
+  assert.equal(one.spark, null);
+  assert.match(one.sub, /Historical trend unavailable/);
+  // All-legacy history never draws a line.
+  assert.equal(M.exposureKpi(cur, pts.slice(0, 2)).spark, null);
+});
+
 test('detectionKpi: a placeholder 100 is never coverage, and history is never plotted', () => {
   const none = M.detectionKpi({ detectionCoverage: 100, detectionMeasurable: false });
   assert.equal(none.value, '—');

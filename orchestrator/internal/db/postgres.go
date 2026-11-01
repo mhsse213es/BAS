@@ -1289,6 +1289,13 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			UNIQUE(snapshot_date)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_dashboard_snapshots_date ON dashboard_snapshots(snapshot_date DESC)`,
+		// Measurement validity per daily point. NULL = a legacy row written before validity was tracked: its
+		// exposure_score / detection_coverage may be a placeholder 100 or an all-asset average and must not be
+		// trended. true = the figure was measured. false = nothing was measurable that day (the numeric column
+		// holds a placeholder). A genuine 0 is therefore (0, true), never confusable with "unavailable".
+		`ALTER TABLE dashboard_snapshots ADD COLUMN IF NOT EXISTS exposure_measurable boolean`,
+		`ALTER TABLE dashboard_snapshots ADD COLUMN IF NOT EXISTS detection_measurable boolean`,
+		`ALTER TABLE dashboard_snapshots ADD COLUMN IF NOT EXISTS exposure_measured_assets int`,
 
 		// Phase 7 Multi-Tenancy — tenant_id on every operational table.
 		// DEFAULT 'default' backfills existing rows and covers every INSERT

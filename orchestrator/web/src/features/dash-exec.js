@@ -27,7 +27,7 @@ function measuredTile(label, ic, m, tab) {
 export function renderExecKpis(current, trends) {
   trends = trends || [];
   var pick = function(k) { return trends.map(function(p) { return p[k]; }); };
-  var ex = exposureKpi(current), det = detectionKpi(current);
+  var ex = exposureKpi(current, trends), det = detectionKpi(current, trends);
   cell('ed-kpi-row', grid(4, [
     kpiCard('Risk score (lower is better)', current.avgRiskScore, pick('avgRiskScore'), 'shield', true, 'runs'),
     measuredTile(ex.label || 'Exposure score', 'alert', ex, 'exposure'),
