@@ -248,6 +248,27 @@ export function actorHistory(t) {
 }
 
 // Counts of open findings per expected control class, largest first.
+// kevDetailRows: the per-technique rows behind the KEV card. kevCount is that technique's own CVE count, so a CVE
+// linked to several techniques appears in each row; the rows therefore do not sum to the card's unique-CVE total.
+export function kevDetailRows(k) {
+  return arr(k && k.techniques).map(function(t) {
+    return { id: t.techniqueId, name: t.name || t.techniqueId, tactic: t.tactic || '', cves: Number(t.kevCount) || 0, ransomware: !!t.ransomwareLinked };
+  }).sort(function(a, b) { return b.cves - a.cves || (b.ransomware - a.ransomware) || (a.id < b.id ? -1 : 1); });
+}
+
+// ceBreakdown: the numbers behind the Control effectiveness donut, each with its numerator and the denominator
+// it is a share of (all scored results). "Not tested" results are listed but are not part of the donut's base.
+export function ceBreakdown(e, runCount) {
+  var base = e.prevented + e.detected + e.missed;
+  var pct = function(n) { return base ? Math.round(n / base * 100) : null; };
+  return { runs: runCount || 0, results: e.total, base: base, rows: [
+    { key: 'prevented', label: 'Prevented', n: e.prevented, pct: pct(e.prevented) },
+    { key: 'detected', label: 'Detected only', n: e.detected, pct: pct(e.detected) },
+    { key: 'missed', label: 'Missed', n: e.missed, pct: pct(e.missed) },
+    { key: 'other', label: 'Not tested', n: e.other, pct: null },
+  ] };
+}
+
 export function openByControl(findings) {
   var m = {};
   arr(findings).filter(function(f) { return f.status === 'open'; }).forEach(function(f) {

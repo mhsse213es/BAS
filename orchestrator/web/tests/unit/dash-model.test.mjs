@@ -251,3 +251,28 @@ test('zero denominators stay empty: no coverage, no scored runs, no compliance c
   assert.equal(M.coverage([run([{ result: 'error', technique: { id: 'T9' } }])]).tested, 0, 'an error result is not a tested technique');
   assert.equal(M.postureWindow([{ score: { preventionScore: 0, passedTechniques: 0, failedTechniques: 0 } }], 8), null, 'a run with nothing scoreable has no score');
 });
+
+test('kevDetailRows: sorted by CVE count then ransomware; per-technique counts are not de-duplicated', () => {
+  const rows = M.kevDetailRows({ techniques: [
+    { techniqueId: 'T1190', name: 'Exploit Public-Facing Application', tactic: 'initial-access', kevCount: 5, ransomwareLinked: false },
+    { techniqueId: 'T1068', name: 'Privilege Escalation', tactic: 'privilege-escalation', kevCount: 5, ransomwareLinked: true },
+    { techniqueId: 'T1059', tactic: 'execution', kevCount: 2 },
+  ] });
+  assert.deepEqual(rows.map((r) => r.id), ['T1068', 'T1190', 'T1059']);
+  assert.equal(rows[2].name, 'T1059', 'a missing name falls back to the id');
+  assert.equal(rows[2].ransomware, false);
+  assert.deepEqual(M.kevDetailRows(null), []);
+  assert.deepEqual(M.kevDetailRows({}), []);
+});
+
+test('ceBreakdown: shares are of scored results; not-tested is excluded; empty base gives null not 0', () => {
+  const b = M.ceBreakdown({ prevented: 6, detected: 0, missed: 2, other: 4, total: 12 }, 3);
+  assert.equal(b.base, 8);
+  assert.equal(b.runs, 3);
+  assert.equal(b.rows.find((r) => r.key === 'prevented').pct, 75);
+  assert.equal(b.rows.find((r) => r.key === 'missed').pct, 25);
+  assert.equal(b.rows.find((r) => r.key === 'other').pct, null);
+  const none = M.ceBreakdown({ prevented: 0, detected: 0, missed: 0, other: 5, total: 5 }, 1);
+  assert.equal(none.base, 0);
+  assert.ok(none.rows.every((r) => r.pct === null), 'no scored results means no percentage, never 0%');
+});

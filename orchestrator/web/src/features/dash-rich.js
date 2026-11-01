@@ -151,7 +151,7 @@ function renderKev() {
     chartSlot({ type: 'donut', h: 150, center: total, centerSub: 'unique KEV CVEs', segments: [
       { label: 'Ransomware-linked CVEs', value: rw, color: CHART_COLORS.bad }, { label: 'Other KEV CVEs', value: total - rw, color: CHART_COLORS.info }] }) +
     '<div class="dp-mini2"><div><span>KEV-linked techniques</span><b>' + x(kevTech) + '</b></div><div><span>Ransomware-linked CVEs</span><b>' + x(rw) + '</b></div></div>' +
-    '<div class="rk-note">Scope: ART-testable techniques only. A CVE linked to several techniques is counted once. ' + tab('View technique matrix →', 'attack-coverage') + '</div>' + btn));
+    '<div class="rk-note">Scope: ART-testable techniques only. A CVE linked to several techniques is counted once. ' + link('Technique breakdown →', 'openKevDetail') + ' · ' + tab('Technique matrix →', 'attack-coverage') + '</div>' + btn));
 }
 function renderPrevTrend() {
   var r = D.readiness, s = r ? M.preventionSeries(r.trends) : { labels: [], data: [] };
@@ -249,7 +249,41 @@ function renderCE() {
   var oc = M.openByControl(D.findings);
   cell('dop-ce', card('Control effectiveness', chartSlot({ type: 'donut', h: 150, center: Math.round(e.prevented / base * 100) + '%', centerSub: 'PREVENTED', segments: segs }) +
     (e.detected === 0 ? '<div class="rk-note">Detected-only appears once a SIEM/EDR integration is reporting alerts.</div>' : '') +
-    (oc.length ? '<div class="dp-sub">Open findings by expected control</div>' + hbars(oc.slice(0, 5).map(function(r) { return [r[0], r[1] / oc[0][1] * 100, 'bad', String(r[1])]; })) : ''), { actions: link('Open findings →', 'openFindingsWithStatus', ['open']) }));
+    (oc.length ? '<div class="dp-sub">Open findings by expected control</div>' + hbars(oc.slice(0, 5).map(function(r) { return [r[0], r[1] / oc[0][1] * 100, 'bad', String(r[1])]; })) : ''), { actions: link('Breakdown →', 'openControlDetail') + link('Open findings →', 'openFindingsWithStatus', ['open']) }));
+}
+
+// ── Detail drawers (KEV card, Control effectiveness card) ──────────────────
+function openDrawer(title, bodyHtml) {
+  var t = document.getElementById('results-title'), b = document.getElementById('results-body'), o = document.getElementById('results-overlay');
+  if (!t || !b || !o) return;
+  o.classList.remove('run-mode');
+  t.textContent = title; b.innerHTML = bodyHtml; o.classList.add('open');
+}
+export function openKevDetail() {
+  var k = D.kev, rows = M.kevDetailRows(k);
+  if (!k || !k.hasData || !rows.length) { openDrawer('KEV exposure', empty('shield', 'No KEV-linked techniques', 'Sync the CISA KEV catalogue in Settings.')); return; }
+  var total = k.totalKevCves || 0, rwCves = Math.min(k.ransomwareCveCount || 0, total);
+  var body = '<div class="rk-note">' + x(total) + ' unique KEV CVEs (' + x(rwCves) + ' ransomware-linked) across ' + x(rows.length) + ' ART-testable techniques. ' +
+    'A CVE linked to several techniques is counted once above but appears in each technique row, so the rows can add up to more than ' + x(total) + '.</div>' +
+    '<div class="tbl-wrap"><table><thead><tr><th>Technique</th><th>Tactic</th><th>KEV CVEs</th><th>Ransomware</th></tr></thead><tbody>' +
+    rows.map(function(t) {
+      return '<tr class="rk-click"' + on('click', 'fndTech', t.id) + '><td><div>' + x(t.name) + '</div><div class="mono muted tiny">' + x(t.id) + '</div></td>' +
+        '<td class="muted">' + x(t.tactic || '—') + '</td><td>' + x(t.cves) + '</td><td>' + (t.ransomware ? chip('linked', 'bad') : '<span class="muted">—</span>') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+  openDrawer('KEV exposure — techniques', body);
+}
+export function openControlDetail() {
+  var runs = D.runs || [], e = M.effectiveness(runs);
+  if (!e.total) { openDrawer('Control effectiveness', empty('shield', 'No run data yet')); return; }
+  var b = M.ceBreakdown(e, runs.length), oc = M.openByControl(D.findings);
+  var body = '<div class="rk-note">Share of ' + x(b.base) + ' scored results across ' + x(b.runs) + ' run' + (b.runs === 1 ? '' : 's') + '. Results that were not tested (' + x(e.other) + ') are excluded from the percentages.</div>' +
+    '<div class="tbl-wrap"><table><thead><tr><th>Outcome</th><th>Results</th><th>Share</th></tr></thead><tbody>' +
+    b.rows.map(function(r) { return '<tr><td>' + x(r.label) + '</td><td>' + x(r.n) + '</td><td class="muted">' + (r.pct == null ? '—' : x(r.n + ' of ' + b.base + ' (' + r.pct + '%)')) + '</td></tr>'; }).join('') +
+    '</tbody></table></div>' +
+    (e.detected === 0 ? '<div class="rk-note">Detected-only appears once a SIEM/EDR integration is reporting alerts.</div>' : '') +
+    '<h4 class="fnd-h">Open findings by expected control</h4>' +
+    (oc.length ? '<div class="tbl-wrap"><table><tbody>' + oc.map(function(r) { return '<tr class="rk-click"' + on('click', 'openFindingsWithStatus', 'open') + '><td>' + x(r[0]) + '</td><td>' + x(r[1]) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="muted tiny">No open findings.</div>');
+  openDrawer('Control effectiveness — breakdown', body);
 }
 
 // ── Campaigns / gaps / runs / failing techniques ───────────────────────────
