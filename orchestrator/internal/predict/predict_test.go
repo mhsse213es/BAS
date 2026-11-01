@@ -91,6 +91,10 @@ func TestBuild_ExposureWindows_MeasuresDaysOpen(t *testing.T) {
 		if exp.Worst[0].ReopenedCount != 2 {
 			t.Errorf("Worst[0].ReopenedCount = %d, want 2", exp.Worst[0].ReopenedCount)
 		}
+		// Each exposure row must carry the ID of the finding it describes, so the UI can open that finding.
+		if exp.Worst[0].FindingID != "f-old" {
+			t.Errorf("Worst[0].FindingID = %q, want f-old", exp.Worst[0].FindingID)
+		}
 	})
 }
 

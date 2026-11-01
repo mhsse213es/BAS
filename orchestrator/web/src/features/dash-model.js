@@ -41,28 +41,18 @@ export function scoredRuns(runs) {
 export function prevPctOf(r) {
   return Math.round(r.score.preventionScore != null ? r.score.preventionScore : r.score.preventionEffectiveness || 0);
 }
-function weightOf(r) { return (r.score.passedTechniques || 0) + (r.score.failedTechniques || 0); }
-function aggOf(list) {
-  var tw = 0, ws = 0;
-  list.forEach(function(r) { var w = weightOf(r); tw += w; ws += prevPctOf(r) * w; });
-  return tw > 0 ? ws / tw : null;
-}
-
-// postureWindow: prevention score aggregated (weighted by technique count) over the newest `n` scored runs,
-// the trend (newer half vs older half) and the series oldest -> newest. runs arrive newest first.
+// postureWindow: the Prevention score over the newest `n` scored runs. Every value is the BACKEND's own
+// per-run preventionScore (severity-weighted pass rate, models/score.go). The window figure is the unweighted
+// mean of those run values, so it never silently re-weights them. The trend is the backend's own trend on the
+// newest scored run (its comparison with the previous run, 5-point threshold). Runs arrive newest first.
 export function postureWindow(runs, n) {
   var scored = scoredRuns(runs);
   if (!scored.length) return null;
   var win = scored.slice(0, n || 8);
-  var agg = aggOf(win);
-  var pct = Math.round(agg != null ? agg : prevPctOf(scored[0]));
-  var mid = Math.ceil(win.length / 2);
-  var newer = aggOf(win.slice(0, mid)), older = aggOf(win.slice(mid));
-  var trend = 'Stable';
-  if (newer != null && older != null) {
-    if (newer - older >= 3) trend = 'Improving';
-    else if (older - newer >= 3) trend = 'Degrading';
-  }
+  var sum = 0;
+  win.forEach(function(r) { sum += prevPctOf(r); });
+  var pct = Math.round(sum / win.length);
+  var trend = (win[0].score && win[0].score.trend) || 'Baseline';
   return { pct: pct, count: win.length, trend: trend, series: win.map(prevPctOf).reverse(), runs: win.slice().reverse() };
 }
 
@@ -92,7 +82,7 @@ export function coverage(runs) {
     arr(r.results).forEach(function(c) { if (isPrevented(c)) p++; else if (c.result === 'fail') f++; });
     return (p + f) ? Math.round(p / (p + f) * 100) : 0;
   }).reverse();
-  return { pct: ids.length ? Math.round(prev / ids.length * 100) : 0, tested: ids.length, series: series };
+  return { pct: ids.length ? Math.round(prev / ids.length * 100) : 0, tested: ids.length, prevented: prev, series: series };
 }
 
 function techTally(runs) {
@@ -280,12 +270,8 @@ export function execInsights(trends, current, exposure) {
   var t = arr(trends);
   var first = t[0], last = t[t.length - 1];
   var plural = function(n, w) { return n + ' ' + (n === 1 ? w : w === 'open weakness' ? 'open weaknesses' : w + 's'); };
-  if (t.length >= 2 && current && current.hasAttackPathData) {
-    var dd = last.detectionCoverage - first.detectionCoverage;
-    out.push({ icon: 'trend', tab: 'coverage',
-      title: dd === 0 ? 'Detection coverage is unchanged at ' + last.detectionCoverage + '%' : 'Detection coverage ' + (dd > 0 ? 'rose ' : 'fell ') + plural(Math.abs(dd), 'point') + ' over this period',
-      desc: 'From ' + first.detectionCoverage + '% to ' + last.detectionCoverage + '% across ' + plural(t.length, 'daily snapshot') + '.' });
-  }
+  // Detection coverage and exposure history are deliberately NOT narrated: stored daily points for them
+  // predate measurability tracking (placeholder 100s, all-asset averages), so no comparison is trustworthy.
   if (t.length >= 2) {
     var dr = last.avgRiskScore - first.avgRiskScore;
     out.push({ icon: dr > 0 ? 'alert' : 'check', tab: 'findings',
@@ -353,4 +339,74 @@ export function startedPerWeek(campaigns, nowMs, weeks) {
     return campaigns.filter(function(c) { var st = Date.parse(c.startedAt); return isFinite(st) && st <= t && st > t - 7 * 86400000; }).length;
   });
   return anyPositive(s) ? s : null;
+}
+
+// trendDelta: the week-over-week change shown under a KPI. invertGood marks metrics where a rise is bad
+// (risk score); a rise then reads red and a fall green. Metrics where a rise is good pass invertGood=false.
+export function trendDelta(values, invertGood) {
+  var v = arr(values);
+  if (v.length < 2) return { text: '', tone: 'muted' };
+  var d = v[v.length - 1] - v[Math.max(0, v.length - 8)];
+  if (d === 0) return { text: 'flat over the last week', tone: 'muted' };
+  var up = d > 0;
+  return { text: (up ? '▲ ' : '▼ ') + Math.abs(d) + ' vs a week ago', tone: (invertGood ? !up : up) ? 'ok' : 'bad' };
+}
+
+// Stored daily history for exposure and detection coverage cannot be trusted: older rows hold placeholder 100s
+// and all-asset averages, and the schema does not record which. Until measurement validity is stored per point,
+// neither metric shows a trend line, a delta or a narrated change. Current values are still shown when valid.
+export var LEGACY_TREND_NOTE = 'Historical trend unavailable due to legacy measurement data.';
+
+// exposureKpi: the Exposure score tile. Higher is better (100 minus weighted risk). The figure is the mean over
+// MEASURED assets only; the sub-line states how many of the fleet that is. No trend is drawn.
+export function exposureKpi(current) {
+  if (!current || current.exposureMeasurable !== true) {
+    return { value: '—', sub: 'Not measurable: no asset has measured exposure', tone: 'muted', spark: null, measurable: false };
+  }
+  var measured = current.exposureMeasuredAssets, total = current.assetCount;
+  var scope = (typeof measured === 'number' && typeof total === 'number') ? 'from ' + measured + ' of ' + total + ' assets' : '';
+  return { value: current.exposureScore, sub: [scope, LEGACY_TREND_NOTE].filter(Boolean).join(' · '), tone: 'accent',
+    spark: null, measurable: true, label: 'Exposure score (higher is better)' };
+}
+
+// detectionKpi: the Detection coverage tile. A placeholder 100 with no weighted attack paths is shown as
+// not measurable, never as a percentage. No trend is drawn.
+export function detectionKpi(current) {
+  if (!current || current.detectionMeasurable !== true) {
+    return { value: '—', sub: 'Not measurable: no weighted attack paths', tone: 'muted', spark: null, measurable: false };
+  }
+  return { value: current.detectionCoverage + '%', sub: LEGACY_TREND_NOTE, tone: 'accent', spark: null, measurable: true };
+}
+
+// heroValues: the two header figures on the Executive page. Same rule as the tiles: unmeasurable is a dash.
+export function heroValues(current) {
+  var c = current || {};
+  return {
+    exposure: c.exposureMeasurable === true ? c.exposureScore : '—',
+    detection: c.detectionMeasurable === true ? c.detectionCoverage + '%' : '—',
+  };
+}
+
+// orgReadinessTrends: turns the organisation readiness response (/api/ti/readiness/org) into the trend shape
+// the readiness cards render. Each actor's prevention is pooled across its agents' latest assessments; the
+// count shown is the number of agents behind it, not a number of runs.
+export function orgReadinessTrends(org) {
+  var actors = arr(org && org.actors);
+  return {
+    scope: 'organisation',
+    total: actors.length,
+    agentCount: org && typeof org.agentCount === 'number' ? org.agentCount : 0,
+    trends: actors.map(function(a) {
+      return {
+        actorName: a.actorName,
+        latestPrevention: a.latestPrevention,
+        preventionDelta: a.preventionDelta,
+        direction: a.direction,
+        dataPoints: a.agentCount,
+        testedTechniques: a.testedTechniques,
+        preventedTechniques: a.preventedTechniques,
+        history: arr(a.history).map(function(p) { return { recordedAt: p.date, prevention: p.prevention, tested: p.tested }; }),
+      };
+    }),
+  };
 }

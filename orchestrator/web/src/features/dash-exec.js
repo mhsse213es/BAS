@@ -6,36 +6,33 @@ import { chartSlot, CHART_COLORS } from '../core/charts.js';
 import { kpi, grid, card, chip, empty, icon, seg } from '../core/kit.js';
 import { sevTone } from './rich-g3.js';
 import { gaugeRing } from './dash-rich.js';
-import { execInsights, riskBand, topRisks } from './dash-model.js';
+import { execInsights, riskBand, topRisks, trendDelta, exposureKpi, detectionKpi } from './dash-model.js';
 
 function cell(id, html) { var el = document.getElementById(id); if (el) el.innerHTML = html; }
 
 export var EXEC_RANGES = [{ id: '30', label: '30 days' }, { id: '90', label: '90 days' }, { id: '365', label: '1 year' }];
 export function renderRangeSeg(active) { cell('ed-range-seg', seg(EXEC_RANGES, active, 'setExecRange')); }
 
-function delta(values, invertGood) {
-  if (values.length < 2) return { text: '', tone: 'muted' };
-  var d = values[values.length - 1] - values[Math.max(0, values.length - 8)];
-  if (d === 0) return { text: 'flat over the last week', tone: 'muted' };
-  var up = d > 0;
-  return { text: (up ? '▲ ' : '▼ ') + Math.abs(d) + ' vs a week ago', tone: (invertGood ? !up : up) ? 'ok' : 'bad' };
+// Risk score (higher is worse) and Fleet assets (neutral) keep the generic tile. A score with no data
+// behind it is shown as "No data yet", never as a number.
+// Each KPI opens the Operational view that holds its evidence (the tab named in `tab`).
+function kpiCard(label, current, series, ic, invertGood, tab) {
+  var d = trendDelta(series, invertGood);
+  return kpi({ label: label, value: current, sub: d.text, icon: ic, tone: d.tone === 'muted' ? 'accent' : d.tone, spark: series, action: 'showTab', args: [tab] });
 }
-// A score that reads a vacuous 100 on an unscanned fleet is shown as "No data yet", not as a number.
-function kpiCard(label, current, series, noData, ic, invertGood) {
-  if (noData) return kpi({ label: label, value: '—', sub: 'No data yet', icon: ic, tone: 'muted' });
-  var d = delta(series, invertGood);
-  return kpi({ label: label, value: current, sub: d.text, icon: ic, tone: d.tone === 'muted' ? 'accent' : d.tone, spark: series });
+function measuredTile(label, ic, m, tab) {
+  return kpi({ label: label, value: m.value, sub: m.sub, icon: ic, tone: m.measurable ? m.tone : 'muted', spark: m.spark, action: 'showTab', args: [tab] });
 }
 
 export function renderExecKpis(current, trends) {
   trends = trends || [];
   var pick = function(k) { return trends.map(function(p) { return p[k]; }); };
-  var noAP = !current.hasAttackPathData;
+  var ex = exposureKpi(current), det = detectionKpi(current);
   cell('ed-kpi-row', grid(4, [
-    kpiCard('Risk score', current.avgRiskScore, pick('avgRiskScore'), false, 'shield', true),
-    kpiCard('Exposure score', current.exposureScore, pick('exposureScore'), noAP, 'alert', true),
-    kpiCard('Detection coverage', current.detectionCoverage + '%', pick('detectionCoverage'), noAP, 'mapped', false),
-    kpiCard('Fleet assets', current.assetCount, pick('assetCount'), false, 'server', false),
+    kpiCard('Risk score (lower is better)', current.avgRiskScore, pick('avgRiskScore'), 'shield', true, 'runs'),
+    measuredTile(ex.label || 'Exposure score', 'alert', ex, 'exposure'),
+    measuredTile('Detection coverage', 'mapped', det, 'coverage'),
+    kpiCard('Fleet assets', current.assetCount, pick('assetCount'), 'server', false, 'agents'),
   ]));
 }
 
@@ -59,9 +56,9 @@ export function renderExecForecast(fc) {
 }
 
 export function renderExecPosture(current) {
-  if (!current) { cell('ed-posture', card('Overall posture', empty('shield', 'No data yet'))); return; }
+  if (!current) { cell('ed-posture', card('Overall risk', empty('shield', 'No data yet'))); return; }
   var score = Number(current.avgRiskScore) || 0, band = riskBand(score);
-  cell('ed-posture', card('Overall posture', '<div class="dp-center">' + gaugeRing(score, CHART_COLORS[band.tone], Math.round(score), 'out of 100') +
+  cell('ed-posture', card('Overall risk', '<div class="dp-center">' + gaugeRing(score, CHART_COLORS[band.tone], Math.round(score), 'out of 100') +
     '<div class="legend dp-center"><span class="lg"><i class="dl-sw" data-bg="' + CHART_COLORS[band.tone] + '"></i>' + x(band.label) + ' risk</span></div></div>', { sub: 'Risk score — lower is better' }));
 }
 
@@ -69,7 +66,9 @@ export function renderExecExposure(exp) {
   if (!exp || !exp.hasData) { cell('ed-exposure', card('Open exposure windows', empty('check', 'No open findings', 'Nothing is currently exposed.'))); return; }
   var rows = (exp.worst || []).map(function(it) {
     var over = it.daysOpen > exp.thresholdDays;
-    return '<tr class="rk-click"' + on('click', 'showTab', 'findings') + '><td><div>' + x(it.techniqueName) + (it.reopenedCount ? ' ' + chip('reopened ×' + it.reopenedCount, 'warn') : '') + '</div><div class="mono muted tiny">' + x(it.techniqueId) + '</div></td>' +
+    // A row opens the specific finding it describes; without an ID it falls back to the list.
+    var click = it.findingId ? on('click', 'openFindingFromDashboard', it.findingId) : on('click', 'showTab', 'findings');
+    return '<tr class="rk-click"' + click + '><td><div>' + x(it.techniqueName) + (it.reopenedCount ? ' ' + chip('reopened ×' + it.reopenedCount, 'warn') : '') + '</div><div class="mono muted tiny">' + x(it.techniqueId) + '</div></td>' +
       '<td>' + chip(it.severity || '—', sevTone(it.severity)) + '</td><td>' + chip(it.daysOpen + ' d', over ? 'bad' : 'muted') + '</td>' +
       '<td class="muted">' + x(exp.thresholdDays) + ' d' + (over ? ' · <span class="dp-bad">breached</span>' : '') + '</td><td class="muted">' + x(it.firstSeen) + '</td></tr>';
   }).join('');

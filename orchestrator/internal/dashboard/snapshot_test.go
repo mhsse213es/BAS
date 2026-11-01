@@ -142,8 +142,20 @@ func TestCompute_ExposureAndDetectionMatchDirectCalls(t *testing.T) {
 		if len(wantSummaries) != 1 {
 			t.Fatalf("direct exposure.Build gave %d summaries, want 1", len(wantSummaries))
 		}
-		if snap.ExposureScore != wantSummaries[0].ExposureScore {
-			t.Errorf("ExposureScore = %d, want %d (direct exposure.Build call)", snap.ExposureScore, wantSummaries[0].ExposureScore)
+		// Phase 1: the snapshot must carry the same measurability as the direct
+		// calls. An unmeasured asset must not surface as a fleet score of 100.
+		if snap.DetectionMeasurable != wantCorr.Measurable {
+			t.Errorf("DetectionMeasurable = %v, want %v (direct pathcorrelation.Correlate call)", snap.DetectionMeasurable, wantCorr.Measurable)
+		}
+		if snap.ExposureMeasurable != wantSummaries[0].ExposureMeasurable {
+			t.Errorf("ExposureMeasurable = %v, want %v (direct exposure.Build call)", snap.ExposureMeasurable, wantSummaries[0].ExposureMeasurable)
+		}
+		if wantSummaries[0].ExposureMeasurable {
+			if snap.ExposureScore != wantSummaries[0].ExposureScore || snap.ExposureMeasuredAssets != 1 {
+				t.Errorf("ExposureScore = %d measured=%d, want %d measured=1", snap.ExposureScore, snap.ExposureMeasuredAssets, wantSummaries[0].ExposureScore)
+			}
+		} else if snap.ExposureScore != 0 || snap.ExposureMeasuredAssets != 0 {
+			t.Errorf("unmeasured fleet: ExposureScore = %d measured=%d, want 0/0", snap.ExposureScore, snap.ExposureMeasuredAssets)
 		}
 	})
 }

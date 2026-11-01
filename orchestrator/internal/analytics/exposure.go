@@ -74,9 +74,36 @@ func (fe *FleetExposure) Correlation() pathcorrelation.AttackPathCorrelation {
 }
 
 // ExposureSummary is the fleet-wide asset exposure view.
+//
+// FleetAvgScore averages ONLY the assets whose exposure was measured
+// (ExposureMeasurable). An unmeasured asset's score is a flawless 100 by
+// construction and would otherwise pull the fleet figure toward "safe".
+// Measurable is false when no asset was measured, in which case FleetAvgScore
+// is 0 and must be shown as not measurable, never as a score.
 type ExposureSummary struct {
-	FleetAvgScore int                     `json:"fleetAvgScore"`
-	Assets        []exposure.AssetSummary `json:"assets"`
+	FleetAvgScore  int                     `json:"fleetAvgScore"`
+	Measurable     bool                    `json:"measurable"`
+	MeasuredAssets int                     `json:"measuredAssets"`
+	TotalAssets    int                     `json:"totalAssets"`
+	Assets         []exposure.AssetSummary `json:"assets"`
+}
+
+// aggregateExposure is the pure fleet aggregation over per-asset summaries.
+func aggregateExposure(all []exposure.AssetSummary) ExposureSummary {
+	s := ExposureSummary{TotalAssets: len(all), Assets: all}
+	total := 0
+	for _, a := range all {
+		if !a.ExposureMeasurable {
+			continue
+		}
+		s.MeasuredAssets++
+		total += a.ExposureScore
+	}
+	if s.MeasuredAssets > 0 {
+		s.Measurable = true
+		s.FleetAvgScore = total / s.MeasuredAssets
+	}
+	return s
 }
 
 // AssetExposureSummary is the cheap accessor: fleet average (same
@@ -90,16 +117,7 @@ type ExposureSummary struct {
 // no separate "asset criticality" accessor here, it was never actually a
 // distinct un-unified concept.
 func (fe *FleetExposure) AssetExposureSummary() ExposureSummary {
-	summaries := fe.ag.Summaries()
-	avg := 0
-	if len(summaries) > 0 {
-		total := 0
-		for _, a := range summaries {
-			total += a.ExposureScore
-		}
-		avg = total / len(summaries)
-	}
-	return ExposureSummary{FleetAvgScore: avg, Assets: summaries}
+	return aggregateExposure(fe.ag.Summaries())
 }
 
 // FindingExposureWindows is unrelated to the graph/asset-based exposure

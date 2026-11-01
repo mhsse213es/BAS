@@ -22,15 +22,24 @@ test('effectiveness tallies every result and ignores missing runs', () => {
   assert.equal(M.effectiveness(null).total, 0);
 });
 
-test('postureWindow weights by technique count and reports the trend', () => {
-  const sc = (p, pass, fail) => ({ score: { preventionScore: p, passedTechniques: pass, failedTechniques: fail } });
-  const runs = [sc(90, 9, 1), sc(80, 8, 2), sc(40, 4, 6), sc(30, 3, 7), sc(0, 0, 0)];
+test('postureWindow is the unweighted mean of the backend per-run preventionScore and the backend trend', () => {
+  // Technique counts differ on purpose: the window figure must NOT re-weight by them.
+  const sc = (p, pass, fail, trend) => ({ score: { preventionScore: p, passedTechniques: pass, failedTechniques: fail, trend } });
+  const runs = [sc(90, 1, 0, 'Improving'), sc(80, 20, 0, 'Stable'), sc(40, 4, 6, 'Degrading'), sc(30, 3, 7, 'Stable'), sc(0, 0, 0)];
   const w = M.postureWindow(runs, 8);
-  assert.equal(w.count, 4);
-  assert.equal(w.pct, Math.round((90 * 10 + 80 * 10 + 40 * 10 + 30 * 10) / 40));
-  assert.equal(w.trend, 'Improving');
+  assert.equal(w.count, 4, 'the run with no scoreable results is not scored');
+  assert.equal(w.pct, Math.round((90 + 80 + 40 + 30) / 4), 'mean of the four run scores, unweighted');
+  assert.equal(w.trend, 'Improving', 'backend trend of the newest scored run');
   assert.deepEqual(w.series, [30, 40, 80, 90]);
   assert.equal(M.postureWindow([], 8), null);
+});
+
+test('coverage reports its numerator and denominator', () => {
+  const runs = [run([res('T1', 'a', 'pass'), res('T2', 'a', 'fail')]), run([res('T2', 'a', 'pass'), res('T3', 'a', 'fail')])];
+  const c = M.coverage(runs);
+  assert.equal(c.tested, 3);
+  assert.equal(c.prevented, 2, 'T1 and T2 were prevented in at least one run');
+  assert.equal(c.pct, 67);
 });
 
 test('topFailing and coverageGaps rank by failures and by prevention rate', () => {
@@ -77,14 +86,59 @@ test('preventionSeries averages per day, oldest first; actorHistory sorts oldest
 
 test('execInsights states only numbers present in its inputs', () => {
   const trends = [{ detectionCoverage: 60, avgRiskScore: 70, assetCount: 10 }, { detectionCoverage: 66, avgRiskScore: 64, assetCount: 12 }];
-  const out = M.execInsights(trends, { hasAttackPathData: true }, { hasData: true, overThreshold: 1, thresholdDays: 30, openCount: 4, worstDaysOpen: 41, medianDaysOpen: 9 });
+  const out = M.execInsights(trends, { detectionMeasurable: true }, { hasData: true, overThreshold: 1, thresholdDays: 30, openCount: 4, worstDaysOpen: 41, medianDaysOpen: 9 });
   const text = out.map((i) => i.title).join('|');
-  assert.match(text, /rose 6 points/);
+  assert.doesNotMatch(text, /Detection coverage/, 'detection history is untrusted legacy data and is never narrated');
   assert.match(text, /Risk score fell 6 points/);
   assert.match(text, /1 open weakness older than 30 days/);
   assert.match(text, /grew from 10 to 12/);
   assert.equal(M.execInsights([], {}, null).length, 0);
+  assert.equal(M.execInsights(trends, { hasAttackPathData: true, detectionMeasurable: true }, null).some((i) => /Detection coverage/.test(i.title)), false);
   assert.equal(M.execInsights(trends, { hasAttackPathData: false }, null).some((i) => /Detection coverage/.test(i.title)), false);
+});
+
+test('trendDelta colour follows the metric direction', () => {
+  // risk: a rise is bad
+  assert.equal(M.trendDelta([50, 60], true).tone, 'bad');
+  assert.equal(M.trendDelta([60, 50], true).tone, 'ok');
+  // exposure score (higher is better): a rise is GOOD (regression guard for the inverted colour)
+  assert.equal(M.trendDelta([50, 60], false).tone, 'ok');
+  assert.equal(M.trendDelta([60, 50], false).tone, 'bad');
+  assert.equal(M.trendDelta([50], false).tone, 'muted');
+  assert.equal(M.trendDelta([50, 50], false).text, 'flat over the last week');
+});
+
+test('exposureKpi: unmeasurable is never a number; measured shows its denominator and no legacy trend', () => {
+  const none = M.exposureKpi({ exposureScore: 100, exposureMeasurable: false, assetCount: 3, exposureMeasuredAssets: 0 });
+  assert.equal(none.value, '—');
+  assert.equal(none.measurable, false);
+  assert.equal(none.spark, null);
+  assert.equal(M.exposureKpi({ exposureScore: 100, assetCount: 3 }).value, '—', 'a server that does not report measurability must not show 100');
+  const ok = M.exposureKpi({ exposureScore: 72, exposureMeasurable: true, assetCount: 5, exposureMeasuredAssets: 3 });
+  assert.equal(ok.value, 72);
+  assert.match(ok.sub, /from 3 of 5 assets/);
+  assert.match(ok.sub, /Historical trend unavailable due to legacy measurement data/);
+  assert.equal(ok.spark, null, 'stored exposure history is legacy data and is not plotted');
+  assert.equal(ok.label, 'Exposure score (higher is better)');
+});
+
+test('detectionKpi: a placeholder 100 is never coverage, and history is never plotted', () => {
+  const none = M.detectionKpi({ detectionCoverage: 100, detectionMeasurable: false });
+  assert.equal(none.value, '—');
+  assert.equal(none.spark, null);
+  assert.equal(M.detectionKpi({ detectionCoverage: 100 }).value, '—');
+  const ok = M.detectionKpi({ detectionCoverage: 64, detectionMeasurable: true });
+  assert.equal(ok.value, '64%');
+  assert.equal(ok.spark, null, 'measurable today does not make earlier stored points trustworthy');
+  assert.equal(ok.sub, M.LEGACY_TREND_NOTE);
+});
+
+test('heroValues: unmeasurable exposure and detection are dashes, never 100', () => {
+  assert.deepEqual(M.heroValues({ exposureScore: 100, exposureMeasurable: false, detectionCoverage: 100, detectionMeasurable: false, hasAttackPathData: true }),
+    { exposure: '—', detection: '—' });
+  assert.deepEqual(M.heroValues({ exposureScore: 61, exposureMeasurable: true, detectionCoverage: 48, detectionMeasurable: true }),
+    { exposure: 61, detection: '48%' });
+  assert.deepEqual(M.heroValues(null), { exposure: '—', detection: '—' });
 });
 
 test('riskBand and topRisks', () => {
@@ -147,4 +201,24 @@ test('startedPerWeek: campaigns started in each weekly bucket, oldest first', ()
   assert.equal(s[s.length - 1], 2);
   assert.equal(s[s.length - 2], 1);
   assert.equal(M.startedPerWeek([], NOW, 8), null);
+});
+
+test('orgReadinessTrends maps organisation readiness to the card shape and counts agents, not runs', () => {
+  const org = { scope: 'organisation', agentCount: 3, actors: [
+    { actorName: 'APT29', agentCount: 2, latestPrevention: 75, preventionDelta: 10, direction: 'up', testedTechniques: 20, preventedTechniques: 15,
+      history: [{ date: '2026-10-01', prevention: 65, tested: 20 }, { date: '2026-10-02', prevention: 75, tested: 20 }] },
+  ] };
+  const t = M.orgReadinessTrends(org);
+  assert.equal(t.scope, 'organisation');
+  assert.equal(t.total, 1);
+  assert.equal(t.agentCount, 3);
+  assert.equal(t.trends[0].dataPoints, 2, 'dataPoints is the agent count behind the figure');
+  assert.deepEqual(t.trends[0].history[1], { recordedAt: '2026-10-02', prevention: 75, tested: 20 });
+  assert.deepEqual(M.orgReadinessTrends(null).trends, [], 'no response gives no actors, never a made-up figure');
+});
+
+test('zero denominators stay empty: no coverage, no scored runs, no compliance coverage', () => {
+  assert.equal(M.coverage([]).tested, 0, 'no tested techniques means no percentage');
+  assert.equal(M.coverage([run([{ result: 'error', technique: { id: 'T9' } }])]).tested, 0, 'an error result is not a tested technique');
+  assert.equal(M.postureWindow([{ score: { preventionScore: 0, passedTechniques: 0, failedTechniques: 0 } }], 8), null, 'a run with nothing scoreable has no score');
 });

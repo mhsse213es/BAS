@@ -36,7 +36,7 @@ func ThreatIntelSummary(ctx context.Context, pool *pgxpool.Pool, tpEngine *threa
 
 	var kevTechCount, kevCveCount int
 	err := pool.QueryRow(ctx, `
-		SELECT COUNT(DISTINCT tc.technique_id), COUNT(*)
+		SELECT COUNT(DISTINCT tc.technique_id), COUNT(DISTINCT tc.cve_id)
 		FROM technique_cves tc
 		JOIN cves c ON c.cve_id = tc.cve_id AND c.source = 'cisa-kev'
 		WHERE EXISTS (SELECT 1 FROM art_atomic_tests a WHERE a.technique_id = tc.technique_id)`,

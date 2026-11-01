@@ -42,6 +42,14 @@ func EndpointPosture(ctx context.Context, pool *pgxpool.Pool) (EndpointPostureSu
 		if err := rows.Scan(&status, &state, &binaryTrusted, &lastUpdate); err != nil {
 			return EndpointPostureSummary{}, err
 		}
+		// A retired agent is decommissioned: it is counted only in the lifecycle
+		// breakdown. Counting it in total, online or offline, or as an untrusted
+		// binary, would misstate the live fleet. This matches groupHealth, which
+		// also leaves retired agents out.
+		if models.AgentState(state) == models.AgentStateRetired {
+			p.RetiredAgents++
+			continue
+		}
 		p.TotalAgents++
 		if models.EffectiveAgentStatus(status, lastUpdate, now) == "offline" {
 			p.OfflineAgents++
@@ -55,8 +63,6 @@ func EndpointPosture(ctx context.Context, pool *pgxpool.Pool) (EndpointPostureSu
 			p.RestrictedAgents++
 		case models.AgentStateQuarantined:
 			p.QuarantinedAgents++
-		case models.AgentStateRetired:
-			p.RetiredAgents++
 		}
 		if !binaryTrusted {
 			p.UntrustedBinaryCount++

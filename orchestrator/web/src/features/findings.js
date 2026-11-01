@@ -124,6 +124,8 @@ function renderFindingsTabs() {
   }
 }
 export function setFindingTab(v) { FINDING_TAB = v; renderFindingsTabs(); renderFindingsRows(); }
+// Opens the Findings tab already filtered to one status (e.g. 'open'), so a dashboard count and its list agree.
+export function openFindingsWithStatus(status) { FINDING_TAB = status; showTab('findings'); }
 export function setFindingSev(v) { FINDING_SEV = v; renderFindingsTabs(); renderFindingsRows(); }
 export function setFindingSearch(el) { FINDING_Q = (el && el.value) || ''; renderFindingsRows(); }
 // Export the rows the current filters show as CSV (every field quoted, formula prefixes neutralised).

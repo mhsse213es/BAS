@@ -265,3 +265,46 @@ func TestGetSuggestPack_SuggestedScenarioShape(t *testing.T) {
 		}
 	})
 }
+
+// Phase 2 (KEV): totalKevCves is UNIQUE CVEs in ART-testable scope. A CVE linked to two techniques
+// counts once, the ransomware figure is a CVE count, and the technique count is kept separate.
+func TestGetSuggestPack_KEVCountsUniqueCVEs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedARTTestableTechnique(t, pool, "T1486", "Data Encrypted for Impact", "impact")
+		seedARTTestableTechnique(t, pool, "T1490", "Inhibit System Recovery", "impact")
+		seedKEVCVE(t, pool, "CVE-2099-0001", "T1486", true)
+		seedKEVCVE(t, pool, "CVE-2099-0001", "T1490", true) // same CVE, second technique
+		seedKEVCVE(t, pool, "CVE-2099-0002", "T1490", false)
+
+		h := suggestPackHandler(t, pool)
+		rec := httptest.NewRecorder()
+		h.GetSuggestPack(rec, tiReq("/api/ti/suggest-pack", "type=kev"))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rec.Code)
+		}
+		var resp struct {
+			TotalKEVCVEs    int    `json:"totalKevCves"`
+			RansomwareCVEs  int    `json:"ransomwareCveCount"`
+			RansomwareTechs int    `json:"ransomwareCount"`
+			Scope           string `json:"kevScope"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if resp.TotalKEVCVEs != 2 {
+			t.Errorf("totalKevCves = %d, want 2 unique CVEs (CVE-2099-0001 counted once)", resp.TotalKEVCVEs)
+		}
+		if resp.RansomwareCVEs != 1 {
+			t.Errorf("ransomwareCveCount = %d, want 1 CVE", resp.RansomwareCVEs)
+		}
+		if resp.RansomwareTechs != 2 {
+			t.Errorf("ransomwareCount = %d, want 2 techniques (T1486, T1490 both link a ransomware CVE)", resp.RansomwareTechs)
+		}
+		if resp.Scope != "ART-testable techniques" {
+			t.Errorf("kevScope = %q", resp.Scope)
+		}
+	})
+}

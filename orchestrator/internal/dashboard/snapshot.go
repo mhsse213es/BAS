@@ -27,6 +27,16 @@ type Snapshot struct {
 	// tells the two states apart instead of presenting an empty-data 100 as
 	// a real score.
 	HasAttackPathData bool `json:"hasAttackPathData"`
+	// DetectionMeasurable is false when there were no weighted attack paths to
+	// score (pathcorrelation.AttackPathCorrelation.Measurable). In that state
+	// DetectionCoverage is a placeholder 100 and must not be shown as a result.
+	DetectionMeasurable bool `json:"detectionMeasurable"`
+	// ExposureMeasurable is false when no asset had measured exposure. In that
+	// state ExposureScore is 0 and must be shown as not measurable.
+	ExposureMeasurable bool `json:"exposureMeasurable"`
+	// ExposureMeasuredAssets / AssetCount say how many assets the exposure
+	// average is built from, so the figure's denominator is visible.
+	ExposureMeasuredAssets int `json:"exposureMeasuredAssets"`
 }
 
 // Compute builds today's fleet-wide snapshot. Nil-safe: an empty fleet (no
@@ -54,10 +64,13 @@ func Compute(ctx context.Context, pool *pgxpool.Pool) (Snapshot, error) {
 	}
 
 	return Snapshot{
-		AvgRiskScore:      risk.FleetAvgScore,
-		ExposureScore:     expSummary.FleetAvgScore,
-		DetectionCoverage: corr.Score,
-		AssetCount:        len(expSummary.Assets),
-		HasAttackPathData: hasAttackPathData,
+		AvgRiskScore:           risk.FleetAvgScore,
+		ExposureScore:          expSummary.FleetAvgScore,
+		ExposureMeasurable:     expSummary.Measurable,
+		ExposureMeasuredAssets: expSummary.MeasuredAssets,
+		DetectionCoverage:      corr.Score,
+		DetectionMeasurable:    corr.Measurable,
+		AssetCount:             len(expSummary.Assets),
+		HasAttackPathData:      hasAttackPathData,
 	}, nil
 }

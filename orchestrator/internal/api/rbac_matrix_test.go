@@ -227,6 +227,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/search/operators", tierAny, ""},
 	{http.MethodGet, "/api/ti/readiness", tierAny, ""},
 	{http.MethodGet, "/api/ti/readiness/history", tierAny, ""},
+	{http.MethodGet, "/api/ti/readiness/org", tierAny, ""},
 	{http.MethodGet, "/api/ti/suggest-pack", tierAny, ""},
 	{http.MethodGet, "/api/ti/priority", tierAny, ""},
 	{http.MethodGet, "/api/adversary-templates", tierAny, ""},

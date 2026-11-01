@@ -33,6 +33,8 @@ type ExposureWindows struct {
 }
 
 type ExposureItem struct {
+	// FindingID is the open finding this row describes, so the UI can open it directly.
+	FindingID     string `json:"findingId"`
 	TechniqueID   string `json:"techniqueId"`
 	TechniqueName string `json:"techniqueName"`
 	Severity      string `json:"severity"`
@@ -85,7 +87,7 @@ func buildForecast(ctx context.Context, pool *pgxpool.Pool) (Forecast, error) {
 func buildExposure(ctx context.Context, pool *pgxpool.Pool) (ExposureWindows, error) {
 	exp := ExposureWindows{ThresholdDays: exposureThresholdDays, Worst: []ExposureItem{}}
 	rows, err := pool.Query(ctx, `
-		SELECT technique_id, technique_name, severity, reopened_count,
+		SELECT id, technique_id, technique_name, severity, reopened_count,
 		       to_char(first_seen, 'YYYY-MM-DD'),
 		       FLOOR(EXTRACT(EPOCH FROM (NOW() - first_seen)) / 86400)::int
 		FROM findings
@@ -99,7 +101,7 @@ func buildExposure(ctx context.Context, pool *pgxpool.Pool) (ExposureWindows, er
 	var days []int
 	for rows.Next() {
 		var it ExposureItem
-		if rows.Scan(&it.TechniqueID, &it.TechniqueName, &it.Severity,
+		if rows.Scan(&it.FindingID, &it.TechniqueID, &it.TechniqueName, &it.Severity,
 			&it.ReopenedCount, &it.FirstSeen, &it.DaysOpen) != nil {
 			continue
 		}

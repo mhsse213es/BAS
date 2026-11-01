@@ -488,6 +488,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Threat Intelligence — readiness, KEV pack suggestions, EPSS priority scoring, and trends.
 		r.Get("/api/ti/readiness", h.GetTIReadiness)
 		r.Get("/api/ti/readiness/history", h.GetTIReadinessHistory)
+		r.Get("/api/ti/readiness/org", h.GetTIReadinessOrg)
 		r.Get("/api/ti/suggest-pack", h.GetSuggestPack)
 		r.Get("/api/ti/priority", h.GetTIPriority)
 

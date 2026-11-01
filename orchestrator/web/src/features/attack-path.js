@@ -12,6 +12,7 @@ import { syncDisplayPrefControls } from './display-prefs.js';
 import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
 import { setHeroStat } from './shell-ui.js';
+import { heroValues } from './dash-model.js';
 import { seg } from '../core/kit.js';
 import { loadRuns, loadSIEMCorrelationPanel, openModal, viewRunResults } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
@@ -103,8 +104,9 @@ export function loadExecDashboard() {
   ]).then(function(res) {
     var cur = res[0] || {};
     setHeroStat('hs-exec-risk', cur.avgRiskScore != null ? cur.avgRiskScore : '—');
-    setHeroStat('hs-exec-exposure', cur.hasAttackPathData ? cur.exposureScore : '—');
-    setHeroStat('hs-exec-detect', cur.hasAttackPathData ? cur.detectionCoverage + '%' : '—');
+    var hero = heroValues(cur);
+    setHeroStat('hs-exec-exposure', hero.exposure);
+    setHeroStat('hs-exec-detect', hero.detection);
     setHeroStat('hs-exec-fleet', cur.assetCount != null ? cur.assetCount : '—');
     renderExecAll({ current: cur, trends: res[1], predict: res[2], findings: Array.isArray(res[3]) ? res[3] : [], days: days });
   }).catch(function(e) { showToast(e.message, 'err'); });

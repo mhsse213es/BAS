@@ -11,6 +11,7 @@ import { ROLE, activateTab, showTab } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
 import { setDashKev, setDashPosture, setDashReadiness } from './dash-rich.js';
+import { orgReadinessTrends } from './dash-model.js';
 import { kpi, grid, bar, pill, seg, empty, icon } from '../core/kit.js';
 import { setHeroStat } from './shell-ui.js';
 import * as M from './cmp-model.js';
@@ -477,7 +478,7 @@ export function selectTIPack(type) {
     var tacticSet = {};
     (pack.techniques || []).forEach(function(t) { if (t.tactic) tacticSet[t.tactic] = true; });
     var tacticCount = Object.keys(tacticSet).length;
-    var ransomNote = pack.ransomwareCount > 0 ? ' &middot; <strong class="u-warning">' + pack.ransomwareCount + ' ransomware-linked</strong>' : '';
+    var ransomNote = pack.ransomwareCount > 0 ? ' &middot; <strong class="u-warning">' + pack.ransomwareCount + ' ransomware-linked techniques</strong>' : '';
     var kevNote = pack.totalKevCves > 0 ? ' &middot; ' + pack.totalKevCves + ' KEV CVEs' : '';
     info.innerHTML = (_tiPackIcons[type] || '') + ' <strong>' + x(pack.packName) + '</strong><br>' +
       '<span class="u-muted">' + x(pack.description) + '</span><br>' +
@@ -531,7 +532,7 @@ export function loadKEVPack() {
   apicall('/api/ti/suggest-pack?type=kev').then(function(pack) {
     if (!pack || !pack.hasData) { showToast('KEV data not available — reseed content pack first', 'err'); return; }
     var msg = 'Create "' + pack.suggestedName + '" with ' + pack.techniqueCount + ' KEV-linked techniques' +
-              (pack.ransomwareCount > 0 ? ' (' + pack.ransomwareCount + ' ransomware-linked)' : '') + '?';
+              (pack.ransomwareCount > 0 ? ' (' + pack.ransomwareCount + ' ransomware-linked techniques)' : '') + '?';
     if (!confirm(msg)) return;
     apicall('/api/scenarios', { method: 'POST', body: JSON.stringify(pack.suggestedScenario) })
       .then(function(res) {
@@ -592,13 +593,12 @@ export function loadEndpointPostureWidget() {
   }).catch(function() { setDashPosture(null); });
 }
 
-// loadReadinessTrends fetches the per-actor readiness history for the most recently active agent;
+// loadReadinessTrends fetches the organisation-level readiness per actor (pooled across agents);
 // dash-rich.js renders the trend table, the Prevention by actor bars and the prevention line.
 export function loadReadinessTrends() {
-  var agentId = state.agents && state.agents.length > 0 ? state.agents[0].agentId : null;
-  if (!agentId) { setDashReadiness({ trends: [] }); return; }
-  apicall('/api/ti/readiness/history?agentId=' + encodeURIComponent(agentId) + '&limit=6').then(function(data) {
-    setDashReadiness(data && data.trends ? data : { trends: [] });
+  // Organisation-level: pooled across every agent's latest assessment per actor (see ti_readiness_org.go).
+  apicall('/api/ti/readiness/org').then(function(data) {
+    setDashReadiness(orgReadinessTrends(data));
   }).catch(function() { setDashReadiness({ trends: [] }); });
 }
 export function cmpAgentOS(a) { var o = (a.osVersion || '').toLowerCase(); return o.indexOf('windows') >= 0 ? 'windows' : (o.indexOf('darwin') >= 0 || o.indexOf('macos') >= 0) ? 'darwin' : 'linux'; }

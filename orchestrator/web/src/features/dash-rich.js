@@ -51,7 +51,8 @@ function renderKpis() {
   var runs = D.runs || [], tiles = [];
   var f = D.findings, open = f ? f.filter(function(r) { return r.status === 'open'; }) : null;
   var sevN = function(r, s) { return String(r.severity || '').toLowerCase() === s; };
-  tiles.push(kpi({ label: 'Open findings', value: open ? open.length : '—', icon: 'flag', tone: open && open.length ? 'bad' : 'ok', action: 'showTab', args: ['findings'],
+  // Opens the Findings tab filtered to Open, so the count and the list it leads to agree.
+  tiles.push(kpi({ label: 'Open findings', value: open ? open.length : '—', icon: 'flag', tone: open && open.length ? 'bad' : 'ok', action: 'openFindingsWithStatus', args: ['open'],
     sub: open ? (open.length ? open.filter(function(r) { return sevN(r, 'critical') || sevN(r, 'high'); }).length + ' critical / high' : 'none open') : 'loading',
     spark: f ? M.openFindingsSeries(f, Date.now(), 8) : null }));
   var maxAge = 0, oldest = null;
@@ -59,18 +60,23 @@ function renderKpis() {
     var age = Math.max(0, Math.floor((Date.now() - new Date(r.firstSeen)) / 86400000));
     if (age >= maxAge) { maxAge = age; oldest = r; }
   });
-  tiles.push(kpi({ label: 'Attack surface age', value: open ? maxAge + 'd' : '—', icon: 'clock', tone: maxAge >= 90 ? 'bad' : maxAge >= 30 ? 'warn' : 'ok', action: 'showTab', args: ['findings'],
-    sub: open ? (open.length && oldest ? 'oldest open weakness: ' + (oldest.techniqueId || 'unknown') : 'no open weaknesses') : 'oldest open weakness',
+  // Age of the OLDEST open finding (not an attack-surface measure). Clicking opens that finding.
+  // Clicking opens the oldest finding itself, not the whole list.
+  var oldestClick = oldest ? { action: 'openFindingFromDashboard', args: [oldest.id] } : { action: 'showTab', args: ['findings'] };
+  tiles.push(kpi({ label: 'Oldest open finding', value: open ? maxAge + 'd' : '—', icon: 'clock', tone: maxAge >= 90 ? 'bad' : maxAge >= 30 ? 'warn' : 'ok', action: oldestClick.action, args: oldestClick.args,
+    sub: open ? (open.length && oldest ? 'open ' + maxAge + ' d · ' + (oldest.techniqueId || 'unknown') : 'no open findings') : 'age of the oldest open finding',
     spark: f ? M.oldestOpenAgeSeries(f, Date.now(), 8) : null }));
   var pw = M.postureWindow(runs, 8);
   var caveat = pw && M.testedTactics(runs) / M.ENTERPRISE_TACTICS.length < 0.5;
-  tiles.push(kpi({ label: 'Prevention score', value: pw ? pw.pct + '%' : '—', icon: 'shield', tone: pw ? toneOf(pw.pct) : 'muted', action: 'showTab', args: ['runs'],
+  // Prevention is driven by failing techniques: the matrix is where those are listed per technique.
+  tiles.push(kpi({ label: 'Prevention score', value: pw ? pw.pct + '%' : '—', icon: 'shield', tone: pw ? toneOf(pw.pct) : 'muted', action: 'showTab', args: ['attack-coverage'],
     sub: pw ? (caveat ? 'Based on ' + M.testedTactics(runs) + '/' + M.ENTERPRISE_TACTICS.length + ' ATT&CK tactics tested'
-      : (pw.trend === 'Improving' ? '▲ ' : pw.trend === 'Degrading' ? '▼ ' : '— ') + 'across last ' + pw.count + ' run' + (pw.count === 1 ? '' : 's')) : 'no runs yet',
+      : 'mean of ' + pw.count + ' scored run' + (pw.count === 1 ? '' : 's') + ' · trend ' + pw.trend.toLowerCase()) : 'no scored runs yet',
     spark: pw ? pw.series : null }));
   var cv = M.coverage(runs);
-  tiles.push(kpi({ label: 'ATT&CK coverage', value: cv.tested ? cv.pct + '%' : '—', icon: 'technique', tone: cv.tested ? toneOf(cv.pct) : 'muted', action: 'showTab', args: ['runs'],
-    sub: cv.tested + ' technique' + (cv.tested === 1 ? '' : 's') + ' tested', spark: cv.tested ? cv.series : null }));
+  // Numerator: tested techniques prevented in at least one run. Denominator: distinct techniques tested.
+  tiles.push(kpi({ label: 'Techniques prevented', value: cv.tested ? cv.pct + '%' : '—', icon: 'technique', tone: cv.tested ? toneOf(cv.pct) : 'muted', action: 'showTab', args: ['attack-coverage'],
+    sub: cv.tested ? cv.prevented + ' of ' + cv.tested + ' tested techniques prevented in ≥1 run' : 'no techniques tested yet', spark: cv.tested ? cv.series : null }));
   var live = (D.campaigns || []).filter(function(c) { return c.summary && c.summary.status === 'running'; });
   tiles.push(kpi({ label: 'Active campaigns', value: D.campaigns ? live.length : '—', icon: 'campaign', tone: live.length ? 'info' : 'muted', action: 'showTab', args: ['campaigns'],
     sub: live.length ? '● ' + live[0].name + (live.length > 1 ? ' +' + (live.length - 1) : '') + ' running' : 'none running',
@@ -86,11 +92,15 @@ export function complianceCard(fw) {
   var has = tested > 0;
   var t = !has ? 'muted' : pct >= 75 ? 'ok' : pct >= 50 ? 'warn' : 'bad';
   var title = fw.frameworkName + '\n' + (has ? pct + '% compliant — ' + passing + ' of ' + tested + ' tested controls passing, ' + failing + ' failing, ' + untested + ' untested.' : 'No controls tested yet.');
+  // Headline = passing ÷ tested controls. Coverage = tested ÷ testable controls, shown as its own line so the
+  // headline cannot be read as a statement about the whole framework. Manual-attestation controls are excluded.
+  var testable = fw.testableControls || (tested + untested);
   return '<div class="rk-reg rk-click tone-' + t + '"' + on('click', 'openComplianceDetail', fw.frameworkId, fw.agentId) + ' title="' + x(title) + '">' +
     '<div class="rk-reg-h"><b>' + x(String(fw.shortName || '').toUpperCase()) + '</b><span>' + x(fw.regulator) + '</span></div>' +
     '<div class="rk-reg-v">' + (has ? PCT(pct) : '—') + '</div>' +
+    '<div class="rk-reg-m">' + (has ? 'of tested controls passing' : 'No controls tested yet') + '</div>' +
     (has ? bar(cov, toneOf(cov)) : bar(0, 'muted')) +
-    '<div class="rk-reg-m">' + (has ? PCT(cov) + ' coverage · ' + (fw.totalControls || 0) + ' controls' : 'No runs yet') + '</div>' +
+    '<div class="rk-reg-m"><b>' + (has ? tested + ' of ' + testable + ' testable controls tested (' + PCT(cov) + ' coverage)' : '0 of ' + testable + ' testable controls tested') + '</b></div>' +
     (has ? '<div class="rk-reg-m">' + passing + ' pass · ' + failing + ' fail · ' + untested + ' untested</div>' : '') +
     (has && failing > 0 ? '<div class="rk-reg-n">Any 1 failed test fails the control — see breakdown</div>' : '') +
     (has && cov < 50 ? '<div class="rk-reg-n">Only ' + PCT(cov) + ' of testable controls covered</div>' : '') + '</div>';
@@ -133,18 +143,21 @@ function renderKev() {
   var k = D.kev, ti = D.ti;
   var btn = '<button type="button" class="btn btn-primary btn-sm dp-block"' + on('click', 'loadKEVPack') + '>' + icon('bolt') + ' Create KEV Pack</button>';
   if (!k || !k.hasData) { cell('dop-kev', card('KEV exposure', empty('shield', k ? 'No KEV data yet' : 'Loading…', k ? 'Sync the CISA KEV catalogue in Settings to see exposure.' : '') + btn)); return; }
-  var total = k.totalKevCves || 0, rw = Math.min(k.ransomwareCount || 0, total);
+  // Both counts are unique CVEs (ransomwareCveCount is the CVE subset). The technique count is separate.
+  // Scope: ART-testable techniques only, which is what the scope note below states.
+  var total = k.totalKevCves || 0, rw = Math.min(k.ransomwareCveCount || 0, total);
   var kevTech = ti && ti.kevExposedTechniques != null ? ti.kevExposedTechniques : k.techniqueCount;
   cell('dop-kev', card('KEV exposure',
-    chartSlot({ type: 'donut', h: 150, center: total, centerSub: 'KEV CVEs', segments: [
-      { label: 'Ransomware-linked', value: rw, color: CHART_COLORS.bad }, { label: 'Other KEV CVEs', value: total - rw, color: CHART_COLORS.info }] }) +
-    '<div class="dp-mini2"><div><span>KEV-linked techniques</span><b>' + x(kevTech) + '</b></div><div><span>Ransomware-linked</span><b>' + x(rw) + '</b></div></div>' + btn));
+    chartSlot({ type: 'donut', h: 150, center: total, centerSub: 'unique KEV CVEs', segments: [
+      { label: 'Ransomware-linked CVEs', value: rw, color: CHART_COLORS.bad }, { label: 'Other KEV CVEs', value: total - rw, color: CHART_COLORS.info }] }) +
+    '<div class="dp-mini2"><div><span>KEV-linked techniques</span><b>' + x(kevTech) + '</b></div><div><span>Ransomware-linked CVEs</span><b>' + x(rw) + '</b></div></div>' +
+    '<div class="rk-note">Scope: ART-testable techniques only. A CVE linked to several techniques is counted once. ' + tab('View technique matrix →', 'attack-coverage') + '</div>' + btn));
 }
 function renderPrevTrend() {
   var r = D.readiness, s = r ? M.preventionSeries(r.trends) : { labels: [], data: [] };
   if (s.data.length < 2) { cell('dop-actprev', emptyCard('Actor activity vs. your prevention', 'trend', r ? 'No data yet' : 'Loading…', r ? 'Needs two or more recorded readiness runs.' : '', {})); return; }
   cell('dop-actprev', card('Actor activity vs. your prevention', chartSlot({ type: 'line', labels: s.labels, h: 130, yMax: 100, suffix: '%', series: [{ name: 'Your prevention', data: s.data, color: CHART_COLORS.ok }] }) +
-    '<div class="rk-note">Prevention is the mean across tracked threat actors. The external actor-activity feed is not connected.</div>',
+    '<div class="rk-note">Unweighted mean of each actor\'s organisation-level prevention (prevented ÷ tested techniques, pooled across agents). The external actor-activity feed is not connected.</div>',
     { actions: '<div class="legend"><span class="lg"><i class="dl-sw" data-bg="' + CHART_COLORS.ok + '"></i>Prevention</span></div>' }));
 }
 
@@ -193,16 +206,16 @@ function renderReadiness() {
     return;
   }
   var rows = tr.slice().sort(function(a, b) { return a.latestPrevention - b.latestPrevention; }).slice(0, 10);
-  cell('dop-rt-table', card('Threat actor prevention trend', '<div class="tbl-wrap"><table><thead><tr><th>Threat actor</th><th>Prevention</th><th>Trend</th><th>History</th><th class="num">Runs</th></tr></thead><tbody>' +
+  cell('dop-rt-table', card('Threat actor prevention trend', '<div class="tbl-wrap"><table><thead><tr><th>Threat actor</th><th>Prevention</th><th>Trend</th><th>History</th><th class="num">Agents</th></tr></thead><tbody>' +
     rows.map(function(t) {
       var d = Math.round(t.preventionDelta || 0);
       var ch = t.direction === 'up' ? chip('▲ +' + Math.abs(d), 'ok') : t.direction === 'down' ? chip('▼ −' + Math.abs(d), 'bad') : chip('no change', 'muted');
       var hist = M.actorHistory(t);
       return '<tr><td><div class="dp-act"><span class="ta-av sm">' + x(M.initials(t.actorName)) + '</span><b>' + x(t.actorName) + '</b></div></td>' +
         '<td class="dp-prog"><div class="rk-hbar dp-hb">' + bar(t.latestPrevention, toneOf(t.latestPrevention)) + '<span class="rk-hbar-v">' + PCT(t.latestPrevention) + '</span></div></td><td>' + ch + '</td>' +
-        '<td>' + miniLine(hist, colorOf(t.direction === 'down' ? 'bad' : t.direction === 'up' ? 'ok' : 'muted')) + '</td><td class="muted num">' + x(t.dataPoints) + ' run' + (t.dataPoints === 1 ? '' : 's') + '</td></tr>';
+        '<td>' + miniLine(hist, colorOf(t.direction === 'down' ? 'bad' : t.direction === 'up' ? 'ok' : 'muted')) + '</td><td class="muted num">' + x(t.dataPoints) + ' agent' + (t.dataPoints === 1 ? '' : 's') + '</td></tr>';
     }).join('') + '</tbody></table></div>', { flush: true }));
-  cell('dop-rt-bars', card('Prevention by actor', hbars(rows.map(function(t) { return [t.actorName, t.latestPrevention, toneOf(t.latestPrevention)]; })) + '<div class="rk-note">Latest validated run per actor.</div>'));
+  cell('dop-rt-bars', card('Prevention by actor', hbars(rows.map(function(t) { return [t.actorName, t.latestPrevention, toneOf(t.latestPrevention)]; })) + '<div class="rk-note">Organisation-level: prevented ÷ tested techniques, pooled across each agent\'s latest assessment.</div>'));
 }
 
 // ── Posture score / Control effectiveness ──────────────────────────────────
@@ -236,7 +249,7 @@ function renderCE() {
   var oc = M.openByControl(D.findings);
   cell('dop-ce', card('Control effectiveness', chartSlot({ type: 'donut', h: 150, center: Math.round(e.prevented / base * 100) + '%', centerSub: 'PREVENTED', segments: segs }) +
     (e.detected === 0 ? '<div class="rk-note">Detected-only appears once a SIEM/EDR integration is reporting alerts.</div>' : '') +
-    (oc.length ? '<div class="dp-sub">Open findings by expected control</div>' + hbars(oc.slice(0, 5).map(function(r) { return [r[0], r[1] / oc[0][1] * 100, 'bad', String(r[1])]; })) : '')));
+    (oc.length ? '<div class="dp-sub">Open findings by expected control</div>' + hbars(oc.slice(0, 5).map(function(r) { return [r[0], r[1] / oc[0][1] * 100, 'bad', String(r[1])]; })) : ''), { actions: link('Open findings →', 'openFindingsWithStatus', ['open']) }));
 }
 
 // ── Campaigns / gaps / runs / failing techniques ───────────────────────────
@@ -263,16 +276,17 @@ function renderGaps() {
 }
 var STATUS_TONE = { completed: 'ok', running: 'info', failed: 'bad', partial: 'warn', queued: 'warn', requested: 'warn', cancelled: 'muted', paused: 'warn' };
 var cap = function(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); };
-function runTable(id, title, runs, action) {
+function runTable(id, title, runs, action, emptyMsg) {
   var head = tab('View all →', 'runs');
-  if (!runs.length) { cell(id, emptyCard(title, 'play', D.runs ? 'No runs yet' : 'Loading…', '', { actions: head })); return; }
+  if (!runs.length) { cell(id, emptyCard(title, 'play', D.runs ? (emptyMsg || 'No runs yet') : 'Loading…', '', { actions: head })); return; }
   cell(id, card(title, '<div class="tbl-wrap"><table><thead><tr><th>Run</th><th>Target</th><th>Status</th></tr></thead><tbody>' + runs.slice(0, 5).map(function(r) {
     var paused = r.status === 'running' && r.paused;
     return '<tr class="rk-click"' + on('click', action, r.id) + '><td><div>' + x(r.name || r.scenarioId) + '</div><div class="mono muted tiny">' + x(r.id) + '</div></td><td class="muted">' + x(r.hostname || r.agentId || '—') + '</td>' +
       '<td>' + pill(paused ? 'Paused' : cap(r.status), paused ? 'warn' : STATUS_TONE[r.status] || 'muted') + '</td></tr>';
   }).join('') + '</tbody></table></div>', { flush: true, actions: head }));
 }
-function renderRuns() { var r = D.runs || []; runTable('dop-runs', 'Recent runs', r, 'openDashRun'); runTable('dop-valruns', 'Recent validation runs', r, 'openDashRun'); }
+// 'Recent validation runs' is the scored subset (runs that produced a prevention score), not a copy of 'Recent runs'.
+function renderRuns() { var r = D.runs || []; runTable('dop-runs', 'Recent runs', r, 'openDashRun'); runTable('dop-valruns', 'Recent validation runs', M.scoredRuns(r), 'openDashRun', 'No scored validation runs yet'); }
 function renderFails() {
   var t = M.topFailing(D.runs || [], 5), head = tab('View all →', 'attack-coverage');
   if (!t.length) { cell('dop-fails', emptyCard('Top failing techniques', 'check', D.runs ? 'No failures recorded' : 'Loading…', D.runs ? 'Every tested technique was prevented.' : '', { actions: head })); return; }
@@ -321,11 +335,12 @@ function renderDetDaily() {
   var days = M.dailySeries(D.runs || [], 30, Date.now());
   var withData = days.filter(function(d) { return d.rate != null; });
   if (withData.length < 2) {
-    cell('dop-det', emptyCard('Detection rate — last 30 days', 'trend', D.runs ? 'No data yet' : 'Loading…', D.runs ? 'Needs validations on two or more days.' : ''));
+    cell('dop-det', emptyCard('Prevented or detected — last 30 days', 'trend', D.runs ? 'No data yet' : 'Loading…', D.runs ? 'Needs validations on two or more days.' : ''));
   } else {
-    cell('dop-det', card('Detection rate — last 30 days', chartSlot({ type: 'line', h: 190, yMax: 100, suffix: '%', area: true, labels: withData.map(function(d) { return d.label; }),
-      series: [{ name: 'Detected', data: withData.map(function(d) { return d.rate; }), color: CHART_COLORS.accent }] }),
-      { actions: '<div class="legend"><span class="lg"><i class="dl-sw" data-bg="' + CHART_COLORS.accent + '"></i>Prevented + detected</span></div>' }));
+    // Rate = (prevented + detected) ÷ all scored results per day. Named for what it counts.
+    cell('dop-det', card('Prevented or detected — last 30 days', chartSlot({ type: 'line', h: 190, yMax: 100, suffix: '%', area: true, labels: withData.map(function(d) { return d.label; }),
+      series: [{ name: 'Prevented or detected', data: withData.map(function(d) { return d.rate; }), color: CHART_COLORS.accent }] }),
+      { actions: '<div class="legend"><span class="lg"><i class="dl-sw" data-bg="' + CHART_COLORS.accent + '"></i>Prevented or detected ÷ scored results</span></div>' }));
   }
   if (!days.some(function(d) { return d.total; })) { cell('dop-daily', emptyCard('Daily validations', 'play', D.runs ? 'No validations in 30 days' : 'Loading…')); return; }
   var lg = '<div class="legend"><span class="lg"><i class="dl-sw" data-bg="' + CHART_COLORS.ok + '"></i>Prevented</span><span class="lg"><i class="dl-sw" data-bg="' + CHART_COLORS.info + '"></i>Detected</span><span class="lg"><i class="dl-sw" data-bg="' + CHART_COLORS.bad + '"></i>Missed</span></div>';
