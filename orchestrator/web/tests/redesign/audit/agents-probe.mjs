@@ -1,0 +1,16 @@
+import { chromium } from 'playwright-core';
+import { createServer } from 'node:http'; import { readFile } from 'node:fs/promises'; import { extname, join, normalize, resolve } from 'node:path';
+import { fixtureSet } from '../fixtures-rich.mjs';
+const dist = resolve('dist'); const strip = new RegExp('^([/\\\\])+');
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
+const server = createServer(async (q, s) => { const p = decodeURIComponent(new URL(q.url, 'http://x').pathname); const f = join(dist, normalize(p === '/' ? '/index.html' : p).replace(strip, '')); try { s.writeHead(200, { 'Content-Type': types[extname(f)] || 'application/octet-stream' }).end(await readFile(f)); } catch { s.writeHead(404).end(); } });
+await new Promise((r) => server.listen(0, '127.0.0.1', r)); const origin = `http://127.0.0.1:${server.address().port}`;
+const fx = fixtureSet('rich'); const b = await chromium.launch(); const page = await (await b.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+const seen = [];
+await page.addInitScript(() => localStorage.setItem('bas_role', 'admin'));
+await page.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.pathname === '/ready' || u.pathname.startsWith('/api/')) { if (u.pathname === '/api/agents') seen.push(u.search || '(none)'); return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fx(r.request().method(), u)) }); } if (u.hostname !== '127.0.0.1') return r.fulfill({ status: 204, body: '' }); return r.continue(); });
+await page.routeWebSocket(/\/ws\//, () => {});
+await page.goto(origin + '/index.html'); await page.waitForTimeout(2500);
+const res = await page.evaluate(async () => { const a = await (await fetch('/api/agents')).json(); const arr = Array.isArray(a) ? a : a.items; const c = {}; arr.forEach((x) => { c[x.status] = (c[x.status] || 0) + 1; }); return { shape: Array.isArray(a) ? 'array' : 'object', n: arr.length, byStatus: c, hero: document.getElementById('hs-dash-online') && document.getElementById('hs-dash-online').textContent }; });
+console.log(JSON.stringify(res), 'agents calls:', JSON.stringify(seen.slice(0, 6)));
+await b.close(); server.close();

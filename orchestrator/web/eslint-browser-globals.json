@@ -13,6 +13,7 @@
   "document": "readonly",
   "event": "readonly",
   "fetch": "readonly",
+  "getComputedStyle": "readonly",
   "history": "readonly",
   "localStorage": "readonly",
   "location": "readonly",
