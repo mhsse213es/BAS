@@ -318,7 +318,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 .row-menu-item-danger:hover { background: rgba(218,54,51,0.1); }
 
 /* ── App shell ─────────────────────────────────────────────── */
-#app { display: flex; width: 100%;
+/* Hidden until bootApp() shows it: without this the shell rendered over the login screen on every unauthenticated load. */
+#app { display: none; width: 100%;
     min-width: 100%;
     max-width: none; }
 
