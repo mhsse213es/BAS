@@ -1066,6 +1066,13 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 	},
 	"T1069": {"enumerate": discoveryDefaultClassification},
 	"T1652": {"enumerate": discoveryDefaultClassification},
+	"T1649": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "read-only LDAP reads of the AD Configuration partition (certificate templates, PKI containers, CA objects); no writes, no enrollment, no template or ACL changes",
+		},
+	},
 }
 
 // discoveryDefaultClassification covers the read-only ATT&CK discovery

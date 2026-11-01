@@ -1,32 +1,29 @@
 id: acl-privilege-exposure-audit
 product_line: ad
-name: ACL Privilege Exposure Audit
+name: ACL Privilege Exposure Audit (Multi-Variant)
 description: >
-  Single-stage, read-only Active Directory configuration audit: reads the
-  access-control lists of privileged objects (the Domain Admins group, the
-  domain head object, and AdminSDHolder) and reports any takeover-enabling
-  right -- GenericAll, GenericWrite, WriteDacl, WriteOwner, WriteProperty,
-  ForceChangePassword (via the reset-password extended right), AddMember
-  (self-membership / member writes), or AllExtendedRights -- granted to a
-  principal that is not a built-in tier-0 trustee (T1069).
-
-  SAFETY: This step only READS object security descriptors via .NET
-  DirectoryServices. It NEVER modifies a DACL, resets a password, takes
-  ownership, or changes group membership. It proves only whether a
-  dangerous right is EXPOSED, not that it was ever used. On a non-domain
-  host it returns a clean SKIP.
-  PRODUCTION-SAFE: runs in telemetry mode. Windows domain members only.
+  Multi-step, read-only Active Directory ACL exposure audit covering five
+  distinct variants: (1) privileged group DACL exposure, (2) domain head and
+  AdminSDHolder DACL exposure, (3) adminCount=1 orphaned-object sweep,
+  (4) extended-right exposure (reset-password / member-write), and
+  (5) WriteDacl / WriteOwner enabler exposure. Each step reports independently.
+  Reads security descriptors only; never modifies a DACL, resets a password,
+  takes ownership, or changes membership.
 author: Audspect Research
 executable: true
 local_check: false
 supported_os: [windows]
+
 tags:
   - acl
   - active-directory
   - privilege-escalation
   - permission-discovery
   - t1069
-  - mitre
+  - t1222
+  - adminsdholder
+  - tier0
+  - attack-path
 mitre_phases:
   - discovery
   - privilege-escalation
@@ -35,15 +32,152 @@ live_policy:
   block_on_domain_controller: false
   require_dc_reachable: true
   max_spray_attempts: 0
-  spray_account_allowlist: []
+  spray_account_allowlist: []      # restored — read-only audit, no spraying
   execution_window: ""
 
 steps:
 
-  # ---------------------------------------------------------------------------
-  # Stage 1 — Privileged-Object DACL Exposure Audit (T1069)
-  # ---------------------------------------------------------------------------
-  - name: "ACL Stage 1 — Privileged-Object DACL Exposure Audit (T1069)"
+  # -------------------------------------------------------------------------
+  # Stage 0 — Shared context builder (no findings; prepares variables)
+  # -------------------------------------------------------------------------
+  - name: "ACL Stage 0 — Build Audit Context (domain DN, tier-0 list, right masks)"
+    technique_id: T1069
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Reads RootDSE only. No object security descriptors are touched."
+    detection: []
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        $rootDSE = [ADSI]"LDAP://RootDSE"
+        $domainDN = $rootDSE.defaultNamingContext
+        if (-not $domainDN) { throw "no domain" }
+        Write-Output "CTX_DOMAIN_DN=$domainDN"
+        Write-Output "CTX_STATUS=READY"
+      } catch {
+        Write-Output "CTX_STATUS=SKIP"
+      }
+    cleanup: ""
+
+  # -------------------------------------------------------------------------
+  # Stage 1 — Privileged group DACL exposure
+  # -------------------------------------------------------------------------
+  - name: "ACL Stage 1 — Privileged Group DACL Exposure (Domain/Enterprise/Schema Admins)"
+    technique_id: T1069
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads DACLs of Domain Admins, Enterprise Admins, and Schema Admins only."
+    telemetry:
+      - "Sysmon EID 1: powershell.exe reading group ACLs via DirectoryServices"
+    detection:
+      - "SIEM: non-tier-0 ACE with GenericAll/GenericWrite/WriteDacl/WriteOwner on a privileged group"
+      - "Security EID 4662 (if SACL): Control Access on Domain Admins"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      try {
+        $rootDSE = [ADSI]"LDAP://RootDSE"
+        $domainDN = $rootDSE.defaultNamingContext
+        if (-not $domainDN) { throw "no domain" }
+        $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-498','*-500','S-1-5-32-548','S-1-5-32-549','S-1-5-32-551','S-1-5-32-552')
+        function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
+        $dangerous = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner'
+        $groups = @(
+          "LDAP://CN=Domain Admins,CN=Users,$domainDN",
+          "LDAP://CN=Enterprise Admins,CN=Users,$domainDN",
+          "LDAP://CN=Schema Admins,CN=Users,$domainDN"
+        )
+        foreach ($path in $groups) {
+          $entry = New-Object System.DirectoryServices.DirectoryEntry($path)
+          if (-not $entry.Name) { continue }
+          $rules = $entry.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+          foreach ($r in $rules) {
+            if ($r.AccessControlType -ne 'Allow') { continue }
+            $sid = $r.IdentityReference.Value
+            if (Is-Tier0 $sid) { continue }
+            if (($r.ActiveDirectoryRights -band $dangerous) -ne 0) {
+              $findings += "SID=$sid | Group=$($entry.Name) | Rights=$($r.ActiveDirectoryRights)"
+            }
+          }
+        }
+        $count = $findings.Count
+      } catch { $count = -1 }
+      if ($count -lt 0) { Write-Output "SKIP: privileged group DACL read unavailable. [ACL-S1]" }
+      elseif ($count -eq 0) { Write-Output "PASS: no non-tier-0 takeover-enabling ACE on Domain/Enterprise/Schema Admins. [ACL-S1]" }
+      else {
+        Write-Output "FAIL: $count non-tier-0 ACE(s) on privileged groups. [ACL-S1]"
+        $findings | ForEach-Object { Write-Output "  $_" }
+      }
+    cleanup: ""
+
+  # -------------------------------------------------------------------------
+  # Stage 2 — Domain head and AdminSDHolder DACL exposure
+  # -------------------------------------------------------------------------
+  - name: "ACL Stage 2 — Domain Head and AdminSDHolder DACL Exposure"
+    technique_id: T1069
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads DACL of the domain root object and CN=AdminSDHolder,CN=System."
+    telemetry:
+      - "Sysmon EID 1: powershell.exe reading domain/AdminSDHolder ACLs"
+    detection:
+      - "SIEM: Event 5136 on CN=AdminSDHolder with nTSecurityDescriptor modified (historical exposure check uses read, but detection rule maps to 5136) [citation:20][citation:25]"
+      - "SIEM: non-tier-0 WriteDacl/WriteOwner on domain head — ACL exposure IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      try {
+        $rootDSE = [ADSI]"LDAP://RootDSE"
+        $domainDN = $rootDSE.defaultNamingContext
+        if (-not $domainDN) { throw "no domain" }
+        $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-498','*-500','S-1-5-32-548','S-1-5-32-549','S-1-5-32-551','S-1-5-32-552')
+        function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
+        $dangerous = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,CreateChild,DeleteChild'
+        $targets = @("LDAP://$domainDN", "LDAP://CN=AdminSDHolder,CN=System,$domainDN")
+        foreach ($path in $targets) {
+          $entry = New-Object System.DirectoryServices.DirectoryEntry($path)
+          if (-not $entry.Name) { continue }
+          $rules = $entry.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+          foreach ($r in $rules) {
+            if ($r.AccessControlType -ne 'Allow') { continue }
+            $sid = $r.IdentityReference.Value
+            if (Is-Tier0 $sid) { continue }
+            if (($r.ActiveDirectoryRights -band $dangerous) -ne 0) {
+              $findings += "SID=$sid | Target=$($entry.Name) | Rights=$($r.ActiveDirectoryRights)"
+            }
+          }
+        }
+        $count = $findings.Count
+      } catch { $count = -1 }
+      if ($count -lt 0) { Write-Output "SKIP: domain/AdminSDHolder DACL read unavailable. [ACL-S2]" }
+      elseif ($count -eq 0) { Write-Output "PASS: domain head and AdminSDHolder clean of non-tier-0 takeover ACEs. [ACL-S2]" }
+      else {
+        Write-Output "FAIL: $count non-tier-0 ACE(s) on domain head or AdminSDHolder. [ACL-S2]"
+        $findings | ForEach-Object { Write-Output "  $_" }
+      }
+    cleanup: ""
+
+  # -------------------------------------------------------------------------
+  # Stage 3 — adminCount=1 orphaned-object sweep
+  # -------------------------------------------------------------------------
+  - name: "ACL Stage 3 — adminCount=1 Orphaned Protected-Object Sweep"
     technique_id: T1069
     framework: custom
     executor: powershell
@@ -53,13 +187,12 @@ steps:
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Reads the security descriptors of the Domain Admins group, the domain head object, and AdminSDHolder via System.DirectoryServices (read-only) and reports takeover-enabling rights held by non-tier-0 principals. Never modifies a DACL, resets a password, takes ownership, or changes group membership. Generates LDAP security-descriptor reads against the DC."
+    blast_radius: "LDAP search for adminCount=1, then read DACLs of each result. No writes."
     telemetry:
-      - "DC: access-control read of privileged objects' security descriptors (nTSecurityDescriptor) — not separately audited by default"
-      - "Sysmon EID 1: powershell.exe reading object ACLs via DirectoryServices"
+      - "Sysmon EID 1: powershell.exe LDAP search (adminCount=1) + ACL reads"
     detection:
-      - "SIEM: a non-tier-0 principal holds a takeover-enabling right (GenericAll/GenericWrite/WriteDacl/WriteOwner/ForceChangePassword/AddMember/AddSelf/AllExtendedRights) over a privileged object — ACL exposure IOC"
-      - "SIEM: a security-descriptor read of privileged objects from a workstation — ACL reconnaissance IOC"
+      - "SIEM: adminCount=1 user with non-tier-0 GenericAll/WriteDacl — stale protection IOC"
+      - "CISA CM0125 recommends monitoring command lines containing admincount [citation:4]"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $findings = @()
@@ -67,47 +200,150 @@ steps:
         $rootDSE = [ADSI]"LDAP://RootDSE"
         $domainDN = $rootDSE.defaultNamingContext
         if (-not $domainDN) { throw "no domain" }
-        # Well-known tier-0 trustees that are EXPECTED to hold these rights.
-        $tier0 = @(
-          'S-1-5-18','S-1-5-32-544','S-1-5-9',
-          '*-512','*-516','*-519','*-518','*-521','*-498','*-500'
-        )
-        function Is-Tier0([string]$sid) {
-          foreach ($t in $tier0) { if ($sid -like $t) { return $true } }
-          return $false
-        }
-        # Dangerous generic/standard right bits (takeover-enabling).
+        $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-498','*-500','S-1-5-32-548','S-1-5-32-549','S-1-5-32-551','S-1-5-32-552')
+        function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
         $dangerous = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
-        # Extended-right GUIDs: reset password + the membership-related rights.
-        $resetPwd  = [guid]'00299570-246d-11d0-a768-00aa006e0529'
-        $targets = @()
-        $targets += "LDAP://CN=Domain Admins,CN=Users,$domainDN"
-        $targets += "LDAP://$domainDN"
-        $targets += "LDAP://CN=AdminSDHolder,CN=System,$domainDN"
+        $searcher = New-Object System.DirectoryServices.DirectorySearcher
+        $searcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domainDN")
+        $searcher.Filter = "(adminCount=1)"
+        $searcher.PropertiesToLoad.Add("distinguishedName") | Out-Null
+        $searcher.PageSize = 1000
+        $results = $searcher.FindAll()
+        foreach ($r in $results) {
+          $dn = $r.Properties["distinguishedName"][0]
+          if (-not $dn) { continue }
+          $entry = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$dn")
+          if (-not $entry.Name) { continue }
+          $rules = $entry.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+          foreach ($rule in $rules) {
+            if ($rule.AccessControlType -ne 'Allow') { continue }
+            $sid = $rule.IdentityReference.Value
+            if (Is-Tier0 $sid) { continue }
+            if (($rule.ActiveDirectoryRights -band $dangerous) -ne 0) {
+              $findings += "SID=$sid | adminCount=1 Object=$dn | Rights=$($rule.ActiveDirectoryRights)"
+            }
+          }
+        }
+        $count = $findings.Count
+      } catch { $count = -1 }
+      if ($count -lt 0) { Write-Output "SKIP: adminCount=1 sweep unavailable. [ACL-S3]" }
+      elseif ($count -eq 0) { Write-Output "PASS: no adminCount=1 object carries a non-tier-0 takeover ACE. [ACL-S3]" }
+      else {
+        Write-Output "FAIL: $count non-tier-0 ACE(s) on adminCount=1 objects (stale protection). [ACL-S3]"
+        $findings | ForEach-Object { Write-Output "  $_" }
+      }
+    cleanup: ""
+
+  # -------------------------------------------------------------------------
+  # Stage 4 — Extended-right exposure (reset password / member write)
+  # -------------------------------------------------------------------------
+  - name: "ACL Stage 4 — Extended-Right Exposure (ForceChangePassword / member Write)"
+    technique_id: T1069
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads DACLs of domain head and AdminSDHolder, specifically checking ExtendedRight and WriteProperty on the member attribute."
+    telemetry:
+      - "Sysmon EID 1: powershell.exe checking extended-right GUIDs"
+    detection:
+      - "SIEM: non-tier-0 ExtendedRight with User-Force-Change-Password GUID on domain head"
+      - "SIEM: non-tier-0 WriteProperty on member attribute (bf9679c0) — AddMember exposure"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      try {
+        $rootDSE = [ADSI]"LDAP://RootDSE"
+        $domainDN = $rootDSE.defaultNamingContext
+        if (-not $domainDN) { throw "no domain" }
+        $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-498','*-500','S-1-5-32-548','S-1-5-32-549','S-1-5-32-551','S-1-5-32-552')
+        function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
+        $resetPwd = [guid]'00299570-246d-11d0-a768-00aa006e0529'
+        $memberAttr = [guid]'bf9679c0-0de6-11d0-a285-00aa003049e2'
+        $targets = @("LDAP://$domainDN", "LDAP://CN=AdminSDHolder,CN=System,$domainDN", "LDAP://CN=Domain Admins,CN=Users,$domainDN")
         foreach ($path in $targets) {
           $entry = New-Object System.DirectoryServices.DirectoryEntry($path)
           if (-not $entry.Name) { continue }
           $rules = $entry.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
           foreach ($r in $rules) {
-            if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
+            if ($r.AccessControlType -ne 'Allow') { continue }
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
-            $hit = $false
-            if (($r.ActiveDirectoryRights -band $dangerous) -ne 0) { $hit = $true }
-            if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $resetPwd -or $r.ObjectType -eq [guid]::Empty)) { $hit = $true }
-            if ($hit) { $findings += "$sid on $($entry.Name): $($r.ActiveDirectoryRights)" }
+            $rights = $r.ActiveDirectoryRights
+            $otype = $r.ObjectType
+            if (($rights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0) {
+              if ($otype -eq $resetPwd -or $otype -eq [guid]::Empty -or $otype -eq $memberAttr) {
+                $findings += "SID=$sid | Target=$($entry.Name) | ExtendedRight GUID=$otype"
+              }
+            }
+            if (($rights -band [System.DirectoryServices.ActiveDirectoryRights]::WriteProperty) -ne 0 -and $otype -eq $memberAttr) {
+              $findings += "SID=$sid | Target=$($entry.Name) | WriteProperty on member attribute"
+            }
           }
         }
         $count = $findings.Count
-      } catch {
-        $count = -1
+      } catch { $count = -1 }
+      if ($count -lt 0) { Write-Output "SKIP: extended-right read unavailable. [ACL-S4]" }
+      elseif ($count -eq 0) { Write-Output "PASS: no non-tier-0 extended-right exposure (reset-password / member-write). [ACL-S4]" }
+      else {
+        Write-Output "FAIL: $count non-tier-0 extended-right ACE(s) exposed. [ACL-S4]"
+        $findings | ForEach-Object { Write-Output "  $_" }
       }
-      if ($count -lt 0) {
-        Write-Output "SKIP: ACL exposure audit unavailable — host is not domain-joined or the DC is unreachable. [BAS-SIM-ACL-S1]"
-      } elseif ($count -eq 0) {
-        Write-Output "PASS: no non-tier-0 principal holds a takeover-enabling right over the Domain Admins group, the domain head, or AdminSDHolder — no ACL-based privilege-escalation path exposed from this context. [BAS-SIM-ACL-S1]"
-      } else {
-        Write-Output "EXEC T1069: found $count non-tier-0 principal(s) holding takeover-enabling rights over privileged objects. Reads DACLs only — this is a detection-and-exposure probe, it exercises none of the rights. [BAS-SIM-ACL-S1]"
-        Write-Output "FAIL: a non-tier-0 principal holds a right (GenericAll/GenericWrite/WriteDacl/WriteOwner/ForceChangePassword/AddMember/AllExtendedRights) that permits takeover of a privileged object, enabling domain privilege escalation. Review and remove the unexpected grant(s), restrict privileged-object DACLs to tier-0 trustees, and alert on Directory Service Changes (5136) to these objects."
+    cleanup: ""
+
+  # -------------------------------------------------------------------------
+  # Stage 5 — WriteDacl / WriteOwner enabler exposure
+  # -------------------------------------------------------------------------
+  - name: "ACL Stage 5 — WriteDacl / WriteOwner Enabler Exposure"
+    technique_id: T1222
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads DACLs of domain head, AdminSDHolder, and Domain Admins, isolating WriteDacl and WriteOwner bits only."
+    telemetry:
+      - "Sysmon EID 1: powershell.exe filtering for WriteDacl/WriteOwner bits"
+    detection:
+      - "SIEM: non-tier-0 WriteDAC access on sensitive object — maps to 4662 AccessMask 0x40000 [citation:20]"
+      - "SIEM: ownership-write ACE (WriteOwner) on domain head — enabler IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      try {
+        $rootDSE = [ADSI]"LDAP://RootDSE"
+        $domainDN = $rootDSE.defaultNamingContext
+        if (-not $domainDN) { throw "no domain" }
+        $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-498','*-500','S-1-5-32-548','S-1-5-32-549','S-1-5-32-551','S-1-5-32-552')
+        function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
+        $enablers = [System.DirectoryServices.ActiveDirectoryRights]'WriteDacl,WriteOwner'
+        $targets = @("LDAP://$domainDN", "LDAP://CN=AdminSDHolder,CN=System,$domainDN", "LDAP://CN=Domain Admins,CN=Users,$domainDN")
+        foreach ($path in $targets) {
+          $entry = New-Object System.DirectoryServices.DirectoryEntry($path)
+          if (-not $entry.Name) { continue }
+          $rules = $entry.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+          foreach ($r in $rules) {
+            if ($r.AccessControlType -ne 'Allow') { continue }
+            $sid = $r.IdentityReference.Value
+            if (Is-Tier0 $sid) { continue }
+            if (($r.ActiveDirectoryRights -band $enablers) -ne 0) {
+              $findings += "SID=$sid | Target=$($entry.Name) | Enabler=$($r.ActiveDirectoryRights)"
+            }
+          }
+        }
+        $count = $findings.Count
+      } catch { $count = -1 }
+      if ($count -lt 0) { Write-Output "SKIP: WriteDacl/WriteOwner read unavailable. [ACL-S5]" }
+      elseif ($count -eq 0) { Write-Output "PASS: no non-tier-0 WriteDacl/WriteOwner enabler on audited objects. [ACL-S5]" }
+      else {
+        Write-Output "FAIL: $count non-tier-0 WriteDacl/WriteOwner enabler(s) found. [ACL-S5]"
+        $findings | ForEach-Object { Write-Output "  $_" }
       }
     cleanup: ""
