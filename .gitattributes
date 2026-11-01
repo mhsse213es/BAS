@@ -38,3 +38,7 @@ packaging/appliance/* text eol=lf
 *.pkr.hcl text eol=lf
 *.tmpl text eol=lf
 packaging/images.pin text eol=lf
+
+# Signed campaign definitions: the signature covers the LF blob, so a CRLF checkout (Windows,
+# core.autocrlf=true) makes every definition fail verification. YAML is already covered by *.yaml.
+campaigns/**/*.json text eol=lf
