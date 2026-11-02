@@ -1,6 +1,7 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf } from '../core/load-state.js';
 import { ago, showToast } from '../core/util.js';
 import { apColor } from './attack-path.js';
 import { freshness as apAgeChip } from './ap-model.js';
@@ -95,8 +96,10 @@ export function removeOpenAEVConfig() {
 function loadOpenAEVScenarios(type) {
   var kind = type === 'exercise' ? 'exs' : 'scen';
   apicall('/api/openaev/scenarios?type=' + encodeURIComponent(type || 'scenario')).then(function(list) {
+    var fail = failureOf(list) || (list && !Array.isArray(list) ? { kind: 'error' } : null);
+    if (fail) { setExError(kind, fail); return; }
     setExRows(kind, list);
-  }).catch(function(e) { setExError(kind, e && e.message); });
+  }).catch(function() { setExError(kind); });
 }
 
 export function testOpenAEVConfig() {
@@ -189,10 +192,14 @@ export function loadExercisesTab() {
   loadOpenAEVScenarios('scenario');
   loadOpenAEVScenarios('exercise');
   apicall('/api/exercises/plans').then(function(plans) {
+    var fail = failureOf(plans) || (plans && !Array.isArray(plans) ? { kind: 'error' } : null);
+    if (fail) { setExPlansError(fail); return; }
     setExPlans(plans);
-  }).catch(function(e) { setExPlansError(e && e.message); });
+  }).catch(function() { setExPlansError(); });
 
   apicall('/api/exercises/executions').then(function(execs) {
+    var fail = failureOf(execs) || (execs && !Array.isArray(execs) ? { kind: 'error' } : null);
+    if (fail) { setExError('execs', fail); return; }
     setExRows('execs', execs);
     if (!execs || !execs.length) { stopExPoll(); return; }
     // Keep the list (and any open detail drawer) live while anything is

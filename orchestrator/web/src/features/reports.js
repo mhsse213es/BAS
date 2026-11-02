@@ -2,6 +2,8 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
+import { setHeroStat } from './shell-ui.js';
 import { fmtRunIdCode, showToast } from '../core/util.js';
 import { renderGroupCheckboxList } from './adversaries.js';
 import { agentBucket, loadScenarios, renderScenarios, resolveGroupTargetAgents } from './attack-path.js';
@@ -16,7 +18,7 @@ import { renderAttackFlow, renderRunFindings, renderRunRecommendations, renderRu
 import { displayOf, replaceClasses, setDisplay } from '../core/inline-style.js';
 import { hydrateCharts } from '../core/charts.js';
 import { TYPE_LABEL, formatsFor, agentRows } from './rpt-model.js';
-import { paintAvailable, paintAvailableError, paintHistory, loadReportsHero } from './rpt-view.js';
+import { paintAvailable, paintAvailableError, paintHistory, paintHistoryError, loadReportsHero } from './rpt-view.js';
 import { applyRunsFilter, renderRunsSummary, runsStatusAttr, runsSelCell, runsRowClick } from './runs-rich.js';
 import { fmtWhen, shortRunId, isLive as isLiveRun } from './runs-model.js';
 import { paintResultsExtras, paintRecommendationExtra } from './runs-drawer.js';
@@ -29,14 +31,19 @@ export function loadReports() {
   loadReportsHero();
   // Per-agent launcher: which agents have run data we can report on.
   apicall('/api/scenarios/runs').then(function(runs) {
+    var fail = failureOf(runs) || (runs && !Array.isArray(runs) ? { kind: 'error' } : null);
+    if (fail) { paintAvailableError(fail); return; }
     var hostOf = {};
     (state.agents || []).forEach(function(a) { hostOf[a.agentId] = a.hostname || a.agentId; });
     paintAvailable(agentRows(runs, hostOf));
   }).catch(function() { paintAvailableError(); });
 }
 function renderRepHistory() {
-  apicall('/api/reports').then(function(list) { paintHistory(list || []); })
-    .catch(function(e) { showToast(e.message, 'err'); });
+  apicall('/api/reports').then(function(list) {
+    var fail = failureOf(list) || (list && !Array.isArray(list) ? { kind: 'error' } : null);
+    if (fail) { paintHistoryError(fail); return; }
+    paintHistory(list || []);
+  }).catch(function(e) { paintHistoryError({ kind: 'error' }); showToast(e.message, 'err'); });
 }
 // genAgentReport logs the generation to history (report_log) and opens the
 // download — the same path the modal uses, so the per-agent launcher and the
@@ -378,8 +385,18 @@ var SWEEP_GROUP_KINDS = [
   { field: 'emSweepId', api: function(id) { return '/api/em/sweeps/' + id + '/runs'; },  render: renderEMSweepRow }
 ];
 
+// Failed load: an error with Retry and "—" counters, never an empty run list or zero counts.
+function runsUnavailable(fail) {
+  ['runs-cnt', 'runs-hs-queued', 'runs-hs-pass', 'runs-hs-agents'].forEach(function(id) { setHeroStat(id, '—'); });
+  ['runs-live', 'runs-summary'].forEach(function(id) { var el = document.getElementById(id); if (el) el.innerHTML = ''; });
+  var tbody = document.getElementById('runs-body');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="12">' + failureHtml('scenario runs', fail, 'loadRuns') + '</td></tr>';
+}
 export function loadRuns() {
   apicall('/api/scenarios/runs').then(function(runs) {
+    var fail = failureOf(runs) || (runs && !Array.isArray(runs) ? { kind: 'error' } : null);
+    if (fail) { runsUnavailable(fail); return; }
+    runs = runs || [];
     renderRunsSummary(runs);
     // Group sweep-dispatched rows (non-null sweepId/emSweepId) so Live Runs
     // shows one row per sweep instead of one row per technique/layer it

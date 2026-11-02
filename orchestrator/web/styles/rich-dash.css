@@ -170,3 +170,8 @@ body.theme-light .sidebar-brand .brand-full.logo-onlight { box-shadow: 0 1px 4px
 /* Wide, stacked cards: keep the donut legend close to its donut instead of stretching across the card. */
 #dop-ce .donut-wrap, #dop-kev .donut-wrap { justify-content: flex-start; gap: 40px; }
 #dop-ce .donut-legend, #dop-kev .donut-legend { flex: 0 1 460px; }
+
+/* Dashboard data unavailable (agents/runs request failed): the banner spans the KPI row and the sections that
+   would otherwise sit on "Loading..." forever are hidden until a successful reload. */
+.dp-g5 > .rk-failed { grid-column: 1 / -1; }
+#dash-view-operational.is-unavailable > :not(#hero-dashboard):not(#dop-kpis) { display: none; }

@@ -2,6 +2,7 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
 import { setHeroStat } from './shell-ui.js';
 import { _apOnCollected, _apOnJobUpdate, _apOnProgress, _onRevalidationStarted, _onSIEMCorrelationComplete, renderScenarios, requestAgentsLiveRefresh, showSettingsSection, showThreatPriorityDetail } from './attack-path.js';
@@ -1093,11 +1094,23 @@ export function gaugeSVG(value, size, stroke) {
       '" stroke-dasharray="' + len + ' ' + C + '" stroke-linecap="round" transform="rotate(135 ' + cx + ' ' + cy + ')" style="transition:stroke-dasharray .8s cubic-bezier(.2,.8,.2,1)"/></svg>';
 }
 
+function dashUnavailable(fail) {
+  ['hs-dash-validations', 'hs-dash-detect', 'hs-dash-online', 'hs-dash-last'].forEach(function(id) { setHeroStat(id, '—'); });
+  var k = document.getElementById('dop-kpis');
+  if (k) k.innerHTML = failureHtml('the dashboard data', fail, 'loadDashboard');
+  var v = document.getElementById('dash-view-operational');
+  if (v) v.classList.add('is-unavailable');
+}
 export function loadDashboard() {
+  var dv = document.getElementById('dash-view-operational');
+  if (dv) dv.classList.remove('is-unavailable');
   // Cards appear at once with their last known (or empty) state; each source then fills its own cells.
   renderDashAll();
   Promise.all([apicall('/api/agents'), apicall('/api/scenarios/runs')])
   .then(function(res) {
+    // A failed agents/runs request must not turn the whole dashboard into "no runs yet" / zero counts.
+    var fail = failureOf(res[0]) || failureOf(res[1]);
+    if (fail) { dashUnavailable(fail); return; }
     var ag = Array.isArray(res[0]) ? res[0] : ((res[0] && res[0].items) || []);
     var runs = Array.isArray(res[1]) ? res[1] : [];
 
@@ -1133,7 +1146,7 @@ export function loadDashboard() {
     loadEndpointPostureWidget();
     loadReadinessTrends();
   })
-  .catch(function(e) { showToast('Dashboard load failed: ' + e.message, 'err'); });
+  .catch(function(e) { dashUnavailable({ kind: 'error' }); showToast('Dashboard load failed: ' + e.message, 'err'); });
 }
 
 // Recent alerts: the notification history (needs the remediation permission; others see an empty card).

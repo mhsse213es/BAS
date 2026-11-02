@@ -1,5 +1,6 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { kpi, card, chip, hbars, empty, icon } from '../core/kit.js';
 import { setHeroStat } from './shell-ui.js';
 import * as M from './adc-model.js';
@@ -32,6 +33,8 @@ export function loadADCoverage() {
   // permission-gated, so a failure there must NOT blank the page -- it only
   // means the live-store completeness note can't be shown.
   apicall('/api/ad/coverage').then(function(d) {
+    var fail = failureOf(d);
+    if (fail) { var err = new Error('request failed'); err.failure = fail; throw err; }
     _adData = d || null;
     return apicall('/api/ad/content-inventory').then(function(inv) {
       _adInv = inv || null; _adInvError = false;
@@ -42,7 +45,7 @@ export function loadADCoverage() {
     renderADCoverage(_adData);
   }).catch(function(e) {
     var list = document.getElementById('adc-list');
-    if (list) list.innerHTML = '<div class="empty u-danger">Failed to load AD coverage: ' + x(e && e.message ? e.message : 'request failed') + '</div>';
+    if (list) list.innerHTML = failureHtml('AD coverage', (e && e.failure) || { kind: 'error' }, 'loadADCoverage');
   });
 }
 

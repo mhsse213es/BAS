@@ -4,6 +4,7 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureHtml } from '../core/load-state.js';
 import { ago, fmtDate } from '../core/util.js';
 import { setDisplay } from '../core/inline-style.js';
 import { kpi, card, hbars, bar, pill, chip, empty, icon } from '../core/kit.js';
@@ -50,8 +51,15 @@ export function paintAvailable(rows) {
         '<button class="btn btn-outline btn-sm"' + on('click', 'genAgentReport', r.id, 'audit', '') + '>Audit pack</button></td></tr>';
   }).join(''));
 }
-export function paintAvailableError() {
-  put('rep-available', '<tr><td colspan="5">' + empty('alert', 'Could not load agents') + '</td></tr>');
+export function paintAvailableError(fail) {
+  put('rep-available', '<tr><td colspan="5">' + failureHtml('available reports', fail || { kind: 'error' }, 'loadReports') + '</td></tr>');
+}
+// Failed history load: an error with Retry, not "No reports generated yet".
+export function paintHistoryError(fail) {
+  ROWS = [];
+  setReportsCount(0);
+  var tb = el('reports-body');
+  if (tb) tb.innerHTML = '<tr><td colspan="6">' + failureHtml('report history', fail || { kind: 'error' }, 'loadReports') + '</td></tr>';
 }
 
 // ── Reports tab: history table with search + type filter ─────────────────────

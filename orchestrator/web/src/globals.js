@@ -54,10 +54,19 @@ import { filterRuns, setRunsStatusFilter, setRunsTargetFilter, clearRunsFilters,
 // through window. scripts/g1d-check-actions.py fails on unregistered or unused
 // names.
 import { setAccentColour, toggleDisplayPref } from './features/display-prefs.js';
+// Retry targets for failed-load cards (core/load-state.js).
+import { loadReports } from './features/reports.js';
+import { loadRemediations } from './features/findings.js';
+import { loadDashboard } from './features/evidence.js';
+import { loadExercisesTab } from './features/openaev.js';
 
 export const ACTIONS = {
   setAccentColour,
   toggleDisplayPref,
+  loadReports,
+  loadRemediations,
+  loadDashboard,
+  loadExercisesTab,
   _apCancelJob,
   _dismissLicenseGraceBanner,
   _toggleEMExtraScenario,

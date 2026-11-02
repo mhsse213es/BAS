@@ -3,6 +3,7 @@
 // (loadRecommendations); this module paints what it is given. Pure helpers live in rec-model.js.
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureHtml } from '../core/load-state.js';
 import { showToast } from '../core/util.js';
 import { seg, pill, chip, bar, empty, icon } from '../core/kit.js';
 import { setHeroStat } from './shell-ui.js';
@@ -47,9 +48,12 @@ export function renderRecLoading() {
   var el = document.getElementById('rec-table');
   if (el) el.innerHTML = cardOpen('<div class="rec-state muted">Loading…</div>');
 }
-export function renderRecError(msg) {
+// fail: a failureOf() result; a plain string (an exception message) is treated as a generic error.
+export function renderRecError(fail) {
   var el = document.getElementById('rec-table');
-  if (el) el.innerHTML = cardOpen('<div class="rec-state u-danger">Failed to load: ' + x(msg) + '</div>');
+  var f = fail && typeof fail === 'object' ? fail : { kind: 'error' };
+  if (el) el.innerHTML = cardOpen(failureHtml('recommendations', f, 'loadRecommendations'));
+  ['rec-hs-ranked', 'rec-hs-top', 'rec-hs-never', 'rec-hs-path'].forEach(function(id) { setHeroStat(id, '—'); });
 }
 
 function skeletonHtml() {
