@@ -4,6 +4,7 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { showToast } from '../core/util.js';
 import { grid, card, chip, bar, hbars, seg, empty, kv, icon } from '../core/kit.js';
 import { chartSlot, CHART_COLORS } from '../core/charts.js';
@@ -111,6 +112,13 @@ function paintTable() {
   setHidden('exp-dt-foot', !list.length);
 }
 
+// A failed load shows an error with Retry and "—" counters, never 0 assets.
+function renderUnavailable(main, fail) {
+  ASSETS = [];
+  ['exp-hs-assets', 'exp-hs-internet', 'exp-hs-kev', 'exp-hs-findings'].forEach(function(id) { setHeroStat(id, '—'); });
+  if (main) main.innerHTML = card(TITLE, failureHtml('exposure assets', fail, 'loadExposureAssets'), { actions: noteHtml() });
+}
+
 function renderHero() {
   var h = M.heroStats(ASSETS);
   setHeroStat('exp-hs-assets', h.assets);
@@ -138,6 +146,8 @@ export function loadExposureAssets() {
   if (main) main.innerHTML = card(TITLE, '<div class="empty">Loading…</div>', { flush: true, actions: noteHtml() });
   if (sum) sum.innerHTML = '';
   apicall('/api/exposure/assets').then(function(assets) {
+    var fail = failureOf(assets) || (assets && !Array.isArray(assets) ? { kind: 'error' } : null);
+    if (fail) { renderUnavailable(main, fail); return; }
     ASSETS = assets || [];
     T.sel = {}; T.page = 0;
     renderHero();
@@ -151,9 +161,8 @@ export function loadExposureAssets() {
     paintTable();
     if (sum) sum.innerHTML = chartsHtml();
   }).catch(function(e) {
-    ASSETS = [];
-    renderHero();
-    if (main) main.innerHTML = card(TITLE, '<div class="empty u-danger">Failed to load: ' + x(e.message) + '</div>', { actions: noteHtml() });
+    renderUnavailable(main, { kind: 'error' });
+    showToast('Could not load exposure assets: ' + (e && e.message ? e.message : 'request failed'), 'err');
   });
 }
 
@@ -217,6 +226,8 @@ export function openExposureDetail(hostKey) {
   body.innerHTML = '<div class="empty">Loading…</div>';
   document.getElementById('exposure-detail-overlay').classList.add('open');
   apicall('/api/exposure/assets/' + encodeURIComponent(hostKey)).then(function(p) {
+    var pf = failureOf(p) || (p && (!p.asset) ? { kind: 'error' } : null);
+    if (pf) { body.innerHTML = failureHtml('this asset', pf); return; }
     setText('exp-detail-title', (p.asset && p.asset.label) || hostKey);
     setText('exp-detail-sub', M.drawerSub(p.asset));
     var h = '<div class="exp-dr-chips">' + M.chipRows(p.asset).map(function(c) { return chip(c[0], c[1]); }).join('') + '</div>';
@@ -271,7 +282,7 @@ export function openExposureDetail(hostKey) {
 
     body.innerHTML = h;
   }).catch(function(e) {
-    body.innerHTML = '<div class="empty u-danger">Failed to load: ' + x(e.message) + '</div>';
+    body.innerHTML = failureHtml('this asset', { kind: 'error' });
   });
 }
 

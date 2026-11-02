@@ -2,6 +2,7 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { ago, showToast } from '../core/util.js';
 import { covSegHtml } from './attack-path.js';
 import { ROLE } from './shell.js';
@@ -129,7 +130,10 @@ export function loadIOCRegistry() {
     if (b) setDisplay(b, ROLE === 'admin' ? '' : 'none');
   });
 
-  apicall('/api/analytics/iocs?limit=5').then(renderIOCAnalyticsTiles).catch(function() {
+  apicall('/api/analytics/iocs?limit=5').then(function(a) {
+    if (failureOf(a)) throw new Error('analytics unavailable');
+    renderIOCAnalyticsTiles(a);
+  }).catch(function() {
     var el = document.getElementById('ioc-analytics-tiles');
     if (el) el.innerHTML = '';
   });
@@ -153,17 +157,24 @@ export function loadIOCRegistry() {
   var clr = document.getElementById('ioc-clear-btn');
   if (clr) setDisplay(clr, (type || source || origin || status || search || showSuppressed) ? '' : 'none');
   apicall('/api/iocs?' + params.join('&')).then(function(rows) {
+    var fail = failureOf(rows) || (rows && !Array.isArray(rows) ? { kind: 'error' } : null);
+    if (fail) { iocUnavailable(tbody, fail); return; }
     rows = rows || [];
     // suppressed filtering happens client-side -- GetIOCs has no suppressed
     // param, and hiding suppressed-by-default (unless the box is checked)
     // is a display preference, not a query the backend needs to know about.
     _iocRegistryRows = showSuppressed ? rows : rows.filter(function(r) { return !r.suppressed; });
     renderIOCRegistryTable();
-  }).catch(function(e) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>';
-    ['ioc-side', 'ioc-insights'].forEach(function(id) { var el = document.getElementById(id); if (el) el.innerHTML = ''; });
-    ['total', 'detected', 'missed', 'observed'].forEach(function(k) { setHeroStat('ioc-hs-' + k, '—'); });
+  }).catch(function() {
+    iocUnavailable(tbody, { kind: 'error' });
   });
+}
+// A failed load shows an error with Retry and "—" counters, never an empty registry.
+function iocUnavailable(tbody, fail) {
+  _iocRegistryRows = [];
+  tbody.innerHTML = '<tr><td colspan="7">' + failureHtml('the IOC registry', fail, 'loadIOCRegistry') + '</td></tr>';
+  ['ioc-side', 'ioc-insights'].forEach(function(id) { var el = document.getElementById(id); if (el) el.innerHTML = ''; });
+  ['total', 'detected', 'missed', 'observed'].forEach(function(k) { setHeroStat('ioc-hs-' + k, '—'); });
 }
 // Type chip beside the charts: sets the type filter (the select in the search bar) and reloads.
 export function setIOCType(t) {

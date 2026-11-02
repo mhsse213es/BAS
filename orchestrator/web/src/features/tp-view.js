@@ -4,6 +4,7 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { fmtDate, showToast } from '../core/util.js';
 import { grid, card, chip, bar, hbars, seg, empty, kv, icon } from '../core/kit.js';
 import { chartSlot, CHART_COLORS } from '../core/charts.js';
@@ -130,6 +131,13 @@ function paintTable() {
   setHidden('tp-dt-foot', !list.length);
 }
 
+// A failed load shows an error with Retry and "—" counters, never 0 actors.
+function renderUnavailable(main, fail) {
+  ACTORS = [];
+  ['tp-hs-actors', 'tp-hs-high', 'tp-hs-techniques', 'tp-hs-gaps'].forEach(function(id) { setHeroStat(id, '—'); });
+  if (main) main.innerHTML = card(TITLE, failureHtml('threat actors', fail, 'loadThreatPriorityActors'));
+}
+
 function renderHero() {
   var h = M.heroStats(ACTORS);
   setHeroStat('tp-hs-actors', h.actors);
@@ -173,6 +181,8 @@ export function loadThreatPriorityActors() {
   if (sum) sum.innerHTML = '';
   if (charts) charts.innerHTML = '';
   return apicall('/api/threat-priority/actors').then(function(actors) {
+    var fail = failureOf(actors) || (actors && !Array.isArray(actors) ? { kind: 'error' } : null);
+    if (fail) { renderUnavailable(main, fail); return; }
     ACTORS = actors || [];
     T.sel = {}; T.page = 0;
     renderHero();
@@ -188,9 +198,8 @@ export function loadThreatPriorityActors() {
     paintTable();
     if (charts) charts.innerHTML = chartsHtml();
   }).catch(function(e) {
-    ACTORS = [];
-    renderHero();
-    if (main) main.innerHTML = card(TITLE, '<div class="empty u-danger">Failed to load: ' + x(e.message) + '</div>');
+    renderUnavailable(main, { kind: 'error' });
+    showToast('Could not load threat actors: ' + (e && e.message ? e.message : 'request failed'), 'err');
   });
 }
 

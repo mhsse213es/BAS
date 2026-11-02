@@ -2,6 +2,7 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { fmtDate, showToast } from '../core/util.js';
 import { loadScenarios, showThreatPriorityDetail } from './attack-path.js';
 import { refreshDashboardCampaigns } from './compliance.js';
@@ -43,11 +44,21 @@ var CAMPAIGN_TAB = 'all';
 var CAMPAIGN_Q = '';
 export function loadCampaigns() {
   apicall('/api/campaigns').then(function(list) {
+    var fail = failureOf(list) || (list && !Array.isArray(list) ? { kind: 'error' } : null);
+    if (fail) { campaignsUnavailable(fail); return; }
     state._campaigns = list || [];
     renderCampaignHero();
     renderCampaignToolbar();
     renderCampaignRows();
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) { campaignsUnavailable({ kind: 'error' }); showToast(e.message, 'err'); });
+}
+// Failed load: say so with Retry and "—" counters, never leave "Loading…" or show an empty list.
+function campaignsUnavailable(fail) {
+  var body = document.getElementById('campaigns-body');
+  var emp = document.getElementById('campaigns-empty');
+  if (emp) emp.hidden = true;
+  if (body) { body.hidden = false; body.innerHTML = failureHtml('campaigns', fail, 'loadCampaigns'); }
+  ['campaign-cnt', 'campaign-hs-completed', 'campaign-hs-partial', 'campaign-hs-runs'].forEach(function(id) { setHeroStat(id, '—'); });
 }
 function renderCampaignHero() {
   var h = M.heroStats(state._campaigns || []);

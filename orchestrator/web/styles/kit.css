@@ -75,6 +75,9 @@
 /* ── Empty, key/value, check rows ───────────────────────── */
 .rk-empty { padding: 36px 16px; text-align: center; color: var(--muted); }
 .rk-empty b { display: block; color: var(--text); font-weight: 600; margin-bottom: 2px; }
+.rk-failed.is-error b { color: var(--danger-text); }
+.rk-failed.is-forbidden b { color: var(--warning-text); }
+.rk-failed .btn { margin-top: 12px; }
 .rk-empty-ico { display: inline-grid; place-items: center; width: 36px; height: 36px; margin-bottom: 8px; border-radius: 10px; background: var(--elevated); color: var(--muted); }
 .rk-kv { display: grid; grid-template-columns: minmax(110px, 150px) 1fr; gap: 9px 14px; font-size: 13px; margin: 0; }
 .rk-kv dt { color: var(--muted); }

@@ -2,6 +2,7 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { fmtDate, showToast } from '../core/util.js';
 import { ROLE } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
@@ -38,13 +39,21 @@ export function loadScheduledAssessments() {
     apicall('/api/scheduled-assessments'),
     apicall('/api/agent-groups')
   ]).then(function(res) {
-    if (res[0] && res[0].error) { showToast(res[0].error, 'err'); return; }
+    var fail = failureOf(res[0]) || (res[0] && res[0].error ? { kind: 'error' } : null);
+    if (fail) { schedUnavailable(fail); return; }
     SCHED.schedules = (res[0] && res[0].schedules) || [];
     var groups = Array.isArray(res[1]) ? res[1] : [];
     SCHED.groupsById = schedFlattenGroupNames(groups, {});
     renderScheduledAssessmentsList();
     loadLastRuns();
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) { schedUnavailable({ kind: 'error' }); showToast(e.message, 'err'); });
+}
+// Failed load: say so with Retry instead of leaving the table on "Loading…" or showing it empty.
+function schedUnavailable(fail) {
+  var body = document.getElementById('sched-body');
+  var emp = document.getElementById('sched-empty');
+  if (emp) emp.hidden = true;
+  if (body) body.innerHTML = '<tr><td colspan="10">' + failureHtml('scheduled assessments', fail, 'loadScheduledAssessments') + '</td></tr>';
 }
 
 // The outcome of each schedule's most recent run: the state of the job it last spawned

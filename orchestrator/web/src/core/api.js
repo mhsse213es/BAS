@@ -8,6 +8,12 @@ export function apicall(path, opts) {
   }))
   .then(function(r) {
     if (r.status === 401) { doLogout(); throw new Error('Session expired'); }
-    return r.json();
+    return r.json().then(function(body) {
+      // Tag failures so callers can tell "failed" from "empty" without changing what they receive.
+      if (r.status >= 400 && body && typeof body === 'object' && !Array.isArray(body)) {
+        Object.defineProperty(body, 'httpStatus', { value: r.status });
+      }
+      return body;
+    });
   });
 }

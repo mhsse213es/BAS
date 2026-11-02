@@ -2,6 +2,7 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { fmtDate, showToast } from '../core/util.js';
 import { closeAllRowMenus } from './attack-path.js';
 import { ROLE } from './shell.js';
@@ -55,10 +56,16 @@ export function initiativeClearFilters() {
   renderInitiativesList();
 }
 
+// Failed load: say so with Retry instead of leaving "Loading…" or showing an empty list.
+function initiativesUnavailable(fail) {
+  var body = document.getElementById('init-body');
+  if (body) body.innerHTML = failureHtml('initiatives', fail, 'loadInitiatives');
+}
 export function loadInitiatives() {
   var q = INITIATIVES.filter === 'all' ? '' : ('?state=' + INITIATIVES.filter);
   apicall('/api/initiatives' + q).then(function(res) {
-    if (res && res.error) { showToast(res.error, 'err'); return; }
+    var fail = failureOf(res) || (res && res.error ? { kind: 'error' } : null);
+    if (fail) { initiativesUnavailable(fail); return; }
     INITIATIVES.list = (res && res.initiatives) || [];
     INITIATIVES.all = INITIATIVES.filter === 'all' ? INITIATIVES.list : null;
     renderInitiativesList();

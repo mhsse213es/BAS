@@ -2,6 +2,7 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { fmtDate, showToast } from '../core/util.js';
 import { covSegHtml, statTileCard } from './attack-path.js';
 import { openModal, scenarioFramework } from './reports.js';
@@ -45,6 +46,9 @@ export function loadSLAReport() {
 function findingStatusClass(st) { return st === 'open' ? 'failed' : st === 'remediated' ? 'completed' : 'partial'; }
 export function loadFindings() {
   apicall('/api/findings').then(function(list) {
+    // A failed request is not "no findings": keep what we had (the sidebar badge reads it) and say so.
+    var fail = failureOf(list) || (list && !Array.isArray(list) ? { kind: 'error' } : null);
+    if (fail) { renderFindingsFailure(fail); return; }
     state._findings = list || [];
     FINDING_LOADED = new Date();
     renderFindingsTiles(); renderFindingsTabs(); renderFindingsRows();
@@ -57,6 +61,16 @@ export function loadFindings() {
     if (bulkBtn) setDisplay(bulkBtn, canPush ? '' : 'none');
     if (ticketTh) setDisplay(ticketTh, canPush ? '' : 'none');
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+function renderFindingsFailure(fail) {
+  var tiles = document.getElementById('findings-tiles');
+  var ins = document.getElementById('findings-insights');
+  var tb = document.getElementById('findings-body');
+  var cnt = document.getElementById('findings-count');
+  if (tiles) tiles.innerHTML = '';
+  if (ins) ins.innerHTML = '';
+  if (cnt) cnt.textContent = '';
+  if (tb) tb.innerHTML = '<tr><td colspan="10">' + failureHtml('findings', fail, 'loadFindings') + '</td></tr>';
 }
 function renderFindingsTiles() {
   var l = state._findings || [];
