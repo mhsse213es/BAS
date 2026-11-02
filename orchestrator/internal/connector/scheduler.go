@@ -112,6 +112,32 @@ func NewScheduler(
 	return s
 }
 
+// NewProductionScheduler builds the scheduler with the full wiring the
+// running server requires: the evidence store (source instances, trust
+// versions, observations, and the threat/intelligence clocks -- spec
+// §5-§8) AND the identity store. The server MUST construct the scheduler
+// through this, never bare NewScheduler, so the evidence layer can never be
+// silently left unwired. A nil evidence store makes recordSourceSync a
+// no-op, which disables every clock, observation, and threat_observed event
+// -- and therefore all threat-coverage velocity -- while content generation
+// (which carries its own evidence store) still appears to work, making the
+// gap invisible without this constructor. See
+// TestNewProductionScheduler_WiresEvidenceAndIdentity.
+func NewProductionScheduler(
+	sources []Source,
+	generator *Generator,
+	engine *scenario.Engine,
+	pollHours int,
+	pool *pgxpool.Pool,
+	priorityEngine *threatpriority.Engine,
+	evStore *evidence.Store,
+	identityStore *threatidentity.Store,
+) *Scheduler {
+	return NewScheduler(sources, generator, engine, pollHours, pool, priorityEngine).
+		WithEvidenceStore(evStore).
+		WithIdentityStore(identityStore)
+}
+
 // Start launches the background polling goroutine. Also starts with zero
 // sources when a bundle directory is configured (WithBundleDir), even if
 // no bundle file is present yet -- otherwise a bundle dropped in later, on
