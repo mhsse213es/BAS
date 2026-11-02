@@ -4,7 +4,7 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
-import { failureHtml } from '../core/load-state.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
 import { state } from '../core/state.js';
 import { setDisplay } from '../core/inline-style.js';
@@ -270,8 +270,11 @@ export function paintFrameworkCards(scores) {
 }
 export function loadComplianceCards() {
   loadReportsHero();
-  apicall('/api/compliance/scores').then(function(s) { paintFrameworkCards(Array.isArray(s) ? s : []); })
-    .catch(function() { put('cmp-fw-cards', card('', empty('alert', 'Could not load compliance scores'))); });
+  apicall('/api/compliance/scores').then(function(s) {
+    var fail = failureOf(s) || (s && !Array.isArray(s) ? { kind: 'error' } : null);
+    if (fail) { put('cmp-fw-cards', card('', failureHtml('compliance scores', fail, 'loadComplianceCards'))); return; }
+    paintFrameworkCards(Array.isArray(s) ? s : []);
+  }).catch(function() { put('cmp-fw-cards', card('', failureHtml('compliance scores', { kind: 'error' }, 'loadComplianceCards'))); });
 }
 
 // ── SLA tab ──────────────────────────────────────────────────────────────────

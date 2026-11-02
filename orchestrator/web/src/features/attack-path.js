@@ -45,6 +45,8 @@ function apLoad(quiet) {
     apicall('/api/attackpath/correlation').catch(function() { return null; })
   ]).then(function(res) {
     var d = res[0], corr = res[1];
+    var fail = failureOf(d);
+    if (fail) { attackPathUnavailable(fail); return; }
     // Restore in-flight job state from server after a page reload.
     var saved = _apLoadJobId();
     if (saved && saved.jobId && !_apCurrentJobId) {
@@ -73,7 +75,7 @@ function apLoad(quiet) {
     renderAttackPath(d, corr);
   }).catch(function(e) {
     if (body && !quiet) body.innerHTML = '<section class="rk-card"><div class="empty">Could not load attack-path data: ' + x(e.message || 'error') +
-      '<div class="ap-retry"><button class="btn btn-outline btn-sm" data-on-click="loadAttackPath">Try again</button></div></div></section>';
+      '<div class="ap-retry"><button class="btn btn-outline btn-sm" data-on-click='loadAttackPath'>Try again</button></div></div></section>';
     else showToast('Could not refresh attack-path data: ' + (e.message || 'error'), 'err');
   });
 }
@@ -104,6 +106,8 @@ export function setExecRange(id) { EXEC_DAYS = id; renderRangeSeg(EXEC_DAYS); lo
 
 export function loadExecDashboard() {
   var days = EXEC_DAYS;
+  var ev = document.getElementById('dash-view-executive');
+  if (ev) ev.classList.remove('is-unavailable');
   renderRangeSeg(days);
   Promise.all([
     apicall('/api/dashboard/current'),
@@ -111,6 +115,8 @@ export function loadExecDashboard() {
     apicall('/api/predict/risk'),
     apicall('/api/findings').catch(function() { return []; })
   ]).then(function(res) {
+    var fail = failureOf(res[0]) || failureOf(res[1]) || failureOf(res[2]);
+    if (fail) { execUnavailable(fail); return; }
     var cur = res[0] || {};
     var hero = heroValues(cur);
     setHeroStat('hs-exec-risk', hero.risk);
@@ -118,7 +124,16 @@ export function loadExecDashboard() {
     setHeroStat('hs-exec-detect', hero.detection);
     setHeroStat('hs-exec-fleet', cur.assetCount != null ? cur.assetCount : '—');
     renderExecAll({ current: cur, trends: res[1], predict: res[2], findings: Array.isArray(res[3]) ? res[3] : null, days: days });
-  }).catch(function(e) { showToast(e.message, 'err'); });
+    renderExecAll({ current: cur, trends: res[1], predict: res[2], findings: Array.isArray(res[3]) ? res[3] : [], days: days });
+  }).catch(function(e) { execUnavailable({ kind: 'error' }); showToast(e.message, 'err'); });
+}
+// Failed load: banner with Retry and "—" counters; the cards that would show zeros are hidden until a reload succeeds.
+function execUnavailable(fail) {
+  ['hs-exec-risk', 'hs-exec-exposure', 'hs-exec-detect', 'hs-exec-fleet'].forEach(function(id) { setHeroStat(id, '—'); });
+  var k = document.getElementById('ed-kpi-row');
+  if (k) k.innerHTML = failureHtml('the executive dashboard', fail, 'loadExecDashboard');
+  var v = document.getElementById('dash-view-executive');
+  if (v) v.classList.add('is-unavailable');
 }
 
 var REC_SCENARIO = null;
@@ -1531,6 +1546,8 @@ export function loadCatalogs() {
 
 export function loadScenarios() {
   apicall('/api/scenarios').then(function(data) {
+    var fail = failureOf(data) || (data && !Array.isArray(data) ? { kind: 'error' } : null);
+    if (fail) { scenariosUnavailable(fail); return; }
     state.scenarios = (data || []).map(function(s) {
       return {
         id:                 s.id                 || '',
@@ -1569,7 +1586,12 @@ export function loadScenarios() {
     // rendered first, it's stuck showing the raw ID until something
     // re-renders it. Re-render now that scenarios is actually populated.
     if (SCHED.schedules.length) renderScheduledAssessmentsList();
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) { scenariosUnavailable({ kind: 'error' }); showToast(e.message, 'err'); });
+}
+// Failed load: an error with Retry in the card grid instead of an empty library or a TypeError.
+function scenariosUnavailable(fail) {
+  var grid = document.getElementById('sc-tile-grid');
+  if (grid) grid.innerHTML = failureHtml('scenarios', fail, 'loadScenarios');
 }
 
 // Approvable: the latest version is a DRAFT/VALIDATED intel or custom one and
@@ -2108,4 +2130,10 @@ function submitPhishingForm() {
     .catch(function(err) {
       showToast('Phishing run failed: ' + (err && err.message ? err.message : String(err)), 'err');
     });
+}
+
+// Failed load: an error with Retry instead of "No attack-path data collected yet".
+function attackPathUnavailable(fail) {
+  var body = document.getElementById('ap-body');
+  if (body) body.innerHTML = failureHtml('attack-path data', fail, 'loadAttackPath');
 }

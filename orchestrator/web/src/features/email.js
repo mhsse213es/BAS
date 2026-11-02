@@ -1,6 +1,7 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
 import { covSegHtml } from './attack-path.js';
 import { ROLE } from './shell.js';
