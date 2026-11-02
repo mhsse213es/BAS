@@ -101,7 +101,8 @@ function overviewHtml(a) {
   var notes = '';
   if (life === 'quarantined') notes += note('bad', '&#9888; Agent is QUARANTINED — binary hash mismatch detected. Scenario dispatch is blocked. Restore to Active once the binary is verified.');
   if (life === 'restricted') notes += note('warn', '&#9888; Agent is RESTRICTED — scenario dispatch is blocked by policy. Restore to Active to re-enable.');
-  if (life === 'retired') notes += note('muted', '&#128683; Agent is RETIRED — decommissioned and blocked from running scenarios. Restore to Active to re-enable.');
+  if (a.forceRemoved) notes += note('bad', '&#128683; Agent was FORCE-REMOVED by an administrator. This is permanent: it cannot be restored, and no state change is possible.');
+  else if (life === 'retired') notes += note('muted', '&#128683; Agent is RETIRED — decommissioned and blocked from running scenarios. Restore to Active to re-enable.');
   if (life === 'uninstalling') notes += note('info', '&#8987; Uninstall in progress — waiting for the endpoint to confirm.');
   if (life === 'uninstalled') notes += note('muted', '&#10003; Agent confirmed it uninstalled itself.');
   if (a.uninstallError) notes += note('bad', '&#9888; Uninstall failed: ' + x(a.uninstallError) + (a.uninstallErrorAt ? ' (' + x(new Date(a.uninstallErrorAt).toLocaleString()) + ')' : ''));
@@ -119,17 +120,15 @@ function overviewHtml(a) {
 
   var acts = [actBtn('Run simulation', 'play', 'rowMenuRunSimulation', [id])];
   if (admin) acts.push(actBtn('Move to Group', 'layers', 'rowMenuMoveGroup', [id]));
-  if (life !== 'active') acts.push(actBtn('Restore to Active', 'shield', 'setAgentState', [id, 'active']));
-  if (life !== 'quarantined') acts.push(actBtn('Quarantine', 'alert', 'setAgentState', [id, 'quarantined']));
-  if (life !== 'restricted') acts.push(actBtn('Restrict', 'lock', 'setAgentState', [id, 'restricted']));
-  if (life !== 'retired') acts.push(actBtn('Retire', 'x', 'setAgentState', [id, 'retired']));
-  if (admin && !offline) acts.push(actBtn('Stop Agent', 'pause', 'rowMenuStopAgent', [id, host]));
-  if (admin && life !== 'retired' && life !== 'uninstalled') {
+  var stateBtn = { active: ['Restore to Active', 'shield'], quarantined: ['Quarantine', 'alert'], restricted: ['Restrict', 'lock'], retired: ['Retire', 'x'] };
+  M.stateTargets(life, a.forceRemoved).forEach(function(s) { acts.push(actBtn(stateBtn[s][0], stateBtn[s][1], 'setAgentState', [id, s])); });
+  if (admin && !offline && !a.forceRemoved) acts.push(actBtn('Stop Agent', 'pause', 'rowMenuStopAgent', [id, host]));
+  if (admin && !a.forceRemoved && life !== 'retired' && life !== 'uninstalled') {
     acts.push(life === 'revoked'
       ? actBtn('Reinstate…', 'refresh', 'rowMenuReinstateAgent', [id, host])
       : actBtn('Revoke…', 'x', 'rowMenuRevokeAgent', [id, host], 'agt-danger'));
   }
-  if (admin) {
+  if (admin && !a.forceRemoved) {
     if (life !== 'revoked' && life !== 'retired' && life !== 'uninstalled') acts.push(actBtn('Allow reinstall…', 'refresh', 'rowMenuAllowReinstall', [id, host]));
     acts.push(actBtn('Uninstall Agent', 'x', 'rowMenuUninstallAgent', [id, host], 'agt-danger'));
     acts.push(actBtn('Force Remove Agent', 'alert', 'rowMenuRemoveAgent', [id, host], 'agt-danger'));

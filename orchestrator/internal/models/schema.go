@@ -574,10 +574,13 @@ type Agent struct {
 	Policy        *PolicyBundle `json:"policy,omitempty"`
 	// TrayHidden is this agent's own tray-icon override: nil = follows the fleet default, true = hidden,
 	// false = forced visible.
-	TrayHidden *bool      `json:"trayHidden"`
-	EnrolledAt *time.Time `json:"enrolledAt,omitempty"`
-	LastUpdate time.Time  `json:"lastUpdate"`
-	Sims       int        `json:"sims"` // scenario runs dispatched to this agent (all time)
+	TrayHidden *bool `json:"trayHidden"`
+	// ForceRemoved is true once an administrator force-removed the agent. That is permanent: the console offers
+	// no way to reactivate it, and the database refuses the change.
+	ForceRemoved bool       `json:"forceRemoved"`
+	EnrolledAt   *time.Time `json:"enrolledAt,omitempty"`
+	LastUpdate   time.Time  `json:"lastUpdate"`
+	Sims         int        `json:"sims"` // scenario runs dispatched to this agent (all time)
 	// StoppedBy/StoppedAt/StopReason are set when an Admin dispatches a
 	// durable remote stop (see StopAgent handler); cleared on re-enroll.
 	// StoppedBy holds the raw user ID (matches audit_logs.actor_id);

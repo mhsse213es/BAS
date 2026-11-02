@@ -530,7 +530,10 @@ func (h *Handler) RemoveAgent(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "reason is required", http.StatusBadRequest)
 		return
 	}
-	tag, err := h.db.Exec(r.Context(), `UPDATE agents SET state = 'retired' WHERE agent_id = $1`, agentID)
+	// force_removed_at makes the removal permanent (see the agents_force_removed_final trigger). COALESCE keeps
+	// the original time if an agent is removed twice.
+	tag, err := h.db.Exec(r.Context(),
+		`UPDATE agents SET state = 'retired', force_removed_at = COALESCE(force_removed_at, NOW()) WHERE agent_id = $1`, agentID)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -539,7 +542,7 @@ func (h *Handler) RemoveAgent(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "agent not found", http.StatusNotFound)
 		return
 	}
-	h.auditLog(r, "agent.remove", agentID, map[string]any{"reason": body.Reason}, "ok")
+	h.auditLog(r, "agent.remove", agentID, map[string]any{"reason": body.Reason, "permanent": true}, "ok")
 	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: agentID})
 	respond(w, map[string]string{"agentId": agentID, "state": "retired"})
 }
@@ -940,7 +943,7 @@ const agentSelectColumns = `a.agent_id, a.hostname, a.ip_address, a.os_version, 
 	        COALESCE(sr.sims, 0) AS sims,
 	        a.stopped_by, COALESCE(u.username, a.stopped_by), a.stopped_at, a.stop_reason,
 	        a.group_id, g.name, a.uninstall_error, a.uninstall_error_at, a.uninstall_requested_at,
-	        COALESCE(a.transport, 'legacy'), a.tray_hidden`
+	        COALESCE(a.transport, 'legacy'), a.tray_hidden, (a.force_removed_at IS NOT NULL)`
 
 // agentFromJoins is the FROM/JOIN clause shared by every GetAgents query
 // that selects agentSelectColumns above.
@@ -967,7 +970,7 @@ func scanAgentRows(rows pgx.Rows, hub *ws.Hub, now time.Time) []models.Agent {
 			&stateStr, &policyRaw, &a.EnrolledAt, &a.Sims,
 			&a.StoppedBy, &a.StoppedByName, &a.StoppedAt, &a.StopReason,
 			&a.GroupID, &a.GroupName, &a.UninstallError, &a.UninstallErrorAt, &uninstallRequestedAt,
-			&a.Transport, &a.TrayHidden); err != nil {
+			&a.Transport, &a.TrayHidden, &a.ForceRemoved); err != nil {
 			continue
 		}
 		// Connectivity is heartbeat-driven: a dead/rebooted agent stops updating
@@ -1308,6 +1311,9 @@ func (h *Handler) SetAgentState(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid state: must be active, restricted, quarantined, or retired", http.StatusBadRequest)
 		return
 	}
+	if h.refuseIfForceRemoved(w, r, agentID) {
+		return
+	}
 	tag, err := h.db.Exec(r.Context(),
 		`UPDATE agents SET state = $1 WHERE agent_id = $2`, body.State, agentID)
 	if err != nil {
@@ -1321,6 +1327,26 @@ func (h *Handler) SetAgentState(w http.ResponseWriter, r *http.Request) {
 	h.auditLog(r, "agent.state", agentID, map[string]any{"state": body.State}, "ok")
 	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: agentID})
 	respond(w, map[string]any{"agentId": agentID, "state": body.State})
+}
+
+// errForceRemovedText is what every refused change to a force-removed agent says.
+const errForceRemovedText = "this agent was force-removed, which is permanent: it cannot be reactivated, revoked or uninstalled again"
+
+// refuseIfForceRemoved answers 409 and reports true when the agent was force-removed. The database trigger
+// refuses the change regardless; this gives the caller a clear reason instead of a database error. A lookup
+// failure is not treated as "not removed": it answers 500 and reports true so the caller stops.
+func (h *Handler) refuseIfForceRemoved(w http.ResponseWriter, r *http.Request, agentID string) bool {
+	var removed bool
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT COALESCE((SELECT force_removed_at IS NOT NULL FROM agents WHERE agent_id = $1), false)`, agentID).Scan(&removed); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return true
+	}
+	if removed {
+		jsonError(w, errForceRemovedText, http.StatusConflict)
+		return true
+	}
+	return false
 }
 
 // POST /api/agents/{agentId}/stop — durably stops a connected agent: the

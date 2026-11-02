@@ -1081,12 +1081,12 @@ function agentRowMenu(a, idx) {
           (ROLE === 'admin' ? trayMenuEntries(a, state.fleetTrayHidden).map(function(e) {
             return '<button class="row-menu-item"' + on('click', 'rowMenuTrayIcon', a.agentId, e.hidden) + '>&#128065; ' + x(e.label) + '</button>';
           }).join('') : '') +
-          (ROLE === 'admin' && a.status !== 'offline' ?
+          (ROLE === 'admin' && !a.forceRemoved && a.status !== 'offline' ?
             '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuStopAgent', a.agentId, a.hostname || a.agentId) + '>&#9209; Stop agent</button>' : '') +
-          (ROLE === 'admin' ?
+          (ROLE === 'admin' && !a.forceRemoved ?
             '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuUninstallAgent', a.agentId, a.hostname || a.agentId) + '>&#128465; Uninstall Agent</button>' : '') +
           agentRevokeMenuItems(a, ROLE === 'admin') +
-          (ROLE === 'admin' ?
+          (ROLE === 'admin' && !a.forceRemoved ?
             '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuRemoveAgent', a.agentId, a.hostname || a.agentId) + '>&#9888; Force Remove…</button>' : '') +
         '</div>' +
         '</div>';
@@ -1122,7 +1122,7 @@ export function rowMenuReinstateAgent(id, hostname) { closeAllRowMenus(); openRe
 // The Revoke / Reinstate entries of an agent's row menu. Admin only (the server enforces it too). A
 // retired or uninstalled agent has nothing to revoke; a revoked one can only be reinstated.
 export function agentRevokeMenuItems(a, isAdmin) {
-  if (!isAdmin || a.state === 'retired' || a.state === 'uninstalled') return '';
+  if (!isAdmin || a.forceRemoved || a.state === 'retired' || a.state === 'uninstalled') return '';
   if (a.state === 'revoked') {
     return '<button class="row-menu-item"' + on('click', 'rowMenuReinstateAgent', a.agentId, a.hostname || a.agentId) + '>&#8617; Reinstate…</button>';
   }

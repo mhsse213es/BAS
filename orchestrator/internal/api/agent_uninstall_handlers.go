@@ -27,6 +27,9 @@ func (h *Handler) UninstallAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.refuseIfForceRemoved(w, r, agentID) {
+		return
+	}
 	var priorState string
 	if err := h.db.QueryRow(r.Context(),
 		`SELECT COALESCE(state, 'active') FROM agents WHERE agent_id = $1`, agentID,

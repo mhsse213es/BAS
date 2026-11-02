@@ -136,3 +136,10 @@ test('fleetTrayLabel: names the action the button performs and the count it affe
   assert.match(M.fleetTrayConfirm(true), /per-agent/i, 'must say per-agent settings still win');
   assert.doesNotMatch(M.fleetTrayConfirm(true), /\d/, 'no count: the default covers agents that are not loaded on the page');
 });
+
+test('stateTargets offers the other states, and none at all for a force-removed agent', () => {
+  assert.deepEqual(M.stateTargets('active', false), ['quarantined', 'restricted', 'retired']);
+  assert.deepEqual(M.stateTargets('retired', false), ['active', 'quarantined', 'restricted']);
+  assert.deepEqual(M.stateTargets('retired', true), []);
+  assert.deepEqual(M.stateTargets('active', true), []);
+});

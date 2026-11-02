@@ -1304,6 +1304,30 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// default); fleet_settings holds fleet-wide defaults as key -> jsonb. The override is its own column
 		// because re-enrolling rewrites policy_json.
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS tray_hidden boolean`,
+
+		// Force Remove is permanent. force_removed_at is set only by an administrator's Force Remove (RemoveAgent);
+		// an agent that retires itself with its own --uninstall (which every reinstall runs) is NOT marked, so it can
+		// still come back. Once marked, the trigger below refuses every change of state away from 'retired' and any
+		// attempt to clear the mark, whatever code or SQL tries it (state endpoint, revoke/reinstate, uninstall/
+		// reinstall). Only the table owner can drop the trigger, which is the deliberate break-glass.
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS force_removed_at timestamptz`,
+		// Agents force-removed before this column existed: the audit log is the only record of it.
+		`UPDATE agents SET force_removed_at = NOW()
+		  WHERE force_removed_at IS NULL AND state = 'retired'
+		    AND EXISTS (SELECT 1 FROM audit_logs al WHERE al.action = 'agent.remove' AND al.resource = agents.agent_id)`,
+		`CREATE OR REPLACE FUNCTION agents_force_removed_is_final() RETURNS trigger AS $$
+		BEGIN
+			IF OLD.force_removed_at IS NOT NULL
+			   AND (NEW.state IS DISTINCT FROM 'retired' OR NEW.force_removed_at IS DISTINCT FROM OLD.force_removed_at) THEN
+				RAISE EXCEPTION 'agent % was force-removed and cannot be reactivated', OLD.agent_id
+					USING ERRCODE = 'check_violation';
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql`,
+		`DROP TRIGGER IF EXISTS agents_force_removed_final ON agents`,
+		`CREATE TRIGGER agents_force_removed_final BEFORE UPDATE ON agents
+			FOR EACH ROW EXECUTE FUNCTION agents_force_removed_is_final()`,
 		`CREATE TABLE IF NOT EXISTS fleet_settings (
 			key        text        PRIMARY KEY,
 			value      jsonb       NOT NULL,

@@ -27,6 +27,9 @@ func (h *Handler) RevokeAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.refuseIfForceRemoved(w, r, agentID) {
+		return
+	}
 	ctx := r.Context()
 	tx, err := h.db.Begin(ctx)
 	if err != nil {

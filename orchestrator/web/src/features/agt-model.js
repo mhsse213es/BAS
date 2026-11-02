@@ -248,3 +248,10 @@ export function fleetTrayConfirm(hide) {
     (hide ? 'Endpoint users will no longer see the agent icon. ' : '') +
     'Agents with their own per-agent setting keep it. Takes effect on each agent’s next heartbeat.';
 }
+
+// stateTargets: the lifecycle states the drawer offers as buttons for an agent now in `life`. A force-removed
+// agent is permanently retired (the server and the database refuse any change), so it is offered none.
+export function stateTargets(life, forceRemoved) {
+  if (forceRemoved) return [];
+  return ['active', 'quarantined', 'restricted', 'retired'].filter(function(s) { return s !== life; });
+}
