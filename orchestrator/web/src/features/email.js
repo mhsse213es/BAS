@@ -176,7 +176,13 @@ var CAMPAIGN_CATALOG = [
   { id: 'credential-phishing-url-chain', name: 'Credential Phishing — Static Lure Then Click-Time Bypass Probe' }
 ];
 
-var EG_CAN_RUN = (ROLE === 'admin' || ROLE === 'analyst');
+// Computed fresh on every call, not cached at module load: email.js and shell.js import each
+// other (email.js needs ROLE from shell.js, shell.js needs loadEmailTab from email.js), and
+// shell.js is reached mid-evaluation via globals.js before it assigns ROLE from localStorage --
+// a one-time `var EG_CAN_RUN = (ROLE === ...)` at this point in the file would permanently
+// capture ROLE's pre-initialization value (undefined), hiding every Run/Launch/Cancel button
+// for every role, including admin.
+function egCanRun() { return ROLE === 'admin' || ROLE === 'analyst'; }
 var EMAIL_TAB = 'campaigns';      // campaigns | templates
 var EMAIL_CAMPAIGNS_TAB = 'all';  // status chip
 var EMAIL_CAMPAIGN_Q = '';
@@ -323,7 +329,7 @@ function renderScenarioDrawer(id) {
       var r = latest[e.id];
       return '<div class="eml-exp"><div class="eml-exp-l"><span>' + x(e.label) + '</span><span class="tiny muted mono">' + x(e.id) + '</span></div>' +
         (r ? egStatusBadge(r.status) : '<span class="tiny muted">not run yet</span>') +
-        (EG_CAN_RUN ? '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'egRunExpectation', e.id) + '>&#9654; Run</button>' : '') + '</div>';
+        (egCanRun() ? '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'egRunExpectation', e.id) + '>&#9654; Run</button>' : '') + '</div>';
     }).join(''),
     CLOSE_BTN);
 }
@@ -336,12 +342,12 @@ function templateCard(t) {
   return '<div class="eml-card eml-tpl"><div class="eml-card-hd">' + chip('Campaign template', 'info') + '</div>' +
     '<div class="eml-card-n">' + x(t.name) + '</div><div class="tiny muted mono">' + x(t.id) + '</div>' +
     '<div class="eml-tpl-ft"><span class="muted eml-small">' + icon('mail') + ' Used ' + M.templateUse(EG_LISTS.campaigns, t.id) + '×</span>' +
-    (EG_CAN_RUN ? '<button type="button" class="btn btn-primary btn-sm"' + on('click', 'egLaunchCampaign', t.id) + '>' + icon('plus') + 'Launch</button>' : '') + '</div></div>';
+    (egCanRun() ? '<button type="button" class="btn btn-primary btn-sm"' + on('click', 'egLaunchCampaign', t.id) + '>' + icon('plus') + 'Launch</button>' : '') + '</div></div>';
 }
 export function openEmailCampaignDrawer() {
   EMAIL_DRAWER = { kind: 'new' };
   setDrawer('New Email Campaign', 'Choose a template to launch',
-    (EG_CAN_RUN ? '' : '<p class="muted eml-drawer-p">Your role cannot launch campaigns.</p>') +
+    (egCanRun() ? '' : '<p class="muted eml-drawer-p">Your role cannot launch campaigns.</p>') +
     '<div class="eml-tpl-list">' + CAMPAIGN_CATALOG.map(templateCard).join('') + '</div>', CLOSE_BTN);
 }
 
@@ -364,7 +370,7 @@ function renderCampaignDrawer(id, view) {
       }).join('');
   }
   setDrawer(M.campaignName(c, CAMPAIGN_CATALOG), c.id || id, body,
-    CLOSE_BTN + (EG_CAN_RUN && c.status === 'running' ? '<span class="grow"></span><button type="button" class="btn btn-outline btn-sm"' + on('click', 'egCancelCampaignClick', c.id) + '>Cancel campaign</button>' : ''));
+    CLOSE_BTN + (egCanRun() && c.status === 'running' ? '<span class="grow"></span><button type="button" class="btn btn-outline btn-sm"' + on('click', 'egCancelCampaignClick', c.id) + '>Cancel campaign</button>' : ''));
 }
 
 // Row click: opens the campaign drawer and fetches its stages.
@@ -446,7 +452,7 @@ function renderEmailCampaignRows() {
         '<td>' + egStatusBadge(c.status) + '</td>' +
         '<td>' + fmtDate(c.createdAt) + '</td>' +
         '<td>' + (c.completedAt ? ago(c.completedAt) : '<span class="muted">—</span>') + '</td>' +
-        '<td>' + (EG_CAN_RUN && (c.status === 'running')
+        '<td>' + (egCanRun() && (c.status === 'running')
           ? '<button class="btn btn-outline btn-sm"' + on('click', 'egCancelCampaignClick', c.id) + '>Cancel</button>'
           : '') +
         '</td></tr>';
