@@ -175,3 +175,5 @@ body.theme-light .sidebar-brand .brand-full.logo-onlight { box-shadow: 0 1px 4px
    would otherwise sit on "Loading..." forever are hidden until a successful reload. */
 .dp-g5 > .rk-failed { grid-column: 1 / -1; }
 #dash-view-operational.is-unavailable > :not(#hero-dashboard):not(#dop-kpis) { display: none; }
+#ed-kpi-row > .rk-failed { grid-column: 1 / -1; }
+#dash-view-executive.is-unavailable > :not(#hero-executive):not(#ed-kpi-row) { display: none; }

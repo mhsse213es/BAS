@@ -2,6 +2,7 @@
 // bar and the technique table card (the design demo's table chrome). Pure helpers live in tcv-model.js.
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { apicall } from '../core/api.js';
 import { showToast } from '../core/util.js';
 import { grid, card, hbars, bar, pill, empty, icon, searchBox } from '../core/kit.js';
@@ -194,6 +195,8 @@ export function loadCoverageMatrix() {
   if (host) host.innerHTML = card('', '<div class="tcv-state muted">Loading…</div>');
   apicall('/api/coverage/matrix' + (_actor ? '?actor=' + encodeURIComponent(_actor) : ''))
     .then(function(rows) {
+      var fail = failureOf(rows) || (rows && !Array.isArray(rows) ? { kind: 'error' } : null);
+      if (fail) { tcvUnavailable(fail, host, sum, flt); return; }
       _rows = Array.isArray(rows) ? rows : [];
       T.page = 0; T.sel = {};
       var h = M.heroStats(_rows);
@@ -207,14 +210,16 @@ export function loadCoverageMatrix() {
       var q = document.getElementById('cov-search'); if (q) q.value = F.q;
       paintHost();
     })
-    .catch(function(e) {
-      _rows = [];
-      heroDash();
-      setText('cov-actor-note', '');
-      if (sum) sum.innerHTML = '';
-      if (flt) flt.innerHTML = '';
-      if (host) host.innerHTML = card('', '<div class="tcv-state u-danger">Failed to load: ' + x(e.message) + '</div>');
-    });
+    .catch(function() { tcvUnavailable({ kind: 'error' }, host, sum, flt); });
+}
+// Failed load: an error with Retry and "—" counters, never an empty matrix.
+function tcvUnavailable(fail, host, sum, flt) {
+  _rows = [];
+  heroDash();
+  setText('cov-actor-note', '');
+  if (sum) sum.innerHTML = '';
+  if (flt) flt.innerHTML = '';
+  if (host) host.innerHTML = card('', failureHtml('the technique coverage matrix', fail, 'loadCoverageMatrix'));
 }
 
 // ── Table controls ──

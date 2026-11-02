@@ -4,12 +4,14 @@
 // given. Pure helpers: int-model.js. Every dynamic string is escaped; behaviour goes through data-on-*.
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureHtml } from '../core/load-state.js';
 import { apicall } from '../core/api.js';
 import { icon, empty, pill, filterBar, searchBox } from '../core/kit.js';
 import { setHeroStat } from './shell-ui.js';
 import * as M from './int-model.js';
 
 var ITSM = null, EPP = null;
+var FAIL = { itsm: null, epp: null }; // a failed connector load, so it is never drawn as 'no connectors configured'
 var T = { q: '', kind: '' };
 var TAXII = null; // null = not loaded, 'err' = failed, else the server's list
 
@@ -67,6 +69,17 @@ function paintGrid(all) {
 }
 
 export function paintIntegrationsView() {
+  var bad = FAIL.itsm || FAIL.epp;
+  if (bad) {
+    ['int-hs-total', 'int-hs-connected', 'int-hs-attention', 'int-hs-fresh'].forEach(function(id) { setHeroStat(id, '—'); });
+    setHidden('int-itsm-empty', true);
+    setHidden('int-epp-empty', true);
+    var bar = document.getElementById('int-filters');
+    if (bar) bar.innerHTML = '';
+    var g = document.getElementById('int-grid');
+    if (g) g.innerHTML = failureHtml('connectors', bad, 'loadIntegrations');
+    return;
+  }
   var all = rows();
   paintHero(all);
   setHidden('int-itsm-empty', !(ITSM && !ITSM.length));
@@ -74,8 +87,8 @@ export function paintIntegrationsView() {
   paintGrid(all);
 }
 
-export function setIntItsm(list) { ITSM = Array.isArray(list) ? list : []; paintIntegrationsView(); }
-export function setIntEpp(list) { EPP = Array.isArray(list) ? list : []; paintIntegrationsView(); }
+export function setIntItsm(list, fail) { FAIL.itsm = fail || null; ITSM = Array.isArray(list) ? list : []; paintIntegrationsView(); }
+export function setIntEpp(list, fail) { FAIL.epp = fail || null; EPP = Array.isArray(list) ? list : []; paintIntegrationsView(); }
 
 export function intQuery(el) { T.q = String((el && el.value) || ''); paintGrid(rows()); }
 export function setIntKind(k) { T.kind = String(k || ''); paintGrid(rows()); }

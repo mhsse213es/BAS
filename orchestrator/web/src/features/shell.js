@@ -472,7 +472,7 @@ document.addEventListener('keydown', function(e) {
 export function goToProfile() {
   showTab('profile');
   apicall('/api/me').then(function(u) {
-    if (!u || u.error) return;
+    if (!u || u.error) { document.getElementById('profile-username').textContent = 'Failed to load profile'; return; }
     var av = document.getElementById('profile-avatar');
     if (av) { av.textContent = avatarInitials(u.username); av.style.background = avatarColorFor(u.username); }
     document.getElementById('profile-username').textContent = u.username || '—';

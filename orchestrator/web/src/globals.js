@@ -59,6 +59,11 @@ import { loadReports } from './features/reports.js';
 import { loadRemediations } from './features/findings.js';
 import { loadDashboard } from './features/evidence.js';
 import { loadExercisesTab } from './features/openaev.js';
+import { loadVariantStats, loadVariantCoverage } from './features/variants.js';
+import { loadCoverage, loadUnifiedTechniques, loadThreatExposure } from './features/coverage.js';
+import { loadIntegrations } from './features/integrations.js';
+import { loadComplianceCards } from './features/rpt-view.js';
+import { loadUsers } from './features/evidence.js';
 
 export const ACTIONS = {
   setAccentColour,
@@ -67,6 +72,14 @@ export const ACTIONS = {
   loadRemediations,
   loadDashboard,
   loadExercisesTab,
+  loadVariantStats,
+  loadVariantCoverage,
+  loadCoverage,
+  loadUnifiedTechniques,
+  loadThreatExposure,
+  loadIntegrations,
+  loadComplianceCards,
+  loadUsers,
   _apCancelJob,
   _dismissLicenseGraceBanner,
   _toggleEMExtraScenario,

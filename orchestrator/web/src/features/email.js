@@ -1,6 +1,7 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
 import { covSegHtml } from './attack-path.js';
 import { ROLE } from './shell.js';
@@ -455,12 +456,19 @@ function renderEmailCampaignRows() {
 
 function loadEmailCampaigns() {
   apicall('/api/emailgw-campaigns?limit=50').then(function(list) {
+    var fail = failureOf(list) || (list && !Array.isArray(list) ? { kind: 'error' } : null);
+    if (fail) { emailListUnavailable('email-campaigns-body', 5, 'email campaigns', fail, 'loadEmailTab'); return; }
     list = Array.isArray(list) ? list : [];
     EG_LISTS.campaigns = list; renderEmailSummary();
     renderEmailCampaignToolbar(list);
     renderEmailTabs();
     renderEmailCampaignRows();
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) { emailListUnavailable('email-campaigns-body', 5, 'email campaigns', { kind: 'error' }, 'loadEmailTab'); showToast(e.message, 'err'); });
+}
+// Failed load: an error with Retry in the list body, never "No campaigns yet".
+function emailListUnavailable(id, cols, what, fail, retry) {
+  var tb = document.getElementById(id);
+  if (tb) tb.innerHTML = '<tr><td colspan="' + cols + '">' + failureHtml(what, fail, retry) + '</td></tr>';
 }
 
 export function egLaunchCampaign(templateId) {
@@ -495,6 +503,8 @@ export function setEmailRunsTab(v) { EMAIL_RUNS_TAB = v; loadEmailRuns(); }
 
 function loadEmailRuns() {
   apicall('/api/emailgw-runs?limit=50').then(function(list) {
+    var fail = failureOf(list) || (list && !Array.isArray(list) ? { kind: 'error' } : null);
+    if (fail) { emailListUnavailable('email-runs-body', 5, 'email runs', fail, 'loadEmailTab'); return; }
     list = Array.isArray(list) ? list : [];
     EG_LISTS.runs = list; renderEmailSummary();
     renderEmailRunsToolbar(list);
@@ -513,7 +523,7 @@ function loadEmailRuns() {
           '<td>' + (r.error ? '<span class="tiny u-danger">' + x(r.error) + '</span>' : '<span class="muted">—</span>') + '</td>' +
         '</tr>' + (expanded ? egRunDetailRowHtml(r) : '');
     }).join('');
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) { emailListUnavailable('email-runs-body', 5, 'email runs', { kind: 'error' }, 'loadEmailTab'); showToast(e.message, 'err'); });
 }
 
 function egRunDetailRowHtml(r) {

@@ -583,9 +583,12 @@ function loadTicketCandidates() {
 
 export function loadTicketingConfigs(cb) {
   apicall('/api/ticketing/configs').then(function(list) {
+    var fail = failureOf(list) || (list && !Array.isArray(list) ? { kind: 'error' } : null);
+    // cb gets (list, fail): callers that only need the list keep working; the Integrations page shows the failure.
+    if (fail) { _ticketingConfigs = []; if (cb) cb([], fail); return; }
     _ticketingConfigs = list || [];
     if (cb) cb(_ticketingConfigs);
-  }).catch(function() { _ticketingConfigs = []; if (cb) cb([]); });
+  }).catch(function() { _ticketingConfigs = []; if (cb) cb([], { kind: 'error' }); });
 }
 
 // ── Dashboard ITSM widget ───────────────────────────────────────────────────

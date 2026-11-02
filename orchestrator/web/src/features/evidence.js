@@ -1003,10 +1003,21 @@ export function openCmdk() {
 
 export function loadUsers() {
   apicall('/api/users').then(function(data) {
+    var fail = failureOf(data) || (data && !Array.isArray(data) ? { kind: 'error' } : null);
+    if (fail) { usersUnavailable(fail); return; }
     document.getElementById('users-cnt').textContent = data.length;
     renderUsersInsights(data);
     setUsersRows(data);
-  }).catch(function(e) { showToast('Failed to load users: ' + e.message, 'err'); });
+  }).catch(function(e) { usersUnavailable({ kind: 'error' }); showToast('Failed to load users: ' + e.message, 'err'); });
+}
+// Failed load: an error with Retry instead of "Loading..." forever or "No users found".
+function usersUnavailable(fail) {
+  var cnt = document.getElementById('users-cnt');
+  if (cnt) cnt.textContent = '—';
+  var ins = document.getElementById('users-insights');
+  if (ins) ins.innerHTML = '';
+  var box = document.getElementById('users-box');
+  if (box) box.innerHTML = failureHtml('users', fail, 'loadUsers');
 }
 
 export function openCreateUser() {

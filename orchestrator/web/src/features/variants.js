@@ -2,6 +2,7 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { showToast } from '../core/util.js';
 import { renderGroupCheckboxList } from './adversaries.js';
 import { resolveGroupTargetAgents } from './attack-path.js';
@@ -85,6 +86,9 @@ export function loadVariantStats() {
   apicall('/api/variants/stats').then(function(s) {
     var el = document.getElementById('vex-stats');
     if (!el) return;
+    var fail = failureOf(s);
+    // A failed request is not "0 variants executed".
+    if (fail) { el.innerHTML = failureHtml('variant statistics', fail, 'loadVariantStats'); return; }
     var artTech = s.artTechniqueCount || 0;
     var artAtomic = s.artAtomicCount || 0;
     var perFamily = s.variantsPerFamily || 56;
@@ -100,7 +104,10 @@ export function loadVariantStats() {
         'How many of the ' + artTech + ' ART techniques have at least one custom payload family attached, giving them extra variant coverage beyond their standard ART atomic tests.')
     ]);
     _updateSweepVariantCount(s.availableVariants);
-  }).catch(function() {});
+  }).catch(function() {
+    var el = document.getElementById('vex-stats');
+    if (el) el.innerHTML = failureHtml('variant statistics', { kind: 'error' }, 'loadVariantStats');
+  });
 }
 
 export function vexStatCard(label, val, col, sub, help) {
@@ -563,6 +570,8 @@ export function loadVariantCoverage() {
   if (!el) return;
   el.innerHTML = empty('layers', 'Loading…');
   apicall('/api/variants/coverage').then(function(rows) {
+    var fail = failureOf(rows) || (rows && !Array.isArray(rows) ? { kind: 'error' } : null);
+    if (fail) { el.innerHTML = failureHtml('variant coverage', fail, 'loadVariantCoverage'); return; }
     if (!rows || !rows.length) {
       renderVexHero([]);
       el.innerHTML = empty('layers', 'No variant runs yet', 'Run variants on a technique to see coverage here.');
