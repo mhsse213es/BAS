@@ -1,6 +1,7 @@
 package validationlab
 
 import (
+	"fmt"
 	"context"
 	"os"
 	"testing"
@@ -527,5 +528,65 @@ func TestRunOnce_ConcurrentClaimOnlyOneWins(t *testing.T) {
 			t.Fatalf("runOnce errors: %v, %v", err1, err2)
 		}
 		assertLifecycle(t, reg, draft, contentregistry.LifecycleValidating)
+	})
+}
+
+// seedExecutionAttempts records n EXECUTION validation attempts for a version, each created `age` ago. Every
+// dispatch writes exactly one EXECUTION row, so rows are the attempt count -- even when the final outcome could
+// not be written back and the row is still the NO_DATA placeholder.
+func seedExecutionAttempts(t *testing.T, pool *pgxpool.Pool, versionID string, n int, age time.Duration) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO content_validations (content_version_id, level, outcome, validator, validator_version, created_at)
+			 VALUES ($1, 'EXECUTION', 'FAIL', 'validationlab', '1', NOW() - $2::interval)`,
+			versionID, fmt.Sprintf("%d seconds", int(age.Seconds()))); err != nil {
+			t.Fatalf("seed attempt: %v", err)
+		}
+	}
+}
+
+// A version that keeps failing validation goes back to DRAFT, and used to be picked again on the very next tick,
+// forever. On a real lab agent that is a live scenario re-run every few minutes. After maxValidationAttempts
+// it must stay out of the queue until a person changes it.
+func TestRunOnce_StopsRetryingAfterMaxAttempts(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-cap", nonDestructiveArtifact("vl-cap"))
+		seedExecutionAttempts(t, pool, draft, maxValidationAttempts, 24*time.Hour)
+
+		o := NewOrchestrator(pool, reg, nil, "lab-agent-cap", 0)
+		if err := o.runOnce(context.Background()); err != nil {
+			t.Fatalf("runOnce: %v", err)
+		}
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleDraft) // not claimed
+	})
+}
+
+func TestRunOnce_WaitsOutTheRetryBackoff(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-backoff", nonDestructiveArtifact("vl-backoff"))
+		seedExecutionAttempts(t, pool, draft, 1, 1*time.Minute) // one attempt a minute ago
+
+		o := NewOrchestrator(pool, reg, nil, "lab-agent-backoff", 0)
+		if err := o.runOnce(context.Background()); err != nil {
+			t.Fatalf("runOnce: %v", err)
+		}
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleDraft) // too soon to retry
+	})
+}
+
+func TestRunOnce_RetriesOnceTheBackoffHasPassed(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-retry", nonDestructiveArtifact("vl-retry"))
+		seedExecutionAttempts(t, pool, draft, 1, 2*validationRetryBackoff) // one old attempt
+
+		o := NewOrchestrator(pool, reg, nil, "lab-agent-retry", 0)
+		if err := o.runOnce(context.Background()); err != nil {
+			t.Fatalf("runOnce: %v", err)
+		}
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleValidating) // claimed again
 	})
 }

@@ -43,6 +43,17 @@ func NewOrchestrator(pool *pgxpool.Pool, reg *contentregistry.Registry, d dispat
 	}
 }
 
+// A version that does not pass validation goes back to DRAFT. Without a limit it was picked again on the very
+// next tick, so a failing scenario re-ran on the lab agent every few minutes for as long as the server was up
+// (live steps, on a real machine). These bound that: at most maxValidationAttempts runs per version, and no
+// sooner than validationRetryBackoff after the previous one. Attempts are counted from EXECUTION rows, one per
+// dispatch, so the limit still holds if an outcome could not be written back and the row is still NO_DATA.
+// A version that hits the limit stays DRAFT until a person changes it (a new version starts at zero).
+const (
+	maxValidationAttempts  = 3
+	validationRetryBackoff = 30 * time.Minute
+)
+
 // selectEligible returns DRAFT content_version ids that are genuinely
 // factory-originated. ActorComposer is always factory output; ActorGenerator
 // is shared by factory generation (which carries a 'generated_for' provenance
@@ -57,8 +68,14 @@ func (o *Orchestrator) selectEligible(ctx context.Context) ([]string, error) {
 		       OR ( cv.created_by = $1 AND EXISTS (
 		              SELECT 1 FROM content_version_threats t
 		               WHERE t.content_version_id = cv.id AND t.relationship_kind = 'generated_for') ) )
+		    AND (SELECT COUNT(*) FROM content_validations v
+		          WHERE v.content_version_id = cv.id AND v.level = 'EXECUTION') < $3
+		    AND NOT EXISTS (SELECT 1 FROM content_validations v
+		          WHERE v.content_version_id = cv.id AND v.level = 'EXECUTION'
+		            AND v.created_at > NOW() - make_interval(secs => $4))
 		  ORDER BY cv.created_at ASC`,
-		contentregistry.ActorGenerator, contentregistry.ActorComposer)
+		contentregistry.ActorGenerator, contentregistry.ActorComposer,
+		maxValidationAttempts, validationRetryBackoff.Seconds())
 	if err != nil {
 		return nil, err
 	}
