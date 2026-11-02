@@ -1,0 +1,61 @@
+/* Design tokens: type scale, spacing scale, complete status colours.
+ *
+ * Step 1 of the redesign (docs/ui-redesign/04-tokens.md): every value below is a value the console ALREADY
+ * uses. Adopting a token must not change a pixel. Consolidating near-duplicates (12.5px -> 12px, 10px -> 12px,
+ * three reds -> one) is a separate, deliberate refinement step, so regressions stay attributable.
+ *
+ * Colour tokens (--bg, --accent, --danger ...) stay in app.css with the four theme overrides. */
+
+:root {
+  /* Type scale (px sizes already in use; rem sizes such as 0.78rem and half-pixel sizes are listed in the doc). */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-display: 24px;
+
+  /* Spacing scale. Named by value on purpose: 6, 10 and 14 are off a 4px grid today and keep their values here;
+     the refinement step remaps them in one place. */
+  --sp-2: 2px;
+  --sp-4: 4px;
+  --sp-6: 6px;
+  --sp-8: 8px;
+  --sp-10: 10px;
+  --sp-12: 12px;
+  --sp-14: 14px;
+  --sp-16: 16px;
+  --sp-20: 20px;
+  --sp-24: 24px;
+  --sp-32: 32px;
+}
+
+/* On body, not :root: these reference themed tokens, and var() inside a custom property resolves where it is
+   declared (the themes override on body). */
+body {
+  /* Status: one name per meaning. Foreground text, solid colour, tinted background, border. */
+  --status-ok-fg: var(--success-text);
+  --status-ok: var(--success);
+  --status-ok-bg: var(--success-dim);
+  --status-ok-border: rgba(34,211,166,0.35);
+
+  --status-warn-fg: var(--warning-text);
+  --status-warn: var(--warning);
+  --status-warn-bg: var(--warning-dim);
+  --status-warn-border: var(--warning-border);
+
+  --status-bad-fg: var(--danger-text);
+  --status-bad: var(--danger);
+  --status-bad-bg: var(--danger-dim);
+  --status-bad-border: var(--danger-border);
+
+  --status-info-fg: var(--info-text);
+  --status-info: var(--accent);
+  --status-info-bg: var(--accent-dim);
+  --status-info-border: var(--accent-border);
+
+  --status-muted-fg: #94a3b8;
+  --status-muted: var(--muted);
+  --status-muted-bg: rgba(100,116,139,.12);
+  --status-muted-border: rgba(100,116,139,.25);
+}

@@ -1,5 +1,6 @@
 /* CSS bundle entry (G1e spec 4.2): app.css in cascade layer "app"; the
    inline-equivalent rules unlayered after it. */
+@import "./tokens.css" layer(app);
 @import "./app.css" layer(app);
 @import "./kit.css" layer(app);
 @import "./rich-g5.css" layer(app);
