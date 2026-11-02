@@ -94,6 +94,14 @@ func EnsureAppRole(ctx context.Context, pool *pgxpool.Pool, appPassword string) 
 		`REVOKE UPDATE, DELETE ON content_safety_verdicts FROM ` + appRole,
 		`REVOKE DELETE ON scenarios FROM ` + appRole,
 		`REVOKE UPDATE, DELETE ON content_validations FROM ` + appRole,
+		// ...but the validation lab must resolve the NO_DATA placeholder row it
+		// writes at dispatch into the terminal outcome -- a column-scoped UPDATE
+		// (never a blanket one) keeps the table otherwise append-only. Without
+		// this, factory validation fails with SQLSTATE 42501 and nothing reaches
+		// VALIDATED. Must come after the REVOKE above. See
+		// validationlab.recordExecutionOutcome and
+		// TestEnsureAppRole_ContentValidationsOutcomeColumnsUpdatable.
+		`GRANT UPDATE (outcome, run_id, detail) ON content_validations TO ` + appRole,
 		`REVOKE UPDATE, DELETE ON content_registry_state FROM ` + appRole,
 
 		// TCV SLA event ledger (spec 2026-10-31 §6): append-only -- INSERT and
