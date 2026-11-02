@@ -36,3 +36,14 @@ test('funnelStages and qualityLines', () => {
   assert.equal(q[0].text, 'Stale sources: OTX');
   assert.deepEqual(qualityLines({}).map((l) => l.text), ['No stale sources', '0 stuck in validation']);
 });
+
+test('qualityLines reports scenarios the validation lab stopped retrying, and stays quiet otherwise', () => {
+  assert.equal(qualityLines({ staleSources: [], staleValidations: 0, stalledValidations: [] }).length, 2);
+  const one = qualityLines({ stalledValidations: [{ contentId: 'intel-1', version: 1, attempts: 3 }] });
+  assert.equal(one.length, 3);
+  assert.equal(one[2].tone, 'warn');
+  assert.equal(one[2].text, '1 scenario stopped after 3 failed validation attempts and needs editing: intel-1 v1');
+  const many = qualityLines({ stalledValidations: Array.from({ length: 7 }, (_, i) => ({ contentId: 'c' + i, version: 1, attempts: 3 })) });
+  assert.match(many[2].text, /^7 scenarios stopped/);
+  assert.match(many[2].text, /and 2 more$/);
+});

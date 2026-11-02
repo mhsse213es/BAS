@@ -64,10 +64,20 @@ export function qualityLines(dq) {
   dq = dq || {};
   var stale = dq.staleSources || [];
   var stuck = n(dq.staleValidations);
-  return [
+  var lines = [
     { tone: stale.length ? 'warn' : 'ok', text: stale.length ? 'Stale sources: ' + stale.join(', ') : 'No stale sources' },
     { tone: stuck > 0 ? 'warn' : 'ok', text: stuck + ' stuck in validation' },
   ];
+  // Scenarios the validation lab gave up on stay DRAFT until someone changes them; say so, because from the
+  // outside they look like a slow pipeline. Shown only when there are some, so a healthy factory stays quiet.
+  var stalled = dq.stalledValidations || [];
+  if (stalled.length) {
+    var names = stalled.slice(0, 5).map(function(s) { return s.contentId + ' v' + s.version; }).join(', ');
+    var more = stalled.length > 5 ? ' and ' + (stalled.length - 5) + ' more' : '';
+    lines.push({ tone: 'warn', text: stalled.length + ' scenario' + (stalled.length === 1 ? '' : 's') + ' stopped after ' +
+      stalled[0].attempts + ' failed validation attempts and ' + (stalled.length === 1 ? 'needs' : 'need') + ' editing: ' + names + more });
+  }
+  return lines;
 }
 
 // ── Metric tiles ─────────────────────────────────────────────────────────────

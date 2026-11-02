@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"github.com/audspect/bas/internal/contentregistry"
 	"context"
 	"time"
 
@@ -208,6 +209,16 @@ func lifecycleFunnel(ctx context.Context, pool *pgxpool.Pool) (LifecycleFunnel, 
 type DataQuality struct {
 	StaleSources     []string `json:"staleSources"`
 	StaleValidations int      `json:"staleValidations"`
+	// StalledValidations are DRAFT scenarios the validation lab has stopped retrying because they used up
+	// their attempts. They stay DRAFT until a person changes them, so without this they just look slow.
+	StalledValidations []StalledValidation `json:"stalledValidations"`
+}
+
+// StalledValidation is one scenario that used up its validation attempts.
+type StalledValidation struct {
+	ContentID string `json:"contentId"`
+	Version   int    `json:"version"`
+	Attempts  int    `json:"attempts"`
 }
 
 // dataQuality reports sources with no successful sync in staleAfter (this
@@ -255,7 +266,31 @@ func dataQuality(ctx context.Context, pool *pgxpool.Pool, staleAfter time.Durati
 		return DataQuality{}, err
 	}
 
-	return DataQuality{StaleSources: staleSources, StaleValidations: staleValidations}, nil
+	stalledRows, err := pool.Query(ctx, `
+		SELECT cv.content_id, cv.version, COUNT(*)
+		FROM content_versions cv
+		JOIN content_validations v ON v.content_version_id = cv.id AND v.level = 'EXECUTION'
+		WHERE cv.lifecycle = 'DRAFT'
+		GROUP BY cv.id, cv.content_id, cv.version
+		HAVING COUNT(*) >= $1
+		ORDER BY cv.content_id, cv.version`, contentregistry.MaxValidationAttempts)
+	if err != nil {
+		return DataQuality{}, err
+	}
+	defer stalledRows.Close()
+	stalled := []StalledValidation{}
+	for stalledRows.Next() {
+		var sv StalledValidation
+		if err := stalledRows.Scan(&sv.ContentID, &sv.Version, &sv.Attempts); err != nil {
+			return DataQuality{}, err
+		}
+		stalled = append(stalled, sv)
+	}
+	if err := stalledRows.Err(); err != nil {
+		return DataQuality{}, err
+	}
+
+	return DataQuality{StaleSources: staleSources, StaleValidations: staleValidations, StalledValidations: stalled}, nil
 }
 
 // minTrendPoints is the smallest number of real data points the UI will

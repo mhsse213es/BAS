@@ -88,7 +88,7 @@ func NewOrchestrator(pool *pgxpool.Pool, reg *contentregistry.Registry, d dispat
 // database writes fail and no row exists, as when the app role lacked UPDATE on content_validations).
 // A version that hits the limit stays DRAFT until a person changes it (a new version starts at zero).
 const (
-	maxValidationAttempts  = 3
+	maxValidationAttempts  = contentregistry.MaxValidationAttempts
 	validationRetryBackoff = 30 * time.Minute
 )
 

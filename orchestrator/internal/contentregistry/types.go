@@ -102,3 +102,7 @@ type ErrIllegalTransition struct {
 func (e *ErrIllegalTransition) Error() string {
 	return fmt.Sprintf("illegal lifecycle transition %s -> %s: %s", e.From, e.To, e.Reason)
 }
+
+// MaxValidationAttempts is how many times the validation lab will run one version before leaving it DRAFT for a
+// person to change. Shared so the console can report exactly the threshold the lab enforces.
+const MaxValidationAttempts = 3
