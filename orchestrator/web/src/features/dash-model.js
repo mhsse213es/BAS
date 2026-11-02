@@ -175,13 +175,19 @@ export function dailySeries(runs, days, nowMs) {
 }
 
 // groupHealth: share of each agent group that is online (retired agents are left out).
+// isAgentOnline: the backend reports a connected agent as 'online', 'idle' or 'busy' and a stale one as 'offline'
+// (models.EffectiveAgentStatus), so online means anything that is not offline or retired. Matches the posture API.
+export function isAgentOnline(a) {
+  var st = a && a.status;
+  return !!st && st !== 'offline' && st !== 'retired' && (a.state !== 'retired');
+}
 export function groupHealth(agents) {
   var m = {};
   arr(agents).filter(function(a) { return a.state !== 'retired' && a.status !== 'retired'; }).forEach(function(a) {
     var n = a.groupName || 'Ungrouped';
     var g = m[n] || (m[n] = { name: n, online: 0, total: 0 });
     g.total++;
-    if (a.status === 'online') g.online++;
+    if (isAgentOnline(a)) g.online++;
   });
   return Object.keys(m).map(function(k) {
     var g = m[k]; g.pct = g.total ? Math.round(g.online / g.total * 100) : 0; return g;
@@ -293,7 +299,9 @@ export function execInsights(trends, current, exposure) {
   var plural = function(n, w) { return n + ' ' + (n === 1 ? w : w === 'open weakness' ? 'open weaknesses' : w + 's'); };
   // Detection coverage and exposure history are deliberately NOT narrated: stored daily points for them
   // predate measurability tracking (placeholder 100s, all-asset averages), so no comparison is trustworthy.
-  if (t.length >= 2) {
+  var rp = riskPoints(t);
+  if (current && current.riskMeasurable === true && rp.length >= 2) {
+    first = rp[0]; last = rp[rp.length - 1];
     var dr = last.avgRiskScore - first.avgRiskScore;
     out.push({ icon: dr > 0 ? 'alert' : 'check', tab: 'findings',
       title: dr === 0 ? 'Risk score is unchanged at ' + last.avgRiskScore : 'Risk score ' + (dr > 0 ? 'rose ' : 'fell ') + plural(Math.abs(dr), 'point'),
@@ -304,7 +312,8 @@ export function execInsights(trends, current, exposure) {
       title: exposure.overThreshold ? plural(exposure.overThreshold, 'open weakness') + ' older than ' + exposure.thresholdDays + ' days' : 'No weakness has been open longer than ' + exposure.thresholdDays + ' days',
       desc: exposure.openCount + ' open · longest ' + exposure.worstDaysOpen + ' days · median ' + exposure.medianDaysOpen + ' days.' });
   }
-  if (t.length >= 2 && first.assetCount !== last.assetCount) {
+  if (t.length >= 2 && t[0].assetCount !== t[t.length - 1].assetCount) {
+    first = t[0]; last = t[t.length - 1];
     out.push({ icon: 'agents', tab: 'agents', title: 'Fleet ' + (last.assetCount > first.assetCount ? 'grew' : 'shrank') + ' from ' + first.assetCount + ' to ' + last.assetCount + ' assets',
       desc: 'Assets with an enrolled agent or discovered by the platform.' });
   }
@@ -380,6 +389,21 @@ export var LEGACY_TREND_NOTE = 'Historical trend unavailable due to legacy measu
 
 // exposureKpi: the Exposure score tile. Higher is better (100 minus weighted risk). The figure is the mean over
 // MEASURED assets only; the sub-line states how many of the fleet that is. No trend is drawn.
+// riskKpi: the Risk score tile (lower is better). With no scored run in the window the backend average is a bare
+// 0, which would read as a perfect score, so it is shown as not measurable. Points flagged false (no scored run
+// that day) are dropped from the trend; legacy points (null) cannot be told apart and are kept.
+function riskPoints(trends) {
+  return (trends || []).filter(function(p) { return p && p.riskMeasurable !== false && typeof p.avgRiskScore === 'number'; });
+}
+export function riskKpi(current, trends) {
+  if (!current || current.riskMeasurable !== true) {
+    return { value: '—', sub: 'Not measurable: no scored runs in the last 30 days', tone: 'muted', spark: null, measurable: false };
+  }
+  var series = riskPoints(trends).map(function(p) { return p.avgRiskScore; });
+  var d = trendDelta(series, true);
+  return { value: current.avgRiskScore, sub: d.text, tone: d.tone === 'muted' ? 'accent' : d.tone, spark: series.length >= 2 ? series : null, measurable: true };
+}
+
 // A trend is drawn only from daily points stamped as measured (flag === true). Legacy rows (null) and
 // unmeasurable days (false) are never interpolated or counted; fewer than two measured points means no trend.
 function measuredSeries(trends, valueKey, flagKey) {
@@ -411,6 +435,7 @@ export function detectionKpi(current, trends) {
 export function heroValues(current) {
   var c = current || {};
   return {
+    risk: c.riskMeasurable === true ? c.avgRiskScore : '—',
     exposure: c.exposureMeasurable === true ? c.exposureScore : '—',
     detection: c.detectionMeasurable === true ? c.detectionCoverage + '%' : '—',
   };

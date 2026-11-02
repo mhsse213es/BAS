@@ -63,7 +63,7 @@ function renderKpis() {
   // Age of the OLDEST open finding (not an attack-surface measure). Clicking opens that finding.
   // Clicking opens the oldest finding itself, not the whole list.
   var oldestClick = oldest ? { action: 'openFindingFromDashboard', args: [oldest.id] } : { action: 'showTab', args: ['findings'] };
-  tiles.push(kpi({ label: 'Oldest open finding', value: open ? maxAge + 'd' : '—', icon: 'clock', tone: maxAge >= 90 ? 'bad' : maxAge >= 30 ? 'warn' : 'ok', action: oldestClick.action, args: oldestClick.args,
+  tiles.push(kpi({ label: 'Oldest open finding', value: (open && open.length) ? maxAge + 'd' : '—', icon: 'clock', tone: maxAge >= 90 ? 'bad' : maxAge >= 30 ? 'warn' : 'ok', action: oldestClick.action, args: oldestClick.args,
     sub: open ? (open.length && oldest ? 'open ' + maxAge + ' d · ' + (oldest.techniqueId || 'unknown') : 'no open findings') : 'age of the oldest open finding',
     spark: f ? M.oldestOpenAgeSeries(f, Date.now(), 8) : null }));
   var pw = M.postureWindow(runs, 8);
@@ -178,7 +178,7 @@ function renderEndpoint() {
       ring(pct, 76, 7, colorOf(toneOf(pct)), Math.round(pct) + '%') +
       '<div><div class="dp-big"><span class="dp-ok">' + x(p.onlineAgents) + '</span> / <span class="dp-bad">' + x(p.offlineAgents) + '</span></div><div class="muted tiny">' + x(p.totalAgents) + ' total agents</div></div></div>' +
       (flags ? '<div class="dp-flags">' + flags + '</div>' : '') + '</section>');
-    cell('dop-ep-life', '<section class="rk-card dp-ep"><div class="dp-lbl">LIFECYCLE</div>' + chartSlot({ type: 'donut', h: 150, center: p.activeAgents, centerSub: 'agents', segments: [
+    cell('dop-ep-life', '<section class="rk-card dp-ep"><div class="dp-lbl">LIFECYCLE</div>' + chartSlot({ type: 'donut', h: 150, center: p.activeAgents, centerSub: 'active', segments: [
       { label: 'Active', value: p.activeAgents, color: CHART_COLORS.ok }, { label: 'Restricted', value: p.restrictedAgents, color: CHART_COLORS.warn },
       { label: 'Quarantined', value: p.quarantinedAgents, color: CHART_COLORS.bad }, { label: 'Retired', value: p.retiredAgents, color: CHART_COLORS.muted }] }) + '</section>');
   }
@@ -247,7 +247,7 @@ function renderCE() {
   segs.push({ label: 'Missed', value: e.missed, color: CHART_COLORS.bad });
   if (e.other > 0) segs.push({ label: 'Not tested', value: e.other, color: CHART_COLORS.muted });
   var oc = M.openByControl(D.findings);
-  cell('dop-ce', card('Control effectiveness', chartSlot({ type: 'donut', h: 150, center: Math.round(e.prevented / base * 100) + '%', centerSub: 'PREVENTED', segments: segs }) +
+  cell('dop-ce', card('Control effectiveness', chartSlot({ type: 'donut', h: 150, center: (e.prevented + e.detected + e.missed) ? Math.round(e.prevented / base * 100) + '%' : '—', centerSub: 'PREVENTED', segments: segs }) +
     (e.detected === 0 ? '<div class="rk-note">Detected-only appears once a SIEM/EDR integration is reporting alerts.</div>' : '') +
     (oc.length ? '<div class="dp-sub">Open findings by expected control</div>' + hbars(oc.slice(0, 5).map(function(r) { return [r[0], r[1] / oc[0][1] * 100, 'bad', String(r[1])]; })) : ''), { actions: link('Breakdown →', 'openControlDetail') + link('Open findings →', 'openFindingsWithStatus', ['open']) }));
 }

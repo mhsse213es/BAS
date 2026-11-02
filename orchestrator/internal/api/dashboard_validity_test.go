@@ -24,13 +24,13 @@ func TestGetDashboardTrends_ReportsMeasurementValidityPerPoint(t *testing.T) {
 		// Day with nothing measurable: placeholders stored, flagged false.
 		mustExecAPI(t, pool, `
 			INSERT INTO dashboard_snapshots (snapshot_date, avg_risk_score, exposure_score, detection_coverage, asset_count,
-				exposure_measurable, detection_measurable, exposure_measured_assets)
-			VALUES (CURRENT_DATE - INTERVAL '2 days', 41, 0, 100, 4, false, false, 0)`)
+				exposure_measurable, detection_measurable, exposure_measured_assets, risk_measurable)
+			VALUES (CURRENT_DATE - INTERVAL '2 days', 41, 0, 100, 4, false, false, 0, false)`)
 		// Measured day, including a genuine zero detection coverage.
 		mustExecAPI(t, pool, `
 			INSERT INTO dashboard_snapshots (snapshot_date, avg_risk_score, exposure_score, detection_coverage, asset_count,
-				exposure_measurable, detection_measurable, exposure_measured_assets)
-			VALUES (CURRENT_DATE - INTERVAL '1 days', 42, 70, 0, 4, true, true, 3)`)
+				exposure_measurable, detection_measurable, exposure_measured_assets, risk_measurable)
+			VALUES (CURRENT_DATE - INTERVAL '1 days', 42, 70, 0, 4, true, true, 3, true)`)
 
 		h := dashboardHandler(t, pool)
 		rec := httptest.NewRecorder()
@@ -43,12 +43,16 @@ func TestGetDashboardTrends_ReportsMeasurementValidityPerPoint(t *testing.T) {
 			ExposureMeasurable     *bool `json:"exposureMeasurable"`
 			DetectionMeasurable    *bool `json:"detectionMeasurable"`
 			ExposureMeasuredAssets *int  `json:"exposureMeasuredAssets"`
+			RiskMeasurable         *bool `json:"riskMeasurable"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &pts); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
 		if len(pts) != 3 {
 			t.Fatalf("points = %d, want 3", len(pts))
+		}
+		if pts[0].RiskMeasurable != nil || pts[1].RiskMeasurable == nil || *pts[1].RiskMeasurable || pts[2].RiskMeasurable == nil || !*pts[2].RiskMeasurable {
+			t.Errorf("risk validity must be null/false/true for legacy/unmeasured/measured, got %v %v %v", pts[0].RiskMeasurable, pts[1].RiskMeasurable, pts[2].RiskMeasurable)
 		}
 		if pts[0].ExposureMeasurable != nil || pts[0].DetectionMeasurable != nil || pts[0].ExposureMeasuredAssets != nil {
 			t.Errorf("legacy row must report null validity, got %+v", pts[0])
@@ -94,6 +98,10 @@ func TestSnapshotAndPrune_RecordsMeasurementValidity(t *testing.T) {
 			t.Fatalf("validity must be recorded, got exposure=%v detection=%v measured=%v", expM, detM, measured)
 		}
 		// An empty fleet has nothing to measure: recorded as not measurable, never as a trusted 100.
+		var riskM *bool
+		if err := pool.QueryRow(ctx, `SELECT risk_measurable FROM dashboard_snapshots WHERE snapshot_date = CURRENT_DATE`).Scan(&riskM); err != nil || riskM == nil || *riskM {
+			t.Errorf("empty fleet must record risk_measurable=false (err %v, got %v)", err, riskM)
+		}
 		if *expM || *detM || *measured != 0 {
 			t.Errorf("empty fleet recorded exposure=%v detection=%v measured=%d, want false/false/0", *expM, *detM, *measured)
 		}

@@ -1296,6 +1296,9 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE dashboard_snapshots ADD COLUMN IF NOT EXISTS exposure_measurable boolean`,
 		`ALTER TABLE dashboard_snapshots ADD COLUMN IF NOT EXISTS detection_measurable boolean`,
 		`ALTER TABLE dashboard_snapshots ADD COLUMN IF NOT EXISTS exposure_measured_assets int`,
+		// Same convention for the risk average: false = no scored run in the window (avg_risk_score is a bare 0),
+		// NULL = legacy row, true = averaged over at least one scored run.
+		`ALTER TABLE dashboard_snapshots ADD COLUMN IF NOT EXISTS risk_measurable boolean`,
 
 		// Phase 7 Multi-Tenancy — tenant_id on every operational table.
 		// DEFAULT 'default' backfills existing rows and covers every INSERT

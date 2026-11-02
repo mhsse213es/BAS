@@ -100,6 +100,9 @@ func TestCompute_AvgRiskScoreFromRecentRuns(t *testing.T) {
 		if snap.AvgRiskScore != 50 {
 			t.Errorf("AvgRiskScore = %d, want 50 (avg of 42 and 58, excluding the 90-day-old run)", snap.AvgRiskScore)
 		}
+		if !snap.RiskMeasurable {
+			t.Error("RiskMeasurable = false with two scored runs in the window, want true")
+		}
 	})
 }
 

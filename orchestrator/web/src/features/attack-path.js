@@ -103,8 +103,8 @@ export function loadExecDashboard() {
     apicall('/api/findings').catch(function() { return []; })
   ]).then(function(res) {
     var cur = res[0] || {};
-    setHeroStat('hs-exec-risk', cur.avgRiskScore != null ? cur.avgRiskScore : '—');
     var hero = heroValues(cur);
+    setHeroStat('hs-exec-risk', hero.risk);
     setHeroStat('hs-exec-exposure', hero.exposure);
     setHeroStat('hs-exec-detect', hero.detection);
     setHeroStat('hs-exec-fleet', cur.assetCount != null ? cur.assetCount : '—');

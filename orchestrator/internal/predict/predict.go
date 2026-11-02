@@ -62,6 +62,7 @@ func buildForecast(ctx context.Context, pool *pgxpool.Pool) (Forecast, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT to_char(snapshot_date, 'YYYY-MM-DD'), avg_risk_score
 		FROM dashboard_snapshots
+		WHERE risk_measurable IS DISTINCT FROM false
 		ORDER BY snapshot_date ASC`)
 	if err != nil {
 		return Forecast{}, err

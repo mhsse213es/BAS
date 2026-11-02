@@ -6,7 +6,7 @@ import { chartSlot, CHART_COLORS } from '../core/charts.js';
 import { kpi, grid, card, chip, empty, icon, seg } from '../core/kit.js';
 import { sevTone } from './rich-g3.js';
 import { gaugeRing } from './dash-rich.js';
-import { execInsights, riskBand, topRisks, trendDelta, exposureKpi, detectionKpi } from './dash-model.js';
+import { execInsights, riskBand, topRisks, trendDelta, riskKpi, exposureKpi, detectionKpi } from './dash-model.js';
 
 function cell(id, html) { var el = document.getElementById(id); if (el) el.innerHTML = html; }
 
@@ -27,9 +27,9 @@ function measuredTile(label, ic, m, tab) {
 export function renderExecKpis(current, trends) {
   trends = trends || [];
   var pick = function(k) { return trends.map(function(p) { return p[k]; }); };
-  var ex = exposureKpi(current, trends), det = detectionKpi(current, trends);
+  var rk = riskKpi(current, trends), ex = exposureKpi(current, trends), det = detectionKpi(current, trends);
   cell('ed-kpi-row', grid(4, [
-    kpiCard('Risk score (lower is better)', current.avgRiskScore, pick('avgRiskScore'), 'shield', true, 'runs'),
+    measuredTile('Risk score (lower is better)', 'shield', rk, 'runs'),
     measuredTile(ex.label || 'Exposure score', 'alert', ex, 'exposure'),
     measuredTile('Detection coverage', 'mapped', det, 'coverage'),
     kpiCard('Fleet assets', current.assetCount, pick('assetCount'), 'server', false, 'agents'),
@@ -57,6 +57,7 @@ export function renderExecForecast(fc) {
 
 export function renderExecPosture(current) {
   if (!current) { cell('ed-posture', card('Overall risk', empty('shield', 'No data yet'))); return; }
+  if (current.riskMeasurable !== true) { cell('ed-posture', card('Overall risk', empty('shield', 'Not measurable', 'No scored runs in the last 30 days.'), { sub: 'Risk score — lower is better' })); return; }
   var score = Number(current.avgRiskScore) || 0, band = riskBand(score);
   cell('ed-posture', card('Overall risk', '<div class="dp-center">' + gaugeRing(score, CHART_COLORS[band.tone], Math.round(score), 'out of 100') +
     '<div class="legend dp-center"><span class="lg"><i class="dl-sw" data-bg="' + CHART_COLORS[band.tone] + '"></i>' + x(band.label) + ' risk</span></div></div>', { sub: 'Risk score — lower is better' }));

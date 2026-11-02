@@ -14,7 +14,7 @@ import { loadRansomwareReadiness } from './ransomware.js';
 import { additionalAgentIds, closeModal, loadRuns, openBuilder, openModal, resolvedAllTargetIds, resolvedGroupTargetIds, scenarioFramework, viewRunResults } from './reports.js';
 import { ROLE, showTab, showTamperBanner } from './shell.js';
 import { renderDashAll, setDashAgents, setDashRuns, setDashFindings, setDashAlerts, setDashSchedules, dashRunById } from './dash-rich.js';
-import { effectiveness as dashEffectiveness } from './dash-model.js';
+import { effectiveness as dashEffectiveness, isAgentOnline } from './dash-model.js';
 import { displayOf, replaceClasses, setDisplay } from '../core/inline-style.js';
 import { empty } from '../core/kit.js';
 import { renderUsersInsights } from './settings-insights.js';
@@ -1112,7 +1112,7 @@ export function loadDashboard() {
     var recent = runs.filter(function(r) { var t = new Date(r.startedAt || r.completedAt).getTime(); return t >= since; }).length;
     var eff = dashEffectiveness(runs);
     var judged = eff.prevented + eff.detected + eff.missed;
-    var online = ag.filter(function(a) { return a.status === 'online'; }).length;
+    var online = ag.filter(isAgentOnline).length;
     setHeroStat('hs-dash-validations', recent);
     setHeroStat('hs-dash-detect', judged ? Math.round((eff.prevented + eff.detected) / judged * 100) + '%' : '—');
     setHeroStat('hs-dash-online', ag.length ? online + ' / ' + ag.length : '—');

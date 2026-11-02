@@ -15,6 +15,11 @@ import (
 // RiskResult is the fleet-wide risk score.
 type RiskResult struct {
 	FleetAvgScore int `json:"fleetAvgScore"`
+	// ScoredRuns is how many completed, scored runs in the window the average is over. Measurable is
+	// ScoredRuns > 0: with no scored runs FleetAvgScore is 0 only because there is nothing to average, and that
+	// 0 must never be read as "no risk".
+	ScoredRuns int  `json:"scoredRuns"`
+	Measurable bool `json:"measurable"`
 }
 
 // FleetRisk returns the fleet-wide average risk score across completed runs
@@ -22,12 +27,13 @@ type RiskResult struct {
 // internal/dashboard's former private avgRiskScore; that function is
 // deleted in Task 6, not duplicated).
 func FleetRisk(ctx context.Context, pool *pgxpool.Pool) (RiskResult, error) {
-	var avg int
+	var avg, n int
 	err := pool.QueryRow(ctx, `
-		SELECT COALESCE(ROUND(AVG((score->>'riskScore')::numeric)), 0)::int
+		SELECT COALESCE(ROUND(AVG((score->>'riskScore')::numeric)), 0)::int,
+		       COUNT(score->>'riskScore')
 		FROM scenario_runs
 		WHERE completed_at IS NOT NULL
 		  AND completed_at > NOW() - INTERVAL '30 days'
-		  AND score IS NOT NULL`).Scan(&avg)
-	return RiskResult{FleetAvgScore: avg}, err
+		  AND score IS NOT NULL`).Scan(&avg, &n)
+	return RiskResult{FleetAvgScore: avg, ScoredRuns: n, Measurable: n > 0}, err
 }

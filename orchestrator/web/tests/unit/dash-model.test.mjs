@@ -86,7 +86,7 @@ test('preventionSeries averages per day, oldest first; actorHistory sorts oldest
 
 test('execInsights states only numbers present in its inputs', () => {
   const trends = [{ detectionCoverage: 60, avgRiskScore: 70, assetCount: 10 }, { detectionCoverage: 66, avgRiskScore: 64, assetCount: 12 }];
-  const out = M.execInsights(trends, { detectionMeasurable: true }, { hasData: true, overThreshold: 1, thresholdDays: 30, openCount: 4, worstDaysOpen: 41, medianDaysOpen: 9 });
+  const out = M.execInsights(trends, { detectionMeasurable: true, riskMeasurable: true }, { hasData: true, overThreshold: 1, thresholdDays: 30, openCount: 4, worstDaysOpen: 41, medianDaysOpen: 9 });
   const text = out.map((i) => i.title).join('|');
   assert.doesNotMatch(text, /Detection coverage/, 'detection history is untrusted legacy data and is never narrated');
   assert.match(text, /Risk score fell 6 points/);
@@ -164,10 +164,11 @@ test('detectionKpi: a placeholder 100 is never coverage, and history is never pl
 
 test('heroValues: unmeasurable exposure and detection are dashes, never 100', () => {
   assert.deepEqual(M.heroValues({ exposureScore: 100, exposureMeasurable: false, detectionCoverage: 100, detectionMeasurable: false, hasAttackPathData: true }),
-    { exposure: '—', detection: '—' });
-  assert.deepEqual(M.heroValues({ exposureScore: 61, exposureMeasurable: true, detectionCoverage: 48, detectionMeasurable: true }),
-    { exposure: 61, detection: '48%' });
-  assert.deepEqual(M.heroValues(null), { exposure: '—', detection: '—' });
+    { risk: '—', exposure: '—', detection: '—' });
+  assert.deepEqual(M.heroValues({ avgRiskScore: 0, riskMeasurable: false, exposureScore: 61, exposureMeasurable: true, detectionCoverage: 48, detectionMeasurable: true }),
+    { risk: '—', exposure: 61, detection: '48%' }, 'a bare 0 risk with no scored runs is a dash');
+  assert.deepEqual(M.heroValues({ avgRiskScore: 0, riskMeasurable: true }).risk, 0, 'a genuine measured 0 stays 0');
+  assert.deepEqual(M.heroValues(null), { risk: '—', exposure: '—', detection: '—' });
 });
 
 test('riskBand and topRisks', () => {
@@ -275,4 +276,41 @@ test('ceBreakdown: shares are of scored results; not-tested is excluded; empty b
   const none = M.ceBreakdown({ prevented: 0, detected: 0, missed: 0, other: 5, total: 5 }, 1);
   assert.equal(none.base, 0);
   assert.ok(none.rows.every((r) => r.pct === null), 'no scored results means no percentage, never 0%');
+});
+
+test('isAgentOnline: idle and busy agents are online; offline and retired are not; groupHealth agrees', () => {
+  assert.equal(M.isAgentOnline({ status: 'online' }), true);
+  assert.equal(M.isAgentOnline({ status: 'idle' }), true, 'a connected idle agent is online');
+  assert.equal(M.isAgentOnline({ status: 'busy' }), true);
+  assert.equal(M.isAgentOnline({ status: 'offline' }), false);
+  assert.equal(M.isAgentOnline({ status: 'idle', state: 'retired' }), false);
+  assert.equal(M.isAgentOnline({}), false, 'no status reported is not online');
+  const gh = M.groupHealth([{ status: 'idle', state: 'quarantined' }, { status: 'offline' }]);
+  assert.equal(gh[0].online, 1);
+  assert.equal(gh[0].total, 2);
+  assert.equal(gh[0].pct, 50);
+});
+
+test('riskKpi: no scored runs is never a score of 0; a measured 0 is; false days are dropped from the trend', () => {
+  const none = M.riskKpi({ avgRiskScore: 0, riskMeasurable: false }, [{ avgRiskScore: 0, riskMeasurable: false }]);
+  assert.equal(none.value, '—');
+  assert.equal(none.measurable, false);
+  assert.match(none.sub, /no scored runs/);
+  assert.equal(M.riskKpi({ avgRiskScore: 0 }, []).value, '—', 'a server that does not report measurability must not show 0');
+  const zero = M.riskKpi({ avgRiskScore: 0, riskMeasurable: true }, []);
+  assert.equal(zero.value, 0);
+  assert.equal(zero.measurable, true);
+  const ok = M.riskKpi({ avgRiskScore: 40, riskMeasurable: true }, [
+    { avgRiskScore: 0, riskMeasurable: false },  // day with no scored run: excluded
+    { avgRiskScore: 60, riskMeasurable: null },  // legacy: kept
+    { avgRiskScore: 40, riskMeasurable: true }]);
+  assert.deepEqual(ok.spark, [60, 40]);
+  assert.match(ok.sub, /▼ 20/);
+  assert.equal(ok.tone, 'ok', 'a falling risk score is good');
+});
+
+test('execInsights does not narrate risk when it is not measurable', () => {
+  const trends = [{ avgRiskScore: 0, riskMeasurable: false, assetCount: 1 }, { avgRiskScore: 0, riskMeasurable: false, assetCount: 1 }];
+  const out = M.execInsights(trends, { riskMeasurable: false }, null);
+  assert.equal(out.some((i) => /Risk score/.test(i.title)), false);
 });

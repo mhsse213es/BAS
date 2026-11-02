@@ -14,10 +14,13 @@ import (
 
 // Snapshot is the fleet-wide posture at the moment Compute was called.
 type Snapshot struct {
-	AvgRiskScore      int `json:"avgRiskScore"`
-	ExposureScore     int `json:"exposureScore"`
-	DetectionCoverage int `json:"detectionCoverage"`
-	AssetCount        int `json:"assetCount"`
+	AvgRiskScore int `json:"avgRiskScore"`
+	// RiskMeasurable is false when no scored run completed in the last 30 days. AvgRiskScore is then 0 only
+	// because there is nothing to average; it is not a clean bill of health.
+	RiskMeasurable    bool `json:"riskMeasurable"`
+	ExposureScore     int  `json:"exposureScore"`
+	DetectionCoverage int  `json:"detectionCoverage"`
+	AssetCount        int  `json:"assetCount"`
 	// HasAttackPathData is false when no attack-path collection has ever
 	// been ingested (attackpath_collections is empty). In that state,
 	// ExposureScore/DetectionCoverage read a "vacuous 100" (see
@@ -65,6 +68,7 @@ func Compute(ctx context.Context, pool *pgxpool.Pool) (Snapshot, error) {
 
 	return Snapshot{
 		AvgRiskScore:           risk.FleetAvgScore,
+		RiskMeasurable:         risk.Measurable,
 		ExposureScore:          expSummary.FleetAvgScore,
 		ExposureMeasurable:     expSummary.Measurable,
 		ExposureMeasuredAssets: expSummary.MeasuredAssets,
