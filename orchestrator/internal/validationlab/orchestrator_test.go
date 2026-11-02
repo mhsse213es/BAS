@@ -590,3 +590,37 @@ func TestRunOnce_RetriesOnceTheBackoffHasPassed(t *testing.T) {
 		assertLifecycle(t, reg, draft, contentregistry.LifecycleValidating) // claimed again
 	})
 }
+
+type countingDispatcher struct{ calls int }
+
+func (c *countingDispatcher) DispatchFactoryValidation(ctx context.Context, sc *scenario.Scenario, agentID string) (string, string, error) {
+	c.calls++
+	return "", "", fmt.Errorf("boom")
+}
+
+// The 2026-11-02 staging incident: UPDATE on content_validations was denied, so no attempt was ever recorded and
+// the same scenario ran on the lab agent every poll. The limit must hold even when the database keeps no record
+// of the attempts, so the rows are wiped after every tick to simulate writes that never landed.
+func TestRunOnce_CapHoldsWhenOutcomeWritesAreLost(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		ctx := context.Background()
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-lost-writes", nonDestructiveArtifact("vl-lost-writes"))
+
+		d := &countingDispatcher{}
+		o := NewOrchestrator(pool, reg, d, "lab-agent-lost", 0)
+		o.retryBackoff = 0 // isolate the attempt cap from the backoff
+		for i := 0; i < maxValidationAttempts+4; i++ {
+			if err := o.runOnce(ctx); err != nil {
+				t.Fatalf("runOnce: %v", err)
+			}
+			if _, err := pool.Exec(ctx, `DELETE FROM content_validations WHERE content_version_id = $1`, draft); err != nil {
+				t.Fatalf("wipe validations: %v", err)
+			}
+		}
+		if d.calls != maxValidationAttempts {
+			t.Fatalf("dispatched %d times with no database record, want exactly %d", d.calls, maxValidationAttempts)
+		}
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleDraft)
+	})
+}

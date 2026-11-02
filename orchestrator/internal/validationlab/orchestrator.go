@@ -34,20 +34,58 @@ type Orchestrator struct {
 	stopOnce     sync.Once
 	timeout      time.Duration
 	pollEvery    time.Duration
+
+	// retryBackoff is the minimum gap between two attempts at one version. A field, not only the constant, so
+	// tests can exercise the attempt cap without waiting.
+	retryBackoff time.Duration
+	// attempts is the in-memory record of dispatches per version. It does not depend on the database, which is
+	// the point: when an outcome write is denied (a missing grant) or the pool is unhealthy, no content_validations
+	// row exists to count, and a database-only limit would never trigger. It resets on a restart; the database
+	// count in selectEligible covers that case.
+	attemptMu sync.Mutex
+	attempts  map[string]attemptState
+}
+
+type attemptState struct {
+	n    int
+	last time.Time
+}
+
+// mayAttempt reports whether this process may dispatch the version now.
+func (o *Orchestrator) mayAttempt(versionID string) bool {
+	o.attemptMu.Lock()
+	defer o.attemptMu.Unlock()
+	a := o.attempts[versionID]
+	if a.n >= maxValidationAttempts {
+		return false
+	}
+	return a.n == 0 || time.Since(a.last) >= o.retryBackoff
+}
+
+// noteAttempt records a dispatch of the version.
+func (o *Orchestrator) noteAttempt(versionID string) {
+	o.attemptMu.Lock()
+	defer o.attemptMu.Unlock()
+	a := o.attempts[versionID]
+	a.n++
+	a.last = time.Now()
+	o.attempts[versionID] = a
 }
 
 func NewOrchestrator(pool *pgxpool.Pool, reg *contentregistry.Registry, d dispatcher, labAgentID string, pollInterval time.Duration) *Orchestrator {
 	return &Orchestrator{
 		pool: pool, reg: reg, dispatcher: d, labAgentID: labAgentID, pollInterval: pollInterval,
 		stopCh: make(chan struct{}), timeout: 10 * time.Minute, pollEvery: 5 * time.Second,
+		retryBackoff: validationRetryBackoff, attempts: make(map[string]attemptState),
 	}
 }
 
 // A version that does not pass validation goes back to DRAFT. Without a limit it was picked again on the very
 // next tick, so a failing scenario re-ran on the lab agent every few minutes for as long as the server was up
 // (live steps, on a real machine). These bound that: at most maxValidationAttempts runs per version, and no
-// sooner than validationRetryBackoff after the previous one. Attempts are counted from EXECUTION rows, one per
-// dispatch, so the limit still holds if an outcome could not be written back and the row is still NO_DATA.
+// sooner than validationRetryBackoff after the previous one. Attempts are counted twice: from EXECUTION rows
+// (one per dispatch, which also holds across a restart) and in this process's memory (which holds when the
+// database writes fail and no row exists, as when the app role lacked UPDATE on content_validations).
 // A version that hits the limit stays DRAFT until a person changes it (a new version starts at zero).
 const (
 	maxValidationAttempts  = 3
@@ -75,7 +113,7 @@ func (o *Orchestrator) selectEligible(ctx context.Context) ([]string, error) {
 		            AND v.created_at > NOW() - make_interval(secs => $4))
 		  ORDER BY cv.created_at ASC`,
 		contentregistry.ActorGenerator, contentregistry.ActorComposer,
-		maxValidationAttempts, validationRetryBackoff.Seconds())
+		maxValidationAttempts, o.retryBackoff.Seconds())
 	if err != nil {
 		return nil, err
 	}
@@ -113,6 +151,9 @@ func (o *Orchestrator) runOnce(ctx context.Context) error {
 		if dispatched {
 			break
 		}
+		if !o.mayAttempt(id) {
+			continue // attempted too recently, or too many times: leave it DRAFT, never claim it
+		}
 		if err := o.reg.Transition(ctx, id, contentregistry.LifecycleValidating, contentregistry.ActorValidationLab, "claimed for validation"); err != nil {
 			continue // already claimed by another tick/instance, or no longer DRAFT -- not an error, just skip
 		}
@@ -136,6 +177,7 @@ func (o *Orchestrator) runOnce(ctx context.Context) error {
 			break
 		}
 		dispatched = true
+		o.noteAttempt(id)
 		o.dispatchAndResolve(ctx, id, v)
 	}
 	return nil
