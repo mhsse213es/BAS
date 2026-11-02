@@ -431,6 +431,8 @@ func (a *Agent) sendHeartbeat(status string) {
 			a.logger.Op("error", "lifecycle", "server quarantined this agent — contact administrator")
 		}
 	}
+	// The server's resolved tray-icon visibility. Repeated every heartbeat; applying the current state is a no-op.
+	applyTrayPolicy(resp.Policy.HideTrayIcon)
 	log.Printf("[~] heartbeat: %s (state=%s latency=%.0fms)", status, resp.State, latencyMs)
 }
 

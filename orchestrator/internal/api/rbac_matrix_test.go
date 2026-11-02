@@ -432,6 +432,9 @@ var routeMatrix = []routeCase{
 
 	// ── admin only (per-permission since the 2026-07-18 RBAC expansion) ────
 	{http.MethodPut, "/api/agents/{agentId}/state", tierPermission, auth.CanSetAgentState},
+	{http.MethodPut, "/api/agents/{agentId}/tray-icon", tierPermission, auth.CanSetAgentState},
+	{http.MethodPut, "/api/fleet/tray-icon", tierPermission, auth.CanSetAgentState},
+	{http.MethodGet, "/api/fleet/tray-icon", tierAny, ""},
 	{http.MethodPost, "/api/agents/{agentId}/stop", tierPermission, auth.CanStopAgent},
 	{http.MethodPost, "/api/agents/{agentId}/remove", tierPermission, auth.CanRemoveAgent},
 	{http.MethodPost, "/api/agents/{agentId}/uninstall", tierPermission, auth.CanRemoveAgent},

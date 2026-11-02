@@ -26,7 +26,7 @@ import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
 import { agentInsightsHtml, agentOperationalHtml, migrationPanelHtml } from './agents-insights.js';
 import { kpi, card, chip, empty as kitEmpty, icon as kitIcon } from '../core/kit.js';
 import { paintAgentTable, statusCellHtml, resetAgtFilters, agtOsFilter, setAgtOs } from './agt-view.js';
-import { osOptions as agtOsOptions, fleetCount as agtFleetCount } from './agt-model.js';
+import { osOptions as agtOsOptions, fleetCount as agtFleetCount, trayMenuEntries, fleetTrayLabel, fleetTrayConfirm } from './agt-model.js';
 import { renderExecAll, renderRangeSeg } from './dash-exec.js';
 import { recLimit, renderRecControls, renderRecError, renderRecLoading, setRecLimitState, showRecommendations } from './recommendations.js';
 
@@ -894,7 +894,18 @@ export function loadAgents() {
     state.agentTotals = (page && page.totals) || { online: 0, degraded: 0, offline: 0, retired: 0 };
     renderAgentHero(); renderAgentInsights(); renderAgentToolbar(); renderAgentRows(); renderAgentGroupTree();
     renderLegacyMigrationPanel();
+    loadFleetTrayState();
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+// The fleet-wide tray-icon default labels the System Tree button and decides each agent's Action-menu wording.
+// A failed read leaves the last known value; it never blocks the agent list.
+function loadFleetTrayState() {
+  apicall('/api/fleet/tray-icon').then(function(r) {
+    var hidden = !!(r && r.hidden);
+    if (hidden === !!state.fleetTrayHidden && state.fleetTrayLoaded) return;
+    state.fleetTrayHidden = hidden; state.fleetTrayLoaded = true;
+    renderAgentToolbar(); renderAgentRows();
+  }).catch(function() {});
 }
 function renderLegacyMigrationPanel() {
   var el = document.getElementById('legacy-migration-panel');
@@ -991,7 +1002,26 @@ function renderAgentToolbar() {
     '<select class="select" aria-label="Operating system"' + on('change', 'setAgentOsSelect') + '><option value="">All OS</option>' + oses.map(function(o) {
       return '<option value="' + x(o) + '"' + (o === os ? ' selected' : '') + '>' + x(o) + '</option>';
     }).join('') + '</select>' +
-    (dirty ? '<button type="button" class="btn btn-ghost btn-sm"' + on('click', 'clearAgentFilters') + '>' + kitIcon('x') + 'Clear</button>' : '');
+    (dirty ? '<button type="button" class="btn btn-ghost btn-sm"' + on('click', 'clearAgentFilters') + '>' + kitIcon('x') + 'Clear</button>' : '') +
+    (ROLE === 'admin' ? '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'toggleFleetTrayIcon') + ' title="Windows agents only. Agents with their own setting keep it.">' + x(fleetTrayLabel(state.fleetTrayHidden)) + '</button>' : '');
+}
+// Sends one tray-icon change and refreshes. `hidden` is true (hide), false (force visible) or null (follow the fleet).
+function putTrayIcon(url, hidden, okMsg) {
+  return apicall(url, { method: 'PUT', body: JSON.stringify({ hidden: hidden }) }).then(function(r) {
+    if (r && r.error) throw new Error(r.error);
+    showToast(okMsg, 'ok');
+    return loadAgents();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+export function toggleFleetTrayIcon() {
+  var hide = !state.fleetTrayHidden;
+  if (!confirm(fleetTrayConfirm(hide))) return;
+  putTrayIcon('/api/fleet/tray-icon', hide, hide ? 'Tray icon hidden on all Windows agents' : 'Tray icon shown on all Windows agents');
+}
+export function rowMenuTrayIcon(id, hidden) {
+  closeAllRowMenus();
+  var msg = hidden === null ? 'Tray icon follows the fleet default' : hidden ? 'Tray icon will be hidden on this agent' : 'Tray icon will be shown on this agent';
+  putTrayIcon('/api/agents/' + encodeURIComponent(id) + '/tray-icon', hidden, msg);
 }
 export function setAgentStatusSelect(el) { setAgentFilter((el && el.value) || 'all'); }
 export function setAgentOsSelect(el) { setAgtOs(el); renderAgentToolbar(); }
@@ -1048,6 +1078,9 @@ function agentRowMenu(a, idx) {
           '<button class="row-menu-item"' + on('click', 'rowMenuAuditPack', a.agentId) + '>&#8659; Download audit pack</button>' +
           (ROLE === 'admin' ?
             '<button class="row-menu-item"' + on('click', 'rowMenuMoveGroup', a.agentId) + '>&#128193; Move to group…</button>' : '') +
+          (ROLE === 'admin' ? trayMenuEntries(a, state.fleetTrayHidden).map(function(e) {
+            return '<button class="row-menu-item"' + on('click', 'rowMenuTrayIcon', a.agentId, e.hidden) + '>&#128065; ' + x(e.label) + '</button>';
+          }).join('') : '') +
           (ROLE === 'admin' && a.status !== 'offline' ?
             '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuStopAgent', a.agentId, a.hostname || a.agentId) + '>&#9209; Stop agent</button>' : '') +
           (ROLE === 'admin' ?

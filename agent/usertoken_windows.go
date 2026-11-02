@@ -271,7 +271,8 @@ var trayProcessAlive = func(pid int32) bool {
 // check (Important finding #7) for every Settings/Troubleshoot window
 // that real tray spawns afterward.
 func shouldSkipTrayLaunch() bool {
-	return trayProcessAlive(trayPID.Load())
+	// A tray the server has hidden is never started here, whether by the service, a session change or the watchdog.
+	return trayHidden.Load() || trayProcessAlive(trayPID.Load())
 }
 
 func launchTrayForActiveSession() {

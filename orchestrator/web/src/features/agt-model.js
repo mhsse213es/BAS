@@ -220,3 +220,31 @@ export function facts(a) {
   ];
   return rows.filter(function(r) { return r[1] != null && String(r[1]) !== ''; });
 }
+
+// ── Tray icon ─────────────────────────────────────────────────────────────────────────────────────────────
+// Only the Windows agent has a tray icon. An agent's own setting (trayHidden: true, false, or null for "none")
+// beats the fleet default; the server resolves the same rule when it answers each heartbeat.
+export function trayEffectiveHidden(a, fleetHidden) {
+  return a && typeof a.trayHidden === 'boolean' ? a.trayHidden : !!fleetHidden;
+}
+
+// trayMenuEntries lists the Action-menu items for one agent as { label, hidden } where `hidden` is what is sent
+// to the server (true hide, false force visible, null follow the fleet default). Empty for agents without a tray.
+export function trayMenuEntries(a, fleetHidden) {
+  var fam = osFamily(a && a.osVersion);
+  if (fam !== 'Windows' && fam !== 'Windows Server') return [];
+  var out = [trayEffectiveHidden(a, fleetHidden) ? { label: 'Show tray icon', hidden: false } : { label: 'Hide tray icon', hidden: true }];
+  if (typeof a.trayHidden === 'boolean') out.push({ label: 'Use fleet default for tray icon', hidden: null });
+  return out;
+}
+
+export function fleetTrayLabel(fleetHidden) {
+  return fleetHidden ? 'Show tray icon on all agents' : 'Hide tray icon on all agents';
+}
+
+// The fleet-wide switch changes what every endpoint user sees, so it is confirmed first.
+export function fleetTrayConfirm(hide) {
+  return (hide ? 'Hide' : 'Show') + ' the tray icon on every Windows agent? ' +
+    (hide ? 'Endpoint users will no longer see the agent icon. ' : '') +
+    'Agents with their own per-agent setting keep it. Takes effect on each agent’s next heartbeat.';
+}

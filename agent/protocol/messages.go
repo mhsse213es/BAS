@@ -30,6 +30,9 @@ type PolicyConf struct {
 	ExecutionWindow   string   `json:"executionWindow"`
 	MaxConcurrentRuns int      `json:"maxConcurrentRuns"`
 	HeartbeatInterval int      `json:"heartbeatIntervalS"`
+	// HideTrayIcon is the server's resolved tray-icon visibility for this agent (per-agent override, else the
+	// fleet default). Windows only; other platforms have no tray and ignore it.
+	HideTrayIcon bool `json:"hideTrayIcon"`
 }
 
 // LivePolicy mirrors the server-side guardrails the agent must honour for live runs.

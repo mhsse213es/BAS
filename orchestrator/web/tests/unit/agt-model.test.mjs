@@ -99,3 +99,40 @@ test('drawer facts skip fields the agent does not carry', () => {
   assert.deepEqual(f.map((r) => r[0]), ['Agent ID', 'IP address', 'Group']);
   assert.equal(M.drawerSub({ ipAddress: '10.0.0.1', agentId: 'a1' }), '10.0.0.1 · a1');
 });
+
+// ── Tray icon (Windows agents only) ───────────────────────────────────────────────────────────────────────
+test('trayEffectiveHidden: an agent override wins over the fleet default; null/undefined follows it', () => {
+  assert.equal(M.trayEffectiveHidden({ trayHidden: true }, false), true);
+  assert.equal(M.trayEffectiveHidden({ trayHidden: false }, true), false, 'forced visible beats a fleet hide');
+  assert.equal(M.trayEffectiveHidden({ trayHidden: null }, true), true);
+  assert.equal(M.trayEffectiveHidden({}, true), true);
+  assert.equal(M.trayEffectiveHidden({}, undefined), false);
+});
+
+test('trayMenuEntries: Windows only; offers the opposite of the effective state, plus fleet default only when overridden', () => {
+  const win = (o) => ag('w', 'WS-1', o);
+  // Visible, no override: offer Hide only.
+  assert.deepEqual(M.trayMenuEntries({ ...win(), trayHidden: null }, false), [{ label: 'Hide tray icon', hidden: true }]);
+  // Hidden by the fleet default, no override: offer Show only.
+  assert.deepEqual(M.trayMenuEntries({ ...win(), trayHidden: null }, true), [{ label: 'Show tray icon', hidden: false }]);
+  // Hidden by its own override: Show, and a way back to following the fleet.
+  assert.deepEqual(M.trayMenuEntries({ ...win(), trayHidden: true }, false), [
+    { label: 'Show tray icon', hidden: false }, { label: 'Use fleet default for tray icon', hidden: null }]);
+  // Forced visible while the fleet hides: Hide, and back to the fleet default.
+  assert.deepEqual(M.trayMenuEntries({ ...win(), trayHidden: false }, true), [
+    { label: 'Hide tray icon', hidden: true }, { label: 'Use fleet default for tray icon', hidden: null }]);
+  assert.ok(M.trayMenuEntries({ ...win({ os: 'Windows Server 2022' }), trayHidden: null }, false).length > 0, 'Windows Server has the tray too');
+  // Linux and macOS agents are headless: no tray, so no entry.
+  assert.deepEqual(M.trayMenuEntries({ ...win({ os: 'Ubuntu 22.04' }), trayHidden: null }, false), []);
+  assert.deepEqual(M.trayMenuEntries({ ...win({ os: 'macOS 14' }), trayHidden: null }, false), []);
+  assert.deepEqual(M.trayMenuEntries({ ...win({ os: '' }), trayHidden: null }, false), [], 'unknown OS: do not offer an action that may do nothing');
+});
+
+test('fleetTrayLabel: names the action the button performs and the count it affects', () => {
+  assert.equal(M.fleetTrayLabel(false), 'Hide tray icon on all agents');
+  assert.equal(M.fleetTrayLabel(true), 'Show tray icon on all agents');
+  assert.match(M.fleetTrayConfirm(true), /hide/i);
+  assert.match(M.fleetTrayConfirm(false), /show/i);
+  assert.match(M.fleetTrayConfirm(true), /per-agent/i, 'must say per-agent settings still win');
+  assert.doesNotMatch(M.fleetTrayConfirm(true), /\d/, 'no count: the default covers agents that are not loaded on the page');
+});

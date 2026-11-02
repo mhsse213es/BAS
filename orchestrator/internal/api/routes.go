@@ -237,6 +237,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 
 		// Viewer + Analyst + Admin
 		r.Get("/api/agents", h.GetAgents)
+		r.Get("/api/fleet/tray-icon", h.GetFleetTrayIcon)
 		r.Get("/api/agents/legacy-migration-status", h.GetLegacyMigrationStatus)
 		r.Get("/api/agents/download/{platform}", h.DownloadAgent)
 		r.Get("/api/scenarios", h.ListScenarios)
@@ -770,6 +771,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// since the 2026-07-18 RBAC permission expansion (see
 		// docs/superpowers/specs/2026-07-18-phase7-rbac-permission-expansion-design.md).
 		r.With(auth.RequirePermission(auth.CanSetAgentState)).Put("/api/agents/{agentId}/state", h.SetAgentState)
+		r.With(auth.RequirePermission(auth.CanSetAgentState)).Put("/api/agents/{agentId}/tray-icon", h.SetAgentTrayIcon)
+		r.With(auth.RequirePermission(auth.CanSetAgentState)).Put("/api/fleet/tray-icon", h.SetFleetTrayIcon)
 		r.With(auth.RequirePermission(auth.CanStopAgent)).Post("/api/agents/{agentId}/stop", h.StopAgent)
 		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/agents/{agentId}/remove", h.RemoveAgent)
 		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/agents/{agentId}/uninstall", h.UninstallAgent)

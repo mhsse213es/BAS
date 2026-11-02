@@ -1300,6 +1300,17 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// NULL = legacy row, true = averaged over at least one scored run.
 		`ALTER TABLE dashboard_snapshots ADD COLUMN IF NOT EXISTS risk_measurable boolean`,
 
+		// Tray-icon visibility (Windows agent). agents.tray_hidden is a per-agent override (NULL = follow the fleet
+		// default); fleet_settings holds fleet-wide defaults as key -> jsonb. The override is its own column
+		// because re-enrolling rewrites policy_json.
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS tray_hidden boolean`,
+		`CREATE TABLE IF NOT EXISTS fleet_settings (
+			key        text        PRIMARY KEY,
+			value      jsonb       NOT NULL,
+			updated_by text        NOT NULL DEFAULT '',
+			updated_at timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
 		// Phase 7 Multi-Tenancy — tenant_id on every operational table.
 		// DEFAULT 'default' backfills existing rows and covers every INSERT
 		// that doesn't specify tenant_id explicitly (matches Task 1's users.tenant_id).

@@ -40,6 +40,9 @@ func noteTrayDuplicate(now time.Time) {
 
 // watchTray is called on a timer from the service loop.
 func watchTray() {
+	if trayHidden.Load() {
+		return // hidden by server policy: do not bring the icon back
+	}
 	now := time.Now()
 	if !shouldRelaunchTray(now, time.Unix(0, trayRetryAfter.Load()), trayProcessAlive(trayPID.Load())) {
 		return

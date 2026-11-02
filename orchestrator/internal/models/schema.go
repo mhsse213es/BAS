@@ -538,6 +538,9 @@ type PolicyBundle struct {
 	ExecutionWindow   string   `json:"executionWindow"`    // "09:00-18:00 IST" — empty = unrestricted
 	MaxConcurrentRuns int      `json:"maxConcurrentRuns"`  // 0 = unlimited
 	HeartbeatInterval int      `json:"heartbeatIntervalS"` // seconds; 0 = agent default
+	// HideTrayIcon is the RESOLVED tray-icon visibility the server tells the agent on each heartbeat (the
+	// agent's own override, else the fleet default). It is never read back from policy_json.
+	HideTrayIcon bool `json:"hideTrayIcon"`
 }
 
 // Agent represents a registered endpoint.
@@ -569,9 +572,12 @@ type Agent struct {
 	BinaryHash    string        `json:"binaryHash,omitempty"`
 	BinaryTrusted bool          `json:"binaryTrusted"`
 	Policy        *PolicyBundle `json:"policy,omitempty"`
-	EnrolledAt    *time.Time    `json:"enrolledAt,omitempty"`
-	LastUpdate    time.Time     `json:"lastUpdate"`
-	Sims          int           `json:"sims"` // scenario runs dispatched to this agent (all time)
+	// TrayHidden is this agent's own tray-icon override: nil = follows the fleet default, true = hidden,
+	// false = forced visible.
+	TrayHidden *bool      `json:"trayHidden"`
+	EnrolledAt *time.Time `json:"enrolledAt,omitempty"`
+	LastUpdate time.Time  `json:"lastUpdate"`
+	Sims       int        `json:"sims"` // scenario runs dispatched to this agent (all time)
 	// StoppedBy/StoppedAt/StopReason are set when an Admin dispatches a
 	// durable remote stop (see StopAgent handler); cleared on re-enroll.
 	// StoppedBy holds the raw user ID (matches audit_logs.actor_id);

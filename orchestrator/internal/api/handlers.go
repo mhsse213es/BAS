@@ -940,7 +940,7 @@ const agentSelectColumns = `a.agent_id, a.hostname, a.ip_address, a.os_version, 
 	        COALESCE(sr.sims, 0) AS sims,
 	        a.stopped_by, COALESCE(u.username, a.stopped_by), a.stopped_at, a.stop_reason,
 	        a.group_id, g.name, a.uninstall_error, a.uninstall_error_at, a.uninstall_requested_at,
-	        COALESCE(a.transport, 'legacy')`
+	        COALESCE(a.transport, 'legacy'), a.tray_hidden`
 
 // agentFromJoins is the FROM/JOIN clause shared by every GetAgents query
 // that selects agentSelectColumns above.
@@ -967,7 +967,7 @@ func scanAgentRows(rows pgx.Rows, hub *ws.Hub, now time.Time) []models.Agent {
 			&stateStr, &policyRaw, &a.EnrolledAt, &a.Sims,
 			&a.StoppedBy, &a.StoppedByName, &a.StoppedAt, &a.StopReason,
 			&a.GroupID, &a.GroupName, &a.UninstallError, &a.UninstallErrorAt, &uninstallRequestedAt,
-			&a.Transport); err != nil {
+			&a.Transport, &a.TrayHidden); err != nil {
 			continue
 		}
 		// Connectivity is heartbeat-driven: a dead/rebooted agent stops updating
@@ -1637,12 +1637,17 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch current state and policy to return to the agent.
 	var stateStr, policyRaw string
+	var trayOverride *bool
+	var trayFleetDefault bool
 	h.db.QueryRow(r.Context(),
-		`SELECT COALESCE(state,'active'), COALESCE(policy_json::text,'{}') FROM agents WHERE agent_id = $1`,
+		`SELECT COALESCE(state,'active'), COALESCE(policy_json::text,'{}'), tray_hidden,
+		        COALESCE((SELECT (value->>'hidden')::boolean FROM fleet_settings WHERE key = 'tray_icon'), false)
+		 FROM agents WHERE agent_id = $1`,
 		hb.AgentID,
-	).Scan(&stateStr, &policyRaw)
+	).Scan(&stateStr, &policyRaw, &trayOverride, &trayFleetDefault)
 	var policy models.PolicyBundle
 	json.Unmarshal([]byte(policyRaw), &policy)
+	policy.HideTrayIcon = effectiveTrayHidden(trayOverride, trayFleetDefault)
 
 	// Handle attack-path job progress if the agent reports one.
 	if hb.CurrentJobID != "" && hb.JobProgress.Stage != "" {

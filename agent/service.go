@@ -131,6 +131,9 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 		Accepts: svc.AcceptStop | svc.AcceptShutdown | svc.AcceptSessionChange,
 	}
 
+	// Restore the tray visibility last set by the server before anything can launch the tray.
+	loadTrayHidden()
+
 	// Covers a session that was already active before the service started (or
 	// restarted, e.g. via svcUpdate) — SessionChange notifications only fire for
 	// transitions that happen after we start accepting them, not retroactively.
