@@ -154,6 +154,15 @@ func main() {
 				fmt.Println("[+] deployment CA root fetched from server and installed")
 			}
 		}
+		// An install is an explicit operator action, so it re-pins the server's CURRENT command-signing
+		// certificate. A pin kept from an earlier install would otherwise survive (the identity is kept when
+		// the CA is unchanged) and reject every scenario command if the server's signing key has changed.
+		// Routine renewal still refuses a different certificate; only this path clears the pin.
+		if cleared, cerr := clearCommandSigningPin(); cerr != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not clear the old command-signing trust: %v\n", cerr)
+		} else if cleared {
+			fmt.Println("[*] previous command-signing trust cleared; the agent will pin the server's current one")
+		}
 		// A single-use enrolment token (BAS_ENROLLMENT_TOKEN, installer environment only) is spent right
 		// here, so it never has to be stored: the service then starts already enrolled.
 		tok, tokErr := resolveEnrollmentToken(*flagTokenFile, *flagTokenStdin, secretFromStdin, os.Stdin)

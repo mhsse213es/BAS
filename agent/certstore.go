@@ -211,6 +211,21 @@ func saveCommandSigningCert(pemBytes []byte) error {
 	return os.WriteFile(commandSigningCertPath(), pemBytes, 0644)
 }
 
+// clearCommandSigningPin drops the pinned command-signing certificate so the next enrollment or renewal
+// pins whatever the server presents now. It reports whether a pin existed. Only an explicit install may
+// call this (the operator is present and has just supplied the agent secret); routine renewal must keep
+// refusing a different certificate, which is what saveCommandSigningCert enforces.
+func clearCommandSigningPin() (bool, error) {
+	err := os.Remove(commandSigningCertPath())
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
 // loadCommandSigningCert returns the persisted command-signing
 // certificate, or an error wrapping os.ErrNotExist if enrollment never
 // completed (or completed against an orchestrator version that predates

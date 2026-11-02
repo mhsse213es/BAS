@@ -269,7 +269,7 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 			// command until this is resolved (see agent/commandsig.go),
 			// which is the correct fail-closed behavior for a missing
 			// trust anchor, not a reason to fail bootstrap/renewal itself.
-			log.Printf("[!] could not persist command-signing trust: %v", err)
+			log.Printf("[!] could not persist command-signing trust: %v -- scenario commands will be rejected until the agent installer is re-run on this host", err)
 		}
 	}
 	if !renewing {

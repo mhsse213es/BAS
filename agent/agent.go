@@ -1505,6 +1505,11 @@ func (a *Agent) verifyAndDispatch(msgType string, data []byte) bool {
 	env, err := a.verifyCommandEnvelope(data, msgType)
 	if err != nil {
 		log.Printf("[!] WS: command envelope rejected (%s): %v", msgType, err)
+		if strings.Contains(err.Error(), "signature verification failed") {
+			// A well-formed signature that does not verify means the server signs with a different key than the
+			// certificate this agent pinned. Say what fixes it, so nobody has to read the source to find out.
+			log.Printf("[!] The server's command-signing key does not match the one this agent trusts. Re-run the agent installer (the Setup file) on this host to trust the current key.")
+		}
 		a.logger.Op("warn", "security", fmt.Sprintf("rejected command envelope for %s: %v", msgType, err))
 		return false
 	}
