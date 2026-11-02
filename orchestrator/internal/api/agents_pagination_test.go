@@ -15,11 +15,7 @@ import (
 )
 
 func TestAgentCursor_EncodeDecodeRoundTrip(t *testing.T) {
-	original := agentCursor{
-		Snapshot:   time.Date(2026, 8, 31, 17, 0, 0, 123000000, time.UTC),
-		LastUpdate: time.Date(2026, 8, 31, 16, 59, 58, 1000000, time.UTC),
-		AgentID:    "loadgen-000042",
-	}
+	original := agentCursor{Hostname: "loadgen-host", AgentID: "loadgen-000042", Alpha: true}
 	encoded := encodeAgentCursor(original)
 	if encoded == "" {
 		t.Fatal("encodeAgentCursor returned empty string")
@@ -28,14 +24,8 @@ func TestAgentCursor_EncodeDecodeRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeAgentCursor: %v", err)
 	}
-	if !decoded.Snapshot.Equal(original.Snapshot) {
-		t.Errorf("Snapshot = %v, want %v", decoded.Snapshot, original.Snapshot)
-	}
-	if !decoded.LastUpdate.Equal(original.LastUpdate) {
-		t.Errorf("LastUpdate = %v, want %v", decoded.LastUpdate, original.LastUpdate)
-	}
-	if decoded.AgentID != original.AgentID {
-		t.Errorf("AgentID = %q, want %q", decoded.AgentID, original.AgentID)
+	if decoded != original {
+		t.Errorf("decoded = %+v, want %+v", decoded, original)
 	}
 }
 
@@ -138,29 +128,11 @@ func TestGetAgents_Paginated_TraversesAllPagesWithoutSkipOrDuplicate(t *testing.
 	})
 }
 
-// TestGetAgents_Paginated_ConcurrentHeartbeat_NoDuplicateOrCollateralSkip
-// documents the actual, achievable guarantee under a mid-traversal
-// heartbeat -- and the one guarantee keyset pagination over a
-// heartbeat-mutable sort column (last_update) structurally cannot deliver.
-//
-// What holds: no duplicates, ever -- and the OTHER rows in the traversal
-// (the ones that don't themselves get updated) are never skipped or
-// reordered by an unrelated row's heartbeat. This is the real improvement
-// over plain OFFSET/LIMIT, which this test would catch a regression of.
-//
-// What does NOT hold, and can't with this design: a row that heartbeats
-// *itself* during the traversal (bumping its own last_update forward)
-// becomes unreachable for the REST of that traversal. In a DESC-ordered
-// keyset cursor, that row's new sort position is "before" (newer than) the
-// cursor's already-passed position -- there is no snapshot mechanism that
-// can un-overwrite last_update's prior value once Postgres has applied the
-// UPDATE, short of a much heavier transactional-snapshot mechanism this
-// design deliberately doesn't take on. The row isn't lost: it simply
-// wasn't returned by *this* traversal, and will appear normally on the
-// next fresh one (a new page-1 request with no cursor). This is the same
-// trade-off essentially every keyset-paginated API (GitHub's, Stripe's)
-// accepts for exactly this reason.
-func TestGetAgents_Paginated_ConcurrentHeartbeat_NoDuplicateOrCollateralSkip(t *testing.T) {
+// TestGetAgents_Paginated_ConcurrentHeartbeat_NoDuplicateOrSkip: the list is ordered by hostname, which a
+// heartbeat never changes, so an agent heartbeating mid-traversal -- before OR after its page -- is neither
+// duplicated nor skipped. (Ordered by last_update, as it used to be, a row that heartbeated itself jumped
+// ahead of the cursor and dropped out of the traversal.)
+func TestGetAgents_Paginated_ConcurrentHeartbeat_NoDuplicateOrSkip(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
 	}
@@ -171,7 +143,6 @@ func TestGetAgents_Paginated_ConcurrentHeartbeat_NoDuplicateOrCollateralSkip(t *
 			seedAgentWithLastUpdate(t, pool, fmt.Sprintf("agent-%02d", i), base.Add(time.Duration(i)*time.Second))
 		}
 
-		// Page 1.
 		rec1 := httptest.NewRecorder()
 		h.GetAgents(rec1, httptest.NewRequest(http.MethodGet, "/api/agents?limit=2", nil))
 		var page1 AgentsPage
@@ -182,15 +153,13 @@ func TestGetAgents_Paginated_ConcurrentHeartbeat_NoDuplicateOrCollateralSkip(t *
 			t.Fatal("expected has_more=true on page 1")
 		}
 
-		// Simulate a heartbeat on agent-00, the one agent NOT yet returned
-		// (page 1, limit=2, sorted DESC, returns the 2 newest: agent-03 and
-		// agent-02 -- agent-01 and agent-00 remain for page 2).
-		if _, err := pool.Exec(context.Background(),
-			`UPDATE agents SET last_update = NOW() WHERE agent_id = 'agent-00'`); err != nil {
-			t.Fatalf("simulate heartbeat: %v", err)
+		// agent-00 (already returned) and agent-03 (not yet returned) both heartbeat mid-traversal.
+		for _, id := range []string{"agent-00", "agent-03"} {
+			if _, err := pool.Exec(context.Background(), `UPDATE agents SET last_update = NOW() WHERE agent_id = $1`, id); err != nil {
+				t.Fatalf("simulate heartbeat: %v", err)
+			}
 		}
 
-		// Page 2, using page 1's cursor.
 		rec2 := httptest.NewRecorder()
 		h.GetAgents(rec2, httptest.NewRequest(http.MethodGet, "/api/agents?limit=2&cursor="+page1.NextCursor, nil))
 		var page2 AgentsPage
@@ -198,27 +167,55 @@ func TestGetAgents_Paginated_ConcurrentHeartbeat_NoDuplicateOrCollateralSkip(t *
 			t.Fatalf("page 2 decode: %v", err)
 		}
 
-		seen := map[string]bool{}
-		for _, a := range page1.Items {
-			seen[a.AgentID] = true
+		var order []string
+		for _, a := range append(append([]models.Agent{}, page1.Items...), page2.Items...) {
+			order = append(order, a.AgentID)
 		}
-		for _, a := range page2.Items {
-			if seen[a.AgentID] {
-				t.Fatalf("agent %s appeared on both page 1 and page 2 -- a real duplicate, which the design must prevent regardless of any row's heartbeat", a.AgentID)
+		want := []string{"agent-00", "agent-01", "agent-02", "agent-03"}
+		if fmt.Sprint(order) != fmt.Sprint(want) {
+			t.Fatalf("traversal = %v, want %v (every agent exactly once, in hostname order)", order, want)
+		}
+	})
+}
+
+// The list order is hostname A-Z, case-insensitive, and does not move when an agent heartbeats.
+func TestGetAgents_OrderedByHostnameAndStableAcrossHeartbeats(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, "")
+		now := time.Now()
+		for i, host := range []string{"zulu", "Alpha", "mike", "bravo"} {
+			if _, err := pool.Exec(context.Background(),
+				`INSERT INTO agents (agent_id, hostname, last_update) VALUES ($1, $2, $3)`,
+				fmt.Sprintf("id-%d", i), host, now.Add(-time.Duration(i)*time.Minute)); err != nil {
+				t.Fatalf("seed: %v", err)
 			}
-			seen[a.AgentID] = true
 		}
-		// agent-01 (which did NOT heartbeat) must still be reachable on page
-		// 2, undisturbed by agent-00's unrelated update -- this is the
-		// actual guarantee the design provides.
-		if !seen["agent-01"] {
-			t.Fatalf("agent-01 (unrelated to the heartbeat) was skipped from page 2 -- collateral skip regression, seen: %v", seen)
+		list := func() string {
+			rec := httptest.NewRecorder()
+			h.GetAgents(rec, httptest.NewRequest(http.MethodGet, "/api/agents?limit=50", nil))
+			var page AgentsPage
+			if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+				t.Fatalf("decode: %v (%s)", err, rec.Body.String())
+			}
+			var hosts []string
+			for _, a := range page.Items {
+				hosts = append(hosts, a.Hostname)
+			}
+			return fmt.Sprint(hosts)
 		}
-		// agent-00 heartbeated itself mid-traversal -- per the design's
-		// documented, accepted limitation, it drops out of THIS traversal.
-		// It is not a bug if it's absent here.
-		if seen["agent-00"] {
-			t.Log("note: agent-00 was reachable despite heartbeating mid-traversal -- fine if it happens, just not guaranteed")
+		want := "[Alpha bravo mike zulu]"
+		if got := list(); got != want {
+			t.Fatalf("order = %s, want %s", got, want)
+		}
+		// zulu was the OLDEST heartbeat; making it the newest must not move it.
+		if _, err := pool.Exec(context.Background(), `UPDATE agents SET last_update = NOW() + interval '1 minute' WHERE hostname = 'zulu'`); err != nil {
+			t.Fatalf("heartbeat: %v", err)
+		}
+		if got := list(); got != want {
+			t.Fatalf("order after a heartbeat = %s, want %s unchanged", got, want)
 		}
 	})
 }

@@ -1029,10 +1029,18 @@ func groupRecursiveFilter(args []any, groupID int64) (string, []any) {
 // keyset-paginated APIs accept. See
 // TestGetAgents_Paginated_ConcurrentHeartbeat_NoDuplicateOrCollateralSkip.
 type agentCursor struct {
-	Snapshot   time.Time `json:"snapshot"`
-	LastUpdate time.Time `json:"last_update"`
-	AgentID    string    `json:"agent_id"`
+	// Hostname is the lower-cased sort key of the last row returned (agentSortKeySQL), AgentID its tie-break.
+	Hostname string `json:"hostname"`
+	AgentID  string `json:"agent_id"`
+	// Alpha marks a cursor issued by the hostname-ordered list. A cursor from the earlier last_update ordering
+	// has no such mark and is refused (the client starts again from page 1) rather than read as a position.
+	Alpha bool `json:"alpha"`
 }
+
+// agentSortKeySQL is the list's sort key: the hostname, case-insensitive. The list is ordered by it (then by
+// agent_id) so rows stay where they are while agents heartbeat; ordered by last_update, as it used to be, the
+// table reshuffled every time any agent communicated.
+const agentSortKeySQL = "LOWER(COALESCE(a.hostname, ''))"
 
 func encodeAgentCursor(c agentCursor) string {
 	b, _ := json.Marshal(c)
@@ -1150,7 +1158,6 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 		limit = 500
 	}
 
-	var snapshot time.Time
 	var cursor agentCursor
 	if cursorParam != "" {
 		c, err := decodeAgentCursor(cursorParam)
@@ -1158,19 +1165,11 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 			jsonError(w, "invalid cursor", http.StatusBadRequest)
 			return
 		}
-		cursor = c
-		snapshot = cursor.Snapshot
-	} else {
-		// The first page takes its snapshot from the database clock, the same
-		// clock that stamps last_update. Taking it from this host's clock lets
-		// two clocks disagree: a freshly stamped agent can fall after the
-		// snapshot and disappear from the page.
-		var err error
-		snapshot, err = h.databaseNow(r.Context())
-		if err != nil {
-			jsonError(w, "read database time: "+err.Error(), http.StatusInternalServerError)
+		if !c.Alpha {
+			jsonError(w, "invalid cursor", http.StatusBadRequest)
 			return
 		}
+		cursor = c
 	}
 
 	var hasGroup bool
@@ -1186,8 +1185,7 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 
 	// Row-list query.
 	var args []any
-	args = append(args, snapshot)
-	where := []string{"a.last_update <= $" + strconv.Itoa(len(args))}
+	var where []string
 
 	if hasGroup {
 		var frag string
@@ -1195,8 +1193,8 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 		where = append(where, frag)
 	}
 	if cursorParam != "" {
-		args = append(args, cursor.LastUpdate, cursor.AgentID)
-		where = append(where, fmt.Sprintf("(a.last_update, a.agent_id) < ($%d, $%d)", len(args)-1, len(args)))
+		args = append(args, cursor.Hostname, cursor.AgentID)
+		where = append(where, fmt.Sprintf("("+agentSortKeySQL+", a.agent_id) > ($%d, $%d)", len(args)-1, len(args)))
 	}
 	if qParam := qs.Get("q"); qParam != "" {
 		args = append(args, "%"+qParam+"%")
@@ -1211,9 +1209,13 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 	}
 	args = append(args, limit+1)
 
+	whereSQL := ""
+	if len(where) > 0 {
+		whereSQL = " WHERE " + strings.Join(where, " AND ")
+	}
 	query := "SELECT " + agentSelectColumns + " " + agentFromJoins +
-		" WHERE " + strings.Join(where, " AND ") +
-		" ORDER BY a.last_update DESC, a.agent_id DESC" +
+		whereSQL +
+		" ORDER BY " + agentSortKeySQL + " ASC, a.agent_id ASC" +
 		" LIMIT $" + strconv.Itoa(len(args))
 
 	rows, err := h.db.Query(r.Context(), query, args...)
@@ -1236,9 +1238,9 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 	if hasMore {
 		last := agents[len(agents)-1]
 		nextCursor = encodeAgentCursor(agentCursor{
-			Snapshot:   snapshot,
-			LastUpdate: last.LastUpdate,
-			AgentID:    last.AgentID,
+			Hostname: strings.ToLower(last.Hostname),
+			AgentID:  last.AgentID,
+			Alpha:    true,
 		})
 	}
 
