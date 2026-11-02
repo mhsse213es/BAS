@@ -661,8 +661,7 @@ func main() {
 	} else if len(legacy) > 0 {
 		log.Printf("[!] %d legacy name-derived intel content item(s); see GET /api/content-registry/migration-report (legacyIntel)", len(legacy))
 	}
-	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool, priorityEngine).
-		WithIdentityStore(identityStore)
+	scheduler := connector.NewProductionScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool, priorityEngine, evStore, identityStore)
 	tiActivitySources, err := connector.LoadActivitySourcesFromDB(context.Background(), pool)
 	if err != nil {
 		log.Printf("[!] threat-intel activity source load warning: %v", err)
