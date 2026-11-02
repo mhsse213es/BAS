@@ -518,11 +518,16 @@
               <a class="btn btn-sm btn-primary" href="/api/agents/download/linux-amd64" download="bas-agent-linux-amd64">CLI Binary (x86_64)</a>
               <a class="btn btn-sm btn-primary" href="/api/agents/download/linux-arm64" download="bas-agent-linux-arm64">CLI Binary (ARM64)</a>
             </div>
-            <div class="agent-dl-hint">Ubuntu 20.04+, Debian 10+, RHEL/Rocky 8+ &mdash; the command below already has your server URL baked in; it only asks for the Agent Secret</div>
+            <div class="agent-dl-hint">Ubuntu 20.04+, Debian 10+, RHEL/Rocky 8+ &mdash; the <strong>Setup file (.run)</strong> already contains the agent, your server address and the deployment CA; it only asks for the Agent Secret</div>
             <div class="agent-dl-usage g1-s-fa769ae0">
               <strong>Install:</strong>
-              <code id="linux-cli-cmd">chmod +x bas-agent-linux-* &amp;&amp; sudo ./bas-agent-linux-* --install --server &lt;URL&gt; --ca-root ./deployment-ca.pem --env Production</code>
-              <div class="g1-s-b3aebb78">Running it prompts <code class="g1-s-eac76940">Agent Secret:</code> interactively &mdash; nothing else to fill in, and the secret never ends up in shell history.</div>
+              <code id="linux-run-cmd">sudo sh ./bas-agent-setup-linux.run</code>
+              <div class="g1-s-b3aebb78">Download the Setup file above, copy it to the machine, and run the command. It prompts <code class="g1-s-eac76940">Agent Secret:</code> &mdash; nothing else to fill in, and the secret never ends up in shell history. For ARM64 use the ARM64 setup file.</div>
+              <details>
+                <summary>Advanced: install from the bare binary</summary>
+                <div class="g1-s-b3aebb78">Needs the <strong>CLI Binary</strong> (<code class="g1-s-eac76940">bas-agent-linux-amd64</code>) downloaded into the <em>same folder</em> as where you run this. It writes the deployment CA, fetches the install script, and installs. Prefer the Setup file unless you cannot copy a file to the machine.</div>
+                <code id="linux-cli-cmd">chmod +x bas-agent-linux-* &amp;&amp; sudo ./bas-agent-linux-* --install --server &lt;URL&gt; --ca-root ./deployment-ca.pem --env Production</code>
+              </details>
               <div class="g1-display-flex g1-s-89b169c7">
                 <span class="g1-s-007f626a">Advanced / scripted deployment (distro package, manual config edit):</span>
               </div>
