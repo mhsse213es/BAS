@@ -221,3 +221,7 @@ body.theme-light .sidebar-brand .brand-full.logo-onlight { box-shadow: 0 1px 4px
 /* Top business risks: a row opens its finding, so it carries the same chevron as the rows above it. */
 #ed-risks .rk-check > svg { flex: none; width: 16px; height: 16px; color: var(--muted); }
 #ed-risks .rk-check.rk-click:hover .rk-check-t b { color: var(--accent); }
+/* Dashboard data unavailable (agents/runs request failed): the banner spans the KPI row and the sections that
+   would otherwise sit on "Loading..." forever are hidden until a successful reload. */
+.dp-g5 > .rk-failed { grid-column: 1 / -1; }
+#dash-view-operational.is-unavailable > :not(#hero-dashboard):not(#dop-kpis) { display: none; }

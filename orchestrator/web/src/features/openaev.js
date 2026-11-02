@@ -1,6 +1,7 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf } from '../core/load-state.js';
 import { ago, showToast } from '../core/util.js';
 import { apColor, apClosePanels } from './attack-path.js';
 import { freshness as apAgeChip } from './ap-model.js';
@@ -105,7 +106,7 @@ function loadOpenAEVScenarios(type) {
   var kind = type === 'exercise' ? 'exs' : 'scen';
   exCall('/api/openaev/scenarios?type=' + encodeURIComponent(type || 'scenario')).then(function(list) {
     setExRows(kind, list);
-  }).catch(function(e) { setExError(kind, e && e.message); });
+  }).catch(function() { setExError(kind); });
 }
 
 export function testOpenAEVConfig() {
@@ -192,7 +193,7 @@ export function loadExercisesTab() {
   loadOpenAEVScenarios('exercise');
   exCall('/api/exercises/plans').then(function(plans) {
     setExPlans(plans);
-  }).catch(function(e) { setExPlansError(e && e.message); });
+  }).catch(function() { setExPlansError(); });
 
   exCall('/api/exercises/executions').then(function(execs) {
     setExRows('execs', execs);

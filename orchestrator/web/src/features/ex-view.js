@@ -4,6 +4,7 @@
 // (loadExercisesTab); this module paints what it is given. Pure helpers live in ex-model.js.
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureHtml } from '../core/load-state.js';
 import { showToast } from '../core/util.js';
 import { pill, bar, empty, chip } from '../core/kit.js';
 import { setHeroStat } from './shell-ui.js';
@@ -182,9 +183,10 @@ export function setExRows(kind, rows) {
   renderHero();
 }
 
-export function setExError(kind, msg) {
+// fail: a failureOf() result, or a string/undefined for an exception (generic error).
+export function setExError(kind, fail) {
   var box = el(BOX[kind]);
-  if (box && ST[kind].rows === null) box.innerHTML = '<div class="ex-state u-danger">Failed to load: ' + x(msg || 'error') + '</div>';
+  if (box && ST[kind].rows === null) box.innerHTML = failureHtml('exercise data', fail && typeof fail === 'object' ? fail : { kind: 'error' }, 'loadExercisesTab');
 }
 
 // setExPlans paints the Exercise plans list: name and caption on the left, Launch on the right.
@@ -217,9 +219,9 @@ export function setExPlans(plans) {
   if (FOCUS_NEW_PLAN && PLANS.length) focusNewestPlan();
 }
 
-export function setExPlansError(msg) {
+export function setExPlansError(fail) {
   var body = el('ex-plans-body');
-  if (body && PLANS === null) body.innerHTML = '<div class="ex-state u-danger">Failed to load: ' + x(msg || 'error') + '</div>';
+  if (body && PLANS === null) body.innerHTML = failureHtml('exercise plans', fail && typeof fail === 'object' ? fail : { kind: 'error' }, 'loadExercisesTab');
 }
 
 // ── Table controls ──

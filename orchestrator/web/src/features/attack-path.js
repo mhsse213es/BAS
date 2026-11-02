@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { on } from '../core/actions.js';
 import { apicall, apicallOk } from '../core/api.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { x } from '../core/escape.js';
 import { debCommand } from './deb-command.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
@@ -132,7 +133,11 @@ export function loadRecommendations() {
   renderRecControls();
   renderRecLoading();
   apicall('/api/recommend/simulations?limit=' + encodeURIComponent(recLimit()))
-    .then(function(data) { renderRecommendations(data); })
+    .then(function(data) {
+      var fail = failureOf(data) || (data && data.techniques !== undefined && !Array.isArray(data.techniques) ? { kind: 'error' } : null);
+      if (fail) { renderRecError(fail); return; }
+      renderRecommendations(data);
+    })
     .catch(function(e) { renderRecError(e.message); });
 }
 
@@ -921,6 +926,8 @@ export function loadAgents() {
   if (q) url += '&q=' + encodeURIComponent(q);
   if (AGENT_FILTER !== 'all') url += '&bucket=' + encodeURIComponent(AGENT_FILTER);
   return apicall(url).then(function(page) {
+    var fail = failureOf(page) || (page && !Array.isArray(page.items) ? { kind: 'error' } : null);
+    if (fail) { agentsUnavailable(fail); return; }
     state.agents = (page && page.items) || [];
     state.agentsNextCursor = (page && page.next_cursor) || '';
     state.agentsHasMore = !!(page && page.has_more);
@@ -929,7 +936,15 @@ export function loadAgents() {
     renderAgentHero(); renderAgentInsights(); renderAgentToolbar(); renderAgentRows(); renderAgentGroupTree();
     renderLegacyMigrationPanel();
     loadFleetTrayState();
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) { agentsUnavailable({ kind: 'error' }); showToast(e.message, 'err'); });
+}
+// Failed load: an error with Retry and "—" counters, never "0 agents" or an empty fleet.
+function agentsUnavailable(fail) {
+  ['hs-agents-total', 'hs-agents-online', 'hs-agents-degraded', 'hs-agents-offline', 'hs-agents-retired'].forEach(function(id) { setHeroStat(id, '—'); });
+  var ins = document.getElementById('agent-insights');
+  if (ins) ins.innerHTML = '';
+  var mount = document.getElementById('agent-table-mount');
+  if (mount) mount.innerHTML = failureHtml('agents', fail, 'loadAgents');
 }
 // The fleet-wide tray-icon default labels the System Tree button and decides each agent's Action-menu wording.
 // A failed read leaves the last known value; it never blocks the agent list.
@@ -969,6 +984,7 @@ function renderLegacyMigrationPanel() {
   var el = document.getElementById('legacy-migration-panel');
   if (!el) return;
   apicall('/api/agents/legacy-migration-status').then(function(status) {
+    if (failureOf(status)) { el.innerHTML = ''; return; }
     el.innerHTML = migrationPanelHtml(status, function(t) { return new Date(t).toLocaleString(); });
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
@@ -981,6 +997,7 @@ export function loadMoreAgents() {
   if (q) url += '&q=' + encodeURIComponent(q);
   if (AGENT_FILTER !== 'all') url += '&bucket=' + encodeURIComponent(AGENT_FILTER);
   return apicall(url).then(function(page) {
+    if (failureOf(page) || (page && !Array.isArray(page.items))) { showToast('Could not load more agents', 'err'); return; }
     state.agents = state.agents.concat((page && page.items) || []);
     state.agentsNextCursor = (page && page.next_cursor) || '';
     state.agentsHasMore = !!(page && page.has_more);
