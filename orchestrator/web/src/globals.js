@@ -37,6 +37,7 @@ import { addStep, addlSelChange, loadStepScript, applyPicker, clearSelection, cl
 import { closeRerunReview, closeRerunReviewOnBackdrop, openCampaignRerunReview, openRerunReview, startRerunFromReview } from './features/rerun-review.js';
 import { cancelScheduledAssessment, closeSchedWizard, loadScheduledAssessments, openSchedWizard, openSchedWizardForEdit, schedAuthCheckChange, schedOnModeChange, schedOnRecurrenceChange, schedToggleAgentFromChecked, schedToggleGroupFromChecked, schedWizardNav, setSchedFilter, submitScheduledAssessment, schedSearch, schedClearFilters, schedTableQuery, setSchedPer, schedPage, schedSortBy, toggleSchedCols, schedColToggle, schedSelectRow, schedSelectAll, clearSchedSelection, exportSchedCsv, exportSchedSelected, schedOpen, schedRowKeydown, closeSchedDrawer, closeSchedDrawerOnBackdrop, schedEditFromDrawer, schedCancelFromDrawer } from './features/scheduled.js';
 import { toggleNavPin } from './features/nav-extras.js';
+import { cloudPickScenario, cloudSubmitRun } from './features/cloud-scenarios.js';
 import { k8sSearch, k8sPickCluster, k8sSetCluster, k8sSetState, k8sClearFilters, k8sNewRun, k8sOpenRun, k8sRowKeydown, closeK8sDrawer, closeK8sDrawerOnBackdrop, k8sFilterClusterFromDrawer, k8sOpenCoverage } from './features/k8s-scenarios.js';
 import { setAgentsViewRich as setAgentsView } from './features/agents-risk-view.js';
 import { intQuery, setIntKind, intCardOpen } from './features/int-view.js';
@@ -502,6 +503,8 @@ export const ACTIONS = {
   k8sSetState,
   k8sClearFilters,
   k8sNewRun,
+  cloudPickScenario,
+  cloudSubmitRun,
   k8sOpenRun,
   k8sRowKeydown,
   closeK8sDrawer,

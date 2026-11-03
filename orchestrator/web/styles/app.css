@@ -1486,3 +1486,17 @@ body.theme-light {
 .rem-ep-mit { font-size: 0.78rem; margin-top: 0.15rem; line-height: 1.5; }
 .rem-ep-h { font-size: 0.78rem; font-weight: 600; color: var(--muted-hi); }
 .rem-ep-err { color: var(--danger); font-size: 0.78rem; }
+
+/* Cloud Scenarios page (O-10) */
+.cloud-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin: 12px 0; }
+.cloud-card { border: 1px solid var(--border, #d0d7de); border-radius: 8px; padding: 12px; }
+.cloud-card-h { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.cloud-prov { font-size: 12px; opacity: 0.75; }
+.cloud-card-d { font-size: 13px; margin: 6px 0; }
+.cloud-card-m { font-size: 12px; opacity: 0.7; margin-bottom: 8px; }
+.cloud-result { border-left: 4px solid var(--border, #d0d7de); padding: 8px 12px; margin-top: 12px; }
+.cloud-tone-ok { border-color: #2e7d32; }
+.cloud-tone-warn { border-color: #b26a00; }
+.cloud-tone-bad { border-color: #c62828; }
+.cloud-tone-neutral { border-color: #6b7280; }
+.cloud-result-err { color: #c62828; margin-top: 4px; }

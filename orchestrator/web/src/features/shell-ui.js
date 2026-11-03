@@ -6,7 +6,7 @@ import { x } from '../core/escape.js';
 
 // Sidebar group of every tab, in the same grouping index.html uses for the nav.
 var TAB_GROUP = {
-  dashboard: 'Operations', scenarios: 'Operations', runs: 'Operations', 'k8s-scenarios': 'Operations',
+  dashboard: 'Operations', scenarios: 'Operations', runs: 'Operations', 'k8s-scenarios': 'Operations', 'cloud-scenarios': 'Operations',
   'scheduled-assessments': 'Operations', initiatives: 'Operations', campaigns: 'Operations',
   'factory-health': 'Operations', coverage: 'Operations', variants: 'Operations', 'ad-coverage': 'Operations',
   email: 'Operations', em: 'Operations',
