@@ -245,6 +245,16 @@ func (o *Orchestrator) recordExecutionOutcome(ctx context.Context, versionID, ru
 	// construction it is a factory run; the Task-6 reconciler enforces the
 	// factory_validation join when healing from content_validations directly.
 	if outcome != "NO_DATA" {
+		payload := map[string]any{"outcome": outcome, "run_id": runID}
+		// Carry the validation scope + coverage onto the SLA event too, so the
+		// profile and its coverage limits travel with the milestone, not only
+		// the content_validations row.
+		if p, ok := detail["validation_profile"]; ok {
+			payload["validation_profile"] = p
+		}
+		if c, ok := detail["validation_coverage"]; ok {
+			payload["validation_coverage"] = c
+		}
 		if err := tcv.RecordPipelineEvent(ctx, o.pool, tcv.Event{
 			Type:             tcv.EventValidationResulted,
 			ContentVersionID: versionID,
@@ -252,7 +262,7 @@ func (o *Orchestrator) recordExecutionOutcome(ctx context.Context, versionID, ru
 			EventTime:        time.Now(),
 			SourceTable:      "content_validations",
 			SourcePK:         runID,
-			Payload:          map[string]any{"outcome": outcome, "run_id": runID},
+			Payload:          payload,
 		}); err != nil {
 			log.Printf("[validationlab] record validation_resulted for %s: %v", versionID, err)
 		}
@@ -312,7 +322,11 @@ func (o *Orchestrator) pollAndResolve(ctx context.Context, versionID, runID stri
 func (o *Orchestrator) resolveIfComplete(ctx context.Context, versionID, runID string) bool {
 	var status string
 	var resultsJSON []byte
-	if err := o.pool.QueryRow(ctx, `SELECT status, results FROM scenario_runs WHERE id = $1`, runID).Scan(&status, &resultsJSON); err != nil {
+	var profile string
+	var coverageJSON []byte
+	if err := o.pool.QueryRow(ctx,
+		`SELECT status, results, validation_profile, validation_coverage FROM scenario_runs WHERE id = $1`, runID,
+	).Scan(&status, &resultsJSON, &profile, &coverageJSON); err != nil {
 		log.Printf("[validationlab] read run %s status: %v", runID, err)
 		return false
 	}
@@ -323,7 +337,16 @@ func (o *Orchestrator) resolveIfComplete(ctx context.Context, versionID, runID s
 	if status == "completed" {
 		outcome, reason = classifyCompletedRun(resultsJSON)
 	}
-	o.recordExecutionOutcome(ctx, versionID, runID, outcome, map[string]any{"run_id": runID, "status": status, "reason": reason})
+	detail := map[string]any{"run_id": runID, "status": status, "reason": reason}
+	// Evidence honesty: a profiled validation records its scope + coverage, so a
+	// representative PASS is never read as "the whole scenario was validated".
+	if profile != "" {
+		detail["validation_profile"] = profile
+		if len(coverageJSON) > 0 {
+			detail["validation_coverage"] = json.RawMessage(coverageJSON)
+		}
+	}
+	o.recordExecutionOutcome(ctx, versionID, runID, outcome, detail)
 	if outcome == "PASS" {
 		_ = o.reg.Transition(ctx, versionID, contentregistry.LifecycleValidated, contentregistry.ActorValidationLab, reason)
 	} else {
