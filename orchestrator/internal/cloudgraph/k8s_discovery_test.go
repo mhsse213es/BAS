@@ -25,7 +25,7 @@ var k8sFixtures = map[string]string{
 	"/api/v1/pods": `{"items":[{"metadata":{"name":"web-1","namespace":"default",
 		"ownerReferences":[{"kind":"ReplicaSet","name":"web-7d"}]},"spec":{"serviceAccountName":"web"}}]}`,
 	"/apis/networking.k8s.io/v1/networkpolicies": `{"items":[]}`,
-	"/api/v1/serviceaccounts": `{"items":[{"metadata":{"name":"web","namespace":"default"}}]}`,
+	"/api/v1/serviceaccounts":                    `{"items":[{"metadata":{"name":"web","namespace":"default"}}]}`,
 	"/apis/rbac.authorization.k8s.io/v1/roles": `{"items":[{"metadata":{"name":"reader","namespace":"default"},
 		"rules":[{"apiGroups":[""],"resources":["pods"],"verbs":["get","list"]}]}]}`,
 	"/apis/rbac.authorization.k8s.io/v1/clusterroles": `{"items":[{"metadata":{"name":"view"},

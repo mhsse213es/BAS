@@ -53,6 +53,7 @@ type K8sWorkloadSelector struct {
 
 // K8sBoundary is one owner expectation. Port is required; Protocol defaults to TCP.
 type K8sBoundary struct {
+	Name     string
 	From     K8sWorkloadSelector
 	To       K8sWorkloadSelector
 	Port     int
@@ -62,19 +63,20 @@ type K8sBoundary struct {
 
 // K8sBoundaryResult is the analysis of one boundary.
 type K8sBoundaryResult struct {
-	From            string
-	To              string
-	Port            int
-	Protocol        string
-	Expect          string
-	Configured      string
-	Matches         bool
-	IngressPolicies []string
-	EgressPolicies  []string
-	Reasons         []string
+	Name            string   `json:"name"`
+	From            string   `json:"from"`
+	To              string   `json:"to"`
+	Port            int      `json:"port"`
+	Protocol        string   `json:"protocol"`
+	Expect          string   `json:"expect"`
+	Configured      string   `json:"configured"`
+	Matches         bool     `json:"matches"`
+	IngressPolicies []string `json:"ingressPolicies"`
+	EgressPolicies  []string `json:"egressPolicies"`
+	Reasons         []string `json:"reasons"`
 	// Complete is false when discovery was incomplete. An incomplete NetworkPolicy list makes
 	// Configured UNKNOWN for every boundary.
-	Complete bool
+	Complete bool `json:"complete"`
 }
 
 type netpolPod struct {
@@ -180,6 +182,7 @@ func resolvePods(pods []netpolPod, sel K8sWorkloadSelector) []netpolPod {
 
 func evaluateBoundary(inv *K8sInventory, b K8sBoundary, pods []netpolPod, nsLabels map[string]map[string]string, complete bool) K8sBoundaryResult {
 	res := K8sBoundaryResult{
+		Name: b.Name,
 		From: describeEnd(b.From), To: describeEnd(b.To), Port: b.Port, Protocol: protocolOf(b.Protocol),
 		Expect: b.Expect, Complete: complete,
 	}

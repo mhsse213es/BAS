@@ -231,9 +231,9 @@ func toRBACRules(in []k8sPolicyRule) []RBACRule {
 // k8sObject is the subset of Kubernetes objects discovery reads.
 type k8sObject struct {
 	Metadata struct {
-		Name            string        `json:"name"`
-		Namespace       string        `json:"namespace"`
-		OwnerReferences []k8sOwnerRef `json:"ownerReferences"`
+		Name            string            `json:"name"`
+		Namespace       string            `json:"namespace"`
+		OwnerReferences []k8sOwnerRef     `json:"ownerReferences"`
 		Labels          map[string]string `json:"labels"`
 	} `json:"metadata"`
 	Spec k8sPodSpec `json:"spec"`

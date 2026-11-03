@@ -1,0 +1,85 @@
+# Lab fixtures for the network-policy boundary analysis (scenario 9). Applied to kind-bas-lab only.
+# Two namespaces. np-db has a default-deny ingress policy and one allow policy for web pods in np-app on TCP 5432.
+# Pods use the pause image: they exist so that discovery can resolve selectors. Nothing here sends traffic.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: np-app
+  labels:
+    name: np-app
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: np-db
+  labels:
+    name: np-db
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web
+  namespace: np-app
+  labels:
+    app: web
+spec:
+  containers:
+    - name: app
+      image: registry.k8s.io/pause:3.9
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: batch
+  namespace: np-app
+  labels:
+    app: batch
+spec:
+  containers:
+    - name: app
+      image: registry.k8s.io/pause:3.9
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: db
+  namespace: np-db
+  labels:
+    app: db
+spec:
+  containers:
+    - name: app
+      image: registry.k8s.io/pause:3.9
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: np-db
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-web-to-db
+  namespace: np-db
+spec:
+  podSelector:
+    matchLabels:
+      app: db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: np-app
+          podSelector:
+            matchLabels:
+              app: web
+      ports:
+        - protocol: TCP
+          port: 5432
