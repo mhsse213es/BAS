@@ -87,6 +87,14 @@ test('renderFactoryVelocity shows per-stage durations, cohort counts, and the bo
   assert.ok(html.includes('Bottleneck'), 'names the bottleneck');
 });
 
+test('renderFactoryVelocity shows an unavailable state (not a false empty) when every stage call failed', () => {
+  document.body.innerHTML = '<div id="factory-health-velocity"></div>';
+  renderFactoryVelocity(velocityModel({ queue: { error: 'x' }, generation: { error: 'x' }, validation: { error: 'x' }, end_to_end: { error: 'x' } }));
+  const html = document.getElementById('factory-health-velocity').innerHTML.toLowerCase();
+  assert.ok(html.includes('not available'), 'says velocity is not available');
+  assert.ok(!html.includes('0 validated'), 'must not show fabricated zero-cohort chips during an outage');
+});
+
 test('renderFactoryVelocity shows an honest empty state before any validated coverage', () => {
   document.body.innerHTML = '<div id="factory-health-velocity"></div>';
   renderFactoryVelocity(velocityModel({ end_to_end: { stage: 'end_to_end', segments: [], open_count: 3, bottleneck: '', incomplete_window: false } }));

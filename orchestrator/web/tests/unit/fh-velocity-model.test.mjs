@@ -99,6 +99,35 @@ test('velocityModel tolerates null/missing reports without throwing', () => {
   assert.doesNotThrow(() => velocityModel(null));
 });
 
+test('velocityModel: a partial outage (one stage errored) reports the summary from a stage that has data', () => {
+  // apicall returns the parsed body for a 500, so a failed stage arrives as
+  // {error:...} (truthy, no segments array) rather than null.
+  const m = velocityModel({
+    queue: { error: 'boom' },
+    generation: { error: 'boom' },
+    validation: { stage: 'validation', segments: [{ source: 'OTX', content_type: 'emulates', cohort: 'validated', n: 3, p50_seconds: 600, p95_seconds: 1800 }], open_count: 1, oldest_open_seconds: 5000, bottleneck: 'validation', incomplete_window: false },
+    end_to_end: { error: 'boom' },
+  });
+  assert.equal(m.available, true);
+  assert.equal(m.hasData, true);
+  assert.equal(m.summary.validatedN, 3); // from validation, NOT the errored end_to_end
+  assert.equal(m.summary.openN, 1);
+  assert.equal(m.rows.length, 1);
+});
+
+test('velocityModel: every stage failed -> available false (an outage is not an empty factory)', () => {
+  assert.equal(velocityModel({ queue: { error: 'x' }, generation: null, validation: { error: 'x' }, end_to_end: { error: 'x' } }).available, false);
+  assert.equal(velocityModel({}).available, false);
+  assert.equal(velocityModel(null).available, false);
+});
+
+test('velocityModel: healthy but no coverage -> available true, hasData false', () => {
+  const m = velocityModel({ end_to_end: { stage: 'end_to_end', segments: [], open_count: 2, bottleneck: '', incomplete_window: false } });
+  assert.equal(m.available, true);
+  assert.equal(m.hasData, false);
+  assert.equal(m.summary.openN, 2);
+});
+
 test('fmtDuration: seconds, minutes, hours, days, and null', () => {
   assert.equal(fmtDuration(null), '—');
   assert.equal(fmtDuration(undefined), '—');

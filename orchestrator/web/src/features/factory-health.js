@@ -321,6 +321,12 @@ function velSummary(sm) {
 export function renderFactoryVelocity(vm) {
   var el = document.getElementById('factory-health-velocity');
   if (!el) return;
+  // No stage call returned data: an outage, not an empty factory. Show that
+  // plainly, without the zero-cohort chips that would read as a real state.
+  if (!vm.available) {
+    el.innerHTML = card('Factory velocity', empty('clock', 'Velocity is not available right now'));
+    return;
+  }
   if (!vm.hasData) {
     el.innerHTML = card('Factory velocity — threat → validated coverage',
       velSummary(vm.summary) +

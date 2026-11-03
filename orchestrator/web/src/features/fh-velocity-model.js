@@ -11,9 +11,14 @@ export var STAGE_ORDER = ['queue', 'generation', 'validation', 'end_to_end'];
 
 function segKey(s) { return (s.source || '') + '\u0000' + (s.content_type || ''); }
 
+// hasSegments: a report we actually received (not null, not an {error:...} body
+// that apicall returns verbatim for a non-200). Only such a report may feed the
+// summary or count toward availability.
+function hasSegments(report) { return !!report && Array.isArray(report.segments); }
+
 // validatedSegments: the validated-cohort segments of one report (or []).
 function validatedSegments(report) {
-  if (!report || !report.segments) return [];
+  if (!hasSegments(report)) return [];
   return report.segments.filter(function (s) { return s.cohort === 'validated' && s.p50_seconds != null; });
 }
 
@@ -48,10 +53,16 @@ export function velocityModel(reports) {
     return row;
   });
 
-  // Summary: cohort counts + health come from the end_to_end report when present
-  // (open_count/oldest_open/bottleneck/incomplete are computed stage-independently
-  // server-side, so any report would agree), else the first non-null report.
-  var base = reports.end_to_end || reports.validation || reports.generation || reports.queue || {};
+  // Summary: cohort counts + health come from a report we actually received,
+  // preferring end_to_end (open_count/oldest_open/bottleneck/incomplete are
+  // computed stage-independently server-side, so any received report agrees).
+  // An {error:...} body from a failed stage must NOT become the summary, or the
+  // chips would read "0 validated" while the rows show real data.
+  var base = {};
+  for (var i = STAGE_ORDER.length - 1; i >= 0; i--) {
+    if (hasSegments(reports[STAGE_ORDER[i]])) { base = reports[STAGE_ORDER[i]]; break; }
+  }
+  var available = STAGE_ORDER.some(function (s) { return hasSegments(reports[s]); });
   var validatedN = 0, failedN = 0;
   (base.segments || []).forEach(function (s) {
     if (s.cohort === 'validated') validatedN += (s.n || 0);
@@ -59,6 +70,7 @@ export function velocityModel(reports) {
   });
 
   return {
+    available: available,
     hasData: rows.length > 0,
     rows: rows,
     summary: {
