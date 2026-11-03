@@ -296,6 +296,34 @@ func TestRunDetectionGapExport_BundlesRulesAndQueriesWithProvenanceAndNothingInv
 	})
 }
 
+// QRadar bundles use the .aql extension, and the manifest lists those files.
+func TestRunDetectionGapExport_QRadarQueriesAreAQLFiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := gapHandler(pool, t)
+		runID := seedGapRun(t, pool, []models.SimulationResult{res("T1059.001", models.ResultFail)})
+		attest(t, pool, runID, "T1059.001", verification.ResultNotDetected, verification.StateApproved)
+		zr, rec := getGapExport(t, h, runID, "?backend=qradar")
+		if zr == nil {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		saw := false
+		for name, body := range zipFiles(t, zr) {
+			if strings.HasPrefix(name, "queries/qradar/") {
+				saw = true
+				if !strings.HasSuffix(name, ".aql") || !strings.Contains(body, "events") {
+					t.Errorf("bad QRadar file %s: %.80s", name, body)
+				}
+			}
+		}
+		if !saw {
+			t.Error("no QRadar query in the bundle")
+		}
+	})
+}
+
 func TestRunDetectionGapExport_UnknownRunAndNothingToExport(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

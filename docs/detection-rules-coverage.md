@@ -28,10 +28,10 @@ ATT&CK version first.
 - Rule exists for the parent technique only: **12** (shown as such, never presented as exact)
 - **No Sigma rule: 2**. These stay "no rule available"; nothing is invented.
 
-## 3. Translation to the five SIEMs
+## 3. Translation to the six SIEMs
 
-Applicable rules (exact or parent match): **2,104**. With the field-mapping pipelines of section 4, **1,927 (91%)**
-translate to all five backends. (Before field mapping, a generic conversion succeeded for 99%, because a bare
+Applicable rules (exact or parent match): **2,104**. With the field-mapping pipelines of section 4, **1,927 (92%)**
+translate to the five original backends, and **1,643 (78%)** to all six including QRadar. (Before field mapping, a generic conversion succeeded for 99%, because a bare
 backend accepts any field name; the drop is rules whose fields a SIEM's real schema cannot express, now reported
 honestly instead of producing a query that matches nothing.)
 
@@ -42,6 +42,7 @@ honestly instead of producing a query that matches nothing.)
 | Splunk (SPL) | 2,104 | 0 |
 | Elastic (Lucene) | 2,104 | 0 |
 | CrowdStrike (LogScale) | 1,945 | 159 |
+| IBM QRadar (AQL), generic only | 1,753 | 351 |
 
 ## 4. Field mapping per SIEM (Windows process creation)
 
@@ -90,21 +91,30 @@ as ready to paste. Each further log-source family is one more entry in `scripts/
   rules fail on every backend with a misleading error.
 - **pySigma edits rules in place**, so the generator converts a fresh copy of the rule for every backend.
 
+### QRadar
+
+QRadar is the sixth backend. Its pySigma backend needs pySigma below 0.10, so it is generated in a separate
+environment (`scripts/rulelib-gen/qradar/README.md`). Every QRadar query is **generic**: AQL with Sigma's own field
+names as custom event properties, never labelled field-mapped, because the package's bundled Windows pipelines
+convert only 77 of 845 Windows process-creation rules and two crash. 1,753 of 2,104 rules (83%) have a QRadar query;
+the other 351 are recorded as "backend translation unavailable" because the backend supports only a fixed set of
+fields per log source. The queries have not been run on a QRadar; treat them as a starting point.
+
 ## 6. What ships in the product
 
 The orchestrator embeds the full library generated from the pinned commit: **2,104 SigmaHQ rules** covering
 **282 ATT&CK technique ids** (the 152 techniques Audspect's scenarios run, plus parents), every rule with its
 translations, mapping labels and provenance (SigmaHQ, exact commit, path inside the checkout, licence DRL 1.1).
 
-- Size: `rules.json` is 14.7 MB (about 5 queries and the raw rule per rule), embedded in the binary. This is larger
+- Size: `rules.json` is 16.1 MB (up to 6 queries and the raw rule per rule), embedded in the binary. This is larger
   than the 6 MB first estimated.
 - Rule ids are stable across regenerations: `scripts/rulelib-gen/id_registry.json` maps each SigmaHQ id to its
   AUDRULE id and only grows. Commit it with every regeneration.
 - Two rules carry ATT&CK ids newer than the bundled ATT&CK v16.1 data (T1059.012, T1204.004); they are kept and
   listed in `metadata.json` as `unrecognizedTechniqueIds`.
 - Regenerate: `tools/rulelib/fetch_sigma.sh`, then
-  `python scripts/rulelib-gen/build.py --sigma-dir tools/rulelib/sigma/rules --sigma-root tools/rulelib/sigma`.
-- Every export (Sigma, KQL, SPL, Lucene, LogScale) returns the upstream rule id, source, commit and licence as
+  `python scripts/rulelib-gen/build.py --sigma-dir tools/rulelib/sigma/rules --sigma-root tools/rulelib/sigma --qradar-python <python of the QRadar environment>`.
+- Every export (Sigma, KQL, SPL, Lucene, LogScale, AQL) returns the upstream rule id, source, commit and licence as
   response headers.
 
 ## 7. Attribution

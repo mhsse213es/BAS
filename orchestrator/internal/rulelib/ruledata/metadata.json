@@ -5,9 +5,10 @@
     "elastic": 2104,
     "microsoft_defender": 2075,
     "microsoft_sentinel": 2075,
+    "qradar": 1753,
     "splunk": 2104
   },
-  "generatedAt": "2026-11-03T06:41:07.851285+00:00",
+  "generatedAt": "2026-11-03T08:39:07.288480+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
     "crowdstrike:generic": 1242,
@@ -18,6 +19,7 @@
     "microsoft_defender:pipeline": 816,
     "microsoft_sentinel:generic": 1259,
     "microsoft_sentinel:pipeline": 816,
+    "qradar:generic": 1753,
     "splunk:generic": 1259,
     "splunk:pipeline": 845
   },
@@ -29,10 +31,28 @@
   "testedTechniqueCount": 152,
   "translationFailures": [
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000005",
+      "sigmaId": "00321fee-ca72-4cce-b011-5415af3b9960"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_wmp.yml",
       "ruleId": "AUDRULE-000007",
       "sigmaId": "0058b9e5-bcd7-40d4-9205-95ca5a16d7b2"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000009",
+      "sigmaId": "00ba9da1-b510-4f6b-b258-8d338836180f"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000021",
+      "sigmaId": "0248a7bc-8a9a-4cd8-a57e-3ae8e073a073"
     },
     {
       "backend": "microsoft_sentinel",
@@ -59,8 +79,20 @@
       "sigmaId": "03552375-cc2c-4883-bbe4-7958d5a980be"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000031",
+      "sigmaId": "03552375-cc2c-4883-bbe4-7958d5a980be"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_regasm_network_activity.yml",
+      "ruleId": "AUDRULE-000043",
+      "sigmaId": "0531e43a-d77d-47c2-b89f-5fe50321c805"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000043",
       "sigmaId": "0531e43a-d77d-47c2-b89f-5fe50321c805"
     },
@@ -77,16 +109,112 @@
       "sigmaId": "05c36dd6-79d6-4a9a-97da-3db20298ab2d"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000052",
+      "sigmaId": "060d5ad4-3153-47bb-8382-43e5e29eda92"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000055",
+      "sigmaId": "065cceea-77ec-4030-9052-fc0affea7110"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000060",
+      "sigmaId": "06d71506-7beb-4f22-8888-e2e5e2ca7fd8"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000066",
+      "sigmaId": "07bdd2f5-9c58-4f38-aec8-e101bb79ef8d"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_wscript_cscript_local_connection.yml",
       "ruleId": "AUDRULE-000069",
       "sigmaId": "08249dc0-a28d-4555-8ba5-9255a198e08c"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000069",
+      "sigmaId": "08249dc0-a28d-4555-8ba5-9255a198e08c"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000074",
+      "sigmaId": "090ffaad-c01a-4879-850c-6d57da98452d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000076",
+      "sigmaId": "092bc4b9-3d1d-43b4-a6b4-8c8acd83522f"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000079",
+      "sigmaId": "09570ae5-889e-43ea-aac0-0e1221fb3d95"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000082",
+      "sigmaId": "09706624-b7f6-455d-9d02-adee024cee1d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000090",
+      "sigmaId": "0adc67e0-a68f-4ffd-9c43-28905aad5d6a"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000092",
+      "sigmaId": "0b0ea3cc-99c8-4730-9c53-45deee2a4c86"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_rcedit_execution.yml",
       "ruleId": "AUDRULE-000101",
       "sigmaId": "0c92f2e6-f08f-4b73-9216-ecb0ca634689"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000101",
+      "sigmaId": "0c92f2e6-f08f-4b73-9216-ecb0ca634689"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000105",
+      "sigmaId": "0d18728b-f5bf-4381-9dcf-915539fff6c2"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000109",
+      "sigmaId": "0dba975d-a193-4ed1-a067-424df57570d1"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000115",
+      "sigmaId": "0e7163d4-9e19-4fa7-9be6-000c61aad77a"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000131",
+      "sigmaId": "100ef69e-3327-481c-8e5c-6d80d9507556"
     },
     {
       "backend": "crowdstrike",
@@ -101,10 +229,82 @@
       "sigmaId": "10c14723-61c7-4c75-92ca-9af245723ad2"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000146",
+      "sigmaId": "11b52f18-aaec-4d60-9143-5dd8cc4706b9"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000147",
+      "sigmaId": "11d00fff-5dc3-428c-8184-801f292faec0"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_script_exec_from_env_folder.yml",
       "ruleId": "AUDRULE-000148",
       "sigmaId": "1228c958-e64e-4e71-92ad-7d429f4138ba"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000149",
+      "sigmaId": "123e4e6d-b123-48f8-b261-7214938acaf0"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000156",
+      "sigmaId": "12e6d621-194f-4f59-90cc-1959e21e69f7"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000160",
+      "sigmaId": "1321dc4e-a1fe-481d-a016-52c45f0c8b4f"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000163",
+      "sigmaId": "13acf386-b8c6-4fe0-9a6e-c4756b974698"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000167",
+      "sigmaId": "13fc89a9-971e-4ca6-b9dc-aa53a445bf40"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000170",
+      "sigmaId": "14bcba49-a428-42d9-b943-e2ce0f0f7ae6"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000173",
+      "sigmaId": "152f3630-77c1-4284-bcc0-4cc68ab2f6e7"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000183",
+      "sigmaId": "166e9c50-8cd9-44af-815d-d1f0c0e90dde"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000188",
+      "sigmaId": "16f5d8ca-44bd-47c8-acbe-6fc95a16c12f"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000190",
+      "sigmaId": "175997c5-803c-4b08-8bb0-70b099f47595"
     },
     {
       "backend": "crowdstrike",
@@ -131,10 +331,46 @@
       "sigmaId": "178e615d-e666-498b-9630-9ed363038101"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000193",
+      "sigmaId": "178e615d-e666-498b-9630-9ed363038101"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000196",
+      "sigmaId": "17d619c1-e020-4347-957e-1d1207455c93"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000200",
+      "sigmaId": "18249279-932f-45e2-b37a-8925f2597670"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_lolbin_pester.yml",
       "ruleId": "AUDRULE-000204",
       "sigmaId": "18988e1b-9087-4f8a-82fe-0414dce49878"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000208",
+      "sigmaId": "18f37338-b9bd-4117-a039-280c81f7a596"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000210",
+      "sigmaId": "192a0330-c20b-4356-90b6-7b7049ae0b87"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000220",
+      "sigmaId": "1a31b18a-f00c-4061-9900-f735b96c99fc"
     },
     {
       "backend": "crowdstrike",
@@ -143,10 +379,52 @@
       "sigmaId": "1ac14d38-3dfc-4635-92c7-e3fd1c5f5bfc"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000227",
+      "sigmaId": "1ac14d38-3dfc-4635-92c7-e3fd1c5f5bfc"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\web\\proxy_generic\\proxy_webdav_external_execution.yml",
       "ruleId": "AUDRULE-000229",
       "sigmaId": "1ae64f96-72b6-48b3-ad3d-e71dff6c6398"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000231",
+      "sigmaId": "1b2ae822-6fe1-43ba-aa7c-d1a3b3d1d5f2"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000237",
+      "sigmaId": "1c480e10-7ee1-46d4-8ed2-85f9789e3ce4"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000242",
+      "sigmaId": "1cb0c6ce-3d00-44fc-ab9c-6d6d577bf20b"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000243",
+      "sigmaId": "1cbbeaaf-3c8c-4e4c-9d72-49485b6a176b"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000247",
+      "sigmaId": "1d08ac94-400d-4469-a82f-daee9a908849"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000249",
+      "sigmaId": "1d61f71d-59d2-479e-9562-4ff5f4ead16b"
     },
     {
       "backend": "crowdstrike",
@@ -173,14 +451,56 @@
       "sigmaId": "1eeed653-dbc8-4187-ad0c-eeebb20e6599"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000260",
+      "sigmaId": "1eeed653-dbc8-4187-ad0c-eeebb20e6599"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000266",
+      "sigmaId": "1f2b5353-573f-4880-8e33-7d04dcf97744"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\network\\zeek\\zeek_rdp_public_listener.yml",
       "ruleId": "AUDRULE-000272",
       "sigmaId": "1fc0809e-06bf-4de3-ad52-25e5263b7623"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000275",
+      "sigmaId": "2074e137-1b73-4e2d-88ba-5a3407dbdce0"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000285",
+      "sigmaId": "214e8f95-100a-4e04-bb31-ef6cba8ce07e"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000288",
+      "sigmaId": "218d2855-2bba-4f61-9c85-81d0ea63ac71"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000311",
+      "sigmaId": "24549159-ac1b-479c-8175-d42aea947cae"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sqlite_chromium_profile_data.yml",
+      "ruleId": "AUDRULE-000314",
+      "sigmaId": "24c77512-782b-448a-8950-eddb0785fc71"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000314",
       "sigmaId": "24c77512-782b-448a-8950-eddb0785fc71"
     },
@@ -197,6 +517,12 @@
       "sigmaId": "24e3e58a-646b-4b50-adef-02ef935b9fc8"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000318",
+      "sigmaId": "252902e3-5830-4cf6-bf21-c22083dfd5cf"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_snapins_hafnium.yml",
       "ruleId": "AUDRULE-000319",
@@ -209,16 +535,64 @@
       "sigmaId": "259a9cdf-c4dd-4fa2-b243-2269e5ab18a2"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000324",
+      "sigmaId": "25b9c01c-350d-4b95-bed1-836d04a4f324"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000327",
+      "sigmaId": "25eabf56-22f0-4915-a1ed-056b8dae0a68"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_system_user_anomaly.yml",
       "ruleId": "AUDRULE-000328",
       "sigmaId": "2617e7ed-adb7-40ba-b0f3-8f9945fe6c09"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000329",
+      "sigmaId": "2632954e-db1c-49cb-9936-67d1ef1d17d2"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000330",
+      "sigmaId": "26481afe-db26-4228-b264-25a29fe6efc7"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_sharpersist.yml",
       "ruleId": "AUDRULE-000331",
       "sigmaId": "26488ad0-f9fd-4536-876f-52fea846a2e4"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000331",
+      "sigmaId": "26488ad0-f9fd-4536-876f-52fea846a2e4"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000338",
+      "sigmaId": "272e55a4-9e6b-4211-acb6-78f51f0b1b40"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000339",
+      "sigmaId": "273a8dd8-3742-4302-bcc7-7df5a80fe425"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000341",
+      "sigmaId": "277efb8f-60be-4f10-b4d3-037802f37167"
     },
     {
       "backend": "crowdstrike",
@@ -233,16 +607,64 @@
       "sigmaId": "285b85b1-a555-4095-8652-a8a4106af63f"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000355",
+      "sigmaId": "29f171d7-aa47-42c7-9c7b-3c87938164d9"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_vscode_tunnel_renamed_execution.yml",
       "ruleId": "AUDRULE-000369",
       "sigmaId": "2cf29f11-e356-4f61-98c0-1bdb9393d6da"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000379",
+      "sigmaId": "2e4e488a-6164-4811-9ea1-f960c7359c40"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000389",
+      "sigmaId": "2fdaf50b-9fd5-449f-ba69-f17248119af6"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000394",
+      "sigmaId": "30a8cb77-8eb3-4cfb-8e79-ad457c5a4592"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_embed_exe_lnk.yml",
       "ruleId": "AUDRULE-000397",
       "sigmaId": "30e92f50-bb5a-4884-98b5-d20aa80f3d7a"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000404",
+      "sigmaId": "31c51af6-e7aa-4da7-84d4-8f32cc580af2"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000405",
+      "sigmaId": "31d68132-4038-47c7-8f8e-635a39a7c174"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000408",
+      "sigmaId": "3236fcd0-b7e3-4433-b4f8-86ad61a9af2d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000416",
+      "sigmaId": "32d56ea1-417f-44ff-822b-882873f5f43b"
     },
     {
       "backend": "microsoft_sentinel",
@@ -275,8 +697,20 @@
       "sigmaId": "37c1333a-a0db-48be-b64b-7393b2386e3b"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000451",
+      "sigmaId": "37c1333a-a0db-48be-b64b-7393b2386e3b"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_dialer_initiated_connection.yml",
+      "ruleId": "AUDRULE-000453",
+      "sigmaId": "37e4024a-6c80-4d8f-b95d-2e7e94f3a8d1"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000453",
       "sigmaId": "37e4024a-6c80-4d8f-b95d-2e7e94f3a8d1"
     },
@@ -287,10 +721,28 @@
       "sigmaId": "38646daa-e78f-4ace-9de0-55547b2d30da"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000454",
+      "sigmaId": "38646daa-e78f-4ace-9de0-55547b2d30da"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000455",
+      "sigmaId": "387df17d-3b04-448f-8669-9e7fd5e5fd8c"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_ntfs_reparse_point.yml",
       "ruleId": "AUDRULE-000469",
       "sigmaId": "39ed3c80-e6a1-431b-9df3-911ac53d08a7"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000471",
+      "sigmaId": "39f919f3-980b-4e6f-a975-8af7e507ef2b"
     },
     {
       "backend": "microsoft_sentinel",
@@ -311,10 +763,34 @@
       "sigmaId": "3a6586ad-127a-4d3b-a677-1e6eacdf8fde"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000474",
+      "sigmaId": "3a734d25-df5c-4b99-8034-af1ddb5883a4"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000476",
+      "sigmaId": "3ab65069-d82a-4d44-a759-466661a082d1"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000482",
+      "sigmaId": "3b4b232a-af90-427c-a22f-30b0c0837b95"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_computerdefaults.yml",
       "ruleId": "AUDRULE-000489",
       "sigmaId": "3c05e90d-7eba-4324-9972-5d7f711a60a8"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000493",
+      "sigmaId": "3ce8e9a4-bc61-4c9b-8e69-d7e2492a8781"
     },
     {
       "backend": "crowdstrike",
@@ -323,10 +799,40 @@
       "sigmaId": "40b95d31-1afc-469e-8d34-9a3a667d058e"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000514",
+      "sigmaId": "40b95d31-1afc-469e-8d34-9a3a667d058e"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000516",
+      "sigmaId": "41025fd7-0466-4650-a813-574aaacbe7f4"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000520",
+      "sigmaId": "41504465-5e3a-4a5b-a5b4-2a0baadd4463"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000533",
+      "sigmaId": "42c575ea-e41e-41f1-b248-8093c3e82a28"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_dism_remove.yml",
       "ruleId": "AUDRULE-000543",
       "sigmaId": "43e32da2-fdd0-4156-90de-50dfd62636f9"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000553",
+      "sigmaId": "45545954-4016-43c6-855e-eae8f1c369dc"
     },
     {
       "backend": "crowdstrike",
@@ -335,10 +841,34 @@
       "sigmaId": "46123129-1024-423e-9fae-43af4a0fa9a5"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000560",
+      "sigmaId": "46123129-1024-423e-9fae-43af4a0fa9a5"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000569",
+      "sigmaId": "472159c5-31b9-4f56-b794-b766faa8b0a7"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sqlite_firefox_gecko_profile_data.yml",
       "ruleId": "AUDRULE-000575",
       "sigmaId": "4833155a-4053-4c9c-a997-777fcea0baa7"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000575",
+      "sigmaId": "4833155a-4053-4c9c-a997-777fcea0baa7"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000577",
+      "sigmaId": "487c7524-f892-4054-b263-8a0ace63fc25"
     },
     {
       "backend": "crowdstrike",
@@ -347,16 +877,52 @@
       "sigmaId": "48a61b29-389f-4032-b317-b30de6b95314"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000580",
+      "sigmaId": "48a61b29-389f-4032-b317-b30de6b95314"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000583",
+      "sigmaId": "48d91a3a-2363-43ba-a456-ca71ac3da5c2"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_fltmc_unload_driver.yml",
       "ruleId": "AUDRULE-000587",
       "sigmaId": "4931188c-178e-4ee7-a348-39e8a7a56821"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000590",
+      "sigmaId": "496a0e47-0a33-4dca-b009-9e6ca3591f39"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000591",
+      "sigmaId": "4976aa50-8f41-45c6-8b15-ab3fc10e79ed"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000595",
+      "sigmaId": "49e5bc24-8b86-49f1-b743-535f332c2856"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_icmluautil.yml",
       "ruleId": "AUDRULE-000596",
       "sigmaId": "49f2f17b-b4c8-4172-a68b-d5bf95d05130"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000598",
+      "sigmaId": "4a1b6da0-d94f-4fc3-98fc-2d9cb9e5ee76"
     },
     {
       "backend": "crowdstrike",
@@ -371,10 +937,28 @@
       "sigmaId": "4b60e6f2-bf39-47b4-b4ea-398e33cfe253"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000611",
+      "sigmaId": "4b657234-038e-4ad5-997c-4be42340bce4"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_idiagnostic_profile.yml",
       "ruleId": "AUDRULE-000625",
       "sigmaId": "4cbef972-f347-4170-b62a-8253f6168e6d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000626",
+      "sigmaId": "4d0083b3-580b-40da-9bba-626c19fe4033"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000631",
+      "sigmaId": "4d7f1827-1637-4def-8d8a-fd254f9454df"
     },
     {
       "backend": "crowdstrike",
@@ -383,6 +967,18 @@
       "sigmaId": "4ede543c-e098-43d9-a28f-dd784a13132f"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000640",
+      "sigmaId": "4ede543c-e098-43d9-a28f-dd784a13132f"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000645",
+      "sigmaId": "4f6c43e2-f989-4ea5-bcd8-843b49a0317c"
+    },
+    {
       "backend": "microsoft_sentinel",
       "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_nimscan.yml)",
       "ruleId": "AUDRULE-000648",
@@ -395,6 +991,12 @@
       "sigmaId": "4fd6b1c7-19b8-4488-97f6-00f0924991a3"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000657",
+      "sigmaId": "50e54b8d-ad73-43f8-96a1-5191685b17a4"
+    },
+    {
       "backend": "microsoft_sentinel",
       "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_adfind_execution.yml)",
       "ruleId": "AUDRULE-000663",
@@ -405,6 +1007,30 @@
       "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_adfind_execution.yml)",
       "ruleId": "AUDRULE-000663",
       "sigmaId": "514e7e3e-b3b4-4a67-af60-be20f139198b"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000665",
+      "sigmaId": "516376b4-05cd-4122-bae0-ad7641c38d48"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000670",
+      "sigmaId": "5205613d-2a63-4412-a895-3a2458b587b3"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000675",
+      "sigmaId": "52a85084-6989-40c3-8f32-091e12e13f09"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000678",
+      "sigmaId": "52d8b0c6-53d6-439a-9e41-52ad442ad9ad"
     },
     {
       "backend": "microsoft_sentinel",
@@ -425,10 +1051,22 @@
       "sigmaId": "52ff7941-8211-46f9-84f8-9903efb7077d"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000679",
+      "sigmaId": "52ff7941-8211-46f9-84f8-9903efb7077d"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_explorer_nouaccheck.yml",
       "ruleId": "AUDRULE-000681",
       "sigmaId": "534f2ef7-e8a2-4433-816d-c91bccde289b"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000688",
+      "sigmaId": "545a5da6-f103-4919-a519-e9aec1026ee4"
     },
     {
       "backend": "crowdstrike",
@@ -437,10 +1075,52 @@
       "sigmaId": "54773c5f-f1cc-4703-9126-2f797d96a69d"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000690",
+      "sigmaId": "54773c5f-f1cc-4703-9126-2f797d96a69d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000695",
+      "sigmaId": "54f0434b-726f-48a1-b2aa-067df14516e4"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000701",
+      "sigmaId": "5594e67a-7f92-4a04-b65d-1a42fd824a60"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000708",
+      "sigmaId": "570ae5ec-33dc-427c-b815-db86228ad43e"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000709",
+      "sigmaId": "571498c8-908e-40b4-910b-d2369159a3da"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_system_informer.yml",
       "ruleId": "AUDRULE-000710",
       "sigmaId": "5722dff1-4bdd-4949-86ab-fbaf707e767a"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000710",
+      "sigmaId": "5722dff1-4bdd-4949-86ab-fbaf707e767a"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000717",
+      "sigmaId": "586a8d6b-6bfe-4ad9-9d78-888cd2fe50c3"
     },
     {
       "backend": "microsoft_sentinel",
@@ -455,16 +1135,82 @@
       "sigmaId": "589ac73f-8e12-409c-964e-31a2f5775ae2"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000723",
+      "sigmaId": "58cb02d5-78ce-4692-b3e1-dce850aae41a"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000728",
+      "sigmaId": "5a105d34-05fc-401e-8553-272b45c1522d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000743",
+      "sigmaId": "5bed80b6-b3e8-428e-a3ae-d3c757589e41"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000755",
+      "sigmaId": "5dfc1465-8f65-4fde-8eb5-6194380c6a62"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000759",
+      "sigmaId": "5e993621-67d4-488a-b9ae-b420d08b96cb"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000761",
+      "sigmaId": "5ef9853e-4d0e-4a70-846f-a9ca37d876da"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_rdp_reverse_tunnel.yml",
       "ruleId": "AUDRULE-000762",
       "sigmaId": "5f699bc5-5446-4a4a-a0b7-5ef2885a3eb4"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000762",
+      "sigmaId": "5f699bc5-5446-4a4a-a0b7-5ef2885a3eb4"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000767",
+      "sigmaId": "60167e5c-84b2-4c95-a7ac-86281f27c445"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_java_sysaidserver_susp_child_process.yml",
       "ruleId": "AUDRULE-000771",
       "sigmaId": "60bfeac3-0d35-4302-8efb-1dd16f715bc6"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000774",
+      "sigmaId": "611eab06-a145-4dfa-a295-3ccc5c20f59a"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000777",
+      "sigmaId": "613c03ba-0779-4a53-8a1f-47f914a4ded3"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000779",
+      "sigmaId": "614cf376-6651-47c4-9dcc-6b9527f749f4"
     },
     {
       "backend": "microsoft_sentinel",
@@ -485,10 +1231,76 @@
       "sigmaId": "631b22a4-70f4-4e2f-9ea8-42f84d9df6d8"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000788",
+      "sigmaId": "6331d09b-4785-4c13-980f-f96661356249"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000791",
+      "sigmaId": "637f689e-b4a5-4a86-be0e-0100a0a33ba2"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000796",
+      "sigmaId": "63e3365d-4824-42d8-8b82-e56810fefa0c"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000798",
+      "sigmaId": "641a4bfb-c017-44f7-800c-2aee0184ce9b"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000804",
+      "sigmaId": "64d51a51-32a6-49f0-9f3d-17e34d640272"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000805",
+      "sigmaId": "64e8e417-c19a-475a-8d19-98ea705394cc"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000816",
+      "sigmaId": "66474410-b883-415f-9f8d-75345a0a66a6"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000819",
+      "sigmaId": "66d31e5f-52d6-40a4-9615-002d3789a119"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_certipy.yml",
       "ruleId": "AUDRULE-000838",
       "sigmaId": "6938366d-8954-4ddc-baff-c830b3ba8fcd"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000838",
+      "sigmaId": "6938366d-8954-4ddc-baff-c830b3ba8fcd"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000839",
+      "sigmaId": "6942bd25-5970-40ab-af49-944247103358"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000842",
+      "sigmaId": "69aeb277-f15f-4d2d-b32a-55e883609563"
     },
     {
       "backend": "crowdstrike",
@@ -503,10 +1315,46 @@
       "sigmaId": "6a5f68d1-c4b5-46b9-94ee-5324892ea939"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000847",
+      "sigmaId": "6a5f68d1-c4b5-46b9-94ee-5324892ea939"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000853",
+      "sigmaId": "6b98b92b-4f00-4f62-b4fe-4d1920215771"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000856",
+      "sigmaId": "6c0a7755-6d31-44fa-80e1-133e57752680"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000861",
+      "sigmaId": "6c82cf5c-090d-4d57-9188-533577631108"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sc_sdset_allow_service_changes.yml",
       "ruleId": "AUDRULE-000862",
       "sigmaId": "6c8fbee5-dee8-49bc-851d-c3142d02aa47"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000865",
+      "sigmaId": "6d44fb93-e7d2-475c-9d3d-54c9c1e33427"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000868",
+      "sigmaId": "6daac7fc-77d1-449a-a71a-e6b4d59a0e54"
     },
     {
       "backend": "crowdstrike",
@@ -515,10 +1363,58 @@
       "sigmaId": "6e968eb1-5f05-4dac-94e9-fd0c5cb49fd6"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000890",
+      "sigmaId": "6fb63b40-e02a-403e-9ffd-3bcc1d749442"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\network\\zeek\\zeek_http_webdav_put_request.yml",
       "ruleId": "AUDRULE-000897",
       "sigmaId": "705072a5-bb6f-4ced-95b6-ecfa6602090b"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000902",
+      "sigmaId": "70e8e9b4-6a93-4cb7-8cde-da69502e7aff"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000904",
+      "sigmaId": "70f00d10-60b2-4f34-b9a0-dc3df3fe762a"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000907",
+      "sigmaId": "71886b70-d7b4-4dbf-acce-87d2ca135262"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000911",
+      "sigmaId": "71c276aa-49cd-43d2-b920-2dcd3e6962d5"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000913",
+      "sigmaId": "71ff406e-b633-4989-96ec-bc49d825a412"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000914",
+      "sigmaId": "72124974-a68b-4366-b990-d30e0b2a190d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000918",
+      "sigmaId": "72862bf2-0eb1-11eb-adc1-0242ac120002"
     },
     {
       "backend": "microsoft_sentinel",
@@ -539,8 +1435,20 @@
       "sigmaId": "744a188b-0415-4792-896f-11ddb0588dbc"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000936",
+      "sigmaId": "749c9f5e-b353-4b90-a9c1-05243357ca4b"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_renamed_curl.yml",
+      "ruleId": "AUDRULE-000942",
+      "sigmaId": "7530cd3d-7671-43e3-b209-976966f6ea48"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000942",
       "sigmaId": "7530cd3d-7671-43e3-b209-976966f6ea48"
     },
@@ -551,8 +1459,32 @@
       "sigmaId": "754ed792-634f-40ae-b3bc-e0448d33f695"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000943",
+      "sigmaId": "754ed792-634f-40ae-b3bc-e0448d33f695"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000946",
+      "sigmaId": "75c505b1-711d-4f68-a357-8c3fe37dbf2d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000950",
+      "sigmaId": "75edd3fd-7146-48e5-9848-3013d7f0282c"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_winlogon_net_connections.yml",
+      "ruleId": "AUDRULE-000953",
+      "sigmaId": "7610a4ea-c06d-495f-a2ac-0a696abcfd3b"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000953",
       "sigmaId": "7610a4ea-c06d-495f-a2ac-0a696abcfd3b"
     },
@@ -563,8 +1495,20 @@
       "sigmaId": "762f2482-ff21-4970-8939-0aa317a886bb"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000955",
+      "sigmaId": "762f2482-ff21-4970-8939-0aa317a886bb"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Company field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_secutyxploded.yml",
+      "ruleId": "AUDRULE-000958",
+      "sigmaId": "7679d464-4f74-45e2-9e01-ac66c5eb041a"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000958",
       "sigmaId": "7679d464-4f74-45e2-9e01-ac66c5eb041a"
     },
@@ -575,10 +1519,22 @@
       "sigmaId": "77df53a5-1d78-4f32-bc5a-0e7465bd8f41"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000966",
+      "sigmaId": "77df53a5-1d78-4f32-bc5a-0e7465bd8f41"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\builtin\\security\\account_management\\win_security_successful_external_remote_smb_login.yml",
       "ruleId": "AUDRULE-000973",
       "sigmaId": "78d5cab4-557e-454f-9fb9-a222bd0d5edc"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000975",
+      "sigmaId": "79609c82-a488-426e-abcf-9f341a39365d"
     },
     {
       "backend": "crowdstrike",
@@ -593,8 +1549,20 @@
       "sigmaId": "7a01183d-71a2-46ad-ad5c-acd989ac1793"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000986",
+      "sigmaId": "7a3b6d1f-4a2b-4f8c-9d7e-e9f8cbf21a35"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_stracciatella_execution.yml",
+      "ruleId": "AUDRULE-000988",
+      "sigmaId": "7a4d9232-92fc-404d-8ce1-4c92e7caf539"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000988",
       "sigmaId": "7a4d9232-92fc-404d-8ce1-4c92e7caf539"
     },
@@ -611,10 +1579,46 @@
       "sigmaId": "7aa7009a-28b9-4344-8c1f-159489a390df"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000995",
+      "sigmaId": "7b14c76a-c602-4ae6-9717-eff868153fc0"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-000996",
+      "sigmaId": "7b434893-c57d-4f41-908d-6a17bf1ae98f"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001002",
+      "sigmaId": "7bd3902d-8b8b-4dd4-838a-c6862d40150d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001003",
+      "sigmaId": "7bdde3bf-2a42-4c39-aa31-a92b3e17afac"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sysinternals_tools_masquerading.yml",
       "ruleId": "AUDRULE-001008",
       "sigmaId": "7cce6fc8-a07f-4d84-a53e-96e1879843c9"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001008",
+      "sigmaId": "7cce6fc8-a07f-4d84-a53e-96e1879843c9"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001009",
+      "sigmaId": "7cd1dcdc-6edf-4896-86dc-d1f19ad64903"
     },
     {
       "backend": "microsoft_sentinel",
@@ -635,6 +1639,12 @@
       "sigmaId": "7d6d30b8-5b91-4b90-a891-46cccaf29598"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001016",
+      "sigmaId": "7d6d30b8-5b91-4b90-a891-46cccaf29598"
+    },
+    {
       "backend": "microsoft_sentinel",
       "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Provider_Name. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_conhost_susp_child_process.yml",
       "ruleId": "AUDRULE-001020",
@@ -647,14 +1657,44 @@
       "sigmaId": "7dc2dedd-7603-461a-bc13-15803d132355"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001020",
+      "sigmaId": "7dc2dedd-7603-461a-bc13-15803d132355"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001024",
+      "sigmaId": "7e9c7999-0f9b-4d4a-a6ed-af6d553d4af4"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_rubeus.yml",
       "ruleId": "AUDRULE-001027",
       "sigmaId": "7ec2c172-dceb-4c10-92c9-87c1881b7e18"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001027",
+      "sigmaId": "7ec2c172-dceb-4c10-92c9-87c1881b7e18"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001041",
+      "sigmaId": "801bd44f-ceed-4eb6-887c-11544633c0aa"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_process_hacker.yml",
+      "ruleId": "AUDRULE-001048",
+      "sigmaId": "811e0002-b13b-4a15-9d00-a613fce66e42"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001048",
       "sigmaId": "811e0002-b13b-4a15-9d00-a613fce66e42"
     },
@@ -665,16 +1705,46 @@
       "sigmaId": "81325ce1-be01-4250-944f-b4789644556f"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001053",
+      "sigmaId": "815bfc17-7fc6-4908-a55e-2f37b98cedb4"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001054",
+      "sigmaId": "815cd91b-7dbc-4247-841a-d7dd1392b0a8"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_webshell_susp_process_spawned_from_webserver.yml",
       "ruleId": "AUDRULE-001061",
       "sigmaId": "8202070f-edeb-4d31-a010-a26c72ac5600"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001064",
+      "sigmaId": "8289bf8c-4aca-4f5a-9db3-dc3d7afe5c10"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_dismhost.yml",
       "ruleId": "AUDRULE-001088",
       "sigmaId": "853e74f9-9392-4935-ad3b-2e8c040dae86"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001090",
+      "sigmaId": "857c8db3-c89b-42fb-882b-f681c7cf4da2"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001092",
+      "sigmaId": "85adeb13-4fc9-4e68-8a4a-c7cb2c336eb7"
     },
     {
       "backend": "crowdstrike",
@@ -695,6 +1765,18 @@
       "sigmaId": "87911521-7098-470b-a459-9a57fc80bdfd"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001107",
+      "sigmaId": "87911521-7098-470b-a459-9a57fc80bdfd"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001110",
+      "sigmaId": "87df9ee1-5416-453a-8a08-e8d4a51e9ce1"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_set_policies_to_unsecure_level.yml",
       "ruleId": "AUDRULE-001111",
@@ -707,6 +1789,18 @@
       "sigmaId": "8823e85d-31d8-473e-b7f4-92da070f0fc6"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001114",
+      "sigmaId": "882e858a-3233-4ba8-855e-2f3d3575803d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001115",
+      "sigmaId": "882fbe50-d8d7-4e29-ae80-0648a8556866"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_python_inline_command_execution.yml",
       "ruleId": "AUDRULE-001126",
@@ -715,6 +1809,12 @@
     {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_memprocfs.yml",
+      "ruleId": "AUDRULE-001132",
+      "sigmaId": "8a1b2c3d-4e5f-6789-abcd-ef1234567890"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001132",
       "sigmaId": "8a1b2c3d-4e5f-6789-abcd-ef1234567890"
     },
@@ -743,6 +1843,12 @@
       "sigmaId": "8bc64091-6875-4881-aaf9-7bd25b5dda08"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001151",
+      "sigmaId": "8ca7004b-e620-4ecb-870e-86129b5b8e75"
+    },
+    {
       "backend": "microsoft_sentinel",
       "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_wmic_squiblytwo_bypass.yml)",
       "ruleId": "AUDRULE-001156",
@@ -755,10 +1861,40 @@
       "sigmaId": "8d63dadf-b91b-4187-87b6-34a1114577ea"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001157",
+      "sigmaId": "8d7e392e-9b28-49e1-831d-5949c6281228"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\builtin\\smbserver\\connectivity\\win_smbserver_connectivity_unsigned_and_unencrypted_share_connection.yml",
       "ruleId": "AUDRULE-001159",
       "sigmaId": "8d91f6e4-9f3b-4c21-ae41-2c5b7d9f7a12"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001159",
+      "sigmaId": "8d91f6e4-9f3b-4c21-ae41-2c5b7d9f7a12"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001161",
+      "sigmaId": "8e4cf0e5-aa5d-4dc3-beff-dc26917744a9"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001164",
+      "sigmaId": "8eef149c-bd26-49f2-9e5a-9b00e3af499b"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001168",
+      "sigmaId": "8ff28fdd-e2fa-4dfa-aeda-ef3d61c62090"
     },
     {
       "backend": "crowdstrike",
@@ -767,8 +1903,38 @@
       "sigmaId": "90d6bd71-dffb-4989-8d86-a827fedd6624"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001178",
+      "sigmaId": "90f138c1-f578-4ac3-8c49-eecfd847c8b7"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001180",
+      "sigmaId": "910ab938-668b-401b-b08c-b596e80fdca5"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001183",
+      "sigmaId": "91903aba-1088-42ee-b680-d6d94fe002b0"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001184",
+      "sigmaId": "919f2ef0-be2d-4a7a-b635-eb2b41fde044"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sysinternals_adexplorer_execution.yml",
+      "ruleId": "AUDRULE-001188",
+      "sigmaId": "9212f354-7775-4e28-9c9f-8f0a4544e664"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001188",
       "sigmaId": "9212f354-7775-4e28-9c9f-8f0a4544e664"
     },
@@ -783,6 +1949,18 @@
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_iis_appcmd_susp_module_install.yml",
       "ruleId": "AUDRULE-001207",
       "sigmaId": "9465ddf4-f9e4-4ebd-8d98-702df3a93239"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001209",
+      "sigmaId": "948a0953-f287-4806-bbcb-3b2e396df89f"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001213",
+      "sigmaId": "9501f8e6-8e3d-48fc-a8a6-1089dd5d7ef4"
     },
     {
       "backend": "crowdstrike",
@@ -809,10 +1987,34 @@
       "sigmaId": "95eadcb2-92e4-4ed1-9031-92547773a6db"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001226",
+      "sigmaId": "961d0ba2-3eea-4303-a930-2cf78bbfcc5e"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_stordiag_susp_child_process.yml",
       "ruleId": "AUDRULE-001227",
       "sigmaId": "961e0abb-1b1e-4c84-a453-aafe56ad0d34"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001231",
+      "sigmaId": "96b9f619-aa91-478f-bacb-c3e50f8df575"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001233",
+      "sigmaId": "9703792d-fd9a-456d-a672-ff92efe4806a"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001246",
+      "sigmaId": "98054878-5eab-434c-85d4-72d4e5a3361b"
     },
     {
       "backend": "crowdstrike",
@@ -827,16 +2029,58 @@
       "sigmaId": "98b53e78-ebaf-46f8-be06-421aafd176d9"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001254",
+      "sigmaId": "98ffaed4-aec2-4e04-9b07-31492fe68b3d"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_wscript_cscript_outbound_connection.yml",
       "ruleId": "AUDRULE-001256",
       "sigmaId": "992a6cae-db6a-43c8-9cec-76d7195c96fc"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001256",
+      "sigmaId": "992a6cae-db6a-43c8-9cec-76d7195c96fc"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001257",
+      "sigmaId": "9976fa64-2804-423c-8a5b-646ade840773"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001259",
+      "sigmaId": "999bff6d-dc15-44c9-9f5c-e1051bfc86e1"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001267",
+      "sigmaId": "9a025188-6f2d-42f8-bb2f-d3a83d24a5af"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_werfault_lsass_shtinkering.yml",
       "ruleId": "AUDRULE-001270",
       "sigmaId": "9a4ccd1a-3526-4d99-b980-9f9c5d3a6ff3"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001270",
+      "sigmaId": "9a4ccd1a-3526-4d99-b980-9f9c5d3a6ff3"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001289",
+      "sigmaId": "9c8acf1a-cbf9-4db6-b63c-74baabe03e59"
     },
     {
       "backend": "crowdstrike",
@@ -851,6 +2095,54 @@
       "sigmaId": "9d5a1274-922a-49d0-87f3-8c653483b909"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001297",
+      "sigmaId": "9d5a1274-922a-49d0-87f3-8c653483b909"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001300",
+      "sigmaId": "9db37458-4df2-46a5-95ab-307e7f29e675"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001303",
+      "sigmaId": "9e02c8ec-02b9-43e8-81eb-34a475ba7965"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001305",
+      "sigmaId": "9e1a1fdf-ee58-40ce-8e15-b66ca5a80e1f"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001307",
+      "sigmaId": "9e2575e7-2cb9-4da1-adc8-ed94221dca5e"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001308",
+      "sigmaId": "9e36ed87-4986-482e-8e3b-5c23ffff11bf"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001309",
+      "sigmaId": "9e3cb244-bdb8-4632-8c90-6079c8f4f16d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001317",
+      "sigmaId": "9eb99343-d336-4020-a3cd-67f3819e68ee"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_expand_cabinet_files.yml",
       "ruleId": "AUDRULE-001319",
@@ -863,10 +2155,94 @@
       "sigmaId": "9f2cc74d-78af-4eb2-bb64-9cd1d292b87b"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001325",
+      "sigmaId": "9f5c1d59-33be-4e60-bcab-85d2f566effd"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_7zip_password_compression.yml",
       "ruleId": "AUDRULE-001328",
       "sigmaId": "9fbf5927-5261-4284-a71d-f681029ea574"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001328",
+      "sigmaId": "9fbf5927-5261-4284-a71d-f681029ea574"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001335",
+      "sigmaId": "a0cb7110-edf0-47a4-9177-541a4083128a"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001340",
+      "sigmaId": "a18dd26b-6450-46de-8c91-9659150cf088"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001341",
+      "sigmaId": "a18e0862-127b-43ca-be12-1a542c75c7c5"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001344",
+      "sigmaId": "a1d9eec5-33b2-4177-8d24-27fe754d0812"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001347",
+      "sigmaId": "a21bcd7e-38ec-49ad-b69a-9ea17e69509e"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001350",
+      "sigmaId": "a27e5fa9-c35e-4e3d-b7e0-1ce2af66ad12"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001355",
+      "sigmaId": "a2e5019d-a658-4c6a-92bf-7197b54e2cae"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001361",
+      "sigmaId": "a3ab73f1-bd46-4319-8f06-4b20d0617886"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001366",
+      "sigmaId": "a49fa4d5-11db-418c-8473-1e014a8dd462"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001367",
+      "sigmaId": "a4c90ea1-2634-4ca0-adbb-35eae169b6fc"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001375",
+      "sigmaId": "a5b40a90-baf5-4bf7-a6f7-373494881d22"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001380",
+      "sigmaId": "a62b37e0-45d3-48d9-a517-90c1a1b0186b"
     },
     {
       "backend": "crowdstrike",
@@ -881,10 +2257,28 @@
       "sigmaId": "a7c3d773-caef-227e-a7e7-c2f13c622329"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001401",
+      "sigmaId": "a8f29a7b-b137-4446-80a0-b804272f3da2"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_regsvr32_susp_parent.yml",
       "ruleId": "AUDRULE-001417",
       "sigmaId": "ab37a6ec-6068-432b-a64e-2c7bf95b1d22"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001418",
+      "sigmaId": "ab4561b1-6c7e-48a7-ad08-087cfb9ce8f1"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001425",
+      "sigmaId": "ac7102b4-9e1e-4802-9b4f-17c5524c015c"
     },
     {
       "backend": "crowdstrike",
@@ -899,16 +2293,82 @@
       "sigmaId": "afe52666-401e-4a02-b4ff-5d128990b8cb"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001451",
+      "sigmaId": "afe52666-401e-4a02-b4ff-5d128990b8cb"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001454",
+      "sigmaId": "aff815cc-e400-4bf0-a47a-5d8a2407d4e1"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_safetykatz.yml",
       "ruleId": "AUDRULE-001459",
       "sigmaId": "b1876533-4ed5-4a83-90f3-b8645840a413"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001459",
+      "sigmaId": "b1876533-4ed5-4a83-90f3-b8645840a413"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001463",
+      "sigmaId": "b1bd3a59-c1fd-4860-9f40-4dd161a7d1f5"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001466",
+      "sigmaId": "b1e0b3f5-b62e-41be-886a-daffde446ad4"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001467",
+      "sigmaId": "b1e5da3b-ca8e-4adf-915c-9921f3d85481"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_lolbin_settingsynchost.yml",
       "ruleId": "AUDRULE-001482",
       "sigmaId": "b2ddd389-f676-4ac4-845a-e00781a48e5f"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001485",
+      "sigmaId": "b366adb4-d63d-422d-8a2c-186463b5ded0"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001486",
+      "sigmaId": "b3ad3c0f-c949-47a1-a30e-b0491ccae876"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001487",
+      "sigmaId": "b3e6418f-7c7a-4fad-993a-93b65027a9f1"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001496",
+      "sigmaId": "b55d23e5-6821-44ff-8a6e-67218891e49f"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001501",
+      "sigmaId": "b5de0c9a-6f19-43e0-af4e-55ad01f550af"
     },
     {
       "backend": "crowdstrike",
@@ -929,8 +2389,32 @@
       "sigmaId": "b730a276-6b63-41b8-bcf8-55930c8fc6ee"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001517",
+      "sigmaId": "b7bc7038-638b-4ffd-880c-292c692209ef"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001521",
+      "sigmaId": "b85e5894-9b19-4d86-8c87-a2f3b81f0521"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001532",
+      "sigmaId": "b98a10af-1e1e-44a7-bab2-4cc026917648"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_inveigh.yml",
+      "ruleId": "AUDRULE-001534",
+      "sigmaId": "b99a1518-1ad5-4f65-bc95-1ffff97a8fd0"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001534",
       "sigmaId": "b99a1518-1ad5-4f65-bc95-1ffff97a8fd0"
     },
@@ -941,14 +2425,50 @@
       "sigmaId": "b9d9cc83-380b-4ba3-8d8f-60c0e7e2930c"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001544",
+      "sigmaId": "bacf58c6-e199-4040-a94f-95dea0f1e45a"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_xor_commandline.yml",
       "ruleId": "AUDRULE-001553",
       "sigmaId": "bb780e0c-16cf-4383-8383-1e5471db6cf9"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001553",
+      "sigmaId": "bb780e0c-16cf-4383-8383-1e5471db6cf9"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001555",
+      "sigmaId": "bbb80e91-5746-4fbe-8898-122e2cafdbf4"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001557",
+      "sigmaId": "bc2e25ed-b92b-4daa-b074-b502bdd1982b"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001564",
+      "sigmaId": "bdc64095-d59a-42a2-8588-71fd9c9d9abc"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_wsudo_susp_execution.yml",
+      "ruleId": "AUDRULE-001568",
+      "sigmaId": "bdeeabc9-ff2a-4a51-be59-bb253aac7891"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001568",
       "sigmaId": "bdeeabc9-ff2a-4a51-be59-bb253aac7891"
     },
@@ -959,10 +2479,46 @@
       "sigmaId": "bedfc8ad-d1c7-4e37-a20e-e2b0dbee759c"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001574",
+      "sigmaId": "bedfc8ad-d1c7-4e37-a20e-e2b0dbee759c"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001575",
+      "sigmaId": "bef0bc5a-b9ae-425d-85c6-7b2d705980c6"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_advanced_ip_scanner.yml",
       "ruleId": "AUDRULE-001576",
       "sigmaId": "bef37fa2-f205-4a7b-b484-0759bfd5f86f"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001576",
+      "sigmaId": "bef37fa2-f205-4a7b-b484-0759bfd5f86f"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001598",
+      "sigmaId": "c187c075-bb3e-4c62-b4fa-beae0ffc211f"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001605",
+      "sigmaId": "c265cf08-3f99-46c1-8d59-328247057d57"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001609",
+      "sigmaId": "c39f0c81-7348-4965-ab27-2fde35a1b641"
     },
     {
       "backend": "crowdstrike",
@@ -971,10 +2527,34 @@
       "sigmaId": "c3a99af4-35a9-4668-879e-c09aeb4f2bdf"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001613",
+      "sigmaId": "c3dbbc9f-ef1d-470a-a90a-d343448d5875"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001621",
+      "sigmaId": "c462f537-a1e3-41a6-b5fc-b2c2cef9bf82"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_sharpup.yml",
       "ruleId": "AUDRULE-001622",
       "sigmaId": "c484e533-ee16-4a93-b6ac-f0ea4868b2f1"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001622",
+      "sigmaId": "c484e533-ee16-4a93-b6ac-f0ea4868b2f1"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001624",
+      "sigmaId": "c4b890e5-8d8c-4496-8c66-c805753817cd"
     },
     {
       "backend": "microsoft_sentinel",
@@ -995,6 +2575,30 @@
       "sigmaId": "c4e49831-1496-40cf-8ce1-b53f942b02f9"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001626",
+      "sigmaId": "c4e49831-1496-40cf-8ce1-b53f942b02f9"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001627",
+      "sigmaId": "c4e92a97-a9ff-4392-9d2d-7a4c642768ca"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001629",
+      "sigmaId": "c4ff1eac-84ad-44dd-a6fb-d56a92fc43a9"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001630",
+      "sigmaId": "c539afac-c12a-46ed-b1bd-5a5567c9f045"
+    },
+    {
       "backend": "microsoft_sentinel",
       "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_edr_freeze.yml)",
       "ruleId": "AUDRULE-001631",
@@ -1005,6 +2609,12 @@
       "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_edr_freeze.yml)",
       "ruleId": "AUDRULE-001631",
       "sigmaId": "c598cc0c-9e70-4852-b9eb-8921af79f598"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001632",
+      "sigmaId": "c5b20776-639a-49bf-94c7-84f912b91c15"
     },
     {
       "backend": "crowdstrike",
@@ -1019,10 +2629,28 @@
       "sigmaId": "c625d754-6a3d-4f65-9c9a-536aea960d37"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001636",
+      "sigmaId": "c625d754-6a3d-4f65-9c9a-536aea960d37"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_wuauclt_network_connection.yml",
       "ruleId": "AUDRULE-001637",
       "sigmaId": "c649a6c7-cd8c-4a78-9c04-000fc76df954"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001641",
+      "sigmaId": "c70e019b-1479-4b65-b0cc-cd0c6093a599"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001647",
+      "sigmaId": "c7e91a02-d771-4a6d-a700-42587e0b1095"
     },
     {
       "backend": "crowdstrike",
@@ -1033,6 +2661,12 @@
     {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_netscan.yml",
+      "ruleId": "AUDRULE-001662",
+      "sigmaId": "ca387a8e-1c84-4da3-9993-028b45342d30"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001662",
       "sigmaId": "ca387a8e-1c84-4da3-9993-028b45342d30"
     },
@@ -1053,6 +2687,12 @@
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_rundll32_spawn_explorer.yml",
       "ruleId": "AUDRULE-001668",
       "sigmaId": "caa06de8-fdef-4c91-826a-7f9e163eef4b"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001674",
+      "sigmaId": "cbb56d62-4060-40f7-9466-d8aaf3123f83"
     },
     {
       "backend": "crowdstrike",
@@ -1079,10 +2719,40 @@
       "sigmaId": "cdc8da7d-c303-42f8-b08c-b4ab47230263"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001701",
+      "sigmaId": "cdc8da7d-c303-42f8-b08c-b4ab47230263"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001702",
+      "sigmaId": "cde0a575-7d3d-4a49-9817-b8004a7bf105"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001710",
+      "sigmaId": "cef24b90-dddc-4ae1-a09a-8764872f69fc"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_sharp_chisel.yml",
       "ruleId": "AUDRULE-001712",
       "sigmaId": "cf93e05e-d798-4d9e-b522-b0248dc61eaf"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001712",
+      "sigmaId": "cf93e05e-d798-4d9e-b522-b0248dc61eaf"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001715",
+      "sigmaId": "d04ae2b8-ad54-4de0-bd87-4bc1da66aa59"
     },
     {
       "backend": "crowdstrike",
@@ -1097,10 +2767,64 @@
       "sigmaId": "d08a2711-ee8b-4323-bdec-b7d85e892b31"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001718",
+      "sigmaId": "d08a2711-ee8b-4323-bdec-b7d85e892b31"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_webbrowserpassview.yml",
       "ruleId": "AUDRULE-001720",
       "sigmaId": "d0dae994-26c6-4d2d-83b5-b3c8b79ae513"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001720",
+      "sigmaId": "d0dae994-26c6-4d2d-83b5-b3c8b79ae513"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001722",
+      "sigmaId": "d21374ff-f574-44a7-9998-4a8c8bf33d7d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001724",
+      "sigmaId": "d22df9cd-2aee-4089-93c7-9dc4eae77f2c"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001726",
+      "sigmaId": "d2451be2-b582-4e15-8701-4196ac180260"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001729",
+      "sigmaId": "d26ce60c-2151-403c-9a42-49420d87b5e4"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001732",
+      "sigmaId": "d29ada0f-af45-4f27-8f32-f7b77c3dbc4e"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001735",
+      "sigmaId": "d36f7c12-14a3-4d48-b6b8-774b9c66f44d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001736",
+      "sigmaId": "d36f87ea-c403-44d2-aa79-1a0ac7c24456"
     },
     {
       "backend": "microsoft_sentinel",
@@ -1119,6 +2843,18 @@
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_uacme.yml",
       "ruleId": "AUDRULE-001737",
       "sigmaId": "d38d2fa4-98e6-4a24-aff1-410b0c9ad177"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001737",
+      "sigmaId": "d38d2fa4-98e6-4a24-aff1-410b0c9ad177"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001738",
+      "sigmaId": "d3abac66-f11c-4ed0-8acb-50cc29c97eed"
     },
     {
       "backend": "microsoft_sentinel",
@@ -1151,6 +2887,24 @@
       "sigmaId": "d474c8fe-bb69-4ea0-b7d9-f682b56d52d3"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001753",
+      "sigmaId": "d5601f8c-b26f-4ab0-9035-69e11a8d4ad2"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001756",
+      "sigmaId": "d635249d-86b5-4dad-a8c7-d7272b788586"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001767",
+      "sigmaId": "d7a63acb-1284-49bc-bfea-7771146c8b1c"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_cmdline_special_characters.yml",
       "ruleId": "AUDRULE-001771",
@@ -1169,16 +2923,58 @@
       "sigmaId": "d80d5c81-04ba-45b4-84e4-92eba40e0ad3"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001783",
+      "sigmaId": "d99b79d2-0a6f-4f46-ad8b-260b6e17f982"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001785",
+      "sigmaId": "dae8171c-5ec6-4396-b210-8466585b53e9"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001786",
+      "sigmaId": "daf7eb81-35fd-410d-9d7a-657837e602bb"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_schtasks_schedule_via_masqueraded_xml_file.yml",
       "ruleId": "AUDRULE-001799",
       "sigmaId": "dd2a821e-3b07-4d3b-a9ac-929fe4c6ca0c"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001801",
+      "sigmaId": "dd80db93-6ec2-4f4c-a017-ad40da6ffe81"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001802",
+      "sigmaId": "dd857d3e-0c6e-457b-9b48-e82ae7f86bd7"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_lnk_exec_hidden_cmd.yml",
       "ruleId": "AUDRULE-001803",
       "sigmaId": "dd8756e7-a3a0-4768-b47e-8f545d1a751c"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001811",
+      "sigmaId": "de41232e-12e8-49fa-86bc-c05c7e722df9"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001814",
+      "sigmaId": "de7ce410-b3fb-4e8a-b38c-3b999e2c3420"
     },
     {
       "backend": "microsoft_sentinel",
@@ -1193,8 +2989,32 @@
       "sigmaId": "df55196f-f105-44d3-a675-e9dfb6cc2f2b"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001822",
+      "sigmaId": "df68f791-ad95-447f-a271-640a0dab9cf8"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001824",
+      "sigmaId": "df9a0e0e-fedb-4d6c-8668-d765dfc92aa7"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001837",
+      "sigmaId": "e0f8ab85-0ac9-423b-a73a-81b3c7b1aa97"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_curl_susp_download.yml",
+      "ruleId": "AUDRULE-001848",
+      "sigmaId": "e218595b-bbe7-4ee5-8a96-f32a24ad3468"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001848",
       "sigmaId": "e218595b-bbe7-4ee5-8a96-f32a24ad3468"
     },
@@ -1205,16 +3025,70 @@
       "sigmaId": "e37db05d-d1f9-49c8-b464-cee1a4b11638"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001859",
+      "sigmaId": "e37db05d-d1f9-49c8-b464-cee1a4b11638"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001860",
+      "sigmaId": "e3818659-5016-4811-a73c-dde4679169d2"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001863",
+      "sigmaId": "e3f673b3-65d1-4d80-9146-466f8b63fa99"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_hijacking_firwall_snap_in.yml",
       "ruleId": "AUDRULE-001873",
       "sigmaId": "e52cb31c-10ed-4aea-bcb7-593c9f4a315b"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001874",
+      "sigmaId": "e54279c7-4910-4e2c-902c-c56a25b549f6"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001875",
+      "sigmaId": "e54979bd-c5f9-4d6c-967b-a04b19ac4c74"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_rundll32_susp_activity.yml",
       "ruleId": "AUDRULE-001880",
       "sigmaId": "e593cf51-88db-4ee1-b920-37e89012a3c9"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001881",
+      "sigmaId": "e5ac86dd-2da1-454b-be74-05d26c769d7d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001884",
+      "sigmaId": "e5f5c693-52d7-4de5-88ae-afbfbce85595"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001892",
+      "sigmaId": "e6e88853-5f20-4c4a-8d26-cd469fd8d31f"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001898",
+      "sigmaId": "e7a21b5f-d8c4-4ae5-b8d9-93c5d3f28e1c"
     },
     {
       "backend": "microsoft_sentinel",
@@ -1229,16 +3103,94 @@
       "sigmaId": "e8d34729-86a4-4140-adfd-0a29c2106307"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001911",
+      "sigmaId": "e8ebd53a-30c2-45bd-81bb-74befba07bdb"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001917",
+      "sigmaId": "e9c8808f-4cfb-4ba9-97d4-e5f3beaa244d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001918",
+      "sigmaId": "e9d4ab66-a532-4ef7-a502-66a9e4a34f5d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001922",
+      "sigmaId": "e9faba72-4974-4ab2-a4c5-46e25ad59e9b"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001926",
+      "sigmaId": "ea5c131b-380d-49f9-aeb3-920694da4d4b"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001928",
+      "sigmaId": "ea9bf0fa-edec-4fb8-8b78-b119f2528186"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_edrsilencer.yml",
       "ruleId": "AUDRULE-001932",
       "sigmaId": "eb2d07d4-49cb-4523-801a-da002df36602"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001932",
+      "sigmaId": "eb2d07d4-49cb-4523-801a-da002df36602"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001938",
+      "sigmaId": "ebfe73c2-5bc9-4ed9-aaa8-8b54b2b4777d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001941",
+      "sigmaId": "ec19ebab-72dc-40e1-9728-4c0b805d722c"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_7zip_exfil_dmp_files.yml",
       "ruleId": "AUDRULE-001943",
       "sigmaId": "ec570e53-4c76-45a9-804d-dc3f355ff7a7"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001943",
+      "sigmaId": "ec570e53-4c76-45a9-804d-dc3f355ff7a7"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001946",
+      "sigmaId": "eca81e8d-09e1-4d04-8614-c91f44fd0519"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001948",
+      "sigmaId": "eca91c7c-9214-47b9-b4c5-cb1d7e4f2350"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001951",
+      "sigmaId": "ed74fe75-7594-4b4b-ae38-e38e3fd2eb23"
     },
     {
       "backend": "microsoft_sentinel",
@@ -1259,8 +3211,26 @@
       "sigmaId": "ed825c86-c009-4014-b413-b76003e33d35"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001957",
+      "sigmaId": "edf3485d-dac4-4d50-90e4-b0e5813f7e60"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001962",
+      "sigmaId": "ee9ca27c-9bd7-4cee-9b01-6e906be7cae3"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sysinternals_adexplorer_susp_execution.yml",
+      "ruleId": "AUDRULE-001966",
+      "sigmaId": "ef61af62-bc74-4f58-b49b-626448227652"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001966",
       "sigmaId": "ef61af62-bc74-4f58-b49b-626448227652"
     },
@@ -1271,6 +3241,30 @@
       "sigmaId": "efafe0bf-4238-479e-af8f-797bd3490d2d"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001968",
+      "sigmaId": "efafe0bf-4238-479e-af8f-797bd3490d2d"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001984",
+      "sigmaId": "f239b326-2f41-4d6b-9dfa-c846a60ef505"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001994",
+      "sigmaId": "f318b911-ea88-43f4-9281-0de23ede628e"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-001998",
+      "sigmaId": "f356a9c4-effd-4608-bbf8-408afd5cd006"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_cobaltstrike_process_patterns.yml",
       "ruleId": "AUDRULE-001999",
@@ -1279,6 +3273,12 @@
     {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_bloodhound_sharphound.yml",
+      "ruleId": "AUDRULE-002000",
+      "sigmaId": "f376c8a7-a2d0-4ddc-aa0c-16c17236d962"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-002000",
       "sigmaId": "f376c8a7-a2d0-4ddc-aa0c-16c17236d962"
     },
@@ -1307,16 +3307,100 @@
       "sigmaId": "f4bbd493-b796-416e-bbf2-121235348529"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002015",
+      "sigmaId": "f512acbf-e662-4903-843e-97ce4652b740"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_forfiles_child_process_masquerading.yml",
       "ruleId": "AUDRULE-002017",
       "sigmaId": "f53714ec-5077-420e-ad20-907ff9bb2958"
     },
     {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002022",
+      "sigmaId": "f598ea0c-c25a-4f72-a219-50c44411c791"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002026",
+      "sigmaId": "f63508a0-c809-4435-b3be-ed819394d612"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002028",
+      "sigmaId": "f6451de4-df0a-41fa-8d72-b39f54a08db5"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002031",
+      "sigmaId": "f65e22f9-819e-4f96-9c7b-498364ae7a25"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002032",
+      "sigmaId": "f663a6d9-9d1b-49b8-b2b1-0637914d199a"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002034",
+      "sigmaId": "f69a87ea-955e-4fb4-adb2-bb9fd6685632"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002035",
+      "sigmaId": "f6c68d5f-e101-4b86-8c84-7d96851fd65c"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002037",
+      "sigmaId": "f6de9536-0441-4b3f-a646-f4e00f300ffd"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002041",
+      "sigmaId": "f7385ee2-0e0c-11eb-adc1-0242ac120002"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\builtin\\security\\account_management\\win_security_susp_failed_logon_source.yml",
       "ruleId": "AUDRULE-002046",
       "sigmaId": "f88e112a-21aa-44bd-9b01-6ee2a2bbbed1"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002047",
+      "sigmaId": "f8a56cb7-a363-44ed-a82f-5926bb44cd05"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002049",
+      "sigmaId": "f8be3e82-46a3-4e4e-ada5-8e538ae8b9c9"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002050",
+      "sigmaId": "f8c1e80b-c73a-476a-ae24-6c72528b1521"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002067",
+      "sigmaId": "fb3722e4-1a06-46b6-b772-253e2e7db933"
     },
     {
       "backend": "crowdstrike",
@@ -1329,6 +3413,30 @@
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_pchunter.yml",
       "ruleId": "AUDRULE-002079",
       "sigmaId": "fca949cc-79ca-446e-8064-01aa7e52ece5"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002079",
+      "sigmaId": "fca949cc-79ca-446e-8064-01aa7e52ece5"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002087",
+      "sigmaId": "fdeebdf0-9f3f-4d08-84a6-4c4d13e39fe4"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002093",
+      "sigmaId": "fe3ac066-98bb-432a-b1e7-a5229cb39d4a"
+    },
+    {
+      "backend": "qradar",
+      "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
+      "ruleId": "AUDRULE-002095",
+      "sigmaId": "fe5ce7eb-dad8-467c-84a9-31ec23bd644a"
     }
   ],
   "unrecognizedTechniqueIds": [

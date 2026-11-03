@@ -86,3 +86,41 @@ func TestEmbeddedLibrary_EveryRuleCarriesProvenanceAndLicence(t *testing.T) {
 		}
 	}
 }
+
+// QRadar is generated in a separate environment and has no field-mapping pipeline, so every rule must either carry a
+// generic AQL query or say why it has none. A QRadar query is never presented as field-mapped.
+func TestEmbeddedLibrary_QRadarIsPresentAndAlwaysGeneric(t *testing.T) {
+	e := NewEngine()
+	withQRadar, failedQRadar := 0, 0
+	for _, r := range e.Search(SearchFilter{}) {
+		got := false
+		for _, tr := range r.Translations {
+			if tr.Backend != "qradar" {
+				continue
+			}
+			got = true
+			withQRadar++
+			if tr.Language != "AQL" || tr.Mapping != "generic" || tr.Pipeline != "" || tr.DataSource != "" || tr.Query == "" || tr.Generator == "" {
+				t.Fatalf("%s: qradar translation = %+v, want a generic AQL query with a generator", r.ID, tr)
+			}
+		}
+		for _, f := range r.Failures {
+			if f.Backend == "qradar" {
+				got = true
+				failedQRadar++
+				if f.Reason == "" {
+					t.Fatalf("%s: qradar failure without a reason", r.ID)
+				}
+			}
+		}
+		if !got {
+			t.Fatalf("%s has neither a qradar translation nor a recorded failure", r.ID)
+		}
+	}
+	if withQRadar < 1500 {
+		t.Errorf("only %d rules have a QRadar query (%d failed); expected most of the library", withQRadar, failedQRadar)
+	}
+	if e.Metadata().Backends["qradar"] != withQRadar {
+		t.Errorf("metadata counts %d qradar translations, the rules hold %d", e.Metadata().Backends["qradar"], withQRadar)
+	}
+}

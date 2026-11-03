@@ -173,7 +173,7 @@ func (h *Handler) GetRunDetectionGaps(w http.ResponseWriter, r *http.Request) {
 }
 
 var safeRuleID = regexp.MustCompile(`^AUDRULE-\d{6}$`)
-var queryExt = map[string]string{"KQL": "kql", "SPL": "spl", "Lucene": "lucene", "LogScale": "logscale"}
+var queryExt = map[string]string{"KQL": "kql", "SPL": "spl", "Lucene": "lucene", "LogScale": "logscale", "AQL": "aql"}
 
 // ExportRunDetectionGaps returns a zip of everything needed to close a run's detection gaps: for each gap the
 // original Sigma rule and the generated query for each SIEM (or the one in ?backend=), a manifest that says where
@@ -300,7 +300,7 @@ func (h *Handler) rulesFor(techniqueID string) ([]rulelib.Rule, string) {
 	return nil, ""
 }
 
-var languageFormat = map[string]string{"KQL": "kql", "SPL": "spl", "Lucene": "lucene", "LogScale": "logscale"}
+var languageFormat = map[string]string{"KQL": "kql", "SPL": "spl", "Lucene": "lucene", "LogScale": "logscale", "AQL": "aql"}
 
 // pickRules orders rules by severity then id, drops those with no translation for the requested SIEM (they are not
 // offered as a fix for it), and keeps at most limit.

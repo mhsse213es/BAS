@@ -64,3 +64,14 @@ test('the explanatory line states what a gap is and what it is not', () => {
   assert.match(G.HELP, /reviewed/i);
   assert.match(G.HELP, /not validated|not been tested|not tested/i);
 });
+
+test('IBM QRadar is a selectable SIEM, in the same order the connectors use', () => {
+  assert.equal(G.backendLabel('qradar'), 'IBM QRadar');
+  assert.deepEqual(G.BACKENDS, ['microsoft_sentinel', 'microsoft_defender', 'splunk', 'qradar', 'elastic', 'crowdstrike']);
+});
+
+test('a QRadar query is generic: it says to adapt it and never names a data source', () => {
+  const note = G.backendNote({ backend: 'qradar', mapping: 'generic', dataSource: '' });
+  assert.match(note, /adapt/i);
+  assert.doesNotMatch(note, /only matches if/i);
+});

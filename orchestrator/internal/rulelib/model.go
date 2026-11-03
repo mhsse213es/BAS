@@ -50,8 +50,8 @@ type LogSource struct {
 }
 
 type Translation struct {
-	Backend   string `json:"backend"`  // provider-registry key: microsoft_sentinel | microsoft_defender | splunk | elastic | crowdstrike
-	Language  string `json:"language"` // KQL | SPL | Lucene | LogScale
+	Backend   string `json:"backend"`  // provider-registry key: microsoft_sentinel | microsoft_defender | splunk | elastic | crowdstrike | qradar
+	Language  string `json:"language"` // KQL | SPL | Lucene | LogScale | AQL
 	Query     string `json:"query"`
 	Generator string `json:"generator"`
 	// Mapping is "pipeline" when the query was field-mapped for the SIEM (real table / index / event type and

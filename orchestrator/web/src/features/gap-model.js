@@ -26,6 +26,7 @@ var BACKEND_LABELS = {
   microsoft_sentinel: 'Microsoft Sentinel',
   microsoft_defender: 'Microsoft Defender XDR',
   splunk: 'Splunk',
+  qradar: 'IBM QRadar',
   elastic: 'Elastic',
   crowdstrike: 'CrowdStrike LogScale',
 };

@@ -21,6 +21,7 @@ import sys
 from collections import Counter
 
 from export import build_rule_record, write_bundle
+from external_backend import merge_external, run_external
 from ids import assign_ids
 from load_sigma import load_rules
 from techniques import applicable_technique_ids, tested_techniques
@@ -60,17 +61,35 @@ def _load_registry(path: str, existing_rules_json: str) -> dict[str, str]:
     return {}
 
 
+def qradar_policy(full: bool, qradar_python: str, no_qradar: bool) -> str | None:
+    """Which Python runs the QRadar backend, or None to leave it out. A full library must never silently lack
+    QRadar, so a full run has to choose: the isolated environment (--qradar-python) or an explicit --no-qradar."""
+    if qradar_python and no_qradar:
+        raise SystemExit("--qradar-python and --no-qradar contradict each other")
+    if not full:
+        return None
+    if no_qradar:
+        return None
+    if not qradar_python:
+        raise SystemExit("a full run needs --qradar-python <python of the QRadar environment> (see qradar/README.md) "
+                         "or an explicit --no-qradar")
+    return qradar_python
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sigma-dir", default=os.path.join(HERE, "sigma_seed"))
     parser.add_argument("--sigma-root", default="", help="SigmaHQ checkout root (for provenance paths and commit)")
     parser.add_argument("--sigma-commit", default="")
+    parser.add_argument("--qradar-python", default="", help="python.exe of the isolated QRadar environment")
+    parser.add_argument("--no-qradar", action="store_true", help="leave QRadar out (the library will not have it)")
     parser.add_argument("--scenarios-dir", default=os.path.join(ROOT, "scenarios"))
     parser.add_argument("--registry", default=os.path.join(HERE, "id_registry.json"))
     parser.add_argument("--out", default=os.path.join(ROOT, "orchestrator", "internal", "rulelib", "ruledata"))
     args = parser.parse_args()
 
     full = bool(args.sigma_root)
+    qradar_py = qradar_policy(full, args.qradar_python, args.no_qradar)
     commit = args.sigma_commit
     if full and not commit:
         with open(os.path.join(ROOT, "tools", "rulelib", "SIGMA_COMMIT"), encoding="utf-8") as f:
@@ -99,9 +118,18 @@ def main() -> int:
         source = {"name": "SigmaHQ", "url": SIGMA_URL, "commit": commit, "license": "DRL-1.1",
                   "licenseUrl": "https://github.com/SigmaHQ/Detection-Rule-License/blob/main/LICENSE.Detection.Rules.md"}
     rules.sort(key=lambda r: id_for[str(r.id)])
+    qradar_results, qradar_generator = {}, ""
+    if qradar_py:
+        print(f"converting {len(rules)} rule(s) for QRadar in the isolated environment ({qradar_py})")
+        qradar_results, qradar_generator = run_external(
+            qradar_py, os.path.join(HERE, "qradar", "convert_qradar.py"),
+            [{"id": str(r.id), "path": str(r.source.path)} for r in rules])
     built = []
     for i, r in enumerate(rules):
-        built.append(build_rule_record(r, id_for[str(r.id)], source=source, sigma_root=args.sigma_root or None))
+        rec = build_rule_record(r, id_for[str(r.id)], source=source, sigma_root=args.sigma_root or None)
+        if qradar_py:
+            merge_external(rec, "qradar", "AQL", qradar_results.get(str(r.id)), qradar_generator)
+        built.append(rec)
         if (i + 1) % 250 == 0:
             print(f"  translated {i + 1}/{len(rules)}")
 

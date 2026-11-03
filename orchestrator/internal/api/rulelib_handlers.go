@@ -66,7 +66,7 @@ func (h *Handler) RulesByTechnique(w http.ResponseWriter, r *http.Request) {
 }
 
 // ExportRule returns one rule's content as raw text in the requested format.
-// GET /api/rules/export?id=&format=sigma|kql|spl|lucene|logscale
+// GET /api/rules/export?id=&format=sigma|kql|spl|lucene|logscale|aql
 func (h *Handler) ExportRule(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	format := r.URL.Query().Get("format")
@@ -92,7 +92,7 @@ func (h *Handler) ExportRule(w http.ResponseWriter, r *http.Request) {
 	switch format {
 	case "sigma", "":
 		text = rule.Detection
-	case "kql", "spl", "lucene", "logscale":
+	case "kql", "spl", "lucene", "logscale", "aql":
 		backend := exportFormatToBackend(format)
 		found := false
 		for _, t := range rule.Translations {
@@ -112,7 +112,7 @@ func (h *Handler) ExportRule(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	default:
-		jsonError(w, "format must be one of sigma|kql|spl|lucene|logscale", http.StatusBadRequest)
+		jsonError(w, "format must be one of sigma|kql|spl|lucene|logscale|aql", http.StatusBadRequest)
 		return
 	}
 
@@ -134,6 +134,8 @@ func exportFormatToBackend(format string) string {
 		return "elastic"
 	case "logscale":
 		return "crowdstrike"
+	case "aql":
+		return "qradar"
 	default:
 		return ""
 	}
