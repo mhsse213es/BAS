@@ -100,6 +100,10 @@ type Handler struct {
 	// probeAudit writes one probe audit entry synchronously. nil in production
 	// (writes audit_logs); tests override it.
 	probeAudit func(ctx context.Context, actorID, action, resource string, detail map[string]any, outcome string) error
+	// cloud holds the validated cloud settings: the account allow-list, the Azure
+	// credentials loaded from the secrets file, and the discovery gate. nil refuses
+	// all cloud work. cmd/server installs it at startup.
+	cloud *CloudSettings
 
 	db     *pgxpool.Pool
 	hub    *ws.Hub

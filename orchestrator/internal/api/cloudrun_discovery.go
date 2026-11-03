@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -20,34 +21,55 @@ import (
 // callers map it to 503.
 var errCloudDiscoveryNotConfigured = errors.New("cloud discovery is not configured on this server")
 
-// cloudDiscovererFor builds the live discoverer for one account from server
-// configuration. Credentials are read from the environment only -- the AWS
-// SDK default chain, Application Default Credentials for GCP, and service
-// principal variables for Azure. Nothing secret is taken from the request.
+// cloudDiscovererFor builds the live discoverer for one account from the server's
+// validated settings. The account must be on the allow-list before anything else
+// happens; a refused account never reaches a provider client.
 //
-// The run names an account; the discoverer proves the credentials belong to
-// it before any inventory is read. A mismatch fails the run rather than
-// silently evaluating one tenant's permissions under another tenant's label.
-func cloudDiscovererFor(ctx context.Context, account cloudgraph.AccountScope) (cloudgraph.Discoverer, error) {
+// Credentials come from the AWS SDK default chain, Application Default Credentials
+// for GCP, and the Azure secrets file loaded at startup. Nothing secret is taken
+// from the request.
+//
+// The run names an account; the discoverer proves the credentials belong to it
+// before any inventory is read. A mismatch fails the run rather than silently
+// evaluating one tenant's permissions under another tenant's label.
+func cloudDiscovererFor(ctx context.Context, s *CloudSettings, account cloudgraph.AccountScope) (cloudgraph.Discoverer, error) {
+	if err := s.permitAccount(account); err != nil {
+		return nil, err
+	}
+	var inner cloudgraph.Discoverer
+	var err error
 	switch account.Provider {
 	case "aws":
-		return awsDiscovererFor(ctx, account)
+		inner, err = awsDiscovererFor(ctx, account)
 	case "gcp":
-		client, err := cloudgraph.NewGCPDiscoveryClient(ctx, account.AccountID, option.WithScopes("https://www.googleapis.com/auth/cloud-platform.read-only"))
-		if err != nil {
-			return nil, fmt.Errorf("%w: gcp: %v", errCloudDiscoveryNotConfigured, err)
-		}
-		return accountChecked(account.AccountID, nil, cloudgraph.GCPDiscoverer(client), func(context.Context) (string, error) {
-			return account.AccountID, nil
-		}), nil
+		inner, err = gcpDiscovererFor(ctx, s, account)
 	case "azure":
-		return azureDiscovererFor(account)
+		inner, err = azureDiscovererFor(s, account)
 	default:
 		return nil, fmt.Errorf("unknown provider %q", account.Provider)
 	}
+	if err != nil {
+		return nil, err
+	}
+	return observeDiscoverer(inner, account, s.metricsOrNil()), nil
+}
+
+// gcpDiscovererFor builds the GCP client and reports its rate-limit waits.
+func gcpDiscovererFor(ctx context.Context, s *CloudSettings, account cloudgraph.AccountScope) (cloudgraph.Discoverer, error) {
+	client, err := cloudgraph.NewGCPDiscoveryClient(ctx, account.AccountID, option.WithScopes("https://www.googleapis.com/auth/cloud-platform.read-only"))
+	if err != nil {
+		return nil, fmt.Errorf("%w: gcp: %v", errCloudDiscoveryNotConfigured, err)
+	}
+	if m := s.metricsOrNil(); m != nil {
+		client.SetRateLimitObserver(func(d time.Duration) { m.RateLimitWait.WithLabelValues("gcp").Observe(d.Seconds()) })
+	}
+	return accountChecked(account.AccountID, nil, cloudgraph.GCPDiscoverer(client), func(context.Context) (string, error) {
+		return account.AccountID, nil
+	}), nil
 }
 
 // awsConfigFor loads the SDK default credential chain for the account's region.
+// The AWS SDK applies its own retries, so no rate-limit wait is reported for AWS.
 func awsConfigFor(ctx context.Context, account cloudgraph.AccountScope) (aws.Config, error) {
 	region := account.Region
 	if region == "" {
@@ -78,38 +100,28 @@ func awsDiscovererFor(ctx context.Context, account cloudgraph.AccountScope) (clo
 	}), nil
 }
 
-// azureDiscovererFor reads the service principal from the environment. The
-// subscription in the environment must be the one the run names.
-// azureConfigFor reads the service principal from the environment and checks
-// that its subscription is the one the run names.
-func azureConfigFor(account cloudgraph.AccountScope) (cloudgraph.AzureDiscoveryConfig, error) {
-	cfg := cloudgraph.AzureDiscoveryConfig{
-		TenantID:       os.Getenv("AZURE_TENANT_ID"),
-		ClientID:       os.Getenv("AZURE_CLIENT_ID"),
-		ClientSecret:   os.Getenv("AZURE_CLIENT_SECRET"),
-		SubscriptionID: os.Getenv("AZURE_SUBSCRIPTION_ID"),
+// azureConfigFor returns the Azure service principal loaded at startup, and checks
+// that its subscription is the one the run names. Nothing is read here: the secret
+// was loaded once from the secrets file when the settings were built.
+func azureConfigFor(s *CloudSettings, account cloudgraph.AccountScope) (cloudgraph.AzureDiscoveryConfig, error) {
+	if s == nil || s.azure == nil {
+		return cloudgraph.AzureDiscoveryConfig{}, fmt.Errorf("%w: azure: no Azure credentials were loaded at startup", errCloudDiscoveryNotConfigured)
 	}
-	for name, v := range map[string]string{
-		"AZURE_TENANT_ID": cfg.TenantID, "AZURE_CLIENT_ID": cfg.ClientID,
-		"AZURE_CLIENT_SECRET": cfg.ClientSecret, "AZURE_SUBSCRIPTION_ID": cfg.SubscriptionID,
-	} {
-		if v == "" {
-			// Names the variable, never its value.
-			return cloudgraph.AzureDiscoveryConfig{}, fmt.Errorf("%w: azure: %s is not set", errCloudDiscoveryNotConfigured, name)
-		}
+	if account.AccountID != s.azure.SubscriptionID {
+		return cloudgraph.AzureDiscoveryConfig{}, fmt.Errorf("azure: server credentials are for subscription %s, run names %s", s.azure.SubscriptionID, account.AccountID)
 	}
-	if account.AccountID != cfg.SubscriptionID {
-		return cloudgraph.AzureDiscoveryConfig{}, fmt.Errorf("azure: server credentials are for subscription %s, run names %s", cfg.SubscriptionID, account.AccountID)
-	}
-	return cfg, nil
+	return *s.azure, nil
 }
 
-func azureDiscovererFor(account cloudgraph.AccountScope) (cloudgraph.Discoverer, error) {
-	cfg, err := azureConfigFor(account)
+func azureDiscovererFor(s *CloudSettings, account cloudgraph.AccountScope) (cloudgraph.Discoverer, error) {
+	cfg, err := azureConfigFor(s, account)
 	if err != nil {
 		return nil, err
 	}
 	client := cloudgraph.NewAzureDiscoveryClient(cfg)
+	if m := s.metricsOrNil(); m != nil {
+		client.SetRateLimitObserver(func(d time.Duration) { m.RateLimitWait.WithLabelValues("azure").Observe(d.Seconds()) })
+	}
 	return accountChecked(account.AccountID, []string{cfg.ClientSecret}, cloudgraph.AzureDiscoverer(client), func(context.Context) (string, error) {
 		return cfg.SubscriptionID, nil
 	}), nil
@@ -180,19 +192,34 @@ func (d accountCheckedDiscoverer) scrub(err error) error {
 	return errors.New(cloudgraph.Redact(err.Error(), d.secrets...))
 }
 
-// discoveryStatusCode maps a discoverer-construction error to an HTTP status:
-// a server that lacks credentials for the provider is 503, anything else is a
-// request that names an account the server cannot serve, which is 400.
+// discoveryStatusCode maps a construction or gate error to an HTTP status:
+//   - an unlisted account is 403;
+//   - a busy account is 409;
+//   - a saturated server is 503 (retry later);
+//   - missing server credentials are 503;
+//   - anything else names an account the server cannot serve, which is 400.
 func discoveryStatusCode(err error) int {
-	if errors.Is(err, errCloudDiscoveryNotConfigured) {
+	switch {
+	case errors.Is(err, errCloudAccountNotAllowed):
+		return http.StatusForbidden
+	case errors.Is(err, errCloudAccountBusy):
+		return http.StatusConflict
+	case errors.Is(err, errCloudServerSaturated):
 		return http.StatusServiceUnavailable
+	case errors.Is(err, errCloudDiscoveryNotConfigured):
+		return http.StatusServiceUnavailable
+	default:
+		return http.StatusBadRequest
 	}
-	return http.StatusBadRequest
 }
 
 // cloudEventSourceFor returns the provider's live audit-log source for the
-// account, using the same server-side credentials as discovery.
-func cloudEventSourceFor(ctx context.Context, account cloudgraph.AccountScope) (cloudgraph.EventSource, error) {
+// account, using the same server-side credentials as discovery. It applies the
+// same allow-list, so an unlisted account is never read here either.
+func cloudEventSourceFor(ctx context.Context, s *CloudSettings, account cloudgraph.AccountScope) (cloudgraph.EventSource, error) {
+	if err := s.permitAccount(account); err != nil {
+		return nil, err
+	}
 	switch account.Provider {
 	case "aws":
 		cfg, err := awsConfigFor(ctx, account)
@@ -201,7 +228,7 @@ func cloudEventSourceFor(ctx context.Context, account cloudgraph.AccountScope) (
 		}
 		return &cloudgraph.CloudTrailSource{API: cloudtrail.NewFromConfig(cfg)}, nil
 	case "azure":
-		cfg, err := azureConfigFor(account)
+		cfg, err := azureConfigFor(s, account)
 		if err != nil {
 			return nil, err
 		}

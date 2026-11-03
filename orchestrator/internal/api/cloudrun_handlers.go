@@ -58,8 +58,21 @@ func (h *Handler) TriggerCloudPlanRun(w http.ResponseWriter, r *http.Request) {
 		req.InitiatedBy = c.UserID
 	}
 
+	// Every plan run names an account, with or without discovery, so the
+	// allow-list applies to all of them. Discovery also takes a gate slot.
+	settings := h.cloudSettings()
+	if err := settings.permitAccount(req.Account); err != nil {
+		h.refuseCloudRequest(w, r, "cloud.plan.run", req.Account, err)
+		return
+	}
 	if req.Discover {
-		d, err := cloudDiscovererFor(r.Context(), req.Account)
+		release, err := settings.gate.Acquire(r.Context(), req.Account)
+		if err != nil {
+			h.refuseCloudRequest(w, r, "cloud.plan.run", req.Account, err)
+			return
+		}
+		defer release()
+		d, err := cloudDiscovererFor(r.Context(), settings, req.Account)
 		if err != nil {
 			h.auditLog(r, "cloudrun.plan.run", "", map[string]any{
 				"scenarioId": req.ScenarioID, "provider": req.Account.Provider, "error": err.Error(),
@@ -220,6 +233,7 @@ func (h *Handler) CreateCloudCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	settings := h.cloudSettings()
 	results := make([]cloudCampaignAccountResult, len(req.Runs))
 	var total, completed, partial, failed int
 	for i, subReq := range req.Runs {
@@ -227,11 +241,21 @@ func (h *Handler) CreateCloudCampaign(w http.ResponseWriter, r *http.Request) {
 		subReq.CampaignID = campaign.ID
 		var run *cloudrun.CloudRun
 		var err error
-		if subReq.Discover {
-			subReq.Discoverer, err = cloudDiscovererFor(r.Context(), subReq.Account)
+		var release func()
+		if err = settings.permitAccount(subReq.Account); err == nil && subReq.Discover {
+			release, err = settings.gate.Acquire(r.Context(), subReq.Account)
+			if err == nil {
+				subReq.Discoverer, err = cloudDiscovererFor(r.Context(), settings, subReq.Account)
+			}
 		}
 		if err == nil {
 			run, err = db.ExecuteCloudPlanRun(r.Context(), h.db, subReq)
+		}
+		if release != nil {
+			release()
+		}
+		if isCloudRefusal(err) {
+			h.recordCloudRefusal(r, "cloudcampaign.run", subReq.Account, err)
 		}
 
 		res := cloudCampaignAccountResult{Account: subReq.Account}

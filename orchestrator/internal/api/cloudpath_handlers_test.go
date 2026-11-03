@@ -49,7 +49,7 @@ func createCloudTopologyImportForPathTest(t *testing.T, h *Handler, userID strin
 
 func TestFindCloudPaths_RouteFoundAndPolicyPermits_PolicySupported(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		userID := seedUser(t, pool, "cloudpath-op", "pw12345678", string(auth.RoleAnalyst), true)
 		topoID := createCloudTopologyImportForPathTest(t, h, userID)
 
@@ -92,7 +92,7 @@ func TestFindCloudPaths_RouteFoundAndPolicyPermits_PolicySupported(t *testing.T)
 // topology would have incorrectly returned policy_supported.
 func TestFindCloudPaths_DestinationInboundSecurityGroupDenies_Blocked(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		userID := seedUser(t, pool, "cloudpath-op-destdeny", "pw12345678", string(auth.RoleAnalyst), true)
 
 		body := map[string]any{
@@ -162,7 +162,7 @@ func TestFindCloudPaths_DestinationInboundSecurityGroupDenies_Blocked(t *testing
 // instance/ENI level), never an empty results array.
 func TestFindCloudPaths_SameSubnetQuery_EvaluatesSecurityGroups(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		userID := seedUser(t, pool, "cloudpath-op-samesub", "pw12345678", string(auth.RoleAnalyst), true)
 
 		body := map[string]any{
@@ -219,7 +219,7 @@ func TestFindCloudPaths_SameSubnetQuery_EvaluatesSecurityGroups(t *testing.T) {
 
 func TestFindCloudPaths_MissingRequiredFields_Rejected(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		userID := seedUser(t, pool, "cloudpath-op-bad", "pw12345678", string(auth.RoleAnalyst), true)
 		b, _ := json.Marshal(map[string]any{"sourceHost": "10.0.1.5"})
 		req := authedRequest(t, http.MethodPost, "/api/cloud-paths", bytes.NewReader(b), auth.RoleAnalyst, userID)
@@ -232,7 +232,7 @@ func TestFindCloudPaths_MissingRequiredFields_Rejected(t *testing.T) {
 
 func TestFindCloudPaths_UnknownTopologyImport_NotFound(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		userID := seedUser(t, pool, "cloudpath-op-404", "pw12345678", string(auth.RoleAnalyst), true)
 		body := map[string]any{"topologyImportId": "does-not-exist", "sourceHost": "10.0.1.5", "destHost": "10.0.2.5", "port": 443}
 		b, _ := json.Marshal(body)

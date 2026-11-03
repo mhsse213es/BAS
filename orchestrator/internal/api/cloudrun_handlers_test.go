@@ -45,7 +45,7 @@ func validCloudPlanRunBody() map[string]any {
 
 func TestTriggerCloudPlanRun_Success(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		req, _ := triggerCloudPlanRunReq(t, pool, validCloudPlanRunBody())
 		rec := callAuthed(h.TriggerCloudPlanRun, req)
 		if rec.Code != http.StatusCreated {
@@ -66,7 +66,7 @@ func TestTriggerCloudPlanRun_Success(t *testing.T) {
 
 func TestTriggerCloudPlanRun_MissingScenarioID(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		body := validCloudPlanRunBody()
 		delete(body, "scenarioId")
 		req, _ := triggerCloudPlanRunReq(t, pool, body)
@@ -79,7 +79,7 @@ func TestTriggerCloudPlanRun_MissingScenarioID(t *testing.T) {
 
 func TestTriggerCloudPlanRun_MissingTarget(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		body := validCloudPlanRunBody()
 		delete(body, "target")
 		req, _ := triggerCloudPlanRunReq(t, pool, body)
@@ -92,7 +92,7 @@ func TestTriggerCloudPlanRun_MissingTarget(t *testing.T) {
 
 func TestTriggerCloudPlanRun_InvalidProvider(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		body := validCloudPlanRunBody()
 		body["account"] = map[string]any{"provider": "not-a-real-provider", "accountId": "111"}
 		req, _ := triggerCloudPlanRunReq(t, pool, body)
@@ -110,7 +110,7 @@ func TestTriggerCloudPlanRun_InvalidProvider(t *testing.T) {
 
 func TestTriggerCloudPlanRun_InitiatedByIsAlwaysServerControlled(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		body := validCloudPlanRunBody()
 		body["initiatedBy"] = "someone-else-entirely"
 		req, userID := triggerCloudPlanRunReq(t, pool, body)
@@ -130,7 +130,7 @@ func TestTriggerCloudPlanRun_InitiatedByIsAlwaysServerControlled(t *testing.T) {
 
 func TestTriggerCloudPlanRun_MismatchFailsWith500AndAuditsTheRealRowID(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		body := map[string]any{
 			"scenarioId": "mismatch-scenario",
 			"account":    map[string]any{"provider": "aws", "accountId": "111"},
@@ -190,7 +190,7 @@ func TestTriggerCloudPlanRun_MismatchFailsWith500AndAuditsTheRealRowID(t *testin
 
 func TestTriggerCloudPlanRun_SuccessAudits(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		req, _ := triggerCloudPlanRunReq(t, pool, validCloudPlanRunBody())
 		rec := callAuthed(h.TriggerCloudPlanRun, req)
 		if rec.Code != http.StatusCreated {
@@ -218,7 +218,7 @@ func TestTriggerCloudPlanRun_SuccessAudits(t *testing.T) {
 
 func TestListCloudRuns_RoundTripsATriggeredRun(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		triggerReq, _ := triggerCloudPlanRunReq(t, pool, validCloudPlanRunBody())
 		triggerRec := callAuthed(h.TriggerCloudPlanRun, triggerReq)
 		if triggerRec.Code != http.StatusCreated {
@@ -252,7 +252,7 @@ func TestListCloudRuns_RoundTripsATriggeredRun(t *testing.T) {
 
 func TestListCloudRuns_LimitBoundaryValues(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		// Seed 3 rows so the "honored, small limit" case (limit=1) has
 		// something real to clamp against -- a test that never seeds more
 		// rows than the default can't distinguish "honored" from "ignored".
@@ -298,7 +298,7 @@ func TestListCloudRuns_LimitBoundaryValues(t *testing.T) {
 
 func TestGetCloudRun_RoundTripsATriggeredRun(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		triggerReq, _ := triggerCloudPlanRunReq(t, pool, validCloudPlanRunBody())
 		triggerRec := callAuthed(h.TriggerCloudPlanRun, triggerReq)
 		if triggerRec.Code != http.StatusCreated {
@@ -327,7 +327,7 @@ func TestGetCloudRun_RoundTripsATriggeredRun(t *testing.T) {
 
 func TestGetCloudRun_NonexistentIDReturns404(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		getReq := authedRequest(t, http.MethodGet, "/api/cloud-runs/nonexistent-id", nil, auth.RoleAnalyst, "any-authenticated-user")
 		getReq = withURLParam(getReq, "id", "nonexistent-id")
 		rec := callAuthed(h.GetCloudRun, getReq)

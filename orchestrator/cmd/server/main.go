@@ -954,7 +954,15 @@ func main() {
 		log.Printf("[WARN] network discovery vantage point not configured: %v -- /api/network-discovery-runs will return 503 until NETWORK_VANTAGE_POINT_ID and NETWORK_VANTAGE_POINT_POSITION are both set", err)
 	}
 
+	// Cloud settings (account allow-list, Azure secrets file, discovery gate) are
+	// validated before the handler is built. A bad setting stops startup.
+	cloudSettings, err := api.LoadCloudSettings(observability.NewDefaultCloudMetrics())
+	if err != nil {
+		log.Fatalf("[FATAL] cloud settings: %v", err)
+	}
+
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
+		WithCloudSettings(cloudSettings).
 		WithDeploymentClass(cfg.Classification()).
 		WithEvidenceStore(evStore).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).

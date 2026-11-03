@@ -163,6 +163,39 @@ SCPs, permission boundaries, S3 bucket policies, management-group inheritance, a
 - **Not done:** no provider-backed integration test against a dedicated sandbox account has been run. That test is the next step and needs a sandbox account. Probes for GCP and Azure are not registered, so those providers are rejected.
 - **Deferred: state-changing actions.** Not implemented, and rejected by default, even in live mode. Before any is built, it needs: (1) per-step approval bound to the exact account, resource, action and parameters; (2) a precondition check immediately before execution, so an approval cannot be reused against a changed target; (3) a defined rollback and post-cleanup verification for each supported action; (4) a durable record of attempted changes and cleanup results; (5) a defined response to partial execution, crashes, lost credentials and failed rollback. Some actions are irreversible and must stay unsupported unless a recovery strategy is proven.
 
+### R-20 — Operational hardening (O-9): account allow-list, Azure secrets file, discovery concurrency, metrics — RESOLVED (this commit)
+
+Implements the owner's O-9 decisions in the priority order given: allow-list, secret injection, concurrency limits, metrics and tracing.
+
+- **Account allow-list (security boundary).** `CLOUD_ALLOWED_ACCOUNTS` is parsed once at startup. It applies to discovery, every plan run (with or without discovery), every campaign sub-run, scenario runs (including their event source), preflight and live probes. An unlisted account returns 403 before any provider client is built. The refusal is written synchronously to `audit_logs` as `<action>.refused` with the actor, account and reason, and counted in `cloud_request_refusals_total{reason="allow-list"}`. An unset variable permits nothing. The old `CLOUD_PROBE_ALLOWED_ACCOUNTS` is no longer read, so a deployment that still sets it gets no probe access until `CLOUD_ALLOWED_ACCOUNTS` is set.
+- **Azure credentials from a file, not the environment.** The four Azure keys load from the file named by `CLOUD_AZURE_SECRETS_FILE` once, at startup. The server refuses to start if `AZURE_CLIENT_SECRET` is set in the process environment, or if the file is missing, malformed, has an unknown or duplicate key, or lists a subscription other than the allow-listed Azure account. Errors name the setting or key, never a value. `AzureDiscoveryConfig` prints `secret=[REDACTED]` under `%v`, `%+v`, `%#v` and `%s`. Rotation is by editing the file and restarting the server; there is no live reload.
+- **Concurrency limits.** One discovery pass per account (second request: 409). A server-wide maximum of concurrent passes, with a bounded queue and a bounded wait. Saturation returns 503 immediately when the queue is full, or after the wait expires. Queued requests that the client abandons are released. Preflight also takes a gate slot because it makes account calls. Live probes do not take a slot (decision: discovery and preflight only).
+- **Telemetry.** `internal/observability/cloud_metrics.go`. Labels are bounded: provider, outcome, object kind, failure category, preflight check name (without any `:` suffix), probe operation (unregistered operations are counted as `unregistered`), and refusal reason. Account IDs, identity IDs and resource names are never labels. Metrics: `cloud_discovery_pass_duration_seconds`, `cloud_discovery_objects_total`, `cloud_discovery_failures_total`, `cloud_preflight_failures_total`, `cloud_probe_outcomes_total`, `cloud_rate_limit_wait_seconds`, `cloud_request_refusals_total`.
+- **Structured logs and traces.** Discovery, preflight, probe outcome and refusal events are written to slog with `account_id`, `provider` and `event`. Spans `cloud.discovery.pass` and `cloud.preflight` carry the account ID. **OpenTelemetry is not initialised in production (no tracer provider is installed in `cmd/server`), so these spans are no-ops until one is configured.** Logs are the working record today.
+- **Audit stays separate from telemetry.** Audit rows keep actor, account, action and outcome, and are written synchronously. Telemetry counts and times, and never carries identifiers.
+
+**Operator configuration**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CLOUD_ALLOWED_ACCOUNTS` | unset (permits nothing) | Comma-separated `provider:accountId` entries, for example `aws:111111111111,azure:<subscription-id>`. Read once at startup. |
+| `CLOUD_AZURE_SECRETS_FILE` | unset | Path to the Azure secrets file. Required when any `azure:` account is listed. |
+| `CLOUD_DISCOVERY_MAX_CONCURRENT` | 4 (1–64) | Server-wide concurrent discovery and preflight passes. |
+| `CLOUD_DISCOVERY_MAX_QUEUED` | 8 (0–256) | Requests allowed to wait for a server slot. Beyond this, refuse at once. |
+| `CLOUD_DISCOVERY_QUEUE_WAIT` | 10s (up to 5m) | Longest a queued request waits before a 503. |
+| `AZURE_CLIENT_SECRET` | must NOT be set | Setting it in the environment stops startup. |
+
+**Secrets file format.** One `KEY=VALUE` per line, with `#` comments. The keys are exactly `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` and `AZURE_SUBSCRIPTION_ID`, each once and non-empty. Values may not contain quotes, backslashes or leading or trailing spaces. On Unix the file must not be readable by group or others (mode 0600). **On Windows the code does not check the file's ACL; the operator must restrict it to the service account.**
+
+**Known limits (R-20)**
+
+- AWS SDK retries are not reported in `cloud_rate_limit_wait_seconds`. The SDK applies its own retries and the code has no hook for them. The metric covers GCP and Azure only.
+- Tracing is inert until a tracer provider is configured (see above).
+- The EmailGW Defender client secret reaches compose through `.env`, which is an environment exposure outside the Azure discovery path. Flagged, not changed in this phase.
+- The runbook generator script from the earlier session is no longer in the scratchpad, so the runbook is maintained by hand in this file.
+
+**Tests.** `internal/api`: refusal for every unlisted account path, fail-closed permit, gate exclusivity, server limit, queue bound, queue timeout and cancellation, secrets-file parser (valid, missing key, unknown key, duplicate, empty, quoted, malformed, missing file), environment-secret refusal, metric label bounds, failure categories. `internal/cloudgraph`: Azure config redaction under every format verb. The `api` group of `scripts/cloud-qa.sh` runs the whole package, so these are included.
+
 ### R-8 — Credentials never come from a request — RESOLVED `28304ead`, `7ae44b57`
 - AWS uses the SDK default chain, GCP uses Application Default Credentials, Azure reads service-principal variables. Each discoverer proves the credentials resolve to the account the run names before it reads inventory. Error text names a missing variable, never its value.
 
@@ -231,7 +264,10 @@ Every item here is open, unbuilt, or a documented limit. Nothing is hidden in a 
 | O-14 | Kubernetes attack-path routes (bind, escalate, impersonate, create-pods, token request, exec, node proxy) | Done as configured-permission modelling | Node proxy is modelled from RBAC grants only; kubelet behaviour is not validated live |
 | R-19a | Sandbox provider integration test for read-only probes | Open | A dedicated sandbox account |
 | R-19b | Probes for GCP and Azure are not registered | Open | Decision on which probes to add |
-| R-19c | `CLOUD_PROBE_ALLOWED_ACCOUNTS` is unset, so no probe can run against a real account | Operational | Sandbox test passing first |
+| R-19c | `CLOUD_ALLOWED_ACCOUNTS` is unset, so no probe can run against a real account (replaces `CLOUD_PROBE_ALLOWED_ACCOUNTS`, which is no longer read) | Operational | Sandbox test passing first |
+| R-20a | Concurrency and refusal paths under real load | Open | Staging run of the discovery gate |
+| R-20b | OpenTelemetry tracer provider not configured in production | Open | Decision on a trace exporter |
+| R-20c | Windows ACL of the Azure secrets file not checked by code | Operator task | Restrict the file to the service account |
 | R-19d | Least-privilege setup of the server's AWS credential chain | Operator task | Operator configuration; code does not enforce it |
 
 ## Known limits (consolidated)
