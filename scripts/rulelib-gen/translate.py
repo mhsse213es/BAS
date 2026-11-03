@@ -35,6 +35,7 @@ WINDOWS_PROCESS_CREATION = "windows_process_creation"
 WINDOWS_NETWORK_CONNECTION = "windows_network_connection"
 WINDOWS_PS_SCRIPT = "windows_ps_script"
 WINDOWS_REGISTRY_SET = "windows_registry_set"
+WINDOWS_FILE_EVENT = "windows_file_event"
 
 
 def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> ProcessingPipeline:
@@ -51,6 +52,12 @@ def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> 
             rule_conditions=[LogsourceCondition(category=category, product="windows")],
         )],
     )
+
+
+def splunk_sysmon_file_event_pipeline() -> ProcessingPipeline:
+    """Sigma's file_event is a file being created: Sysmon event 11. The bundled Splunk pipeline adds no source or
+    event code."""
+    return _splunk_sysmon_pipeline("audspect_splunk_sysmon_file_event", "file_event", 11)
 
 
 def splunk_sysmon_registry_set_pipeline() -> ProcessingPipeline:
@@ -141,6 +148,10 @@ BACKENDS: dict[str, BackendSpec] = {
             microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
             "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceProcessEvents table",
             "pysigma-backend-kusto"),
+        WINDOWS_FILE_EVENT: Mapping(
+            microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
+            "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceFileEvents table",
+            "pysigma-backend-kusto"),
         WINDOWS_REGISTRY_SET: Mapping(
             microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
             "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceRegistryEvents table",
@@ -155,6 +166,10 @@ BACKENDS: dict[str, BackendSpec] = {
             microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
             "Microsoft Defender for Endpoint advanced hunting: the DeviceProcessEvents table",
             "pysigma-backend-microsoft365defender"),
+        WINDOWS_FILE_EVENT: Mapping(
+            microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
+            "Microsoft Defender for Endpoint advanced hunting: the DeviceFileEvents table",
+            "pysigma-backend-microsoft365defender"),
         WINDOWS_REGISTRY_SET: Mapping(
             microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
             "Microsoft Defender for Endpoint advanced hunting: the DeviceRegistryEvents table",
@@ -168,6 +183,11 @@ BACKENDS: dict[str, BackendSpec] = {
         WINDOWS_PROCESS_CREATION: Mapping(
             splunk_sysmon_process_creation_pipeline, "audspect_splunk_sysmon_process_creation",
             "Sysmon event 1 (process creation) indexed by Splunk through the Splunk Add-on for Sysmon "
+            "(source XmlWinEventLog:Microsoft-Windows-Sysmon/Operational)",
+            ""),
+        WINDOWS_FILE_EVENT: Mapping(
+            splunk_sysmon_file_event_pipeline, "audspect_splunk_sysmon_file_event",
+            "Sysmon event 11 (file created) indexed by Splunk through the Splunk Add-on for Sysmon "
             "(source XmlWinEventLog:Microsoft-Windows-Sysmon/Operational)",
             ""),
         WINDOWS_REGISTRY_SET: Mapping(
@@ -190,6 +210,10 @@ BACKENDS: dict[str, BackendSpec] = {
         WINDOWS_PROCESS_CREATION: Mapping(
             ecs_windows, "ecs_windows",
             "Windows process events in ECS field names (Elastic Defend, or Winlogbeat / Sysmon with the ECS ingest pipeline)",
+            "pysigma-backend-elasticsearch"),
+        WINDOWS_FILE_EVENT: Mapping(
+            ecs_windows, "ecs_windows",
+            "File creation events in ECS field names (Elastic Defend, or Winlogbeat's Sysmon module, event 11)",
             "pysigma-backend-elasticsearch"),
         WINDOWS_REGISTRY_SET: Mapping(
             ecs_windows, "ecs_windows",
@@ -250,6 +274,8 @@ def log_source_family(rule) -> str:
             return WINDOWS_PS_SCRIPT
         if ls.category == "registry_set":
             return WINDOWS_REGISTRY_SET
+        if ls.category == "file_event":
+            return WINDOWS_FILE_EVENT
     return ""
 
 

@@ -3,25 +3,25 @@
   "backends": {
     "crowdstrike": 1936,
     "elastic": 2104,
-    "microsoft_defender": 2074,
-    "microsoft_sentinel": 2074,
+    "microsoft_defender": 2073,
+    "microsoft_sentinel": 2073,
     "qradar": 1753,
     "splunk": 2104
   },
-  "generatedAt": "2026-11-03T10:14:46.700603+00:00",
+  "generatedAt": "2026-11-03T10:38:49.304787+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
     "crowdstrike:generic": 1107,
     "crowdstrike:pipeline": 829,
-    "elastic:generic": 1012,
-    "elastic:pipeline": 1092,
-    "microsoft_defender:generic": 1120,
-    "microsoft_defender:pipeline": 954,
-    "microsoft_sentinel:generic": 1120,
-    "microsoft_sentinel:pipeline": 954,
+    "elastic:generic": 913,
+    "elastic:pipeline": 1191,
+    "microsoft_defender:generic": 1021,
+    "microsoft_defender:pipeline": 1052,
+    "microsoft_sentinel:generic": 1021,
+    "microsoft_sentinel:pipeline": 1052,
     "qradar:generic": 1753,
-    "splunk:generic": 1012,
-    "splunk:pipeline": 1092
+    "splunk:generic": 913,
+    "splunk:pipeline": 1191
   },
   "ruleCount": 2104,
   "schemaVersion": 2,
@@ -3041,6 +3041,18 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001824",
       "sigmaId": "df9a0e0e-fedb-4d6c-8668-d765dfc92aa7"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: InitiatingProcessParentCommandLine. Please use valid fields for the DeviceFileEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileOriginIP, FileOriginReferrerUrl, FileOriginUrl, FileSize, FolderPath, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsAzureInfoProtectionApplied, IsInitiatingProcessRemoteSession, MD5, ObjectName, OriginalFileName, ParentCommandLine, ParentProcessId, PreviousFileName, PreviousFolderPath, ProcessId, ProcessName, Product, ReportId, RequestAccountDomain, RequestAccountName, RequestAccountSid, RequestProtocol, RequestSourceIP, RequestSourcePort, SHA1, SHA256, SensitivityLabel, SensitivitySubLabel, ShareName, SourceImage, TargetFilename, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\file\\file_event\\file_event_win_net_cli_artefact.yml",
+      "ruleId": "AUDRULE-001832",
+      "sigmaId": "e0b06658-7d1d-4cd3-bf15-03467507ff7c"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: InitiatingProcessParentCommandLine. Please use valid fields for the DeviceFileEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileOriginIP, FileOriginReferrerUrl, FileOriginUrl, FileSize, FolderPath, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsAzureInfoProtectionApplied, IsInitiatingProcessRemoteSession, MD5, ObjectName, OriginalFileName, ParentCommandLine, ParentProcessId, PreviousFileName, PreviousFolderPath, ProcessId, ProcessName, Product, ReportId, RequestAccountDomain, RequestAccountName, RequestAccountSid, RequestProtocol, RequestSourceIP, RequestSourcePort, SHA1, SHA256, SensitivityLabel, SensitivitySubLabel, ShareName, SourceImage, TargetFilename, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\file\\file_event\\file_event_win_net_cli_artefact.yml",
+      "ruleId": "AUDRULE-001832",
+      "sigmaId": "e0b06658-7d1d-4cd3-bf15-03467507ff7c"
     },
     {
       "backend": "crowdstrike",
