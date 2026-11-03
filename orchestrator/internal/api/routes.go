@@ -683,6 +683,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Safe checks: read-only SubjectAccessReview against a registered cluster. Requestable by analysts and admins.
 		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Post("/api/k8s-scenarios/safe-checks/run", h.RunK8sSafeCheck)
 		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Post("/api/k8s-scenarios/admission-checks/run", h.RunK8sAdmissionCheck)
+		// Lab-profile network checks create probe pods: execute permission only, and lab-class clusters only.
+		r.With(auth.RequirePermission(auth.CanExecuteK8sScenario)).Post("/api/k8s-scenarios/network-checks/run", h.RunK8sNetworkCheck)
 		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Post("/api/k8s-scenarios/runs", h.CreateK8sRun)
 		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/approve", h.ApproveK8sRun)
 		r.With(auth.RequirePermission(auth.CanExecuteK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/execute", h.ExecuteK8sRun)
