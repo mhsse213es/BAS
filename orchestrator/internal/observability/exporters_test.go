@@ -1,6 +1,11 @@
 package observability
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"go.opentelemetry.io/otel/sdk/trace"
+)
 
 func TestNewTempoExporter_EmptyEndpoint_ReturnsError(t *testing.T) {
 	if _, err := NewTempoExporter(""); err == nil {
@@ -19,7 +24,7 @@ func TestNewTempoExporter_ValidEndpoint_ReturnsRealExporter(t *testing.T) {
 	// construction succeeds even against an endpoint nothing is listening
 	// on. This locks in that NewTempoExporter returns the real OTLP
 	// exporter (not the no-op stub Prometheus's path returns).
-	exp, err := NewTempoExporter("localhost:4318")
+	exp, err := NewTempoExporter("http://localhost:4318")
 	if err != nil {
 		t.Fatalf("NewTempoExporter: %v", err)
 	}
@@ -44,7 +49,7 @@ func TestNewJaegerExporter_InvalidURL_ReturnsError(t *testing.T) {
 }
 
 func TestNewJaegerExporter_ValidEndpoint_ReturnsRealExporter(t *testing.T) {
-	exp, err := NewJaegerExporter("localhost:4317")
+	exp, err := NewJaegerExporter("http://localhost:4318")
 	if err != nil {
 		t.Fatalf("NewJaegerExporter: %v", err)
 	}
@@ -84,5 +89,41 @@ func TestNewPrometheusRemoteWriteExporter_IsDeliberatelyANoOp(t *testing.T) {
 	}
 	if _, ok := exp.(*noOpExporter); !ok {
 		t.Fatal("expected the no-op stub -- see the doc comment on NewPrometheusRemoteWriteExporter for why")
+	}
+}
+
+// An endpoint without a scheme is refused: the exporter needs to know whether to use TLS.
+func TestOTLPExporters_SchemeRequired(t *testing.T) {
+	for name, ctor := range map[string]func(string) (trace.SpanExporter, error){
+		"tempo":  NewTempoExporter,
+		"jaeger": NewJaegerExporter,
+	} {
+		if _, err := ctor("localhost:4318"); err == nil {
+			t.Errorf("%s accepted an endpoint without http:// or https://", name)
+		}
+	}
+}
+
+// Port 4317 is the OTLP gRPC port. The exporter speaks HTTP, so it is refused with a message that names 4318.
+func TestOTLPExporters_RefuseGRPCPort(t *testing.T) {
+	for name, ctor := range map[string]func(string) (trace.SpanExporter, error){
+		"tempo":  NewTempoExporter,
+		"jaeger": NewJaegerExporter,
+	} {
+		_, err := ctor("http://localhost:4317")
+		if err == nil {
+			t.Errorf("%s accepted port 4317", name)
+			continue
+		}
+		if !strings.Contains(err.Error(), "4318") {
+			t.Errorf("%s error should name the HTTP port 4318: %v", name, err)
+		}
+	}
+}
+
+// https is accepted, so a TLS-fronted receiver can be used.
+func TestOTLPExporters_HTTPSAccepted(t *testing.T) {
+	if _, err := NewTempoExporter("https://tempo.internal:4318"); err != nil {
+		t.Errorf("https endpoint refused: %v", err)
 	}
 }

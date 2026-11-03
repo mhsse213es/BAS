@@ -134,7 +134,7 @@ func TestTempoExporterConfig_WiredIntoTracerProvider(t *testing.T) {
 	config := &observability.OTelConfig{
 		Enabled: true,
 		Exporters: observability.ExporterConfig{
-			TempoEndpoint: "localhost:4318",
+			TempoEndpoint: "http://localhost:4318",
 		},
 	}
 	tp := observability.NewTracerProviderWithConfig(config)
@@ -153,7 +153,7 @@ func TestJaegerExporterConfig_WiredIntoTracerProvider(t *testing.T) {
 	config := &observability.OTelConfig{
 		Enabled: true,
 		Exporters: observability.ExporterConfig{
-			JaegerEndpoint: "localhost:4317",
+			JaegerEndpoint: "http://localhost:4318",
 		},
 	}
 	tp := observability.NewTracerProviderWithConfig(config)

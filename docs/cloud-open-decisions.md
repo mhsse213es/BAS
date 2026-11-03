@@ -4,6 +4,10 @@ Three items need your decision or a configuration step before the next build. Ea
 
 ## R-20b: Trace exporter for cloud spans
 
+**Decision (owner): Option A.** Trace export stays disabled in production. Console export is on the test machine only. No remote trace backend. No Tempo or Jaeger deployment for now. If a local collector is added later, self-hosted Tempo with a set retention period.
+
+**Done:** the OTLP exporters now require a full http:// or https:// URL, refuse port 4317 (the gRPC port), and use the scheme for TLS. The console exporter had been writing to a discard sink and now writes to stdout. Tests cover these cases.
+
 **What it is.** The cloud work emits spans: `cloud.discovery.pass` and `cloud.preflight`. Each span carries the account ID. A span is a timed record of one operation, which lets you see where time goes. Right now no exporter is wired in `cmd/server`, so the spans are discarded. Logs are the only working record.
 
 **What already exists.** The code in `internal/observability/otel.go` builds a tracer provider with three choices:
