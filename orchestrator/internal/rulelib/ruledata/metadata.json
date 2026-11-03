@@ -4,11 +4,11 @@
     "crowdstrike": 1916,
     "elastic": 2096,
     "microsoft_defender": 2054,
-    "microsoft_sentinel": 2026,
+    "microsoft_sentinel": 2008,
     "qradar": 1753,
     "splunk": 2104
   },
-  "generatedAt": "2026-11-03T11:14:25.221894+00:00",
+  "generatedAt": "2026-11-03T11:18:14.706360+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
     "crowdstrike:generic": 900,
@@ -17,8 +17,8 @@
     "elastic:pipeline": 1574,
     "microsoft_defender:generic": 814,
     "microsoft_defender:pipeline": 1240,
-    "microsoft_sentinel:generic": 679,
-    "microsoft_sentinel:pipeline": 1347,
+    "microsoft_sentinel:generic": 620,
+    "microsoft_sentinel:pipeline": 1388,
     "qradar:generic": 1753,
     "splunk:generic": 605,
     "splunk:pipeline": 1499
@@ -571,6 +571,12 @@
       "sigmaId": "24549159-ac1b-479c-8175-d42aea947cae"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: properties.message. Please use valid fields for the SigninLogs table, or the following fields that have fieldmappings in this pipeline:\nAADTenantId, AlternateSignInName, AppDisplayName, AppId, Application, AppliedConditionalAccessPolicies, AppliedEventListeners, AuthenticationContextClassReferences, AuthenticationDetails, AuthenticationMethod, AuthenticationMethodsUsed, AuthenticationProcessingDetails, AuthenticationProtocol, AuthenticationRequirement, AuthenticationRequirementPolicies, AutonomousSystemNumber, Category, ClientAppUsed, ConditionalAccessPolicies, ConditionalAccessStatus, CorrelationId, CreatedDateTime, CrossTenantAccessType, DeviceDetail, DurationMs, FlaggedForReview, Hashes, HomeTenantId, IPAddress, IPAddressFromResourceProvider, Id, Identity, IpAddress, IsInteractive, IsRisky, Level, Location, LocationDetails, MfaDetail, NetworkLocationDetails, OperationName, OperationVersion, OriginalRequestId, ProcessingTimeInMilliseconds, Resource, ResourceDisplayName, ResourceGroup, ResourceId, ResourceIdentity, ResourceProvider, ResourceServicePrincipalId, ResourceTenantId, ResultDescription, ResultSignature, ResultType, RiskDetail, RiskEventTypes, RiskEventTypes_V2, RiskLevel, RiskLevelAggregated, RiskLevelDuringSignIn, RiskState, ServicePrincipalId, ServicePrincipalName, SessionLifetimePolicies, SignInIdentifier, SignInIdentifierType, SourceSystem, Status, TargetUserName, TimeGenerated, TokenIssuerName, TokenIssuerType, Type, UniqueTokenIdentifier, User, UserAgent, UserDisplayName, UserId, UserPrincipalName, UserType, _BilledSize, _IsBillable, app, src_ip in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\signin_logs\\azure_app_device_code_authentication.yml",
+      "ruleId": "AUDRULE-000312",
+      "sigmaId": "248649b7-d64f-46f0-9fb2-a52774166fb5"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sqlite_chromium_profile_data.yml",
       "ruleId": "AUDRULE-000314",
@@ -781,6 +787,12 @@
       "sigmaId": "340a090b-c4e9-412e-bb36-b4b16fe96f9b"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: userAgent. Please use valid fields for the SigninLogs table, or the following fields that have fieldmappings in this pipeline:\nAADTenantId, AlternateSignInName, AppDisplayName, AppId, Application, AppliedConditionalAccessPolicies, AppliedEventListeners, AuthenticationContextClassReferences, AuthenticationDetails, AuthenticationMethod, AuthenticationMethodsUsed, AuthenticationProcessingDetails, AuthenticationProtocol, AuthenticationRequirement, AuthenticationRequirementPolicies, AutonomousSystemNumber, Category, ClientAppUsed, ConditionalAccessPolicies, ConditionalAccessStatus, CorrelationId, CreatedDateTime, CrossTenantAccessType, DeviceDetail, DurationMs, FlaggedForReview, Hashes, HomeTenantId, IPAddress, IPAddressFromResourceProvider, Id, Identity, IpAddress, IsInteractive, IsRisky, Level, Location, LocationDetails, MfaDetail, NetworkLocationDetails, OperationName, OperationVersion, OriginalRequestId, ProcessingTimeInMilliseconds, Resource, ResourceDisplayName, ResourceGroup, ResourceId, ResourceIdentity, ResourceProvider, ResourceServicePrincipalId, ResourceTenantId, ResultDescription, ResultSignature, ResultType, RiskDetail, RiskEventTypes, RiskEventTypes_V2, RiskLevel, RiskLevelAggregated, RiskLevelDuringSignIn, RiskState, ServicePrincipalId, ServicePrincipalName, SessionLifetimePolicies, SignInIdentifier, SignInIdentifierType, SourceSystem, Status, TargetUserName, TimeGenerated, TokenIssuerName, TokenIssuerType, Type, UniqueTokenIdentifier, User, UserAgent, UserDisplayName, UserId, UserPrincipalName, UserType, _BilledSize, _IsBillable, app, src_ip in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\signin_logs\\azure_ad_azurehound_discovery.yml",
+      "ruleId": "AUDRULE-000432",
+      "sigmaId": "35b781cc-1a08-4a5a-80af-42fd7c315c6b"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the OriginalFileName field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_dll_rstrtmgr_uncommon_load.yml",
       "ruleId": "AUDRULE-000441",
@@ -925,6 +937,12 @@
       "sigmaId": "41025fd7-0466-4650-a813-574aaacbe7f4"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: properties.message. Please use valid fields for the AzureActivity table, or the following fields that have fieldmappings in this pipeline:\nActivityStatus, ActivityStatusValue, ActivitySubstatus, ActivitySubstatusValue, Authorization, Authorization_d, Caller, CallerIpAddress, Category, CategoryValue, Claims, Claims_d, CorrelationId, EventDataId, EventSubmissionTimestamp, HTTPRequest, Hashes, Hierarchy, Level, OperationId, OperationName, OperationNameValue, Properties, Properties_d, Resource, ResourceGroup, ResourceId, ResourceProvider, ResourceProviderValue, SourceSystem, SubscriptionId, TenantId, TimeGenerated, Type, _BilledSize, _IsBillable, _ResourceId, _SubscriptionId in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\activity_logs\\azure_application_deleted.yml",
+      "ruleId": "AUDRULE-000517",
+      "sigmaId": "410d2a41-1e6d-452f-85e5-abdd8257a823"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000520",
@@ -959,6 +977,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000560",
       "sigmaId": "46123129-1024-423e-9fae-43af4a0fa9a5"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: properties.message. Please use valid fields for the AzureActivity table, or the following fields that have fieldmappings in this pipeline:\nActivityStatus, ActivityStatusValue, ActivitySubstatus, ActivitySubstatusValue, Authorization, Authorization_d, Caller, CallerIpAddress, Category, CategoryValue, Claims, Claims_d, CorrelationId, EventDataId, EventSubmissionTimestamp, HTTPRequest, Hashes, Hierarchy, Level, OperationId, OperationName, OperationNameValue, Properties, Properties_d, Resource, ResourceGroup, ResourceId, ResourceProvider, ResourceProviderValue, SourceSystem, SubscriptionId, TenantId, TimeGenerated, Type, _BilledSize, _IsBillable, _ResourceId, _SubscriptionId in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\activity_logs\\azure_device_or_configuration_modified_or_deleted.yml",
+      "ruleId": "AUDRULE-000563",
+      "sigmaId": "46530378-f9db-4af9-a9e5-889c177d3881"
     },
     {
       "backend": "qradar",
@@ -1067,6 +1091,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000611",
       "sigmaId": "4b657234-038e-4ad5-997c-4be42340bce4"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: TargetResources.modifiedProperties.newValue. Please use valid fields for the AuditLogs table, or the following fields that have fieldmappings in this pipeline:\nAADOperationType, AADTenantId, ActivityDateTime, ActivityDisplayName, AdditionalDetails, Category, CorrelationId, DurationMs, Hashes, Id, Identity, InitiatedBy, Level, Location, LoggedByService, OperationName, OperationVersion, Resource, ResourceGroup, ResourceId, ResourceProvider, Result, ResultDescription, ResultReason, ResultSignature, ResultType, SourceSystem, TargetResources, TimeGenerated, Type, _BilledSize, _IsBillable in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\audit_logs\\azure_ad_new_root_ca_added.yml",
+      "ruleId": "AUDRULE-000614",
+      "sigmaId": "4bb80281-3756-4ec8-a88e-523c5a6fda9e"
     },
     {
       "backend": "crowdstrike",
@@ -1189,6 +1219,12 @@
       "sigmaId": "534f2ef7-e8a2-4433-816d-c91bccde289b"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: userAgent. Please use valid fields for the SigninLogs table, or the following fields that have fieldmappings in this pipeline:\nAADTenantId, AlternateSignInName, AppDisplayName, AppId, Application, AppliedConditionalAccessPolicies, AppliedEventListeners, AuthenticationContextClassReferences, AuthenticationDetails, AuthenticationMethod, AuthenticationMethodsUsed, AuthenticationProcessingDetails, AuthenticationProtocol, AuthenticationRequirement, AuthenticationRequirementPolicies, AutonomousSystemNumber, Category, ClientAppUsed, ConditionalAccessPolicies, ConditionalAccessStatus, CorrelationId, CreatedDateTime, CrossTenantAccessType, DeviceDetail, DurationMs, FlaggedForReview, Hashes, HomeTenantId, IPAddress, IPAddressFromResourceProvider, Id, Identity, IpAddress, IsInteractive, IsRisky, Level, Location, LocationDetails, MfaDetail, NetworkLocationDetails, OperationName, OperationVersion, OriginalRequestId, ProcessingTimeInMilliseconds, Resource, ResourceDisplayName, ResourceGroup, ResourceId, ResourceIdentity, ResourceProvider, ResourceServicePrincipalId, ResourceTenantId, ResultDescription, ResultSignature, ResultType, RiskDetail, RiskEventTypes, RiskEventTypes_V2, RiskLevel, RiskLevelAggregated, RiskLevelDuringSignIn, RiskState, ServicePrincipalId, ServicePrincipalName, SessionLifetimePolicies, SignInIdentifier, SignInIdentifierType, SourceSystem, Status, TargetUserName, TimeGenerated, TokenIssuerName, TokenIssuerType, Type, UniqueTokenIdentifier, User, UserAgent, UserDisplayName, UserId, UserPrincipalName, UserType, _BilledSize, _IsBillable, app, src_ip in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\signin_logs\\azure_ad_suspicious_signin_bypassing_mfa.yml",
+      "ruleId": "AUDRULE-000685",
+      "sigmaId": "53bb4f7f-48a8-4475-ac30-5a82ddfdf6fc"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000688",
@@ -1217,6 +1253,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000695",
       "sigmaId": "54f0434b-726f-48a1-b2aa-067df14516e4"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: properties.message. Please use valid fields for the SigninLogs table, or the following fields that have fieldmappings in this pipeline:\nAADTenantId, AlternateSignInName, AppDisplayName, AppId, Application, AppliedConditionalAccessPolicies, AppliedEventListeners, AuthenticationContextClassReferences, AuthenticationDetails, AuthenticationMethod, AuthenticationMethodsUsed, AuthenticationProcessingDetails, AuthenticationProtocol, AuthenticationRequirement, AuthenticationRequirementPolicies, AutonomousSystemNumber, Category, ClientAppUsed, ConditionalAccessPolicies, ConditionalAccessStatus, CorrelationId, CreatedDateTime, CrossTenantAccessType, DeviceDetail, DurationMs, FlaggedForReview, Hashes, HomeTenantId, IPAddress, IPAddressFromResourceProvider, Id, Identity, IpAddress, IsInteractive, IsRisky, Level, Location, LocationDetails, MfaDetail, NetworkLocationDetails, OperationName, OperationVersion, OriginalRequestId, ProcessingTimeInMilliseconds, Resource, ResourceDisplayName, ResourceGroup, ResourceId, ResourceIdentity, ResourceProvider, ResourceServicePrincipalId, ResourceTenantId, ResultDescription, ResultSignature, ResultType, RiskDetail, RiskEventTypes, RiskEventTypes_V2, RiskLevel, RiskLevelAggregated, RiskLevelDuringSignIn, RiskState, ServicePrincipalId, ServicePrincipalName, SessionLifetimePolicies, SignInIdentifier, SignInIdentifierType, SourceSystem, Status, TargetUserName, TimeGenerated, TokenIssuerName, TokenIssuerType, Type, UniqueTokenIdentifier, User, UserAgent, UserDisplayName, UserId, UserPrincipalName, UserType, _BilledSize, _IsBillable, app, src_ip in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\signin_logs\\azure_app_ropc_authentication.yml",
+      "ruleId": "AUDRULE-000698",
+      "sigmaId": "55695bc0-c8cf-461f-a379-2535f563c854"
     },
     {
       "backend": "qradar",
@@ -1253,6 +1295,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000710",
       "sigmaId": "5722dff1-4bdd-4949-86ab-fbaf707e767a"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: DeviceDetail.trusttype. Please use valid fields for the SigninLogs table, or the following fields that have fieldmappings in this pipeline:\nAADTenantId, AlternateSignInName, AppDisplayName, AppId, Application, AppliedConditionalAccessPolicies, AppliedEventListeners, AuthenticationContextClassReferences, AuthenticationDetails, AuthenticationMethod, AuthenticationMethodsUsed, AuthenticationProcessingDetails, AuthenticationProtocol, AuthenticationRequirement, AuthenticationRequirementPolicies, AutonomousSystemNumber, Category, ClientAppUsed, ConditionalAccessPolicies, ConditionalAccessStatus, CorrelationId, CreatedDateTime, CrossTenantAccessType, DeviceDetail, DurationMs, FlaggedForReview, Hashes, HomeTenantId, IPAddress, IPAddressFromResourceProvider, Id, Identity, IpAddress, IsInteractive, IsRisky, Level, Location, LocationDetails, MfaDetail, NetworkLocationDetails, OperationName, OperationVersion, OriginalRequestId, ProcessingTimeInMilliseconds, Resource, ResourceDisplayName, ResourceGroup, ResourceId, ResourceIdentity, ResourceProvider, ResourceServicePrincipalId, ResourceTenantId, ResultDescription, ResultSignature, ResultType, RiskDetail, RiskEventTypes, RiskEventTypes_V2, RiskLevel, RiskLevelAggregated, RiskLevelDuringSignIn, RiskState, ServicePrincipalId, ServicePrincipalName, SessionLifetimePolicies, SignInIdentifier, SignInIdentifierType, SourceSystem, Status, TargetUserName, TimeGenerated, TokenIssuerName, TokenIssuerType, Type, UniqueTokenIdentifier, User, UserAgent, UserDisplayName, UserId, UserPrincipalName, UserType, _BilledSize, _IsBillable, app, src_ip in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\signin_logs\\azure_ad_risky_sign_ins_with_singlefactorauth_from_unknown_devices.yml",
+      "ruleId": "AUDRULE-000711",
+      "sigmaId": "572b12d4-9062-11ed-a1eb-0242ac120002"
     },
     {
       "backend": "qradar",
@@ -1337,6 +1385,12 @@
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_java_sysaidserver_susp_child_process.yml",
       "ruleId": "AUDRULE-000771",
       "sigmaId": "60bfeac3-0d35-4302-8efb-1dd16f715bc6"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: ActivityDetails. Please use valid fields for the SigninLogs table, or the following fields that have fieldmappings in this pipeline:\nAADTenantId, AlternateSignInName, AppDisplayName, AppId, Application, AppliedConditionalAccessPolicies, AppliedEventListeners, AuthenticationContextClassReferences, AuthenticationDetails, AuthenticationMethod, AuthenticationMethodsUsed, AuthenticationProcessingDetails, AuthenticationProtocol, AuthenticationRequirement, AuthenticationRequirementPolicies, AutonomousSystemNumber, Category, ClientAppUsed, ConditionalAccessPolicies, ConditionalAccessStatus, CorrelationId, CreatedDateTime, CrossTenantAccessType, DeviceDetail, DurationMs, FlaggedForReview, Hashes, HomeTenantId, IPAddress, IPAddressFromResourceProvider, Id, Identity, IpAddress, IsInteractive, IsRisky, Level, Location, LocationDetails, MfaDetail, NetworkLocationDetails, OperationName, OperationVersion, OriginalRequestId, ProcessingTimeInMilliseconds, Resource, ResourceDisplayName, ResourceGroup, ResourceId, ResourceIdentity, ResourceProvider, ResourceServicePrincipalId, ResourceTenantId, ResultDescription, ResultSignature, ResultType, RiskDetail, RiskEventTypes, RiskEventTypes_V2, RiskLevel, RiskLevelAggregated, RiskLevelDuringSignIn, RiskState, ServicePrincipalId, ServicePrincipalName, SessionLifetimePolicies, SignInIdentifier, SignInIdentifierType, SourceSystem, Status, TargetUserName, TimeGenerated, TokenIssuerName, TokenIssuerType, Type, UniqueTokenIdentifier, User, UserAgent, UserDisplayName, UserId, UserPrincipalName, UserType, _BilledSize, _IsBillable, app, src_ip in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\signin_logs\\azure_legacy_authentication_protocols.yml",
+      "ruleId": "AUDRULE-000773",
+      "sigmaId": "60f6535a-760f-42a9-be3f-c9a0a025906e"
     },
     {
       "backend": "qradar",
@@ -1427,6 +1481,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000819",
       "sigmaId": "66d31e5f-52d6-40a4-9615-002d3789a119"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Count. Please use valid fields for the SigninLogs table, or the following fields that have fieldmappings in this pipeline:\nAADTenantId, AlternateSignInName, AppDisplayName, AppId, Application, AppliedConditionalAccessPolicies, AppliedEventListeners, AuthenticationContextClassReferences, AuthenticationDetails, AuthenticationMethod, AuthenticationMethodsUsed, AuthenticationProcessingDetails, AuthenticationProtocol, AuthenticationRequirement, AuthenticationRequirementPolicies, AutonomousSystemNumber, Category, ClientAppUsed, ConditionalAccessPolicies, ConditionalAccessStatus, CorrelationId, CreatedDateTime, CrossTenantAccessType, DeviceDetail, DurationMs, FlaggedForReview, Hashes, HomeTenantId, IPAddress, IPAddressFromResourceProvider, Id, Identity, IpAddress, IsInteractive, IsRisky, Level, Location, LocationDetails, MfaDetail, NetworkLocationDetails, OperationName, OperationVersion, OriginalRequestId, ProcessingTimeInMilliseconds, Resource, ResourceDisplayName, ResourceGroup, ResourceId, ResourceIdentity, ResourceProvider, ResourceServicePrincipalId, ResourceTenantId, ResultDescription, ResultSignature, ResultType, RiskDetail, RiskEventTypes, RiskEventTypes_V2, RiskLevel, RiskLevelAggregated, RiskLevelDuringSignIn, RiskState, ServicePrincipalId, ServicePrincipalName, SessionLifetimePolicies, SignInIdentifier, SignInIdentifierType, SourceSystem, Status, TargetUserName, TimeGenerated, TokenIssuerName, TokenIssuerType, Type, UniqueTokenIdentifier, User, UserAgent, UserDisplayName, UserId, UserPrincipalName, UserType, _BilledSize, _IsBillable, app, src_ip in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\signin_logs\\azure_ad_auth_sucess_increase.yml",
+      "ruleId": "AUDRULE-000825",
+      "sigmaId": "67d5f8fc-8325-44e4-8f5f-7c0ac07cb5ae"
     },
     {
       "backend": "crowdstrike",
@@ -1555,6 +1615,12 @@
       "sigmaId": "6eea1bf6-f8d2-488a-a742-e6ef6c1b67db"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Status. Please use valid fields for the AuditLogs table, or the following fields that have fieldmappings in this pipeline:\nAADOperationType, AADTenantId, ActivityDateTime, ActivityDisplayName, AdditionalDetails, Category, CorrelationId, DurationMs, Hashes, Id, Identity, InitiatedBy, Level, Location, LoggedByService, OperationName, OperationVersion, Resource, ResourceGroup, ResourceId, ResourceProvider, Result, ResultDescription, ResultReason, ResultSignature, ResultType, SourceSystem, TargetResources, TimeGenerated, Type, _BilledSize, _IsBillable in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\audit_logs\\azure_ad_account_created_deleted.yml",
+      "ruleId": "AUDRULE-000888",
+      "sigmaId": "6f583da0-3a90-4566-a4ed-83c09fe18bbf"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000890",
@@ -1565,6 +1631,12 @@
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\network\\zeek\\zeek_http_webdav_put_request.yml",
       "ruleId": "AUDRULE-000897",
       "sigmaId": "705072a5-bb6f-4ced-95b6-ecfa6602090b"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: failure_status_reason. Please use valid fields for the AuditLogs table, or the following fields that have fieldmappings in this pipeline:\nAADOperationType, AADTenantId, ActivityDateTime, ActivityDisplayName, AdditionalDetails, Category, CorrelationId, DurationMs, Hashes, Id, Identity, InitiatedBy, Level, Location, LoggedByService, OperationName, OperationVersion, Resource, ResourceGroup, ResourceId, ResourceProvider, Result, ResultDescription, ResultReason, ResultSignature, ResultType, SourceSystem, TargetResources, TimeGenerated, Type, _BilledSize, _IsBillable in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\audit_logs\\azure_app_end_user_consent_blocked.yml",
+      "ruleId": "AUDRULE-000899",
+      "sigmaId": "7091372f-623c-4293-bc37-20c32b3492be"
     },
     {
       "backend": "microsoft_sentinel",
@@ -1919,6 +1991,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001024",
       "sigmaId": "7e9c7999-0f9b-4d4a-a6ed-af6d553d4af4"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: eventSource. Please use valid fields for the AzureActivity table, or the following fields that have fieldmappings in this pipeline:\nActivityStatus, ActivityStatusValue, ActivitySubstatus, ActivitySubstatusValue, Authorization, Authorization_d, Caller, CallerIpAddress, Category, CategoryValue, Claims, Claims_d, CorrelationId, EventDataId, EventSubmissionTimestamp, HTTPRequest, Hashes, Hierarchy, Level, OperationId, OperationName, OperationNameValue, Properties, Properties_d, Resource, ResourceGroup, ResourceId, ResourceProvider, ResourceProviderValue, SourceSystem, SubscriptionId, TenantId, TimeGenerated, Type, _BilledSize, _IsBillable, _ResourceId, _SubscriptionId in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\activity_logs\\azure_mfa_disabled.yml",
+      "ruleId": "AUDRULE-001025",
+      "sigmaId": "7ea78478-a4f9-42a6-9dcd-f861816122bf"
     },
     {
       "backend": "crowdstrike",
@@ -2425,6 +2503,12 @@
       "sigmaId": "9a4ccd1a-3526-4d99-b980-9f9c5d3a6ff3"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: ConsentContext.IsAdminConsent. Please use valid fields for the AuditLogs table, or the following fields that have fieldmappings in this pipeline:\nAADOperationType, AADTenantId, ActivityDateTime, ActivityDisplayName, AdditionalDetails, Category, CorrelationId, DurationMs, Hashes, Id, Identity, InitiatedBy, Level, Location, LoggedByService, OperationName, OperationVersion, Resource, ResourceGroup, ResourceId, ResourceProvider, Result, ResultDescription, ResultReason, ResultSignature, ResultType, SourceSystem, TargetResources, TimeGenerated, Type, _BilledSize, _IsBillable in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\audit_logs\\azure_app_end_user_consent.yml",
+      "ruleId": "AUDRULE-001278",
+      "sigmaId": "9b2cc4c4-2ad4-416d-8e8e-ee6aa6f5035a"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001289",
@@ -2737,6 +2821,12 @@
       "sigmaId": "b48492dc-c5ef-4572-8dff-32bc241c15c8"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Resultdescription. Please use valid fields for the SigninLogs table, or the following fields that have fieldmappings in this pipeline:\nAADTenantId, AlternateSignInName, AppDisplayName, AppId, Application, AppliedConditionalAccessPolicies, AppliedEventListeners, AuthenticationContextClassReferences, AuthenticationDetails, AuthenticationMethod, AuthenticationMethodsUsed, AuthenticationProcessingDetails, AuthenticationProtocol, AuthenticationRequirement, AuthenticationRequirementPolicies, AutonomousSystemNumber, Category, ClientAppUsed, ConditionalAccessPolicies, ConditionalAccessStatus, CorrelationId, CreatedDateTime, CrossTenantAccessType, DeviceDetail, DurationMs, FlaggedForReview, Hashes, HomeTenantId, IPAddress, IPAddressFromResourceProvider, Id, Identity, IpAddress, IsInteractive, IsRisky, Level, Location, LocationDetails, MfaDetail, NetworkLocationDetails, OperationName, OperationVersion, OriginalRequestId, ProcessingTimeInMilliseconds, Resource, ResourceDisplayName, ResourceGroup, ResourceId, ResourceIdentity, ResourceProvider, ResourceServicePrincipalId, ResourceTenantId, ResultDescription, ResultSignature, ResultType, RiskDetail, RiskEventTypes, RiskEventTypes_V2, RiskLevel, RiskLevelAggregated, RiskLevelDuringSignIn, RiskState, ServicePrincipalId, ServicePrincipalName, SessionLifetimePolicies, SignInIdentifier, SignInIdentifierType, SourceSystem, Status, TargetUserName, TimeGenerated, TokenIssuerName, TokenIssuerType, Type, UniqueTokenIdentifier, User, UserAgent, UserDisplayName, UserId, UserPrincipalName, UserType, _BilledSize, _IsBillable, app, src_ip in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\signin_logs\\azure_conditional_access_failure.yml",
+      "ruleId": "AUDRULE-001493",
+      "sigmaId": "b4a6d707-9430-4f5f-af68-0337f52d5c42"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001496",
@@ -2927,6 +3017,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001598",
       "sigmaId": "c187c075-bb3e-4c62-b4fa-beae0ffc211f"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: TargetResources.modifiedProperties. Please use valid fields for the AuditLogs table, or the following fields that have fieldmappings in this pipeline:\nAADOperationType, AADTenantId, ActivityDateTime, ActivityDisplayName, AdditionalDetails, Category, CorrelationId, DurationMs, Hashes, Id, Identity, InitiatedBy, Level, Location, LoggedByService, OperationName, OperationVersion, Resource, ResourceGroup, ResourceId, ResourceProvider, Result, ResultDescription, ResultReason, ResultSignature, ResultType, SourceSystem, TargetResources, TimeGenerated, Type, _BilledSize, _IsBillable in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\audit_logs\\azure_ad_certificate_based_authencation_enabled.yml",
+      "ruleId": "AUDRULE-001603",
+      "sigmaId": "c2496b41-16a9-4016-a776-b23f8910dc58"
     },
     {
       "backend": "qradar",
@@ -3565,6 +3661,12 @@
       "sigmaId": "e0f8ab85-0ac9-423b-a73a-81b3c7b1aa97"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Count. Please use valid fields for the SigninLogs table, or the following fields that have fieldmappings in this pipeline:\nAADTenantId, AlternateSignInName, AppDisplayName, AppId, Application, AppliedConditionalAccessPolicies, AppliedEventListeners, AuthenticationContextClassReferences, AuthenticationDetails, AuthenticationMethod, AuthenticationMethodsUsed, AuthenticationProcessingDetails, AuthenticationProtocol, AuthenticationRequirement, AuthenticationRequirementPolicies, AutonomousSystemNumber, Category, ClientAppUsed, ConditionalAccessPolicies, ConditionalAccessStatus, CorrelationId, CreatedDateTime, CrossTenantAccessType, DeviceDetail, DurationMs, FlaggedForReview, Hashes, HomeTenantId, IPAddress, IPAddressFromResourceProvider, Id, Identity, IpAddress, IsInteractive, IsRisky, Level, Location, LocationDetails, MfaDetail, NetworkLocationDetails, OperationName, OperationVersion, OriginalRequestId, ProcessingTimeInMilliseconds, Resource, ResourceDisplayName, ResourceGroup, ResourceId, ResourceIdentity, ResourceProvider, ResourceServicePrincipalId, ResourceTenantId, ResultDescription, ResultSignature, ResultType, RiskDetail, RiskEventTypes, RiskEventTypes_V2, RiskLevel, RiskLevelAggregated, RiskLevelDuringSignIn, RiskState, ServicePrincipalId, ServicePrincipalName, SessionLifetimePolicies, SignInIdentifier, SignInIdentifierType, SourceSystem, Status, TargetUserName, TimeGenerated, TokenIssuerName, TokenIssuerType, Type, UniqueTokenIdentifier, User, UserAgent, UserDisplayName, UserId, UserPrincipalName, UserType, _BilledSize, _IsBillable, app, src_ip in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\signin_logs\\azure_ad_auth_failure_increase.yml",
+      "ruleId": "AUDRULE-001845",
+      "sigmaId": "e1d02b53-c03c-4948-b11d-4d00cca49d03"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_curl_susp_download.yml",
       "ruleId": "AUDRULE-001848",
@@ -3761,6 +3863,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001932",
       "sigmaId": "eb2d07d4-49cb-4523-801a-da002df36602"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Operation. Please use valid fields for the AzureActivity table, or the following fields that have fieldmappings in this pipeline:\nActivityStatus, ActivityStatusValue, ActivitySubstatus, ActivitySubstatusValue, Authorization, Authorization_d, Caller, CallerIpAddress, Category, CategoryValue, Claims, Claims_d, CorrelationId, EventDataId, EventSubmissionTimestamp, HTTPRequest, Hashes, Hierarchy, Level, OperationId, OperationName, OperationNameValue, Properties, Properties_d, Resource, ResourceGroup, ResourceId, ResourceProvider, ResourceProviderValue, SourceSystem, SubscriptionId, TenantId, TimeGenerated, Type, _BilledSize, _IsBillable, _ResourceId, _SubscriptionId in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\activity_logs\\azure_ad_user_added_to_admin_role.yml",
+      "ruleId": "AUDRULE-001935",
+      "sigmaId": "ebbeb024-5b1d-4e16-9c0c-917f86c708a7"
     },
     {
       "backend": "qradar",

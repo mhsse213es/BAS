@@ -48,6 +48,9 @@ WINDOWS_PS_MODULE = "windows_ps_module"
 LINUX_PROCESS_CREATION = "linux_process_creation"
 MACOS_PROCESS_CREATION = "macos_process_creation"
 AWS_CLOUDTRAIL = "aws_cloudtrail"
+AZURE_ACTIVITYLOGS = "azure_activitylogs"
+AZURE_AUDITLOGS = "azure_auditlogs"
+AZURE_SIGNINLOGS = "azure_signinlogs"
 
 
 def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> ProcessingPipeline:
@@ -134,6 +137,33 @@ ECS_AWS_CLOUDTRAIL_FIELDS = {
     "userAgent": "user_agent.original", "errorCode": "aws.cloudtrail.error_code", "errorMessage": "aws.cloudtrail.error_message",
     "userIdentity.type": "aws.cloudtrail.user_identity.type", "userIdentity.arn": "aws.cloudtrail.user_identity.arn",
 }
+
+
+def _azure_pipeline(service: str, table: str, renames: dict) -> ProcessingPipeline:
+    """The Azure Monitor pipeline on an explicit table, preceded by the few renames the stock pipeline lacks. It rejects
+    any column the table does not have, so such a rule is a recorded failure."""
+    if not renames:
+        return azure_monitor_pipeline(table)
+    rename = ProcessingPipeline(items=[ProcessingItem(
+        identifier=f"audspect_sentinel_azure_{service}_columns",
+        transformation=FieldMappingTransformation(renames),
+        rule_conditions=[LogsourceCondition(product="azure", service=service)],
+    )], priority=5)
+    return rename + azure_monitor_pipeline(table)
+
+
+def sentinel_azure_activity_pipeline() -> ProcessingPipeline:
+    # Sigma's operationName holds the raw "MICROSOFT.X/Y/action" value, which is the OperationNameValue column.
+    return _azure_pipeline("activitylogs", "AzureActivity", {"operationName": "OperationNameValue"})
+
+
+def sentinel_azure_audit_pipeline() -> ProcessingPipeline:
+    # Sigma's properties.message on Entra audit logs holds the operation name (for example "Add member to role").
+    return _azure_pipeline("auditlogs", "AuditLogs", {"properties.message": "OperationName"})
+
+
+def sentinel_azure_signin_pipeline() -> ProcessingPipeline:
+    return _azure_pipeline("signinlogs", "SigninLogs", {})
 
 
 def _aws() -> list:
@@ -315,6 +345,20 @@ BACKENDS: dict[str, BackendSpec] = {
         WINDOWS_PROCESS_CREATION: Mapping(
             microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
             "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceProcessEvents table",
+            "pysigma-backend-kusto"),
+        AZURE_ACTIVITYLOGS: Mapping(
+            sentinel_azure_activity_pipeline, "audspect_sentinel_azure_activitylogs + azure_monitor_pipeline (query table AzureActivity)",
+            "Azure activity (control-plane) logs in the AzureActivity table of the Log Analytics workspace (Azure Activity connector). "
+            "Sigma's operationName is matched as OperationNameValue",
+            "pysigma-backend-kusto"),
+        AZURE_AUDITLOGS: Mapping(
+            sentinel_azure_audit_pipeline, "audspect_sentinel_azure_auditlogs + azure_monitor_pipeline (query table AuditLogs)",
+            "Microsoft Entra audit logs in the AuditLogs table of the Log Analytics workspace (Microsoft Entra ID connector). "
+            "Sigma's properties.message is matched as OperationName",
+            "pysigma-backend-kusto"),
+        AZURE_SIGNINLOGS: Mapping(
+            sentinel_azure_signin_pipeline, "azure_monitor_pipeline (query table SigninLogs)",
+            "Microsoft Entra sign-in logs in the SigninLogs table of the Log Analytics workspace (Microsoft Entra ID connector)",
             "pysigma-backend-kusto"),
         AWS_CLOUDTRAIL: Mapping(
             sentinel_aws_cloudtrail_pipeline, "audspect_sentinel_aws_cloudtrail + azure_monitor_pipeline (query table AWSCloudTrail)",
@@ -537,6 +581,10 @@ def log_source_family(rule) -> str:
     ls = rule.logsource
     if ls.product == "aws" and ls.service == "cloudtrail" and not ls.category:
         return AWS_CLOUDTRAIL
+    if ls.product == "azure" and not ls.category:
+        family = {"activitylogs": AZURE_ACTIVITYLOGS, "auditlogs": AZURE_AUDITLOGS, "signinlogs": AZURE_SIGNINLOGS}.get(ls.service)
+        if family:
+            return family
     if ls.product == "linux" and ls.category == "process_creation" and not ls.service:
         return LINUX_PROCESS_CREATION
     if ls.product == "macos" and ls.category == "process_creation" and not ls.service:
