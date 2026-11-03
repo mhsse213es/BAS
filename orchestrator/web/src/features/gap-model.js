@@ -43,6 +43,9 @@ export function verificationNote(v) {
 }
 
 export function backendNote(b) {
+  if (b && b.mapping === 'keyword' && b.dataSource) {
+    return 'Free-text search of the raw log message. ' + b.dataSource + '.';
+  }
   if (b && b.mapping === 'pipeline' && b.dataSource) {
     return 'Field-mapped. This query only matches if you collect: ' + b.dataSource + '. ' + verificationNote(b.verification);
   }

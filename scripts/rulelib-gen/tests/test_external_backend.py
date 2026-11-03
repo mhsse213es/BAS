@@ -17,7 +17,7 @@ def test_merge_adds_a_generic_translation_with_its_generator_and_never_a_mapping
     merge_external(rec, "qradar", "AQL", {"query": "SELECT 1"}, "pySigma 0.9.11 / qradar 0.3.3")
     t = rec["translations"][-1]
     assert t == {"backend": "qradar", "language": "AQL", "query": "SELECT 1", "generator": "pySigma 0.9.11 / qradar 0.3.3",
-                 "mapping": "generic", "pipeline": "", "dataSource": ""}
+                 "mapping": "generic", "pipeline": "", "dataSource": "", "verification": "none"}
     assert rec["failures"] == []
 
 

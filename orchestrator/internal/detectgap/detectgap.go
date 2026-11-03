@@ -231,6 +231,9 @@ func VerificationNote(v string) string {
 // QueryNote is what to tell the reader beside a query. A field-mapped query only matches when its data source is
 // collected; a generic one uses Sigma's own field names and must be adapted. It is never presented as ready to paste.
 func QueryNote(mapping, dataSource, verification string) string {
+	if mapping == "keyword" && dataSource != "" {
+		return "Free-text search of the raw log message. " + dataSource + "."
+	}
 	if mapping == "pipeline" && dataSource != "" {
 		return "Field-mapped. This only matches if you collect: " + dataSource + ". " + VerificationNote(verification)
 	}

@@ -261,7 +261,7 @@ The last Sysmon and PowerShell categories map for Splunk: WMI events 19/20/21, S
 executable detected 29, process tampering 25, and the classic PowerShell provider start (event 600; Elastic too).
 
 **Verification.** Every translation carries a `verification` value, shown beside the query in the console, the API and the
-PDF: `none` (generic, Sigma's own field names), `documented` (names from the product's documentation or an upstream
+PDF: `none` (generic with Sigma's own field names, or keyword), `documented` (names from the product's documentation or an upstream
 pipeline, never run on events; 7,109 translations), `assumed` (our own assumption, flagged unverified in the data-source
 note: 217, all Splunk or Elastic) and `validated` (matched a positive and not a negative sample event). The generator
 never sets `validated`; it is reserved for mappings tested against supplied events, and none is yet. A test fails if a
@@ -279,16 +279,21 @@ Rules with at least one field-mapped translation: **2,004 of 2,104**. Coverage p
 
 A rule a backend cannot express (for example a hash format, `CurrentDirectory`, or CrowdStrike's missing
 `Description`/`ParentCommandLine` fields) is recorded as **"backend translation unavailable"** with the reason. It
-is never silently replaced by a generic query. The 100 rules with no field-mapped translation are left generic on purpose, in three groups:
+is never silently replaced by a generic query. **Keyword-scoped.** 26 rules have no field conditions at all (application-framework logs, Linux syslog/sshd/vsftpd and
+unscoped Linux keywords, Juniper and Huawei BGP, one SQL rule, one Azure activity rule). They are a free-text search of the
+raw log message, so there is no field to map. For Splunk and Elastic, where a plain text search is valid, the translation
+is labelled `keyword`: it names the log it belongs to, says no field mapping applies, claims no schema, and has
+verification `none`. Sentinel and Defender render such a rule as a bare expression with no table, and CrowdStrike wraps the
+phrase in quotes inside a regex, so those stay `generic` rather than claim a query that may not run.
 
-- **Free text with no schema** (27): application-framework logs (JVM, Spring, Django, Rails, Node, Python, SQL, Velocity),
-  Linux syslog/sshd/vsftpd and unscoped Linux keyword rules, and Juniper/Huawei BGP. These are keyword searches of raw log
-  text; there is no field to map, so the generic query is already what the rule says. They need scoping to the right log.
-- **No schema verified** (44): GitHub audit (8), Fortigate (4), M365 audit and threat management (7), RPC Firewall
+The 75 rules with neither a field mapping nor a keyword label are left generic on purpose:
+
+- **No schema verified** (about 44): GitHub audit (8), Fortigate (4), M365 audit and threat management (7), RPC Firewall
   (6), Linux file-event and network-connection from Sysmon for Linux (6), Windows IIS, LDAP, SMB-server and file-access
   (13). A guessed field name would produce a query that looks right and never matches.
-- **Fields the table lacks or other defects** (29): the Azure activity, audit, sign-in and PIM rules that use fields no Sentinel table
-  has (PIM alert incidents are not in `AuditLogs` or `AADUserRiskEvents`), and the GCP/Zeek rules a pipeline cannot express.
+- **Fields the table lacks or other defects** (about 31): the Azure activity, audit, sign-in and PIM rules that use fields
+  no Sentinel table has (PIM alert incidents are not in `AuditLogs` or `AADUserRiskEvents`), and the GCP and Zeek rules a
+  pipeline cannot express.
 
 Their translations are labelled `generic`, need adapting to the customer's schema, and are not presented
 as ready to paste.

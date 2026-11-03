@@ -51,7 +51,7 @@ func mappedGroup(ls LogSource) string {
 
 func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 	e := NewEngine()
-	mapped, generic := 0, 0
+	mapped, generic, keyword := 0, 0, 0
 	mappedByGroup := map[string]int{}
 	for _, r := range e.Search(SearchFilter{}) {
 		for _, tr := range r.Translations {
@@ -70,6 +70,12 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 					t.Fatalf("%s/%s: verification %q disagrees with the data-source note %q", r.ID, tr.Backend, tr.Verification, tr.DataSource)
 				}
 				mappedByGroup[mappedGroup(r.LogSource)]++
+			case "keyword":
+				// a free-text search: no pipeline and no schema claim, but it must name the log it belongs to
+				if tr.Pipeline != "" || tr.DataSource == "" || tr.Verification != "none" || (tr.Backend != "splunk" && tr.Backend != "elastic") {
+					t.Fatalf("%s/%s: malformed keyword translation: %+v", r.ID, tr.Backend, tr)
+				}
+				keyword++
 			case "generic":
 				generic++
 				if tr.Pipeline != "" || tr.DataSource != "" {
@@ -98,6 +104,9 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 		if mappedByGroup[g] == 0 {
 			t.Errorf("no field-mapped translations for %s (got %v)", g, mappedByGroup)
 		}
+	}
+	if keyword == 0 {
+		t.Error("expected keyword translations for the free-text rules")
 	}
 	if mapped == 0 || generic == 0 {
 		t.Errorf("expected both mapped and generic translations, got %d mapped / %d generic", mapped, generic)

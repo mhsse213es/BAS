@@ -54,7 +54,8 @@ type Translation struct {
 	Language  string `json:"language"` // KQL | SPL | Lucene | LogScale | AQL
 	Query     string `json:"query"`
 	Generator string `json:"generator"`
-	// Mapping is "pipeline" when the query was field-mapped for the SIEM (real table / index / event type and
+	// Mapping "keyword" is a rule with no field conditions at all: a free-text search of the raw log message for Splunk and
+	// Elastic, which needs no field mapping and claims none. Otherwise, Mapping is "pipeline" when the query was field-mapped for the SIEM (real table / index / event type and
 	// field names), or "generic" when it uses Sigma's own field names and needs adapting. A generic query is
 	// never presented as ready to paste.
 	Mapping string `json:"mapping"`

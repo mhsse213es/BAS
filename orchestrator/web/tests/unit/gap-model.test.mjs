@@ -32,6 +32,13 @@ test('a mapped query names the data source it needs; a generic one says it must 
   assert.doesNotMatch(generic, /only matches if/i);
 });
 
+test('a keyword query is a free-text search that names its log and makes no field-mapping claim', () => {
+  const n = G.backendNote({ backend: 'splunk', mapping: 'keyword', dataSource: 'Raw log text of the django application log' });
+  assert.match(n, /Free-text search/);
+  assert.match(n, /django/);
+  assert.doesNotMatch(n, /adapt|field-mapped/i);
+});
+
 test('backend names and the export link', () => {
   assert.equal(G.backendLabel('microsoft_sentinel'), 'Microsoft Sentinel');
   assert.equal(G.backendLabel('crowdstrike'), 'CrowdStrike LogScale');

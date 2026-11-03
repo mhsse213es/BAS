@@ -910,6 +910,37 @@ _HOST_PATH = re.compile(r"\s+in\s+[A-Za-z]:\\\S*|[A-Za-z]:\\\S+")
 _FIELD_LIST = re.compile(r"(, or the following fields that have fieldmappings in this pipeline:).*", re.S)
 
 
+# A rule with no field conditions is a free-text search of the raw log message. Splunk and Elastic accept that as a plain
+# text search. Sentinel and Defender render it as a bare expression with no table, and CrowdStrike wraps the phrase in
+# quotes inside a regex, so those stay generic rather than claim a query that may not run.
+KEYWORD_BACKENDS = ("splunk", "elastic")
+
+
+def is_keyword_only(rule) -> bool:
+    """True when every detection item is a bare keyword (no field name anywhere)."""
+    seen = []
+
+    def walk(detection) -> bool:
+        for item in detection.detection_items:
+            if hasattr(item, "detection_items"):
+                if not walk(item):
+                    return False
+            else:
+                seen.append(item)
+                if item.field:
+                    return False
+        return True
+
+    return all(walk(d) for d in rule.detection.detections.values()) and bool(seen)
+
+
+def keyword_source(rule) -> str:
+    ls = rule.logsource
+    name = " ".join(x for x in (ls.product, ls.service, ls.category) if x) or "the affected"
+    return (f"Raw log text of the {name} log. The rule is a free-text search of the message, so no field mapping applies: "
+            "scope it to the index or sourcetype that holds this log")
+
+
 def verification_of(mapping) -> str:
     """How much is known about a translation. none: generic. assumed: the mapping's own data-source note says it is
     unverified. documented: names come from the product's documentation or an upstream pipeline. 'validated' is never
@@ -955,14 +986,15 @@ def translate_rule(rule) -> tuple[list[dict], list[dict]]:
                 generator += f" / pipeline {mapping.name}"
                 if mapping.dist_name and mapping.dist_name != spec.dist_name:
                     generator += f" ({mapping.dist_name} {_version(mapping.dist_name)})"
+            keyword = mapping is None and backend_key in KEYWORD_BACKENDS and is_keyword_only(rule)
             translations.append({
                 "backend": backend_key,
                 "language": spec.language,
                 "query": queries[0],
                 "generator": generator,
-                "mapping": "pipeline" if mapping else "generic",
+                "mapping": "pipeline" if mapping else ("keyword" if keyword else "generic"),
                 "pipeline": mapping.name if mapping else "",
-                "dataSource": mapping.data_source if mapping else "",
+                "dataSource": mapping.data_source if mapping else (keyword_source(rule) if keyword else ""),
                 "verification": verification_of(mapping),
             })
         except Exception as e:  # noqa: BLE001 — deliberately broad: one backend's exception must never stop the

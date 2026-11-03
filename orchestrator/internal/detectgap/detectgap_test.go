@@ -168,6 +168,10 @@ func TestBackendLabelAndQueryNote(t *testing.T) {
 	if !strings.Contains(validated, "matched a sample event") || strings.Contains(validated, "not yet been run") {
 		t.Errorf("a validated mapping must say what was shown, and not claim it is untested: %q", validated)
 	}
+	keyword := QueryNote("keyword", "Raw log text of the django application log", VerificationNone)
+	if !strings.Contains(keyword, "Free-text") || !strings.Contains(keyword, "django") || strings.Contains(keyword, "field names") {
+		t.Errorf("keyword note must say free text, name the log, and not talk about field names: %q", keyword)
+	}
 	generic := QueryNote("generic", "", VerificationNone)
 	if !strings.Contains(strings.ToLower(generic), "adapt") || strings.Contains(generic, "only matches if") {
 		t.Errorf("generic note = %q", generic)
