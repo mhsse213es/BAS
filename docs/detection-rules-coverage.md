@@ -44,11 +44,11 @@ honestly instead of producing a query that matches nothing.)
 | CrowdStrike (LogScale) | 1,945 | 159 |
 | IBM QRadar (AQL), generic only | 1,753 | 351 |
 
-## 4. Field mapping per SIEM (Windows process creation)
+## 4. Field mapping per SIEM (Windows process creation and network connection)
 
 A bare pySigma backend emits Sigma's own field names with no table, index or event type, so its query matches
-nothing in a real SIEM. For Windows `process_creation` rules the generator now applies a per-SIEM processing
-pipeline, and every such translation records the pipeline and the data source the customer must collect for the
+nothing in a real SIEM. For Windows `process_creation` and `network_connection` rules the generator now applies a
+per-SIEM processing pipeline, and every such translation records the pipeline and the data source the customer must collect for the
 query to match anything. Pipelines were chosen by measuring each over all 1,177 SigmaHQ Windows process-creation
 rules:
 
@@ -64,19 +64,36 @@ Rejected for Sentinel: ASIM (51% convert) and Security event 4688 (41%), which c
 Splunk's bundled pipeline adds no process-creation condition, so one small pipeline of ours adds the standard
 Sysmon condition. The original Sigma rule is never changed.
 
-Of the 2,104 applicable rules, **845** are Windows process-creation:
+**Network connection** (Windows, 37 rules) uses the same pipelines on different data:
+
+| Backend | Pipeline | Data source the customer must collect | Field-mapped (of 37) |
+|---|---|---|---:|
+| Microsoft Sentinel | `microsoft_xdr_pipeline` | Defender for Endpoint device events: `DeviceNetworkEvents` | 36 |
+| Microsoft Defender | `microsoft_365_defender_pipeline` | Defender for Endpoint advanced hunting: `DeviceNetworkEvents` | 36 |
+| Splunk | `audspect_splunk_sysmon_network_connection` (ours) | Sysmon event 3 via the Splunk Add-on for Sysmon | 37 |
+| Elastic | `ecs_windows` + `audspect_ecs_initiated_to_direction` (ours) | Network events in ECS field names (Elastic Defend, or Winlogbeat's Sysmon module, event 3) | 37 |
+| CrowdStrike | `crowdstrike_fdr_pipeline` | Falcon Data Replicator `NetworkConnectIP4` events (IPv4 only) | 18 |
+
+Not expressible: one rule on Sentinel and Defender (the `SourceIsIpv6` field has no column), and 19 on CrowdStrike (it
+supports only the file name of the image, and not OR-ed CIDR ranges).
+
+**One correction of ours, unverified.** pySigma's `ecs_windows` writes Sysmon's `Initiated` as `network.direction:true`,
+a value no ECS data contains. Our extra step rewrites it to `egress` / `ingress`, which is what ECS and Winlogbeat's
+Sysmon module use. This is from the ECS field definition, not tested against live Elastic data.
+
+Of the 2,104 applicable rules, **882** are in the two mapped families (845 process creation, 37 network connection):
 
 | Backend | Field-mapped | Not expressible |
 |---|---:|---:|
-| Microsoft Sentinel | 816 | 29 |
-| Microsoft Defender | 816 | 29 |
-| Splunk | 845 | 0 |
-| Elastic | 845 | 0 |
-| CrowdStrike | 703 | 142 |
+| Microsoft Sentinel | 852 | 30 |
+| Microsoft Defender | 852 | 30 |
+| Splunk | 882 | 0 |
+| Elastic | 882 | 0 |
+| CrowdStrike | 721 | 161 |
 
 A rule a backend cannot express (for example a hash format, `CurrentDirectory`, or CrowdStrike's missing
 `Description`/`ParentCommandLine` fields) is recorded as **"backend translation unavailable"** with the reason. It
-is never silently replaced by a generic query. The other 1,259 applicable rules (other log sources) are still
+is never silently replaced by a generic query. The other 1,222 applicable rules (other log sources) are still
 generic: their translations are labelled `generic`, need adapting to the customer's schema, and are not presented
 as ready to paste. Each further log-source family is one more entry in `scripts/rulelib-gen/translate.py`.
 

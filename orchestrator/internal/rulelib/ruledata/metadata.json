@@ -1,27 +1,27 @@
 {
   "attribution": "Detection rules are from the SigmaHQ project (https://github.com/SigmaHQ/sigma), licensed under the Detection Rule License (DRL) 1.1. Each rule keeps its original author, title, id and references; the per-SIEM queries are generated from the rule by Audspect.",
   "backends": {
-    "crowdstrike": 1945,
+    "crowdstrike": 1936,
     "elastic": 2104,
-    "microsoft_defender": 2075,
-    "microsoft_sentinel": 2075,
+    "microsoft_defender": 2074,
+    "microsoft_sentinel": 2074,
     "qradar": 1753,
     "splunk": 2104
   },
-  "generatedAt": "2026-11-03T08:39:07.288480+00:00",
+  "generatedAt": "2026-11-03T09:34:57.369349+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
-    "crowdstrike:generic": 1242,
-    "crowdstrike:pipeline": 703,
-    "elastic:generic": 1259,
-    "elastic:pipeline": 845,
-    "microsoft_defender:generic": 1259,
-    "microsoft_defender:pipeline": 816,
-    "microsoft_sentinel:generic": 1259,
-    "microsoft_sentinel:pipeline": 816,
+    "crowdstrike:generic": 1215,
+    "crowdstrike:pipeline": 721,
+    "elastic:generic": 1222,
+    "elastic:pipeline": 882,
+    "microsoft_defender:generic": 1222,
+    "microsoft_defender:pipeline": 852,
+    "microsoft_sentinel:generic": 1222,
+    "microsoft_sentinel:pipeline": 852,
     "qradar:generic": 1753,
-    "splunk:generic": 1259,
-    "splunk:pipeline": 845
+    "splunk:generic": 1222,
+    "splunk:pipeline": 882
   },
   "ruleCount": 2104,
   "schemaVersion": 2,
@@ -704,7 +704,7 @@
     },
     {
       "backend": "crowdstrike",
-      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_dialer_initiated_connection.yml",
+      "reason": "SigmaTransformationError: Only file name of image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_dialer_initiated_connection.yml",
       "ruleId": "AUDRULE-000453",
       "sigmaId": "37e4024a-6c80-4d8f-b95d-2e7e94f3a8d1"
     },
@@ -1585,6 +1585,12 @@
       "sigmaId": "7b14c76a-c602-4ae6-9717-eff868153fc0"
     },
     {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_susp_initiated_uncommon_or_suspicious_locations.yml",
+      "ruleId": "AUDRULE-000996",
+      "sigmaId": "7b434893-c57d-4f41-908d-6a17bf1ae98f"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000996",
@@ -2047,6 +2053,12 @@
       "sigmaId": "992a6cae-db6a-43c8-9cec-76d7195c96fc"
     },
     {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_susp_outbound_smtp_connections.yml",
+      "ruleId": "AUDRULE-001257",
+      "sigmaId": "9976fa64-2804-423c-8a5b-646ade840773"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001257",
@@ -2347,6 +2359,12 @@
       "sigmaId": "b366adb4-d63d-422d-8a2c-186463b5ded0"
     },
     {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_adws_unusual_connection.yml",
+      "ruleId": "AUDRULE-001486",
+      "sigmaId": "b3ad3c0f-c949-47a1-a30e-b0491ccae876"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001486",
@@ -2527,6 +2545,12 @@
       "sigmaId": "c3a99af4-35a9-4668-879e-c09aeb4f2bdf"
     },
     {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_domain_telegram_api_non_browser_access.yml",
+      "ruleId": "AUDRULE-001613",
+      "sigmaId": "c3dbbc9f-ef1d-470a-a90a-d343448d5875"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001613",
@@ -2591,6 +2615,24 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001629",
       "sigmaId": "c4ff1eac-84ad-44dd-a6fb-d56a92fc43a9"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: SourceIsIpv6. Please use valid fields for the DeviceNetworkEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, Description, DestinationHostname, DestinationIp, DestinationPort, DeviceId, DeviceName, EventType, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, LocalIP, LocalIPType, LocalPort, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, Protocol, RemoteIP, RemoteIPType, RemotePort, RemoteUrl, ReportId, SourceHostname, SourceImage, SourceIp, SourcePort, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_susp_remote_powershell_session.yml",
+      "ruleId": "AUDRULE-001630",
+      "sigmaId": "c539afac-c12a-46ed-b1bd-5a5567c9f045"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: SourceIsIpv6. Please use valid fields for the DeviceNetworkEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, Description, DestinationHostname, DestinationIp, DestinationPort, DeviceId, DeviceName, EventType, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, LocalIP, LocalIPType, LocalPort, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, Protocol, RemoteIP, RemoteIPType, RemotePort, RemoteUrl, ReportId, SourceHostname, SourceImage, SourceIp, SourcePort, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_susp_remote_powershell_session.yml",
+      "ruleId": "AUDRULE-001630",
+      "sigmaId": "c539afac-c12a-46ed-b1bd-5a5567c9f045"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_susp_remote_powershell_session.yml",
+      "ruleId": "AUDRULE-001630",
+      "sigmaId": "c539afac-c12a-46ed-b1bd-5a5567c9f045"
     },
     {
       "backend": "qradar",
@@ -3001,6 +3043,12 @@
       "sigmaId": "df9a0e0e-fedb-4d6c-8668-d765dfc92aa7"
     },
     {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_susp_file_sharing_domains_susp_folders.yml",
+      "ruleId": "AUDRULE-001837",
+      "sigmaId": "e0f8ab85-0ac9-423b-a73a-81b3c7b1aa97"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001837",
@@ -3053,6 +3101,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001874",
       "sigmaId": "e54279c7-4910-4e2c-902c-c56a25b549f6"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_susp_outbound_kerberos_connection.yml",
+      "ruleId": "AUDRULE-001875",
+      "sigmaId": "e54979bd-c5f9-4d6c-967b-a04b19ac4c74"
     },
     {
       "backend": "qradar",
@@ -3187,6 +3241,12 @@
       "sigmaId": "eca91c7c-9214-47b9-b4c5-cb1d7e4f2350"
     },
     {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_rdp_outbound_over_non_standard_tools.yml",
+      "ruleId": "AUDRULE-001951",
+      "sigmaId": "ed74fe75-7594-4b4b-ae38-e38e3fd2eb23"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001951",
@@ -3209,6 +3269,12 @@
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the CurrentDirectory field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_wsl_windows_binaries_execution.yml",
       "ruleId": "AUDRULE-001952",
       "sigmaId": "ed825c86-c009-4014-b413-b76003e33d35"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_domain_external_ip_lookup.yml",
+      "ruleId": "AUDRULE-001957",
+      "sigmaId": "edf3485d-dac4-4d50-90e4-b0e5813f7e60"
     },
     {
       "backend": "qradar",

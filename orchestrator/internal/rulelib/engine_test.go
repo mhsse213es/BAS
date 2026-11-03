@@ -38,6 +38,7 @@ func TestLoadFromBytes_CorruptJSON_ReturnsEmptyEngine(t *testing.T) {
 func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 	e := NewEngine()
 	mapped, generic := 0, 0
+	mappedByCategory := map[string]int{}
 	for _, r := range e.Search(SearchFilter{}) {
 		for _, tr := range r.Translations {
 			switch tr.Mapping {
@@ -46,9 +47,10 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 				if tr.Pipeline == "" || tr.DataSource == "" {
 					t.Fatalf("%s/%s: mapped translation without pipeline/data source", r.ID, tr.Backend)
 				}
-				if r.LogSource.Category != "process_creation" || r.LogSource.Product != "windows" {
+				if r.LogSource.Product != "windows" || (r.LogSource.Category != "process_creation" && r.LogSource.Category != "network_connection") {
 					t.Fatalf("%s/%s: mapped although the log source is %+v", r.ID, tr.Backend, r.LogSource)
 				}
+				mappedByCategory[r.LogSource.Category]++
 			case "generic":
 				generic++
 				if tr.Pipeline != "" || tr.DataSource != "" {
@@ -58,6 +60,9 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 				t.Fatalf("%s/%s: mapping = %q", r.ID, tr.Backend, tr.Mapping)
 			}
 		}
+	}
+	if mappedByCategory["process_creation"] == 0 || mappedByCategory["network_connection"] == 0 {
+		t.Errorf("expected mapped translations for both process_creation and network_connection, got %v", mappedByCategory)
 	}
 	if mapped == 0 || generic == 0 {
 		t.Errorf("expected both mapped and generic translations, got %d mapped / %d generic", mapped, generic)
