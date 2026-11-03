@@ -86,6 +86,12 @@ export function filterList(list, f, productOf) {
   });
 }
 
+// allView: what the "All Scenarios" view lists. Threat-intel scenarios have their own category, so they are kept out
+// of the mixed list unless the Source filter is explicitly "Threat intel".
+export function allView(list, source) {
+  return arr(list).filter(function(s) { return source === 'intel' || sourceOf(s) !== 'intel'; });
+}
+
 // sortList: 'default' keeps the server order; 'name' is A-Z; 'tech' is most techniques first. Never mutates.
 export function sortList(list, mode) {
   var out = arr(list).slice();

@@ -78,3 +78,13 @@ test('showing pluralises', () => {
   assert.equal(M.showing(1, 1), 'Showing 1 of 1 scenario');
   assert.equal(M.showing(2, 5), 'Showing 2 of 5 scenarios');
 });
+
+test('allView leaves threat-intel scenarios out of All Scenarios, but keeps them when filtering by that source', () => {
+  const list = [{ id: 'a' }, { id: 'b', intelSource: 'opencti' }, { id: 'c', source: 'custom' }];
+  assert.deepEqual(M.allView(list, 'all').map((s) => s.id), ['a', 'c']);
+  assert.deepEqual(M.allView(list, '').map((s) => s.id), ['a', 'c']);
+  assert.deepEqual(M.allView(list, 'builtin').map((s) => s.id), ['a', 'c']);
+  // The Source filter has already narrowed the list, so an explicit intel filter passes it through untouched.
+  assert.deepEqual(M.allView([list[1]], 'intel').map((s) => s.id), ['b']);
+  assert.deepEqual(M.allView(null, 'all'), []);
+});

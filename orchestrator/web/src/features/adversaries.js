@@ -416,19 +416,33 @@ export function confirmTmplRun() {
 
 var _adversaries = [];
 var _advDrawerID = null;
-var _adversaryCollapsed = false;
+var ADV_COLLAPSE_KEY = 'adversary_library_collapsed';
+// Starts collapsed: the library sits below every scenario card, so it used to take a long scroll to pass. The
+// choice is remembered per browser.
+function advStoredCollapsed() {
+  try { var v = localStorage.getItem(ADV_COLLAPSE_KEY); return v === null ? true : v === '1'; } catch (e) { return true; }
+}
+var _adversaryCollapsed = advStoredCollapsed();
 
-// toggleAdversarySection collapses/expands the Threat Actor Library, mirroring
-// the chevron/collapse pattern the scenario source groups above it already use
-// (.sc-src-hdr/.collapsed) — this section previously had no way to collapse at
-// all. renderAdversaryLibrary() (called on every search keystroke and refresh)
-// never touches #adversary-hdr/#adversary-body, so this state survives re-renders.
-export function toggleAdversarySection() {
-  _adversaryCollapsed = !_adversaryCollapsed;
+// Applies the collapsed state to the header, the body and the button.
+function paintAdversaryCollapse() {
   var hdr = document.getElementById('adversary-hdr');
   var body = document.getElementById('adversary-body');
+  var btn = document.getElementById('adv-collapse-btn');
   if (hdr) hdr.classList.toggle('collapsed', _adversaryCollapsed);
   if (body) setDisplay(body, _adversaryCollapsed ? 'none' : '');
+  if (btn) {
+    btn.textContent = _adversaryCollapsed ? 'Expand' : 'Collapse';
+    btn.setAttribute('aria-expanded', _adversaryCollapsed ? 'false' : 'true');
+  }
+}
+
+// toggleAdversarySection collapses/expands the Threat Actor Library (header click or the Collapse button).
+// renderAdversaryLibrary() never touches the header or body, so the state survives re-renders.
+export function toggleAdversarySection() {
+  _adversaryCollapsed = !_adversaryCollapsed;
+  try { localStorage.setItem(ADV_COLLAPSE_KEY, _adversaryCollapsed ? '1' : '0'); } catch (e) {}
+  paintAdversaryCollapse();
 }
 
 export function loadAdversaries() {
@@ -454,6 +468,7 @@ export function renderAdversaryLibrary() {
   });
 
   setDisplay(section, _adversaries.length ? '' : 'none');
+  paintAdversaryCollapse();
   if (cnt) cnt.textContent = _adversaries.length;
 
   if (!filtered.length) {
@@ -461,32 +476,19 @@ export function renderAdversaryLibrary() {
     return;
   }
 
-  var tacticColors = {
-    'initial-access':'#2f81f7','execution':'#f0883e','persistence':'#d29922',
-    'privilege-escalation':'#f85149','defense-evasion':'#a371f7','credential-access':'#da3633',
-    'discovery':'#9aa9bc','lateral-movement':'#0d9488','collection':'#56d364',
-    'command-and-control':'#f0883e','exfiltration':'#da3633','impact':'#f85149'
-  };
-  function tacticChip(t) {
-    var col = tacticColors[t] || 'var(--muted)';
-    return '<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:0.68rem;font-weight:600;background:' + col + '22;color:' + col + ';border:1px solid ' + col + '44;white-space:nowrap">' + x(t) + '</span>';
-  }
-
   grid.innerHTML = filtered.map(function(a) {
-    var tactics = (a.tactics || []).slice(0, 4).map(tacticChip).join(' ');
-    var moreT = a.tactics && a.tactics.length > 4 ? ' <span style="color:var(--muted);font-size:0.68rem">+' + (a.tactics.length - 4) + '</span>' : '';
-    var desc = (a.description || '').length > 100 ? a.description.substring(0, 97) + '…' : (a.description || 'MITRE CTID adversary emulation profile');
+    var tactics = (a.tactics || []).slice(0, 3).map(function(t) { return '<span class="sc-tag purple">' + x(t) + '</span>'; }).join('');
+    var moreT = a.tactics && a.tactics.length > 3 ? '<span class="sc-tag">+' + (a.tactics.length - 3) + '</span>' : '';
+    var desc = (a.description || '').length > 140 ? a.description.substring(0, 137) + '…' : (a.description || 'MITRE CTID adversary emulation profile');
     var canRun = ROLE === 'admin' || ROLE === 'analyst';
-    return '<div class="card" style="cursor:pointer;display:flex;flex-direction:column;gap:0.5rem;border-left:3px solid var(--accent)"' + on('click', 'openAdvDrawer', a.id) + '>' +
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem">' +
-        '<div style="font-size:0.9rem;font-weight:700;color:var(--text)">' + x(a.name) + '</div>' +
-        '<span style="flex-shrink:0;font-size:0.72rem;color:var(--muted);background:var(--elevated);padding:2px 7px;border-radius:9px;border:1px solid var(--border)">' + (a.abilityCount || 0) + ' abilities</span>' +
+    // Same card as the scenario grid (sc-card), so the library no longer looks like the old page.
+    return '<div class="sc-card src-intel" tabindex="0" role="button"' + on('click', 'openAdvDrawer', a.id) + '>' +
+      '<div class="sc-tags"><span class="sc-tag blue">Threat actor</span>' + tactics + moreT + '</div>' +
+      '<h3>' + x(a.name) + '</h3><p>' + x(desc) + '</p>' +
+      '<div class="sc-foot"><span>' + (a.abilityCount || 0) + ' abilities</span></div>' +
+      '<div class="sc-actions"' + on('click', 'stopEvent') + '><span class="sc-avail ok">&#9679; Emulation profile</span>' +
+        (canRun ? '<button type="button" class="btn btn-primary btn-sm"' + on('click', 'openAdvRunModal', a.id, a.name) + '>&#9654; Run</button>' : '') +
       '</div>' +
-      '<div style="font-size:0.78rem;color:var(--muted);line-height:1.45">' + x(desc) + '</div>' +
-      '<div style="display:flex;flex-wrap:wrap;gap:0.25rem">' + tactics + moreT + '</div>' +
-      (canRun ? '<div style="margin-top:0.25rem"' + on('click', 'stopEvent') + '>' +
-        '<button class="btn btn-primary btn-sm u-w100"' + on('click', 'openAdvRunModal', a.id, a.name) + '>&#9654; Run</button>' +
-      '</div>' : '') +
     '</div>';
   }).join('');
 }

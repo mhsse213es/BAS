@@ -19,7 +19,7 @@ import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
 import { describePhishingRun } from './phishing-run-view.js';
 import { LIBRARY_TYPE_PHISHING, buildDispatchFields, buildPhishingRunRequest, withExecutionLink, libraryEntryRoute, phishingLibraryCounts, showNoScenariosMessage } from './scenario-library-route.js';
 import { ROLE, setAgentsView, showTab } from './shell.js';
-import { sourceOf as scnSourceOf, heroStats as scnHeroStats, filterList as scnFilterList, sortList as scnSortList, categoryRows as scnCategoryRows, showing as scnShowing } from './scn-model.js';
+import { allView as scnAllView, sourceOf as scnSourceOf, heroStats as scnHeroStats, filterList as scnFilterList, sortList as scnSortList, categoryRows as scnCategoryRows, showing as scnShowing } from './scn-model.js';
 import { catsHtml as scnCatsHtml, toolbarHtml as scnToolbarHtml, gridHtml as scnGridHtml, emptyHtml as scnEmptyHtml, scnUi, setScenarioViewMode, setScenarioSortMode, setScenarioCatOffMode, hideFilterSelects, openDrawer as openScnDrawer, closeDrawer as closeScnDrawer, drawerTab, drawerScenarioId, paintDrawer, bindApproveButton, runById as scnRunById } from './scn-rich.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
@@ -1697,7 +1697,8 @@ function paintScenarios() {
   }
   var catList = scenarioSectionOrder().map(function(sec) { return { key: sec.key, label: sec.label, icon: sec.key }; });
   if (_templates.length) catList.push({ key: 'templates', label: 'Adversary Templates' });
-  var rows = scnCategoryRows(catList, pool.length, function(key) {
+  var allList = scnAllView(pool, scnFilters().source);
+  var rows = scnCategoryRows(catList, allList.length, function(key) {
     return key === 'phishing' ? ph.total : key === 'templates' ? _templates.length : pool.filter(function(s) { return scenarioProductOf(s) === key; }).length;
   }, subs);
   cats.innerHTML = scnCatsHtml(rows, view);
@@ -1712,7 +1713,7 @@ function paintScenarios() {
     renderTemplateGrid();
     return;
   }
-  var list = scnSortList(view === 'all' ? pool : pool.filter(function(s) { return scenarioProductOf(s) === view; }), scnUi().sort);
+  var list = scnSortList(view === 'all' ? allList : pool.filter(function(s) { return scenarioProductOf(s) === view; }), scnUi().sort);
   grid.innerHTML = list.length ? scnGridHtml(list) : scnEmptyHtml();
   if (foot && list.length) foot.textContent = scnShowing(list.length, all.length);
 }

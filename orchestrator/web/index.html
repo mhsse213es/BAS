@@ -1187,13 +1187,14 @@
               <input type="search" id="adv-search" placeholder="Search actor…" data-on-input="renderAdversaryLibrary" data-on-click="stopEvent"
                      class="g1-s-f2296c7a">
               <button class="btn btn-outline btn-sm" data-on-click="loadAdversariesStop">Refresh</button>
+              <button type="button" class="btn btn-outline btn-sm" id="adv-collapse-btn" aria-expanded="false" aria-controls="adversary-body" data-on-click="toggleAdversarySection">Expand</button>
             </div>
           </div>
           <div id="adversary-body">
             <div class="g1-s-932e5b99">
               Adversary emulation profiles from the MITRE CTID library — each is a sequenced kill-chain of ATT&amp;CK-mapped abilities. Click a card to see the ability chain; <strong>Run</strong> dispatches the full emulation to an agent.
             </div>
-            <div id="adv-grid" class="g1-display-grid g1-s-06068a98"></div>
+            <div id="adv-grid" class="sc-grid"></div>
           </div>
         </div>
       </div>

@@ -193,3 +193,20 @@ for (const [tab, route, action, word] of [
     await expect(page.locator('#toast')).toContainText(`${word} panels could not be refreshed`);
   });
 }
+
+// Threat Actor Library: cards match the scenario cards, and an explicit button collapses/expands it.
+test('threat actor library: sc-card style and a Collapse button', async ({ page }) => {
+  await boot(page);
+  await page.route('**/api/caldera/adversaries', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify([{ id: 'a1', name: 'APT29', description: 'A group.', tactics: ['collection', 'discovery'], abilityCount: 79 }]) }));
+  await openTab(page, 'scenarios');
+  await page.evaluate(() => document.querySelector('[data-on-click="loadAdversariesStop"]').click());
+  await expect(page.locator('#adv-grid .sc-card')).toHaveCount(1);
+  await expect(page.locator('#adv-collapse-btn')).toHaveText('Expand');
+  await expect(page.locator('#adversary-body')).toBeHidden();
+  await page.click('#adv-collapse-btn');
+  await expect(page.locator('#adversary-body')).toBeVisible();
+  await expect(page.locator('#adv-collapse-btn')).toHaveText('Collapse');
+  await page.click('#adv-collapse-btn');
+  await expect(page.locator('#adversary-body')).toBeHidden();
+});
