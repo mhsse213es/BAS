@@ -45,6 +45,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/scenarios", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/api-bas", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/library", tierAny, ""},
+	{http.MethodGet, "/api/scenarios/intel-skipped", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/{id}", tierAny, ""},
 	{http.MethodGet, "/api/ad/coverage", tierAny, ""},
 	{http.MethodGet, "/api/waf/coverage", tierAny, ""},

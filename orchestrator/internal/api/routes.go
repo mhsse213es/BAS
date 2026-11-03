@@ -243,6 +243,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/scenarios", h.ListScenarios)
 		r.Get("/api/scenarios/api-bas", h.ListAPIBASScenarios)
 		r.Get("/api/scenarios/library", h.ListScenarioLibrary)
+		r.Get("/api/scenarios/intel-skipped", h.GetIntelSkippedActors)
 		r.Get("/api/scenarios/{id}", h.GetScenario)
 		r.Get("/api/ad/coverage", h.GetADCoverage)
 		// WebGW industry profiles (internal/webgwefficacy), same read-only

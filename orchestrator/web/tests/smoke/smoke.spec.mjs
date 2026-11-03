@@ -210,3 +210,22 @@ test('threat actor library: sc-card style and a Collapse button', async ({ page 
   await page.click('#adv-collapse-btn');
   await expect(page.locator('#adversary-body')).toBeHidden();
 });
+
+// Threat-Intel category: intel scenarios stay out of All Scenarios, and skipped actors are explained.
+test('threat intel category: separate from All, with the skipped-actors note', async ({ page }) => {
+  await boot(page);
+  const sc = (id, name, extra) => ({ id, name, description: 'd', productLine: 'common', supportedOs: ['windows'], mitrePhases: [], steps: [], tags: [], ...extra });
+  await page.route('**/api/scenarios', (r) => r.request().method() !== 'GET' ? r.fallback() : r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify([sc('b1', 'Builtin One', {}), sc('i1', 'Actor X — Active Campaign (Intel)', { intelSource: 'opencti', source: 'intel', intelActor: 'Actor X' })]) }));
+  await page.route('**/api/scenarios/intel-skipped', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ minTechniques: 2, actors: [{ name: 'UNC788', reason: 'below_min_techniques' }] }) }));
+  await openTab(page, 'scenarios');
+  await page.evaluate(() => document.querySelector('[data-on-click="loadScenarios"]').click());
+  await expect(page.locator('#sc-tile-grid')).toContainText('Builtin One');
+  await expect(page.locator('#sc-tile-grid')).not.toContainText('Actor X');
+  await page.locator('#sc-cats .sc-cat-item', { hasText: 'Threat-Intel' }).click();
+  await expect(page.locator('#sc-tile-grid')).toContainText('Actor X');
+  await expect(page.locator('.sc-skip-note')).toContainText('UNC788');
+  await page.locator('#sc-cats .sc-cat-item', { hasText: 'All Scenarios' }).click();
+  await expect(page.locator('.sc-skip-note')).toHaveCount(0);
+});

@@ -29,7 +29,10 @@ import (
 	"github.com/audspect/bas/internal/threatidentity"
 )
 
-const minTechniques = 2 // minimum techniques before generating a scenario
+// MinTechniques is the fewest techniques an actor needs before a scenario is generated for it. Exported so the
+// console can explain a skip with the same number the generator uses.
+const MinTechniques = 2
+const minTechniques = MinTechniques
 
 // generationPolicyVersion versions the policy RecordGeneration snapshots
 // are taken under (spec §8). Bump it when the active-set-vs-generation

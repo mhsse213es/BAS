@@ -19,7 +19,7 @@ import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
 import { describePhishingRun } from './phishing-run-view.js';
 import { LIBRARY_TYPE_PHISHING, buildDispatchFields, buildPhishingRunRequest, withExecutionLink, libraryEntryRoute, phishingLibraryCounts, showNoScenariosMessage } from './scenario-library-route.js';
 import { ROLE, setAgentsView, showTab } from './shell.js';
-import { allView as scnAllView, sourceOf as scnSourceOf, heroStats as scnHeroStats, filterList as scnFilterList, sortList as scnSortList, categoryRows as scnCategoryRows, showing as scnShowing } from './scn-model.js';
+import { skippedNote as scnSkippedNote, allView as scnAllView, sourceOf as scnSourceOf, heroStats as scnHeroStats, filterList as scnFilterList, sortList as scnSortList, categoryRows as scnCategoryRows, showing as scnShowing } from './scn-model.js';
 import { catsHtml as scnCatsHtml, toolbarHtml as scnToolbarHtml, gridHtml as scnGridHtml, emptyHtml as scnEmptyHtml, scnUi, setScenarioViewMode, setScenarioSortMode, setScenarioCatOffMode, hideFilterSelects, openDrawer as openScnDrawer, closeDrawer as closeScnDrawer, drawerTab, drawerScenarioId, paintDrawer, bindApproveButton, runById as scnRunById } from './scn-rich.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
@@ -1714,15 +1714,23 @@ function paintScenarios() {
     return;
   }
   var list = scnSortList(view === 'all' ? allList : pool.filter(function(s) { return scenarioProductOf(s) === view; }), scnUi().sort);
-  grid.innerHTML = list.length ? scnGridHtml(list) : scnEmptyHtml();
+  var skipNote = view === 'intel' ? scnSkippedNote(_intelSkipped) : '';
+  grid.innerHTML = (skipNote ? '<div class="alert-info sc-skip-note" role="note">' + x(skipNote) + '</div>' : '') + (list.length ? scnGridHtml(list) : scnEmptyHtml());
   if (foot && list.length) foot.textContent = scnShowing(list.length, all.length);
 }
 
 // renderScenarios reloads the phishing library and redraws; the toolbar and sidebar call paintScenarios
 // directly because they change nothing the library depends on.
+var _intelSkipped = null; // GET /api/scenarios/intel-skipped; null until read, or when it cannot be
+function loadIntelSkipped() {
+  return apicall('/api/scenarios/intel-skipped').then(function(d) { _intelSkipped = d && Array.isArray(d.actors) ? d : null; paintScenarios(); })
+    .catch(function() { _intelSkipped = null; });
+}
+
 export function renderScenarios() {
   if (!document.getElementById('sc-tile-grid')) return;
   loadScenarioLibrary();
+  loadIntelSkipped();
   paintScenarios();
 }
 export function refreshScenarioView() { paintScenarios(); }

@@ -88,3 +88,17 @@ test('allView leaves threat-intel scenarios out of All Scenarios, but keeps them
   assert.deepEqual(M.allView([list[1]], 'intel').map((s) => s.id), ['b']);
   assert.deepEqual(M.allView(null, 'all'), []);
 });
+
+test('skippedNote explains actors with no scenario, and says nothing when there are none', () => {
+  assert.equal(M.skippedNote(null), '');
+  assert.equal(M.skippedNote({ minTechniques: 2, actors: [] }), '');
+  assert.equal(M.skippedNote({ minTechniques: 2, actors: [{ name: 'UNC788' }] }),
+    '1 threat actor has no scenario yet: the threat-intel source gives fewer than 2 techniques for it (UNC788). It is checked again on every sync.');
+  assert.equal(M.skippedNote({ minTechniques: 2, actors: [{ name: 'A' }, { name: 'B' }] }),
+    '2 threat actors have no scenario yet: the threat-intel source gives fewer than 2 techniques for them (A, B). They are checked again on every sync.');
+});
+
+test('skippedNote lists at most five names and counts the rest', () => {
+  const actors = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((name) => ({ name }));
+  assert.match(M.skippedNote({ minTechniques: 2, actors }), /\(A, B, C, D, E and 2 more\)/);
+});

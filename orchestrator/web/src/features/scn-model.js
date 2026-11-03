@@ -92,6 +92,19 @@ export function allView(list, source) {
   return arr(list).filter(function(s) { return source === 'intel' || sourceOf(s) !== 'intel'; });
 }
 
+// skippedNote: the line shown in the Threat-Intel category for actors the generator skipped for having too few
+// techniques (from GET /api/scenarios/intel-skipped). Empty when there are none, so nothing is shown.
+export function skippedNote(data) {
+  var actors = data && Array.isArray(data.actors) ? data.actors : [];
+  if (!actors.length) return '';
+  var min = data.minTechniques || 2;
+  var names = actors.map(function(a) { return a.name; });
+  var shown = names.slice(0, 5).join(', ') + (names.length > 5 ? ' and ' + (names.length - 5) + ' more' : '');
+  var many = names.length > 1;
+  return names.length + ' threat actor' + (many ? 's have' : ' has') + ' no scenario yet: the threat-intel source gives fewer than ' +
+    min + ' techniques for ' + (many ? 'them' : 'it') + ' (' + shown + '). ' + (many ? 'They are' : 'It is') + ' checked again on every sync.';
+}
+
 // sortList: 'default' keeps the server order; 'name' is A-Z; 'tech' is most techniques first. Never mutates.
 export function sortList(list, mode) {
   var out = arr(list).slice();
