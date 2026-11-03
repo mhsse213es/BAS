@@ -680,6 +680,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/clusters", h.RegisterK8sCluster)
 		r.With(auth.RequirePermission(auth.CanViewK8sDiscovery)).Get("/api/k8s-scenarios/clusters/{id}/namespaces", h.ListK8sClusterNamespaces)
 		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/clusters/{id}/verify", h.VerifyK8sCluster)
+		// Safe checks: read-only SubjectAccessReview against a registered cluster. Requestable by analysts and admins.
+		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Post("/api/k8s-scenarios/safe-checks/run", h.RunK8sSafeCheck)
 		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Post("/api/k8s-scenarios/runs", h.CreateK8sRun)
 		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/approve", h.ApproveK8sRun)
 		r.With(auth.RequirePermission(auth.CanExecuteK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/execute", h.ExecuteK8sRun)
