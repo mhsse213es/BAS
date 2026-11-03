@@ -137,7 +137,19 @@ func (c *SettingsController) Test(candidateHost string) (TestOutcome, string) {
 // "must not even attempt to write" without this confirmation step).
 func (c *SettingsController) RequestSave(candidateHost string) (needsConfirm bool, warning string) {
 	c.pendingHost = candidateHost
-	return true, "Saving will restart the agent service and may briefly interrupt connectivity. Continue?"
+	return true, "Saving switches this agent to the new server. It reconnects without restarting, which may briefly " +
+		"interrupt connectivity; if it cannot reach the new server within 30 seconds, the previous server is restored. Continue?"
+}
+
+// NeedsConfirmation is what one click of the Save button asks. It returns true with the warning when the text on
+// screen has not been confirmed yet (the first click, and any click after the text was edited or after a save), and
+// false when this exact text was already warned about so the click should go ahead and call ConfirmSave. The
+// confirmation therefore follows the text on screen: it can never carry over to a host the user did not confirm.
+func (c *SettingsController) NeedsConfirmation(currentHost string) (bool, string) {
+	if currentHost != "" && c.pendingHost == currentHost {
+		return false, ""
+	}
+	return c.RequestSave(currentHost)
 }
 
 // ConfirmSave commits the host RequestSave recorded -- but only if
@@ -232,21 +244,17 @@ func showSettingsWindow(currentHost string, controller *SettingsController) erro
 		go func() {
 			outcome, detail := controller.Test(host)
 			wnd.UiThread(func() {
-				resultLbl.SetTextAndResize(string(outcome) + ": " + detail)
+				resultLbl.SetTextAndResize(FormatTestResult(outcome, detail))
 			})
 		}()
 	})
 
-	confirmed := false
 	saveBtn.On().BnClicked(func() {
-		if !confirmed {
-			_, warning := controller.RequestSave(hostEdit.Text())
+		host := hostEdit.Text()
+		if need, warning := controller.NeedsConfirmation(host); need {
 			resultLbl.SetTextAndResize(warning + " (click Save again to confirm)")
-			confirmed = true
 			return
 		}
-		confirmed = false
-		host := hostEdit.Text()
 		resultLbl.SetTextAndResize("Saving...")
 		go func() {
 			ok, detail := controller.ConfirmSave(host)

@@ -10,8 +10,8 @@ person on a real Windows install, against a real server.
 **How the expected results were written.** They are read from the code (`agent/hostcheck.go`,
 `agent/configmutate_windows.go`, `agent/localmutate_windows.go`, `agent/settingswindow_windows.go`,
 `agent/troubleshootwindow_windows.go`), **not observed on a running agent**. Where a step disagrees with what you
-see, record what you saw: that is a finding, not a failed checklist. Section 9 lists three places where the UI and
-the design already disagree.
+see, record what you saw: that is a finding, not a failed checklist. Section 9 lists three problems found while
+writing this checklist and since fixed in the code; confirm the fixes on your build.
 
 ## 0. Before you start
 
@@ -27,8 +27,10 @@ the design already disagree.
   `bas_agent.exe --troubleshoot-window`. **Do this from the tray for the scenarios below**; a hand-launched window has
   the wrong parent and is refused by design (scenario 7).
 
-Result key used below: **Test** shows `<outcome>: <detail>` in the result area, where `<outcome>` is one of
-`connected`, `server_rejected`, `cert_invalid`, `host_unreachable`, `invalid_host`.
+Result key used below: **Test** shows `<Outcome>: <detail>` in the result area, where `<Outcome>` is one of
+**Connected**, **Server rejected connection**, **Certificate validation failed**, **Host unreachable**,
+**Invalid host**. A successful test shows just `Connected`. No internal code (`cert_invalid` and the like) should ever
+appear on screen.
 
 ## 1. Settings opens and shows the current host
 
@@ -40,13 +42,13 @@ Result key used below: **Test** shows `<outcome>: <detail>` in the result area, 
 
 1. Leave the host as `ORIGINAL` and click **Test**. The result area shows `Testing...` and the window stays
    responsive (the call runs off the UI thread).
-2. Expect `connected: Connected`.
+2. Expect `Connected`.
 3. Expect nothing to change: status window still Active, registry value still `ORIGINAL`, no restart.
 
 ## 3. Test: invalid host -> no network call
 
-1. Enter `not a url` and click **Test**. Expect `invalid_host: invalid host: missing scheme or host`, immediately.
-2. Enter `https://server:9443/api` (has a path). Expect `invalid_host: invalid host: must not include a path, query, or fragment`.
+1. Enter `not a url` and click **Test**. Expect `Invalid host: missing scheme or host`, immediately.
+2. Enter `https://server:9443/api` (has a path). Expect `Invalid host: must not include a path, query, or fragment`.
 3. Confirm with a packet capture or the server's access log that **neither** attempt reached the network: the host
    is validated before the pipe is used.
 
@@ -57,10 +59,10 @@ that succeeds is `connected`.
 
 | Scenario | How to set it up | Expected |
 |---|---|---|
-| Host unreachable | Enter `https://192.0.2.1:9443` (a documentation address) or a closed port on a live host | `host_unreachable: ...` with the dial error |
-| Certificate invalid | Point at any HTTPS service on a listening port that is **not** signed by the deployment CA (for example `https://localhost:<port>` of a throwaway server) | `cert_invalid: ...` naming the certificate problem |
-| Server rejected | A host that completes TLS with a certificate from the deployment CA and answers the authenticated heartbeat with a 4xx/5xx. With one server this is easiest by temporarily revoking or force-removing this agent in the console and testing `ORIGINAL` | `server_rejected: server <code> on /api/heartbeat` (record the code you actually get; the revoked-agent case may fail at TLS instead and read `cert_invalid`) |
-| Listening port, no TLS | Any plain-HTTP service | `host_unreachable` or `cert_invalid` with the TLS error. Record which |
+| Host unreachable | Enter `https://192.0.2.1:9443` (a documentation address) or a closed port on a live host | `Host unreachable: ...` with the dial error |
+| Certificate invalid | Point at any HTTPS service on a listening port that is **not** signed by the deployment CA (for example `https://localhost:<port>` of a throwaway server) | `Certificate validation failed: ...` naming the certificate problem |
+| Server rejected | A host that completes TLS with a certificate from the deployment CA and answers the authenticated heartbeat with a 4xx/5xx. With one server this is easiest by temporarily revoking or force-removing this agent in the console and testing `ORIGINAL` | `Server rejected connection: server <code> on /api/heartbeat` (record the code you actually get; the revoked-agent case may fail at TLS instead and read `Certificate validation failed`) |
+| Listening port, no TLS | Any plain-HTTP service | `Host unreachable` or `Certificate validation failed` with the TLS error. Record which |
 
 Restore anything you revoked before continuing.
 
@@ -68,8 +70,13 @@ Restore anything you revoked before continuing.
 
 1. Use a second reachable server you control, or `ORIGINAL` written differently (for example the DNS name instead of
    the IP), so the change is real but still works.
-2. Click **Save**. Expect the warning text and **(click Save again to confirm)**. Nothing has been saved yet:
-   re-read the registry value, it must still be `ORIGINAL`.
+2. Click **Save**. Expect: "Saving switches this agent to the new server. It reconnects without restarting, which
+   may briefly interrupt connectivity; if it cannot reach the new server within 30 seconds, the previous server is
+   restored. Continue? (click Save again to confirm)". Nothing has been saved yet: re-read the registry value, it
+   must still be `ORIGINAL`.
+   **Edit-after-warning check:** change the host text now and click **Save**. Expect the same warning again (for the
+   new text), and still nothing saved. Only a second click on unchanged text saves. Put the intended host back before
+   confirming.
 3. Click **Save** again. Expect `Saving...`, then `Saved: Saved and reconnected` within about 30 seconds.
 4. Check: the registry value now holds exactly the text you entered; `agent.log` has
    `server host changed via Settings: <host>`; the status window reconnects.
@@ -95,7 +102,7 @@ without a reply.
 
 1. **A copy of the agent started by hand.** From a normal PowerShell prompt run the installed
    `bas_agent.exe --settings-window` (path from `sc qc "Audspect Agent"`). The window opens, but click **Test**
-   with a valid host: expect `host_unreachable: The Audspect Agent service on this computer did not answer, so the
+   with a valid host: expect `Host unreachable: The Audspect Agent service on this computer did not answer, so the
    server was not tested...`. Its parent is the shell, not the tray.
 2. **A script connecting directly.** In PowerShell:
    ```
@@ -137,20 +144,19 @@ Things to confirm specifically:
   Troubleshoot, and confirm check 2 still shows the real host.
 - Start the service again and **Retry** each check; all six should return to pass.
 
-## 9. Known mismatches to record (found by reading the code)
+## 9. Problems found while writing this checklist (now fixed in the code: confirm on your build)
 
-These are not failures of the steps above, but a tester should expect to see them:
-
-1. **The Save warning says the service will restart. It does not.** The warning reads "Saving will restart the agent
-   service and may briefly interrupt connectivity." In fact `handleSetServer` writes the registry and hot-swaps the
-   running process's configuration (the same way the mTLS upgrade does), because restarting the service from inside
-   itself would kill the code that verifies and rolls back. The design spec said "restart"; the implementation
-   chose not to, and the wording was not updated. Expect a brief reconnect, not a service restart.
-2. **Results show raw outcome codes.** Test prints `connected: Connected`, `cert_invalid: ...`; the design named
-   the five outcomes "Connected / Server rejected connection / Certificate validation failed / Host unreachable /
-   Invalid host".
-3. **The "click Save again" confirmation is not reset when you edit the host.** After the first Save click shows the
-   warning, changing the text and clicking Save again saves the **edited** host without a fresh warning.
+1. **The Save warning used to say the service would restart. It does not restart.** Save writes the registry and
+   hot-swaps the running process's configuration, because restarting the service from inside itself would kill the
+   code that verifies and rolls back. The warning now says the agent reconnects without restarting and that the
+   previous server is restored if the new one is not reachable within 30 seconds. (Step 5.2.)
+2. **Test results used to show raw outcome codes** (`cert_invalid: ...`). They now show the five plain-language names
+   from the design. (Sections 2 to 4.)
+3. **Editing the host after the Save warning.** This was first written up wrongly as "the edited host is saved without
+   a fresh warning". It was not: the old text was refused, but the message said "click Save again" and that click only
+   showed the warning again, so it took two extra clicks. The confirmation now follows the text on screen: an edit
+   gives a fresh warning for the new host on the next click, and a save always needs a click on unchanged text.
+   (Step 5.2, "Edit-after-warning check".)
 
 ## 10. Recording the result
 

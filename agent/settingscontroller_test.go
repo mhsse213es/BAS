@@ -105,3 +105,56 @@ func TestSettingsTest_ALocalAgentFailureIsNotBlamedOnTheServer(t *testing.T) {
 		t.Errorf("detail = %q must not claim the server was unreachable", detail)
 	}
 }
+
+// The Save warning must describe what Save really does. It used to say "will restart the agent service"; Save
+// hot-swaps the live configuration and reconnects, and restores the previous host if the new one cannot be reached.
+func TestSettingsController_SaveWarning_DescribesWhatSaveActuallyDoes(t *testing.T) {
+	c := NewSettingsController(&fakeSettingsMutateClient{})
+	_, warning := c.RequestSave("https://10.0.0.5:9443")
+	lower := strings.ToLower(warning)
+	if strings.Contains(lower, "restart the agent service") {
+		t.Errorf("the warning claims a service restart that does not happen: %q", warning)
+	}
+	for _, want := range []string{"reconnect", "previous"} {
+		if !strings.Contains(lower, want) {
+			t.Errorf("warning %q does not mention %q", warning, want)
+		}
+	}
+}
+
+// One Save click shows the warning; the next click with the same text commits. Editing the text in between starts
+// over with a fresh warning for the NEW host, so the confirmation is never carried to a host the user did not confirm.
+func TestSettingsController_NeedsConfirmation_FollowsTheTextOnScreen(t *testing.T) {
+	c := NewSettingsController(&fakeSettingsMutateClient{setOK: true})
+
+	if need, warning := c.NeedsConfirmation("https://a:9443"); !need || warning == "" {
+		t.Fatal("first click must warn and wait")
+	}
+	if need, _ := c.NeedsConfirmation("https://a:9443"); need {
+		t.Fatal("second click on the same text must go ahead")
+	}
+	// the user confirms and the save runs: the confirmation is spent
+	c.ConfirmSave("https://a:9443")
+	if need, _ := c.NeedsConfirmation("https://a:9443"); !need {
+		t.Fatal("after a save the next click must warn again")
+	}
+
+	// edit after the warning: the old confirmation does not apply to the new text
+	c.NeedsConfirmation("https://b:9443")
+	if need, warning := c.NeedsConfirmation("https://c:9443"); !need || warning == "" {
+		t.Fatal("editing the host after the warning must produce a fresh warning, not a save")
+	}
+	if need, _ := c.NeedsConfirmation("https://c:9443"); need {
+		t.Fatal("confirming the edited text must then go ahead")
+	}
+}
+
+func TestSettingsController_NeedsConfirmation_NeverConfirmsAnEmptyHost(t *testing.T) {
+	c := NewSettingsController(&fakeSettingsMutateClient{})
+	if need, _ := c.NeedsConfirmation(""); !need {
+		t.Fatal("an empty host must not be treated as already confirmed")
+	}
+	if need, _ := c.NeedsConfirmation(""); !need {
+		t.Fatal("an empty host must keep asking")
+	}
+}

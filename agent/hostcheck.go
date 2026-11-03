@@ -40,6 +40,38 @@ const (
 	TestOutcomeInvalidHost     TestOutcome = "invalid_host"
 )
 
+// Label is the outcome's plain-language name, the one the Settings window shows. An outcome this build does not know
+// is shown as its own code rather than hidden or mislabelled.
+func (o TestOutcome) Label() string {
+	switch o {
+	case TestOutcomeConnected:
+		return "Connected"
+	case TestOutcomeServerRejected:
+		return "Server rejected connection"
+	case TestOutcomeCertInvalid:
+		return "Certificate validation failed"
+	case TestOutcomeHostUnreachable:
+		return "Host unreachable"
+	case TestOutcomeInvalidHost:
+		return "Invalid host"
+	}
+	return string(o)
+}
+
+// FormatTestResult is the line the Settings window shows for a Test: the outcome's label, then the detail when it
+// adds something. It never repeats itself ("Connected: Connected") and never shows an internal code.
+func FormatTestResult(o TestOutcome, detail string) string {
+	label := o.Label()
+	detail = strings.TrimSpace(detail)
+	if p := strings.ToLower(label) + ":"; strings.HasPrefix(strings.ToLower(detail), p) {
+		detail = strings.TrimSpace(detail[len(p):])
+	}
+	if detail == "" || strings.EqualFold(detail, label) {
+		return label
+	}
+	return label + ": " + detail
+}
+
 // ClassifyTestResult classifies a connectivity test from the error (or nil)
 // of its TLS dial step and the error (or nil) of the authenticated call
 // that followed. A completed TLS handshake is never, by itself, reported
