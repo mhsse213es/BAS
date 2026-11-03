@@ -7,6 +7,9 @@ import { chartSlot, CHART_COLORS } from '../core/charts.js';
 import { hbarRows } from './rich-g3.js';
 import { setHeroStat } from './shell-ui.js';
 import * as M from './ver-model.js';
+import { setDisplay } from '../core/inline-style.js';
+import * as DC from './dc-model.js';
+import { dcShow, dcEnabledCount } from './detection-connectors.js';
 
 
 // ── Detection Verification (SP2) ───────────────────────────────────────────
@@ -41,11 +44,11 @@ function vfStatusLabel(s) {
 
 export function loadVerificationTab() {
   // Load caller permissions once so controls can be enabled/disabled.
-  if (!VF.perms) {
-    apicall('/api/me/permissions').then(function(d) {
-      VF.perms = (d && d.permissions) || [];
-    }).catch(function(){ VF.perms = []; });
-  }
+  var permsReady = VF.perms ? Promise.resolve() : apicall('/api/me/permissions').then(function(d) {
+    VF.perms = (d && d.permissions) || [];
+  }).catch(function(){ VF.perms = []; });
+  // The connectors card and the Verify now button depend on what the caller may do.
+  permsReady.then(function() { dcShow(VF.perms); vfSyncVerifyNow(); });
   // Populate the run selector (reuse the runs list).
   apicall('/api/scenarios/runs').then(function(runs) {
     var sel = document.getElementById('vf-run');
@@ -58,6 +61,24 @@ export function loadVerificationTab() {
     sel.innerHTML = opts;
     if (cur) vfLoadQueue();
   }).catch(function(e){ showToast(e.message, 'err'); });
+}
+
+// Verify now is offered only to someone allowed to run it, and only once a run is picked.
+function vfSyncVerifyNow() {
+  var b = document.getElementById('vf-verify-now');
+  if (b) setDisplay(b, (DC.canRun(VF.perms) && VF.runId) ? '' : 'none');
+}
+
+// Asks the server to check the picked run against the enabled detection connectors. The server does it in the
+// background and attests what it finds, so the queue is reloaded once after a short wait instead of at once.
+export function vfVerifyNow() {
+  var runId = VF.runId;
+  if (!runId) { showToast('Pick a run first.', 'err'); return; }
+  if (dcEnabledCount() === 0) { showToast('No detection connector is enabled. Add one above, then try again.', 'err'); return; }
+  apicall('/api/detectverify/run/' + encodeURIComponent(runId), { method: 'POST' }).then(function(d) {
+    showToast((d && d.message) || 'Verification started.', 'ok');
+    setTimeout(function() { if (VF.runId === runId) vfLoadQueue(); }, 10000);
+  }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
 // The banner numbers; with no run (or a failed load) every chip shows an em dash.
@@ -95,6 +116,7 @@ export function vfLoadQueue() {
     T = { q: '', col: -1, dir: 1, page: 0, per: T.per, sel: {}, hidden: T.hidden };
   }
   VF.runId = runId;
+  vfSyncVerifyNow();
   VF.selected = '';
   vfCloseDetail();
   var box = document.getElementById('vf-queue');

@@ -103,3 +103,53 @@ test('drawers open and render with no errors', async ({ page }) => {
   expect(await page.evaluate(() => window.__xss), 'a fixture payload executed').toBeUndefined();
   expect(problems).toEqual([]);
 });
+
+// Detection Verification > Detection connectors: the add form shows the provider's own fields, refuses an
+// incomplete form without calling the server, and posts the body the server expects (enabled explicit, unused
+// fields empty, no secret echoed back anywhere).
+test('detection connectors: add form validates and posts the expected body', async ({ page }) => {
+  const errors = await boot(page);
+  const posts = [];
+  await page.route('**/api/detectverify/configs', (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    posts.push(JSON.parse(route.request().postData() || '{}'));
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'dc-new' }) });
+  });
+  await openTab(page, 'verification');
+  await expect(page.locator('#dc-card')).toBeVisible();
+
+  await page.click('[data-on-click="dcAdd"]');
+  await page.selectOption('#dc-provider', 'splunk');
+  await expect(page.locator('#dc-f-baseUrl')).toBeVisible();
+  await expect(page.locator('#dc-f-tenantId')).toHaveCount(0); // a Sentinel field must not show for Splunk
+
+  await page.fill('#dc-name', 'Prod Splunk');
+  await page.click('[data-on-click="dcSave"]'); // base URL and token still empty
+  expect(posts).toHaveLength(0);
+
+  await page.fill('#dc-f-baseUrl', 'https://splunk.example:8089');
+  await page.fill('#dc-f-apiToken', 'tok-123');
+  await page.click('[data-on-click="dcSave"]');
+  await expect.poll(() => posts.length).toBe(1);
+  expect(posts[0]).toMatchObject({ provider: 'splunk', name: 'Prod Splunk', enabled: true, autoVerify: false,
+    baseUrl: 'https://splunk.example:8089', apiToken: 'tok-123', tenantId: '', workspaceId: '', clientId: '', verifyDelaySeconds: 120 });
+  expect(await page.evaluate(() => window.__xss)).toBeUndefined();
+  // the earlier (intentional) validation toast is an error toast; nothing else may be
+  expect(errors.filter((e) => !/toast: (Name|Base URL|API token)/.test(e) && !/toast: .* is required/.test(e))).toEqual(expect.not.arrayContaining([expect.stringMatching(/pageerror|csp:/)]));
+});
+
+test('detection connectors: Verify now appears once a run is picked', async ({ page }) => {
+  await boot(page);
+  const calls = [];
+  await page.route('**/api/detectverify/run/**', (route) => {
+    calls.push(route.request().url());
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'verifying', message: 'started' }) });
+  });
+  await openTab(page, 'verification');
+  await expect(page.locator('#vf-verify-now')).toBeHidden();
+  await page.selectOption('#vf-run', 'run-smoke-1');
+  await expect(page.locator('#vf-verify-now')).toBeVisible();
+  await page.click('#vf-verify-now');
+  await expect.poll(() => calls.length).toBe(1);
+  expect(calls[0]).toContain('/api/detectverify/run/run-smoke-1');
+});

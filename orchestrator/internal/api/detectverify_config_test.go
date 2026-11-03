@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/audspect/bas/internal/detectverify"
@@ -231,6 +232,53 @@ func TestTestDetectionConnector_SuccessAndFailure(t *testing.T) {
 		json.Unmarshal(rec2.Body.Bytes(), &out2)
 		if out2.OK || out2.Error == "" {
 			t.Fatalf("expected ok:false with an error, got %+v", out2)
+		}
+	})
+}
+
+// The console's edit form needs the client ID (not secret) and to know whether a secret/token is already
+// stored, so it can show "set" and send "***" to keep it. The values themselves must never be returned.
+func TestListDetectionConnectors_ExposesClientIDAndSecretPresenceNotValues(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := detectverifyHandler(t, pool)
+		create := func(body map[string]any) {
+			rec := httptest.NewRecorder()
+			h.CreateDetectionConnector(rec, detectverifyConfigReq(body))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("create %v: status = %d %s", body["name"], rec.Code, rec.Body.String())
+			}
+		}
+		create(map[string]any{"name": "Falcon", "provider": "crowdstrike", "baseUrl": "https://api.example", "clientId": "cid-123", "clientSecret": "TOP-SECRET-VALUE"})
+		create(map[string]any{"name": "Splunk", "provider": "splunk", "baseUrl": "https://splunk:8089", "apiToken": "TOKEN-VALUE-XYZ"})
+		create(map[string]any{"name": "Bare", "provider": "microsoft_defender", "tenantId": "t1"})
+
+		rec := httptest.NewRecorder()
+		h.ListDetectionConnectors(rec, httptest.NewRequest(http.MethodGet, "/api/detectverify/configs", nil))
+		body := rec.Body.String()
+		for _, secret := range []string{"TOP-SECRET-VALUE", "TOKEN-VALUE-XYZ"} {
+			if strings.Contains(body, secret) {
+				t.Fatalf("the list response contains a stored secret %q: %s", secret, body)
+			}
+		}
+		var out []map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		by := map[string]map[string]any{}
+		for _, c := range out {
+			by[c["name"].(string)] = c
+		}
+		if by["Falcon"]["clientId"] != "cid-123" || by["Falcon"]["hasClientSecret"] != true || by["Falcon"]["hasApiToken"] != false {
+			t.Errorf("Falcon = %+v, want clientId cid-123, hasClientSecret true, hasApiToken false", by["Falcon"])
+		}
+		if by["Splunk"]["hasApiToken"] != true || by["Splunk"]["hasClientSecret"] != false {
+			t.Errorf("Splunk = %+v, want hasApiToken true, hasClientSecret false", by["Splunk"])
+		}
+		if by["Bare"]["hasApiToken"] != false || by["Bare"]["hasClientSecret"] != false {
+			t.Errorf("Bare = %+v, want no stored secret or token", by["Bare"])
 		}
 	})
 }

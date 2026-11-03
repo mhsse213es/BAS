@@ -62,3 +62,19 @@
 #vf-drawer-overlay .sc-dh-t { text-transform: none; }
 .vf-dr-state { margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 #vf-drawer-overlay .sec-label { margin: 16px 0 8px; }
+
+/* Detection connectors card */
+.vf-run { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.vf-run-pick { flex: 1 1 280px; }
+.vf-run .btn[hidden] { display: none; }
+.dc-card .rk-hd { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dc-sub { margin: 0 16px 10px; color: var(--muted); font-size: 12.5px; }
+.dc-actions { white-space: nowrap; text-align: right; }
+.dc-form-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.dc-form-foot { margin-top: 12px; display: flex; gap: 8px; }
+.dc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 10px; }
+.dc-hint { margin: 0 0 10px; }
+.dc-check { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; }
+#dc-form { margin: 0 16px 16px; }
+.dc-card .rk-hd .btn, .dc-form-foot .btn, .dc-form-head .btn { width: auto; flex: none; }
+.dc-card .rk-hd { padding-right: 16px; }

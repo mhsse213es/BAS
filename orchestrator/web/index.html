@@ -2179,11 +2179,21 @@
           <div class="vf-fs"><span class="vf-fs-n">4</span><span class="vf-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/></svg></span><div><b>Audit log</b><div class="muted">Every action is written to the audit log</div></div></div>
         </div>
 
+        <section class="rk-card flush dc-card is-hidden" id="dc-card">
+          <div class="rk-hd"><h2>Detection connectors</h2><button type="button" class="btn btn-sm btn-primary" data-on-click="dcAdd">+ Add connector</button></div>
+          <p class="dc-sub">Connect the SIEM or XDR your endpoints report to. The server then checks each run against it automatically; otherwise an analyst has to attest every item by hand.</p>
+          <div id="dc-list"></div>
+          <div id="dc-form" class="is-hidden"></div>
+        </section>
+
         <div class="rk-card vf-run">
-          <div class="vf-run-lbl">RUN</div>
-          <select id="vf-run" data-on-change="vfLoadQueue" class="g1-s-8ce8e97e" aria-label="Run">
-            <option value="">Select a run…</option>
-          </select>
+          <div class="vf-run-pick">
+            <div class="vf-run-lbl">RUN</div>
+            <select id="vf-run" data-on-change="vfLoadQueue" class="g1-s-8ce8e97e" aria-label="Run">
+              <option value="">Select a run…</option>
+            </select>
+          </div>
+          <button type="button" id="vf-verify-now" class="btn btn-sm btn-outline is-hidden" data-on-click="vfVerifyNow" title="Check this run against the enabled detection connectors now">Verify now</button>
         </div>
 
         <div id="vf-queue">

@@ -22,7 +22,8 @@ import (
 func (h *Handler) ListDetectionConnectors(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
 		`SELECT id, name, provider, enabled, auto_verify, azure_tenant_id, workspace_id, base_url,
-		        insecure_tls, verify_delay_seconds, created_at, updated_at
+		        insecure_tls, verify_delay_seconds, created_at, updated_at,
+		        client_id, client_secret <> '', api_token <> ''
 		   FROM detection_connectors ORDER BY created_at ASC`)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -42,12 +43,18 @@ func (h *Handler) ListDetectionConnectors(w http.ResponseWriter, r *http.Request
 		VerifyDelaySeconds int       `json:"verifyDelaySeconds"`
 		CreatedAt          time.Time `json:"createdAt"`
 		UpdatedAt          time.Time `json:"updatedAt"`
+		// ClientID is an identifier, not a secret. The secret and token are never returned; the console only
+		// learns whether one is stored, so it can show "set" and send "***" to keep it on update.
+		ClientID        string `json:"clientId"`
+		HasClientSecret bool   `json:"hasClientSecret"`
+		HasAPIToken     bool   `json:"hasApiToken"`
 	}
 	var out []row
 	for rows.Next() {
 		var rv row
 		if err := rows.Scan(&rv.ID, &rv.Name, &rv.Provider, &rv.Enabled, &rv.AutoVerify,
-			&rv.TenantID, &rv.WorkspaceID, &rv.BaseURL, &rv.InsecureTLS, &rv.VerifyDelaySeconds, &rv.CreatedAt, &rv.UpdatedAt); err != nil {
+			&rv.TenantID, &rv.WorkspaceID, &rv.BaseURL, &rv.InsecureTLS, &rv.VerifyDelaySeconds, &rv.CreatedAt, &rv.UpdatedAt,
+			&rv.ClientID, &rv.HasClientSecret, &rv.HasAPIToken); err != nil {
 			continue
 		}
 		out = append(out, rv)
