@@ -2,26 +2,26 @@
   "attribution": "Detection rules are from the SigmaHQ project (https://github.com/SigmaHQ/sigma), licensed under the Detection Rule License (DRL) 1.1. Each rule keeps its original author, title, id and references; the per-SIEM queries are generated from the rule by Audspect.",
   "backends": {
     "crowdstrike": 1907,
-    "elastic": 2096,
+    "elastic": 2093,
     "microsoft_defender": 2052,
     "microsoft_sentinel": 2006,
     "qradar": 1753,
-    "splunk": 2104
+    "splunk": 2099
   },
-  "generatedAt": "2026-11-03T11:24:09.935019+00:00",
+  "generatedAt": "2026-11-03T11:40:59.213677+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
     "crowdstrike:generic": 873,
     "crowdstrike:pipeline": 1034,
-    "elastic:generic": 399,
-    "elastic:pipeline": 1697,
+    "elastic:generic": 318,
+    "elastic:pipeline": 1775,
     "microsoft_defender:generic": 779,
     "microsoft_defender:pipeline": 1273,
-    "microsoft_sentinel:generic": 585,
-    "microsoft_sentinel:pipeline": 1421,
+    "microsoft_sentinel:generic": 570,
+    "microsoft_sentinel:pipeline": 1436,
     "qradar:generic": 1753,
-    "splunk:generic": 422,
-    "splunk:pipeline": 1682
+    "splunk:generic": 291,
+    "splunk:pipeline": 1808
   },
   "ruleCount": 2104,
   "schemaVersion": 2,
@@ -53,6 +53,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000009",
       "sigmaId": "00ba9da1-b510-4f6b-b258-8d338836180f"
+    },
+    {
+      "backend": "splunk",
+      "reason": "SigmaTransformationError: Field c-uri-extension has no equivalent in the Splunk CIM Web pipeline",
+      "ruleId": "AUDRULE-000011",
+      "sigmaId": "00d0b5ab-1f55-4120-8e83-487c0a7baf19"
     },
     {
       "backend": "qradar",
@@ -421,6 +427,12 @@
       "sigmaId": "192a0330-c20b-4356-90b6-7b7049ae0b87"
     },
     {
+      "backend": "splunk",
+      "reason": "SigmaTransformationError: Field c-uri-extension has no equivalent in the Splunk CIM Web pipeline",
+      "ruleId": "AUDRULE-000212",
+      "sigmaId": "195c1119-ef07-4909-bb12-e66f5e07bf3c"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000220",
@@ -440,7 +452,7 @@
     },
     {
       "backend": "elastic",
-      "reason": "SigmaTransformationError: Field requestParameters.attribute has no ECS equivalent in the AWS CloudTrail pipeline",
+      "reason": "SigmaTransformationError: Field requestParameters.attribute has no equivalent in the AWS CloudTrail pipeline",
       "ruleId": "AUDRULE-000226",
       "sigmaId": "1ab3c5ed-5baf-417b-bb6b-78ca33f6c3df"
     },
@@ -455,6 +467,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000227",
       "sigmaId": "1ac14d38-3dfc-4635-92c7-e3fd1c5f5bfc"
+    },
+    {
+      "backend": "splunk",
+      "reason": "SigmaTransformationError: Field dst_ip has no equivalent in the Splunk CIM Web pipeline",
+      "ruleId": "AUDRULE-000229",
+      "sigmaId": "1ae64f96-72b6-48b3-ad3d-e71dff6c6398"
     },
     {
       "backend": "crowdstrike",
@@ -572,7 +590,7 @@
     },
     {
       "backend": "elastic",
-      "reason": "SigmaTransformationError: Field LogonId has no ECS equivalent in the Linux process pipeline",
+      "reason": "SigmaTransformationError: Field LogonId has no equivalent in the Linux process pipeline",
       "ruleId": "AUDRULE-000286",
       "sigmaId": "21541900-27a9-4454-9c4c-3f0a4240344a"
     },
@@ -1183,6 +1201,12 @@
       "sigmaId": "4fd6b1c7-19b8-4488-97f6-00f0924991a3"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000653",
+      "sigmaId": "503fe26e-b5f2-4944-a126-eab405cc06e5"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000657",
@@ -1658,7 +1682,7 @@
     },
     {
       "backend": "elastic",
-      "reason": "SigmaTransformationError: Field LogonId has no ECS equivalent in the Linux process pipeline",
+      "reason": "SigmaTransformationError: Field LogonId has no equivalent in the Linux process pipeline",
       "ruleId": "AUDRULE-000882",
       "sigmaId": "6eea1bf6-f8d2-488a-a742-e6ef6c1b67db"
     },
@@ -1841,6 +1865,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000955",
       "sigmaId": "762f2482-ff21-4970-8939-0aa317a886bb"
+    },
+    {
+      "backend": "elastic",
+      "reason": "SigmaTransformationError: Field data.protoPayload.resource.type has no equivalent in the GCP audit pipeline",
+      "ruleId": "AUDRULE-000957",
+      "sigmaId": "76737c19-66ee-4c07-b65a-a03301d1573d"
     },
     {
       "backend": "crowdstrike",
@@ -2240,7 +2270,7 @@
     },
     {
       "backend": "elastic",
-      "reason": "SigmaTransformationError: Field responseElements.pendingModifiedValues.masterUserPassword has no ECS equivalent in the AWS CloudTrail pipeline",
+      "reason": "SigmaTransformationError: Field responseElements.pendingModifiedValues.masterUserPassword has no equivalent in the AWS CloudTrail pipeline",
       "ruleId": "AUDRULE-001136",
       "sigmaId": "8a63cdd4-6207-414a-85bc-7e032bd3c1a2"
     },
@@ -2336,7 +2366,7 @@
     },
     {
       "backend": "elastic",
-      "reason": "SigmaTransformationError: Field userIdentity.sessionContext.sessionIssuer.type has no ECS equivalent in the AWS CloudTrail pipeline",
+      "reason": "SigmaTransformationError: Field userIdentity.sessionContext.sessionIssuer.type has no equivalent in the AWS CloudTrail pipeline",
       "ruleId": "AUDRULE-001173",
       "sigmaId": "905d389b-b853-46d0-9d3d-dea0d3a3cd49"
     },
@@ -2684,7 +2714,7 @@
     },
     {
       "backend": "elastic",
-      "reason": "SigmaTransformationError: Field requestParameters has no ECS equivalent in the AWS CloudTrail pipeline",
+      "reason": "SigmaTransformationError: Field requestParameters has no equivalent in the AWS CloudTrail pipeline",
       "ruleId": "AUDRULE-001337",
       "sigmaId": "a136ac98-b2bc-4189-a14d-f0d0388e57a7"
     },
@@ -2935,6 +2965,12 @@
       "sigmaId": "b5de0c9a-6f19-43e0-af4e-55ad01f550af"
     },
     {
+      "backend": "splunk",
+      "reason": "SigmaTransformationError: Field c-uri-extension has no equivalent in the Splunk CIM Web pipeline",
+      "ruleId": "AUDRULE-001502",
+      "sigmaId": "b5de2919-b74a-4805-91a7-5049accbaefe"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_schtasks_powershell_persistence.yml",
       "ruleId": "AUDRULE-001507",
@@ -3140,7 +3176,7 @@
     },
     {
       "backend": "elastic",
-      "reason": "SigmaTransformationError: Field responseElements.publiclyAccessible has no ECS equivalent in the AWS CloudTrail pipeline",
+      "reason": "SigmaTransformationError: Field responseElements.publiclyAccessible has no equivalent in the AWS CloudTrail pipeline",
       "ruleId": "AUDRULE-001615",
       "sigmaId": "c3f265c7-ff03-4056-8ab2-d486227b4599"
     },
@@ -3470,7 +3506,7 @@
     },
     {
       "backend": "elastic",
-      "reason": "SigmaTransformationError: Field requestParameters.enable has no ECS equivalent in the AWS CloudTrail pipeline",
+      "reason": "SigmaTransformationError: Field requestParameters.enable has no equivalent in the AWS CloudTrail pipeline",
       "ruleId": "AUDRULE-001728",
       "sigmaId": "d2656e78-c069-4571-8220-9e0ab5913f19"
     },
@@ -4097,6 +4133,18 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-002000",
       "sigmaId": "f376c8a7-a2d0-4ddc-aa0c-16c17236d962"
+    },
+    {
+      "backend": "splunk",
+      "reason": "SigmaTransformationError: Field cs-cookie has no equivalent in the Splunk CIM Web pipeline",
+      "ruleId": "AUDRULE-002005",
+      "sigmaId": "f3f21ce1-cdef-4bfc-8328-ed2e826f5fac"
+    },
+    {
+      "backend": "elastic",
+      "reason": "SigmaTransformationError: Field cs-cookie has no equivalent in the ECS web pipeline",
+      "ruleId": "AUDRULE-002005",
+      "sigmaId": "f3f21ce1-cdef-4bfc-8328-ed2e826f5fac"
     },
     {
       "backend": "microsoft_sentinel",

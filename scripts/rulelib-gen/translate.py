@@ -25,6 +25,8 @@ from sigma.collection import SigmaCollection
 from sigma.pipelines.azuremonitor import azure_monitor_pipeline
 from sigma.pipelines.crowdstrike import crowdstrike_fdr_pipeline
 from sigma.pipelines.elasticsearch.windows import ecs_windows
+from sigma.pipelines.elasticsearch.zeek import ecs_zeek_beats
+from sigma.pipelines.elasticsearch.kubernetes import ecs_kubernetes
 from sigma.pipelines.microsoft365defender import microsoft_365_defender_pipeline
 from sigma.pipelines.microsoftxdr import microsoft_xdr_pipeline
 from sigma.pipelines.splunk import splunk_windows_pipeline
@@ -53,9 +55,23 @@ WINDOWS_EVENTLOG = "windows_eventlog"
 # Windows categories (Sysmon and others) mapped by the long-tail tables at the end of this module.
 WINDOWS_TAIL_CATEGORIES = (
     "process_access", "dns_query", "pipe_created", "driver_load", "create_remote_thread",
-    "registry_event", "registry_delete", "file_delete", "ps_classic_start",
+    "registry_event", "registry_delete", "file_delete", "ps_classic_start", "ps_classic_provider_start",
+    "wmi_event", "sysmon_status", "sysmon_error", "file_executable_detected", "process_tampering",
 )
 AZURE_ACTIVITYLOGS = "azure_activitylogs"
+AZURE_RISKDETECTION = "azure_riskdetection"
+# (product, service, category) of the small log sources -> family. Empty string = the rule does not set it.
+SMALL_SOURCE_FAMILIES = {
+    ("", "", "proxy"): "web_proxy", ("", "", "webserver"): "web_server", ("", "apache", ""): "web_server",
+    ("", "", "dns"): "dns_log", ("", "", "antivirus"): "antivirus_log",
+    ("linux", "auditd", ""): "linux_auditd",
+    ("cisco", "aaa", ""): "cisco_ios", ("cisco", "ldp", ""): "cisco_ios", ("cisco", "bgp", ""): "cisco_ios",
+    ("okta", "okta", ""): "okta",
+    ("kubernetes", "audit", ""): "k8s_audit", ("kubernetes", "audit", "application"): "k8s_audit",
+    ("gcp", "gcp.audit", ""): "gcp_audit",
+    ("opencanary", "", "application"): "opencanary", ("bitbucket", "audit", ""): "bitbucket_audit",
+    **{("zeek", svc, ""): "zeek_log" for svc in ("dns", "http", "smb_files", "rdp", "kerberos", "dce_rpc")},
+}
 AZURE_AUDITLOGS = "azure_auditlogs"
 AZURE_SIGNINLOGS = "azure_signinlogs"
 
@@ -96,7 +112,9 @@ class UnmappedFieldFailure(DetectionItemTransformation):
         self.label = label
 
     def apply_detection_item(self, detection_item):
-        raise SigmaTransformationError(f"Field {detection_item.field} has no ECS equivalent in the {self.label} pipeline")
+        if detection_item.field is None:  # a keyword (free-text) item has no field to map
+            return
+        raise SigmaTransformationError(f"Field {detection_item.field} has no equivalent in the {self.label} pipeline")
 
 
 def _ecs_unix_process_pipeline(product: str, label: str) -> ProcessingPipeline:
@@ -167,6 +185,10 @@ def sentinel_azure_activity_pipeline() -> ProcessingPipeline:
 def sentinel_azure_audit_pipeline() -> ProcessingPipeline:
     # Sigma's properties.message on Entra audit logs holds the operation name (for example "Add member to role").
     return _azure_pipeline("auditlogs", "AuditLogs", {"properties.message": "OperationName"})
+
+
+def sentinel_azure_risk_pipeline() -> ProcessingPipeline:
+    return _azure_pipeline("riskdetection", "AADUserRiskEvents", {"riskEventType": "RiskEventType"})
 
 
 def sentinel_azure_signin_pipeline() -> ProcessingPipeline:
@@ -365,6 +387,11 @@ BACKENDS: dict[str, BackendSpec] = {
             sentinel_azure_audit_pipeline, "audspect_sentinel_azure_auditlogs + azure_monitor_pipeline (query table AuditLogs)",
             "Microsoft Entra audit logs in the AuditLogs table of the Log Analytics workspace (Microsoft Entra ID connector). "
             "Sigma's properties.message is matched as OperationName",
+            "pysigma-backend-kusto"),
+        AZURE_RISKDETECTION: Mapping(
+            sentinel_azure_risk_pipeline, "audspect_sentinel_azure_riskdetection + azure_monitor_pipeline (query table AADUserRiskEvents)",
+            "Microsoft Entra ID Protection risk detections in the AADUserRiskEvents table of the Log Analytics workspace (Microsoft Entra ID "
+            "connector, risk events enabled). Sigma's riskEventType is matched as RiskEventType",
             "pysigma-backend-kusto"),
         AZURE_SIGNINLOGS: Mapping(
             sentinel_azure_signin_pipeline, "azure_monitor_pipeline (query table SigninLogs)",
@@ -587,6 +614,11 @@ _SYSMON_SPLUNK = {   # category -> (event codes, what the event is)
     "registry_event": ((12, 13, 14), "registry object created or deleted, value set, key or value renamed"),
     "registry_delete": ((12,), "registry object deleted"),
     "file_delete": ((23, 26), "file delete archived / detected"),
+    "wmi_event": ((19, 20, 21), "WMI event filter / consumer / binding"),
+    "sysmon_status": ((4, 16), "Sysmon service state / configuration change"),
+    "sysmon_error": ((255,), "Sysmon error"),
+    "file_executable_detected": ((29,), "executable file written"),
+    "process_tampering": ((25,), "process image tampering"),
 }
 
 
@@ -614,10 +646,14 @@ def splunk_ps_classic_start_pipeline() -> ProcessingPipeline:
 
 
 def ecs_ps_classic_start_pipeline() -> ProcessingPipeline:
+    return _ecs_ps_classic("ps_classic_start", "400")
+
+
+def _ecs_ps_classic(category: str, code: str) -> ProcessingPipeline:
     add = ProcessingPipeline(items=[ProcessingItem(
-        identifier="audspect_ecs_ps_classic_start",
-        transformation=AddConditionTransformation({"winlog.channel": "Windows PowerShell", "event.code": "400"}),
-        rule_conditions=[LogsourceCondition(category="ps_classic_start", product="windows")],
+        identifier=f"audspect_ecs_{category}",
+        transformation=AddConditionTransformation({"winlog.channel": "Windows PowerShell", "event.code": code}),
+        rule_conditions=[LogsourceCondition(category=category, product="windows")],
     )], priority=100)
     return ecs_windows() + add
 
@@ -637,6 +673,15 @@ def _register_long_tail() -> None:
     elastic["windows_ps_classic_start"] = Mapping(
         ecs_ps_classic_start_pipeline, "ecs_windows + audspect_ecs_ps_classic_start",
         "Windows PowerShell classic log, event 400, in ECS field names (Winlogbeat, winlog.channel Windows PowerShell)",
+        "pysigma-backend-elasticsearch")
+    splunk["windows_ps_classic_provider_start"] = Mapping(
+        lambda: _splunk_condition_pipeline("audspect_splunk_ps_classic_provider_start", "ps_classic_provider_start",
+                                           {"source": "WinEventLog:Windows PowerShell", "EventCode": 600}),
+        "audspect_splunk_ps_classic_provider_start",
+        "Windows PowerShell classic log, event 600 (provider lifecycle), indexed by Splunk (source WinEventLog:Windows PowerShell)", "")
+    elastic["windows_ps_classic_provider_start"] = Mapping(
+        lambda: _ecs_ps_classic("ps_classic_provider_start", "600"), "ecs_windows + audspect_ecs_ps_classic_provider_start",
+        "Windows PowerShell classic log, event 600, in ECS field names (Winlogbeat, winlog.channel Windows PowerShell)",
         "pysigma-backend-elasticsearch")
     for category, events in (("dns_query", "22"), ("registry_event", "12, 13, 14"), ("registry_delete", "12")):
         elastic[f"windows_{category}"] = Mapping(
@@ -673,6 +718,127 @@ def _register_long_tail() -> None:
 _register_long_tail()
 
 
+# ── Small log sources ────────────────────────────────────────────────────────────────────────────────────────
+# Mapped only where the product's field names are documented (or are Sigma's own names); everything else stays generic.
+# Splunk uses the CIM names where a CIM data model covers the source. Unverified against live data unless stated.
+WEB_CIM = {
+    "c-uri": "url", "cs-uri": "url", "cs-uri-query": "uri_query", "cs-method": "http_method", "c-useragent": "http_user_agent",
+    "cs-user-agent": "http_user_agent", "cs-host": "url_domain", "cs-referer": "http_referrer", "sc-status": "status",
+}
+WEB_ECS = {
+    "c-uri": "url.original", "cs-uri": "url.original", "cs-uri-query": "url.query", "c-uri-extension": "url.extension",
+    "cs-method": "http.request.method", "c-useragent": "user_agent.original", "cs-user-agent": "user_agent.original",
+    "cs-host": "url.domain", "cs-referer": "http.request.referrer", "sc-status": "http.response.status_code",
+    "dst_ip": "destination.ip", "r-dns": "url.domain",
+}
+DNS_CIM = {"query": "query", "record_type": "record_type", "answer": "answer"}
+DNS_ECS = {"query": "dns.question.name", "record_type": "dns.question.type", "answer": "dns.answers.data"}
+
+
+def _source_pipeline(name: str, shapes: list, fields: dict | None = None, conditions: dict | None = None,
+                     label: str = "", field_pattern: str = "") -> Callable[[], ProcessingPipeline]:
+    """A pipeline for one log source (one or more log-source shapes): rename fields, fail the rule on a field with no
+    equivalent, add source conditions. Fresh condition objects per item, as pySigma requires."""
+    def build() -> ProcessingPipeline:
+        def lc():
+            return [LogsourceCondition(**{k: v for k, v in s.items() if v}) for s in shapes]
+        items = []
+        if fields:
+            items.append(ProcessingItem(identifier=f"{name}_fields", transformation=FieldMappingTransformation(dict(fields)),
+                                        rule_conditions=lc(), rule_condition_linking=any))
+        if label and (fields or field_pattern):
+            known = ExcludeFieldCondition(fields=[field_pattern], mode="re") if field_pattern else ExcludeFieldCondition(fields=list(fields.values()))
+            items.append(ProcessingItem(identifier=f"{name}_unmapped", transformation=UnmappedFieldFailure(label),
+                                        field_name_conditions=[known], rule_conditions=lc(), rule_condition_linking=any))
+        if conditions:
+            items.append(ProcessingItem(identifier=f"{name}_source", transformation=AddConditionTransformation(dict(conditions)),
+                                        rule_conditions=lc(), rule_condition_linking=any))
+        return ProcessingPipeline(name=name, priority=20, items=items)
+    return build
+
+
+def _zeek_pipeline() -> ProcessingPipeline:
+    """ecs_zeek_beats turns the smb_files fields into an invalid wildcard field name; name them as Filebeat's zeek module does."""
+    smb = ProcessingPipeline(items=[ProcessingItem(
+        identifier="audspect_ecs_zeek_smb_files",
+        transformation=FieldMappingTransformation({"path": "zeek.smb_files.path", "name": "zeek.smb_files.name"}),
+        rule_conditions=[LogsourceCondition(product="zeek", service="smb_files")],
+    )], priority=5)
+    return smb + ecs_zeek_beats()
+
+
+def _register_small_sources() -> None:
+    splunk, elastic = BACKENDS["splunk"].mappings, BACKENDS["elastic"].mappings
+
+    def add(target: dict, family: str, name: str, shapes: list, data_source: str, **kw) -> None:
+        target[family] = Mapping(_source_pipeline(name, shapes, **kw), name, data_source, "")
+
+    web_proxy, web_server = [{"category": "proxy"}], [{"category": "webserver"}, {"service": "apache"}]
+    add(splunk, "web_proxy", "audspect_splunk_web_proxy", web_proxy,
+        "Proxy events normalised to the Splunk CIM Web data model (tag web): url, http_method, http_user_agent, ... The proxy's "
+        "add-on must provide the CIM mapping", fields=WEB_CIM, conditions={"tag": "web"}, label="Splunk CIM Web")
+    add(splunk, "web_server", "audspect_splunk_web_server", web_server,
+        "Web server access events normalised to the Splunk CIM Web data model (tag web). The server's add-on must provide the CIM "
+        "mapping", fields=WEB_CIM, conditions={"tag": "web"}, label="Splunk CIM Web")
+    add(elastic, "web_proxy", "audspect_ecs_web_proxy", web_proxy,
+        "Proxy events in ECS url.*, http.*, user_agent.* fields (Filebeat's proxy/web modules or the Elastic integrations). No "
+        "dataset restriction is added: scope the query to the proxy's index", fields=WEB_ECS, label="ECS web")
+    add(elastic, "web_server", "audspect_ecs_web_server", web_server,
+        "Web server access events in ECS url.*, http.*, user_agent.* fields (Filebeat's apache/nginx/iis modules). No dataset "
+        "restriction is added: scope the query to the server's index", fields=WEB_ECS, label="ECS web")
+
+    dns = [{"category": "dns"}]
+    add(splunk, "dns_log", "audspect_splunk_dns", dns,
+        "DNS events normalised to the Splunk CIM Network Resolution (DNS) data model (tag dns): query, record_type, answer. "
+        "CIM field names are unverified", fields=DNS_CIM, conditions={"tag": "dns"}, label="Splunk CIM DNS")
+    add(elastic, "dns_log", "audspect_ecs_dns", dns,
+        "DNS events in ECS dns.* fields (Packetbeat DNS, Filebeat network modules)", fields=DNS_ECS, label="ECS DNS")
+
+    add(splunk, "antivirus_log", "audspect_splunk_antivirus", [{"category": "antivirus"}],
+        "Antivirus detections normalised to the Splunk CIM Malware data model (tag malware): signature",
+        fields={"Signature": "signature"}, conditions={"tag": "malware"}, label="Splunk CIM Malware")
+
+    add(splunk, "linux_auditd", "audspect_splunk_linux_auditd", [{"product": "linux", "service": "auditd"}],
+        "The Linux audit log (/var/log/audit/audit.log) indexed by the Splunk Add-on for Unix and Linux (sourcetype linux_audit); "
+        "auditd's own keys (type, a0..a3, exe, name, key) are the field names. SYSCALL is matched as syscall (unverified)",
+        fields={"SYSCALL": "syscall"}, conditions={"sourcetype": "linux_audit"})
+
+    cisco = [{"product": "cisco", "service": s} for s in ("aaa", "ldp", "bgp")]
+    add(splunk, "cisco_ios", "audspect_splunk_cisco_ios", cisco,
+        "Cisco IOS / IOS-XE syslog indexed with the Cisco Networks Add-on (sourcetype cisco:ios); the rule is a free-text search of the message",
+        conditions={"sourcetype": "cisco:ios"})
+    add(elastic, "cisco_ios", "audspect_ecs_cisco_ios", cisco,
+        "Cisco IOS syslog ingested by Filebeat's cisco module (event.dataset cisco.ios); the rule is a free-text search of the message. Unverified",
+        conditions={"event.dataset": "cisco.ios"})
+
+    add(splunk, "okta", "audspect_splunk_okta", [{"product": "okta", "service": "okta"}],
+        "Okta System Log events indexed by the Splunk Add-on for Okta Identity Cloud (sourcetype OktaIM2:log); the System Log's "
+        "own JSON keys (eventType, actor.alternateId, outcome.result) are the field names",
+        conditions={"sourcetype": "OktaIM2:log"})
+
+    add(splunk, "opencanary", "audspect_splunk_opencanary", [{"product": "opencanary", "category": "application"}],
+        "OpenCanary's JSON log with its own keys (logtype ...), extracted as JSON fields by Splunk. No source restriction is added: "
+        "scope the query to the index holding it")
+    add(splunk, "bitbucket_audit", "audspect_splunk_bitbucket_audit", [{"product": "bitbucket", "service": "audit"}],
+        "Bitbucket Data Center audit events as JSON with their own keys (auditType.category, auditType.action), extracted as JSON "
+        "fields by Splunk. No source restriction is added: scope the query to the index holding it")
+
+    add(elastic, "gcp_audit", "audspect_ecs_gcp_audit", [{"product": "gcp", "service": "gcp.audit"}],
+        "GCP audit logs ingested by Filebeat's gcp module / the Elastic GCP integration (event.dataset gcp.audit; fields gcp.audit.*). "
+        "A rule using the raw protoPayload shape instead is not expressible",
+        conditions={"event.dataset": "gcp.audit"}, label="GCP audit", field_pattern=r"^gcp\.audit\..+$")
+
+    elastic["zeek_log"] = Mapping(_zeek_pipeline, "ecs_zeek_beats + audspect_ecs_zeek_smb_files",
+                                  "Zeek logs in the field names Filebeat's zeek module writes (event.dataset zeek.<log>)",
+                                  "pysigma-backend-elasticsearch", "zeek.")
+    elastic["k8s_audit"] = Mapping(ecs_kubernetes, "ecs_kubernetes",
+                                   "Kubernetes API audit events in the field names Filebeat's kubernetes audit fileset writes "
+                                   "(kubernetes.audit.*)", "pysigma-backend-elasticsearch", "kubernetes.audit")
+
+
+_register_small_sources()
+
+
 def _version(dist_name: str) -> str:
     if not dist_name:
         return ""
@@ -689,6 +855,9 @@ def _pysigma_version() -> str:
 def log_source_family(rule) -> str:
     """The family a rule's log source belongs to, or "" when it has no mapped family."""
     ls = rule.logsource
+    small = SMALL_SOURCE_FAMILIES.get((ls.product or "", ls.service or "", ls.category or ""))
+    if small:
+        return small
     if ls.product == "windows" and not ls.service and ls.category in WINDOWS_TAIL_CATEGORIES:
         return f"windows_{ls.category}"
     if ls.product == "windows" and ls.service and ls.service not in ("security", "system") and not ls.category:
@@ -696,7 +865,7 @@ def log_source_family(rule) -> str:
     if ls.product == "aws" and ls.service == "cloudtrail" and not ls.category:
         return AWS_CLOUDTRAIL
     if ls.product == "azure" and not ls.category:
-        family = {"activitylogs": AZURE_ACTIVITYLOGS, "auditlogs": AZURE_AUDITLOGS, "signinlogs": AZURE_SIGNINLOGS}.get(ls.service)
+        family = {"activitylogs": AZURE_ACTIVITYLOGS, "auditlogs": AZURE_AUDITLOGS, "signinlogs": AZURE_SIGNINLOGS, "riskdetection": AZURE_RISKDETECTION}.get(ls.service)
         if family:
             return family
     if ls.product == "linux" and ls.category == "process_creation" and not ls.service:
@@ -728,7 +897,7 @@ def log_source_family(rule) -> str:
     return ""
 
 
-_LEAKED_OBJECT = re.compile(r"Sigma(?:String|RegularExpression|Number|Bool|CIDR|Null|Expansion|Placeholder|Query)\(")
+_LEAKED_OBJECT = re.compile(r"Sigma(?:String|RegularExpression|Number|Bool|CIDR|Null|Expansion|Placeholder|Query)\(|\w\.\\\*\.")
 
 
 def looks_corrupt(query: str) -> bool:

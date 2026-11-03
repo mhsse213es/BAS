@@ -1,6 +1,9 @@
 package rulelib
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestNewEngine_LoadsEmbeddedBundle(t *testing.T) {
 	e := NewEngine()
@@ -37,13 +40,13 @@ func TestLoadFromBytes_CorruptJSON_ReturnsEmptyEngine(t *testing.T) {
 // the customer must collect for it to match anything. A generic query (log source with no mapping) names neither.
 // mappedGroup names the log-source group a rule belongs to, for counting which groups have field-mapped translations.
 func mappedGroup(ls LogSource) string {
-	switch {
-	case ls.Service != "":
-		return ls.Product + "/" + ls.Service
-	case ls.Category != "":
-		return ls.Product + "/" + ls.Category
+	var parts []string
+	for _, p := range []string{ls.Product, ls.Service, ls.Category} {
+		if p != "" {
+			parts = append(parts, p)
+		}
 	}
-	return ls.Product
+	return strings.Join(parts, "/") // windows/process_creation, azure/activitylogs, proxy, zeek/dns ...
 }
 
 func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
@@ -57,11 +60,6 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 				mapped++
 				if tr.Pipeline == "" || tr.DataSource == "" {
 					t.Fatalf("%s/%s: mapped translation without pipeline/data source", r.ID, tr.Backend)
-				}
-				switch r.LogSource.Product {
-				case "windows", "linux", "macos", "aws", "azure":
-				default:
-					t.Fatalf("%s/%s: mapped although the log source is %+v", r.ID, tr.Backend, r.LogSource)
 				}
 				mappedByGroup[mappedGroup(r.LogSource)]++
 			case "generic":
@@ -81,6 +79,10 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 		"macos/process_creation", "aws/cloudtrail", "azure/activitylogs", "azure/auditlogs", "azure/signinlogs",
 		"windows/dns_query", "windows/registry_event", "windows/registry_delete", "windows/file_delete", "windows/pipe_created",
 		"windows/driver_load", "windows/process_access", "windows/create_remote_thread", "windows/ps_classic_start", "windows/windefend",
+		"proxy", "webserver", "dns", "antivirus", "linux/auditd", "cisco/aaa", "okta/okta", "kubernetes/audit", "gcp/gcp.audit",
+		"opencanary/application", "bitbucket/audit", "zeek/dns", "zeek/http", "zeek/smb_files", "azure/riskdetection",
+		"windows/wmi_event", "windows/sysmon_status", "windows/sysmon_error", "windows/file_executable_detected", "windows/process_tampering",
+		"windows/ps_classic_provider_start",
 	} {
 		if mappedByGroup[g] == 0 {
 			t.Errorf("no field-mapped translations for %s (got %v)", g, mappedByGroup)

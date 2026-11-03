@@ -41,7 +41,7 @@ def test_families_recognised():
     assert log_source_family(_rule(ACTIVITY)) == "azure_activitylogs"
     assert log_source_family(_rule(AUDIT)) == "azure_auditlogs"
     assert log_source_family(_rule(SIGNIN)) == "azure_signinlogs"
-    assert log_source_family(_rule(azure("riskdetection", "riskEventType: 'x'"))) == ""
+    assert log_source_family(_rule(azure("pim", "riskEventType: 'x'"))) == ""
     assert log_source_family(_rule(ACTIVITY.replace("product: azure", "product: aws"))) == ""
 
 

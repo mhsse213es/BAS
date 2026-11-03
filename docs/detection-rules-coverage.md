@@ -232,20 +232,59 @@ against the stock pipelines and reading the output, not by whether the output ch
 **Query integrity gate.** The generator now rejects any query containing a leaked pySigma object (the defect above) and
 records it as a failure; none exists in the shipped bundle.
 
-Rules with at least one field-mapped translation: **1,839 of 2,104**. Coverage per SIEM differs:
+**Small log sources** (169 rules, added last). Each maps only for the SIEMs whose schema is documented:
+
+| Source (rules) | Splunk | Elastic | Sentinel |
+|---|---|---|---|
+| Web proxy (27), web server (12), Apache (1) | CIM Web (`tag=web`, `url`, `http_method`, `http_user_agent`) | ECS `url.*`, `http.*`, `user_agent.*` | none |
+| DNS (6) | CIM DNS (`tag=dns`, `query`) | ECS `dns.*` | none |
+| Antivirus (4) | CIM Malware (`signature`) | none | none |
+| Linux auditd (28) | sourcetype `linux_audit` (Unix and Linux add-on) | none | none |
+| Cisco IOS (12) | sourcetype `cisco:ios` | `event.dataset cisco.ios` | none |
+| Okta (3) | sourcetype `OktaIM2:log`, native keys | none | none |
+| OpenCanary (21), Bitbucket audit (10) | native JSON keys, no source condition | none | none |
+| Zeek (14) | none | stock `ecs_zeek_beats` | none |
+| Kubernetes audit (3) | none | stock `ecs_kubernetes` | none |
+| GCP audit (5) | none | Filebeat `gcp.audit.*` + dataset | none |
+| Entra risk detection (15) | none | none | `AADUserRiskEvents` |
+
+Sources checked against vendor documentation: the `linux_audit`, `OktaIM2:log` and `cisco:ios` sourcetypes and the CIM
+Web fields. Not verified: the CIM DNS and Malware field names, `auditd` `SYSCALL` as `syscall`, the Filebeat Cisco and
+GCP dataset names. A field with no equivalent (for example `cs-cookie`, `dst_ip` on Splunk, raw `protoPayload` on GCP) is a
+recorded failure naming the field.
+
+The stock Zeek pipeline emits an invalid wildcard field name (`zeek.\*.path`) for SMB file rules; those two fields are
+mapped to Filebeat's `zeek.smb_files.*` names first. The integrity gate also rejects any query with a wildcard field-name
+segment, which caught one remaining Zeek Kerberos rule (a recorded failure on Elastic).
+
+The last Sysmon and PowerShell categories map for Splunk: WMI events 19/20/21, Sysmon state 4/16, Sysmon error 255,
+executable detected 29, process tampering 25, and the classic PowerShell provider start (event 600; Elastic too).
+
+Rules with at least one field-mapped translation: **2,004 of 2,104**. Coverage per SIEM differs:
 
 | Backend | Field-mapped | Not expressible |
 |---|---:|---:|
-| Microsoft Sentinel | 1,421 | 98 |
+| Microsoft Sentinel | 1,436 | 98 |
 | Microsoft Defender | 1,273 | 52 |
-| Splunk | 1,682 | 0 |
-| Elastic | 1,697 | 8 |
+| Splunk | 1,808 | 5 |
+| Elastic | 1,775 | 11 |
 | CrowdStrike | 1,034 | 197 |
 
 A rule a backend cannot express (for example a hash format, `CurrentDirectory`, or CrowdStrike's missing
 `Description`/`ParentCommandLine` fields) is recorded as **"backend translation unavailable"** with the reason. It
-is never silently replaced by a generic query. The 265 rules with no field-mapped translation (proxy, web server, Linux auditd, Cisco, GitHub and other small log sources) are
-generic: their translations are labelled `generic`, need adapting to the customer's schema, and are not presented
+is never silently replaced by a generic query. The 100 rules with no field-mapped translation are left generic on purpose, in three groups:
+
+- **Free text with no schema** (27): application-framework logs (JVM, Spring, Django, Rails, Node, Python, SQL, Velocity),
+  Linux syslog/sshd/vsftpd and unscoped Linux keyword rules, and Juniper/Huawei BGP. These are keyword searches of raw log
+  text; there is no field to map, so the generic query is already what the rule says. They need scoping to the right log.
+- **No schema verified** (44): GitHub audit (8), Fortigate (4), M365 audit and threat management (7), RPC Firewall
+  (6), Linux file-event and network-connection from Sysmon for Linux (6), Windows IIS, LDAP, SMB-server and file-access
+  (13). A guessed field name would produce a query that looks right and never matches.
+- **Fields the table lacks or other defects** (29): the Azure activity, audit, sign-in and PIM rules that use fields no Sentinel table
+  has (PIM alert incidents are not in `AuditLogs` or `AADUserRiskEvents`), and the GCP/Zeek rules a pipeline cannot express.
+
+Their translations are labelled `generic`, need adapting to the customer's schema, and are not presented
+as ready to paste.
 as ready to paste. Each further log-source family is one more entry in `scripts/rulelib-gen/translate.py`.
 
 ## 5. Limits that decide what the product may claim
