@@ -27,10 +27,13 @@ from sigma.pipelines.elasticsearch.windows import ecs_windows
 from sigma.pipelines.microsoft365defender import microsoft_365_defender_pipeline
 from sigma.pipelines.microsoftxdr import microsoft_xdr_pipeline
 from sigma.pipelines.splunk import splunk_windows_pipeline
-from sigma.processing.conditions import IncludeFieldCondition, LogsourceCondition
+from sigma.processing.conditions import ExcludeFieldCondition, IncludeFieldCondition, LogsourceCondition
 from sigma.processing.pipeline import ProcessingItem, ProcessingPipeline
-from sigma.processing.transformations import AddConditionTransformation
-from sigma.processing.transformations.base import DetectionItemTransformation
+from sigma.processing.transformations import (
+    AddConditionTransformation,
+    FieldMappingTransformation,
+)
+from sigma.processing.transformations.base import DetectionItemTransformation, SigmaTransformationError
 from sigma.types import SigmaBool, SigmaString
 
 WINDOWS_PROCESS_CREATION = "windows_process_creation"
@@ -42,6 +45,7 @@ WINDOWS_IMAGE_LOAD = "windows_image_load"
 WINDOWS_SECURITY = "windows_security"
 WINDOWS_SYSTEM = "windows_system"
 WINDOWS_PS_MODULE = "windows_ps_module"
+LINUX_PROCESS_CREATION = "linux_process_creation"
 
 
 def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> ProcessingPipeline:
@@ -57,6 +61,56 @@ def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> 
             }),
             rule_conditions=[LogsourceCondition(category=category, product="windows")],
         )],
+    )
+
+
+# Sigma's Linux process_creation fields and their ECS equivalents. A field not listed here has no ECS equivalent that
+# this generator can state, so a rule using it is a recorded failure rather than a query with a raw Sigma field name.
+ECS_LINUX_PROCESS_FIELDS = {
+    "Image": "process.executable",
+    "CommandLine": "process.command_line",
+    "ParentImage": "process.parent.executable",
+    "ParentCommandLine": "process.parent.command_line",
+    "User": "user.name",
+    "CurrentDirectory": "process.working_directory",
+}
+
+
+class UnmappedFieldFailure(DetectionItemTransformation):
+    """Fails the rule for this backend, naming the field that has no equivalent."""
+
+    def apply_detection_item(self, detection_item):
+        raise SigmaTransformationError(f"Field {detection_item.field} has no ECS equivalent in the Linux process pipeline")
+
+
+def ecs_linux_process_creation_pipeline() -> ProcessingPipeline:
+    """pySigma's ecs_windows pipeline only renames Windows fields, so Linux rules keep Sigma's own names. This maps the
+    Linux process_creation fields to ECS and restricts the query to process start events. Unverified against live
+    Elastic data."""
+    def linux_process():  # a condition object can belong to only one processing item
+        return [LogsourceCondition(category="process_creation", product="linux")]
+
+    return ProcessingPipeline(
+        name="Audspect ECS Linux process creation",
+        priority=20,
+        items=[
+            ProcessingItem(
+                identifier="audspect_ecs_linux_process_fields",
+                transformation=FieldMappingTransformation(ECS_LINUX_PROCESS_FIELDS),
+                rule_conditions=linux_process(),
+            ),
+            ProcessingItem(
+                identifier="audspect_ecs_linux_process_unmapped_field",
+                transformation=UnmappedFieldFailure(),
+                field_name_conditions=[ExcludeFieldCondition(fields=list(ECS_LINUX_PROCESS_FIELDS.values()))],
+                rule_conditions=linux_process(),
+            ),
+            ProcessingItem(
+                identifier="audspect_ecs_linux_process_start",
+                transformation=AddConditionTransformation({"event.category": "process", "event.type": "start"}),
+                rule_conditions=linux_process(),
+            ),
+        ],
     )
 
 
@@ -175,6 +229,10 @@ BACKENDS: dict[str, BackendSpec] = {
             microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
             "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceProcessEvents table",
             "pysigma-backend-kusto"),
+        LINUX_PROCESS_CREATION: Mapping(
+            microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
+            "Microsoft Defender for Endpoint on Linux (Defender XDR) device events connected to Sentinel: the DeviceProcessEvents table",
+            "pysigma-backend-kusto"),
         WINDOWS_SECURITY: Mapping(
             sentinel_security_event_pipeline, "azure_monitor_pipeline (query table SecurityEvent)",
             "Windows Security events in the SecurityEvent table of the Log Analytics workspace (Windows Security Events via AMA "
@@ -201,6 +259,10 @@ BACKENDS: dict[str, BackendSpec] = {
         WINDOWS_PROCESS_CREATION: Mapping(
             microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
             "Microsoft Defender for Endpoint advanced hunting: the DeviceProcessEvents table",
+            "pysigma-backend-microsoft365defender"),
+        LINUX_PROCESS_CREATION: Mapping(
+            microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
+            "Microsoft Defender for Endpoint on Linux advanced hunting: the DeviceProcessEvents table",
             "pysigma-backend-microsoft365defender"),
         WINDOWS_IMAGE_LOAD: Mapping(
             microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
@@ -276,6 +338,11 @@ BACKENDS: dict[str, BackendSpec] = {
             ecs_windows, "ecs_windows",
             "Windows System event log in ECS field names (Winlogbeat or the Elastic Agent Windows integration, winlog.channel System)",
             "pysigma-backend-elasticsearch"),
+        LINUX_PROCESS_CREATION: Mapping(
+            ecs_linux_process_creation_pipeline, "audspect_ecs_linux_process_creation",
+            "Linux process start events in ECS field names (Elastic Defend for Linux, or Auditbeat), matched as "
+            "event.category process and event.type start. Unverified against live Elastic data",
+            ""),
         WINDOWS_SECURITY: Mapping(
             ecs_windows, "ecs_windows",
             "Windows Security event log in ECS field names (Winlogbeat or Elastic Agent Windows integration, winlog.channel Security). "
@@ -312,6 +379,10 @@ BACKENDS: dict[str, BackendSpec] = {
             crowdstrike_fdr_pipeline, "crowdstrike_fdr_pipeline",
             "CrowdStrike Falcon Data Replicator ProcessRollup2 events from the Windows sensor, in LogScale",
             "pysigma-backend-crowdstrike"),
+        LINUX_PROCESS_CREATION: Mapping(
+            crowdstrike_fdr_pipeline, "crowdstrike_fdr_pipeline",
+            "CrowdStrike Falcon Data Replicator process events from the Linux sensor (event_platform Lin), in LogScale",
+            "pysigma-backend-crowdstrike"),
         WINDOWS_IMAGE_LOAD: Mapping(
             crowdstrike_fdr_pipeline, "crowdstrike_fdr_pipeline",
             "CrowdStrike Falcon Data Replicator ClassifiedModuleLoad events from the Windows sensor, in LogScale",
@@ -345,6 +416,8 @@ def _pysigma_version() -> str:
 def log_source_family(rule) -> str:
     """The family a rule's log source belongs to, or "" when it has no mapped family."""
     ls = rule.logsource
+    if ls.product == "linux" and ls.category == "process_creation" and not ls.service:
+        return LINUX_PROCESS_CREATION
     if ls.product == "windows" and not ls.category:
         # Only these two logs have a mapping; Sentinel's Security pipeline is registered for WINDOWS_SECURITY alone, so
         # a System-log rule is never pointed at the SecurityEvent table.

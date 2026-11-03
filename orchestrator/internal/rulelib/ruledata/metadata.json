@@ -2,23 +2,23 @@
   "attribution": "Detection rules are from the SigmaHQ project (https://github.com/SigmaHQ/sigma), licensed under the Detection Rule License (DRL) 1.1. Each rule keeps its original author, title, id and references; the per-SIEM queries are generated from the rule by Audspect.",
   "backends": {
     "crowdstrike": 1916,
-    "elastic": 2104,
-    "microsoft_defender": 2056,
-    "microsoft_sentinel": 2033,
+    "elastic": 2102,
+    "microsoft_defender": 2054,
+    "microsoft_sentinel": 2031,
     "qradar": 1753,
     "splunk": 2104
   },
-  "generatedAt": "2026-11-03T10:56:54.487739+00:00",
+  "generatedAt": "2026-11-03T11:03:13.041859+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
-    "crowdstrike:generic": 1013,
-    "crowdstrike:pipeline": 903,
-    "elastic:generic": 664,
-    "elastic:pipeline": 1440,
-    "microsoft_defender:generic": 927,
-    "microsoft_defender:pipeline": 1129,
-    "microsoft_sentinel:generic": 821,
-    "microsoft_sentinel:pipeline": 1212,
+    "crowdstrike:generic": 939,
+    "crowdstrike:pipeline": 977,
+    "elastic:generic": 590,
+    "elastic:pipeline": 1512,
+    "microsoft_defender:generic": 853,
+    "microsoft_defender:pipeline": 1201,
+    "microsoft_sentinel:generic": 747,
+    "microsoft_sentinel:pipeline": 1284,
     "qradar:generic": 1753,
     "splunk:generic": 634,
     "splunk:pipeline": 1470
@@ -527,6 +527,24 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000285",
       "sigmaId": "214e8f95-100a-4e04-bb31-ef6cba8ce07e"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\linux\\process_creation\\proc_creation_lnx_omigod_scx_runasprovider_executeshellcommand.yml",
+      "ruleId": "AUDRULE-000286",
+      "sigmaId": "21541900-27a9-4454-9c4c-3f0a4240344a"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\linux\\process_creation\\proc_creation_lnx_omigod_scx_runasprovider_executeshellcommand.yml",
+      "ruleId": "AUDRULE-000286",
+      "sigmaId": "21541900-27a9-4454-9c4c-3f0a4240344a"
+    },
+    {
+      "backend": "elastic",
+      "reason": "SigmaTransformationError: Field LogonId has no ECS equivalent in the Linux process pipeline",
+      "ruleId": "AUDRULE-000286",
+      "sigmaId": "21541900-27a9-4454-9c4c-3f0a4240344a"
     },
     {
       "backend": "qradar",
@@ -1505,6 +1523,24 @@
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_link_uncommon_parent_process.yml",
       "ruleId": "AUDRULE-000878",
       "sigmaId": "6e968eb1-5f05-4dac-94e9-fd0c5cb49fd6"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\linux\\process_creation\\proc_creation_lnx_omigod_scx_runasprovider_executescript.yml",
+      "ruleId": "AUDRULE-000882",
+      "sigmaId": "6eea1bf6-f8d2-488a-a742-e6ef6c1b67db"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\linux\\process_creation\\proc_creation_lnx_omigod_scx_runasprovider_executescript.yml",
+      "ruleId": "AUDRULE-000882",
+      "sigmaId": "6eea1bf6-f8d2-488a-a742-e6ef6c1b67db"
+    },
+    {
+      "backend": "elastic",
+      "reason": "SigmaTransformationError: Field LogonId has no ECS equivalent in the Linux process pipeline",
+      "ruleId": "AUDRULE-000882",
+      "sigmaId": "6eea1bf6-f8d2-488a-a742-e6ef6c1b67db"
     },
     {
       "backend": "qradar",

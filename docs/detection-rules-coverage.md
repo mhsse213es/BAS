@@ -44,10 +44,10 @@ honestly instead of producing a query that matches nothing.)
 | CrowdStrike (LogScale) | 1,945 | 159 |
 | IBM QRadar (AQL), generic only | 1,753 | 351 |
 
-## 4. Field mapping per SIEM (Windows process creation, network connection, PowerShell script block, registry set, file event, image load, Security log, System log, PowerShell module)
+## 4. Field mapping per SIEM (Windows process creation, network connection, PowerShell script block, registry set, file event, image load, Security log, System log, PowerShell module, Linux process creation)
 
 A bare pySigma backend emits Sigma's own field names with no table, index or event type, so its query matches
-nothing in a real SIEM. For Windows `process_creation`, `network_connection`, `ps_script`, `registry_set`, `file_event`, `image_load`, Security-log, System-log and PowerShell-module rules the generator now applies a
+nothing in a real SIEM. For Windows `process_creation`, `network_connection`, `ps_script`, `registry_set`, `file_event`, `image_load`, Security-log, System-log, PowerShell-module and Linux process-creation rules the generator now applies a
 per-SIEM processing pipeline, and every such translation records the pipeline and the data source the customer must collect for the
 query to match anything. Pipelines were chosen by measuring each over all 1,177 SigmaHQ Windows process-creation
 rules:
@@ -160,19 +160,36 @@ labelling that mapped would be false. Defender XDR and CrowdStrike have no Syste
 renames `Payload` to the script-block field, which belongs to event 4104, so a mapped label would be false. Sentinel
 and Defender have no table for it and CrowdStrike no event type.
 
-Of the 2,104 applicable rules, **1,470** are in the nine mapped families (845 process creation, 37 network connection, 108 PowerShell script block, 102 registry set, 99 file event, 94 image load, 106 Security log, 49 System log, 30 PowerShell module); Splunk covers all of them, the other SIEMs fewer, per the table below:
+**Linux process creation** (`product: linux`, 74 rules) maps for four SIEMs:
+
+| Backend | Pipeline | Data source the customer must collect | Field-mapped (of 74) |
+|---|---|---|---:|
+| Microsoft Sentinel | `microsoft_xdr_pipeline` | Defender for Endpoint on Linux device events: `DeviceProcessEvents` | 72 |
+| Microsoft Defender | `microsoft_365_defender_pipeline` | Defender for Endpoint on Linux advanced hunting: `DeviceProcessEvents` | 72 |
+| CrowdStrike | `crowdstrike_fdr_pipeline` | Falcon Data Replicator process events from the Linux sensor (`event_platform` Lin) | 74 |
+| Elastic | `audspect_ecs_linux_process_creation` (ours) | Linux process start events in ECS (Elastic Defend for Linux, or Auditbeat) | 72 |
+
+pySigma's `ecs_windows` only renames Windows fields, so Linux rules kept Sigma's own names (`Image`, `CommandLine`) in the
+query. Our pipeline maps the seven fields these rules use to ECS (`process.executable`, `process.command_line`,
+`process.parent.*`, `user.name`, `process.working_directory`) and adds `event.category:process AND event.type:start`.
+That mapping is from the ECS definition and is **unverified against live Elastic data**. A field with no ECS equivalent
+(`LogonId`, 2 rules) is a recorded failure, never a raw name. Sentinel and Defender cannot express `CurrentDirectory`
+(2 rules). **Splunk stays generic**: Sigma's Linux field names are Sysmon for Linux's, and the Splunk source and
+sourcetype for it are not something this generator can state truthfully.
+
+Of the 2,104 applicable rules, **1,544** are in the ten mapped families (845 Windows process creation, 74 Linux process creation, 37 network connection, 108 PowerShell script block, 102 registry set, 99 file event, 94 image load, 106 Security log, 49 System log, 30 PowerShell module); coverage per SIEM differs, per the table below:
 
 | Backend | Field-mapped | Not expressible |
 |---|---:|---:|
-| Microsoft Sentinel | 1,212 | 71 |
-| Microsoft Defender | 1,129 | 48 |
+| Microsoft Sentinel | 1,284 | 73 |
+| Microsoft Defender | 1,201 | 50 |
 | Splunk | 1,470 | 0 |
-| Elastic | 1,440 | 0 |
-| CrowdStrike | 903 | 181 |
+| Elastic | 1,512 | 2 |
+| CrowdStrike | 977 | 181 |
 
 A rule a backend cannot express (for example a hash format, `CurrentDirectory`, or CrowdStrike's missing
 `Description`/`ParentCommandLine` fields) is recorded as **"backend translation unavailable"** with the reason. It
-is never silently replaced by a generic query. The other 634 applicable rules (other log sources) are still
+is never silently replaced by a generic query. The other 560 applicable rules (other log sources) are still
 generic: their translations are labelled `generic`, need adapting to the customer's schema, and are not presented
 as ready to paste. Each further log-source family is one more entry in `scripts/rulelib-gen/translate.py`.
 
