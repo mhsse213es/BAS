@@ -38,7 +38,7 @@ def by_backend(ts):
 
 def test_family_recognised_only_for_linux_process_creation():
     assert log_source_family(_rule(LIN)) == "linux_process_creation"
-    assert log_source_family(_rule(LIN.replace("product: linux", "product: macos"))) == ""
+    assert log_source_family(_rule(LIN.replace("product: linux", "product: freebsd"))) == ""
     assert log_source_family(_rule(LIN.replace("product: linux", "product: windows"))) == "windows_process_creation"
 
 

@@ -46,6 +46,7 @@ WINDOWS_SECURITY = "windows_security"
 WINDOWS_SYSTEM = "windows_system"
 WINDOWS_PS_MODULE = "windows_ps_module"
 LINUX_PROCESS_CREATION = "linux_process_creation"
+MACOS_PROCESS_CREATION = "macos_process_creation"
 
 
 def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> ProcessingPipeline:
@@ -79,39 +80,51 @@ ECS_LINUX_PROCESS_FIELDS = {
 class UnmappedFieldFailure(DetectionItemTransformation):
     """Fails the rule for this backend, naming the field that has no equivalent."""
 
+    def __init__(self, label: str):
+        super().__init__()
+        self.label = label
+
     def apply_detection_item(self, detection_item):
-        raise SigmaTransformationError(f"Field {detection_item.field} has no ECS equivalent in the Linux process pipeline")
+        raise SigmaTransformationError(f"Field {detection_item.field} has no ECS equivalent in the {self.label} process pipeline")
 
 
-def ecs_linux_process_creation_pipeline() -> ProcessingPipeline:
-    """pySigma's ecs_windows pipeline only renames Windows fields, so Linux rules keep Sigma's own names. This maps the
-    Linux process_creation fields to ECS and restricts the query to process start events. Unverified against live
-    Elastic data."""
+def _ecs_unix_process_pipeline(product: str, label: str) -> ProcessingPipeline:
+    """pySigma's ecs_windows (and ecs_macos_esf) pipelines do not rename Image/CommandLine for Linux or macOS rules, so
+    their queries keep Sigma's own names. This maps the process_creation fields to ECS and restricts the query to
+    process start events. Unverified against live Elastic data."""
     def linux_process():  # a condition object can belong to only one processing item
-        return [LogsourceCondition(category="process_creation", product="linux")]
+        return [LogsourceCondition(category="process_creation", product=product)]
 
     return ProcessingPipeline(
-        name="Audspect ECS Linux process creation",
+        name=f"Audspect ECS {label} process creation",
         priority=20,
         items=[
             ProcessingItem(
-                identifier="audspect_ecs_linux_process_fields",
+                identifier=f"audspect_ecs_{product}_process_fields",
                 transformation=FieldMappingTransformation(ECS_LINUX_PROCESS_FIELDS),
                 rule_conditions=linux_process(),
             ),
             ProcessingItem(
-                identifier="audspect_ecs_linux_process_unmapped_field",
-                transformation=UnmappedFieldFailure(),
+                identifier=f"audspect_ecs_{product}_process_unmapped_field",
+                transformation=UnmappedFieldFailure(label),
                 field_name_conditions=[ExcludeFieldCondition(fields=list(ECS_LINUX_PROCESS_FIELDS.values()))],
                 rule_conditions=linux_process(),
             ),
             ProcessingItem(
-                identifier="audspect_ecs_linux_process_start",
+                identifier=f"audspect_ecs_{product}_process_start",
                 transformation=AddConditionTransformation({"event.category": "process", "event.type": "start"}),
                 rule_conditions=linux_process(),
             ),
         ],
     )
+
+
+def ecs_linux_process_creation_pipeline() -> ProcessingPipeline:
+    return _ecs_unix_process_pipeline("linux", "Linux")
+
+
+def ecs_macos_process_creation_pipeline() -> ProcessingPipeline:
+    return _ecs_unix_process_pipeline("macos", "macOS")
 
 
 def sentinel_security_event_pipeline() -> ProcessingPipeline:
@@ -229,6 +242,10 @@ BACKENDS: dict[str, BackendSpec] = {
             microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
             "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceProcessEvents table",
             "pysigma-backend-kusto"),
+        MACOS_PROCESS_CREATION: Mapping(
+            microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
+            "Microsoft Defender for Endpoint on macOS (Defender XDR) device events connected to Sentinel: the DeviceProcessEvents table",
+            "pysigma-backend-kusto"),
         LINUX_PROCESS_CREATION: Mapping(
             microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
             "Microsoft Defender for Endpoint on Linux (Defender XDR) device events connected to Sentinel: the DeviceProcessEvents table",
@@ -259,6 +276,10 @@ BACKENDS: dict[str, BackendSpec] = {
         WINDOWS_PROCESS_CREATION: Mapping(
             microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
             "Microsoft Defender for Endpoint advanced hunting: the DeviceProcessEvents table",
+            "pysigma-backend-microsoft365defender"),
+        MACOS_PROCESS_CREATION: Mapping(
+            microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
+            "Microsoft Defender for Endpoint on macOS advanced hunting: the DeviceProcessEvents table",
             "pysigma-backend-microsoft365defender"),
         LINUX_PROCESS_CREATION: Mapping(
             microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
@@ -338,6 +359,11 @@ BACKENDS: dict[str, BackendSpec] = {
             ecs_windows, "ecs_windows",
             "Windows System event log in ECS field names (Winlogbeat or the Elastic Agent Windows integration, winlog.channel System)",
             "pysigma-backend-elasticsearch"),
+        MACOS_PROCESS_CREATION: Mapping(
+            ecs_macos_process_creation_pipeline, "audspect_ecs_macos_process_creation",
+            "macOS process start events in ECS field names (Elastic Defend for macOS), matched as "
+            "event.category process and event.type start. Unverified against live Elastic data",
+            ""),
         LINUX_PROCESS_CREATION: Mapping(
             ecs_linux_process_creation_pipeline, "audspect_ecs_linux_process_creation",
             "Linux process start events in ECS field names (Elastic Defend for Linux, or Auditbeat), matched as "
@@ -379,6 +405,10 @@ BACKENDS: dict[str, BackendSpec] = {
             crowdstrike_fdr_pipeline, "crowdstrike_fdr_pipeline",
             "CrowdStrike Falcon Data Replicator ProcessRollup2 events from the Windows sensor, in LogScale",
             "pysigma-backend-crowdstrike"),
+        MACOS_PROCESS_CREATION: Mapping(
+            crowdstrike_fdr_pipeline, "crowdstrike_fdr_pipeline",
+            "CrowdStrike Falcon Data Replicator process events from the macOS sensor (event_platform Mac), in LogScale",
+            "pysigma-backend-crowdstrike"),
         LINUX_PROCESS_CREATION: Mapping(
             crowdstrike_fdr_pipeline, "crowdstrike_fdr_pipeline",
             "CrowdStrike Falcon Data Replicator process events from the Linux sensor (event_platform Lin), in LogScale",
@@ -418,6 +448,8 @@ def log_source_family(rule) -> str:
     ls = rule.logsource
     if ls.product == "linux" and ls.category == "process_creation" and not ls.service:
         return LINUX_PROCESS_CREATION
+    if ls.product == "macos" and ls.category == "process_creation" and not ls.service:
+        return MACOS_PROCESS_CREATION
     if ls.product == "windows" and not ls.category:
         # Only these two logs have a mapping; Sentinel's Security pipeline is registered for WINDOWS_SECURITY alone, so
         # a System-log rule is never pointed at the SecurityEvent table.
