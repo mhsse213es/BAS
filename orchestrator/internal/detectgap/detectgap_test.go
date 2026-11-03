@@ -163,3 +163,37 @@ func TestBackendLabelAndQueryNote(t *testing.T) {
 		t.Errorf("generic note = %q", generic)
 	}
 }
+
+func asmt(s Status) *Assessment {
+	return &Assessment{TechniqueID: "T1059.001", Classification: Classification{Status: s, Reason: "r"}}
+}
+
+// A deployment is only "closed" by a reviewed detection on a re-test that actually ran the technique. Anything less
+// stays open or unproven; nothing is inferred from the rule having been deployed.
+func TestDeploymentStatus(t *testing.T) {
+	cases := []struct {
+		name             string
+		linked, finished bool
+		retest           *Assessment
+		want             string
+	}{
+		{"deployed, no re-test yet", false, false, nil, DeploymentDeployed},
+		{"re-test linked but the run is still going", true, false, nil, DeploymentRetestRunning},
+		{"re-test finished, reviewed detection", true, true, asmt(Detected), DeploymentClosed},
+		{"re-test finished, reviewed miss again", true, true, asmt(DetectionGap), DeploymentStillGap},
+		{"re-test finished, nobody has verified it", true, true, asmt(Unknown), DeploymentAwaitingVerification},
+		{"re-test finished, technique errored", true, true, asmt(ExecutionError), DeploymentNotRetested},
+		{"re-test finished, technique skipped", true, true, asmt(Skipped), DeploymentNotRetested},
+		{"re-test finished, technique absent from it", true, true, nil, DeploymentNotRetested},
+	}
+	for _, c := range cases {
+		got, detail := DeploymentStatus(c.linked, c.finished, c.retest)
+		if got != c.want || detail == "" {
+			t.Errorf("%s: got %q (detail %q), want %q with a detail", c.name, got, detail, c.want)
+		}
+	}
+	_, closed := DeploymentStatus(true, true, asmt(Detected))
+	if !strings.Contains(closed, "does not confirm") {
+		t.Errorf("a closed deployment must say Audspect does not confirm which rule fired: %q", closed)
+	}
+}

@@ -296,6 +296,9 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/scenarios/runs/{runId}/verifications", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/runs/{runId}/detection-gaps", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/runs/{runId}/detection-gaps/export", tierAny, ""},
+	{http.MethodGet, "/api/scenarios/runs/{runId}/detection-gaps/deployments", tierAny, ""},
+	{http.MethodPost, "/api/scenarios/runs/{runId}/detection-gaps/deployments", tierPermission, auth.CanVerify},
+	{http.MethodPost, "/api/scenarios/runs/{runId}/detection-gaps/deployments/{deploymentId}/retest", tierPermission, auth.CanVerify},
 	{http.MethodGet, "/api/scenarios/runs/{runId}/verifications/{expectationId}/history", tierAny, ""},
 	{http.MethodGet, "/api/verifications/{id}/evidence", tierAny, ""},
 	{http.MethodGet, "/api/evidence/{id}/download", tierAny, ""},
@@ -436,6 +439,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/k8s-scenarios/clusters/{id}/namespaces", tierPermission, auth.CanViewK8sDiscovery},
 	{http.MethodPost, "/api/k8s-scenarios/clusters/{id}/verify", tierPermission, auth.CanApproveK8sScenario},
 	{http.MethodPost, "/api/k8s-scenarios/safe-checks/run", tierPermission, auth.CanRequestK8sScenario},
+	{http.MethodPost, "/api/k8s-scenarios/admission-checks/run", tierPermission, auth.CanRequestK8sScenario},
 	{http.MethodPost, "/api/exercises/executions/{id}/evidence", tierPermission, auth.CanInjectExerciseEvidence},
 
 	// ── admin only (per-permission since the 2026-07-18 RBAC expansion) ────

@@ -1555,6 +1555,23 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_technique_verification_runs_agent_id ON technique_verification_runs (agent_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_technique_verification_runs_run_id ON technique_verification_runs (run_id) WHERE run_id != ''`,
 
+		// detection_rule_deployments: a customer's record that they deployed a recommended Sigma rule to close a
+		// detection gap found in run_id, and the run they used to re-test it. Recording a deployment proves nothing about
+		// detection; the outcome is derived from the re-test run's reviewed verifications (internal/detectgap).
+		`CREATE TABLE IF NOT EXISTS detection_rule_deployments (
+			id               text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			run_id           text        NOT NULL REFERENCES scenario_runs(id) ON DELETE CASCADE,
+			technique_id     text        NOT NULL,
+			rule_id          text        NOT NULL,
+			backend          text        NOT NULL,
+			note             text        NOT NULL DEFAULT '',
+			deployed_by      text        NOT NULL DEFAULT '',
+			deployed_at      timestamptz NOT NULL DEFAULT NOW(),
+			retest_run_id    text        REFERENCES scenario_runs(id) ON DELETE SET NULL,
+			retest_linked_at timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_detection_rule_deployments_run_id ON detection_rule_deployments (run_id)`,
+
 		// jobs / job_targets: generic fleet-job infrastructure. internal/jobs
 		// knows nothing about what a given Job.Type actually does -- that's
 		// supplied by internal/api at wiring time. See

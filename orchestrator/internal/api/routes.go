@@ -682,6 +682,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/clusters/{id}/verify", h.VerifyK8sCluster)
 		// Safe checks: read-only SubjectAccessReview against a registered cluster. Requestable by analysts and admins.
 		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Post("/api/k8s-scenarios/safe-checks/run", h.RunK8sSafeCheck)
+		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Post("/api/k8s-scenarios/admission-checks/run", h.RunK8sAdmissionCheck)
 		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Post("/api/k8s-scenarios/runs", h.CreateK8sRun)
 		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/approve", h.ApproveK8sRun)
 		r.With(auth.RequirePermission(auth.CanExecuteK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/execute", h.ExecuteK8sRun)
@@ -740,6 +741,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/scenarios/runs/{runId}/verifications", h.ListRunVerifications)
 		r.Get("/api/scenarios/runs/{runId}/detection-gaps", h.GetRunDetectionGaps)
 		r.Get("/api/scenarios/runs/{runId}/detection-gaps/export", h.ExportRunDetectionGaps)
+		r.Get("/api/scenarios/runs/{runId}/detection-gaps/deployments", h.ListRuleDeployments)
+		r.With(auth.RequirePermission(auth.CanVerify)).Post("/api/scenarios/runs/{runId}/detection-gaps/deployments", h.CreateRuleDeployment)
+		r.With(auth.RequirePermission(auth.CanVerify)).Post("/api/scenarios/runs/{runId}/detection-gaps/deployments/{deploymentId}/retest", h.LinkDeploymentRetest)
 		r.Get("/api/scenarios/runs/{runId}/verifications/{expectationId}/history", h.GetVerificationHistory)
 		r.Get("/api/verifications/{id}/evidence", h.ListVerificationEvidence)
 		r.Get("/api/evidence/{id}/download", h.DownloadEvidence)

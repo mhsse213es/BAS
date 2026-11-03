@@ -215,3 +215,36 @@ func QueryNote(mapping, dataSource string) string {
 	}
 	return "Generic query using Sigma field names: adapt the field names and log source to your schema before use."
 }
+
+// Deployment statuses: where a recommended rule stands after the customer says they deployed it.
+const (
+	DeploymentDeployed             = "Deployed"
+	DeploymentRetestRunning        = "Re-test running"
+	DeploymentClosed               = "Closed on re-test"
+	DeploymentStillGap             = "Still a gap"
+	DeploymentAwaitingVerification = "Re-test awaiting verification"
+	DeploymentNotRetested          = "Technique not re-tested"
+)
+
+// DeploymentStatus says where a deployment stands. A deployment closes a gap only when a re-test run that executed
+// the technique has a reviewed detection. That is evidence a detection exists, not that the deployed rule produced
+// it, and the detail says so. Recording a deployment proves nothing about detection by itself.
+func DeploymentStatus(retestLinked, retestFinished bool, retest *Assessment) (status, detail string) {
+	switch {
+	case !retestLinked:
+		return DeploymentDeployed, "Deployment recorded. Re-run the technique and have the result reviewed to find out whether the gap is closed."
+	case !retestFinished:
+		return DeploymentRetestRunning, "The re-test run has not finished."
+	case retest == nil:
+		return DeploymentNotRetested, "The re-test run did not include this technique."
+	}
+	switch retest.Status {
+	case Detected:
+		return DeploymentClosed, "The re-test executed the technique and a reviewed verification found an alert. Audspect does not confirm that the deployed rule produced it."
+	case DetectionGap:
+		return DeploymentStillGap, "The re-test executed the technique and a reviewed verification again found no alert."
+	case Unknown:
+		return DeploymentAwaitingVerification, "The re-test executed the technique but no reviewed verification says whether an alert fired."
+	}
+	return DeploymentNotRetested, "The re-test did not execute the technique (" + string(retest.Status) + "), so it says nothing about detection."
+}
