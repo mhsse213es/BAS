@@ -72,7 +72,7 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 				mappedByGroup[mappedGroup(r.LogSource)]++
 			case "keyword":
 				// a free-text search: no pipeline and no schema claim, but it must name the log it belongs to
-				if tr.Pipeline != "" || tr.DataSource == "" || tr.Verification != "none" || (tr.Backend != "splunk" && tr.Backend != "elastic") {
+				if tr.Pipeline != "" || tr.DataSource == "" || tr.Verification != "none" || (tr.Backend != "splunk" && tr.Backend != "elastic" && tr.Backend != "microsoft_sentinel") {
 					t.Fatalf("%s/%s: malformed keyword translation: %+v", r.ID, tr.Backend, tr)
 				}
 				keyword++

@@ -38,10 +38,10 @@ def test_keyword_only_detection():
 
 def test_keyword_rule_is_labelled_for_splunk_and_elastic_with_its_log_and_no_schema_claim():
     t = by(rule_for({"product": "django", "category": "application"}, KEYWORDS))
-    for b in ("splunk", "elastic"):
+    for b in ("splunk", "elastic", "microsoft_sentinel"):
         assert t[b]["mapping"] == "keyword" and t[b]["pipeline"] == "" and t[b]["verification"] == "none", b
         assert "django" in t[b]["dataSource"].lower() and "Traceback" in t[b]["query"], b
-    for b in ("microsoft_sentinel", "microsoft_defender", "crowdstrike"):
+    for b in ("microsoft_defender", "crowdstrike"):
         assert t[b]["mapping"] == "generic" and t[b]["dataSource"] == "", b
 
 

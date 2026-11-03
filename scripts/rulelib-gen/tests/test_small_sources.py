@@ -120,10 +120,10 @@ def test_azure_risk_detection_maps_for_sentinel_but_pim_alerts_do_not():
     assert pim["microsoft_sentinel"]["mapping"] == "generic"
 
 
-def test_free_text_application_logs_are_keyword_for_splunk_and_elastic_and_generic_elsewhere():
+def test_free_text_application_logs_are_keyword_for_splunk_elastic_and_sentinel_and_generic_elsewhere():
     t, _ = run({"product": "django", "category": "application"}, "selection:\n            - 'Traceback'")
     for b in t:
-        assert t[b]["mapping"] == ("keyword" if b in ("splunk", "elastic") else "generic"), b
+        assert t[b]["mapping"] == ("keyword" if b in ("splunk", "elastic", "microsoft_sentinel") else "generic"), b
     assert not any(looks_corrupt(x["query"]) for x in t.values())
 
 

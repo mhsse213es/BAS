@@ -911,9 +911,22 @@ _FIELD_LIST = re.compile(r"(, or the following fields that have fieldmappings in
 
 
 # A rule with no field conditions is a free-text search of the raw log message. Splunk and Elastic accept that as a plain
-# text search. Sentinel and Defender render it as a bare expression with no table, and CrowdStrike wraps the phrase in
+# text search. Sentinel's Kusto backend emits a bare boolean expression, which is not a query; it is rewritten as KQL
+# `search` (documented for Sentinel). Defender XDR is not in that documentation, and CrowdStrike wraps the phrase in
 # quotes inside a regex, so those stay generic rather than claim a query that may not run.
-KEYWORD_BACKENDS = ("splunk", "elastic")
+KEYWORD_BACKENDS = ("splunk", "elastic", "microsoft_sentinel")
+
+_KQL_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"')
+_KQL_BOOLEAN = re.compile(r"\b(?:and|or|not)\b|[()\s]")
+
+
+def kql_search(query: str):
+    """Rewrites the Kusto backend's keyword expression as `search ...`, or returns None when the text is anything but
+    string literals, and/or/not and parentheses. Each literal gets wildcards on both sides: a bare `search "x"` is a
+    whole-token match, but a Sigma keyword is a substring match."""
+    if not query or _KQL_BOOLEAN.sub("", _KQL_LITERAL.sub("", query)):
+        return None
+    return "search " + _KQL_LITERAL.sub(lambda m: '"*' + m.group(0)[1:-1] + '*"', query)
 
 
 def is_keyword_only(rule) -> bool:
@@ -934,9 +947,13 @@ def is_keyword_only(rule) -> bool:
     return all(walk(d) for d in rule.detection.detections.values()) and bool(seen)
 
 
-def keyword_source(rule) -> str:
+def keyword_source(rule, backend_key: str = "") -> str:
     ls = rule.logsource
     name = " ".join(x for x in (ls.product, ls.service, ls.category) if x) or "the affected"
+    if backend_key == "microsoft_sentinel":
+        return (f"Raw log text of the {name} log. The rule is a free-text KQL search, so no field mapping applies. With no table "
+                "named it searches every table in the workspace, which is slow and costly: replace it with "
+                "`search in (<the table that holds this log>)` for your workspace")
     return (f"Raw log text of the {name} log. The rule is a free-text search of the message, so no field mapping applies: "
             "scope it to the index or sourcetype that holds this log")
 
@@ -987,6 +1004,11 @@ def translate_rule(rule) -> tuple[list[dict], list[dict]]:
                 if mapping.dist_name and mapping.dist_name != spec.dist_name:
                     generator += f" ({mapping.dist_name} {_version(mapping.dist_name)})"
             keyword = mapping is None and backend_key in KEYWORD_BACKENDS and is_keyword_only(rule)
+            if keyword and backend_key == "microsoft_sentinel":
+                rewritten = kql_search(queries[0])
+                keyword = rewritten is not None
+                if keyword:
+                    queries = [rewritten]
             translations.append({
                 "backend": backend_key,
                 "language": spec.language,
@@ -994,7 +1016,7 @@ def translate_rule(rule) -> tuple[list[dict], list[dict]]:
                 "generator": generator,
                 "mapping": "pipeline" if mapping else ("keyword" if keyword else "generic"),
                 "pipeline": mapping.name if mapping else "",
-                "dataSource": mapping.data_source if mapping else (keyword_source(rule) if keyword else ""),
+                "dataSource": mapping.data_source if mapping else (keyword_source(rule, backend_key) if keyword else ""),
                 "verification": verification_of(mapping),
             })
         except Exception as e:  # noqa: BLE001 — deliberately broad: one backend's exception must never stop the

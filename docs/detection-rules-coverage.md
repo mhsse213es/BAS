@@ -279,12 +279,21 @@ Rules with at least one field-mapped translation: **2,004 of 2,104**. Coverage p
 
 A rule a backend cannot express (for example a hash format, `CurrentDirectory`, or CrowdStrike's missing
 `Description`/`ParentCommandLine` fields) is recorded as **"backend translation unavailable"** with the reason. It
-is never silently replaced by a generic query. **Keyword-scoped.** 26 rules have no field conditions at all (application-framework logs, Linux syslog/sshd/vsftpd and
-unscoped Linux keywords, Juniper and Huawei BGP, one SQL rule, one Azure activity rule). They are a free-text search of the
-raw log message, so there is no field to map. For Splunk and Elastic, where a plain text search is valid, the translation
-is labelled `keyword`: it names the log it belongs to, says no field mapping applies, claims no schema, and has
-verification `none`. Sentinel and Defender render such a rule as a bare expression with no table, and CrowdStrike wraps the
-phrase in quotes inside a regex, so those stay `generic` rather than claim a query that may not run.
+is never silently replaced by a generic query. **Keyword-scoped.** A rule with no field conditions at all is a free-text search of the raw log message, so there is no
+field to map. 26 rules are keyword-only on every SIEM (application-framework logs, Linux syslog/sshd/vsftpd and unscoped
+Linux keywords, BGP, one SQL rule, one Azure activity rule); 19 more are keyword-only rules in a source that other SIEMs map
+by field, and are keyword on Sentinel. The translation is labelled `keyword`, names the log it belongs to, says no field
+mapping applies, claims no schema and has verification `none`.
+
+- **Splunk and Elastic:** the plain text search the backend emits (26 rules each).
+- **Sentinel (45 rules):** the Kusto backend emits a bare boolean expression with no table, which is not a query. It is
+  rewritten as KQL `search`, which Microsoft documents for Sentinel (`search "a" and ("b" or "c")`), with wildcards on both
+  sides of each term (`search "*term*"`): a bare term is a whole-token match, but a Sigma keyword is a substring match. The
+  rewrite is refused (the rule stays generic) unless the text is only string literals, `and`/`or`/`not` and parentheses.
+  Without a table named, `search` scans every table in the workspace, which is slow and costly; the data-source note tells
+  the analyst to replace it with `search in (<the table that holds this log>)`. Not run against a real workspace.
+- **Defender XDR and CrowdStrike** stay `generic`: `search` is not in the documentation page that lists Sentinel, and
+  CrowdStrike wraps the phrase in quotes inside a regex.
 
 The 75 rules with neither a field mapping nor a keyword label are left generic on purpose:
 

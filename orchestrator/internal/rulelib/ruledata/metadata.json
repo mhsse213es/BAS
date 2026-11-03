@@ -8,7 +8,7 @@
     "qradar": 1753,
     "splunk": 2099
   },
-  "generatedAt": "2026-11-03T12:12:14.240267+00:00",
+  "generatedAt": "2026-11-03T12:20:53.587170+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
     "crowdstrike:generic": 873,
@@ -18,7 +18,8 @@
     "elastic:pipeline": 1775,
     "microsoft_defender:generic": 779,
     "microsoft_defender:pipeline": 1273,
-    "microsoft_sentinel:generic": 570,
+    "microsoft_sentinel:generic": 525,
+    "microsoft_sentinel:keyword": 45,
     "microsoft_sentinel:pipeline": 1436,
     "qradar:generic": 1753,
     "splunk:generic": 265,
