@@ -108,6 +108,10 @@ type K8sInventory struct {
 	Unresolved []K8sUnresolvedBinding
 	// Roles holds the rules of each listed Role and ClusterRole, keyed by canonical ID.
 	Roles map[string][]RBACRule
+	// NetworkPolicies holds the parsed NetworkPolicy objects. NetworkPoliciesListed is false when the
+	// list was incomplete, in which case the boundary analysis cannot settle any boundary.
+	NetworkPolicies       []K8sNetworkPolicy
+	NetworkPoliciesListed bool
 }
 
 // K8sUnresolvedBinding is a binding whose role was not in the inventory.
@@ -230,6 +234,7 @@ type k8sObject struct {
 		Name            string        `json:"name"`
 		Namespace       string        `json:"namespace"`
 		OwnerReferences []k8sOwnerRef `json:"ownerReferences"`
+		Labels          map[string]string `json:"labels"`
 	} `json:"metadata"`
 	Spec k8sPodSpec `json:"spec"`
 	// AutomountServiceAccountToken is set on a ServiceAccount object, not on a pod.
@@ -361,10 +366,12 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 		{"daemonsets", c.scopedPath("apps", "v1", "daemonsets", true)},
 		{"jobs", c.scopedPath("batch", "v1", "jobs", true)},
 		{"cronjobs", c.scopedPath("batch", "v1", "cronjobs", true)},
+		{"networkpolicies", c.scopedPath("networking.k8s.io", "v1", "networkpolicies", true)},
 		{"helmcharts", c.scopedPath("helm.cattle.io", "v1", "helmcharts", true)},
 	}
 	raw := map[string][]json.RawMessage{}
 	optionalLists := map[string]bool{"helmcharts": true}
+	netpolListed := false
 	for _, s := range specs {
 		items, gap, err := c.list(ctx, s.path)
 		if err != nil {
@@ -377,12 +384,21 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 		}
 		raw[s.key] = items
 		rep.Counts[s.key] = len(items)
+		if s.key == "networkpolicies" {
+			netpolListed = gap == ""
+		}
 		if gap != "" {
 			rep.Gaps = append(rep.Gaps, gap)
 		}
 	}
 
-	inv := &K8sInventory{Roles: map[string][]RBACRule{}}
+	inv := &K8sInventory{Roles: map[string][]RBACRule{}, NetworkPoliciesListed: netpolListed}
+	policies, polGaps := parseK8sNetworkPolicies(raw["networkpolicies"])
+	inv.NetworkPolicies = policies
+	if len(polGaps) > 0 {
+		inv.NetworkPoliciesListed = false
+		rep.Gaps = append(rep.Gaps, polGaps...)
+	}
 	resources := map[string]*CloudResource{}
 	identities := map[string]*CloudIdentity{}
 	addResource := func(id, kind, namespace, name string, attrs map[string]string, list string) *CloudResource {
@@ -492,7 +508,11 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 		return "", ""
 	}
 	for _, n := range parse("namespaces") {
-		addResource(k8sCanonicalID(cluster, "", "namespace", n.Metadata.Name), "k8s:namespace", "", n.Metadata.Name, map[string]string{}, "namespaces")
+		nsAttrs := map[string]string{}
+		for k, v := range n.Metadata.Labels {
+			nsAttrs["label."+k] = v
+		}
+		addResource(k8sCanonicalID(cluster, "", "namespace", n.Metadata.Name), "k8s:namespace", "", n.Metadata.Name, nsAttrs, "namespaces")
 	}
 	for _, sa := range parse("serviceaccounts") {
 		id := addIdentity(k8sCanonicalID(cluster, sa.Metadata.Namespace, "serviceaccount", sa.Metadata.Name), "k8s:serviceaccount", sa.Metadata.Namespace, sa.Metadata.Name, "serviceaccounts")
@@ -504,6 +524,9 @@ func (c *K8sDiscoveryClient) Discover(ctx context.Context) (*K8sInventory, *K8sD
 			sa = "default"
 		}
 		attrs := map[string]string{"serviceAccount": sa}
+		for k, v := range p.Metadata.Labels {
+			attrs["label."+k] = v
+		}
 		for k, v := range podSecurityAttrs(p.Spec) {
 			attrs[k] = v
 		}
