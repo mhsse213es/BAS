@@ -3,5 +3,8 @@ pysigma-backend-splunk==2.1.0
 pysigma-backend-elasticsearch==2.1.0
 pysigma-backend-microsoft365defender==0.3.2
 pysigma-backend-crowdstrike==3.0.0
+pysigma-backend-kusto==1.0.1
+# pyparsing 3.3 breaks pySigma 1.4.0 condition parsing ("'str' object is not callable"): keep below it.
+pyparsing==3.2.5
 pyyaml>=6.0.1
 pytest>=8.0.0
