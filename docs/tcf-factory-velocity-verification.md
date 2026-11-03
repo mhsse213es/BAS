@@ -181,3 +181,33 @@ openssl dgst -sha256 -sign orchestrator/private_key.pem ti-bundle.json \
 # verify locally against the embedded public key before shipping:
 openssl dgst -sha256 -verify scenario_pub.pem -signature <(base64 -d ti-bundle.json.sig) ti-bundle.json
 ```
+
+## What `VALIDATED` means (representative profile)
+
+Factory validation runs the **representative** profile: a deterministic,
+capped subset of a scenario's server-expanded steps (default: one atomic per
+technique, at most 25 steps), not the full expansion. This keeps a validation
+fast and reliable regardless of scenario length.
+
+Therefore a content version in `VALIDATED` means **"its representative
+validation profile passed"** — not that every step or variant was executed.
+The limitation is recorded in the evidence, never implied away:
+
+- `scenario_runs.validation_profile` (`representative`) and
+  `scenario_runs.validation_coverage` (jsonb: `total_steps`, `selected_steps`,
+  `skipped_steps`, `techniques_total`, `techniques_selected`, `truncated`).
+- The same `profile` + `coverage` are copied into the run's
+  `content_validations.detail` row and the `validation_resulted` SLA event, so
+  a PASS is self-describing (e.g. "representative, 3 of 462 steps, 8 of 8
+  techniques").
+
+Failure modes never produce PASS: a run that times out, executes nothing
+(all-skipped), errors a step, or never reports is recorded ERROR/FAIL/NO_DATA.
+
+Selection is reproducible for a fixed immutable content version (keyed on the
+stable per-step `TaskID`). The run-completion wait is
+`VALIDATION_LAB_TIMEOUT_MINUTES` (default 10, hard max 30) — a budget, not a
+substitute for bounding. A `full` profile (complete execution) is defined for
+deeper validation but the routine lab does not dispatch it.
+
+See `docs/superpowers/specs/2026-11-03-factory-representative-validation-design.md`.
