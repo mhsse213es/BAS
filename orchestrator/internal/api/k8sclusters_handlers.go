@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/k8sscenario"
@@ -16,6 +17,7 @@ type K8sClusterRegistry interface {
 	Insert(ctx context.Context, c k8sscenario.ClusterRecord) error
 	List(ctx context.Context) ([]k8sscenario.ClusterRecord, error)
 	Get(ctx context.Context, id string) (k8sscenario.ClusterRecord, bool, error)
+	UpdateIdentity(ctx context.Context, id string, c k8sscenario.ClusterRecord) error
 }
 
 type k8sClusterRequest struct {
@@ -26,16 +28,25 @@ type k8sClusterRequest struct {
 
 // k8sClusterView is what the API returns for a registered cluster, including its allowed profiles.
 type k8sClusterView struct {
-	ID              string   `json:"id"`
-	DisplayName     string   `json:"displayName"`
-	ServerURL       string   `json:"serverUrl"`
-	Class           string   `json:"class"`
-	AllowedProfiles []string `json:"allowedProfiles"`
+	ID              string     `json:"id"`
+	DisplayName     string     `json:"displayName"`
+	ServerURL       string     `json:"serverUrl"`
+	Class           string     `json:"class"`
+	AllowedProfiles []string   `json:"allowedProfiles"`
+	Version         string     `json:"version,omitempty"`
+	CAFingerprint   string     `json:"caFingerprint,omitempty"`
+	SPKIHash        string     `json:"spkiHash,omitempty"`
+	VerifiedAt      *time.Time `json:"verifiedAt,omitempty"`
 }
 
 func toClusterView(c k8sscenario.ClusterRecord) k8sClusterView {
-	return k8sClusterView{ID: c.ID, DisplayName: c.DisplayName, ServerURL: c.ServerURL, Class: c.Class,
-		AllowedProfiles: k8sscenario.AllowedProfiles(c.Class)}
+	v := k8sClusterView{ID: c.ID, DisplayName: c.DisplayName, ServerURL: c.ServerURL, Class: c.Class,
+		AllowedProfiles: k8sscenario.AllowedProfiles(c.Class), Version: c.Version, CAFingerprint: c.CAFingerprint, SPKIHash: c.SPKIHash}
+	if !c.VerifiedAt.IsZero() {
+		t := c.VerifiedAt
+		v.VerifiedAt = &t
+	}
+	return v
 }
 
 // ListK8sClusters lists registered clusters. GET /api/k8s-scenarios/clusters

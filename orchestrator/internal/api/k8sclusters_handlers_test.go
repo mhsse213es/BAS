@@ -35,6 +35,22 @@ func (f *fakeClusterRegistry) List(context.Context) ([]k8sscenario.ClusterRecord
 	defer f.mu.Unlock()
 	return append([]k8sscenario.ClusterRecord(nil), f.clusters...), nil
 }
+func (f *fakeClusterRegistry) UpdateIdentity(_ context.Context, id string, c k8sscenario.ClusterRecord) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i, e := range f.clusters {
+		if e.ID != id {
+			continue
+		}
+		if !e.VerifiedAt.IsZero() && (e.CAFingerprint != c.CAFingerprint || e.SPKIHash != c.SPKIHash) {
+			return db.ErrK8sIdentityChanged
+		}
+		f.clusters[i].Version, f.clusters[i].CAFingerprint, f.clusters[i].SPKIHash, f.clusters[i].VerifiedAt = c.Version, c.CAFingerprint, c.SPKIHash, c.VerifiedAt
+		return nil
+	}
+	return db.ErrK8sIdentityChanged
+}
+
 func (f *fakeClusterRegistry) Get(_ context.Context, id string) (k8sscenario.ClusterRecord, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

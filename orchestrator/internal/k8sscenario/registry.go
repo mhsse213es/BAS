@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Cluster classes. The class decides which execution profiles a cluster may be targeted with
@@ -19,10 +20,15 @@ const (
 // ClusterRecord is a registered cluster. Identity fields beyond the name and server URL (version,
 // CA fingerprint, SPKI hash) are filled by live verification in a later step and are empty until then.
 type ClusterRecord struct {
-	ID          string
-	DisplayName string
-	ServerURL   string
-	Class       string
+	ID            string
+	DisplayName   string
+	ServerURL     string
+	Class         string
+	// Identity, filled by verification. Zero until the cluster has been verified.
+	Version       string
+	CAFingerprint string
+	SPKIHash      string
+	VerifiedAt    time.Time
 }
 
 // nameRE allows letters, digits, dot, underscore, hyphen and space; 1 to 64 characters.
