@@ -62,10 +62,24 @@ func SelectRepresentative(steps []ScenarioStep, lim RepresentativeLimits) ([]Sce
 		lim.PerTechnique = 1
 	}
 
-	// Count distinct techniques in the full input (the honest denominator).
+	// bucketKey groups steps for the per-technique cap. Steps with a real
+	// TechniqueID share a bucket; a step without one (some Caldera/custom steps
+	// leave it empty) is its own bucket, so an entire family is never collapsed
+	// to a single step, and such steps are excluded from the technique counts.
+	bucketKey := func(s ScenarioStep) string {
+		if s.TechniqueID == "" {
+			return "\x00task\x00" + s.TaskID
+		}
+		return s.TechniqueID
+	}
+
+	// Count distinct techniques in the full input (the honest denominator),
+	// ignoring technique-less steps.
 	seenAll := make(map[string]struct{}, len(steps))
 	for _, s := range steps {
-		seenAll[s.TechniqueID] = struct{}{}
+		if s.TechniqueID != "" {
+			seenAll[s.TechniqueID] = struct{}{}
+		}
 	}
 	cov.TechniquesTotal = len(seenAll)
 
@@ -92,10 +106,11 @@ func SelectRepresentative(steps []ScenarioStep, lim RepresentativeLimits) ([]Sce
 	perTech := make(map[string]int, cov.TechniquesTotal)
 	kept := make([]ScenarioStep, 0, len(ordered))
 	for _, s := range ordered {
-		if perTech[s.TechniqueID] >= lim.PerTechnique {
+		k := bucketKey(s)
+		if perTech[k] >= lim.PerTechnique {
 			continue
 		}
-		perTech[s.TechniqueID]++
+		perTech[k]++
 		kept = append(kept, s)
 	}
 
@@ -107,7 +122,9 @@ func SelectRepresentative(steps []ScenarioStep, lim RepresentativeLimits) ([]Sce
 
 	seenSel := make(map[string]struct{}, len(kept))
 	for _, s := range kept {
-		seenSel[s.TechniqueID] = struct{}{}
+		if s.TechniqueID != "" {
+			seenSel[s.TechniqueID] = struct{}{}
+		}
 	}
 	cov.SelectedSteps = len(kept)
 	cov.SkippedSteps = cov.TotalSteps - cov.SelectedSteps

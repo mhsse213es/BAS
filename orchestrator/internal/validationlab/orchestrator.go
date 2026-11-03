@@ -365,6 +365,16 @@ func (o *Orchestrator) resolveIfComplete(ctx context.Context, versionID, runID s
 		outcome, reason = classifyCompletedRun(resultsJSON)
 	}
 	detail := map[string]any{"run_id": runID, "status": status, "reason": reason}
+	// Runtime execution breakdown of the dispatched steps: a PASS where most
+	// selected steps were skipped by the agent is honestly recorded as such, so
+	// "selected N" in the coverage is never mistaken for "N executed".
+	if status == "completed" {
+		if c, ok := countRunResults(resultsJSON); ok {
+			detail["executed_steps"] = c.Executed
+			detail["errored_steps"] = c.Errored
+			detail["skipped_by_agent_steps"] = c.Skipped
+		}
+	}
 	// Evidence honesty: a profiled validation records its scope + coverage, so a
 	// representative PASS is never read as "the whole scenario was validated".
 	if profile != "" {
@@ -387,29 +397,50 @@ func (o *Orchestrator) resolveIfComplete(ctx context.Context, versionID, runID s
 // technique succeeded against the control, still a clean execution for the
 // factory's "does it run" question); error means the step itself errored;
 // skipped means it never ran.
-func classifyCompletedRun(resultsJSON []byte) (outcome, reason string) {
+// runResultCounts is the per-outcome breakdown of a completed run's results.
+// Executed counts steps that actually ran (pass|fail); Skipped counts steps the
+// agent did not run at all (platform/policy not applicable at runtime).
+type runResultCounts struct{ Executed, Errored, Skipped, Total int }
+
+// countRunResults parses a run's results snapshot into its outcome breakdown.
+// ok is false when there are no results or the JSON is malformed -- the two
+// cases classifyCompletedRun maps to NO_DATA and ERROR respectively.
+func countRunResults(resultsJSON []byte) (c runResultCounts, ok bool) {
 	if len(resultsJSON) == 0 {
-		return "NO_DATA", "run completed with no results recorded"
+		return runResultCounts{}, false
 	}
 	var rs []struct {
 		Result string `json:"result"`
 	}
 	if err := json.Unmarshal(resultsJSON, &rs); err != nil {
-		return "ERROR", "run results were malformed"
+		return runResultCounts{}, false
 	}
-	executed, errored := 0, 0
+	c.Total = len(rs)
 	for _, r := range rs {
 		switch r.Result {
 		case "pass", "fail":
-			executed++
+			c.Executed++
 		case "error":
-			errored++
+			c.Errored++
+		case "skipped":
+			c.Skipped++
 		}
 	}
+	return c, true
+}
+
+func classifyCompletedRun(resultsJSON []byte) (outcome, reason string) {
+	if len(resultsJSON) == 0 {
+		return "NO_DATA", "run completed with no results recorded"
+	}
+	c, ok := countRunResults(resultsJSON)
+	if !ok {
+		return "ERROR", "run results were malformed"
+	}
 	switch {
-	case errored > 0:
+	case c.Errored > 0:
 		return "FAIL", "one or more steps errored during execution"
-	case executed == 0:
+	case c.Executed == 0:
 		return "NO_DATA", "no steps executed (all skipped); nothing to validate"
 	default:
 		return "PASS", "content executed cleanly"

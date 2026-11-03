@@ -107,6 +107,23 @@ func TestSelectRepresentative_PerTechniqueTwo(t *testing.T) {
 	}
 }
 
+// Steps without a TechniqueID (some Caldera/custom steps) must not all
+// collapse into one "" bucket, and "" must not be counted as a technique.
+func TestSelectRepresentative_TechniquelessStepsNotCollapsed(t *testing.T) {
+	steps := []ScenarioStep{
+		vstep("n1", "", ""), vstep("n2", "", ""), vstep("n3", "", ""),
+		vstep("a2", "T1", ""), vstep("a1", "T1", ""),
+	}
+	sub, cov := SelectRepresentative(steps, RepresentativeLimits{MaxSteps: 25, PerTechnique: 1})
+	// 3 technique-less steps each kept (own bucket) + 1 for T1 = 4.
+	if len(sub) != 4 {
+		t.Fatalf("selected %d, want 4 (3 technique-less kept individually + 1 for T1)", len(sub))
+	}
+	if cov.TechniquesTotal != 1 || cov.TechniquesSelected != 1 {
+		t.Fatalf("techniques total=%d selected=%d, want 1/1 (empty TechniqueID is not a technique)", cov.TechniquesTotal, cov.TechniquesSelected)
+	}
+}
+
 func TestDefaultRepresentativeLimits(t *testing.T) {
 	if got := DefaultRepresentativeLimits(); got.MaxSteps != 25 || got.PerTechnique != 1 {
 		t.Fatalf("defaults = %+v, want {25,1}", got)
