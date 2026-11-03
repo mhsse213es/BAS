@@ -1505,3 +1505,9 @@ body.theme-light {
 .cloud-runs-h { display: flex; justify-content: space-between; align-items: center; }
 .cloud-runs-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .cloud-runs-table th, .cloud-runs-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border, #d0d7de); vertical-align: top; }
+
+/* Operator notes on the Cloud Scenarios page */
+.cloud-notes summary { cursor: pointer; }
+.cloud-notes h3 { margin-top: 16px; }
+.cloud-notes ul { padding-left: 20px; }
+.cloud-note-code { white-space: pre-wrap; word-break: break-word; font-size: 12px; padding: 10px; border-radius: 6px; border: 1px solid var(--border, #d0d7de); overflow-x: auto; }
