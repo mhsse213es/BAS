@@ -21,10 +21,12 @@ from sigma.backends.kusto import KustoBackend as SentinelKustoBackend
 from sigma.backends.microsoft365defender import KustoBackend as DefenderKustoBackend
 from sigma.backends.splunk import SplunkBackend
 from sigma.collection import SigmaCollection
+from sigma.pipelines.azuremonitor import azure_monitor_pipeline
 from sigma.pipelines.crowdstrike import crowdstrike_fdr_pipeline
 from sigma.pipelines.elasticsearch.windows import ecs_windows
 from sigma.pipelines.microsoft365defender import microsoft_365_defender_pipeline
 from sigma.pipelines.microsoftxdr import microsoft_xdr_pipeline
+from sigma.pipelines.splunk import splunk_windows_pipeline
 from sigma.processing.conditions import IncludeFieldCondition, LogsourceCondition
 from sigma.processing.pipeline import ProcessingItem, ProcessingPipeline
 from sigma.processing.transformations import AddConditionTransformation
@@ -37,6 +39,7 @@ WINDOWS_PS_SCRIPT = "windows_ps_script"
 WINDOWS_REGISTRY_SET = "windows_registry_set"
 WINDOWS_FILE_EVENT = "windows_file_event"
 WINDOWS_IMAGE_LOAD = "windows_image_load"
+WINDOWS_SECURITY = "windows_security"
 
 
 def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> ProcessingPipeline:
@@ -53,6 +56,12 @@ def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> 
             rule_conditions=[LogsourceCondition(category=category, product="windows")],
         )],
     )
+
+
+def sentinel_security_event_pipeline() -> ProcessingPipeline:
+    """The Azure Monitor pipeline picks a table from a short list of known event ids and fails the rest. Every
+    Windows Security-log event is in SecurityEvent, so the table is set explicitly."""
+    return azure_monitor_pipeline("SecurityEvent")
 
 
 def splunk_sysmon_image_load_pipeline() -> ProcessingPipeline:
@@ -155,6 +164,11 @@ BACKENDS: dict[str, BackendSpec] = {
             microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
             "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceProcessEvents table",
             "pysigma-backend-kusto"),
+        WINDOWS_SECURITY: Mapping(
+            sentinel_security_event_pipeline, "azure_monitor_pipeline (query table SecurityEvent)",
+            "Windows Security events in the SecurityEvent table of the Log Analytics workspace (Windows Security Events via AMA "
+            "connector). The audit policy for the event must be enabled on the endpoints",
+            "pysigma-backend-kusto"),
         WINDOWS_IMAGE_LOAD: Mapping(
             microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
             "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceImageLoadEvents table",
@@ -200,6 +214,11 @@ BACKENDS: dict[str, BackendSpec] = {
             "Sysmon event 1 (process creation) indexed by Splunk through the Splunk Add-on for Sysmon "
             "(source XmlWinEventLog:Microsoft-Windows-Sysmon/Operational)",
             ""),
+        WINDOWS_SECURITY: Mapping(
+            splunk_windows_pipeline, "splunk_windows_pipeline",
+            "Windows Security event log indexed by Splunk (source WinEventLog:Security, event id as EventCode) through the "
+            "Splunk Add-on for Microsoft Windows. The audit policy for the event must be enabled on the endpoints",
+            "pysigma-backend-splunk"),
         WINDOWS_IMAGE_LOAD: Mapping(
             splunk_sysmon_image_load_pipeline, "audspect_splunk_sysmon_image_load",
             "Sysmon event 7 (image loaded) indexed by Splunk through the Splunk Add-on for Sysmon "
@@ -230,6 +249,11 @@ BACKENDS: dict[str, BackendSpec] = {
         WINDOWS_PROCESS_CREATION: Mapping(
             ecs_windows, "ecs_windows",
             "Windows process events in ECS field names (Elastic Defend, or Winlogbeat / Sysmon with the ECS ingest pipeline)",
+            "pysigma-backend-elasticsearch"),
+        WINDOWS_SECURITY: Mapping(
+            ecs_windows, "ecs_windows",
+            "Windows Security event log in ECS field names (Winlogbeat or Elastic Agent Windows integration, winlog.channel Security). "
+            "The audit policy for the event must be enabled on the endpoints",
             "pysigma-backend-elasticsearch"),
         WINDOWS_IMAGE_LOAD: Mapping(
             ecs_windows, "ecs_windows",
@@ -295,6 +319,8 @@ def _pysigma_version() -> str:
 def log_source_family(rule) -> str:
     """The family a rule's log source belongs to, or "" when it has no mapped family."""
     ls = rule.logsource
+    if ls.product == "windows" and ls.service == "security" and not ls.category:
+        return WINDOWS_SECURITY
     if ls.product == "windows" and not ls.service:
         if ls.category == "process_creation":
             return WINDOWS_PROCESS_CREATION
