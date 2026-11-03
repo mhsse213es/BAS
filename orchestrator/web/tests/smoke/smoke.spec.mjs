@@ -170,3 +170,12 @@ test('factory health: Re-check answers the click', async ({ page }) => {
   await expect(page.locator('#toast')).toContainText('Factory health is not available');
   await expect(page.locator('#hero-factory [data-on-click="recheckFactoryHealth"]')).toBeEnabled();
 });
+
+// Coverage's Recalculate hides failed reads inside its panels; it must still say so.
+test('coverage: Recalculate reports a panel that could not be reloaded', async ({ page }) => {
+  await boot(page);
+  await openTab(page, 'coverage');
+  await page.route('**/api/techniques/unified', (route) => route.abort());
+  await page.click('#hero-coverage [data-on-click="recalcCoverage"]');
+  await expect(page.locator('#toast')).toContainText('could not be reloaded');
+});

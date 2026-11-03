@@ -35,7 +35,7 @@ export function loadCoverageAnalytics() {
   var scen  = (document.getElementById('ca-scenario') || {}).value || '';
   var agent = (document.getElementById('ca-agent')    || {}).value || '';
   var qs = '?limit=50' + (scen ? '&scenarioId=' + encodeURIComponent(scen) : '') + (agent ? '&agentId=' + encodeURIComponent(agent) : '');
-  apicall('/api/coverage/analytics' + qs).catch(function() { return null; }).then(function(d) {
+  return apicall('/api/coverage/analytics' + qs).catch(function() { _covFailed++; return null; }).then(function(d) {
     if (!d) return;
     state._covAnalytics = d.byTechnique || [];
     populateCoverageFilters(d);
@@ -193,7 +193,7 @@ var _utlData = [];          // raw response from /api/techniques/unified
 var _utlFilter = { src: 'all' }; // active source filter
 
 export function loadUnifiedTechniques() {
-  apicall('/api/techniques/unified').catch(function() { return []; }).then(function(d) {
+  return apicall('/api/techniques/unified').catch(function() { _covFailed++; return []; }).then(function(d) {
     _utlData = Array.isArray(d) ? d : [];
     // Populate tactic dropdown.
     var sel = document.getElementById('utl-tactic');
@@ -254,7 +254,7 @@ export function renderUTL() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function loadCoverage() {
-  Promise.all([apicall('/api/attack/matrix'), apicall('/api/scenarios/runs')]).then(function(res) {
+  return Promise.all([apicall('/api/attack/matrix'), apicall('/api/scenarios/runs')]).then(function(res) {
     var tactics = (res[0] && res[0].tactics) || [];
     var st = covStatusMap(res[1] || []);
     var counts = { cov: 0, part: 0, gap: 0, none: 0, total: 0 }, seen = {};
@@ -277,18 +277,28 @@ export function loadCoverage() {
       'Showing ' + counts.total + ' techniques across ' + tactics.length +
       ' tactics · coverage = last validated result per technique, not theoretical inventory.';
   }).catch(function(e) {
+    _covFailed++;
     document.getElementById('cov-matrix').innerHTML = '<div class="empty g1-s-be6df18e">' + x(e.message) + '</div>';
   });
 }
 
 // Recalculate (banner button): reload every panel on the page from the server.
+// Three of the four panels hide a failed read (they keep or blank their data), so count the failures and tell
+// the user, instead of a click that looks like nothing happened.
+var _covFailed = 0;
 export function recalcCoverage() {
-  loadCoverage(); loadCoverageAnalytics(); loadUnifiedTechniques(); loadThreatExposure();
+  _covFailed = 0;
+  showToast('Recalculating coverage…', 'ok');
+  var main = loadCoverage();
+  Promise.all([main, loadCoverageAnalytics(), loadUnifiedTechniques(), loadThreatExposure()]).then(function() {
+    if (_covFailed > 0) showToast(_covFailed + ' of 4 coverage panels could not be reloaded. Showing what was loaded before.', 'err');
+    else showToast('Coverage reloaded.', 'ok');
+  });
 }
 
 // ── Live Threat Coverage (TCF Phase 10) ──────────────────────────────────────
 export function loadThreatExposure() {
-  apicall('/api/threats/exposure?limit=50').catch(function() { return null; }).then(function(d) {
+  return apicall('/api/threats/exposure?limit=50').catch(function() { _covFailed++; return null; }).then(function(d) {
     renderThreatExposure(d || []);
   });
 }
