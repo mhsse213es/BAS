@@ -134,7 +134,32 @@ translations, mapping labels and provenance (SigmaHQ, exact commit, path inside 
 - Every export (Sigma, KQL, SPL, Lucene, LogScale, AQL) returns the upstream rule id, source, commit and licence as
   response headers.
 
-## 7. Attribution
+## 7. Where the recommendations appear, and closing the loop
+
+- **Console**: Detection Verification > Detection gaps, per run, with copy buttons and a zip export.
+- **Run report (HTML and PDF)**: Section 18b, Detection Engineering Recommendations. Present only when the run has at
+  least one reviewed detection gap. It shows the highest-severity rule per gap with its query for every SIEM, the
+  mapped or generic note, "Not validated", "No rule available" where there is none, and the SigmaHQ attribution.
+  Queries are capped at 1,200 characters (the export has the rest). The PDF comes from the HTML through the Chromium
+  sidecar; the plain-Go fallback renderer does not include this section.
+- **Deploy and re-test**: the customer records that they deployed a rule ("Mark deployed"), then re-tests. The
+  re-test is a new run of the same scenario on the same agent, started from the console with the original run's mode
+  (telemetry and lab keep their confirmations), and linked to the deployment. The outcome comes only from the re-test
+  run's own reviewed verifications:
+
+| Status | Meaning |
+|---|---|
+| Deployed | Recorded; nothing is known about detection |
+| Re-test running | The linked run has not finished |
+| Re-test awaiting verification | The re-test executed the technique but nobody has reviewed whether an alert fired |
+| Closed on re-test | The re-test executed the technique and a reviewed verification found an alert. Audspect does **not** confirm the deployed rule produced it |
+| Still a gap | The re-test executed the technique and a reviewed verification found no alert |
+| Technique not re-tested | The re-test errored, skipped the technique, or did not include it |
+
+A re-test must be another run of the same scenario on the same agent that started after the deployment was recorded.
+None of this has been run against a real deployment yet.
+
+## 8. Attribution
 
 Rules are from SigmaHQ (https://github.com/SigmaHQ/sigma), licensed under the Detection Rule License (DRL) 1.1.
 Every export carries the rule's original author, Sigma id, source commit and this attribution.
