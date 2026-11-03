@@ -199,6 +199,15 @@ Implements the owner's O-9 decisions in the priority order given: allow-list, se
 ### R-8 — Credentials never come from a request — RESOLVED `28304ead`, `7ae44b57`
 - AWS uses the SDK default chain, GCP uses Application Default Credentials, Azure reads service-principal variables. Each discoverer proves the credentials resolve to the account the run names before it reads inventory. Error text names a missing variable, never its value.
 
+## Kubernetes network-policy boundary analysis (scenario 9, 2026-11-03)
+
+Configured-state analysis only. Design: `docs/superpowers/specs/2026-10-23-k8s-network-policy-analysis-design.md`. Built in `948767c0` (evaluator and discovery) and `3af9bdad` (expectations file, runner wiring, lab manifests).
+
+- Verified by unit tests: open, allow, wrong port, default-deny, egress overriding ingress, ipBlock (UNKNOWN), named port (UNKNOWN), podSelector scoped to the policy namespace, external source, disagreeing pods (UNKNOWN), incomplete policy list (UNKNOWN everywhere), unresolvable selector (UNKNOWN), invalid expectations rejected, unknown selector operator reported as a gap. Discovery: policies and labels collected; forbidden policy list is a gap.
+- Not verified live. The lab fixtures in `orchestrator/testdata/k8s-netpol/` are committed but NOT applied to `kind-bas-lab` (the apply was denied by the permission check on 2026-11-03). Expected results once applied: four boundaries match their expectations.
+- Not verified on staging: `KUBE_DISCOVERY_*` is unset there, so the analysis returns 503.
+- Enforcement by the CNI is not tested.
+
 ## Kubernetes state-changing scenarios (2026-10-23)
 
 Scope: lab only (kind-bas-lab, bas-sandbox), three labelled non-privileged actions. Design: `docs/superpowers/specs/2026-10-23-k8s-state-changing-scenarios-design.md`.
