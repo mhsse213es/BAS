@@ -906,6 +906,18 @@ def looks_corrupt(query: str) -> bool:
     return bool(_LEAKED_OBJECT.search(query))
 
 
+_HOST_PATH = re.compile(r"\s+in\s+[A-Za-z]:\\\S*|[A-Za-z]:\\\S+")
+_FIELD_LIST = re.compile(r"(, or the following fields that have fieldmappings in this pipeline:).*", re.S)
+
+
+def clean_reason(message: str) -> str:
+    """A failure reason keeps the cause and the offending field, but not the build host's file path or pySigma's
+    multi-kilobyte list of valid fields."""
+    message = _FIELD_LIST.sub(" (list of valid fields omitted)", message)
+    message = _HOST_PATH.sub("", message)
+    return " ".join(message.split())
+
+
 def translate_rule(rule) -> tuple[list[dict], list[dict]]:
     """Returns (translations, failures) for one SigmaRule across every backend in BACKENDS. Never raises: a
     per-backend exception becomes a failure entry. The caller's rule is never changed (pipelines edit rules in
@@ -945,6 +957,6 @@ def translate_rule(rule) -> tuple[list[dict], list[dict]]:
             })
         except Exception as e:  # noqa: BLE001 — deliberately broad: one backend's exception must never stop the
             # others (SigmaBackendError, SigmaTransformationError, NotImplementedError ... all funnel here).
-            failures.append({"backend": backend_key, "reason": f"{type(e).__name__}: {e}"})
+            failures.append({"backend": backend_key, "reason": clean_reason(f"{type(e).__name__}: {e}")})
 
     return translations, failures

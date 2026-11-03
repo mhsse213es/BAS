@@ -125,3 +125,14 @@ def test_free_text_application_logs_stay_generic():
     for b in t:
         assert t[b]["mapping"] == "generic", b
     assert not any(looks_corrupt(x["query"]) for x in t.values())
+
+
+def test_failure_reasons_drop_the_host_path_and_the_long_field_list_but_keep_the_field():
+    from translate import clean_reason
+    raw = ("SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: TargetName. Please use valid fields for "
+           "the SecurityEvent table, or the following fields that have fieldmappings in this pipeline:\nAccessList, AccessMask, "
+           "Account in C:\\Users\\Administrator\\Downloads\\x\\rule.yml")
+    out = clean_reason(raw)
+    assert "TargetName" in out and "SecurityEvent" in out
+    assert "AccessList" not in out and "Users" not in out and "\n" not in out
+    assert clean_reason("plain message") == "plain message"
