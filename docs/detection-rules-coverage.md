@@ -44,10 +44,10 @@ honestly instead of producing a query that matches nothing.)
 | CrowdStrike (LogScale) | 1,945 | 159 |
 | IBM QRadar (AQL), generic only | 1,753 | 351 |
 
-## 4. Field mapping per SIEM (Windows process creation and network connection)
+## 4. Field mapping per SIEM (Windows process creation, network connection, PowerShell script block)
 
 A bare pySigma backend emits Sigma's own field names with no table, index or event type, so its query matches
-nothing in a real SIEM. For Windows `process_creation` and `network_connection` rules the generator now applies a
+nothing in a real SIEM. For Windows `process_creation`, `network_connection` and `ps_script` rules the generator now applies a
 per-SIEM processing pipeline, and every such translation records the pipeline and the data source the customer must collect for the
 query to match anything. Pipelines were chosen by measuring each over all 1,177 SigmaHQ Windows process-creation
 rules:
@@ -81,19 +81,30 @@ supports only the file name of the image, and not OR-ed CIDR ranges).
 a value no ECS data contains. Our extra step rewrites it to `egress` / `ingress`, which is what ECS and Winlogbeat's
 Sysmon module use. This is from the ECS field definition, not tested against live Elastic data.
 
-Of the 2,104 applicable rules, **882** are in the two mapped families (845 process creation, 37 network connection):
+**PowerShell script block** (Windows `ps_script`, 108 rules) maps for three SIEMs:
+
+| Backend | Pipeline | Data source the customer must collect | Field-mapped (of 108) |
+|---|---|---|---:|
+| Splunk | `audspect_splunk_powershell_script_block` (ours) | Event 4104 in `Microsoft-Windows-PowerShell/Operational` | 108 |
+| Elastic | `ecs_windows` | `powershell.file.script_block_text` (Winlogbeat PowerShell module or Elastic Defend) | 108 |
+| CrowdStrike | `crowdstrike_fdr_pipeline` | `CommandHistory` / `ScriptControlScanTelemetry` events | 108 |
+
+Microsoft Sentinel and Defender stay **generic** for this family: their pipelines have no table for script-block
+text, so nothing is guessed. Script block logging must be enabled on the endpoints for any of these to match.
+
+Of the 2,104 applicable rules, **990** are in the three mapped families (845 process creation, 37 network connection, 108 PowerShell script block):
 
 | Backend | Field-mapped | Not expressible |
 |---|---:|---:|
 | Microsoft Sentinel | 852 | 30 |
 | Microsoft Defender | 852 | 30 |
-| Splunk | 882 | 0 |
-| Elastic | 882 | 0 |
-| CrowdStrike | 721 | 161 |
+| Splunk | 990 | 0 |
+| Elastic | 990 | 0 |
+| CrowdStrike | 829 | 161 |
 
 A rule a backend cannot express (for example a hash format, `CurrentDirectory`, or CrowdStrike's missing
 `Description`/`ParentCommandLine` fields) is recorded as **"backend translation unavailable"** with the reason. It
-is never silently replaced by a generic query. The other 1,222 applicable rules (other log sources) are still
+is never silently replaced by a generic query. The other 1,114 applicable rules (other log sources) are still
 generic: their translations are labelled `generic`, need adapting to the customer's schema, and are not presented
 as ready to paste. Each further log-source family is one more entry in `scripts/rulelib-gen/translate.py`.
 

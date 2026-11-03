@@ -8,20 +8,20 @@
     "qradar": 1753,
     "splunk": 2104
   },
-  "generatedAt": "2026-11-03T09:34:57.369349+00:00",
+  "generatedAt": "2026-11-03T10:11:05.357412+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
-    "crowdstrike:generic": 1215,
-    "crowdstrike:pipeline": 721,
-    "elastic:generic": 1222,
-    "elastic:pipeline": 882,
+    "crowdstrike:generic": 1107,
+    "crowdstrike:pipeline": 829,
+    "elastic:generic": 1114,
+    "elastic:pipeline": 990,
     "microsoft_defender:generic": 1222,
     "microsoft_defender:pipeline": 852,
     "microsoft_sentinel:generic": 1222,
     "microsoft_sentinel:pipeline": 852,
     "qradar:generic": 1753,
-    "splunk:generic": 1222,
-    "splunk:pipeline": 882
+    "splunk:generic": 1114,
+    "splunk:pipeline": 990
   },
   "ruleCount": 2104,
   "schemaVersion": 2,

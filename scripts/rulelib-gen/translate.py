@@ -33,6 +33,7 @@ from sigma.types import SigmaBool, SigmaString
 
 WINDOWS_PROCESS_CREATION = "windows_process_creation"
 WINDOWS_NETWORK_CONNECTION = "windows_network_connection"
+WINDOWS_PS_SCRIPT = "windows_ps_script"
 
 
 def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> ProcessingPipeline:
@@ -47,6 +48,24 @@ def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> 
                 "EventCode": event_code,
             }),
             rule_conditions=[LogsourceCondition(category=category, product="windows")],
+        )],
+    )
+
+
+def splunk_powershell_script_block_pipeline() -> ProcessingPipeline:
+    """PowerShell script block logging is Windows event 4104 in the PowerShell/Operational log. The bundled Splunk
+    pipeline adds no source or event code, so a bare query would search every index for ScriptBlockText."""
+    return ProcessingPipeline(
+        name="Audspect Splunk PowerShell script block",
+        allowed_backends={"splunk"},
+        priority=20,
+        items=[ProcessingItem(
+            identifier="audspect_splunk_powershell_script_block",
+            transformation=AddConditionTransformation({
+                "source": "XmlWinEventLog:Microsoft-Windows-PowerShell/Operational",
+                "EventCode": 4104,
+            }),
+            rule_conditions=[LogsourceCondition(category="ps_script", product="windows")],
         )],
     )
 
@@ -136,6 +155,11 @@ BACKENDS: dict[str, BackendSpec] = {
             "Sysmon event 1 (process creation) indexed by Splunk through the Splunk Add-on for Sysmon "
             "(source XmlWinEventLog:Microsoft-Windows-Sysmon/Operational)",
             ""),
+        WINDOWS_PS_SCRIPT: Mapping(
+            splunk_powershell_script_block_pipeline, "audspect_splunk_powershell_script_block",
+            "PowerShell script block logging (Windows event 4104, Microsoft-Windows-PowerShell/Operational) indexed by Splunk "
+            "(source XmlWinEventLog:Microsoft-Windows-PowerShell/Operational). Script block logging must be enabled on the endpoints",
+            ""),
         WINDOWS_NETWORK_CONNECTION: Mapping(
             splunk_sysmon_network_connection_pipeline, "audspect_splunk_sysmon_network_connection",
             "Sysmon event 3 (network connection) indexed by Splunk through the Splunk Add-on for Sysmon "
@@ -147,6 +171,11 @@ BACKENDS: dict[str, BackendSpec] = {
             ecs_windows, "ecs_windows",
             "Windows process events in ECS field names (Elastic Defend, or Winlogbeat / Sysmon with the ECS ingest pipeline)",
             "pysigma-backend-elasticsearch"),
+        WINDOWS_PS_SCRIPT: Mapping(
+            ecs_windows, "ecs_windows",
+            "PowerShell script block events in ECS field names (Winlogbeat's PowerShell module or Elastic Defend, "
+            "powershell.file.script_block_text). Script block logging must be enabled on the endpoints",
+            "pysigma-backend-elasticsearch"),
         WINDOWS_NETWORK_CONNECTION: Mapping(
             ecs_network_connection_pipeline, "ecs_windows + audspect_ecs_initiated_to_direction",
             "Windows network connection events in ECS field names (Elastic Defend, or Winlogbeat's Sysmon module, event 3). "
@@ -157,6 +186,10 @@ BACKENDS: dict[str, BackendSpec] = {
         WINDOWS_PROCESS_CREATION: Mapping(
             crowdstrike_fdr_pipeline, "crowdstrike_fdr_pipeline",
             "CrowdStrike Falcon Data Replicator ProcessRollup2 events from the Windows sensor, in LogScale",
+            "pysigma-backend-crowdstrike"),
+        WINDOWS_PS_SCRIPT: Mapping(
+            crowdstrike_fdr_pipeline, "crowdstrike_fdr_pipeline",
+            "CrowdStrike Falcon Data Replicator CommandHistory and ScriptControlScanTelemetry events from the Windows sensor, in LogScale",
             "pysigma-backend-crowdstrike"),
         WINDOWS_NETWORK_CONNECTION: Mapping(
             crowdstrike_fdr_pipeline, "crowdstrike_fdr_pipeline",
@@ -188,6 +221,8 @@ def log_source_family(rule) -> str:
             return WINDOWS_PROCESS_CREATION
         if ls.category == "network_connection":
             return WINDOWS_NETWORK_CONNECTION
+        if ls.category == "ps_script":
+            return WINDOWS_PS_SCRIPT
     return ""
 
 
