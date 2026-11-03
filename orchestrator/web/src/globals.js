@@ -22,7 +22,7 @@ import { setReportType, pickReportFormat } from './features/reports.js';
 import { rptFilter, rptClear } from './features/rpt-view.js';
 import { dcAdd, dcEdit, dcTest, dcDelete, dcSave, dcCancel, dcProviderChanged } from './features/detection-connectors.js';
 import { vfVerifyNow, vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfToggleHistory, vfUploadEvidence, vfSetStatus, vfSearch, vfClearFilters, vfTableQuery, vfClearTableQuery, vfSetPer, vfPage, vfSortBy, vfToggleCols, vfColToggle, vfSelectRow, vfSelectAll, vfClearSelection, vfRowKeydown, vfExportCsv, vfExportSelected, vfDrawerBackdrop } from './features/detection-verification.js';
-import { egCancelCampaignClick, egLaunchCampaign, egRunExpectation, egToggleCampaign, egToggleRunDetail, loadEmailTab, setEmailCampaignsTab, setEmailRunsTab, openEmailScenario, openEmailCampaignDrawer, closeEmailDrawer, closeEmailDrawerOnBackdrop, setEmailTab, emailCampaignSearch, emailClearFilters, emailScenarioKeydown } from './features/email.js';
+import { refreshEmailTab, egCancelCampaignClick, egLaunchCampaign, egRunExpectation, egToggleCampaign, egToggleRunDetail, loadEmailTab, setEmailCampaignsTab, setEmailRunsTab, openEmailScenario, openEmailCampaignDrawer, closeEmailDrawer, closeEmailDrawerOnBackdrop, setEmailTab, emailCampaignSearch, emailClearFilters, emailScenarioKeydown } from './features/email.js';
 import { _toggleEMExtraScenario, _toggleEMPreviewRow, _toggleVexPreviewRow, _toggleVexPreviewSection, cancelEMSweep, closeEMSweepModal, closeEMSweepModalOnBackdrop, closeEMSweepProgress, closeEMSweepProgressOnBackdrop, closeSweepPreview, closeSweepPreviewOnBackdrop, emGroupSelChange, emRunLayer, emSweepDispatch, openEMSweepProgress, openEMSweepReport, setEMExtraSearchFromInput, setEMSweepTargetMode, setVexPreviewSearchFromInput, setVexPreviewTacticFromSelect, startSweepFromPreview, stopEMSweep, stopEMSweepCurrent } from './features/endpoint-mastery.js';
 import { closeCreateUser, closeCreateUserOnBackdrop, closeDownloadOptions, closeEditUser, closeEditUserOnBackdrop, closeEvidence, closeEvidenceOnBackdrop, confirmRun, copyRaw, doResetPassword, downloadCampaignCSV, downloadCampaignReport, downloadEMSweepReport, downloadRunCSV, downloadRunReport, downloadSweepReport, exportRunJSON, openCampaignReport, openCmdk, openCreateUser, openDashRun, openEditUser, openEvidence, openFindingFromDashboard, openRunReport, pauseRun, resumeRun, stopRun, submitCreateUser, submitEditUser, toggleUserActive } from './features/evidence.js';
 import { openKevDetail, openControlDetail } from './features/dash-rich.js';
@@ -45,7 +45,7 @@ import { setAgentStatusSelect, setAgentOsSelect, clearAgentFilters, agentRowKeyd
 import { _dismissLicenseGraceBanner, ackAllTamperEvents, doLogin, doRecover, hideRecovery, showRecovery, doLogoutFromMenu, goToProfileFromMenu, togglePasswordVisibility, licenseBannerDismissHoverOff, licenseBannerDismissHoverOn, openAgentDetailRiskTab, openSettingsFromMenu, setDashView, showTab, tamperAckHoverOff, tamperAckHoverOn, toggleSidebarCollapsed, toggleUserMenuFromEvent } from './features/shell.js';
 import { saveExecutionPolicyDefault } from './features/execution-policy.js';
 import { closeTAXIIConnectorModal, deleteTAXIIConnector, loadARTContentStatus, loadTAXIIConnectors, openTAXIIConnectorModal, removeConnectorConfig, reseedART, saveConnectorConfig, saveTAXIIConnectorForm, simCovHoverOff, simCovHoverOn, syncTAXIIConnectorNow, taxiiToggleAuthFields, testConnectorConfig, testTAXIIConnectorForm, toggleSimCoverage, triggerConnectorSync } from './features/threat-intel.js';
-import { loadVariantTab } from './features/variant-executor.js';
+import { loadVariantTab, refreshVariantTab } from './features/variant-executor.js';
 import { loadVariantMatrixFromButton } from './features/variant-report.js';
 import { _vexCheckAgentSweepConflict, filterVexTechniques, pollVariantRun, runVariants, setVexRunTargetMode, setVexTargetMode, showVexStatHelp, stopVex, stopVexSweep, vexClearAll, vexRunFullSweep, vexRunGroupChange, vexSelectAll, vexSweepGroupChange } from './features/variants.js';
 import { filterRuns, setRunsStatusFilter, setRunsTargetFilter, clearRunsFilters, runsTableQuery, clearRunsTableQuery, setRunsPer, runsPage, sortRunsBy, toggleRunsCols, runsColToggle, runsSelectRow, runsSelectAll, clearRunsSelection, exportRunsCsv, exportRunsSelected, openRunCard, openRunRow } from './features/runs-rich.js';
@@ -288,6 +288,7 @@ export const ACTIONS = {
   egToggleCampaign,
   egToggleRunDetail,
   loadEmailTab,
+  refreshEmailTab,
   setEmailCampaignsTab,
   setEmailRunsTab,
   openEmailScenario,
@@ -384,6 +385,7 @@ export const ACTIONS = {
   loadTAXIIConnectors,
   loadVariantMatrixFromButton,
   loadVariantTab,
+  refreshVariantTab,
   manageUsersLink,
   moveStepBy,
   onAgentSearchInput,

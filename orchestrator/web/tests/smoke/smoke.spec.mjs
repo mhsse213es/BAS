@@ -179,3 +179,17 @@ test('coverage: Recalculate reports a panel that could not be reloaded', async (
   await page.click('#hero-coverage [data-on-click="recalcCoverage"]');
   await expect(page.locator('#toast')).toContainText('could not be reloaded');
 });
+
+// Variants and Email refresh several panels; a panel that cannot reload must be reported, not hidden.
+for (const [tab, route, action, word] of [
+  ['variants', '**/api/variants/stats', 'refreshVariantTab', 'variants'],
+  ['email', '**/api/emailgw/metrics', 'refreshEmailTab', 'email'],
+]) {
+  test(`${tab}: Refresh reports a panel that could not be refreshed`, async ({ page }) => {
+    await boot(page);
+    await openTab(page, tab);
+    await page.route(route, (r) => r.abort());
+    await page.click(`[data-on-click="${action}"]`);
+    await expect(page.locator('#toast')).toContainText(`${word} panels could not be refreshed`);
+  });
+}

@@ -13,6 +13,7 @@ import { setDisplay } from '../core/inline-style.js';
 import { kpi, grid, chip, hbars, empty } from '../core/kit.js';
 import * as M from './var-model.js';
 import { setHeroStat } from './shell-ui.js';
+import { noteRefreshFailure } from '../core/refresh.js';
 
 
 // ── Run Variants reload-survival ────────────────────────────────────────────
@@ -82,7 +83,7 @@ export function _vexResumeActiveRun() {
 export var _vexAvailableVariants = 0;
 
 export function loadVariantStats() {
-  apicall('/api/variants/stats').then(function(s) {
+  return apicall('/api/variants/stats').then(function(s) {
     var el = document.getElementById('vex-stats');
     if (!el) return;
     var artTech = s.artTechniqueCount || 0;
@@ -100,7 +101,7 @@ export function loadVariantStats() {
         'How many of the ' + artTech + ' ART techniques have at least one custom payload family attached, giving them extra variant coverage beyond their standard ART atomic tests.')
     ]);
     _updateSweepVariantCount(s.availableVariants);
-  }).catch(function() {});
+  }).catch(function() { noteRefreshFailure(); });
 }
 
 export function vexStatCard(label, val, col, sub, help) {
@@ -119,7 +120,7 @@ export function showVexStatHelp(label, help) {
 }
 
 export function populateVexAgents() {
-  apicall('/api/agents').then(function(agents) {
+  return apicall('/api/agents').then(function(agents) {
     // Every variant Template the generator produces is Windows-only
     // PowerShell (internal/variant/generator.go), so a non-Windows agent
     // can never run anything dispatched from this panel -- excluded
@@ -136,7 +137,7 @@ export function populateVexAgents() {
     if (sweepSel) sweepSel.innerHTML = opts;
     var allLabel = document.getElementById('vex-run-all-label');
     if (allLabel) setDisplay(allLabel, (ROLE === 'admin') ? 'flex' : 'none');
-  }).catch(function(e) { showToast('Failed to load agents: ' + (e.message || 'error'), 'err'); });
+  }).catch(function(e) { noteRefreshFailure(); showToast('Failed to load agents: ' + (e.message || 'error'), 'err'); });
 }
 
 export var _vexAllTechniques = [];
@@ -146,13 +147,13 @@ export var _vexAllTechniques = [];
 export var _vexCalderaTechniques = [];
 
 export function populateVexTechniques() {
-  apicall('/api/caldera/techniques').then(function(techs) {
+  var caldera = apicall('/api/caldera/techniques').then(function(techs) {
     _vexCalderaTechniques = (techs || []).filter(function(t) { return t.id; });
     var calderaEl = document.getElementById('vex-sweep-caldera-count');
     if (calderaEl) calderaEl.textContent = _vexCalderaTechniques.length ? (' + ' + _vexCalderaTechniques.length + ' Caldera') : '';
-  }).catch(function() { _vexCalderaTechniques = []; });
+  }).catch(function() { _vexCalderaTechniques = []; noteRefreshFailure(); });
 
-  apicall('/api/art/techniques').then(function(techs) {
+  var art = apicall('/api/art/techniques').then(function(techs) {
     _vexAllTechniques = (techs || []).filter(function(t) { return t.id; });
     // Update sweep card counts
     var n = _vexAllTechniques.length;
@@ -172,9 +173,11 @@ export function populateVexTechniques() {
     }
     filterVexTechniques();
   }).catch(function() {
+    noteRefreshFailure();
     var el = document.getElementById('vex-technique-list');
     if (el) el.innerHTML = '<div style="color:var(--danger);font-size:0.75rem;padding:0.4rem">Failed to load techniques</div>';
   });
+  return Promise.all([caldera, art]);
 }
 
 // Update the sweep card "N total variants" once stats load.
@@ -562,7 +565,7 @@ export function loadVariantCoverage() {
   var el = document.getElementById('vex-coverage');
   if (!el) return;
   el.innerHTML = empty('layers', 'Loading…');
-  apicall('/api/variants/coverage').then(function(rows) {
+  return apicall('/api/variants/coverage').then(function(rows) {
     if (!rows || !rows.length) {
       renderVexHero([]);
       el.innerHTML = empty('layers', 'No variant runs yet', 'Run variants on a technique to see coverage here.');
@@ -589,6 +592,7 @@ export function loadVariantCoverage() {
       hbars(cr.map(function(r) { return [r.technique, r.pct, M.preventionTone(r.pct), r.pct + '%']; })) + '</div>';
     el.innerHTML = html;
   }).catch(function(e) {
+    noteRefreshFailure();
     el.innerHTML = empty('alert', 'Error loading coverage', e.message || '');
   });
 }

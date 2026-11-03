@@ -7,6 +7,7 @@ import { ROLE } from './shell.js';
 import { card, hbars, pill, chip, empty, tabs, kv, icon } from '../core/kit.js';
 import { ring } from './runs-drawer.js';
 import { setHeroStat } from './shell-ui.js';
+import { noteRefreshFailure, refreshPanels } from '../core/refresh.js';
 import * as M from './eml-model.js';
 
 
@@ -217,6 +218,13 @@ function egReportError(res, fallback) {
   showToast((res && res.error) ? res.error : fallback, 'err');
 }
 
+// The hero Refresh button: same reload as opening the tab, but it says how it went.
+export function refreshEmailTab() {
+  renderEmailCatalog();
+  renderEmailTabs();
+  refreshPanels('email', [loadEmailCoverage, loadEmailMetrics, loadEmailCampaigns, loadEmailRuns]);
+}
+
 export function loadEmailTab() {
   renderEmailCatalog();
   renderEmailTabs();
@@ -230,8 +238,8 @@ export function loadEmailTab() {
 function loadEmailCoverage() {
   var el = document.getElementById('email-coverage');
   if (!el) return;
-  var fail = function() { el.innerHTML = card('Coverage', empty('mail', 'Coverage report unavailable')); };
-  apicall('/api/emailgw/coverage').then(function(d) {
+  var fail = function() { noteRefreshFailure(); el.innerHTML = card('Coverage', empty('mail', 'Coverage report unavailable')); };
+  return apicall('/api/emailgw/coverage').then(function(d) {
     if (!d || !Array.isArray(d.areas)) { fail(); return; }
 
     var s = M.coverageSummary(d.areas);
@@ -250,8 +258,8 @@ function loadEmailCoverage() {
 function loadEmailMetrics() {
   var el = document.getElementById('email-metrics');
   if (!el) return;
-  var fail = function() { el.innerHTML = card('Time-based metrics', empty('clock', 'Metrics unavailable')); };
-  apicall('/api/emailgw/metrics').then(function(d) {
+  var fail = function() { noteRefreshFailure(); el.innerHTML = card('Time-based metrics', empty('clock', 'Metrics unavailable')); };
+  return apicall('/api/emailgw/metrics').then(function(d) {
     if (!d) { fail(); return; }
     var tiles = M.metricTiles(d);
     var envs = [['Lab', d.lab], ['Customer', d.customer]].filter(function(e) { return e[1]; });
@@ -460,13 +468,13 @@ function renderEmailCampaignRows() {
 }
 
 function loadEmailCampaigns() {
-  apicall('/api/emailgw-campaigns?limit=50').then(function(list) {
+  return apicall('/api/emailgw-campaigns?limit=50').then(function(list) {
     list = Array.isArray(list) ? list : [];
     EG_LISTS.campaigns = list; renderEmailSummary();
     renderEmailCampaignToolbar(list);
     renderEmailTabs();
     renderEmailCampaignRows();
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) { noteRefreshFailure(); showToast(e.message, 'err'); });
 }
 
 export function egLaunchCampaign(templateId) {
@@ -500,7 +508,7 @@ function renderEmailRunsToolbar(list) {
 export function setEmailRunsTab(v) { EMAIL_RUNS_TAB = v; loadEmailRuns(); }
 
 function loadEmailRuns() {
-  apicall('/api/emailgw-runs?limit=50').then(function(list) {
+  return apicall('/api/emailgw-runs?limit=50').then(function(list) {
     list = Array.isArray(list) ? list : [];
     EG_LISTS.runs = list; renderEmailSummary();
     renderEmailRunsToolbar(list);
@@ -519,7 +527,7 @@ function loadEmailRuns() {
           '<td>' + (r.error ? '<span class="tiny u-danger">' + x(r.error) + '</span>' : '<span class="muted">—</span>') + '</td>' +
         '</tr>' + (expanded ? egRunDetailRowHtml(r) : '');
     }).join('');
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) { noteRefreshFailure(); showToast(e.message, 'err'); });
 }
 
 function egRunDetailRowHtml(r) {

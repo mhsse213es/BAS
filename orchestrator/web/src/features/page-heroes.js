@@ -288,7 +288,7 @@ var HEROES = {
     icon: ICON.layers,
     title: 'Variants',
     sub: 'Generated technique variants and full-estate variant sweeps.',
-    actions: '<div class="g1-display-flex g1-s-9b5be34d"><button class="btn btn-outline btn-sm" data-on-click="loadVariantTab">&#x21bb; Refresh</button><button class="btn btn-primary btn-sm" data-on-click="vexRunFullSweep">&#9654; Run Full Sweep</button></div>',
+    actions: '<div class="g1-display-flex g1-s-9b5be34d"><button class="btn btn-outline btn-sm" data-on-click="refreshVariantTab">&#x21bb; Refresh</button><button class="btn btn-primary btn-sm" data-on-click="vexRunFullSweep">&#9654; Run Full Sweep</button></div>',
     stats: [
       { id: 'var-hs-techniques', icon: ICON.layers, value: '—', label: 'Techniques tested' },
       { id: 'var-hs-variants', icon: ICON.box, value: '—', label: 'Variants tested' },
@@ -300,7 +300,7 @@ var HEROES = {
     icon: ICON.mail,
     title: 'Email',
     sub: 'Email security-effectiveness validation — SPF/DKIM/DMARC, phishing, attachments, outbound DLP, mailbox/identity security',
-    actions: '<button type="button" class="btn btn-outline" data-on-click="loadEmailTab">&#x21bb; Refresh</button><button type="button" class="btn btn-primary" data-on-click="openEmailCampaignDrawer">' + svg('<path d="M12 5v14M5 12h14"/>') + 'New Email Campaign</button>',
+    actions: '<button type="button" class="btn btn-outline" data-on-click="refreshEmailTab">&#x21bb; Refresh</button><button type="button" class="btn btn-primary" data-on-click="openEmailCampaignDrawer">' + svg('<path d="M12 5v14M5 12h14"/>') + 'New Email Campaign</button>',
     stats: [
       { id: 'eml-hs-runs', icon: ICON.runs, value: '—', label: 'Runs' },
       { id: 'eml-hs-done', icon: ICON.ok, value: '—', label: 'Completed runs' },
