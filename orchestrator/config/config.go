@@ -110,6 +110,11 @@ type Config struct {
 	// TCF Phase 6: validation lab (empty agent ID disables it entirely)
 	ValidationLabAgentID     string `json:"validation_lab_agent_id,omitempty"`
 	ValidationLabPollMinutes int    `json:"validation_lab_poll_minutes,omitempty"` // default 5
+	// ValidationLabTimeoutMinutes bounds how long the lab waits for a run to
+	// complete. 0 = default (10); clamped to a conservative hard max (30) in
+	// validationlab -- config can lengthen the budget but never make an
+	// unbounded run an accepted validation.
+	ValidationLabTimeoutMinutes int `json:"validation_lab_timeout_minutes,omitempty"`
 
 	// Air-gapped threat-intel: dir holding a signed ti-bundle.json (bundle floor;
 	// live MISP/OpenCTI above overlay on top when configured).
@@ -375,6 +380,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("VALIDATION_LAB_POLL_MINUTES"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.ValidationLabPollMinutes)
+	}
+	if v := os.Getenv("VALIDATION_LAB_TIMEOUT_MINUTES"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.ValidationLabTimeoutMinutes)
 	}
 	if v := os.Getenv("TI_BUNDLE_DIR"); v != "" {
 		cfg.TIBundleDir = v

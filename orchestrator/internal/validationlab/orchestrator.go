@@ -75,10 +75,37 @@ func (o *Orchestrator) noteAttempt(versionID string) {
 func NewOrchestrator(pool *pgxpool.Pool, reg *contentregistry.Registry, d dispatcher, labAgentID string, pollInterval time.Duration) *Orchestrator {
 	return &Orchestrator{
 		pool: pool, reg: reg, dispatcher: d, labAgentID: labAgentID, pollInterval: pollInterval,
-		stopCh: make(chan struct{}), timeout: 10 * time.Minute, pollEvery: 5 * time.Second,
+		stopCh: make(chan struct{}), timeout: ClampValidationTimeout(0), pollEvery: 5 * time.Second,
 		retryBackoff: validationRetryBackoff, attempts: make(map[string]attemptState),
 	}
 }
+
+const (
+	validationTimeoutDefaultMinutes = 10
+	// validationTimeoutHardMaxMinutes is a conservative ceiling on the
+	// configurable run timeout. Bounding (the representative profile) is the
+	// real control; configuration can lengthen the budget within reason but
+	// must never let an unbounded run be accepted as a validation.
+	validationTimeoutHardMaxMinutes = 30
+)
+
+// ClampValidationTimeout maps a configured VALIDATION_LAB_TIMEOUT_MINUTES value
+// to a run-completion timeout: <=0 (unset/invalid) -> the default; otherwise
+// the value, capped at the hard maximum.
+func ClampValidationTimeout(minutes int) time.Duration {
+	if minutes <= 0 {
+		minutes = validationTimeoutDefaultMinutes
+	}
+	if minutes > validationTimeoutHardMaxMinutes {
+		minutes = validationTimeoutHardMaxMinutes
+	}
+	return time.Duration(minutes) * time.Minute
+}
+
+// SetTimeout overrides the run-completion wait. Callers pass an already-clamped
+// duration (see ClampValidationTimeout); this exists so cmd/server can apply
+// the configured VALIDATION_LAB_TIMEOUT_MINUTES from outside the package.
+func (o *Orchestrator) SetTimeout(d time.Duration) { o.timeout = d }
 
 // A version that does not pass validation goes back to DRAFT. Without a limit it was picked again on the very
 // next tick, so a failing scenario re-ran on the lab agent every few minutes for as long as the server was up
