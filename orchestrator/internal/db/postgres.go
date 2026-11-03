@@ -1387,6 +1387,14 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// no retroactive backfill for runs that predate this column.
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_total_base int NOT NULL DEFAULT 0`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_eligible_base int NOT NULL DEFAULT 0`,
+		// validation_profile/validation_coverage record a factory-validation
+		// run's scope: "representative" (bounded, deterministic subset) vs full,
+		// plus the auditable coverage (total/selected/skipped/techniques,
+		// truncated). Written at dispatch for profiled runs; the validation lab
+		// copies them into the content_validations evidence. See
+		// docs/superpowers/specs/2026-11-03-factory-representative-validation-design.md.
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS validation_profile text NOT NULL DEFAULT ''`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS validation_coverage jsonb`,
 		// policy_skipped_results holds SimulationResults the server itself
 		// synthesized at dispatch time for steps a run's MaxPrivilege execution
 		// policy excluded before ever contacting the agent. Written once at

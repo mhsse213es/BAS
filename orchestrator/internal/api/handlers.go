@@ -2013,6 +2013,12 @@ type dispatchOpts struct {
 	// again, so a publish between the two lookups cannot make the validated
 	// and the executed versions differ. nil means dispatchRun resolves itself.
 	Resolved *scenario.ExecutableVersion
+	// ValidationProfile bounds a factory-validation dispatch. "representative"
+	// applies the deterministic, capped subset selector after BuildSteps so a
+	// large scenario validates within a predictable budget; "" / "full" run the
+	// whole expansion. Coverage is recorded on scenario_runs. See
+	// docs/superpowers/specs/2026-11-03-factory-representative-validation-design.md.
+	ValidationProfile scenario.ValidationProfile
 }
 
 // nullIfEmpty maps "" to a SQL NULL so an ad-hoc run leaves campaign_id null
@@ -2175,7 +2181,7 @@ func (h *Handler) markRunFailed(ctx context.Context, runID string, reason string
 // caller-supplied, so a validationlab caller cannot accidentally dispatch in
 // any other mode.
 func (h *Handler) DispatchFactoryValidation(ctx context.Context, sc *scenario.Scenario, agentID string) (runID, skipReason string, err error) {
-	return h.dispatchRun(ctx, sc, agentID, dispatchOpts{Mode: "factory-validation", Kind: contentregistry.KindFactoryValidation})
+	return h.dispatchRun(ctx, sc, agentID, dispatchOpts{Mode: "factory-validation", Kind: contentregistry.KindFactoryValidation, ValidationProfile: scenario.ValidationProfileRepresentative})
 }
 
 func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentID string, o dispatchOpts) (runID string, skipReason string, err error) {
@@ -2586,6 +2592,26 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		steps = scenario.ExpandSteps(steps, o.VariantDepth)
 		log.Printf("[scenario] run %s: variant expand depth=%s base=%d expanded=%d",
 			runID, o.VariantDepth, baseCount, len(steps))
+	}
+
+	// Representative factory validation: bound the expanded step set to a
+	// deterministic, capped subset so a large scenario validates within a
+	// predictable budget. Coverage is persisted on the run (and copied into the
+	// validation evidence by the lab); steps_total_base above stays the honest
+	// full count. Only the representative profile narrows -- "" / full are
+	// dispatched whole.
+	if o.ValidationProfile == scenario.ValidationProfileRepresentative {
+		subset, cov := scenario.SelectRepresentative(steps, scenario.DefaultRepresentativeLimits())
+		steps = subset
+		covJSON, _ := json.Marshal(cov)
+		if _, err := h.db.Exec(ctx,
+			`UPDATE scenario_runs SET validation_profile = $1, validation_coverage = $2 WHERE id = $3`,
+			string(o.ValidationProfile), covJSON, runID,
+		); err != nil {
+			return "", "", fmt.Errorf("persist validation coverage: %w", err)
+		}
+		log.Printf("[scenario] run %s: representative profile selected %d of %d step(s) across %d of %d technique(s) (truncated=%t)",
+			runID, cov.SelectedSteps, cov.TotalSteps, cov.TechniquesSelected, cov.TechniquesTotal, cov.Truncated)
 	}
 
 	h.persistStepMeta(ctx, runID, steps, resolved)
