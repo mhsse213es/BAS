@@ -1437,7 +1437,6 @@ export function loadScenarios() {
         registry:           s.registry            || null
       };
     });
-    _scnLoadedAt = new Date();
     renderScenarios();
     loadRegistryMigrationBanner();
     // renderScheduledAssessmentsList() looks up each schedule's human name
@@ -1613,8 +1612,6 @@ export function scenarioCategoryOf(s) {
 // ── Scenarios page: sidebar + toolbar + grid/list + drawer (see scn-rich.js / scn-model.js) ──
 function scenarioSourceOf(s) { return scnSourceOf(s); }
 
-// Set when /api/scenarios last answered; shown as the hero's "Updated" figure.
-var _scnLoadedAt = null;
 
 export function scenarioCategoryKeydown(key, el, event) {
   if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openScenarioCategory(key); }
@@ -1664,7 +1661,6 @@ function paintHero(all) {
   setHeroStat('sc-hs-total', st.total);
   setHeroStat('sc-hs-tech', st.techniques);
   setHeroStat('sc-hs-fam', st.families);
-  setHeroStat('sc-hs-upd', _scnLoadedAt ? _scnLoadedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
 }
 
 // paintScenarios redraws the whole page body from the loaded scenarios and the toolbar. It never

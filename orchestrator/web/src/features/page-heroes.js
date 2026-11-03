@@ -97,7 +97,6 @@ var HEROES = {
       { id: 'sc-hs-total', icon: ICON.technique, value: '—', label: 'Total Scenarios' },
       { id: 'sc-hs-tech', icon: ICON.mapped, value: '—', label: 'ATT&CK Techniques' },
       { id: 'sc-hs-fam', icon: ICON.layers, value: '—', label: 'Product Families' },
-      { id: 'sc-hs-upd', icon: ICON.ok, value: '—', label: 'Updated' },
     ],
   },
   'hero-agents': {
