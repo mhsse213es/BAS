@@ -253,6 +253,28 @@ What the groups cover (see `docs/cloud-qa-test-runbook.md` for the full list of 
 
 Dependencies: `aws-sdk-go-v2` (config, iam, sts, s3, cloudtrail, backup, organizations), `google.golang.org/api` v0.264.0 (cloud resource manager v1 and v2, iam v1 and v2, storage, logging, transport). `go mod tidy` moved Google API from v0.200.0 to v0.264.0.
 
+## Pre-build status (2026-11-03)
+
+What is built and pushed on `main`, what is verified, and what waits for the build or a tenant.
+
+| Item | Built | Verified here | Waits for |
+|---|---|---|---|
+| O-9 hardening: allow-list, Azure secrets file, discovery gate, metrics (R-20) | `401038ea` | Cloud QA gate exit 0; fresh clone builds | Staging rebuild. Staging runs an older build: the allow-list is not enforced there. |
+| R-20b trace export | `6059b2a1` | Unit tests for scheme, port 4317 refusal, console to stdout | Decided: disabled in production (owner) |
+| Scenario 9, Kubernetes network-policy analysis | `948767c0`, `3af9bdad` | Unit tests; cloudgraph suite | Lab fixtures applied to kind-bas-lab (owner) |
+| O-10 console: scenario runs | `0329b9ea`, `51a90ce0` | 19 model tests; 627 web unit tests on host Node; build | Rebuild; a browser check |
+| O-10 console: discovery-only runs and recent runs | `064ccbeb` | Same as above | Rebuild; a browser check |
+| Operator notes on the Cloud Scenarios page | `19b2e2e8` | Build; 627 unit tests | Rebuild |
+| R-19d read-only AWS policy | `33ddc777` | JSON validated | Owner review; attach to the server's role (operator) |
+| R-20c Azure secrets file ACL (Windows) | operator command in the console notes | none | Operator run on the Windows host |
+
+Known test limits, recorded so they are not mistaken for passes:
+- The pinned Docker test image ran out of memory (Docker VM at 1.86 GiB). The web unit tests were run on host Node 24 instead. Raise the Docker memory to about 4 GiB to run the pinned run.
+- One lint error exists in `src/features/attack-path.js` (`getComputedStyle` not defined). It was there before this work and is not touched here.
+- The action-registry check fails on three unused actions and a stale inline-style baseline. These predate the Cloud Scenarios page.
+
+Not yet verified anywhere: the Cloud Scenarios page in a browser; the discovery run's real response shape from a live server; the allow-list on a build that has it.
+
 ## Open items register (consolidated)
 
 Every item here is open, unbuilt, or a documented limit. Nothing is hidden in a closed entry.
@@ -275,9 +297,9 @@ Every item here is open, unbuilt, or a documented limit. Nothing is hidden in a 
 | R-19b | Probes for GCP and Azure are not registered | Open | Decision on which probes to add |
 | R-19c | `CLOUD_ALLOWED_ACCOUNTS` is unset, so no probe can run against a real account (replaces `CLOUD_PROBE_ALLOWED_ACCOUNTS`, which is no longer read) | Operational | Sandbox test passing first |
 | R-20a | Concurrency and refusal paths under real load | Open | Staging run of the discovery gate |
-| R-20b | OpenTelemetry tracer provider not configured in production | Open | Decision on a trace exporter |
-| R-20c | Windows ACL of the Azure secrets file not checked by code | Operator task | Restrict the file to the service account |
-| R-19d | Least-privilege setup of the server's AWS credential chain | Operator task | Operator configuration; code does not enforce it |
+| R-20b | OpenTelemetry tracer provider not configured in production | Decided: disabled in production (owner, 2026-11-03) | None until a collector is approved |
+| R-20c | Windows ACL of the Azure secrets file not checked by code | Operator task | Run the `icacls` steps in the console notes on the Windows host |
+| R-19d | Least-privilege setup of the server's AWS credential chain | Policy written (`docs/aws/bas-server-readonly-policy.json`); operator attaches it | Owner review, then attach to the server's role |
 
 ## Known limits (consolidated)
 
