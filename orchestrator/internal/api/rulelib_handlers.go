@@ -91,6 +91,11 @@ func (h *Handler) ExportRule(w http.ResponseWriter, r *http.Request) {
 			if t.Backend == backend {
 				text = t.Query
 				found = true
+				// The query only matches if this data is collected; say so beside it, never imply otherwise.
+				w.Header().Set("X-Audspect-Mapping", t.Mapping)
+				if t.DataSource != "" {
+					w.Header().Set("X-Audspect-Data-Source", t.DataSource)
+				}
 				break
 			}
 		}

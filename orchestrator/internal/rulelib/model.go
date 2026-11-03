@@ -37,6 +37,14 @@ type Translation struct {
 	Language  string `json:"language"` // KQL | SPL | Lucene | LogScale
 	Query     string `json:"query"`
 	Generator string `json:"generator"`
+	// Mapping is "pipeline" when the query was field-mapped for the SIEM (real table / index / event type and
+	// field names), or "generic" when it uses Sigma's own field names and needs adapting. A generic query is
+	// never presented as ready to paste.
+	Mapping string `json:"mapping"`
+	// Pipeline names the field-mapping pipeline used; empty when Mapping is "generic".
+	Pipeline string `json:"pipeline"`
+	// DataSource is what the customer must collect for the query to match anything; empty when generic.
+	DataSource string `json:"dataSource"`
 }
 
 type TranslationFailure struct {

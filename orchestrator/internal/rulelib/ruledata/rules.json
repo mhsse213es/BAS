@@ -26,33 +26,48 @@
     "translations": [
       {
         "backend": "microsoft_sentinel",
-        "generator": "pySigma 1.4.0 / pysigma-backend-kusto 1.0.1",
+        "dataSource": "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceProcessEvents table",
+        "generator": "pySigma 1.4.0 / pysigma-backend-kusto 1.0.1 / pipeline microsoft_xdr_pipeline",
         "language": "KQL",
-        "query": "Image endswith \"\\\\powershell.exe\" and CommandLine contains \"-EncodedCommand\""
+        "mapping": "pipeline",
+        "pipeline": "microsoft_xdr_pipeline",
+        "query": "DeviceProcessEvents\n| where FolderPath endswith \"\\\\powershell.exe\" and ProcessCommandLine contains \"-EncodedCommand\""
       },
       {
         "backend": "microsoft_defender",
-        "generator": "pySigma 1.4.0 / pysigma-backend-microsoft365defender 0.3.2",
+        "dataSource": "Microsoft Defender for Endpoint advanced hunting: the DeviceProcessEvents table",
+        "generator": "pySigma 1.4.0 / pysigma-backend-microsoft365defender 0.3.2 / pipeline microsoft_365_defender_pipeline",
         "language": "KQL",
-        "query": "Image endswith \"\\\\powershell.exe\" and CommandLine contains \"-EncodedCommand\""
+        "mapping": "pipeline",
+        "pipeline": "microsoft_365_defender_pipeline",
+        "query": "DeviceProcessEvents\n| where FolderPath endswith \"\\\\powershell.exe\" and ProcessCommandLine contains \"-EncodedCommand\""
       },
       {
         "backend": "splunk",
-        "generator": "pySigma 1.4.0 / pysigma-backend-splunk 2.1.0",
+        "dataSource": "Sysmon event 1 (process creation) indexed by Splunk through the Splunk Add-on for Sysmon (source XmlWinEventLog:Microsoft-Windows-Sysmon/Operational)",
+        "generator": "pySigma 1.4.0 / pysigma-backend-splunk 2.1.0 / pipeline audspect_splunk_sysmon_process_creation",
         "language": "SPL",
-        "query": "Image=\"*\\\\powershell.exe\" CommandLine=\"*-EncodedCommand*\""
+        "mapping": "pipeline",
+        "pipeline": "audspect_splunk_sysmon_process_creation",
+        "query": "source=\"XmlWinEventLog:Microsoft-Windows-Sysmon/Operational\" EventCode=1 Image=\"*\\\\powershell.exe\" CommandLine=\"*-EncodedCommand*\""
       },
       {
         "backend": "elastic",
-        "generator": "pySigma 1.4.0 / pysigma-backend-elasticsearch 2.1.0",
+        "dataSource": "Windows process events in ECS field names (Elastic Defend, or Winlogbeat / Sysmon with the ECS ingest pipeline)",
+        "generator": "pySigma 1.4.0 / pysigma-backend-elasticsearch 2.1.0 / pipeline ecs_windows",
         "language": "Lucene",
-        "query": "Image:*\\\\powershell.exe AND CommandLine:*\\-EncodedCommand*"
+        "mapping": "pipeline",
+        "pipeline": "ecs_windows",
+        "query": "process.executable:*\\\\powershell.exe AND process.command_line:*\\-EncodedCommand*"
       },
       {
         "backend": "crowdstrike",
-        "generator": "pySigma 1.4.0 / pysigma-backend-crowdstrike 3.0.0",
+        "dataSource": "CrowdStrike Falcon Data Replicator ProcessRollup2 events from the Windows sensor, in LogScale",
+        "generator": "pySigma 1.4.0 / pysigma-backend-crowdstrike 3.0.0 / pipeline crowdstrike_fdr_pipeline",
         "language": "LogScale",
-        "query": "Image=/\\\\powershell\\.exe$/i CommandLine=/-EncodedCommand/i"
+        "mapping": "pipeline",
+        "pipeline": "crowdstrike_fdr_pipeline",
+        "query": "event_platform=/^Win$/i event_simpleName=/^ProcessRollup2$/i or event_simpleName=/^SyntheticProcessRollup2$/i ImageFileName=/\\\\powershell\\.exe$/i CommandLine=/-EncodedCommand/i"
       }
     ]
   },
@@ -83,33 +98,48 @@
     "translations": [
       {
         "backend": "microsoft_sentinel",
-        "generator": "pySigma 1.4.0 / pysigma-backend-kusto 1.0.1",
+        "dataSource": "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceProcessEvents table",
+        "generator": "pySigma 1.4.0 / pysigma-backend-kusto 1.0.1 / pipeline microsoft_xdr_pipeline",
         "language": "KQL",
-        "query": "(Image endswith \"\\\\setspn.exe\" and CommandLine contains \"-Q\") or (Image endswith \"\\\\powershell.exe\" and CommandLine contains \"GetUserSPNs\")"
+        "mapping": "pipeline",
+        "pipeline": "microsoft_xdr_pipeline",
+        "query": "DeviceProcessEvents\n| where (FolderPath endswith \"\\\\setspn.exe\" and ProcessCommandLine contains \"-Q\") or (FolderPath endswith \"\\\\powershell.exe\" and ProcessCommandLine contains \"GetUserSPNs\")"
       },
       {
         "backend": "microsoft_defender",
-        "generator": "pySigma 1.4.0 / pysigma-backend-microsoft365defender 0.3.2",
+        "dataSource": "Microsoft Defender for Endpoint advanced hunting: the DeviceProcessEvents table",
+        "generator": "pySigma 1.4.0 / pysigma-backend-microsoft365defender 0.3.2 / pipeline microsoft_365_defender_pipeline",
         "language": "KQL",
-        "query": "(Image endswith \"\\\\setspn.exe\" and CommandLine contains \"-Q\") or (Image endswith \"\\\\powershell.exe\" and CommandLine contains \"GetUserSPNs\")"
+        "mapping": "pipeline",
+        "pipeline": "microsoft_365_defender_pipeline",
+        "query": "DeviceProcessEvents\n| where (FolderPath endswith \"\\\\setspn.exe\" and ProcessCommandLine contains \"-Q\") or (FolderPath endswith \"\\\\powershell.exe\" and ProcessCommandLine contains \"GetUserSPNs\")"
       },
       {
         "backend": "splunk",
-        "generator": "pySigma 1.4.0 / pysigma-backend-splunk 2.1.0",
+        "dataSource": "Sysmon event 1 (process creation) indexed by Splunk through the Splunk Add-on for Sysmon (source XmlWinEventLog:Microsoft-Windows-Sysmon/Operational)",
+        "generator": "pySigma 1.4.0 / pysigma-backend-splunk 2.1.0 / pipeline audspect_splunk_sysmon_process_creation",
         "language": "SPL",
-        "query": "(Image=\"*\\\\setspn.exe\" CommandLine=\"*-Q*\") OR (Image=\"*\\\\powershell.exe\" CommandLine=\"*GetUserSPNs*\")"
+        "mapping": "pipeline",
+        "pipeline": "audspect_splunk_sysmon_process_creation",
+        "query": "source=\"XmlWinEventLog:Microsoft-Windows-Sysmon/Operational\" EventCode=1 (Image=\"*\\\\setspn.exe\" CommandLine=\"*-Q*\") OR (Image=\"*\\\\powershell.exe\" CommandLine=\"*GetUserSPNs*\")"
       },
       {
         "backend": "elastic",
-        "generator": "pySigma 1.4.0 / pysigma-backend-elasticsearch 2.1.0",
+        "dataSource": "Windows process events in ECS field names (Elastic Defend, or Winlogbeat / Sysmon with the ECS ingest pipeline)",
+        "generator": "pySigma 1.4.0 / pysigma-backend-elasticsearch 2.1.0 / pipeline ecs_windows",
         "language": "Lucene",
-        "query": "(Image:*\\\\setspn.exe AND CommandLine:*\\-Q*) OR (Image:*\\\\powershell.exe AND CommandLine:*GetUserSPNs*)"
+        "mapping": "pipeline",
+        "pipeline": "ecs_windows",
+        "query": "(process.executable:*\\\\setspn.exe AND process.command_line:*\\-Q*) OR (process.executable:*\\\\powershell.exe AND process.command_line:*GetUserSPNs*)"
       },
       {
         "backend": "crowdstrike",
-        "generator": "pySigma 1.4.0 / pysigma-backend-crowdstrike 3.0.0",
+        "dataSource": "CrowdStrike Falcon Data Replicator ProcessRollup2 events from the Windows sensor, in LogScale",
+        "generator": "pySigma 1.4.0 / pysigma-backend-crowdstrike 3.0.0 / pipeline crowdstrike_fdr_pipeline",
         "language": "LogScale",
-        "query": "(Image=/\\\\setspn\\.exe$/i CommandLine=/-Q/i) or (Image=/\\\\powershell\\.exe$/i CommandLine=/GetUserSPNs/i)"
+        "mapping": "pipeline",
+        "pipeline": "crowdstrike_fdr_pipeline",
+        "query": "event_platform=/^Win$/i event_simpleName=/^ProcessRollup2$/i or event_simpleName=/^SyntheticProcessRollup2$/i (ImageFileName=/\\\\setspn\\.exe$/i CommandLine=/-Q/i) or (ImageFileName=/\\\\powershell\\.exe$/i CommandLine=/GetUserSPNs/i)"
       }
     ]
   }

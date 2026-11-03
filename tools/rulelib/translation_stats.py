@@ -22,7 +22,7 @@ import yaml  # noqa: E402
 from sigma.collection import SigmaCollection  # noqa: E402
 
 import coverage as cov  # noqa: E402
-from translate import BACKENDS, translate_rule  # noqa: E402
+from translate import BACKENDS, log_source_family, translate_rule  # noqa: E402
 
 
 def applicable_rules(sigma_dir, tested, trees):
@@ -60,6 +60,9 @@ def main():
     ok = Counter(); fail = Counter(); reasons = defaultdict(Counter)
     per_tech = defaultdict(lambda: defaultdict(int))  # technique -> backend -> rules that translated
     all5 = 0
+    fam_total = 0
+    fam_mapped = Counter()  # process_creation rules that got a field-mapped query, per backend
+    fam_reasons = defaultdict(Counter)
     for i, (path, doc, exact, parent) in enumerate(rules):
         try:
             rule = SigmaCollection.from_yaml(open(path, encoding="utf-8").read()).rules[0]
@@ -70,6 +73,13 @@ def main():
             continue
         translations, failures = translate_rule(rule)
         got = {t["backend"] for t in translations}
+        if log_source_family(rule):
+            fam_total += 1
+            for t in translations:
+                if t["mapping"] == "pipeline":
+                    fam_mapped[t["backend"]] += 1
+            for f in failures:
+                fam_reasons[f["backend"]][f["reason"].split(":")[0] + ": " + f["reason"].split(":", 1)[-1].strip()[:90]] += 1
         for b in BACKENDS:
             if b in got:
                 ok[b] += 1
@@ -91,7 +101,9 @@ def main():
         via_parent = [r for r in rules if "." in tid and tid.split(".")[0] in r[3]]
         rows.append({"technique": tid, "exactRules": len(direct), "parentRules": len(via_parent),
                      "translated": {b: per_tech[tid].get(b, 0) for b in BACKENDS}})
-    report = {"applicableRules": n, "translatedAll5": all5, "ok": dict(ok), "failed": dict(fail),
+    report = {"windowsProcessCreation": {"rules": fam_total, "mapped": dict(fam_mapped),
+                                        "topFailures": {b: fam_reasons[b].most_common(3) for b in BACKENDS}},
+              "applicableRules": n, "translatedAll5": all5, "ok": dict(ok), "failed": dict(fail),
               "topFailures": {b: reasons[b].most_common(5) for b in BACKENDS}, "rows": rows}
     if a.json:
         json.dump(report, open(a.json, "w", encoding="utf-8"), indent=1)
@@ -102,6 +114,13 @@ def main():
     md += ["", "Most common failures per backend:"]
     for b in BACKENDS:
         md.append(f"- {b}: " + "; ".join(f"{c}x {r}" for r, c in reasons[b].most_common(3)))
+    md += ["", f"Windows process-creation rules (field-mapped per SIEM): **{fam_total}**", "",
+           "| Backend | Field-mapped | Not expressible |", "|---|---:|---:|"]
+    for b in BACKENDS:
+        md.append(f"| {b} | {fam_mapped[b]} | {fam_total - fam_mapped[b]} |")
+    for b in BACKENDS:
+        if fam_total - fam_mapped[b]:
+            md.append(f"- {b} not expressible: " + "; ".join(f"{c}x {r}" for r, c in fam_reasons[b].most_common(3)))
     text = "\n".join(md) + "\n"
     if a.md:
         open(a.md, "w", encoding="utf-8").write(text)
