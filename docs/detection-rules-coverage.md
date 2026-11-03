@@ -90,7 +90,24 @@ as ready to paste. Each further log-source family is one more entry in `scripts/
   rules fail on every backend with a misleading error.
 - **pySigma edits rules in place**, so the generator converts a fresh copy of the rule for every backend.
 
-## 6. Attribution
+## 6. What ships in the product
+
+The orchestrator embeds the full library generated from the pinned commit: **2,104 SigmaHQ rules** covering
+**282 ATT&CK technique ids** (the 152 techniques Audspect's scenarios run, plus parents), every rule with its
+translations, mapping labels and provenance (SigmaHQ, exact commit, path inside the checkout, licence DRL 1.1).
+
+- Size: `rules.json` is 14.7 MB (about 5 queries and the raw rule per rule), embedded in the binary. This is larger
+  than the 6 MB first estimated.
+- Rule ids are stable across regenerations: `scripts/rulelib-gen/id_registry.json` maps each SigmaHQ id to its
+  AUDRULE id and only grows. Commit it with every regeneration.
+- Two rules carry ATT&CK ids newer than the bundled ATT&CK v16.1 data (T1059.012, T1204.004); they are kept and
+  listed in `metadata.json` as `unrecognizedTechniqueIds`.
+- Regenerate: `tools/rulelib/fetch_sigma.sh`, then
+  `python scripts/rulelib-gen/build.py --sigma-dir tools/rulelib/sigma/rules --sigma-root tools/rulelib/sigma`.
+- Every export (Sigma, KQL, SPL, Lucene, LogScale) returns the upstream rule id, source, commit and licence as
+  response headers.
+
+## 7. Attribution
 
 Rules are from SigmaHQ (https://github.com/SigmaHQ/sigma), licensed under the Detection Rule License (DRL) 1.1.
 Every export carries the rule's original author, Sigma id, source commit and this attribution.

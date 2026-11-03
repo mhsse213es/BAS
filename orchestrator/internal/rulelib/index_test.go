@@ -10,7 +10,7 @@ func testEngine() *Engine {
 		{"id":"AUDRULE-000002","sigmaId":"s2","title":"Kerberoasting SPN Enum","techniqueIds":["T1558.003"],
 		 "severity":"high","status":"test","logSource":{"category":"process_creation","product":"windows"},
 		 "translations":[{"backend":"splunk","language":"SPL","query":"..."}]}
-	]`), []byte(`{"schemaVersion":1}`))
+	]`), []byte(`{"schemaVersion":2}`))
 }
 
 func TestRuleByID_FoundAndNotFound(t *testing.T) {

@@ -10,20 +10,37 @@ package rulelib
 // Rule is one curated detection rule: its Sigma content plus every backend
 // translation that converted successfully.
 type Rule struct {
-	ID             string               `json:"id"`      // stable, Audspect-owned: "AUDRULE-000001"
-	SigmaID        string               `json:"sigmaId"` // upstream Sigma rule UUID — traceability only
-	Title          string               `json:"title"`
-	Description    string               `json:"description"`
-	TechniqueIDs   []string             `json:"techniqueIds"`
-	Severity       string               `json:"severity"`
-	Status         string               `json:"status"`
-	Author         string               `json:"author"`
-	References     []string             `json:"references"`
-	FalsePositives []string             `json:"falsePositives"`
-	LogSource      LogSource            `json:"logSource"`
-	Detection      string               `json:"detection"` // raw Sigma YAML, verbatim
-	Translations   []Translation        `json:"translations"`
-	Failures       []TranslationFailure `json:"failures"`
+	ID             string    `json:"id"`      // stable, Audspect-owned: "AUDRULE-000001"
+	SigmaID        string    `json:"sigmaId"` // upstream Sigma rule UUID — traceability only
+	Title          string    `json:"title"`
+	Description    string    `json:"description"`
+	TechniqueIDs   []string  `json:"techniqueIds"`
+	Severity       string    `json:"severity"`
+	Status         string    `json:"status"`
+	Author         string    `json:"author"`
+	References     []string  `json:"references"`
+	FalsePositives []string  `json:"falsePositives"`
+	LogSource      LogSource `json:"logSource"`
+	Detection      string    `json:"detection"` // raw Sigma YAML, verbatim
+	// Tags, Date and Modified are the upstream rule's own, unchanged (ATT&CK and other tags as written).
+	Tags     []string `json:"tags"`
+	Date     string   `json:"date"`
+	Modified string   `json:"modified"`
+	// Source is where the rule came from and under what licence. Exports keep it.
+	Source       Source               `json:"source"`
+	Translations []Translation        `json:"translations"`
+	Failures     []TranslationFailure `json:"failures"`
+}
+
+// Source is a rule's provenance: the upstream project, the exact commit it was taken from, the path inside that
+// checkout, and the licence it is distributed under (SigmaHQ detection rules: DRL 1.1, attribution required).
+type Source struct {
+	Name       string `json:"name"`
+	URL        string `json:"url"`
+	Commit     string `json:"commit"`
+	Path       string `json:"path"`
+	License    string `json:"license"`
+	LicenseURL string `json:"licenseUrl"`
 }
 
 type LogSource struct {
@@ -54,14 +71,21 @@ type TranslationFailure struct {
 
 // Metadata is the generator's provenance and quality-gate audit trail.
 type Metadata struct {
-	SchemaVersion       int               `json:"schemaVersion"`
-	GeneratorVersion    string            `json:"generatorVersion"`
-	SigmaCommit         string            `json:"sigmaCommit"`
-	GeneratedAt         string            `json:"generatedAt"`
-	RuleCount           int               `json:"ruleCount"`
-	TechniqueCount      int               `json:"techniqueCount"`
-	Backends            map[string]int    `json:"backends"`
-	TranslationFailures []MetadataFailure `json:"translationFailures"`
+	SchemaVersion        int            `json:"schemaVersion"`
+	GeneratorVersion     string         `json:"generatorVersion"`
+	SigmaCommit          string         `json:"sigmaCommit"`
+	GeneratedAt          string         `json:"generatedAt"`
+	SourceLicense        string         `json:"sourceLicense"`
+	Attribution          string         `json:"attribution"`
+	TestedTechniqueCount int            `json:"testedTechniqueCount"`
+	Mappings             map[string]int `json:"mappings"`
+	// UnrecognizedTechniqueIds are ATT&CK ids on rules that the bundled ATT&CK data does not know yet
+	// (SigmaHQ is newer than the bundle).
+	UnrecognizedTechniqueIds []string          `json:"unrecognizedTechniqueIds"`
+	RuleCount                int               `json:"ruleCount"`
+	TechniqueCount           int               `json:"techniqueCount"`
+	Backends                 map[string]int    `json:"backends"`
+	TranslationFailures      []MetadataFailure `json:"translationFailures"`
 }
 
 type MetadataFailure struct {

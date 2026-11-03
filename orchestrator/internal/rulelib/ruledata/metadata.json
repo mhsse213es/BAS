@@ -1,16 +1,1338 @@
 {
+  "attribution": "Detection rules are from the SigmaHQ project (https://github.com/SigmaHQ/sigma), licensed under the Detection Rule License (DRL) 1.1. Each rule keeps its original author, title, id and references; the per-SIEM queries are generated from the rule by Audspect.",
   "backends": {
-    "crowdstrike": 2,
-    "elastic": 2,
-    "microsoft_defender": 2,
-    "microsoft_sentinel": 2,
-    "splunk": 2
+    "crowdstrike": 1945,
+    "elastic": 2104,
+    "microsoft_defender": 2075,
+    "microsoft_sentinel": 2075,
+    "splunk": 2104
   },
-  "generatedAt": "2026-11-03T05:58:53.461856+00:00",
+  "generatedAt": "2026-11-03T06:41:07.851285+00:00",
   "generatorVersion": "1.4.0",
-  "ruleCount": 2,
-  "schemaVersion": 1,
-  "sigmaCommit": "n/a (curated sigma_seed/, not a SigmaHQ checkout)",
-  "techniqueCount": 2,
-  "translationFailures": []
+  "mappings": {
+    "crowdstrike:generic": 1242,
+    "crowdstrike:pipeline": 703,
+    "elastic:generic": 1259,
+    "elastic:pipeline": 845,
+    "microsoft_defender:generic": 1259,
+    "microsoft_defender:pipeline": 816,
+    "microsoft_sentinel:generic": 1259,
+    "microsoft_sentinel:pipeline": 816,
+    "splunk:generic": 1259,
+    "splunk:pipeline": 845
+  },
+  "ruleCount": 2104,
+  "schemaVersion": 2,
+  "sigmaCommit": "0e3b749e0d85cd943706ed610a1447f0d54e8388",
+  "sourceLicense": "DRL-1.1",
+  "techniqueCount": 282,
+  "testedTechniqueCount": 152,
+  "translationFailures": [
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_wmp.yml",
+      "ruleId": "AUDRULE-000007",
+      "sigmaId": "0058b9e5-bcd7-40d4-9205-95ca5a16d7b2"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_offlinescannershell_mpclient_sideloading.yml",
+      "ruleId": "AUDRULE-000025",
+      "sigmaId": "02b18447-ea83-4b1b-8805-714a8a34546a"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_offlinescannershell_mpclient_sideloading.yml",
+      "ruleId": "AUDRULE-000025",
+      "sigmaId": "02b18447-ea83-4b1b-8805-714a8a34546a"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the CurrentDirectory field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_offlinescannershell_mpclient_sideloading.yml",
+      "ruleId": "AUDRULE-000025",
+      "sigmaId": "02b18447-ea83-4b1b-8805-714a8a34546a"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_silenttrinity_stager.yml",
+      "ruleId": "AUDRULE-000031",
+      "sigmaId": "03552375-cc2c-4883-bbe4-7958d5a980be"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_regasm_network_activity.yml",
+      "ruleId": "AUDRULE-000043",
+      "sigmaId": "0531e43a-d77d-47c2-b89f-5fe50321c805"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_wmic_xsl_script_processing.yml)",
+      "ruleId": "AUDRULE-000048",
+      "sigmaId": "05c36dd6-79d6-4a9a-97da-3db20298ab2d"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_wmic_xsl_script_processing.yml)",
+      "ruleId": "AUDRULE-000048",
+      "sigmaId": "05c36dd6-79d6-4a9a-97da-3db20298ab2d"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_wscript_cscript_local_connection.yml",
+      "ruleId": "AUDRULE-000069",
+      "sigmaId": "08249dc0-a28d-4555-8ba5-9255a198e08c"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_rcedit_execution.yml",
+      "ruleId": "AUDRULE-000101",
+      "sigmaId": "0c92f2e6-f08f-4b73-9216-ecb0ca634689"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_svchost_termserv_proc_spawn.yml",
+      "ruleId": "AUDRULE-000132",
+      "sigmaId": "1012f107-b8f1-4271-af30-5aed2de89b39"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_impacket_lateral_movement.yml",
+      "ruleId": "AUDRULE-000136",
+      "sigmaId": "10c14723-61c7-4c75-92ca-9af245723ad2"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_script_exec_from_env_folder.yml",
+      "ruleId": "AUDRULE-000148",
+      "sigmaId": "1228c958-e64e-4e71-92ad-7d429f4138ba"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_rundll32_no_params.yml",
+      "ruleId": "AUDRULE-000191",
+      "sigmaId": "1775e15e-b61b-4d14-a1a3-80981298085a"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_elevated_system_shell_uncommon_parent.yml",
+      "ruleId": "AUDRULE-000193",
+      "sigmaId": "178e615d-e666-498b-9630-9ed363038101"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_elevated_system_shell_uncommon_parent.yml",
+      "ruleId": "AUDRULE-000193",
+      "sigmaId": "178e615d-e666-498b-9630-9ed363038101"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the CurrentDirectory field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_elevated_system_shell_uncommon_parent.yml",
+      "ruleId": "AUDRULE-000193",
+      "sigmaId": "178e615d-e666-498b-9630-9ed363038101"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_lolbin_pester.yml",
+      "ruleId": "AUDRULE-000204",
+      "sigmaId": "18988e1b-9087-4f8a-82fe-0414dce49878"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_winrar_exfil_dmp_files.yml",
+      "ruleId": "AUDRULE-000227",
+      "sigmaId": "1ac14d38-3dfc-4635-92c7-e3fd1c5f5bfc"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\web\\proxy_generic\\proxy_webdav_external_execution.yml",
+      "ruleId": "AUDRULE-000229",
+      "sigmaId": "1ae64f96-72b6-48b3-ad3d-e71dff6c6398"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_mofcomp_execution.yml",
+      "ruleId": "AUDRULE-000250",
+      "sigmaId": "1dd05363-104e-4b4a-b963-196a534b03a1"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_elavated_msi_spawned_shell.yml",
+      "ruleId": "AUDRULE-000254",
+      "sigmaId": "1e53dd56-8d83-4eb4-a43e-b790a05510aa"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_lolbin_gpscript.yml",
+      "ruleId": "AUDRULE-000255",
+      "sigmaId": "1e59c230-6670-45bf-83b0-98903780607e"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_setspn_spn_enumeration.yml",
+      "ruleId": "AUDRULE-000260",
+      "sigmaId": "1eeed653-dbc8-4187-ad0c-eeebb20e6599"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\network\\zeek\\zeek_rdp_public_listener.yml",
+      "ruleId": "AUDRULE-000272",
+      "sigmaId": "1fc0809e-06bf-4de3-ad52-25e5263b7623"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sqlite_chromium_profile_data.yml",
+      "ruleId": "AUDRULE-000314",
+      "sigmaId": "24c77512-782b-448a-8950-eddb0785fc71"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_execution_via_imphashes.yml)",
+      "ruleId": "AUDRULE-000317",
+      "sigmaId": "24e3e58a-646b-4b50-adef-02ef935b9fc8"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_execution_via_imphashes.yml)",
+      "ruleId": "AUDRULE-000317",
+      "sigmaId": "24e3e58a-646b-4b50-adef-02ef935b9fc8"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_snapins_hafnium.yml",
+      "ruleId": "AUDRULE-000319",
+      "sigmaId": "25676e10-2121-446e-80a4-71ff8506af47"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\builtin\\security\\account_management\\win_security_successful_external_remote_rdp_login.yml",
+      "ruleId": "AUDRULE-000321",
+      "sigmaId": "259a9cdf-c4dd-4fa2-b243-2269e5ab18a2"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_system_user_anomaly.yml",
+      "ruleId": "AUDRULE-000328",
+      "sigmaId": "2617e7ed-adb7-40ba-b0f3-8f9945fe6c09"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_sharpersist.yml",
+      "ruleId": "AUDRULE-000331",
+      "sigmaId": "26488ad0-f9fd-4536-876f-52fea846a2e4"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_cmd_for_loop_execution_with_recursive_directory_search.yml",
+      "ruleId": "AUDRULE-000342",
+      "sigmaId": "2782fbd8-b662-4eb5-9962-5bfbfb671e7b"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_rundll32_setupapi_installhinfsection.yml",
+      "ruleId": "AUDRULE-000345",
+      "sigmaId": "285b85b1-a555-4095-8652-a8a4106af63f"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_vscode_tunnel_renamed_execution.yml",
+      "ruleId": "AUDRULE-000369",
+      "sigmaId": "2cf29f11-e356-4f61-98c0-1bdb9393d6da"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_embed_exe_lnk.yml",
+      "ruleId": "AUDRULE-000397",
+      "sigmaId": "30e92f50-bb5a-4884-98b5-d20aa80f3d7a"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_renamed_dctask64.yml)",
+      "ruleId": "AUDRULE-000423",
+      "sigmaId": "340a090b-c4e9-412e-bb36-b4b16fe96f9b"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_renamed_dctask64.yml)",
+      "ruleId": "AUDRULE-000423",
+      "sigmaId": "340a090b-c4e9-412e-bb36-b4b16fe96f9b"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_createminidump.yml)",
+      "ruleId": "AUDRULE-000443",
+      "sigmaId": "36d88494-1d43-4dc0-b3fa-35c8fea0ca9d"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_createminidump.yml)",
+      "ruleId": "AUDRULE-000443",
+      "sigmaId": "36d88494-1d43-4dc0-b3fa-35c8fea0ca9d"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Company field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_execution_via_pe_metadata.yml",
+      "ruleId": "AUDRULE-000451",
+      "sigmaId": "37c1333a-a0db-48be-b64b-7393b2386e3b"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_dialer_initiated_connection.yml",
+      "ruleId": "AUDRULE-000453",
+      "sigmaId": "37e4024a-6c80-4d8f-b95d-2e7e94f3a8d1"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_seatbelt.yml",
+      "ruleId": "AUDRULE-000454",
+      "sigmaId": "38646daa-e78f-4ace-9de0-55547b2d30da"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_ntfs_reparse_point.yml",
+      "ruleId": "AUDRULE-000469",
+      "sigmaId": "39ed3c80-e6a1-431b-9df3-911ac53d08a7"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_shell_spawn_susp_program.yml",
+      "ruleId": "AUDRULE-000472",
+      "sigmaId": "3a6586ad-127a-4d3b-a677-1e6eacdf8fde"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_shell_spawn_susp_program.yml",
+      "ruleId": "AUDRULE-000472",
+      "sigmaId": "3a6586ad-127a-4d3b-a677-1e6eacdf8fde"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the CurrentDirectory field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_shell_spawn_susp_program.yml",
+      "ruleId": "AUDRULE-000472",
+      "sigmaId": "3a6586ad-127a-4d3b-a677-1e6eacdf8fde"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_computerdefaults.yml",
+      "ruleId": "AUDRULE-000489",
+      "sigmaId": "3c05e90d-7eba-4324-9972-5d7f711a60a8"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Company field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_csi_execution.yml",
+      "ruleId": "AUDRULE-000514",
+      "sigmaId": "40b95d31-1afc-469e-8d34-9a3a667d058e"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_dism_remove.yml",
+      "ruleId": "AUDRULE-000543",
+      "sigmaId": "43e32da2-fdd0-4156-90de-50dfd62636f9"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_mpcmdrun_download_arbitrary_file.yml",
+      "ruleId": "AUDRULE-000560",
+      "sigmaId": "46123129-1024-423e-9fae-43af4a0fa9a5"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sqlite_firefox_gecko_profile_data.yml",
+      "ruleId": "AUDRULE-000575",
+      "sigmaId": "4833155a-4053-4c9c-a997-777fcea0baa7"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_plink_port_forwarding.yml",
+      "ruleId": "AUDRULE-000580",
+      "sigmaId": "48a61b29-389f-4032-b317-b30de6b95314"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_fltmc_unload_driver.yml",
+      "ruleId": "AUDRULE-000587",
+      "sigmaId": "4931188c-178e-4ee7-a348-39e8a7a56821"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_icmluautil.yml",
+      "ruleId": "AUDRULE-000596",
+      "sigmaId": "49f2f17b-b4c8-4172-a68b-d5bf95d05130"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_msiexec_embedding.yml",
+      "ruleId": "AUDRULE-000599",
+      "sigmaId": "4a2a2c3e-209f-4d01-b513-4155a540b469"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_cmstp_com_object_access.yml",
+      "ruleId": "AUDRULE-000610",
+      "sigmaId": "4b60e6f2-bf39-47b4-b4ea-398e33cfe253"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_idiagnostic_profile.yml",
+      "ruleId": "AUDRULE-000625",
+      "sigmaId": "4cbef972-f347-4170-b62a-8253f6168e6d"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_winrar_uncommon_folder_execution.yml",
+      "ruleId": "AUDRULE-000640",
+      "sigmaId": "4ede543c-e098-43d9-a28f-dd784a13132f"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_nimscan.yml)",
+      "ruleId": "AUDRULE-000648",
+      "sigmaId": "4fd6b1c7-19b8-4488-97f6-00f0924991a3"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_nimscan.yml)",
+      "ruleId": "AUDRULE-000648",
+      "sigmaId": "4fd6b1c7-19b8-4488-97f6-00f0924991a3"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_adfind_execution.yml)",
+      "ruleId": "AUDRULE-000663",
+      "sigmaId": "514e7e3e-b3b4-4a67-af60-be20f139198b"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_adfind_execution.yml)",
+      "ruleId": "AUDRULE-000663",
+      "sigmaId": "514e7e3e-b3b4-4a67-af60-be20f139198b"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_selectmyparent.yml)",
+      "ruleId": "AUDRULE-000679",
+      "sigmaId": "52ff7941-8211-46f9-84f8-9903efb7077d"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_selectmyparent.yml)",
+      "ruleId": "AUDRULE-000679",
+      "sigmaId": "52ff7941-8211-46f9-84f8-9903efb7077d"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_selectmyparent.yml",
+      "ruleId": "AUDRULE-000679",
+      "sigmaId": "52ff7941-8211-46f9-84f8-9903efb7077d"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_explorer_nouaccheck.yml",
+      "ruleId": "AUDRULE-000681",
+      "sigmaId": "534f2ef7-e8a2-4433-816d-c91bccde289b"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_advanced_port_scanner.yml",
+      "ruleId": "AUDRULE-000690",
+      "sigmaId": "54773c5f-f1cc-4703-9126-2f797d96a69d"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_system_informer.yml",
+      "ruleId": "AUDRULE-000710",
+      "sigmaId": "5722dff1-4bdd-4949-86ab-fbaf707e767a"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_wsass.yml)",
+      "ruleId": "AUDRULE-000720",
+      "sigmaId": "589ac73f-8e12-409c-964e-31a2f5775ae2"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_wsass.yml)",
+      "ruleId": "AUDRULE-000720",
+      "sigmaId": "589ac73f-8e12-409c-964e-31a2f5775ae2"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_rdp_reverse_tunnel.yml",
+      "ruleId": "AUDRULE-000762",
+      "sigmaId": "5f699bc5-5446-4a4a-a0b7-5ef2885a3eb4"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_java_sysaidserver_susp_child_process.yml",
+      "ruleId": "AUDRULE-000771",
+      "sigmaId": "60bfeac3-0d35-4302-8efb-1dd16f715bc6"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_addinutil_suspicious_cmdline.yml",
+      "ruleId": "AUDRULE-000787",
+      "sigmaId": "631b22a4-70f4-4e2f-9ea8-42f84d9df6d8"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_addinutil_suspicious_cmdline.yml",
+      "ruleId": "AUDRULE-000787",
+      "sigmaId": "631b22a4-70f4-4e2f-9ea8-42f84d9df6d8"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the CurrentDirectory field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_addinutil_suspicious_cmdline.yml",
+      "ruleId": "AUDRULE-000787",
+      "sigmaId": "631b22a4-70f4-4e2f-9ea8-42f84d9df6d8"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_certipy.yml",
+      "ruleId": "AUDRULE-000838",
+      "sigmaId": "6938366d-8954-4ddc-baff-c830b3ba8fcd"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_execution_from_public_folder_as_parent.yml",
+      "ruleId": "AUDRULE-000844",
+      "sigmaId": "69bd9b97-2be2-41b6-9816-fb08757a4d1a"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sysinternals_sysmon_uninstall.yml",
+      "ruleId": "AUDRULE-000847",
+      "sigmaId": "6a5f68d1-c4b5-46b9-94ee-5324892ea939"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sc_sdset_allow_service_changes.yml",
+      "ruleId": "AUDRULE-000862",
+      "sigmaId": "6c8fbee5-dee8-49bc-851d-c3142d02aa47"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_link_uncommon_parent_process.yml",
+      "ruleId": "AUDRULE-000878",
+      "sigmaId": "6e968eb1-5f05-4dac-94e9-fd0c5cb49fd6"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\network\\zeek\\zeek_http_webdav_put_request.yml",
+      "ruleId": "AUDRULE-000897",
+      "sigmaId": "705072a5-bb6f-4ced-95b6-ecfa6602090b"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_lolbin_mpiexec.yml)",
+      "ruleId": "AUDRULE-000919",
+      "sigmaId": "729ce0ea-5d8f-4769-9762-e35de441586d"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_lolbin_mpiexec.yml)",
+      "ruleId": "AUDRULE-000919",
+      "sigmaId": "729ce0ea-5d8f-4769-9762-e35de441586d"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_msra_process_injection.yml",
+      "ruleId": "AUDRULE-000934",
+      "sigmaId": "744a188b-0415-4792-896f-11ddb0588dbc"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_renamed_curl.yml",
+      "ruleId": "AUDRULE-000942",
+      "sigmaId": "7530cd3d-7671-43e3-b209-976966f6ea48"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_susp_parent_process.yml",
+      "ruleId": "AUDRULE-000943",
+      "sigmaId": "754ed792-634f-40ae-b3bc-e0448d33f695"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_winlogon_net_connections.yml",
+      "ruleId": "AUDRULE-000953",
+      "sigmaId": "7610a4ea-c06d-495f-a2ac-0a696abcfd3b"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_certify.yml",
+      "ruleId": "AUDRULE-000955",
+      "sigmaId": "762f2482-ff21-4970-8939-0aa317a886bb"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Company field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_secutyxploded.yml",
+      "ruleId": "AUDRULE-000958",
+      "sigmaId": "7679d464-4f74-45e2-9e01-ac66c5eb041a"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_gpg4win_portable_execution.yml",
+      "ruleId": "AUDRULE-000966",
+      "sigmaId": "77df53a5-1d78-4f32-bc5a-0e7465bd8f41"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\builtin\\security\\account_management\\win_security_successful_external_remote_smb_login.yml",
+      "ruleId": "AUDRULE-000973",
+      "sigmaId": "78d5cab4-557e-454f-9fb9-a222bd0d5edc"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_msiexec_install_quiet.yml",
+      "ruleId": "AUDRULE-000977",
+      "sigmaId": "79a87aa6-e4bd-42fc-a5bb-5e6fbdcd62f5"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_winsat.yml",
+      "ruleId": "AUDRULE-000981",
+      "sigmaId": "7a01183d-71a2-46ad-ad5c-acd989ac1793"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_stracciatella_execution.yml",
+      "ruleId": "AUDRULE-000988",
+      "sigmaId": "7a4d9232-92fc-404d-8ce1-4c92e7caf539"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_wce.yml)",
+      "ruleId": "AUDRULE-000992",
+      "sigmaId": "7aa7009a-28b9-4344-8c1f-159489a390df"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_wce.yml)",
+      "ruleId": "AUDRULE-000992",
+      "sigmaId": "7aa7009a-28b9-4344-8c1f-159489a390df"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sysinternals_tools_masquerading.yml",
+      "ruleId": "AUDRULE-001008",
+      "sigmaId": "7cce6fc8-a07f-4d84-a53e-96e1879843c9"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_ssh_proxy_execution.yml)",
+      "ruleId": "AUDRULE-001016",
+      "sigmaId": "7d6d30b8-5b91-4b90-a891-46cccaf29598"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_ssh_proxy_execution.yml)",
+      "ruleId": "AUDRULE-001016",
+      "sigmaId": "7d6d30b8-5b91-4b90-a891-46cccaf29598"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_ssh_proxy_execution.yml",
+      "ruleId": "AUDRULE-001016",
+      "sigmaId": "7d6d30b8-5b91-4b90-a891-46cccaf29598"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Provider_Name. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_conhost_susp_child_process.yml",
+      "ruleId": "AUDRULE-001020",
+      "sigmaId": "7dc2dedd-7603-461a-bc13-15803d132355"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Provider_Name. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_conhost_susp_child_process.yml",
+      "ruleId": "AUDRULE-001020",
+      "sigmaId": "7dc2dedd-7603-461a-bc13-15803d132355"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_rubeus.yml",
+      "ruleId": "AUDRULE-001027",
+      "sigmaId": "7ec2c172-dceb-4c10-92c9-87c1881b7e18"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_process_hacker.yml",
+      "ruleId": "AUDRULE-001048",
+      "sigmaId": "811e0002-b13b-4a15-9d00-a613fce66e42"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_schtasks_env_folder.yml",
+      "ruleId": "AUDRULE-001050",
+      "sigmaId": "81325ce1-be01-4250-944f-b4789644556f"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_webshell_susp_process_spawned_from_webserver.yml",
+      "ruleId": "AUDRULE-001061",
+      "sigmaId": "8202070f-edeb-4d31-a010-a26c72ac5600"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_dismhost.yml",
+      "ruleId": "AUDRULE-001088",
+      "sigmaId": "853e74f9-9392-4935-ad3b-2e8c040dae86"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sc_create_service.yml",
+      "ruleId": "AUDRULE-001098",
+      "sigmaId": "85ff530b-261d-48c6-a441-facaa2e81e48"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_mssql_susp_child_process.yml",
+      "ruleId": "AUDRULE-001104",
+      "sigmaId": "869b9ca7-9ea2-4a5a-8325-e80e62f75445"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sysinternals_sysmon_config_update.yml",
+      "ruleId": "AUDRULE-001107",
+      "sigmaId": "87911521-7098-470b-a459-9a57fc80bdfd"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_set_policies_to_unsecure_level.yml",
+      "ruleId": "AUDRULE-001111",
+      "sigmaId": "87e3c4e8-a6a8-4ad9-bb4f-46e7ff99a180"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_rundll32_susp_shellexec_ordinal_execution.yml",
+      "ruleId": "AUDRULE-001113",
+      "sigmaId": "8823e85d-31d8-473e-b7f4-92da070f0fc6"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_python_inline_command_execution.yml",
+      "ruleId": "AUDRULE-001126",
+      "sigmaId": "899133d5-4d7c-4a7f-94ee-27355c879d90"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_memprocfs.yml",
+      "ruleId": "AUDRULE-001132",
+      "sigmaId": "8a1b2c3d-4e5f-6789-abcd-ef1234567890"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_wmiprvse_susp_child_processes.yml",
+      "ruleId": "AUDRULE-001135",
+      "sigmaId": "8a582fe2-0882-4b89-a82a-da6b2dc32937"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_sysmoneop.yml)",
+      "ruleId": "AUDRULE-001138",
+      "sigmaId": "8a7e90c5-fe6e-45dc-889e-057fe4378bd9"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_sysmoneop.yml)",
+      "ruleId": "AUDRULE-001138",
+      "sigmaId": "8a7e90c5-fe6e-45dc-889e-057fe4378bd9"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_ntds.yml",
+      "ruleId": "AUDRULE-001144",
+      "sigmaId": "8bc64091-6875-4881-aaf9-7bd25b5dda08"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_wmic_squiblytwo_bypass.yml)",
+      "ruleId": "AUDRULE-001156",
+      "sigmaId": "8d63dadf-b91b-4187-87b6-34a1114577ea"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_wmic_squiblytwo_bypass.yml)",
+      "ruleId": "AUDRULE-001156",
+      "sigmaId": "8d63dadf-b91b-4187-87b6-34a1114577ea"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\builtin\\smbserver\\connectivity\\win_smbserver_connectivity_unsigned_and_unencrypted_share_connection.yml",
+      "ruleId": "AUDRULE-001159",
+      "sigmaId": "8d91f6e4-9f3b-4c21-ae41-2c5b7d9f7a12"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_vscode_tunnel_execution.yml",
+      "ruleId": "AUDRULE-001176",
+      "sigmaId": "90d6bd71-dffb-4989-8d86-a827fedd6624"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sysinternals_adexplorer_execution.yml",
+      "ruleId": "AUDRULE-001188",
+      "sigmaId": "9212f354-7775-4e28-9c9f-8f0a4544e664"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_schtasks_creation.yml",
+      "ruleId": "AUDRULE-001191",
+      "sigmaId": "92626ddd-662c-49e3-ac59-f6535f12d189"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_iis_appcmd_susp_module_install.yml",
+      "ruleId": "AUDRULE-001207",
+      "sigmaId": "9465ddf4-f9e4-4ebd-8d98-702df3a93239"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_mstsc_remote_connection.yml",
+      "ruleId": "AUDRULE-001220",
+      "sigmaId": "954f0af7-62dd-418f-b3df-a84bc2c7a774"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_script_engine_parent.yml",
+      "ruleId": "AUDRULE-001224",
+      "sigmaId": "95eadcb2-92e4-4ed1-9031-92547773a6db"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_script_engine_parent.yml",
+      "ruleId": "AUDRULE-001224",
+      "sigmaId": "95eadcb2-92e4-4ed1-9031-92547773a6db"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the CurrentDirectory field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_script_engine_parent.yml",
+      "ruleId": "AUDRULE-001224",
+      "sigmaId": "95eadcb2-92e4-4ed1-9031-92547773a6db"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_stordiag_susp_child_process.yml",
+      "ruleId": "AUDRULE-001227",
+      "sigmaId": "961e0abb-1b1e-4c84-a453-aafe56ad0d34"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_rundll32_webdav_client_susp_execution.yml",
+      "ruleId": "AUDRULE-001249",
+      "sigmaId": "982e9f2d-1a85-4d5b-aea4-31f5e97c6555"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_winpeas.yml",
+      "ruleId": "AUDRULE-001251",
+      "sigmaId": "98b53e78-ebaf-46f8-be06-421aafd176d9"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_wscript_cscript_outbound_connection.yml",
+      "ruleId": "AUDRULE-001256",
+      "sigmaId": "992a6cae-db6a-43c8-9cec-76d7195c96fc"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_werfault_lsass_shtinkering.yml",
+      "ruleId": "AUDRULE-001270",
+      "sigmaId": "9a4ccd1a-3526-4d99-b980-9f9c5d3a6ff3"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_wlrmdr_uncommon_child_process.yml",
+      "ruleId": "AUDRULE-001294",
+      "sigmaId": "9cfc00b6-bfb7-49ce-9781-ef78503154bb"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_wmic_recon_system_info_uncommon.yml",
+      "ruleId": "AUDRULE-001297",
+      "sigmaId": "9d5a1274-922a-49d0-87f3-8c653483b909"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_expand_cabinet_files.yml",
+      "ruleId": "AUDRULE-001319",
+      "sigmaId": "9f107a84-532c-41af-b005-8d12a607639f"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_susp_outbound_mobsync_connection.yml",
+      "ruleId": "AUDRULE-001320",
+      "sigmaId": "9f2cc74d-78af-4eb2-bb64-9cd1d292b87b"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_7zip_password_compression.yml",
+      "ruleId": "AUDRULE-001328",
+      "sigmaId": "9fbf5927-5261-4284-a71d-f681029ea574"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_script_exec_from_temp_folder.yml",
+      "ruleId": "AUDRULE-001384",
+      "sigmaId": "a6a39bdb-935c-4f0a-ab77-35f4bbf44d33"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_bad_opsec_sacrificial_processes.yml",
+      "ruleId": "AUDRULE-001392",
+      "sigmaId": "a7c3d773-caef-227e-a7e7-c2f13c622329"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_regsvr32_susp_parent.yml",
+      "ruleId": "AUDRULE-001417",
+      "sigmaId": "ab37a6ec-6068-432b-a64e-2c7bf95b1d22"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_msconfig_gui.yml",
+      "ruleId": "AUDRULE-001430",
+      "sigmaId": "ad92e3f9-7eb6-460e-96b1-582b0ccbb980"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_rar_susp_greedy_compression.yml",
+      "ruleId": "AUDRULE-001451",
+      "sigmaId": "afe52666-401e-4a02-b4ff-5d128990b8cb"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_safetykatz.yml",
+      "ruleId": "AUDRULE-001459",
+      "sigmaId": "b1876533-4ed5-4a83-90f3-b8645840a413"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_lolbin_settingsynchost.yml",
+      "ruleId": "AUDRULE-001482",
+      "sigmaId": "b2ddd389-f676-4ac4-845a-e00781a48e5f"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_schtasks_powershell_persistence.yml",
+      "ruleId": "AUDRULE-001507",
+      "sigmaId": "b66474aa-bd92-4333-a16c-298155b120df"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_cleanmgr.yml",
+      "ruleId": "AUDRULE-001508",
+      "sigmaId": "b697e69c-746f-4a86-9f59-7bfff8eab881"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_csc_susp_parent.yml",
+      "ruleId": "AUDRULE-001513",
+      "sigmaId": "b730a276-6b63-41b8-bcf8-55930c8fc6ee"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_inveigh.yml",
+      "ruleId": "AUDRULE-001534",
+      "sigmaId": "b99a1518-1ad5-4f65-bc95-1ffff97a8fd0"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_base64_encoded_cmd_patterns.yml",
+      "ruleId": "AUDRULE-001537",
+      "sigmaId": "b9d9cc83-380b-4ba3-8d8f-60c0e7e2930c"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_xor_commandline.yml",
+      "ruleId": "AUDRULE-001553",
+      "sigmaId": "bb780e0c-16cf-4383-8383-1e5471db6cf9"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_wsudo_susp_execution.yml",
+      "ruleId": "AUDRULE-001568",
+      "sigmaId": "bdeeabc9-ff2a-4a51-be59-bb253aac7891"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_sharpevtmute.yml",
+      "ruleId": "AUDRULE-001574",
+      "sigmaId": "bedfc8ad-d1c7-4e37-a20e-e2b0dbee759c"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_advanced_ip_scanner.yml",
+      "ruleId": "AUDRULE-001576",
+      "sigmaId": "bef37fa2-f205-4a7b-b484-0759bfd5f86f"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_rundll32_uncommon_dll_extension.yml",
+      "ruleId": "AUDRULE-001610",
+      "sigmaId": "c3a99af4-35a9-4668-879e-c09aeb4f2bdf"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_sharpup.yml",
+      "ruleId": "AUDRULE-001622",
+      "sigmaId": "c484e533-ee16-4a93-b6ac-f0ea4868b2f1"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_renamed_paexec.yml)",
+      "ruleId": "AUDRULE-001626",
+      "sigmaId": "c4e49831-1496-40cf-8ce1-b53f942b02f9"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_renamed_paexec.yml)",
+      "ruleId": "AUDRULE-001626",
+      "sigmaId": "c4e49831-1496-40cf-8ce1-b53f942b02f9"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_renamed_paexec.yml",
+      "ruleId": "AUDRULE-001626",
+      "sigmaId": "c4e49831-1496-40cf-8ce1-b53f942b02f9"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_edr_freeze.yml)",
+      "ruleId": "AUDRULE-001631",
+      "sigmaId": "c598cc0c-9e70-4852-b9eb-8921af79f598"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_edr_freeze.yml)",
+      "ruleId": "AUDRULE-001631",
+      "sigmaId": "c598cc0c-9e70-4852-b9eb-8921af79f598"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_schtasks_appdata_local_system.yml",
+      "ruleId": "AUDRULE-001633",
+      "sigmaId": "c5c00f49-b3f9-45a6-997e-cfdecc6e1967"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sysinternals_accesschk_check_permissions.yml",
+      "ruleId": "AUDRULE-001636",
+      "sigmaId": "c625d754-6a3d-4f65-9c9a-536aea960d37"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_wuauclt_network_connection.yml",
+      "ruleId": "AUDRULE-001637",
+      "sigmaId": "c649a6c7-cd8c-4a78-9c04-000fc76df954"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_lsass_process_clone.yml",
+      "ruleId": "AUDRULE-001655",
+      "sigmaId": "c8da0dfd-4ed0-4b68-962d-13c9c884384e"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_netscan.yml",
+      "ruleId": "AUDRULE-001662",
+      "sigmaId": "ca387a8e-1c84-4da3-9993-028b45342d30"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_handlekatz.yml)",
+      "ruleId": "AUDRULE-001664",
+      "sigmaId": "ca621ba5-54ab-4035-9942-d378e6fcde3c"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_handlekatz.yml)",
+      "ruleId": "AUDRULE-001664",
+      "sigmaId": "ca621ba5-54ab-4035-9942-d378e6fcde3c"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_rundll32_spawn_explorer.yml",
+      "ruleId": "AUDRULE-001668",
+      "sigmaId": "caa06de8-fdef-4c91-826a-7f9e163eef4b"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_conhost_uncommon_parent.yml",
+      "ruleId": "AUDRULE-001675",
+      "sigmaId": "cbb9e3d1-2386-4e59-912e-62f1484f7a89"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_eventlog_clear.yml",
+      "ruleId": "AUDRULE-001682",
+      "sigmaId": "cc36992a-4671-4f21-a91d-6c2b72a2edf5"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_always_install_elevated_windows_installer.yml",
+      "ruleId": "AUDRULE-001699",
+      "sigmaId": "cd951fdc-4b2f-47f5-ba99-a33bf61e3770"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_rundll32_net_connections.yml",
+      "ruleId": "AUDRULE-001701",
+      "sigmaId": "cdc8da7d-c303-42f8-b08c-b4ab47230263"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_sharp_chisel.yml",
+      "ruleId": "AUDRULE-001712",
+      "sigmaId": "cf93e05e-d798-4d9e-b522-b0248dc61eaf"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_verclsid_runs_com.yml",
+      "ruleId": "AUDRULE-001717",
+      "sigmaId": "d06be4b9-8045-428b-a567-740a26d9db25"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_csexec.yml",
+      "ruleId": "AUDRULE-001718",
+      "sigmaId": "d08a2711-ee8b-4323-bdec-b7d85e892b31"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_webbrowserpassview.yml",
+      "ruleId": "AUDRULE-001720",
+      "sigmaId": "d0dae994-26c6-4d2d-83b5-b3c8b79ae513"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_uacme.yml)",
+      "ruleId": "AUDRULE-001737",
+      "sigmaId": "d38d2fa4-98e6-4a24-aff1-410b0c9ad177"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_uacme.yml)",
+      "ruleId": "AUDRULE-001737",
+      "sigmaId": "d38d2fa4-98e6-4a24-aff1-410b0c9ad177"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_uacme.yml",
+      "ruleId": "AUDRULE-001737",
+      "sigmaId": "d38d2fa4-98e6-4a24-aff1-410b0c9ad177"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_lolbin_ie4uinit.yml",
+      "ruleId": "AUDRULE-001741",
+      "sigmaId": "d3bf399f-b0cf-4250-8bb4-dfc192ab81dc"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_lolbin_ie4uinit.yml",
+      "ruleId": "AUDRULE-001741",
+      "sigmaId": "d3bf399f-b0cf-4250-8bb4-dfc192ab81dc"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the CurrentDirectory field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_lolbin_ie4uinit.yml",
+      "ruleId": "AUDRULE-001741",
+      "sigmaId": "d3bf399f-b0cf-4250-8bb4-dfc192ab81dc"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_doppelganger.yml)",
+      "ruleId": "AUDRULE-001747",
+      "sigmaId": "d474c8fe-bb69-4ea0-b7d9-f682b56d52d3"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_doppelganger.yml)",
+      "ruleId": "AUDRULE-001747",
+      "sigmaId": "d474c8fe-bb69-4ea0-b7d9-f682b56d52d3"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_cmdline_special_characters.yml",
+      "ruleId": "AUDRULE-001771",
+      "sigmaId": "d7bcd677-645d-4691-a8d4-7a5602b780d1"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_rundll32_susp_control_dll_load.yml",
+      "ruleId": "AUDRULE-001774",
+      "sigmaId": "d7eb979b-c2b5-4a6f-a3a7-c87ce6763819"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_dotnet_arbitrary_dll_csproj_execution.yml",
+      "ruleId": "AUDRULE-001775",
+      "sigmaId": "d80d5c81-04ba-45b4-84e4-92eba40e0ad3"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_schtasks_schedule_via_masqueraded_xml_file.yml",
+      "ruleId": "AUDRULE-001799",
+      "sigmaId": "dd2a821e-3b07-4d3b-a9ac-929fe4c6ca0c"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_susp_lnk_exec_hidden_cmd.yml",
+      "ruleId": "AUDRULE-001803",
+      "sigmaId": "dd8756e7-a3a0-4768-b47e-8f545d1a751c"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_renamed_adfind.yml)",
+      "ruleId": "AUDRULE-001821",
+      "sigmaId": "df55196f-f105-44d3-a675-e9dfb6cc2f2b"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_renamed_adfind.yml)",
+      "ruleId": "AUDRULE-001821",
+      "sigmaId": "df55196f-f105-44d3-a675-e9dfb6cc2f2b"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Product field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_curl_susp_download.yml",
+      "ruleId": "AUDRULE-001848",
+      "sigmaId": "e218595b-bbe7-4ee5-8a96-f32a24ad3468"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_pua_rclone_execution.yml",
+      "ruleId": "AUDRULE-001859",
+      "sigmaId": "e37db05d-d1f9-49c8-b464-cee1a4b11638"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_hijacking_firwall_snap_in.yml",
+      "ruleId": "AUDRULE-001873",
+      "sigmaId": "e52cb31c-10ed-4aea-bcb7-593c9f4a315b"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_rundll32_susp_activity.yml",
+      "ruleId": "AUDRULE-001880",
+      "sigmaId": "e593cf51-88db-4ee1-b920-37e89012a3c9"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_coercedpotato.yml)",
+      "ruleId": "AUDRULE-001910",
+      "sigmaId": "e8d34729-86a4-4140-adfd-0a29c2106307"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_coercedpotato.yml)",
+      "ruleId": "AUDRULE-001910",
+      "sigmaId": "e8d34729-86a4-4140-adfd-0a29c2106307"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_edrsilencer.yml",
+      "ruleId": "AUDRULE-001932",
+      "sigmaId": "eb2d07d4-49cb-4523-801a-da002df36602"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_7zip_exfil_dmp_files.yml",
+      "ruleId": "AUDRULE-001943",
+      "sigmaId": "ec570e53-4c76-45a9-804d-dc3f355ff7a7"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_wsl_windows_binaries_execution.yml",
+      "ruleId": "AUDRULE-001952",
+      "sigmaId": "ed825c86-c009-4014-b413-b76003e33d35"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: CurrentDirectory. Please use valid fields for the DeviceProcessEvents table, or the following fields that have keymappings in this pipeline:\nAccountDomain, AccountName, AccountObjectId, AccountSid, AccountUpn, ActionType, AdditionalFields, AppGuardContainerId, CommandLine, Company, CreatedProcessSessionId, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, GrandParentImage, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessLogonId, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessSignatureStatus, InitiatingProcessSignerType, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IntegrityLevel, IsInitiatingProcessRemoteSession, IsProcessRemoteSession, LogonId, MD5, OriginalFileName, ParentCommandLine, ParentImage, ParentProcessId, ParentUser, ProcessCommandLine, ProcessCreationTime, ProcessId, ProcessIntegrityLevel, ProcessName, ProcessRemoteSessionDeviceName, ProcessRemoteSessionIP, ProcessTokenElevation, ProcessVersionInfoCompanyName, ProcessVersionInfoFileDescription, ProcessVersionInfoInternalFileName, ProcessVersionInfoOriginalFileName, ProcessVersionInfoProductName, ProcessVersionInfoProductVersion, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_wsl_windows_binaries_execution.yml",
+      "ruleId": "AUDRULE-001952",
+      "sigmaId": "ed825c86-c009-4014-b413-b76003e33d35"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the CurrentDirectory field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_wsl_windows_binaries_execution.yml",
+      "ruleId": "AUDRULE-001952",
+      "sigmaId": "ed825c86-c009-4014-b413-b76003e33d35"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_sysinternals_adexplorer_susp_execution.yml",
+      "ruleId": "AUDRULE-001966",
+      "sigmaId": "ef61af62-bc74-4f58-b49b-626448227652"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\network_connection\\net_connection_win_cmstp_initiated_connection.yml",
+      "ruleId": "AUDRULE-001968",
+      "sigmaId": "efafe0bf-4238-479e-af8f-797bd3490d2d"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_cobaltstrike_process_patterns.yml",
+      "ruleId": "AUDRULE-001999",
+      "sigmaId": "f35c5d71-b489-4e22-a115-f003df287317"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_bloodhound_sharphound.yml",
+      "ruleId": "AUDRULE-002000",
+      "sigmaId": "f376c8a7-a2d0-4ddc-aa0c-16c17236d962"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_renamed_autoit.yml)",
+      "ruleId": "AUDRULE-002008",
+      "sigmaId": "f4264e47-f522-4c38-a420-04525d5b880f"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_renamed_autoit.yml)",
+      "ruleId": "AUDRULE-002008",
+      "sigmaId": "f4264e47-f522-4c38-a420-04525d5b880f"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_vscode_tunnel_remote_shell_.yml",
+      "ruleId": "AUDRULE-002012",
+      "sigmaId": "f4a623c2-4ef5-4c33-b811-0642f702c9f1"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_non_interactive_execution.yml",
+      "ruleId": "AUDRULE-002013",
+      "sigmaId": "f4bbd493-b796-416e-bbf2-121235348529"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_forfiles_child_process_masquerading.yml",
+      "ruleId": "AUDRULE-002017",
+      "sigmaId": "f53714ec-5077-420e-ad20-907ff9bb2958"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\builtin\\security\\account_management\\win_security_susp_failed_logon_source.yml",
+      "ruleId": "AUDRULE-002046",
+      "sigmaId": "f88e112a-21aa-44bd-9b01-6ee2a2bbbed1"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_powershell_encode.yml",
+      "ruleId": "AUDRULE-002071",
+      "sigmaId": "fb843269-508c-4b76-8b8d-88679db22ce7"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_pchunter.yml",
+      "ruleId": "AUDRULE-002079",
+      "sigmaId": "fca949cc-79ca-446e-8064-01aa7e52ece5"
+    }
+  ],
+  "unrecognizedTechniqueIds": [
+    "T1059.012",
+    "T1204.004"
+  ]
 }

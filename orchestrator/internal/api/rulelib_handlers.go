@@ -80,6 +80,14 @@ func (h *Handler) ExportRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Provenance travels with every export: the upstream rule, where and when it came from, and its licence.
+	w.Header().Set("X-Audspect-Sigma-Id", rule.SigmaID)
+	if rule.Source.Name != "" {
+		w.Header().Set("X-Audspect-Source", rule.Source.Name)
+		w.Header().Set("X-Audspect-Source-Commit", rule.Source.Commit)
+		w.Header().Set("X-Audspect-Source-License", rule.Source.License)
+	}
+
 	var text string
 	switch format {
 	case "sigma", "":

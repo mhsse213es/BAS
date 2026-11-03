@@ -117,3 +117,25 @@ func TestExportRule_ReturnsRequestedFormat(t *testing.T) {
 		t.Fatalf("status = %d, want 400 for an unsupported format", badRec.Code)
 	}
 }
+
+// An exported rule or query keeps its provenance: the upstream rule id, the project and commit it came from, and
+// its licence (SigmaHQ rules are DRL 1.1, attribution required).
+func TestExportRule_CarriesProvenanceAndLicenceInEveryFormat(t *testing.T) {
+	h := rulelibTestHandler(t)
+	listRec := httptest.NewRecorder()
+	h.ListRules(listRec, httptest.NewRequest(http.MethodGet, "/api/rules", nil))
+	var list []map[string]any
+	json.Unmarshal(listRec.Body.Bytes(), &list)
+	id := list[0]["id"].(string)
+	for _, format := range []string{"sigma", "spl"} {
+		rec := httptest.NewRecorder()
+		h.ExportRule(rec, httptest.NewRequest(http.MethodGet, "/api/rules/export?id="+id+"&format="+format, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status = %d", format, rec.Code)
+		}
+		if rec.Header().Get("X-Audspect-Sigma-Id") == "" || len(rec.Header().Get("X-Audspect-Source-Commit")) != 40 ||
+			rec.Header().Get("X-Audspect-Source-License") != "DRL-1.1" || rec.Header().Get("X-Audspect-Source") != "SigmaHQ" {
+			t.Errorf("%s: provenance headers missing: %v", format, rec.Header())
+		}
+	}
+}

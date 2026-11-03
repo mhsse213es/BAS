@@ -22,7 +22,7 @@ func TestLoadFromBytes_SchemaVersionMismatch_ReturnsEmptyEngine(t *testing.T) {
 }
 
 func TestLoadFromBytes_CorruptJSON_ReturnsEmptyEngine(t *testing.T) {
-	e := loadFromBytes([]byte(`not json`), []byte(`{"schemaVersion": 1}`))
+	e := loadFromBytes([]byte(`not json`), []byte(`{"schemaVersion": 2}`))
 	if e.RuleCount() != 0 {
 		t.Fatalf("RuleCount() = %d, want 0 for corrupt rules.json", e.RuleCount())
 	}
@@ -34,22 +34,55 @@ func TestLoadFromBytes_CorruptJSON_ReturnsEmptyEngine(t *testing.T) {
 }
 
 // A translation says whether its query was field-mapped for the SIEM, with which pipeline, and which data source
-// the customer must collect for it to match anything. (The generic case, for log sources with no mapping, is
-// covered by scripts/rulelib-gen/tests/test_pipelines.py: both seed rules are Windows process-creation.)
+// the customer must collect for it to match anything. A generic query (log source with no mapping) names neither.
 func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 	e := NewEngine()
-	for _, id := range []string{"AUDRULE-000001", "AUDRULE-000002"} {
-		rule, ok := e.RuleByID(id)
-		if !ok {
-			t.Fatalf("seed rule %s not found", id)
-		}
-		if len(rule.Translations) != 5 {
-			t.Fatalf("%s: translations = %d, want 5", id, len(rule.Translations))
-		}
-		for _, tr := range rule.Translations {
-			if tr.Mapping != "pipeline" || tr.Pipeline == "" || tr.DataSource == "" {
-				t.Errorf("%s/%s: mapping=%q pipeline=%q dataSource=%q, want a mapped translation with a data source", id, tr.Backend, tr.Mapping, tr.Pipeline, tr.DataSource)
+	mapped, generic := 0, 0
+	for _, r := range e.Search(SearchFilter{}) {
+		for _, tr := range r.Translations {
+			switch tr.Mapping {
+			case "pipeline":
+				mapped++
+				if tr.Pipeline == "" || tr.DataSource == "" {
+					t.Fatalf("%s/%s: mapped translation without pipeline/data source", r.ID, tr.Backend)
+				}
+				if r.LogSource.Category != "process_creation" || r.LogSource.Product != "windows" {
+					t.Fatalf("%s/%s: mapped although the log source is %+v", r.ID, tr.Backend, r.LogSource)
+				}
+			case "generic":
+				generic++
+				if tr.Pipeline != "" || tr.DataSource != "" {
+					t.Fatalf("%s/%s: generic translation claims a pipeline or data source", r.ID, tr.Backend)
+				}
+			default:
+				t.Fatalf("%s/%s: mapping = %q", r.ID, tr.Backend, tr.Mapping)
 			}
+		}
+	}
+	if mapped == 0 || generic == 0 {
+		t.Errorf("expected both mapped and generic translations, got %d mapped / %d generic", mapped, generic)
+	}
+}
+
+// The shipped library is the full SigmaHQ set for the techniques Audspect tests. Every rule must say where it came
+// from and under what licence, keep its upstream id, and have an Audspect id that is unique.
+func TestEmbeddedLibrary_EveryRuleCarriesProvenanceAndLicence(t *testing.T) {
+	e := NewEngine()
+	if e.RuleCount() < 1500 {
+		t.Fatalf("embedded library has %d rules, want the full set (>= 1500)", e.RuleCount())
+	}
+	meta := e.Metadata()
+	if len(meta.SigmaCommit) != 40 || meta.SourceLicense != "DRL-1.1" || meta.Attribution == "" {
+		t.Errorf("metadata provenance missing: commit=%q license=%q attribution set=%v", meta.SigmaCommit, meta.SourceLicense, meta.Attribution != "")
+	}
+	ids := map[string]bool{}
+	for _, r := range e.Search(SearchFilter{}) {
+		if ids[r.ID] {
+			t.Fatalf("duplicate rule id %s", r.ID)
+		}
+		ids[r.ID] = true
+		if r.SigmaID == "" || r.Title == "" || r.Source.Commit != meta.SigmaCommit || r.Source.License != "DRL-1.1" || r.Source.Path == "" {
+			t.Fatalf("rule %s lacks upstream id/title or provenance: %+v", r.ID, r.Source)
 		}
 	}
 }
