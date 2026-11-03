@@ -75,10 +75,37 @@ func (o *Orchestrator) noteAttempt(versionID string) {
 func NewOrchestrator(pool *pgxpool.Pool, reg *contentregistry.Registry, d dispatcher, labAgentID string, pollInterval time.Duration) *Orchestrator {
 	return &Orchestrator{
 		pool: pool, reg: reg, dispatcher: d, labAgentID: labAgentID, pollInterval: pollInterval,
-		stopCh: make(chan struct{}), timeout: 10 * time.Minute, pollEvery: 5 * time.Second,
+		stopCh: make(chan struct{}), timeout: ClampValidationTimeout(0), pollEvery: 5 * time.Second,
 		retryBackoff: validationRetryBackoff, attempts: make(map[string]attemptState),
 	}
 }
+
+const (
+	validationTimeoutDefaultMinutes = 10
+	// validationTimeoutHardMaxMinutes is a conservative ceiling on the
+	// configurable run timeout. Bounding (the representative profile) is the
+	// real control; configuration can lengthen the budget within reason but
+	// must never let an unbounded run be accepted as a validation.
+	validationTimeoutHardMaxMinutes = 30
+)
+
+// ClampValidationTimeout maps a configured VALIDATION_LAB_TIMEOUT_MINUTES value
+// to a run-completion timeout: <=0 (unset/invalid) -> the default; otherwise
+// the value, capped at the hard maximum.
+func ClampValidationTimeout(minutes int) time.Duration {
+	if minutes <= 0 {
+		minutes = validationTimeoutDefaultMinutes
+	}
+	if minutes > validationTimeoutHardMaxMinutes {
+		minutes = validationTimeoutHardMaxMinutes
+	}
+	return time.Duration(minutes) * time.Minute
+}
+
+// SetTimeout overrides the run-completion wait. Callers pass an already-clamped
+// duration (see ClampValidationTimeout); this exists so cmd/server can apply
+// the configured VALIDATION_LAB_TIMEOUT_MINUTES from outside the package.
+func (o *Orchestrator) SetTimeout(d time.Duration) { o.timeout = d }
 
 // A version that does not pass validation goes back to DRAFT. Without a limit it was picked again on the very
 // next tick, so a failing scenario re-ran on the lab agent every few minutes for as long as the server was up
@@ -245,6 +272,16 @@ func (o *Orchestrator) recordExecutionOutcome(ctx context.Context, versionID, ru
 	// construction it is a factory run; the Task-6 reconciler enforces the
 	// factory_validation join when healing from content_validations directly.
 	if outcome != "NO_DATA" {
+		payload := map[string]any{"outcome": outcome, "run_id": runID}
+		// Carry the validation scope + coverage onto the SLA event too, so the
+		// profile and its coverage limits travel with the milestone, not only
+		// the content_validations row.
+		if p, ok := detail["validation_profile"]; ok {
+			payload["validation_profile"] = p
+		}
+		if c, ok := detail["validation_coverage"]; ok {
+			payload["validation_coverage"] = c
+		}
 		if err := tcv.RecordPipelineEvent(ctx, o.pool, tcv.Event{
 			Type:             tcv.EventValidationResulted,
 			ContentVersionID: versionID,
@@ -252,7 +289,7 @@ func (o *Orchestrator) recordExecutionOutcome(ctx context.Context, versionID, ru
 			EventTime:        time.Now(),
 			SourceTable:      "content_validations",
 			SourcePK:         runID,
-			Payload:          map[string]any{"outcome": outcome, "run_id": runID},
+			Payload:          payload,
 		}); err != nil {
 			log.Printf("[validationlab] record validation_resulted for %s: %v", versionID, err)
 		}
@@ -312,7 +349,11 @@ func (o *Orchestrator) pollAndResolve(ctx context.Context, versionID, runID stri
 func (o *Orchestrator) resolveIfComplete(ctx context.Context, versionID, runID string) bool {
 	var status string
 	var resultsJSON []byte
-	if err := o.pool.QueryRow(ctx, `SELECT status, results FROM scenario_runs WHERE id = $1`, runID).Scan(&status, &resultsJSON); err != nil {
+	var profile string
+	var coverageJSON []byte
+	if err := o.pool.QueryRow(ctx,
+		`SELECT status, results, validation_profile, validation_coverage FROM scenario_runs WHERE id = $1`, runID,
+	).Scan(&status, &resultsJSON, &profile, &coverageJSON); err != nil {
 		log.Printf("[validationlab] read run %s status: %v", runID, err)
 		return false
 	}
@@ -323,7 +364,26 @@ func (o *Orchestrator) resolveIfComplete(ctx context.Context, versionID, runID s
 	if status == "completed" {
 		outcome, reason = classifyCompletedRun(resultsJSON)
 	}
-	o.recordExecutionOutcome(ctx, versionID, runID, outcome, map[string]any{"run_id": runID, "status": status, "reason": reason})
+	detail := map[string]any{"run_id": runID, "status": status, "reason": reason}
+	// Runtime execution breakdown of the dispatched steps: a PASS where most
+	// selected steps were skipped by the agent is honestly recorded as such, so
+	// "selected N" in the coverage is never mistaken for "N executed".
+	if status == "completed" {
+		if c, ok := countRunResults(resultsJSON); ok {
+			detail["executed_steps"] = c.Executed
+			detail["errored_steps"] = c.Errored
+			detail["skipped_by_agent_steps"] = c.Skipped
+		}
+	}
+	// Evidence honesty: a profiled validation records its scope + coverage, so a
+	// representative PASS is never read as "the whole scenario was validated".
+	if profile != "" {
+		detail["validation_profile"] = profile
+		if len(coverageJSON) > 0 {
+			detail["validation_coverage"] = json.RawMessage(coverageJSON)
+		}
+	}
+	o.recordExecutionOutcome(ctx, versionID, runID, outcome, detail)
 	if outcome == "PASS" {
 		_ = o.reg.Transition(ctx, versionID, contentregistry.LifecycleValidated, contentregistry.ActorValidationLab, reason)
 	} else {
@@ -337,29 +397,50 @@ func (o *Orchestrator) resolveIfComplete(ctx context.Context, versionID, runID s
 // technique succeeded against the control, still a clean execution for the
 // factory's "does it run" question); error means the step itself errored;
 // skipped means it never ran.
-func classifyCompletedRun(resultsJSON []byte) (outcome, reason string) {
+// runResultCounts is the per-outcome breakdown of a completed run's results.
+// Executed counts steps that actually ran (pass|fail); Skipped counts steps the
+// agent did not run at all (platform/policy not applicable at runtime).
+type runResultCounts struct{ Executed, Errored, Skipped, Total int }
+
+// countRunResults parses a run's results snapshot into its outcome breakdown.
+// ok is false when there are no results or the JSON is malformed -- the two
+// cases classifyCompletedRun maps to NO_DATA and ERROR respectively.
+func countRunResults(resultsJSON []byte) (c runResultCounts, ok bool) {
 	if len(resultsJSON) == 0 {
-		return "NO_DATA", "run completed with no results recorded"
+		return runResultCounts{}, false
 	}
 	var rs []struct {
 		Result string `json:"result"`
 	}
 	if err := json.Unmarshal(resultsJSON, &rs); err != nil {
-		return "ERROR", "run results were malformed"
+		return runResultCounts{}, false
 	}
-	executed, errored := 0, 0
+	c.Total = len(rs)
 	for _, r := range rs {
 		switch r.Result {
 		case "pass", "fail":
-			executed++
+			c.Executed++
 		case "error":
-			errored++
+			c.Errored++
+		case "skipped":
+			c.Skipped++
 		}
 	}
+	return c, true
+}
+
+func classifyCompletedRun(resultsJSON []byte) (outcome, reason string) {
+	if len(resultsJSON) == 0 {
+		return "NO_DATA", "run completed with no results recorded"
+	}
+	c, ok := countRunResults(resultsJSON)
+	if !ok {
+		return "ERROR", "run results were malformed"
+	}
 	switch {
-	case errored > 0:
+	case c.Errored > 0:
 		return "FAIL", "one or more steps errored during execution"
-	case executed == 0:
+	case c.Executed == 0:
 		return "NO_DATA", "no steps executed (all skipped); nothing to validate"
 	default:
 		return "PASS", "content executed cleanly"

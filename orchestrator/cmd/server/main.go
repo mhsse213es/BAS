@@ -1091,8 +1091,10 @@ func main() {
 		validationOrchestrator := validationlab.NewOrchestrator(
 			pool, contentRegistry, handler, cfg.ValidationLabAgentID, time.Duration(pollMinutes)*time.Minute,
 		)
+		validationTimeout := validationlab.ClampValidationTimeout(cfg.ValidationLabTimeoutMinutes)
+		validationOrchestrator.SetTimeout(validationTimeout)
 		validationOrchestrator.Start()
-		log.Printf("[validationlab] enabled, lab agent %s, poll every %dm", cfg.ValidationLabAgentID, pollMinutes)
+		log.Printf("[validationlab] enabled, lab agent %s, poll every %dm, run timeout %s", cfg.ValidationLabAgentID, pollMinutes, validationTimeout)
 	} else {
 		log.Println("[validationlab] disabled (VALIDATION_LAB_AGENT_ID not set)")
 	}
