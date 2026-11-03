@@ -75,3 +75,50 @@ test('a QRadar query is generic: it says to adapt it and never names a data sour
   assert.match(note, /adapt/i);
   assert.doesNotMatch(note, /only matches if/i);
 });
+
+test('deployment URLs are under the run and encode ids', () => {
+  assert.equal(G.deploymentsUrl('r 1'), '/api/scenarios/runs/r%201/detection-gaps/deployments');
+  assert.equal(G.retestLinkUrl('r1', 'd/2'), '/api/scenarios/runs/r1/detection-gaps/deployments/d%2F2/retest');
+});
+
+test('only a re-test that proves a detection reads as closed; the rest never look like success', () => {
+  assert.equal(G.deploymentTone('Closed on re-test'), 'ok');
+  assert.equal(G.deploymentTone('Still a gap'), 'bad');
+  assert.equal(G.deploymentTone('Deployed'), 'info');
+  assert.equal(G.deploymentTone('Re-test running'), 'info');
+  assert.equal(G.deploymentTone('Re-test awaiting verification'), 'warn');
+  assert.equal(G.deploymentTone('Technique not re-tested'), 'warn');
+  assert.equal(G.deploymentTone('anything else'), 'muted');
+});
+
+test('a re-test is offered only where another run could change the answer', () => {
+  for (const s of ['Deployed', 'Still a gap', 'Technique not re-tested']) assert.equal(G.canRetest(s), true, s);
+  for (const s of ['Re-test running', 'Re-test awaiting verification', 'Closed on re-test']) assert.equal(G.canRetest(s), false, s);
+});
+
+test('the re-test plan reuses the original run mode and asks for the same confirmations as starting a run', () => {
+  const posture = G.retestPlan({ scenarioId: 's1', agentId: 'a1', mode: '' });
+  assert.deepEqual(posture.body, { agentId: 'a1', mode: 'posture', confirmLive: false, confirmLab: false, reason: posture.body.reason });
+  assert.deepEqual(posture.confirms, []);
+  assert.match(posture.body.reason, /re-test/i);
+
+  const tel = G.retestPlan({ scenarioId: 's1', agentId: 'a1', mode: 'telemetry' });
+  assert.equal(tel.body.confirmLive, true);
+  assert.equal(tel.body.confirmLab, false);
+  assert.equal(tel.confirms.length, 1);
+  assert.match(tel.confirms[0], /alerts/i);
+
+  const lab = G.retestPlan({ scenarioId: 's1', agentId: 'a1', mode: 'lab' });
+  assert.equal(lab.body.confirmLab, true);
+  assert.equal(lab.confirms.length, 2);
+  assert.match(lab.confirms[1], /isolated/i);
+
+  assert.equal(G.retestPlan({ scenarioId: '', agentId: 'a1' }), null);
+  assert.equal(G.retestPlan(null), null);
+});
+
+test('deployments are grouped by technique', () => {
+  const deps = [{ id: '1', techniqueId: 'T1' }, { id: '2', techniqueId: 'T2' }, { id: '3', techniqueId: 'T1' }];
+  assert.deepEqual(G.deploymentsFor(deps, 'T1').map((d) => d.id), ['1', '3']);
+  assert.deepEqual(G.deploymentsFor(null, 'T1'), []);
+});

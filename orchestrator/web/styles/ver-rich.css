@@ -99,3 +99,8 @@
 .gap-rest summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
 .gap-clear { margin: 0 16px 12px; }
 .gap-lib { margin: 0 16px 14px; }
+
+/* Deployed rules and re-tests under a detection gap */
+.gap-deploy { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.gap-deps { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line, #d0d7de); }
+.gap-dep { padding: 6px 0; }

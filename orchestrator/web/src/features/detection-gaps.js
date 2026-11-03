@@ -11,7 +11,7 @@ import * as G from './gap-model.js';
 // reviewed verification found no alert), and the SigmaHQ rules and per-SIEM queries that could close each gap.
 // The server (/api/scenarios/runs/{id}/detection-gaps) decides every status from evidence; this only shows it.
 
-var S = { runId: '', backend: '', data: null, seq: 0 };
+var S = { runId: '', backend: '', data: null, deps: { retest: null, deployments: [] }, seq: 0 };
 
 function el(id) { return document.getElementById(id); }
 
@@ -19,16 +19,21 @@ function el(id) { return document.getElementById(id); }
 export function gapLoad(runId) {
   S.runId = runId || '';
   S.data = null;
+  S.deps = { retest: null, deployments: [] };
   var box = el('gap-panel');
   if (!box) return;
   if (!S.runId) { box.innerHTML = ''; setDisplay(box, 'none'); return; }
   setDisplay(box, '');
   box.innerHTML = '<section class="rk-card">' + empty('refresh', 'Loading detection gaps…') + '</section>';
   var seq = ++S.seq; // a slow answer for an earlier run must not overwrite the current one
-  apicall(G.gapsUrl(S.runId, S.backend)).then(function(d) {
+  // Deployments are secondary: if they cannot be loaded the gaps still show, without the tracking.
+  var depsReq = apicall(G.deploymentsUrl(S.runId)).catch(function() { return null; });
+  Promise.all([apicall(G.gapsUrl(S.runId, S.backend)), depsReq]).then(function(res) {
+    var d = res[0], deps = res[1];
     if (seq !== S.seq) return;
     if (d && d.error) { box.innerHTML = '<section class="rk-card">' + empty('alert', 'Could not load detection gaps', d.error) + '</section>'; return; }
     S.data = d;
+    S.deps = deps && !deps.error ? { retest: deps.retest || null, deployments: deps.deployments || [] } : { retest: null, deployments: [] };
     render();
   }).catch(function(e) {
     if (seq !== S.seq) return;
@@ -43,7 +48,11 @@ function backendSelect() {
   return '<select id="gap-backend" aria-label="SIEM"' + on('change', 'gapSetBackend') + '>' + opts + '</select>';
 }
 
-function ruleRow(r) {
+function ruleRow(r, techniqueId) {
+  var deploy = (r.backends || []).map(function(b) {
+    return '<button type="button" class="btn btn-sm btn-outline" title="Record that you deployed this rule to ' + x(G.backendLabel(b.backend)) + '. This does not prove it detects anything; re-test to find out."' +
+      on('click', 'gapDeploy', techniqueId, r.id, b.backend) + '>Mark deployed · ' + x(G.backendLabel(b.backend)) + '</button>';
+  }).join(' ');
   var buttons = (r.backends || []).map(function(b) {
     return '<button type="button" class="btn btn-sm btn-outline" title="' + x(G.backendNote(b)) + '"' +
       on('click', 'gapCopy', b.exportUrl) + '>Copy ' + x(b.language) + ' · ' + x(G.backendLabel(b.backend)) + '</button>';
@@ -54,7 +63,17 @@ function ruleRow(r) {
   return '<tr><td><b>' + x(r.title) + '</b><div class="tiny muted">' + x(r.id) + ' · ' + x(r.sigmaId) + lic +
     (G.matchNote(r.match) ? '<br>' + x(G.matchNote(r.match)) : '') + '</div></td>' +
     '<td>' + pill(r.severity || 'n/a', G.severityTone(r.severity)) + '</td>' +
-    '<td class="gap-copy">' + (buttons || '<span class="muted">No translation for this SIEM</span>') + notes + '</td></tr>';
+    '<td class="gap-copy">' + (buttons || '<span class="muted">No translation for this SIEM</span>') + notes +
+    (deploy ? '<div class="gap-deploy">' + deploy + '</div>' : '') + '</td></tr>';
+}
+
+function deploymentRow(d) {
+  var retest = G.canRetest(d.status)
+    ? ' <button type="button" class="btn btn-sm btn-primary"' + on('click', 'gapRetest', d.id) + '>Re-test</button>' : '';
+  var link = d.retestRunId ? ' <span class="tiny muted">re-test run ' + x(String(d.retestRunId).slice(0, 8)) + '</span>' : '';
+  return '<div class="gap-dep"><div>' + pill(d.status, G.deploymentTone(d.status)) + ' <b>' + x(d.ruleTitle || d.ruleId) + '</b> · ' +
+    x(d.backendLabel || d.backend) + ' <span class="tiny muted">' + x(d.ruleId) + ' · ' + x(d.deployedAt || '') + (d.deployedBy ? ' · ' + x(d.deployedBy) : '') + '</span>' +
+    retest + link + '</div><div class="tiny muted">' + x(d.detail || '') + (d.note ? ' Note: ' + x(d.note) : '') + '</div></div>';
 }
 
 function techniqueBlock(t) {
@@ -67,9 +86,11 @@ function techniqueBlock(t) {
       : (t.ruleAvailability === 'Backend translation unavailable' ? 'Rules exist, but none translates to the selected SIEM.' : '');
     return '<div class="gap-t">' + head + (why ? '<div class="gap-none">' + x(why) + '</div>' : '') + '</div>';
   }
+  var deps = G.deploymentsFor(S.deps.deployments, t.techniqueId);
+  var depBlock = deps.length ? '<div class="gap-deps"><div class="tiny muted">Deployed rules</div>' + deps.map(deploymentRow).join('') + '</div>' : '';
   var more = t.ruleCount > t.rules.length ? '<div class="tiny muted">Showing ' + t.rules.length + ' of ' + t.ruleCount + ' rules, highest severity first. Export for more.</div>' : '';
   return '<div class="gap-t">' + head + '<div class="tbl-wrap"><table><thead><tr><th>Rule</th><th>Severity</th><th>Query</th></tr></thead><tbody>' +
-    t.rules.map(ruleRow).join('') + '</tbody></table></div>' + more + '</div>';
+    t.rules.map(function(r) { return ruleRow(r, t.techniqueId); }).join('') + '</tbody></table></div>' + more + depBlock + '</div>';
 }
 
 function render() {
@@ -96,6 +117,36 @@ function render() {
     (gaps.length ? gaps.map(techniqueBlock).join('') : '<div class="gap-clear">' + empty('check', 'No detection gap in this run',
       'No technique ran and was confirmed undetected by a reviewed verification. Unverified techniques are listed below as Unknown.') + '</div>') +
     restRows + '<div class="tiny muted gap-lib">' + lib + '</div></section>';
+}
+
+// Records that the customer deployed a recommended rule. It claims nothing about detection: the server answers
+// "Deployed" until a re-test is linked and reviewed.
+export function gapDeploy(techniqueId, ruleId, backend) {
+  if (!S.runId) return;
+  apicall(G.deploymentsUrl(S.runId), { method: 'POST', body: JSON.stringify({ techniqueId: techniqueId, ruleId: ruleId, backend: backend }) })
+    .then(function(r) {
+      if (r && r.error) throw new Error(r.error);
+      showToast('Deployment recorded. Re-test to find out whether the gap is closed.', 'ok');
+      gapLoad(S.runId);
+    }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// Starts the re-test through the normal run endpoint (same scenario, agent and mode as the run that found the gap,
+// with the same confirmations a live run needs), then links the new run to the deployment.
+export function gapRetest(deploymentId) {
+  var plan = G.retestPlan(S.deps.retest);
+  if (!plan || !S.runId) { showToast('This run cannot be re-tested from here.', 'err'); return; }
+  for (var i = 0; i < plan.confirms.length; i++) { if (!confirm(plan.confirms[i])) return; }
+  var runId = S.runId;
+  apicall('/api/scenarios/' + encodeURIComponent(plan.scenarioId) + '/run', { method: 'POST', body: JSON.stringify(plan.body) })
+    .then(function(started) {
+      if (!started || started.error || !started.runId) throw new Error((started && started.error) || 'The re-test run did not start');
+      return apicall(G.retestLinkUrl(runId, deploymentId), { method: 'POST', body: JSON.stringify({ retestRunId: started.runId }) });
+    }).then(function(linked) {
+      if (linked && linked.error) throw new Error(linked.error);
+      showToast('Re-test started. Review its verifications to find out whether the gap is closed.', 'ok');
+      gapLoad(runId);
+    }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
 export function gapSetBackend(elm) {

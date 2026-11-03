@@ -205,6 +205,58 @@ test('detection gaps: panel shows a gap with its rules, escapes content, and exp
   expect(errors.filter((e) => /pageerror|csp:/.test(e))).toEqual([]);
 });
 
+// Detection gaps: recording a deployed rule and re-testing it. Deployment claims nothing; the re-test starts through
+// the normal run endpoint with the original run's scenario/agent/mode and is then linked to the deployment.
+test('detection gaps: mark a rule deployed, then re-test it', async ({ page }) => {
+  const errors = await boot(page);
+  const evil = '<img src=x onerror="window.__xss=1">';
+  const gaps = {
+    runId: 'run-smoke-1', summary: { 'Detection gap': 1 },
+    library: { loaded: true, sigmaCommit: '0e3b749e0d85cd943706ed610a1447f0d54e8388', license: 'DRL-1.1' },
+    techniques: [{ techniqueId: 'T1059.001', name: 'PowerShell', status: 'Detection gap', reason: 'r', steps: { fail: 1 },
+      ruleAvailability: 'Rule available', effectiveness: 'Not validated', ruleCount: 1,
+      rules: [{ id: 'AUDRULE-000001', sigmaId: 'abc', title: 'Rule', severity: 'high', match: 'exact', source: { name: 'SigmaHQ', license: 'DRL-1.1' },
+        backends: [{ backend: 'splunk', language: 'SPL', mapping: 'pipeline', dataSource: 'Sysmon event 1', exportUrl: '/api/rules/export?id=AUDRULE-000001&format=spl' }] }] }],
+  };
+  const deps = { retest: { scenarioId: 'scn-1', agentId: 'a1', mode: '' }, deployments: [
+    { id: 'd1', techniqueId: 'T1059.001', ruleId: 'AUDRULE-000001', ruleTitle: evil, backend: 'splunk', backendLabel: 'Splunk', status: 'Deployed',
+      detail: 'Deployment recorded.', deployedAt: '2026-11-03T10:00:00Z', deployedBy: 'user:zain', note: evil }] };
+  const posted = [];
+  await page.route('**/api/scenarios/runs/run-smoke-1/detection-gaps**', (route) => {
+    const req = route.request();
+    if (req.url().includes('/deployments')) {
+      if (req.method() === 'POST') {
+        posted.push(req.url().replace(/^.*\/api/, '/api') + ' ' + req.postData());
+        return route.fulfill({ status: 201, contentType: 'application/json', body: '{"id":"d2"}' });
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(deps) });
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(gaps) });
+  });
+  await page.route('**/api/scenarios/scn-1/run', (route) => {
+    posted.push('/api/scenarios/scn-1/run ' + route.request().postData());
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{"runId":"run-retest-9","status":"dispatched","mode":"posture"}' });
+  });
+  await openTab(page, 'verification');
+  await page.selectOption('#vf-run', 'run-smoke-1');
+  const panel = page.locator('#gap-panel');
+  await expect(panel).toContainText('Deployed rules');
+  await expect(panel).toContainText('Deployment recorded.');
+  expect(await page.evaluate(() => window.__xss), 'server content executed').toBeUndefined();
+
+  await page.click('[data-on-click="gapDeploy"]');
+  await expect.poll(() => posted.length).toBe(1);
+  expect(posted[0]).toContain('/deployments {"techniqueId":"T1059.001","ruleId":"AUDRULE-000001","backend":"splunk"}');
+
+  await page.click('[data-on-click="gapRetest"]');
+  await expect.poll(() => posted.length).toBe(3);
+  expect(posted[1]).toContain('/api/scenarios/scn-1/run');
+  expect(posted[1]).toContain('"agentId":"a1"');
+  expect(posted[1]).toContain('"mode":"posture"');
+  expect(posted[2]).toContain('/deployments/d1/retest {"retestRunId":"run-retest-9"}');
+  expect(errors.filter((e) => /pageerror|csp:/.test(e))).toEqual([]);
+});
+
 // Factory Health's Re-check button must visibly answer a click, including when the server has nothing to show.
 test('factory health: Re-check answers the click', async ({ page }) => {
   await boot(page);

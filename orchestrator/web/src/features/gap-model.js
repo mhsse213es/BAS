@@ -65,3 +65,55 @@ export function gapsUrl(runId, backend) {
 export function exportZipUrl(runId, backend) {
   return base(runId) + '/export' + (backend ? '?backend=' + encodeURIComponent(backend) : '');
 }
+
+// ── Deployed rules and re-tests ──────────────────────────────────────────────
+// A customer records that they deployed a recommended rule, re-runs the scenario, and the server reports whether the
+// gap is closed from the re-test run's own reviewed verifications. Recording a deployment proves nothing by itself.
+
+export function deploymentsUrl(runId) { return base(runId) + '/deployments'; }
+
+export function retestLinkUrl(runId, deploymentId) {
+  return base(runId) + '/deployments/' + encodeURIComponent(deploymentId) + '/retest';
+}
+
+var DEP_TONE = {
+  'Closed on re-test': 'ok',
+  'Still a gap': 'bad',
+  Deployed: 'info',
+  'Re-test running': 'info',
+  'Re-test awaiting verification': 'warn',
+  'Technique not re-tested': 'warn',
+};
+
+export function deploymentTone(status) { return DEP_TONE[status] || 'muted'; }
+
+// Another run can change the answer only when the last one did not settle it.
+export function canRetest(status) {
+  return status === 'Deployed' || status === 'Still a gap' || status === 'Technique not re-tested';
+}
+
+export function deploymentsFor(deployments, techniqueId) {
+  return (deployments || []).filter(function(d) { return d.techniqueId === techniqueId; });
+}
+
+// What starting the re-test needs: the body for POST /api/scenarios/{id}/run (same scenario, agent and mode as the run
+// that found the gap) and the confirmations the console asks before any live run. Null when the run is unknown.
+export function retestPlan(retest) {
+  if (!retest || !retest.scenarioId || !retest.agentId) return null;
+  var mode = retest.mode === 'telemetry' || retest.mode === 'lab' ? retest.mode : 'posture';
+  var confirms = [];
+  if (mode === 'telemetry') {
+    confirms.push('TELEMETRY mode runs real, identity-safe techniques and WILL generate EDR/SIEM alerts.\n\nProceed only on an approved, monitored target. Continue?');
+  } else if (mode === 'lab') {
+    confirms.push('LAB mode runs FULL-FIDELITY techniques (LSASS dump, allowlisted spray) and will trigger EDR.\n\nISOLATED AD RANGE ONLY — never production. Continue?');
+    confirms.push('Second confirmation required for LAB mode.\n\nConfirm the target is an isolated lab/range with a snapshot?');
+  }
+  return {
+    scenarioId: retest.scenarioId,
+    confirms: confirms,
+    body: {
+      agentId: retest.agentId, mode: mode, confirmLive: mode !== 'posture', confirmLab: mode === 'lab',
+      reason: 'Re-test after deploying a recommended detection rule',
+    },
+  };
+}
