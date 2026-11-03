@@ -339,6 +339,10 @@ func (a *Agent) enrollWithServer() {
 		log.Printf("[!] AGENT IS QUARANTINED — scenario execution blocked; contact your BAS administrator")
 		a.logger.Op("error", "lifecycle", "agent quarantined — contact administrator to resolve before running scenarios")
 	}
+	if resp.State == "retired" {
+		log.Printf("[!] THIS MACHINE IS RETIRED on the server — it will not run scenarios; reinstall the agent to bring it back")
+		a.logger.Op("error", "lifecycle", "machine retired on the server — reinstall the agent to bring it back")
+	}
 }
 
 // buildHeartbeat constructs the real heartbeat payload for status --
@@ -429,6 +433,10 @@ func (a *Agent) sendHeartbeat(status string) {
 		if resp.State == "quarantined" && prev != "quarantined" {
 			log.Printf("[!] SERVER HAS QUARANTINED THIS AGENT — scenario execution blocked; contact administrator")
 			a.logger.Op("error", "lifecycle", "server quarantined this agent — contact administrator")
+		}
+		if resp.State == "retired" && prev != "retired" {
+			log.Printf("[!] SERVER HAS RETIRED THIS MACHINE — it will not run scenarios; reinstall the agent to bring it back")
+			a.logger.Op("error", "lifecycle", "server retired this machine — reinstall the agent to bring it back")
 		}
 	}
 	// The server's resolved tray-icon visibility. Repeated every heartbeat; applying the current state is a no-op.

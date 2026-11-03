@@ -1310,6 +1310,9 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// still come back. Once marked, the trigger below refuses every change of state away from 'retired' and any
 		// attempt to clear the mark, whatever code or SQL tries it (state endpoint, revoke/reinstate, uninstall/
 		// reinstall). Only the table owner can drop the trigger, which is the deliberate break-glass.
+		// The one exception is a fresh INSTALL of the agent on that machine: its ID is derived from the hostname, so
+		// a reinstall lands on the same record. EnrollCSR sets audspect.reinstall_agent (transaction-local) to that
+		// agent's ID while it lifts the removal; no other code path sets it.
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS force_removed_at timestamptz`,
 		// Agents force-removed before this column existed: the audit log is the only record of it.
 		`UPDATE agents SET force_removed_at = NOW()
@@ -1318,7 +1321,8 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE OR REPLACE FUNCTION agents_force_removed_is_final() RETURNS trigger AS $$
 		BEGIN
 			IF OLD.force_removed_at IS NOT NULL
-			   AND (NEW.state IS DISTINCT FROM 'retired' OR NEW.force_removed_at IS DISTINCT FROM OLD.force_removed_at) THEN
+			   AND (NEW.state IS DISTINCT FROM 'retired' OR NEW.force_removed_at IS DISTINCT FROM OLD.force_removed_at)
+			   AND COALESCE(current_setting('audspect.reinstall_agent', true), '') <> OLD.agent_id THEN
 				RAISE EXCEPTION 'agent % was force-removed and cannot be reactivated', OLD.agent_id
 					USING ERRCODE = 'check_violation';
 			END IF;

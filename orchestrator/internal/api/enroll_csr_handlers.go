@@ -3,9 +3,14 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"regexp"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/audspect/bas/internal/models"
 )
 
 // enrollCSRRequest is the wire shape agent/protocol's SubmitCSR (Task 9)
@@ -230,6 +235,33 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// A fresh install lifts a Force Remove. The agent's ID comes from its hostname, so reinstalling on a removed
+	// machine lands on the removed record; without this the machine would enrol, run and look healthy locally while
+	// the console kept it retired for good. Only a bootstrap issuance (the installer, with the shared secret or an
+	// administrator's one-time token) counts: a renewal over mTLS by an agent that is still running is not an
+	// install and never lifts it. The Active toggle, revoke/reinstate and the other console paths stay refused.
+	var liftedRemovalAt *time.Time
+	if mtlsID == "" {
+		var removedAt *time.Time
+		err := tx.QueryRow(ctx, `SELECT force_removed_at FROM agents WHERE agent_id = $1 FOR UPDATE`, req.AgentID).Scan(&removedAt)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if removedAt != nil {
+			// Transaction-local: the trigger reads it for this agent only, and it vanishes at commit or rollback.
+			if _, err := tx.Exec(ctx, `SELECT set_config('audspect.reinstall_agent', $1, true)`, req.AgentID); err != nil {
+				jsonError(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if _, err := tx.Exec(ctx, `UPDATE agents SET force_removed_at = NULL, state = 'active', last_update = NOW() WHERE agent_id = $1`, req.AgentID); err != nil {
+				jsonError(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			liftedRemovalAt = removedAt
+		}
+	}
+
 	issued, err := h.pki.IssueClientCertificate(req.AgentID, []byte(req.CSRPEM))
 	if err != nil {
 		jsonError(w, "invalid CSR: "+err.Error(), http.StatusBadRequest)
@@ -267,6 +299,16 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 		}
 		h.auditLogAs(r, "agent:"+req.AgentID, action, req.AgentID,
 			map[string]any{"previousCertificates": previousCerts, "serial": issued.SerialNumber, "supersededLiveCertificates": superseded}, "ok")
+	}
+
+	if liftedRemovalAt != nil {
+		mode := "shared secret"
+		if tokenAccepted {
+			mode = "enrolment token"
+		}
+		h.auditLogAs(r, "agent:"+req.AgentID, "agent.force_removal_lifted", req.AgentID,
+			map[string]any{"removedAt": liftedRemovalAt.Format(time.RFC3339), "installedWith": mode}, "ok")
+		h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: req.AgentID})
 	}
 
 	resp := enrollCSRResponse{

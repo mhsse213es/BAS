@@ -141,11 +141,27 @@ func stateColor(s statusclient.StatusResponse) win.COLORREF {
 		return colWarning
 	case !s.ServerConnected:
 		return colDanger
-	case s.State == "quarantined" || s.State == "restricted":
+	case s.State == "quarantined" || s.State == "restricted" || s.State == "retired":
 		return colDanger
 	default:
 		return colSuccess
 	}
+}
+
+// stateDescription is the line under the status card. It must never reassure about a state it does not know: a
+// retired agent used to read "Agent healthy and connected" while the console showed it removed.
+func stateDescription(s statusclient.StatusResponse) string {
+	switch {
+	case !s.ServerConnected && s.Paused:
+		return "Server link lost — run continues locally if one is active."
+	case !s.ServerConnected:
+		return "Cannot reach the BAS server. The agent will keep retrying; any results are buffered locally until the link is restored."
+	case s.State == "retired":
+		return "This machine was removed in the console. Reinstall the agent to bring it back."
+	case s.State == "quarantined" || s.State == "restricted":
+		return "Agent integrity check failed — server has been notified."
+	}
+	return "Agent healthy and connected. No simulation is running."
 }
 
 func stateLabel(s statusclient.StatusResponse) string {
@@ -158,6 +174,8 @@ func stateLabel(s statusclient.StatusResponse) string {
 		return "Quarantined"
 	case s.State == "restricted":
 		return "Restricted"
+	case s.State == "retired":
+		return "Retired"
 	case s.State == "active":
 		return "Active"
 	default:
@@ -225,15 +243,7 @@ func (r *resources) drawHero(hdc win.HDC, snap StatusSnapshot) {
 	// through to the "healthy" default whenever the agent was disconnected
 	// but not mid-run, showing "Disconnected" as the title next to "Agent
 	// healthy and connected" as the description.
-	desc := "Agent healthy and connected. No simulation is running."
-	switch {
-	case !s.ServerConnected && s.Paused:
-		desc = "Server link lost — run continues locally if one is active."
-	case !s.ServerConnected:
-		desc = "Cannot reach the BAS server. The agent will keep retrying; any results are buffered locally until the link is restored."
-	case s.State == "quarantined" || s.State == "restricted":
-		desc = "Agent integrity check failed — server has been notified."
-	}
+	desc := stateDescription(s)
 	r.drawText(hdc, desc, dpiRect(56, 160, 500, 18), r.fontBody, colMuted, co.DT_LEFT)
 
 	r.drawText(hdc, s.Hostname, dpiRect(696, 104, 176, 20), r.fontBody, colText, co.DT_RIGHT)
