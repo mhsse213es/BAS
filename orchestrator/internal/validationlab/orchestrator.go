@@ -259,6 +259,24 @@ func (o *Orchestrator) recordExecutionOutcome(ctx context.Context, versionID, ru
 	}
 }
 
+// failTimedOutRun marks a run the lab has stopped waiting on as terminal, so
+// the single-slot concurrency guard (handlers.dispatchRun) frees the lab agent
+// at once instead of treating the dead run as live until staleRunGuard (2h) --
+// the 2026-11-03 staging deadlock, where one timed-out run locked every later
+// dispatch with "agent busy". Guarded on status='running' so a result that
+// lands in the race window is never clobbered; an empty runID (dispatch never
+// produced one) is a no-op.
+func (o *Orchestrator) failTimedOutRun(ctx context.Context, runID string) {
+	if runID == "" {
+		return
+	}
+	if _, err := o.pool.Exec(ctx,
+		`UPDATE scenario_runs SET status = 'failed', completed_at = NOW()
+		  WHERE id = $1 AND status = 'running'`, runID); err != nil {
+		log.Printf("[validationlab] free timed-out run %s: %v", runID, err)
+	}
+}
+
 // pollAndResolve waits (bounded) for a just-dispatched run to complete, then
 // resolves the version. Shares its resolution logic with resolveOrphaned so
 // a crash between dispatch and completion is handled identically to a live
@@ -275,6 +293,7 @@ func (o *Orchestrator) pollAndResolve(ctx context.Context, versionID, runID stri
 		case <-time.After(o.pollEvery):
 		}
 	}
+	o.failTimedOutRun(ctx, runID)
 	o.recordExecutionOutcome(ctx, versionID, runID, "ERROR", map[string]any{"error": "validation run timed out"})
 	_ = o.reg.Transition(ctx, versionID, contentregistry.LifecycleDraft, contentregistry.ActorValidationLab, "validation timed out")
 }
@@ -425,6 +444,7 @@ func (o *Orchestrator) resolveOrphaned(ctx context.Context) error {
 				if p.runID != nil {
 					rid = *p.runID
 				}
+				o.failTimedOutRun(ctx, rid)
 				o.recordExecutionOutcome(ctx, p.versionID, rid, "ERROR", map[string]any{"error": "orphaned validation exceeded timeout"})
 				_ = o.reg.Transition(ctx, p.versionID, contentregistry.LifecycleDraft, contentregistry.ActorValidationLab, "orphaned validation timed out")
 			}

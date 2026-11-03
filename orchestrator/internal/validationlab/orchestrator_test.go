@@ -222,6 +222,15 @@ func TestResolveOrphaned_TimesOutStuckRunning(t *testing.T) {
 		if outcome != "ERROR" {
 			t.Fatalf("got outcome=%s, want ERROR (timed-out orphan)", outcome)
 		}
+
+		// Same deadlock as the synchronous path: the stuck 'running' run must be
+		// marked terminal here too, so the single lab slot releases immediately
+		// rather than at staleRunGuard (2h).
+		var runStatus string
+		pool.QueryRow(ctx, `SELECT status FROM scenario_runs WHERE id = $1`, runID).Scan(&runStatus)
+		if runStatus == "running" {
+			t.Fatalf("orphan-timeout left run in status='running'; it must be freed so the lab slot releases")
+		}
 	})
 }
 
@@ -481,6 +490,15 @@ func TestRunOnce_TimeoutReturnsToDraft(t *testing.T) {
 		pool.QueryRow(ctx, `SELECT outcome FROM content_validations WHERE content_version_id = $1 AND level = 'EXECUTION'`, draft).Scan(&outcome)
 		if outcome != "ERROR" {
 			t.Fatalf("got outcome=%s, want ERROR", outcome)
+		}
+
+		// The run the lab gave up waiting on must be marked terminal, or it holds
+		// the single lab slot ("agent busy") until staleRunGuard (2h) -- the
+		// 2026-11-03 staging deadlock. A freed slot is any status != 'running'.
+		var runStatus string
+		pool.QueryRow(ctx, `SELECT status FROM scenario_runs WHERE id = $1`, runID).Scan(&runStatus)
+		if runStatus == "running" {
+			t.Fatalf("timed-out run left in status='running'; it must be freed so the lab slot releases")
 		}
 	})
 }
