@@ -7,12 +7,14 @@ import { chartSlot, CHART_COLORS } from '../core/charts.js';
 import { ring } from './runs-drawer.js';
 import { setHeroStat } from './shell-ui.js';
 import * as M from './fh-model.js';
+import * as V from './fh-velocity-model.js';
 
 var minTrendPoints = 3;
 var _sources = [];
 var T = { q: '', col: -1, dir: 1, page: 0, per: 8, sel: {}, hidden: {} };
 
 export function loadFactoryHealth() {
+  loadFactoryVelocity(); // independent endpoint; renders into its own container
   return apicall('/api/analytics/factory-health').then(function(r) {
     if (!r || !r.threatsProcessed || !r.pipeline) {
       var t = document.getElementById('factory-health-tiles');
@@ -257,6 +259,85 @@ function renderFactoryHealthFunnel(r) {
     return '<span class="fh-q tone-' + l.tone + '">' + icon(l.tone === 'ok' ? 'ok' : 'alert') + x(l.text) + '</span>';
   }).join('');
   el.innerHTML = card('Content pipeline', '<div class="fh-funnel">' + boxes + '</div><div class="fh-quality">' + lines + '</div>');
+}
+
+// ── Factory velocity ─────────────────────────────────────────────────────────
+// The measured threat→validated-coverage velocity, decomposed into the four
+// pipeline stages. One GET per stage of /api/intel/factory/sla; rendered from
+// V.velocityModel. Independent of the factory-health analytics endpoint, so a
+// failure here leaves the rest of the page intact.
+
+var VEL_STAGE_LABEL = {
+  queue: 'Threat → eligible',
+  generation: 'Eligible → content',
+  validation: 'Content → validated',
+  end_to_end: 'Threat → validated',
+};
+
+function velContentType(ct) {
+  if (ct === 'emulates') return 'Emulation';
+  if (ct === 'generated_for') return 'Detection';
+  return ct || '—';
+}
+
+export function loadFactoryVelocity() {
+  var el = document.getElementById('factory-health-velocity');
+  if (!el) return Promise.resolve(false);
+  return Promise.all(V.STAGE_ORDER.map(function(s) {
+    return apicall('/api/intel/factory/sla?stage=' + encodeURIComponent(s)).catch(function() { return null; });
+  })).then(function(list) {
+    var reports = {};
+    V.STAGE_ORDER.forEach(function(s, i) { reports[s] = list[i]; });
+    renderFactoryVelocity(V.velocityModel(reports));
+    return true;
+  }).catch(function() {
+    el.innerHTML = card('Factory velocity', empty('clock', 'Velocity is not available right now'));
+    return false;
+  });
+}
+
+function velCell(st) {
+  if (!st) return '<td class="muted">—</td>';
+  return '<td><b>' + x(V.fmtDuration(st.p50)) + '</b>' +
+    (st.p95 != null ? '<div class="mono muted fh-id">p95 ' + x(V.fmtDuration(st.p95)) + '</div>' : '') + '</td>';
+}
+
+function velSummary(sm) {
+  var chips = pill(sm.validatedN + ' validated', 'ok') +
+    pill(sm.failedN + ' failed', sm.failedN ? 'bad' : 'muted') +
+    pill(sm.openN + ' open', sm.openN ? 'warn' : 'muted');
+  var notes = [];
+  if (sm.bottleneck) notes.push('Bottleneck: ' + (VEL_STAGE_LABEL[sm.bottleneck] || sm.bottleneck));
+  if (sm.oldestOpenSeconds != null) notes.push('oldest open ' + V.fmtDuration(sm.oldestOpenSeconds));
+  var note = notes.length ? '<span class="muted">' + x(notes.join(' · ')) + '</span>' : '';
+  // Honest caveat: the server excludes incomplete/anomalous legs from the
+  // percentiles; say so when the window contained any, so the numbers are not
+  // over-read as covering every leg.
+  var warn = sm.incomplete ? '<span class="fh-q tone-warn">' + icon('alert') +
+    'Some legs were excluded from these percentiles (missing or out-of-order milestones)</span>' : '';
+  return '<div class="fh-dr-state">' + chips + note + '</div>' + (warn ? '<div class="fh-quality">' + warn + '</div>' : '');
+}
+
+export function renderFactoryVelocity(vm) {
+  var el = document.getElementById('factory-health-velocity');
+  if (!el) return;
+  if (!vm.hasData) {
+    el.innerHTML = card('Factory velocity — threat → validated coverage',
+      velSummary(vm.summary) +
+      empty('clock', 'No validated coverage yet',
+        'Velocity appears once generated content reaches validated coverage in the factory lab.'));
+    return;
+  }
+  var head = '<tr><th>Source</th><th>Content</th>' +
+    V.STAGE_ORDER.map(function(s) { return '<th class="num">' + x(VEL_STAGE_LABEL[s]) + '</th>'; }).join('') +
+    '<th class="num">Validated</th></tr>';
+  var body = vm.rows.map(function(row) {
+    return '<tr><td><b>' + x(row.source) + '</b></td><td class="muted">' + x(velContentType(row.contentType)) + '</td>' +
+      V.STAGE_ORDER.map(function(s) { return velCell(row.stages[s]); }).join('') +
+      '<td class="num">' + x(row.n) + '</td></tr>';
+  }).join('');
+  var table = '<div class="tbl-wrap"><table class="fh-vel-tbl"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>';
+  el.innerHTML = card('Factory velocity — threat → validated coverage', velSummary(vm.summary) + table);
 }
 
 function trendCard(title, points, suffix) {

@@ -2,9 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setupDom, load } from './dom.mjs';
 import { displayOf } from '../../src/core/inline-style.js';
+import { velocityModel } from '../../src/features/fh-velocity-model.js';
 
 setupDom();
-const { metricTile, renderSparkline, renderFactoryHealthIngestion, activateTab } = await load(['metricTile', 'renderSparkline', 'renderFactoryHealthIngestion', 'activateTab']);
+const { metricTile, renderSparkline, renderFactoryHealthIngestion, activateTab, renderFactoryVelocity } = await load(['metricTile', 'renderSparkline', 'renderFactoryHealthIngestion', 'activateTab', 'renderFactoryVelocity']);
 
 test('activateTab makes the factory-health panel visible when its tab is active, hidden otherwise', () => {
   // Restore the full dashboard markup: earlier tests overwrite document.body.
@@ -66,4 +67,30 @@ test('renderSparkline shows an empty state below 3 points, a polyline at or abov
 
   renderSparkline('spark', null);
   assert.ok(!document.getElementById('spark').innerHTML.includes('<svg'), 'null/empty trend must not render a polyline');
+});
+
+test('renderFactoryVelocity shows per-stage durations, cohort counts, and the bottleneck', () => {
+  document.body.innerHTML = '<div id="factory-health-velocity"></div>';
+  const reports = {
+    queue: { stage: 'queue', segments: [{ source: 'OTX', content_type: 'emulates', cohort: 'validated', n: 4, p50_seconds: 300, p95_seconds: 900 }], open_count: 2, oldest_open_seconds: 90000, bottleneck: 'validation', incomplete_window: false },
+    generation: { stage: 'generation', segments: [{ source: 'OTX', content_type: 'emulates', cohort: 'validated', n: 4, p50_seconds: 120, p95_seconds: 240 }], open_count: 2, bottleneck: 'validation', incomplete_window: false },
+    validation: { stage: 'validation', segments: [{ source: 'OTX', content_type: 'emulates', cohort: 'validated', n: 4, p50_seconds: 600, p95_seconds: 1800 }], open_count: 2, bottleneck: 'validation', incomplete_window: false },
+    end_to_end: { stage: 'end_to_end', segments: [{ source: 'OTX', content_type: 'emulates', cohort: 'validated', n: 4, p50_seconds: 7200, p95_seconds: 15000 }, { source: 'OTX', content_type: 'emulates', cohort: 'failed', n: 1 }], open_count: 2, oldest_open_seconds: 90000, bottleneck: 'validation', incomplete_window: false },
+  };
+  renderFactoryVelocity(velocityModel(reports));
+  const html = document.getElementById('factory-health-velocity').innerHTML;
+  assert.ok(html.includes('OTX'), 'shows the source');
+  assert.ok(html.includes('Emulation'), 'prettifies the content type');
+  assert.ok(html.includes('2.0h'), 'shows end-to-end p50 (7200s) as a duration');
+  assert.ok(html.includes('10m'), 'shows validation p50 (600s) as a duration');
+  assert.ok(html.includes('4 validated') && html.includes('1 failed') && html.includes('2 open'), 'shows cohort counts');
+  assert.ok(html.includes('Bottleneck'), 'names the bottleneck');
+});
+
+test('renderFactoryVelocity shows an honest empty state before any validated coverage', () => {
+  document.body.innerHTML = '<div id="factory-health-velocity"></div>';
+  renderFactoryVelocity(velocityModel({ end_to_end: { stage: 'end_to_end', segments: [], open_count: 3, bottleneck: '', incomplete_window: false } }));
+  const html = document.getElementById('factory-health-velocity').innerHTML.toLowerCase();
+  assert.ok(html.includes('no validated coverage yet'), 'states there is no validated coverage yet');
+  assert.ok(html.includes('3 open'), 'still shows the open count');
 });
