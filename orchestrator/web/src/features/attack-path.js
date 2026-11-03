@@ -1193,7 +1193,7 @@ function triggerVisible(btn) {
   if (r.width === 0 && r.height === 0) return false;
   if (r.bottom < 0 || r.top > window.innerHeight) return false;
   for (var el = btn.parentElement; el && el !== document.body; el = el.parentElement) {
-    var cs = getComputedStyle(el);
+    var cs = window.getComputedStyle(el);
     if (/(auto|hidden|scroll)/.test(cs.overflowY + cs.overflowX)) {
       var c = el.getBoundingClientRect();
       if (r.bottom < c.top || r.top > c.bottom || r.right < c.left || r.left > c.right) return false;

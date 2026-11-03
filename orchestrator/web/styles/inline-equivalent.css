@@ -17,7 +17,6 @@
 .g1-s-04f181fe { margin-bottom:0.5rem }
 .g1-s-0550e239 { font-size:1.1rem;color:var(--accent);margin:0;gap:8px }
 .g1-s-057c1db7 { flex-direction:column;gap:0;padding-left:0.1rem }
-.g1-s-06068a98 { grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0.75rem }
 .g1-s-06733f1c { font-weight:700;font-size:0.95rem }
 .g1-s-07297cbf { font-weight:600;color:var(--text);margin-bottom:0.3rem;font-size:0.83rem }
 .g1-s-08ac4010 { padding:0.4rem 1rem;border-radius:6px;border:1px solid var(--border,#22324a);background:transparent;color:inherit;cursor:pointer }

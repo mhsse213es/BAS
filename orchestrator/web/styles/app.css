@@ -1511,3 +1511,4 @@ body.theme-light {
 .cloud-notes h3 { margin-top: 16px; }
 .cloud-notes ul { padding-left: 20px; }
 .cloud-note-code { white-space: pre-wrap; word-break: break-word; font-size: 12px; padding: 10px; border-radius: 6px; border: 1px solid var(--border, #d0d7de); overflow-x: auto; }
+.cloud-notes-title { display: inline; }
