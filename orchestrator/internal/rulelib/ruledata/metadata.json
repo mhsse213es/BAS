@@ -2,26 +2,26 @@
   "attribution": "Detection rules are from the SigmaHQ project (https://github.com/SigmaHQ/sigma), licensed under the Detection Rule License (DRL) 1.1. Each rule keeps its original author, title, id and references; the per-SIEM queries are generated from the rule by Audspect.",
   "backends": {
     "crowdstrike": 1916,
-    "elastic": 2102,
+    "elastic": 2096,
     "microsoft_defender": 2054,
-    "microsoft_sentinel": 2031,
+    "microsoft_sentinel": 2026,
     "qradar": 1753,
     "splunk": 2104
   },
-  "generatedAt": "2026-11-03T11:09:05.324306+00:00",
+  "generatedAt": "2026-11-03T11:14:25.221894+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
     "crowdstrike:generic": 900,
     "crowdstrike:pipeline": 1016,
-    "elastic:generic": 551,
-    "elastic:pipeline": 1551,
+    "elastic:generic": 522,
+    "elastic:pipeline": 1574,
     "microsoft_defender:generic": 814,
     "microsoft_defender:pipeline": 1240,
-    "microsoft_sentinel:generic": 708,
-    "microsoft_sentinel:pipeline": 1323,
+    "microsoft_sentinel:generic": 679,
+    "microsoft_sentinel:pipeline": 1347,
     "qradar:generic": 1753,
-    "splunk:generic": 634,
-    "splunk:pipeline": 1470
+    "splunk:generic": 605,
+    "splunk:pipeline": 1499
   },
   "ruleCount": 2104,
   "schemaVersion": 2,
@@ -413,6 +413,18 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000220",
       "sigmaId": "1a31b18a-f00c-4061-9900-f735b96c99fc"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: requestParameters.attribute. Please use valid fields for the AWSCloudTrail table, or the following fields that have fieldmappings in this pipeline:\nAPIVersion, AWSRegion, AdditionalEventData, AwsEventId, AwsRequestId, AwsRequestId_, Category, CidrIp, CipherSuite, ClientProvidedHostHeader, DestinationPort, EC2RoleDelivery, ErrorCode, ErrorMessage, EventName, EventSource, EventTypeName, EventVersion, Hashes, IpProtocol, ManagementEvent, OperationName, ReadOnly, RecipientAccountId, RequestParameters, Resources, ResponseElements, ServiceEventDetails, SessionCreationDate, SessionIssuerAccountId, SessionIssuerArn, SessionIssuerPrincipalId, SessionIssuerType, SessionIssuerUserName, SessionMfaAuthenticated, SharedEventId, SourceIpAddress, SourcePort, SourceSystem, TenantId, TimeGenerated, TlsVersion, Type, UserAgent, UserIdentityAccessKeyId, UserIdentityAccountId, UserIdentityArn, UserIdentityInvokedBy, UserIdentityPrincipalid, UserIdentityType, UserIdentityUserName, VpcEndpointId, _BilledSize, _IsBillable in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\aws\\cloudtrail\\aws_ec2_startup_script_change.yml",
+      "ruleId": "AUDRULE-000226",
+      "sigmaId": "1ab3c5ed-5baf-417b-bb6b-78ca33f6c3df"
+    },
+    {
+      "backend": "elastic",
+      "reason": "SigmaTransformationError: Field requestParameters.attribute has no ECS equivalent in the AWS CloudTrail pipeline",
+      "ruleId": "AUDRULE-000226",
+      "sigmaId": "1ab3c5ed-5baf-417b-bb6b-78ca33f6c3df"
     },
     {
       "backend": "crowdstrike",
@@ -2084,6 +2096,18 @@
     },
     {
       "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: responseElements.pendingModifiedValues.masterUserPassword. Please use valid fields for the AWSCloudTrail table, or the following fields that have fieldmappings in this pipeline:\nAPIVersion, AWSRegion, AdditionalEventData, AwsEventId, AwsRequestId, AwsRequestId_, Category, CidrIp, CipherSuite, ClientProvidedHostHeader, DestinationPort, EC2RoleDelivery, ErrorCode, ErrorMessage, EventName, EventSource, EventTypeName, EventVersion, Hashes, IpProtocol, ManagementEvent, OperationName, ReadOnly, RecipientAccountId, RequestParameters, Resources, ResponseElements, ServiceEventDetails, SessionCreationDate, SessionIssuerAccountId, SessionIssuerArn, SessionIssuerPrincipalId, SessionIssuerType, SessionIssuerUserName, SessionMfaAuthenticated, SharedEventId, SourceIpAddress, SourcePort, SourceSystem, TenantId, TimeGenerated, TlsVersion, Type, UserAgent, UserIdentityAccessKeyId, UserIdentityAccountId, UserIdentityArn, UserIdentityInvokedBy, UserIdentityPrincipalid, UserIdentityType, UserIdentityUserName, VpcEndpointId, _BilledSize, _IsBillable in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\aws\\cloudtrail\\aws_rds_change_master_password.yml",
+      "ruleId": "AUDRULE-001136",
+      "sigmaId": "8a63cdd4-6207-414a-85bc-7e032bd3c1a2"
+    },
+    {
+      "backend": "elastic",
+      "reason": "SigmaTransformationError: Field responseElements.pendingModifiedValues.masterUserPassword has no ECS equivalent in the AWS CloudTrail pipeline",
+      "ruleId": "AUDRULE-001136",
+      "sigmaId": "8a63cdd4-6207-414a-85bc-7e032bd3c1a2"
+    },
+    {
+      "backend": "microsoft_sentinel",
       "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_sysmoneop.yml)",
       "ruleId": "AUDRULE-001138",
       "sigmaId": "8a7e90c5-fe6e-45dc-889e-057fe4378bd9"
@@ -2165,6 +2189,18 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001168",
       "sigmaId": "8ff28fdd-e2fa-4dfa-aeda-ef3d61c62090"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: userIdentity.sessionContext.sessionIssuer.type. Please use valid fields for the AWSCloudTrail table, or the following fields that have fieldmappings in this pipeline:\nAPIVersion, AWSRegion, AdditionalEventData, AwsEventId, AwsRequestId, AwsRequestId_, Category, CidrIp, CipherSuite, ClientProvidedHostHeader, DestinationPort, EC2RoleDelivery, ErrorCode, ErrorMessage, EventName, EventSource, EventTypeName, EventVersion, Hashes, IpProtocol, ManagementEvent, OperationName, ReadOnly, RecipientAccountId, RequestParameters, Resources, ResponseElements, ServiceEventDetails, SessionCreationDate, SessionIssuerAccountId, SessionIssuerArn, SessionIssuerPrincipalId, SessionIssuerType, SessionIssuerUserName, SessionMfaAuthenticated, SharedEventId, SourceIpAddress, SourcePort, SourceSystem, TenantId, TimeGenerated, TlsVersion, Type, UserAgent, UserIdentityAccessKeyId, UserIdentityAccountId, UserIdentityArn, UserIdentityInvokedBy, UserIdentityPrincipalid, UserIdentityType, UserIdentityUserName, VpcEndpointId, _BilledSize, _IsBillable in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\aws\\cloudtrail\\aws_sts_assumerole_misuse.yml",
+      "ruleId": "AUDRULE-001173",
+      "sigmaId": "905d389b-b853-46d0-9d3d-dea0d3a3cd49"
+    },
+    {
+      "backend": "elastic",
+      "reason": "SigmaTransformationError: Field userIdentity.sessionContext.sessionIssuer.type has no ECS equivalent in the AWS CloudTrail pipeline",
+      "ruleId": "AUDRULE-001173",
+      "sigmaId": "905d389b-b853-46d0-9d3d-dea0d3a3cd49"
     },
     {
       "backend": "crowdstrike",
@@ -2489,6 +2525,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001335",
       "sigmaId": "a0cb7110-edf0-47a4-9177-541a4083128a"
+    },
+    {
+      "backend": "elastic",
+      "reason": "SigmaTransformationError: Field requestParameters has no ECS equivalent in the AWS CloudTrail pipeline",
+      "ruleId": "AUDRULE-001337",
+      "sigmaId": "a136ac98-b2bc-4189-a14d-f0d0388e57a7"
     },
     {
       "backend": "qradar",
@@ -2917,6 +2959,18 @@
       "sigmaId": "c3dbbc9f-ef1d-470a-a90a-d343448d5875"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: responseElements.publiclyAccessible. Please use valid fields for the AWSCloudTrail table, or the following fields that have fieldmappings in this pipeline:\nAPIVersion, AWSRegion, AdditionalEventData, AwsEventId, AwsRequestId, AwsRequestId_, Category, CidrIp, CipherSuite, ClientProvidedHostHeader, DestinationPort, EC2RoleDelivery, ErrorCode, ErrorMessage, EventName, EventSource, EventTypeName, EventVersion, Hashes, IpProtocol, ManagementEvent, OperationName, ReadOnly, RecipientAccountId, RequestParameters, Resources, ResponseElements, ServiceEventDetails, SessionCreationDate, SessionIssuerAccountId, SessionIssuerArn, SessionIssuerPrincipalId, SessionIssuerType, SessionIssuerUserName, SessionMfaAuthenticated, SharedEventId, SourceIpAddress, SourcePort, SourceSystem, TenantId, TimeGenerated, TlsVersion, Type, UserAgent, UserIdentityAccessKeyId, UserIdentityAccountId, UserIdentityArn, UserIdentityInvokedBy, UserIdentityPrincipalid, UserIdentityType, UserIdentityUserName, VpcEndpointId, _BilledSize, _IsBillable in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\aws\\cloudtrail\\aws_rds_public_db_restore.yml",
+      "ruleId": "AUDRULE-001615",
+      "sigmaId": "c3f265c7-ff03-4056-8ab2-d486227b4599"
+    },
+    {
+      "backend": "elastic",
+      "reason": "SigmaTransformationError: Field responseElements.publiclyAccessible has no ECS equivalent in the AWS CloudTrail pipeline",
+      "ruleId": "AUDRULE-001615",
+      "sigmaId": "c3f265c7-ff03-4056-8ab2-d486227b4599"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001621",
@@ -3233,6 +3287,18 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001726",
       "sigmaId": "d2451be2-b582-4e15-8701-4196ac180260"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: requestParameters.enable. Please use valid fields for the AWSCloudTrail table, or the following fields that have fieldmappings in this pipeline:\nAPIVersion, AWSRegion, AdditionalEventData, AwsEventId, AwsRequestId, AwsRequestId_, Category, CidrIp, CipherSuite, ClientProvidedHostHeader, DestinationPort, EC2RoleDelivery, ErrorCode, ErrorMessage, EventName, EventSource, EventTypeName, EventVersion, Hashes, IpProtocol, ManagementEvent, OperationName, ReadOnly, RecipientAccountId, RequestParameters, Resources, ResponseElements, ServiceEventDetails, SessionCreationDate, SessionIssuerAccountId, SessionIssuerArn, SessionIssuerPrincipalId, SessionIssuerType, SessionIssuerUserName, SessionMfaAuthenticated, SharedEventId, SourceIpAddress, SourcePort, SourceSystem, TenantId, TimeGenerated, TlsVersion, Type, UserAgent, UserIdentityAccessKeyId, UserIdentityAccountId, UserIdentityArn, UserIdentityInvokedBy, UserIdentityPrincipalid, UserIdentityType, UserIdentityUserName, VpcEndpointId, _BilledSize, _IsBillable in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\aws\\cloudtrail\\aws_cloudtrail_guardduty_detector_deleted_or_updated.yml",
+      "ruleId": "AUDRULE-001728",
+      "sigmaId": "d2656e78-c069-4571-8220-9e0ab5913f19"
+    },
+    {
+      "backend": "elastic",
+      "reason": "SigmaTransformationError: Field requestParameters.enable has no ECS equivalent in the AWS CloudTrail pipeline",
+      "ruleId": "AUDRULE-001728",
+      "sigmaId": "d2656e78-c069-4571-8220-9e0ab5913f19"
     },
     {
       "backend": "qradar",

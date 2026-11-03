@@ -51,6 +51,10 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 					mappedByCategory[r.LogSource.Service]++
 					continue
 				}
+				if r.LogSource.Product == "aws" && r.LogSource.Service == "cloudtrail" {
+					mappedByCategory["aws_cloudtrail"]++
+					continue
+				}
 				if (r.LogSource.Product == "linux" || r.LogSource.Product == "macos") && r.LogSource.Category == "process_creation" {
 					mappedByCategory[r.LogSource.Product+"_process_creation"]++
 					continue
@@ -69,7 +73,7 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 			}
 		}
 	}
-	if mappedByCategory["process_creation"] == 0 || mappedByCategory["network_connection"] == 0 || mappedByCategory["ps_script"] == 0 || mappedByCategory["registry_set"] == 0 || mappedByCategory["file_event"] == 0 || mappedByCategory["image_load"] == 0 || mappedByCategory["ps_module"] == 0 || mappedByCategory["linux_process_creation"] == 0 || mappedByCategory["macos_process_creation"] == 0 || mappedByCategory["security"] == 0 || mappedByCategory["system"] == 0 {
+	if mappedByCategory["process_creation"] == 0 || mappedByCategory["network_connection"] == 0 || mappedByCategory["ps_script"] == 0 || mappedByCategory["registry_set"] == 0 || mappedByCategory["file_event"] == 0 || mappedByCategory["image_load"] == 0 || mappedByCategory["ps_module"] == 0 || mappedByCategory["linux_process_creation"] == 0 || mappedByCategory["macos_process_creation"] == 0 || mappedByCategory["aws_cloudtrail"] == 0 || mappedByCategory["security"] == 0 || mappedByCategory["system"] == 0 {
 		t.Errorf("expected mapped translations for both process_creation and network_connection, got %v", mappedByCategory)
 	}
 	if mapped == 0 || generic == 0 {

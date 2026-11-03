@@ -47,6 +47,7 @@ WINDOWS_SYSTEM = "windows_system"
 WINDOWS_PS_MODULE = "windows_ps_module"
 LINUX_PROCESS_CREATION = "linux_process_creation"
 MACOS_PROCESS_CREATION = "macos_process_creation"
+AWS_CLOUDTRAIL = "aws_cloudtrail"
 
 
 def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> ProcessingPipeline:
@@ -85,7 +86,7 @@ class UnmappedFieldFailure(DetectionItemTransformation):
         self.label = label
 
     def apply_detection_item(self, detection_item):
-        raise SigmaTransformationError(f"Field {detection_item.field} has no ECS equivalent in the {self.label} process pipeline")
+        raise SigmaTransformationError(f"Field {detection_item.field} has no ECS equivalent in the {self.label} pipeline")
 
 
 def _ecs_unix_process_pipeline(product: str, label: str) -> ProcessingPipeline:
@@ -106,7 +107,7 @@ def _ecs_unix_process_pipeline(product: str, label: str) -> ProcessingPipeline:
             ),
             ProcessingItem(
                 identifier=f"audspect_ecs_{product}_process_unmapped_field",
-                transformation=UnmappedFieldFailure(label),
+                transformation=UnmappedFieldFailure(f"{label} process"),
                 field_name_conditions=[ExcludeFieldCondition(fields=list(ECS_LINUX_PROCESS_FIELDS.values()))],
                 rule_conditions=linux_process(),
             ),
@@ -114,6 +115,79 @@ def _ecs_unix_process_pipeline(product: str, label: str) -> ProcessingPipeline:
                 identifier=f"audspect_ecs_{product}_process_start",
                 transformation=AddConditionTransformation({"event.category": "process", "event.type": "start"}),
                 rule_conditions=linux_process(),
+            ),
+        ],
+    )
+
+
+# Sigma's CloudTrail field names are CloudTrail's own JSON keys. Where a SIEM stores the event with different names, the
+# mapping below renames the simple top-level fields; a nested field (requestParameters.x, userIdentity.sessionContext...)
+# has no safe equivalent and makes the rule a recorded failure instead of a query with a raw name.
+SENTINEL_AWS_COLUMNS = {
+    "eventName": "EventName", "eventSource": "EventSource", "awsRegion": "AWSRegion", "sourceIPAddress": "SourceIpAddress",
+    "userAgent": "UserAgent", "errorCode": "ErrorCode", "errorMessage": "ErrorMessage",
+    "userIdentity.type": "UserIdentityType", "userIdentity.arn": "UserIdentityArn",
+    "requestParameters": "RequestParameters", "responseElements": "ResponseElements",
+}
+ECS_AWS_CLOUDTRAIL_FIELDS = {
+    "eventName": "event.action", "eventSource": "event.provider", "awsRegion": "cloud.region", "sourceIPAddress": "source.ip",
+    "userAgent": "user_agent.original", "errorCode": "aws.cloudtrail.error_code", "errorMessage": "aws.cloudtrail.error_message",
+    "userIdentity.type": "aws.cloudtrail.user_identity.type", "userIdentity.arn": "aws.cloudtrail.user_identity.arn",
+}
+
+
+def _aws() -> list:
+    return [LogsourceCondition(product="aws", service="cloudtrail")]  # a condition object belongs to one item only
+
+
+def sentinel_aws_cloudtrail_pipeline() -> ProcessingPipeline:
+    """Renames CloudTrail's JSON keys to the AWSCloudTrail table's columns, then lets the Azure Monitor pipeline build
+    the query on that table (it rejects any column the table does not have)."""
+    rename = ProcessingPipeline(items=[ProcessingItem(
+        identifier="audspect_sentinel_aws_cloudtrail_columns",
+        transformation=FieldMappingTransformation(SENTINEL_AWS_COLUMNS),
+        rule_conditions=_aws(),
+    )], priority=5)
+    return rename + azure_monitor_pipeline("AWSCloudTrail")
+
+
+def splunk_aws_cloudtrail_pipeline() -> ProcessingPipeline:
+    """CloudTrail events indexed by the Splunk Add-on for AWS keep their JSON keys as field names, so only the source
+    needs stating."""
+    return ProcessingPipeline(
+        name="Audspect Splunk AWS CloudTrail",
+        allowed_backends={"splunk"},
+        priority=20,
+        items=[ProcessingItem(
+            identifier="audspect_splunk_aws_cloudtrail",
+            transformation=AddConditionTransformation({"sourcetype": "aws:cloudtrail"}),
+            rule_conditions=_aws(),
+        )],
+    )
+
+
+def ecs_aws_cloudtrail_pipeline() -> ProcessingPipeline:
+    """Maps CloudTrail's top-level keys to the fields Filebeat's AWS module (or the Elastic AWS integration) writes, and
+    restricts the query to that dataset. Unverified against live Elastic data."""
+    return ProcessingPipeline(
+        name="Audspect ECS AWS CloudTrail",
+        priority=20,
+        items=[
+            ProcessingItem(
+                identifier="audspect_ecs_aws_cloudtrail_fields",
+                transformation=FieldMappingTransformation(ECS_AWS_CLOUDTRAIL_FIELDS),
+                rule_conditions=_aws(),
+            ),
+            ProcessingItem(
+                identifier="audspect_ecs_aws_cloudtrail_unmapped_field",
+                transformation=UnmappedFieldFailure("AWS CloudTrail"),
+                field_name_conditions=[ExcludeFieldCondition(fields=list(ECS_AWS_CLOUDTRAIL_FIELDS.values()))],
+                rule_conditions=_aws(),
+            ),
+            ProcessingItem(
+                identifier="audspect_ecs_aws_cloudtrail_dataset",
+                transformation=AddConditionTransformation({"event.dataset": "aws.cloudtrail"}),
+                rule_conditions=_aws(),
             ),
         ],
     )
@@ -242,6 +316,11 @@ BACKENDS: dict[str, BackendSpec] = {
             microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
             "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceProcessEvents table",
             "pysigma-backend-kusto"),
+        AWS_CLOUDTRAIL: Mapping(
+            sentinel_aws_cloudtrail_pipeline, "audspect_sentinel_aws_cloudtrail + azure_monitor_pipeline (query table AWSCloudTrail)",
+            "AWS CloudTrail events in the AWSCloudTrail table of the Log Analytics workspace (Amazon Web Services connector). "
+            "Nested fields such as requestParameters.x are not columns and are not mapped",
+            "pysigma-backend-kusto"),
         MACOS_PROCESS_CREATION: Mapping(
             microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
             "Microsoft Defender for Endpoint on macOS (Defender XDR) device events connected to Sentinel: the DeviceProcessEvents table",
@@ -314,6 +393,11 @@ BACKENDS: dict[str, BackendSpec] = {
             "(source XmlWinEventLog:Microsoft-Windows-PowerShell/Operational, matched on the Payload field). "
             "Module logging must be enabled on the endpoints",
             ""),
+        AWS_CLOUDTRAIL: Mapping(
+            splunk_aws_cloudtrail_pipeline, "audspect_splunk_aws_cloudtrail",
+            "AWS CloudTrail events indexed by the Splunk Add-on for AWS (sourcetype aws:cloudtrail); CloudTrail's own JSON keys "
+            "are the field names",
+            ""),
         WINDOWS_SYSTEM: Mapping(
             splunk_windows_pipeline, "splunk_windows_pipeline",
             "Windows System event log indexed by Splunk (source WinEventLog:System, event id as EventCode) through the "
@@ -359,6 +443,11 @@ BACKENDS: dict[str, BackendSpec] = {
             ecs_windows, "ecs_windows",
             "Windows System event log in ECS field names (Winlogbeat or the Elastic Agent Windows integration, winlog.channel System)",
             "pysigma-backend-elasticsearch"),
+        AWS_CLOUDTRAIL: Mapping(
+            ecs_aws_cloudtrail_pipeline, "audspect_ecs_aws_cloudtrail",
+            "AWS CloudTrail events in the fields Filebeat's AWS module or the Elastic AWS integration write "
+            "(event.dataset aws.cloudtrail; nested fields such as requestParameters.* are not mapped). Unverified against live Elastic data",
+            ""),
         MACOS_PROCESS_CREATION: Mapping(
             ecs_macos_process_creation_pipeline, "audspect_ecs_macos_process_creation",
             "macOS process start events in ECS field names (Elastic Defend for macOS), matched as "
@@ -446,6 +535,8 @@ def _pysigma_version() -> str:
 def log_source_family(rule) -> str:
     """The family a rule's log source belongs to, or "" when it has no mapped family."""
     ls = rule.logsource
+    if ls.product == "aws" and ls.service == "cloudtrail" and not ls.category:
+        return AWS_CLOUDTRAIL
     if ls.product == "linux" and ls.category == "process_creation" and not ls.service:
         return LINUX_PROCESS_CREATION
     if ls.product == "macos" and ls.category == "process_creation" and not ls.service:

@@ -44,10 +44,10 @@ honestly instead of producing a query that matches nothing.)
 | CrowdStrike (LogScale) | 1,945 | 159 |
 | IBM QRadar (AQL), generic only | 1,753 | 351 |
 
-## 4. Field mapping per SIEM (Windows process creation, network connection, PowerShell script block, registry set, file event, image load, Security log, System log, PowerShell module, Linux and macOS process creation)
+## 4. Field mapping per SIEM (Windows process creation, network connection, PowerShell script block, registry set, file event, image load, Security log, System log, PowerShell module, Linux and macOS process creation, AWS CloudTrail)
 
 A bare pySigma backend emits Sigma's own field names with no table, index or event type, so its query matches
-nothing in a real SIEM. For Windows `process_creation`, `network_connection`, `ps_script`, `registry_set`, `file_event`, `image_load`, Security-log, System-log, PowerShell-module, Linux and macOS process-creation rules the generator now applies a
+nothing in a real SIEM. For Windows `process_creation`, `network_connection`, `ps_script`, `registry_set`, `file_event`, `image_load`, Security-log, System-log, PowerShell-module, Linux and macOS process-creation and AWS CloudTrail rules the generator now applies a
 per-SIEM processing pipeline, and every such translation records the pipeline and the data source the customer must collect for the
 query to match anything. Pipelines were chosen by measuring each over all 1,177 SigmaHQ Windows process-creation
 rules:
@@ -182,19 +182,33 @@ through `DeviceProcessEvents` (Defender for Endpoint on macOS), CrowdStrike thro
 Mac), and Elastic through the same ECS pipeline of ours as Linux (Elastic Defend for macOS; unverified on live data;
 pySigma's `ecs_macos_esf` also leaves `Image` and `CommandLine` unrenamed). Splunk stays generic.
 
-Of the 2,104 applicable rules, **1,583** are in the eleven mapped families (845 Windows process creation, 74 Linux process creation, 39 macOS process creation, 37 network connection, 108 PowerShell script block, 102 registry set, 99 file event, 94 image load, 106 Security log, 49 System log, 30 PowerShell module); coverage per SIEM differs, per the table below:
+**AWS CloudTrail** (29 rules; 22 use only top-level fields such as `eventName` and `eventSource`) maps for three SIEMs:
+
+| Backend | Pipeline | Data source the customer must collect | Field-mapped (of 29) |
+|---|---|---|---:|
+| Microsoft Sentinel | `audspect_sentinel_aws_cloudtrail` (ours) + `azure_monitor_pipeline` on `AWSCloudTrail` | The `AWSCloudTrail` table (Amazon Web Services connector) | 24 |
+| Splunk | `audspect_splunk_aws_cloudtrail` (ours) | Sourcetype `aws:cloudtrail` (Splunk Add-on for AWS); CloudTrail's JSON keys are the field names | 29 |
+| Elastic | `audspect_ecs_aws_cloudtrail` (ours) | Filebeat AWS module / Elastic AWS integration (`event.dataset` aws.cloudtrail) | 23 |
+
+Top-level keys are renamed to each SIEM's columns or fields. A nested field (`requestParameters.x`,
+`responseElements.x`, `userIdentity.sessionContext...`) is not a column or ECS field we can name, so the rule is a
+recorded failure on that SIEM with the field in the reason (5 on Sentinel, 6 on Elastic). The Sentinel column names
+and the Elastic AWS field names are from the products' documented schemas and are unverified against live data.
+Defender XDR and CrowdStrike have no CloudTrail source and stay generic.
+
+Of the 2,104 applicable rules, **1,612** are in the twelve mapped families (845 Windows process creation, 74 Linux process creation, 39 macOS process creation, 37 network connection, 108 PowerShell script block, 102 registry set, 99 file event, 94 image load, 106 Security log, 49 System log, 30 PowerShell module); coverage per SIEM differs, per the table below:
 
 | Backend | Field-mapped | Not expressible |
 |---|---:|---:|
-| Microsoft Sentinel | 1,323 | 73 |
+| Microsoft Sentinel | 1,347 | 78 |
 | Microsoft Defender | 1,240 | 50 |
-| Splunk | 1,470 | 0 |
-| Elastic | 1,551 | 2 |
+| Splunk | 1,499 | 0 |
+| Elastic | 1,574 | 8 |
 | CrowdStrike | 1,016 | 181 |
 
 A rule a backend cannot express (for example a hash format, `CurrentDirectory`, or CrowdStrike's missing
 `Description`/`ParentCommandLine` fields) is recorded as **"backend translation unavailable"** with the reason. It
-is never silently replaced by a generic query. The other 521 applicable rules (other log sources) are still
+is never silently replaced by a generic query. The other 492 applicable rules (other log sources) are still
 generic: their translations are labelled `generic`, need adapting to the customer's schema, and are not presented
 as ready to paste. Each further log-source family is one more entry in `scripts/rulelib-gen/translate.py`.
 
