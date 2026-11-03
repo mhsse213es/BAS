@@ -64,6 +64,7 @@ func buildK8sScenarioService(pool *pgxpool.Pool) *api.K8sScenarioService {
 	return &api.K8sScenarioService{
 		Engine:     engine,
 		Runs:       k8sRunAdapter{store: db.NewK8sRunStore(pool)},
+		Registry:   db.NewK8sClusterStore(pool),
 		Approvals:  db.NewK8sApprovalStore(pool),
 		Clusters:   clusters,
 		Namespaces: []string{namespace},

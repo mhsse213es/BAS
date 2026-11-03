@@ -50,6 +50,7 @@ type K8sScenarioService struct {
 	Runs        K8sRunStore
 	Approvals   K8sApprovals
 	Clusters    map[string]string // cluster name -> API server URL
+	Registry    K8sClusterRegistry // registered clusters (Phase 2)
 	Namespaces  []string
 	ApprovalTTL time.Duration
 	Now         func() time.Time

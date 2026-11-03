@@ -675,6 +675,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanApproveExerciseStep)).Post("/api/exercises/executions/{id}/steps/{stepId}/approve", h.ApproveExerciseStep)
 		// Kubernetes state-changing scenarios: request and execute for analysts and admins; approve for admins only.
 		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Get("/api/k8s-scenarios/runs", h.ListK8sRuns)
+		// Cluster registry: anyone who can request may read it; only an administrator registers a cluster and sets its class.
+		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Get("/api/k8s-scenarios/clusters", h.ListK8sClusters)
+		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/clusters", h.RegisterK8sCluster)
 		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Post("/api/k8s-scenarios/runs", h.CreateK8sRun)
 		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/approve", h.ApproveK8sRun)
 		r.With(auth.RequirePermission(auth.CanExecuteK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/execute", h.ExecuteK8sRun)
