@@ -153,3 +153,20 @@ test('detection connectors: Verify now appears once a run is picked', async ({ p
   await expect.poll(() => calls.length).toBe(1);
   expect(calls[0]).toContain('/api/detectverify/run/run-smoke-1');
 });
+
+// Factory Health's Re-check button must visibly answer a click, including when the server has nothing to show.
+test('factory health: Re-check answers the click', async ({ page }) => {
+  await boot(page);
+  let calls = 0;
+  await page.route('**/api/analytics/factory-health', (route) => {
+    calls++;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  await openTab(page, 'factory-health');
+  await expect.poll(() => calls).toBeGreaterThan(0);
+  const before = calls;
+  await page.click('#hero-factory [data-on-click="recheckFactoryHealth"]');
+  await expect.poll(() => calls).toBe(before + 1);
+  await expect(page.locator('#toast')).toContainText('Factory health is not available');
+  await expect(page.locator('#hero-factory [data-on-click="recheckFactoryHealth"]')).toBeEnabled();
+});

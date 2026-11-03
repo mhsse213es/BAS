@@ -1,5 +1,5 @@
 import { x } from './core/escape.js';
-import { closeFactoryDrawerOnBackdrop, closeFactorySource, loadFactoryHealth, openFactorySource, fhTableQuery, clearFhTableQuery, setFhPer, fhPage, fhSortBy, toggleFhCols, fhColToggle, fhSelectRow, fhSelectAll, clearFhSelection, fhRowKeydown, exportFhCsv, exportFhSelected } from './features/factory-health.js';
+import { closeFactoryDrawerOnBackdrop, closeFactorySource, loadFactoryHealth, recheckFactoryHealth, openFactorySource, fhTableQuery, clearFhTableQuery, setFhPer, fhPage, fhSortBy, toggleFhCols, fhColToggle, fhSelectRow, fhSelectAll, clearFhSelection, fhRowKeydown, exportFhCsv, exportFhSelected } from './features/factory-health.js';
 import { stopEvent } from './core/actions.js';
 import { loadThreatPriorityActors, onThreatPrioritySearch, clearTpTableQuery, setTpPer, tpPage, tpSortBy, toggleTpCols, tpColToggle, tpSelectRow, tpSelectAll, clearTpSelection, tpRowKeydown, exportTpCsv, exportTpSelected, closeThreatPriorityDetail, closeThreatPriorityDetailOnBackdrop, tpGo } from './features/tp-view.js';
 import { toggleExpCols, setExpPer, expPage, expSortBy, expColToggle, expSelectRow, expSelectAll, clearExpSelection, expRowKeydown, exportExpCsv, exportExpSelected, clearExpTableQuery, expGo } from './features/exp-view.js';
@@ -103,6 +103,7 @@ export const ACTIONS = {
   closeCovDrawerOnBackdrop,
   recalcCoverage,
   loadFactoryHealth,
+  recheckFactoryHealth,
   openFactorySource,
   fhTableQuery,
   toggleExpCols,

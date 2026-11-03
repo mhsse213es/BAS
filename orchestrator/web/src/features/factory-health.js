@@ -13,18 +13,32 @@ var _sources = [];
 var T = { q: '', col: -1, dir: 1, page: 0, per: 8, sel: {}, hidden: {} };
 
 export function loadFactoryHealth() {
-  apicall('/api/analytics/factory-health').then(function(r) {
+  return apicall('/api/analytics/factory-health').then(function(r) {
     if (!r || !r.threatsProcessed || !r.pipeline) {
       var t = document.getElementById('factory-health-tiles');
       if (t) t.innerHTML = empty('factory', 'Factory health is not available right now');
-      return;
+      return false;
     }
     renderFactoryHealthHero(r);
     renderFactoryHealthTiles(r);
     renderFactoryHealthIngestion(r);
     renderFactoryHealthFunnel(r);
     renderFactoryHealthTrends(r);
+    return true;
   });
+}
+
+// The hero's Re-check button. The page reloads the same numbers when nothing changed, so without a message a
+// click looked dead; say what happened, and say so when the request fails instead of staying silent.
+export function recheckFactoryHealth() {
+  var btn = document.querySelector('#hero-factory [data-on-click="recheckFactoryHealth"]');
+  if (btn) btn.disabled = true;
+  showToast('Re-checking factory health…', 'ok');
+  loadFactoryHealth().then(function(ok) {
+    showToast(ok ? 'Factory health is up to date.' : 'Factory health is not available right now.', ok ? 'ok' : 'err');
+  }).catch(function(e) {
+    showToast('Could not reach the server: ' + (e && e.message ? e.message : 'request failed'), 'err');
+  }).then(function() { if (btn) btn.disabled = false; });
 }
 
 // A tile in the demo's style: tinted icon square on the left, small label, big value, one-line caption.
