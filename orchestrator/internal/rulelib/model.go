@@ -62,6 +62,8 @@ type Translation struct {
 	Pipeline string `json:"pipeline"`
 	// DataSource is what the customer must collect for the query to match anything; empty when generic.
 	DataSource string `json:"dataSource"`
+	// Verification is how much is known about the translation: "none" (generic), "documented", "assumed" or "validated".
+	Verification string `json:"verification"`
 }
 
 type TranslationFailure struct {

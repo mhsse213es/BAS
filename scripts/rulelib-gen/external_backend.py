@@ -35,7 +35,7 @@ def merge_external(record: dict, backend: str, language: str, result: dict | Non
     if result and result.get("query"):
         record["translations"].append({
             "backend": backend, "language": language, "query": result["query"], "generator": generator,
-            "mapping": "generic", "pipeline": "", "dataSource": "",
+            "mapping": "generic", "pipeline": "", "dataSource": "", "verification": "none",
         })
         return
     reason = (result or {}).get("reason") or "no result returned for this rule"

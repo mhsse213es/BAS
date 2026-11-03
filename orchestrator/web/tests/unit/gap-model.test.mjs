@@ -122,3 +122,12 @@ test('deployments are grouped by technique', () => {
   assert.deepEqual(G.deploymentsFor(deps, 'T1').map((d) => d.id), ['1', '3']);
   assert.deepEqual(G.deploymentsFor(null, 'T1'), []);
 });
+
+test('a mapped query says how far it can be trusted, and never claims more than the evidence', () => {
+  const note = (v) => G.backendNote({ backend: 'splunk', mapping: 'pipeline', dataSource: 'X', verification: v });
+  assert.match(note('documented'), /not yet been run against real events/);
+  assert.match(note('assumed'), /our assumption/);
+  assert.match(note('validated'), /matched a sample event/);
+  assert.doesNotMatch(note('validated'), /not yet been run/);
+  assert.match(note(undefined), /not yet been run against real events/, 'a missing value is the weakest claim, never "validated"');
+});

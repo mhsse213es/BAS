@@ -154,11 +154,21 @@ func TestBackendLabelAndQueryNote(t *testing.T) {
 	if BackendLabel("qradar") != "IBM QRadar" || BackendLabel("microsoft_sentinel") != "Microsoft Sentinel" || BackendLabel("x") != "x" {
 		t.Error("backend labels")
 	}
-	mapped := QueryNote("pipeline", "Sysmon event 1")
+	mapped := QueryNote("pipeline", "Sysmon event 1", VerificationDocumented)
 	if !strings.Contains(mapped, "only matches if") || !strings.Contains(mapped, "Sysmon event 1") {
 		t.Errorf("mapped note = %q", mapped)
 	}
-	generic := QueryNote("generic", "")
+	if !strings.Contains(mapped, "not yet been run against real events") {
+		t.Errorf("a documented mapping must say it has not been run against events: %q", mapped)
+	}
+	if assumed := QueryNote("pipeline", "x", VerificationAssumed); !strings.Contains(assumed, "assumption") {
+		t.Errorf("an assumed mapping must say so: %q", assumed)
+	}
+	validated := QueryNote("pipeline", "x", VerificationValidated)
+	if !strings.Contains(validated, "matched a sample event") || strings.Contains(validated, "not yet been run") {
+		t.Errorf("a validated mapping must say what was shown, and not claim it is untested: %q", validated)
+	}
+	generic := QueryNote("generic", "", VerificationNone)
 	if !strings.Contains(strings.ToLower(generic), "adapt") || strings.Contains(generic, "only matches if") {
 		t.Errorf("generic note = %q", generic)
 	}

@@ -61,11 +61,22 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 				if tr.Pipeline == "" || tr.DataSource == "" {
 					t.Fatalf("%s/%s: mapped translation without pipeline/data source", r.ID, tr.Backend)
 				}
+				switch tr.Verification {
+				case "documented", "assumed":
+				default:
+					t.Fatalf("%s/%s: mapped translation with verification %q (the generator may only say documented or assumed)", r.ID, tr.Backend, tr.Verification)
+				}
+				if (tr.Verification == "assumed") != strings.Contains(tr.DataSource, "nverified") {
+					t.Fatalf("%s/%s: verification %q disagrees with the data-source note %q", r.ID, tr.Backend, tr.Verification, tr.DataSource)
+				}
 				mappedByGroup[mappedGroup(r.LogSource)]++
 			case "generic":
 				generic++
 				if tr.Pipeline != "" || tr.DataSource != "" {
 					t.Fatalf("%s/%s: generic translation claims a pipeline or data source", r.ID, tr.Backend)
+				}
+				if tr.Verification != "none" {
+					t.Fatalf("%s/%s: generic translation with verification %q, want none", r.ID, tr.Backend, tr.Verification)
 				}
 			default:
 				t.Fatalf("%s/%s: mapping = %q", r.ID, tr.Backend, tr.Mapping)

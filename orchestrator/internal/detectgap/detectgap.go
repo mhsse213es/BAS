@@ -207,11 +207,32 @@ func BackendLabel(key string) string {
 	return key
 }
 
+// How much is known about a translation. "validated" is reserved for a mapping that matched a positive and did not match
+// a negative sample event; the rule-library generator never sets it by itself.
+const (
+	VerificationNone       = "none"       // generic: Sigma's own field names
+	VerificationDocumented = "documented" // names from the product's documentation or an upstream pipeline, never run on events
+	VerificationAssumed    = "assumed"    // our own assumption about the names, flagged unverified in the data-source note
+	VerificationValidated  = "validated"  // matched a positive and not a negative sample event
+)
+
+// VerificationNote states how far a mapped query can be trusted. An unknown value is treated as the weakest claim.
+func VerificationNote(v string) string {
+	switch v {
+	case VerificationValidated:
+		return "Validated: it matched a sample event and did not match a negative one."
+	case VerificationAssumed:
+		return "The field names are our assumption; test this query on your own data before relying on it."
+	default:
+		return "The field names come from the product's documentation; this query has not yet been run against real events."
+	}
+}
+
 // QueryNote is what to tell the reader beside a query. A field-mapped query only matches when its data source is
 // collected; a generic one uses Sigma's own field names and must be adapted. It is never presented as ready to paste.
-func QueryNote(mapping, dataSource string) string {
+func QueryNote(mapping, dataSource, verification string) string {
 	if mapping == "pipeline" && dataSource != "" {
-		return "Field-mapped. This only matches if you collect: " + dataSource + "."
+		return "Field-mapped. This only matches if you collect: " + dataSource + ". " + VerificationNote(verification)
 	}
 	return "Generic query using Sigma field names: adapt the field names and log source to your schema before use."
 }

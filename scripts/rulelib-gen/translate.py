@@ -910,6 +910,15 @@ _HOST_PATH = re.compile(r"\s+in\s+[A-Za-z]:\\\S*|[A-Za-z]:\\\S+")
 _FIELD_LIST = re.compile(r"(, or the following fields that have fieldmappings in this pipeline:).*", re.S)
 
 
+def verification_of(mapping) -> str:
+    """How much is known about a translation. none: generic. assumed: the mapping's own data-source note says it is
+    unverified. documented: names come from the product's documentation or an upstream pipeline. 'validated' is never
+    set here: it is reserved for a mapping that matched a positive and a negative sample event."""
+    if mapping is None:
+        return "none"
+    return "assumed" if "nverified" in mapping.data_source else "documented"
+
+
 def clean_reason(message: str) -> str:
     """A failure reason keeps the cause and the offending field, but not the build host's file path or pySigma's
     multi-kilobyte list of valid fields."""
@@ -954,6 +963,7 @@ def translate_rule(rule) -> tuple[list[dict], list[dict]]:
                 "mapping": "pipeline" if mapping else "generic",
                 "pipeline": mapping.name if mapping else "",
                 "dataSource": mapping.data_source if mapping else "",
+                "verification": verification_of(mapping),
             })
         except Exception as e:  # noqa: BLE001 — deliberately broad: one backend's exception must never stop the
             # others (SigmaBackendError, SigmaTransformationError, NotImplementedError ... all funnel here).

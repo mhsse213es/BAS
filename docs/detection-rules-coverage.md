@@ -260,6 +260,13 @@ segment, which caught one remaining Zeek Kerberos rule (a recorded failure on El
 The last Sysmon and PowerShell categories map for Splunk: WMI events 19/20/21, Sysmon state 4/16, Sysmon error 255,
 executable detected 29, process tampering 25, and the classic PowerShell provider start (event 600; Elastic too).
 
+**Verification.** Every translation carries a `verification` value, shown beside the query in the console, the API and the
+PDF: `none` (generic, Sigma's own field names), `documented` (names from the product's documentation or an upstream
+pipeline, never run on events; 7,109 translations), `assumed` (our own assumption, flagged unverified in the data-source
+note: 217, all Splunk or Elastic) and `validated` (matched a positive and not a negative sample event). The generator
+never sets `validated`; it is reserved for mappings tested against supplied events, and none is yet. A test fails if a
+mapped translation says `assumed` without the note, or `documented` while the note says unverified.
+
 Rules with at least one field-mapped translation: **2,004 of 2,104**. Coverage per SIEM differs:
 
 | Backend | Field-mapped | Not expressible |

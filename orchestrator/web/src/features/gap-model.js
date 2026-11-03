@@ -36,9 +36,15 @@ export function backendLabel(key) { return BACKEND_LABELS[key] || key; }
 
 // What to tell the analyst beside a query. A field-mapped query only matches when its data source is collected; a
 // generic one uses Sigma's own field names and has to be adapted: it is never presented as ready to paste.
+export function verificationNote(v) {
+  if (v === 'validated') return 'Validated: it matched a sample event and did not match a negative one.';
+  if (v === 'assumed') return 'The field names are our assumption; test this query on your own data before relying on it.';
+  return "The field names come from the product's documentation; this query has not yet been run against real events.";
+}
+
 export function backendNote(b) {
   if (b && b.mapping === 'pipeline' && b.dataSource) {
-    return 'Field-mapped. This query only matches if you collect: ' + b.dataSource + '.';
+    return 'Field-mapped. This query only matches if you collect: ' + b.dataSource + '. ' + verificationNote(b.verification);
   }
   return 'Generic query with Sigma field names: adapt it to your own schema before use.';
 }

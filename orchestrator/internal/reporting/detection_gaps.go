@@ -49,13 +49,14 @@ type GapRuleRow struct {
 }
 
 type GapQuery struct {
-	Backend    string `json:"backend"`
-	Language   string `json:"language"`
-	Query      string `json:"query"`
-	Truncated  bool   `json:"truncated"`
-	Mapping    string `json:"mapping"`
-	DataSource string `json:"dataSource"`
-	Note       string `json:"note"`
+	Backend      string `json:"backend"`
+	Language     string `json:"language"`
+	Query        string `json:"query"`
+	Truncated    bool   `json:"truncated"`
+	Mapping      string `json:"mapping"`
+	DataSource   string `json:"dataSource"`
+	Verification string `json:"verification"`
+	Note         string `json:"note"`
 }
 
 // BuildDetectionGaps turns a run's results, its current reviewed verifications and the rule library into the report
@@ -81,7 +82,7 @@ func BuildDetectionGaps(results []models.SimulationResult, current map[string]ve
 				Source: fmt.Sprintf("%s %s (%s)", r.Source.Name, shortCommit(r.Source.Commit), r.Source.License)}
 			for _, t := range r.Translations {
 				q := GapQuery{Backend: detectgap.BackendLabel(t.Backend), Language: t.Language, Query: t.Query,
-					Mapping: t.Mapping, DataSource: t.DataSource, Note: detectgap.QueryNote(t.Mapping, t.DataSource)}
+					Mapping: t.Mapping, DataSource: t.DataSource, Verification: t.Verification, Note: detectgap.QueryNote(t.Mapping, t.DataSource, t.Verification)}
 				if len(q.Query) > gapReportQueryChars {
 					q.Query, q.Truncated = q.Query[:gapReportQueryChars], true
 				}

@@ -20,12 +20,13 @@ import (
 )
 
 type gapBackend struct {
-	Backend    string `json:"backend"`
-	Language   string `json:"language"`
-	Mapping    string `json:"mapping"`
-	Pipeline   string `json:"pipeline,omitempty"`
-	DataSource string `json:"dataSource,omitempty"`
-	ExportURL  string `json:"exportUrl"`
+	Backend      string `json:"backend"`
+	Language     string `json:"language"`
+	Mapping      string `json:"mapping"`
+	Pipeline     string `json:"pipeline,omitempty"`
+	DataSource   string `json:"dataSource,omitempty"`
+	Verification string `json:"verification"`
+	ExportURL    string `json:"exportUrl"`
 }
 
 type gapRule struct {
@@ -280,7 +281,7 @@ func gapRules(rules []rulelib.Rule, match, backend string) []gapRule {
 				continue
 			}
 			g.Backends = append(g.Backends, gapBackend{Backend: t.Backend, Language: t.Language, Mapping: t.Mapping,
-				Pipeline: t.Pipeline, DataSource: t.DataSource, ExportURL: "/api/rules/export?id=" + r.ID + "&format=" + languageFormat[t.Language]})
+				Pipeline: t.Pipeline, DataSource: t.DataSource, Verification: t.Verification, ExportURL: "/api/rules/export?id=" + r.ID + "&format=" + languageFormat[t.Language]})
 		}
 		out = append(out, g)
 	}
