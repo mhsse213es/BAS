@@ -3485,6 +3485,53 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 {{end}}{{end}}
 
+<!-- ═══ 18b. DETECTION ENGINEERING RECOMMENDATIONS ══════════════════════ -->
+{{if .detectionGaps.hasData}}{{$dg := .detectionGaps}}
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 18b</div>
+<div class="stitle" role="heading" aria-level="1">Detection Engineering Recommendations</div>
+
+<p style="color:#6e7681;margin-bottom:14px"><strong>{{$dg.gaps}}</strong> of {{$dg.assessed}} techniques in this run executed and were reviewed as <strong>not detected</strong>. For each, the Sigma rule that targets the technique and its translation for common SIEMs are listed. A rule being available does not mean it would have detected this simulation: <strong>effectiveness is not validated</strong> until the rule is deployed and the technique is re-tested.</p>
+
+{{range $dg.rows}}
+<h3 style="margin-top:16px;margin-bottom:4px">{{.techniqueId}} &mdash; {{.name}}</h3>
+<p style="font-size:0.82rem;color:#3a4656;margin-bottom:6px">{{.reason}} &middot; <strong>{{.availability}}</strong> &middot; Effectiveness: <strong>{{.effectiveness}}</strong>{{if gt .ruleCount 1.0}} &middot; {{.ruleCount}} rules available (showing the highest severity; the console and export list all){{end}}</p>
+{{range .rules}}
+<p style="font-size:0.85rem;margin:6px 0 2px"><strong>{{.id}}</strong> {{.title}} <span style="color:#6e7681">[{{.severity}}{{if eq .match "parent"}}, parent technique only{{end}}] &middot; {{.source}}</span></p>
+{{range .queries}}
+<div style="margin:6px 0 10px">
+  <div style="font-size:0.74rem;color:#3a4656"><strong>{{.backend}}</strong> ({{.language}}) &mdash; {{.note}}</div>
+  <pre style="font-size:0.7rem;white-space:pre-wrap;word-break:break-all;background:#f6f8fa;border:1px solid #d0d7de;border-radius:4px;padding:6px;margin:3px 0">{{.query}}{{if .truncated}}
+... (truncated; full query in the export){{end}}</pre>
+</div>
+{{end}}
+{{else}}
+<p style="font-size:0.85rem;color:#9a6700;margin:6px 0 10px">No Sigma rule is available for this technique. Nothing has been invented; this needs a custom detection.</p>
+{{end}}
+{{end}}
+
+<p style="font-size:0.72rem;color:#6e7681;margin-top:14px">{{$dg.attribution}}</p>
+
+<div class="pf">
+  <span>Detection Engineering Recommendations</span>
+  {{template "pf-right" $}}
+</div>
+</div>
+</div>
+{{end}}
+
 <!-- ═══ 19. COVERAGE ANALYTICS ══════════════════════════════════════════ -->
 <div class="page">
 <div class="inner">

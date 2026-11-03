@@ -11,6 +11,8 @@ import (
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/verification"
+	"sort"
+	"strings"
 )
 
 type Status string
@@ -108,4 +110,108 @@ func Availability(rules []rulelib.Rule, backend string) string {
 		}
 	}
 	return BackendTranslationUnavailable
+}
+
+// Assessment is one technique's outcome in one run.
+type Assessment struct {
+	TechniqueID string
+	Name        string
+	Steps       map[string]int // steps by result: fail, pass, blocked, error, skipped
+	Classification
+}
+
+// Assess groups a run's step results by ATT&CK technique and classifies each from the run's reviewed verifications
+// (keyed by expectation id, as the Verification Store returns them). A result with no technique id is a posture check
+// and is left out. Techniques come back in the order they first appear in the run.
+func Assess(results []models.SimulationResult, current map[string]verification.Record) []Assessment {
+	byTech := map[string]*Technique{}
+	names := map[string]string{}
+	var order []string
+	for _, res := range results {
+		id := res.Technique.ID
+		if id == "" {
+			continue
+		}
+		t := byTech[id]
+		if t == nil {
+			t = &Technique{TechniqueID: id, Outcomes: map[models.CheckResult]int{}}
+			byTech[id] = t
+			names[id] = res.Technique.Name
+			order = append(order, id)
+		}
+		t.Outcomes[res.Result]++
+	}
+	for _, rec := range current {
+		if t := byTech[rec.TechniqueID]; t != nil {
+			t.Attestations = append(t.Attestations, Attestation{Result: rec.Result, State: rec.WorkflowState})
+		}
+	}
+	out := make([]Assessment, 0, len(order))
+	for _, id := range order {
+		t := byTech[id]
+		steps := map[string]int{}
+		for k, v := range t.Outcomes {
+			steps[string(k)] = v
+		}
+		out = append(out, Assessment{TechniqueID: id, Name: names[id], Steps: steps, Classification: Classify(*t)})
+	}
+	return out
+}
+
+var severityOrder = map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "informational": 4}
+
+// PickRules orders rules by severity then id, drops those with no translation for the requested SIEM (they are not
+// offered as a fix for it; backend "" keeps all), and keeps at most limit. The caller's slice is not reordered.
+func PickRules(rules []rulelib.Rule, backend string, limit int) []rulelib.Rule {
+	sorted := append([]rulelib.Rule(nil), rules...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		a, b := severityOrder[strings.ToLower(sorted[i].Severity)], severityOrder[strings.ToLower(sorted[j].Severity)]
+		if a != b {
+			return a < b
+		}
+		return sorted[i].ID < sorted[j].ID
+	})
+	var out []rulelib.Rule
+	for _, r := range sorted {
+		if backend != "" {
+			has := false
+			for _, t := range r.Translations {
+				has = has || t.Backend == backend
+			}
+			if !has {
+				continue
+			}
+		}
+		out = append(out, r)
+		if len(out) == limit {
+			break
+		}
+	}
+	return out
+}
+
+var backendLabels = map[string]string{
+	"microsoft_sentinel": "Microsoft Sentinel",
+	"microsoft_defender": "Microsoft Defender XDR",
+	"splunk":             "Splunk",
+	"qradar":             "IBM QRadar",
+	"elastic":            "Elastic",
+	"crowdstrike":        "CrowdStrike LogScale",
+}
+
+// BackendLabel is the SIEM's display name; an unknown key is returned as is.
+func BackendLabel(key string) string {
+	if l, ok := backendLabels[key]; ok {
+		return l
+	}
+	return key
+}
+
+// QueryNote is what to tell the reader beside a query. A field-mapped query only matches when its data source is
+// collected; a generic one uses Sigma's own field names and must be adapted. It is never presented as ready to paste.
+func QueryNote(mapping, dataSource string) string {
+	if mapping == "pipeline" && dataSource != "" {
+		return "Field-mapped. This only matches if you collect: " + dataSource + "."
+	}
+	return "Generic query using Sigma field names: adapt the field names and log source to your schema before use."
 }

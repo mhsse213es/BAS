@@ -16,7 +16,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/audspect/bas/internal/detectgap"
-	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/rulelib"
 )
 
@@ -58,8 +57,6 @@ var gapStatusOrder = map[detectgap.Status]int{
 	detectgap.DetectionGap: 0, detectgap.Unknown: 1, detectgap.ExecutionError: 2, detectgap.Skipped: 3, detectgap.Detected: 4,
 }
 
-var gapSeverityOrder = map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "informational": 4}
-
 type gapReport struct {
 	RunID      string
 	Summary    map[string]int
@@ -81,47 +78,18 @@ func (h *Handler) buildGapReport(ctx context.Context, runID, backend string, all
 		return nil, err
 	}
 
-	byTech := map[string]*detectgap.Technique{}
-	names := map[string]string{}
-	var order []string
-	for _, res := range results {
-		id := res.Technique.ID
-		if id == "" {
-			continue // a posture check, not an ATT&CK technique
-		}
-		t := byTech[id]
-		if t == nil {
-			t = &detectgap.Technique{TechniqueID: id, Outcomes: map[models.CheckResult]int{}}
-			byTech[id] = t
-			names[id] = res.Technique.Name
-			order = append(order, id)
-		}
-		t.Outcomes[res.Result]++
-	}
-	for _, rec := range current {
-		if t := byTech[rec.TechniqueID]; t != nil {
-			t.Attestations = append(t.Attestations, detectgap.Attestation{Result: rec.Result, State: rec.WorkflowState})
-		}
-	}
-
 	rep := &gapReport{RunID: runID, Summary: map[string]int{}, statuses: map[string]detectgap.Status{}}
-	for _, id := range order {
-		t := byTech[id]
-		c := detectgap.Classify(*t)
-		rep.Summary[string(c.Status)]++
-		steps := map[string]int{}
-		for k, v := range t.Outcomes {
-			steps[string(k)] = v
-		}
-		rules, match := h.rulesFor(id)
+	for _, a := range detectgap.Assess(results, current) {
+		rep.Summary[string(a.Status)]++
+		rules, match := h.rulesFor(a.TechniqueID)
 		row := gapTechnique{
-			TechniqueID: id, Name: names[id], Status: string(c.Status), Reason: c.Reason, Steps: steps,
+			TechniqueID: a.TechniqueID, Name: a.Name, Status: string(a.Status), Reason: a.Reason, Steps: a.Steps,
 			RuleAvailability: detectgap.Availability(rules, backend), Effectiveness: detectgap.Effectiveness, RuleCount: len(rules),
 		}
-		if c.Status == detectgap.DetectionGap || allRules {
-			row.Rules = gapRules(pickRules(rules, backend, limit), match, backend)
+		if a.Status == detectgap.DetectionGap || allRules {
+			row.Rules = gapRules(detectgap.PickRules(rules, backend, limit), match, backend)
 		}
-		rep.statuses[id] = c.Status
+		rep.statuses[a.TechniqueID] = a.Status
 		rep.Techniques = append(rep.Techniques, row)
 	}
 	sort.SliceStable(rep.Techniques, func(i, j int) bool {
@@ -229,7 +197,7 @@ func (h *Handler) ExportRunDetectionGaps(w http.ResponseWriter, r *http.Request)
 		mt := mTech{TechniqueID: t.TechniqueID, Name: t.Name, Reason: t.Reason, RuleAvailability: t.RuleAvailability,
 			Effectiveness: t.Effectiveness, RuleCount: t.RuleCount, Rules: []mRule{}}
 		rules, _ := h.rulesFor(t.TechniqueID)
-		picked := pickRules(rules, backend, limit)
+		picked := detectgap.PickRules(rules, backend, limit)
 		for i, gr := range t.Rules {
 			if !safeRuleID.MatchString(gr.ID) {
 				continue
@@ -301,36 +269,6 @@ func (h *Handler) rulesFor(techniqueID string) ([]rulelib.Rule, string) {
 }
 
 var languageFormat = map[string]string{"KQL": "kql", "SPL": "spl", "Lucene": "lucene", "LogScale": "logscale", "AQL": "aql"}
-
-// pickRules orders rules by severity then id, drops those with no translation for the requested SIEM (they are not
-// offered as a fix for it), and keeps at most limit.
-func pickRules(rules []rulelib.Rule, backend string, limit int) []rulelib.Rule {
-	sorted := append([]rulelib.Rule(nil), rules...)
-	sort.SliceStable(sorted, func(i, j int) bool {
-		a, b := gapSeverityOrder[strings.ToLower(sorted[i].Severity)], gapSeverityOrder[strings.ToLower(sorted[j].Severity)]
-		if a != b {
-			return a < b
-		}
-		return sorted[i].ID < sorted[j].ID
-	})
-	var out []rulelib.Rule
-	for _, r := range sorted {
-		if backend != "" {
-			has := false
-			for _, t := range r.Translations {
-				has = has || t.Backend == backend
-			}
-			if !has {
-				continue
-			}
-		}
-		out = append(out, r)
-		if len(out) == limit {
-			break
-		}
-	}
-	return out
-}
 
 func gapRules(rules []rulelib.Rule, match, backend string) []gapRule {
 	out := []gapRule{}

@@ -168,6 +168,9 @@ type FullReport struct {
 	// Validation Pack). HasData is false — and the section renders as before —
 	// for any run whose scenario declares no expected_detection.
 	DetectionValidation DetectionValidationSection `json:"detectionValidation"`
+	// DetectionGaps is the Detection Engineering Recommendations section: for each technique that ran and was
+	// reviewed as not detected, the Sigma rule and per-SIEM queries that could close it. Empty without reviewed gaps.
+	DetectionGaps DetectionGapSection `json:"detectionGaps"`
 	// AppControl is the Application Control Efficacy section (Section 18a).
 	// Built from this run's own results before any report filter, and
 	// hidden (HasData false) for a run with no application-control steps.
@@ -1998,6 +2001,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	report.ObjectiveRisks = buildObjectiveRisks(results)
 	report.Detection = buildDetectionSummary(results)
 	report.DetectionValidation = e.buildDetectionValidation(ctx, runID, scenarioID, results)
+	report.DetectionGaps = e.buildDetectionGaps(ctx, runID, results)
 	report.AttackPath = buildAttackPath(results)
 	report.AttackFlow = BuildAttackFlow(results)
 	report.AttackFlowSummary = summariseAttackFlow(report.AttackFlow)
