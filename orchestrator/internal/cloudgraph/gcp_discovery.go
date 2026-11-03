@@ -35,6 +35,7 @@ type GCPDiscoveryStats struct {
 // call -- from any service client -- gets the same throttling and transient
 // retry as the Azure path, without each caller re-implementing it.
 type retryTransport struct {
+	onWait  func(time.Duration) // telemetry hook; see RetryPolicy.OnWait
 	next    http.RoundTripper
 	limiter *rate.Limiter
 	policy  RetryPolicy
@@ -55,10 +56,8 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	attempts := max(t.policy.MaxAttempts, 1)
 	var lastErr error
 	for attempt := 1; attempt <= attempts; attempt++ {
-		if t.limiter != nil {
-			if err := t.limiter.Wait(req.Context()); err != nil {
-				return nil, err
-			}
+		if err := waitLimiter(req.Context(), t.limiter, t.onWait); err != nil {
+			return nil, err
 		}
 		r := req.Clone(req.Context())
 		if body != nil {
@@ -102,6 +101,15 @@ type GCPDiscoveryClient struct {
 	iamDeny   *iamv2.Service
 	storage   *storage.Service
 	maxPages  int
+	transport *retryTransport
+}
+
+// SetRateLimitObserver reports each rate-limiter delay this client imposes to fn.
+// Telemetry only.
+func (c *GCPDiscoveryClient) SetRateLimitObserver(fn func(time.Duration)) {
+	if c.transport != nil {
+		c.transport.onWait = fn
+	}
 }
 
 // NewGCPDiscoveryClient builds the Google API clients for projectID. Auth
@@ -115,11 +123,12 @@ func NewGCPDiscoveryClient(ctx context.Context, projectID string, opts ...option
 	if err != nil {
 		return nil, fmt.Errorf("gcp discovery: building authenticated transport: %w", err)
 	}
-	base.Transport = &retryTransport{
+	rt := &retryTransport{
 		next:    base.Transport,
 		limiter: DefaultRateLimiter(),
 		policy:  DefaultRetryPolicy,
 	}
+	base.Transport = rt
 	clientOpts := append([]option.ClientOption{option.WithHTTPClient(base)}, opts...)
 
 	crm, err := crm.NewService(ctx, clientOpts...)
@@ -143,6 +152,7 @@ func NewGCPDiscoveryClient(ctx context.Context, projectID string, opts ...option
 		return nil, fmt.Errorf("gcp discovery: storage client: %w", err)
 	}
 	return &GCPDiscoveryClient{
+		transport: rt,
 		projectID: projectID,
 		crm:       crm,
 		crm2:      crm2,
