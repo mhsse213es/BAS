@@ -1,10 +1,14 @@
 package api
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -178,6 +182,132 @@ func TestRunDetectionGaps_BackendFilterAndUnknownRun(t *testing.T) {
 		}
 		if _, code := getGaps(t, h, "00000000-0000-0000-0000-000000000000", ""); code != http.StatusNotFound {
 			t.Errorf("unknown run = %d, want 404", code)
+		}
+	})
+}
+
+func getGapExport(t *testing.T, h *Handler, runID, query string) (*zip.Reader, *httptest.ResponseRecorder) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.ExportRunDetectionGaps(rec, withURLParam(httptest.NewRequest(http.MethodGet, "/x"+query, nil), "runId", runID))
+	if rec.Code != http.StatusOK {
+		return nil, rec
+	}
+	zr, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+	if err != nil {
+		t.Fatalf("export is not a zip: %v", err)
+	}
+	return zr, rec
+}
+
+func zipFiles(t *testing.T, zr *zip.Reader) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	for _, f := range zr.File {
+		rc, _ := f.Open()
+		b, _ := io.ReadAll(rc)
+		rc.Close()
+		out[f.Name] = string(b)
+	}
+	return out
+}
+
+func TestRunDetectionGapExport_BundlesRulesAndQueriesWithProvenanceAndNothingInvented(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := gapHandler(pool, t)
+		runID := seedGapRun(t, pool, []models.SimulationResult{
+			res("T1059.001", models.ResultFail), res("T9999", models.ResultFail), res("T1003.001", models.ResultFail),
+		})
+		attest(t, pool, runID, "T1059.001", verification.ResultNotDetected, verification.StateApproved)
+		attest(t, pool, runID, "T9999", verification.ResultNotDetected, verification.StateApproved)
+		attest(t, pool, runID, "T1003.001", verification.ResultDetected, verification.StateApproved)
+
+		zr, rec := getGapExport(t, h, runID, "?backend=splunk")
+		if zr == nil {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		if ct := rec.Header().Get("Content-Type"); ct != "application/zip" {
+			t.Errorf("Content-Type = %q", ct)
+		}
+		files := zipFiles(t, zr)
+
+		notice := files["NOTICE.txt"]
+		if !strings.Contains(notice, "Detection Rule License") || !strings.Contains(notice, "SigmaHQ") || !strings.Contains(notice, "0e3b749e0d85cd943706ed610a1447f0d54e8388") {
+			t.Errorf("NOTICE lacks attribution, licence or commit:\n%s", notice)
+		}
+		var manifest struct {
+			RunID         string `json:"runId"`
+			Effectiveness string `json:"effectiveness"`
+			Techniques    []struct {
+				TechniqueID      string `json:"techniqueId"`
+				RuleAvailability string `json:"ruleAvailability"`
+				Rules            []struct {
+					ID, SigmaID string
+					Source      struct{ Commit, License string }
+					Files       []string `json:"files"`
+				} `json:"rules"`
+			} `json:"techniques"`
+		}
+		if err := json.Unmarshal([]byte(files["manifest.json"]), &manifest); err != nil {
+			t.Fatalf("manifest.json: %v", err)
+		}
+		if manifest.RunID != runID || manifest.Effectiveness != "Not validated" {
+			t.Errorf("manifest header = %+v", manifest)
+		}
+		if len(manifest.Techniques) != 2 {
+			t.Fatalf("manifest lists %d techniques, want only the 2 gaps (not the detected one)", len(manifest.Techniques))
+		}
+		for _, tq := range manifest.Techniques {
+			if tq.TechniqueID == "T9999" && (tq.RuleAvailability != "No rule available" || len(tq.Rules) != 0) {
+				t.Errorf("a gap with no rule must say so: %+v", tq)
+			}
+			for _, r := range tq.Rules {
+				if r.Source.License != "DRL-1.1" || len(r.Files) < 2 {
+					t.Fatalf("rule %s lacks licence or files: %+v", r.ID, r)
+				}
+				for _, f := range r.Files {
+					if _, ok := files[f]; !ok {
+						t.Errorf("manifest points at %q which is not in the bundle", f)
+					}
+				}
+			}
+		}
+		var sawSigma, sawSPL bool
+		for name, body := range files {
+			if strings.HasSuffix(name, ".sigma.yml") && strings.Contains(body, "detection:") {
+				sawSigma = true
+			}
+			if strings.HasPrefix(name, "queries/splunk/") && strings.HasSuffix(name, ".spl") && body != "" {
+				sawSPL = true
+			}
+			if strings.HasPrefix(name, "queries/") && !strings.HasPrefix(name, "queries/splunk/") {
+				t.Errorf("backend filter ignored: %s", name)
+			}
+			if strings.Contains(name, "..") || strings.HasPrefix(name, "/") {
+				t.Errorf("unsafe path in bundle: %q", name)
+			}
+		}
+		if !sawSigma || !sawSPL {
+			t.Errorf("bundle lacks the original Sigma rule (%v) or a Splunk query (%v)", sawSigma, sawSPL)
+		}
+	})
+}
+
+func TestRunDetectionGapExport_UnknownRunAndNothingToExport(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := gapHandler(pool, t)
+		if _, rec := getGapExport(t, h, "00000000-0000-0000-0000-000000000000", ""); rec.Code != http.StatusNotFound {
+			t.Errorf("unknown run = %d, want 404", rec.Code)
+		}
+		runID := seedGapRun(t, pool, []models.SimulationResult{res("T1059.001", models.ResultFail)})
+		if _, rec := getGapExport(t, h, runID, ""); rec.Code != http.StatusNotFound {
+			t.Errorf("a run with no detection gap = %d, want 404 (nothing to export)", rec.Code)
 		}
 	})
 }

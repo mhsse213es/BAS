@@ -736,6 +736,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/me", h.GetMe)
 		r.Get("/api/scenarios/runs/{runId}/verifications", h.ListRunVerifications)
 		r.Get("/api/scenarios/runs/{runId}/detection-gaps", h.GetRunDetectionGaps)
+		r.Get("/api/scenarios/runs/{runId}/detection-gaps/export", h.ExportRunDetectionGaps)
 		r.Get("/api/scenarios/runs/{runId}/verifications/{expectationId}/history", h.GetVerificationHistory)
 		r.Get("/api/verifications/{id}/evidence", h.ListVerificationEvidence)
 		r.Get("/api/evidence/{id}/download", h.DownloadEvidence)
