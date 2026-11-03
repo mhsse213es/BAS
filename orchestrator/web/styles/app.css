@@ -318,7 +318,10 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 .row-menu-item-danger:hover { background: rgba(218,54,51,0.1); }
 
 /* ── App shell ─────────────────────────────────────────────── */
-#app { display: flex; width: 100%;
+/* Hidden until bootApp() shows it (inline display:flex after a verified session). It used to start visible, so
+   the app shell showed over the sign-in screen on every load until a 401 happened to hide it, and stayed there when
+   the session check failed some other way. */
+#app { display: none; width: 100%;
     min-width: 100%;
     max-width: none; }
 
