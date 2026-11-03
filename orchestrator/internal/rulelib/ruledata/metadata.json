@@ -1,27 +1,27 @@
 {
   "attribution": "Detection rules are from the SigmaHQ project (https://github.com/SigmaHQ/sigma), licensed under the Detection Rule License (DRL) 1.1. Each rule keeps its original author, title, id and references; the per-SIEM queries are generated from the rule by Audspect.",
   "backends": {
-    "crowdstrike": 1916,
+    "crowdstrike": 1907,
     "elastic": 2096,
-    "microsoft_defender": 2054,
-    "microsoft_sentinel": 2008,
+    "microsoft_defender": 2052,
+    "microsoft_sentinel": 2006,
     "qradar": 1753,
     "splunk": 2104
   },
-  "generatedAt": "2026-11-03T11:18:14.706360+00:00",
+  "generatedAt": "2026-11-03T11:24:09.935019+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
-    "crowdstrike:generic": 900,
-    "crowdstrike:pipeline": 1016,
-    "elastic:generic": 522,
-    "elastic:pipeline": 1574,
-    "microsoft_defender:generic": 814,
-    "microsoft_defender:pipeline": 1240,
-    "microsoft_sentinel:generic": 620,
-    "microsoft_sentinel:pipeline": 1388,
+    "crowdstrike:generic": 873,
+    "crowdstrike:pipeline": 1034,
+    "elastic:generic": 399,
+    "elastic:pipeline": 1697,
+    "microsoft_defender:generic": 779,
+    "microsoft_defender:pipeline": 1273,
+    "microsoft_sentinel:generic": 585,
+    "microsoft_sentinel:pipeline": 1421,
     "qradar:generic": 1753,
-    "splunk:generic": 605,
-    "splunk:pipeline": 1499
+    "splunk:generic": 422,
+    "splunk:pipeline": 1682
   },
   "ruleCount": 2104,
   "schemaVersion": 2,
@@ -89,6 +89,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000031",
       "sigmaId": "03552375-cc2c-4883-bbe4-7958d5a980be"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Hashes field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\driver_load\\driver_load_win_mal_drivers.yml",
+      "ruleId": "AUDRULE-000042",
+      "sigmaId": "05296024-fe8a-4baf-8f3d-9a5f5624ceb2"
     },
     {
       "backend": "crowdstrike",
@@ -259,6 +265,12 @@
       "sigmaId": "10c14723-61c7-4c75-92ca-9af245723ad2"
     },
     {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Hashes field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\driver_load\\driver_load_win_pua_system_informer.yml",
+      "ruleId": "AUDRULE-000137",
+      "sigmaId": "10cb6535-b31d-4512-9962-513dcbc42cc1"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000146",
@@ -413,6 +425,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000220",
       "sigmaId": "1a31b18a-f00c-4061-9900-f735b96c99fc"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Hashes field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\driver_load\\driver_load_win_vuln_winring0_driver.yml",
+      "ruleId": "AUDRULE-000222",
+      "sigmaId": "1a42dfa6-6cb2-4df9-9b48-295be477e835"
     },
     {
       "backend": "microsoft_sentinel",
@@ -691,6 +709,18 @@
       "sigmaId": "273a8dd8-3742-4302-bcc7-7df5a80fe425"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: NewName. Please use valid fields for the DeviceRegistryEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, Details, DeviceId, DeviceName, EventType, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, ObjectName, OriginalFileName, ParentCommandLine, ParentProcessId, PreviousRegistryKey, PreviousRegistryValueData, PreviousRegistryValueName, ProcessId, ProcessName, Product, RegistryKey, RegistryValueData, RegistryValueName, RegistryValueType, ReportId, SourceImage, TargetObject, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\registry\\registry_event\\registry_event_persistence_recycle_bin.yml",
+      "ruleId": "AUDRULE-000341",
+      "sigmaId": "277efb8f-60be-4f10-b4d3-037802f37167"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: NewName. Please use valid fields for the DeviceRegistryEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, Details, DeviceId, DeviceName, EventType, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, ObjectName, OriginalFileName, ParentCommandLine, ParentProcessId, PreviousRegistryKey, PreviousRegistryValueData, PreviousRegistryValueName, ProcessId, ProcessName, Product, RegistryKey, RegistryValueData, RegistryValueName, RegistryValueType, ReportId, SourceImage, TargetObject, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\registry\\registry_event\\registry_event_persistence_recycle_bin.yml",
+      "ruleId": "AUDRULE-000341",
+      "sigmaId": "277efb8f-60be-4f10-b4d3-037802f37167"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000341",
@@ -707,6 +737,12 @@
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_rundll32_setupapi_installhinfsection.yml",
       "ruleId": "AUDRULE-000345",
       "sigmaId": "285b85b1-a555-4095-8652-a8a4106af63f"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Hashes field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\driver_load\\driver_load_win_vuln_hevd_driver.yml",
+      "ruleId": "AUDRULE-000352",
+      "sigmaId": "295c9289-acee-4503-a571-8eacaef36b28"
     },
     {
       "backend": "qradar",
@@ -1483,6 +1519,18 @@
       "sigmaId": "66d31e5f-52d6-40a4-9615-002d3789a119"
     },
     {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Hashes field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\driver_load\\driver_load_win_windivert.yml",
+      "ruleId": "AUDRULE-000823",
+      "sigmaId": "679085d5-f427-4484-9f58-1dc30a7c426d"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Hashes field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\driver_load\\driver_load_win_pua_process_hacker.yml",
+      "ruleId": "AUDRULE-000824",
+      "sigmaId": "67add051-9ee7-4ad3-93ba-42935615ae8d"
+    },
+    {
       "backend": "microsoft_sentinel",
       "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Count. Please use valid fields for the SigninLogs table, or the following fields that have fieldmappings in this pipeline:\nAADTenantId, AlternateSignInName, AppDisplayName, AppId, Application, AppliedConditionalAccessPolicies, AppliedEventListeners, AuthenticationContextClassReferences, AuthenticationDetails, AuthenticationMethod, AuthenticationMethodsUsed, AuthenticationProcessingDetails, AuthenticationProtocol, AuthenticationRequirement, AuthenticationRequirementPolicies, AutonomousSystemNumber, Category, ClientAppUsed, ConditionalAccessPolicies, ConditionalAccessStatus, CorrelationId, CreatedDateTime, CrossTenantAccessType, DeviceDetail, DurationMs, FlaggedForReview, Hashes, HomeTenantId, IPAddress, IPAddressFromResourceProvider, Id, Identity, IpAddress, IsInteractive, IsRisky, Level, Location, LocationDetails, MfaDetail, NetworkLocationDetails, OperationName, OperationVersion, OriginalRequestId, ProcessingTimeInMilliseconds, Resource, ResourceDisplayName, ResourceGroup, ResourceId, ResourceIdentity, ResourceProvider, ResourceServicePrincipalId, ResourceTenantId, ResultDescription, ResultSignature, ResultType, RiskDetail, RiskEventTypes, RiskEventTypes_V2, RiskLevel, RiskLevelAggregated, RiskLevelDuringSignIn, RiskState, ServicePrincipalId, ServicePrincipalName, SessionLifetimePolicies, SignInIdentifier, SignInIdentifierType, SourceSystem, Status, TargetUserName, TimeGenerated, TokenIssuerName, TokenIssuerType, Type, UniqueTokenIdentifier, User, UserAgent, UserDisplayName, UserId, UserPrincipalName, UserType, _BilledSize, _IsBillable, app, src_ip in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\cloud\\azure\\signin_logs\\azure_ad_auth_sucess_increase.yml",
       "ruleId": "AUDRULE-000825",
@@ -1891,6 +1939,12 @@
       "sigmaId": "7aa7009a-28b9-4344-8c1f-159489a390df"
     },
     {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Hashes field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\driver_load\\driver_load_win_vuln_drivers.yml",
+      "ruleId": "AUDRULE-000993",
+      "sigmaId": "7aaaf4b8-e47c-4295-92ee-6ed40a6f60c8"
+    },
+    {
       "backend": "microsoft_sentinel",
       "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: FilterName. Please use valid fields for the SecurityEvent table, or the following fields that have fieldmappings in this pipeline:\nAccessList, AccessMask, Account, AccountDomain, AccountExpires, AccountName, AccountSessionIdentifier, AccountType, Activity, AdditionalInfo, AdditionalInfo2, AllowedToDelegateTo, Attributes, AuditPolicyChanges, AuditsDiscarded, AuthenticationLevel, AuthenticationPackageName, AuthenticationProvider, AuthenticationServer, AuthenticationService, AuthenticationType, AzureDeploymentID, CACertificateHash, CAPublicKeyHash, CalledStationID, CallerProcessId, CallerProcessName, CallingStationID, Category, CategoryId, CertificateDatabaseHash, Channel, ClassId, ClassName, ClientAddress, ClientIPAddress, ClientName, CommandLine, CompatibleIds, Computer, Correlation, DCDNSName, DestinationHostname, DestinationIp, DestinationPort, DeviceDescription, DeviceId, DisplayName, Disposition, DomainBehaviorVersion, DomainName, DomainPolicyChanged, DomainSid, EAPType, ElevatedToken, ErrorCode, EventData, EventID, EventLevelName, EventRecordId, EventSourceName, ExtendedQuarantineState, FailureReason, FileHash, FilePath, FilePathNoUser, Filter, ForceLogoff, Fqbn, FullyQualifiedSubjectMachineName, FullyQualifiedSubjectUserName, GroupMembership, HandleId, HardwareIds, Hashes, HomeDirectory, HomePath, Image, InterfaceUuid, IpAddress, IpPort, KeyLength, Keywords, Level, LmPackageName, LocationInformation, LockoutDuration, LockoutObservationWindow, LockoutThreshold, LoggingResult, LogonGuid, LogonHours, LogonID, LogonProcessName, LogonType, LogonTypeName, MachineAccountQuota, MachineInventory, MachineLogon, ManagementGroupName, MandatoryLabel, MaxPasswordAge, MemberName, MemberSid, MinPasswordAge, MinPasswordLength, MixedDomainMode, NASIPv4Address, NASIPv6Address, NASIdentifier, NASPort, NASPortType, NetworkPolicyName, NewDate, NewMaxUsers, NewProcessId, NewProcessName, NewRemark, NewShareFlags, NewTime, NewUacValue, NewValue, NewValueType, ObjectName, ObjectServer, ObjectType, ObjectValueName, OemInformation, OldMaxUsers, OldRemark, OldShareFlags, OldUacValue, OldValue, OldValueType, Opcode, OperationType, PackageName, ParentImage, ParentProcessName, PasswordHistoryLength, PasswordLastSet, PasswordProperties, PreviousDate, PreviousTime, PrimaryGroupId, PrivateKeyUsageCount, PrivilegeList, Process, ProcessId, ProcessName, ProfilePath, Properties, ProtocolSequence, ProxyPolicyName, QuarantineHelpURL, QuarantineSessionID, QuarantineSessionIdentifier, QuarantineState, QuarantineSystemHealthResult, RelativeTargetName, RemoteIpAddress, RemotePort, RequestId, Requester, RestrictedAdminMode, RowsDeleted, SamAccountName, ScriptPath, SecurityDescriptor, ServiceAccount, ServiceFileName, ServiceName, ServiceStartType, ServiceType, SessionName, ShareLocalPath, ShareName, SidHistory, SourceComputerId, SourceHostname, SourceIp, SourcePort, SourceSystem, Status, StorageAccount, SubStatus, SubcategoryGuid, SubcategoryId, Subject, SubjectAccount, SubjectDomainName, SubjectKeyIdentifier, SubjectLogonId, SubjectMachineName, SubjectMachineSID, SubjectUserName, SubjectUserSid, SystemProcessId, SystemThreadId, SystemUserId, TableId, TargetAccount, TargetDomainName, TargetFilename, TargetInfo, TargetLinkedLogonId, TargetLogonGuid, TargetLogonId, TargetObject, TargetOutboundDomainName, TargetOutboundUserName, TargetServerName, TargetSid, TargetUser, TargetUserName, TargetUserSid, Task, TemplateContent, TemplateDSObjectFQDN, TemplateInternalName, TemplateOID, TemplateSchemaVersion, TemplateVersion, TenantId, TicketEncryptionType, TicketOptions, TimeGenerated, TokenElevationType, TransmittedServices, Type, User, UserAccountControl, UserParameters, UserPrincipalName, UserWorkstations, VendorIds, Version, VirtualAccount, Workstation, WorkstationName, _BilledSize, _IsBillable, _ResourceId, _SubscriptionId in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\builtin\\security\\win_security_hktl_nofilter.yml",
       "ruleId": "AUDRULE-000995",
@@ -1943,6 +1997,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001009",
       "sigmaId": "7cd1dcdc-6edf-4896-86dc-d1f19ad64903"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\dns_query\\dns_query_win_appinstaller.yml",
+      "ruleId": "AUDRULE-001010",
+      "sigmaId": "7cff77e1-9663-46a3-8260-17f2e1aa9d0a"
     },
     {
       "backend": "microsoft_sentinel",
@@ -2305,6 +2365,18 @@
       "sigmaId": "91903aba-1088-42ee-b680-d6d94fe002b0"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: NewName. Please use valid fields for the DeviceRegistryEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, Details, DeviceId, DeviceName, EventType, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, ObjectName, OriginalFileName, ParentCommandLine, ParentProcessId, PreviousRegistryKey, PreviousRegistryValueData, PreviousRegistryValueName, ProcessId, ProcessName, Product, RegistryKey, RegistryValueData, RegistryValueName, RegistryValueType, ReportId, SourceImage, TargetObject, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\registry\\registry_event\\registry_event_disable_security_events_logging_adding_reg_key_minint.yml",
+      "ruleId": "AUDRULE-001184",
+      "sigmaId": "919f2ef0-be2d-4a7a-b635-eb2b41fde044"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: NewName. Please use valid fields for the DeviceRegistryEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, Details, DeviceId, DeviceName, EventType, Hashes, Image, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, ObjectName, OriginalFileName, ParentCommandLine, ParentProcessId, PreviousRegistryKey, PreviousRegistryValueData, PreviousRegistryValueName, ProcessId, ProcessName, Product, RegistryKey, RegistryValueData, RegistryValueName, RegistryValueType, ReportId, SourceImage, TargetObject, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\registry\\registry_event\\registry_event_disable_security_events_logging_adding_reg_key_minint.yml",
+      "ruleId": "AUDRULE-001184",
+      "sigmaId": "919f2ef0-be2d-4a7a-b635-eb2b41fde044"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001184",
@@ -2633,6 +2705,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001344",
       "sigmaId": "a1d9eec5-33b2-4177-8d24-27fe754d0812"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: Only file name of image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\dns_query\\dns_query_win_dns_server_discovery_via_ldap_query.yml",
+      "ruleId": "AUDRULE-001347",
+      "sigmaId": "a21bcd7e-38ec-49ad-b69a-9ea17e69509e"
     },
     {
       "backend": "qradar",

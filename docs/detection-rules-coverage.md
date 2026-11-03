@@ -212,19 +212,39 @@ Defender XDR and CrowdStrike stay generic: there is no Azure source or sourcetyp
 The Entra risk-detection (15), PIM (7), GCP audit (5) and Microsoft 365 (5) rules remain generic: none converts
 usefully through the Azure Monitor pipeline.
 
-Of the 2,104 applicable rules, **1,671** are in the fifteen mapped families (845 Windows process creation, 74 Linux process creation, 39 macOS process creation, 37 network connection, 108 PowerShell script block, 102 registry set, 99 file event, 94 image load, 106 Security log, 49 System log, 30 PowerShell module); coverage per SIEM differs, per the table below:
+**Long tail of Windows log sources** (186 rules in 30 groups). Chosen by measuring every unmapped Windows group
+against the stock pipelines and reading the output, not by whether the output changed:
+
+- **Event-log services** (Defender, Application, Firewall, BITS, DNS client, Exchange management, Task Scheduler and
+  others) map for Splunk and Elastic through the stock pipelines, **only when the output actually carries the source
+  (`source="`) or channel (`winlog.channel`)**. A service the pipeline does not recognise (`iis-configuration`, `ldap`,
+  `smbserver-connectivity`) stays generic, and a service recognised by only one SIEM maps for only that one.
+- **Sysmon categories for Splunk** use our own pipelines pinning the event codes: process access 10, DNS query 22, named
+  pipe 17/18, driver load 6, remote thread 8, registry event 12/13/14, registry delete 12, file delete 23/26. Classic
+  PowerShell start (event 400, `Windows PowerShell` log) maps for Splunk and Elastic.
+- **Stock pipelines where they are correct**: Sentinel and Defender for registry events, registry delete and file delete
+  (`DeviceRegistryEvents`, `DeviceFileEvents`); CrowdStrike for DNS query and driver load; Elastic for DNS query and the
+  two registry categories.
+- **Deliberately left generic**: Elastic for process access (pySigma emits a corrupt query for regex rules), remote
+  thread, named pipe, driver load and file delete (their ECS fields are not specific to the event); Sentinel and Defender
+  for file access (file events are creation and modification, not reads).
+
+**Query integrity gate.** The generator now rejects any query containing a leaked pySigma object (the defect above) and
+records it as a failure; none exists in the shipped bundle.
+
+Rules with at least one field-mapped translation: **1,839 of 2,104**. Coverage per SIEM differs:
 
 | Backend | Field-mapped | Not expressible |
 |---|---:|---:|
-| Microsoft Sentinel | 1,388 | 96 |
-| Microsoft Defender | 1,240 | 50 |
-| Splunk | 1,499 | 0 |
-| Elastic | 1,574 | 8 |
-| CrowdStrike | 1,016 | 181 |
+| Microsoft Sentinel | 1,421 | 98 |
+| Microsoft Defender | 1,273 | 52 |
+| Splunk | 1,682 | 0 |
+| Elastic | 1,697 | 8 |
+| CrowdStrike | 1,034 | 197 |
 
 A rule a backend cannot express (for example a hash format, `CurrentDirectory`, or CrowdStrike's missing
 `Description`/`ParentCommandLine` fields) is recorded as **"backend translation unavailable"** with the reason. It
-is never silently replaced by a generic query. The other 433 applicable rules (other log sources) are still
+is never silently replaced by a generic query. The 265 rules with no field-mapped translation (proxy, web server, Linux auditd, Cisco, GitHub and other small log sources) are
 generic: their translations are labelled `generic`, need adapting to the customer's schema, and are not presented
 as ready to paste. Each further log-source family is one more entry in `scripts/rulelib-gen/translate.py`.
 

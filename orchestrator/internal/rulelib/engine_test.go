@@ -35,10 +35,21 @@ func TestLoadFromBytes_CorruptJSON_ReturnsEmptyEngine(t *testing.T) {
 
 // A translation says whether its query was field-mapped for the SIEM, with which pipeline, and which data source
 // the customer must collect for it to match anything. A generic query (log source with no mapping) names neither.
+// mappedGroup names the log-source group a rule belongs to, for counting which groups have field-mapped translations.
+func mappedGroup(ls LogSource) string {
+	switch {
+	case ls.Service != "":
+		return ls.Product + "/" + ls.Service
+	case ls.Category != "":
+		return ls.Product + "/" + ls.Category
+	}
+	return ls.Product
+}
+
 func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 	e := NewEngine()
 	mapped, generic := 0, 0
-	mappedByCategory := map[string]int{}
+	mappedByGroup := map[string]int{}
 	for _, r := range e.Search(SearchFilter{}) {
 		for _, tr := range r.Translations {
 			switch tr.Mapping {
@@ -47,26 +58,12 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 				if tr.Pipeline == "" || tr.DataSource == "" {
 					t.Fatalf("%s/%s: mapped translation without pipeline/data source", r.ID, tr.Backend)
 				}
-				if r.LogSource.Product == "windows" && (r.LogSource.Service == "security" || r.LogSource.Service == "system") && r.LogSource.Category == "" {
-					mappedByCategory[r.LogSource.Service]++
-					continue
-				}
-				if r.LogSource.Product == "azure" && (r.LogSource.Service == "activitylogs" || r.LogSource.Service == "auditlogs" || r.LogSource.Service == "signinlogs") {
-					mappedByCategory["azure_"+r.LogSource.Service]++
-					continue
-				}
-				if r.LogSource.Product == "aws" && r.LogSource.Service == "cloudtrail" {
-					mappedByCategory["aws_cloudtrail"]++
-					continue
-				}
-				if (r.LogSource.Product == "linux" || r.LogSource.Product == "macos") && r.LogSource.Category == "process_creation" {
-					mappedByCategory[r.LogSource.Product+"_process_creation"]++
-					continue
-				}
-				if r.LogSource.Product != "windows" || (r.LogSource.Category != "process_creation" && r.LogSource.Category != "network_connection" && r.LogSource.Category != "ps_script" && r.LogSource.Category != "registry_set" && r.LogSource.Category != "file_event" && r.LogSource.Category != "image_load" && r.LogSource.Category != "ps_module") {
+				switch r.LogSource.Product {
+				case "windows", "linux", "macos", "aws", "azure":
+				default:
 					t.Fatalf("%s/%s: mapped although the log source is %+v", r.ID, tr.Backend, r.LogSource)
 				}
-				mappedByCategory[r.LogSource.Category]++
+				mappedByGroup[mappedGroup(r.LogSource)]++
 			case "generic":
 				generic++
 				if tr.Pipeline != "" || tr.DataSource != "" {
@@ -77,8 +74,17 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 			}
 		}
 	}
-	if mappedByCategory["process_creation"] == 0 || mappedByCategory["network_connection"] == 0 || mappedByCategory["ps_script"] == 0 || mappedByCategory["registry_set"] == 0 || mappedByCategory["file_event"] == 0 || mappedByCategory["image_load"] == 0 || mappedByCategory["ps_module"] == 0 || mappedByCategory["linux_process_creation"] == 0 || mappedByCategory["macos_process_creation"] == 0 || mappedByCategory["aws_cloudtrail"] == 0 || mappedByCategory["azure_activitylogs"] == 0 || mappedByCategory["azure_auditlogs"] == 0 || mappedByCategory["azure_signinlogs"] == 0 || mappedByCategory["security"] == 0 || mappedByCategory["system"] == 0 {
-		t.Errorf("expected mapped translations for both process_creation and network_connection, got %v", mappedByCategory)
+	// Every family the generator maps must have produced field-mapped translations in the shipped bundle.
+	for _, g := range []string{
+		"windows/process_creation", "windows/network_connection", "windows/ps_script", "windows/registry_set", "windows/file_event",
+		"windows/image_load", "windows/security", "windows/system", "windows/ps_module", "linux/process_creation",
+		"macos/process_creation", "aws/cloudtrail", "azure/activitylogs", "azure/auditlogs", "azure/signinlogs",
+		"windows/dns_query", "windows/registry_event", "windows/registry_delete", "windows/file_delete", "windows/pipe_created",
+		"windows/driver_load", "windows/process_access", "windows/create_remote_thread", "windows/ps_classic_start", "windows/windefend",
+	} {
+		if mappedByGroup[g] == 0 {
+			t.Errorf("no field-mapped translations for %s (got %v)", g, mappedByGroup)
+		}
 	}
 	if mapped == 0 || generic == 0 {
 		t.Errorf("expected both mapped and generic translations, got %d mapped / %d generic", mapped, generic)

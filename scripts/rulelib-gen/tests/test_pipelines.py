@@ -38,7 +38,7 @@ NOT_PROC = """
     id: 33333333-3333-3333-3333-333333333333
     status: test
     logsource:
-        category: dns_query
+        category: webserver
         product: windows
     detection:
         selection:

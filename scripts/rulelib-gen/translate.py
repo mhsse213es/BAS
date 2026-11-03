@@ -11,6 +11,7 @@ no mapping are translated generically and labelled that way; the original Sigma 
 Adding a backend (QRadar next) is one more `BackendSpec` in BACKENDS: a key, a pySigma backend class, a language and
 its mappings. Nothing else in the generator or the rule library changes."""
 import copy
+import re
 import importlib.metadata
 from dataclasses import dataclass, field
 from typing import Callable
@@ -48,6 +49,12 @@ WINDOWS_PS_MODULE = "windows_ps_module"
 LINUX_PROCESS_CREATION = "linux_process_creation"
 MACOS_PROCESS_CREATION = "macos_process_creation"
 AWS_CLOUDTRAIL = "aws_cloudtrail"
+WINDOWS_EVENTLOG = "windows_eventlog"
+# Windows categories (Sysmon and others) mapped by the long-tail tables at the end of this module.
+WINDOWS_TAIL_CATEGORIES = (
+    "process_access", "dns_query", "pipe_created", "driver_load", "create_remote_thread",
+    "registry_event", "registry_delete", "file_delete", "ps_classic_start",
+)
 AZURE_ACTIVITYLOGS = "azure_activitylogs"
 AZURE_AUDITLOGS = "azure_auditlogs"
 AZURE_SIGNINLOGS = "azure_signinlogs"
@@ -327,6 +334,9 @@ class Mapping:
     name: str          # recorded on every translation that uses it
     data_source: str   # what the customer must collect for the query to match anything
     dist_name: str     # PyPI distribution providing the pipeline (version recorded); "" for in-repo pipelines
+    # When set, the translation is labelled mapped only if the query contains this text. A stock pipeline that does not
+    # recognise a log source leaves the query unchanged; it then stays generic instead of claiming a source it did not add.
+    must_contain: str = ""
 
 
 @dataclass(frozen=True)
@@ -563,6 +573,106 @@ BACKENDS: dict[str, BackendSpec] = {
 }
 
 
+# ── Long tail of Windows log sources ──────────────────────────────────────────────────────────────────────────
+# Chosen by measuring every unmapped Windows group against the stock pipelines and reading the output (not by whether
+# the output changed): Elastic is left generic for process_access (pySigma emits a corrupt query for regex rules),
+# create_remote_thread, pipe_created, driver_load and file_delete, whose ECS fields are not specific to the event.
+# Sentinel and Defender are not mapped for file_access: file events are creation/modification, not reads.
+_SYSMON_SPLUNK = {   # category -> (event codes, what the event is)
+    "process_access": ((10,), "process access"),
+    "dns_query": ((22,), "DNS query"),
+    "pipe_created": ((17, 18), "named pipe created / connected"),
+    "driver_load": ((6,), "driver loaded"),
+    "create_remote_thread": ((8,), "remote thread created"),
+    "registry_event": ((12, 13, 14), "registry object created or deleted, value set, key or value renamed"),
+    "registry_delete": ((12,), "registry object deleted"),
+    "file_delete": ((23, 26), "file delete archived / detected"),
+}
+
+
+def _splunk_condition_pipeline(identifier: str, category: str, conditions: dict) -> ProcessingPipeline:
+    return ProcessingPipeline(
+        name=f"Audspect Splunk {category}", allowed_backends={"splunk"}, priority=20,
+        items=[ProcessingItem(
+            identifier=identifier, transformation=AddConditionTransformation(conditions),
+            rule_conditions=[LogsourceCondition(category=category, product="windows")],
+        )],
+    )
+
+
+def _sysmon_splunk_factory(category: str):
+    codes = _SYSMON_SPLUNK[category][0]
+    value = codes[0] if len(codes) == 1 else list(codes)
+    return lambda: _splunk_condition_pipeline(
+        f"audspect_splunk_sysmon_{category}", category,
+        {"source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational", "EventCode": value})
+
+
+def splunk_ps_classic_start_pipeline() -> ProcessingPipeline:
+    return _splunk_condition_pipeline("audspect_splunk_ps_classic_start", "ps_classic_start",
+                                      {"source": "WinEventLog:Windows PowerShell", "EventCode": 400})
+
+
+def ecs_ps_classic_start_pipeline() -> ProcessingPipeline:
+    add = ProcessingPipeline(items=[ProcessingItem(
+        identifier="audspect_ecs_ps_classic_start",
+        transformation=AddConditionTransformation({"winlog.channel": "Windows PowerShell", "event.code": "400"}),
+        rule_conditions=[LogsourceCondition(category="ps_classic_start", product="windows")],
+    )], priority=100)
+    return ecs_windows() + add
+
+
+def _register_long_tail() -> None:
+    splunk, elastic = BACKENDS["splunk"].mappings, BACKENDS["elastic"].mappings
+    sentinel, defender, crowd = (BACKENDS[k].mappings for k in ("microsoft_sentinel", "microsoft_defender", "crowdstrike"))
+    for category, (codes, what) in _SYSMON_SPLUNK.items():
+        events = ", ".join(str(c) for c in codes)
+        splunk[f"windows_{category}"] = Mapping(
+            _sysmon_splunk_factory(category), f"audspect_splunk_sysmon_{category}",
+            f"Sysmon event {events} ({what}) indexed by Splunk through the Splunk Add-on for Sysmon "
+            "(source XmlWinEventLog:Microsoft-Windows-Sysmon/Operational). Sysmon must be configured to log these events", "")
+    splunk["windows_ps_classic_start"] = Mapping(
+        splunk_ps_classic_start_pipeline, "audspect_splunk_ps_classic_start",
+        "Windows PowerShell classic log, event 400 (engine state changed), indexed by Splunk (source WinEventLog:Windows PowerShell)", "")
+    elastic["windows_ps_classic_start"] = Mapping(
+        ecs_ps_classic_start_pipeline, "ecs_windows + audspect_ecs_ps_classic_start",
+        "Windows PowerShell classic log, event 400, in ECS field names (Winlogbeat, winlog.channel Windows PowerShell)",
+        "pysigma-backend-elasticsearch")
+    for category, events in (("dns_query", "22"), ("registry_event", "12, 13, 14"), ("registry_delete", "12")):
+        elastic[f"windows_{category}"] = Mapping(
+            ecs_windows, "ecs_windows",
+            f"Windows Sysmon events {events} in ECS field names (Winlogbeat's Sysmon module). The query carries no event-type "
+            "condition, so it relies on the field names being specific to these events",
+            "pysigma-backend-elasticsearch")
+    for category, table in (("registry_event", "DeviceRegistryEvents"), ("registry_delete", "DeviceRegistryEvents"),
+                            ("file_delete", "DeviceFileEvents")):
+        sentinel[f"windows_{category}"] = Mapping(
+            microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
+            f"Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the {table} table", "pysigma-backend-kusto")
+        defender[f"windows_{category}"] = Mapping(
+            microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
+            f"Microsoft Defender for Endpoint advanced hunting: the {table} table", "pysigma-backend-microsoft365defender")
+    for category in ("dns_query", "driver_load"):
+        crowd[f"windows_{category}"] = Mapping(
+            crowdstrike_fdr_pipeline, "crowdstrike_fdr_pipeline",
+            "CrowdStrike Falcon Data Replicator events from the Windows sensor, in LogScale (event type set by the pipeline)",
+            "pysigma-backend-crowdstrike")
+    # Event-log services: only labelled mapped when the stock pipeline actually added the source or channel.
+    splunk[WINDOWS_EVENTLOG] = Mapping(
+        splunk_windows_pipeline, "splunk_windows_pipeline",
+        "The Windows event log channel for this service indexed by Splunk (source WinEventLog:<channel>, event id as EventCode) "
+        "through the Splunk Add-on for Microsoft Windows. The channel must be collected and its logging enabled",
+        "pysigma-backend-splunk", 'source="')
+    elastic[WINDOWS_EVENTLOG] = Mapping(
+        ecs_windows, "ecs_windows",
+        "The Windows event log channel for this service in ECS field names (Winlogbeat or the Elastic Agent Windows integration, "
+        "winlog.channel). The channel must be collected and its logging enabled",
+        "pysigma-backend-elasticsearch", "winlog.channel")
+
+
+_register_long_tail()
+
+
 def _version(dist_name: str) -> str:
     if not dist_name:
         return ""
@@ -579,6 +689,10 @@ def _pysigma_version() -> str:
 def log_source_family(rule) -> str:
     """The family a rule's log source belongs to, or "" when it has no mapped family."""
     ls = rule.logsource
+    if ls.product == "windows" and not ls.service and ls.category in WINDOWS_TAIL_CATEGORIES:
+        return f"windows_{ls.category}"
+    if ls.product == "windows" and ls.service and ls.service not in ("security", "system") and not ls.category:
+        return WINDOWS_EVENTLOG
     if ls.product == "aws" and ls.service == "cloudtrail" and not ls.category:
         return AWS_CLOUDTRAIL
     if ls.product == "azure" and not ls.category:
@@ -614,6 +728,15 @@ def log_source_family(rule) -> str:
     return ""
 
 
+_LEAKED_OBJECT = re.compile(r"Sigma(?:String|RegularExpression|Number|Bool|CIDR|Null|Expansion|Placeholder|Query)\(")
+
+
+def looks_corrupt(query: str) -> bool:
+    """True when a pySigma object's repr leaked into the query text (a pySigma defect seen with regex rules under
+    ecs_windows). Such a query can never match, so it is a recorded failure."""
+    return bool(_LEAKED_OBJECT.search(query))
+
+
 def translate_rule(rule) -> tuple[list[dict], list[dict]]:
     """Returns (translations, failures) for one SigmaRule across every backend in BACKENDS. Never raises: a
     per-backend exception becomes a failure entry. The caller's rule is never changed (pipelines edit rules in
@@ -628,8 +751,14 @@ def translate_rule(rule) -> tuple[list[dict], list[dict]]:
             kwargs = {"processing_pipeline": mapping.pipeline()} if mapping else {}
             backend = spec.backend_cls(**kwargs)
             queries = backend.convert(SigmaCollection([copy.deepcopy(rule)]))
+            if queries and mapping and mapping.must_contain and mapping.must_contain not in queries[0]:
+                mapping = None  # the pipeline did not recognise this log source: keep the plain translation, labelled generic
+                queries = spec.backend_cls().convert(SigmaCollection([copy.deepcopy(rule)]))
             if not queries:
                 failures.append({"backend": backend_key, "reason": "backend returned no query"})
+                continue
+            if looks_corrupt(queries[0]):
+                failures.append({"backend": backend_key, "reason": "the backend produced an invalid query (a pySigma object leaked into the text)"})
                 continue
             generator = f"pySigma {_pysigma_version()} / {spec.dist_name} {_version(spec.dist_name)}"
             if mapping:

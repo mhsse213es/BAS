@@ -83,7 +83,7 @@ def test_other_log_sources_are_still_generic():
         id: 55555555-5555-5555-5555-555555555555
         status: test
         logsource:
-            category: dns_query
+            category: webserver
             product: windows
         detection:
             selection:
