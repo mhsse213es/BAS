@@ -36,6 +36,7 @@ WINDOWS_NETWORK_CONNECTION = "windows_network_connection"
 WINDOWS_PS_SCRIPT = "windows_ps_script"
 WINDOWS_REGISTRY_SET = "windows_registry_set"
 WINDOWS_FILE_EVENT = "windows_file_event"
+WINDOWS_IMAGE_LOAD = "windows_image_load"
 
 
 def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> ProcessingPipeline:
@@ -52,6 +53,12 @@ def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> 
             rule_conditions=[LogsourceCondition(category=category, product="windows")],
         )],
     )
+
+
+def splunk_sysmon_image_load_pipeline() -> ProcessingPipeline:
+    """Sigma's image_load is a module (DLL) being loaded: Sysmon event 7. The bundled Splunk pipeline adds no source
+    or event code."""
+    return _splunk_sysmon_pipeline("audspect_splunk_sysmon_image_load", "image_load", 7)
 
 
 def splunk_sysmon_file_event_pipeline() -> ProcessingPipeline:
@@ -148,6 +155,10 @@ BACKENDS: dict[str, BackendSpec] = {
             microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
             "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceProcessEvents table",
             "pysigma-backend-kusto"),
+        WINDOWS_IMAGE_LOAD: Mapping(
+            microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
+            "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceImageLoadEvents table",
+            "pysigma-backend-kusto"),
         WINDOWS_FILE_EVENT: Mapping(
             microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
             "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceFileEvents table",
@@ -165,6 +176,10 @@ BACKENDS: dict[str, BackendSpec] = {
         WINDOWS_PROCESS_CREATION: Mapping(
             microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
             "Microsoft Defender for Endpoint advanced hunting: the DeviceProcessEvents table",
+            "pysigma-backend-microsoft365defender"),
+        WINDOWS_IMAGE_LOAD: Mapping(
+            microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
+            "Microsoft Defender for Endpoint advanced hunting: the DeviceImageLoadEvents table",
             "pysigma-backend-microsoft365defender"),
         WINDOWS_FILE_EVENT: Mapping(
             microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
@@ -184,6 +199,11 @@ BACKENDS: dict[str, BackendSpec] = {
             splunk_sysmon_process_creation_pipeline, "audspect_splunk_sysmon_process_creation",
             "Sysmon event 1 (process creation) indexed by Splunk through the Splunk Add-on for Sysmon "
             "(source XmlWinEventLog:Microsoft-Windows-Sysmon/Operational)",
+            ""),
+        WINDOWS_IMAGE_LOAD: Mapping(
+            splunk_sysmon_image_load_pipeline, "audspect_splunk_sysmon_image_load",
+            "Sysmon event 7 (image loaded) indexed by Splunk through the Splunk Add-on for Sysmon "
+            "(source XmlWinEventLog:Microsoft-Windows-Sysmon/Operational). Image load logging is off by default in Sysmon and must be enabled",
             ""),
         WINDOWS_FILE_EVENT: Mapping(
             splunk_sysmon_file_event_pipeline, "audspect_splunk_sysmon_file_event",
@@ -211,6 +231,12 @@ BACKENDS: dict[str, BackendSpec] = {
             ecs_windows, "ecs_windows",
             "Windows process events in ECS field names (Elastic Defend, or Winlogbeat / Sysmon with the ECS ingest pipeline)",
             "pysigma-backend-elasticsearch"),
+        WINDOWS_IMAGE_LOAD: Mapping(
+            ecs_windows, "ecs_windows",
+            "Image/library load events in ECS field names (Winlogbeat's Sysmon module, event 7, or Elastic Defend library events). "
+            "The query carries no event-type condition, so it relies on the field names being specific to these events. "
+            "Image load logging is off by default in Sysmon and must be enabled",
+            "pysigma-backend-elasticsearch"),
         WINDOWS_FILE_EVENT: Mapping(
             ecs_windows, "ecs_windows",
             "File creation events in ECS field names (Elastic Defend, or Winlogbeat's Sysmon module, event 11)",
@@ -235,6 +261,10 @@ BACKENDS: dict[str, BackendSpec] = {
         WINDOWS_PROCESS_CREATION: Mapping(
             crowdstrike_fdr_pipeline, "crowdstrike_fdr_pipeline",
             "CrowdStrike Falcon Data Replicator ProcessRollup2 events from the Windows sensor, in LogScale",
+            "pysigma-backend-crowdstrike"),
+        WINDOWS_IMAGE_LOAD: Mapping(
+            crowdstrike_fdr_pipeline, "crowdstrike_fdr_pipeline",
+            "CrowdStrike Falcon Data Replicator ClassifiedModuleLoad events from the Windows sensor, in LogScale",
             "pysigma-backend-crowdstrike"),
         WINDOWS_PS_SCRIPT: Mapping(
             crowdstrike_fdr_pipeline, "crowdstrike_fdr_pipeline",
@@ -276,6 +306,8 @@ def log_source_family(rule) -> str:
             return WINDOWS_REGISTRY_SET
         if ls.category == "file_event":
             return WINDOWS_FILE_EVENT
+        if ls.category == "image_load":
+            return WINDOWS_IMAGE_LOAD
     return ""
 
 

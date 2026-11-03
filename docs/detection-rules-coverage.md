@@ -44,10 +44,10 @@ honestly instead of producing a query that matches nothing.)
 | CrowdStrike (LogScale) | 1,945 | 159 |
 | IBM QRadar (AQL), generic only | 1,753 | 351 |
 
-## 4. Field mapping per SIEM (Windows process creation, network connection, PowerShell script block, registry set, file event)
+## 4. Field mapping per SIEM (Windows process creation, network connection, PowerShell script block, registry set, file event, image load)
 
 A bare pySigma backend emits Sigma's own field names with no table, index or event type, so its query matches
-nothing in a real SIEM. For Windows `process_creation`, `network_connection`, `ps_script`, `registry_set` and `file_event` rules the generator now applies a
+nothing in a real SIEM. For Windows `process_creation`, `network_connection`, `ps_script`, `registry_set`, `file_event` and `image_load` rules the generator now applies a
 per-SIEM processing pipeline, and every such translation records the pipeline and the data source the customer must collect for the
 query to match anything. Pipelines were chosen by measuring each over all 1,177 SigmaHQ Windows process-creation
 rules:
@@ -116,19 +116,33 @@ it mapped would be false.
 One rule uses `InitiatingProcessParentFileName`-style fields the Defender tables lack and is recorded as unavailable
 on Sentinel and Defender. CrowdStrike stays **generic** (its pipeline emits Sysmon field names with no event type).
 
-Of the 2,104 applicable rules, **1,191** are in the five mapped families (845 process creation, 37 network connection, 108 PowerShell script block, 102 registry set, 99 file event):
+**Image load** (Windows `image_load`, 94 rules) maps for all five SIEMs:
+
+| Backend | Pipeline | Data source the customer must collect | Field-mapped (of 94) |
+|---|---|---|---:|
+| Microsoft Sentinel | `microsoft_xdr_pipeline` | Defender for Endpoint device events: `DeviceImageLoadEvents` | 77 |
+| Microsoft Defender | `microsoft_365_defender_pipeline` | Defender for Endpoint advanced hunting: `DeviceImageLoadEvents` | 77 |
+| Splunk | `audspect_splunk_sysmon_image_load` (ours) | Sysmon event 7 via the Splunk Add-on for Sysmon | 94 |
+| Elastic | `ecs_windows` | Winlogbeat's Sysmon module (event 7) or Elastic Defend library events | 94 |
+| CrowdStrike | `crowdstrike_fdr_pipeline` | Falcon Data Replicator `ClassifiedModuleLoad` events | 74 |
+
+Not expressible: 17 rules on Sentinel and Defender (mostly the `Signed` field, and unsupported hash formats) and 20 on
+CrowdStrike (`Signed`, `OriginalFileName`); each is recorded with its reason. Sysmon does not log image loads by default,
+so event 7 must be enabled. The Elastic query carries no event-type condition; it relies on the field names.
+
+Of the 2,104 applicable rules, **1,285** are in the six mapped families (845 process creation, 37 network connection, 108 PowerShell script block, 102 registry set, 99 file event, 94 image load):
 
 | Backend | Field-mapped | Not expressible |
 |---|---:|---:|
-| Microsoft Sentinel | 1,052 | 31 |
-| Microsoft Defender | 1,052 | 31 |
-| Splunk | 1,191 | 0 |
-| Elastic | 1,191 | 0 |
-| CrowdStrike | 829 | 161 |
+| Microsoft Sentinel | 1,129 | 48 |
+| Microsoft Defender | 1,129 | 48 |
+| Splunk | 1,285 | 0 |
+| Elastic | 1,285 | 0 |
+| CrowdStrike | 903 | 181 |
 
 A rule a backend cannot express (for example a hash format, `CurrentDirectory`, or CrowdStrike's missing
 `Description`/`ParentCommandLine` fields) is recorded as **"backend translation unavailable"** with the reason. It
-is never silently replaced by a generic query. The other 913 applicable rules (other log sources) are still
+is never silently replaced by a generic query. The other 819 applicable rules (other log sources) are still
 generic: their translations are labelled `generic`, need adapting to the customer's schema, and are not presented
 as ready to paste. Each further log-source family is one more entry in `scripts/rulelib-gen/translate.py`.
 

@@ -1,27 +1,27 @@
 {
   "attribution": "Detection rules are from the SigmaHQ project (https://github.com/SigmaHQ/sigma), licensed under the Detection Rule License (DRL) 1.1. Each rule keeps its original author, title, id and references; the per-SIEM queries are generated from the rule by Audspect.",
   "backends": {
-    "crowdstrike": 1936,
+    "crowdstrike": 1916,
     "elastic": 2104,
-    "microsoft_defender": 2073,
-    "microsoft_sentinel": 2073,
+    "microsoft_defender": 2056,
+    "microsoft_sentinel": 2056,
     "qradar": 1753,
     "splunk": 2104
   },
-  "generatedAt": "2026-11-03T10:38:49.304787+00:00",
+  "generatedAt": "2026-11-03T10:42:28.073489+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
-    "crowdstrike:generic": 1107,
-    "crowdstrike:pipeline": 829,
-    "elastic:generic": 913,
-    "elastic:pipeline": 1191,
-    "microsoft_defender:generic": 1021,
-    "microsoft_defender:pipeline": 1052,
-    "microsoft_sentinel:generic": 1021,
-    "microsoft_sentinel:pipeline": 1052,
+    "crowdstrike:generic": 1013,
+    "crowdstrike:pipeline": 903,
+    "elastic:generic": 819,
+    "elastic:pipeline": 1285,
+    "microsoft_defender:generic": 927,
+    "microsoft_defender:pipeline": 1129,
+    "microsoft_sentinel:generic": 927,
+    "microsoft_sentinel:pipeline": 1129,
     "qradar:generic": 1753,
-    "splunk:generic": 913,
-    "splunk:pipeline": 1191
+    "splunk:generic": 819,
+    "splunk:pipeline": 1285
   },
   "ruleCount": 2104,
   "schemaVersion": 2,
@@ -109,6 +109,24 @@
       "sigmaId": "05c36dd6-79d6-4a9a-97da-3db20298ab2d"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_susp_clickonce_unsigned_module_loaded.yml",
+      "ruleId": "AUDRULE-000052",
+      "sigmaId": "060d5ad4-3153-47bb-8382-43e5e29eda92"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_susp_clickonce_unsigned_module_loaded.yml",
+      "ruleId": "AUDRULE-000052",
+      "sigmaId": "060d5ad4-3153-47bb-8382-43e5e29eda92"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Signed field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_susp_clickonce_unsigned_module_loaded.yml",
+      "ruleId": "AUDRULE-000052",
+      "sigmaId": "060d5ad4-3153-47bb-8382-43e5e29eda92"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000052",
@@ -149,6 +167,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000074",
       "sigmaId": "090ffaad-c01a-4879-850c-6d57da98452d"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the OriginalFileName field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_dll_system_management_automation_susp_load.yml",
+      "ruleId": "AUDRULE-000076",
+      "sigmaId": "092bc4b9-3d1d-43b4-a6b4-8c8acd83522f"
     },
     {
       "backend": "qradar",
@@ -583,6 +607,24 @@
       "sigmaId": "272e55a4-9e6b-4211-acb6-78f51f0b1b40"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_vmmap_dbghelp_unsigned.yml",
+      "ruleId": "AUDRULE-000339",
+      "sigmaId": "273a8dd8-3742-4302-bcc7-7df5a80fe425"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_vmmap_dbghelp_unsigned.yml",
+      "ruleId": "AUDRULE-000339",
+      "sigmaId": "273a8dd8-3742-4302-bcc7-7df5a80fe425"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Signed field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_vmmap_dbghelp_unsigned.yml",
+      "ruleId": "AUDRULE-000339",
+      "sigmaId": "273a8dd8-3742-4302-bcc7-7df5a80fe425"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000339",
@@ -667,6 +709,12 @@
       "sigmaId": "32d56ea1-417f-44ff-822b-882873f5f43b"
     },
     {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the CommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_dll_vss_ps_susp_load.yml",
+      "ruleId": "AUDRULE-000419",
+      "sigmaId": "333cdbe8-27bb-4246-bf82-b41a0dca4b70"
+    },
+    {
       "backend": "microsoft_sentinel",
       "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_renamed_dctask64.yml)",
       "ruleId": "AUDRULE-000423",
@@ -677,6 +725,12 @@
       "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_renamed_dctask64.yml)",
       "ruleId": "AUDRULE-000423",
       "sigmaId": "340a090b-c4e9-412e-bb36-b4b16fe96f9b"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the OriginalFileName field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_dll_rstrtmgr_uncommon_load.yml",
+      "ruleId": "AUDRULE-000441",
+      "sigmaId": "3669afd2-9891-4534-a626-e5cf03810a61"
     },
     {
       "backend": "microsoft_sentinel",
@@ -893,6 +947,18 @@
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_fltmc_unload_driver.yml",
       "ruleId": "AUDRULE-000587",
       "sigmaId": "4931188c-178e-4ee7-a348-39e8a7a56821"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_hktl_sharpevtmute.yml)",
+      "ruleId": "AUDRULE-000588",
+      "sigmaId": "49329257-089d-46e6-af37-4afce4290685"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_hktl_sharpevtmute.yml)",
+      "ruleId": "AUDRULE-000588",
+      "sigmaId": "49329257-089d-46e6-af37-4afce4290685"
     },
     {
       "backend": "qradar",
@@ -1321,6 +1387,24 @@
       "sigmaId": "6a5f68d1-c4b5-46b9-94ee-5324892ea939"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_non_existent_dlls.yml",
+      "ruleId": "AUDRULE-000853",
+      "sigmaId": "6b98b92b-4f00-4f62-b4fe-4d1920215771"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_non_existent_dlls.yml",
+      "ruleId": "AUDRULE-000853",
+      "sigmaId": "6b98b92b-4f00-4f62-b4fe-4d1920215771"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Signed field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_non_existent_dlls.yml",
+      "ruleId": "AUDRULE-000853",
+      "sigmaId": "6b98b92b-4f00-4f62-b4fe-4d1920215771"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000853",
@@ -1373,6 +1457,24 @@
       "reason": "SigmaFeatureNotSupportedByBackendError: ORing CIDR matching is not yet supported by LogScale backend in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\network\\zeek\\zeek_http_webdav_put_request.yml",
       "ruleId": "AUDRULE-000897",
       "sigmaId": "705072a5-bb6f-4ced-95b6-ecfa6602090b"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_vmguestlib.yml",
+      "ruleId": "AUDRULE-000902",
+      "sigmaId": "70e8e9b4-6a93-4cb7-8cde-da69502e7aff"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_vmguestlib.yml",
+      "ruleId": "AUDRULE-000902",
+      "sigmaId": "70e8e9b4-6a93-4cb7-8cde-da69502e7aff"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Signed field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_vmguestlib.yml",
+      "ruleId": "AUDRULE-000902",
+      "sigmaId": "70e8e9b4-6a93-4cb7-8cde-da69502e7aff"
     },
     {
       "backend": "qradar",
@@ -1465,6 +1567,12 @@
       "sigmaId": "754ed792-634f-40ae-b3bc-e0448d33f695"
     },
     {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_hktl_silenttrinity_stager.yml",
+      "ruleId": "AUDRULE-000946",
+      "sigmaId": "75c505b1-711d-4f68-a357-8c3fe37dbf2d"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000946",
@@ -1547,6 +1655,24 @@
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_winsat.yml",
       "ruleId": "AUDRULE-000981",
       "sigmaId": "7a01183d-71a2-46ad-ad5c-acd989ac1793"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_jli.yml",
+      "ruleId": "AUDRULE-000986",
+      "sigmaId": "7a3b6d1f-4a2b-4f8c-9d7e-e9f8cbf21a35"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_jli.yml",
+      "ruleId": "AUDRULE-000986",
+      "sigmaId": "7a3b6d1f-4a2b-4f8c-9d7e-e9f8cbf21a35"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the OriginalFileName field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_jli.yml",
+      "ruleId": "AUDRULE-000986",
+      "sigmaId": "7a3b6d1f-4a2b-4f8c-9d7e-e9f8cbf21a35"
     },
     {
       "backend": "qradar",
@@ -1741,6 +1867,24 @@
       "sigmaId": "853e74f9-9392-4935-ad3b-2e8c040dae86"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_lsass_unsigned_image_load.yml",
+      "ruleId": "AUDRULE-001090",
+      "sigmaId": "857c8db3-c89b-42fb-882b-f681c7cf4da2"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_lsass_unsigned_image_load.yml",
+      "ruleId": "AUDRULE-001090",
+      "sigmaId": "857c8db3-c89b-42fb-882b-f681c7cf4da2"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Signed field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_lsass_unsigned_image_load.yml",
+      "ruleId": "AUDRULE-001090",
+      "sigmaId": "857c8db3-c89b-42fb-882b-f681c7cf4da2"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001090",
@@ -1856,6 +2000,18 @@
     },
     {
       "backend": "microsoft_sentinel",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_dll_comsvcs_load_renamed_version_by_rundll32.yml)",
+      "ruleId": "AUDRULE-001153",
+      "sigmaId": "8cde342c-ba48-4b74-b615-172c330f2e93"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_dll_comsvcs_load_renamed_version_by_rundll32.yml)",
+      "ruleId": "AUDRULE-001153",
+      "sigmaId": "8cde342c-ba48-4b74-b615-172c330f2e93"
+    },
+    {
+      "backend": "microsoft_sentinel",
       "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_wmic_squiblytwo_bypass.yml)",
       "ruleId": "AUDRULE-001156",
       "sigmaId": "8d63dadf-b91b-4187-87b6-34a1114577ea"
@@ -1957,6 +2113,18 @@
       "sigmaId": "9465ddf4-f9e4-4ebd-8d98-702df3a93239"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: SignatureStatus. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_mfdetours_unsigned.yml",
+      "ruleId": "AUDRULE-001209",
+      "sigmaId": "948a0953-f287-4806-bbcb-3b2e396df89f"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: SignatureStatus. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_mfdetours_unsigned.yml",
+      "ruleId": "AUDRULE-001209",
+      "sigmaId": "948a0953-f287-4806-bbcb-3b2e396df89f"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001209",
@@ -2033,6 +2201,24 @@
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_hktl_winpeas.yml",
       "ruleId": "AUDRULE-001251",
       "sigmaId": "98b53e78-ebaf-46f8-be06-421aafd176d9"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_vmmap_dbghelp_signed.yml",
+      "ruleId": "AUDRULE-001254",
+      "sigmaId": "98ffaed4-aec2-4e04-9b07-31492fe68b3d"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_vmmap_dbghelp_signed.yml",
+      "ruleId": "AUDRULE-001254",
+      "sigmaId": "98ffaed4-aec2-4e04-9b07-31492fe68b3d"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Signed field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_vmmap_dbghelp_signed.yml",
+      "ruleId": "AUDRULE-001254",
+      "sigmaId": "98ffaed4-aec2-4e04-9b07-31492fe68b3d"
     },
     {
       "backend": "qradar",
@@ -2294,6 +2480,12 @@
     },
     {
       "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the OriginalFileName field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_wsman_provider_image_load.yml",
+      "ruleId": "AUDRULE-001428",
+      "sigmaId": "ad1f4bb9-8dfb-4765-adb6-2a7cfb6c0f94"
+    },
+    {
+      "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events. in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\process_creation\\proc_creation_win_uac_bypass_msconfig_gui.yml",
       "ruleId": "AUDRULE-001430",
       "sigmaId": "ad92e3f9-7eb6-460e-96b1-582b0ccbb980"
@@ -2377,10 +2569,34 @@
       "sigmaId": "b3e6418f-7c7a-4fad-993a-93b65027a9f1"
     },
     {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the OriginalFileName field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_dll_rstrtmgr_suspicious_load.yml",
+      "ruleId": "AUDRULE-001491",
+      "sigmaId": "b48492dc-c5ef-4572-8dff-32bc241c15c8"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001496",
       "sigmaId": "b55d23e5-6821-44ff-8a6e-67218891e49f"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_susp_unsigned_dll.yml",
+      "ruleId": "AUDRULE-001501",
+      "sigmaId": "b5de0c9a-6f19-43e0-af4e-55ad01f550af"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_susp_unsigned_dll.yml",
+      "ruleId": "AUDRULE-001501",
+      "sigmaId": "b5de0c9a-6f19-43e0-af4e-55ad01f550af"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Signed field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_susp_unsigned_dll.yml",
+      "ruleId": "AUDRULE-001501",
+      "sigmaId": "b5de0c9a-6f19-43e0-af4e-55ad01f550af"
     },
     {
       "backend": "qradar",
@@ -2471,6 +2687,24 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001557",
       "sigmaId": "bc2e25ed-b92b-4daa-b074-b502bdd1982b"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_dll_dbghelp_dbgcore_unsigned_load.yml",
+      "ruleId": "AUDRULE-001564",
+      "sigmaId": "bdc64095-d59a-42a2-8588-71fd9c9d9abc"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_dll_dbghelp_dbgcore_unsigned_load.yml",
+      "ruleId": "AUDRULE-001564",
+      "sigmaId": "bdc64095-d59a-42a2-8588-71fd9c9d9abc"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Signed field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_dll_dbghelp_dbgcore_unsigned_load.yml",
+      "ruleId": "AUDRULE-001564",
+      "sigmaId": "bdc64095-d59a-42a2-8588-71fd9c9d9abc"
     },
     {
       "backend": "qradar",
@@ -2731,6 +2965,12 @@
       "sigmaId": "caa06de8-fdef-4c91-826a-7f9e163eef4b"
     },
     {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_susp_python_image_load.yml",
+      "ruleId": "AUDRULE-001674",
+      "sigmaId": "cbb56d62-4060-40f7-9466-d8aaf3123f83"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001674",
@@ -2839,6 +3079,18 @@
       "sigmaId": "d22df9cd-2aee-4089-93c7-9dc4eae77f2c"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signature. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_keyscrambler.yml",
+      "ruleId": "AUDRULE-001726",
+      "sigmaId": "d2451be2-b582-4e15-8701-4196ac180260"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signature. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_keyscrambler.yml",
+      "ruleId": "AUDRULE-001726",
+      "sigmaId": "d2451be2-b582-4e15-8701-4196ac180260"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001726",
@@ -2855,6 +3107,24 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001732",
       "sigmaId": "d29ada0f-af45-4f27-8f32-f7b77c3dbc4e"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_python.yml",
+      "ruleId": "AUDRULE-001735",
+      "sigmaId": "d36f7c12-14a3-4d48-b6b8-774b9c66f44d"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_python.yml",
+      "ruleId": "AUDRULE-001735",
+      "sigmaId": "d36f7c12-14a3-4d48-b6b8-774b9c66f44d"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_python.yml",
+      "ruleId": "AUDRULE-001735",
+      "sigmaId": "d36f7c12-14a3-4d48-b6b8-774b9c66f44d"
     },
     {
       "backend": "qradar",
@@ -2939,6 +3209,24 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001756",
       "sigmaId": "d635249d-86b5-4dad-a8c7-d7272b788586"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_vcruntime140.yml",
+      "ruleId": "AUDRULE-001767",
+      "sigmaId": "d7a63acb-1284-49bc-bfea-7771146c8b1c"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_vcruntime140.yml",
+      "ruleId": "AUDRULE-001767",
+      "sigmaId": "d7a63acb-1284-49bc-bfea-7771146c8b1c"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Description field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_side_load_vcruntime140.yml",
+      "ruleId": "AUDRULE-001767",
+      "sigmaId": "d7a63acb-1284-49bc-bfea-7771146c8b1c"
     },
     {
       "backend": "qradar",
@@ -3139,6 +3427,24 @@
       "sigmaId": "e5ac86dd-2da1-454b-be74-05d26c769d7d"
     },
     {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_dll_unsigned_node_load.yml",
+      "ruleId": "AUDRULE-001884",
+      "sigmaId": "e5f5c693-52d7-4de5-88ae-afbfbce85595"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_dll_unsigned_node_load.yml",
+      "ruleId": "AUDRULE-001884",
+      "sigmaId": "e5f5c693-52d7-4de5-88ae-afbfbce85595"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Signed field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_dll_unsigned_node_load.yml",
+      "ruleId": "AUDRULE-001884",
+      "sigmaId": "e5f5c693-52d7-4de5-88ae-afbfbce85595"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001884",
@@ -3191,6 +3497,24 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001922",
       "sigmaId": "e9faba72-4974-4ab2-a4c5-46e25ad59e9b"
+    },
+    {
+      "backend": "microsoft_sentinel",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_thor_unsigned_execution.yml",
+      "ruleId": "AUDRULE-001926",
+      "sigmaId": "ea5c131b-380d-49f9-aeb3-920694da4d4b"
+    },
+    {
+      "backend": "microsoft_defender",
+      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Signed. Please use valid fields for the DeviceImageLoadEvents table, or the following fields that have keymappings in this pipeline:\nActionType, AppGuardContainerId, CommandLine, Company, Description, DeviceId, DeviceName, EventType, FileName, FileSize, FileVersion, FolderPath, Hashes, Image, ImageLoaded, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountObjectId, InitiatingProcessAccountSid, InitiatingProcessAccountUpn, InitiatingProcessCommandLine, InitiatingProcessCreationTime, InitiatingProcessFileName, InitiatingProcessFileSize, InitiatingProcessFolderPath, InitiatingProcessId, InitiatingProcessIntegrityLevel, InitiatingProcessMD5, InitiatingProcessParentCreationTime, InitiatingProcessParentFileName, InitiatingProcessParentId, InitiatingProcessRemoteSessionDeviceName, InitiatingProcessRemoteSessionIP, InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessSessionId, InitiatingProcessTokenElevation, InitiatingProcessVersionInfoCompanyName, InitiatingProcessVersionInfoFileDescription, InitiatingProcessVersionInfoInternalFileName, InitiatingProcessVersionInfoOriginalFileName, InitiatingProcessVersionInfoProductName, InitiatingProcessVersionInfoProductVersion, IsInitiatingProcessRemoteSession, MD5, OriginalFileName, ParentCommandLine, ParentProcessId, ProcessId, ProcessName, Product, ReportId, SHA1, SHA256, SourceImage, Timestamp, User, md5, sha1, sha256 in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_thor_unsigned_execution.yml",
+      "ruleId": "AUDRULE-001926",
+      "sigmaId": "ea5c131b-380d-49f9-aeb3-920694da4d4b"
+    },
+    {
+      "backend": "crowdstrike",
+      "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the Signed field in C:\\Users\\Administrator\\Downloads\\Audspect_Cloud\\tools\\rulelib\\sigma\\rules\\windows\\image_load\\image_load_thor_unsigned_execution.yml",
+      "ruleId": "AUDRULE-001926",
+      "sigmaId": "ea5c131b-380d-49f9-aeb3-920694da4d4b"
     },
     {
       "backend": "qradar",
