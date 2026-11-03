@@ -1370,6 +1370,23 @@
           <button type="button" id="cloud-run-submit" class="btn btn-primary" data-on-click="cloudSubmitRun">Run scenario</button>
         </div>
         <div id="cloud-run-result" class="cloud-result-host"></div>
+        <div class="rk-card" id="cloud-disc-form">
+          <h3 class="rk-h">Discovery run</h3>
+          <p class="muted">Reads the account's permissions with a live discovery pass and asks whether the target can be reached from the held identities. Read-only.</p>
+          <label>Label <input id="cloud-disc-label" type="text" autocomplete="off"></label>
+          <label>Provider <select id="cloud-disc-provider"><option value="aws">AWS</option><option value="azure">Azure</option><option value="gcp">GCP</option></select></label>
+          <label>Account ID <input id="cloud-disc-account" type="text" autocomplete="off"></label>
+          <label>Region (optional) <input id="cloud-disc-region" type="text" autocomplete="off"></label>
+          <label>Target (identity or resource) <input id="cloud-disc-target" type="text" autocomplete="off"></label>
+          <label>Held identities (comma or space separated) <textarea id="cloud-disc-held" rows="2"></textarea></label>
+          <button type="button" id="cloud-disc-submit" class="btn btn-primary" data-on-click="cloudSubmitDiscovery">Start discovery run</button>
+        </div>
+        <div id="cloud-disc-result" class="cloud-result-host"></div>
+        <div class="rk-card">
+          <div class="cloud-runs-h"><h3 class="rk-h">Recent runs</h3>
+            <button type="button" class="btn btn-sm" data-on-click="cloudRefreshRuns">Refresh</button></div>
+          <div id="cloud-runs-list"></div>
+        </div>
       </div>
       <div id="tab-k8s-scenarios" class="is-hidden">
         <div id="hero-k8s"></div>

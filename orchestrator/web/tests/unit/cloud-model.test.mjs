@@ -78,3 +78,65 @@ test('cloudProviderLabel falls back to the raw key', function() {
   assert.equal(cloudProviderLabel('oci'), 'oci');
   assert.equal(cloudProviderLabel(undefined), '');
 });
+
+import { parseHeldIdentities, buildDiscoveryRunRequest, runRow, runRows } from '../../src/features/cloud-model.js';
+
+test('parseHeldIdentities splits on commas, spaces and new lines and drops blanks', function() {
+  assert.deepEqual(parseHeldIdentities(' a,b  c\n\nd , '), ['a', 'b', 'c', 'd']);
+  assert.deepEqual(parseHeldIdentities(''), []);
+  assert.deepEqual(parseHeldIdentities(undefined), []);
+});
+
+test('buildDiscoveryRunRequest sends discover true with the target and held identities', function() {
+  var r = buildDiscoveryRunRequest({ label: ' audit ', provider: 'aws', accountId: '111', region: 'us-east-1', target: ' arn:t ', held: 'arn:a, arn:b' });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.body, {
+    scenarioId: 'audit',
+    account: { provider: 'aws', accountId: '111', region: 'us-east-1' },
+    discover: true,
+    target: 'arn:t',
+    held: ['arn:a', 'arn:b'],
+  });
+});
+
+test('buildDiscoveryRunRequest does not send maxHops, leaving the server default', function() {
+  var r = buildDiscoveryRunRequest({ label: 'x', provider: 'gcp', accountId: 'p', target: 't' });
+  assert.equal(r.ok, true);
+  assert.equal('maxHops' in r.body, false);
+  assert.deepEqual(r.body.held, []);
+});
+
+test('buildDiscoveryRunRequest names the first missing field', function() {
+  assert.match(buildDiscoveryRunRequest({}).error, /label/);
+  assert.match(buildDiscoveryRunRequest({ label: 'x' }).error, /provider/);
+  assert.match(buildDiscoveryRunRequest({ label: 'x', provider: 'aws' }).error, /account ID/);
+  assert.match(buildDiscoveryRunRequest({ label: 'x', provider: 'aws', accountId: '1' }).error, /target/);
+});
+
+test('runRow maps a run to display fields and a tone', function() {
+  var row = runRow({ id: 'r1', scenarioId: 'audit', provider: 'azure', accountId: 'sub', status: 'partial', error: '', initiatedBy: 'u1', startedAt: '2026-11-03T10:00:00Z' });
+  assert.equal(row.account, 'Azure sub');
+  assert.equal(row.tone, 'warn');
+  assert.equal(row.label, 'audit');
+});
+
+test('runRow tolerates missing fields', function() {
+  var row = runRow({ id: 'r2' });
+  assert.equal(row.status, 'unknown');
+  assert.equal(row.tone, 'neutral');
+  assert.equal(row.account, '');
+});
+
+test('runRows keeps only rows with an id and sorts newest first', function() {
+  var rows = runRows([
+    { id: 'old', startedAt: '2026-11-01T00:00:00Z' },
+    { startedAt: '2026-11-09T00:00:00Z' },
+    { id: 'new', startedAt: '2026-11-09T00:00:00Z' },
+  ]);
+  assert.deepEqual(rows.map(function(r) { return r.id; }), ['new', 'old']);
+});
+
+test('runRows tolerates a non-array response', function() {
+  assert.deepEqual(runRows(null), []);
+  assert.deepEqual(runRows({ error: 'x' }), []);
+});

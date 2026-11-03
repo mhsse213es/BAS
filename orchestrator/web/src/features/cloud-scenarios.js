@@ -36,6 +36,7 @@ export function loadCloudScenarios() {
     catalogue = M.scenarioCards(r.body);
     renderCards();
     populateScenarioSelect();
+    loadCloudRuns();
   }).catch(function(err) {
     catalogue = [];
     if (host) host.innerHTML = '<div class="empty">Cloud scenarios are unavailable: ' + x(err.message || 'request failed') + '</div>';
@@ -97,9 +98,9 @@ export function cloudSubmitRun() {
   renderResultPending();
   cloudRequest('/api/cloud-scenario-runs', { method: 'POST', body: JSON.stringify(built.body) }).then(function(r) {
     if (r.status >= 400) throw new Error(M.describeRunError(r.status, r.body && r.body.error));
-    renderResult(r.body);
+    renderResult(r.body, 'cloud-run-result');
   }).catch(function(err) {
-    renderResultError(err.message || 'The run was not started.');
+    renderResultError(err.message || 'The run was not started.', 'cloud-run-result');
   }).then(function() {
     if (btn) btn.disabled = false;
   });
@@ -110,8 +111,8 @@ function renderResultPending() {
   if (out) out.innerHTML = '<div class="empty">Running. Discovery of the account can take a while.</div>';
 }
 
-function renderResult(run) {
-  var out = el('cloud-run-result');
+function renderResult(run, hostId) {
+  var out = el(hostId || 'cloud-run-result');
   if (!out) return;
   var status = (run && run.status) || 'submitted';
   var tone = M.runTone(status);
@@ -124,8 +125,79 @@ function renderResult(run) {
   showToast('Run ' + status, tone === 'bad' ? 'error' : 'success');
 }
 
-function renderResultError(message) {
-  var out = el('cloud-run-result');
+function renderResultError(message, hostId) {
+  var out = el(hostId || 'cloud-run-result');
   if (out) out.innerHTML = '<div class="cloud-result cloud-tone-bad">' + x(message) + '</div>';
   showToast(message, 'error');
+}
+
+// ── Discovery-only runs (POST /api/cloud-runs with discover: true) ─────────────────────────────
+// The run builds the permission graph from a live discovery pass of the account and asks whether the target is
+// reachable from the held identities. Nothing is changed in the cloud.
+
+// cloudSubmitDiscovery checks the discovery form and starts the run. A refusal shows the same messages as a scenario run.
+export function cloudSubmitDiscovery() {
+  var built = M.buildDiscoveryRunRequest({
+    label: fieldValue('cloud-disc-label'),
+    provider: fieldValue('cloud-disc-provider'),
+    accountId: fieldValue('cloud-disc-account'),
+    region: fieldValue('cloud-disc-region'),
+    target: fieldValue('cloud-disc-target'),
+    held: fieldValue('cloud-disc-held'),
+  });
+  if (!built.ok) { showToast(built.error, 'error'); return; }
+
+  var btn = el('cloud-disc-submit');
+  if (btn) btn.disabled = true;
+  var out = el('cloud-disc-result');
+  if (out) out.innerHTML = '<div class="empty">Running. Discovery of the account can take a while.</div>';
+  cloudRequest('/api/cloud-runs', { method: 'POST', body: JSON.stringify(built.body) }).then(function(r) {
+    if (r.status >= 400) throw new Error(M.describeRunError(r.status, r.body && r.body.error));
+    renderResult(r.body, 'cloud-disc-result');
+    loadCloudRuns();
+  }).catch(function(err) {
+    renderResultError(err.message || 'The run was not started.', 'cloud-disc-result');
+  }).then(function() {
+    if (btn) btn.disabled = false;
+  });
+}
+
+// loadCloudRuns fills the recent-runs table, newest first. Both scenario and discovery runs are listed.
+export function loadCloudRuns() {
+  var host = el('cloud-runs-list');
+  if (!host) return;
+  host.innerHTML = '<div class="empty">Loading…</div>';
+  cloudRequest('/api/cloud-runs?limit=20').then(function(r) {
+    if (r.status !== 200) throw new Error(M.describeRunError(r.status, r.body && r.body.error));
+    renderRunsTable(M.runRows(r.body));
+  }).catch(function(err) {
+    host.innerHTML = '<div class="empty">Runs are unavailable: ' + x(err.message || 'request failed') + '</div>';
+  });
+}
+
+// cloudRefreshRuns is the refresh button's action.
+export function cloudRefreshRuns() { loadCloudRuns(); }
+
+function formatWhen(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  return isNaN(d.getTime()) ? '' : d.toLocaleString();
+}
+
+function renderRunsTable(rows) {
+  var host = el('cloud-runs-list');
+  if (!host) return;
+  if (!rows.length) { host.innerHTML = '<div class="empty">No runs yet.</div>'; return; }
+  var head = '<tr><th>Started</th><th>Label</th><th>Account</th><th>Status</th><th>By</th><th>Error</th></tr>';
+  var body = rows.map(function(r) {
+    return '<tr>' +
+      '<td>' + x(formatWhen(r.startedAt)) + '</td>' +
+      '<td><code>' + x(r.label) + '</code></td>' +
+      '<td>' + x(r.account) + '</td>' +
+      '<td><span class="cloud-tone-' + x(r.tone) + '">' + x(r.status) + '</span></td>' +
+      '<td>' + x(r.initiatedBy) + '</td>' +
+      '<td class="cloud-result-err">' + x(r.error) + '</td>' +
+      '</tr>';
+  }).join('');
+  host.innerHTML = '<table class="cloud-runs-table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
 }

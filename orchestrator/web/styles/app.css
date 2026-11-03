@@ -1500,3 +1500,8 @@ body.theme-light {
 .cloud-tone-bad { border-color: #c62828; }
 .cloud-tone-neutral { border-color: #6b7280; }
 .cloud-result-err { color: #c62828; margin-top: 4px; }
+
+/* Recent runs table (O-10) */
+.cloud-runs-h { display: flex; justify-content: space-between; align-items: center; }
+.cloud-runs-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cloud-runs-table th, .cloud-runs-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border, #d0d7de); vertical-align: top; }

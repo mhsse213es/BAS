@@ -80,3 +80,55 @@ export function runTone(status) {
     default: return 'neutral';
   }
 }
+
+// parseHeldIdentities splits the "held" box into identities. Commas, spaces and new lines all separate them.
+export function parseHeldIdentities(text) {
+  return String(text || '').split(/[\s,]+/).map(function(s) { return s.trim(); }).filter(Boolean);
+}
+
+// buildDiscoveryRunRequest checks the discovery-only form, sent to POST /api/cloud-runs with discover: true. The
+// label is stored with the run; the server does not check it against the scenario catalogue. The target is the
+// identity or resource the run asks about. Held identities are the ones the run starts from. maxHops is left to
+// the server's default.
+export function buildDiscoveryRunRequest(form) {
+  var f = form || {};
+  var label = String(f.label || '').trim();
+  var provider = String(f.provider || '').trim();
+  var accountId = String(f.accountId || '').trim();
+  var target = String(f.target || '').trim();
+  var held = parseHeldIdentities(f.held);
+  if (!label) return { ok: false, error: 'Enter a label for this run.' };
+  if (!PROVIDERS[provider]) return { ok: false, error: 'Choose a provider: AWS, Azure or GCP.' };
+  if (!accountId) return { ok: false, error: 'Enter the account ID to discover.' };
+  if (!target) return { ok: false, error: 'Enter the target the run asks about.' };
+  var account = { provider: provider, accountId: accountId };
+  var region = String(f.region || '').trim();
+  if (region) account.region = region;
+  return { ok: true, body: { scenarioId: label, account: account, discover: true, target: target, held: held } };
+}
+
+// runRow turns one run from GET /api/cloud-runs into a table row.
+export function runRow(run) {
+  var r = run || {};
+  var status = r.status || 'unknown';
+  return {
+    id: r.id || '',
+    label: r.scenarioId || '',
+    account: r.provider && r.accountId ? (cloudProviderLabel(r.provider) + ' ' + r.accountId) : '',
+    status: status,
+    tone: runTone(status),
+    error: r.error || '',
+    initiatedBy: r.initiatedBy || '',
+    startedAt: r.startedAt || '',
+    completedAt: r.completedAt || '',
+  };
+}
+
+// runRows maps a list of runs to rows, newest first. Accepts the bare array the server returns.
+export function runRows(runs) {
+  var list = Array.isArray(runs) ? runs : [];
+  return list
+    .filter(function(r) { return r && r.id; })
+    .map(runRow)
+    .sort(function(a, b) { return a.startedAt < b.startedAt ? 1 : a.startedAt > b.startedAt ? -1 : 0; });
+}
