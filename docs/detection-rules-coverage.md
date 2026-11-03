@@ -8,7 +8,7 @@ unsupported rules are excluded. Tools: `tools/rulelib/coverage.py` and `tools/ru
 
 Audspect bundles ATT&CK **v16.1**. SigmaHQ's newest commit (and release `r2026-07-01`) tags rules with the
 renumbered ATT&CK ids (for example Impair Defenses T1562 became T1685/T1686, and the tactic is now
-`defense-impairment`), so those rules stop matching Audspect's scenarios. Measured per release, over the 150
+`defense-impairment`), so those rules stop matching Audspect's scenarios. Measured per release, over the 152
 techniques Audspect's scenarios run:
 
 | SigmaHQ release | Rules | Exact match | No rule |
@@ -23,9 +23,9 @@ ATT&CK version first.
 
 ## 2. Technique coverage (r2026-04-01, main `rules/` tree)
 
-- Techniques Audspect's scenarios run: **150** (38 also carry a detection profile)
+- Techniques Audspect's scenarios run: **152** (38 also carry a detection profile)
 - Exact rule match: **138** (91%). Only exact matches are directly applicable.
-- Rule exists for the parent technique only: **10** (shown as such, never presented as exact)
+- Rule exists for the parent technique only: **12** (shown as such, never presented as exact)
 - **No Sigma rule: 2**. These stay "no rule available"; nothing is invented.
 
 ## 3. Translation to the five SIEMs
