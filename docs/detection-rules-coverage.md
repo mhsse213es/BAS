@@ -44,10 +44,10 @@ honestly instead of producing a query that matches nothing.)
 | CrowdStrike (LogScale) | 1,945 | 159 |
 | IBM QRadar (AQL), generic only | 1,753 | 351 |
 
-## 4. Field mapping per SIEM (Windows process creation, network connection, PowerShell script block, registry set, file event, image load, Security log, System log)
+## 4. Field mapping per SIEM (Windows process creation, network connection, PowerShell script block, registry set, file event, image load, Security log, System log, PowerShell module)
 
 A bare pySigma backend emits Sigma's own field names with no table, index or event type, so its query matches
-nothing in a real SIEM. For Windows `process_creation`, `network_connection`, `ps_script`, `registry_set`, `file_event`, `image_load`, Security-log and System-log rules the generator now applies a
+nothing in a real SIEM. For Windows `process_creation`, `network_connection`, `ps_script`, `registry_set`, `file_event`, `image_load`, Security-log, System-log and PowerShell-module rules the generator now applies a
 per-SIEM processing pipeline, and every such translation records the pipeline and the data source the customer must collect for the
 query to match anything. Pipelines were chosen by measuring each over all 1,177 SigmaHQ Windows process-creation
 rules:
@@ -154,19 +154,25 @@ Sentinel stays **generic** on purpose: its Azure Monitor pipeline can only put t
 the wrong table (the System log is in the `Event` table with different fields, such as `Source` for the provider), so
 labelling that mapped would be false. Defender XDR and CrowdStrike have no System-event source.
 
-Of the 2,104 applicable rules, **1,440** are in the eight mapped families (845 process creation, 37 network connection, 108 PowerShell script block, 102 registry set, 99 file event, 94 image load, 106 Security log, 49 System log):
+**PowerShell module logging** (Windows `ps_module`, event 4103, 30 rules) maps for Splunk only
+(`audspect_splunk_powershell_module`, source `XmlWinEventLog:Microsoft-Windows-PowerShell/Operational`, matched on
+`Payload`; module logging must be enabled). Elastic stays **generic** on purpose: the stock `ecs_windows` pipeline
+renames `Payload` to the script-block field, which belongs to event 4104, so a mapped label would be false. Sentinel
+and Defender have no table for it and CrowdStrike no event type.
+
+Of the 2,104 applicable rules, **1,470** are in the nine mapped families (845 process creation, 37 network connection, 108 PowerShell script block, 102 registry set, 99 file event, 94 image load, 106 Security log, 49 System log, 30 PowerShell module); Splunk covers all of them, the other SIEMs fewer, per the table below:
 
 | Backend | Field-mapped | Not expressible |
 |---|---:|---:|
 | Microsoft Sentinel | 1,212 | 71 |
 | Microsoft Defender | 1,129 | 48 |
-| Splunk | 1,440 | 0 |
+| Splunk | 1,470 | 0 |
 | Elastic | 1,440 | 0 |
 | CrowdStrike | 903 | 181 |
 
 A rule a backend cannot express (for example a hash format, `CurrentDirectory`, or CrowdStrike's missing
 `Description`/`ParentCommandLine` fields) is recorded as **"backend translation unavailable"** with the reason. It
-is never silently replaced by a generic query. The other 664 applicable rules (other log sources) are still
+is never silently replaced by a generic query. The other 634 applicable rules (other log sources) are still
 generic: their translations are labelled `generic`, need adapting to the customer's schema, and are not presented
 as ready to paste. Each further log-source family is one more entry in `scripts/rulelib-gen/translate.py`.
 

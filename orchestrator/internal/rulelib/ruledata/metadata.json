@@ -8,7 +8,7 @@
     "qradar": 1753,
     "splunk": 2104
   },
-  "generatedAt": "2026-11-03T10:53:24.549695+00:00",
+  "generatedAt": "2026-11-03T10:56:54.487739+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
     "crowdstrike:generic": 1013,
@@ -20,8 +20,8 @@
     "microsoft_sentinel:generic": 821,
     "microsoft_sentinel:pipeline": 1212,
     "qradar:generic": 1753,
-    "splunk:generic": 664,
-    "splunk:pipeline": 1440
+    "splunk:generic": 634,
+    "splunk:pipeline": 1470
   },
   "ruleCount": 2104,
   "schemaVersion": 2,

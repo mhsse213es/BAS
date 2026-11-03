@@ -41,6 +41,7 @@ WINDOWS_FILE_EVENT = "windows_file_event"
 WINDOWS_IMAGE_LOAD = "windows_image_load"
 WINDOWS_SECURITY = "windows_security"
 WINDOWS_SYSTEM = "windows_system"
+WINDOWS_PS_MODULE = "windows_ps_module"
 
 
 def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> ProcessingPipeline:
@@ -83,22 +84,31 @@ def splunk_sysmon_registry_set_pipeline() -> ProcessingPipeline:
     return _splunk_sysmon_pipeline("audspect_splunk_sysmon_registry_set", "registry_set", 13)
 
 
-def splunk_powershell_script_block_pipeline() -> ProcessingPipeline:
-    """PowerShell script block logging is Windows event 4104 in the PowerShell/Operational log. The bundled Splunk
-    pipeline adds no source or event code, so a bare query would search every index for ScriptBlockText."""
+def _splunk_powershell_pipeline(identifier: str, category: str, event_code: int) -> ProcessingPipeline:
     return ProcessingPipeline(
-        name="Audspect Splunk PowerShell script block",
+        name=f"Audspect Splunk PowerShell {category}",
         allowed_backends={"splunk"},
         priority=20,
         items=[ProcessingItem(
-            identifier="audspect_splunk_powershell_script_block",
+            identifier=identifier,
             transformation=AddConditionTransformation({
                 "source": "XmlWinEventLog:Microsoft-Windows-PowerShell/Operational",
-                "EventCode": 4104,
+                "EventCode": event_code,
             }),
-            rule_conditions=[LogsourceCondition(category="ps_script", product="windows")],
+            rule_conditions=[LogsourceCondition(category=category, product="windows")],
         )],
     )
+
+
+def splunk_powershell_script_block_pipeline() -> ProcessingPipeline:
+    """PowerShell script block logging is Windows event 4104 in the PowerShell/Operational log. The bundled Splunk
+    pipeline adds no source or event code, so a bare query would search every index for ScriptBlockText."""
+    return _splunk_powershell_pipeline("audspect_splunk_powershell_script_block", "ps_script", 4104)
+
+
+def splunk_powershell_module_pipeline() -> ProcessingPipeline:
+    """PowerShell module logging is Windows event 4103 in the same log; its text is the event's Payload."""
+    return _splunk_powershell_pipeline("audspect_splunk_powershell_module", "ps_module", 4103)
 
 
 def splunk_sysmon_process_creation_pipeline() -> ProcessingPipeline:
@@ -214,6 +224,12 @@ BACKENDS: dict[str, BackendSpec] = {
             splunk_sysmon_process_creation_pipeline, "audspect_splunk_sysmon_process_creation",
             "Sysmon event 1 (process creation) indexed by Splunk through the Splunk Add-on for Sysmon "
             "(source XmlWinEventLog:Microsoft-Windows-Sysmon/Operational)",
+            ""),
+        WINDOWS_PS_MODULE: Mapping(
+            splunk_powershell_module_pipeline, "audspect_splunk_powershell_module",
+            "PowerShell module logging (Windows event 4103, Microsoft-Windows-PowerShell/Operational) indexed by Splunk "
+            "(source XmlWinEventLog:Microsoft-Windows-PowerShell/Operational, matched on the Payload field). "
+            "Module logging must be enabled on the endpoints",
             ""),
         WINDOWS_SYSTEM: Mapping(
             splunk_windows_pipeline, "splunk_windows_pipeline",
@@ -349,6 +365,8 @@ def log_source_family(rule) -> str:
             return WINDOWS_FILE_EVENT
         if ls.category == "image_load":
             return WINDOWS_IMAGE_LOAD
+        if ls.category == "ps_module":
+            return WINDOWS_PS_MODULE
     return ""
 
 
