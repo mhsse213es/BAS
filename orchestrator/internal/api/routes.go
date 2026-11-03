@@ -678,6 +678,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Cluster registry: anyone who can request may read it; only an administrator registers a cluster and sets its class.
 		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Get("/api/k8s-scenarios/clusters", h.ListK8sClusters)
 		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/clusters", h.RegisterK8sCluster)
+		r.With(auth.RequirePermission(auth.CanViewK8sDiscovery)).Get("/api/k8s-scenarios/clusters/{id}/namespaces", h.ListK8sClusterNamespaces)
 		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Post("/api/k8s-scenarios/runs", h.CreateK8sRun)
 		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/approve", h.ApproveK8sRun)
 		r.With(auth.RequirePermission(auth.CanExecuteK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/execute", h.ExecuteK8sRun)
@@ -734,8 +735,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/me/permissions", h.GetMyPermissions)
 		r.Get("/api/me", h.GetMe)
 		r.Get("/api/scenarios/runs/{runId}/verifications", h.ListRunVerifications)
-		r.Get("/api/scenarios/runs/{runId}/verifications/{expectationId}/history", h.GetVerificationHistory)
 		r.Get("/api/scenarios/runs/{runId}/detection-gaps", h.GetRunDetectionGaps)
+		r.Get("/api/scenarios/runs/{runId}/verifications/{expectationId}/history", h.GetVerificationHistory)
 		r.Get("/api/verifications/{id}/evidence", h.ListVerificationEvidence)
 		r.Get("/api/evidence/{id}/download", h.DownloadEvidence)
 		r.With(auth.RequirePermission(auth.CanVerify)).Post("/api/verifications", h.CreateVerification)

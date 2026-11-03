@@ -51,6 +51,7 @@ type K8sScenarioService struct {
 	Approvals   K8sApprovals
 	Clusters    map[string]string // cluster name -> API server URL
 	Registry    K8sClusterRegistry // registered clusters (Phase 2)
+	Credentials K8sClusterCredentials // per-cluster read-only credential source (Phase 2)
 	Namespaces  []string
 	ApprovalTTL time.Duration
 	Now         func() time.Time
@@ -85,6 +86,7 @@ func k8sJSON(w http.ResponseWriter, status int, v any) {
 }
 
 type k8sRunRequest struct {
+	ClusterID string            `json:"clusterId"`
 	Cluster   string            `json:"cluster"`
 	Namespace string            `json:"namespace"`
 	Action    string            `json:"action"`
@@ -109,7 +111,7 @@ func (s *K8sScenarioService) targetServer(cluster, namespace string) (string, bo
 // POST /api/k8s-scenarios/runs
 func (h *Handler) CreateK8sRun(w http.ResponseWriter, r *http.Request) {
 	svc := h.k8sScenario
-	if svc == nil {
+	if svc == nil || svc.Engine == nil {
 		jsonError(w, "Kubernetes scenarios are not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -117,6 +119,20 @@ func (h *Handler) CreateK8sRun(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
+	}
+	if body.ClusterID != "" {
+		// A registered cluster is named by its registration ID. Its display name must still be in the configured
+		// engine map, so a registration alone never makes a cluster runnable.
+		if svc.Registry == nil {
+			jsonError(w, "cluster registry is not configured", http.StatusServiceUnavailable)
+			return
+		}
+		c, found, err := svc.Registry.Get(r.Context(), body.ClusterID)
+		if err != nil || !found {
+			jsonError(w, "cluster not found", http.StatusBadRequest)
+			return
+		}
+		body.Cluster = c.DisplayName
 	}
 	server, ok := svc.targetServer(body.Cluster, body.Namespace)
 	if !ok {
@@ -147,7 +163,7 @@ func (h *Handler) CreateK8sRun(w http.ResponseWriter, r *http.Request) {
 // POST /api/k8s-scenarios/runs/{id}/approve
 func (h *Handler) ApproveK8sRun(w http.ResponseWriter, r *http.Request) {
 	svc := h.k8sScenario
-	if svc == nil {
+	if svc == nil || svc.Engine == nil {
 		jsonError(w, "Kubernetes scenarios are not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -197,7 +213,7 @@ func (h *Handler) ApproveK8sRun(w http.ResponseWriter, r *http.Request) {
 // every gate, so approval alone is not enough. POST /api/k8s-scenarios/runs/{id}/execute
 func (h *Handler) ExecuteK8sRun(w http.ResponseWriter, r *http.Request) {
 	svc := h.k8sScenario
-	if svc == nil {
+	if svc == nil || svc.Engine == nil {
 		jsonError(w, "Kubernetes scenarios are not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -237,7 +253,7 @@ func (h *Handler) ExecuteK8sRun(w http.ResponseWriter, r *http.Request) {
 
 // ListK8sRuns lists recent runs. GET /api/k8s-scenarios/runs
 func (h *Handler) ListK8sRuns(w http.ResponseWriter, r *http.Request) {
-	if h.k8sScenario == nil {
+	if h.k8sScenario == nil || h.k8sScenario.Runs == nil {
 		jsonError(w, "Kubernetes scenarios are not configured", http.StatusServiceUnavailable)
 		return
 	}

@@ -999,7 +999,7 @@ func main() {
 		WithLicensePath(cfg.LicensePath).
 		WithPublicBaseURL(cfg.PublicBaseURL).
 		WithExercise(exStore, exExecutor, exChain).
-		WithK8sScenario(buildK8sScenarioService(pool)).
+		WithK8sScenario(buildK8sClusterService(pool)).
 		WithK8sAnalysis(buildK8sAnalysisRunner()).
 		WithVerificationStore(verificationStore).
 		WithRelationshipStore(relationshipStore).
