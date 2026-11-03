@@ -44,10 +44,10 @@ honestly instead of producing a query that matches nothing.)
 | CrowdStrike (LogScale) | 1,945 | 159 |
 | IBM QRadar (AQL), generic only | 1,753 | 351 |
 
-## 4. Field mapping per SIEM (Windows process creation, network connection, PowerShell script block)
+## 4. Field mapping per SIEM (Windows process creation, network connection, PowerShell script block, registry set)
 
 A bare pySigma backend emits Sigma's own field names with no table, index or event type, so its query matches
-nothing in a real SIEM. For Windows `process_creation`, `network_connection` and `ps_script` rules the generator now applies a
+nothing in a real SIEM. For Windows `process_creation`, `network_connection`, `ps_script` and `registry_set` rules the generator now applies a
 per-SIEM processing pipeline, and every such translation records the pipeline and the data source the customer must collect for the
 query to match anything. Pipelines were chosen by measuring each over all 1,177 SigmaHQ Windows process-creation
 rules:
@@ -92,19 +92,31 @@ Sysmon module use. This is from the ECS field definition, not tested against liv
 Microsoft Sentinel and Defender stay **generic** for this family: their pipelines have no table for script-block
 text, so nothing is guessed. Script block logging must be enabled on the endpoints for any of these to match.
 
-Of the 2,104 applicable rules, **990** are in the three mapped families (845 process creation, 37 network connection, 108 PowerShell script block):
+**Registry set** (Windows `registry_set`, 102 rules) maps for four SIEMs:
+
+| Backend | Pipeline | Data source the customer must collect | Field-mapped (of 102) |
+|---|---|---|---:|
+| Microsoft Sentinel | `microsoft_xdr_pipeline` | Defender for Endpoint device events: `DeviceRegistryEvents` | 102 |
+| Microsoft Defender | `microsoft_365_defender_pipeline` | Defender for Endpoint advanced hunting: `DeviceRegistryEvents` | 102 |
+| Splunk | `audspect_splunk_sysmon_registry_set` (ours) | Sysmon event 13 via the Splunk Add-on for Sysmon | 102 |
+| Elastic | `ecs_windows` | Winlogbeat's Sysmon module (event 13); the registry value is `winlog.event_data.Details`, so Elastic Defend alone may not carry it | 102 |
+
+CrowdStrike stays **generic** for this family: its pipeline emits Sysmon field names with no event type, so calling
+it mapped would be false.
+
+Of the 2,104 applicable rules, **1,092** are in the four mapped families (845 process creation, 37 network connection, 108 PowerShell script block, 102 registry set):
 
 | Backend | Field-mapped | Not expressible |
 |---|---:|---:|
-| Microsoft Sentinel | 852 | 30 |
-| Microsoft Defender | 852 | 30 |
-| Splunk | 990 | 0 |
-| Elastic | 990 | 0 |
+| Microsoft Sentinel | 954 | 30 |
+| Microsoft Defender | 954 | 30 |
+| Splunk | 1,092 | 0 |
+| Elastic | 1,092 | 0 |
 | CrowdStrike | 829 | 161 |
 
 A rule a backend cannot express (for example a hash format, `CurrentDirectory`, or CrowdStrike's missing
 `Description`/`ParentCommandLine` fields) is recorded as **"backend translation unavailable"** with the reason. It
-is never silently replaced by a generic query. The other 1,114 applicable rules (other log sources) are still
+is never silently replaced by a generic query. The other 1,012 applicable rules (other log sources) are still
 generic: their translations are labelled `generic`, need adapting to the customer's schema, and are not presented
 as ready to paste. Each further log-source family is one more entry in `scripts/rulelib-gen/translate.py`.
 

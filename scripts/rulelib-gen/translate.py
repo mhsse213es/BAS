@@ -34,6 +34,7 @@ from sigma.types import SigmaBool, SigmaString
 WINDOWS_PROCESS_CREATION = "windows_process_creation"
 WINDOWS_NETWORK_CONNECTION = "windows_network_connection"
 WINDOWS_PS_SCRIPT = "windows_ps_script"
+WINDOWS_REGISTRY_SET = "windows_registry_set"
 
 
 def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> ProcessingPipeline:
@@ -50,6 +51,12 @@ def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> 
             rule_conditions=[LogsourceCondition(category=category, product="windows")],
         )],
     )
+
+
+def splunk_sysmon_registry_set_pipeline() -> ProcessingPipeline:
+    """Sigma's registry_set is a registry value being set: Sysmon event 13. The bundled Splunk pipeline adds no source
+    or event code."""
+    return _splunk_sysmon_pipeline("audspect_splunk_sysmon_registry_set", "registry_set", 13)
 
 
 def splunk_powershell_script_block_pipeline() -> ProcessingPipeline:
@@ -134,6 +141,10 @@ BACKENDS: dict[str, BackendSpec] = {
             microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
             "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceProcessEvents table",
             "pysigma-backend-kusto"),
+        WINDOWS_REGISTRY_SET: Mapping(
+            microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
+            "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceRegistryEvents table",
+            "pysigma-backend-kusto"),
         WINDOWS_NETWORK_CONNECTION: Mapping(
             microsoft_xdr_pipeline, "microsoft_xdr_pipeline",
             "Microsoft Defender for Endpoint (Defender XDR) device events connected to Sentinel: the DeviceNetworkEvents table",
@@ -144,6 +155,10 @@ BACKENDS: dict[str, BackendSpec] = {
             microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
             "Microsoft Defender for Endpoint advanced hunting: the DeviceProcessEvents table",
             "pysigma-backend-microsoft365defender"),
+        WINDOWS_REGISTRY_SET: Mapping(
+            microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
+            "Microsoft Defender for Endpoint advanced hunting: the DeviceRegistryEvents table",
+            "pysigma-backend-microsoft365defender"),
         WINDOWS_NETWORK_CONNECTION: Mapping(
             microsoft_365_defender_pipeline, "microsoft_365_defender_pipeline",
             "Microsoft Defender for Endpoint advanced hunting: the DeviceNetworkEvents table",
@@ -153,6 +168,11 @@ BACKENDS: dict[str, BackendSpec] = {
         WINDOWS_PROCESS_CREATION: Mapping(
             splunk_sysmon_process_creation_pipeline, "audspect_splunk_sysmon_process_creation",
             "Sysmon event 1 (process creation) indexed by Splunk through the Splunk Add-on for Sysmon "
+            "(source XmlWinEventLog:Microsoft-Windows-Sysmon/Operational)",
+            ""),
+        WINDOWS_REGISTRY_SET: Mapping(
+            splunk_sysmon_registry_set_pipeline, "audspect_splunk_sysmon_registry_set",
+            "Sysmon event 13 (registry value set) indexed by Splunk through the Splunk Add-on for Sysmon "
             "(source XmlWinEventLog:Microsoft-Windows-Sysmon/Operational)",
             ""),
         WINDOWS_PS_SCRIPT: Mapping(
@@ -170,6 +190,11 @@ BACKENDS: dict[str, BackendSpec] = {
         WINDOWS_PROCESS_CREATION: Mapping(
             ecs_windows, "ecs_windows",
             "Windows process events in ECS field names (Elastic Defend, or Winlogbeat / Sysmon with the ECS ingest pipeline)",
+            "pysigma-backend-elasticsearch"),
+        WINDOWS_REGISTRY_SET: Mapping(
+            ecs_windows, "ecs_windows",
+            "Registry value-set events in ECS field names (Winlogbeat's Sysmon module, event 13). The registry value "
+            "(Details) is matched as winlog.event_data.Details, so Elastic Defend alone may not carry it",
             "pysigma-backend-elasticsearch"),
         WINDOWS_PS_SCRIPT: Mapping(
             ecs_windows, "ecs_windows",
@@ -223,6 +248,8 @@ def log_source_family(rule) -> str:
             return WINDOWS_NETWORK_CONNECTION
         if ls.category == "ps_script":
             return WINDOWS_PS_SCRIPT
+        if ls.category == "registry_set":
+            return WINDOWS_REGISTRY_SET
     return ""
 
 

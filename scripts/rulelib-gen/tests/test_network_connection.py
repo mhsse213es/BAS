@@ -83,11 +83,11 @@ def test_other_log_sources_are_still_generic():
         id: 55555555-5555-5555-5555-555555555555
         status: test
         logsource:
-            category: registry_set
+            category: dns_query
             product: windows
         detection:
             selection:
-                TargetObject|contains: 'Run'
+                QueryName|contains: "evil"
             condition: selection
         level: low
     """

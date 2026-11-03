@@ -38,11 +38,11 @@ NOT_PROC = """
     id: 33333333-3333-3333-3333-333333333333
     status: test
     logsource:
-        category: registry_set
+        category: dns_query
         product: windows
     detection:
         selection:
-            TargetObject|contains: 'Run'
+            QueryName|contains: "evil"
         condition: selection
     level: low
 """

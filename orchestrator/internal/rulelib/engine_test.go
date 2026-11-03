@@ -47,7 +47,7 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 				if tr.Pipeline == "" || tr.DataSource == "" {
 					t.Fatalf("%s/%s: mapped translation without pipeline/data source", r.ID, tr.Backend)
 				}
-				if r.LogSource.Product != "windows" || (r.LogSource.Category != "process_creation" && r.LogSource.Category != "network_connection" && r.LogSource.Category != "ps_script") {
+				if r.LogSource.Product != "windows" || (r.LogSource.Category != "process_creation" && r.LogSource.Category != "network_connection" && r.LogSource.Category != "ps_script" && r.LogSource.Category != "registry_set") {
 					t.Fatalf("%s/%s: mapped although the log source is %+v", r.ID, tr.Backend, r.LogSource)
 				}
 				mappedByCategory[r.LogSource.Category]++
@@ -61,7 +61,7 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 			}
 		}
 	}
-	if mappedByCategory["process_creation"] == 0 || mappedByCategory["network_connection"] == 0 || mappedByCategory["ps_script"] == 0 {
+	if mappedByCategory["process_creation"] == 0 || mappedByCategory["network_connection"] == 0 || mappedByCategory["ps_script"] == 0 || mappedByCategory["registry_set"] == 0 {
 		t.Errorf("expected mapped translations for both process_creation and network_connection, got %v", mappedByCategory)
 	}
 	if mapped == 0 || generic == 0 {
