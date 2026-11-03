@@ -47,8 +47,8 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 				if tr.Pipeline == "" || tr.DataSource == "" {
 					t.Fatalf("%s/%s: mapped translation without pipeline/data source", r.ID, tr.Backend)
 				}
-				if r.LogSource.Product == "windows" && r.LogSource.Service == "security" && r.LogSource.Category == "" {
-					mappedByCategory["security"]++
+				if r.LogSource.Product == "windows" && (r.LogSource.Service == "security" || r.LogSource.Service == "system") && r.LogSource.Category == "" {
+					mappedByCategory[r.LogSource.Service]++
 					continue
 				}
 				if r.LogSource.Product != "windows" || (r.LogSource.Category != "process_creation" && r.LogSource.Category != "network_connection" && r.LogSource.Category != "ps_script" && r.LogSource.Category != "registry_set" && r.LogSource.Category != "file_event" && r.LogSource.Category != "image_load") {
@@ -65,7 +65,7 @@ func TestTranslationsRecordMappingPipelineAndDataSource(t *testing.T) {
 			}
 		}
 	}
-	if mappedByCategory["process_creation"] == 0 || mappedByCategory["network_connection"] == 0 || mappedByCategory["ps_script"] == 0 || mappedByCategory["registry_set"] == 0 || mappedByCategory["file_event"] == 0 || mappedByCategory["image_load"] == 0 || mappedByCategory["security"] == 0 {
+	if mappedByCategory["process_creation"] == 0 || mappedByCategory["network_connection"] == 0 || mappedByCategory["ps_script"] == 0 || mappedByCategory["registry_set"] == 0 || mappedByCategory["file_event"] == 0 || mappedByCategory["image_load"] == 0 || mappedByCategory["security"] == 0 || mappedByCategory["system"] == 0 {
 		t.Errorf("expected mapped translations for both process_creation and network_connection, got %v", mappedByCategory)
 	}
 	if mapped == 0 || generic == 0 {

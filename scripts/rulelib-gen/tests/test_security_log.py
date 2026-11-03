@@ -36,7 +36,7 @@ def by_backend(ts):
 
 def test_family_recognised_only_for_the_windows_security_service():
     assert log_source_family(_rule(SEC)) == "windows_security"
-    assert log_source_family(_rule(SEC.replace("service: security", "service: system"))) == ""
+    assert log_source_family(_rule(SEC.replace("service: security", "service: application"))) == ""
     assert log_source_family(_rule(SEC.replace("product: windows", "product: linux"))) == ""
 
 

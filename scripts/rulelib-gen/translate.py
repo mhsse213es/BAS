@@ -40,6 +40,7 @@ WINDOWS_REGISTRY_SET = "windows_registry_set"
 WINDOWS_FILE_EVENT = "windows_file_event"
 WINDOWS_IMAGE_LOAD = "windows_image_load"
 WINDOWS_SECURITY = "windows_security"
+WINDOWS_SYSTEM = "windows_system"
 
 
 def _splunk_sysmon_pipeline(identifier: str, category: str, event_code: int) -> ProcessingPipeline:
@@ -214,6 +215,11 @@ BACKENDS: dict[str, BackendSpec] = {
             "Sysmon event 1 (process creation) indexed by Splunk through the Splunk Add-on for Sysmon "
             "(source XmlWinEventLog:Microsoft-Windows-Sysmon/Operational)",
             ""),
+        WINDOWS_SYSTEM: Mapping(
+            splunk_windows_pipeline, "splunk_windows_pipeline",
+            "Windows System event log indexed by Splunk (source WinEventLog:System, event id as EventCode) through the "
+            "Splunk Add-on for Microsoft Windows",
+            "pysigma-backend-splunk"),
         WINDOWS_SECURITY: Mapping(
             splunk_windows_pipeline, "splunk_windows_pipeline",
             "Windows Security event log indexed by Splunk (source WinEventLog:Security, event id as EventCode) through the "
@@ -249,6 +255,10 @@ BACKENDS: dict[str, BackendSpec] = {
         WINDOWS_PROCESS_CREATION: Mapping(
             ecs_windows, "ecs_windows",
             "Windows process events in ECS field names (Elastic Defend, or Winlogbeat / Sysmon with the ECS ingest pipeline)",
+            "pysigma-backend-elasticsearch"),
+        WINDOWS_SYSTEM: Mapping(
+            ecs_windows, "ecs_windows",
+            "Windows System event log in ECS field names (Winlogbeat or the Elastic Agent Windows integration, winlog.channel System)",
             "pysigma-backend-elasticsearch"),
         WINDOWS_SECURITY: Mapping(
             ecs_windows, "ecs_windows",
@@ -319,8 +329,13 @@ def _pysigma_version() -> str:
 def log_source_family(rule) -> str:
     """The family a rule's log source belongs to, or "" when it has no mapped family."""
     ls = rule.logsource
-    if ls.product == "windows" and ls.service == "security" and not ls.category:
-        return WINDOWS_SECURITY
+    if ls.product == "windows" and not ls.category:
+        # Only these two logs have a mapping; Sentinel's Security pipeline is registered for WINDOWS_SECURITY alone, so
+        # a System-log rule is never pointed at the SecurityEvent table.
+        if ls.service == "security":
+            return WINDOWS_SECURITY
+        if ls.service == "system":
+            return WINDOWS_SYSTEM
     if ls.product == "windows" and not ls.service:
         if ls.category == "process_creation":
             return WINDOWS_PROCESS_CREATION
