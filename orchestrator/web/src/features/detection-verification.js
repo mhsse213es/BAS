@@ -10,6 +10,7 @@ import * as M from './ver-model.js';
 import { setDisplay } from '../core/inline-style.js';
 import * as DC from './dc-model.js';
 import { dcShow, dcEnabledCount } from './detection-connectors.js';
+import { gapLoad } from './detection-gaps.js';
 
 
 // ── Detection Verification (SP2) ───────────────────────────────────────────
@@ -116,6 +117,7 @@ export function vfLoadQueue() {
     T = { q: '', col: -1, dir: 1, page: 0, per: T.per, sel: {}, hidden: T.hidden };
   }
   VF.runId = runId;
+  gapLoad(runId);
   vfSyncVerifyNow();
   VF.selected = '';
   vfCloseDetail();

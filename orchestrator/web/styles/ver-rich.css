@@ -78,3 +78,24 @@
 #dc-form { margin: 0 16px 16px; }
 .dc-card .rk-hd .btn, .dc-form-foot .btn, .dc-form-head .btn { width: auto; flex: none; }
 .dc-card .rk-hd { padding-right: 16px; }
+
+/* Detection gaps panel */
+.gap-panel { margin-top: 16px; }
+.gap-actions { display: flex; align-items: center; gap: 8px; }
+.gap-actions .btn { width: auto; flex: none; }
+.gap-card .rk-hd { padding-right: 16px; }
+.gap-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 0 16px 14px; }
+.gap-tile { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--card); }
+.gap-tile.tone-bad { border-color: var(--danger); }
+.gap-n { font-size: 22px; font-weight: 700; line-height: 1.1; }
+.gap-l { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.gap-t { margin: 0 16px 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.gap-t-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gap-reason { margin: 4px 0 8px; }
+.gap-none { padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); font-size: 13px; }
+.gap-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.gap-copy .btn { width: auto; flex: none; }
+.gap-rest { margin: 0 16px 12px; }
+.gap-rest summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.gap-clear { margin: 0 16px 12px; }
+.gap-lib { margin: 0 16px 14px; }
