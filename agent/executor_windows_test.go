@@ -259,7 +259,7 @@ func TestExecStepCleanupRunsAfterOperatorCancel(t *testing.T) {
 			t.Fatalf("TimedOut = true, want false -- this was an operator cancel, not an execute-timeout")
 		}
 		if r.CleanupVerdict != "reverted" {
-			t.Fatalf("CleanupVerdict = %q, want %q -- cleanup must still run and succeed after a cancel", r.CleanupVerdict, "reverted")
+			t.Fatalf("CleanupVerdict = %q, want %q -- cleanup must still run and succeed after a cancel (cleanup error: %q)", r.CleanupVerdict, "reverted", r.CleanupError)
 		}
 	case <-time.After(15 * time.Second):
 		t.Fatal("execStep did not return within 15s of cancel -- cleanup may be blocking on the cancelled parentCtx instead of its own independent context")
@@ -295,7 +295,7 @@ func TestExecStepCleanupRunsAfterExecuteTimeout(t *testing.T) {
 			t.Fatalf("TimedOut = false, want true")
 		}
 		if r.CleanupVerdict != "reverted" {
-			t.Fatalf("CleanupVerdict = %q, want %q -- cleanup must still run and succeed after an execute-timeout kill", r.CleanupVerdict, "reverted")
+			t.Fatalf("CleanupVerdict = %q, want %q -- cleanup must still run and succeed after an execute-timeout kill (cleanup error: %q)", r.CleanupVerdict, "reverted", r.CleanupError)
 		}
 	case <-time.After(60 * time.Second):
 		t.Fatal("execStep did not return within 60s of a 10s execute timeout -- cleanup may be blocking indefinitely")
