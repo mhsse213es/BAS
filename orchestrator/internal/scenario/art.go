@@ -469,6 +469,31 @@ func artUnixPlatform(platforms []string) string {
 	return ""
 }
 
+// safeArgDefault returns a lab-safe default for an ART input argument that the
+// atomic itself left without a default, so a validation run executes against a
+// harmless local target instead of a bogus `bas-placeholder-<name>` path (which
+// makes network-target atomics like T1046 error out). Returns "" when no sane
+// default is known, leaving the placeholder fallback unchanged. The value is
+// deliberately loopback so a customer run never scans or connects to a real
+// host it was not explicitly given.
+func safeArgDefault(name string) string {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "ip", "ip_address", "ipaddress", "address", "host", "hostname",
+		"target", "target_host", "targethost", "remote_host", "remote_ip",
+		"computer_name", "computername", "server", "destination", "dest_ip":
+		return "127.0.0.1"
+	case "subnet", "cidr", "network", "ip_range", "iprange", "range":
+		return "127.0.0.0/24"
+	case "url":
+		return "http://127.0.0.1"
+	case "domain", "domain_name", "dns_server", "dnsserver":
+		return "localhost"
+	case "port":
+		return "445"
+	}
+	return ""
+}
+
 func artResolveArgs(cmd string, args map[string]artInputArg, techniqueID, testName string) string {
 	if cmd == "" {
 		return ""
@@ -479,7 +504,11 @@ func artResolveArgs(cmd string, args map[string]artInputArg, techniqueID, testNa
 		}
 		def := arg.Default
 		if def == "" {
-			def = `$env:TEMP\bas-placeholder-` + name
+			if safe := safeArgDefault(name); safe != "" {
+				def = safe
+			} else {
+				def = `$env:TEMP\bas-placeholder-` + name
+			}
 		}
 		cmd = strings.ReplaceAll(cmd, "#{"+name+"}", def)
 	}
