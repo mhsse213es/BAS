@@ -24,6 +24,10 @@ type accessEvent struct {
 	ActionClass string `json:"action_class,omitempty"`
 	// ActorRole is the caller's role from the fixture (see actorRole). Empty for an unauthenticated request.
 	ActorRole string `json:"actor_role,omitempty"`
+	// IdentityBasis says how Identity was established (see auth_context.go). ClaimedIdentity is set only when the basis is
+	// a claim no credential proved. Both are omitted when the request established no identity. Identity keeps its value.
+	IdentityBasis   string `json:"identity_basis,omitempty"`
+	ClaimedIdentity string `json:"claimed_identity,omitempty"`
 	// DisclosedClasses and DisclosedFields are the protected fields the response actually emitted: classes and field names
 	// only, never values. Empty when the response emitted none. See disclosure.go.
 	DisclosedClasses []string `json:"disclosed_classes,omitempty"`
@@ -178,14 +182,8 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 		if strings.HasPrefix(r.URL.Path, "/lab/") {
 			return
 		}
-		identity := "anonymous"
-		if caller, st := s.identify(r); st == authOK {
-			identity = caller
-		} else if st != authMissing {
-			identity = "unknown"
-		} else if cn, ok := s.certClaim(r); ok {
-			identity = cn
-		}
+		auth := s.resolveAuth(r)
+		identity := auth.Identity
 		owners := s.ownersOfRequest(r)
 		for _, o := range bodyOwnersFromContext(r.Context()) {
 			owners = appendOwner(owners, o)
@@ -212,6 +210,8 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 			DestinationPolicy: dest.policy,
 			Outcome:       outcomeFor(rec.status),
 			Identity:      identity,
+			IdentityBasis:   auth.Basis,
+			ClaimedIdentity: auth.Claimed,
 			ActorRole:     s.actorRole(identity),
 			DisclosedClasses: disclosureClasses(ro.disclosed),
 			DisclosedFields:  ro.disclosed,

@@ -46,6 +46,9 @@ type Event struct {
 	// ActorRole is the role the lab's fixture gives the identity ("borrower", "officer", "administrator", or "customer" for an
 	// authenticated identity the fixture does not name). Empty means the request was not authenticated.
 	ActorRole string `json:"actor_role,omitempty"`
+	// IdentityBasis and ClaimedIdentity mirror the lab event (see lab/auth_context.go). Rules do not read them yet.
+	IdentityBasis   string `json:"identity_basis,omitempty"`
+	ClaimedIdentity string `json:"claimed_identity,omitempty"`
 	// DisclosedClasses and DisclosedFields describe the protected fields a response actually emitted, as classes and
 	// field names only. They never carry a value (see disclosure.go). Empty when the response emitted none.
 	DisclosedClasses []string `json:"disclosed_classes,omitempty"`

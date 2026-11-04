@@ -3256,3 +3256,36 @@ Status: **proposed. No code changes until approved.**
 - Confirm that the orchestrator's own authentication attribution is a separate item.
 
 No code will be written until this design is approved.
+
+## Implementation: identity attribution (AUTHN-003, AUTHN-007), 4 November 2026
+
+Implements the approved design above.
+
+### Changes
+
+- `lab/auth_context.go` (new): `resolveAuth` is the single source for the access event's identity, basis and claim. It mirrors `identify`, so `identity` keeps its value. New basis constants: `signed_token`, `chain_verified_cert`, `unsigned_token_claim`, `header_claim`, `unverified_cert_claim`.
+- `lab/lab.go`: `verifiedIdentity` now uses a chain-verified certificate whenever the `Authorization` header is not a Bearer credential. Before, it ignored a certificate when the header was present but malformed. A valid signed token still wins, and an unknown Bearer token is still not replaced by a certificate.
+- `lab/access.go`: `accessEvent` gains `identity_basis` and `claimed_identity` (both `omitempty`). `logAccess` takes its identity from `resolveAuth`. The identity values are the same as before.
+- `detect/detect.go`: `Event` mirrors the two fields so the runner decodes them. No rule reads them yet, so no verdict depends on them.
+
+### Tests
+
+- `lab/auth_context_test.go`: 11 cases with real certificates from the lab PKI and a self-signed certificate: signed token, unsigned subject (vulnerable and fixed), header claim (vulnerable and fixed), revoked or unknown token, no credential, chain-verified certificate, self-signed certificate, malformed header with a verified certificate, unknown Bearer with a verified certificate. Each checks identity, basis, claim and verified identity. Plus: empty identity fields are omitted from the JSON.
+- `runner/phase8_identity_test.go`: end to end through the request path, with events decoded as the runner decodes them.
+  - AUTHN-003 vulnerable: `unsigned_token_claim`, claim `cust-b`, verified empty, REL-013 fires.
+  - AUTHN-003 fixed: refused, no basis, REL-013 does not fire.
+  - Header claim (vulnerable): `header_claim`, claim `cust-b`, verified `cust-a`, REL-013 fires.
+  - Signed token: `signed_token`, no claim, REL-013 does not fire.
+
+### Results
+
+- **Exploitability:** unchanged. AUTHN-003 and AUTHN-007 keep their verdicts.
+- **Detection:** REL-013 unchanged in every case where it fired before. `TestPhase34_DetectionMatchesDeclaredExpectations` passes across the catalogue, both builds, extraction on and off, repeated twice.
+- Full apibas suite: all packages pass except one timing test (see below).
+- **Timing flake:** `TestABUSE002Repeatability` reported `ATTACK_MEASUREMENT_INVALID` once, under the full suite's parallel load. Run alone, it passed twice (281 s and 287 s). The timing policy already treats this scenario as provisional, and its result is diagnostic. This is noted, not hidden. The rest of the runner package passed in that run.
+
+### Notes for review
+
+- `identity` deliberately keeps the unverified certificate's common name. Clearing it would stop REL-013 firing on AUTHN-007, which is why the basis carries the meaning instead.
+- The precedence change affects only `verified_identity`, and only when a malformed header is sent alongside a verified certificate. In that case `identity` is `unknown`, so REL-013 cannot fire on it either way.
+- Stated gap: the orchestrator's own authentication path (`internal/api`) is not covered by this change, as the design said.

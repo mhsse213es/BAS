@@ -512,13 +512,12 @@ func methodOverride(next http.Handler) http.Handler {
 // actually established. It is recorded beside the claimed identity (REL-013 compares them) and never used for access.
 func (s *Server) verifiedIdentity(r *http.Request) string {
 	h := r.Header.Get("Authorization")
-	if h == "" {
+	const prefix = "Bearer "
+	if !strings.HasPrefix(h, prefix) {
+		// No Bearer credential (absent, or malformed): a certificate that chains to the lab CA is the proof, if one was sent.
 		if cn, ok := s.certIdentity(r); ok {
 			return cn
 		}
-	}
-	const prefix = "Bearer "
-	if !strings.HasPrefix(h, prefix) {
 		return ""
 	}
 	customer, ok := s.cfg.Tokens[strings.TrimPrefix(h, prefix)]
