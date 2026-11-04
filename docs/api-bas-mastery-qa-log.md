@@ -3451,3 +3451,33 @@ Decisions approved by the product owner:
 - **Backup exclusion and separate recovery copy** of the key are not implemented.
 - **Restore test** (every database reference resolves after restore) is not run.
 - **Rotation** (D5) has not started. It waits for migration.
+
+## D4 phase 1a: installer provisioning of the interim encryption key (4 November 2026)
+
+### Design
+- Key location: `/etc/audspect/secrets/db-encryption.key`, directory `/etc/audspect/secrets` (root:65532, 0750). Outside DATA_DIR, so the upgrade backup (which copies `.env` and `pki/`) and database dumps do not capture it.
+- Ownership: root owns the file and the directory. Group 65532 is the orchestrator container's own GID (`USER nonroot`, UID/GID 65532), so the container reads the key through its primary group. No compose `group_add` is needed. Mode 0640. Nothing else has access.
+- Loader check changed to match: owner must be root, and the mode may give the group read but no group write or execute and nothing to others (mask 0o037). Previously the check forbade all group bits, which the container could not satisfy.
+- Fresh install (`mode_install`, step 3): generate the key when absent; reuse and verify it when present; repair owner and mode when they have drifted; refuse a key whose content is not base64 of 32 bytes (left unchanged).
+- Upgrade (`mode_upgrade`, before any change): verify the key. A missing key stops the upgrade with a pointer to `--import-db-key`. An upgrade never generates a key, because a new key would make every stored credential unreadable.
+- Recovery: `install.sh --export-db-key <file>` writes an AES-256-CBC copy with PBKDF2 (600,000 iterations) under an operator passphrase (at least 12 characters, entered twice). `install.sh --import-db-key <file>` restores it, refuses to replace an existing key, and writes nothing on a wrong passphrase. The passphrase is read interactively; `BAS_DB_KEY_PASSPHRASE` exists for automation only.
+- Uninstall: `mode_uninstall` removes only DATA_DIR, so the key in `/etc` survives an uninstall. Recovering data after a reinstall therefore needs the key still present or imported.
+
+### Changes
+- `packaging/compose/db-encryption-key.sh` (new): sourced by `install.sh`; functions only.
+- `packaging/compose/install.sh`: sources the helper; `--export-db-key` and `--import-db-key` arguments; provisioning in fresh install step 3; verification in upgrade; dispatch. Diff is 15 insertions.
+- `packaging/compose/tests/db_encryption_key_test.sh` (new): 11 cases.
+- `orchestrator/internal/secretstore/keyfile.go` and `store_test.go`: mode check relaxed as above; `DefaultKeyPath` comment corrected to 0640.
+
+### Tests and results
+- `tests/db_encryption_key_test.sh` in `debian:stable-slim` as root: 11 passed, 0 failed, mode bits enforced.
+- The same suite as UID 1000 (`setpriv`): 11 passed, 0 failed.
+- Earlier run on NTFS under Git Bash failed on the mode check, as intended: NTFS reports 644 regardless of chmod, so the check does not hold there. The suite now detects enforcement and skips mode-only cases when it is absent, reporting them as skipped, never passed. Run the suite on Linux.
+- `packaging/compose/setup-install-state.test.sh` in Linux: all tests pass (unchanged behaviour).
+- `go test ./internal/secretstore/` for the mode and format cases: pass.
+
+### Not done (stated)
+- The orchestrator does not load the key yet. `LoadKeyFile` has no production caller. Wiring it into the server, and mounting `/etc/audspect/secrets` read-only into the container, belong to the connector dual-read step, so nothing reads the key until then.
+- The backup exclusion is true by construction (the key is outside DATA_DIR). It is not yet covered by a test that runs `install.sh --backup` and inspects the archive.
+- Not run on a real installed host. Real `install.sh --install` needs Docker and images; not run here.
+- Recovery copy off-host and its passphrase custody are owned by the Admin role; not verified by this phase.

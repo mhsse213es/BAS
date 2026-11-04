@@ -64,9 +64,13 @@ func TestCheckKeyPerms(t *testing.T) {
 	}{
 		{0o600, true},
 		{0o400, true},
-		{0o640, false},
-		{0o604, false},
-		{0o644, false},
+		{0o440, true},
+		{0o640, true},
+		{0o620, false}, // group write
+		{0o660, false}, // group write
+		{0o604, false}, // others read
+		{0o644, false}, // others read
+		{0o750, false}, // group and other execute
 	}
 	for _, c := range cases {
 		err := checkKeyPerms(fakeInfo{mode: c.mode})

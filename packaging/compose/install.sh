@@ -67,6 +67,10 @@ readonly COMPOSE_PROJECT="audspect"
 readonly SERVICE_NAME="audspect"
 unset CDPATH
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# Interim database encryption key provisioning (db-encryption-key.sh). Functions only; nothing runs on source.
+[[ -f "${SCRIPT_DIR}/db-encryption-key.sh" ]] || { echo "missing ${SCRIPT_DIR}/db-encryption-key.sh" >&2; exit 1; }
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/db-encryption-key.sh"
 readonly SCRIPT_DIR
 
 # Bundled (offline) Docker installer, shared with setup.sh.
@@ -99,6 +103,7 @@ info()  { echo -e "      $*"; }
 # ── Argument parsing ──────────────────────────────────────────────────────────
 MODE=""
 CONFIG_FILE=""
+DB_KEY_RECOVERY_PATH=""
 PURGE_IMAGES=false
 YES=false
 COSIGN_PUB_FLAG=""
@@ -117,6 +122,8 @@ while [[ $# -gt 0 ]]; do
     --backup)          MODE="backup"          ;;
     --backup-request)  MODE="backup-request"  ;;
     --backup-worker)   MODE="backup-worker"   ;;
+    --export-db-key)   MODE="export-db-key"; shift; DB_KEY_RECOVERY_PATH="${1:-}" ;;
+    --import-db-key)   MODE="import-db-key"; shift; DB_KEY_RECOVERY_PATH="${1:-}" ;;
     --restore)
       MODE="restore"
       shift
@@ -1264,6 +1271,8 @@ mode_install() {
   chown 65532:65532 "${DATA_DIR}/signing"
   chmod 700 "${DATA_DIR}/signing"
   log "Created: ${DATA_DIR}"
+  # Interim database encryption key, kept outside DATA_DIR so dumps and the upgrade backup do not capture it.
+  db_key_provision fresh || { err "encryption key provisioning failed; installation stopped at step 3"; exit 1; }
 
   step "4/10  Loading Docker images (air-gap safe -no pull)"
   # Fail closed: every tar was verified after the prerequisite checks (a missing
@@ -1365,6 +1374,10 @@ mode_upgrade() {
     info "Run --install to perform a fresh installation."
     exit 1
   fi
+
+  # The encryption key must exist and verify before anything changes. An upgrade never generates one: that would make
+  # every stored credential unreadable.
+  db_key_provision upgrade || { err "encryption key check failed; the upgrade was not started"; exit 1; }
 
   # Detect an upgrade FROM a pre-mTLS install: BAS_ENROLL_PORT's absence
   # from the existing .env means the current deployment predates the
@@ -2368,4 +2381,6 @@ case "$MODE" in
   backup-request) mode_backup_request ;;
   backup-worker)  mode_backup_worker  ;;
   restore)        mode_restore "$RESTORE_ARCHIVE" ;;
+  export-db-key) db_key_export "$DB_KEY_RECOVERY_PATH" ;;
+  import-db-key) db_key_import "$DB_KEY_RECOVERY_PATH" ;;
 esac
