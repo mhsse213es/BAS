@@ -2930,8 +2930,11 @@ Seven official documents, provided in `API_Phase5/`, copied byte-for-byte to `or
 ### Not done
 
 - No mapping has a reviewer, a review date, or a reviewed hash. None is verified.
+  *Superseded 21 October 2026: RBI 19(a) and UAE PDPL 15(2) are verified by Zain (see the verification record). DPDP section 12 stays unverified.*
 - DATA-011 is not yet checked against every owner read path.
+  *Superseded: DATA-012 (summary) and DATA-013 (export) cover the other owner read paths; a status read carries no protected value, so it is not a leak scenario.*
 - Scenario-level behaviour for the unmapped obligations is not built: a breach-notification scenario, and a reporting-timeline scenario.
+  *Superseded: REPORT-001 and REPORT-002 were built in Phase 6 (see that section). Their stated gaps are listed under Phase 6.*
 - The source URLs were taken from search results and have not been fetched. The committed PDFs are the bytes the registry tests.
 
 ## Blueprint Phase 6: reporting-workflow engine extension and notification scenarios
