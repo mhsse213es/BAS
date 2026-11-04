@@ -7,6 +7,15 @@ import (
 	"time"
 )
 
+// enableControlledForTest marks one action Controlled for the duration of a test only. Production classification
+// stays empty; the engine behaviour under test is the same as it would be once the action is enabled.
+func enableControlledForTest(t *testing.T, id string) {
+	t.Helper()
+	prev := controlledActions
+	controlledActions = map[string]bool{id: true}
+	t.Cleanup(func() { controlledActions = prev })
+}
+
 // controlledCM sets up a sandbox ConfigMap holding "original" and a valid approval for a live patch to value.
 func controlledCM(t *testing.T, value string) (*fakeClient, *memApprovals, RunRequest) {
 	t.Helper()
@@ -48,6 +57,7 @@ const cmKey = "ConfigMap/bas-sandbox/bas-fixture"
 
 // The prior state is recorded before the first write, and the record names the approval and the prior value.
 func TestControlledConfigMap_SnapshotIsRecordedBeforeTheFirstWrite(t *testing.T) {
+	enableControlledForTest(t, "configmap-patch-labelled")
 	fc, store, req := controlledCM(t, "changed")
 	var valueAtSnapshot string
 	au := &hookAudit{onWrite: func(e Event) error {
@@ -79,6 +89,7 @@ func TestControlledConfigMap_SnapshotIsRecordedBeforeTheFirstWrite(t *testing.T)
 
 // If the snapshot cannot be recorded, nothing is applied: the run is refused and the ConfigMap is unchanged.
 func TestControlledConfigMap_UnrecordedSnapshotMeansNothingIsApplied(t *testing.T) {
+	enableControlledForTest(t, "configmap-patch-labelled")
 	fc, store, req := controlledCM(t, "changed")
 	au := &hookAudit{onWrite: func(e Event) error {
 		if e.Type == EventSnapshot {
