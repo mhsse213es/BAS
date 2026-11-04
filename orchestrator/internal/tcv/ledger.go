@@ -62,6 +62,13 @@ func (e Event) idempotencyKey() string {
 // NOTHING). q is the caller's transaction or the pool -- but callers wire this
 // log-and-continue, never letting a ledger failure roll back the source write.
 func RecordPipelineEvent(ctx context.Context, q Querier, e Event) error {
+	// Invariant: never store a zero event_time. A connector that stamped an
+	// unparsed timestamp as the Go zero value (0001-01-01) would otherwise
+	// poison the SLA projection — now() - 0001 reads as ~2000 years of latency.
+	// Callers log-and-continue, so a rejected event is skipped, not fatal.
+	if e.EventTime.IsZero() {
+		return fmt.Errorf("tcv: pipeline event %s has a zero event_time; refusing to record", e.Type)
+	}
 	payload := e.Payload
 	if payload == nil {
 		payload = map[string]any{}
