@@ -345,7 +345,9 @@ func (d *TestDB) RunWithPool(t *testing.T, fn func(pool *pgxpool.Pool)) {
 
 func truncateAll(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	ctx := context.Background()
+	// Bounded: a pool with every connection held must fail the test, not hang the whole binary.
+	ctx, cancel := context.WithTimeout(context.Background(), truncateWaitLimit)
+	defer cancel()
 	rows, err := pool.Query(ctx, `SELECT tablename FROM pg_tables WHERE schemaname = 'public'`)
 	if err != nil {
 		t.Fatalf("testutil: list tables: %v", err)
