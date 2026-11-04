@@ -1,0 +1,420 @@
+{
+ "keyword": {
+  "fieldType": "keyword",
+  "strings": 582,
+  "results": [
+   {
+    "pattern": "\\s-[FTd]\\s",
+    "flags": "",
+    "status": "PASS",
+    "matches": 18
+   },
+   {
+    "pattern": "(.){200,}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 15
+   },
+   {
+    "pattern": ".+:assumed-role/aws:.+",
+    "flags": "",
+    "status": "PASS",
+    "matches": 7
+   },
+   {
+    "pattern": "(?:\\s-[^-\\s]{0,20}i|\\s--inode\\s)",
+    "flags": "",
+    "status": "PASS",
+    "matches": 13
+   },
+   {
+    "pattern": "(?:\\s-[^-\\s]{0,20}d|\\s--directory\\s)",
+    "flags": "",
+    "status": "PASS",
+    "matches": 8
+   },
+   {
+    "pattern": "-(W|R)\\s?(\\s|\"|')([0-9a-fA-F]{2}\\s?){2,20}(\\s|\"|')",
+    "flags": "",
+    "status": "PASS",
+    "matches": 9
+   },
+   {
+    "pattern": "-D",
+    "flags": "",
+    "status": "PASS",
+    "matches": 3
+   },
+   {
+    "pattern": "\\s-O\\s",
+    "flags": "",
+    "status": "PASS",
+    "matches": 13
+   },
+   {
+    "pattern": "(?i)(ipfs\\.io/|ipfs\\.io\\s).+\\..+@.+\\.[a-z]+",
+    "flags": "",
+    "status": "FAIL",
+    "value": ".*((ipfs\\.io/|ipfs\\.io[ \t\n\r\f\u000b])[^\n]+\\.[^\n]+\\@[^\n]+\\.[a-z]+).*",
+    "missing": [
+     "HTTPS://IPFS.IO/ABC.DEF@GHI.COM",
+     "IPFS.IO X.Y@Z.Q"
+    ],
+    "extra": []
+   },
+   {
+    "pattern": "^abc",
+    "flags": "",
+    "status": "PASS",
+    "matches": 5
+   },
+   {
+    "pattern": "abc$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 15
+   },
+   {
+    "pattern": "^abc$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 1
+   },
+   {
+    "pattern": "a|b",
+    "flags": "",
+    "status": "PASS",
+    "matches": 316
+   },
+   {
+    "pattern": "x(a|b)y",
+    "flags": "",
+    "status": "PASS",
+    "matches": 7
+   },
+   {
+    "pattern": "\\d{3}-\\d{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 1
+   },
+   {
+    "pattern": "\\w+@\\w+",
+    "flags": "",
+    "status": "PASS",
+    "matches": 41
+   },
+   {
+    "pattern": "a.c",
+    "flags": "",
+    "status": "PASS",
+    "matches": 46
+   },
+   {
+    "pattern": "a.c",
+    "flags": "s",
+    "status": "PASS",
+    "matches": 50
+   },
+   {
+    "pattern": "[a-c]+z",
+    "flags": "",
+    "status": "PASS",
+    "matches": 8
+   },
+   {
+    "pattern": "[^0-9]{4}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 409
+   },
+   {
+    "pattern": "a\\.b",
+    "flags": "",
+    "status": "PASS",
+    "matches": 6
+   },
+   {
+    "pattern": "a+?b",
+    "flags": "",
+    "status": "PASS",
+    "matches": 66
+   },
+   {
+    "pattern": "colou?r",
+    "flags": "",
+    "status": "PASS",
+    "matches": 4
+   },
+   {
+    "pattern": "<tag>&amp;~#\\\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 1
+   },
+   {
+    "pattern": "\\\\\\\\server\\\\share",
+    "flags": "",
+    "status": "PASS",
+    "matches": 2
+   },
+   {
+    "pattern": "\\S+\\.exe",
+    "flags": "",
+    "status": "PASS",
+    "matches": 6
+   },
+   {
+    "pattern": "\\W\\D",
+    "flags": "",
+    "status": "PASS",
+    "matches": 364
+   },
+   {
+    "pattern": "abc",
+    "flags": "i",
+    "status": "PASS",
+    "matches": 63
+   },
+   {
+    "pattern": "(?i)ABC",
+    "flags": "",
+    "status": "PASS",
+    "matches": 63
+   },
+   {
+    "pattern": "[\\s,]x",
+    "flags": "",
+    "status": "PASS",
+    "matches": 31
+   },
+   {
+    "pattern": "a\\tb",
+    "flags": "",
+    "status": "PASS",
+    "matches": 6
+   },
+   {
+    "pattern": "a{2,}b",
+    "flags": "",
+    "status": "PASS",
+    "matches": 3
+   },
+   {
+    "pattern": "(?:ab)+c",
+    "flags": "",
+    "status": "PASS",
+    "matches": 40
+   }
+  ]
+ },
+ "wildcard": {
+  "fieldType": "wildcard",
+  "strings": 582,
+  "results": [
+   {
+    "pattern": "\\s-[FTd]\\s",
+    "flags": "",
+    "status": "PASS",
+    "matches": 18
+   },
+   {
+    "pattern": "(.){200,}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 15
+   },
+   {
+    "pattern": ".+:assumed-role/aws:.+",
+    "flags": "",
+    "status": "PASS",
+    "matches": 7
+   },
+   {
+    "pattern": "(?:\\s-[^-\\s]{0,20}i|\\s--inode\\s)",
+    "flags": "",
+    "status": "PASS",
+    "matches": 13
+   },
+   {
+    "pattern": "(?:\\s-[^-\\s]{0,20}d|\\s--directory\\s)",
+    "flags": "",
+    "status": "PASS",
+    "matches": 8
+   },
+   {
+    "pattern": "-(W|R)\\s?(\\s|\"|')([0-9a-fA-F]{2}\\s?){2,20}(\\s|\"|')",
+    "flags": "",
+    "status": "PASS",
+    "matches": 9
+   },
+   {
+    "pattern": "-D",
+    "flags": "",
+    "status": "PASS",
+    "matches": 3
+   },
+   {
+    "pattern": "\\s-O\\s",
+    "flags": "",
+    "status": "PASS",
+    "matches": 13
+   },
+   {
+    "pattern": "(?i)(ipfs\\.io/|ipfs\\.io\\s).+\\..+@.+\\.[a-z]+",
+    "flags": "",
+    "status": "FAIL",
+    "value": ".*((ipfs\\.io/|ipfs\\.io[ \t\n\r\f\u000b])[^\n]+\\.[^\n]+\\@[^\n]+\\.[a-z]+).*",
+    "missing": [
+     "HTTPS://IPFS.IO/ABC.DEF@GHI.COM",
+     "IPFS.IO X.Y@Z.Q"
+    ],
+    "extra": []
+   },
+   {
+    "pattern": "^abc",
+    "flags": "",
+    "status": "PASS",
+    "matches": 5
+   },
+   {
+    "pattern": "abc$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 15
+   },
+   {
+    "pattern": "^abc$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 1
+   },
+   {
+    "pattern": "a|b",
+    "flags": "",
+    "status": "PASS",
+    "matches": 316
+   },
+   {
+    "pattern": "x(a|b)y",
+    "flags": "",
+    "status": "PASS",
+    "matches": 7
+   },
+   {
+    "pattern": "\\d{3}-\\d{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 1
+   },
+   {
+    "pattern": "\\w+@\\w+",
+    "flags": "",
+    "status": "PASS",
+    "matches": 41
+   },
+   {
+    "pattern": "a.c",
+    "flags": "",
+    "status": "PASS",
+    "matches": 46
+   },
+   {
+    "pattern": "a.c",
+    "flags": "s",
+    "status": "PASS",
+    "matches": 50
+   },
+   {
+    "pattern": "[a-c]+z",
+    "flags": "",
+    "status": "PASS",
+    "matches": 8
+   },
+   {
+    "pattern": "[^0-9]{4}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 409
+   },
+   {
+    "pattern": "a\\.b",
+    "flags": "",
+    "status": "PASS",
+    "matches": 6
+   },
+   {
+    "pattern": "a+?b",
+    "flags": "",
+    "status": "PASS",
+    "matches": 66
+   },
+   {
+    "pattern": "colou?r",
+    "flags": "",
+    "status": "PASS",
+    "matches": 4
+   },
+   {
+    "pattern": "<tag>&amp;~#\\\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 1
+   },
+   {
+    "pattern": "\\\\\\\\server\\\\share",
+    "flags": "",
+    "status": "PASS",
+    "matches": 2
+   },
+   {
+    "pattern": "\\S+\\.exe",
+    "flags": "",
+    "status": "PASS",
+    "matches": 6
+   },
+   {
+    "pattern": "\\W\\D",
+    "flags": "",
+    "status": "PASS",
+    "matches": 364
+   },
+   {
+    "pattern": "abc",
+    "flags": "i",
+    "status": "PASS",
+    "matches": 63
+   },
+   {
+    "pattern": "(?i)ABC",
+    "flags": "",
+    "status": "PASS",
+    "matches": 63
+   },
+   {
+    "pattern": "[\\s,]x",
+    "flags": "",
+    "status": "PASS",
+    "matches": 31
+   },
+   {
+    "pattern": "a\\tb",
+    "flags": "",
+    "status": "PASS",
+    "matches": 6
+   },
+   {
+    "pattern": "a{2,}b",
+    "flags": "",
+    "status": "PASS",
+    "matches": 3
+   },
+   {
+    "pattern": "(?:ab)+c",
+    "flags": "",
+    "status": "PASS",
+    "matches": 40
+   }
+  ]
+ }
+}

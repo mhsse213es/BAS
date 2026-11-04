@@ -65,7 +65,7 @@ def test_ip_field_prefix_becomes_cidr_and_text_matches_nothing():
 
 
 def test_regex_keyword_and_field_reference_are_not_translated():
-    for det in ("  sel:\n    f|re: 'a.*b'\n", "  sel:\n    - 'free text'\n", "  sel:\n    f|fieldref: g\n"):
+    for det in ("  sel:\n    - 'free text'\n", "  sel:\n    f|fieldref: g\n", "  sel:\n    f|re: 'a(?=b)'\n"):
         with pytest.raises(Unsupported):
             dsl(det)
 
@@ -116,3 +116,33 @@ def test_non_ascii_letters_also_match_upper_and_lower_case():
 
 def test_pure_ascii_value_gets_no_extra_variants():
     assert dsl("  sel:\n    f: Abc\n") == {"term": {"f": {"value": "Abc", "case_insensitive": True}}}
+
+
+def test_regex_is_padded_rewritten_and_case_sensitive_unless_flagged():
+    # Lucene regexp is anchored and has no \s: the pattern is wrapped in .* and \s becomes a class
+    q = dsl("  sel:\n    f|re: '\\s-O\\s'\n")
+    assert q == {"regexp": {"f": {"value": ".*([ \t\n\r\f\v]-O[ \t\n\r\f\v]).*"}}}  # Sigma re is case-sensitive: no flag
+    assert dsl("  sel:\n    f|re|i: 'abc'\n")["regexp"]["f"]["case_insensitive"] is True
+    q = dsl("  sel:\n    f|re: '(?i)abc'\n")
+    assert q["regexp"]["f"]["case_insensitive"] is True and q["regexp"]["f"]["value"] == ".*(abc).*"
+
+
+def test_regex_anchors_are_kept_and_alternation_stays_grouped():
+    assert dsl("  sel:\n    f|re: '^a|b$'\n")["regexp"]["f"]["value"] == "(a|b)"
+    assert dsl("  sel:\n    f|re: '^abc$'\n")["regexp"]["f"]["value"] == "(abc)"
+
+
+def test_regex_features_lucene_lacks_are_not_translated():
+    for pat in (r"\bword\b", r"a(?=b)", r"(a)\1", r"a^b", r"\x41"):
+        with pytest.raises(Unsupported):
+            dsl("  sel:\n    f|re: '%s'\n" % pat)
+
+
+def test_regex_class_gets_the_other_case_under_ignorecase():
+    assert dsl("  sel:\n    f|re|i: '[a-c]x'\n")["regexp"]["f"]["value"] == ".*([a-cA-C]x).*"
+
+
+def test_ip_field_compared_to_a_non_address_text_matches_nothing_instead_of_erroring():
+    # AUDRULE-000429 has source.ip: 'AWS Internal'; Elasticsearch answers HTTP 400 to a term like that on an ip field
+    assert dsl("  sel:\n    source.ip: 'AWS Internal'\n") == {"match_none": {}}
+    assert dsl("  sel:\n    source.ip: '10.1.2.3'\n") == {"term": {"source.ip": "10.1.2.3"}}

@@ -33,16 +33,17 @@ NOT). No EQL.
 
 | Field mapping used in the test | PASS | FAIL | UNTESTABLE | No DSL |
 |---|---:|---:|---:|---:|
-| all strings `keyword` | 1,682 | 0 | 18 | 61 |
-| all strings `wildcard` type | 1,682 | 0 | 18 | 61 |
-| all strings analysed `text` | 157 | 1,525 | 18 | 61 |
+| all strings `keyword` | 1,685 | 0 | 24 | 52 |
+| all strings `wildcard` type | 1,685 | 0 | 24 | 52 |
+| all strings analysed `text` | 157 | 1,528 | 24 | 52 |
 
 - **Different-case events:** every PASS also matched the same event upper-cased and lower-cased, and still rejected
   the benign event, the filtered event and the filtered event differing only in case. Of the 1,726 passing Lucene
   queries, 1,706 were case-sensitive; the DSL of those matches case variants.
 - **Mutation check:** removing `case_insensitive` failed 80 of 80 queries on a case miss; corrupting a value failed
   60 of 60; deleting a `must_not` failed 57 of 60 (2 untestable, 1 unaffected).
-- **61 rules have no DSL:** 26 keyword-only (free text), 26 free-text search conditions, 9 regular expressions.
+- **52 rules have no DSL:** 26 keyword-only and 26 free-text search conditions. The 9 rules that use a regular
+  expression now have one (next section).
 - **Text mapping fails by design.** `term`/`prefix`/`wildcard` act on analysed tokens, so a DSL query does not
   work on an analysed `text` field. The DSL is for `keyword` and `wildcard`-typed fields (what ECS uses). Where a
   customer's fields are analysed `text`, the analyser already gives case-insensitivity and the Lucene query applies;
@@ -58,6 +59,35 @@ Behaviour of Elasticsearch 8.15.3 the translator works around (each tested):
    no character". The `wildcard` field type cannot express this; 2 rules' filtered-empty events are skipped on that
    type (20 rules contain an empty-string condition).
 3. A wildcard on an `ip` field is an error or matches nothing, so IPv4 prefixes become CIDR terms (see below).
+
+## Regular expressions in the DSL
+
+Sigma's `re` is a PCRE-style search; Elasticsearch's `regexp` is Lucene syntax and must match the whole value. So the
+regex is rewritten (`scripts/rulelib-gen/elastic_regex.py`): wrapped in `.*( ... ).*` unless anchored with `^` / `$`,
+`\s \d \w` (and negations) turned into classes, `(?:` into `(`, Lucene operator characters (`@ & ~ < > # "`) escaped,
+`.` made `[^\n]` as in PCRE, and a leading `(?i)` or the rule's `i` flag turned into `case_insensitive: true` (also
+applied inside `[a-z]`, which Elasticsearch does not do on its own). Sigma regexes are case-sensitive unless flagged,
+and these stay so. Lookaround, `\b`, back-references, `\x..`, inline flags, `^` / `$` mid-pattern and the `m` flag are
+refused: that rule gets no regex DSL rather than a wrong one.
+
+- **Differential test:** `scripts/rulelib-gen/esregex_diff.py` compares the translated query with Python's `re.search`
+  on 582 strings (hand-written plus mutations: a character removed, inserted, case-swapped) for the 9 shipped regexes
+  and 24 other constructs. **33 of 33 agree exactly on `keyword` and on `wildcard` fields**
+  (`docs/elastic-regex-dsl-test-results.json`). The first run caught one real error (`[a-z]` under `(?i)`), now fixed.
+- **Rule level:** 3 of the 9 rules (AUDRULE-001572, -001934, -000429) were run end to end with hand-built events (match,
+  upper-case match where `(?i)` or the field allows it, a benign event, a filtered event): all pass on both field
+  types. The other 6 are UNTESTABLE for the rule harness (it cannot build an event from a regex) and are covered only
+  by the differential test and the structural tests.
+- **Found on the way:** AUDRULE-000429 compares `source.ip` to the text `AWS Internal`, which Elasticsearch rejects on
+  an `ip` field (HTTP 400). The DSL now writes such a condition as `match_none`; this also corrected AUDRULE-000321 and
+  AUDRULE-000973.
+
+### Open finding: the shipped Lucene queries for these 9 rules are anchored
+
+A Lucene `query_string` regex must match the whole field value. On Elasticsearch 8.15.3 `c:/-D/` returns nothing for
+the value `auditctl -D`, while `c:/.*-D.*/` matches it. The Lucene text of the 9 regex rules was not changed (the DSL
+work keeps Lucene as is), so those 9 Lucene queries almost never match; use the DSL for them. The rule harness had
+marked them UNTESTABLE, which hid this. The fix would be to pad the Lucene regex with `.*`.
 
 ## What a test is
 
@@ -80,14 +110,15 @@ built from the rule, not captured from an attack). No rule's `verification` valu
    IPv4 prefixes are now CIDR terms; a branch that can never be an address is dropped
    (`scripts/rulelib-gen/elastic_ip.py`).
 2. **40 corrupt shipped queries** (above).
-3. **DSL translator:** empty-string and non-ASCII handling (above), found by 5 failures in the first DSL run.
+3. **DSL translator:** empty-string and non-ASCII handling (above), found by 5 failures in the first DSL run; regex
+   class case and `ip` fields compared to non-address text, found by the regex tests.
 
 ## Why 35 Lucene rules (18 DSL) were not testable
 
 | Lucene | DSL | Reason |
 |---:|---:|---|
 | 18 | 7 | two conditions on the same field cannot be met by one value |
-| 6 | 0 | regular-expression value: no event is generated from a regex (no DSL exists for these) |
+| 6 | 6 | regular-expression value: no event is generated from a regex (the DSL is covered by the differential test) |
 | 4 | 4 | no event can be built that avoids one of the rule's filters |
 | 3 | 3 | a text condition on the ip field `source.ip` cannot be met by an address |
 | 2 | 2 | the event built does not satisfy the rule by the tool's own check |

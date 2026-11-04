@@ -8,7 +8,7 @@
     "qradar": 1753,
     "splunk": 2099
   },
-  "generatedAt": "2026-11-04T09:53:15.590202+00:00",
+  "generatedAt": "2026-11-04T11:01:39.952954+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
     "crowdstrike:generic": 873,

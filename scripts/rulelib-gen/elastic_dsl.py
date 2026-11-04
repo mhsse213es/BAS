@@ -10,7 +10,8 @@ names agree between the two. The condition tree is the one pySigma's own backend
 structure (AND, OR, NOT, grouping) identical to the rule.
 
 What is deliberately not translated (Unsupported: the rule keeps its Lucene query and gets no DSL):
-  - regular expressions: Elasticsearch's regexp is Lucene syntax and anchored, not Sigma's PCRE search;
+  - regular expressions that use PCRE features Lucene lacks (lookaround, \b, back-references, inline flags): see
+    elastic_regex.py; the rest are rewritten into Lucene syntax and padded with `.*`, since Lucene's is anchored;
   - free-text keyword searches, which rely on the analysers of every field rather than one named field;
   - field-to-field comparisons.
 Nothing here lowercases a value: that would not make a keyword field case-insensitive.
@@ -56,6 +57,10 @@ def _split(sigma_string):
 def _ip_leaf(field, sigma_string):
     text, kind, _ = _split(sigma_string)
     if kind == "none":
+        try:
+            ipaddress.ip_network(text, strict=False)
+        except ValueError:
+            return {"match_none": {}}  # e.g. 'AWS Internal': an ip field never holds it, and a term on it is an HTTP 400
         return {"term": {field: text}}
     m = _PREFIX_IP.match(text)
     if kind == "prefix" and m:
@@ -140,7 +145,18 @@ def _value(field, v):
             raise Unsupported("comparison operator %s" % op)
         return {"range": {field: {op: v.number.number}}}
     if isinstance(v, SigmaRegularExpression):
-        raise Unsupported("regular expression")
+        from sigma.types import SigmaRegularExpressionFlag as Flag
+        import elastic_regex
+        flags = set(v.flags or ())
+        try:
+            value, ci = elastic_regex.to_lucene(v.to_plain(), ignorecase=Flag.IGNORECASE in flags,
+                                                multiline=Flag.MULTILINE in flags, dotall=Flag.DOTALL in flags)
+        except elastic_regex.Unsupported as e:
+            raise Unsupported("regular expression (%s)" % e)
+        body = {"value": value}
+        if ci:
+            body["case_insensitive"] = True
+        return {"regexp": {field: body}}
     if isinstance(v, SigmaFieldReference):
         raise Unsupported("field-to-field comparison")
     raise Unsupported("value type %s" % type(v).__name__)
