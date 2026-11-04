@@ -477,19 +477,24 @@ func artUnixPlatform(platforms []string) string {
 // deliberately loopback so a customer run never scans or connects to a real
 // host it was not explicitly given.
 func safeArgDefault(name string) string {
+	// Only names that are unambiguously a network target get a default. Names
+	// that are commonly file paths (target, destination, server, address),
+	// adapter names (network), or ambiguous (range) are deliberately excluded:
+	// injecting a loopback value where a path is expected would just break the
+	// atomic in a way that is hard to see. `port` is excluded on purpose — it is
+	// often a LISTEN / firewall-rule parameter, so a real value (e.g. 445) could
+	// open a real service on the host; it must fall through to the placeholder.
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "ip", "ip_address", "ipaddress", "address", "host", "hostname",
-		"target", "target_host", "targethost", "remote_host", "remote_ip",
-		"computer_name", "computername", "server", "destination", "dest_ip":
+	case "ip", "ip_address", "ipaddress", "host", "hostname",
+		"target_host", "targethost", "remote_host", "remote_ip", "dest_ip",
+		"computer_name", "computername":
 		return "127.0.0.1"
-	case "subnet", "cidr", "network", "ip_range", "iprange", "range":
+	case "subnet", "cidr", "ip_range", "iprange":
 		return "127.0.0.0/24"
 	case "url":
 		return "http://127.0.0.1"
-	case "domain", "domain_name", "dns_server", "dnsserver":
-		return "localhost"
-	case "port":
-		return "445"
+	case "dns_server", "dnsserver":
+		return "127.0.0.1"
 	}
 	return ""
 }

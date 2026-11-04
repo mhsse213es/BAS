@@ -24,3 +24,16 @@ func TestClassifyExecution_PrereqAndBinaryAreSkippedNotErrored(t *testing.T) {
 		}
 	}
 }
+
+// An unresolved bas-placeholder argument reaching execution is a BAS
+// arg-resolution bug (a required input we could not fill), not an environment
+// prerequisite. It matches a "cannot find path" prereq string, but it must stay
+// ERROR so the defect stays visible instead of being hidden as an environment
+// skip.
+func TestClassifyExecution_UnresolvedPlaceholderStaysError(t *testing.T) {
+	combined := `Cannot find path 'C:\Users\x\AppData\Local\Temp\bas-placeholder-weird_arg' because it does not exist`
+	out, _, detail := classifyExecution(ExecResult{ExitCode: 1}, combined)
+	if out != OutcomeError {
+		t.Fatalf("unresolved placeholder: outcome = %v, want OutcomeError (detail=%q)", out, detail)
+	}
+}

@@ -34,4 +34,16 @@ func TestArtResolveArgs_SafeDefaultForNetworkTargets(t *testing.T) {
 	if got := artResolveArgs("cat #{weird_arg}", map[string]artInputArg{"weird_arg": {}}, "T1", "x"); !strings.Contains(got, "bas-placeholder-weird_arg") {
 		t.Fatalf("unknown arg should keep the placeholder: %q", got)
 	}
+
+	// Ambiguous or state-changing names must NOT get a network default. `port`
+	// especially must never become a real port (445) — #{port} is often a LISTEN
+	// / firewall-rule parameter that would open a real service on the host — and
+	// target/destination/network/range/server/address are frequently file paths.
+	// All keep the harmless placeholder fallback.
+	for _, name := range []string{"port", "target", "destination", "network", "range", "server", "address"} {
+		got := artResolveArgs("run #{"+name+"}", map[string]artInputArg{name: {}}, "T1", "x")
+		if !strings.Contains(got, "bas-placeholder-"+name) {
+			t.Errorf("arg %q = %q, want placeholder fallback (no network default)", name, got)
+		}
+	}
 }
