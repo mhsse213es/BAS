@@ -2804,6 +2804,7 @@ These are printed in every coverage report (`coverage.KnownGaps`).
 - **Identity-forged blind spot (AUTHN-003, AUTHN-007).** Not started. The fix is to record the trusted identity from the
   lab's authentication context separately from any identity claimed in a header, then flag mismatches. Until then these
   stay documented gaps.
+  *Superseded 4 November 2026: REL-013 already compares the verified identity with the claimed one and fires on both scenarios (fixture-validated). The remaining work is attribution clarity; see the design "Identity attribution for AUTHN-003 and AUTHN-007" below.*
 - **Action class vocabulary.** Only `privileged` exists. The policy asks for a small vocabulary (read, write,
   privilege_change, sensitive_export, financial_approval, security_control_change). Not started.
 - **Telemetry groups still unevaluated.** ABUSE-002 to 005, AUTHN-004, AUTHN-011, DATA-006, DISC-008, INTEG-010: each
@@ -3200,3 +3201,58 @@ Implements the approved design above. Exploitability and detection are reported 
 - **The fixed statement change** is the one behaviour change to a fixed build. It follows the approved policy and was not in the design text, so it is called out here.
 - **Stated gap:** fixture-validated only. Whether a production event source can carry the same disclosure fields is an open question, and live validation is still not done.
 - `docs/detection-rules-coverage.md` shows a modified Elastic count from another session's rule-library work. It is not part of this change and was not staged.
+
+## Design: identity attribution for AUTHN-003 and AUTHN-007
+
+Status: **proposed. No code changes until approved.**
+
+### Current behaviour (lab, `lab/lab.go`, `lab/tls.go`, `lab/access.go`)
+
+- **Claimed identity (`identify`).** Resolved from, in order: an unsigned token's subject (vulnerable build only); the signed token's customer; the `X-Customer-Id` header, which the vulnerable build trusts over the token. Logged as `identity`.
+- **Verified identity (`verifiedIdentity`).** The customer a signed token proves, or the common name of a client certificate that chains to the lab CA. Only when no `Authorization` header is sent. Logged as `verified_identity`.
+- **Certificate without credentials.** When `identify` reports "missing", the access log falls back to the presented certificate's common name **without chain verification**. This value becomes `identity` in both builds, even when the chain check fails and the fixed build returns 401.
+- **REL-013.** Fires when `identity` is a customer and `verified_identity` differs, on a 2xx response. It covers AUTHN-003 (unsigned subject) and AUTHN-007 (self-signed certificate), and both declare it.
+
+### Gaps that remain
+
+1. **Event meaning is inconsistent for certificates.** The access log records an unverified common name as `identity`. The contract says `identity` is "the claimed identity the verifier accepted". For a certificate that did not chain, no verifier accepted it.
+2. **No basis.** Consumers cannot tell whether `identity` came from a signed token, a chain-verified certificate, an unsigned claim, a header or an unverified certificate.
+3. **Precedence edge.** A valid chain-verified certificate is ignored as `verified_identity` when a malformed `Authorization` header is also sent. The request is then judged as an unproven claim.
+4. **Identity-keyed rules read the claim.** REL-004, REL-010 and the owner comparisons use `identity`. They are correct for the planted weakness because REL-013 carries the signal, but they do not state which source they trusted.
+
+### Proposed change
+
+1. **One resolution point.** Replace the separate calls with a single `resolveAuth(r)` that returns `{Identity, Basis, Verified, Claimed}`. `identify`, `verifiedIdentity` and the access log all read from it, so the event cannot disagree with the identity that served the request.
+2. **Basis field (additive).** New optional event field `identity_basis`, one of `signed_token`, `chain_verified_cert`, `unsigned_token_claim`, `header_claim`, `unverified_cert_claim`. Omitted when the request carries no credential.
+3. **Claim field (additive).** New optional `claimed_identity`, set only when the claim is not proven (`unsigned_token_claim`, `header_claim`, `unverified_cert_claim`).
+4. **`identity` keeps its current value.** For an unverified certificate it stays the common name. Changing it to empty would stop REL-013 firing on AUTHN-007, so the value is kept and the basis explains it.
+5. **Precedence fix.** A chain-verified certificate is recorded as verified when the `Authorization` header is absent or unparseable. A valid signed token still wins over a certificate.
+6. **Rules unchanged.** REL-013 and the other rules keep their logic. No new rule is proposed in this step. A later step may make REL-013 read `identity_basis` directly; that is a separate change.
+
+### Security implications
+
+- The lab never uses a header or an unverified certificate for access. The planted weaknesses stay exactly where they are: the vulnerable build still honours `X-Customer-Id`, the unsigned subject and the certificate common name in the mTLS handler.
+- `claimed_identity` holds identity names only. No token, key or certificate material is recorded.
+- This changes what the lab records, not what the product does. The orchestrator's own authentication path (`internal/api`) is out of scope and needs its own review; this design does not claim anything about it.
+
+### Migration and compatibility
+
+- Both new fields are optional and omitted when empty. Existing consumers ignore unknown JSON keys.
+- `identity` and `verified_identity` keep their values for every request. The only change is that the basis and claim are added beside them.
+- No database change. The results store, when built, stores the basis as recorded.
+- Acceptance is verdict stability: the full detection table, the exploitability tests and REL-013 must give the same results before and after.
+
+### Tests
+
+1. Table test for `resolveAuth`: valid signed token; revoked token; unsigned subject (vulnerable and fixed); `X-Customer-Id` with a valid token (vulnerable and fixed); chain-verified certificate; self-signed certificate; malformed `Authorization` with a valid certificate; no credential.
+2. Event tests: each case records the expected `identity_basis` and `claimed_identity`; the self-signed certificate records `unverified_cert_claim` with `identity` unchanged.
+3. Compatibility: every pre-existing event key keeps its value for the existing scenarios, and empty fields are omitted.
+4. Verdict stability: AUTHN-003 and AUTHN-007 still FAIL exploited on the vulnerable build and PASS on the fixed build, and REL-013 still fires on both vulnerable builds and not on the fixed builds. The full detection table is unchanged.
+
+### Decisions needed
+
+- Approve the two additive fields and their names.
+- Approve keeping `identity` unchanged for unverified certificates.
+- Confirm that the orchestrator's own authentication attribution is a separate item.
+
+No code will be written until this design is approved.
