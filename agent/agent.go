@@ -43,6 +43,10 @@ type Agent struct {
 	// HTTP handler goroutine, no torn read. recordConnError/clearConnError
 	// below are the only two things that touch it.
 	lastConnErrPtr atomic.Pointer[LastConnError]
+	// enrollRejected is set while the server is refusing this agent's enrollment (401/403). The fallback transport's
+	// follow-on certificate errors are a symptom of that, so recordConnError keeps the rejection visible until the
+	// agent enrolls or a connection succeeds.
+	enrollRejected atomic.Bool
 	// setServerMu guards handleSetServer's whole read-previous -> persist ->
 	// restart -> verify-or-rollback sequence so two overlapping Settings
 	// Save calls can never interleave (one call's rollback racing another's
@@ -200,6 +204,7 @@ func (a *Agent) httpClient() *http.Client { return a.clientPtr.Load() }
 // bootstrap compatibility mechanism, never something an already-enrolled
 // identity returns to.
 func (a *Agent) upgradeToMTLS(newCfg Config) {
+	a.enrollRejected.Store(false)
 	a.swapLiveConfig(newCfg)
 	log.Printf("[+] certificate obtained -- switched permanently to mTLS (%s); legacy transport disabled for this process", newCfg.ServerURL)
 	a.logger.Op("info", "connectivity", fmt.Sprintf("upgraded to mTLS transport: %s", newCfg.ServerURL))
@@ -239,6 +244,18 @@ func (a *Agent) swapLiveConfig(newCfg Config) {
 // to diagnose).
 func (a *Agent) recordConnError(err error) {
 	classified := ClassifyConnError(err)
+	if a.enrollRejected.Load() && !a.cfg().MTLS &&
+		(classified.Category == ConnErrorTLS || classified.Category == ConnErrorUnknown) {
+		return // a symptom of the rejected enrollment, which is already recorded
+	}
+	a.lastConnErrPtr.Store(&classified)
+}
+
+// recordEnrollmentError records a failed enrollment attempt. A rejected secret (401/403) is remembered so the
+// certificate errors that follow on the fallback transport do not replace it as the reported cause.
+func (a *Agent) recordEnrollmentError(err error) {
+	classified := ClassifyConnError(err)
+	a.enrollRejected.Store(classified.Category == ConnErrorServerRejected)
 	a.lastConnErrPtr.Store(&classified)
 }
 
@@ -247,6 +264,7 @@ func (a *Agent) recordConnError(err error) {
 // prior outage doesn't linger in Troubleshoot after the agent has already
 // recovered.
 func (a *Agent) clearConnError() {
+	a.enrollRejected.Store(false)
 	a.lastConnErrPtr.Store(&LastConnError{Category: ConnErrorNone, At: time.Now()})
 }
 
@@ -267,7 +285,7 @@ func (a *Agent) retryBootstrapUntilEnrolled(ctx context.Context) {
 			a.upgradeToMTLS(newCfg)
 			return
 		}
-		a.recordConnError(err)
+		a.recordEnrollmentError(err)
 		delay := bootstrapRetryBackoff(attempt)
 		log.Printf("[!] still on legacy transport, retrying enrollment in %s (attempt %d)", delay.Round(time.Second), attempt+1)
 		attempt++
