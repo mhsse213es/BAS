@@ -69,6 +69,7 @@ import (
 	"github.com/audspect/bas/internal/rwcontain"
 	"github.com/audspect/bas/internal/rwprevent"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/secretstore"
 	"github.com/audspect/bas/internal/taxii"
 	"github.com/audspect/bas/internal/threatcontent"
 	"github.com/audspect/bas/internal/threatpriority"
@@ -108,6 +109,8 @@ type Handler struct {
 	db     *pgxpool.Pool
 	hub    *ws.Hub
 	engine *scenario.Engine
+	// secrets resolves credential reference columns (nil until WithSecretStore; see secrets.go).
+	secrets secretstore.Store
 	// dbsimCheckRunner dispatches the dbsim read-only identity check to an
 	// agent. nil in production until the dbsim run API exists (the check
 	// endpoint answers 501 and no target becomes client-eligible).

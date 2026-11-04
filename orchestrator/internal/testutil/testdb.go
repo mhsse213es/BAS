@@ -173,6 +173,12 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureAPIBASRunSchema: %w", err)
 	}
+	// Mirrors cmd/server: the credential reference columns must exist for the connector read paths.
+	if err := db.EnsureSecretStoreSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureSecretStoreSchema: %w", err)
+	}
 	if err := db.EnsureEmailGWRunSchema(ctx, pool); err != nil {
 		pool.Close()
 		_ = container.Terminate(context.Background())
