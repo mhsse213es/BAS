@@ -3507,7 +3507,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 {{range $dg.rows}}
 <h3 style="margin-top:16px;margin-bottom:4px">{{.techniqueId}} &mdash; {{.name}}</h3>
-<p style="font-size:0.82rem;color:#3a4656;margin-bottom:6px">{{.reason}} &middot; <strong>{{.availability}}</strong> &middot; Effectiveness: <strong>{{.effectiveness}}</strong>{{if gt .ruleCount 1.0}} &middot; {{.ruleCount}} rules available (showing the highest severity; the console and export list all){{end}}</p>
+<p style="font-size:0.82rem;color:#3a4656;margin-bottom:6px">{{.reason}} &middot; <strong>{{.availability}}</strong> &middot; Effectiveness: <strong>{{.effectiveness}}</strong>{{if gt .ruleCount 1.0}} &middot; {{.ruleCount}} rules available (showing the highest severity; the export includes up to 25 per technique){{end}}</p>
 {{range .rules}}
 <p style="font-size:0.85rem;margin:6px 0 2px"><strong>{{.id}}</strong> {{.title}} <span style="color:#6e7681">[{{.severity}}{{if eq .match "parent"}}, parent technique only{{end}}] &middot; {{.source}}</span></p>
 {{range .queries}}

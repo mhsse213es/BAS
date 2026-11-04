@@ -88,7 +88,7 @@ function techniqueBlock(t) {
   }
   var deps = G.deploymentsFor(S.deps.deployments, t.techniqueId);
   var depBlock = deps.length ? '<div class="gap-deps"><div class="tiny muted">Deployed rules</div>' + deps.map(deploymentRow).join('') + '</div>' : '';
-  var more = t.ruleCount > t.rules.length ? '<div class="tiny muted">Showing ' + t.rules.length + ' of ' + t.ruleCount + ' rules, highest severity first. Export for more.</div>' : '';
+  var more = t.ruleCount > t.rules.length ? '<div class="tiny muted">Showing ' + t.rules.length + ' of ' + t.ruleCount + ' rules, highest severity first. The export includes up to 25 per technique.</div>' : '';
   return '<div class="gap-t">' + head + '<div class="tbl-wrap"><table><thead><tr><th>Rule</th><th>Severity</th><th>Query</th></tr></thead><tbody>' +
     t.rules.map(function(r) { return ruleRow(r, t.techniqueId); }).join('') + '</tbody></table></div>' + more + depBlock + '</div>';
 }
