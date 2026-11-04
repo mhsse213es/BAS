@@ -103,9 +103,10 @@ type recordAlert struct{ msgs []string }
 func (a *recordAlert) Alert(_ context.Context, msg string) { a.msgs = append(a.msgs, msg) }
 
 const (
-	testCluster = "kind-bas-lab"
-	testServer  = "https://127.0.0.1:6443"
-	testNS      = "bas-sandbox"
+	testCluster   = "kind-bas-lab"
+	testClusterID = "k8sc-test-lab"
+	testServer    = "https://127.0.0.1:6443"
+	testNS        = "bas-sandbox"
 )
 
 func testConfig(c *fakeClient, au Audit, al *recordAlert, store *memApprovals) Config {
@@ -122,7 +123,7 @@ func testConfig(c *fakeClient, au Audit, al *recordAlert, store *memApprovals) C
 }
 
 func podRequest(live bool, approvalID string) RunRequest {
-	return RunRequest{
+	return RunRequest{ClusterID: testClusterID,
 		RunID:      "run-1",
 		Requester:  "operator-1",
 		Cluster:    ClusterRef{Name: testCluster, Server: testServer},
@@ -137,7 +138,7 @@ func podRequest(live bool, approvalID string) RunRequest {
 // approvedPod stores a valid approval for podRequest and returns its ID.
 func approvedPod(t *testing.T, store *memApprovals, req RunRequest) string {
 	t.Helper()
-	a := Approval{
+	a := Approval{ClusterID: testClusterID,
 		ID:          "appr-1",
 		ApproverID:  "operator-2",
 		RequesterID: req.Requester,
@@ -228,7 +229,10 @@ func TestApproval_EachRejectionRefusesTheRun(t *testing.T) {
 		{name: "self approval", mutate: func(a *Approval) { a.ApproverID = a.RequesterID }},
 		{name: "approver lacks permission", mutate: func(a *Approval) { a.ApproverID = "operator-3" }},
 		{name: "different run", mutate: func(a *Approval) { a.RunID = "run-9" }},
-		{name: "different cluster", mutate: func(a *Approval) { a.Cluster = "other" }},
+		{name: "different cluster id", mutate: func(a *Approval) { a.ClusterID = "k8sc-other" }},
+		{name: "cluster id missing", mutate: func(a *Approval) { a.ClusterID = "" }},
+		{name: "different authorization", mutate: func(a *Approval) { a.AuthorizationID = "k8sa-other" }},
+		{name: "different customer", mutate: func(a *Approval) { a.CustomerRef = "cust-other" }},
 		{name: "different namespace", mutate: func(a *Approval) { a.Namespace = "other-ns" }},
 		{name: "different action", mutate: func(a *Approval) { a.ActionID = "configmap-patch-labelled" }},
 		{name: "different params", mutate: func(a *Approval) { a.ParamsHash = HashParams(map[string]string{"name": "other"}) }},
@@ -240,7 +244,7 @@ func TestApproval_EachRejectionRefusesTheRun(t *testing.T) {
 			store := newMemApprovals()
 			req := podRequest(true, "")
 			if !c.noID {
-				a := Approval{ID: "appr-1", ApproverID: "operator-2", RequesterID: req.Requester, RunID: req.RunID,
+				a := Approval{ClusterID: testClusterID, ID: "appr-1", ApproverID: "operator-2", RequesterID: req.Requester, RunID: req.RunID,
 					Cluster: req.Cluster.Name, Namespace: req.Namespace, ActionID: req.ActionID, ParamsHash: HashParams(req.Params),
 					ExpiresAt: time.Date(2026, 10, 23, 10, 30, 0, 0, time.UTC)}
 				c.mutate(&a)
@@ -384,9 +388,9 @@ func TestConfigMapPatch_RestoresPriorValue(t *testing.T) {
 		Data:   map[string]string{"state": "original"},
 	}
 	store := newMemApprovals()
-	req := RunRequest{RunID: "run-2", Requester: "operator-1", Cluster: ClusterRef{Name: testCluster, Server: testServer},
+	req := RunRequest{ClusterID: testClusterID, RunID: "run-2", Requester: "operator-1", Cluster: ClusterRef{Name: testCluster, Server: testServer},
 		Namespace: testNS, ActionID: "configmap-patch-labelled", Params: map[string]string{"name": "bas-fixture", "value": "changed"}, Live: true}
-	a := Approval{ID: "appr-2", ApproverID: "operator-2", RequesterID: req.Requester, RunID: req.RunID, Cluster: testCluster,
+	a := Approval{ClusterID: testClusterID, ID: "appr-2", ApproverID: "operator-2", RequesterID: req.Requester, RunID: req.RunID, Cluster: testCluster,
 		Namespace: testNS, ActionID: req.ActionID, ParamsHash: HashParams(req.Params), ExpiresAt: time.Date(2026, 10, 23, 10, 30, 0, 0, time.UTC)}
 	_ = store.Put(a)
 	req.ApprovalID = a.ID

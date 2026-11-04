@@ -103,12 +103,14 @@ type k8sRunAdapter struct {
 
 func toRecord(r api.K8sRun) db.K8sRunRecord {
 	return db.K8sRunRecord{ID: r.ID, RequesterID: r.RequesterID, Cluster: r.Cluster, Namespace: r.Namespace,
+		ClusterID: r.ClusterID, AuthorizationID: r.AuthorizationID, CustomerRef: r.CustomerRef,
 		ActionID: r.ActionID, Params: r.Params, ParamsHash: r.ParamsHash, ApprovalID: r.ApprovalID,
 		State: r.State, Detail: r.Detail, CreatedAt: r.CreatedAt}
 }
 
 func fromRecord(r db.K8sRunRecord) api.K8sRun {
 	return api.K8sRun{ID: r.ID, RequesterID: r.RequesterID, Cluster: r.Cluster, Namespace: r.Namespace,
+		ClusterID: r.ClusterID, AuthorizationID: r.AuthorizationID, CustomerRef: r.CustomerRef,
 		ActionID: r.ActionID, Params: r.Params, ParamsHash: r.ParamsHash, ApprovalID: r.ApprovalID,
 		State: r.State, Detail: r.Detail, CreatedAt: r.CreatedAt}
 }

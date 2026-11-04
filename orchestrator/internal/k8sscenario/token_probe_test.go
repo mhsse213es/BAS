@@ -11,7 +11,7 @@ import (
 const probeSecret = "SECRET-PROBE-TOKEN-VALUE"
 
 func probeRequest(live bool) RunRequest {
-	return RunRequest{
+	return RunRequest{ClusterID: testClusterID,
 		RunID: "tok-1", Requester: "operator-1",
 		Cluster:   ClusterRef{Name: testCluster, Server: testServer},
 		Namespace: "bas-sandbox", ActionID: "sa-token-probe", Params: map[string]string{}, Live: live,

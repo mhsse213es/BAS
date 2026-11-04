@@ -16,17 +16,22 @@ import (
 
 // K8sRun is one requested state-changing Kubernetes scenario run, as the console shows it.
 type K8sRun struct {
-	ID          string            `json:"id"`
-	RequesterID string            `json:"requester"`
-	Cluster     string            `json:"cluster"`
-	Namespace   string            `json:"namespace"`
-	ActionID    string            `json:"action"`
-	Params      map[string]string `json:"params"`
-	ParamsHash  string            `json:"paramsHash"`
-	ApprovalID  string            `json:"approvalId,omitempty"`
-	State       string            `json:"state"`
-	Detail      string            `json:"detail,omitempty"`
-	CreatedAt   time.Time         `json:"createdAt"`
+	ID          string `json:"id"`
+	RequesterID string `json:"requester"`
+	// ClusterID, AuthorizationID and CustomerRef are the execution context, fixed when the run is planned.
+	// Cluster is the display name, for presentation only.
+	ClusterID       string            `json:"clusterId"`
+	AuthorizationID string            `json:"authorizationId,omitempty"`
+	CustomerRef     string            `json:"customerRef,omitempty"`
+	Cluster         string            `json:"cluster"`
+	Namespace       string            `json:"namespace"`
+	ActionID        string            `json:"action"`
+	Params          map[string]string `json:"params"`
+	ParamsHash      string            `json:"paramsHash"`
+	ApprovalID      string            `json:"approvalId,omitempty"`
+	State           string            `json:"state"`
+	Detail          string            `json:"detail,omitempty"`
+	CreatedAt       time.Time         `json:"createdAt"`
 }
 
 // K8sRunStore persists runs. The database implementation lives in internal/db.
@@ -46,17 +51,17 @@ type K8sApprovals interface {
 // K8sScenarioService wires the engine to the HTTP surface. Clusters and Namespaces are server configuration:
 // a request cannot name a cluster or namespace that is not listed here.
 type K8sScenarioService struct {
-	Engine      *k8sscenario.Engine
-	Runs        K8sRunStore
-	Approvals   K8sApprovals
-	Clusters    map[string]string     // cluster name -> API server URL
-	Registry    K8sClusterRegistry    // registered clusters (Phase 2)
-	Credentials K8sClusterCredentials // per-cluster read-only credential source (Phase 2)
-	Audit       k8sscenario.Audit     // records refused execution profiles (Phase 4)
+	Engine         *k8sscenario.Engine
+	Runs           K8sRunStore
+	Approvals      K8sApprovals
+	Clusters       map[string]string        // cluster name -> API server URL
+	Registry       K8sClusterRegistry       // registered clusters (Phase 2)
+	Credentials    K8sClusterCredentials    // per-cluster read-only credential source (Phase 2)
+	Audit          k8sscenario.Audit        // records refused execution profiles (Phase 4)
 	Authorizations K8sAuthorizationRegistry // customer authorization records (Phase 4, Controlled)
-	Namespaces  []string
-	ApprovalTTL time.Duration
-	Now         func() time.Time
+	Namespaces     []string
+	ApprovalTTL    time.Duration
+	Now            func() time.Time
 }
 
 func (s *K8sScenarioService) now() time.Time {
@@ -146,7 +151,8 @@ func (h *Handler) CreateK8sRun(w http.ResponseWriter, r *http.Request) {
 	if refuseProfile(w, r, svc, c, profile, "run:"+body.Action) {
 		return
 	}
-	if enforceCustomerAuthorization(w, r, svc, c, profile, body.Action, body.Namespace) {
+	authz, denied := authorizeControlled(w, r, svc, c, profile, body.Action, body.Namespace)
+	if denied {
 		return
 	}
 	body.Cluster = c.DisplayName
@@ -162,13 +168,15 @@ func (h *Handler) CreateK8sRun(w http.ResponseWriter, r *http.Request) {
 	id := newK8sID("k8sr-")
 	req := k8sscenario.RunRequest{RunID: id, Requester: actorID(r),
 		Cluster: k8sscenario.ClusterRef{Name: body.Cluster, Server: server}, Namespace: body.Namespace,
-		ActionID: body.Action, Params: body.Params, Live: false}
+		ActionID: body.Action, Params: body.Params, Live: false,
+		ClusterID: c.ID, AuthorizationID: authz.ID, CustomerRef: authz.CustomerRef}
 	res := svc.Engine.Run(r.Context(), req)
 	if res.State != k8sscenario.StateDryRunPlanned {
 		jsonError(w, res.Error, http.StatusBadRequest)
 		return
 	}
-	run := K8sRun{ID: id, RequesterID: req.Requester, Cluster: body.Cluster, Namespace: body.Namespace, ActionID: body.Action,
+	run := K8sRun{ID: id, RequesterID: req.Requester, ClusterID: c.ID, AuthorizationID: authz.ID, CustomerRef: authz.CustomerRef,
+		Cluster: body.Cluster, Namespace: body.Namespace, ActionID: body.Action,
 		Params: body.Params, ParamsHash: k8sscenario.HashParams(body.Params), State: "PLANNED",
 		Detail: strings.Join(res.Plan, "\n"), CreatedAt: svc.now()}
 	if err := svc.Runs.InsertRun(r.Context(), run); err != nil {
@@ -206,15 +214,19 @@ func (h *Handler) ApproveK8sRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	approval := k8sscenario.Approval{
-		ID:          newK8sID("appr-"),
-		ApproverID:  approver,
-		RequesterID: run.RequesterID,
-		RunID:       run.ID,
-		Cluster:     run.Cluster,
-		Namespace:   run.Namespace,
-		ActionID:    run.ActionID,
-		ParamsHash:  run.ParamsHash,
-		ExpiresAt:   svc.now().Add(svc.approvalTTL()),
+		ID:              newK8sID("appr-"),
+		ApproverID:      approver,
+		RequesterID:     run.RequesterID,
+		RunID:           run.ID,
+		Cluster:         run.Cluster,
+		Namespace:       run.Namespace,
+		ActionID:        run.ActionID,
+		ParamsHash:      run.ParamsHash,
+		ClusterID:       run.ClusterID,
+		AuthorizationID: run.AuthorizationID,
+		CustomerRef:     run.CustomerRef,
+		ApprovedAt:      svc.now(),
+		ExpiresAt:       svc.now().Add(svc.approvalTTL()),
 	}
 	if err := svc.Approvals.Put(approval); err != nil {
 		jsonError(w, "could not record the approval", http.StatusInternalServerError)
@@ -250,8 +262,18 @@ func (h *Handler) ExecuteK8sRun(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "run has no approval", http.StatusConflict)
 		return
 	}
-	// Re-checked at execution: a registration change, a class change or a revoked authorization all take effect here.
-	c, found, err := clusterByDisplayName(r.Context(), svc, run.Cluster)
+	// Runs planned before cluster identity was stored have no registry ID. They are refused, never resolved by name.
+	if run.ClusterID == "" {
+		jsonError(w, "this run was planned before cluster identity was recorded; plan it again", http.StatusConflict)
+		return
+	}
+	if svc.Registry == nil {
+		jsonError(w, "cluster registry is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	// Re-checked at execution: a registration change, a class change or a changed or revoked authorization all take
+	// effect here, before any mutation.
+	c, found, err := svc.Registry.Get(r.Context(), run.ClusterID)
 	if err != nil {
 		jsonError(w, "could not read the cluster", http.StatusInternalServerError)
 		return
@@ -264,7 +286,12 @@ func (h *Handler) ExecuteK8sRun(w http.ResponseWriter, r *http.Request) {
 	if refuseProfile(w, r, svc, c, profile, "run:"+run.ActionID) {
 		return
 	}
-	if enforceCustomerAuthorization(w, r, svc, c, profile, run.ActionID, run.Namespace) {
+	authz, denied := authorizeControlled(w, r, svc, c, profile, run.ActionID, run.Namespace)
+	if denied {
+		return
+	}
+	if profile == k8sscenario.ProfileControlled && (authz.ID != run.AuthorizationID || authz.CustomerRef != run.CustomerRef) {
+		jsonError(w, "the customer authorization has changed since this run was planned; plan it again", http.StatusConflict)
 		return
 	}
 	server, ok := svc.targetServer(run.Cluster, run.Namespace)
@@ -274,7 +301,8 @@ func (h *Handler) ExecuteK8sRun(w http.ResponseWriter, r *http.Request) {
 	}
 	res := svc.Engine.Run(r.Context(), k8sscenario.RunRequest{RunID: run.ID, Requester: run.RequesterID,
 		Cluster: k8sscenario.ClusterRef{Name: run.Cluster, Server: server}, Namespace: run.Namespace, ActionID: run.ActionID,
-		Params: run.Params, Live: true, ApprovalID: run.ApprovalID})
+		Params: run.Params, Live: true, ApprovalID: run.ApprovalID,
+		ClusterID: run.ClusterID, AuthorizationID: run.AuthorizationID, CustomerRef: run.CustomerRef})
 
 	run.State = string(res.State)
 	run.Detail = res.Error

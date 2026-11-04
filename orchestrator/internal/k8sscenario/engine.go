@@ -86,6 +86,11 @@ type RunRequest struct {
 	Params     map[string]string
 	Live       bool
 	ApprovalID string
+	// ClusterID, AuthorizationID and CustomerRef are the execution context persisted with the run. They are recorded
+	// in every audit event, so the customer and cluster identifiers always appear in the trail.
+	ClusterID       string
+	AuthorizationID string
+	CustomerRef     string
 }
 
 // Result reports what happened. Withheld means the outcome could not be recorded, so it must not be shown.
@@ -346,8 +351,12 @@ func (e *Engine) checkApproval(req RunRequest) string {
 		return "approver lacks the approval permission"
 	case a.RunID != req.RunID:
 		return "approval is for a different run"
-	case a.Cluster != req.Cluster.Name:
+	case a.ClusterID == "" || a.ClusterID != req.ClusterID:
 		return "approval is for a different cluster"
+	case a.AuthorizationID != req.AuthorizationID:
+		return "approval is for a different customer authorization"
+	case a.CustomerRef != req.CustomerRef:
+		return "approval is for a different customer"
 	case a.Namespace != req.Namespace:
 		return "approval is for a different namespace"
 	case a.ActionID != req.ActionID:
@@ -364,12 +373,15 @@ func (e *Engine) checkApproval(req RunRequest) string {
 
 func runFields(req RunRequest) map[string]string {
 	return map[string]string{
-		"requester":  req.Requester,
-		"cluster":    req.Cluster.Name,
-		"namespace":  req.Namespace,
-		"action":     req.ActionID,
-		"approval":   req.ApprovalID,
-		"paramsHash": HashParams(req.Params),
+		"requester":       req.Requester,
+		"cluster":         req.Cluster.Name,
+		"clusterId":       req.ClusterID,
+		"authorizationId": req.AuthorizationID,
+		"customerRef":     req.CustomerRef,
+		"namespace":       req.Namespace,
+		"action":          req.ActionID,
+		"approval":        req.ApprovalID,
+		"paramsHash":      HashParams(req.Params),
 	}
 }
 

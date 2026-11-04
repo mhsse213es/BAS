@@ -26,9 +26,9 @@ func controlledCM(t *testing.T, value string) (*fakeClient, *memApprovals, RunRe
 		Data:   map[string]string{"state": "original"},
 	}
 	store := newMemApprovals()
-	req := RunRequest{RunID: "run-cm", Requester: "operator-1", Cluster: ClusterRef{Name: testCluster, Server: testServer},
+	req := RunRequest{ClusterID: testClusterID, RunID: "run-cm", Requester: "operator-1", Cluster: ClusterRef{Name: testCluster, Server: testServer},
 		Namespace: testNS, ActionID: "configmap-patch-labelled", Params: map[string]string{"name": "bas-fixture", "value": value}, Live: true}
-	a := Approval{ID: "appr-cm", ApproverID: "operator-2", RequesterID: req.Requester, RunID: req.RunID, Cluster: testCluster,
+	a := Approval{ClusterID: testClusterID, ID: "appr-cm", ApproverID: "operator-2", RequesterID: req.Requester, RunID: req.RunID, Cluster: testCluster,
 		Namespace: testNS, ActionID: req.ActionID, ParamsHash: HashParams(req.Params), ExpiresAt: time.Date(2026, 10, 23, 10, 30, 0, 0, time.UTC)}
 	if err := store.Put(a); err != nil {
 		t.Fatal(err)
