@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/audspect/bas/internal/k8sscenario"
@@ -22,4 +23,21 @@ func refuseProfile(w http.ResponseWriter, r *http.Request, svc *K8sScenarioServi
 	}
 	jsonError(w, "this cluster's class does not allow the "+profile+" profile", http.StatusForbidden)
 	return true
+}
+
+// clusterByDisplayName finds a registered cluster by its display name. Runs store the name, so execution uses this.
+func clusterByDisplayName(ctx context.Context, svc *K8sScenarioService, name string) (k8sscenario.ClusterRecord, bool, error) {
+	if svc == nil || svc.Registry == nil {
+		return k8sscenario.ClusterRecord{}, false, nil
+	}
+	list, err := svc.Registry.List(ctx)
+	if err != nil {
+		return k8sscenario.ClusterRecord{}, false, err
+	}
+	for _, c := range list {
+		if c.DisplayName == name {
+			return c, true, nil
+		}
+	}
+	return k8sscenario.ClusterRecord{}, false, nil
 }

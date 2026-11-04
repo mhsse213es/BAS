@@ -305,6 +305,9 @@ func main() {
 	if err := db.EnsureK8sClusterSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] k8s cluster schema: %v", err)
 	}
+	if err := db.EnsureK8sAuthorizationSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] k8s authorization schema: %v", err)
+	}
 	if err := db.EnsureContentRegistrySchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] content registry schema: %v", err)
 	}

@@ -53,6 +53,7 @@ type K8sScenarioService struct {
 	Registry    K8sClusterRegistry    // registered clusters (Phase 2)
 	Credentials K8sClusterCredentials // per-cluster read-only credential source (Phase 2)
 	Audit       k8sscenario.Audit     // records refused execution profiles (Phase 4)
+	Authorizations K8sAuthorizationRegistry // customer authorization records (Phase 4, Controlled)
 	Namespaces  []string
 	ApprovalTTL time.Duration
 	Now         func() time.Time
@@ -128,6 +129,10 @@ func (h *Handler) CreateK8sRun(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "clusterId is required; cluster names are not accepted", http.StatusBadRequest)
 		return
 	}
+	if svc.Registry == nil {
+		jsonError(w, "cluster registry is not configured", http.StatusServiceUnavailable)
+		return
+	}
 	c, found, err := svc.Registry.Get(r.Context(), clusterID)
 	if err != nil {
 		jsonError(w, "could not read the cluster", http.StatusInternalServerError)
@@ -137,7 +142,11 @@ func (h *Handler) CreateK8sRun(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "cluster not found", http.StatusBadRequest)
 		return
 	}
-	if refuseProfile(w, r, svc, c, "lab", "run:"+body.Action) {
+	profile := k8sscenario.ActionProfile(body.Action)
+	if refuseProfile(w, r, svc, c, profile, "run:"+body.Action) {
+		return
+	}
+	if enforceCustomerAuthorization(w, r, svc, c, profile, body.Action, body.Namespace) {
 		return
 	}
 	body.Cluster = c.DisplayName
@@ -239,6 +248,23 @@ func (h *Handler) ExecuteK8sRun(w http.ResponseWriter, r *http.Request) {
 	}
 	if run.ApprovalID == "" || run.State != "APPROVED" {
 		jsonError(w, "run has no approval", http.StatusConflict)
+		return
+	}
+	// Re-checked at execution: a registration change, a class change or a revoked authorization all take effect here.
+	c, found, err := clusterByDisplayName(r.Context(), svc, run.Cluster)
+	if err != nil {
+		jsonError(w, "could not read the cluster", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		jsonError(w, "cluster is no longer registered", http.StatusConflict)
+		return
+	}
+	profile := k8sscenario.ActionProfile(run.ActionID)
+	if refuseProfile(w, r, svc, c, profile, "run:"+run.ActionID) {
+		return
+	}
+	if enforceCustomerAuthorization(w, r, svc, c, profile, run.ActionID, run.Namespace) {
 		return
 	}
 	server, ok := svc.targetServer(run.Cluster, run.Namespace)
