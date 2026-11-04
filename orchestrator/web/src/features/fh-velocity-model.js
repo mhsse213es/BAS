@@ -84,6 +84,19 @@ export function velocityModel(reports) {
   };
 }
 
+// sinceForWindow maps a velocity time-window key ('7'|'30'|'90') to an RFC3339
+// `since` bound for GET /api/intel/factory/sla, or null for "all time" (no
+// bound). A recent default keeps stale pre-fix legs — and bogus epoch
+// timestamps — out of the panel. nowMs is injectable for tests.
+export function sinceForWindow(key, nowMs) {
+  var days = { '7': 7, '30': 30, '90': 90 }[String(key)];
+  if (!days) return null;
+  // Canonical second-precision RFC3339 (drop toISOString's .000 ms) so the Go
+  // time.RFC3339 parse on the server side is unambiguous.
+  return new Date((nowMs == null ? Date.now() : nowMs) - days * 86400000)
+    .toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
 // fmtDuration renders whole seconds as a compact human duration. Validation is
 // minutes, end-to-end can be days, so a single days-only format (as the other
 // factory tiles use) would read "0.0d" for a fast leg; pick the unit by size.

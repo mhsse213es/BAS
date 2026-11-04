@@ -69,3 +69,9 @@
 .fh-diag { max-width: 320px; overflow-wrap: anywhere; }
 .fh-dr-state { margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .fh-trends { margin-top: 14px; }
+
+.fh-velwin { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: 12px; }
+.fh-velwin > .muted { margin-right: 2px; font-size: 12px; }
+.fh-vel-tbl { width: 100%; border-collapse: collapse; }
+.fh-vel-tbl th, .fh-vel-tbl td { padding: 8px 10px; text-align: left; }
+.fh-vel-tbl th.num, .fh-vel-tbl td.num { text-align: right; }

@@ -280,11 +280,31 @@ function velContentType(ct) {
   return ct || '—';
 }
 
+// The reporting window. Default to 30 days so the first fully-validated leg
+// (~days-long end-to-end) is included, while stale pre-fix legs and bogus epoch
+// timestamps age out of view. 'all' removes the bound.
+var VEL_WINDOWS = [{ k: '7', label: '7d' }, { k: '30', label: '30d' }, { k: '90', label: '90d' }, { k: 'all', label: 'All' }];
+var velWindow = '30';
+
+export function setVelocityWindow(k) {
+  velWindow = String(k);
+  loadFactoryVelocity();
+}
+
+function velWindowBar() {
+  return '<div class="fh-velwin"><span class="muted">Window</span>' + VEL_WINDOWS.map(function(w) {
+    return '<button type="button" class="btn btn-sm ' + (w.k === velWindow ? 'btn-outline' : 'btn-ghost') + '"' +
+      on('click', 'setVelocityWindow', w.k) + '>' + x(w.label) + '</button>';
+  }).join('') + '</div>';
+}
+
 export function loadFactoryVelocity() {
   var el = document.getElementById('factory-health-velocity');
   if (!el) return Promise.resolve(false);
+  var since = V.sinceForWindow(velWindow);
+  var suffix = since ? '&since=' + encodeURIComponent(since) : '';
   return Promise.all(V.STAGE_ORDER.map(function(s) {
-    return apicall('/api/intel/factory/sla?stage=' + encodeURIComponent(s)).catch(function() { return null; });
+    return apicall('/api/intel/factory/sla?stage=' + encodeURIComponent(s) + suffix).catch(function() { return null; });
   })).then(function(list) {
     var reports = {};
     V.STAGE_ORDER.forEach(function(s, i) { reports[s] = list[i]; });
@@ -329,7 +349,7 @@ export function renderFactoryVelocity(vm) {
   }
   if (!vm.hasData) {
     el.innerHTML = card('Factory velocity — threat → validated coverage',
-      velSummary(vm.summary) +
+      velWindowBar() + velSummary(vm.summary) +
       empty('clock', 'No validated coverage yet',
         'Velocity appears once generated content reaches validated coverage in the factory lab.'));
     return;
@@ -343,7 +363,7 @@ export function renderFactoryVelocity(vm) {
       '<td class="num">' + x(row.n) + '</td></tr>';
   }).join('');
   var table = '<div class="tbl-wrap"><table class="fh-vel-tbl"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>';
-  el.innerHTML = card('Factory velocity — threat → validated coverage', velSummary(vm.summary) + table);
+  el.innerHTML = card('Factory velocity — threat → validated coverage', velWindowBar() + velSummary(vm.summary) + table);
 }
 
 function trendCard(title, points, suffix) {
