@@ -45,9 +45,12 @@ additional_detections:
   - source: elastic-security
     expect_rule: APIBAS-REL-004
     min_severity: high
+  - source: elastic-security
+    expect_rule: APIBAS-REL-020
+    min_severity: high
 detection_assertion:
   status: fixture_validated
-  reason: "The administrative attempt is graded against the access event: a privileged route called without the administrator role (REL-019), the privileged call itself (REL-007), and the cross-owner object (REL-004). Fixture-validated, not live-SIEM-validated."
+  reason: "The administrative attempt is graded against the access event: a privileged route called without the administrator role (REL-019), the privileged call itself (REL-007), the cross-owner object (REL-004), and the disbursement account the vulnerable admin route emits outside the disclosure policy (REL-020). Fixture-validated, not live-SIEM-validated."
 side_effect_class: READ_ONLY
 evidence:
   - sanitized_request

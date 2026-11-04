@@ -3160,3 +3160,43 @@ No code will be written until this design is approved.
 ### Consequence to check before merging
 
 `account_identifier` on the admin loan route is not allowed. The vulnerable admin route returns `disbursement_account` to a borrower (AUTHZ-106 vulnerable), so REL-020 will also fire there. That is a true policy violation, but it is an extra detection on a scenario whose declared expectation is REL-019, REL-007 and REL-004. The detection table must state this explicitly, not hide it.
+
+## Implementation: NBFC-007 disclosure detection (REL-020), 4 November 2026
+
+Implements the approved design above. Exploitability and detection are reported separately.
+
+### Changes
+
+- `detect/disclosure.go` (new): closed class set (`kyc_identity`, `payment_credential`, `account_identifier`); the explicit resource allowlist (`kyc` for kyc_identity; `statement` for payment_credential; `loan` for account_identifier). Nothing is allowed by default. Resource is derived from the action path. Admin KYC is in the KYC family; the admin loan route is its own resource, so an account identifier there is outside the policy.
+- `detect/detect.go`: `Event.DisclosedClasses` and `Event.DisclosedFields` (both optional, `omitempty`); REL-020 appended to `ElasticRules`. The ownership rules are unchanged.
+- `lab/disclosure.go` (new): field-to-class map (`pan_number`, `aadhaar_ref` to kyc_identity; `debit_mandate` to payment_credential; `disbursement_account` to account_identifier). `emittedDisclosureFields` walks the response body as it is serialised, recursively, and returns field names only. `writeNBFCJSON` records those names on the request holder, then writes the same value.
+- `lab/response_owners.go`: the per-request holder gains `disclosed` and `noteDisclosedFields`.
+- `lab/access.go`: `accessEvent` gains the two fields; `logAccess` fills them from the holder.
+- `lab/nbfc.go`: all 28 NBFC response writes go through `writeNBFCJSON`, except the audit log route, which holds no protected field. **Behaviour change in the fixed build:** the statement's loan object now returns public fields only (`statementLoanBody`). Before, the owner's statement carried `disbursement_account`, which the policy does not allow on the statement. The owner still receives the debit mandates the statement is for. The vulnerable build is unchanged.
+- Catalogue (generator-produced): DATA-102 detection moves from `not_evaluated` to `fixture_validated` with primary REL-020. AUTHZ-106 declares REL-020 as an additional rule. DATA-104 declares REL-020 as an additional rule.
+- `runner/phase34_detection_test.go`: REL-020 expectation. Vulnerable detected on the expanded loan read, the admin loan route and the statement; fixed not detected on any.
+
+### Tests
+
+- `detect/disclosure_test.go`: the policy matrix (allowed and disallowed combinations, unknown class), no-disclosure event, and REL-004 unchanged for the owner's own KYC read.
+- `lab/disclosure_test.go`: drift test (every protected fixture field has a class), nested walk and names-only result, class derivation, empty disclosure omitted from the event JSON.
+- `runner/phase8_disclosure_test.go` (end to end, events decoded the way the runner decodes them):
+  - vulnerable expanded loan read records KYC names and classes, REL-020 fires, and no protected value appears in the serialised events;
+  - fixed expanded loan read emits no KYC;
+  - **negative test (approved condition):** the owner's KYC read through `/api/nbfc/kyc/` records kyc_identity and REL-020 does not fire;
+  - fixed statement omits the disbursement account and keeps the debit mandate;
+  - vulnerable admin loan records account_identifier and REL-020 fires.
+
+### Results
+
+- **Exploitability (unchanged):** `TestPhase7_NBFCScenariosBothBuilds` passes. All ten NBFC scenarios still FAIL exploited on the vulnerable build and PASS on the fixed build. No scenario verdict changed.
+- **Detection:** `TestPhase34_DetectionMatchesDeclaredExpectations` passes across the full catalogue, in both builds, with extraction on and off, and repeated twice. DATA-102: vulnerable REL-020 detected, fixed not detected. AUTHZ-106 and DATA-104: REL-020 detected on the vulnerable build only, as an additional rule.
+- Full apibas suite (`go test ./internal/apibas/... -count=1 -timeout 60m`): EXIT 0. Runner package about 9.5 minutes.
+
+### Notes for review
+
+- **Two additional detections were not in the original declarations.** AUTHZ-106 and DATA-104 vulnerable builds now also raise REL-020. Both are true policy violations (an account identifier and a disbursement account reach a non-loan resource), and both are declared now rather than left hidden.
+- **Admin KYC is in the KYC family.** The vulnerable admin KYC route returns identity evidence to a caller. That is an authorisation failure, which REL-019 and the administrative scenarios cover. REL-020 does not add a second verdict for it.
+- **The fixed statement change** is the one behaviour change to a fixed build. It follows the approved policy and was not in the design text, so it is called out here.
+- **Stated gap:** fixture-validated only. Whether a production event source can carry the same disclosure fields is an open question, and live validation is still not done.
+- `docs/detection-rules-coverage.md` shows a modified Elastic count from another session's rule-library work. It is not part of this change and was not staged.

@@ -120,6 +120,17 @@ func expectedDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, ru
 			return listDisclosureDetection(t, fx, s, mode)
 		}
 		return ownershipDetection(t, fx, s, mode, extract)
+	case "APIBAS-REL-020":
+		// The vulnerable build emits a protected class outside the disclosure policy on three routes: the expanded loan read
+		// (kyc_identity on the loan resource), the administrative loan route (account_identifier on the admin loan
+		// resource), and the statement (account_identifier on the statement resource). The fixed build emits none of them.
+		// The rule reads the events the lab records, so a change in what the lab emits moves the result and the test fails.
+		attack := s.Steps[len(s.Steps)-1]
+		if mode == lab.ModeVulnerable && (strings.Contains(attack.Path, "expand=kyc") ||
+			strings.HasPrefix(attack.Path, "/api/nbfc/admin/loans/") || strings.HasSuffix(attack.Path, "/statement")) {
+			return detect.Detected
+		}
+		return detect.NotDetected
 	case "APIBAS-REL-018":
 		// A repayment change by a caller who is not lender staff. The attempt is the signal, in either build.
 		attack := s.Steps[len(s.Steps)-1]

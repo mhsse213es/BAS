@@ -46,6 +46,10 @@ type Event struct {
 	// ActorRole is the role the lab's fixture gives the identity ("borrower", "officer", "administrator", or "customer" for an
 	// authenticated identity the fixture does not name). Empty means the request was not authenticated.
 	ActorRole string `json:"actor_role,omitempty"`
+	// DisclosedClasses and DisclosedFields describe the protected fields a response actually emitted, as classes and
+	// field names only. They never carry a value (see disclosure.go). Empty when the response emitted none.
+	DisclosedClasses []string `json:"disclosed_classes,omitempty"`
+	DisclosedFields  []string `json:"disclosed_fields,omitempty"`
 	Status        int      `json:"status"`
 	// Signature lists the injection-pattern classes the request carried (see Signature* below). It holds
 	// classes only, never the text that matched, so a body is never stored through this field.
@@ -319,6 +323,13 @@ var ElasticRules = []Rule{
 		Match: func(e Event) bool {
 			return (isPrivilegedClass(e.ActionClass) || privilegedFunction(e.Action)) && e.ActorRole != "" && e.ActorRole != "administrator"
 		},
+	},
+	{
+		// REL-020 fires when a response emits a protected class on a resource the disclosure policy does not allow for it. It
+		// reads the response as emitted, and it does not depend on ownership: the owner of a KYC record who receives it through
+		// a loan read is still a violation. REL-004 and REL-008 keep their ownership logic.
+		ID: "APIBAS-REL-020", Name: "Protected disclosure outside the policy for its resource", Severity: SeverityHigh, Threshold: 1,
+		Match: disclosureOutsidePolicy,
 	},
 }
 

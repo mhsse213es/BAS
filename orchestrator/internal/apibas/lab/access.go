@@ -24,6 +24,10 @@ type accessEvent struct {
 	ActionClass string `json:"action_class,omitempty"`
 	// ActorRole is the caller's role from the fixture (see actorRole). Empty for an unauthenticated request.
 	ActorRole string `json:"actor_role,omitempty"`
+	// DisclosedClasses and DisclosedFields are the protected fields the response actually emitted: classes and field names
+	// only, never values. Empty when the response emitted none. See disclosure.go.
+	DisclosedClasses []string `json:"disclosed_classes,omitempty"`
+	DisclosedFields  []string `json:"disclosed_fields,omitempty"`
 	// Destination is the normalised destination a handler acted on (scheme://host:port), and DestinationPolicy is its
 	// verdict under DestinationPolicy in destination.go. Both are empty when the route records no destination.
 	Destination       string `json:"destination,omitempty"`
@@ -209,6 +213,8 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 			Outcome:       outcomeFor(rec.status),
 			Identity:      identity,
 			ActorRole:     s.actorRole(identity),
+			DisclosedClasses: disclosureClasses(ro.disclosed),
+			DisclosedFields:  ro.disclosed,
 			Status:        rec.status,
 			Degraded:      s.degradedDependencies(),
 			ObjectOwner:   owner,
