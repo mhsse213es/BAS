@@ -159,7 +159,8 @@ func TestContentVersions_AppRoleCannotRewriteOrDelete(t *testing.T) { // A3 (DB 
 			`DELETE FROM scenarios WHERE scenario_id='imm'`,
 			`UPDATE content_version_events SET actor='x'`,
 			`DELETE FROM content_version_events`,
-			`UPDATE content_validations SET outcome='FAIL'`,
+			// outcome, run_id and detail are column-granted for the validation lab (see app_role.go); other columns stay read-only.
+			`UPDATE content_validations SET content_version_id='x'`,
 			`DELETE FROM content_validations`,
 			`UPDATE content_registry_state SET inventory='{}'`,
 			`DELETE FROM content_registry_state`,
