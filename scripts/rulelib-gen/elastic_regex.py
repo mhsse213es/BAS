@@ -46,8 +46,11 @@ def _other_case(lits):
     return "".join(extra)
 
 
-def to_lucene(pattern, ignorecase=False, multiline=False, dotall=False):
-    """Return (value, case_insensitive) for an Elasticsearch regexp query."""
+def to_lucene(pattern, ignorecase=False, multiline=False, dotall=False, query_string=False):
+    """Return (value, case_insensitive) for an Elasticsearch regexp query.
+
+    With query_string=True the value is for a Lucene `field:/.../` regex: a slash is escaped, and because that syntax
+    has no case flag, case-insensitivity is written into the pattern as letter classes ([aA]) and False is returned."""
     if multiline:
         raise Unsupported("multi-line flag")
     p = pattern
@@ -159,8 +162,26 @@ def to_lucene(pattern, ignorecase=False, multiline=False, dotall=False):
             i += 1
             last_quant = False
         else:
-            out.append(_lit(c))
+            if query_string and ignorecase and c.isascii() and c.isalpha():
+                out.append("[" + c.lower() + c.upper() + "]")
+            else:
+                out.append("\\/" if query_string and c == "/" else _lit(c))
             i += 1
             last_quant = False
+    if query_string:
+        ignorecase = False
     body = "(" + "".join(out) + ")"  # grouped so a top-level `a|b` stays one operand
     return ("" if start_anchor else ".*") + body + ("" if end_anchor else ".*"), ignorecase
+
+
+# a field-qualified regex in a Lucene query_string: name:/body/ (a slash inside is escaped)
+_QS_REGEX = re.compile(r"(?P<field>[\w.@-]+):/(?P<body>(?:\\.|[^/\\])*)/")
+
+
+def pad_query_regexes(query):
+    """Rewrite every `field:/regex/` in a Lucene query so it searches (Sigma semantics) instead of matching the whole
+    value. Raises Unsupported for a regex Lucene cannot express."""
+    def one(m):
+        value, _ = to_lucene(m.group("body"), query_string=True)
+        return "%s:/%s/" % (m.group("field"), value)
+    return _QS_REGEX.sub(one, query)

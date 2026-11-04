@@ -2,18 +2,18 @@
   "attribution": "Detection rules are from the SigmaHQ project (https://github.com/SigmaHQ/sigma), licensed under the Detection Rule License (DRL) 1.1. Each rule keeps its original author, title, id and references; the per-SIEM queries are generated from the rule by Audspect.",
   "backends": {
     "crowdstrike": 1907,
-    "elastic": 2053,
+    "elastic": 2052,
     "microsoft_defender": 2052,
     "microsoft_sentinel": 2009,
     "qradar": 1753,
     "splunk": 2099
   },
-  "generatedAt": "2026-11-04T11:01:39.952954+00:00",
+  "generatedAt": "2026-11-04T11:49:34.848172+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
     "crowdstrike:generic": 873,
     "crowdstrike:pipeline": 1034,
-    "elastic:generic": 292,
+    "elastic:generic": 291,
     "elastic:keyword": 26,
     "elastic:pipeline": 1735,
     "microsoft_defender:generic": 779,
@@ -2546,6 +2546,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001184",
       "sigmaId": "919f2ef0-be2d-4a7a-b635-eb2b41fde044"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the rule's regular expression uses a feature Lucene lacks (anchor inside the pattern)",
+      "ruleId": "AUDRULE-001186",
+      "sigmaId": "91b76b84-8589-47aa-9605-c837583b82a9"
     },
     {
       "backend": "crowdstrike",

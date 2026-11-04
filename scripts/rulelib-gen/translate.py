@@ -19,6 +19,7 @@ from typing import Callable
 from sigma.backends.crowdstrike import LogScaleBackend
 from elastic_dsl import Unsupported as DslUnsupported, rule_to_dsl
 from elastic_ip import UnexpressibleOnIpField, fix_ip_wildcards
+from elastic_regex import Unsupported as RegexUnsupported, pad_query_regexes
 from sigma.backends.elasticsearch import LuceneBackend
 from sigma.backends.kusto import KustoBackend as SentinelKustoBackend
 from sigma.backends.microsoft365defender import KustoBackend as DefenderKustoBackend
@@ -1025,7 +1026,11 @@ def translate_rule(rule) -> tuple[list[dict], list[dict]]:
                     queries = [rewritten]
             if backend_key == "elastic":
                 try:
-                    queries = [fix_ip_wildcards(queries[0])]
+                    # a Lucene regex must match the whole value; Sigma's searches, so pad it
+                    queries = [pad_query_regexes(fix_ip_wildcards(queries[0]))]
+                except RegexUnsupported as e:
+                    failures.append({"backend": backend_key, "reason": "the rule's regular expression uses a feature Lucene lacks (%s)" % e})
+                    continue
                 except UnexpressibleOnIpField:
                     failures.append({"backend": backend_key, "reason": "the rule matches text on an ip field, which Elasticsearch cannot express"})
                     continue
