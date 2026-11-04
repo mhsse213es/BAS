@@ -15,10 +15,10 @@ const ProfileControlled = "controlled"
 // ProfileLab is the profile for lab-only actions.
 const ProfileLab = "lab"
 
-// controlledActions lists the actions that run under the Controlled profile. Only the labelled ConfigMap patch is
-// eligible: its prior state is recorded before the write and rolled back with a verified restore. Pod creation, the
-// synthetic secret read and the token probe stay ineligible until each has a tested rollback or cleanup.
-var controlledActions = map[string]bool{"configmap-patch-labelled": true}
+// controlledActions lists the actions that run under the Controlled profile. It is empty: Controlled execution stays
+// disabled until the execution lifecycle (identity binding, kill switch, cancellation, timeout, audit) is proven. The
+// ConfigMap patch is the first candidate, enabled by a separate decision once that is done.
+var controlledActions = map[string]bool{}
 
 // ActionProfile returns the execution profile an action runs under.
 func ActionProfile(actionID string) string {
