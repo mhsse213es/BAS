@@ -141,13 +141,23 @@ func (h *Handler) UpdateDetectionConnector(w http.ResponseWriter, r *http.Reques
 	}
 	// Preserve masked sensitive values (UI returns "***" for secrets it can't show).
 	var existingSecret, existingToken, provider string
-	if err := h.db.QueryRow(r.Context(), `SELECT client_secret, api_token, provider FROM detection_connectors WHERE id=$1`, id).
-		Scan(&existingSecret, &existingToken, &provider); err != nil {
+	var secretRef, tokenRef string
+	if err := h.db.QueryRow(r.Context(), `SELECT client_secret, client_secret_ref, api_token, api_token_ref, provider FROM detection_connectors WHERE id=$1`, id).
+		Scan(&existingSecret, &secretRef, &existingToken, &tokenRef, &provider); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			jsonError(w, "connector not found", http.StatusNotFound)
 		} else {
 			jsonError(w, err.Error(), http.StatusInternalServerError)
 		}
+		return
+	}
+	var resolveErr error
+	if existingSecret, resolveErr = h.resolveCredential(r.Context(), secretRef, existingSecret); resolveErr != nil {
+		jsonError(w, "stored credential unavailable", http.StatusInternalServerError)
+		return
+	}
+	if existingToken, resolveErr = h.resolveCredential(r.Context(), tokenRef, existingToken); resolveErr != nil {
+		jsonError(w, "stored credential unavailable", http.StatusInternalServerError)
 		return
 	}
 	if req.ClientSecret == "***" {
@@ -227,14 +237,21 @@ func (h *Handler) TestDetectionConnector(w http.ResponseWriter, r *http.Request)
 
 func (h *Handler) loadDetectionConnector(ctx context.Context, id string) (*detectverify.Config, error) {
 	var cfg detectverify.Config
+	var secretRef, tokenRef string
 	err := h.db.QueryRow(ctx,
-		`SELECT id, name, provider, enabled, auto_verify, azure_tenant_id, client_id, client_secret,
-		        workspace_id, base_url, api_token, insecure_tls, verify_delay_seconds
+		`SELECT id, name, provider, enabled, auto_verify, azure_tenant_id, client_id, client_secret, client_secret_ref,
+		        workspace_id, base_url, api_token, api_token_ref, insecure_tls, verify_delay_seconds
 		   FROM detection_connectors WHERE id=$1`, id,
 	).Scan(&cfg.ID, &cfg.Name, &cfg.Provider, &cfg.Enabled, &cfg.AutoVerify,
-		&cfg.TenantID, &cfg.ClientID, &cfg.ClientSecret, &cfg.WorkspaceID,
-		&cfg.BaseURL, &cfg.APIToken, &cfg.InsecureTLS, &cfg.VerifyDelaySeconds)
+		&cfg.TenantID, &cfg.ClientID, &cfg.ClientSecret, &secretRef, &cfg.WorkspaceID,
+		&cfg.BaseURL, &cfg.APIToken, &tokenRef, &cfg.InsecureTLS, &cfg.VerifyDelaySeconds)
 	if err != nil {
+		return nil, err
+	}
+	if cfg.ClientSecret, err = h.resolveCredential(ctx, secretRef, cfg.ClientSecret); err != nil {
+		return nil, err
+	}
+	if cfg.APIToken, err = h.resolveCredential(ctx, tokenRef, cfg.APIToken); err != nil {
 		return nil, err
 	}
 	return &cfg, nil

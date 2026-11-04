@@ -126,8 +126,18 @@ func (h *Handler) UpdateSIEMConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	// Preserve masked sensitive values (UI returns "***" for secrets it can't show).
 	var existing struct{ Token, Username, Password string }
-	h.db.QueryRow(r.Context(), `SELECT token, username, password FROM siem_configs WHERE id=$1`, id).
-		Scan(&existing.Token, &existing.Username, &existing.Password)
+	var tokenRef, passwordRef string
+	h.db.QueryRow(r.Context(), `SELECT token, token_ref, username, password, password_ref FROM siem_configs WHERE id=$1`, id).
+		Scan(&existing.Token, &tokenRef, &existing.Username, &existing.Password, &passwordRef)
+	var err error
+	if existing.Token, err = h.resolveCredential(r.Context(), tokenRef, existing.Token); err != nil {
+		jsonError(w, "stored credential unavailable", http.StatusInternalServerError)
+		return
+	}
+	if existing.Password, err = h.resolveCredential(r.Context(), passwordRef, existing.Password); err != nil {
+		jsonError(w, "stored credential unavailable", http.StatusInternalServerError)
+		return
+	}
 	if req.Token == "***" {
 		req.Token = existing.Token
 	}
@@ -301,15 +311,25 @@ func (h *Handler) GetSIEMCorrelations(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) loadSIEMConfig(ctx context.Context, id string) (*siem.Config, error) {
 	var cfg siem.Config
 	var providerStr string
+	var tokenRef, passwordRef, clientSecretRef string
 	err := h.db.QueryRow(ctx,
-		`SELECT id, name, provider, enabled, console_url, token, username, password,
-		        tenant_id, workspace_id, client_id, client_secret, insecure_skip_verify, created_at, updated_at
+		`SELECT id, name, provider, enabled, console_url, token, token_ref, username, password, password_ref,
+		        tenant_id, workspace_id, client_id, client_secret, client_secret_ref, insecure_skip_verify, created_at, updated_at
 		   FROM siem_configs WHERE id=$1`, id,
 	).Scan(&cfg.ID, &cfg.Name, &providerStr, &cfg.Enabled, &cfg.ConsoleURL,
-		&cfg.Token, &cfg.Username, &cfg.Password,
-		&cfg.TenantID, &cfg.WorkspaceID, &cfg.ClientID, &cfg.ClientSecret,
+		&cfg.Token, &tokenRef, &cfg.Username, &cfg.Password, &passwordRef,
+		&cfg.TenantID, &cfg.WorkspaceID, &cfg.ClientID, &cfg.ClientSecret, &clientSecretRef,
 		&cfg.InsecureSkipVerify, &cfg.CreatedAt, &cfg.UpdatedAt)
 	if err != nil {
+		return nil, err
+	}
+	if cfg.Token, err = h.resolveCredential(ctx, tokenRef, cfg.Token); err != nil {
+		return nil, err
+	}
+	if cfg.Password, err = h.resolveCredential(ctx, passwordRef, cfg.Password); err != nil {
+		return nil, err
+	}
+	if cfg.ClientSecret, err = h.resolveCredential(ctx, clientSecretRef, cfg.ClientSecret); err != nil {
 		return nil, err
 	}
 	cfg.Provider = siem.Provider(providerStr)

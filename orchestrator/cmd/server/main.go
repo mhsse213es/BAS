@@ -978,7 +978,15 @@ func main() {
 		log.Fatalf("[FATAL] cloud settings: %v", err)
 	}
 
+	// Credential store for reference columns. A missing or invalid key leaves the store nil: references then fail their own
+	// operation, and plaintext columns keep working (see secretstore.Resolve).
+	secretStore, secretErr := secretstore.OpenStore(pool, secretstore.DefaultKeyPath)
+	if secretErr != nil {
+		log.Printf("[secretstore] credential references unavailable: %v", secretErr)
+	}
+
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
+		WithSecretStore(secretStore).
 		WithCloudSettings(cloudSettings).
 		WithDeploymentClass(cfg.Classification()).
 		WithEvidenceStore(evStore).

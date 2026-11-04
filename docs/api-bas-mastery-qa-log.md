@@ -3509,3 +3509,35 @@ Decisions approved by the product owner:
 - **The key is validated but not used** by any read. Nothing is encrypted with it until phase 2 writes references.
 - **Phase 2 migration job** (move values, write references, verify resolution) is not started.
 - Phase 3 (drop plaintext columns) and D5 rotation are not started.
+
+## D4 phase 2a: dual-read in SIEM, detection and action connectors (4 November 2026)
+
+### Scope
+- Three consumers read credential references: SIEM (`siem_configs`: token, password, client_secret), detection verification (`detection_connectors`: client_secret, api_token), and response actions (`action_connectors`: client_secret, api_token). Each read selects the reference column beside the plaintext column and resolves through `secretstore.Resolve`.
+- Not in this slice: OpenAEV, OTX/threat intel, SSO, notification webhooks, TAXII. They remain on plaintext reads.
+
+### Behaviour
+- Empty reference: plaintext, unchanged. Every row today, because phase 2 migration has not written references.
+- Set reference: value from the store. Missing store, missing value or failed decryption returns an error. The plaintext column is never used as fallback.
+- Masked-value preservation on update (`***`): the existing secret is read through the same resolver. A resolve failure returns HTTP 500 and writes nothing, so a stale plaintext is never written back.
+- Store wiring: `cmd/server/main.go` opens the store with `secretstore.OpenStore(pool, DefaultKeyPath)` and passes it with `WithSecretStore`. On any failure the store is a true nil interface, not a typed nil pointer.
+
+### Changes
+- `internal/api/secrets.go` (new): `WithSecretStore`, `resolveCredential`.
+- `internal/api/handlers.go`: `secrets` field.
+- `internal/api/siem_handlers.go`, `detectverify_handlers.go`, `action_handlers.go`: refs selected and resolved in the update preservation reads and the loaders.
+- `internal/secretstore/resolve.go`: `OpenStore`.
+- `internal/api/secrets_test.go` (new): three database-backed tests. Each checks that a stored reference wins over a stale plaintext, that an unmigrated row returns its plaintext, and that a reference with no store fails.
+- `internal/testutil/testdb.go`: adds `EnsureSecretStoreSchema` to the shared test bootstrap. Without it the reference columns do not exist in tests, and nine existing connector tests failed (found in the first full run, fixed here).
+
+### Tests and results
+- First full `internal/api` run: 10 failures and a 10-minute timeout panic. All failures were the missing reference columns in the test database, fixed by the bootstrap change. The timeout is Go's default, not a hang.
+- After the fix: the nine previously failing tests and the three new tests pass (`-run` subset, 25 s).
+- Full `internal/api` run with a 45-minute timeout (2561 s): one failure, `TestStopIsIdempotent` (`internal/api/aleef_handlers_test.go`, Aleef feature, not changed by this phase). All other tests in the package pass, including the three new credential tests and the nine connector tests fixed by the bootstrap change.
+- The failing test sleeps a fixed 300 ms and then asserts the run has reached a halted state. Under the parallel load of the full suite that window can be missed. Run alone it passed 3 of 3 (`-count=3`). It also failed in the earlier full run before the bootstrap fix. Treated as a pre-existing timing flake in the Aleef test, not caused by this phase, and NOT hidden: the phase is committed with this failure on record. A timing fix to that test is a separate change.
+- `go build` for `cmd/server`, `internal/api`, `internal/secretstore`: pass.
+
+### Not done (stated)
+- Writes still go to plaintext only. No reference is written yet, so the resolver path is exercised only by tests until phase 2 migration runs.
+- Remaining consumers listed above.
+- Phase 2 migration job, phase 3 column drop, D5 rotation: not started.

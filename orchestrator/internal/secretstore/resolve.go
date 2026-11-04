@@ -3,6 +3,8 @@ package secretstore
 import (
 	"context"
 	"errors"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ErrUnavailable means a credential column holds a reference but no store is available to resolve it (for example the
@@ -33,4 +35,18 @@ func Resolve(ctx context.Context, store Store, ref, plaintext string) (string, e
 		return "", err
 	}
 	return v, nil
+}
+
+// OpenStore loads the interim key from path and returns a PGStore on pool. On any failure it returns a nil Store interface
+// (not a typed nil pointer), so Resolve reports ErrUnavailable instead of calling into a nil store.
+func OpenStore(pool *pgxpool.Pool, path string) (Store, error) {
+	key, err := LoadKeyFile(path)
+	if err != nil {
+		return nil, err
+	}
+	s, err := NewPGStore(pool, key)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
 }
