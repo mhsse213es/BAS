@@ -54,13 +54,8 @@
    {
     "pattern": "(?i)(ipfs\\.io/|ipfs\\.io\\s).+\\..+@.+\\.[a-z]+",
     "flags": "",
-    "status": "FAIL",
-    "value": ".*((ipfs\\.io/|ipfs\\.io[ \t\n\r\f\u000b])[^\n]+\\.[^\n]+\\@[^\n]+\\.[a-z]+).*",
-    "missing": [
-     "HTTPS://IPFS.IO/ABC.DEF@GHI.COM",
-     "IPFS.IO X.Y@Z.Q"
-    ],
-    "extra": []
+    "status": "PASS",
+    "matches": 21
    },
    {
     "pattern": "^abc",
@@ -263,13 +258,8 @@
    {
     "pattern": "(?i)(ipfs\\.io/|ipfs\\.io\\s).+\\..+@.+\\.[a-z]+",
     "flags": "",
-    "status": "FAIL",
-    "value": ".*((ipfs\\.io/|ipfs\\.io[ \t\n\r\f\u000b])[^\n]+\\.[^\n]+\\@[^\n]+\\.[a-z]+).*",
-    "missing": [
-     "HTTPS://IPFS.IO/ABC.DEF@GHI.COM",
-     "IPFS.IO X.Y@Z.Q"
-    ],
-    "extra": []
+    "status": "PASS",
+    "matches": 21
    },
    {
     "pattern": "^abc",

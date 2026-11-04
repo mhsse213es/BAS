@@ -61,7 +61,8 @@ def gen(path):
             cases.append({"pattern": pat, "flags": fl, "unsupported": str(e)})
             continue
         rx = re.compile(pat, flags)
-        cases.append({"pattern": pat, "flags": fl, "value": value, "ci": ci,
+        qs, _ = to_lucene(pat, ignorecase="i" in fl, dotall="s" in fl, query_string=True)
+        cases.append({"pattern": pat, "flags": fl, "value": value, "ci": ci, "qs": qs,
                       "expected": [i for i, s in enumerate(strings) if rx.search(s)]})
     json.dump({"strings": strings, "cases": cases}, open(path, "w"))
     print("patterns=%d strings=%d unsupported=%d" % (len(cases), len(strings), sum(1 for c in cases if "unsupported" in c)))
@@ -99,7 +100,12 @@ def run(path, out, field_type="keyword"):
                 res.update(status="FAIL", reason="HTTP %s %s" % (st, json.dumps(r)[:200]), value=c["value"])
             else:
                 got = sorted(int(h["_id"]) for h in r["hits"]["hits"])
-                if got == c["expected"]:
+                st2, r2 = call("GET", "/%s/_search" % ix, {"size": 10000, "_source": False,
+                               "query": {"query_string": {"query": "f:/" + c["qs"] + "/"}}})
+                got_qs = sorted(int(h["_id"]) for h in r2["hits"]["hits"]) if st2 < 300 else "HTTP %s" % st2
+                if got_qs != c["expected"]:
+                    res.update(status="FAIL", value=c["qs"], reason="query_string form differs", queryStringGot=got_qs if isinstance(got_qs, str) else len(got_qs))
+                elif got == c["expected"]:
                     res.update(status="PASS", matches=len(got))
                 else:
                     res.update(status="FAIL", value=c["value"], missing=[d["strings"][i] for i in sorted(set(c["expected"]) - set(got))][:4],

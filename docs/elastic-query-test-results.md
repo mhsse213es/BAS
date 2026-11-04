@@ -82,12 +82,21 @@ refused: that rule gets no regex DSL rather than a wrong one.
   an `ip` field (HTTP 400). The DSL now writes such a condition as `match_none`; this also corrected AUDRULE-000321 and
   AUDRULE-000973.
 
-### Open finding: the shipped Lucene queries for these 9 rules are anchored
+### The shipped Lucene queries for regex rules were anchored: fixed
 
-A Lucene `query_string` regex must match the whole field value. On Elasticsearch 8.15.3 `c:/-D/` returns nothing for
-the value `auditctl -D`, while `c:/.*-D.*/` matches it. The Lucene text of the 9 regex rules was not changed (the DSL
-work keeps Lucene as is), so those 9 Lucene queries almost never match; use the DSL for them. The rule harness had
-marked them UNTESTABLE, which hid this. The fix would be to pad the Lucene regex with `.*`.
+A Lucene `query_string` regex must match the whole field value. On Elasticsearch 8.15.3 `c:/-D/` returned nothing for
+the value `auditctl -D`, while `c:/.*-D.*/` matched it, so the Lucene text of every regex rule almost never matched
+(the rule harness had marked them UNTESTABLE, which hid it). The generator now pads each `field:/regex/` in the Lucene
+query the same way (`elastic_regex.pad_query_regexes`); a `(?i)` becomes letter classes (`[aA]`) because `query_string`
+has no case flag. The 33-pattern differential test also runs the padded `query_string` form: **33 of 33 agree with
+Python `re` on `keyword` and `wildcard` fields**, as does the DSL form.
+
+Bundle change: 18 Elastic queries were re-padded (9 field-mapped, 9 generic, `query` only), and one rule,
+AUDRULE-001186 (Okta password in AlternateID), moved from a shipped query to a recorded failure: its regex has `^`
+inside an alternation, which cannot be padded safely. Its old query could never have matched (a literal `^`). Elastic
+is now 2,052 translated, 52 not available. No query that passed the Lucene test changed status (1,726 pass, 0 fail).
+Hand-built events on the three rules above pass for the shipped Lucene text as well as for the DSL (the Lucene form of
+the `(?i)` rule matches the upper-case event too, which is correct).
 
 ## What a test is
 
