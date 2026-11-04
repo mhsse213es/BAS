@@ -3077,3 +3077,66 @@ Decided by the product owner. Implementation follows these.
 - The 250 ms ceiling stays provisional and unvalidated until a named product or security owner approves the requirement and its rationale. **Owner: not yet named.**
 - Qualifying staging host: `audspecterver` (the existing staging host, `zain@audspecterver`, per the deployment record). Before use, confirm it is not carrying other load during qualification. Record its hardware, OS and build, Go version, CPU and memory, workload, and background load.
 - Until qualified: no timing-based PASS or FAIL verdict and no new timing scenarios. Timing is reported as diagnostic only, or INCONCLUSIVE when qualification is missing.
+
+## Design: field-level disclosure evidence for NBFC-007 (DATA-102)
+
+Status: **proposed. No code changes until approved.**
+
+### Current behaviour
+
+- The access event (`lab/access.go`, `accessEvent`) records the action, action class, actor role, owners, outcome, status and identity. It records nothing about which fields a response returned.
+- `detect.Event` mirrors that. REL-008 (`sensitiveProjection`) matches only the action suffix `/statement`, `/card`, `/audit` or `/view` on a foreign-owned object. A loan read with `?expand=kyc` matches none of these.
+- Vulnerable build, `GET /api/nbfc/loans/{id}?expand=kyc` (`nbfcGetLoan`): returns the borrower's KYC record with `pan_number` and `aadhaar_ref` to any caller. The fixed build never returns KYC through the loan read.
+- DATA-102's baseline reads the owner's own loan, so the attacker-owned KYC record is the same owner's record. Ownership rules (REL-004, REL-008) cannot fire: the caller owns what they receive. The violation is the kind of data disclosed through a non-KYC resource, not who owns it.
+
+### Proposed change
+
+1. **Disclosure classes, not values.** Each protected field carries a fixed classification in the fixture's pack policy. For NBFC: `pan_number` and `aadhaar_ref` are `kyc_identity`; `debit_mandate` is `payment_credential`; `disbursement_account` is `account_identifier`. Classes are a closed set defined in code, never taken from a request.
+2. **Response-side holder.** Reuse the `responseOwners` pattern (`lab/response_owners.go`): a per-request holder that a handler fills when it writes a protected field into a response. The holder records only the class and the field name. A helper, for example `noteDisclosure(r, class, field)`, is called at the point the field is added to the body, so the event reflects what was sent, not what the record contains.
+3. **New optional event fields**, both `omitempty`:
+   - `disclosed_classes []string`: the distinct classes in the response.
+   - `disclosed_fields []string`: the field names, from the same closed set. For example `["pan_number","aadhaar_ref"]`.
+
+   Neither field holds a value. Field names come from the fixture policy, so they can't carry request text.
+4. **Detection rule REL-020 (next free ID; confirm before implementation).** Fires when `disclosed_classes` contains `kyc_identity` and the action is not on the KYC resource (`/api/nbfc/kyc/`). It does not depend on ownership, so the owner's own expanded read is still detected. It is the policy violation: identity evidence leaves through a loan projection.
+5. **No change** to existing rules, to `ObjectOwner` or `ObjectOwners`, or to any existing field's meaning.
+
+### Expected verdicts
+
+| Build | Request | Expected event | REL-020 |
+|---|---|---|---|
+| Vulnerable | owner reads own loan with `?expand=kyc` | `disclosed_classes=["kyc_identity"]`, `disclosed_fields=["pan_number","aadhaar_ref"]` | fires |
+| Fixed | same request | no disclosure fields (the KYC is not returned) | does not fire |
+| Vulnerable | owner reads own loan without expand | no `kyc_identity` class | does not fire |
+| Vulnerable | owner reads own KYC on `/api/nbfc/kyc/` | `kyc_identity` but on the KYC resource | does not fire |
+
+The DATA-102 assertion changes from `not_evaluated` to `fixture_validated` with reason, after the tests pass. The detection table gets an `APIBAS-REL-020` expectation: vulnerable detected, fixed not detected, repeated runs identical.
+
+### Security implications
+
+- No protected value enters the event, the detection store or any result. Tests assert that the serialised event does not contain `BAS-SIM-PAN-A` or `BAS-SIM-AADHAAR-A`.
+- The class set is closed. An unknown field name is recorded as `unclassified` and the handler test fails, so a new protected field cannot silently skip classification.
+- The holder records what was written, so a future change that adds a field to the response without calling `noteDisclosure` is caught by the drift test below.
+
+### Migration and compatibility
+
+- No database change. Events are in-memory in the lab today. The results store (the planned next step) must keep the same shape: classes and field names only.
+- Existing event consumers ignore unknown JSON fields. A golden test asserts that an event with no disclosure serialises byte-identical to today.
+- The Elastic-style fixture events in the detection tables have no disclosure fields, so existing expectations do not move.
+- Live SIEM: this is a fixture contract. Whether the production event source can carry the same fields is an open question, and live validation remains not done.
+
+### Tests
+
+1. `detect`: REL-020 fires on `kyc_identity` outside `/api/nbfc/kyc/`; does not fire on the KYC resource, on other classes, or with no classes; fires for the owner.
+2. `lab`: vulnerable expand event carries the expected classes and field names; fixed build carries none; the serialised event contains no protected value.
+3. `lab` drift: every protected field in the NBFC fixture has a classification. A new protected field with no class fails the test.
+4. `runner` phase34 table: REL-020 expectation for DATA-102, vulnerable detected, fixed not detected, repeatability check.
+5. `runner` scenario: DATA-102 still FAILs exploited on vulnerable and PASSes on fixed (exploitability is unchanged; detection is separate).
+6. Golden JSON: event without disclosure is byte-identical to the current format.
+
+### Decision needed
+
+- Approve the class set and the rule ID (REL-020).
+- Confirm that a policy-based rule (class on a non-owning resource) is acceptable alongside the existing owner-based rules.
+
+No code will be written until this design is approved.
