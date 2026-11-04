@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/verification"
 )
@@ -60,6 +61,16 @@ type QueueItem struct {
 
 // runScenario loads the scenario for a run id: its pinned content version,
 // never the current YAML (TCF Phase 1 §7).
+// runVerificationError says why a run has no scenario to verify against. A factory validation run is real and
+// readable but synthetic: it checks generated threat content and has no scenario with detection expectations, so
+// the honest answer is that it cannot be verified, not that it was not found.
+func runVerificationError(rc contentregistry.RunContent) (int, string) {
+	if rc.Status == contentregistry.RunSynthetic {
+		return http.StatusConflict, "this is a factory validation run: it checks generated threat content and has no detection expectations to verify. Pick a scenario run instead"
+	}
+	return http.StatusNotFound, "run or scenario not found"
+}
+
 func (h *Handler) runScenario(ctx context.Context, runID string) (*scenario.Scenario, bool) {
 	if h.engine == nil {
 		return nil, false
@@ -119,7 +130,8 @@ func (h *Handler) ListRunVerifications(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "runId")
 	sc, ok := h.runScenario(r.Context(), runID)
 	if !ok {
-		jsonError(w, "run or scenario not found", http.StatusNotFound)
+		status, msg := runVerificationError(h.runContent(r.Context(), runID))
+		jsonError(w, msg, status)
 		return
 	}
 	current, err := h.verification.CurrentForRun(r.Context(), runID)
@@ -230,7 +242,8 @@ func (h *Handler) CreateVerification(w http.ResponseWriter, r *http.Request) {
 
 	sc, ok := h.runScenario(r.Context(), body.RunID)
 	if !ok {
-		jsonError(w, "run or scenario not found", http.StatusNotFound)
+		status, msg := runVerificationError(h.runContent(r.Context(), body.RunID))
+		jsonError(w, msg, status)
 		return
 	}
 	meta := h.expectationMeta(sc, body.ExpectationID)
