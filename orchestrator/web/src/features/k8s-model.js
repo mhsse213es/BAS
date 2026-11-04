@@ -64,3 +64,15 @@ export function paramRows(params) {
   var p = params || {};
   return Object.keys(p).sort().map(function(k) { return [k, String(p[k])]; });
 }
+
+// The body for a plan request. The cluster is the registry ID; a display name is never sent (Phase 4).
+export function planRunBody(clusterId, namespace, action, params) {
+  return { clusterId: String(clusterId || ''), namespace: String(namespace || ''), action: String(action || ''), params: params || {} };
+}
+
+// Lab-class clusters from the registry, as picker options. Only these can be planned or run.
+export function labClusterOptions(list) {
+  return (Array.isArray(list) ? list : [])
+    .filter(function(c) { return c && c.class === 'lab' && c.id; })
+    .map(function(c) { return { id: c.id, label: c.displayName || c.id }; });
+}

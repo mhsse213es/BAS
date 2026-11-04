@@ -159,8 +159,23 @@ function syncActionFields() {
   });
 }
 
+// Fills the cluster picker with the registered lab-class clusters. The registry ID is the value; names are display only.
+export function loadK8sClusterChoices() {
+  var sel = document.getElementById('k8s-cluster');
+  if (!sel) return;
+  apicall('/api/k8s-scenarios/clusters').then(function(list) {
+    var opts = M.labClusterOptions(list);
+    sel.innerHTML = opts.length
+      ? opts.map(function(o) { return '<option value="' + x(o.id) + '">' + x(o.label) + '</option>'; }).join('')
+      : '<option value="">No lab-class cluster is registered</option>';
+  }).catch(function() {
+    sel.innerHTML = '<option value="">Could not load clusters</option>';
+  });
+}
+
 export function loadK8sRuns() {
   syncActionFields();
+  loadK8sClusterChoices();
   setHost('<div class="empty">Loading…</div>');
   apicall('/api/k8s-scenarios/runs').then(function(body) {
     if (!Array.isArray(body)) throw new Error(body && body.error ? body.error : 'unexpected response');
@@ -311,10 +326,11 @@ document.addEventListener('keydown', function(e) {
 
 export function planK8sRun() {
   var action = (document.getElementById('k8s-action') || {}).value || '';
-  var cluster = ((document.getElementById('k8s-cluster') || {}).value || '').trim();
+  var clusterId = ((document.getElementById('k8s-cluster') || {}).value || '').trim();
   var namespace = ((document.getElementById('k8s-namespace') || {}).value || '').trim();
   var spec = K8S_ACTIONS[action];
   if (!spec) { showToast('Choose an action', 'error'); return; }
+  if (!clusterId) { showToast('Choose a registered lab cluster', 'error'); return; }
   var params = {};
   for (var i = 0; i < spec.params.length; i++) {
     var p = spec.params[i];
@@ -324,7 +340,7 @@ export function planK8sRun() {
   }
   apicall('/api/k8s-scenarios/runs', {
     method: 'POST',
-    body: JSON.stringify({ cluster: cluster, namespace: namespace, action: action, params: params })
+    body: JSON.stringify(M.planRunBody(clusterId, namespace, action, params))
   }).then(function(body) {
     if (body.error) throw new Error(body.error);
     showToast('Planned. Nothing has been written to the cluster.', 'success');

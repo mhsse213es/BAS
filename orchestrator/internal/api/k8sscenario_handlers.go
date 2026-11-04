@@ -121,24 +121,31 @@ func (h *Handler) CreateK8sRun(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	if body.ClusterID != "" {
-		// A registered cluster is named by its registration ID. Its display name must still be in the configured
-		// engine map, so a registration alone never makes a cluster runnable.
-		if svc.Registry == nil {
-			jsonError(w, "cluster registry is not configured", http.StatusServiceUnavailable)
-			return
-		}
-		c, found, err := svc.Registry.Get(r.Context(), body.ClusterID)
-		if err != nil || !found {
-			jsonError(w, "cluster not found", http.StatusBadRequest)
-			return
-		}
-		if refuseProfile(w, r, svc, c, "lab", "run:"+body.Action) {
-			return
-		}
-		body.Cluster = c.DisplayName
+	// The registry is the only source of cluster identity and class. A run must name a registered cluster by its
+	// registration ID. Display names are not accepted, and there is no fallback through the configured engine map.
+	clusterID := strings.TrimSpace(body.ClusterID)
+	if clusterID == "" {
+		jsonError(w, "clusterId is required; cluster names are not accepted", http.StatusBadRequest)
+		return
 	}
+	c, found, err := svc.Registry.Get(r.Context(), clusterID)
+	if err != nil {
+		jsonError(w, "could not read the cluster", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		jsonError(w, "cluster not found", http.StatusBadRequest)
+		return
+	}
+	if refuseProfile(w, r, svc, c, "lab", "run:"+body.Action) {
+		return
+	}
+	body.Cluster = c.DisplayName
 	server, ok := svc.targetServer(body.Cluster, body.Namespace)
+	if ok && server != c.ServerURL {
+		jsonError(w, "the registered cluster and the configured engine disagree on its API server", http.StatusConflict)
+		return
+	}
 	if !ok {
 		jsonError(w, "cluster or namespace is not configured for scenarios", http.StatusBadRequest)
 		return
