@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from sigma.backends.crowdstrike import LogScaleBackend
+from elastic_ip import UnexpressibleOnIpField, fix_ip_wildcards
 from sigma.backends.elasticsearch import LuceneBackend
 from sigma.backends.kusto import KustoBackend as SentinelKustoBackend
 from sigma.backends.microsoft365defender import KustoBackend as DefenderKustoBackend
@@ -1021,6 +1022,12 @@ def translate_rule(rule) -> tuple[list[dict], list[dict]]:
                 keyword = rewritten is not None
                 if keyword:
                     queries = [rewritten]
+            if backend_key == "elastic":
+                try:
+                    queries = [fix_ip_wildcards(queries[0])]
+                except UnexpressibleOnIpField:
+                    failures.append({"backend": backend_key, "reason": "the rule matches text on an ip field, which Elasticsearch cannot express"})
+                    continue
             if mapping is None and not keyword and backend_key in KUSTO_BACKENDS:
                 queries = [kql_template(queries[0])]
             translations.append({

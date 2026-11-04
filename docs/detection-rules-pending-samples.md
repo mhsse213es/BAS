@@ -4,6 +4,8 @@
 
 A mapping built from a sample is checked with a positive and a negative event before its `verification` becomes `validated`.
 
+**Status of every rule below: `PENDING_SAMPLE`.** None is validated and none has been tested against Elasticsearch (there is no translation to test). This file is the evidence checklist: send the sample named in the last column when that log source becomes available, then the group is mapped and tested. See `docs/elastic-query-test-results.md` for how the already-mapped Elastic queries were tested.
+
 | Group | Rules | Why blocked | What to send |
 |---|---:|---|---|
 | `github/audit` | 8 | No Sentinel table, Splunk sourcetype or Elastic dataset for GitHub audit events could be confirmed from vendor documentation. | Which collector ships GitHub audit logs to your SIEM, and one redacted audit event (the `action` and `actor` keys). |
