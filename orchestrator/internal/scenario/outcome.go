@@ -282,6 +282,15 @@ func classifyExecution(r ExecResult, combined string) (ExecutionOutcome, ErrorRe
 
 	// BAS execution error — not a security outcome.
 	if reason := classifyExecutionError(lower, r.ExitCode); reason != ErrNone {
+		// A missing prerequisite or an absent required binary means the
+		// environment could not run the technique at all — it was never tested.
+		// That is a SKIP (not applicable here), exactly like an OS mismatch: it
+		// is not the content's fault and must not FAIL a factory validation or
+		// be scored as a BAS error. Genuine execution problems (malformed
+		// content, timeouts, spawn failures) stay errors.
+		if reason == ErrMissingPrerequisite || reason == ErrBinaryMissing {
+			return OutcomeSkipped, ErrNone, "Not applicable in this environment (" + errorReasonLabel(reason) + "): " + firstLine(combined)
+		}
 		return OutcomeError, reason, "Execution error (" + errorReasonLabel(reason) + "): " + firstLine(combined)
 	}
 
