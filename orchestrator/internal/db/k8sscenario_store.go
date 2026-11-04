@@ -51,6 +51,7 @@ func EnsureK8sScenarioSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at   timestamptz NOT NULL DEFAULT NOW()
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_k8s_runs_state ON k8s_scenario_runs (state)`,
+		k8sControlledSwitchSchema,
 		// Identity columns, added after the tables existed. Empty on legacy rows, which execution refuses.
 		`ALTER TABLE k8s_scenario_runs ADD COLUMN IF NOT EXISTS cluster_id text NOT NULL DEFAULT ''`,
 		`ALTER TABLE k8s_scenario_runs ADD COLUMN IF NOT EXISTS authorization_id text NOT NULL DEFAULT ''`,
@@ -97,7 +98,29 @@ func NewK8sApprovalStore(pool *pgxpool.Pool) *K8sApprovalStore {
 
 // Put records a new approval. The CHECK constraint refuses an approver equal to the requester.
 func (s *K8sApprovalStore) Put(a k8sscenario.Approval) error {
-	_, err := s.pool.Exec(context.Background(), `
+	return insertApproval(context.Background(), s.pool, a)
+}
+
+// PutWithAudit records an approval and its audit event in one transaction. If the audit cannot be written, no
+// approval exists, so an approval never runs without a record of who approved it and for what.
+func (s *K8sApprovalStore) PutWithAudit(a k8sscenario.Approval, ev k8sscenario.Event) error {
+	ctx := context.Background()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := insertApproval(ctx, tx, a); err != nil {
+		return err
+	}
+	if err := writeScenarioAuditRow(ctx, tx, ev); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func insertApproval(ctx context.Context, q auditExecer, a k8sscenario.Approval) error {
+	_, err := q.Exec(ctx, `
 		INSERT INTO k8s_scenario_approvals
 			(id, approver_id, requester_id, run_id, cluster, namespace, action_id, params_hash, expires_at,
 			 cluster_id, authorization_id, customer_ref, approved_at)

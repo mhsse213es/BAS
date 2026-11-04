@@ -59,6 +59,10 @@ func buildK8sScenarioService(pool *pgxpool.Pool) *api.K8sScenarioService {
 		log.Fatalf("[FATAL] k8s scenario: %v", err)
 	}
 	clusters := map[string]string{rec.DisplayName: rec.ServerURL}
+	switchStore := db.NewK8sControlledSwitchStore(pool)
+	authStore := db.NewK8sAuthorizationStore(pool)
+	// The gate is checked before a Controlled run starts and again just before its first write.
+	controlledGate := k8sscenario.NewControlledGate(switchStore.Enabled, authStore.List, time.Now)
 	engine := k8sscenario.NewEngine(k8sscenario.Config{
 		AllowedClusters:   clusters,
 		AllowedNamespaces: []string{namespace},
@@ -66,6 +70,8 @@ func buildK8sScenarioService(pool *pgxpool.Pool) *api.K8sScenarioService {
 		Audit:             db.NewK8sScenarioAudit(pool),
 		Alert:             logAlerter{},
 		Approvals:         db.NewK8sApprovalStore(pool),
+		ControlledGate:    controlledGate,
+		MaxRunDuration:    k8sscenario.DefaultMaxRun,
 		// The route already requires the approve permission, so any non-empty approver id reaching the engine
 		// has been authorised. The engine still refuses self-approval.
 		ApproverPermitted: func(id string) bool { return id != "" },
@@ -73,12 +79,13 @@ func buildK8sScenarioService(pool *pgxpool.Pool) *api.K8sScenarioService {
 	})
 	log.Printf("[k8s-scenario] enabled for registered lab cluster %q (%s), namespace %q", rec.DisplayName, rec.ID, namespace)
 	return &api.K8sScenarioService{
-		Engine:     engine,
-		Runs:       k8sRunAdapter{store: db.NewK8sRunStore(pool)},
-		Registry:   db.NewK8sClusterStore(pool),
-		Approvals:  db.NewK8sApprovalStore(pool),
-		Clusters:   clusters,
-		Namespaces: []string{namespace},
+		Engine:           engine,
+		Runs:             k8sRunAdapter{store: db.NewK8sRunStore(pool)},
+		Registry:         db.NewK8sClusterStore(pool),
+		Approvals:        db.NewK8sApprovalStore(pool),
+		ControlledSwitch: switchStore,
+		Clusters:         clusters,
+		Namespaces:       []string{namespace},
 	}
 }
 

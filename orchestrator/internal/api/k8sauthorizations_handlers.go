@@ -221,7 +221,19 @@ func authorizeControlled(w http.ResponseWriter, r *http.Request, svc *K8sScenari
 		jsonError(w, msg, status)
 		return k8sscenario.CustomerAuthorization{}, true
 	}
-	if svc == nil || svc.Authorizations == nil {
+	// The global switch is checked at planning and again at execution. Off, or no switch configured, denies.
+	if svc == nil || svc.ControlledSwitch == nil {
+		return deny("no Controlled switch is configured; Controlled work is denied", http.StatusForbidden)
+	}
+	on, err := svc.ControlledSwitch.Enabled(r.Context())
+	if err != nil {
+		jsonError(w, "could not read the Controlled switch", http.StatusInternalServerError)
+		return k8sscenario.CustomerAuthorization{}, true
+	}
+	if !on {
+		return deny(k8sscenario.ErrControlledDisabled.Error(), http.StatusForbidden)
+	}
+	if svc.Authorizations == nil {
 		return deny("no customer authorization store is configured; Controlled work is denied", http.StatusForbidden)
 	}
 	records, err := svc.Authorizations.List(r.Context(), c.ID)
