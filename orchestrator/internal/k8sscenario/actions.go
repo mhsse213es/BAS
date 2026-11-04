@@ -27,6 +27,9 @@ type Action struct {
 	summary     func(snap any) string
 	// observation reports a conclusive read result, recorded separately from the state. Nil for actions that have none.
 	observation func(snap any) string
+	// snapshotFields describes the pre-run state for the audit event written before the first write of a Controlled
+	// action. It must not contain secret values.
+	snapshotFields func(snap any) map[string]string
 }
 
 var (
@@ -201,6 +204,10 @@ func configMapAction() *Action {
 		},
 		apply: func(ctx context.Context, c Client, req RunRequest, _ any) error {
 			return c.SetData(ctx, ref(req.Namespace, req.Params), map[string]string{key: req.Params["value"]})
+		},
+		snapshotFields: func(snap any) map[string]string {
+			s := snap.(cmSnap)
+			return map[string]string{"key": key, "priorPresent": fmt.Sprint(s.had), "priorValue": s.prior}
 		},
 		verify: func(ctx context.Context, c Client, req RunRequest, _ any) error {
 			o, _, err := c.Get(ctx, ref(req.Namespace, req.Params))

@@ -130,11 +130,15 @@ func TestAuthorizationState(t *testing.T) {
 	}
 }
 
-// Controlled execution must stay disabled: no action may be classified Controlled in this step.
-func TestActionProfile_NoActionIsControlledYet(t *testing.T) {
+// Only the labelled ConfigMap patch is Controlled. Every other action must stay lab-only until its own rollback is tested.
+func TestActionProfile_OnlyTheConfigMapPatchIsControlled(t *testing.T) {
 	for id := range Registry() {
-		if ActionProfile(id) != ProfileLab {
-			t.Errorf("action %s is classified %s; Controlled must stay disabled until its step", id, ActionProfile(id))
+		want := ProfileLab
+		if id == "configmap-patch-labelled" {
+			want = ProfileControlled
+		}
+		if ActionProfile(id) != want {
+			t.Errorf("action %s is classified %s, want %s", id, ActionProfile(id), want)
 		}
 	}
 }

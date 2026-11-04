@@ -52,6 +52,7 @@ const (
 	EventRequested = "k8s.scenario.requested"
 	EventRefused   = "k8s.scenario.refused"
 	EventOutcome   = "k8s.scenario.outcome"
+	EventSnapshot  = "k8s.scenario.snapshot"
 )
 
 // ObjectRef identifies a Kubernetes object.
@@ -237,6 +238,21 @@ func (e *Engine) execute(ctx context.Context, req RunRequest, a *Action, plan []
 			return ""
 		}
 		return a.observation(snap)
+	}
+
+	// A Controlled action records its pre-run state durably before the first write. If that record cannot be written,
+	// nothing is applied: a change without a recorded prior state could not be attributed or rolled back by hand.
+	if ActionProfile(req.ActionID) == ProfileControlled {
+		fields := runFields(req)
+		fields["approvalId"] = req.ApprovalID
+		if a.snapshotFields != nil {
+			for k, v := range a.snapshotFields(snap) {
+				fields[k] = v
+			}
+		}
+		if err := e.cfg.Audit.Write(ctx, Event{Type: EventSnapshot, RunID: req.RunID, Fields: fields}); err != nil {
+			return Result{State: StateRefused, Plan: plan, Error: "snapshot could not be recorded; nothing was applied"}
+		}
 	}
 
 	applyErr := a.apply(ctx, e.cfg.Client, req, snap)

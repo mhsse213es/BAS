@@ -51,7 +51,8 @@ func TestCreateK8sRun_ProductionEntryIsRefusedForLabExecution(t *testing.T) {
 	if code != http.StatusForbidden {
 		t.Errorf("a production-class cluster must be refused for lab execution: %d", code)
 	}
-	if len(audit.events) != 1 || audit.events[0].Fields["profile"] != "lab" {
+	// configmap-patch-labelled is Controlled, so the refusal names that profile.
+	if len(audit.events) != 1 || audit.events[0].Fields["profile"] != "controlled" {
 		t.Errorf("the refusal must be audited: %+v", audit.events)
 	}
 }
