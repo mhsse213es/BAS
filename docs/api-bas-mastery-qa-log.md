@@ -3289,3 +3289,90 @@ Implements the approved design above.
 - `identity` deliberately keeps the unverified certificate's common name. Clearing it would stop REL-013 firing on AUTHN-007, which is why the basis carries the meaning instead.
 - The precedence change affects only `verified_identity`, and only when a malformed header is sent alongside a verified certificate. In that case `identity` is `unknown`, so REL-013 cannot fire on it either way.
 - Stated gap: the orchestrator's own authentication path (`internal/api`) is not covered by this change, as the design said.
+
+## Design: plaintext credential columns (D4), inventory and bounded remediation
+
+Status: **proposed, inventory complete. No code changes until approved.** Scope is the orchestrator's own Postgres. The agent's proxy and database credentials are already held on the agent (see Precedents) and are not in scope.
+
+### Inventory: credential values stored as plaintext text in the orchestrator database
+
+| Table (`internal/db/postgres.go`) | Columns | Consumers (non-test) | API response |
+|---|---|---|---|
+| `siem_configs` | `token`, `password`, `client_secret` | `api/siem_handlers.go`, SIEM correlation | list omits them; update preserves `***` |
+| `detection_connectors` | `client_secret`, `api_token` | `api/detectverify_handlers.go`, `detectverify/elastic.go` | response carries `hasClientSecret` and `hasApiToken` |
+| `action_connectors` | `client_secret`, `api_token` | `api/action_handlers.go`, response connector clients | **to verify**: the GET path was not confirmed |
+| `threat_intel_config` | `api_key` | `api/threat_intel_config_handlers.go`, `connector/otx.go`, `ioc/otx.go` | **to verify**: request body confirmed, GET not confirmed |
+| `openaev_config` | `bearer_token` | `api/openaev_handlers.go` | **to verify**: request body confirmed, GET not confirmed |
+| `taxii_connector_config` | `password`, `client_cert`, `client_key` | `taxii/store.go`, `api/taxii_handlers.go` | returns `hasPassword`, `hasClientCert`, `hasClientKey` only |
+| `sso_configs` | `client_secret` | `api/sso_handlers.go`, `api/sso_login_handlers.go` | masked, never returned |
+| `notification_webhooks` | `secret` | `notifications/store.go`, `api/notification_handlers.go` | returns `***` when set |
+
+Not in scope, and already safe:
+- `users.password_hash`, `agent_enrollment_tokens.token_hash`, and agent certificates: stored as hashes.
+- `dlp_sink_tokens.token`: a bearer-style token stored as plaintext. It is run-scoped and expires, so it is lower risk. It is listed here as a separate decision, not included in the eight tables.
+- `dbsim_targets.credential_ref`: a reference, not a secret. This is the pattern this design follows.
+
+### Existing precedents
+
+- **Database credentials (dbsim).** Targets store only `dbcred:<name>` references. The agent resolves a reference locally: a `BAS_DBCRED_<NAME>` environment variable, otherwise a DPAPI-protected value (Windows) or a root-owned, mode-0600 file (Linux). An unresolvable reference is a refusal, never a fallback to a default account.
+- **Proxy credentials.** Held agent-side with DPAPI on Windows, per the same note in `agent/dbcred.go`.
+
+So the platform already has a reference-based design and an agent-local protected store. None of those secrets sits in the orchestrator database.
+
+### Current behaviour
+
+- Every value in the table above is a plaintext `text` column. The only protection is the disk-level encryption the schema comment assumes (TDE or LUKS).
+- `pgcrypto` is created at startup and never used for these columns.
+- The API already avoids returning most values, using `has*` booleans or `***`. That protects responses. It does not protect the database, its dumps, or its backups.
+- Backups (`backup_jobs`, and the upgrade backup) contain the same plaintext, so every archive taken so far holds the values.
+
+### Proposed change: references in the database, values in a secret store
+
+1. **Secret store interface.** The orchestrator gets a `SecretStore` with `Put(ref, value)`, `Get(ref)` and `Delete(ref)`. The backend is the one chosen under D1 (Vault, or another approved manager). It follows the `dbcred:` pattern: a reference is an opaque name, and the value never enters a row, an event, a log or a response.
+2. **Per-table reference column.** Each affected table gets `<column>_ref text`. New writes store the value in the store and the reference in the row. Reads resolve the reference only at the point of use: SIEM correlation, connector call, webhook send, TAXII poll, SSO login.
+3. **Migration in three phases, one connector at a time.**
+   - Phase 1: add the reference columns and dual-read (prefer the reference, fall back to the plaintext column).
+   - Phase 2: a one-time job moves each plaintext value into the store, writes its reference, and clears the plaintext column.
+   - Phase 3, a later release: drop the plaintext columns. This waits until the backup and restore plan below is proven.
+4. **Scope bounded to these eight tables.** No change to the users, enrollment or certificate tables, and no change to the agent.
+5. **Preserve the API contract.** `***` still means "keep the stored value" on update, and the `has*` booleans keep their meaning. The UI sees no change.
+
+### Alternative if D1 approves no external store
+
+Keep the values in Postgres, but encrypt them at the column with `pgcrypto` (`pgp_sym_encrypt`), with the key in a root-only file outside the database and outside its dumps, loaded at startup. This is weaker than a secret store: the key sits on the same host, so an attacker with the orchestrator process can read it. It is an acceptable interim only if the residual risk is stated in the QA log.
+
+### Security implications
+
+- Plaintext in backups is the largest exposure today. After migration, a new backup holds references only. Old archives keep their plaintext until they are deleted or re-taken, so the values in them must be treated as exposed (see D5).
+- Resolution happens at use, inside the call that needs the value. A value must never be logged, put in an access event, or returned. Tests check each of these.
+- The secret store becomes a critical dependency. Its availability and its access audit become part of the platform's security surface.
+
+### Migration and compatibility impact
+
+- **Schema:** additive first (`*_ref` columns), then the plaintext columns are dropped in a later migration. Each phase is a separate migration with a tested rollback to the previous phase.
+- **Backup and restore:** the secret store must be backed up and restored with the database. A restored database holding references, without the store's contents, cannot reach its connectors. The restore procedure must say so, and the upgrade path (`install.sh --upgrade`) must carry the store's contents, in the same way it carries the CA key.
+- **Existing installs:** the migration job runs once and is idempotent. A value that cannot be moved is reported, never silently dropped.
+- **Connectors:** a connector whose reference cannot be resolved is refused with a clear error, never silently skipped. Dual-read means a row created before the migration keeps working until the job moves it.
+
+### Tests
+
+1. Round trip per table: a written value is resolved for the connector call, and the row holds only the reference.
+2. No plaintext after migration: a sentinel value written before migration must be absent from every credential column afterwards.
+3. No secret in output: the sentinel must not appear in any API response, access event, log line or error message.
+4. The `***` update path keeps the stored value, and the `has*` booleans are unchanged.
+5. Idempotent migration: running the job twice changes nothing the second time.
+6. Refusal on an unresolvable reference, with no fallback to a default value.
+7. Backup and restore: a restored database resolves its references from the restored store, and a restore without the store fails loudly.
+
+### Decisions needed
+
+- **D1:** the secret store (Vault or another approved manager), or the `pgcrypto` interim.
+- **D4 scope:** approve the eight tables and the three phases. Decide separately on `dlp_sink_tokens`.
+- **D5, linked:** rotation of every credential that was stored in plaintext, since old backups hold it. Rotation was declined earlier (P0). The exposure analysis here is the reason to revisit it.
+- **Backup and restore owner:** who owns the store's backup, and who runs the restore test.
+
+### Unverified items
+
+- The GET responses of `action_connectors`, `threat_intel_config` and `openaev_config`. The request side is confirmed. The response side must be read before the migration starts, because a leak there would be a separate defect.
+
+No code will be written until this design is approved.
