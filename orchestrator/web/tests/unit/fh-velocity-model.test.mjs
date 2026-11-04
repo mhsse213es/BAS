@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { velocityModel, fmtDuration, STAGE_ORDER } from '../../src/features/fh-velocity-model.js';
+import { velocityModel, fmtDuration, STAGE_ORDER, sinceForWindow } from '../../src/features/fh-velocity-model.js';
 
 // One SLAReport per stage, as GET /api/intel/factory/sla?stage=<s> returns it.
 // Percentiles are per (source, content_type) validated segment; queue/generation
@@ -126,6 +126,16 @@ test('velocityModel: healthy but no coverage -> available true, hasData false', 
   assert.equal(m.available, true);
   assert.equal(m.hasData, false);
   assert.equal(m.summary.openN, 2);
+});
+
+test('sinceForWindow: day keys -> RFC3339 bound; all/unknown -> null (no bound)', () => {
+  const now = Date.parse('2026-11-04T00:00:00.000Z');
+  assert.equal(sinceForWindow('7', now), '2026-10-28T00:00:00Z');
+  assert.equal(sinceForWindow('30', now), '2026-10-05T00:00:00Z');
+  assert.equal(sinceForWindow('90', now), '2026-08-06T00:00:00Z');
+  assert.equal(sinceForWindow('all', now), null);
+  assert.equal(sinceForWindow('', now), null);
+  assert.equal(sinceForWindow('bogus', now), null);
 });
 
 test('fmtDuration: seconds, minutes, hours, days, and null', () => {

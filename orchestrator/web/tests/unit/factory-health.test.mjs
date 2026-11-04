@@ -5,7 +5,7 @@ import { displayOf } from '../../src/core/inline-style.js';
 import { velocityModel } from '../../src/features/fh-velocity-model.js';
 
 setupDom();
-const { metricTile, renderSparkline, renderFactoryHealthIngestion, activateTab, renderFactoryVelocity } = await load(['metricTile', 'renderSparkline', 'renderFactoryHealthIngestion', 'activateTab', 'renderFactoryVelocity']);
+const { metricTile, renderSparkline, renderFactoryHealthIngestion, activateTab, renderFactoryVelocity, setVelocityWindow } = await load(['metricTile', 'renderSparkline', 'renderFactoryHealthIngestion', 'activateTab', 'renderFactoryVelocity', 'setVelocityWindow']);
 
 test('activateTab makes the factory-health panel visible when its tab is active, hidden otherwise', () => {
   // Restore the full dashboard markup: earlier tests overwrite document.body.
@@ -85,6 +85,15 @@ test('renderFactoryVelocity shows per-stage durations, cohort counts, and the bo
   assert.ok(html.includes('10m'), 'shows validation p50 (600s) as a duration');
   assert.ok(html.includes('4 validated') && html.includes('1 failed') && html.includes('2 open'), 'shows cohort counts');
   assert.ok(html.includes('Bottleneck'), 'names the bottleneck');
+});
+
+test('renderFactoryVelocity renders the time-window selector with 30d active by default', () => {
+  document.body.innerHTML = '<div id="factory-health-velocity"></div>';
+  renderFactoryVelocity(velocityModel({ end_to_end: { stage: 'end_to_end', segments: [], open_count: 0, bottleneck: '', incomplete_window: false } }));
+  const html = document.getElementById('factory-health-velocity').innerHTML;
+  assert.ok(html.includes('7d') && html.includes('30d') && html.includes('90d') && html.includes('All'), 'shows all window options');
+  assert.ok(html.includes('setVelocityWindow'), 'window buttons are wired to setVelocityWindow');
+  assert.equal((html.match(/btn-outline/g) || []).length, 1, 'exactly one window option is active (the default)');
 });
 
 test('renderFactoryVelocity shows an unavailable state (not a false empty) when every stage call failed', () => {
