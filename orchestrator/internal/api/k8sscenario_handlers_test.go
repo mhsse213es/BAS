@@ -164,6 +164,10 @@ func newScenarioHarness(t *testing.T) *scenarioHarness {
 		Approvals:  approvals,
 		Clusters:   map[string]string{"kind-bas-lab": "https://lab.example:6443"},
 		Namespaces: []string{"bas-sandbox"},
+		// Runs name a cluster by registry ID; the lab cluster is registered here as class lab.
+		Registry: &fakeClusterRegistry{clusters: []k8sscenario.ClusterRecord{
+			{ID: "k8sc-lab", DisplayName: "kind-bas-lab", ServerURL: "https://lab.example:6443", Class: k8sscenario.ClassLab},
+		}},
 	}}
 	r := chi.NewRouter()
 	r.Post("/api/k8s-scenarios/runs", h.CreateK8sRun)
@@ -190,7 +194,7 @@ func (sh *scenarioHarness) do(t *testing.T, method, path, user string, role auth
 	return rec
 }
 
-var labPodBody = map[string]any{"cluster": "kind-bas-lab", "namespace": "bas-sandbox", "action": "pod-create-unprivileged",
+var labPodBody = map[string]any{"clusterId": "k8sc-lab", "namespace": "bas-sandbox", "action": "pod-create-unprivileged",
 	"params": map[string]string{"name": "bas-sbx-api-probe"}}
 
 func planRun(t *testing.T, sh *scenarioHarness, user string) K8sRun {
@@ -219,7 +223,7 @@ func TestK8sRun_PlanningWritesNothing(t *testing.T) {
 
 func TestK8sRun_UnconfiguredTargetIsRefused(t *testing.T) {
 	sh := newScenarioHarness(t)
-	body := map[string]any{"cluster": "production", "namespace": "bas-sandbox", "action": "pod-create-unprivileged",
+	body := map[string]any{"clusterId": "k8sc-missing", "namespace": "bas-sandbox", "action": "pod-create-unprivileged",
 		"params": map[string]string{"name": "bas-sbx-x"}}
 	rec := sh.do(t, http.MethodPost, "/api/k8s-scenarios/runs", "requester-1", auth.RoleAnalyst, body)
 	if rec.Code != http.StatusBadRequest || len(sh.runs.m) != 0 {
