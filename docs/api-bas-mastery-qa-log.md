@@ -3481,3 +3481,31 @@ Decisions approved by the product owner:
 - The backup exclusion is true by construction (the key is outside DATA_DIR). It is not yet covered by a test that runs `install.sh --backup` and inspects the archive.
 - Not run on a real installed host. Real `install.sh --install` needs Docker and images; not run here.
 - Recovery copy off-host and its passphrase custody are owned by the Admin role; not verified by this phase.
+
+## D4 phase 1b: dual-read design and core (4 November 2026)
+
+### Design (approved: fail closed)
+- **Current behaviour:** connectors read plaintext columns (`siem_configs.token`, `openaev_config.bearer_token`, and the other twelve). Reference columns are empty, so nothing reads them.
+- **Proposed read path:** every credential read goes through `secretstore.Resolve(ctx, store, ref, plaintext)`.
+  - `ref` empty: return plaintext. This is every row until phase 2 migrates it, so runtime behaviour is unchanged.
+  - `ref` set: return the stored value. A missing store returns `ErrUnavailable`. A missing or undecryptable value returns its error. **The plaintext column is never used once a reference exists.** A stale plaintext after rotation would otherwise be used silently.
+- **Writes:** unchanged in phase 1 and 2 (plaintext continues). Phase 2 writes the reference and verifies it resolves.
+- **Key wiring:** startup validates the key with `LoadKeyFile(DefaultKeyPath)` and logs verified or warns. A missing or invalid key does not stop the server, because plaintext rows still work; references then fail their own operation.
+- **Container access:** `/etc/audspect/secrets` is mounted read-only into the orchestrator (`docker-compose.yml`). The key is readable by GID 65532, the container's own group.
+
+### Changes
+- `orchestrator/internal/secretstore/resolve.go`: `Resolve`, `ErrUnavailable`.
+- `orchestrator/internal/secretstore/resolve_test.go`: plaintext when empty; store value (not the plaintext) when set; fail closed with no store; fail closed on a missing value; malformed reference refused.
+- `orchestrator/cmd/server/main.go`: key check at boot after the secret store schema.
+- `packaging/compose/docker-compose.yml`: read-only secrets mount.
+
+### Tests and results
+- `go test ./internal/secretstore/` (full package, Postgres test container): pass, 111 s. Includes the resolver tests and the existing round-trip, wrong-key and reference tests.
+- `go build ./cmd/server`: pass. `GOOS=windows go build` for `cmd/server`, `cmd/apibas-lab` and `cmd/apibas-runner`: pass. `go vet ./internal/secretstore/`: clean.
+- The compose mount is not exercised by a test. It must be checked on an installed Linux host.
+
+### Not done (stated)
+- **No consumer calls `Resolve` yet.** The fourteen read sites are unchanged. In phase 1, every reference is empty, so wiring the consumers changes nothing at runtime. Consumer wiring is the next step. It needs a store handle passed to each consumer, which the server does not hold yet.
+- **The key is validated but not used** by any read. Nothing is encrypted with it until phase 2 writes references.
+- **Phase 2 migration job** (move values, write references, verify resolution) is not started.
+- Phase 3 (drop plaintext columns) and D5 rotation are not started.

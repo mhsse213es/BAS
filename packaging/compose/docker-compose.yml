@@ -304,6 +304,8 @@ services:
       # identical bind-mount treatment: a host path the orchestrator
       # container (UID 65532) generates/persists into directly.
       - ./signing:/etc/audspect/signing
+      # Interim database encryption key (installer-provisioned, root:65532 0640). Read-only; outside DATA_DIR by design.
+      - /etc/audspect/secrets:/etc/audspect/secrets:ro
       # Operator-supplied TLS certificate for the browser dashboard
       # (BAS_TLS=true in setup.conf) -- install.sh already copies TLS_CERT/
       # TLS_KEY here (${DATA_DIR}/certs/bas.crt|bas.key); read-only, the

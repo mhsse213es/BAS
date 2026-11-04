@@ -27,6 +27,7 @@ import (
 	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/secretstore"
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/dnssink"
 	"github.com/audspect/bas/internal/emailgwefficacy"
@@ -340,6 +341,13 @@ func main() {
 	}
 	if err := db.EnsureSecretStoreSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] secret store schema: %v", err)
+	}
+	// Validate the interim encryption key at boot. A missing or invalid key does not stop the server: plaintext credentials
+	// still work, and any credential reference that cannot be resolved fails its own operation (secretstore.Resolve).
+	if _, err := secretstore.LoadKeyFile(secretstore.DefaultKeyPath); err != nil {
+		log.Printf("[secretstore] WARNING: encryption key not usable: %v; credential references cannot be resolved", err)
+	} else {
+		log.Printf("[secretstore] encryption key verified")
 	}
 	if err := aleefstore.EnsureSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] aleef schema: %v", err)
