@@ -56,8 +56,7 @@ func (h *Handler) RunK8sSafeCheck(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "cluster not found", http.StatusNotFound)
 		return
 	}
-	if !profileAllowed(c.Class, "safe") {
-		jsonError(w, "this cluster's class does not allow the safe profile", http.StatusForbidden)
+	if refuseProfile(w, r, svc, c, "safe", check.ID) {
 		return
 	}
 	if svc.Credentials == nil {

@@ -49,9 +49,10 @@ type K8sScenarioService struct {
 	Engine      *k8sscenario.Engine
 	Runs        K8sRunStore
 	Approvals   K8sApprovals
-	Clusters    map[string]string // cluster name -> API server URL
-	Registry    K8sClusterRegistry // registered clusters (Phase 2)
+	Clusters    map[string]string     // cluster name -> API server URL
+	Registry    K8sClusterRegistry    // registered clusters (Phase 2)
 	Credentials K8sClusterCredentials // per-cluster read-only credential source (Phase 2)
+	Audit       k8sscenario.Audit     // records refused execution profiles (Phase 4)
 	Namespaces  []string
 	ApprovalTTL time.Duration
 	Now         func() time.Time
@@ -130,6 +131,9 @@ func (h *Handler) CreateK8sRun(w http.ResponseWriter, r *http.Request) {
 		c, found, err := svc.Registry.Get(r.Context(), body.ClusterID)
 		if err != nil || !found {
 			jsonError(w, "cluster not found", http.StatusBadRequest)
+			return
+		}
+		if refuseProfile(w, r, svc, c, "lab", "run:"+body.Action) {
 			return
 		}
 		body.Cluster = c.DisplayName

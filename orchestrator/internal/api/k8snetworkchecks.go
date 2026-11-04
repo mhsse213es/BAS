@@ -78,8 +78,7 @@ func (h *Handler) RunK8sNetworkCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Refused before any credential is read or any request is made: a non-lab cluster never sees a probe pod.
-	if !profileAllowed(c.Class, "lab") {
-		jsonError(w, "network checks that create probe pods run only on lab-class clusters", http.StatusForbidden)
+	if refuseProfile(w, r, svc, c, "lab", checkID) {
 		return
 	}
 	if svc.Credentials == nil {

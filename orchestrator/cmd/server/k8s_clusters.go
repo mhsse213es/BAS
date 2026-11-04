@@ -24,6 +24,7 @@ func buildK8sClusterService(pool *pgxpool.Pool) *api.K8sScenarioService {
 		svc = &api.K8sScenarioService{}
 	}
 	svc.Registry = db.NewK8sClusterStore(pool)
+	svc.Audit = db.NewK8sScenarioAudit(pool)
 	svc.Credentials = clusterCredentialsFromDir(strings.TrimSpace(os.Getenv("KUBE_CLUSTER_CREDENTIALS_DIR")))
 	return svc
 }
