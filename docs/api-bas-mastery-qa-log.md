@@ -3376,3 +3376,39 @@ Keep the values in Postgres, but encrypt them at the column with `pgcrypto` (`pg
 - The GET responses of `action_connectors`, `threat_intel_config` and `openaev_config`. The request side is confirmed. The response side must be read before the migration starts, because a leak there would be a separate defect.
 
 No code will be written until this design is approved.
+
+## D4 decisions and pre-implementation checks (4 November 2026)
+
+Decisions approved by the product owner:
+- **D1, secret store:** prefer an approved external manager if it can be operated on on-prem and air-gapped installs. Otherwise the `pgcrypto` interim, with the conditions below. Do not build two interchangeable store implementations.
+- **D4, scope:** the eight inventoried tables, three-phase migration (add reference columns with dual-read; migrate values and verify resolution; drop plaintext columns in a later release after compatibility and rollback criteria pass). `***` update behaviour and the API contract are unchanged. `dlp_sink_tokens` is a separate decision.
+- **D5, rotation:** treat credentials in historical plaintext backups as potentially exposed. Rotate all affected credentials after migration, in this order: (1) SSO client secret and webhook signing secret; (2) SIEM, detection/response and threat-intelligence credentials; (3) OpenAEV and TAXII credentials, including client certificate and key material. Each rotation verifies the new credential works and the old one is revoked or invalidated. Historical backups are not deleted as a substitute.
+- **D4 backup and restore:** a named operational owner is required before production rollout (see Open items).
+
+### Interim conditions if `pgcrypto` is used
+
+- The key is stored outside PostgreSQL, in a root-only file.
+- The key is never stored in the database, in database dumps, or in backup archives.
+- Strict file permissions, and a documented recovery procedure.
+- Residual risk, stated explicitly: compromise of the host and the key can expose every encrypted credential.
+
+### Pre-implementation checks
+
+1. **External secret manager availability: not confirmed.** The repository has no client for Vault, AWS Secrets Manager or any other external manager. The secret rotation runbook lists Vault as a future option ("move all runtime secrets to env vars / a secrets manager"). The air-gap capability list does not name one. Whether an external manager can be operated on the target on-prem and air-gapped installs is a fact about the customer environment. It must be confirmed by the product owner before the store is chosen.
+2. **Unverified GET responses: verified, none exposes a credential.**
+   - `GET /api/threat-intel/{connector}/config`: selects `base_url, enabled, insecure_tls, last_sync_status, last_error`. `api_key` is not returned.
+   - `GET /api/openaev/config`: selects `base_url, poll_interval_hours, enabled, last_sync_status, last_error` and timestamps. `bearer_token` is not returned.
+   - `GET /api/actions/configs` (the only read route for action connectors): selects `id, name, provider, enabled, tenant_id, base_url, kill_process_script_name` and timestamps. `client_secret` and `api_token` are not returned. The update handler returns a status only.
+   No separate API defect is raised from these three.
+3. **Backup and restore owner: not named.** This must be named before production rollout.
+
+### New finding: the automatic upgrade backup captures the interim key's likely location
+
+- `install.sh --upgrade` takes an automatic backup that includes `<DATA_DIR>/.env` and `<DATA_DIR>/pki/` (`packaging/compose/install.sh`, around line 1408; `docs/guides/backup-restore.md`).
+- If the `pgcrypto` interim is chosen, the key must not sit under `<DATA_DIR>` or in any file the upgrade backup copies. Otherwise every upgrade archive would hold the key next to the encrypted credentials, which breaks condition 2 above.
+- Options for the owner to decide: store the key outside `<DATA_DIR>` (for example, a separate root-only path that the installer creates and excludes from backups, with its own documented recovery copy), or make the upgrade backup exclude the key file explicitly and test that exclusion.
+
+### Status
+
+- Implementation is **not started**. It waits on pre-implementation items 1 and 3, and on the decision about where the interim key lives if the interim is chosen.
+- Nothing in the database or the code has changed by this decision.
