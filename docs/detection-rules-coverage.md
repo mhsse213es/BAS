@@ -295,6 +295,8 @@ mapping applies, claims no schema and has verification `none`.
 - **Defender XDR and CrowdStrike** stay `generic`: `search` is not in the documentation page that lists Sentinel, and
   CrowdStrike wraps the phrase in quotes inside a regex.
 
+**Generic Sentinel and Defender queries.** The Kusto backend emits a generic rule as a bare predicate (`Field =~ "x" and ...`), which is a `where` clause body, not a query. All 1,304 are now wrapped as a template: a comment, a `<Table>` placeholder and `| where <predicate>`. They are still generic (the column names are Sigma's) and cannot run until the analyst names the table and adapts the columns, but they can no longer be mistaken for a query that is ready to paste. Mapped and keyword queries are never wrapped.
+
 The 75 rules with neither a field mapping nor a keyword label are left generic on purpose:
 
 - **No schema verified** (about 44): GitHub audit (8), Fortigate (4), M365 audit and threat management (7), RPC Firewall

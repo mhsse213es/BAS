@@ -920,6 +920,17 @@ _KQL_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"')
 _KQL_BOOLEAN = re.compile(r"\b(?:and|or|not)\b|[()\s]")
 
 
+KUSTO_BACKENDS = ("microsoft_sentinel", "microsoft_defender")
+
+
+def kql_template(predicate: str) -> str:
+    """The Kusto backend emits a generic rule as a bare predicate, which is a where-clause body, not a query. Wrap it as a
+    template with an explicit <Table> placeholder and a comment: it is still generic (the column names are Sigma's), but it
+    can no longer be mistaken for a query that is ready to paste."""
+    return ("// Generic translation with Sigma's own column names. Replace <Table> with the table that holds this log,\n"
+            "// and adapt the column names, before use.\n<Table>\n| where " + predicate)
+
+
 def kql_search(query: str):
     """Rewrites the Kusto backend's keyword expression as `search ...`, or returns None when the text is anything but
     string literals, and/or/not and parentheses. Each literal gets wildcards on both sides: a bare `search "x"` is a
@@ -1009,6 +1020,8 @@ def translate_rule(rule) -> tuple[list[dict], list[dict]]:
                 keyword = rewritten is not None
                 if keyword:
                     queries = [rewritten]
+            if mapping is None and not keyword and backend_key in KUSTO_BACKENDS:
+                queries = [kql_template(queries[0])]
             translations.append({
                 "backend": backend_key,
                 "language": spec.language,
