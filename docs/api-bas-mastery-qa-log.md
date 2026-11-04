@@ -3080,7 +3080,7 @@ Decided by the product owner. Implementation follows these.
 
 ## Design: field-level disclosure evidence for NBFC-007 (DATA-102)
 
-Status: **proposed. No code changes until approved.**
+Status: **approved 4 November 2026 with the conditions below. Implementation follows.**
 
 ### Current behaviour
 
@@ -3140,3 +3140,23 @@ The DATA-102 assertion changes from `not_evaluated` to `fixture_validated` with 
 - Confirm that a policy-based rule (class on a non-owning resource) is acceptable alongside the existing owner-based rules.
 
 No code will be written until this design is approved.
+
+### Approval conditions (4 November 2026)
+
+1. **Values.** The event records field names and disclosure classes only. No actual values, no partial PAN or Aadhaar, no reversible representation.
+2. **Emitted, not intended.** REL-020 evaluates the response as it is written. The handler records a field only when the field is present in the body that is serialised. Classes are found by walking the final body, recursively, so a nested `kyc` object is covered and a field that was built but not emitted is not recorded.
+3. **Explicit allowlist.** Every class has an explicit list of resources where it may appear. A class on any other resource is a REL-020 event. Nothing is allowed by default.
+
+   | Class | Allowed resource (path) |
+   |---|---|
+   | `kyc_identity` | `/api/nbfc/kyc/`, `/api/nbfc/admin/kyc/` |
+   | `payment_credential` | `/statement` (the owner's statement) |
+   | `account_identifier` | the loan resource: `/api/nbfc/loans/{id}` and `/api/nbfc/admin/loans/{id}` is **not** allowed |
+
+   Resource is derived from the action path, using the same path rules the lab uses.
+4. **Negative test.** Legitimate KYC-resource disclosure (the owner reads their own KYC record through `/api/nbfc/kyc/`) must not trigger REL-020. It is part of the test set below.
+5. **Ownership rules unchanged.** REL-004, REL-007, REL-008 and the other existing rules keep their logic. Exploitability and detection are reported separately in the results.
+
+### Consequence to check before merging
+
+`account_identifier` on the admin loan route is not allowed. The vulnerable admin route returns `disbursement_account` to a borrower (AUTHZ-106 vulnerable), so REL-020 will also fire there. That is a true policy violation, but it is an extra detection on a scenario whose declared expectation is REL-019, REL-007 and REL-004. The detection table must state this explicitly, not hide it.
