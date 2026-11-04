@@ -3541,3 +3541,34 @@ Decisions approved by the product owner:
 - Writes still go to plaintext only. No reference is written yet, so the resolver path is exercised only by tests until phase 2 migration runs.
 - Remaining consumers listed above.
 - Phase 2 migration job, phase 3 column drop, D5 rotation: not started.
+
+## API BAS assessment step 2: runner process contract, no database access (4 November 2026)
+
+### Scope (approved order, step 2 of 6)
+- Approved design: `docs/api-bas-assessment-design.md` (status APPROVED; acceptance requirements in section 5).
+- This step covers the runner side only. The orchestrator job path (step 3) is not built yet.
+
+### What changed
+- `orchestrator/internal/apibas/runnerproto/runnerproto.go` (new): the contract. `JobRequest` (job ID, target, fixture, scenario IDs, allowed hosts, credentials file path) and `JobResult` (status, reports, reason). `DecodeJobRequest` refuses unknown fields and invalid values. `ValidateResult` is the orchestrator's gate: schema version, job ID, target, scenario set and report count, and each report's scenario ID and run tag. A failed result must carry a reason and no reports. A completed result must carry no reason. `LoadCredentials` refuses a file readable by group or others (Unix), and never echoes file content in errors.
+- `orchestrator/cmd/apibas-runner/main.go`: new `-job-request <file>` mode. It reads one request, runs the scenarios, and writes one `JobResult` to stdout. Exit status 0 only for a completed result. Every failure path writes `status: failed` with a short reason and no reports. The `persistRun` function, the `APIBAS_DB_DSN` environment variable, the `-build` flag and the database import are removed. The CLI no longer writes to PostgreSQL.
+
+### Acceptance requirements (section 5) status after this step
+1. No runner database access: DONE. The runner has no database import and reads no DSN.
+2. Job idempotency: NOT STARTED. Belongs to step 3 (job key and dispatch).
+3. Approval binding: NOT STARTED. Step 4.
+4. Result validation: PARTIAL. Schema, job ID, target, scenario set, report count, scenario ID and run tag are checked. Evidence-reference validation is NOT done: the runner's report carries no evidence references yet. Stated gap; must be added before step 3 persists anything.
+5. Auditability: NOT STARTED. Steps 3 and 4.
+6. Isolation: PARTIAL. Credentials arrive by file, not argument, and the file is read by the owner only. The environment allow-list for the child process is enforced by the orchestrator, so it belongs to step 3.
+7. Failure semantics: DONE at the contract level. A crash, malformed output or partial run cannot be validated as completed.
+8. Production rejection: NOT STARTED. Step 3 and 4 (execution service).
+
+### Tests and results
+- `go test ./internal/apibas/runnerproto/`: 6 tests pass. Valid and invalid requests; unknown fields refused; result false-success cases refused (job mismatch, target mismatch, wrong scenario, missing reports, missing run tag, failed with reports, failed with no reason, completed with an error, unknown status); truncated and unknown-field result refused; credentials file format and permission checks.
+- Smoke test of the runner job mode against an unreachable target (`http://127.0.0.1:1`): the run executed and wrote a completed document whose verdict is `ERROR` / `TARGET_UNREACHABLE`; exit status 0. A missing credentials file produced `status: failed` with exit status 1 and no reports.
+- Interpretation recorded: job status `completed` means execution finished and every verdict is recorded. It does not mean the target passed. The grade is in each report's outcome.
+- Windows cross-compile: `cmd/apibas-runner`, `cmd/apibas-lab`, `cmd/server`: pass.
+- Full lab-backed end-to-end run of job mode: NOT run here (needs a running lab with tokens). To run in step 5 on staging.
+
+### Not done (stated)
+- Steps 3 to 6 of the approved order.
+- No UI work has started. The approved order holds the UI until execution and persistence work end to end.
