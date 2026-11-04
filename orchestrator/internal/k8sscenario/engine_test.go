@@ -21,6 +21,9 @@ type fakeClient struct {
 	issued        []byte
 	issueErr      error
 	tokenIdentity string
+	// lifecycle hooks: onSetData runs at the start of each SetData; failSetData makes every SetData fail.
+	onSetData   func()
+	failSetData bool
 }
 
 func newFakeClient() *fakeClient {
@@ -55,6 +58,12 @@ func (f *fakeClient) Create(_ context.Context, o Object) error {
 }
 func (f *fakeClient) SetData(_ context.Context, r ObjectRef, data map[string]string) error {
 	f.writes = append(f.writes, "setdata "+key(r))
+	if f.onSetData != nil {
+		f.onSetData()
+	}
+	if f.failSetData {
+		return errors.New("set refused")
+	}
 	o, ok := f.objects[key(r)]
 	if !ok {
 		return errors.New("not found")
@@ -119,6 +128,8 @@ func testConfig(c *fakeClient, au Audit, al *recordAlert, store *memApprovals) C
 		Approvals:         store,
 		ApproverPermitted: func(id string) bool { return id == "operator-2" },
 		Now:               func() time.Time { return time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC) },
+		// Tests of Controlled work allow the gate unless a test overrides it. Lab work never calls the gate.
+		ControlledGate: func(context.Context, RunRequest) error { return nil },
 	}
 }
 

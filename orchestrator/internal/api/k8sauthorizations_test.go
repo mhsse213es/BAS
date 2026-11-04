@@ -113,7 +113,8 @@ func authHandler(t *testing.T) (*Handler, *fakeAuthStore, *recordingAudit) {
 		{ID: "k8sc-prod", DisplayName: "prod-east", ServerURL: "https://prod.example:6443", Class: k8sscenario.ClassProduction},
 	}}
 	svc := &K8sScenarioService{Registry: reg, Authorizations: store, Audit: audit,
-		Now: func() time.Time { return authTestNow }}
+		ControlledSwitch: &fakeSwitch{on: true},
+		Now:              func() time.Time { return authTestNow }}
 	return &Handler{k8sScenario: svc}, store, audit
 }
 
@@ -317,6 +318,47 @@ func TestEnforceCustomerAuthorization_AllowsTheExactMatch(t *testing.T) {
 	if enforceCustomerAuthorization(rec, httptest.NewRequest(http.MethodPost, "/x", nil), h.k8sScenario, stage,
 		"controlled", "configmap-patch-labelled", "bas-sandbox") {
 		t.Errorf("the exact active match must be allowed: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// fakeSwitch is the Controlled kill switch for tests. Set records the change.
+type fakeSwitch struct {
+	on  bool
+	err error
+}
+
+func (f *fakeSwitch) Enabled(context.Context) (bool, error) { return f.on, f.err }
+func (f *fakeSwitch) Set(_ context.Context, enabled bool, _ string, _ time.Time, _ k8sscenario.Event) error {
+	f.on = enabled
+	return nil
+}
+
+// With the switch off, an otherwise exact authorization is denied, and the denial says why.
+func TestEnforceCustomerAuthorization_SwitchOffDenies(t *testing.T) {
+	h, _, _ := authHandler(t)
+	postAuth(t, h, validAuthBody)
+	h.k8sScenario.ControlledSwitch = &fakeSwitch{on: false}
+	stage := k8sscenario.ClusterRecord{ID: "k8sc-stage", DisplayName: "stage", Class: k8sscenario.ClassNonProduction}
+	rec := httptest.NewRecorder()
+	if !enforceCustomerAuthorization(rec, httptest.NewRequest(http.MethodPost, "/x", nil), h.k8sScenario, stage,
+		"controlled", "configmap-patch-labelled", "bas-sandbox") {
+		t.Fatal("with the switch off, Controlled work must be denied")
+	}
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "disabled") {
+		t.Fatalf("denial = %d %s, want 403 naming the disabled switch", rec.Code, rec.Body.String())
+	}
+}
+
+// With no switch configured, Controlled work is denied (fail closed).
+func TestEnforceCustomerAuthorization_NoSwitchDeniesFailClosed(t *testing.T) {
+	h, _, _ := authHandler(t)
+	postAuth(t, h, validAuthBody)
+	h.k8sScenario.ControlledSwitch = nil
+	stage := k8sscenario.ClusterRecord{ID: "k8sc-stage", DisplayName: "stage", Class: k8sscenario.ClassNonProduction}
+	rec := httptest.NewRecorder()
+	if !enforceCustomerAuthorization(rec, httptest.NewRequest(http.MethodPost, "/x", nil), h.k8sScenario, stage,
+		"controlled", "configmap-patch-labelled", "bas-sandbox") {
+		t.Fatal("with no switch configured, Controlled work must be denied")
 	}
 }
 

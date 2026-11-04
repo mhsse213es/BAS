@@ -75,7 +75,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	r.Post("/api/auth/login", h.Login)
 	r.Post("/api/auth/logout", h.Logout)
 	r.Post("/api/auth/recover", h.RecoverPassword) // forgotten administrator password: needs the setup.conf recovery passphrase
-	r.Post("/api/auth/setup", h.Setup) // first-run admin provisioning (installer)
+	r.Post("/api/auth/setup", h.Setup)             // first-run admin provisioning (installer)
 	r.Get("/login/{tenantSlug}/sso", h.InitiateSSOLogin)
 	r.Get("/api/auth/sso/callback", h.SSOCallback)
 	r.Get("/api/config/ca-root", h.GetCARoot)
@@ -690,6 +690,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Get("/api/k8s-scenarios/authorizations", h.ListK8sAuthorizations)
 		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Get("/api/k8s-scenarios/authorizations/{id}", h.GetK8sAuthorization)
 		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/authorizations/{id}/revoke", h.RevokeK8sAuthorization)
+		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Get("/api/k8s-scenarios/controlled-switch", h.GetK8sControlledSwitch)
+		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/controlled-switch", h.SetK8sControlledSwitch)
+		r.With(auth.RequirePermission(auth.CanExecuteK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/cancel", h.CancelK8sRun)
 		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/approve", h.ApproveK8sRun)
 		r.With(auth.RequirePermission(auth.CanExecuteK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/execute", h.ExecuteK8sRun)
 		// Read-only Kubernetes analysis: discovery and configured-permission checks. It writes nothing to the cluster.

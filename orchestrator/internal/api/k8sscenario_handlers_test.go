@@ -109,6 +109,9 @@ func (s *memApprovalStore) Put(a k8sscenario.Approval) error {
 	s.m[a.ID] = a
 	return nil
 }
+func (s *memApprovalStore) PutWithAudit(a k8sscenario.Approval, _ k8sscenario.Event) error {
+	return s.Put(a)
+}
 func (s *memApprovalStore) Get(id string) (k8sscenario.Approval, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

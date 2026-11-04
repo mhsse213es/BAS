@@ -46,22 +46,25 @@ type K8sRunStore interface {
 type K8sApprovals interface {
 	k8sscenario.ApprovalStore
 	Put(a k8sscenario.Approval) error
+	// PutWithAudit records the approval and its audit event in one transaction.
+	PutWithAudit(a k8sscenario.Approval, ev k8sscenario.Event) error
 }
 
 // K8sScenarioService wires the engine to the HTTP surface. Clusters and Namespaces are server configuration:
 // a request cannot name a cluster or namespace that is not listed here.
 type K8sScenarioService struct {
-	Engine         *k8sscenario.Engine
-	Runs           K8sRunStore
-	Approvals      K8sApprovals
-	Clusters       map[string]string        // cluster name -> API server URL
-	Registry       K8sClusterRegistry       // registered clusters (Phase 2)
-	Credentials    K8sClusterCredentials    // per-cluster read-only credential source (Phase 2)
-	Audit          k8sscenario.Audit        // records refused execution profiles (Phase 4)
-	Authorizations K8sAuthorizationRegistry // customer authorization records (Phase 4, Controlled)
-	Namespaces     []string
-	ApprovalTTL    time.Duration
-	Now            func() time.Time
+	Engine           *k8sscenario.Engine
+	Runs             K8sRunStore
+	Approvals        K8sApprovals
+	Clusters         map[string]string        // cluster name -> API server URL
+	Registry         K8sClusterRegistry       // registered clusters (Phase 2)
+	Credentials      K8sClusterCredentials    // per-cluster read-only credential source (Phase 2)
+	Audit            k8sscenario.Audit        // records refused execution profiles (Phase 4)
+	Authorizations   K8sAuthorizationRegistry // customer authorization records (Phase 4, Controlled)
+	ControlledSwitch K8sControlledSwitch      // global kill switch for Controlled execution (Phase 4, step 4)
+	Namespaces       []string
+	ApprovalTTL      time.Duration
+	Now              func() time.Time
 }
 
 func (s *K8sScenarioService) now() time.Time {
@@ -228,7 +231,7 @@ func (h *Handler) ApproveK8sRun(w http.ResponseWriter, r *http.Request) {
 		ApprovedAt:      svc.now(),
 		ExpiresAt:       svc.now().Add(svc.approvalTTL()),
 	}
-	if err := svc.Approvals.Put(approval); err != nil {
+	if err := svc.Approvals.PutWithAudit(approval, k8sscenario.ApprovalEvent(approval, run.Params)); err != nil {
 		jsonError(w, "could not record the approval", http.StatusInternalServerError)
 		return
 	}
