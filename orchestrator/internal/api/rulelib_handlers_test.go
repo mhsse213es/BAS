@@ -157,3 +157,45 @@ func TestExportRule_AQLIsQRadarsGenericQuery(t *testing.T) {
 	}
 	t.Fatal("no rule has a QRadar translation")
 }
+
+func TestExportRule_DSLFormatReturnsCaseInsensitiveElasticQuery(t *testing.T) {
+	h := rulelibTestHandler(t)
+	var withDSL, without string
+	for _, r := range h.rules.Search(rulelib.SearchFilter{}) {
+		hasDSL := false
+		for _, tr := range r.Translations {
+			if tr.Backend == "elastic" && tr.DSL != "" {
+				hasDSL = true
+			}
+		}
+		if hasDSL && withDSL == "" {
+			withDSL = r.ID
+		}
+		if !hasDSL && without == "" {
+			without = r.ID
+		}
+	}
+	if withDSL == "" || without == "" {
+		t.Fatalf("need a rule with and without a DSL: %q %q", withDSL, without)
+	}
+	rec := httptest.NewRecorder()
+	h.ExportRule(rec, httptest.NewRequest(http.MethodGet, "/api/rules/export?id="+withDSL+"&format=dsl", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Content-Type = %q", ct)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil || doc["query"] == nil {
+		t.Fatalf("not a DSL query: %v %.100s", err, rec.Body.String())
+	}
+	if rec.Header().Get("X-Audspect-Sigma-Id") == "" {
+		t.Error("provenance header missing")
+	}
+	none := httptest.NewRecorder()
+	h.ExportRule(none, httptest.NewRequest(http.MethodGet, "/api/rules/export?id="+without+"&format=dsl", nil))
+	if none.Code != http.StatusNotFound {
+		t.Fatalf("a rule with no DSL must answer 404, got %d", none.Code)
+	}
+}

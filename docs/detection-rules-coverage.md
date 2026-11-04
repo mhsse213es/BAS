@@ -40,7 +40,7 @@ honestly instead of producing a query that matches nothing.)
 | Microsoft Sentinel (KQL) | 2,075 | 29 |
 | Microsoft Defender (KQL) | 2,075 | 29 |
 | Splunk (SPL) | 2,104 | 0 |
-| Elastic (Lucene) | 2,104 | 0 |
+| Elastic (Lucene) | 2,053 | 51 |
 | CrowdStrike (LogScale) | 1,945 | 159 |
 | IBM QRadar (AQL), generic only | 1,753 | 351 |
 

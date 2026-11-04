@@ -2,20 +2,20 @@
   "attribution": "Detection rules are from the SigmaHQ project (https://github.com/SigmaHQ/sigma), licensed under the Detection Rule License (DRL) 1.1. Each rule keeps its original author, title, id and references; the per-SIEM queries are generated from the rule by Audspect.",
   "backends": {
     "crowdstrike": 1907,
-    "elastic": 2093,
+    "elastic": 2053,
     "microsoft_defender": 2052,
     "microsoft_sentinel": 2009,
     "qradar": 1753,
     "splunk": 2099
   },
-  "generatedAt": "2026-11-04T09:08:09.879938+00:00",
+  "generatedAt": "2026-11-04T09:53:15.590202+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
     "crowdstrike:generic": 873,
     "crowdstrike:pipeline": 1034,
     "elastic:generic": 292,
     "elastic:keyword": 26,
-    "elastic:pipeline": 1775,
+    "elastic:pipeline": 1735,
     "microsoft_defender:generic": 779,
     "microsoft_defender:pipeline": 1273,
     "microsoft_sentinel:generic": 525,
@@ -98,6 +98,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000031",
       "sigmaId": "03552375-cc2c-4883-bbe4-7958d5a980be"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000035",
+      "sigmaId": "03f4ca17-de95-428d-a75a-4ee78b047256"
     },
     {
       "backend": "crowdstrike",
@@ -218,6 +224,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000090",
       "sigmaId": "0adc67e0-a68f-4ffd-9c43-28905aad5d6a"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000091",
+      "sigmaId": "0adfbc14-0ed1-11eb-adc1-0242ac120002"
     },
     {
       "backend": "qradar",
@@ -436,6 +448,12 @@
       "sigmaId": "195c1119-ef07-4909-bb12-e66f5e07bf3c"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000218",
+      "sigmaId": "1a0d4aba-7668-4365-9ce4-6d79ab088dfd"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000220",
@@ -484,10 +502,22 @@
       "sigmaId": "1ae64f96-72b6-48b3-ad3d-e71dff6c6398"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000231",
+      "sigmaId": "1b2ae822-6fe1-43ba-aa7c-d1a3b3d1d5f2"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000231",
       "sigmaId": "1b2ae822-6fe1-43ba-aa7c-d1a3b3d1d5f2"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000233",
+      "sigmaId": "1b9dc62e-6e9e-42a3-8990-94d7a10007f7"
     },
     {
       "backend": "microsoft_sentinel",
@@ -670,6 +700,12 @@
       "sigmaId": "25eabf56-22f0-4915-a1ed-056b8dae0a68"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000328",
+      "sigmaId": "2617e7ed-adb7-40ba-b0f3-8f9945fe6c09"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field",
       "ruleId": "AUDRULE-000328",
@@ -754,6 +790,12 @@
       "sigmaId": "2782fbd8-b662-4eb5-9962-5bfbfb671e7b"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000343",
+      "sigmaId": "27aec9c9-dbb0-4939-8422-1742242471d0"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field",
       "ruleId": "AUDRULE-000345",
@@ -790,6 +832,12 @@
       "sigmaId": "2fdaf50b-9fd5-449f-ba69-f17248119af6"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000394",
+      "sigmaId": "30a8cb77-8eb3-4cfb-8e79-ad457c5a4592"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000394",
@@ -800,6 +848,12 @@
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events.",
       "ruleId": "AUDRULE-000397",
       "sigmaId": "30e92f50-bb5a-4884-98b5-d20aa80f3d7a"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000404",
+      "sigmaId": "31c51af6-e7aa-4da7-84d4-8f32cc580af2"
     },
     {
       "backend": "qradar",
@@ -1150,6 +1204,12 @@
       "sigmaId": "4bb80281-3756-4ec8-a88e-523c5a6fda9e"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000617",
+      "sigmaId": "4bf943c6-5146-4273-98dd-e958fd1e3abf"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field",
       "ruleId": "AUDRULE-000625",
@@ -1228,6 +1288,12 @@
       "sigmaId": "516376b4-05cd-4122-bae0-ad7641c38d48"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000667",
+      "sigmaId": "51aa9387-1c53-4153-91cc-d73c59ae1ca9"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000670",
@@ -1274,6 +1340,12 @@
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field",
       "ruleId": "AUDRULE-000681",
       "sigmaId": "534f2ef7-e8a2-4433-816d-c91bccde289b"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000686",
+      "sigmaId": "53d4bb30-3f36-4e8a-b078-69d36c4a79ff"
     },
     {
       "backend": "qradar",
@@ -1372,6 +1444,12 @@
       "sigmaId": "589ac73f-8e12-409c-964e-31a2f5775ae2"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000720",
+      "sigmaId": "589ac73f-8e12-409c-964e-31a2f5775ae2"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000723",
@@ -1382,6 +1460,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000728",
       "sigmaId": "5a105d34-05fc-401e-8553-272b45c1522d"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000739",
+      "sigmaId": "5b872a46-3b90-45c1-8419-f675db8053aa"
     },
     {
       "backend": "microsoft_sentinel",
@@ -1636,6 +1720,12 @@
       "sigmaId": "6c8fbee5-dee8-49bc-851d-c3142d02aa47"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000863",
+      "sigmaId": "6c96fc76-0eb1-11eb-adc1-0242ac120002"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000865",
@@ -1652,6 +1742,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000868",
       "sigmaId": "6daac7fc-77d1-449a-a71a-e6b4d59a0e54"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000871",
+      "sigmaId": "6e2a900a-ced9-4e4a-a9c2-13e706f9518a"
     },
     {
       "backend": "crowdstrike",
@@ -1682,6 +1778,12 @@
       "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Status. Please use valid fields for the AuditLogs table (list of valid fields omitted)",
       "ruleId": "AUDRULE-000888",
       "sigmaId": "6f583da0-3a90-4566-a4ed-83c09fe18bbf"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000890",
+      "sigmaId": "6fb63b40-e02a-403e-9ffd-3bcc1d749442"
     },
     {
       "backend": "qradar",
@@ -1750,6 +1852,12 @@
       "sigmaId": "71ff406e-b633-4989-96ec-bc49d825a412"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000914",
+      "sigmaId": "72124974-a68b-4366-b990-d30e0b2a190d"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000914",
@@ -1772,6 +1880,18 @@
       "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule",
       "ruleId": "AUDRULE-000919",
       "sigmaId": "729ce0ea-5d8f-4769-9762-e35de441586d"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000927",
+      "sigmaId": "736ffa74-5f6f-44ca-94ef-1c0df4f51d2a"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000931",
+      "sigmaId": "73e67340-0d25-11eb-adc1-0242ac120002"
     },
     {
       "backend": "crowdstrike",
@@ -1874,6 +1994,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-000958",
       "sigmaId": "7679d464-4f74-45e2-9e01-ac66c5eb041a"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-000965",
+      "sigmaId": "779c8c12-0eb1-11eb-adc1-0242ac120002"
     },
     {
       "backend": "crowdstrike",
@@ -2024,6 +2150,12 @@
       "reason": "SigmaTransformationError: Only file name of image is available in CrowdStrike Query Language events.",
       "ruleId": "AUDRULE-001010",
       "sigmaId": "7cff77e1-9663-46a3-8260-17f2e1aa9d0a"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001012",
+      "sigmaId": "7d1aaf3d-4304-425c-b7c3-162055e0b3ab"
     },
     {
       "backend": "microsoft_sentinel",
@@ -2188,6 +2320,12 @@
       "sigmaId": "869b9ca7-9ea2-4a5a-8325-e80e62f75445"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001105",
+      "sigmaId": "86b896ba-ffa1-4fea-83e3-ee28a4c915c7"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the Description field",
       "ruleId": "AUDRULE-001107",
@@ -2300,6 +2438,12 @@
       "reason": "InvalidHashAlgorithmError: No valid hash algo found in Hashes field. Please use one of the following: MD5, SHA1, SHA256 (while applying processing pipeline on rule",
       "ruleId": "AUDRULE-001153",
       "sigmaId": "8cde342c-ba48-4b74-b615-172c330f2e93"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001155",
+      "sigmaId": "8d5aca11-22b3-4f22-b7ba-90e60533e1fb"
     },
     {
       "backend": "microsoft_sentinel",
@@ -2512,6 +2656,12 @@
       "sigmaId": "98054878-5eab-434c-85d4-72d4e5a3361b"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001249",
+      "sigmaId": "982e9f2d-1a85-4d5b-aea4-31f5e97c6555"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field",
       "ruleId": "AUDRULE-001249",
@@ -2600,6 +2750,12 @@
       "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: ConsentContext.IsAdminConsent. Please use valid fields for the AuditLogs table (list of valid fields omitted)",
       "ruleId": "AUDRULE-001278",
       "sigmaId": "9b2cc4c4-2ad4-416d-8e8e-ee6aa6f5035a"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001285",
+      "sigmaId": "9c14c9fa-1a63-4a64-8e57-d19280559490"
     },
     {
       "backend": "qradar",
@@ -2744,6 +2900,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001350",
       "sigmaId": "a27e5fa9-c35e-4e3d-b7e0-1ce2af66ad12"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001353",
+      "sigmaId": "a29c1813-ab1f-4dde-b489-330b952e91ae"
     },
     {
       "backend": "qradar",
@@ -2968,6 +3130,12 @@
       "sigmaId": "b697e69c-746f-4a86-9f59-7bfff8eab881"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001513",
+      "sigmaId": "b730a276-6b63-41b8-bcf8-55930c8fc6ee"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field",
       "ruleId": "AUDRULE-001513",
@@ -2984,6 +3152,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001521",
       "sigmaId": "b85e5894-9b19-4d86-8c87-a2f3b81f0521"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001523",
+      "sigmaId": "b86f6dea-0b2f-41f5-bdcc-a057bd19cd6a"
     },
     {
       "backend": "qradar",
@@ -3110,6 +3284,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001576",
       "sigmaId": "bef37fa2-f205-4a7b-b484-0759bfd5f86f"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001595",
+      "sigmaId": "c15a46a0-07d4-4c87-b4b6-89207835a83b"
     },
     {
       "backend": "qradar",
@@ -3308,6 +3488,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001647",
       "sigmaId": "c7e91a02-d771-4a6d-a700-42587e0b1095"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001650",
+      "sigmaId": "c83bf4b5-cdf0-437c-90fa-43d734f7c476"
     },
     {
       "backend": "crowdstrike",
@@ -3634,6 +3820,12 @@
       "sigmaId": "d7a63acb-1284-49bc-bfea-7771146c8b1c"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001771",
+      "sigmaId": "d7bcd677-645d-4691-a8d4-7a5602b780d1"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Only file name of parent image is available in CrowdStrike Query Language events.",
       "ruleId": "AUDRULE-001771",
@@ -3676,6 +3868,12 @@
       "sigmaId": "daf7eb81-35fd-410d-9d7a-657837e602bb"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001790",
+      "sigmaId": "db92dd33-a3ad-49cf-8c2c-608c3e30ace0"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field",
       "ruleId": "AUDRULE-001799",
@@ -3692,6 +3890,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001802",
       "sigmaId": "dd857d3e-0c6e-457b-9b48-e82ae7f86bd7"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001803",
+      "sigmaId": "dd8756e7-a3a0-4768-b47e-8f545d1a751c"
     },
     {
       "backend": "crowdstrike",
@@ -3730,6 +3934,12 @@
       "sigmaId": "df68f791-ad95-447f-a271-640a0dab9cf8"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001824",
+      "sigmaId": "df9a0e0e-fedb-4d6c-8668-d765dfc92aa7"
+    },
+    {
       "backend": "qradar",
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001824",
@@ -3758,6 +3968,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001837",
       "sigmaId": "e0f8ab85-0ac9-423b-a73a-81b3c7b1aa97"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001839",
+      "sigmaId": "e1561947-b4e3-4a74-9bdd-83baed21bdb5"
     },
     {
       "backend": "microsoft_sentinel",
@@ -3824,6 +4040,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001875",
       "sigmaId": "e54979bd-c5f9-4d6c-967b-a04b19ac4c74"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001876",
+      "sigmaId": "e54f5149-6ba3-49cf-b153-070d24679126"
     },
     {
       "backend": "crowdstrike",
@@ -4036,6 +4258,12 @@
       "sigmaId": "ed825c86-c009-4014-b413-b76003e33d35"
     },
     {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001952",
+      "sigmaId": "ed825c86-c009-4014-b413-b76003e33d35"
+    },
+    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the CurrentDirectory field",
       "ruleId": "AUDRULE-001952",
@@ -4082,6 +4310,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-001968",
       "sigmaId": "efafe0bf-4238-479e-af8f-797bd3490d2d"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-001981",
+      "sigmaId": "f17211f1-1f24-4d0c-829f-31e28dc93cdd"
     },
     {
       "backend": "qradar",
@@ -4280,6 +4514,12 @@
       "reason": "SigmaTransformationError: The QRadar savedsearches Sigma backend supports only the following fields for process_creation log source",
       "ruleId": "AUDRULE-002079",
       "sigmaId": "fca949cc-79ca-446e-8064-01aa7e52ece5"
+    },
+    {
+      "backend": "elastic",
+      "reason": "the backend produced an invalid query (a pySigma object leaked into the text)",
+      "ruleId": "AUDRULE-002082",
+      "sigmaId": "fd0f5778-d3cb-4c9a-9695-66759d04702a"
     },
     {
       "backend": "qradar",

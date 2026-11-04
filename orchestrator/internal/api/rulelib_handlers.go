@@ -66,7 +66,7 @@ func (h *Handler) RulesByTechnique(w http.ResponseWriter, r *http.Request) {
 }
 
 // ExportRule returns one rule's content as raw text in the requested format.
-// GET /api/rules/export?id=&format=sigma|kql|spl|lucene|logscale|aql
+// GET /api/rules/export?id=&format=sigma|kql|spl|lucene|logscale|aql|dsl
 func (h *Handler) ExportRule(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	format := r.URL.Query().Get("format")
@@ -111,8 +111,27 @@ func (h *Handler) ExportRule(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "no "+format+" translation available for this rule", http.StatusNotFound)
 			return
 		}
+	case "dsl":
+		found := false
+		for _, t := range rule.Translations {
+			if t.Backend == "elastic" && t.DSL != "" {
+				text, found = t.DSL, true
+				w.Header().Set("X-Audspect-Mapping", t.Mapping)
+				if t.DataSource != "" {
+					w.Header().Set("X-Audspect-Data-Source", t.DataSource)
+				}
+				break
+			}
+		}
+		if !found {
+			jsonError(w, "no Elasticsearch DSL translation available for this rule", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Write([]byte(text))
+		return
 	default:
-		jsonError(w, "format must be one of sigma|kql|spl|lucene|logscale|aql", http.StatusBadRequest)
+		jsonError(w, "format must be one of sigma|kql|spl|lucene|logscale|aql|dsl", http.StatusBadRequest)
 		return
 	}
 

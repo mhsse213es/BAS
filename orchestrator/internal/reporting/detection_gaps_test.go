@@ -122,3 +122,28 @@ func TestGenerateHTML_DetectionGapSection(t *testing.T) {
 		t.Error("section must be absent when the run has no gaps")
 	}
 }
+
+// A Lucene query is case-sensitive on keyword fields and Sigma is not, so a report that prints the Lucene query must
+// say so and point to the DSL, but only for an Elastic translation that has a DSL.
+func TestBuildDetectionGaps_ElasticLuceneWithADSLCarriesTheCaseNote(t *testing.T) {
+	r := gapRule("AUDRULE-000001", "high")
+	r.Translations = append(r.Translations,
+		rulelib.Translation{Backend: "elastic", Language: "Lucene", Query: "process.name:cmd.exe", Mapping: "pipeline", DataSource: "Winlogbeat", DSL: `{"query":{}}`},
+		rulelib.Translation{Backend: "elastic", Language: "Lucene", Query: "x", Mapping: "pipeline", DataSource: "Winlogbeat"})
+	sec := BuildDetectionGaps([]models.SimulationResult{gapRes("T1059.001", models.ResultFail)}, notDetected("T1059.001"), fakeRules{"T1059.001": {r}})
+	var with, without int
+	for _, q := range sec.Rows[0].Rules[0].Queries {
+		if q.Backend == "Elastic" || q.Backend == "Elasticsearch" {
+			if strings.Contains(q.Note, "case-sensitive") {
+				with++
+			} else {
+				without++
+			}
+		} else if strings.Contains(q.Note, "case-sensitive") {
+			t.Errorf("%s must not carry the Elastic case note", q.Backend)
+		}
+	}
+	if with != 1 || without != 1 {
+		t.Fatalf("want exactly the DSL-bearing Elastic query to carry the note, got with=%d without=%d (%+v)", with, without, sec.Rows[0].Rules[0].Queries)
+	}
+}

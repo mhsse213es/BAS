@@ -1,73 +1,97 @@
 # Elastic query test against a real Elasticsearch
 
-Tested 2026-11-04 on staging's Elasticsearch 8.15.3 (throwaway index, deleted afterwards). Tool:
-`scripts/rulelib-gen/esvalidate.py`. Per-rule results: `docs/elastic-query-test-results.json`.
+Tested 2026-11-04 on staging's Elasticsearch 8.15.3 (throwaway indices, deleted afterwards). Tool:
+`scripts/rulelib-gen/esvalidate.py`. Per-rule results for every run: `docs/elastic-query-test-results.json`.
 
-## Result
+## Correction to the earlier version of this document
+
+The first version reported 1,761 of 1,801 Elastic queries tested and all passing. That was wrong in one way:
+**40 Elastic queries shipped corrupt** (pySigma's `ecs_windows` pipeline turned a regular-expression value into the
+text of a Python object, e.g. `SigmaRegularExpression(regexp=...)`; the generator's gate missed the form where the
+Lucene backend escapes the parenthesis). Such a query can never match, and the test built its events from the same
+rule, so it passed 35 of them and marked 5 untestable. The gate is fixed, the 40 Elastic translations are now
+recorded as failures instead of shipped, and the test now rejects the pattern on the query text itself. The Go
+bundle has a test for it that fails on the old bundle (40 hits) and passes on the new one.
+
+## Result: Lucene `query_string` (unchanged text)
 
 | | Rules |
 |---|---:|
-| Elastic queries considered (1,775 field-mapped + 26 keyword-only) | 1,801 |
-| **Tested** (Elasticsearch evaluated them) | **1,761** |
-| **PASS** | **1,761** |
-| **FAIL** | **0** (after the two fixes below; 2 real defects were found first) |
-| **UNTESTABLE** | **40** |
+| Elastic queries shipped (1,735 field-mapped + 26 keyword-only) | 1,761 |
+| **PASS** | **1,726** |
+| **FAIL** | **0** |
+| **UNTESTABLE** | **35** |
 
-The 72 rules with no translation stay `PENDING_SAMPLE`: nothing here changes them, and no rule's `verification`
-value was changed by this test (see "What PASS means").
+No query that passed before and is still shipped changed status. The 72 `PENDING_SAMPLE` rules are the identical
+set and byte-identical in the bundle.
+
+## Result: Elasticsearch DSL with `case_insensitive: true` (new, additive)
+
+The Lucene query is kept as is. Where possible each field-mapped Elastic translation also carries a `dsl` query
+(`term` / `prefix` / `wildcard` with `case_insensitive: true`, bool `filter` / `should` / `must_not` for AND / OR /
+NOT). No EQL.
+
+| Field mapping used in the test | PASS | FAIL | UNTESTABLE | No DSL |
+|---|---:|---:|---:|---:|
+| all strings `keyword` | 1,682 | 0 | 18 | 61 |
+| all strings `wildcard` type | 1,682 | 0 | 18 | 61 |
+| all strings analysed `text` | 157 | 1,525 | 18 | 61 |
+
+- **Different-case events:** every PASS also matched the same event upper-cased and lower-cased, and still rejected
+  the benign event, the filtered event and the filtered event differing only in case. Of the 1,726 passing Lucene
+  queries, 1,706 were case-sensitive; the DSL of those matches case variants.
+- **Mutation check:** removing `case_insensitive` failed 80 of 80 queries on a case miss; corrupting a value failed
+  60 of 60; deleting a `must_not` failed 57 of 60 (2 untestable, 1 unaffected).
+- **61 rules have no DSL:** 26 keyword-only (free text), 26 free-text search conditions, 9 regular expressions.
+- **Text mapping fails by design.** `term`/`prefix`/`wildcard` act on analysed tokens, so a DSL query does not
+  work on an analysed `text` field. The DSL is for `keyword` and `wildcard`-typed fields (what ECS uses). Where a
+  customer's fields are analysed `text`, the analyser already gives case-insensitivity and the Lucene query applies;
+  that was not measured here.
+- **Not claimed:** equivalence under any other mapping (a custom normalizer, `constant_keyword`, runtime fields,
+  other analysers) was not tested.
+
+Behaviour of Elasticsearch 8.15.3 the translator works around (each tested):
+
+1. `case_insensitive` folds ASCII only (`Ä` does not match `ä`). For the 7 rules with cased non-ASCII letters the
+   upper-case and lower-case spellings of those letters are both added. A mixed-case spelling of them is not covered.
+2. `term ""` never matches, with or without `case_insensitive`. An empty string is written as "field exists and has
+   no character". The `wildcard` field type cannot express this; 2 rules' filtered-empty events are skipped on that
+   type (20 rules contain an empty-string condition).
+3. A wildcard on an `ip` field is an error or matches nothing, so IPv4 prefixes become CIDR terms (see below).
 
 ## What a test is
 
-For each rule the tool applies the same processing pipeline the generator used, builds events from the resulting
-detection, and asks Elasticsearch to evaluate the shipped query against them:
-
-- a **positive** event that satisfies the rule: the query must match it;
-- a **benign** event (right fields, wrong values): the query must not match it;
-- for the 309 passing rules with a `not filter` clause, a **filtered** event that satisfies the filter: the query
-  must not match it.
-
-Every event is checked against the rule by the tool's own evaluator before it is used. The query must also be
-accepted by Elasticsearch's query validator.
-
-**The harness can fail.** Negative controls on staging: corrupting a value in 60 passing queries was caught in 45
-(the other 15 have another OR branch that still matches); deleting the `NOT` filter from 60 queries produced a
-false positive in 57 (2 untestable, 1 unaffected).
+For each rule the tool applies the generator's pipeline, builds events from the resulting detection and asks
+Elasticsearch to evaluate the shipped query: a **positive** that must match, a **benign** that must not, and for
+rules with a `not` filter a **filtered** event that must not. Every event is checked against the rule by the tool's
+own evaluator first. Negative controls on the Lucene side: corrupting a value in 60 passing queries was caught in 45
+(the rest have another OR branch); deleting the `NOT` filter from 60 produced a false positive in 57.
 
 ## What PASS means, and what it does not
 
-PASS means the query is valid and logically equivalent to the rule when Elasticsearch evaluates it, under the test
-mapping (every string a `keyword`, `*.ip` an `ip`). It does **not** mean:
-
-- a collector emits the field names the pipeline produced (that stays in the rule's `verification`:
-  documented / assumed / none, and none was promoted to `validated`);
-- the rule fires on real telemetry (events are built from the rule itself, not captured from an attack).
+PASS means the query is valid and logically equivalent to the rule when Elasticsearch evaluates it under the test
+mapping. It does **not** mean the collector emits those field names (that stays in the rule's `verification`:
+documented / assumed / none; none was promoted to `validated`), or that the rule fires on real telemetry (events are
+built from the rule, not captured from an attack). No rule's `verification` value changed.
 
 ## Defects found and fixed
 
-1. **Wildcard on an `ip` field** (AUDRULE-000743, AUDRULE-002046). Elasticsearch 8.15 answers HTTP 400 to
-   `destination.ip:127.*` in strict mode and matches nothing in lenient mode. The generator now rewrites an IPv4
-   prefix to a CIDR (`"127.0.0.0/8"`) and drops a branch that can never be an address (`source.ip:*-*`); a rule
-   with nothing left is reported as a failure rather than guessed (`scripts/rulelib-gen/elastic_ip.py`, 5 tests).
-   Rebuilding the whole bundle changed exactly these two rules and nothing else.
+1. **Wildcard on an `ip` field** (AUDRULE-000743, AUDRULE-002046): HTTP 400 in strict mode, no match in lenient mode.
+   IPv4 prefixes are now CIDR terms; a branch that can never be an address is dropped
+   (`scripts/rulelib-gen/elastic_ip.py`).
+2. **40 corrupt shipped queries** (above).
+3. **DSL translator:** empty-string and non-ASCII handling (above), found by 5 failures in the first DSL run.
 
-## Open finding: case sensitivity
+## Why 35 Lucene rules (18 DSL) were not testable
 
-**1,741 of the 1,761 passing queries do not match the same event with its text upper-cased.** Sigma matching is
-case-insensitive; a Lucene query on a `keyword` field is not, and `query_string` has no case-insensitive option.
-These queries therefore match only when the event's case equals the rule's. Whether that bites depends on how the
-customer's index maps each field (a normalizer or an analyzed `text` field would match case-insensitively). This
-is not fixed: it needs a decision (for example DSL `case_insensitive` queries, or EQL), and it is the largest gap
-between "valid query" and "detects reliably".
+| Lucene | DSL | Reason |
+|---:|---:|---|
+| 18 | 7 | two conditions on the same field cannot be met by one value |
+| 6 | 0 | regular-expression value: no event is generated from a regex (no DSL exists for these) |
+| 4 | 4 | no event can be built that avoids one of the rule's filters |
+| 3 | 3 | a text condition on the ip field `source.ip` cannot be met by an address |
+| 2 | 2 | the event built does not satisfy the rule by the tool's own check |
+| 2 | 2 | a CIDR filter on Zeek `id.orig_h` / `id.resp_h` only works if the field is typed `ip`; unknown |
 
-## Why 40 rules were not testable
-
-| Rules | Reason |
-|---:|---|
-| 23 | two conditions on the same field cannot be met by one value |
-| 6 | regular-expression value: no event is generated from a regex |
-| 4 | no event can be built that avoids one of the rule's filters |
-| 3 | a text condition on the ip field `source.ip` cannot be met by an address |
-| 2 | the event built does not satisfy the rule by the tool's own check |
-| 2 | a CIDR filter on `id.orig_h` / `id.resp_h` (Zeek) only works if the collector types the field as `ip`; unknown |
-
-Rules in each group are listed in the JSON with their reason. UNTESTABLE is not PASS and is not counted as tested.
+UNTESTABLE is not PASS and is not counted as tested. Coverage counts: Elastic now 2,053 translated, 51 not available
+(`docs/detection-rules-coverage.md`).

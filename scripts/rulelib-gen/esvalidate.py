@@ -29,6 +29,10 @@ import urllib.request
 
 SENTINEL = "zz-benign-value-zz"
 
+# A pySigma object's repr in a query (the Lucene backend escapes its parenthesis). Events are built from the same
+# rule as the query, so a corrupt query can still match them: this must be checked on the text itself.
+LEAKED_OBJECT = re.compile(r"Sigma(?:String|RegularExpression|Number|Bool|CIDR|Null|Expansion|Placeholder|Query)\\?\(|SpecialChars\.")
+
 
 # --------------------------------------------------------------------------------------------------------------
 # gen: build events from a rule
@@ -286,13 +290,33 @@ def build_case(rule_entry, rule, tree):
     case["negatives"] = negatives
     # informational: Sigma matching is case-insensitive, an Elasticsearch keyword field is not
     case["caseVariant"] = {k: (v.upper() if isinstance(v, str) else v) for k, v in positive.items()}
+    case["dslEvents"] = _dsl_events(positive, negatives)
     return case
+
+
+def _is_ip_field(name):
+    return name == "ip" or name.endswith(".ip")
+
+
+def _recase(event, fn):
+    return {k: (fn(v) if isinstance(v, str) and not _is_ip_field(k) else v) for k, v in event.items()}
+
+
+def _dsl_events(positive, negatives):
+    """Events for the DSL test. Sigma is case-insensitive, so the positive must match in its own case, upper-cased
+    and lower-cased; a benign event must not; an event that satisfies a filter must not, in its own case or
+    differing only in case."""
+    pos = [("exact", positive), ("upper", _recase(positive, str.upper)), ("lower", _recase(positive, str.lower))]
+    neg = [(n["kind"], n["event"]) for n in negatives]
+    neg += [("filtered-upper", _recase(n["event"], str.upper)) for n in negatives if n["kind"] == "filtered"]
+    return {"pos": [{"label": a, "event": b} for a, b in pos], "neg": [{"label": a, "event": b} for a, b in neg]}
 
 
 def gen(rules_path, out_path, backend="elastic"):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from sigma.collection import SigmaCollection
     import translate as t
+    from elastic_dsl import Unsupported, rule_to_dsl
     with open(rules_path, encoding="utf-8") as f:
         data = json.load(f)
     rules = data if isinstance(data, list) else data.get("rules", data)
@@ -312,6 +336,15 @@ def gen(rules_path, out_path, backend="elastic"):
             cond = rule.detection.parsed_condition[0]
             tree = cond.parsed.postprocess(rule.detection, cond)
             case = build_case(entry, rule, tree)
+            if tr["mapping"] == "pipeline":
+                if tr.get("dsl"):
+                    case["dsl"] = tr["dsl"]  # exactly what ships
+                else:
+                    try:
+                        rule_to_dsl(rule)
+                        case["dslUnsupported"] = "not generated"
+                    except Unsupported as e:
+                        case["dslUnsupported"] = str(e)
         except Exception as e:  # noqa: BLE001 - a rule the tool cannot read is reported, never skipped silently
             case = {"id": r["id"], "title": r["title"], "untestable": "could not build events: %s" % str(e)[:160]}
         cidr_fields = sorted({m.group(1) for m in re.finditer(r"([\w.]+):\(?[^\s)]*\/\d+", tr["query"]) if not m.group(1).endswith("ip")})
@@ -408,6 +441,10 @@ def run(cases_path, out_path):
                 res.update(status="UNTESTABLE", reason=c.get("untestable", "no events"))
                 results.append(res)
                 continue
+            if LEAKED_OBJECT.search(c["query"]):
+                res.update(status="FAIL", failure="corrupt", reason="the query contains a leaked pySigma object")
+                results.append(res)
+                continue
             q = {"query_string": {"query": c["query"], "analyze_wildcard": True}}
             st, v = es.call("GET", "/%s/_validate/query?explain=true" % index, {"query": q})
             if st >= 300 or v.get("valid") is False:
@@ -459,6 +496,107 @@ def run(cases_path, out_path):
 
 
 # --------------------------------------------------------------------------------------------------------------
+# rundsl: the DSL translation against Elasticsearch, per field mapping
+# --------------------------------------------------------------------------------------------------------------
+
+def _index_body(field_type):
+    return {
+        "settings": {"index.mapping.total_fields.limit": 100000, "number_of_shards": 1, "number_of_replicas": 0,
+                     "index.mapping.ignore_malformed": True},
+        "mappings": {"dynamic_templates": [
+            {"ips": {"match_mapping_type": "string", "path_match": "*.ip", "mapping": {"type": "ip", "ignore_malformed": True}}},
+            {"strings": {"match_mapping_type": "string", "mapping": {"type": field_type}}}]}}
+
+
+def rundsl(cases_path, out_path, field_type):
+    """field_type is the Elasticsearch type every string field gets: keyword, wildcard or text."""
+    es = ES()
+    with open(cases_path, encoding="utf-8") as f:
+        cases = json.load(f)["cases"]
+    index = "audspect-dsltest-%s-%d" % (field_type, os.getpid())
+    st, resp = es.call("PUT", "/" + index, _index_body(field_type))
+    if st >= 300:
+        raise SystemExit("could not create the scratch index: %s %s" % (st, resp))
+    results = []
+    try:
+        batch, keys = [], []
+        for i, c in enumerate(cases):
+            if "dsl" not in c or "dslEvents" not in c:
+                continue
+            for group in ("pos", "neg"):
+                for n, e in enumerate(c["dslEvents"][group]):
+                    key = "%d|%s|%d" % (i, group, n)
+                    batch.append(json.dumps({"index": {"_index": index, "_id": key}}) + "\n" + json.dumps(_stringify(e["event"])) + "\n")
+                    keys.append(key)
+                    if len(batch) >= 500:
+                        es.call("POST", "/_bulk?refresh=false", "".join(batch), ndjson=True)
+                        batch = []
+        if batch:
+            es.call("POST", "/_bulk?refresh=false", "".join(batch), ndjson=True)
+        es.call("POST", "/%s/_refresh" % index)
+        for i, c in enumerate(cases):
+            res = {"id": c["id"], "title": c["title"], "fieldType": field_type, "verification": c["verification"]}
+            if c["mapping"] != "pipeline":
+                res.update(status="NO_DSL", reason="keyword-only rule: relies on every field's analyser, so it keeps its Lucene query")
+            elif "dsl" not in c:
+                res.update(status="NO_DSL", reason="not translated: %s" % c.get("dslUnsupported", "no events could be built"))
+            elif "dslEvents" not in c:
+                res.update(status="UNTESTABLE", reason=c.get("untestable", "no events"))
+            else:
+                if LEAKED_OBJECT.search(c["dsl"]):
+                    res.update(status="FAIL", failure="corrupt", reason="the DSL contains a leaked pySigma object")
+                    results.append(res)
+                    continue
+                query = json.loads(c["dsl"])["query"]
+                problems = []
+                inconclusive = []
+                skipped = 0
+                evaluated = True
+                for group in ("pos", "neg"):
+                    for n, e in enumerate(c["dslEvents"][group]):
+                        key = "%d|%s|%d" % (i, group, n)
+                        if field_type == "wildcard" and group == "neg" and e["label"].startswith("filtered") \
+                                and any(v == "" for v in e["event"].values()):
+                            # Elasticsearch cannot query an empty string on a wildcard-typed field (tested on 8.15)
+                            skipped += 1
+                            continue
+                        s2, r = es.call("GET", "/%s/_search" % index,
+                                        {"size": 0, "terminate_after": 1, "query": {"bool": {"filter": [{"ids": {"values": [key]}}, query]}}})
+                        if s2 >= 300:
+                            res.update(status="FAIL", failure="syntax",
+                                       reason="Elasticsearch rejected the query: %s" % str(r.get("error", {}).get("root_cause", r))[:200])
+                            evaluated = False
+                            break
+                        hit = r.get("hits", {}).get("total", {}).get("value", 0) > 0
+                        if group == "pos" and not hit:
+                            problems.append("missed the %s-case positive" % e["label"])
+                        if group == "neg" and hit:
+                            if e["label"].startswith("filtered") and c.get("cidrOnNonIp"):
+                                inconclusive.append(", ".join(c["cidrOnNonIp"]))
+                            else:
+                                problems.append("matched the %s negative" % e["label"])
+                    if not evaluated:
+                        break
+                if evaluated:
+                    if problems:
+                        res.update(status="FAIL", failure="behaviour", reason="; ".join(problems))
+                    elif inconclusive:
+                        res.update(status="UNTESTABLE", reason="a CIDR filter on %s only works if the collector types that field as ip; "
+                                   "the test cannot know that" % inconclusive[0])
+                    else:
+                        res.update(status="PASS", reason="")
+                    if skipped:
+                        res["emptyStringEventsSkipped"] = skipped
+            results.append(res)
+    finally:
+        es.call("DELETE", "/" + index)
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump({"backend": "elastic-dsl", "fieldType": field_type, "results": results}, f)
+    from collections import Counter
+    print(field_type, dict(Counter(r["status"] for r in results)))
+
+
+# --------------------------------------------------------------------------------------------------------------
 # report
 # --------------------------------------------------------------------------------------------------------------
 
@@ -498,5 +636,7 @@ if __name__ == "__main__":
         run(sys.argv[2], sys.argv[3])
     elif cmd == "report":
         report(sys.argv[2], sys.argv[3])
+    elif cmd == "rundsl":
+        rundsl(sys.argv[2], sys.argv[3], sys.argv[4])
     else:
         raise SystemExit(__doc__)

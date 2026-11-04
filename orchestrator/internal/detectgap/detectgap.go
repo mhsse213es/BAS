@@ -240,6 +240,10 @@ func QueryNote(mapping, dataSource, verification string) string {
 	return "Generic query using Sigma field names: adapt the field names and log source to your schema before use."
 }
 
+// ElasticCaseNote is shown beside an Elastic Lucene query that has an Elasticsearch DSL counterpart. Keep it in step
+// with ELASTIC_CASE_NOTE in web/src/features/gap-model.js.
+const ElasticCaseNote = "The Lucene query is case-sensitive on keyword fields; the Elasticsearch DSL query matches case-insensitively, as Sigma does."
+
 // Deployment statuses: where a recommended rule stands after the customer says they deployed it.
 const (
 	DeploymentDeployed             = "Deployed"

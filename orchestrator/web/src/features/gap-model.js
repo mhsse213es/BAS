@@ -36,6 +36,9 @@ export function backendLabel(key) { return BACKEND_LABELS[key] || key; }
 
 // What to tell the analyst beside a query. A field-mapped query only matches when its data source is collected; a
 // generic one uses Sigma's own field names and has to be adapted: it is never presented as ready to paste.
+// Same wording as detectgap.ElasticCaseNote (Go), which the report uses.
+var ELASTIC_CASE_NOTE = 'The Lucene query is case-sensitive on keyword fields; the Elasticsearch DSL query matches case-insensitively, as Sigma does.';
+
 export function verificationNote(v) {
   if (v === 'validated') return 'Validated: it matched a sample event and did not match a negative one.';
   if (v === 'assumed') return 'The field names are our assumption; test this query on your own data before relying on it.';
@@ -47,7 +50,8 @@ export function backendNote(b) {
     return 'Free-text search of the raw log message. ' + b.dataSource + '.';
   }
   if (b && b.mapping === 'pipeline' && b.dataSource) {
-    return 'Field-mapped. This query only matches if you collect: ' + b.dataSource + '. ' + verificationNote(b.verification);
+    return 'Field-mapped. This query only matches if you collect: ' + b.dataSource + '. ' + verificationNote(b.verification) +
+      (b.dslExportUrl ? ' ' + ELASTIC_CASE_NOTE : '');
   }
   return 'Generic query with Sigma field names: adapt it to your own schema before use.';
 }

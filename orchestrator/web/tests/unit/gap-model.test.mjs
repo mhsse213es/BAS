@@ -138,3 +138,13 @@ test('a mapped query says how far it can be trusted, and never claims more than 
   assert.doesNotMatch(note('validated'), /not yet been run/);
   assert.match(note(undefined), /not yet been run against real events/, 'a missing value is the weakest claim, never "validated"');
 });
+
+test('an Elastic translation that has a DSL says the Lucene query is case-sensitive and points to the DSL', () => {
+  const withDsl = G.backendNote({ backend: 'elastic', mapping: 'pipeline', dataSource: 'X', verification: 'documented', dslExportUrl: '/api/rules/export?id=A&format=dsl' });
+  assert.match(withDsl, /case-sensitive/);
+  assert.match(withDsl, /DSL/);
+  const without = G.backendNote({ backend: 'elastic', mapping: 'pipeline', dataSource: 'X', verification: 'documented' });
+  assert.doesNotMatch(without, /case-sensitive/);
+  const splunk = G.backendNote({ backend: 'splunk', mapping: 'pipeline', dataSource: 'X', verification: 'documented' });
+  assert.doesNotMatch(splunk, /DSL/);
+});

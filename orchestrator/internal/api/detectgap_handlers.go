@@ -27,6 +27,8 @@ type gapBackend struct {
 	DataSource   string `json:"dataSource,omitempty"`
 	Verification string `json:"verification"`
 	ExportURL    string `json:"exportUrl"`
+	// DSLExportURL is set when an Elasticsearch DSL (case-insensitive) translation exists beside the Lucene query.
+	DSLExportURL string `json:"dslExportUrl,omitempty"`
 }
 
 type gapRule struct {
@@ -215,6 +217,11 @@ func (h *Handler) ExportRunDetectionGaps(w http.ResponseWriter, r *http.Request)
 				p := "queries/" + tr.Backend + "/" + gr.ID + "." + ext
 				add(p, tr.Query+"\n")
 				mr.Files = append(mr.Files, p)
+				if tr.DSL != "" {
+					dp := "queries/" + tr.Backend + "/" + gr.ID + ".dsl.json"
+					add(dp, tr.DSL+"\n")
+					mr.Files = append(mr.Files, dp)
+				}
 			}
 			mt.Rules = append(mt.Rules, mr)
 		}
@@ -280,8 +287,12 @@ func gapRules(rules []rulelib.Rule, match, backend string) []gapRule {
 			if backend != "" && t.Backend != backend {
 				continue
 			}
-			g.Backends = append(g.Backends, gapBackend{Backend: t.Backend, Language: t.Language, Mapping: t.Mapping,
-				Pipeline: t.Pipeline, DataSource: t.DataSource, Verification: t.Verification, ExportURL: "/api/rules/export?id=" + r.ID + "&format=" + languageFormat[t.Language]})
+			gb := gapBackend{Backend: t.Backend, Language: t.Language, Mapping: t.Mapping,
+				Pipeline: t.Pipeline, DataSource: t.DataSource, Verification: t.Verification, ExportURL: "/api/rules/export?id=" + r.ID + "&format=" + languageFormat[t.Language]}
+			if t.DSL != "" {
+				gb.DSLExportURL = "/api/rules/export?id=" + r.ID + "&format=dsl"
+			}
+			g.Backends = append(g.Backends, gb)
 		}
 		out = append(out, g)
 	}

@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from sigma.backends.crowdstrike import LogScaleBackend
+from elastic_dsl import Unsupported as DslUnsupported, rule_to_dsl
 from elastic_ip import UnexpressibleOnIpField, fix_ip_wildcards
 from sigma.backends.elasticsearch import LuceneBackend
 from sigma.backends.kusto import KustoBackend as SentinelKustoBackend
@@ -899,7 +900,7 @@ def log_source_family(rule) -> str:
     return ""
 
 
-_LEAKED_OBJECT = re.compile(r"Sigma(?:String|RegularExpression|Number|Bool|CIDR|Null|Expansion|Placeholder|Query)\(|\w\.\\\*\.")
+_LEAKED_OBJECT = re.compile(r"Sigma(?:String|RegularExpression|Number|Bool|CIDR|Null|Expansion|Placeholder|Query)\\?\(|\w\.\\\*\.")
 
 
 def looks_corrupt(query: str) -> bool:
@@ -1030,7 +1031,16 @@ def translate_rule(rule) -> tuple[list[dict], list[dict]]:
                     continue
             if mapping is None and not keyword and backend_key in KUSTO_BACKENDS:
                 queries = [kql_template(queries[0])]
-            translations.append({
+            dsl = ""
+            if backend_key == "elastic" and mapping and not keyword:
+                # Same pipeline as the Lucene query, so field names agree; the DSL adds Sigma's case-insensitivity.
+                try:
+                    shaped = copy.deepcopy(rule)
+                    mapping.pipeline().apply(shaped)
+                    dsl = rule_to_dsl(shaped)
+                except DslUnsupported:
+                    dsl = ""  # a regular expression or similar: the rule keeps its Lucene query only
+            entry = {
                 "backend": backend_key,
                 "language": spec.language,
                 "query": queries[0],
@@ -1039,7 +1049,10 @@ def translate_rule(rule) -> tuple[list[dict], list[dict]]:
                 "pipeline": mapping.name if mapping else "",
                 "dataSource": mapping.data_source if mapping else (keyword_source(rule, backend_key) if keyword else ""),
                 "verification": verification_of(mapping),
-            })
+            }
+            if dsl:
+                entry["dsl"] = dsl
+            translations.append(entry)
         except Exception as e:  # noqa: BLE001 — deliberately broad: one backend's exception must never stop the
             # others (SigmaBackendError, SigmaTransformationError, NotImplementedError ... all funnel here).
             failures.append({"backend": backend_key, "reason": clean_reason(f"{type(e).__name__}: {e}")})

@@ -55,7 +55,9 @@ function ruleRow(r, techniqueId) {
   }).join(' ');
   var buttons = (r.backends || []).map(function(b) {
     return '<button type="button" class="btn btn-sm btn-outline" title="' + x(G.backendNote(b)) + '"' +
-      on('click', 'gapCopy', b.exportUrl) + '>Copy ' + x(b.language) + ' · ' + x(G.backendLabel(b.backend)) + '</button>';
+      on('click', 'gapCopy', b.exportUrl) + '>Copy ' + x(b.language) + ' · ' + x(G.backendLabel(b.backend)) + '</button>' +
+      (b.dslExportUrl ? ' <button type="button" class="btn btn-sm btn-outline" title="Elasticsearch Query DSL: matches case-insensitively, as Sigma does. The Lucene query is case-sensitive on keyword fields."' +
+        on('click', 'gapCopy', b.dslExportUrl) + '>Copy DSL · ' + x(G.backendLabel(b.backend)) + ' (case-insensitive)</button>' : '');
   }).join(' ');
   var notes = (r.backends || []).filter(function(b, i, a) { return a.findIndex(function(o) { return G.backendNote(o) === G.backendNote(b); }) === i; })
     .map(function(b) { return '<div class="tiny muted">' + x(G.backendLabel(b.backend)) + ': ' + x(G.backendNote(b)) + '</div>'; }).join('');

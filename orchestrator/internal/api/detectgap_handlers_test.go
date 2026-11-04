@@ -339,3 +339,44 @@ func TestRunDetectionGapExport_UnknownRunAndNothingToExport(t *testing.T) {
 		}
 	})
 }
+
+// An Elastic export carries the Lucene query for every rule and, where one exists, the case-insensitive Elasticsearch
+// DSL beside it: never instead of it.
+func TestRunDetectionGapExport_ElasticHasLuceneAndCaseInsensitiveDSLFiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := gapHandler(pool, t)
+		runID := seedGapRun(t, pool, []models.SimulationResult{res("T1059.001", models.ResultFail)})
+		attest(t, pool, runID, "T1059.001", verification.ResultNotDetected, verification.StateApproved)
+		zr, rec := getGapExport(t, h, runID, "?backend=elastic")
+		if zr == nil {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		files := zipFiles(t, zr)
+		lucene, dsl := 0, 0
+		for name, body := range files {
+			switch {
+			case strings.HasPrefix(name, "queries/elastic/") && strings.HasSuffix(name, ".lucene"):
+				lucene++
+			case strings.HasPrefix(name, "queries/elastic/") && strings.HasSuffix(name, ".dsl.json"):
+				dsl++
+				var doc map[string]any
+				if err := json.Unmarshal([]byte(body), &doc); err != nil || doc["query"] == nil {
+					t.Errorf("%s is not a DSL query: %v", name, err)
+				}
+				sibling := strings.TrimSuffix(name, ".dsl.json") + ".lucene"
+				if _, ok := files[sibling]; !ok {
+					t.Errorf("%s has no Lucene query beside it", name)
+				}
+			}
+		}
+		if lucene == 0 {
+			t.Fatal("no Lucene query in the Elastic export")
+		}
+		if dsl == 0 {
+			t.Error("no Elasticsearch DSL in the Elastic export")
+		}
+	})
+}

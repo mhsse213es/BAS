@@ -65,6 +65,11 @@ type Translation struct {
 	DataSource string `json:"dataSource"`
 	// Verification is how much is known about the translation: "none" (generic), "documented", "assumed" or "validated".
 	Verification string `json:"verification"`
+	// DSL is an Elasticsearch Query DSL translation of the same rule (JSON text of {"query": ...}), present for
+	// field-mapped Elastic translations only. A Lucene query_string cannot ask for case-insensitive matching and
+	// Sigma matches case-insensitively, so the DSL uses `case_insensitive: true`. Empty when the rule has a
+	// regular expression or is keyword-only; the Lucene Query is always present regardless.
+	DSL string `json:"dsl,omitempty"`
 }
 
 type TranslationFailure struct {

@@ -1,8 +1,11 @@
 package rulelib
 
 import (
+	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
+	"unicode"
 )
 
 func TestNewEngine_LoadsEmbeddedBundle(t *testing.T) {
@@ -171,5 +174,80 @@ func TestEmbeddedLibrary_QRadarIsPresentAndAlwaysGeneric(t *testing.T) {
 	}
 	if e.Metadata().Backends["qradar"] != withQRadar {
 		t.Errorf("metadata counts %d qradar translations, the rules hold %d", e.Metadata().Backends["qradar"], withQRadar)
+	}
+}
+
+// The Elasticsearch DSL exists to give Sigma's case-insensitive matching to field-mapped Elastic rules. It is
+// present only on a field-mapped elastic translation, is valid JSON with a query, and always asks for
+// case-insensitive matching somewhere (a DSL with no such clause would be a Lucene query in disguise).
+func TestEmbeddedBundle_ElasticDSLInvariants(t *testing.T) {
+	e := NewEngine()
+	withDSL := 0
+	for _, r := range e.Search(SearchFilter{}) {
+		for _, tr := range r.Translations {
+			if tr.DSL == "" {
+				continue
+			}
+			withDSL++
+			if tr.Backend != "elastic" || tr.Mapping != "pipeline" {
+				t.Errorf("%s: DSL on a %s/%s translation", r.ID, tr.Backend, tr.Mapping)
+			}
+			var doc map[string]any
+			if err := json.Unmarshal([]byte(tr.DSL), &doc); err != nil || doc["query"] == nil {
+				t.Errorf("%s: DSL is not JSON with a query: %v", r.ID, err)
+			}
+			if dslHasLetterValue(doc) && !strings.Contains(tr.DSL, `"case_insensitive":true`) {
+				t.Errorf("%s: DSL has string conditions but never asks for case-insensitive matching", r.ID)
+			}
+			if tr.Query == "" {
+				t.Errorf("%s: the Lucene query must stay beside the DSL", r.ID)
+			}
+		}
+	}
+	if withDSL == 0 {
+		t.Fatal("no translation carries a DSL")
+	}
+}
+
+// dslHasLetterValue reports whether any "value" in a DSL document is a string with a letter in it (a pattern such as
+// "?*" has nothing to fold, so it needs no case-insensitivity).
+func dslHasLetterValue(n any) bool {
+	switch v := n.(type) {
+	case map[string]any:
+		for k, x := range v {
+			if s, ok := x.(string); ok && k == "value" {
+				if strings.ContainsFunc(s, unicode.IsLetter) {
+					return true
+				}
+			} else if dslHasLetterValue(x) {
+				return true
+			}
+		}
+	case []any:
+		for _, x := range v {
+			if dslHasLetterValue(x) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// A pySigma object's repr must never reach a shipped query: it can never match, and a test that builds its events
+// from the same rule cannot see it. 40 Elastic queries shipped like that once, because the Lucene backend escapes the
+// parenthesis (`SigmaRegularExpression\(`) and the generator's gate only knew the plain form.
+var leakedSigmaObject = regexp.MustCompile(`Sigma(?:String|RegularExpression|Number|Bool|CIDR|Null|Expansion|Placeholder|Query)\\?\(|SpecialChars\.`)
+
+func TestEmbeddedBundle_NoQueryContainsALeakedPySigmaObject(t *testing.T) {
+	e := NewEngine()
+	for _, r := range e.Search(SearchFilter{}) {
+		for _, tr := range r.Translations {
+			if leakedSigmaObject.MatchString(tr.Query) {
+				t.Errorf("%s (%s): the query contains a leaked pySigma object: %.90s", r.ID, tr.Backend, tr.Query)
+			}
+			if tr.DSL != "" && leakedSigmaObject.MatchString(tr.DSL) {
+				t.Errorf("%s (%s): the DSL contains a leaked pySigma object", r.ID, tr.Backend)
+			}
+		}
 	}
 }
