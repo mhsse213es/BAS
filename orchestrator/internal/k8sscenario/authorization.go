@@ -160,8 +160,15 @@ func AuthorizationState(a CustomerAuthorization, now time.Time) string {
 // CheckCustomerAuthorization returns nil only when some record for this exact cluster is active (not revoked, not
 // expired) and names this exact scenario and this exact namespace. Anything else is denied, including an empty record.
 func CheckCustomerAuthorization(records []CustomerAuthorization, clusterID, scenario, namespace string, now time.Time) error {
+	_, err := MatchCustomerAuthorization(records, clusterID, scenario, namespace, now)
+	return err
+}
+
+// MatchCustomerAuthorization returns the active record that covers this exact cluster, scenario and namespace. The
+// caller records the returned ID and customer on the run, so the authorization used is traceable.
+func MatchCustomerAuthorization(records []CustomerAuthorization, clusterID, scenario, namespace string, now time.Time) (CustomerAuthorization, error) {
 	if clusterID == "" || scenario == "" || namespace == "" {
-		return ErrAuthorizationDenied
+		return CustomerAuthorization{}, ErrAuthorizationDenied
 	}
 	for _, a := range records {
 		if a.ClusterID != clusterID || AuthorizationState(a, now) != "active" {
@@ -171,10 +178,10 @@ func CheckCustomerAuthorization(records []CustomerAuthorization, clusterID, scen
 			continue
 		}
 		if slices.Contains(a.Scenarios, scenario) && slices.Contains(a.Namespaces, namespace) {
-			return nil
+			return a, nil
 		}
 	}
-	return ErrAuthorizationDenied
+	return CustomerAuthorization{}, ErrAuthorizationDenied
 }
 
 // AuthorizationEvent is the audit record for an authorization lifecycle change: created, revoked, or denied at

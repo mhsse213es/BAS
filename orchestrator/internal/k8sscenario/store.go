@@ -17,12 +17,18 @@ type Approval struct {
 	ApproverID  string
 	RequesterID string
 	RunID       string
-	Cluster     string
-	Namespace   string
-	ActionID    string
-	ParamsHash  string
-	ExpiresAt   time.Time
-	Used        bool
+	// ClusterID, AuthorizationID and CustomerRef bind the approval to the registry cluster and the customer
+	// authorization the run was planned under. Cluster is the display name, for presentation only.
+	ClusterID       string
+	AuthorizationID string
+	CustomerRef     string
+	Cluster         string
+	Namespace       string
+	ActionID        string
+	ParamsHash      string
+	ApprovedAt      time.Time
+	ExpiresAt       time.Time
+	Used            bool
 }
 
 // ApprovalStore holds approvals. MarkUsed must be atomic: an approval can be consumed once.

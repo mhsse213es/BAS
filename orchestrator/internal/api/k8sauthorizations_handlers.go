@@ -204,21 +204,22 @@ func (h *Handler) RevokeK8sAuthorization(w http.ResponseWriter, r *http.Request)
 	k8sJSON(w, http.StatusOK, toAuthorizationView(a, now))
 }
 
-// enforceCustomerAuthorization is the server-side check for Controlled work. For any profile other than controlled it
-// does nothing. For controlled it requires an active record matching this exact cluster, scenario and namespace; a
-// missing store, no match, or any error denies. A denial is audited and written as a 403, and the function returns true.
-func enforceCustomerAuthorization(w http.ResponseWriter, r *http.Request, svc *K8sScenarioService,
-	c k8sscenario.ClusterRecord, profile, action, namespace string) bool {
+// authorizeControlled is the server-side check for Controlled work. For any profile other than controlled it does
+// nothing. For controlled it requires an active record where the cluster ID, the action ID and the namespace all match
+// exactly, and returns that record so the caller can bind the run to it. A missing store, no match, or a read error
+// denies. A denial returns 403 and writes a k8s.authorization.denied audit event; denied is then true.
+func authorizeControlled(w http.ResponseWriter, r *http.Request, svc *K8sScenarioService,
+	c k8sscenario.ClusterRecord, profile, action, namespace string) (k8sscenario.CustomerAuthorization, bool) {
 	if profile != k8sscenario.ProfileControlled {
-		return false
+		return k8sscenario.CustomerAuthorization{}, false
 	}
-	deny := func(msg string, status int) bool {
+	deny := func(msg string, status int) (k8sscenario.CustomerAuthorization, bool) {
 		if svc != nil && svc.Audit != nil {
 			ev := k8sscenario.AuthorizationDenialEvent(action, c.ID, c.DisplayName, action, namespace, actorID(r))
 			_ = svc.Audit.Write(r.Context(), ev)
 		}
 		jsonError(w, msg, status)
-		return true
+		return k8sscenario.CustomerAuthorization{}, true
 	}
 	if svc == nil || svc.Authorizations == nil {
 		return deny("no customer authorization store is configured; Controlled work is denied", http.StatusForbidden)
@@ -226,10 +227,18 @@ func enforceCustomerAuthorization(w http.ResponseWriter, r *http.Request, svc *K
 	records, err := svc.Authorizations.List(r.Context(), c.ID)
 	if err != nil {
 		jsonError(w, "could not read customer authorizations", http.StatusInternalServerError)
-		return true
+		return k8sscenario.CustomerAuthorization{}, true
 	}
-	if err := k8sscenario.CheckCustomerAuthorization(records, c.ID, action, namespace, svc.now()); err != nil {
+	rec, err := k8sscenario.MatchCustomerAuthorization(records, c.ID, action, namespace, svc.now())
+	if err != nil {
 		return deny(err.Error(), http.StatusForbidden)
 	}
-	return false
+	return rec, false
+}
+
+// enforceCustomerAuthorization reports whether Controlled work is denied. See authorizeControlled.
+func enforceCustomerAuthorization(w http.ResponseWriter, r *http.Request, svc *K8sScenarioService,
+	c k8sscenario.ClusterRecord, profile, action, namespace string) bool {
+	_, denied := authorizeControlled(w, r, svc, c, profile, action, namespace)
+	return denied
 }
