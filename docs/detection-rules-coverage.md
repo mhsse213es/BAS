@@ -271,7 +271,7 @@ Rules with at least one field-mapped translation: **2,004 of 2,104**. Coverage p
 
 | Backend | Field-mapped | Not expressible |
 |---|---:|---:|
-| Microsoft Sentinel | 1,436 | 98 |
+| Microsoft Sentinel | 1,439 | 95 |
 | Microsoft Defender | 1,273 | 52 |
 | Splunk | 1,808 | 5 |
 | Elastic | 1,775 | 11 |
@@ -297,7 +297,7 @@ mapping applies, claims no schema and has verification `none`.
 
 **Generic Sentinel and Defender queries.** The Kusto backend emits a generic rule as a bare predicate (`Field =~ "x" and ...`), which is a `where` clause body, not a query. All 1,304 are now wrapped as a template: a comment, a `<Table>` placeholder and `| where <predicate>`. They are still generic (the column names are Sigma's) and cannot run until the analyst names the table and adapts the columns, but they can no longer be mistaken for a query that is ready to paste. Mapped and keyword queries are never wrapped.
 
-The 75 rules with neither a field mapping nor a keyword label are left generic on purpose:
+The 72 rules with neither a field mapping nor a keyword label are left generic on purpose (the list, why each group is blocked and what sample unblocks it: `docs/detection-rules-pending-samples.md`):
 
 - **No schema verified** (about 44): GitHub audit (8), Fortigate (4), M365 audit and threat management (7), RPC Firewall
   (6), Linux file-event and network-connection from Sysmon for Linux (6), Windows IIS, LDAP, SMB-server and file-access

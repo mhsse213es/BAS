@@ -192,7 +192,8 @@ def sentinel_azure_risk_pipeline() -> ProcessingPipeline:
 
 
 def sentinel_azure_signin_pipeline() -> ProcessingPipeline:
-    return _azure_pipeline("signinlogs", "SigninLogs", {})
+    # userAgent and Resultdescription differ from the documented SigninLogs columns only in name (case / word shape).
+    return _azure_pipeline("signinlogs", "SigninLogs", {"userAgent": "UserAgent", "Resultdescription": "ResultDescription"})
 
 
 def _aws() -> list:

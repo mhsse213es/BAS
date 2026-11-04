@@ -67,3 +67,12 @@ def test_a_field_the_table_lacks_is_a_recorded_failure_not_a_generic_fallback():
     ts, failures = translate_rule(_rule(NO_COLUMN))
     assert "microsoft_sentinel" not in by_backend(ts)
     assert "someMadeUpField" in {f["backend"]: f["reason"] for f in failures}["microsoft_sentinel"]
+
+
+def test_signin_columns_that_differ_from_sigma_only_in_name_are_renamed_to_the_documented_columns():
+    ua = azure("signinlogs", "userAgent|contains: 'azurehound'")
+    t = by_backend(translate_rule(_rule(ua))[0])["microsoft_sentinel"]
+    assert t["mapping"] == "pipeline" and "UserAgent" in t["query"] and "userAgent" not in t["query"]
+    rd = azure("signinlogs", "Resultdescription: 'Blocked by Conditional Access'")
+    t = by_backend(translate_rule(_rule(rd))[0])["microsoft_sentinel"]
+    assert t["mapping"] == "pipeline" and "ResultDescription" in t["query"]

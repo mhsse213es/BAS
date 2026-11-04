@@ -4,11 +4,11 @@
     "crowdstrike": 1907,
     "elastic": 2093,
     "microsoft_defender": 2052,
-    "microsoft_sentinel": 2006,
+    "microsoft_sentinel": 2009,
     "qradar": 1753,
     "splunk": 2099
   },
-  "generatedAt": "2026-11-04T04:06:02.021725+00:00",
+  "generatedAt": "2026-11-04T04:09:46.980731+00:00",
   "generatorVersion": "1.4.0",
   "mappings": {
     "crowdstrike:generic": 873,
@@ -20,7 +20,7 @@
     "microsoft_defender:pipeline": 1273,
     "microsoft_sentinel:generic": 525,
     "microsoft_sentinel:keyword": 45,
-    "microsoft_sentinel:pipeline": 1436,
+    "microsoft_sentinel:pipeline": 1439,
     "qradar:generic": 1753,
     "splunk:generic": 265,
     "splunk:keyword": 26,
@@ -844,12 +844,6 @@
       "sigmaId": "340a090b-c4e9-412e-bb36-b4b16fe96f9b"
     },
     {
-      "backend": "microsoft_sentinel",
-      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: userAgent. Please use valid fields for the SigninLogs table (list of valid fields omitted)",
-      "ruleId": "AUDRULE-000432",
-      "sigmaId": "35b781cc-1a08-4a5a-80af-42fd7c315c6b"
-    },
-    {
       "backend": "crowdstrike",
       "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the OriginalFileName field",
       "ruleId": "AUDRULE-000441",
@@ -1280,12 +1274,6 @@
       "reason": "SigmaTransformationError: Crowdstrike Query Language does not support the ParentCommandLine field",
       "ruleId": "AUDRULE-000681",
       "sigmaId": "534f2ef7-e8a2-4433-816d-c91bccde289b"
-    },
-    {
-      "backend": "microsoft_sentinel",
-      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: userAgent. Please use valid fields for the SigninLogs table (list of valid fields omitted)",
-      "ruleId": "AUDRULE-000685",
-      "sigmaId": "53bb4f7f-48a8-4475-ac30-5a82ddfdf6fc"
     },
     {
       "backend": "qradar",
@@ -2930,12 +2918,6 @@
       "reason": "SigmaTransformationError: CrowdStrike Query Language does not support the OriginalFileName field",
       "ruleId": "AUDRULE-001491",
       "sigmaId": "b48492dc-c5ef-4572-8dff-32bc241c15c8"
-    },
-    {
-      "backend": "microsoft_sentinel",
-      "reason": "SigmaTransformationError: Invalid SigmaDetectionItem field name encountered: Resultdescription. Please use valid fields for the SigninLogs table (list of valid fields omitted)",
-      "ruleId": "AUDRULE-001493",
-      "sigmaId": "b4a6d707-9430-4f5f-af68-0337f52d5c42"
     },
     {
       "backend": "qradar",
