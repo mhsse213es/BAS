@@ -338,6 +338,9 @@ func main() {
 	if err := db.EnsureAPIBASRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] apibas run schema: %v", err)
 	}
+	if err := db.EnsureSecretStoreSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] secret store schema: %v", err)
+	}
 	if err := aleefstore.EnsureSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] aleef schema: %v", err)
 	}

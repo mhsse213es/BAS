@@ -3412,3 +3412,42 @@ Decisions approved by the product owner:
 
 - Implementation is **not started**. It waits on pre-implementation items 1 and 3, and on the decision about where the interim key lives if the interim is chosen.
 - Nothing in the database or the code has changed by this decision.
+
+## D4 phase 1: secret store interface, pgcrypto interim, reference columns (4 November 2026)
+
+### Decisions recorded
+
+- **D1, secret store:** an external secret manager is **assumed unavailable** for the current on-prem and air-gapped baseline. The `pgcrypto` interim is used. Vault is not a deployment prerequisite. The store interface is kept compatible with a future Vault backend.
+- **Interim key:** stored outside PostgreSQL, in a root-owned file, default `/etc/audspect/secrets/db-encryption.key`. Access is restricted to the Audspect service account and root. The key is excluded from database dumps and ordinary backups, and backed up separately through an encrypted, access-controlled recovery process.
+- **Residual risk (stated):** compromise of the host and the key together exposes every encrypted credential.
+- **D4, scope:** the eight tables, three phases, as approved. `dlp_sink_tokens` is separate.
+- **D5, rotation:** after migration, in this order: (1) SSO client secret and webhook signing secret; (2) SIEM, detection/response and threat-intelligence credentials; (3) OpenAEV and TAXII credentials, including certificate and key material. Each rotation verifies the new credential and invalidates the old one. Historical backups are not deleted as a substitute.
+- **Backup and restore owner:** the Admin role (the product owner who approved this decision). A named individual is not recorded here.
+
+### Pre-implementation items: status
+
+1. External manager availability: settled by the decision above (assumed unavailable).
+2. Unverified GET responses: verified safe (see the previous section).
+3. Backup and restore owner: Admin role recorded above.
+
+### Built in phase 1
+
+- `internal/secretstore/store.go`: the `Store` interface (`Put`, `Get`, `Delete`), the reference grammar (`cred:<table>:<row>:<column>`), `ErrNotFound`, `ErrBadRef`, `ErrEmptyValue`. Values never appear in an error.
+- `internal/secretstore/pgcrypto.go`: `PGStore`. Values are encrypted with `pgp_sym_encrypt` into `credential_secrets`, which holds ciphertext only. The key is passed per statement and never written to the database. A wrong key is an error, never a wrong value.
+- `internal/secretstore/keyfile.go`: `LoadKeyFile`. The file must hold the base64 of exactly 32 random bytes on one line. On Linux and macOS (`keyfile_unix.go`) it must be owned by root and carry no group or other bits. Windows (`keyfile_other.go`) applies the format check only, because Windows ACLs are not expressed in mode bits.
+- `internal/db/secretstore_schema.go`: `EnsureSecretStoreSchema` creates `credential_secrets` and adds `<column>_ref text NOT NULL DEFAULT ''` to the fourteen credential columns in the eight tables. It is idempotent and runs at server startup, beside the other schema steps (`cmd/server/main.go`).
+
+### Tests and results
+
+- Unit (`go test ./internal/secretstore/`): reference grammar, reference construction, permission-bit checks, key format (short, non-base64, empty, two lines, missing). All pass.
+- Database, against the Postgres 16 test container: round trip; the stored column does not contain the plaintext; overwrite and delete; missing reference is `ErrNotFound`; a wrong key returns an error with no key or value in the text; empty value and malformed reference are refused. All pass (`internal/secretstore`, 80 s).
+- Schema (`internal/db`, `TestEnsureSecretStoreSchemaAddsReferenceColumns`): all fourteen reference columns present as NOT NULL text, the step run twice, the table present. Passes.
+- Linux build, Windows cross-compile of `cmd/server`, `cmd/apibas-lab` and `cmd/apibas-runner`: pass.
+
+### Not done in phase 1 (stated)
+
+- **No connector reads or writes the reference columns yet.** Runtime behaviour is unchanged. Dual-read in the consumers (SIEM, detection and response connectors, threat intel, OpenAEV, TAXII, SSO, webhooks) is the next step, followed by the migration job (phase 2). Phase 3, dropping the plaintext columns, follows after compatibility, rollback, backup recovery and rotation have all passed verification.
+- **Installer provisioning is not done.** `install.sh` does not yet create `/etc/audspect/secrets/db-encryption.key` (root-owned, 0600), does not place it in the container, and does not set the service account's access. Deployment must not reach production before this exists. The key is not under `<DATA_DIR>`, so the automatic upgrade backup (which copies `.env` and `pki/`) does not capture it, but this must be confirmed by test.
+- **Backup exclusion and separate recovery copy** of the key are not implemented.
+- **Restore test** (every database reference resolves after restore) is not run.
+- **Rotation** (D5) has not started. It waits for migration.
