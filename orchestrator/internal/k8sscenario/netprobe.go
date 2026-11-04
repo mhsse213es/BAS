@@ -60,8 +60,12 @@ type NetCheckResult struct {
 // runTagRE restricts the run tag used in probe pod names to a DNS-safe, short form.
 var runTagRE = regexp.MustCompile(`^[a-z0-9]{4,12}$`)
 
-// netProbeImage is the image of the probe pods. It provides sh, nc and wget.
+// netProbeImage is the image of the S9 probe pods. It provides sh and nc.
 const netProbeImage = "busybox:1.36"
+
+// netProbeCurlImage is the image of the S10 probe pods. busybox wget cannot complete a TLS handshake with the lab API
+// server (alert 40), so S10 uses curl, which can.
+const netProbeCurlImage = "curlimages/curl:8.11.1"
 
 // cleanupWait bounds how long a deleted pod may take to disappear. It is a variable so tests can shorten it.
 var cleanupWait = 60 * time.Second
@@ -74,7 +78,15 @@ type probeSpec struct {
 	name      string
 	labels    map[string]string
 	automount bool
+	image     string
 	script    string
+}
+
+func (p probeSpec) imageOrDefault() string {
+	if p.image != "" {
+		return p.image
+	}
+	return netProbeImage
 }
 
 func (p probeSpec) pod() map[string]any {
@@ -89,7 +101,7 @@ func (p probeSpec) pod() map[string]any {
 			"restartPolicy":                "Never",
 			"automountServiceAccountToken": p.automount,
 			"containers": []any{map[string]any{
-				"name": "probe", "image": netProbeImage,
+				"name": "probe", "image": p.imageOrDefault(),
 				"command": []any{"sh", "-c", p.script},
 			}},
 		},
@@ -234,12 +246,13 @@ func RunAPIReachability(ctx context.Context, c NetProbeClient, runTag, namespace
 		res.Outcome, res.Verdict, res.Error = controlval.OutcomeUnknown, controlval.VerdictError, "run tag must be 4 to 12 lower-case letters or digits"
 		return res
 	}
-	wget := "wget --no-check-certificate -S -O /dev/null -T 5 " + apiURL + " 2>&1; true"
+	// curl -D - prints the response headers, including the status line, to stdout.
+	curlAnon := "curl -sk -D - -o /dev/null -m 10 " + apiURL + "; true"
 	anon := probeSpec{name: "bas-s10a-" + runTag, labels: map[string]string{"bas-probe": "s10"}, automount: false,
-		script: wget}
-	tokenScript := `wget --no-check-certificate --header="Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" -S -O /dev/null -T 5 ` + apiURL + " 2>&1; true"
+		image: netProbeCurlImage, script: curlAnon}
+	tokenScript := `curl -sk -D - -o /dev/null -m 10 -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" ` + apiURL + "; true"
 	withToken := probeSpec{name: "bas-s10b-" + runTag, labels: map[string]string{"bas-probe": "s10"}, automount: true,
-		script: tokenScript}
+		image: netProbeCurlImage, script: tokenScript}
 
 	var cleanups []string
 	var outcomes []NetProbeEvidence
@@ -263,7 +276,12 @@ func RunAPIReachability(ctx context.Context, c NetProbeClient, runTag, namespace
 			status = m[1]
 		}
 		if status == "" {
-			failed = p.label + ": no HTTP status in the probe output"
+			// Keep a short excerpt of the probe output so the reason is visible in the result.
+			excerpt := strings.TrimSpace(logs)
+			if len(excerpt) > 400 {
+				excerpt = excerpt[:400] + "..."
+			}
+			failed = p.label + ": no HTTP status in the probe output: " + excerpt
 			break
 		}
 		outcomes = append(outcomes, NetProbeEvidence{Probe: p.label, Target: apiURL, Expected: p.expected,
