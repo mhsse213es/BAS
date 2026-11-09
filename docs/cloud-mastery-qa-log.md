@@ -26,10 +26,19 @@ Status key: **OPEN** = needs a live account or a decision. **MODEL** = known lim
 - **Why not code:** subscription activation and consent need a human with the right role. The earlier diagnosis is in `project_azure_real_discovery_integration`.
 - **Resolution path:** set `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SUBSCRIPTION_ID`, then run `Preflight`. It returns one line per gap: `token-graph`, `token-arm`, `subscription-visible`, `rbac-readable`, `deny-assignments-readable`, `mg-hierarchy-readable`, `graph-users-readable`, `graph-service-principals-readable`. Then run the existing integration test with `-tags=integration`.
 
+- **Status check 2026-11-09 (read-only, `az` CLI as `Tausif@essenvision.com`):** still blocked, and one assumption above is wrong.
+  - No subscription: `az account list` shows only the tenant-level placeholder ("N/A(tenant level account)").
+  - The signed-in account has no directory role, so it cannot grant admin consent.
+  - **App `870e1fcd-0338-46b4-89a7-cc19f5517097` no longer exists in the tenant** (`az ad app show` returns not found). A new app registration is needed, not just consent: register it, add Graph application permissions `User.Read.All` and `Application.Read.All`, grant admin consent, assign Reader on the subscription (optionally on the root management group so `mg-hierarchy-readable` passes), and create a new client secret.
+  - No `AZURE_*` variables are set on the build host.
+- **Owner position 2026-11-09:** there is no tenant to use at present. This item is parked until one is available. Nothing else in cloud BAS depends on it except the live Azure checks in O-4 and O-5.
+
 ### O-2 — Live AWS discovery — OPEN
 - **What's needed:** a least-privilege read role in a test account. It needs `iam:GetAccountAuthorizationDetails`, `sts:GetCallerIdentity`, `s3:ListAllMyBuckets`, `backup:ListBackupVaults`, and for enforcement layers `organizations:ListParents`, `organizations:ListPoliciesForTarget`, `organizations:DescribePolicy`. Then compare the discovered edges against IAM Policy Simulator for a sample of identities.
 - **Also needs** `s3:GetBucketPolicy` on each bucket. A bucket with no policy is normal. Any other failure fails the pass, naming the permission. Buckets in another region may return a redirect from `GetBucketPolicy`; if that happens, the pass fails rather than skipping the bucket. Verify this on a bucket in a second region.
 - **Verify:** the `GetAccountAuthorizationDetails` pagination marker; that policy documents arrive URL-encoded and decode cleanly; that the `backup_vaults` count matches the console; that `scp_levels` and `boundary_attached` in the discovery report match the Organizations console and each identity's permissions boundary. A discovery pass fails if Organizations cannot be read, so a missing permission shows up as a named error, not as silent over-reporting.
+
+- **Status check 2026-11-09:** not run. The AWS CLI on the build host is signed in as `arn:aws:iam::165228763915:user/opshddbackup` (account `165228763915`). Only `sts get-caller-identity` was called. That account was **not** used: it is not established as a test account, and `iam:GetAccountAuthorizationDetails` reads every user, role and policy in it. Discovery waits for a dedicated test account with `docs/aws/bas-server-readonly-policy.json` attached and `CLOUD_ALLOWED_ACCOUNTS` set to that account, or an explicit owner decision to read `165228763915`.
 
 ### O-3 — Live GCP discovery — OPEN
 - **What's needed:** a project with a read-only service account. It needs `resourcemanager.projects.getIamPolicy`, `resourcemanager.projects.get` (for ancestry), `iam.roles.get`, `iam.serviceAccounts.list`, `storage.buckets.list`, `storage.buckets.getIamPolicy`, and `iam.denypolicies.list` at the project. If the project sits under a folder or organization, the same account also needs `resourcemanager.folders.getIamPolicy`, `resourcemanager.organizations.getIamPolicy`, and `iam.denypolicies.list` at each of those levels. A missing permission fails the pass with the call named.
@@ -281,7 +290,7 @@ Every item here is open, unbuilt, or a documented limit. Nothing is hidden in a 
 
 | ID | Item | Type | Blocked on |
 |---|---|---|---|
-| O-1 | Azure tenant readiness: subscription activation and Graph admin consent | Open | A person with tenant rights |
+| O-1 | Azure tenant readiness: new app registration, subscription activation, Graph admin consent, Reader role (parked: no tenant, 2026-11-09) | Open | A person with tenant rights |
 | O-2 | Live AWS discovery | Open | A least-privilege read role in a test account |
 | O-3 | Live GCP discovery | Open | A project with a read-only service account |
 | O-4 | Live audit evidence coverage (CloudTrail data events, Azure blob reads, GCP Data Access logs off by default) | Open | Live accounts with logging configured |
