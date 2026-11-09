@@ -280,25 +280,16 @@ func classifyExecution(r ExecResult, combined string) (ExecutionOutcome, ErrorRe
 		return OutcomeBlocked, ErrNone, fmt.Sprintf("Security control blocked the technique (exit 0x%X): %s", uint32(r.ExitCode), out)
 	}
 
-	// BAS execution error — not a security outcome.
+	// BAS execution error — not a security outcome. Every classified reason,
+	// including a missing prerequisite or an absent required binary, stays an
+	// ERROR here: the normalised ExecutionFailure assessment
+	// (execution_failure.go) matches this detail's "Execution error (<label>)"
+	// prefix and attributes each error to its owner — environment (missing
+	// tool/prereq, timeout, env conflict) vs content (malformed) — which is the
+	// single source of truth downstream consumers (factory validation,
+	// reporting, scoring) key off. Collapsing environment errors to a SKIP here
+	// would blind that taxonomy, so it is deliberately not done.
 	if reason := classifyExecutionError(lower, r.ExitCode); reason != ErrNone {
-		// A missing prerequisite or an absent required binary means the
-		// environment could not run the technique at all — it was never tested.
-		// That is a SKIP (not applicable here), exactly like an OS mismatch: it
-		// is not the content's fault and must not FAIL a factory validation or
-		// be scored as a BAS error. Genuine execution problems (malformed
-		// content, timeouts, spawn failures) stay errors.
-		if reason == ErrMissingPrerequisite || reason == ErrBinaryMissing {
-			// An unresolved bas-placeholder argument reaching execution is a BAS
-			// arg-resolution bug (a required input we could not fill), not an
-			// environment prerequisite — it just happens to match a "cannot find
-			// path" string. Keep it an ERROR so the defect stays visible instead
-			// of being hidden as an environment skip.
-			if strings.Contains(lower, "bas-placeholder-") {
-				return OutcomeError, reason, "Execution error (unresolved argument placeholder): " + firstLine(combined)
-			}
-			return OutcomeSkipped, ErrNone, "Not applicable in this environment (" + errorReasonLabel(reason) + "): " + firstLine(combined)
-		}
 		return OutcomeError, reason, "Execution error (" + errorReasonLabel(reason) + "): " + firstLine(combined)
 	}
 

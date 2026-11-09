@@ -372,6 +372,7 @@ func (o *Orchestrator) resolveIfComplete(ctx context.Context, versionID, runID s
 		if c, ok := countRunResults(resultsJSON); ok {
 			detail["executed_steps"] = c.Executed
 			detail["errored_steps"] = c.Errored
+			detail["environment_blocked_steps"] = c.EnvErrored
 			detail["skipped_by_agent_steps"] = c.Skipped
 		}
 	}
@@ -399,8 +400,13 @@ func (o *Orchestrator) resolveIfComplete(ctx context.Context, versionID, runID s
 // skipped means it never ran.
 // runResultCounts is the per-outcome breakdown of a completed run's results.
 // Executed counts steps that actually ran (pass|fail); Skipped counts steps the
-// agent did not run at all (platform/policy not applicable at runtime).
-type runResultCounts struct{ Executed, Errored, Skipped, Total int }
+// agent did not run at all (platform/policy not applicable at runtime). Errored
+// counts steps that errored for a content/our-side reason (ExecutionFailure
+// owner != "environment", or no attribution) — these FAIL the validation.
+// EnvErrored counts steps that errored because the lab endpoint lacked a tool,
+// prerequisite, DNS, etc. (owner == "environment") — not a content defect, so
+// they do NOT FAIL the validation; they just could not be tested here.
+type runResultCounts struct{ Executed, Errored, EnvErrored, Skipped, Total int }
 
 // countRunResults parses a run's results snapshot into its outcome breakdown.
 // ok is false when there are no results or the JSON is malformed -- the two
@@ -410,7 +416,10 @@ func countRunResults(resultsJSON []byte) (c runResultCounts, ok bool) {
 		return runResultCounts{}, false
 	}
 	var rs []struct {
-		Result string `json:"result"`
+		Result           string `json:"result"`
+		ExecutionFailure *struct {
+			Owner string `json:"owner"`
+		} `json:"executionFailure"`
 	}
 	if err := json.Unmarshal(resultsJSON, &rs); err != nil {
 		return runResultCounts{}, false
@@ -421,7 +430,14 @@ func countRunResults(resultsJSON []byte) (c runResultCounts, ok bool) {
 		case "pass", "fail":
 			c.Executed++
 		case "error":
-			c.Errored++
+			// An error the normalised taxonomy attributes to the endpoint's
+			// environment (missing tool/prerequisite/DNS/timeout) is not the
+			// content's fault — count it apart so it never FAILs the validation.
+			if r.ExecutionFailure != nil && r.ExecutionFailure.Owner == "environment" {
+				c.EnvErrored++
+			} else {
+				c.Errored++
+			}
 		case "skipped":
 			c.Skipped++
 		}
@@ -439,10 +455,13 @@ func classifyCompletedRun(resultsJSON []byte) (outcome, reason string) {
 	}
 	switch {
 	case c.Errored > 0:
-		return "FAIL", "one or more steps errored during execution"
+		// Content/our-side errors only; environment-owned errors are excluded.
+		return "FAIL", "one or more steps errored for a content reason during execution"
 	case c.Executed == 0:
-		return "NO_DATA", "no steps executed (all skipped); nothing to validate"
+		return "NO_DATA", "no steps executed (all skipped or environment-blocked); nothing to validate"
 	default:
+		// At least one step ran cleanly and no content errors. Steps the
+		// endpoint could not run (environment-blocked) do not fail the content.
 		return "PASS", "content executed cleanly"
 	}
 }
