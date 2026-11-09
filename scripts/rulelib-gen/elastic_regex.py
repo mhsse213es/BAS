@@ -22,6 +22,7 @@ _CLASS = {"s": _WS, "d": "0-9", "w": "a-zA-Z0-9_"}
 _NEG = {"S": "s", "D": "d", "W": "w"}
 _CTRL = {"n": "\n", "t": "\t", "r": "\r", "f": "\f", "v": "\v"}
 _LUCENE_OPS = set('@&~<>#"')
+_BOUNDED_THEN_MORE = re.compile(r"(?:\[\^(?:\\.|[^\]\\])*\]|(?<!\\)\.)\{\d*,(?:3[2-9]|[4-9]\d|\d{3,})\}(?!\$|\)*$)")
 _QUANT = re.compile(r"\{\d+(?:,\d*)?\}")
 
 
@@ -59,6 +60,10 @@ def to_lucene(pattern, ignorecase=False, multiline=False, dotall=False, query_st
     start_anchor = p.startswith("^")
     if start_anchor:
         p = p[1:]
+    elif _BOUNDED_THEN_MORE.search(p):
+        # `.*X[^"]{0,64}Y`: a long bounded repeat of a class that overlaps what follows, behind an unanchored prefix,
+        # makes Lucene's automaton explode (checked on Elasticsearch 8.15.3: HTTP 400 even at 200,000 states)
+        raise Unsupported("bounded repeat of 32 or more of a negated class, followed by more pattern, in an unanchored regex")
     end_anchor = False
     if p.endswith("$") and not p.endswith("\\$"):
         p, end_anchor = p[:-1], True
@@ -131,6 +136,10 @@ def to_lucene(pattern, ignorecase=False, multiline=False, dotall=False, query_st
                 i += 1
             last_quant = False
         elif c == ")" or c == "|":
+            prev = out[-1] if out else "("
+            # Lucene rejects an empty alternative, `(a|)` or `(|a)`: spell the empty string `()`
+            if (c == "|" and prev in ("(", "|")) or (c == ")" and prev == "|"):
+                out.append("()")
             out.append(c)
             i += 1
             last_quant = False
@@ -185,3 +194,45 @@ def pad_query_regexes(query):
         value, _ = to_lucene(m.group("body"), query_string=True)
         return "%s:/%s/" % (m.group("field"), value)
     return _QS_REGEX.sub(one, query)
+
+
+# ---- recovering regexes that a pySigma pipeline turns into text -------------------------------------------------
+# pySigma's `ecs_windows` pipeline stringifies a regex value into "SigmaRegularExpression(regexp=...)". The regex is
+# swapped for a placeholder word before the pipeline runs and put back afterwards, in the Lucene text and the DSL.
+_PLACEHOLDER = re.compile(r"\bAUDRX(\d+)\b")
+
+
+def protect_regexes(rule):
+    """Return (copy of the rule with each regex value replaced by a placeholder, {placeholder: SigmaRegularExpression})."""
+    import copy
+    from sigma.rule import SigmaDetection
+    from sigma.types import SigmaRegularExpression, SigmaString
+    rule = copy.deepcopy(rule)
+    found = {}
+
+    def walk(det):
+        for item in det.detection_items:
+            if isinstance(item, SigmaDetection):
+                walk(item)
+                continue
+            for k, val in enumerate(item.value):
+                if isinstance(val, SigmaRegularExpression):
+                    name = "AUDRX%d" % len(found)
+                    found[name] = val
+                    item.value[k] = SigmaString(name)
+    for det in rule.detection.detections.values():
+        walk(det)
+    return rule, found
+
+
+def restore_query_regexes(query, found):
+    """Put the regexes back into a Lucene query (`field:AUDRX0` -> `field:/padded regex/`)."""
+    from sigma.types import SigmaRegularExpressionFlag as Flag
+
+    def one(m):
+        rx = found["AUDRX" + m.group(1)]
+        flags = set(rx.flags or ())
+        value, _ = to_lucene(rx.to_plain(), ignorecase=Flag.IGNORECASE in flags, multiline=Flag.MULTILINE in flags,
+                             dotall=Flag.DOTALL in flags, query_string=True)
+        return "/" + value + "/"
+    return _PLACEHOLDER.sub(one, query)

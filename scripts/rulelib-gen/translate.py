@@ -19,7 +19,8 @@ from typing import Callable
 from sigma.backends.crowdstrike import LogScaleBackend
 from elastic_dsl import Unsupported as DslUnsupported, rule_to_dsl
 from elastic_ip import UnexpressibleOnIpField, fix_ip_wildcards
-from elastic_regex import Unsupported as RegexUnsupported, pad_query_regexes
+from elastic_regex import (Unsupported as RegexUnsupported, pad_query_regexes, protect_regexes,
+                           restore_query_regexes)
 from sigma.backends.elasticsearch import LuceneBackend
 from sigma.backends.kusto import KustoBackend as SentinelKustoBackend
 from sigma.backends.microsoft365defender import KustoBackend as DefenderKustoBackend
@@ -1010,6 +1011,19 @@ def translate_rule(rule) -> tuple[list[dict], list[dict]]:
             if not queries:
                 failures.append({"backend": backend_key, "reason": "backend returned no query"})
                 continue
+            recovered = None  # {placeholder: regex} when the pipeline stringified the rule's regexes and they were put back
+            if looks_corrupt(queries[0]) and backend_key == "elastic" and mapping:
+                try:
+                    protected, recovered = protect_regexes(rule)
+                    if recovered:
+                        q2 = spec.backend_cls(processing_pipeline=mapping.pipeline()).convert(SigmaCollection([protected]))
+                        if q2 and not looks_corrupt(q2[0]):
+                            queries = [restore_query_regexes(q2[0], recovered)]
+                        else:
+                            recovered = None
+                except RegexUnsupported as e:
+                    failures.append({"backend": backend_key, "reason": "the rule's regular expression uses a feature Lucene lacks (%s)" % e})
+                    continue
             if looks_corrupt(queries[0]):
                 failures.append({"backend": backend_key, "reason": "the backend produced an invalid query (a pySigma object leaked into the text)"})
                 continue
@@ -1040,9 +1054,9 @@ def translate_rule(rule) -> tuple[list[dict], list[dict]]:
             if backend_key == "elastic" and mapping and not keyword:
                 # Same pipeline as the Lucene query, so field names agree; the DSL adds Sigma's case-insensitivity.
                 try:
-                    shaped = copy.deepcopy(rule)
+                    shaped, found = protect_regexes(rule) if recovered else (copy.deepcopy(rule), None)
                     mapping.pipeline().apply(shaped)
-                    dsl = rule_to_dsl(shaped)
+                    dsl = rule_to_dsl(shaped, found)
                 except DslUnsupported:
                     dsl = ""  # a regular expression or similar: the rule keeps its Lucene query only
             entry = {

@@ -47,12 +47,46 @@ def mutate(rng, s):
     return out
 
 
-def gen(path):
+def shipped_regexes(rules_json):
+    """Every distinct (pattern, flags) used by a shipped rule's detection."""
+    from sigma.collection import SigmaCollection
+    from sigma.rule import SigmaDetection
+    from sigma.types import SigmaRegularExpression, SigmaRegularExpressionFlag as F
+    found = {}
+
+    def walk(det):
+        for it in det.detection_items:
+            if isinstance(it, SigmaDetection):
+                walk(it)
+                continue
+            for v in it.value:
+                if isinstance(v, SigmaRegularExpression):
+                    fl = "".join(k for k, f in (("i", F.IGNORECASE), ("m", F.MULTILINE), ("s", F.DOTALL)) if f in (v.flags or ()))
+                    found[(v.to_plain(), fl)] = 1
+    for r in json.load(open(rules_json, encoding="utf8")):
+        try:
+            for det in SigmaCollection.from_yaml(r["detection"]).rules[0].detection.detections.values():
+                walk(det)
+        except Exception:
+            pass
+    return list(found)
+
+
+def gen(path, rules_json=None):
     from elastic_regex import to_lucene, Unsupported
     rng = random.Random(7)
-    strings = sorted({m for s in SEEDS for m in mutate(rng, s)})
+    pats = REAL + SYNTH + (shipped_regexes(rules_json) if rules_json else [])
+    from rxsample import samples
+    seeds = list(SEEDS)
+    for pat, fl in pats:  # strings that really match each pattern, so agreement is not just "nothing matches"
+        try:
+            for smp in samples(pat, (re.IGNORECASE if "i" in fl else 0) | (re.DOTALL if "s" in fl else 0), n=3):
+                seeds += [smp, "pre " + smp + " post"]
+        except Exception:
+            pass
+    strings = sorted({m for s in seeds for m in mutate(rng, s)})
     cases = []
-    for pat, fl in REAL + SYNTH:
+    for pat, fl in pats:
         flags = re.IGNORECASE if "i" in fl else 0
         flags |= re.DOTALL if "s" in fl else 0
         try:
@@ -92,7 +126,7 @@ def run(path, out, field_type="keyword"):
         if "unsupported" in c:
             res.update(status="NO_DSL", reason=c["unsupported"])
         else:
-            q = {"regexp": {"f": {"value": c["value"]}}}
+            q = {"regexp": {"f": {"value": c["value"], "max_determinized_states": 200000}}}
             if c["ci"]:
                 q["regexp"]["f"]["case_insensitive"] = True
             st, r = call("GET", "/%s/_search" % ix, {"size": 10000, "_source": False, "fields": ["n"], "query": q})
@@ -119,6 +153,6 @@ def run(path, out, field_type="keyword"):
 
 if __name__ == "__main__":
     if sys.argv[1] == "gen":
-        gen(sys.argv[2])
+        gen(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
     else:
         run(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else "keyword")
