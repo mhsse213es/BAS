@@ -302,6 +302,7 @@ Every item here is open, unbuilt, or a documented limit. Nothing is hidden in a 
 | O-12 | Kubernetes validation on managed platforms (EKS, AKS, GKE, OpenShift) | Open | Cloud accounts and managed clusters; the operator has neither |
 | O-13 | Kubernetes validation on multi-node K3s and on K3s beyond a single-node k3d cluster | Open | A multi-node K3s environment |
 | O-14 | Kubernetes attack-path routes (bind, escalate, impersonate, create-pods, token request, exec, node proxy) | Done as configured-permission modelling | Node proxy is modelled from RBAC grants only; kubelet behaviour is not validated live |
+| O-15 | Stratus Red Team cloud attack-execution subsystem (REQ-010 broaden-cloud: AWS IAM-abuse/storage-exposure/workload) | Open, direction approved | AWS sandbox account: provisioned, ownership confirmed, budget alerts configured, permissions scoped (see `docs/cloud-open-decisions.md` R-21) |
 | R-19a | Sandbox provider integration test for read-only probes | Open | A dedicated sandbox account |
 | R-19b | Probes for GCP and Azure are not registered | Open | Decision on which probes to add |
 | R-19c | `CLOUD_ALLOWED_ACCOUNTS` is unset, so no probe can run against a real account (replaces `CLOUD_PROBE_ALLOWED_ACCOUNTS`, which is no longer read) | Operational | Sandbox test passing first |
