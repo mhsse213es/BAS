@@ -3,6 +3,7 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { fmtRunIdCode, showToast } from '../core/util.js';
+import { splitReverted } from './restore-model.js';
 import { renderGroupCheckboxList } from './adversaries.js';
 import { agentBucket, loadScenarios, renderScenarios, resolveGroupTargetAgents } from './attack-path.js';
 import { cmpAgentOS } from './campaigns.js';
@@ -2610,8 +2611,17 @@ export function viewRunResults(run) {
   // detected but FAILED to revert are not included here -- see
   // docs/superpowers/specs/2026-08-06-endpoint-changes-tab-design.md.
   var endpointHtml = (function() {
-    var items = run.reverted || [];
+    var split = splitReverted(run.reverted);
+    var items = split.reverted;
+    var failedHtml = split.incomplete.length
+      ? '<div style="border:1px solid var(--danger);background:rgba(218,54,51,0.08);border-radius:8px;padding:0.75rem 1rem;margin-bottom:0.8rem">' +
+        '<div style="font-weight:700;color:var(--danger);font-size:0.85rem;margin-bottom:0.3rem">Not fully restored (' + split.incomplete.length + ')</div>' +
+        '<div style="color:var(--muted);font-size:0.78rem;margin-bottom:0.4rem">The agent could not put back, or could not verify, the items below. The endpoint may behave differently until they are fixed.</div>' +
+        split.incomplete.map(function(m) { return '<div style="font-size:0.78rem;padding:0.15rem 0">&bull; ' + x(m) + '</div>'; }).join('') +
+        '</div>'
+      : '';
     if (!items.length) {
+      if (failedHtml) return '<div style="padding:0.5rem 0">' + failedHtml + '</div>';
       return '<div class="dash-panel dash-soon" style="padding:2rem;text-align:center;color:var(--muted);font-size:0.8rem">No endpoint changes were captured for reversal during this run.</div>';
     }
     var rows = items.map(function(item) {
@@ -2619,7 +2629,7 @@ export function viewRunResults(run) {
         '<span class="u-muted">&bull;</span><span>' + x(item) + '</span>' +
       '</div>';
     }).join('');
-    return '<div style="padding:0.5rem 0">' +
+    return '<div style="padding:0.5rem 0">' + failedHtml +
       '<div style="color:var(--muted);font-size:0.78rem;margin-bottom:0.6rem">The agent reverted ' + items.length + ' endpoint change(s) made during the run.</div>' +
       rows +
     '</div>';

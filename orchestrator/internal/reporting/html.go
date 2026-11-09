@@ -3089,6 +3089,17 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   <div style="font-size:0.88rem;line-height:1.5;color:#374151">{{.envRestoration.execSummary}}</div>
 </div>
 
+{{if .envRestoration.restoreIssues}}
+<div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:8px;padding:14px 18px;margin:14px 0;page-break-inside:avoid">
+  <div style="font-weight:800;color:#b91c1c;font-size:0.95rem;margin-bottom:6px">&#9888; Not fully restored</div>
+  <div style="font-size:0.84rem;line-height:1.5;color:#374151;margin-bottom:8px">After this run the agent could not put back, or could not verify, the items below. The endpoint may behave differently until they are fixed.</div>
+  <ul style="margin:0 0 0 18px;padding:0;font-size:0.84rem;line-height:1.55;color:#7f1d1d">
+    {{range .envRestoration.restoreIssues}}<li>{{.}}</li>
+    {{end}}
+  </ul>
+</div>
+{{end}}
+
 {{/* ── KPI tiles ── */}}
 <div class="score-row">
   <div class="scard" style="border-left:3px solid {{if gt .envRestoration.cleanupRate 99.9}}#0d9488{{else if gt .envRestoration.cleanupRate 79.9}}#d29922{{else}}#da3633{{end}}">

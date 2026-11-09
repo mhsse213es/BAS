@@ -228,8 +228,8 @@ func TestDefaultGuardRoots_CoverTheKnownHijackPoints(t *testing.T) {
 		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths`,
 		`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options`,
 		`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon`,
-		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System`,
-		`HKLM\SOFTWARE\Policies\Microsoft\Windows Defender`,
+		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies`, // includes the UAC settings under Policies\System
+		`HKLM\SOFTWARE\Policies\Microsoft`, // includes Windows Defender, Firewall, BitLocker (FVE), Windows Update
 	} {
 		if !have[strings.ToLower(want)] {
 			t.Errorf("not protected: %s", want)

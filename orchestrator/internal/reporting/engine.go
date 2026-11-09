@@ -3821,6 +3821,10 @@ type EnvRestoration struct {
 	// counts from, so a step the whole-run safety net later confirmed
 	// removed (verdict "rescued") never appears here.
 	LeakedItems []LeakedCleanupItem `json:"leakedItems,omitempty"`
+	// RestoreIssues are the agent's own post-restore findings: after putting recorded changes back it asks Windows
+	// whether things still open the way they did (and whether a recorded change could be restored at all). One entry per
+	// "restore incomplete:" line the agent reported, with that machine prefix removed. A run with any is never "clean".
+	RestoreIssues []string `json:"restoreIssues,omitempty"`
 }
 
 // LeakedCleanupItem is one step's cleanup-failure detail: which step, what
@@ -3905,6 +3909,12 @@ func buildEnvRestoration(matrix []TechniqueRow, reverted []string) EnvRestoratio
 		StepsTotal:    len(matrix),
 		RevertedCount: len(reverted),
 	}
+	const incompletePrefix = "restore incomplete: "
+	for _, line := range reverted {
+		if strings.HasPrefix(line, incompletePrefix) {
+			e.RestoreIssues = append(e.RestoreIssues, strings.TrimPrefix(line, incompletePrefix))
+		}
+	}
 	for _, r := range matrix {
 		switch r.CleanupVerdict {
 		case "reverted":
@@ -3967,7 +3977,21 @@ func buildEnvRestoration(matrix []TechniqueRow, reverted []string) EnvRestoratio
 		e.ExecSummary += fmt.Sprintf(" %d of these were cleaned by the safety-net sweep, not by their own script.", e.StepsRescued)
 	}
 
-	e.HasData = e.StepsTotal > 0
+	// The endpoint is only "clean" if the agent's verification found nothing wrong either.
+	if n := len(e.RestoreIssues); n > 0 {
+		note := fmt.Sprintf(" The endpoint was not fully restored: %d item(s) the agent could not put back or verify (listed below).", n)
+		switch {
+		case n > 3:
+			e.ImpactLevel, e.StatusLabel = "persistent", "Failed"
+			e.ImpactLabel = fmt.Sprintf("Endpoint Not Fully Restored (%d)", n)
+		case e.ImpactLevel == "clean":
+			e.ImpactLevel, e.StatusLabel = "minor", "Attention Required"
+			e.ImpactLabel = fmt.Sprintf("Endpoint Not Fully Restored (%d)", n)
+		}
+		e.ExecSummary += note
+	}
+
+	e.HasData = e.StepsTotal > 0 || len(e.RestoreIssues) > 0
 	return e
 }
 
