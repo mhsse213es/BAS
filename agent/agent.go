@@ -138,6 +138,10 @@ func newAgent(cfg Config, id Identity) *Agent {
 		spoolKick: make(chan struct{}, 1),
 	}
 	a.cfgPtr.Store(&cfg)
+	// A run that never finished restoring (agent or machine went down mid-run) is restored before anything new runs.
+	if n := len(recoverPendingRestores()); n > 0 {
+		log.Printf("[restore] recovered %d registry change(s) left by an interrupted run", n)
+	}
 	a.clientPtr.Store(&http.Client{Timeout: 30 * time.Second, Transport: transport})
 	if h, err := SelfHash(); err == nil {
 		a.binaryHash = h

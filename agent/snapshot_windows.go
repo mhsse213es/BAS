@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,6 +88,9 @@ func captureSnapshot(runID string) *SystemSnapshot {
 		}
 	}
 
+	// Registry locations that decide what runs and how Windows behaves; put back at the end of the run.
+	s.Guard = captureRegGuard(runID)
+
 	return s
 }
 
@@ -161,6 +165,17 @@ func captureSnapshotLite(runID string) *SystemSnapshot {
 
 func revertFromSnapshot(s *SystemSnapshot) []string {
 	var reverted []string
+
+	// ── Registry restore guard: shell handlers, App Paths, IFEO, UAC/Defender policy, ... ──
+	// Runs first so a hijacked shell handler is repaired even if a later step of the revert fails.
+	if g, ok := s.Guard.(*regGuard); ok && g != nil {
+		changed, residual := g.restore()
+		reverted = append(reverted, changed...)
+		for _, r := range residual {
+			log.Printf("[!] restore guard: %s", r)
+			reverted = append(reverted, "restore incomplete: "+r)
+		}
+	}
 
 	// ── Hosts file restore ────────────────────────────────────────────────────
 	hostsPath := `C:\Windows\System32\drivers\etc\hosts`

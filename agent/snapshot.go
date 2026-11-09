@@ -16,6 +16,8 @@ type SystemSnapshot struct {
 	TakenAt time.Time
 	Lists   map[string][]string // category → items present at snapshot time
 	Files   map[string][]byte   // path (or logical key) → content at snapshot time
+	// Guard is platform-specific restore state taken with the snapshot (Windows: the registry restore guard).
+	Guard any
 }
 
 func newSnapshot(runID string) *SystemSnapshot {
