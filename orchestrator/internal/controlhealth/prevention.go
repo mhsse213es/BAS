@@ -31,6 +31,7 @@ func loadPreventionEvidence(ctx context.Context, pool *pgxpool.Pool, since time.
 		       (r->>'executedAt')::timestamptz AS executed_at
 		FROM scenario_runs sr, jsonb_array_elements(sr.results) r
 		WHERE sr.status IN ('completed', 'partial')
+		  AND sr.execution_kind <> 'factory_validation'
 		  AND r->'technique'->>'id' IS NOT NULL AND r->'technique'->>'id' <> ''
 		  AND r->>'result' IN ('pass', 'fail', 'blocked')
 		  AND r->>'executedAt' IS NOT NULL

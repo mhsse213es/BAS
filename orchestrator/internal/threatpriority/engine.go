@@ -91,6 +91,7 @@ func LoadPreventionVerdicts(ctx context.Context, pool *pgxpool.Pool) (map[string
 		       (r->>'executedAt')::timestamptz AS at
 		FROM scenario_runs sr, jsonb_array_elements(sr.results) r
 		WHERE sr.status IN ('completed', 'partial')
+		  AND sr.execution_kind <> 'factory_validation'
 		  AND r->'technique'->>'id' IS NOT NULL AND r->'technique'->>'id' <> ''
 		  AND r->>'result' NOT IN ('error', 'skipped', 'vetoed')
 		ORDER BY UPPER(r->'technique'->>'id'), (r->>'executedAt')::timestamptz DESC`)

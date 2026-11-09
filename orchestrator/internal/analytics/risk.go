@@ -32,7 +32,8 @@ func FleetRisk(ctx context.Context, pool *pgxpool.Pool) (RiskResult, error) {
 		SELECT COALESCE(ROUND(AVG((score->>'riskScore')::numeric)), 0)::int,
 		       COUNT(score->>'riskScore')
 		FROM scenario_runs
-		WHERE completed_at IS NOT NULL
+		WHERE execution_kind <> 'factory_validation'
+		  AND completed_at IS NOT NULL
 		  AND completed_at > NOW() - INTERVAL '30 days'
 		  AND score IS NOT NULL`).Scan(&avg, &n)
 	return RiskResult{FleetAvgScore: avg, ScoredRuns: n, Measurable: n > 0}, err
