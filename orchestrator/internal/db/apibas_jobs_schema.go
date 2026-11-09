@@ -54,6 +54,8 @@ func EnsureAPIBASJobSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`ALTER TABLE apibas_jobs ADD COLUMN IF NOT EXISTS target_id text NOT NULL DEFAULT ''`,
 		`ALTER TABLE apibas_jobs ADD COLUMN IF NOT EXISTS allowed_hosts jsonb NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE apibas_jobs ADD COLUMN IF NOT EXISTS allowed_paths jsonb NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE apibas_targets ADD COLUMN IF NOT EXISTS allowed_paths jsonb NOT NULL DEFAULT '[]'`,
 		`CREATE INDEX IF NOT EXISTS apibas_jobs_target_active_idx ON apibas_jobs (target_id) WHERE status IN ('queued', 'running')`,
 		`CREATE TABLE IF NOT EXISTS apibas_job_reports (
 			job_id         uuid        NOT NULL REFERENCES apibas_jobs(id) ON DELETE CASCADE,

@@ -25,6 +25,8 @@ type APIBASJob struct {
 	CredentialRefs map[string]string
 	// AllowedHosts are the registered hosts (host:port) the runner may reach besides loopback. Copied from the target at submit.
 	AllowedHosts  []string
+	// AllowedPaths are the registered path prefixes the runner may request. Copied from the target at submit. Empty means no path restriction (lab only).
+	AllowedPaths []string
 	Status        string
 	FailureReason string
 	CreatedAt     time.Time
@@ -59,17 +61,18 @@ func CreateAPIBASJob(ctx context.Context, pool *pgxpool.Pool, j APIBASJob) (APIB
 		return APIBASJob{}, false, fmt.Errorf("encode scenario ids: %w", err)
 	}
 	hosts, _ := json.Marshal(j.AllowedHosts)
+	paths, _ := json.Marshal(nonNil(j.AllowedPaths))
 	refs, err := json.Marshal(j.CredentialRefs)
 	if err != nil {
 		return APIBASJob{}, false, fmt.Errorf("encode credential refs: %w", err)
 	}
 	var id string
 	err = pool.QueryRow(ctx, `
-		INSERT INTO apibas_jobs (job_key, requested_by, target_base_url, environment, fixture, scenario_ids, credential_refs, allowed_hosts, status)
-		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, 'queued')
+		INSERT INTO apibas_jobs (job_key, requested_by, target_base_url, environment, fixture, scenario_ids, credential_refs, allowed_hosts, allowed_paths, status)
+		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, 'queued')
 		ON CONFLICT (job_key) DO NOTHING
 		RETURNING id::text`,
-		j.JobKey, j.RequestedBy, j.TargetBaseURL, j.Environment, j.Fixture, string(scen), string(refs), string(hosts)).Scan(&id)
+		j.JobKey, j.RequestedBy, j.TargetBaseURL, j.Environment, j.Fixture, string(scen), string(refs), string(hosts), string(paths)).Scan(&id)
 	if err == nil {
 		got, gerr := GetAPIBASJob(ctx, pool, id)
 		return got, true, gerr
@@ -177,7 +180,7 @@ func ListAPIBASJobReports(ctx context.Context, pool *pgxpool.Pool, jobID string)
 }
 
 const apibasJobSelect = `SELECT id::text, job_key, target_id, requested_by, target_base_url, environment, fixture, scenario_ids::text,
-	credential_refs::text, allowed_hosts::text, status, failure_reason, created_at, started_at, finished_at FROM apibas_jobs`
+	credential_refs::text, allowed_hosts::text, allowed_paths::text, status, failure_reason, created_at, started_at, finished_at FROM apibas_jobs`
 
 // ReconcileStaleAPIBASJobs fails every job that has been running longer than olderThan. A crash of the orchestrator during a run
 // leaves its job in 'running'; this makes that visible as a failure instead of a run that never ends. It returns the number of jobs
@@ -194,8 +197,8 @@ func ReconcileStaleAPIBASJobs(ctx context.Context, pool *pgxpool.Pool, olderThan
 
 func scanAPIBASJob(row pgx.Row) (APIBASJob, error) {
 	var j APIBASJob
-	var scen, refs, hosts string
-	err := row.Scan(&j.ID, &j.JobKey, &j.TargetID, &j.RequestedBy, &j.TargetBaseURL, &j.Environment, &j.Fixture, &scen, &refs, &hosts,
+	var scen, refs, hosts, paths string
+	err := row.Scan(&j.ID, &j.JobKey, &j.TargetID, &j.RequestedBy, &j.TargetBaseURL, &j.Environment, &j.Fixture, &scen, &refs, &hosts, &paths,
 		&j.Status, &j.FailureReason, &j.CreatedAt, &j.StartedAt, &j.FinishedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return APIBASJob{}, ErrAPIBASJobNotFound
@@ -208,6 +211,9 @@ func scanAPIBASJob(row pgx.Row) (APIBASJob, error) {
 	}
 	if err := json.Unmarshal([]byte(hosts), &j.AllowedHosts); err != nil {
 		return APIBASJob{}, fmt.Errorf("decode allowed hosts: %w", err)
+	}
+	if err := json.Unmarshal([]byte(paths), &j.AllowedPaths); err != nil {
+		return APIBASJob{}, fmt.Errorf("decode allowed paths: %w", err)
 	}
 	if err := json.Unmarshal([]byte(refs), &j.CredentialRefs); err != nil {
 		return APIBASJob{}, fmt.Errorf("decode credential refs: %w", err)

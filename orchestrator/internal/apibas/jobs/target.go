@@ -71,21 +71,23 @@ func (s *Service) SubmitForTarget(ctx context.Context, r TargetRequest) (db.APIB
 	}
 	return db.CreateAPIBASJobExclusive(ctx, s.pool, db.APIBASJob{
 		JobKey: r.Key, TargetID: t.ID, RequestedBy: r.RequestedBy, TargetBaseURL: t.BaseURL, Environment: t.Environment,
-		Fixture: r.Fixture, ScenarioIDs: r.ScenarioIDs, CredentialRefs: t.CredentialRefs, AllowedHosts: t.AllowedHosts,
+		Fixture: r.Fixture, ScenarioIDs: r.ScenarioIDs, CredentialRefs: t.CredentialRefs, AllowedHosts: t.AllowedHosts, AllowedPaths: t.AllowedPaths,
 	})
 }
 
 // Binding is the hash an approval is bound to. It covers the target, environment, fixture, the sorted scenario set and the
-// sorted allowed hosts, so changing any of them yields a different hash and the old approval stops matching.
-func Binding(targetID, environment, fixture string, scenarioIDs, allowedHosts []string) string {
+// sorted allowed hosts and paths, so changing any of them yields a different hash and the old approval stops matching.
+func Binding(targetID, environment, fixture string, scenarioIDs, allowedHosts, allowedPaths []string) string {
 	sc := slices.Clone(scenarioIDs)
 	slices.Sort(sc)
 	ah := slices.Clone(allowedHosts)
 	slices.Sort(ah)
+	ap := slices.Clone(allowedPaths)
+	slices.Sort(ap)
 	doc, _ := json.Marshal(struct {
 		Target, Environment, Fixture string
-		Scenarios, Hosts             []string
-	}{targetID, environment, fixture, sc, ah})
+		Scenarios, Hosts, Paths      []string
+	}{targetID, environment, fixture, sc, ah, ap})
 	sum := sha256.Sum256(doc)
 	return hex.EncodeToString(sum[:])
 }

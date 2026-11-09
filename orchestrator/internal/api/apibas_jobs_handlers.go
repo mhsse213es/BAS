@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
+	"github.com/audspect/bas/internal/apibas/scope"
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/secretstore"
@@ -54,6 +55,7 @@ type apibasTargetBody struct {
 	BaseURL          string            `json:"base_url"`
 	Environment      string            `json:"environment"`
 	AllowedHosts     []string          `json:"allowed_hosts"`
+	AllowedPaths     []string          `json:"allowed_paths"`
 	AllowedScenarios []string          `json:"allowed_scenarios"`
 	CredentialRefs   map[string]string `json:"credential_refs"`
 	// Credentials is write-only: each value is stored in the secret store and replaced by a reference. It is never returned,
@@ -105,7 +107,7 @@ func (h *Handler) CreateAPIBASTarget(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	err := db.CreateAPIBASTarget(r.Context(), h.db, db.APIBASTarget{
-		ID: b.ID, Name: b.Name, BaseURL: b.BaseURL, Environment: b.Environment, AllowedHosts: b.AllowedHosts,
+		ID: b.ID, Name: b.Name, BaseURL: b.BaseURL, Environment: b.Environment, AllowedHosts: b.AllowedHosts, AllowedPaths: b.AllowedPaths,
 		AllowedScenarios: b.AllowedScenarios, CredentialRefs: refs, Enabled: b.Enabled, CreatedBy: actor,
 	})
 	if errors.Is(err, db.ErrAPIBASTargetExists) {
@@ -117,7 +119,7 @@ func (h *Handler) CreateAPIBASTarget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = h.auditDurable(r.Context(), actor, "apibas.target.create", "apibas-target:"+b.ID, map[string]any{
-		"environment": b.Environment, "base_url": b.BaseURL, "allowed_hosts": b.AllowedHosts,
+		"environment": b.Environment, "base_url": b.BaseURL, "allowed_hosts": b.AllowedHosts, "allowed_paths": b.AllowedPaths,
 		"allowed_scenarios": b.AllowedScenarios, "enabled": b.Enabled, "credential_names": credentialNames(refs),
 	}, "success")
 	apibasRespond(w, http.StatusCreated, map[string]any{"id": b.ID})
@@ -175,6 +177,14 @@ func (h *Handler) validateAPIBASTarget(b apibasTargetBody) string {
 	}
 	if !slices.Contains(b.AllowedHosts, u.Host) {
 		return "the base_url host must be listed in allowed_hosts"
+	}
+	for _, p := range b.AllowedPaths {
+		if !scope.ValidPrefix(p) {
+			return "allowed_paths must be rooted path prefixes with no query, no dot segments and not just \"/\": " + p
+		}
+	}
+	if b.Environment != "lab" && len(b.AllowedPaths) == 0 {
+		return "allowed_paths must list at least one path prefix for a staging or production target"
 	}
 	if len(b.AllowedScenarios) == 0 {
 		return "allowed_scenarios must name at least one scenario"

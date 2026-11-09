@@ -141,16 +141,17 @@ func TestCancelStopsARunningJob(t *testing.T) {
 }
 
 func TestBindingChangesWithAnyMaterialField(t *testing.T) {
-	base := Binding("t1", "staging", "fx", []string{"B", "A"}, []string{"h:1"})
-	if base != Binding("t1", "staging", "fx", []string{"A", "B"}, []string{"h:1"}) {
+	base := Binding("t1", "staging", "fx", []string{"B", "A"}, []string{"h:1"}, nil)
+	if base != Binding("t1", "staging", "fx", []string{"A", "B"}, []string{"h:1"}, nil) {
 		t.Fatal("scenario order changed the binding")
 	}
 	for name, other := range map[string]string{
-		"target":      Binding("t2", "staging", "fx", []string{"A", "B"}, []string{"h:1"}),
-		"environment": Binding("t1", "production", "fx", []string{"A", "B"}, []string{"h:1"}),
-		"fixture":     Binding("t1", "staging", "fy", []string{"A", "B"}, []string{"h:1"}),
-		"scenarios":   Binding("t1", "staging", "fx", []string{"A", "B", "C"}, []string{"h:1"}),
-		"hosts":       Binding("t1", "staging", "fx", []string{"A", "B"}, []string{"h:1", "h:2"}),
+		"target":      Binding("t2", "staging", "fx", []string{"A", "B"}, []string{"h:1"}, nil),
+		"environment": Binding("t1", "production", "fx", []string{"A", "B"}, []string{"h:1"}, nil),
+		"fixture":     Binding("t1", "staging", "fy", []string{"A", "B"}, []string{"h:1"}, nil),
+		"scenarios":   Binding("t1", "staging", "fx", []string{"A", "B", "C"}, []string{"h:1"}, nil),
+		"hosts":       Binding("t1", "staging", "fx", []string{"A", "B"}, []string{"h:1", "h:2"}, nil),
+		"paths":       Binding("t1", "staging", "fx", []string{"A", "B"}, []string{"h:1"}, []string{"/api"}),
 	} {
 		if other == base {
 			t.Errorf("changing %s did not change the binding", name)
@@ -159,7 +160,7 @@ func TestBindingChangesWithAnyMaterialField(t *testing.T) {
 }
 
 func TestCheckApprovalRules(t *testing.T) {
-	bind := Binding("t1", "production", "fx", []string{"A"}, []string{"h:1"})
+	bind := Binding("t1", "production", "fx", []string{"A"}, []string{"h:1"}, nil)
 	ok := db.APIBASApproval{BindingHash: bind, TargetID: "t1", RequestedBy: "alice", ApprovedBy: "bob"}
 	if err := CheckApproval(ok, "alice", "t1", bind); err != nil {
 		t.Fatalf("valid approval refused: %v", err)
@@ -174,7 +175,7 @@ func TestCheckApprovalRules(t *testing.T) {
 		"self approved":       {db.APIBASApproval{BindingHash: bind, TargetID: "t1", RequestedBy: "alice", ApprovedBy: "alice"}, "alice", "t1", bind},
 		"other requester":     {ok, "mallory", "t1", bind},
 		"other target":        {ok, "alice", "t2", bind},
-		"configuration moved": {ok, "alice", "t1", Binding("t1", "production", "fx", []string{"A", "B"}, []string{"h:1"})},
+		"configuration moved": {ok, "alice", "t1", Binding("t1", "production", "fx", []string{"A", "B"}, []string{"h:1"}, nil)},
 	}
 	for name, c := range cases {
 		if err := CheckApproval(c.a, c.requester, c.target, c.bind); !errors.Is(err, ErrApprovalInvalid) {

@@ -157,3 +157,83 @@ func TestLoadCredentialsChecksFormatAndPermissions(t *testing.T) {
 		}
 	}
 }
+
+func withExchanges(req JobRequest, ex ...runner.Exchange) JobResult {
+	res := completedFor(req)
+	res.Reports[0].RunTag = "apibas-0a1b2c3d"
+	res.Reports[0].Exchanges = ex
+	return res
+}
+
+func goodExchange() runner.Exchange {
+	return runner.Exchange{StepID: "attack", Method: "GET", Path: "/api/orders/ORD-1", Status: 200}
+}
+
+func TestValidateResultChecksEvidenceReferences(t *testing.T) {
+	req := validReq(t)
+	if err := ValidateResult(req, withExchanges(req, goodExchange())); err != nil {
+		t.Fatalf("valid evidence refused: %v", err)
+	}
+	cases := map[string]func(*runner.Exchange){
+		"no step id":      func(e *runner.Exchange) { e.StepID = "" },
+		"unknown method":  func(e *runner.Exchange) { e.Method = "TRACE" },
+		"status too low":  func(e *runner.Exchange) { e.Status = 42 },
+		"status too high": func(e *runner.Exchange) { e.Status = 999 },
+		"negative leaks":  func(e *runner.Exchange) { e.Leaked = -1 },
+	}
+	for name, mutate := range cases {
+		ex := goodExchange()
+		mutate(&ex)
+		if err := ValidateResult(req, withExchanges(req, ex)); err == nil {
+			t.Errorf("%s: result accepted, want refusal", name)
+		}
+	}
+	// A transport failure (status 0) is a valid exchange record.
+	ex := goodExchange()
+	ex.Status = 0
+	if err := ValidateResult(req, withExchanges(req, ex)); err != nil {
+		t.Errorf("status 0 refused: %v", err)
+	}
+}
+
+func TestValidateResultRunTags(t *testing.T) {
+	req := validReq(t)
+	req.ScenarioIDs = []string{"API-BAS-AUTHZ-001", "API-BAS-AUTHZ-002"}
+	res := completedFor(req)
+	res.Reports[0].RunTag, res.Reports[1].RunTag = "apibas-0a1b2c3d", "apibas-0a1b2c3d"
+	if err := ValidateResult(req, res); err == nil {
+		t.Error("duplicate run tags accepted")
+	}
+	res.Reports[1].RunTag = "apibas-99999999"
+	if err := ValidateResult(req, res); err != nil {
+		t.Errorf("distinct run tags refused: %v", err)
+	}
+	for _, bad := range []string{"", "x", "has space tag", "../../etc"} {
+		res.Reports[1].RunTag = bad
+		if err := ValidateResult(req, res); err == nil {
+			t.Errorf("run tag %q accepted", bad)
+		}
+	}
+}
+
+// Every recorded request must lie inside the job's path scope, even if the runner misbehaves.
+func TestValidateResultEnforcesPathScope(t *testing.T) {
+	req := validReq(t)
+	req.AllowedPaths = []string{"/api/orders"}
+	if err := ValidateResult(req, withExchanges(req, goodExchange())); err != nil {
+		t.Fatalf("in-scope exchange refused: %v", err)
+	}
+	for _, p := range []string{"/api/customers", "/api/orders-admin", "/api/orders/../admin", "/", "http://evil.example/x"} {
+		ex := goodExchange()
+		ex.Path = p
+		if err := ValidateResult(req, withExchanges(req, goodExchange(), ex)); err == nil {
+			t.Errorf("out-of-scope path %q accepted", p)
+		}
+	}
+	req.AllowedPaths = nil
+	ex := goodExchange()
+	ex.Path = "/anything"
+	if err := ValidateResult(req, withExchanges(req, ex)); err != nil {
+		t.Errorf("no scope configured but path refused: %v", err)
+	}
+}

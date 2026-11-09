@@ -35,6 +35,7 @@ import (
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/grade"
+	"github.com/audspect/bas/internal/apibas/scope"
 	"github.com/audspect/bas/internal/apibas/latency"
 	"github.com/audspect/bas/internal/apibas/reporting"
 	"strconv"
@@ -104,6 +105,8 @@ type Config struct {
 	ClientCerts map[string]tls.Certificate
 	// RogueURL fills the {rogue_url} placeholder: an upstream whose certificate the runner does not trust (GWAY-012).
 	RogueURL string
+	// AllowedPaths restricts every scenario request to these path prefixes (whole segments). Empty means no restriction.
+	AllowedPaths []string
 	// DetectionWindow is how long the detection stage waits for the SIEM to deliver the run's events.
 	// Zero means DefaultDetectionWindow. Events delivered after the window are not seen.
 	DetectionWindow time.Duration
@@ -151,6 +154,22 @@ type Exchange struct {
 	raw      []byte
 	// request is the path and body sent, used to skip forbidden values the attacker sent.
 	request string
+}
+
+// CheckScope reports the first step of s whose request path cannot be shown to lie inside allowed. It checks the fixed part of
+// each step path (before any placeholder), so a scenario that could leave the scope is refused before anything is sent. An
+// empty allowed list restricts nothing.
+func CheckScope(allowed []string, s contract.Scenario) error {
+	if len(allowed) == 0 {
+		return nil
+	}
+	for _, st := range s.Steps {
+		prefix := scope.StaticPrefix(st.Path)
+		if prefix == "" || !scope.Allowed(allowed, prefix) {
+			return fmt.Errorf("scenario %s step %s requests a path outside the target's allowed paths", s.ID, st.ID)
+		}
+	}
+	return nil
 }
 
 // Report is the complete output of one scenario execution.
@@ -492,6 +511,10 @@ func attackAuth(st contract.Step) string {
 func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj fixture.Object, protect *fixture.Object) (Exchange, bool) {
 	path := strings.ReplaceAll(step.Path, "{object}", obj.ID)
 	ex := Exchange{StepID: step.ID, Identity: step.Identity, Auth: attackAuth(step), Method: step.Method, Path: path}
+	// Backstop for CheckScope: a request outside the registered path scope is never sent.
+	if len(r.cfg.AllowedPaths) > 0 && !scope.Allowed(r.cfg.AllowedPaths, path) {
+		return ex, true
+	}
 
 	// {lab_url} lets a body name the target itself, for the SSRF scenario.
 	payload := strings.ReplaceAll(step.Body, "{lab_url}", r.cfg.BaseURL)

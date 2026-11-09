@@ -39,6 +39,7 @@ type Spec struct {
 	Fixture       string
 	ScenarioIDs   []string
 	AllowedHosts  []string
+	AllowedPaths  []string
 	// Credentials maps each runner secret name to a D4 secret-store reference. Only references are stored on the job.
 	Credentials map[string]string
 }
@@ -93,7 +94,7 @@ func (s *Service) Submit(ctx context.Context, sp Spec) (db.APIBASJob, bool, erro
 	}
 	return db.CreateAPIBASJob(ctx, s.pool, db.APIBASJob{
 		JobKey: sp.Key, RequestedBy: sp.RequestedBy, TargetBaseURL: sp.TargetBaseURL, Environment: sp.Environment,
-		Fixture: sp.Fixture, ScenarioIDs: sp.ScenarioIDs, CredentialRefs: sp.Credentials, AllowedHosts: sp.AllowedHosts,
+		Fixture: sp.Fixture, ScenarioIDs: sp.ScenarioIDs, CredentialRefs: sp.Credentials, AllowedHosts: sp.AllowedHosts, AllowedPaths: sp.AllowedPaths,
 	})
 }
 
@@ -199,7 +200,7 @@ func (s *Service) execute(parent context.Context, job db.APIBASJob) outcome {
 	}
 	req := runnerproto.JobRequest{
 		SchemaVersion: runnerproto.SchemaVersion, JobID: job.ID, TargetBaseURL: job.TargetBaseURL,
-		Fixture: job.Fixture, ScenarioIDs: job.ScenarioIDs, AllowedHosts: hostnames(job.AllowedHosts), CredentialsFile: credsPath,
+		Fixture: job.Fixture, ScenarioIDs: job.ScenarioIDs, AllowedHosts: hostnames(job.AllowedHosts), AllowedPaths: job.AllowedPaths, CredentialsFile: credsPath,
 	}
 	reqBytes, err := json.Marshal(req)
 	if err != nil {

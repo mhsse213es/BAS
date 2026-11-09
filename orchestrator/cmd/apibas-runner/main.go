@@ -236,7 +236,7 @@ func runJob(path string) int {
 	r, err := runner.New(runner.Config{
 		BaseURL: req.TargetBaseURL, Fixture: fx, Secrets: creds,
 		State: admin, Reporting: admin, Reset: admin, Events: admin,
-		HTTP: &http.Client{Timeout: 10 * time.Second},
+		HTTP: &http.Client{Timeout: 10 * time.Second}, AllowedPaths: req.AllowedPaths,
 	})
 	if err != nil {
 		return emitFailure(base, "runner setup failed")
@@ -246,6 +246,9 @@ func runJob(path string) int {
 		scen, err := findScenario(id)
 		if err != nil {
 			return emitFailure(base, "scenario not in the catalog")
+		}
+		if err := runner.CheckScope(req.AllowedPaths, scen); err != nil {
+			return emitFailure(base, err.Error())
 		}
 		rep, err := r.Run(context.Background(), scen)
 		if err != nil {

@@ -3675,3 +3675,28 @@ Decisions approved by the product owner:
 - Staging run (section above). Also not verified on staging: the compose mount of `/etc/audspect/secrets`, the image build, the container's temp directory for per-job files, and runner access to a LAN host.
 - No credential rotation or update path for an existing target (registration only).
 - Evidence references still not validated; path-level scope not implemented.
+
+## API BAS assessment: evidence reference validation and path-level scope (9 November 2026)
+
+### What changed
+- **Path scope (new package `internal/apibas/scope`).** A target now carries `allowed_paths`: path prefixes compared by whole segment (`/api/orders` covers `/api/orders/ORD-1`, not `/api/orders-admin`). Matching is case-sensitive and refuses anything it cannot reason about: not rooted, backslash or NUL, empty or `.`/`..` segments, or percent-encoded forms that decode to those or to a slash.
+- **Registration.** `allowed_paths` is validated (no bare `/`, no query or fragment, no dot segments) and is required for staging and production targets. A lab target may omit it, which means unrestricted (loopback lab only). Paths are copied onto each job, like allowed hosts.
+- **Runner enforcement, two layers.** (1) Before a scenario runs, `runner.CheckScope` checks the fixed part of every step path (before any placeholder); a scenario that could leave scope fails the job before anything is sent, with a reason naming the step. (2) `Runner.do` refuses to send any path outside scope even if (1) was bypassed. Because paths must be rooted, absolute URLs and `@host` authority tricks are refused as a side effect.
+- **Orchestrator enforcement.** `ValidateResult` re-checks every recorded exchange path against the job's scope, so a misbehaving runner cannot store evidence of an out-of-scope request.
+- **Evidence reference validation.** `ValidateResult` now requires each report to have a well-formed run tag (`[A-Za-z0-9_-]{6,64}`) unique within the job, and each exchange to have a step id, a known HTTP method, status 0 or 100 to 599, and a non-negative leak count. A result failing any check is not stored, so every evidence reference the results API later builds (`<run tag>#<index>`) resolves to a valid, in-scope exchange.
+- **Approvals.** `Binding` now includes the allowed paths, so changing the path scope invalidates an approval (production is still not executable).
+
+### Tests (all pass)
+- `scope`: segment matching, traversal and encoded forms, empty list, prefix validity, static prefix.
+- `runnerproto`: evidence field checks, duplicate and malformed run tags, path-scope enforcement on recorded exchanges, no-scope behaviour.
+- `runner`: `CheckScope` table (placeholders, siblings, traversal, absolute URL, authority smuggling) and the send-time refusal without network access.
+- `jobs` end-to-end with the real runner and lab: unscoped vulnerable FAIL and fixed PASS as before; a target scoped to `/api` completes PASS; a target scoped to `/health` fails the job with "outside the target's allowed paths" and stores no report.
+- `api`: registration refusals and acceptance; RBAC matrix tests unchanged and passing. Existing non-lab test targets now carry a default path scope.
+
+### Limits stated plainly
+- The exchange record is made by the runner; the orchestrator validates its shape and scope but cannot independently confirm the request was actually sent. Validation catches malformed or out-of-scope evidence, not a runner that fabricates in-scope exchanges. (The runner is a trusted binary shipped in the same image.)
+- The runner's lab-admin channel (state reads, reset, events, authenticated with the admin token) is outside this scope check. It is only used against lab-style targets that expose that interface.
+- Scenarios that deliberately use traversal or odd path forms (for example path-normalisation tests) cannot run on a target with a path scope; they fail the pre-check by design. Unscoped lab targets still run them.
+- Submission does not pre-check scenarios against the target's paths; a mismatch is reported when the job runs (job `failed`, reason names the step, no reports).
+- Existing staging or production targets registered before this change have no paths and would be refused only at registration of new ones; none exist outside tests. No migration needed beyond the added columns (`apibas_targets.allowed_paths`, `apibas_jobs.allowed_paths`, created at startup).
+- Not run on staging (see the staging runbook).

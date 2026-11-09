@@ -19,6 +19,7 @@ import (
 	"slices"
 
 	"github.com/audspect/bas/internal/apibas/runner"
+	"github.com/audspect/bas/internal/apibas/scope"
 )
 
 // SchemaVersion is the only contract version accepted by both sides. A change to either struct bumps it.
@@ -41,6 +42,8 @@ type JobRequest struct {
 	ScenarioIDs   []string `json:"scenario_ids"`
 	// AllowedHosts are the hosts, besides the target itself, the runner may reach.
 	AllowedHosts []string `json:"allowed_hosts,omitempty"`
+	// AllowedPaths are the path prefixes (whole segments) the runner may request. Empty means no path restriction.
+	AllowedPaths []string `json:"allowed_paths,omitempty"`
 	// CredentialsFile is the path of a JSON object mapping secret reference to value. It must be readable by the owner only.
 	CredentialsFile string `json:"credentials_file"`
 }
@@ -139,18 +142,50 @@ func ValidateResult(req JobRequest, res JobResult) error {
 		if len(res.Reports) != len(req.ScenarioIDs) {
 			return fmt.Errorf("runnerproto: %d reports for %d scenarios", len(res.Reports), len(req.ScenarioIDs))
 		}
+		seenTags := map[string]bool{}
 		for i, rep := range res.Reports {
 			if rep.ScenarioID != req.ScenarioIDs[i] {
 				return fmt.Errorf("runnerproto: report %d is for %q, want %q", i, rep.ScenarioID, req.ScenarioIDs[i])
 			}
-			if rep.RunTag == "" {
-				return fmt.Errorf("runnerproto: report for %q has no run tag", rep.ScenarioID)
+			if err := validateEvidence(req, rep, seenTags); err != nil {
+				return err
 			}
 		}
 		return nil
 	default:
 		return fmt.Errorf("runnerproto: unknown status %q", res.Status)
 	}
+}
+
+var runTagRE = regexp.MustCompile(`^[A-Za-z0-9_-]{6,64}$`)
+
+// validateEvidence checks the references one report carries. Each report needs a well-formed run tag that no other report in
+// the job uses, and every recorded exchange must be a complete, plausible record: a step ID, a known method, a status that is
+// either 0 (no response) or a real HTTP status, a non-negative leak count and, when the job has a path scope, a request path
+// inside it. A result that fails any of these is not stored, so the stored evidence references always resolve to a valid exchange.
+func validateEvidence(req JobRequest, rep runner.Report, seenTags map[string]bool) error {
+	if !runTagRE.MatchString(rep.RunTag) {
+		return fmt.Errorf("runnerproto: report for %q has a missing or malformed run tag", rep.ScenarioID)
+	}
+	if seenTags[rep.RunTag] {
+		return fmt.Errorf("runnerproto: run tag %q is used by more than one report", rep.RunTag)
+	}
+	seenTags[rep.RunTag] = true
+	for i, ex := range rep.Exchanges {
+		switch {
+		case ex.StepID == "":
+			return fmt.Errorf("runnerproto: %s exchange %d has no step id", rep.RunTag, i)
+		case !slices.Contains([]string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}, ex.Method):
+			return fmt.Errorf("runnerproto: %s exchange %d has method %q", rep.RunTag, i, ex.Method)
+		case ex.Status != 0 && (ex.Status < 100 || ex.Status > 599):
+			return fmt.Errorf("runnerproto: %s exchange %d has status %d", rep.RunTag, i, ex.Status)
+		case ex.Leaked < 0:
+			return fmt.Errorf("runnerproto: %s exchange %d has a negative leak count", rep.RunTag, i)
+		case len(req.AllowedPaths) > 0 && !scope.Allowed(req.AllowedPaths, ex.Path):
+			return fmt.Errorf("runnerproto: %s exchange %d requested a path outside the job's allowed paths", rep.RunTag, i)
+		}
+	}
+	return nil
 }
 
 // DecodeResult parses a runner's stdout document. Unknown fields are refused.

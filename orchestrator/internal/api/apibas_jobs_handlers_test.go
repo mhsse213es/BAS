@@ -66,11 +66,15 @@ func postAs(t *testing.T, h http.Handler, path string, body any, role auth.Role,
 
 func targetBody(id, env string) map[string]any {
 	ref, _ := secretstore.MakeRef("apibas_targets", id, "token")
-	return map[string]any{
+	b := map[string]any{
 		"id": id, "name": id, "base_url": "http://127.0.0.1:8099", "environment": env,
 		"allowed_hosts": []string{"127.0.0.1:8099"}, "allowed_scenarios": []string{"API-BAS-AUTHZ-001"},
 		"credential_refs": map[string]string{"apibas/lab/customer-a": ref}, "enabled": true,
 	}
+	if env != "lab" {
+		b["allowed_paths"] = []string{"/api/orders"}
+	}
+	return b
 }
 
 func auditCount(t *testing.T, action, resource string) int {
@@ -268,6 +272,37 @@ func TestAPIBASTargetCredentialsAreWriteOnly(t *testing.T) {
 	withVals["credentials"] = map[string]string{"x": "VALUE-D"}
 	if rec := postAs(t, noStore, "/api/apibas/targets", withVals, auth.RoleAdmin, "admin1"); rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("credentials with no secret store: %d, want 503", rec.Code)
+	}
+}
+
+// Path scope is validated at registration: staging and production need prefixes, and malformed prefixes are refused.
+func TestAPIBASTargetAllowedPaths(t *testing.T) {
+	h := jobsRouter(jobsHandler(t, true))
+	post := func(id, env string, paths any) int {
+		b := targetBody(id, env)
+		delete(b, "allowed_paths")
+		if paths != nil {
+			b["allowed_paths"] = paths
+		}
+		return postAs(t, h, "/api/apibas/targets", b, auth.RoleAdmin, "admin1").Code
+	}
+	if c := post("p-stg-none", "staging", nil); c != http.StatusBadRequest {
+		t.Errorf("staging without allowed_paths: %d, want 400", c)
+	}
+	if c := post("p-lab-none", "lab", nil); c != http.StatusCreated {
+		t.Errorf("lab without allowed_paths: %d, want 201", c)
+	}
+	for i, bad := range []string{"/", "api/orders", "/api/../x", "/api?x=1", "/api/%2e%2e/x", ""} {
+		if c := post("p-bad-"+string(rune('a'+i)), "staging", []string{bad}); c != http.StatusBadRequest {
+			t.Errorf("allowed_paths %q: %d, want 400", bad, c)
+		}
+	}
+	if c := post("p-stg-ok", "staging", []string{"/api/orders", "/health"}); c != http.StatusCreated {
+		t.Fatalf("staging with valid allowed_paths: %d, want 201", c)
+	}
+	tgt, err := db.GetAPIBASTarget(context.Background(), sharedDB.Pool, "p-stg-ok")
+	if err != nil || len(tgt.AllowedPaths) != 2 {
+		t.Errorf("stored paths = %v, %v; want two prefixes", tgt.AllowedPaths, err)
 	}
 }
 

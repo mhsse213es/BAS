@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -95,21 +96,25 @@ func TestEndToEndRealRunnerAgainstRealLab(t *testing.T) {
 
 		for _, tc := range []struct {
 			mode, target, want string
+			paths              []string
+			wantFailed         string // job must fail with a reason containing this, and store no report
 		}{
-			{"vulnerable", "e2e-vulnerable", "FAIL"},
-			{"fixed", "e2e-fixed", "PASS"},
+			{mode: "vulnerable", target: "e2e-vulnerable", want: "FAIL"},
+			{mode: "fixed", target: "e2e-fixed", want: "PASS"},
+			{mode: "fixed", target: "e2e-scoped-ok", want: "PASS", paths: []string{"/api"}},
+			{mode: "fixed", target: "e2e-scoped-narrow", paths: []string{"/health"}, wantFailed: "outside the target"},
 		} {
 			addr := freeAddr(t)
 			startLab(t, labBin, tc.mode, addr, tokens)
 			if err := db.CreateAPIBASTarget(ctx, pool, db.APIBASTarget{
 				ID: tc.target, Name: tc.target, BaseURL: "http://" + addr, Environment: "lab",
-				AllowedHosts: []string{addr}, AllowedScenarios: []string{"API-BAS-AUTHZ-001"},
+				AllowedHosts: []string{addr}, AllowedPaths: tc.paths, AllowedScenarios: []string{"API-BAS-AUTHZ-001"},
 				CredentialRefs: refs, Enabled: true, CreatedBy: "e2e",
 			}); err != nil {
 				t.Fatal(err)
 			}
 			job, _, err := svc.SubmitForTarget(ctx, TargetRequest{
-				Key: "e2e-key-" + tc.mode, RequestedBy: "e2e", TargetID: tc.target,
+				Key: "e2e-key-" + tc.target, RequestedBy: "e2e", TargetID: tc.target,
 				Fixture: "orders-two-tenant", ScenarioIDs: []string{"API-BAS-AUTHZ-001"},
 			})
 			if err != nil {
@@ -119,6 +124,12 @@ func TestEndToEndRealRunnerAgainstRealLab(t *testing.T) {
 				t.Fatalf("%s: dispatch: %v", tc.mode, err)
 			}
 			got, reps := finalState(t, pool, job.ID)
+			if tc.wantFailed != "" {
+				if got.Status != "failed" || !strings.Contains(got.FailureReason, tc.wantFailed) || len(reps) != 0 {
+					t.Fatalf("%s: status=%s reason=%q reports=%d, want failed with %q and no reports", tc.target, got.Status, got.FailureReason, len(reps), tc.wantFailed)
+				}
+				continue
+			}
 			if got.Status != "completed" {
 				t.Fatalf("%s: status = %s (%s), want completed", tc.mode, got.Status, got.FailureReason)
 			}

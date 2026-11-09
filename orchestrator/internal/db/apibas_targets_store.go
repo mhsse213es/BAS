@@ -19,6 +19,8 @@ type APIBASTarget struct {
 	BaseURL          string
 	Environment      string // lab, staging or production; production is registrable but never executed in this release
 	AllowedHosts     []string
+	// AllowedPaths are the path prefixes (whole segments) the runner may request. Required for staging and production.
+	AllowedPaths     []string
 	AllowedScenarios []string
 	// CredentialRefs maps runner secret names to D4 secret-store references. Never values.
 	CredentialRefs map[string]string
@@ -52,13 +54,14 @@ var (
 // CreateAPIBASTarget registers a target. A second registration of the same id is refused, not replaced.
 func CreateAPIBASTarget(ctx context.Context, pool *pgxpool.Pool, t APIBASTarget) error {
 	hosts, _ := json.Marshal(t.AllowedHosts)
+	paths, _ := json.Marshal(nonNil(t.AllowedPaths))
 	scen, _ := json.Marshal(t.AllowedScenarios)
 	refs, _ := json.Marshal(t.CredentialRefs)
 	tag, err := pool.Exec(ctx, `
-		INSERT INTO apibas_targets (id, name, base_url, environment, allowed_hosts, allowed_scenarios, credential_refs, enabled, created_by)
-		VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9)
+		INSERT INTO apibas_targets (id, name, base_url, environment, allowed_hosts, allowed_scenarios, credential_refs, enabled, created_by, allowed_paths)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10::jsonb)
 		ON CONFLICT (id) DO NOTHING`,
-		t.ID, t.Name, t.BaseURL, t.Environment, string(hosts), string(scen), string(refs), t.Enabled, t.CreatedBy)
+		t.ID, t.Name, t.BaseURL, t.Environment, string(hosts), string(scen), string(refs), t.Enabled, t.CreatedBy, string(paths))
 	if err != nil {
 		return fmt.Errorf("create apibas target: %w", err)
 	}
@@ -68,15 +71,23 @@ func CreateAPIBASTarget(ctx context.Context, pool *pgxpool.Pool, t APIBASTarget)
 	return nil
 }
 
+// nonNil makes a nil slice encode as [] rather than null.
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
 // GetAPIBASTarget returns one target by id.
 func GetAPIBASTarget(ctx context.Context, pool *pgxpool.Pool, id string) (APIBASTarget, error) {
 	var t APIBASTarget
-	var hosts, scen, refs string
+	var hosts, scen, refs, paths string
 	err := pool.QueryRow(ctx, `
 		SELECT id, name, base_url, environment, allowed_hosts::text, allowed_scenarios::text, credential_refs::text,
-		       enabled, created_by, created_at
+		       enabled, created_by, created_at, allowed_paths::text
 		  FROM apibas_targets WHERE id = $1`, id).
-		Scan(&t.ID, &t.Name, &t.BaseURL, &t.Environment, &hosts, &scen, &refs, &t.Enabled, &t.CreatedBy, &t.CreatedAt)
+		Scan(&t.ID, &t.Name, &t.BaseURL, &t.Environment, &hosts, &scen, &refs, &t.Enabled, &t.CreatedBy, &t.CreatedAt, &paths)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return APIBASTarget{}, ErrAPIBASTargetNotFound
 	}
@@ -85,6 +96,9 @@ func GetAPIBASTarget(ctx context.Context, pool *pgxpool.Pool, id string) (APIBAS
 	}
 	if err := json.Unmarshal([]byte(hosts), &t.AllowedHosts); err != nil {
 		return APIBASTarget{}, fmt.Errorf("decode allowed hosts: %w", err)
+	}
+	if err := json.Unmarshal([]byte(paths), &t.AllowedPaths); err != nil {
+		return APIBASTarget{}, fmt.Errorf("decode allowed paths: %w", err)
 	}
 	if err := json.Unmarshal([]byte(scen), &t.AllowedScenarios); err != nil {
 		return APIBASTarget{}, fmt.Errorf("decode allowed scenarios: %w", err)
@@ -173,11 +187,12 @@ func CreateAPIBASJobExclusive(ctx context.Context, pool *pgxpool.Pool, j APIBASJ
 	scen, _ := json.Marshal(j.ScenarioIDs)
 	refs, _ := json.Marshal(j.CredentialRefs)
 	hosts, _ := json.Marshal(j.AllowedHosts)
+	paths, _ := json.Marshal(nonNil(j.AllowedPaths))
 	var id string
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO apibas_jobs (job_key, requested_by, target_id, target_base_url, environment, fixture, scenario_ids, credential_refs, allowed_hosts, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, 'queued') RETURNING id::text`,
-		j.JobKey, j.RequestedBy, j.TargetID, j.TargetBaseURL, j.Environment, j.Fixture, string(scen), string(refs), string(hosts)).Scan(&id); err != nil {
+		INSERT INTO apibas_jobs (job_key, requested_by, target_id, target_base_url, environment, fixture, scenario_ids, credential_refs, allowed_hosts, allowed_paths, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, 'queued') RETURNING id::text`,
+		j.JobKey, j.RequestedBy, j.TargetID, j.TargetBaseURL, j.Environment, j.Fixture, string(scen), string(refs), string(hosts), string(paths)).Scan(&id); err != nil {
 		return APIBASJob{}, false, fmt.Errorf("create apibas job: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
