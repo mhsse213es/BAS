@@ -270,3 +270,30 @@ func TestGenerateHTMLContentProvenance(t *testing.T) {
 		t.Fatal("content provenance cell must be absent when the report has none")
 	}
 }
+
+// The ranking section must never show products that did not detect anything. With no detection from a named product
+// it says there is nothing to rank; with real sources it lists exactly those.
+func TestGenerateHTMLDetectionSourceRanking_EmptyAndPopulated(t *testing.T) {
+	var empty bytes.Buffer
+	if err := GenerateHTML(&empty, &FullReport{}, nil); err != nil {
+		t.Fatalf("GenerateHTML: %v", err)
+	}
+	out := empty.String()
+	if !strings.Contains(out, "Detection Source Ranking") || !strings.Contains(out, "nothing to rank") {
+		t.Error("an empty ranking must say there is nothing to rank")
+	}
+	for _, invented := range []string{"Trellix", "18</td>", "25s"} {
+		if strings.Contains(out, invented) {
+			t.Errorf("an empty ranking rendered %q, which is invented data", invented)
+		}
+	}
+
+	var full bytes.Buffer
+	rep := &FullReport{DetectionSources: []DetectionSource{{Product: "Defender", Detections: 3, MinMTTDMs: 2000, AvgMTTDMs: 3000}}}
+	if err := GenerateHTML(&full, rep, nil); err != nil {
+		t.Fatalf("GenerateHTML: %v", err)
+	}
+	if o := full.String(); !strings.Contains(o, "<strong>Defender</strong>") || strings.Contains(o, "nothing to rank") {
+		t.Error("a populated ranking must list its products and not the empty message")
+	}
+}

@@ -3327,6 +3327,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 {{end}}
 
 <h3 style="margin-top:16px;margin-bottom:8px">Detection Source Ranking</h3>
+{{if not .detectionSources}}
+<p style="color:#6e7681;font-size:0.85rem;margin-bottom:20px">No security product recorded a detection for this assessment, so there is nothing to rank. This is the case when no EDR, AV or SIEM is connected to Audspect, when protection was switched off on the endpoint, or when nothing alerted.</p>
+{{else}}
 <p style="color:#6e7681;font-size:0.85rem;margin-bottom:12px">Ranking of security products based on total detection count (most often) and speed (first to detect/lowest minimum MTTD).</p>
 <table style="width:100%;margin-bottom:20px;max-width:600px">
   <thead>
@@ -3350,6 +3353,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     {{end}}
   </tbody>
 </table>
+{{end}}
 
 {{if .techniqueMatrix}}
 <table class="det-matrix" style="table-layout:fixed;width:100%">

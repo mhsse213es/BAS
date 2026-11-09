@@ -487,3 +487,31 @@ func TestBuildExecutiveConclusion_SchedulerSkipSentence(t *testing.T) {
 		t.Errorf("conclusion = %q, want no scheduler sentence when Scheduler=0", withoutScheduler)
 	}
 }
+
+// A report on an endpoint where no detection product alerted must rank nothing. It used to substitute invented figures
+// (Trellix 18, Defender 14, SIEM 5), so a report claimed detections by products that were never connected.
+func TestBuildDetectionSources_NoDetectionsRanksNothing(t *testing.T) {
+	results := []models.SimulationResult{
+		{Technique: models.AttackTechnique{ID: "T1059.001"}, Result: models.ResultFail, DetectionVerdict: "undetected"},
+		{Technique: models.AttackTechnique{ID: "T1547.001"}, Result: models.ResultPass},
+	}
+	if got := buildDetectionSources(results); len(got) != 0 {
+		t.Fatalf("detection sources = %+v, want none when nothing was detected", got)
+	}
+	if got := buildDetectionSources(nil); len(got) != 0 {
+		t.Fatalf("detection sources for no results = %+v, want none", got)
+	}
+}
+
+func TestBuildDetectionSources_RanksRealAlertsOnly(t *testing.T) {
+	alert := func(p string, ms int64) *models.DetectionAlert { return &models.DetectionAlert{Provider: p, MTTDMs: ms} }
+	results := []models.SimulationResult{
+		{Result: models.ResultFail, DetectionVerdict: "detected", DetectionAlert: alert("Defender", 2000)},
+		{Result: models.ResultFail, DetectionVerdict: "detected", DetectionAlert: alert("Defender", 4000)},
+		{Result: models.ResultFail, DetectionVerdict: "detected", DetectionAlert: alert("Sentinel", 9000)},
+	}
+	got := buildDetectionSources(results)
+	if len(got) != 2 || got[0].Product != "Defender" || got[0].Detections != 2 || got[0].MinMTTDMs != 2000 || got[0].AvgMTTDMs != 3000 || got[1].Product != "Sentinel" {
+		t.Fatalf("ranking = %+v", got)
+	}
+}
