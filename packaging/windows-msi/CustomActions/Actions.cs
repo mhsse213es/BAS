@@ -182,6 +182,34 @@ namespace Audspect.Installer
             return ActionResult.Success;
         }
 
+        static void RunTool(Session session, string file, string args)
+        {
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo(file, args) { UseShellExecute = false, CreateNoWindow = true };
+                using (var p = System.Diagnostics.Process.Start(psi)) { p.WaitForExit(20000); }
+            }
+            catch (Exception e) { session.Log("Audspect: " + file + " " + args + " failed: " + e.Message); }
+        }
+
+        /// <summary>Last resort: stop the agent process and delete its service registration(s) directly.</summary>
+        static void ForceRemoveService(Session session)
+        {
+            session.Log("Audspect: the agent's own uninstall left its service registered; removing it directly.");
+            foreach (var name in new[] { ServiceName, LegacyServiceName })
+            {
+                if (!ServiceExists(name)) continue;
+                RunTool(session, "sc.exe", "stop \"" + name + "\"");
+            }
+            RunTool(session, "taskkill.exe", "/F /IM bas_agent.exe");
+            foreach (var name in new[] { ServiceName, LegacyServiceName })
+            {
+                if (!ServiceExists(name)) continue;
+                RunTool(session, "sc.exe", "delete \"" + name + "\"");
+            }
+            System.Threading.Thread.Sleep(1500);
+        }
+
         static ActionResult Uninstall(Session session, bool failIfStillRegistered)
         {
             // Run the agent's own uninstall even when no service is registered but its executable is still here: a
@@ -190,6 +218,9 @@ namespace Audspect.Installer
             if (!AgentServiceExists() && !File.Exists(exe)) return ActionResult.Success;
             var run = InstallLogic.RunAgent(exe, "--uninstall", "", AgentTimeoutMs, null, true);
             if (!string.IsNullOrEmpty(run.Output)) session.Log("Audspect agent output:\n" + run.Output);
+            // The agent's own uninstall is the normal path. If it left the service behind (it could not stop or delete
+            // it), remove it here directly rather than leaving an agent that keeps running after the uninstall.
+            if (AgentServiceExists()) ForceRemoveService(session);
             if (AgentServiceExists() && failIfStillRegistered)
             {
                 Fail(session, "The agent service could not be removed (exit code " + run.ExitCode + "). Nothing was uninstalled.");
