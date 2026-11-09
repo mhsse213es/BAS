@@ -155,7 +155,12 @@ RUN bash /build-packages.sh
 # reference only against stages already declared earlier in the file,
 # regardless of the dependency graph it then builds in.
 FROM alpine AS binaries-manifest
+# The previous release's BINARIES.sha256, base64, from the build script. Its hashes are kept in the new manifest as
+# "#prev" lines, so an agent still on that release is marked "outdated" instead of being quarantined as an unknown
+# binary after an upgrade. Empty means the build had no earlier release to carry.
+ARG PREVIOUS_MANIFEST_B64=""
 RUN mkdir /agents
+COPY packaging/carry-previous-manifest.sh /carry-previous-manifest.sh
 COPY --from=agent-builder /agents/bas-agent-linux-amd64 /agents/bas-agent-linux-arm64 \
      /agents/bas-agent-windows-amd64.exe /agents/bas-agent-darwin-amd64 /agents/bas-agent-darwin-arm64 \
      /agents/bas-agent-windows-amd64-setup.zip \
@@ -174,6 +179,16 @@ RUN cd /agents && sha256sum \
       bas-agent-installer-darwin-arm64 bas-agent-installer-darwin-amd64 \
       bas-agent-linux-amd64.deb bas-agent-linux-arm64.deb bas-agent-linux-amd64.rpm \
     > /agents/BINARIES.sha256
+# This manifest is the one the final image ships and the signing steps later sign, so the previous hashes must be
+# in it here. verify fails the build if any of them is missing.
+RUN if [ -n "$PREVIOUS_MANIFEST_B64" ]; then \
+      printf '%s' "$PREVIOUS_MANIFEST_B64" | base64 -d > /tmp/previous.sha256 && \
+      n="$(sh /carry-previous-manifest.sh carry /agents/BINARIES.sha256 /tmp/previous.sha256)" && \
+      sh /carry-previous-manifest.sh verify /agents/BINARIES.sha256 /tmp/previous.sha256 && \
+      echo "carried $n previous-release hash(es) into BINARIES.sha256"; \
+    else \
+      echo "WARNING: no previous manifest supplied - agents still on the last release will be quarantined after the upgrade"; \
+    fi
 
 # ── Dashboard (G1c): Node only here, never in the final image ─────────────────
 FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS web

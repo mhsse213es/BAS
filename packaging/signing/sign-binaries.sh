@@ -100,6 +100,20 @@ log "Generating manifest: ${MANIFEST}"
 
 log "  $(wc -l < "$MANIFEST") entries in manifest"
 
+# ── Carry the previous release's hashes ───────────────────────────────────────
+# Agents still on the previous release would otherwise be quarantined as an unknown binary after an upgrade. The
+# previous hashes stay in the manifest as "#prev" lines, so the server marks those agents "outdated" instead.
+# BAS_PREVIOUS_MANIFEST is set by packaging/build.sh. This must run before the manifest is signed below.
+CARRY="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/carry-previous-manifest.sh"
+if [[ -n "${BAS_PREVIOUS_MANIFEST:-}" ]]; then
+  [[ -f "${BAS_PREVIOUS_MANIFEST}" ]] || { err "BAS_PREVIOUS_MANIFEST not found: ${BAS_PREVIOUS_MANIFEST}"; exit 1; }
+  carried="$(sh "$CARRY" carry "$MANIFEST" "$BAS_PREVIOUS_MANIFEST")"
+  sh "$CARRY" verify "$MANIFEST" "$BAS_PREVIOUS_MANIFEST" >/dev/null
+  log "  carried ${carried} previous-release hash(es) as #prev lines"
+else
+  warn "BAS_PREVIOUS_MANIFEST not set - agents still on the last release will be quarantined after the upgrade."
+fi
+
 # ── Sign the manifest ─────────────────────────────────────────────────────────
 MANIFEST_SIG="${MANIFEST}.asc"
 rm -f "$MANIFEST_SIG"

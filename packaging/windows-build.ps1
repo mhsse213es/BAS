@@ -214,6 +214,14 @@ Log "  wwwroot integrity: manifest hash is computed inside the Docker build (G1c
 # -- 1. Build Docker image ----------------------------------------------------
 $OrchestratorTag = "bas-orchestrator:$Version"
 
+# The previous release's manifest: its hashes are carried into the new one as "#prev" lines (see
+# packaging/carry-previous-manifest.sh), so agents still on that release show as "outdated" instead of being
+# quarantined after the upgrade. Taken from the newest earlier release under dist\, not from git.
+. "$RepoRoot\packaging\signing\sign-orchestrator-artifacts.ps1"
+$PreviousManifestPath = Get-PreviousReleaseManifest -DistDir $DistDir -Version $Version
+if ($PreviousManifestPath) { Log "Previous release manifest: $PreviousManifestPath" }
+else { Warn "No earlier release under $DistDir - agents on an older build will be quarantined after the upgrade." }
+
 if (-not $SkipBuild) {
     # Obfuscation (garble -literals -tiny, scoped to our module via GOGARBLE) runs
     # inside orchestrator/Dockerfile  -  see that file for the GOGARBLE rationale.
@@ -223,6 +231,10 @@ if (-not $SkipBuild) {
     # was already compiled into signing.go by step 0b-i above.
     Log "Building $OrchestratorTag (garble -literals -tiny - this takes 5-10 min)..."
     $buildExtraArgs = @("--build-arg", "BAS_VERSION=$Version", "--build-arg", "AGENT_VERSION=$Version")
+    if ($PreviousManifestPath) {
+        $prevB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($PreviousManifestPath))
+        $buildExtraArgs += @("--build-arg", "PREVIOUS_MANIFEST_B64=$prevB64")
+    }
     # A tiered build must not put other tiers' scenarios in the image. The image is built from the
     # repo root, so give it a filtered copy of the scenarios inside the build context.
     $scenarioStage = $null
@@ -741,7 +753,8 @@ if ($LASTEXITCODE -ne 0) {
         # replaces that narrower patch -- it's now folded into the richer
         # one below, which also bakes BINARIES.sha256.sig.
         $orchestratorPatched = Update-OrchestratorAgentArtifacts -OrchestratorTag $OrchestratorTag `
-            -OutDir $OutDir -Version $Version -OrchestratorDir $OrchestratorDir -ExpectedThumbprint $WindowsCertThumbprint
+            -OutDir $OutDir -Version $Version -OrchestratorDir $OrchestratorDir -ExpectedThumbprint $WindowsCertThumbprint `
+            -PreviousManifest $PreviousManifestPath
         if ($orchestratorPatched -ne $true -and $WindowsSigningRequired) {
             Err "Failed to inject signed Windows artifacts into the orchestrator image, and Windows signing is required for this build."
         } elseif ($orchestratorPatched -ne $true) {

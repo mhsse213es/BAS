@@ -138,6 +138,21 @@ rm -f "${INSTALLER_DIR}/bas_agent_darwin_arm64" "${INSTALLER_DIR}/bas_agent_darw
 cd "${REPO_ROOT}"
 log "macOS installers written to ${AGENTS_DIR}/"
 
+# ── 1b'. Previous release's manifest ──────────────────────────────────────────
+# Its hashes are kept in the new manifest as "#prev" lines (packaging/carry-previous-manifest.sh), so agents still on
+# that release show as "outdated" instead of being quarantined after the upgrade. It is the newest earlier release
+# under dist/, not git HEAD: a build overwrites the committed manifest without committing it.
+PREV_MANIFEST=""
+for m in $(ls -d "${DIST_DIR}"/bas-install-*/BINARIES.sha256 2>/dev/null | sort -V); do
+  v="$(basename "$(dirname "$m")")"; v="${v#bas-install-}"
+  [[ "$v" == "$VERSION" ]] && continue
+  # keep the last one that sorts before this version
+  if [[ "$(printf '%s\n%s\n' "$v" "$VERSION" | sort -V | head -1)" == "$v" ]]; then PREV_MANIFEST="$m"; fi
+done
+if [[ -n "$PREV_MANIFEST" ]]; then log "Previous release manifest: ${PREV_MANIFEST}"
+else warn "No earlier release under ${DIST_DIR} - agents on an older build will be quarantined after the upgrade."; fi
+export BAS_PREVIOUS_MANIFEST="${PREV_MANIFEST}"
+
 # ── 1c. Sign binaries if GPG key is available ─────────────────────────────────
 SIGNING_KEY_EMAIL="releases@audspect.com"
 SIGN_BINS="${REPO_ROOT}/packaging/signing/sign-binaries.sh"
@@ -250,9 +265,14 @@ if [[ ! -f "$COSIGN_KEY" ]]; then
 fi
 
 log "Building Docker image bas-orchestrator:${VERSION}..."
+PREV_ARGS=()
+if [[ -n "${PREV_MANIFEST}" ]]; then
+  PREV_ARGS=(--build-arg "PREVIOUS_MANIFEST_B64=$(base64 < "${PREV_MANIFEST}" | tr -d '\n')")
+fi
 docker build \
   --build-arg VERSION="${VERSION}" \
   --build-arg BAS_VERSION="${VERSION}" \
+  ${PREV_ARGS[@]+"${PREV_ARGS[@]}"} \
   -t "bas-orchestrator:${VERSION}" \
   -f "${REPO_ROOT}/orchestrator/Dockerfile" \
   "${REPO_ROOT}"
