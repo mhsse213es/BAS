@@ -78,27 +78,31 @@ function deploymentRow(d) {
     retest + link + '</div><div class="tiny muted">' + x(d.detail || '') + (d.note ? ' Note: ' + x(d.note) : '') + '</div></div>';
 }
 
+// Each technique is one collapsed row showing only its title and status. The reason, rules and copy buttons open on
+// click, so a run with many gaps reads as a short list instead of a long scroll of queries.
 function techniqueBlock(t) {
-  var head = '<div class="gap-t-head"><b>' + x(t.techniqueId) + '</b> ' + x(t.name || '') + ' ' +
+  var head = '<summary class="gap-t-head"><span class="gap-chev" aria-hidden="true"></span><b>' + x(t.techniqueId) + '</b> ' + x(t.name || '') + ' ' +
     pill(t.status, G.statusTone(t.status)) + ' ' + pill(t.ruleAvailability, G.availabilityTone(t.ruleAvailability)) + ' ' +
-    pill(t.effectiveness, 'muted') + '</div><div class="tiny muted gap-reason">' + x(t.reason) + '</div>';
+    pill(t.effectiveness, 'muted') + '</summary><div class="tiny muted gap-reason">' + x(t.reason) + '</div>';
   if (!t.rules || !t.rules.length) {
     var why = t.ruleAvailability === 'No rule available'
       ? 'The rule library has no Sigma rule for this technique. Nothing is invented: this needs a rule written by your detection engineers.'
       : (t.ruleAvailability === 'Backend translation unavailable' ? 'Rules exist, but none translates to the selected SIEM.' : '');
-    return '<div class="gap-t">' + head + (why ? '<div class="gap-none">' + x(why) + '</div>' : '') + '</div>';
+    return '<details class="gap-t" data-tid="' + x(t.techniqueId) + '">' + head + (why ? '<div class="gap-none">' + x(why) + '</div>' : '') + '</details>';
   }
   var deps = G.deploymentsFor(S.deps.deployments, t.techniqueId);
   var depBlock = deps.length ? '<div class="gap-deps"><div class="tiny muted">Deployed rules</div>' + deps.map(deploymentRow).join('') + '</div>' : '';
   var more = t.ruleCount > t.rules.length ? '<div class="tiny muted">Showing ' + t.rules.length + ' of ' + t.ruleCount + ' rules, highest severity first. The export includes up to 25 per technique.</div>' : '';
-  return '<div class="gap-t">' + head + '<div class="tbl-wrap"><table><thead><tr><th>Rule</th><th>Severity</th><th>Query</th></tr></thead><tbody>' +
-    t.rules.map(function(r) { return ruleRow(r, t.techniqueId); }).join('') + '</tbody></table></div>' + more + depBlock + '</div>';
+  return '<details class="gap-t" data-tid="' + x(t.techniqueId) + '">' + head + '<div class="tbl-wrap"><table><thead><tr><th>Rule</th><th>Severity</th><th>Query</th></tr></thead><tbody>' +
+    t.rules.map(function(r) { return ruleRow(r, t.techniqueId); }).join('') + '</tbody></table></div>' + more + depBlock + '</details>';
 }
 
 function render() {
   var box = el('gap-panel');
   var d = S.data;
   if (!box || !d) return;
+  // Re-rendering (after Mark deployed, a re-test, or switching SIEM) must not fold away what the person had open.
+  var openIds = Array.prototype.map.call(box.querySelectorAll('details.gap-t[open]'), function(n) { return n.getAttribute('data-tid'); });
   var tiles = G.summaryTiles(d.summary).map(function(t) {
     return '<div class="gap-tile tone-' + x(t.tone) + '"><div class="gap-n">' + t.count + '</div><div class="gap-l">' + x(t.status) + '</div></div>';
   }).join('');
@@ -119,6 +123,9 @@ function render() {
     (gaps.length ? gaps.map(techniqueBlock).join('') : '<div class="gap-clear">' + empty('check', 'No detection gap in this run',
       'No technique ran and was confirmed undetected by a reviewed verification. Unverified techniques are listed below as Unknown.') + '</div>') +
     restRows + '<div class="tiny muted gap-lib">' + lib + '</div></section>';
+  openIds.forEach(function(id) {
+    Array.prototype.forEach.call(box.querySelectorAll('details.gap-t'), function(n) { if (n.getAttribute('data-tid') === id) n.open = true; });
+  });
 }
 
 // Records that the customer deployed a recommended rule. It claims nothing about detection: the server answers

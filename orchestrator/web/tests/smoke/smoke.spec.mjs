@@ -190,6 +190,11 @@ test('detection gaps: panel shows a gap with its rules, escapes content, and exp
   const panel = page.locator('#gap-panel');
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('T1059.001');
+  // Each technique starts collapsed to its title row; the rules and copy buttons open on click.
+  await expect(panel.locator('details.gap-t[open]')).toHaveCount(0);
+  await panel.locator('.gap-t-head').first().click();
+  await expect(panel.locator('details.gap-t[open]')).toHaveCount(1);
+  await panel.evaluate((el) => el.querySelectorAll('details.gap-t').forEach((d) => { d.open = true; }));
   await expect(panel).toContainText('Not validated');
   await expect(panel).toContainText('No rule available');
   await expect(panel).toContainText('SigmaHQ');
@@ -240,6 +245,7 @@ test('detection gaps: mark a rule deployed, then re-test it', async ({ page }) =
   await openTab(page, 'verification');
   await page.selectOption('#vf-run', 'run-smoke-1');
   const panel = page.locator('#gap-panel');
+  await panel.evaluate((el) => el.querySelectorAll('details.gap-t').forEach((d) => { d.open = true; }));
   await expect(panel).toContainText('Deployed rules');
   await expect(panel).toContainText('Deployment recorded.');
   expect(await page.evaluate(() => window.__xss), 'server content executed').toBeUndefined();
