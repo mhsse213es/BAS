@@ -33,6 +33,7 @@ export function runStats(runs) {
 
 var DAY = 86400000;
 var WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+var MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function startOf(t) { var d = new Date(t); d.setHours(0, 0, 0, 0); return d; }
 
@@ -56,13 +57,14 @@ export function runsPerDay(runs, days) {
 // counts. Runs in any other state (running, partial, cancelled) are not drawn on this chart.
 export function weekSeries(runs) {
   var stamps = (runs || []).map(function(r) { return r && r.startedAt ? new Date(r.startedAt).getTime() : NaN; }).filter(function(t) { return !isNaN(t); });
-  if (!stamps.length) return { labels: [], passed: [], failed: [], total: 0, peak: 0 };
+  if (!stamps.length) return { labels: [], dates: [], passed: [], failed: [], total: 0, peak: 0 };
   var end = startOf(Math.max.apply(null, stamps));
-  var labels = [], passed = [], failed = [], idx = {};
+  var labels = [], dates = [], passed = [], failed = [], idx = {};
   for (var i = 6; i >= 0; i--) {
     var d = new Date(end.getTime() - i * DAY);
     idx[d.getTime()] = labels.length;
     labels.push(WEEKDAY[d.getDay()]);
+    dates.push(d.getDate() + ' ' + MONTH[d.getMonth()]); // the calendar date under the day name, e.g. "26 Oct"
     passed.push(0); failed.push(0);
   }
   var total = 0;
@@ -73,7 +75,7 @@ export function weekSeries(runs) {
     var st = statusOf(r);
     if (st === 'completed') { passed[idx[k]]++; total++; } else if (st === 'failed') { failed[idx[k]]++; total++; }
   });
-  return { labels: labels, passed: passed, failed: failed, total: total, peak: Math.max.apply(null, passed.map(function(v, i) { return v + failed[i]; }).concat([0])) };
+  return { labels: labels, dates: dates, passed: passed, failed: failed, total: total, peak: Math.max.apply(null, passed.map(function(v, i) { return v + failed[i]; }).concat([0])) };
 }
 
 // agentLabel resolves an agent id to its hostname when the console knows the agent.
