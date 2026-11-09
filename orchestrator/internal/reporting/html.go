@@ -1191,7 +1191,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
         <div class="cs-lbl">Prevention</div>
       </div>
       <div class="cs-item">
-        <div class="cs-num" style="color:#2563eb">{{fmtScore .summary.detectionScore}}%</div>
+        <div class="cs-num" style="color:#2563eb">{{if .summary.detectionMeasured}}{{fmtScore .summary.detectionScore}}%{{else}}N/A{{end}}</div>
         <div class="cs-lbl">Detection</div>
       </div>
       <div class="cs-item">

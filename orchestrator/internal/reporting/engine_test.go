@@ -940,3 +940,16 @@ func TestFilterResults_OnlyRealOutcomesAppearUnderTheNotFilters(t *testing.T) {
 		t.Errorf("all = %d results, want every one of the %d", got, len(results))
 	}
 }
+
+// Rows with no prevented/detected/undetected verdict (no detection sweep ran, or every step errored or was skipped)
+// must not produce a breakdown: it printed "Techniques missed 0 / 0" beside a run that executed techniques.
+func TestBuildCoverageBreakdown_NoVerdictsMeansNoBreakdown(t *testing.T) {
+	rows := []TechniqueRow{{TechniqueID: "T1059.001", DetectionVerdict: ""}, {TechniqueID: "T1547.001", DetectionVerdict: "error"}}
+	if cb := buildCoverageBreakdown(rows); cb.HasData || cb.Attempted != 0 {
+		t.Fatalf("breakdown = %+v, want none", cb)
+	}
+	cb := buildCoverageBreakdown([]TechniqueRow{{TechniqueID: "T1", DetectionVerdict: "prevented"}, {TechniqueID: "T2", DetectionVerdict: "undetected"}})
+	if !cb.HasData || cb.Attempted != 2 || cb.Prevented != 1 || cb.Missed != 1 {
+		t.Fatalf("breakdown = %+v", cb)
+	}
+}

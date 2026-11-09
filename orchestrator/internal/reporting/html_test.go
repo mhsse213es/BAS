@@ -297,3 +297,19 @@ func TestGenerateHTMLDetectionSourceRanking_EmptyAndPopulated(t *testing.T) {
 		t.Error("a populated ranking must list its products and not the empty message")
 	}
 }
+
+// The cover must not print a detection percentage when detection was not measured (it showed 100.0% beside 0 of 5).
+func TestGenerateHTMLCoverDetectionNAWhenNotMeasured(t *testing.T) {
+	var buf bytes.Buffer
+	rep := &FullReport{Summary: ExecutiveSummary{DetectionScore: 100, DetectionMeasured: false}}
+	if err := GenerateHTML(&buf, rep, nil); err != nil {
+		t.Fatal(err)
+	}
+	i := strings.Index(buf.String(), `<div class="cs-lbl">Detection</div>`)
+	if i < 0 {
+		t.Fatal("cover detection tile missing")
+	}
+	if tile := buf.String()[max(0, i-120):i]; !strings.Contains(tile, "N/A") || strings.Contains(tile, "100") {
+		t.Errorf("cover detection tile = %q, want N/A", tile)
+	}
+}

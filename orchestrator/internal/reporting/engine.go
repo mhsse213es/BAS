@@ -605,6 +605,12 @@ func buildCoverageBreakdown(matrix []TechniqueRow) CoverageBreakdown {
 			gapped = append(gapped, row)
 		}
 	}
+	if cb.Attempted == 0 {
+		// Rows exist but none carries a prevented/detected/undetected verdict (no post-run detection sweep ran, or
+		// every step errored or was skipped). Reporting HasData with 0 of 0 printed "Techniques missed 0 / 0" and
+		// "Techniques prevented 0 / 0" beside a run that executed techniques; no breakdown is the honest answer.
+		return CoverageBreakdown{}
+	}
 	if cb.Attempted > 0 {
 		cb.PreventionRate = cb.Prevented * 100 / cb.Attempted
 		cb.DetectionCoverage = (cb.Prevented + cb.DetectedOnly) * 100 / cb.Attempted
