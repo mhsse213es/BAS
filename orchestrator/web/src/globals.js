@@ -30,6 +30,7 @@ import { openKevDetail, openControlDetail } from './features/dash-rich.js';
 import { bulkPushSelectedFindings, loadFindings, loadSLAReport, openFinding, openFindingsWithStatus, openRemediation, pushFindingToITSM, quickTriageFinding, remBulkTicket, remSingleTicket, revalidateRemediation, exportFindings, fndGo, fndTech, setFindingSearch, setFindingSev, setFindingStatus, setFindingTab, setRemFilter, setRemView, toggleRemEndpoint, setRemSearch, toggleAllFindingChecksFromChecked, toggleFindingCheck } from './features/findings.js';
 import { closeInitiativeAttachDrawer, closeInitiativeAttachDrawerOnBackdrop, closeInitiativeCreateDrawer, closeInitiativeCreateDrawerOnBackdrop, closeInitiativeDrawer, closeInitiativeDrawerOnBackdrop, initiativeArchiveAction, initiativeAttachSelect, initiativeCloseAction, initiativeDeleteFromMenu, initiativeDetachJob, initiativeRenderAttachList, initiativeSetFilter, initiativeSearch, initiativeClearFilters, initiativeCardKeydown, loadInitiatives, openInitiativeAttachDrawer, openInitiativeCreateDrawer, openInitiativeDrawer, submitInitiativeAttach, submitInitiativeCreate } from './features/initiatives.js';
 import { openAddConnectorFor, openAddResponseConnectorFor, refreshResponseConnectors, closeConnectorForm, closeRespondModal, closeResponseConnectorForm, connectorProjectSelectChange, deleteConnector, deleteResponseConnector, fetchConnectorProjects, openAddConnector, openAddResponseConnector, openEditConnector, openEditResponseConnector, openRespondModal, renderConnectorSettings, renderRespondFields, renderResponseConnectorFields, saveConnectorForm, saveResponseConnectorForm, submitRespondAction, testConnectorById, testConnectorForm, testResponseConnectorById } from './features/integrations.js';
+import { openContentImport, closeContentImport, closeContentImportOnBackdrop, ciKindChange, submitContentImport, approveImportDraft, rejectImportDraft } from './features/content-import.js';
 import { clearIOCFilters, closeIOCAddModal, closeIOCAddOnBackdrop, closeIOCDrawer, closeIOCDrawerOnBackdrop, closeIOCImportOnBackdrop, openIOCAddModal, setIOCType, submitIOCAdd, closeIOCImportModal, closeResults, closeResultsOnBackdrop, loadIOCRegistry, loadIOCRegistryOnEnter, openIOCDetail, openIOCImportModal, setRunIOCSearchFromInput, setRunIOCTypeFilter, submitIOCImport, toggleIOCSuppressed, toggleRunIOCRow } from './features/iocs.js';
 import { closeRunLive, closeRunLiveOnBackdrop, closeSweepDrilldown, closeSweepDrilldownOnBackdrop, openRunPanelAction, openRunScenarioAction, openSweepDrilldown, openSweepReport, toggleLiveStepAction } from './features/live-run.js';
 import { abortExecution, abortExecutionStop, approveExStep, closeExerciseDetail, closeExerciseDetailOnBackdrop, closeOpenAEVDetail, closeOpenAEVDetailOnBackdrop, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory, toggleAPScore } from './features/openaev.js';
@@ -462,6 +463,13 @@ export const ACTIONS = {
   pauseCampaign,
   pauseRun,
   pickScenarioUploadFile,
+  openContentImport,
+  closeContentImport,
+  closeContentImportOnBackdrop,
+  ciKindChange,
+  submitContentImport,
+  approveImportDraft,
+  rejectImportDraft,
   pickerSelectAll,
   pickerToggle,
   pollVariantRun,

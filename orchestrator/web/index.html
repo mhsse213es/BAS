@@ -2133,6 +2133,38 @@
         </div>
       </div>
 
+      <!-- Import detection content (Sigma / YARA / chain) -->
+      <div id="ci-overlay" class="overlay" data-on-click="closeContentImportOnBackdrop">
+        <div class="modal init-modal ci-modal" role="dialog" aria-modal="true" aria-label="Import detection content">
+          <div class="init-mhd">
+            <h3>Import detection content</h3>
+            <button type="button" class="drawer-close" data-on-click="closeContentImport" aria-label="Close">&#10005;</button>
+          </div>
+          <div class="init-mbd">
+            <p class="sub2">Sigma and YARA rules become <strong>drafts</strong>. A draft carries the rule's strings inertly (nothing the rule describes is executed) and cannot run until an Admin approves it. A chain runs approved steps in order and records which stage a control stopped.</p>
+            <div class="ci-toolbar">
+              <select id="ci-kind" aria-label="Kind" data-on-change="ciKindChange">
+                <option value="sigma">Sigma rule</option>
+                <option value="yara">YARA rule</option>
+                <option value="chain">Chain of approved steps</option>
+              </select>
+              <span id="ci-os-wrap"><select id="ci-os" aria-label="Target OS"><option value="windows">Windows</option><option value="linux">Linux</option></select></span>
+              <span id="ci-tech-wrap"><input id="ci-tech" type="text" placeholder="ATT&amp;CK id if the rule has none, e.g. T1105" aria-label="ATT&amp;CK technique"></span>
+              <span id="ci-name-wrap"><input id="ci-name" type="text" placeholder="Chain name" aria-label="Chain name"></span>
+            </div>
+            <textarea id="ci-text" rows="9" class="init-field ioc-mono"></textarea>
+            <div id="ci-err" class="is-hidden ioc-err"></div>
+            <div id="ci-results"></div>
+            <h4>Awaiting review</h4>
+            <div id="ci-drafts"></div>
+          </div>
+          <div class="init-mft">
+            <button class="btn btn-outline btn-sm" data-on-click="closeContentImport">Close</button>
+            <button id="ci-submit-btn" class="btn btn-primary btn-sm" data-on-click="submitContentImport">Import</button>
+          </div>
+        </div>
+      </div>
+
       <!-- IOC Import Modal -->
       <div id="ioc-import-overlay" class="overlay" data-on-click="closeIOCImportOnBackdrop">
         <div class="modal init-modal" role="dialog" aria-modal="true" aria-label="Import Indicators">

@@ -608,6 +608,16 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanCloneScenario)).Post("/api/scenarios/{id}/clone", h.CloneScenario)
 		r.With(auth.RequirePermission(auth.CanUpdateScenario)).Put("/api/scenarios/{id}", h.UpdateScenario)
 		r.With(auth.RequirePermission(auth.CanDeleteScenario)).Delete("/api/scenarios/{id}", h.DeleteScenario)
+
+		// Content import: Sigma/YARA rules and chains become DRAFTS that cannot run until an Admin approves them
+		// (content:transition). Importing needs only scenario-creation rights.
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Post("/api/content-import/sigma", h.ImportSigma)
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Post("/api/content-import/yara", h.ImportYARA)
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Post("/api/content-import/chain", h.ImportChain)
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Get("/api/content-import/drafts", h.ListImportDrafts)
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Get("/api/content-import/drafts/{id}", h.GetImportDraft)
+		r.With(auth.RequirePermission(auth.CanTransitionContent)).Post("/api/content-import/drafts/{id}/approve", h.ApproveImportDraft)
+		r.With(auth.RequirePermission(auth.CanTransitionContent)).Post("/api/content-import/drafts/{id}/reject", h.RejectImportDraft)
 		r.With(auth.RequirePermission(auth.CanViewContentArtifact)).Get("/api/content-registry/versions/{vid}/artifact", h.GetContentArtifact)
 		r.With(auth.RequirePermission(auth.CanTransitionContent)).Post("/api/content-registry/versions/{vid}/transition", h.TransitionContentVersion)
 		r.With(auth.RequirePermission(auth.CanViewContentMigrationReport)).Get("/api/content-registry/migration-report", h.GetContentMigrationReport)

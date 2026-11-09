@@ -295,6 +295,9 @@ func main() {
 	if err := db.EnsureAgentUninstallSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] agent uninstall schema bootstrap: %v", err)
 	}
+	if err := db.EnsureContentImportSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] content import schema bootstrap: %v", err)
+	}
 	if err := db.EnsureRecoverySchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] recovery schema bootstrap: %v", err)
 	}
