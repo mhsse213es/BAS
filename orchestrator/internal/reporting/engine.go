@@ -3422,8 +3422,17 @@ func FilterResults(results []models.SimulationResult, filter string) []models.Si
 		if r.Result == models.ResultVetoed {
 			continue
 		}
+		// The same holds for SKIPPED and ERROR steps. A skipped step was not run, and an ERROR means the BAS hit a
+		// problem (timeout, missing prerequisite, ...): neither says anything about the customer's controls, and the
+		// score already leaves both out. Listing them under "Not prevented" or "Not detected" made the report claim
+		// defence failures that never happened.
+		if r.Result == models.ResultSkipped || r.Result == models.ResultError {
+			continue
+		}
 		isPrevented := r.Result == models.ResultPass || r.Result == models.ResultBlocked
 		isDetected := r.DetectionVerdict == "detected"
+		// A step the controls stopped has the verdict "prevented": that is an outcome of the control, not a miss.
+		isStoppedByControl := r.DetectionVerdict == "prevented"
 		switch filter {
 		case "prevented":
 			if isPrevented {
@@ -3438,7 +3447,7 @@ func FilterResults(results []models.SimulationResult, filter string) []models.Si
 				filtered = append(filtered, r)
 			}
 		case "not_detected":
-			if !isDetected {
+			if !isDetected && !isStoppedByControl {
 				filtered = append(filtered, r)
 			}
 		}
