@@ -1,0 +1,52 @@
+id: "API-BAS-AUTHZ-503"
+name: "UPI-003: standing-instruction mandate executed by a caller who is not the assigned merchant"
+category: AUTHZ
+claim: function_level
+attack_objective: "An authenticated caller who is not the merchant assigned to MANDATE-A-001 triggers a debit under it."
+threat_model:
+  attacker: "an authenticated caller who holds no assignment on the mandate"
+  identity: upi-cust-b
+  access_level: "standard customer, valid token, not the mandate's owner or assignee"
+  objective: "Trigger a debit under customer A's standing instruction without being the merchant it is assigned to."
+preconditions:
+  fixture: upi-two-customer
+  identities: [upi-cust-a, upi-cust-b, upi-merchant-1]
+  object: MANDATE-A-001
+steps:
+  - id: "baseline-owner-mandate"
+    role: baseline
+    identity: upi-cust-a
+    auth: valid
+    method: GET
+    path: "/api/upi/mandates/MANDATE-A-001"
+    hypothesis: "Customer A, the owner, reads their own mandate. If this fails, the scenario is not testable."
+  - id: "attack-execute-unassigned"
+    role: attack
+    identity: upi-cust-b
+    auth: valid
+    method: POST
+    path: "/api/upi/mandates/MANDATE-A-001/execute"
+    body: '{}'
+    hypothesis: "A caller who is not the assigned merchant cannot execute the mandate."
+denied_statuses: [403, 404]
+expected_control: "Only the merchant assigned to MANDATE-A-001 may execute a debit under it. Any other caller is refused."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The mandate's execution state is unchanged by the unassigned caller's attempt beyond the sandbox reset.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-007
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The unassigned execution attempt is an access event invoking a privileged function (REL-007). Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "UPI / open banking: a standing-instruction mandate is executable only by its registered counterparty (RBI Master Direction on standing instructions for recurring payments)"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-503 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-503 against the vulnerable build must FAIL (exploited)"

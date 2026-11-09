@@ -1,7 +1,10 @@
 # API BAS coverage manifest
 
 Refreshed 9 November 2026 from a measured run, not from earlier notes. The previous version of this file listed 28
-scenarios and five unsupported protocols; both statements were out of date.
+scenarios and five unsupported protocols; both statements were out of date. Updated the same day to add the UPI /
+open-banking pack (6 scenarios): the catalogue, lab-validated and family counts below reflect that addition; the detection
+counts were re-measured after wiring APIBAS-REL-007 to the new mandate-execution route (see the QA log entry
+"API BAS UPI / open-banking pack").
 
 Reproduce the numbers with:
 
@@ -17,9 +20,9 @@ A number is only worth quoting with its tier. Nothing here is live-validated.
 
 | Tier | Meaning | Count |
 |---|---|---|
-| Catalogued | Scenario file exists in `internal/apibas/catalog` | **145** |
-| Executable | Has a working adapter (REST, or one of the protocol adapters) | **145 / 145** |
-| Lab-validated | In both lab builds the vulnerable build FAILs as exploited and the fixed build PASSes with control enforced | **142 / 145** (97.9%) |
+| Catalogued | Scenario file exists in `internal/apibas/catalog` | **151** |
+| Executable | Has a working adapter (REST, or one of the protocol adapters) | **151 / 151** |
+| Lab-validated | In both lab builds the vulnerable build FAILs as exploited and the fixed build PASSes with control enforced | **148 / 151** (98.0%) |
 | Workflow-verified | Reporting-obligation scenario that PASSed with control enforced in both builds, graded by the reporting adapter. Simulated receiver; not part of evaluated or validated | **1** (REPORT-001) |
 | Live-validated | Run against a real customer or staging API with real security telemetry | **0** |
 
@@ -44,11 +47,11 @@ FAIL/exploited, fixed PASS/enforced).
 | API.txt family | Scenario prefix | Scenarios |
 |---|---|---|
 | 01 Identity and authentication | AUTHN | 11 |
-| 02 Authorization and access control | AUTHZ | 30 (12 general, 6 NBFC, 4 manufacturing, 5 healthcare, 3 retail/telecom) |
-| 03 Gateway, WAF, perimeter | GWAY | 12 |
+| 02 Authorization and access control | AUTHZ | 34 (12 general, 6 NBFC, 4 manufacturing, 5 healthcare, 3 retail/telecom, 4 UPI/open banking) |
+| 03 Gateway, WAF, perimeter | GWAY | 13 (12 general, 1 UPI/open banking) |
 | 04 Input validation and injection | INJ | 12 |
 | 05 Business logic | BIZ | 13 (12 general, 1 retail) |
-| 06 Sensitive data exposure | DATA | 24 (13 general, 4 NBFC, 2 manufacturing, 3 healthcare, 2 telecom) |
+| 06 Sensitive data exposure | DATA | 25 (13 general, 4 NBFC, 2 manufacturing, 3 healthcare, 2 telecom, 1 UPI/open banking) |
 | 07 Resource consumption and abuse | ABUSE | 10 |
 | 08 Integrations, webhooks, backend trust | INTEG | 16 (11 general, 1 manufacturing, 1 healthcare, 3 retail/partner/logistics) |
 | 09 Discovery, lifecycle, configuration | DISC | 10 |
@@ -93,6 +96,7 @@ Every protocol has an executable adapter and at least one lab-validated scenario
 | Manufacturing | 7 scenarios (AUTHZ-201 to 204, DATA-201, 202, INTEG-201) on `manufacturing-two-plant`: cross-plant production-order read, operator releasing an order, supplier changing another supplier's purchase order, device commanding another device (simulated, lab only), BOM and CAD leakage, asset and telemetry listing, IT-side access to the OT management configuration. Detection: all seven graded by APIBAS-REL-004 (fixture-validated). No regulatory mapping: no applicable source in the registry. Not covered: ERP/MES inventory and bill-of-materials write paths, machine-command safety interlocks, OT protocol (Modbus, OPC UA) adapters. |
 | Healthcare (FHIR, patient records) | 9 scenarios (AUTHZ-301 to 305, DATA-301 to 303, INTEG-301) on `healthcare-two-patient`: cross-patient record read, clinician without a treating relationship, prescription change, patient altering their own result, delegate beyond consent scope, medical image download, FHIR Observation read, records export, device posting to another patient's result. Detection: eight graded by APIBAS-REL-004, AUTHZ-304 by REL-021 (result changed by a non-device identity) and AUTHZ-305 by REL-022 (clinical data to a delegate beyond consent); all fixture-validated. REL-004 cannot tell a treating clinician from one without a relationship (AUTHZ-302). Eight carry an unverified DPDP section 8(5) mapping. Not covered: HL7 v2 and DICOM adapters, real FHIR server, break-glass access, consent revocation, audit-log integrity. |
 | Retail, logistics, telecom | 9 scenarios on `commerce-telecom-two-tenant`: shipment tracking and redirect across shoppers (AUTHZ-401, 402), SIM swap on another subscriber's line (AUTHZ-403, simulated), usage listing and subscriber record exposure (DATA-401, 402), shopper setting their own order price (BIZ-401), partner reading another partner's API key (INTEG-401), partner escalating their own key scope (INTEG-402), shopper reporting delivery through the carrier callback (INTEG-403). Detection (fixture-validated): six graded by APIBAS-REL-004; BIZ-401 by REL-023 (order changed by a non-staff identity), INTEG-402 by REL-024 (partner key scope changed by a non-staff identity), INTEG-403 by REL-025 (delivery reported by a non-carrier). These three are attempt signals keyed on the route and the actor's role. No regulatory mapping. Refunds, coupons, stock reservation, partner quotes and webhook replay are covered by the general BIZ and INTEG scenarios. Not covered at all: number porting, billing disputes, real carrier or OSS/BSS integrations, SIM provisioning, inventory write paths. |
+| UPI / open banking | 6 scenarios on `upi-two-customer`: cross-customer UPI transaction read (AUTHZ-501), cross-customer VPA/linked-account read (AUTHZ-502), standing-instruction mandate executed by a caller who is not the assigned merchant (AUTHZ-503), cross-customer mandate read (AUTHZ-504), a revoked Account Aggregator consent still accepted for a financial-information fetch (DATA-501), VPA-validate rate limit bypassed by rotating X-Forwarded-For (GWAY-501). Detection (fixture-validated): AUTHZ-501, 502, 504 and DATA-501 graded by APIBAS-REL-004/REL-020; AUTHZ-503 by REL-007 (mandate execution classified as a financial approval, the same class as a loan decision); GWAY-501 by REL-005 (counted-request burst), the same rule GWAY-009 uses. No regulatory mapping: the registry has no sourced NPCI/UPI or RBI Account Aggregator document; `industry_mapping` notes the applicable RBI/NPCI framework in plain English only. Not covered: real UPI switch or NPCI integration, QR-code/intent-flow payment initiation, refund/chargeback flows, PSP-side settlement. |
 
 ## 5. India and UAE (API.txt section 4)
 
@@ -105,7 +109,7 @@ Ten scenarios carry a regulatory mapping: AUTHZ-001, DATA-011 and eight healthca
 | IN-DPDP-S12-3 | DATA-011 | **unverified**: the notification bringing it into force is not in the source set |
 | IN-DPDP-S8-5 | AUTHZ-301, 302, 303, 305, DATA-301, 302, 303, INTEG-301 | **unverified**: same commencement gap, and no named reviewer has confirmed the mapping. Reasonable security safeguards (section 8(5)) is one access-control safeguard per scenario, not a compliance finding |
 
-Healthcare AUTHZ-304 (a patient altering their own result) is not mapped: it is not a breach of another person's data. UAE healthcare data is not mapped to the PDPL because that law leaves health data to its own legislation, which is not in the source set. Manufacturing has no mapping: the registry holds no source document that applies (an OT or industrial security standard such as IEC 62443, or a sector regulation, would have to be obtained and reviewed first), and the DPDP Act does not fit production orders, bills of materials or device commands. Not mapped or not started: NPCI and UPI, an NBFC mapping (needs a fresh applicability review), CERT-In direction mapping
+Healthcare AUTHZ-304 (a patient altering their own result) is not mapped: it is not a breach of another person's data. UAE healthcare data is not mapped to the PDPL because that law leaves health data to its own legislation, which is not in the source set. Manufacturing has no mapping: the registry holds no source document that applies (an OT or industrial security standard such as IEC 62443, or a sector regulation, would have to be obtained and reviewed first), and the DPDP Act does not fit production orders, bills of materials or device commands. The new UPI / open-banking pack (AUTHZ-501 to 504, DATA-501, GWAY-501) has scenario coverage but still no sourced regulatory mapping: no NPCI UPI procedural guideline or RBI Master Direction on Account Aggregators is in the source set, so its `industry_mapping` notes name the applicable framework in plain English, not as a reviewed clause. Not mapped or not started: a sourced NPCI/UPI or RBI Account Aggregator mapping, an NBFC mapping (needs a fresh applicability review), CERT-In direction mapping
 beyond REPORT-001 (unverified), CBUAE clauses 6.1.2.6 and 6.1.7.2 (no provision-derived deadline), DIFC and ADGM, UAE
 healthcare rules, UAE information-assurance requirements, data residency, PDPL Executive Regulation (not in the source set).
 There is no live reporting channel: a simulated REPORT PASS proves a workflow check only. A successful simulation never
@@ -119,10 +123,10 @@ adapter exists.
 
 | Build | detected | not_detected | inconclusive | error |
 |---|---|---|---|---|
-| vulnerable | 88 | 21 | 1 | 0 |
-| fixed | 73 | 36 | 1 | 0 |
+| vulnerable | 93 | 22 | 1 | 0 |
+| fixed | 78 | 37 | 1 | 0 |
 
-35 of 145 scenarios have no detection block and are `not_evaluated`, which is a distinct state from a miss. Per-scenario reasons
+35 of 151 scenarios have no detection block and are `not_evaluated`, which is a distinct state from a miss. Per-scenario reasons
 are in `docs/api-bas-det001-tracker.md`. The counts above are raw; a not_detected on the fixed build means the control denied
 the request and the fixture raised no event, which is not automatically a gap. The per-scenario expectations decide that.
 

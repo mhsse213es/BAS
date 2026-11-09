@@ -3859,3 +3859,48 @@ Walk of 5 approvals 2 per page: every approval exactly once, newest first, 3 pag
 - **Tests (all pass):** document facts; path-level parameters and `$ref` resolution through nested objects and array items; effective authentication (inherited, none, optional); candidate classes per operation including negative cases (a health path is not unauthenticated, the newest version is not lifecycle); example values never reach the inventory; remote `$ref` (https and file) reported not followed; reference loop and recursive schema terminate; schema fan-out (12 properties x 8 levels) bounded by a node budget and reported; rejected inputs (empty, Swagger 2.0, no version, no paths, no operations, invalid, oversize); JSON accepted; operation limit; scope suggestion; drift (template match, query ignored, deeper path not matched, deprecated in use). CLI: report content, drift from an observed file, JSON output, bad input.
 - **Run on a real document:** the Aleef bank OpenAPI in the repo (20 operations). 17 object-level, 3 property-level, 3 data-exposure and 4 lifecycle candidates. It showed that `approve` and `settle` routes were not flagged as function-level, so the privileged-action list was extended and a test added.
 - **Limits:** parse-only. No persistence, API, console or scenario binding. OpenAPI 3.x only. Class rules are name heuristics and will both miss and over-flag. Observed routes come from a user-supplied file; nothing is discovered. A class is a reason to test, not a finding.
+
+## API BAS UPI / open-banking pack (9 November 2026)
+
+### Why
+Driven by `Assessment/BAS_Evaluation_Detailed_Report.md`'s roadmap item for REQ-016 (API attacks, BOLA/auth bypass):
+"no dedicated open-banking/UPI API-abuse suite." Everything else in `internal/apibas` already covers BOLA, auth-bypass and
+rate-limit generically; this pack adds the India UPI / open-banking-specific scenario content the report named, reusing the
+existing catalog/lab/runner machinery rather than building anything new architecturally.
+
+### Built
+- Fixture `upi-two-customer` (`internal/apibas/fixture/upi.go`): two UPI customers, one merchant/PSP, with a VPA-linked
+  account, a transaction, a standing-instruction mandate and two Account Aggregator consents (one active, one revoked) each.
+- Lab routes `/api/upi/...` (`internal/apibas/lab/upi.go`), vulnerable and fixed builds, on the shared pack store (the same
+  `nbfcStore` healthcare, manufacturing and commerce already share). The VPA-validate endpoint reuses the gateway's existing
+  per-caller rate counter (`gwRateKey`/`gwOverLimit`) rather than a new one.
+- Six scenarios: AUTHZ-501 (cross-customer transaction read), AUTHZ-502 (cross-customer VPA/linked-account read), AUTHZ-503
+  (mandate executed by a caller who is not the assigned merchant), AUTHZ-504 (cross-customer mandate read), DATA-501 (a
+  revoked Account Aggregator consent still accepted for a financial-information fetch), GWAY-501 (VPA-validate rate limit
+  bypassed by rotating X-Forwarded-For, the same bypass shape as GWAY-009). All six: vulnerable build FAIL (exploited),
+  fixed build PASS (control enforced).
+- Detection: AUTHZ-501/502/504 and DATA-501 graded by the existing APIBAS-REL-004/REL-020 rules. GWAY-501 by the existing
+  REL-005. AUTHZ-503 needed one new wiring: `detect.ActionClass` did not classify `POST /api/upi/mandates/{id}/execute` as
+  anything privileged, so REL-007 never fired; added a case classifying it as `ClassFinancialApproval` (the same class as a
+  loan decision), since executing a standing-instruction mandate collects a debit. All six now fire in both builds.
+- `TestPhase38_UPIScenariosBothBuilds` (new), plus the identities added to the shared test harness (`acceptance_test.go`)
+  and the fixture lookup `TestPhase28_MeasuredCoverage` uses (`phase28_measure_test.go`'s `fixtureFor` was missing a case for
+  the new fixture name; without it the whole measured-coverage test would have failed with `unknown fixture`, not just
+  skipped the new scenarios).
+- Measured: catalogue 145 -> 151, lab-validated 142/145 -> 148/151 (97.9% -> 98.0%), no new exclusions (the same ABUSE-002
+  provisional / REPORT-001 workflow-verified / REPORT-002 unevaluated as before). Detection: all 114 declared expectations
+  now match (`TestPhase34_DetectionMatchesDeclaredExpectations`, 0 mismatches), up from 108; vulnerable detected 93, fixed
+  detected 78; not_evaluated stays 35 of 151 (every new scenario declared a detection block).
+
+### Limits
+- Fixture/lab-validated only, same as every other pack: no live UPI switch, NPCI integration, or real PSP. No live SIEM;
+  REL-004/005/007/020 are fixture-validated against the Elastic Security fixture, not a real SIEM.
+- No regulatory mapping: the registry (`internal/apibas/regulatory/registry.yaml`) has no sourced NPCI UPI procedural
+  guideline or RBI Master Direction on Account Aggregators committed under `sources/`. `industry_mapping` on each scenario
+  names the applicable framework in plain English; this is not a reviewed, sourced compliance mapping and should not be
+  read as one.
+- Not covered: QR-code/intent-flow payment initiation, refund/chargeback flows, PSP-side settlement, a real Account
+  Aggregator's consent-handle (ReBIT) protocol. The pack tests the same BOLA/auth-bypass/rate-limit technique classes
+  already proven elsewhere in `internal/apibas`, applied to UPI/open-banking-shaped objects, not a from-scratch AA/UPI
+  protocol implementation.
+- Not run on staging or against any real environment.

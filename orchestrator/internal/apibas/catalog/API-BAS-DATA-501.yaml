@@ -1,0 +1,53 @@
+id: "API-BAS-DATA-501"
+name: "UPI-005: a revoked Account Aggregator consent is still accepted for a financial-information fetch"
+category: DATA
+claim: function_level
+attack_objective: "Customer A fetches financial information through CONSENT-A-001, a consent they have already revoked."
+threat_model:
+  attacker: "the consent's own owner, replaying a consent they revoked"
+  identity: upi-cust-a
+  access_level: "standard customer, valid token, owner of the revoked consent"
+  objective: "Fetch linked financial data through a consent artifact whose status is revoked."
+preconditions:
+  fixture: upi-two-customer
+  identities: [upi-cust-a]
+  object: CONSENT-A-001
+steps:
+  - id: "baseline-active-consent-fetch"
+    role: baseline
+    identity: upi-cust-a
+    auth: valid
+    method: GET
+    path: "/api/upi/consent/CONSENT-A-002/fetch"
+    hypothesis: "A fetch through the active consent CONSENT-A-002 succeeds. If this fails, the scenario is not testable."
+  - id: "attack-revoked-consent-fetch"
+    role: attack
+    identity: upi-cust-a
+    auth: valid
+    method: GET
+    path: "/api/upi/consent/CONSENT-A-001/fetch"
+    hypothesis: "A fetch through the revoked consent CONSENT-A-001 is refused, and the linked accounts are not returned."
+denied_statuses: [403]
+forbidden_values: ["BAS-SIM-FI-A"]
+expected_control: "A fetch through a consent whose status is not active is refused, whatever caller holds it, and no linked account is disclosed."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to the fetch through CONSENT-A-001 (status revoked) carries no linked-account value.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-020
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The fetch against a non-active consent is an access event outside the consent's disclosure policy (REL-020). Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "Open banking / Account Aggregator: a revoked consent artifact must not be usable for any further financial-information fetch (RBI Master Direction, Non-Banking Financial Company - Account Aggregator, consent lifecycle requirements)"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DATA-501 with the baseline fetch against the fixed build must be accepted"
+  - "API-BAS-DATA-501 against the vulnerable build must FAIL (exploited)"

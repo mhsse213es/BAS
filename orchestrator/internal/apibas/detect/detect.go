@@ -476,6 +476,9 @@ func ActionClass(action string) string {
 		return ClassFinancialApproval
 	case method == "POST" && (strings.HasSuffix(path, "/approve-payout") || strings.HasSuffix(path, "/refund")):
 		return ClassFinancialApproval
+	case method == "POST" && strings.HasSuffix(path, "/execute") && strings.HasPrefix(path, "/api/upi/mandates/"):
+		// Executing a UPI standing-instruction mandate collects a debit: an approval, like a loan decision (UPI pack).
+		return ClassFinancialApproval
 	case method == "GET" && strings.HasSuffix(path, "/export"):
 		return ClassSensitiveExport
 	case method == "GET":

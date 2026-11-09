@@ -84,6 +84,10 @@ func newEnvWith(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string
 	mfgTok_device_a := randomToken(t)
 	mfgTok_device_b := randomToken(t)
 	mfgTok_ot_engineer := randomToken(t)
+	// UPI / open-banking pack identities (fixture.UPITwoCustomer). Each caller ID is the identity name.
+	upiTok_cust_a := randomToken(t)
+	upiTok_cust_b := randomToken(t)
+	upiTok_merchant_1 := randomToken(t)
 	l, err := lab.New(lab.Config{
 		Mode:    mode,
 		Fixture: fx,
@@ -93,6 +97,7 @@ func newEnvWith(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string
 			mfgTok_planner_a: "planner-a", mfgTok_operator_a: "operator-a", mfgTok_planner_b: "planner-b", mfgTok_operator_b: "operator-b", mfgTok_supplier_1: "supplier-1", mfgTok_supplier_2: "supplier-2", mfgTok_device_a: "device-a", mfgTok_device_b: "device-b", mfgTok_ot_engineer: "ot-engineer",
 			hcTok_patient_a: "patient-a", hcTok_patient_b: "patient-b", hcTok_clinician_a: "clinician-a", hcTok_clinician_b: "clinician-b", hcTok_delegate_a: "delegate-a", hcTok_bedside_device_a: "bedside-device-a", hcTok_bedside_device_b: "bedside-device-b",
 			comTok_shopper_a: "shopper-a", comTok_shopper_b: "shopper-b", comTok_subscriber_a: "subscriber-a", comTok_subscriber_b: "subscriber-b", comTok_partner_1: "partner-1", comTok_partner_2: "partner-2", comTok_carrier_1: "carrier-1", comTok_agent_1: "agent-1",
+			upiTok_cust_a: "upi-cust-a", upiTok_cust_b: "upi-cust-b", upiTok_merchant_1: "upi-merchant-1",
 		},
 		Revoked:        []string{revokedA},
 		AdminToken:     adminTok,
@@ -145,6 +150,9 @@ func newEnvWith(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string
 		"apibas/lab/partner-2":          comTok_partner_2,
 		"apibas/lab/carrier-1":          comTok_carrier_1,
 		"apibas/lab/agent-1":            comTok_agent_1,
+		"apibas/lab/upi-cust-a":         upiTok_cust_a,
+		"apibas/lab/upi-cust-b":         upiTok_cust_b,
+		"apibas/lab/upi-merchant-1":     upiTok_merchant_1,
 	}
 	return &env{
 		url: srv.URL, apiHits: hits, srv: srv, admin: admin, secrets: secrets, fx: fx,

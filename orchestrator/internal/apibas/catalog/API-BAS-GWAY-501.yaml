@@ -1,0 +1,62 @@
+id: API-BAS-GWAY-501
+name: Rate limit on a VPA-validate endpoint is bypassed by rotating a client-supplied source address
+category: GWAY
+claim: function_level
+attack_objective: >
+  A caller enumerates valid UPI handles by repeating the VPA-validate check while varying the
+  X-Forwarded-For header, so a rate limit keyed on that header never reaches its threshold.
+threat_model:
+  attacker: authenticated caller who can set request headers
+  identity: upi-cust-b
+  access_level: standard customer, valid token
+  objective: enumerate valid VPA handles by exceeding the per-caller validate-call limit through a rotating source address
+preconditions:
+  fixture: upi-two-customer
+  identities: [upi-cust-b]
+  object: VPA-B-001
+steps:
+  - id: baseline-single-validate
+    role: baseline
+    identity: upi-cust-b
+    auth: valid
+    method: GET
+    path: "/api/upi/vpa/validate?handle=upicust.b@psp"
+    hypothesis: A single validate call within the limit is accepted. If this fails, the scenario is not testable.
+  - id: attack-rotating-source-address
+    role: attack
+    identity: upi-cust-b
+    auth: valid
+    method: GET
+    path: "/api/upi/vpa/validate?handle=upicust.a@psp"
+    headers:
+      X-Forwarded-For: 10.0.0.{n}
+    repeat: 10
+    hypothesis: The limit is keyed on the authenticated caller, so rotating a header does not reset it.
+max_accepted_attempts: 5
+denied_statuses: [429]
+expected_control: >
+  The validate endpoint refuses calls past the per-caller limit with 429, whatever source address
+  header is sent.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The number of accepted validate calls stays within the declared limit, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: fixture_validated
+  reason: "Ten validate calls in one run reach the burst threshold. Varying the forwarded address does not change the run volume the rule counts. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-005
+  min_severity: medium
+evidence:
+  - sanitized_request
+  - sanitized_response
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "UPI: VPA-validate endpoints without a per-caller rate limit enable large-scale handle enumeration (NPCI UPI API usage guidelines on validate-address throttling)"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-GWAY-501 with a single legitimate validate call against the fixed build must PASS

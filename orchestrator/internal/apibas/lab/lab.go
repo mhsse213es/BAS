@@ -458,6 +458,7 @@ func (s *Server) Handler() http.Handler {
 	s.registerManufacturing(mux)
 	s.registerHealthcare(mux)
 	s.registerCommerce(mux)
+	s.registerUPI(mux)
 	mux.HandleFunc("POST /lab/orders", s.adminOnly(s.createTagged))
 	mux.HandleFunc("DELETE /lab/runs/{tag}", s.adminOnly(s.cleanupRun))
 	mux.HandleFunc("POST /lab/reset", s.adminOnly(s.resetFixture))
