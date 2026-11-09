@@ -71,3 +71,18 @@ test('connector stats', () => {
   assert.equal(s.connected, 1); assert.equal(s.failed, 1); assert.equal(s.disabled, 1); assert.equal(s.auto, 1); assert.equal(s.eppEnabled, 1);
   assert.ok(!/x<y/.test(ii.integrationsInsightsHtml([], [{ enabled: true, provider: 'x<y' }])));
 });
+
+test('intel tiles say the sync counters are since restart, and show the library size when known', () => {
+  const html = si.intelInsightsHtml({ scenariosCreated: 3, scenariosUpdated: 0 });
+  assert.match(html, /Created since restart/);
+  assert.match(html, /Updated since restart/);
+  assert.doesNotMatch(html, /Scenarios created/);
+});
+
+test('once the library size is known the created tile shows it', () => {
+  si.setIntelLibraryCount(99);
+  const html = si.intelInsightsHtml({ scenariosCreated: 3 });
+  assert.match(html, /of 99 threat-intel scenarios in the library/);
+  si.setIntelLibraryCount(null);
+  assert.doesNotMatch(si.intelInsightsHtml({ scenariosCreated: 3 }), /in the library/);
+});

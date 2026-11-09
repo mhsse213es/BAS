@@ -6,7 +6,7 @@ import { loadScenarios } from './attack-path.js';
 import { _diffRow, _diffSecretRow, _renderConnectorCard, openConfirmDiffModal } from './compliance.js';
 import { ROLE } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
-import { renderArtInsights, renderIntelInsights, renderSimMix } from './settings-insights.js';
+import { renderArtInsights, renderIntelInsights, renderSimMix, setIntelLibraryCount } from './settings-insights.js';
 
 
 // ── Threat Intel connector config (MISP/OpenCTI/OTX) — editable, matching
@@ -429,6 +429,7 @@ export function loadSimCoverage() {
     var builtinScen   = scen.filter(function(s) { return s.source === 'builtin'; }).length;
     var customScen    = scen.filter(function(s) { return s.source === 'custom';  }).length;
     var intelScen     = scen.filter(function(s) { return s.source === 'intel';   }).length;
+    setIntelLibraryCount(intelScen);
 
     var byPlugin = {}, techSet = {}, subTechSet = {};
     var calWin = 0, calLin = 0, calMac = 0;

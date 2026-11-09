@@ -81,6 +81,14 @@ export function artInsightsHtml(d) {
 export function renderArtInsights(d) { put('art-insights', artInsightsHtml(d)); }
 
 // ── Threat intel ──
+// The sync counters are running totals since the server last started, kept in memory, so they are not the size of
+// the library. The library size comes from the scenario list (threat-intel.js) and is shown beside them when known.
+var intelLibraryCount = null;
+var lastIntelStatus = null;
+export function setIntelLibraryCount(n) {
+  intelLibraryCount = (typeof n === 'number' && isFinite(n)) ? n : null;
+  if (lastIntelStatus) put('intel-insights', intelInsightsHtml(lastIntelStatus));
+}
 export function intelInsightsHtml(s) {
   s = s || {};
   var sources = [['MISP', s.mispEnabled], ['OpenCTI', s.openctiEnabled], ['OTX', s.otxEnabled], ['Air-gap bundle', s.bundleEnabled]];
@@ -89,12 +97,12 @@ export function intelInsightsHtml(s) {
   var tiles = [
     kpi({ label: 'Sources enabled', value: on.length + ' / ' + sources.length, sub: on.length ? on.map(function(r) { return r[0]; }).join(', ') : 'none configured', icon: 'cloud', tone: on.length ? 'ok' : 'muted' }),
     kpi({ label: 'Last sync', value: st, sub: s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleString() : 'no sync yet', icon: 'refresh', tone: st === 'ok' ? 'ok' : st === 'error' ? 'bad' : 'muted' }),
-    kpi({ label: 'Scenarios created', value: num(s.scenariosCreated), sub: 'by the sync scheduler', icon: 'plus', tone: 'accent' }),
-    kpi({ label: 'Scenarios updated', value: num(s.scenariosUpdated), sub: s.nextSyncAt ? 'next sync ' + new Date(s.nextSyncAt).toLocaleString() : '', icon: 'file', tone: 'info' }),
+    kpi({ label: 'Created since restart', value: num(s.scenariosCreated), sub: intelLibraryCount != null ? 'of ' + intelLibraryCount.toLocaleString() + ' threat-intel scenarios in the library' : 'by the sync scheduler, since the server started', icon: 'plus', tone: 'accent' }),
+    kpi({ label: 'Updated since restart', value: num(s.scenariosUpdated), sub: s.nextSyncAt ? 'next sync ' + new Date(s.nextSyncAt).toLocaleString() : 'by the sync scheduler, since the server started', icon: 'file', tone: 'info' }),
   ];
   return grid(4, tiles);
 }
-export function renderIntelInsights(s) { put('intel-insights', intelInsightsHtml(s)); }
+export function renderIntelInsights(s) { lastIntelStatus = s || {}; put('intel-insights', intelInsightsHtml(s)); }
 
 // ── Audit logs (the page of records on screen) ──
 export function auditStats(entries) {
