@@ -3572,3 +3572,42 @@ Decisions approved by the product owner:
 ### Not done (stated)
 - Steps 3 to 6 of the approved order.
 - No UI work has started. The approved order holds the UI until execution and persistence work end to end.
+
+## API BAS assessment step 3: orchestrator job creation, dispatch, lifecycle, persistence (9 November 2026)
+
+### Deviation from the approved design (stated)
+- The design (section 2.4) said results would reuse `apibas_runs`. That table only accepts `build` = vulnerable or fixed, which are lab concepts with no meaning for a target assessment. Step 3 uses two new tables instead: `apibas_jobs` (lifecycle, requester, target, environment, scenario set, credential references) and `apibas_job_reports` (one row per scenario). The lab table is unchanged. This needs approval before step 4 relies on it.
+
+### What changed
+- `internal/db/apibas_jobs_schema.go` (new): tables. `environment` is constrained to `lab` or `staging` at the storage layer too, so production is refused in the database as well as in the service.
+- `internal/db/apibas_jobs_store.go` (new): `CreateAPIBASJob` (idempotent on `job_key`), `StartAPIBASJob` (queued to running only), `FinishAPIBASJob` (terminal states; a completed job stores its reports in the same transaction; failed and cancelled jobs store none), `ReconcileStaleAPIBASJobs`, and read helpers. Only credential references are stored, never values.
+- `internal/apibas/jobs/service.go` (new): `Submit`, `Dispatch`, `ReconcileStale`. Dispatch resolves credentials from the secret store, writes them to a private per-job directory (mode 0600), starts the runner with `-job-request`, and removes the directory on every path. The child's environment is an explicit allow-list (empty on Linux; SYSTEMROOT, TEMP and TMP on Windows). Stdout is capped at 32 MiB and stderr is discarded. The result is persisted only after `runnerproto.ValidateResult` passes. Timeout, cancellation, overflow, malformed output, exit errors and runner-reported failure each end in a failed or cancelled job with no reports.
+- `internal/apibas/jobs/testdata/fakerunner/main.go` (new): a test stand-in for the runner, driven by the fixture field, so every failure mode is exercised deterministically.
+- `cmd/server/main.go`, `internal/testutil/testdb.go`: create the job tables at startup and in the test bootstrap.
+
+### Defects found and fixed during this step
+1. A cancelled job could stay `running`: the outcome write used the cancelled context. Database writes now use `context.WithoutCancel`.
+2. The Windows runner child failed to start: the test built the stand-in without `.exe`. Fixed in the test. `New` now also refuses a missing runner binary at startup, instead of failing at the first job.
+
+### Acceptance requirements (section 5) status after step 3
+1. No runner database access: done (step 2).
+2. Job idempotency: done. The same key returns the same job; a repeated dispatch starts nothing. Tested.
+3. Approval binding: not started (step 4).
+4. Result validation: done for schema, job ID, target, scenario set and run tags. Evidence-reference validation is still NOT done, because the runner emits no evidence references. Stated gap.
+5. Auditability: partly. Requester, target, environment, scenario set, timestamps, outcome and failure reason are stored on the job. Writes to `audit_logs` and the approver field are step 4.
+6. Isolation: done for the environment allow-list, the credential file mode, and removal after the run. Tested with a parent variable that must not reach the child.
+7. Failure semantics: done and tested for every failure mode.
+8. Production rejection: done in the service and in the database. Tested.
+
+### Tests and results
+- `go test ./internal/apibas/jobs/`: 11 pass against the Postgres test container. Covered: idempotent submit; production and plaintext credential refusal; completed dispatch persists reports once, and a retry does not re-run; failure modes (malformed, mismatched job, runner-reported failure, non-zero exit after a complete-looking document) store no reports; timeout; cancellation; parent environment not inherited; credential reaches the child, is removed afterwards, and the job holds only the reference; unresolvable credential fails before running; stale running jobs reconciled; store refuses inconsistent terminal states.
+- `go test ./internal/db/` for the APIBAS, secret store and app-role tests: pass.
+- `go test ./internal/apibas/runnerproto/`: pass.
+- Windows cross-compile of server, runner and lab: pass.
+
+### Not done (stated)
+- No HTTP endpoint creates or dispatches a job. Step 4 adds authorization first.
+- `ReconcileStale` exists but has no periodic caller yet. It must run at startup and on a timer before any job is dispatched in production.
+- Dispatch runs only when a caller invokes it. There is no worker queue yet.
+- Evidence references are not validated (see requirement 4).
+- Not run against a live lab or staging target.
