@@ -310,6 +310,10 @@ test('threat actor library: sc-card style and a Collapse button', async ({ page 
     body: JSON.stringify([{ id: 'a1', name: 'APT29', description: 'A group.', tactics: ['collection', 'discovery'], abilityCount: 79 }]) }));
   await openTab(page, 'scenarios');
   await page.evaluate(() => document.querySelector('[data-on-click="loadAdversariesStop"]').click());
+  // The library is its own entry in the category list, after Adversary Templates, and shows only when opened.
+  await expect(page.locator('#adversary-section')).toBeHidden();
+  await page.locator('#sc-cats').getByText('Threat Actor Library').click();
+  await expect(page.locator('#adversary-section')).toBeVisible();
   await expect(page.locator('#adv-grid .sc-card')).toHaveCount(1);
   await expect(page.locator('#adv-collapse-btn')).toHaveText('Expand');
   await expect(page.locator('#adversary-body')).toBeHidden();
