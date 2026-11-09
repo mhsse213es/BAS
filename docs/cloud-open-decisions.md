@@ -87,4 +87,4 @@ Also decided: `Revert` is a technique-supplied recovery mechanism, not proof of 
 
 **What's blocked.** Everything past Priority 1 (sandbox account, fixed technique registry, approval/lifecycle, executor, reconciliation, evidence correlation, API/console — Priorities 2 through 8) waits on the AWS sandbox account: provisioned, ownership confirmed, budget alerts configured, permissions scoped to the eventual approved technique set.
 
-**What I need from you.** Confirm whether the sandbox account exists yet or is being provisioned, and who owns the budget alert configuration. No detonation-capable code will be written before that.
+**Status 2026-11-09: PARKED.** The owner confirmed the sandbox account is not provisioned yet and asked to park this until it is. No further work on R-21 (registry, approval model, executor, schema, API/console) until the account exists. Resume by re-checking account status, then re-confirming budget-alert ownership before anything is built.
