@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"time"
 
 	"github.com/audspect/bas/internal/db"
 )
@@ -96,10 +97,16 @@ func Binding(targetID, environment, fixture string, scenarioIDs, allowedHosts, a
 // production execution will use once enabled; it is tested now so enabling production needs no new model. An approval is valid
 // only if it is approved, was requested by this requester, is bound to this target and configuration hash, and was approved by
 // someone other than the requester.
-func CheckApproval(a db.APIBASApproval, requester, targetID, bindingHash string) error {
+func CheckApproval(a db.APIBASApproval, requester, targetID, bindingHash string, now time.Time) error {
 	switch {
 	case a.ApprovedBy == "":
 		return fmt.Errorf("%w: not approved", ErrApprovalInvalid)
+	case a.RevokedAt != nil:
+		return fmt.Errorf("%w: revoked", ErrApprovalInvalid)
+	case a.ConsumedAt != nil:
+		return fmt.Errorf("%w: already used", ErrApprovalInvalid)
+	case a.ExpiresAt == nil || !now.Before(*a.ExpiresAt):
+		return fmt.Errorf("%w: expired", ErrApprovalInvalid)
 	case a.ApprovedBy == requester:
 		return fmt.Errorf("%w: the requester cannot approve their own run", ErrApprovalInvalid)
 	case a.RequestedBy != requester:

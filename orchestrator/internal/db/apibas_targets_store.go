@@ -38,7 +38,22 @@ type APIBASApproval struct {
 	ApprovedBy  string
 	ApprovedAt  *time.Time
 	CreatedAt   time.Time
+	// ExpiresAt is set when the approval is granted. An approval is unusable at or after it.
+	ExpiresAt *time.Time
+	RevokedBy    string
+	RevokedAt    *time.Time
+	RevokeReason string
+	// ConsumedByJob is the job that used the approval. An approval covers one job.
+	ConsumedByJob string
+	ConsumedAt    *time.Time
 }
+
+const (
+	// ApprovalValidity is how long a granted approval stays usable.
+	ApprovalValidity = 24 * time.Hour
+	// ApprovalRequestWindow is how long a request may wait to be approved.
+	ApprovalRequestWindow = 72 * time.Hour
+)
 
 var (
 	// ErrAPIBASTargetNotFound means no target has the given id.
@@ -49,6 +64,8 @@ var (
 	ErrAPIBASTargetBusy = errors.New("apibas target already has an active job")
 	// ErrAPIBASApprovalNotFound means no approval has the given id.
 	ErrAPIBASApprovalNotFound = errors.New("apibas approval not found")
+	// ErrAPIBASApprovalUnusable means the approval is not approved, or is expired, revoked or already used.
+	ErrAPIBASApprovalUnusable = errors.New("apibas approval is not usable")
 )
 
 // CreateAPIBASTarget registers a target. A second registration of the same id is refused, not replaced.
@@ -124,8 +141,10 @@ func CreateAPIBASApproval(ctx context.Context, pool *pgxpool.Pool, a APIBASAppro
 // ApproveAPIBASApproval records the approver. The requester cannot approve their own request, and an approval is recorded once.
 func ApproveAPIBASApproval(ctx context.Context, pool *pgxpool.Pool, id, approver string) error {
 	tag, err := pool.Exec(ctx, `
-		UPDATE apibas_approvals SET approved_by = $2, approved_at = NOW()
-		 WHERE id = $1::uuid AND approved_by = '' AND requested_by <> $2`, id, approver)
+		UPDATE apibas_approvals SET approved_by = $2, approved_at = NOW(), expires_at = NOW() + make_interval(secs => $3)
+		 WHERE id = $1::uuid AND approved_by = '' AND revoked_at IS NULL AND requested_by <> $2
+		   AND created_at > NOW() - make_interval(secs => $4)`,
+		id, approver, ApprovalValidity.Seconds(), ApprovalRequestWindow.Seconds())
 	if err != nil {
 		return fmt.Errorf("approve apibas approval: %w", err)
 	}
@@ -135,13 +154,45 @@ func ApproveAPIBASApproval(ctx context.Context, pool *pgxpool.Pool, id, approver
 	return nil
 }
 
+// RevokeAPIBASApproval withdraws a pending or approved approval. An approval that was already used or revoked cannot be revoked.
+func RevokeAPIBASApproval(ctx context.Context, pool *pgxpool.Pool, id, by, reason string) error {
+	tag, err := pool.Exec(ctx, `
+		UPDATE apibas_approvals SET revoked_by = $2, revoked_at = NOW(), revoke_reason = $3
+		 WHERE id = $1::uuid AND revoked_at IS NULL AND consumed_at IS NULL`, id, by, reason)
+	if err != nil {
+		return fmt.Errorf("revoke apibas approval: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrAPIBASApprovalNotFound
+	}
+	return nil
+}
+
+// ConsumeAPIBASApproval marks an approval used by a job, atomically. It succeeds only for an approved, unexpired, unrevoked,
+// unused approval, so two jobs racing for one approval cannot both get it.
+func ConsumeAPIBASApproval(ctx context.Context, pool *pgxpool.Pool, id, jobID string) error {
+	tag, err := pool.Exec(ctx, `
+		UPDATE apibas_approvals SET consumed_by_job = $2, consumed_at = NOW()
+		 WHERE id = $1::uuid AND approved_by <> '' AND revoked_at IS NULL AND consumed_at IS NULL
+		   AND expires_at IS NOT NULL AND expires_at > NOW()`, id, jobID)
+	if err != nil {
+		return fmt.Errorf("consume apibas approval: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrAPIBASApprovalUnusable
+	}
+	return nil
+}
+
 // GetAPIBASApproval returns one approval by id.
 func GetAPIBASApproval(ctx context.Context, pool *pgxpool.Pool, id string) (APIBASApproval, error) {
 	var a APIBASApproval
 	err := pool.QueryRow(ctx, `
-		SELECT id::text, binding_hash, target_id, requested_by, approved_by, approved_at, created_at
+		SELECT id::text, binding_hash, target_id, requested_by, approved_by, approved_at, created_at,
+		       expires_at, revoked_by, revoked_at, revoke_reason, consumed_by_job, consumed_at
 		  FROM apibas_approvals WHERE id = $1::uuid`, id).
-		Scan(&a.ID, &a.BindingHash, &a.TargetID, &a.RequestedBy, &a.ApprovedBy, &a.ApprovedAt, &a.CreatedAt)
+		Scan(&a.ID, &a.BindingHash, &a.TargetID, &a.RequestedBy, &a.ApprovedBy, &a.ApprovedAt, &a.CreatedAt,
+			&a.ExpiresAt, &a.RevokedBy, &a.RevokedAt, &a.RevokeReason, &a.ConsumedByJob, &a.ConsumedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return APIBASApproval{}, ErrAPIBASApprovalNotFound
 	}

@@ -634,6 +634,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/jobs/{id}/cancel", h.CancelAPIBASJob)
 		r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/approvals", h.RequestAPIBASApproval)
 		r.With(auth.RequirePermission(auth.CanApproveAPIBASProduction)).Post("/api/apibas/approvals/{id}/approve", h.ApproveAPIBASApproval)
+		r.With(auth.RequirePermission(auth.CanApproveAPIBASProduction)).Post("/api/apibas/approvals/{id}/revoke", h.RevokeAPIBASApproval)
 		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/approvals/{id}", h.GetAPIBASApproval)
 		// Aleef API discovery (separate licence add-on, license.ProductAleef via productPrefixes).
 		r.With(auth.RequirePermission(auth.CanAuthorizeAleef)).Post("/api/aleef/engagements", h.CreateAleefEngagement)

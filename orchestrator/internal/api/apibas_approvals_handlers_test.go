@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/db"
 )
 
 func getAsUser(t *testing.T, h http.Handler, path string, role auth.Role, user string) *httptest.ResponseRecorder {
@@ -81,5 +83,76 @@ func TestAPIBASApprovalFlow(t *testing.T) {
 	}
 	if auditCount(t, "apibas.approval.refused", "apibas-approval:"+created.ID) != 1 {
 		t.Error("refused second approval was not audited")
+	}
+}
+
+func TestAPIBASApprovalRevokeAndExpiry(t *testing.T) {
+	h := jobsRouter(jobsHandler(t, true))
+	if rec := postAs(t, h, "/api/apibas/targets", targetBody("rev-prod", "production"), auth.RoleAdmin, "admin1"); rec.Code != http.StatusCreated {
+		t.Fatalf("register: %d %s", rec.Code, rec.Body.String())
+	}
+	req := map[string]any{"target_id": "rev-prod", "fixture": "orders-two-tenant", "scenario_ids": []string{"API-BAS-AUTHZ-001"}}
+	newReq := func() string {
+		rec := postAs(t, h, "/api/apibas/approvals", req, auth.RoleAnalyst, "analyst1")
+		var c struct{ ID string }
+		_ = json.Unmarshal(rec.Body.Bytes(), &c)
+		if c.ID == "" {
+			t.Fatalf("request: %d %s", rec.Code, rec.Body.String())
+		}
+		return c.ID
+	}
+	status := func(id string) string {
+		var v struct{ Status string }
+		_ = json.Unmarshal(getAsUser(t, h, "/api/apibas/approvals/"+id, auth.RoleAnalyst, "analyst1").Body.Bytes(), &v)
+		return v.Status
+	}
+	// Revoking an approved approval makes it unusable; revoking twice is a conflict; analysts cannot revoke.
+	id := newReq()
+	if rec := postAs(t, h, "/api/apibas/approvals/"+id+"/approve", map[string]any{}, auth.RoleAdmin, "admin2"); rec.Code != http.StatusOK {
+		t.Fatalf("approve: %d", rec.Code)
+	}
+	if s := status(id); s != "approved" {
+		t.Errorf("status = %s, want approved", s)
+	}
+	if rec := postAs(t, h, "/api/apibas/approvals/"+id+"/revoke", map[string]any{"reason": "x"}, auth.RoleAnalyst, "analyst1"); rec.Code != http.StatusForbidden {
+		t.Errorf("analyst revoke: %d, want 403", rec.Code)
+	}
+	if rec := postAs(t, h, "/api/apibas/approvals/"+id+"/revoke", map[string]any{"reason": "scope changed"}, auth.RoleAdmin, "admin3"); rec.Code != http.StatusOK {
+		t.Fatalf("revoke: %d %s", rec.Code, rec.Body.String())
+	}
+	if s := status(id); s != "revoked" {
+		t.Errorf("status = %s, want revoked", s)
+	}
+	if rec := postAs(t, h, "/api/apibas/approvals/"+id+"/revoke", map[string]any{}, auth.RoleAdmin, "admin3"); rec.Code != http.StatusConflict {
+		t.Errorf("second revoke: %d, want 409", rec.Code)
+	}
+	// A revoked request can no longer be approved.
+	pending := newReq()
+	_ = postAs(t, h, "/api/apibas/approvals/"+pending+"/revoke", map[string]any{}, auth.RoleAdmin, "admin3")
+	if rec := postAs(t, h, "/api/apibas/approvals/"+pending+"/approve", map[string]any{}, auth.RoleAdmin, "admin2"); rec.Code != http.StatusConflict {
+		t.Errorf("approving a revoked request: %d, want 409", rec.Code)
+	}
+	// Expired approvals report as expired, and a used approval cannot be revoked.
+	exp := newReq()
+	_ = postAs(t, h, "/api/apibas/approvals/"+exp+"/approve", map[string]any{}, auth.RoleAdmin, "admin2")
+	if _, err := sharedDB.Pool.Exec(context.Background(), `UPDATE apibas_approvals SET expires_at = NOW() - interval '1 second' WHERE id = $1::uuid`, exp); err != nil {
+		t.Fatal(err)
+	}
+	if s := status(exp); s != "expired" {
+		t.Errorf("status = %s, want expired", s)
+	}
+	used := newReq()
+	_ = postAs(t, h, "/api/apibas/approvals/"+used+"/approve", map[string]any{}, auth.RoleAdmin, "admin2")
+	if err := db.ConsumeAPIBASApproval(context.Background(), sharedDB.Pool, used, "job-x"); err != nil {
+		t.Fatal(err)
+	}
+	if s := status(used); s != "used" {
+		t.Errorf("status = %s, want used", s)
+	}
+	if rec := postAs(t, h, "/api/apibas/approvals/"+used+"/revoke", map[string]any{}, auth.RoleAdmin, "admin3"); rec.Code != http.StatusConflict {
+		t.Errorf("revoking a used approval: %d, want 409", rec.Code)
+	}
+	if auditCount(t, "apibas.approval.revoke", "apibas-approval:"+id) != 1 {
+		t.Error("revocation was not audited")
 	}
 }

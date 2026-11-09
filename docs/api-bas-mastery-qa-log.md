@@ -3716,3 +3716,21 @@ Full flow in `TestAPIBASApprovalFlow`: staging target refused, unknown target, o
 - Production execution remains refused by the job service (unchanged by decision for the first release). An approved record does not make anything run; `jobs.CheckApproval` is still not called by any execution path.
 - Approvals do not expire and cannot be revoked or listed. Before production execution is enabled they need an expiry, single-use consumption and a revoke endpoint.
 - Not run on staging.
+
+## API BAS approvals: expiry, revoke, single use (9 November 2026)
+
+### What changed
+- **Expiry.** A granted approval expires 24 hours after it is approved (`expires_at`, set by the database at approval time). A request left unapproved for more than 72 hours can no longer be approved. Both windows are constants in `db` (`ApprovalValidity`, `ApprovalRequestWindow`); they are not configurable yet.
+- **Revoke.** `POST /api/apibas/approvals/{id}/revoke` (Admin-only approve permission) with an optional reason (max 500 characters). Works on pending and approved approvals; 409 if already revoked or already used; 404 if unknown. A revoked request cannot be approved. Audited as `apibas.approval.revoke` (refusals as `apibas.approval.refused`). Any holder of the approve permission may revoke, including the requester if they are an Admin.
+- **Single use.** `db.ConsumeAPIBASApproval` marks an approval used by a job in one conditional update (approved, unexpired, unrevoked, unused), so jobs racing for one approval cannot both get it. A used approval cannot be revoked.
+- **Check rules.** `jobs.CheckApproval` now also refuses revoked, used, expired, and approvals with no recorded expiry (including any approval created before this change), and takes the current time as an argument.
+- **View.** `GET /api/apibas/approvals/{id}` reports status `pending`, `approved`, `expired`, `revoked` or `used`, plus expiry, revoker and reason, and the using job. Still `executable:false`.
+- Schema: six columns added to `apibas_approvals`, created at startup.
+
+### Tests
+Store lifecycle test: expiry about 24 hours ahead; first consume wins and a second is refused; 8 concurrent consumers produce exactly one winner; revoked, pending and expired approvals cannot be consumed; a used approval cannot be revoked; a stale or revoked request cannot be approved. Handler test: revoke, double revoke, analyst forbidden, approve-after-revoke, expired and used status, revoke-after-use, audit row. `CheckApproval` table extended. RBAC matrix updated.
+
+### Not done (stated)
+- Nothing calls `ConsumeAPIBASApproval` or `CheckApproval` yet: production execution is still refused, so no job consumes an approval. Wiring them into the execution path (check, then consume inside the same step that creates the job) is the work that enables production.
+- No list endpoint for pending approvals, and no notification to approvers.
+- Not run on staging.

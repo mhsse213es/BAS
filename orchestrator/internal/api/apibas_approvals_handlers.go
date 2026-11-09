@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -22,14 +23,30 @@ type apibasApprovalBody struct {
 	ScenarioIDs []string `json:"scenario_ids"`
 }
 
-func approvalView(a db.APIBASApproval) map[string]any {
-	status := "pending"
-	if a.ApprovedBy != "" {
-		status = "approved"
+// approvalStatus is the single place that turns an approval record into a state. Revoked and used win over expired, and
+// expired wins over approved, so the status always names why an approval cannot be used.
+func approvalStatus(a db.APIBASApproval, now time.Time) string {
+	switch {
+	case a.RevokedAt != nil:
+		return "revoked"
+	case a.ConsumedAt != nil:
+		return "used"
+	case a.ApprovedBy == "" && now.After(a.CreatedAt.Add(db.ApprovalRequestWindow)):
+		return "expired"
+	case a.ApprovedBy == "":
+		return "pending"
+	case a.ExpiresAt == nil || !now.Before(*a.ExpiresAt):
+		return "expired"
 	}
+	return "approved"
+}
+
+func approvalView(a db.APIBASApproval) map[string]any {
 	return map[string]any{
 		"id": a.ID, "target_id": a.TargetID, "requested_by": a.RequestedBy, "approved_by": a.ApprovedBy,
-		"approved_at": a.ApprovedAt, "created_at": a.CreatedAt, "status": status,
+		"approved_at": a.ApprovedAt, "created_at": a.CreatedAt, "expires_at": a.ExpiresAt, "status": approvalStatus(a, time.Now()),
+		"revoked_by": a.RevokedBy, "revoked_at": a.RevokedAt, "revoke_reason": a.RevokeReason,
+		"used_by_job": a.ConsumedByJob, "used_at": a.ConsumedAt,
 		"executable": false, // production execution is not enabled in this release
 	}
 }
@@ -103,8 +120,14 @@ func (h *Handler) ApproveAPIBASApproval(w http.ResponseWriter, r *http.Request) 
 		jsonError(w, msg, code)
 	}
 	switch {
+	case a.RevokedAt != nil:
+		refuse(http.StatusConflict, "this request was revoked")
+		return
 	case a.ApprovedBy != "":
 		refuse(http.StatusConflict, "this request is already approved")
+		return
+	case approvalStatus(a, time.Now()) == "expired":
+		refuse(http.StatusConflict, "this request expired before it was approved")
 		return
 	case a.RequestedBy == actor:
 		refuse(http.StatusForbidden, "the requester cannot approve their own request")
@@ -121,6 +144,59 @@ func (h *Handler) ApproveAPIBASApproval(w http.ResponseWriter, r *http.Request) 
 	got, err := db.GetAPIBASApproval(r.Context(), h.db, id)
 	if err != nil {
 		apibasRespond(w, http.StatusOK, map[string]any{"id": id, "status": "approved"})
+		return
+	}
+	apibasRespond(w, http.StatusOK, approvalView(got))
+}
+
+type apibasRevokeBody struct {
+	Reason string `json:"reason"`
+}
+
+// RevokeAPIBASApproval withdraws a pending or approved approval so it can no longer be used. An approval that was already used
+// cannot be revoked. POST /api/apibas/approvals/{id}/revoke
+func (h *Handler) RevokeAPIBASApproval(w http.ResponseWriter, r *http.Request) {
+	actor, ok := apibasActor(r)
+	if !ok {
+		jsonError(w, "unauthenticated", http.StatusUnauthorized)
+		return
+	}
+	var b apibasRevokeBody
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&b); err != nil || len(b.Reason) > 500 {
+		jsonError(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	a, err := db.GetAPIBASApproval(r.Context(), h.db, id)
+	if errors.Is(err, db.ErrAPIBASApprovalNotFound) {
+		jsonError(w, "approval not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		jsonError(w, "could not load approval", http.StatusInternalServerError)
+		return
+	}
+	if a.RevokedAt != nil || a.ConsumedAt != nil {
+		msg := "this approval was already revoked"
+		if a.ConsumedAt != nil {
+			msg = "this approval was already used and cannot be revoked"
+		}
+		_ = h.auditDurable(r.Context(), actor, "apibas.approval.refused", "apibas-approval:"+id, map[string]any{"reason": msg}, "denied")
+		jsonError(w, msg, http.StatusConflict)
+		return
+	}
+	if err := db.RevokeAPIBASApproval(r.Context(), h.db, id, actor, b.Reason); err != nil {
+		jsonError(w, "this approval could not be revoked; it may have just been used", http.StatusConflict)
+		return
+	}
+	_ = h.auditDurable(r.Context(), actor, "apibas.approval.revoke", "apibas-approval:"+id, map[string]any{
+		"target_id": a.TargetID, "requested_by": a.RequestedBy, "approved_by": a.ApprovedBy, "reason": b.Reason,
+	}, "success")
+	got, err := db.GetAPIBASApproval(r.Context(), h.db, id)
+	if err != nil {
+		apibasRespond(w, http.StatusOK, map[string]any{"id": id, "status": "revoked"})
 		return
 	}
 	apibasRespond(w, http.StatusOK, approvalView(got))

@@ -3,6 +3,9 @@ package jobs
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -161,8 +164,10 @@ func TestBindingChangesWithAnyMaterialField(t *testing.T) {
 
 func TestCheckApprovalRules(t *testing.T) {
 	bind := Binding("t1", "production", "fx", []string{"A"}, []string{"h:1"}, nil)
-	ok := db.APIBASApproval{BindingHash: bind, TargetID: "t1", RequestedBy: "alice", ApprovedBy: "bob"}
-	if err := CheckApproval(ok, "alice", "t1", bind); err != nil {
+	now := time.Now()
+	later, earlier := now.Add(time.Hour), now.Add(-time.Hour)
+	ok := db.APIBASApproval{BindingHash: bind, TargetID: "t1", RequestedBy: "alice", ApprovedBy: "bob", ExpiresAt: &later}
+	if err := CheckApproval(ok, "alice", "t1", bind, now); err != nil {
 		t.Fatalf("valid approval refused: %v", err)
 	}
 	cases := map[string]struct {
@@ -172,13 +177,17 @@ func TestCheckApprovalRules(t *testing.T) {
 		bind      string
 	}{
 		"not approved":        {db.APIBASApproval{BindingHash: bind, TargetID: "t1", RequestedBy: "alice"}, "alice", "t1", bind},
-		"self approved":       {db.APIBASApproval{BindingHash: bind, TargetID: "t1", RequestedBy: "alice", ApprovedBy: "alice"}, "alice", "t1", bind},
+		"self approved":       {db.APIBASApproval{BindingHash: bind, TargetID: "t1", RequestedBy: "alice", ApprovedBy: "alice", ExpiresAt: &later}, "alice", "t1", bind},
+		"expired":             {db.APIBASApproval{BindingHash: bind, TargetID: "t1", RequestedBy: "alice", ApprovedBy: "bob", ExpiresAt: &earlier}, "alice", "t1", bind},
+		"no expiry recorded":  {db.APIBASApproval{BindingHash: bind, TargetID: "t1", RequestedBy: "alice", ApprovedBy: "bob"}, "alice", "t1", bind},
+		"revoked":             {db.APIBASApproval{BindingHash: bind, TargetID: "t1", RequestedBy: "alice", ApprovedBy: "bob", ExpiresAt: &later, RevokedAt: &now}, "alice", "t1", bind},
+		"already used":        {db.APIBASApproval{BindingHash: bind, TargetID: "t1", RequestedBy: "alice", ApprovedBy: "bob", ExpiresAt: &later, ConsumedAt: &now}, "alice", "t1", bind},
 		"other requester":     {ok, "mallory", "t1", bind},
 		"other target":        {ok, "alice", "t2", bind},
 		"configuration moved": {ok, "alice", "t1", Binding("t1", "production", "fx", []string{"A", "B"}, []string{"h:1"}, nil)},
 	}
 	for name, c := range cases {
-		if err := CheckApproval(c.a, c.requester, c.target, c.bind); !errors.Is(err, ErrApprovalInvalid) {
+		if err := CheckApproval(c.a, c.requester, c.target, c.bind, now); !errors.Is(err, ErrApprovalInvalid) {
 			t.Errorf("%s: err = %v, want ErrApprovalInvalid", name, err)
 		}
 	}
@@ -206,6 +215,91 @@ func TestApprovalStoreRules(t *testing.T) {
 		got, err := db.GetAPIBASApproval(ctx, pool, id)
 		if err != nil || got.ApprovedBy != "bob" {
 			t.Fatalf("approval = %+v, err = %v; want approved by bob", got, err)
+		}
+	})
+}
+
+// Expiry, revocation and single use are enforced by the store, atomically, whatever the caller checks.
+func TestApprovalLifecycleInStore(t *testing.T) {
+	skipShort(t)
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		setup(t, pool, Config{})
+		ctx := context.Background()
+		newApproved := func() string {
+			id, err := db.CreateAPIBASApproval(ctx, pool, db.APIBASApproval{BindingHash: "h", TargetID: "t1", RequestedBy: "alice"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := db.ApproveAPIBASApproval(ctx, pool, id, "bob"); err != nil {
+				t.Fatal(err)
+			}
+			return id
+		}
+		// A fresh approval has an expiry about 24 hours out.
+		id := newApproved()
+		a, _ := db.GetAPIBASApproval(ctx, pool, id)
+		if a.ExpiresAt == nil || time.Until(*a.ExpiresAt) < 23*time.Hour || time.Until(*a.ExpiresAt) > 25*time.Hour {
+			t.Fatalf("expires_at = %v, want about 24h ahead", a.ExpiresAt)
+		}
+		// Single use: the first consume wins, the second is refused, and a used approval cannot be revoked.
+		if err := db.ConsumeAPIBASApproval(ctx, pool, id, "job-1"); err != nil {
+			t.Fatalf("first consume: %v", err)
+		}
+		if err := db.ConsumeAPIBASApproval(ctx, pool, id, "job-2"); !errors.Is(err, db.ErrAPIBASApprovalUnusable) {
+			t.Errorf("second consume: %v, want unusable", err)
+		}
+		if err := db.RevokeAPIBASApproval(ctx, pool, id, "bob", "late"); !errors.Is(err, db.ErrAPIBASApprovalNotFound) {
+			t.Errorf("revoking a used approval: %v, want refusal", err)
+		}
+		// Two jobs racing for one approval: exactly one gets it.
+		race := newApproved()
+		var wins atomic.Int32
+		var wg sync.WaitGroup
+		for i := 0; i < 8; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				if db.ConsumeAPIBASApproval(ctx, pool, race, fmt.Sprintf("job-%d", i)) == nil {
+					wins.Add(1)
+				}
+			}(i)
+		}
+		wg.Wait()
+		if wins.Load() != 1 {
+			t.Errorf("%d jobs consumed one approval, want exactly 1", wins.Load())
+		}
+		// Revoked approvals cannot be consumed; unapproved ones cannot either.
+		rev := newApproved()
+		if err := db.RevokeAPIBASApproval(ctx, pool, rev, "carol", "wrong scope"); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.ConsumeAPIBASApproval(ctx, pool, rev, "job-r"); !errors.Is(err, db.ErrAPIBASApprovalUnusable) {
+			t.Errorf("consuming a revoked approval: %v", err)
+		}
+		pend, _ := db.CreateAPIBASApproval(ctx, pool, db.APIBASApproval{BindingHash: "h", TargetID: "t1", RequestedBy: "alice"})
+		if err := db.ConsumeAPIBASApproval(ctx, pool, pend, "job-p"); !errors.Is(err, db.ErrAPIBASApprovalUnusable) {
+			t.Errorf("consuming a pending approval: %v", err)
+		}
+		// Expired: push expiry into the past.
+		exp := newApproved()
+		if _, err := pool.Exec(ctx, `UPDATE apibas_approvals SET expires_at = NOW() - interval '1 minute' WHERE id = $1::uuid`, exp); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.ConsumeAPIBASApproval(ctx, pool, exp, "job-e"); !errors.Is(err, db.ErrAPIBASApprovalUnusable) {
+			t.Errorf("consuming an expired approval: %v", err)
+		}
+		// A request left unapproved past the window cannot be approved, and a revoked request cannot be approved.
+		stale, _ := db.CreateAPIBASApproval(ctx, pool, db.APIBASApproval{BindingHash: "h", TargetID: "t1", RequestedBy: "alice"})
+		if _, err := pool.Exec(ctx, `UPDATE apibas_approvals SET created_at = NOW() - interval '73 hours' WHERE id = $1::uuid`, stale); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.ApproveAPIBASApproval(ctx, pool, stale, "bob"); err == nil {
+			t.Error("a stale request was approved")
+		}
+		rq, _ := db.CreateAPIBASApproval(ctx, pool, db.APIBASApproval{BindingHash: "h", TargetID: "t1", RequestedBy: "alice"})
+		_ = db.RevokeAPIBASApproval(ctx, pool, rq, "bob", "withdrawn")
+		if err := db.ApproveAPIBASApproval(ctx, pool, rq, "bob"); err == nil {
+			t.Error("a revoked request was approved")
 		}
 	})
 }

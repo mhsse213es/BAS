@@ -37,6 +37,12 @@ func EnsureAPIBASJobSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			approved_at  timestamptz,
 			created_at   timestamptz NOT NULL DEFAULT NOW()
 		)`,
+		`ALTER TABLE apibas_approvals ADD COLUMN IF NOT EXISTS expires_at timestamptz`,
+		`ALTER TABLE apibas_approvals ADD COLUMN IF NOT EXISTS revoked_by text NOT NULL DEFAULT ''`,
+		`ALTER TABLE apibas_approvals ADD COLUMN IF NOT EXISTS revoked_at timestamptz`,
+		`ALTER TABLE apibas_approvals ADD COLUMN IF NOT EXISTS revoke_reason text NOT NULL DEFAULT ''`,
+		`ALTER TABLE apibas_approvals ADD COLUMN IF NOT EXISTS consumed_by_job text NOT NULL DEFAULT ''`,
+		`ALTER TABLE apibas_approvals ADD COLUMN IF NOT EXISTS consumed_at timestamptz`,
 		`CREATE TABLE IF NOT EXISTS apibas_jobs (
 			id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
 			job_key         text        NOT NULL UNIQUE,
