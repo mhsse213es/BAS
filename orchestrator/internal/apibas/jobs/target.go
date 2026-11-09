@@ -31,6 +31,8 @@ type TargetRequest struct {
 	TargetID    string
 	Fixture     string
 	ScenarioIDs []string
+	// ApprovalID names the approval a production assessment uses. Ignored for lab and staging.
+	ApprovalID string
 }
 
 // SubmitForTarget validates a request against its registered target and records a queued job. It enforces, in this order:
@@ -48,7 +50,8 @@ func (s *Service) SubmitForTarget(ctx context.Context, r TargetRequest) (db.APIB
 	if !t.Enabled {
 		return db.APIBASJob{}, false, ErrTargetDisabled
 	}
-	if t.Environment != "lab" && t.Environment != "staging" {
+	production := t.Environment == "production"
+	if t.Environment != "lab" && t.Environment != "staging" && !(production && s.cfg.AllowProduction) {
 		return db.APIBASJob{}, false, ErrEnvironmentNotPermitted
 	}
 	u, err := url.Parse(t.BaseURL)
@@ -70,10 +73,41 @@ func (s *Service) SubmitForTarget(ctx context.Context, r TargetRequest) (db.APIB
 	if err := s.validateSpec(sp); err != nil {
 		return db.APIBASJob{}, false, err
 	}
-	return db.CreateAPIBASJobExclusive(ctx, s.pool, db.APIBASJob{
+	job := db.APIBASJob{
 		JobKey: r.Key, TargetID: t.ID, RequestedBy: r.RequestedBy, TargetBaseURL: t.BaseURL, Environment: t.Environment,
 		Fixture: r.Fixture, ScenarioIDs: r.ScenarioIDs, CredentialRefs: t.CredentialRefs, AllowedHosts: t.AllowedHosts, AllowedPaths: t.AllowedPaths,
-	})
+	}
+	if !production {
+		return db.CreateAPIBASJobExclusive(ctx, s.pool, job)
+	}
+	// A repeated key returns the existing job without needing, or spending, another approval.
+	existing, found, err := db.FindAPIBASJobByKey(ctx, s.pool, r.Key)
+	if err != nil {
+		return db.APIBASJob{}, false, err
+	}
+	if found {
+		return existing, false, nil
+	}
+	if r.ApprovalID == "" {
+		return db.APIBASJob{}, false, ErrApprovalRequired
+	}
+	appr, err := db.GetAPIBASApproval(ctx, s.pool, r.ApprovalID)
+	if errors.Is(err, db.ErrAPIBASApprovalNotFound) {
+		return db.APIBASJob{}, false, fmt.Errorf("%w: approval not found", ErrApprovalInvalid)
+	}
+	if err != nil {
+		return db.APIBASJob{}, false, err
+	}
+	bind := Binding(t.ID, t.Environment, r.Fixture, r.ScenarioIDs, t.AllowedHosts, t.AllowedPaths)
+	if err := CheckApproval(appr, r.RequestedBy, t.ID, bind, time.Now()); err != nil {
+		return db.APIBASJob{}, false, err
+	}
+	got, created, err := db.CreateAPIBASJobExclusiveWithApproval(ctx, s.pool, job, r.ApprovalID)
+	if errors.Is(err, db.ErrAPIBASApprovalUnusable) {
+		// Lost a race for the approval, or it expired or was revoked between the check and the insert.
+		return db.APIBASJob{}, false, fmt.Errorf("%w: approval was just used, revoked or expired", ErrApprovalInvalid)
+	}
+	return got, created, err
 }
 
 // Binding is the hash an approval is bound to. It covers the target, environment, fixture, the sorted scenario set and the

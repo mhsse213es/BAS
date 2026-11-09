@@ -3734,3 +3734,25 @@ Store lifecycle test: expiry about 24 hours ahead; first consume wins and a seco
 - Nothing calls `ConsumeAPIBASApproval` or `CheckApproval` yet: production execution is still refused, so no job consumes an approval. Wiring them into the execution path (check, then consume inside the same step that creates the job) is the work that enables production.
 - No list endpoint for pending approvals, and no notification to approvers.
 - Not run on staging.
+
+## API BAS approvals wired into the job path (9 November 2026)
+
+### What changed
+- `TargetRequest` and `POST /api/apibas/jobs` accept an `approval_id`. For a production target the service, in order: finds an existing job with the same key (returned without spending anything); requires an approval (`ErrApprovalRequired`, HTTP 403); loads it; runs `CheckApproval` against the requester, the target, and a binding hash it recomputes from the target's current hosts and paths plus the requested fixture and scenario set (`ErrApprovalInvalid`, HTTP 403 with the reason: not approved, revoked, used, expired, wrong requester, wrong target, configuration changed); then creates the job and consumes the approval in ONE transaction (`db.CreateAPIBASJobExclusiveWithApproval`). If the approval was just used, revoked or expired between check and insert, nothing is created. If the job insert fails, the approval stays unused.
+- Lab and staging are unchanged and ignore `approval_id`.
+- `jobs.Config.AllowProduction` (default false) gates all of it. Without it production is refused with `ErrEnvironmentNotPermitted` before any approval is looked at, even when a valid approval is offered. The server does not set it: there is no environment variable or setting that turns it on.
+- The job's submit audit record now includes the approval id; refusals are audited as `apibas.job.refused` with the reason.
+
+### Production is still not executable, by design
+Three guards remain and the wiring sits behind all of them: (1) `AllowProduction` is false and not exposed; (2) the `apibas_jobs.environment` CHECK still admits only lab and staging, so even with the switch on, inserting a production job fails and the transaction rolls back; (3) the endpoint reports `executable:false`. Enabling production needs a deliberate change to each, after the staging run proves approval, audit, cancel and timeout.
+
+### Tests (pass)
+- With the switch on: no approval, unknown approval, pending, other requester, changed scenario set, revoked and expired approvals are all refused with the right error and none spends an approval. A fully valid approval passes every check, the job-table constraint then refuses the insert, the approval is left unused and no job row exists.
+- With the switch off: a valid approval is still refused as environment not permitted.
+- Atomic consumption (using a staging-shaped job, since the constraint blocks production rows): first job consumes the approval and records its id; a second job with the same approval is refused and not created; a repeated job key returns the first job without needing an approval; 8 concurrent jobs racing for one approval create exactly one; an expired approval creates nothing.
+
+### Not done (stated)
+- The end-to-end production path (approval request, approval, submit, execute, report) has not run, because guard (2) blocks the insert. It can only be exercised after the constraint is widened in a staging environment.
+- No handler-level test for the new `approval_id` error mappings (they mirror the service errors that are tested).
+- Dispatch does not re-check the approval; the job already holds the consumed approval and the environment, and production dispatch is blocked by the same guards.
+- Not run on staging.

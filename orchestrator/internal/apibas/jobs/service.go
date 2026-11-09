@@ -30,6 +30,9 @@ import (
 // here, in the service, whatever the UI or API sends (design section 5, requirement 8).
 var ErrEnvironmentNotPermitted = errors.New("apibas: environment not permitted for execution in this release")
 
+// ErrApprovalRequired means a production assessment was requested without an approval.
+var ErrApprovalRequired = errors.New("apibas: a production assessment requires an approved approval")
+
 // Spec is one requested assessment. Key makes the request idempotent: the same key always yields the same job.
 type Spec struct {
 	Key           string
@@ -50,6 +53,9 @@ type Config struct {
 	Timeout        time.Duration // default 15 minutes
 	MaxOutputBytes int64         // default 32 MiB
 	WorkDir        string        // parent of per-job private directories; default os.TempDir()
+	// AllowProduction lets SubmitForTarget accept production targets, each with a valid single-use approval. False by default and
+	// not set by the server: production stays refused until staging has proven the approval, audit, cancel and timeout paths.
+	AllowProduction bool
 }
 
 // Service executes jobs. It holds the database pool and the secret store, and nothing that the runner child process receives.
@@ -102,6 +108,10 @@ func (s *Service) Submit(ctx context.Context, sp Spec) (db.APIBASJob, bool, erro
 func (s *Service) validateSpec(sp Spec) error {
 	switch sp.Environment {
 	case "lab", "staging":
+	case "production":
+		if !s.cfg.AllowProduction {
+			return ErrEnvironmentNotPermitted
+		}
 	default:
 		return ErrEnvironmentNotPermitted
 	}

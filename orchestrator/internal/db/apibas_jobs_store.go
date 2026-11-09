@@ -153,6 +153,18 @@ func GetAPIBASJob(ctx context.Context, pool *pgxpool.Pool, id string) (APIBASJob
 	return scanAPIBASJob(pool.QueryRow(ctx, apibasJobSelect+` WHERE id = $1::uuid`, id))
 }
 
+// FindAPIBASJobByKey returns the job with this idempotency key, if any.
+func FindAPIBASJobByKey(ctx context.Context, pool *pgxpool.Pool, key string) (APIBASJob, bool, error) {
+	j, err := getAPIBASJobByKey(ctx, pool, key)
+	if errors.Is(err, ErrAPIBASJobNotFound) {
+		return APIBASJob{}, false, nil
+	}
+	if err != nil {
+		return APIBASJob{}, false, err
+	}
+	return j, true, nil
+}
+
 func getAPIBASJobByKey(ctx context.Context, pool *pgxpool.Pool, key string) (APIBASJob, error) {
 	return scanAPIBASJob(pool.QueryRow(ctx, apibasJobSelect+` WHERE job_key = $1`, key))
 }

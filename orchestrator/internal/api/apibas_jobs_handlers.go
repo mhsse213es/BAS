@@ -215,6 +215,8 @@ type apibasJobBody struct {
 	TargetID    string   `json:"target_id"`
 	Fixture     string   `json:"fixture"`
 	ScenarioIDs []string `json:"scenario_ids"`
+	// ApprovalID is required for a production target and ignored otherwise.
+	ApprovalID string `json:"approval_id"`
 }
 
 // SubmitAPIBASJob queues an assessment and starts it in the background. POST /api/apibas/jobs
@@ -236,7 +238,7 @@ func (h *Handler) SubmitAPIBASJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	job, created, err := h.apibasJobs.SubmitForTarget(r.Context(), apibasjobs.TargetRequest{
-		Key: b.Key, RequestedBy: actor, TargetID: b.TargetID, Fixture: b.Fixture, ScenarioIDs: b.ScenarioIDs,
+		Key: b.Key, RequestedBy: actor, TargetID: b.TargetID, Fixture: b.Fixture, ScenarioIDs: b.ScenarioIDs, ApprovalID: b.ApprovalID,
 	})
 	if err != nil {
 		h.writeAPIBASSubmitError(w, r, actor, b, err)
@@ -250,7 +252,7 @@ func (h *Handler) SubmitAPIBASJob(w http.ResponseWriter, r *http.Request) {
 	// The start record is committed before anything runs. If it cannot be, the job is failed and never dispatched.
 	if aerr := h.auditDurable(r.Context(), actor, "apibas.job.submit", "apibas-job:"+job.ID, map[string]any{
 		"target_id": job.TargetID, "environment": job.Environment, "base_url": job.TargetBaseURL,
-		"scenario_ids": job.ScenarioIDs, "fixture": job.Fixture, "job_key": job.JobKey,
+		"scenario_ids": job.ScenarioIDs, "fixture": job.Fixture, "job_key": job.JobKey, "approval_id": b.ApprovalID,
 	}, "success"); aerr != nil {
 		bg := context.WithoutCancel(r.Context())
 		if ok, _ := db.StartAPIBASJob(bg, h.db, job.ID); ok {
@@ -289,6 +291,10 @@ func (h *Handler) writeAPIBASSubmitError(w http.ResponseWriter, r *http.Request,
 		code, msg = http.StatusNotFound, "target not found"
 	case errors.Is(err, apibasjobs.ErrEnvironmentNotPermitted):
 		code, msg = http.StatusForbidden, "this target's environment is not permitted for execution in this release"
+	case errors.Is(err, apibasjobs.ErrApprovalRequired):
+		code, msg = http.StatusForbidden, "a production assessment requires an approved approval_id"
+	case errors.Is(err, apibasjobs.ErrApprovalInvalid):
+		code, msg = http.StatusForbidden, err.Error()
 	case errors.Is(err, apibasjobs.ErrScopeViolation):
 		code, msg = http.StatusForbidden, "request is outside the target's registered scope"
 	case errors.Is(err, apibasjobs.ErrTargetDisabled):

@@ -206,6 +206,14 @@ func GetAPIBASApproval(ctx context.Context, pool *pgxpool.Pool, id string) (APIB
 // start an assessment on one target. A repeated key returns the existing job (created=false). A different key for a target that
 // already has a queued or running job returns ErrAPIBASTargetBusy.
 func CreateAPIBASJobExclusive(ctx context.Context, pool *pgxpool.Pool, j APIBASJob) (APIBASJob, bool, error) {
+	return CreateAPIBASJobExclusiveWithApproval(ctx, pool, j, "")
+}
+
+// CreateAPIBASJobExclusiveWithApproval is CreateAPIBASJobExclusive that also consumes an approval for the new job. The job insert
+// and the consumption happen in one transaction: if the approval is not usable (not approved, expired, revoked or already used)
+// nothing is created, and if the job cannot be inserted the approval stays unused. A repeated job key returns the existing job
+// without touching any approval. An empty approvalID consumes nothing.
+func CreateAPIBASJobExclusiveWithApproval(ctx context.Context, pool *pgxpool.Pool, j APIBASJob, approvalID string) (APIBASJob, bool, error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return APIBASJob{}, false, fmt.Errorf("create apibas job: %w", err)
@@ -245,6 +253,18 @@ func CreateAPIBASJobExclusive(ctx context.Context, pool *pgxpool.Pool, j APIBASJ
 		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, 'queued') RETURNING id::text`,
 		j.JobKey, j.RequestedBy, j.TargetID, j.TargetBaseURL, j.Environment, j.Fixture, string(scen), string(refs), string(hosts), string(paths)).Scan(&id); err != nil {
 		return APIBASJob{}, false, fmt.Errorf("create apibas job: %w", err)
+	}
+	if approvalID != "" {
+		tag, err := tx.Exec(ctx, `
+			UPDATE apibas_approvals SET consumed_by_job = $2, consumed_at = NOW()
+			 WHERE id = $1::uuid AND approved_by <> '' AND revoked_at IS NULL AND consumed_at IS NULL
+			   AND expires_at IS NOT NULL AND expires_at > NOW()`, approvalID, id)
+		if err != nil {
+			return APIBASJob{}, false, fmt.Errorf("consume apibas approval: %w", err)
+		}
+		if tag.RowsAffected() != 1 {
+			return APIBASJob{}, false, ErrAPIBASApprovalUnusable
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return APIBASJob{}, false, fmt.Errorf("create apibas job: %w", err)
