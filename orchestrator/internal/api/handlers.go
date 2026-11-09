@@ -2253,7 +2253,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		return "", "factory-validation dispatch requires the factory-owned lab agent", nil
 	}
 	if o.Mode != "factory-validation" && isFactoryLab {
-		return "", "the factory-owned lab agent cannot be dispatched to in mode " + o.Mode, nil
+		return "", "this agent is the factory validation lab and cannot run " + o.Mode + " scenarios. If it should be an ordinary agent, remove VALIDATION_LAB_AGENT_ID from the server configuration and restart the orchestrator", nil
 	}
 
 	// ── OS compatibility check ────────────────────────────────────────────────

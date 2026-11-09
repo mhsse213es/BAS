@@ -87,4 +87,24 @@ func TestEnsureSoleFactoryLabAgent_NotYetEnrolled(t *testing.T) {
 	if readFactoryLabFlag(t, pool, "labflag-orphan-stale") {
 		t.Error("stale flag must be cleared even when the configured agent has not enrolled yet")
 	}
+}
+
+// TestEnsureSoleFactoryLabAgent_EmptyIDClearsEveryFlag: removing VALIDATION_LAB_AGENT_ID from the configuration must
+// release the agent that was the lab. Before, the server skipped the whole step for an empty ID, so the old agent
+// stayed flagged in the database and ordinary runs on it were refused.
+func TestEnsureSoleFactoryLabAgent_EmptyIDClearsEveryFlag(t *testing.T) {
+	pool := sharedDB.Pool
+	ctx := context.Background()
+	seedAgentFlag(t, pool, "labflag-was-lab", true)
+	seedAgentFlag(t, pool, "labflag-ordinary", false)
+
+	if err := EnsureSoleFactoryLabAgent(ctx, pool, ""); err != nil {
+		t.Fatalf("EnsureSoleFactoryLabAgent with an empty ID: %v", err)
+	}
+	if readFactoryLabFlag(t, pool, "labflag-was-lab") {
+		t.Error("with no lab configured the previous lab agent must be released")
+	}
+	if readFactoryLabFlag(t, pool, "labflag-ordinary") {
+		t.Error("an ordinary agent must never be flagged")
+	}
 }

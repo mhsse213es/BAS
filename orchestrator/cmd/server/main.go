@@ -1128,15 +1128,18 @@ func main() {
 		log.Printf("[contentregistry] migration deferred: %d intake failures (load error: %v)", bootIntakeFailures, scenarioLoadErr)
 	}
 
+	// The lab flag follows the configured ID in BOTH directions, every start. A set ID makes that agent the sole
+	// factory lab (is_factory_lab is required for dispatch, see EnsureSoleFactoryLabAgent) so an operator never
+	// flags it by hand; an EMPTY ID clears every flag. Without the empty case, removing VALIDATION_LAB_AGENT_ID
+	// from setup.conf left the old agent flagged in the database, and ordinary runs on it were refused as "lab
+	// agent" with the lab itself switched off. Non-fatal: the agent may just not be enrolled yet.
+	if err := validationlab.EnsureSoleFactoryLabAgent(context.Background(), pool, cfg.ValidationLabAgentID); err != nil {
+		log.Printf("[validationlab] WARNING: could not apply is_factory_lab for %q: %v", cfg.ValidationLabAgentID, err)
+	}
+	if cfg.ValidationLabAgentID == "" {
+		log.Printf("[validationlab] disabled: VALIDATION_LAB_AGENT_ID is not set, so no agent is a factory lab")
+	}
 	if cfg.ValidationLabAgentID != "" {
-		// Make the configured agent the sole factory lab so an operator never
-		// flags it by hand -- is_factory_lab is required for dispatch (see
-		// EnsureSoleFactoryLabAgent). Non-fatal: the agent may just not be
-		// enrolled yet, and the orchestrator below refuses cleanly until the
-		// flag lands on a later restart.
-		if err := validationlab.EnsureSoleFactoryLabAgent(context.Background(), pool, cfg.ValidationLabAgentID); err != nil {
-			log.Printf("[validationlab] WARNING: could not set is_factory_lab for %s: %v", cfg.ValidationLabAgentID, err)
-		}
 		pollMinutes := cfg.ValidationLabPollMinutes
 		if pollMinutes <= 0 {
 			pollMinutes = 5
