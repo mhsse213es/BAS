@@ -19,21 +19,24 @@ A number is only worth quoting with its tier. Nothing here is live-validated.
 |---|---|---|
 | Catalogued | Scenario file exists in `internal/apibas/catalog` | **120** |
 | Executable | Has a working adapter (REST, or one of the protocol adapters) | **120 / 120** |
-| Lab-validated | In both lab builds the vulnerable build FAILs as exploited and the fixed build PASSes with control enforced | **115 / 120** (95.8%) |
+| Lab-validated | In both lab builds the vulnerable build FAILs as exploited and the fixed build PASSes with control enforced | **117 / 120** (97.5%) |
 | Live-validated | Run against a real customer or staging API with real security telemetry | **0** |
 
 Lab-validated is evidence that the scenario and the grader work against a deliberately flawed lab. It is not evidence about any
 customer API.
 
-### Not lab-validated (5)
+### Not lab-validated (3)
 
 | Scenario | State | Why |
 |---|---|---|
-| API-BAS-ABUSE-002 | evaluated | Timing scenario. Its 250 ms ceiling is provisional (decision D2 in `api-bas-remaining-work.md`); timing is not a validated claim. |
-| API-BAS-GWAY-012 | evaluated | Upstream TLS verification. The report records no reason; it has valid verdicts but not the validated pair. Not yet investigated. |
-| API-BAS-AUTHN-007 | error `TARGET_UNREACHABLE` | Client-certificate scenario. It errored in this run. Not yet investigated, so it may be a harness or environment fault rather than a scenario fault. |
-| API-BAS-REPORT-001 | unevaluated | Reporting-workflow scenario with no valid exploitability verdict. |
+| API-BAS-ABUSE-002 | provisional | Timing scenario. Verdicts are valid, but the 250 ms ceiling has no approved requirement owner or rationale (decision D2 in `api-bas-remaining-work.md`), so it is held out of validated. In the first measured run this scenario was classed plain `evaluated` rather than `provisional`; timing results can vary between runs, so treat its class as unstable until timing qualification (D3) is done. |
+| API-BAS-REPORT-001 | unevaluated | Reporting-workflow scenario with no valid exploitability verdict. The report records no reason; not investigated. |
 | API-BAS-REPORT-002 | unevaluated | `deadline_not_defined_by_provision`: no CBUAE provision-derived deadline is recorded, so it cannot PASS on timeliness. |
+
+AUTHN-007 and GWAY-012 were first reported as not validated (error and evaluated). That was a measurement fault, not a scenario
+fault: both need TLS (a client certificate, an upstream certificate), and the measurement harness ran them on the plain-HTTP lab.
+`TestPhase28_MeasuredCoverage` now runs them on the TLS environment their own acceptance test uses; both validate (vulnerable
+FAIL/exploited, fixed PASS/enforced).
 
 ## 2. Catalogue by family (API.txt section 1)
 
@@ -114,8 +117,8 @@ adapter exists.
 
 | Build | detected | not_detected | inconclusive | error |
 |---|---|---|---|---|
-| vulnerable | 61 | 22 | 1 | 1 |
-| fixed | 52 | 31 | 1 | 1 |
+| vulnerable | 63 | 21 | 1 | 0 |
+| fixed | 52 | 32 | 1 | 0 |
 
 35 of 120 scenarios have no detection block and are `not_evaluated`, which is a distinct state from a miss. Per-scenario reasons
 are in `docs/api-bas-det001-tracker.md`. The counts above are raw; a not_detected on the fixed build means the control denied
