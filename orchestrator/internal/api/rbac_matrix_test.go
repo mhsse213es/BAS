@@ -417,6 +417,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/apibas/targets/{id}/inventory", tierPermission, auth.CanViewAPIBASRuns},
 	{http.MethodGet, "/api/apibas/targets/{id}/inventory/versions", tierPermission, auth.CanViewAPIBASRuns},
 	{http.MethodPost, "/api/apibas/targets/{id}/inventory/drift", tierPermission, auth.CanViewAPIBASRuns},
+	{http.MethodPost, "/api/apibas/targets/{id}/binding/plan", tierPermission, auth.CanViewAPIBASRuns},
 	{http.MethodPost, "/api/aleef/engagements", tierPermission, auth.CanAuthorizeAleef},
 	{http.MethodPost, "/api/aleef/runs", tierPermission, auth.CanRunAleef},
 	{http.MethodGet, "/api/aleef/runs/{id}", tierPermission, auth.CanViewAleef},
