@@ -284,6 +284,9 @@ func (r *Runner) run(ctx context.Context, s contract.Scenario, tag string) (Repo
 	if r.cfg.State == nil {
 		return r.skip(rep, grade.ReasonAdapterUnavailable, "state adapter is not configured"), nil
 	}
+	if _, noState := r.cfg.State.(NoState); noState && s.SideEffectClass != "READ_ONLY" {
+		return r.skip(rep, grade.ReasonAdapterUnavailable, "the target offers no independent state, so only read-only scenarios can run"), nil
+	}
 	sandbox := s.SideEffectClass == "STATE_CHANGE_SANDBOX"
 	if sandbox && r.cfg.Reset == nil {
 		return r.skip(rep, grade.ReasonAdapterUnavailable, "sandbox scenario needs a reset adapter"), nil

@@ -647,6 +647,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanApproveAPIBASProduction)).Post("/api/apibas/approvals/{id}/revoke", h.RevokeAPIBASApproval)
 		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/approvals", h.ListAPIBASApprovals)
 		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/approvals/{id}", h.GetAPIBASApproval)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Post("/api/apibas/targets/{id}/inventory", h.ImportAPIBASInventory)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets/{id}/inventory", h.GetAPIBASInventory)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets/{id}/inventory/versions", h.ListAPIBASInventoryVersions)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Post("/api/apibas/targets/{id}/inventory/drift", h.DriftAPIBASInventory)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Post("/api/apibas/targets/{id}/binding/plan", h.PlanAPIBASBinding)
 		// Aleef API discovery (separate licence add-on, license.ProductAleef via productPrefixes).
 		r.With(auth.RequirePermission(auth.CanAuthorizeAleef)).Post("/api/aleef/engagements", h.CreateAleefEngagement)
 		r.With(auth.RequirePermission(auth.CanRunAleef)).Post("/api/aleef/runs", h.StartAleefRun)

@@ -42,22 +42,22 @@ const (
 
 // Operation is one method on one path.
 type Operation struct {
-	Method           string
-	Path             string
-	OperationID      string
-	Summary          string
-	Tags             []string
-	Deprecated       bool
-	Auth             AuthMode
-	SecuritySchemes  []string
-	PathParams       []string
-	QueryParams      []string
-	HeaderParams     []string
-	BodyContentTypes []string
-	BodyFields       []string
-	ResponseCodes    []string
-	ResponseFields   []string
-	Classes          []Class
+	Method           string   `json:"method"`
+	Path             string   `json:"path"`
+	OperationID      string   `json:"operation_id,omitempty"`
+	Summary          string   `json:"summary,omitempty"`
+	Tags             []string `json:"tags,omitempty"`
+	Deprecated       bool     `json:"deprecated,omitempty"`
+	Auth             AuthMode `json:"auth"`
+	SecuritySchemes  []string `json:"security_schemes,omitempty"`
+	PathParams       []string `json:"path_params,omitempty"`
+	QueryParams      []string `json:"query_params,omitempty"`
+	HeaderParams     []string `json:"header_params,omitempty"`
+	BodyContentTypes []string `json:"body_content_types,omitempty"`
+	BodyFields       []string `json:"body_fields,omitempty"`
+	ResponseCodes    []string `json:"response_codes,omitempty"`
+	ResponseFields   []string `json:"response_fields,omitempty"`
+	Classes          []Class  `json:"classes,omitempty"`
 }
 
 // Key is "METHOD path", the identity of an operation.
@@ -65,13 +65,13 @@ func (o Operation) Key() string { return o.Method + " " + o.Path }
 
 // Inventory is the result of an import.
 type Inventory struct {
-	Title          string
-	Version        string
-	OpenAPIVersion string
+	Title          string `json:"title"`
+	Version        string `json:"version"`
+	OpenAPIVersion string `json:"openapi_version"`
 	// Servers are the server URLs as declared. They are recorded, never contacted.
-	Servers    []string
-	Operations []Operation
-	Warnings   []string
+	Servers    []string    `json:"servers,omitempty"`
+	Operations []Operation `json:"operations"`
+	Warnings   []string    `json:"warnings,omitempty"`
 }
 
 // Import parses an OpenAPI 3.x document, JSON or YAML, into an inventory.
@@ -94,7 +94,7 @@ func Import(data []byte) (*Inventory, error) {
 		return nil, errors.New("openapi: this is a Swagger 2.0 document; only OpenAPI 3.x is supported, convert it first")
 	}
 	if !strings.HasPrefix(ver, "3.") {
-		return nil, fmt.Errorf("openapi: unsupported or missing openapi version %q; only 3.x is supported", ver)
+		return nil, fmt.Errorf("openapi: unsupported or missing openapi version %q; only 3.x is supported", truncate(ver, 24))
 	}
 	r := &resolver{root: root}
 	inv := &Inventory{OpenAPIVersion: ver}
@@ -347,6 +347,13 @@ func templateParams(path string) []string {
 		}
 	}
 	return out
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
 
 func asList(v any) []any {
