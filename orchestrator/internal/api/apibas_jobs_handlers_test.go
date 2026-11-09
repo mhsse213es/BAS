@@ -28,6 +28,10 @@ func jobsRouter(h *Handler) http.Handler {
 	r.With(auth.RequirePermission(auth.CanApproveAPIBASProduction)).Post("/api/apibas/approvals/{id}/revoke", h.RevokeAPIBASApproval)
 	r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/approvals", h.ListAPIBASApprovals)
 	r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/approvals/{id}", h.GetAPIBASApproval)
+	r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Post("/api/apibas/targets/{id}/inventory", h.ImportAPIBASInventory)
+	r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets/{id}/inventory", h.GetAPIBASInventory)
+	r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets/{id}/inventory/versions", h.ListAPIBASInventoryVersions)
+	r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Post("/api/apibas/targets/{id}/inventory/drift", h.DriftAPIBASInventory)
 	return r
 }
 

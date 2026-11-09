@@ -1,6 +1,6 @@
 # API BAS OpenAPI import and endpoint inventory
 
-Status: first tranche, 9 November 2026. Code: `orchestrator/internal/apibas/openapi`, command `orchestrator/cmd/apibas-inventory`.
+Status: first tranche and target storage, 9 November 2026. Code: `orchestrator/internal/apibas/openapi`, command `orchestrator/cmd/apibas-inventory`.
 
 ## Why
 
@@ -27,7 +27,7 @@ but not seen in use, and which are in use but not described.
 - It does not decide that anything is vulnerable. A class is a reason to test.
 - It does not select or run scenarios. Catalogue scenarios are written against the lab's routes, so mapping a customer operation to
   a specific scenario needs a binding step that does not exist yet.
-- It does not persist the inventory or attach it to a target, and there is no API endpoint or console page for it.
+- There is no console page for inventories yet (the API below is the interface).
 - It does not read Swagger 2.0 (reported with a clear error), SOAP/WSDL, GraphQL schemas, gRPC or AsyncAPI.
 - It does not discover routes. Observed routes come from a file the user supplies.
 
@@ -49,6 +49,22 @@ but not seen in use, and which are in use but not described.
 4. A health, docs, status or well-known path is not flagged as unauthenticated even when public.
 5. A route that is the older of two versions (`/v1/x` beside `/v2/x`) is a lifecycle candidate, as is any deprecated operation.
 
+## Storage on targets (API)
+
+An inventory is stored per target as numbered versions in `apibas_target_inventories` (created with the other API BAS tables by
+`EnsureAPIBASJobSchema`). Only the parsed inventory and the source document's SHA-256 and size are stored. The raw document is
+not, because a specification can carry a secret in an example. An identical re-import (same hash) writes nothing. A target keeps
+its 50 newest versions. Importing locks the target row, so concurrent imports get distinct versions.
+
+| Route | Permission | Purpose |
+|---|---|---|
+| `POST /api/apibas/targets/{id}/inventory` | manage targets | The body is the OpenAPI document (JSON or YAML, up to 8 MiB). Stores the next version and returns the class counts, warnings, the suggested scope, and what changed since the previous version (operations added, removed, or with changed authentication). Audited as `apibas.inventory.import` (hash, size and counts, never content). |
+| `GET /api/apibas/targets/{id}/inventory` | view runs | The newest inventory, or `?version=N`. `?class=` keeps one candidate class. |
+| `GET /api/apibas/targets/{id}/inventory/versions` | view runs | Version metadata, newest first. |
+| `POST /api/apibas/targets/{id}/inventory/drift` | view runs | Body `{"observed":[{"method":"GET","path":"/x"}]}` (up to 20000 routes). Compares the stored inventory with the routes the caller observed. Requests nothing from the target. |
+
+The suggested scope is shown and never applied: changing a target's allowed paths stays a separate, deliberate act.
+
 ## Use
 
     apibas-inventory -spec openapi.yaml
@@ -57,8 +73,8 @@ but not seen in use, and which are in use but not described.
 
 ## Next steps, in order of value
 
-1. Persist an inventory against a target and show it with the target (store, API, RBAC, audit).
+1. A console page for a target's inventory, versions, changes and drift.
 2. A binding step from inventory operations to catalogue scenarios (which identities, which object IDs, which fixtures) so an
    imported API can be assessed, not only listed.
-3. Run the importer's scope suggestion through the existing approval flow, so confirming it is an audited action.
+3. Applying the scope suggestion to a target as an audited action (target update does not exist yet).
 4. Swagger 2.0, then GraphQL schema import.
