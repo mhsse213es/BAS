@@ -44,9 +44,9 @@ func captureSnapshot(runID string) *SystemSnapshot {
 	// Registry Run keys (persistence locations)
 	regKeys := []string{
 		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
-		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
+		hkcuReg(`SOFTWARE\Microsoft\Windows\CurrentVersion\Run`),
 		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`,
-		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`,
+		hkcuReg(`SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`),
 	}
 	for _, key := range regKeys {
 		if out, err := snapCmd("reg", "query", key); err == nil {
@@ -77,7 +77,7 @@ func captureSnapshot(runID string) *SystemSnapshot {
 
 	// Startup folders
 	startupDirs := []string{
-		filepath.Join(os.Getenv("APPDATA"), `Microsoft\Windows\Start Menu\Programs\Startup`),
+		userStartupDir(),
 		`C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup`,
 	}
 	for _, dir := range startupDirs {
@@ -90,6 +90,7 @@ func captureSnapshot(runID string) *SystemSnapshot {
 
 	// Registry locations that decide what runs and how Windows behaves; put back at the end of the run.
 	s.Guard = captureRegGuard(runID)
+	s.Health = captureHealth()
 
 	return s
 }
@@ -129,9 +130,9 @@ func captureSnapshotLite(runID string) *SystemSnapshot {
 
 	regKeys := []string{
 		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
-		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
+		hkcuReg(`SOFTWARE\Microsoft\Windows\CurrentVersion\Run`),
 		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`,
-		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`,
+		hkcuReg(`SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`),
 	}
 	for _, key := range regKeys {
 		if out, err := snapCmd("reg", "query", key); err == nil {
@@ -149,7 +150,7 @@ func captureSnapshotLite(runID string) *SystemSnapshot {
 	}
 
 	startupDirs := []string{
-		filepath.Join(os.Getenv("APPDATA"), `Microsoft\Windows\Start Menu\Programs\Startup`),
+		userStartupDir(),
 		`C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup`,
 	}
 	for _, dir := range startupDirs {
@@ -177,6 +178,16 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 		}
 	}
 
+	var health *healthState
+	if h, ok := s.Health.(*healthState); ok && h != nil {
+		health = h
+		// Named in the result so a leftover from an earlier run is not silently accepted as the normal state.
+		for _, p := range h.baselineProblems() {
+			log.Printf("[!] %s", p)
+			reverted = append(reverted, "restore incomplete: "+p)
+		}
+	}
+
 	// ── Hosts file restore ────────────────────────────────────────────────────
 	hostsPath := `C:\Windows\System32\drivers\etc\hosts`
 	if original, ok := s.Files[hostsPath]; ok {
@@ -190,9 +201,9 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 	// ── Registry Run key restore ──────────────────────────────────────────────
 	regKeys := []string{
 		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
-		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
+		hkcuReg(`SOFTWARE\Microsoft\Windows\CurrentVersion\Run`),
 		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`,
-		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`,
+		hkcuReg(`SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`),
 	}
 	for _, key := range regKeys {
 		original, ok := s.Files["reg:"+key]
@@ -271,7 +282,7 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 	// ── Startup folder — remove newly added files ─────────────────────────────
 	origStartup := toSet(s.Lists["startup"])
 	startupDirs := []string{
-		filepath.Join(os.Getenv("APPDATA"), `Microsoft\Windows\Start Menu\Programs\Startup`),
+		userStartupDir(),
 		`C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup`,
 	}
 	for _, dir := range startupDirs {
@@ -284,6 +295,14 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 					}
 				}
 			}
+		}
+	}
+
+	// ── Verify: ask Windows whether things still open the way they did before the run ──
+	if health != nil {
+		for _, p := range health.verify() {
+			log.Printf("[!] %s", p)
+			reverted = append(reverted, "restore incomplete: "+p)
 		}
 	}
 

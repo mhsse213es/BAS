@@ -50,7 +50,7 @@ func (r guardRoot) base() registry.Key {
 	if r.Hive == "HKLM" {
 		return registry.LOCAL_MACHINE
 	}
-	return registry.CURRENT_USER
+	return userHiveKey() // the logged-in user's hive: the service's own HKCU is SYSTEM's, not the customer's
 }
 
 // classesHijackKeys are the file-type and shell-verb keys a technique rewrites to change what a file, folder or

@@ -18,6 +18,8 @@ type SystemSnapshot struct {
 	Files   map[string][]byte   // path (or logical key) → content at snapshot time
 	// Guard is platform-specific restore state taken with the snapshot (Windows: the registry restore guard).
 	Guard any
+	// Health is the platform-specific "does Windows still open things the same way" reference taken with the snapshot.
+	Health any
 }
 
 func newSnapshot(runID string) *SystemSnapshot {
