@@ -50,7 +50,8 @@ evidence:
   - state_diff
 industry_mapping:
   - "Healthcare: medical device and hospital integration trust failure"
-regulatory_mapping: []
+regulatory_mapping:
+  - IN-DPDP-S8-5
 negative_tests:
   - "API-BAS-INTEG-301 against the fixed build must PASS"
   - "API-BAS-INTEG-301 against the vulnerable build must FAIL (exploited)"

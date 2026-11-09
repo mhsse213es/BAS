@@ -90,21 +90,22 @@ Every protocol has an executable adapter and at least one lab-validated scenario
 |---|---|
 | BFSI | 84 scenarios tagged, most on the generic orders fixture; payment workflows are BIZ-003 to 009 |
 | NBFC | 10 scenarios (AUTHZ-101 to 106, DATA-101 to 104). DATA-102 detection is `not_evaluated`. |
-| Manufacturing | 7 scenarios (AUTHZ-201 to 204, DATA-201, 202, INTEG-201) on `manufacturing-two-plant`: cross-plant production-order read, operator releasing an order, supplier changing another supplier's purchase order, device commanding another device (simulated, lab only), BOM and CAD leakage, asset and telemetry listing, IT-side access to the OT management configuration. Detection: all seven graded by APIBAS-REL-004 (fixture-validated). No regulatory mapping yet. Not covered: ERP/MES inventory and bill-of-materials write paths, machine-command safety interlocks, OT protocol (Modbus, OPC UA) adapters. |
-| Healthcare (FHIR, patient records) | 9 scenarios (AUTHZ-301 to 305, DATA-301 to 303, INTEG-301) on `healthcare-two-patient`: cross-patient record read, clinician without a treating relationship, prescription change, patient altering their own result, delegate beyond consent scope, medical image download, FHIR Observation read, records export, device posting to another patient's result. Detection: eight graded by APIBAS-REL-004, AUTHZ-304 by REL-021 (result changed by a non-device identity) and AUTHZ-305 by REL-022 (clinical data to a delegate beyond consent); all fixture-validated. REL-004 cannot tell a treating clinician from one without a relationship (AUTHZ-302). Not covered: HL7 v2 and DICOM adapters, real FHIR server, break-glass access, consent revocation, audit-log integrity. |
+| Manufacturing | 7 scenarios (AUTHZ-201 to 204, DATA-201, 202, INTEG-201) on `manufacturing-two-plant`: cross-plant production-order read, operator releasing an order, supplier changing another supplier's purchase order, device commanding another device (simulated, lab only), BOM and CAD leakage, asset and telemetry listing, IT-side access to the OT management configuration. Detection: all seven graded by APIBAS-REL-004 (fixture-validated). No regulatory mapping: no applicable source in the registry. Not covered: ERP/MES inventory and bill-of-materials write paths, machine-command safety interlocks, OT protocol (Modbus, OPC UA) adapters. |
+| Healthcare (FHIR, patient records) | 9 scenarios (AUTHZ-301 to 305, DATA-301 to 303, INTEG-301) on `healthcare-two-patient`: cross-patient record read, clinician without a treating relationship, prescription change, patient altering their own result, delegate beyond consent scope, medical image download, FHIR Observation read, records export, device posting to another patient's result. Detection: eight graded by APIBAS-REL-004, AUTHZ-304 by REL-021 (result changed by a non-device identity) and AUTHZ-305 by REL-022 (clinical data to a delegate beyond consent); all fixture-validated. REL-004 cannot tell a treating clinician from one without a relationship (AUTHZ-302). Eight carry an unverified DPDP section 8(5) mapping. Not covered: HL7 v2 and DICOM adapters, real FHIR server, break-glass access, consent revocation, audit-log integrity. |
 | Retail, logistics, telecom | **not started** |
 
 ## 5. India and UAE (API.txt section 4)
 
-Only two scenarios carry a regulatory mapping. Registry: `internal/apibas/regulatory/registry.yaml` (six entries, two verified).
+Ten scenarios carry a regulatory mapping: AUTHZ-001, DATA-011 and eight healthcare scenarios. Registry: `internal/apibas/regulatory/registry.yaml` (seven entries, two verified, both DPDP entries unverified).
 
 | Mapping | Scenario | Status |
 |---|---|---|
 | IN-RBI-ITGRC-19A | AUTHZ-001 | verified, reviewed |
 | UAE-PDPL-A15-2 | DATA-011 | verified, reviewed |
 | IN-DPDP-S12-3 | DATA-011 | **unverified**: the notification bringing it into force is not in the source set |
+| IN-DPDP-S8-5 | AUTHZ-301, 302, 303, 305, DATA-301, 302, 303, INTEG-301 | **unverified**: same commencement gap, and no named reviewer has confirmed the mapping. Reasonable security safeguards (section 8(5)) is one access-control safeguard per scenario, not a compliance finding |
 
-Not mapped or not started: NPCI and UPI, an NBFC mapping (needs a fresh applicability review), CERT-In direction mapping
+Healthcare AUTHZ-304 (a patient altering their own result) is not mapped: it is not a breach of another person's data. UAE healthcare data is not mapped to the PDPL because that law leaves health data to its own legislation, which is not in the source set. Manufacturing has no mapping: the registry holds no source document that applies (an OT or industrial security standard such as IEC 62443, or a sector regulation, would have to be obtained and reviewed first), and the DPDP Act does not fit production orders, bills of materials or device commands. Not mapped or not started: NPCI and UPI, an NBFC mapping (needs a fresh applicability review), CERT-In direction mapping
 beyond REPORT-001 (unverified), CBUAE clauses 6.1.2.6 and 6.1.7.2 (no provision-derived deadline), DIFC and ADGM, UAE
 healthcare rules, UAE information-assurance requirements, data residency, PDPL Executive Regulation (not in the source set).
 There is no live reporting channel: a simulated REPORT PASS proves a workflow check only. A successful simulation never

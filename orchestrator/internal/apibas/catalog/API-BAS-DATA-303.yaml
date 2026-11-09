@@ -48,7 +48,8 @@ evidence:
   - sanitized_response
 industry_mapping:
   - "Healthcare: health-data exposure in exports"
-regulatory_mapping: []
+regulatory_mapping:
+  - IN-DPDP-S8-5
 negative_tests:
   - "API-BAS-DATA-303 against the fixed build must PASS"
   - "API-BAS-DATA-303 against the vulnerable build must FAIL (exploited)"

@@ -48,7 +48,8 @@ evidence:
   - sanitized_response
 industry_mapping:
   - "Healthcare: patient consent and delegated-access violations"
-regulatory_mapping: []
+regulatory_mapping:
+  - IN-DPDP-S8-5
 negative_tests:
   - "API-BAS-AUTHZ-305 against the fixed build must PASS"
   - "API-BAS-AUTHZ-305 against the vulnerable build must FAIL (exploited)"
