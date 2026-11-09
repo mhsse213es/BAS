@@ -33,3 +33,26 @@ test('posture card: nothing scored yet keeps the empty state', () => {
   assert.match(html, /No scored runs yet/);
   assert.doesNotMatch(html, /dp-gauge/);
 });
+
+const E = await import('../../src/features/dash-exec.js');
+function renderRisk(current) {
+  document.body.innerHTML = '<div id="ed-posture"></div>';
+  E.renderExecPosture(current);
+  return document.getElementById('ed-posture').innerHTML;
+}
+
+test('overall risk: the same gauge, toned by risk band (lower is better)', () => {
+  assert.match(renderRisk({ riskMeasurable: true, avgRiskScore: 22 }), /dp-gauge t-ok[\s\S]*>Low risk</);
+  assert.match(renderRisk({ riskMeasurable: true, avgRiskScore: 55 }), /dp-gauge t-warn[\s\S]*>Moderate risk</);
+  const high = renderRisk({ riskMeasurable: true, avgRiskScore: 81 });
+  assert.match(high, /dp-gauge t-bad[\s\S]*>High risk</);
+  assert.match(high, />81</, 'the centre shows the backend score');
+  assert.match(high, /Lower is better/);
+});
+
+test('overall risk: empty and unmeasurable states are unchanged', () => {
+  assert.match(renderRisk(null), /No data yet/);
+  const html = renderRisk({ riskMeasurable: false });
+  assert.match(html, /Not measurable/);
+  assert.doesNotMatch(html, /dp-gauge/);
+});

@@ -35,6 +35,11 @@ function ring(pct, size, stroke, color, big, small) {
     (small ? '<text x="' + c + '" y="' + (c + 16) + '" text-anchor="middle" class="donut-l">' + x(small) + '</text>' : '') + '</svg>';
 }
 export function gaugeRing(pct, color, big, small) { return ring(pct, 136, 14, color, big, small); }
+// The large score gauge shared by the Posture score and Overall risk cards: the ring glows in the tone of the band
+// it is in, and the band is named in the centre. `tone` is ok | warn | bad.
+export function toneGauge(pct, tone, band, title) {
+  return '<div class="dp-gauge t-' + tone + '" title="' + x(title) + '">' + ring(pct, 168, 16, colorOf(tone), Math.round(pct), band) + '</div>';
+}
 
 function miniLine(vals, color) {
   var v = vals.length > 1 ? vals : (vals.length ? [vals[0], vals[0]] : []);
@@ -239,7 +244,7 @@ function renderPosture() {
   var arrow = pw.trend === 'Improving' ? 'M12 19V5M5 12l7-7 7 7' : pw.trend === 'Degrading' ? 'M12 5v14M19 12l-7 7-7-7' : 'M5 12h14';
   var trendIco = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + arrow + '"/></svg>';
   cell('dop-posture', card('Posture score', '<div class="dp-posture">' +
-    '<div class="dp-gauge t-' + t + '" title="Prevention score, out of 100">' + ring(pw.pct, 168, 16, colorOf(t), pw.pct, verdict) + '</div>' +
+    toneGauge(pw.pct, t, verdict, 'Prevention score, out of 100') +
     '<div class="dp-posture-r"><div class="dp-stats">' +
       '<div class="dp-stat"><span class="dp-stat-l">Trend</span><b class="dp-stat-v tone-' + tt + '">' + trendIco + x(pw.trend) + '</b></div>' +
       '<div class="dp-stat"><span class="dp-stat-l">Target</span><b class="dp-stat-v tone-muted">Not set</b></div></div>' +

@@ -5,7 +5,7 @@ import { on } from '../core/actions.js';
 import { chartSlot, CHART_COLORS } from '../core/charts.js';
 import { kpi, grid, card, chip, empty, icon, seg } from '../core/kit.js';
 import { sevTone } from './rich-g3.js';
-import { gaugeRing } from './dash-rich.js';
+import { toneGauge } from './dash-rich.js';
 import { execInsights, riskBand, topRisks, trendDelta, riskKpi, exposureKpi, detectionKpi } from './dash-model.js';
 
 function cell(id, html) { var el = document.getElementById(id); if (el) el.innerHTML = html; }
@@ -59,8 +59,8 @@ export function renderExecPosture(current) {
   if (!current) { cell('ed-posture', card('Overall risk', empty('shield', 'No data yet'))); return; }
   if (current.riskMeasurable !== true) { cell('ed-posture', card('Overall risk', empty('shield', 'Not measurable', 'No scored runs in the last 30 days.'), { sub: 'Risk score — lower is better' })); return; }
   var score = Number(current.avgRiskScore) || 0, band = riskBand(score);
-  cell('ed-posture', card('Overall risk', '<div class="dp-center">' + gaugeRing(score, CHART_COLORS[band.tone], Math.round(score), 'out of 100') +
-    '<div class="legend dp-center"><span class="lg"><i class="dl-sw" data-bg="' + CHART_COLORS[band.tone] + '"></i>' + x(band.label) + ' risk</span></div></div>', { sub: 'Risk score — lower is better' }));
+  cell('ed-posture', card('Overall risk', '<div class="dp-center dp-risk">' + toneGauge(score, band.tone, band.label + ' risk', 'Risk score, out of 100. Lower is better.') +
+    '<p class="muted tiny dp-risk-note">Average risk score over the last 30 days. The ring fills as risk rises.</p></div>', { sub: 'Risk score — lower is better' }));
 }
 
 export function renderExecExposure(exp) {
