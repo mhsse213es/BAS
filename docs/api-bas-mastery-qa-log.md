@@ -3917,3 +3917,39 @@ existing catalog/lab/runner machinery rather than building anything new architec
 - **Why read-only only:** the runner needs a state reader, and a customer API has none. An empty reader would let a state-changing attack grade as if nothing changed, so writes are skipped with a reason rather than bound with a weaker claim.
 - **Tests (all pass):** generated scenarios pass `Validate`, are READ_ONLY GET-only, use ids 901+, build correct paths and attacker/victim; skipped operations carry reasons (write, public, one owner, no objects); 16 invalid specs rejected (one identity, bad or duplicate names, shared credential, unknown owner or operation, missing or extra path parameter, traversal, slash and query in a value, short or multi-line protected value, duplicate object); 99-scenario limit; **end to end through the real runner** against a spec-shaped API: vulnerable API gives FAIL exploited, fixed API gives PASS enforced; `NoState` plus a STATE_CHANGE scenario gives SKIPPED ADAPTER_UNAVAILABLE. API: plan before an inventory 404, plan with two skipped/bound sets, no credential reference echoed, unknown field and bad input 400, unauthenticated refused; RBAC matrix includes the route.
 - **Limits:** no persistence of a binding spec, no job through the orchestrator (a plan can only be run by calling the runner directly, as the test does), no function-, property-level or data-exposure binding, response evidence only, no detection or regulatory mapping.
+
+## REQ-007: WAF assessment hardening -- scenario-specific handler test coverage (9 November 2026)
+
+(REQ-016, the open-banking/UPI API-abuse suite named alongside REQ-007 in the same request, was built concurrently
+by a separate session -- see "API BAS UPI / open-banking pack" above. An independent attempt at the same suite was
+made in parallel in this session; once the collision was found -- same scenario-ID range and, worse, a literal
+`net/http.ServeMux` route collision on `GET /api/upi/transactions/{id}` -- that attempt was discarded rather than
+merged, per this repo's standing rule for concurrent sessions on `main`: sync and discard on collision.)
+
+### Scope
+Closed a bounded part of the two open, deferred-as-low-risk items already on record in `docs/waf-mastery-qa-log.md`
+(items #3 and #4). Did not touch item #1 (no live vendor WAF adapter exists, deferred by design) or item #12's
+"nothing sends a request to a WAF" gap -- both need a real lab/vendor target this round did not add.
+
+### Changes (item #4: scenario-specific handler test density)
+Added the handler-specific tests named in item #4's own resolution path for 3 of the 5 scenarios that had none, on
+the existing `wafScenarioJSONHandler` closure test pattern used by Exploit Prevention and HTTP Protocol Integrity:
+`internal/api/waf_assessment_handlers_test.go` gained `TestWafScenarioJSONHandler_AutomatedAbuse_ReturnsRealFailOutcome`
+(slug `automated-abuse`, vector `BOTABUSE-004`), `..._FileUpload_...` (slug `file-upload-content-trust`, vector
+`FILEUP-001`), and `..._RoutingCache_...` (slug `routing-cache-integrity`, vector `CACHE-001`).
+
+**Not done:** Policy Integrity and Legitimate Traffic still have no scenario-specific handler test. Their fixtures use
+a different evidence shape (`BaselineEvidence`/`WeakenedEvidence` pairs and a false-positive claim, respectively) than
+the flat `vectorId` shape the existing closure tests assert on, and writing a correct assertion for either needs
+reading their JSON response shape first -- left for a follow-up rather than guessed.
+
+Item #3 (3 scenarios wire only 2 vectors each, no deliberately-untested vector to exercise the Incomplete path) was
+**not closed this round**: its own resolution path calls for a new third attack vector per family in `wafcatalog`,
+which is new content, not a test-density fix, and was not picked up here.
+
+### Tests and results
+- `go test ./internal/api/... -run "TestWafScenarioJSONHandler|TestGetWAFExploitPreventionScenario|RBAC|Matrix" -v`:
+  all pass (18 tests, including the 3 new ones, and `TestRBACMatrix_NoDrift`) -- no route changes were needed, since
+  WAF scenario content is slug-driven through the existing generic handler closure.
+- `go build ./...`, `go vet ./internal/apibas/... ./internal/api/...`: clean on the final tree (origin/main plus
+  only this change).

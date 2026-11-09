@@ -62,6 +62,72 @@ func TestWafScenarioJSONHandler_HTTPProtocolIntegrity_ReturnsRealFailOutcome(t *
 	}
 }
 
+// Review Focus: a FOURTH scenario must serve correctly through the same shared closure with no handler changes
+// (closes WAF QA log item #4 in part: automated-abuse had no scenario-specific handler test).
+func TestWafScenarioJSONHandler_AutomatedAbuse_ReturnsRealFailOutcome(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.wafScenarioJSONHandler("automated-abuse")(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/automated-abuse", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"outcome":"fail"`) {
+		t.Error(`body missing "outcome":"fail"`)
+	}
+	if !strings.Contains(body, `"vectorId":"BOTABUSE-004"`) {
+		t.Error(`body missing "vectorId":"BOTABUSE-004"`)
+	}
+	if !strings.Contains(body, `"scenarioName":"Automated Abuse and Resource Protection"`) {
+		t.Error("body missing scenarioName for the correct scenario")
+	}
+}
+
+// Review Focus: a FIFTH scenario must serve correctly through the same shared closure with no handler changes
+// (closes WAF QA log item #4 in part: file-upload had no scenario-specific handler test).
+func TestWafScenarioJSONHandler_FileUpload_ReturnsRealFailOutcome(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.wafScenarioJSONHandler("file-upload-content-trust")(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/file-upload-content-trust", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"outcome":"fail"`) {
+		t.Error(`body missing "outcome":"fail"`)
+	}
+	if !strings.Contains(body, `"vectorId":"FILEUP-001"`) {
+		t.Error(`body missing "vectorId":"FILEUP-001"`)
+	}
+	if !strings.Contains(body, `"scenarioName":"File Upload and Content Trust"`) {
+		t.Error("body missing scenarioName for the correct scenario")
+	}
+}
+
+// Review Focus: a SIXTH scenario must serve correctly through the same shared closure with no handler changes
+// (closes WAF QA log item #4 in part: routing-cache had no scenario-specific handler test).
+func TestWafScenarioJSONHandler_RoutingCache_ReturnsRealFailOutcome(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.wafScenarioJSONHandler("routing-cache-integrity")(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/routing-cache-integrity", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"outcome":"fail"`) {
+		t.Error(`body missing "outcome":"fail"`)
+	}
+	if !strings.Contains(body, `"vectorId":"CACHE-001"`) {
+		t.Error(`body missing "vectorId":"CACHE-001"`)
+	}
+	if !strings.Contains(body, `"scenarioName":"Application Routing and Cache Integrity"`) {
+		t.Error("body missing scenarioName for the correct scenario")
+	}
+}
+
 // Review Focus: a THIRD scenario, spanning two real catalogs
 // internally (wafcatalog + wafapiflow), must serve correctly through
 // the same shared closure with no handler changes.
