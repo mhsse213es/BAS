@@ -6,6 +6,7 @@ package validationlab
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -461,7 +462,12 @@ func classifyCompletedRun(resultsJSON []byte) (outcome, reason string) {
 		return "NO_DATA", "no steps executed (all skipped or environment-blocked); nothing to validate"
 	default:
 		// At least one step ran cleanly and no content errors. Steps the
-		// endpoint could not run (environment-blocked) do not fail the content.
+		// endpoint could not run (environment-blocked) do not fail the content,
+		// but the reason names them so a thin PASS (few ran, many blocked) is
+		// never read as a full validation.
+		if c.EnvErrored > 0 {
+			return "PASS", fmt.Sprintf("content executed cleanly (%d step(s) ran, %d environment-blocked)", c.Executed, c.EnvErrored)
+		}
 		return "PASS", "content executed cleanly"
 	}
 }

@@ -93,6 +93,16 @@ func errorReasonLabel(r ErrorReason) string {
 // error. Grouped by category so the set stays auditable as it grows.
 func classifyExecutionError(lower string, exitCode int) ErrorReason {
 	switch {
+	// An unresolved bas-placeholder argument reached execution: our builder
+	// could not fill a required input, so the command ran against a dummy path.
+	// That is OUR content/arg-resolution defect (owner=audspect), never an
+	// environment gap — it must be caught before the "cannot find path" match
+	// below (which it would otherwise hit and be mislabelled a missing
+	// prerequisite, i.e. environment-owned, letting broken content pass
+	// factory validation).
+	case strings.Contains(lower, "bas-placeholder-"):
+		return ErrMalformedContent
+
 	// Our own scheduler / timeout supervisor — never a security outcome.
 	case strings.Contains(lower, "schedule timeout: resource locks unavailable"):
 		return ErrSchedulerContention
