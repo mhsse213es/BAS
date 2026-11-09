@@ -540,9 +540,9 @@
                 <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-arm64-deb" download data-on-click="updateLinuxDownloadCmd" data-args="[&quot;arm64&quot;,&quot;deb&quot;]">.deb ARM64</a>
                 <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64-rpm" download data-on-click="updateLinuxDownloadCmd" data-args="[&quot;amd64&quot;,&quot;rpm&quot;]">.rpm x86_64</a>
               </div>
-              <code id="linux-deb-cmd">sudo dpkg -i bas-agent-linux-amd64.deb &amp;&amp; sudo systemctl start bas-agent</code>
+              <code id="linux-deb-cmd">sudo apt install -y ./bas-agent-linux-amd64.deb &amp;&amp; sudo audspect-agent-setup</code>
               <code id="linux-rpm-cmd">sudo rpm -i bas-agent-linux-amd64.rpm &amp;&amp; sudo systemctl start bas-agent</code>
-              <div class="g1-s-b3aebb78">The <code class="g1-s-eac76940">.deb</code>/<code class="g1-s-eac76940">.rpm</code> packages need <code class="g1-s-eac76940">/etc/bas-agent/config</code> edited by hand to set <code class="g1-s-eac76940">BAS_SERVER_URL</code> and <code class="g1-s-eac76940">BAS_AGENT_SECRET</code> &mdash; use the CLI binary above unless you specifically need a distro package for fleet management (Ansible/Puppet/apt-mirror).</div>
+              <div class="g1-s-b3aebb78">The <code class="g1-s-eac76940">.deb</code> (Ubuntu/Debian) installs with <code class="g1-s-eac76940">apt</code> and enrols the host with the command above: it asks for the agent secret, then upgrades keep the agent's identity and roll back if the new version does not run, and removing the package keeps the configuration (purge erases it). For fleet tools (Ansible/Puppet/apt-mirror) put the values in <code class="g1-s-eac76940">/etc/audspect-agent/enroll.env</code> before installing. The <code class="g1-s-eac76940">.rpm</code> is the older minimal package and needs <code class="g1-s-eac76940">/etc/bas-agent/config</code> edited by hand &mdash; use the CLI binary above for RPM-based systems.</div>
             </div>
           </div>
           <div class="agent-dl-card">
