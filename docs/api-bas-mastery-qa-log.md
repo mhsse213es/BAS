@@ -3650,3 +3650,28 @@ Decisions approved by the product owner:
 - Evidence-reference validation.
 - No live lab or staging run. Step 5 covers staging end-to-end.
 - The job endpoint dispatches in a background goroutine inside the server process; there is no external queue, so a server restart fails running jobs (by reconciliation) rather than resuming them.
+
+## API BAS assessment step 5: end-to-end verification (9 November 2026)
+
+### Status
+- LOCAL end-to-end: done and passing. STAGING end-to-end: NOT RUN. Staging (192.168.10.78) was offered, but SSH key authentication from the build host was refused (`Permission denied (publickey,password)`). Passwords were not tried. The staging procedure is in `docs/api-bas-staging-e2e-runbook.md` for someone with access. Step 6 (UI) must not start until that runbook passes.
+
+### Local end-to-end result
+- `TestEndToEndRealRunnerAgainstRealLab` builds the real `apibas-runner` and `apibas-lab`, starts a vulnerable and a fixed lab on loopback, registers a target for each, and runs a job through `SubmitForTarget`, `Dispatch`, the secret store and Postgres, with the runner as a child process with an empty environment. Vulnerable build: `completed`, FAIL, exploited, control failed, detection detected. Fixed build: `completed`, PASS, not exploited, control enforced, detection detected. Pass.
+
+### Defects found by this step (all fixed)
+1. **Non-loopback targets could never run.** The runner accepts loopback or hosts passed in its allow-list, and the service never passed the target's allowed hosts. Any staging target would have been refused at run time. Jobs now store the target's allowed hosts and the service passes their bare hostnames (`apibas_jobs.allowed_hosts`, `hostnames()`; unit-tested including IPv6). The local test cannot prove this on a real LAN host, so staging must.
+2. **The runner was not in the orchestrator image.** `BAS_APIBAS_RUNNER` could not point anywhere in a deployed container. `orchestrator/Dockerfile` now builds `/apibas-runner` (plain `go build`, not garble, because the runner's report types have no json tags and garble breaks reflection-based output). `docker-compose.yml` passes `BAS_APIBAS_RUNNER` through from `.env`, empty by default, so existing installs are unchanged. The Dockerfile change was NOT built into an image here; only the Linux runner build and `docker compose config` were checked.
+3. **First upgrade of an existing install would abort.** `install.sh --upgrade` refused when the encryption key was missing, but an install from before this work has never had one. A marker `<DATA_DIR>/.db-key-issued` now records that a key was issued. No marker and no key: the upgrade generates one (nothing can be encrypted under a key that never existed). Marker present and key missing: the upgrade still refuses. Shell tests: 13 pass as root and as UID 1000 in Linux, including both cases.
+4. **No way to store a target credential.** Targets accept only secret-store references and nothing could write one. `POST /api/apibas/targets` now accepts a write-only `credentials` map: values are encrypted into the secret store, the target keeps references only, and the values are never returned, audited or stored in the target row (audit lists names only). A name given both as a reference and a value is refused before anything is stored. Tested.
+
+### Tests and results
+- `internal/apibas/jobs` (all, including end-to-end and the hostname test): pass.
+- `internal/api`: target and job handler tests, the write-only credential test, RBAC matrix tests: pass.
+- `packaging/compose/tests/db_encryption_key_test.sh`: 13 of 13, root and UID 1000. `setup-install-state.test.sh`: pass.
+- `GOOS=linux` runner build and `docker compose config`: pass.
+
+### Not done (stated)
+- Staging run (section above). Also not verified on staging: the compose mount of `/etc/audspect/secrets`, the image build, the container's temp directory for per-job files, and runner access to a LAN host.
+- No credential rotation or update path for an existing target (registration only).
+- Evidence references still not validated; path-level scope not implemented.

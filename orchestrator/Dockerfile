@@ -227,9 +227,14 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     garble -literals build \
     -ldflags="-s -w -X main.Version=${BAS_VERSION} -X github.com/audspect/bas/internal/license.buildTier=${BAS_BUILD_TIER} -X main.expectedWWWManifestHash=$(cat /web-manifest.sha256) -X github.com/audspect/bas/internal/integrity.orchestratorManifestExpected=true" \
     -o /bin/orchestrator ./cmd/server
+# API BAS assessment runner. The orchestrator starts it as a child process (BAS_APIBAS_RUNNER=/apibas-runner). Built with plain
+# go build, not garble: its report types carry no json tags, and garble renames fields that encoding/json reads by name.
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /bin/apibas-runner ./cmd/apibas-runner
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=builder /bin/orchestrator /orchestrator
+COPY --from=builder /bin/apibas-runner /apibas-runner
 COPY --from=binaries-manifest /agents/BINARIES.sha256 /agents/BINARIES.sha256
 COPY --from=agent-builder /agents /agents
 COPY --from=agent-legacy-builder /agents-legacy/bas-agent-windows-legacy-amd64.exe /agents/bas-agent-windows-legacy-amd64.exe

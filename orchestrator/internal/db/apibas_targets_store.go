@@ -172,11 +172,12 @@ func CreateAPIBASJobExclusive(ctx context.Context, pool *pgxpool.Pool, j APIBASJ
 	}
 	scen, _ := json.Marshal(j.ScenarioIDs)
 	refs, _ := json.Marshal(j.CredentialRefs)
+	hosts, _ := json.Marshal(j.AllowedHosts)
 	var id string
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO apibas_jobs (job_key, requested_by, target_id, target_base_url, environment, fixture, scenario_ids, credential_refs, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, 'queued') RETURNING id::text`,
-		j.JobKey, j.RequestedBy, j.TargetID, j.TargetBaseURL, j.Environment, j.Fixture, string(scen), string(refs)).Scan(&id); err != nil {
+		INSERT INTO apibas_jobs (job_key, requested_by, target_id, target_base_url, environment, fixture, scenario_ids, credential_refs, allowed_hosts, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, 'queued') RETURNING id::text`,
+		j.JobKey, j.RequestedBy, j.TargetID, j.TargetBaseURL, j.Environment, j.Fixture, string(scen), string(refs), string(hosts)).Scan(&id); err != nil {
 		return APIBASJob{}, false, fmt.Errorf("create apibas job: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

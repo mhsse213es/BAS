@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -92,7 +93,7 @@ func (s *Service) Submit(ctx context.Context, sp Spec) (db.APIBASJob, bool, erro
 	}
 	return db.CreateAPIBASJob(ctx, s.pool, db.APIBASJob{
 		JobKey: sp.Key, RequestedBy: sp.RequestedBy, TargetBaseURL: sp.TargetBaseURL, Environment: sp.Environment,
-		Fixture: sp.Fixture, ScenarioIDs: sp.ScenarioIDs, CredentialRefs: sp.Credentials,
+		Fixture: sp.Fixture, ScenarioIDs: sp.ScenarioIDs, CredentialRefs: sp.Credentials, AllowedHosts: sp.AllowedHosts,
 	})
 }
 
@@ -198,7 +199,7 @@ func (s *Service) execute(parent context.Context, job db.APIBASJob) outcome {
 	}
 	req := runnerproto.JobRequest{
 		SchemaVersion: runnerproto.SchemaVersion, JobID: job.ID, TargetBaseURL: job.TargetBaseURL,
-		Fixture: job.Fixture, ScenarioIDs: job.ScenarioIDs, CredentialsFile: credsPath,
+		Fixture: job.Fixture, ScenarioIDs: job.ScenarioIDs, AllowedHosts: hostnames(job.AllowedHosts), CredentialsFile: credsPath,
 	}
 	reqBytes, err := json.Marshal(req)
 	if err != nil {
@@ -269,6 +270,17 @@ func toReports(in []runner.Report) ([]db.APIBASJobReport, error) {
 		})
 	}
 	return out, nil
+}
+
+// hostnames strips the port from each registered host:port. The runner compares bare hostnames.
+func hostnames(hostPorts []string) []string {
+	out := make([]string, 0, len(hostPorts))
+	for _, hp := range hostPorts {
+		if u, err := url.Parse("//" + hp); err == nil && u.Hostname() != "" {
+			out = append(out, u.Hostname())
+		}
+	}
+	return out
 }
 
 // resolveCredentials reads each reference at dispatch. A failure to resolve any one of them fails the whole job, so a run never

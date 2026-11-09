@@ -71,7 +71,7 @@ func (s *Service) SubmitForTarget(ctx context.Context, r TargetRequest) (db.APIB
 	}
 	return db.CreateAPIBASJobExclusive(ctx, s.pool, db.APIBASJob{
 		JobKey: r.Key, TargetID: t.ID, RequestedBy: r.RequestedBy, TargetBaseURL: t.BaseURL, Environment: t.Environment,
-		Fixture: r.Fixture, ScenarioIDs: r.ScenarioIDs, CredentialRefs: t.CredentialRefs,
+		Fixture: r.Fixture, ScenarioIDs: r.ScenarioIDs, CredentialRefs: t.CredentialRefs, AllowedHosts: t.AllowedHosts,
 	})
 }
 

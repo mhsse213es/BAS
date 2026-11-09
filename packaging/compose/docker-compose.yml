@@ -276,6 +276,9 @@ services:
       # escape hatch if a client hits a violation. No "off" value exists.
       BAS_CSP_MODE: ${BAS_CSP_MODE:-enforce}
       ALEEF_SECRETS_FILE: /etc/bas/aleef-secrets.env
+      # API BAS assessment jobs. Empty (default) leaves the job endpoints answering 503. To enable, set
+      # BAS_APIBAS_RUNNER=/apibas-runner in .env; the encryption key under /etc/audspect/secrets must also be provisioned.
+      BAS_APIBAS_RUNNER: ${BAS_APIBAS_RUNNER:-}
       # Install-wide phishing target allowlists (orchestrator phishscope). Blank
       # means unconfigured, so PH-ID-002 and PH-ID-003 stay unavailable.
       AUDSPECT_PHISH_IDENTITY_TARGET_USERS: ${AUDSPECT_PHISH_IDENTITY_TARGET_USERS:-}

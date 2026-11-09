@@ -56,7 +56,10 @@ type apibasTargetBody struct {
 	AllowedHosts     []string          `json:"allowed_hosts"`
 	AllowedScenarios []string          `json:"allowed_scenarios"`
 	CredentialRefs   map[string]string `json:"credential_refs"`
-	Enabled          bool              `json:"enabled"`
+	// Credentials is write-only: each value is stored in the secret store and replaced by a reference. It is never returned,
+	// logged or audited.
+	Credentials map[string]string `json:"credentials"`
+	Enabled     bool              `json:"enabled"`
 }
 
 // CreateAPIBASTarget registers an assessment target. POST /api/apibas/targets
@@ -77,9 +80,33 @@ func (h *Handler) CreateAPIBASTarget(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, msg, http.StatusBadRequest)
 		return
 	}
+	refs := map[string]string{}
+	for k, v := range b.CredentialRefs {
+		refs[k] = v
+	}
+	for name := range b.Credentials {
+		if _, dup := b.CredentialRefs[name]; dup {
+			jsonError(w, "a credential name is given both as a reference and as a value", http.StatusBadRequest)
+			return
+		}
+	}
+	if len(b.Credentials) > 0 {
+		if h.secrets == nil {
+			jsonError(w, "the credential store is not available on this server", http.StatusServiceUnavailable)
+			return
+		}
+		stored, serr := h.storeTargetCredentials(r.Context(), b.ID, b.Credentials)
+		if serr != nil {
+			jsonError(w, "credentials could not be stored", http.StatusInternalServerError)
+			return
+		}
+		for name, ref := range stored {
+			refs[name] = ref
+		}
+	}
 	err := db.CreateAPIBASTarget(r.Context(), h.db, db.APIBASTarget{
 		ID: b.ID, Name: b.Name, BaseURL: b.BaseURL, Environment: b.Environment, AllowedHosts: b.AllowedHosts,
-		AllowedScenarios: b.AllowedScenarios, CredentialRefs: b.CredentialRefs, Enabled: b.Enabled, CreatedBy: actor,
+		AllowedScenarios: b.AllowedScenarios, CredentialRefs: refs, Enabled: b.Enabled, CreatedBy: actor,
 	})
 	if errors.Is(err, db.ErrAPIBASTargetExists) {
 		jsonError(w, "a target with this id is already registered", http.StatusConflict)
@@ -91,9 +118,45 @@ func (h *Handler) CreateAPIBASTarget(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = h.auditDurable(r.Context(), actor, "apibas.target.create", "apibas-target:"+b.ID, map[string]any{
 		"environment": b.Environment, "base_url": b.BaseURL, "allowed_hosts": b.AllowedHosts,
-		"allowed_scenarios": b.AllowedScenarios, "enabled": b.Enabled,
+		"allowed_scenarios": b.AllowedScenarios, "enabled": b.Enabled, "credential_names": credentialNames(refs),
 	}, "success")
 	apibasRespond(w, http.StatusCreated, map[string]any{"id": b.ID})
+}
+
+// storeTargetCredentials writes each value to the secret store under a reference derived from the target id and the sorted
+// position of the name, and returns name to reference. The reference grammar allows only letters and underscores in the column,
+// so the column is "secret_" plus a letter for the position rather than the name itself.
+func (h *Handler) storeTargetCredentials(ctx context.Context, targetID string, values map[string]string) (map[string]string, error) {
+	names := make([]string, 0, len(values))
+	for n := range values {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	out := make(map[string]string, len(names))
+	for i, n := range names {
+		if n == "" || values[n] == "" || i >= 26 {
+			return nil, errors.New("credential name or value is empty, or there are too many credentials")
+		}
+		ref, err := secretstore.MakeRef("apibas_targets", targetID, "secret_"+string(rune('a'+i)))
+		if err != nil {
+			return nil, err
+		}
+		if err := h.secrets.Put(ctx, ref, values[n]); err != nil {
+			return nil, err
+		}
+		out[n] = ref
+	}
+	return out, nil
+}
+
+// credentialNames lists the credential names of a target for audit. Names only, never references to values or the values.
+func credentialNames(refs map[string]string) []string {
+	out := make([]string, 0, len(refs))
+	for n := range refs {
+		out = append(out, n)
+	}
+	slices.Sort(out)
+	return out
 }
 
 // validateAPIBASTarget returns a reason for refusing the registration, or "".

@@ -219,6 +219,58 @@ func TestAPIBASJobSubmitFlow(t *testing.T) {
 	}
 }
 
+// Credentials given as values are stored encrypted, replaced by references, and never echoed, audited or kept in the target row.
+func TestAPIBASTargetCredentialsAreWriteOnly(t *testing.T) {
+	hh := jobsHandler(t, true)
+	store, err := secretstore.NewPGStore(sharedDB.Pool, credTestKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hh.WithSecretStore(store)
+	h := jobsRouter(hh)
+	body := targetBody("wo-target", "lab")
+	delete(body, "credential_refs")
+	body["credentials"] = map[string]string{"apibas/lab/customer-a": "VALUE-A-7731", "apibas/lab/customer-b": "VALUE-B-7731"}
+	rec := postAs(t, h, "/api/apibas/targets", body, auth.RoleAdmin, "admin1")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register: %d %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "VALUE-") {
+		t.Error("a credential value appeared in the response")
+	}
+	tgt, err := db.GetAPIBASTarget(context.Background(), sharedDB.Pool, "wo-target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tgt.CredentialRefs) != 2 {
+		t.Fatalf("refs = %v, want two references", tgt.CredentialRefs)
+	}
+	for name, ref := range tgt.CredentialRefs {
+		got, err := store.Get(context.Background(), ref)
+		if err != nil || !strings.HasPrefix(got, "VALUE-") {
+			t.Errorf("%s: store.Get(%s) = %q, %v; want the stored value", name, ref, got, err)
+		}
+	}
+	var leaked int
+	_ = sharedDB.Pool.QueryRow(context.Background(), `SELECT count(*) FROM audit_logs WHERE detail::text LIKE '%VALUE-%'`).Scan(&leaked)
+	var inRow int
+	_ = sharedDB.Pool.QueryRow(context.Background(), `SELECT count(*) FROM apibas_targets WHERE credential_refs::text LIKE '%VALUE-%'`).Scan(&inRow)
+	if leaked != 0 || inRow != 0 {
+		t.Errorf("credential values leaked: audit rows=%d target rows=%d", leaked, inRow)
+	}
+	both := targetBody("wo-both", "lab")
+	both["credentials"] = map[string]string{"apibas/lab/customer-a": "VALUE-C"}
+	if rec := postAs(t, h, "/api/apibas/targets", both, auth.RoleAdmin, "admin1"); rec.Code != http.StatusBadRequest {
+		t.Errorf("name given as both reference and value: %d, want 400", rec.Code)
+	}
+	noStore := jobsRouter(jobsHandler(t, false))
+	withVals := targetBody("wo-nostore", "lab")
+	withVals["credentials"] = map[string]string{"x": "VALUE-D"}
+	if rec := postAs(t, noStore, "/api/apibas/targets", withVals, auth.RoleAdmin, "admin1"); rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("credentials with no secret store: %d, want 503", rec.Code)
+	}
+}
+
 func TestAPIBASJobEndpointsUnavailableWithoutService(t *testing.T) {
 	h := jobsRouter(jobsHandler(t, false))
 	rec := postAs(t, h, "/api/apibas/jobs", map[string]any{"key": "k"}, auth.RoleAnalyst, "alice")
