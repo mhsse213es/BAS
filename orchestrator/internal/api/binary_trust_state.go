@@ -20,11 +20,26 @@ func (h *Handler) applyBinaryTrustState(ctx context.Context, agentID, binaryHash
 	if next == current {
 		return
 	}
-	if _, err := h.db.Exec(ctx,
+	tag, err := h.db.Exec(ctx,
 		`UPDATE agents SET state = $3 WHERE agent_id = $1 AND state = $2`,
-		agentID, current, next); err != nil {
+		agentID, current, next)
+	if err != nil {
 		log.Printf("[!] agent %s: binary trust state update failed: %v", agentID, err)
 		return
+	}
+	if tag.RowsAffected() == 0 {
+		return // an operator changed the state between the read and the update
+	}
+	// The log line below is the only other trace of a transition and rotates away. This row keeps the
+	// agent, both states and the hash that caused the change, so a quarantine can be explained later.
+	if err := h.auditDurable(ctx, "", "agent.trust_state_changed", agentID, map[string]any{
+		"from":             current,
+		"to":               next,
+		"binary_hash":      binaryHash,
+		"binary_trusted":   trusted,
+		"previous_release": previous,
+	}, "ok"); err != nil {
+		log.Printf("[!] agent %s: audit of trust state change failed: %v", agentID, err)
 	}
 	switch next {
 	case "quarantined":
