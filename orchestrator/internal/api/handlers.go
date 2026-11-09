@@ -3577,6 +3577,11 @@ func scanRunRows(rows pgx.Rows) ([]runRow, error) {
 func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 	agentID := r.URL.Query().Get("agentId")
 	scenarioID := r.URL.Query().Get("scenarioId")
+	// The factory validation lab runs content checks on its own agent every few minutes. Those runs are the
+	// product's internal quality loop, not customer assessments: left in, they flood Live Runs and skew every
+	// figure the console computes from this list (posture, coverage, reports). They stay out of the list unless the
+	// caller asks for them (includeFactory=1) or is looking at one specific agent, such as the lab agent's drawer.
+	includeFactory := r.URL.Query().Get("includeFactory") == "1" || agentID != ""
 
 	rows, err := h.db.Query(r.Context(),
 		`SELECT id, scenario_id, agent_id, sweep_id, em_sweep_id, name, status, results, score, initiated_by, started_at, completed_at,
@@ -3585,8 +3590,9 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 		 FROM scenario_runs
 		 WHERE ($1 = '' OR agent_id = $1)
 		   AND ($2 = '' OR scenario_id = $2)
+		   AND ($3 OR execution_kind <> 'factory_validation')
 		 ORDER BY started_at DESC LIMIT 100`,
-		agentID, scenarioID,
+		agentID, scenarioID, includeFactory,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
