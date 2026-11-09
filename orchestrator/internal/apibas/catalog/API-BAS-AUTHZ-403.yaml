@@ -1,0 +1,56 @@
+id: "API-BAS-AUTHZ-403"
+name: "TEL-001: subscriber requests a SIM swap on another subscriber's line"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "Subscriber A requests a SIM replacement on subscriber B's line. The swap is recorded in the lab; nothing is provisioned."
+threat_model:
+  attacker: "authenticated subscriber A"
+  identity: subscriber-a
+  access_level: "subscriber, valid token, owns SIM-A-001 only"
+  objective: "Subscriber A requests a SIM replacement on subscriber B's line. The swap is recorded in the lab; nothing is provisioned."
+preconditions:
+  fixture: commerce-telecom-two-tenant
+  identities: [subscriber-a, subscriber-b]
+  object: SIM-B-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: subscriber-b
+    auth: valid
+    method: GET
+    path: "/api/telecom/subscribers/SUBR-B-001"
+    hypothesis: "Subscriber B reads their own subscriber record. If this fails, the scenario is not testable."
+  - id: "attack-authz-403"
+    role: attack
+    identity: subscriber-a
+    auth: valid
+    method: POST
+    path: "/api/telecom/sims/SIM-B-001/swap"
+    body: '{}'
+    hypothesis: "Subscriber A's swap request on SIM-B-001 is refused, and the SIM status is unchanged."
+denied_statuses: [404]
+expected_control: "Only the line's owner can request a SIM swap. Another subscriber's request is refused and the SIM is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows SIM-B-001 unchanged after subscriber A's swap request.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The swap names SIM-B-001, owned by subscriber B, from subscriber A. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "Telecom: SIM, account and subscription workflow abuse (SIM swap; simulated)"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-403 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-403 against the vulnerable build must FAIL (exploited)"

@@ -457,6 +457,8 @@ func collectionKind(path string) string {
 		return "asset"
 	case strings.HasSuffix(path, "/health/export"):
 		return "patient_record"
+	case strings.HasSuffix(path, "/telecom/usage"):
+		return "usage"
 	}
 	return ""
 }

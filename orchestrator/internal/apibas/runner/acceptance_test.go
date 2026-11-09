@@ -57,6 +57,15 @@ func newEnvWith(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string
 	// NBFC pack identities (fixture.NBFCTwoBorrower). Each caller ID is the identity name.
 	tokBorrowerA, tokBorrowerB, tokOfficer, tokNBFCAdmin := randomToken(t), randomToken(t), randomToken(t), randomToken(t)
 	revokedA := randomToken(t) // issued to customer-a, then revoked in the lab
+	// Retail, logistics and telecom pack identities (fixture.CommerceTelecomTwoTenant). Each caller ID is the identity name.
+	comTok_shopper_a := randomToken(t)
+	comTok_shopper_b := randomToken(t)
+	comTok_subscriber_a := randomToken(t)
+	comTok_subscriber_b := randomToken(t)
+	comTok_partner_1 := randomToken(t)
+	comTok_partner_2 := randomToken(t)
+	comTok_carrier_1 := randomToken(t)
+	comTok_agent_1 := randomToken(t)
 	// Healthcare pack identities (fixture.HealthcareTwoPatient). Each caller ID is the identity name.
 	hcTok_patient_a := randomToken(t)
 	hcTok_patient_b := randomToken(t)
@@ -83,6 +92,7 @@ func newEnvWith(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string
 			tokBorrowerA: "borrower-a", tokBorrowerB: "borrower-b", tokOfficer: "loan-officer", tokNBFCAdmin: "nbfc-admin",
 			mfgTok_planner_a: "planner-a", mfgTok_operator_a: "operator-a", mfgTok_planner_b: "planner-b", mfgTok_operator_b: "operator-b", mfgTok_supplier_1: "supplier-1", mfgTok_supplier_2: "supplier-2", mfgTok_device_a: "device-a", mfgTok_device_b: "device-b", mfgTok_ot_engineer: "ot-engineer",
 			hcTok_patient_a: "patient-a", hcTok_patient_b: "patient-b", hcTok_clinician_a: "clinician-a", hcTok_clinician_b: "clinician-b", hcTok_delegate_a: "delegate-a", hcTok_bedside_device_a: "bedside-device-a", hcTok_bedside_device_b: "bedside-device-b",
+			comTok_shopper_a: "shopper-a", comTok_shopper_b: "shopper-b", comTok_subscriber_a: "subscriber-a", comTok_subscriber_b: "subscriber-b", comTok_partner_1: "partner-1", comTok_partner_2: "partner-2", comTok_carrier_1: "carrier-1", comTok_agent_1: "agent-1",
 		},
 		Revoked:        []string{revokedA},
 		AdminToken:     adminTok,
@@ -111,22 +121,30 @@ func newEnvWith(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string
 		"apibas/lab/borrower-b":         tokBorrowerB,
 		"apibas/lab/loan-officer":       tokOfficer,
 		"apibas/lab/nbfc-admin":         tokNBFCAdmin,
-		"apibas/lab/planner-a": mfgTok_planner_a,
-		"apibas/lab/operator-a": mfgTok_operator_a,
-		"apibas/lab/planner-b": mfgTok_planner_b,
-		"apibas/lab/operator-b": mfgTok_operator_b,
-		"apibas/lab/supplier-1": mfgTok_supplier_1,
-		"apibas/lab/supplier-2": mfgTok_supplier_2,
-		"apibas/lab/device-a": mfgTok_device_a,
-		"apibas/lab/device-b": mfgTok_device_b,
-		"apibas/lab/ot-engineer": mfgTok_ot_engineer,
-		"apibas/lab/patient-a": hcTok_patient_a,
-		"apibas/lab/patient-b": hcTok_patient_b,
-		"apibas/lab/clinician-a": hcTok_clinician_a,
-		"apibas/lab/clinician-b": hcTok_clinician_b,
-		"apibas/lab/delegate-a": hcTok_delegate_a,
-		"apibas/lab/bedside-device-a": hcTok_bedside_device_a,
-		"apibas/lab/bedside-device-b": hcTok_bedside_device_b,
+		"apibas/lab/planner-a":          mfgTok_planner_a,
+		"apibas/lab/operator-a":         mfgTok_operator_a,
+		"apibas/lab/planner-b":          mfgTok_planner_b,
+		"apibas/lab/operator-b":         mfgTok_operator_b,
+		"apibas/lab/supplier-1":         mfgTok_supplier_1,
+		"apibas/lab/supplier-2":         mfgTok_supplier_2,
+		"apibas/lab/device-a":           mfgTok_device_a,
+		"apibas/lab/device-b":           mfgTok_device_b,
+		"apibas/lab/ot-engineer":        mfgTok_ot_engineer,
+		"apibas/lab/patient-a":          hcTok_patient_a,
+		"apibas/lab/patient-b":          hcTok_patient_b,
+		"apibas/lab/clinician-a":        hcTok_clinician_a,
+		"apibas/lab/clinician-b":        hcTok_clinician_b,
+		"apibas/lab/delegate-a":         hcTok_delegate_a,
+		"apibas/lab/bedside-device-a":   hcTok_bedside_device_a,
+		"apibas/lab/bedside-device-b":   hcTok_bedside_device_b,
+		"apibas/lab/shopper-a":          comTok_shopper_a,
+		"apibas/lab/shopper-b":          comTok_shopper_b,
+		"apibas/lab/subscriber-a":       comTok_subscriber_a,
+		"apibas/lab/subscriber-b":       comTok_subscriber_b,
+		"apibas/lab/partner-1":          comTok_partner_1,
+		"apibas/lab/partner-2":          comTok_partner_2,
+		"apibas/lab/carrier-1":          comTok_carrier_1,
+		"apibas/lab/agent-1":            comTok_agent_1,
 	}
 	return &env{
 		url: srv.URL, apiHits: hits, srv: srv, admin: admin, secrets: secrets, fx: fx,

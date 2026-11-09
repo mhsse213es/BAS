@@ -99,12 +99,13 @@ func main() {
 // fixtures lists every fixture the lab and runner both understand.
 func fixtures() map[string]fixture.Fixture {
 	return map[string]fixture.Fixture{
-		"orders-two-tenant":       fixture.OrdersTwoTenant(),
-		"orders-no-protected":     fixture.OrdersNoProtected(),
-		"orders-paged":            fixture.OrdersPaged(),
-		"nbfc-two-borrower":       fixture.NBFCTwoBorrower(),
-		"manufacturing-two-plant": fixture.ManufacturingTwoPlant(),
-		"healthcare-two-patient":  fixture.HealthcareTwoPatient(),
+		"orders-two-tenant":           fixture.OrdersTwoTenant(),
+		"orders-no-protected":         fixture.OrdersNoProtected(),
+		"orders-paged":                fixture.OrdersPaged(),
+		"nbfc-two-borrower":           fixture.NBFCTwoBorrower(),
+		"manufacturing-two-plant":     fixture.ManufacturingTwoPlant(),
+		"healthcare-two-patient":      fixture.HealthcareTwoPatient(),
+		"commerce-telecom-two-tenant": fixture.CommerceTelecomTwoTenant(),
 	}
 }
 
@@ -138,6 +139,14 @@ func configFromEnv(mode lab.Mode, fx fixture.Fixture) (lab.Config, error) {
 		"APIBAS_HC_DELEGATE_A_TOKEN":       "delegate-a",
 		"APIBAS_HC_BEDSIDE_DEVICE_A_TOKEN": "bedside-device-a",
 		"APIBAS_HC_BEDSIDE_DEVICE_B_TOKEN": "bedside-device-b",
+		"APIBAS_COM_SHOPPER_A_TOKEN":       "shopper-a",
+		"APIBAS_COM_SHOPPER_B_TOKEN":       "shopper-b",
+		"APIBAS_COM_SUBSCRIBER_A_TOKEN":    "subscriber-a",
+		"APIBAS_COM_SUBSCRIBER_B_TOKEN":    "subscriber-b",
+		"APIBAS_COM_PARTNER_1_TOKEN":       "partner-1",
+		"APIBAS_COM_PARTNER_2_TOKEN":       "partner-2",
+		"APIBAS_COM_CARRIER_1_TOKEN":       "carrier-1",
+		"APIBAS_COM_AGENT_1_TOKEN":         "agent-1",
 	} {
 		if v := os.Getenv(env); v != "" {
 			tokens[v] = caller

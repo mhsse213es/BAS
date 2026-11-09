@@ -3827,3 +3827,19 @@ Walk of 5 approvals 2 per page: every approval exactly once, newest first, 3 pag
 - **Manufacturing: no mapping.** The registry holds no applicable source. DPDP does not fit production orders, BOMs or device commands. An industrial-security standard or sector regulation (for example IEC 62443) would have to be obtained, committed with its hash and reviewed first; nothing was invented.
 - **Test change:** the registry load test named DPDP s12(3) as the one mapping allowed to stay unverified. It now states the rule: any mapping with commencement not verified must stay unverified, and every other mapping still needs a reviewer and matching hash. No reviewer was faked.
 - Registry, contract and coverage tests pass. A mapping is a candidate, never a compliance finding.
+
+## API BAS retail, logistics and telecom pack (9 November 2026)
+
+### Built
+- Fixture `commerce-telecom-two-tenant`: two shoppers (order + shipment), two subscribers (subscriber record, SIM, usage), two partners (API key), a carrier and a support agent. Protected values tagged BAS-SIM.
+- Lab routes `/api/retail/...` and `/api/telecom/...` in `lab/commerce.go`, vulnerable and fixed builds, on the shared pack store. A SIM swap and a key-scope change are recorded as status changes in the lab; nothing is provisioned.
+- Nine scenarios, chosen to add coverage rather than repeat the generic BIZ and INTEG scenarios (refund, coupon, stock, partner quote and webhook replay already exist): AUTHZ-401 shipment read, AUTHZ-402 shipment redirect, AUTHZ-403 SIM swap, DATA-401 usage list, DATA-402 subscriber record, BIZ-401 order price set by the owner (property-level), INTEG-401 partner key read, INTEG-402 key scope escalation (property-level), INTEG-403 carrier callback by a non-carrier (function-level).
+
+### Results
+- All nine: vulnerable build FAIL (exploited), fixed build PASS (control enforced).
+- Measured: catalogue 145, lab-validated 142 of 145 (97.9%). All 105 declared detection expectations match the detector (0 mismatches); vulnerable detected 85, fixed detected 70; 38 of 145 scenarios without detection.
+
+### Limits
+- Detection: six scenarios use REL-004. BIZ-401, INTEG-402 and INTEG-403 act on the caller's own object, so REL-004 cannot fire; they are `not_evaluated` with that reason. New rules (price change by a non-staff identity, key-scope change by a non-staff identity, delivery report by a non-carrier) would be needed.
+- No regulatory mapping (subscriber and shipment data are personal data, but regulatory verification is deferred by decision).
+- Pack records still use the NBFC store type name. Not run on staging or against a real carrier, OSS/BSS or partner portal.

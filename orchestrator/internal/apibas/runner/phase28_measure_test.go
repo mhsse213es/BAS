@@ -29,6 +29,8 @@ func fixtureFor(t *testing.T, name string) fixture.Fixture {
 		return fixture.ManufacturingTwoPlant()
 	case "healthcare-two-patient":
 		return fixture.HealthcareTwoPatient()
+	case "commerce-telecom-two-tenant":
+		return fixture.CommerceTelecomTwoTenant()
 	}
 	t.Fatalf("unknown fixture %q", name)
 	return fixture.Fixture{}
