@@ -1,0 +1,136 @@
+openapi: 3.0.3
+info:
+  title: Shop API
+  version: "2.1"
+servers:
+  - url: https://api.example.test
+security:
+  - bearerAuth: []
+paths:
+  /v1/orders/{orderId}:
+    get:
+      operationId: getOrderV1
+      deprecated: true
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200": { description: ok }
+  /v2/orders/{orderId}:
+    parameters:
+      - $ref: "#/components/parameters/OrderId"
+    get:
+      operationId: getOrder
+      tags: [orders]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+    patch:
+      operationId: patchOrder
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount: { type: number }
+                note: { type: string }
+      responses:
+        "200": { description: ok }
+  /v2/orders/{orderId}/approve:
+    post:
+      operationId: approveOrder
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200": { description: ok }
+  /v2/orders:
+    get:
+      operationId: listOrders
+      parameters:
+        - { name: limit, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: ok }
+  /v2/admin/users:
+    post:
+      operationId: createUser
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                role: { type: string, example: "hunter2-super-secret-example" }
+      responses:
+        "201": { description: created }
+  /v2/webhooks:
+    post:
+      operationId: registerWebhook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                callback_url: { type: string }
+      responses:
+        "201": { description: created }
+  /v2/files:
+    post:
+      operationId: upload
+      requestBody:
+        content:
+          multipart/form-data:
+            schema: { type: object, properties: { file: { type: string, format: binary } } }
+      responses:
+        "201": { description: created }
+  /v2/catalog:
+    get:
+      operationId: catalog
+      security: []
+      responses:
+        "200": { description: ok }
+  /healthz:
+    get:
+      security: []
+      responses:
+        "200": { description: ok }
+  /v2/maybe:
+    get:
+      security:
+        - {}
+        - bearerAuth: []
+      responses:
+        "200": { description: ok }
+components:
+  parameters:
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    Order:
+      type: object
+      properties:
+        id: { type: string }
+        total: { type: number }
+        customer:
+          type: object
+          properties:
+            email: { type: string }
+            national_id: { type: string }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Item"
+    Item:
+      type: object
+      properties:
+        sku: { type: string }
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
