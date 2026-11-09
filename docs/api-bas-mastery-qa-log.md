@@ -3700,3 +3700,19 @@ Decisions approved by the product owner:
 - Submission does not pre-check scenarios against the target's paths; a mismatch is reported when the job runs (job `failed`, reason names the step, no reports).
 - Existing staging or production targets registered before this change have no paths and would be refused only at registration of new ones; none exist outside tests. No migration needed beyond the added columns (`apibas_targets.allowed_paths`, `apibas_jobs.allowed_paths`, created at startup).
 - Not run on staging (see the staging runbook).
+
+## API BAS production approval endpoints (9 November 2026)
+
+### What changed
+- `POST /api/apibas/approvals` (permission: run API BAS): records a request to approve one exact production configuration (target, fixture, scenario set). The server loads the target, refuses non-production targets (400), unknown targets (404) and scenarios outside the target's allow-list (403), and computes the binding hash itself from the target's registered hosts and paths, so the requester cannot choose what is bound.
+- `POST /api/apibas/approvals/{id}/approve` (permission: approve production, Admin only): records the approver. Refused with 403 when the approver is the requester, 409 when already approved, 404 when unknown. Refusals are audited (`apibas.approval.refused`). The SQL update also enforces both rules, so a race cannot approve twice or let the requester approve.
+- `GET /api/apibas/approvals/{id}`: status (pending or approved), requester, approver, times, and `executable:false`.
+- Audit actions: `apibas.approval.request`, `apibas.approval.approve`, `apibas.approval.refused`. RBAC matrix updated; the matrix tests pass.
+
+### Tests
+Full flow in `TestAPIBASApprovalFlow`: staging target refused, unknown target, out-of-scope scenario, analyst can request but not approve (RBAC), admin cannot approve own request, a different admin approves, a third gets 409, unknown id 404, GET shows approved with the approver and `executable:false`, audit rows present.
+
+### Not done (stated)
+- Production execution remains refused by the job service (unchanged by decision for the first release). An approved record does not make anything run; `jobs.CheckApproval` is still not called by any execution path.
+- Approvals do not expire and cannot be revoked or listed. Before production execution is enabled they need an expiry, single-use consumption and a revoke endpoint.
+- Not run on staging.

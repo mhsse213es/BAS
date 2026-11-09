@@ -23,6 +23,9 @@ func jobsRouter(h *Handler) http.Handler {
 	r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/jobs", h.SubmitAPIBASJob)
 	r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/jobs/{id}", h.GetAPIBASJob)
 	r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/jobs/{id}/cancel", h.CancelAPIBASJob)
+	r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/approvals", h.RequestAPIBASApproval)
+	r.With(auth.RequirePermission(auth.CanApproveAPIBASProduction)).Post("/api/apibas/approvals/{id}/approve", h.ApproveAPIBASApproval)
+	r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/approvals/{id}", h.GetAPIBASApproval)
 	return r
 }
 
