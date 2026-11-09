@@ -139,6 +139,7 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		RawOutput:            truncate(combined, outputLimit),
 		Truncated:            truncated,
 		OriginalOutputBytes:  len(combined),
+		ExecutionFailure:     assessExecutionFailure(checkResult, result, details),
 		DurationMs:           result.DurationMs,
 		ExecutedAt:           execAt,
 		ExecutedAtSource:     execSource,

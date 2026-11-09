@@ -273,6 +273,24 @@ function renderEvidencePanel(c) {
   tlHtml += '</div>';
   html += section('Detection Timeline', null, tlHtml);
 
+  // ── 4b. Execution assessment (only for a step that did not run to a result) ──
+  if (c.executionFailure) {
+    var ef = c.executionFailure;
+    var efStatus = { not_executed: 'Not executed', timed_out: 'Timed out', execution_error: 'Execution error', cancelled: 'Cancelled' }[ef.executionStatus] || 'Not executed';
+    var efHtml = kv('Execution status', x(efStatus))
+      + kv('Security verdict', 'Not assessed')
+      + kv('Why', x(ef.reason || ''))
+      + kv('Evidence confidence', 'None')
+      + kv('What to do', x(ef.remediation || ''))
+      + '<details style="margin-top:0.4rem"><summary style="cursor:pointer;font-size:0.7rem;color:var(--muted)">Technical diagnostics</summary>'
+      + kv('Category', x((ef.category || '').replace(/_/g, ' ')))
+      + kv('Failure stage', x((ef.stage || '').replace(/_/g, ' ')))
+      + kv('Owner', ef.owner === 'audspect' ? 'Audspect (content or agent)' : 'Endpoint environment')
+      + (ef.rawError ? kv('Raw error', '<code style="font-size:0.68rem;word-break:break-word">' + x(ef.rawError) + '</code>') : '')
+      + '</details>';
+    html += section('Execution assessment', 'Not counted in the score', efHtml);
+  }
+
   // ── 5. Cleanup (only if cleanup verdict exists) ──
   if (c.cleanupVerdict) {
     var cv   = c.cleanupVerdict;

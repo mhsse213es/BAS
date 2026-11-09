@@ -75,6 +75,8 @@ type SimulationResult struct {
 	// of silent -- a parser (e.g. Application Risk's installed-software
 	// parser) can detect incomplete evidence rather than unknowingly working
 	// with a partial list.
+	// ExecutionFailure explains an ERROR result in normalised form (see execution_failure.go). Details keeps the raw text.
+	ExecutionFailure *ExecutionFailure `json:"executionFailure,omitempty"`
 	Truncated           bool      `json:"truncated,omitempty"`
 	OriginalOutputBytes int       `json:"originalOutputBytes,omitempty"`
 	DurationMs          int64     `json:"durationMs"`
