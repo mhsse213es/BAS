@@ -24,6 +24,7 @@ import { loadIntegrations, loadResponseConnectors, renderResponseConnectorList }
 import { loadIOCRegistry } from './iocs.js';
 import { loadExercisesTab } from './openaev.js';
 import { loadFactoryHealth } from './factory-health.js';
+import { loadApiInventory } from './api-inventory.js';
 import { loadReports, loadRuns } from './reports.js';
 import { loadScheduledAssessments } from './scheduled.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
@@ -63,7 +64,7 @@ export function toggleSidebarCollapsed() {
   try { localStorage.setItem('bas_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
   document.getElementById('sidebar-collapse-btn').title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
 }
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'k8s-scenarios':'Kubernetes Scenarios', 'cloud-scenarios':'Cloud Scenarios', aleef:'Aleef API discovery', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variants', em:'Endpoint Mastery', 'ad-coverage':'AD Coverage', email:'Email', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance', 'factory-health':'Factory Health', attackpath:'Attack Paths', integrations:'Integrations' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', 'api-inventory':'API Inventory', runs:'Live Runs', 'k8s-scenarios':'Kubernetes Scenarios', 'cloud-scenarios':'Cloud Scenarios', aleef:'Aleef API discovery', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variants', em:'Endpoint Mastery', 'ad-coverage':'AD Coverage', email:'Email', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance', 'factory-health':'Factory Health', attackpath:'Attack Paths', integrations:'Integrations' };
 export var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -514,7 +515,7 @@ export function doLogoutFromMenu() { closeUserMenu(); doLogout(); }
 export function activateTab(name) {
   var appEl = document.getElementById('app');
   if (appEl) appEl.classList.remove('sidebar-open');
-  ['dashboard','agents','scenarios','runs','k8s-scenarios','cloud-scenarios','aleef','scheduled-assessments','initiatives','campaigns','factory-health','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','ad-coverage','email','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','k8s-scenarios','cloud-scenarios','aleef','scheduled-assessments','initiatives','campaigns','factory-health','api-inventory','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','ad-coverage','email','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) setDisplay(el, t === name ? '' : 'none');
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -653,6 +654,7 @@ export function showTab(name) {
   if (name === 'recommendations') loadRecommendations();
   if (name === 'exercises') loadExercisesTab();
   if (name === 'factory-health') loadFactoryHealth();
+  if (name === 'api-inventory') loadApiInventory();
   if (name === 'variants') loadVariantTab();
   if (name === 'em') loadEmTab();
   if (name === 'ad-coverage') loadADCoverage();

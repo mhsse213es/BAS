@@ -1514,3 +1514,15 @@ body.theme-light {
 .cloud-notes ul { padding-left: 20px; }
 .cloud-note-code { white-space: pre-wrap; word-break: break-word; font-size: 12px; padding: 10px; border-radius: 6px; border: 1px solid var(--border, #d0d7de); overflow-x: auto; }
 .cloud-notes-title { display: inline; }
+
+/* api-inventory */
+.ai-sub { font-size: 12px; color: var(--muted); }
+.ai-mono { font-family: var(--font-mono); font-size: 12px; word-break: break-all; }
+.ai-note { color: var(--muted); font-size: 13px; margin: 8px 0; }
+.ai-ok { color: var(--success); font-size: 13px; margin: 8px 0; }
+.ai-err { color: var(--danger-text); font-size: 13px; margin: 8px 0; }
+.ai-h { margin: 14px 0 6px; font-size: 13px; }
+.ai-list { padding-left: 20px; margin: 6px 0; font-size: 13px; }
+.ai-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+.ai-text { width: 100%; box-sizing: border-box; font-family: var(--font-mono); font-size: 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; resize: vertical; }
+tr.ai-sel { background: var(--accent-dim); }

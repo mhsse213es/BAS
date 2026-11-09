@@ -405,6 +405,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/apibas/runs", tierPermission, auth.CanViewAPIBASRuns},
 	{http.MethodGet, "/api/apibas/runs/{id}", tierPermission, auth.CanViewAPIBASRuns},
 	{http.MethodPost, "/api/apibas/targets", tierPermission, auth.CanManageAPIBASTargets},
+	{http.MethodGet, "/api/apibas/targets", tierPermission, auth.CanViewAPIBASRuns},
 	{http.MethodPost, "/api/apibas/jobs", tierPermission, auth.CanRunAPIBAS},
 	{http.MethodGet, "/api/apibas/jobs/{id}", tierPermission, auth.CanViewAPIBASRuns},
 	{http.MethodPost, "/api/apibas/jobs/{id}/cancel", tierPermission, auth.CanRunAPIBAS},

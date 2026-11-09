@@ -1,0 +1,246 @@
+// API Inventory: a target's imported OpenAPI inventory, its versions and changes, drift against observed routes, and a preview of
+// how it would bind to test data. Everything shown comes from /api/apibas/targets/... and is escaped on the way into markup. The
+// page never takes or shows a credential value, and nothing here applies the suggested scope or starts a job.
+import { apicall } from '../core/api.js';
+import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
+import { fmtDate, showToast } from '../core/util.js';
+import { card, pill, chip, seg, empty, kv } from '../core/kit.js';
+import { setHeroStat } from './shell-ui.js';
+import * as M from './api-inventory-model.js';
+
+var S = { targets: [], sel: '', inv: null, cls: 'all', version: 0, versions: [] };
+var MAX_ROWS = 500;
+
+function el(id) { return document.getElementById(id); }
+function base() { return '/api/apibas/targets/' + encodeURIComponent(S.sel); }
+function btn(label, action, args, kind) {
+  return '<button type="button" class="btn ' + (kind || 'btn-outline') + '"' + on.apply(null, ['click', action].concat(args || [])) + '>' + x(label) + '</button>';
+}
+
+export function loadApiInventory() {
+  return apicall('/api/apibas/targets').then(function(r) {
+    var host = el('api-inv-targets');
+    if (!host) return false;
+    var err = M.errorText(r);
+    if (err || !r || !Array.isArray(r.targets)) {
+      host.innerHTML = card('Targets', empty('warn', 'Targets could not be loaded', err || 'The server returned an unexpected answer.'));
+      return false;
+    }
+    S.targets = r.targets;
+    renderTargets();
+    setHeroStat('ai-hs-targets', S.targets.length);
+    setHeroStat('ai-hs-inventories', S.targets.filter(function(t) { return t.inventory; }).length);
+    if (S.sel && S.targets.some(function(t) { return t.id === S.sel; })) return loadDetail(S.version);
+    S.sel = '';
+    renderDetail();
+    return true;
+  }).catch(function(e) {
+    showToast('Could not reach the server: ' + (e && e.message ? e.message : 'request failed'), 'err');
+    return false;
+  });
+}
+
+export function apiInvRefresh() {
+  showToast('Refreshing…', 'ok');
+  loadApiInventory();
+}
+
+function renderTargets() {
+  var host = el('api-inv-targets');
+  if (!host) return;
+  if (!S.targets.length) {
+    host.innerHTML = card('Targets', empty('box', 'No API BAS targets are registered', 'A target is registered through POST /api/apibas/targets.'));
+    return;
+  }
+  var rows = S.targets.map(function(t) {
+    var inv = t.inventory;
+    return '<tr' + (t.id === S.sel ? ' class="ai-sel"' : '') + '>' +
+      '<td><b>' + x(t.name) + '</b><div class="ai-sub">' + x(t.id) + '</div></td>' +
+      '<td>' + pill(t.environment, M.envTone(t.environment)) + (t.enabled ? '' : ' ' + chip('disabled', 'muted')) + '</td>' +
+      '<td class="ai-mono">' + x(t.base_url) + '</td>' +
+      '<td>' + (inv ? 'v' + x(inv.version) + ' · ' + x(inv.operations) + ' operations<div class="ai-sub">' + x(fmtDate(inv.imported_at)) + '</div>' : '<span class="ai-sub">None yet</span>') + '</td>' +
+      '<td>' + btn('Open', 'apiInvSelect', [t.id]) + '</td></tr>';
+  }).join('');
+  host.innerHTML = card('Targets', '<div class="tbl-wrap"><table><thead><tr><th>Target</th><th>Environment</th><th>Base URL</th><th>Inventory</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>',
+    { sub: S.targets.length + ' registered' });
+}
+
+export function apiInvSelect(id) {
+  S.sel = id; S.cls = 'all'; S.version = 0; S.inv = null; S.versions = [];
+  renderTargets();
+  loadDetail(0);
+}
+
+function loadDetail(version) {
+  if (!S.sel) { renderDetail(); return Promise.resolve(true); }
+  S.version = version || 0;
+  var q = S.version ? '?version=' + encodeURIComponent(S.version) : '';
+  return Promise.all([apicall(base() + '/inventory' + q), apicall(base() + '/inventory/versions')]).then(function(res) {
+    var inv = res[0], vers = res[1];
+    S.inv = (inv && !M.errorText(inv) && inv.listed_operations) ? inv : null;
+    S.versions = (vers && Array.isArray(vers.versions)) ? vers.versions : [];
+    renderDetail();
+    return true;
+  }).catch(function(e) {
+    showToast('Could not load the inventory: ' + (e && e.message ? e.message : 'request failed'), 'err');
+    return false;
+  });
+}
+
+function renderDetail() {
+  var host = el('api-inv-detail');
+  if (!host) return;
+  if (!S.sel) { host.innerHTML = card('', empty('radar', 'Select a target', 'Open a target to import its OpenAPI document and see its inventory.')); return; }
+  var t = S.targets.filter(function(a) { return a.id === S.sel; })[0];
+  var html = card(t ? t.name : S.sel, importBody(), { sub: 'Import an OpenAPI 3 document' });
+  if (!S.inv) {
+    html += card('Inventory', empty('file', 'No inventory yet', 'Import this target\'s OpenAPI document above. The document itself is not stored, only its parsed shape.'));
+    host.innerHTML = html;
+    return;
+  }
+  html += card('Inventory', inventoryMeta() + '<div id="api-inv-ops">' + opsBody() + '</div>', { sub: 'Candidate test classes, not findings' });
+  html += card('Versions', versionsBody(), { sub: S.versions.length + ' kept' });
+  html += card('Drift against observed routes', driftBody(), { sub: 'Compares routes you list with this inventory; nothing is requested from the target' });
+  html += card('Binding preview', bindingBody(), { sub: 'Which scenarios would be generated; nothing is stored or run' });
+  host.innerHTML = html;
+}
+
+function importBody() {
+  return '<p class="ai-note">Paste the document (JSON or YAML, up to 8 MiB) or choose a file. Importing needs permission to manage targets. Examples in the document are never stored.</p>' +
+    '<textarea id="api-inv-spec" class="ai-text" rows="8" spellcheck="false" aria-label="OpenAPI document"></textarea>' +
+    '<div class="ai-row"><input type="file" id="api-inv-file" accept=".json,.yaml,.yml,application/json,text/yaml"' + on('change', 'apiInvLoadFile') + '>' +
+    btn('Import', 'apiInvImport', [], 'btn-primary') + '</div><div id="api-inv-import-result"></div>';
+}
+
+function inventoryMeta() {
+  var i = S.inv;
+  var rows = [['Version', 'v' + i.version + (S.version ? '' : ' (newest)')], ['API', (i.title || '—') + ' ' + (i.api_version || '')], ['OpenAPI', i.openapi_version],
+    ['Imported', fmtDate(i.imported_at) + ' by ' + i.imported_by], ['Source SHA-256', String(i.source_sha256 || '').slice(0, 16) + '…'], ['Operations', i.operations]];
+  var scope = Array.isArray(i.suggested_scope) && i.suggested_scope.length
+    ? '<p class="ai-note">Suggested allowed path prefixes (advice only, not applied to the target): <span class="ai-mono">' + i.suggested_scope.map(x).join(' ') + '</span></p>' : '';
+  var warn = Array.isArray(i.warnings) && i.warnings.length ? '<p class="ai-note">Warnings: ' + i.warnings.map(x).join('; ') + '</p>' : '';
+  return kv(rows) + scope + warn;
+}
+
+function opsBody() {
+  var i = S.inv;
+  var ops = M.filterOps(i.listed_operations, S.cls);
+  var filter = seg(M.classOptions(i.listed_operations, i.classes), S.cls, 'apiInvFilter');
+  var shown = ops.slice(0, MAX_ROWS);
+  var rows = shown.map(function(o) {
+    return '<tr><td>' + chip(o.method, 'info') + '</td><td class="ai-mono">' + x(o.path) + '</td>' +
+      '<td>' + pill(M.authLabel(o.auth), M.authTone(o.auth)) + (o.deprecated ? ' ' + chip('deprecated', 'warn') : '') + '</td>' +
+      '<td>' + (o.classes || []).map(function(c) { return chip(M.classLabel(c), 'accent'); }).join(' ') + '</td></tr>';
+  }).join('');
+  return filter + '<div class="tbl-wrap"><table><thead><tr><th>Method</th><th>Path</th><th>Authentication</th><th>Candidate classes</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    (ops.length > MAX_ROWS ? '<p class="ai-note">Showing the first ' + MAX_ROWS + ' of ' + ops.length + ' operations. Use a class filter to narrow the list.</p>' : '');
+}
+
+export function apiInvFilter(cls) {
+  S.cls = cls;
+  var host = el('api-inv-ops');
+  if (host) host.innerHTML = opsBody();
+}
+
+function versionsBody() {
+  if (!S.versions.length) return empty('file', 'No versions');
+  var rows = S.versions.map(function(v) {
+    return '<tr><td>v' + x(v.version) + '</td><td>' + x(v.operations) + ' operations</td><td>' + x(fmtDate(v.imported_at)) + ' by ' + x(v.imported_by) + '</td>' +
+      '<td>' + (v.version === S.inv.version ? chip('viewing', 'ok') : btn('View', 'apiInvVersion', [v.version])) + '</td></tr>';
+  }).join('');
+  return '<div class="tbl-wrap"><table><thead><tr><th>Version</th><th>Size</th><th>Imported</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+export function apiInvVersion(n) { loadDetail(n); }
+
+function driftBody() {
+  return '<p class="ai-note">One route per line, for example <span class="ai-mono">GET /v2/orders</span>, taken from a gateway log or route table. Lines starting with # are ignored.</p>' +
+    '<textarea id="api-inv-observed" class="ai-text" rows="6" spellcheck="false" aria-label="Observed routes"></textarea>' +
+    '<div class="ai-row">' + btn('Compare', 'apiInvDrift', [], 'btn-primary') + '</div><div id="api-inv-drift-result"></div>';
+}
+
+function bindingBody() {
+  return '<p class="ai-note">Test data as JSON: identities (a name and the <b>name</b> of a credential, never its value) and objects each identity owns. Only read-only object-level operations are bound.</p>' +
+    '<textarea id="api-inv-binding" class="ai-text" rows="12" spellcheck="false" aria-label="Binding test data"></textarea>' +
+    '<div class="ai-row">' + btn('Fill an example', 'apiInvExample') + btn('Preview binding', 'apiInvPlanBinding', [], 'btn-primary') + '</div><div id="api-inv-binding-result"></div>';
+}
+
+export function apiInvLoadFile(inputEl) {
+  var f = inputEl && inputEl.files && inputEl.files[0];
+  if (!f) return;
+  if (f.size > M.MAX_SPEC_BYTES) { showToast('That file is larger than 8 MiB.', 'err'); return; }
+  var rd = new FileReader();
+  rd.onload = function() { var t = el('api-inv-spec'); if (t) t.value = String(rd.result || ''); };
+  rd.onerror = function() { showToast('The file could not be read.', 'err'); };
+  rd.readAsText(f);
+}
+
+export function apiInvImport() {
+  var t = el('api-inv-spec');
+  var text = t ? t.value : '';
+  if (!text.trim()) { showToast('Paste or choose an OpenAPI document first.', 'err'); return; }
+  var out = el('api-inv-import-result');
+  if (out) out.innerHTML = '<p class="ai-note">Importing…</p>';
+  apicall(base() + '/inventory', { method: 'POST', body: text, headers: { 'Content-Type': 'text/plain' } }).then(function(r) {
+    var err = M.errorText(r);
+    if (err) { if (out) out.innerHTML = '<p class="ai-err">' + x(err) + '</p>'; return; }
+    var lines = M.changeLines(r.changes);
+    var html;
+    if (r.unchanged) {
+      html = '<p class="ai-ok">This document is identical to version ' + x(r.version) + '. Nothing was stored.</p>';
+    } else {
+      html = '<p class="ai-ok">Stored as version ' + x(r.version) + ' with ' + x(r.operations) + ' operations.</p>' +
+        (lines.length ? '<ul class="ai-list">' + lines.map(function(l) { return '<li>' + x(l) + '</li>'; }).join('') + '</ul>' : '<p class="ai-note">No operations were added, removed or re-secured.</p>');
+    }
+    S.version = 0;
+    loadApiInventory().then(function() { var o2 = el('api-inv-import-result'); if (o2) o2.innerHTML = html; });
+  }).catch(function(e) {
+    if (out) out.innerHTML = '<p class="ai-err">' + x(e && e.message ? e.message : 'The request failed') + '</p>';
+  });
+}
+
+export function apiInvDrift() {
+  var t = el('api-inv-observed');
+  var p = M.parseObserved(t ? t.value : '');
+  var out = el('api-inv-drift-result');
+  if (!out) return;
+  if (p.error) { out.innerHTML = '<p class="ai-err">' + x(p.error) + '</p>'; return; }
+  var q = S.version ? '?version=' + encodeURIComponent(S.version) : '';
+  apicall(base() + '/inventory/drift' + q, { method: 'POST', body: JSON.stringify({ observed: p.routes }) }).then(function(r) {
+    var err = M.errorText(r);
+    if (err) { out.innerHTML = '<p class="ai-err">' + x(err) + '</p>'; return; }
+    var und = (r.undocumented || []).map(function(o) { return '<li class="ai-mono">' + x(o.Method || o.method) + ' ' + x(o.Path || o.path) + '</li>'; }).join('');
+    var dep = (r.deprecated_in_use || []).map(function(k) { return '<li class="ai-mono">' + x(k) + '</li>'; }).join('');
+    out.innerHTML = kv([['Compared against', 'version ' + r.version], ['Observed but not in the specification', r.undocumented_total], ['In the specification but not seen', r.unserved_total]]) +
+      (und ? '<h4 class="ai-h">Not in the specification</h4><ul class="ai-list">' + und + '</ul>' : '') +
+      (dep ? '<h4 class="ai-h">Deprecated and in use</h4><ul class="ai-list">' + dep + '</ul>' : '') +
+      '<p class="ai-note">' + x(r.note) + '</p>';
+  }).catch(function(e) { out.innerHTML = '<p class="ai-err">' + x(e && e.message ? e.message : 'The request failed') + '</p>'; });
+}
+
+export function apiInvExample() {
+  var t = el('api-inv-binding');
+  if (t && S.inv) t.value = JSON.stringify(M.exampleBindingSpec(S.inv.listed_operations), null, 2);
+}
+
+export function apiInvPlanBinding() {
+  var t = el('api-inv-binding');
+  var p = M.parseBindingSpec(t ? t.value : '');
+  var out = el('api-inv-binding-result');
+  if (!out) return;
+  if (p.error) { out.innerHTML = '<p class="ai-err">' + x(p.error) + '</p>'; return; }
+  var q = S.version ? '?version=' + encodeURIComponent(S.version) : '';
+  apicall(base() + '/binding/plan' + q, { method: 'POST', body: JSON.stringify(p.spec) }).then(function(r) {
+    var err = M.errorText(r);
+    if (err) { out.innerHTML = '<p class="ai-err">' + x(err) + '</p>'; return; }
+    var bound = (r.bound || []).map(function(b) {
+      return '<tr><td class="ai-mono">' + x(b.scenario_id) + '</td><td class="ai-mono">' + x(b.operation) + '</td><td>' + x(b.attacker) + ' → ' + x(b.victim) + '</td><td class="ai-mono">' + x(b.path) + '</td></tr>';
+    }).join('');
+    var skipped = (r.skipped || []).map(function(s) { return '<tr><td class="ai-mono">' + x(s.operation) + '</td><td>' + x(s.reason) + '</td></tr>'; }).join('');
+    out.innerHTML = '<p class="ai-ok">' + x(r.scenarios) + ' scenario(s) would be generated from inventory version ' + x(r.inventory_version) + '.</p>' +
+      (bound ? '<h4 class="ai-h">Would be generated</h4><div class="tbl-wrap"><table><thead><tr><th>Scenario</th><th>Operation</th><th>Attacker → owner</th><th>Request path</th></tr></thead><tbody>' + bound + '</tbody></table></div>' : '') +
+      (skipped ? '<h4 class="ai-h">Not bound</h4><div class="tbl-wrap"><table><thead><tr><th>Operation</th><th>Why</th></tr></thead><tbody>' + skipped + '</tbody></table></div>' : '') +
+      '<h4 class="ai-h">What a result would and would not show</h4><ul class="ai-list">' + (r.limits || []).map(function(l) { return '<li>' + x(l) + '</li>'; }).join('') + '</ul>';
+  }).catch(function(e) { out.innerHTML = '<p class="ai-err">' + x(e && e.message ? e.message : 'The request failed') + '</p>'; });
+}

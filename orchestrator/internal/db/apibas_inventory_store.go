@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -131,6 +132,58 @@ func ListAPIBASInventoryVersions(ctx context.Context, pool *pgxpool.Pool, target
 			return nil, err
 		}
 		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// APIBASTargetSummary is a target as the console lists it: what identifies and scopes it, and its newest inventory if any.
+// Credential references are deliberately absent.
+type APIBASTargetSummary struct {
+	ID               string
+	Name             string
+	BaseURL          string
+	Environment      string
+	Enabled          bool
+	AllowedHosts     []string
+	AllowedPaths     []string
+	ScenarioCount    int
+	CreatedBy        string
+	CreatedAt        time.Time
+	InventoryVersion int // 0 when the target has no inventory
+	InventoryOps     int
+	InventoryAt      *time.Time
+}
+
+// ListAPIBASTargetSummaries returns up to 200 targets, newest first, each with its newest inventory version.
+func ListAPIBASTargetSummaries(ctx context.Context, pool *pgxpool.Pool) ([]APIBASTargetSummary, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT t.id, t.name, t.base_url, t.environment, t.enabled, t.allowed_hosts::text, t.allowed_paths::text,
+		       jsonb_array_length(t.allowed_scenarios), t.created_by, t.created_at,
+		       COALESCE(i.version, 0), COALESCE(i.operations, 0), i.imported_at
+		  FROM apibas_targets t
+		  LEFT JOIN LATERAL (
+		        SELECT version, operations, imported_at FROM apibas_target_inventories
+		         WHERE target_id = t.id ORDER BY version DESC LIMIT 1) i ON true
+		 ORDER BY t.created_at DESC, t.id LIMIT 200`)
+	if err != nil {
+		return nil, fmt.Errorf("list apibas targets: %w", err)
+	}
+	defer rows.Close()
+	var out []APIBASTargetSummary
+	for rows.Next() {
+		var s APIBASTargetSummary
+		var hosts, paths string
+		if err := rows.Scan(&s.ID, &s.Name, &s.BaseURL, &s.Environment, &s.Enabled, &hosts, &paths, &s.ScenarioCount, &s.CreatedBy,
+			&s.CreatedAt, &s.InventoryVersion, &s.InventoryOps, &s.InventoryAt); err != nil {
+			return nil, fmt.Errorf("read apibas target: %w", err)
+		}
+		if err := json.Unmarshal([]byte(hosts), &s.AllowedHosts); err != nil {
+			return nil, fmt.Errorf("decode allowed hosts: %w", err)
+		}
+		if err := json.Unmarshal([]byte(paths), &s.AllowedPaths); err != nil {
+			return nil, fmt.Errorf("decode allowed paths: %w", err)
+		}
+		out = append(out, s)
 	}
 	return out, rows.Err()
 }

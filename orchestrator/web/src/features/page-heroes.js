@@ -320,6 +320,16 @@ var HEROES = {
       { id: 'adc-hs-detected', icon: ICON.ok, value: '—', label: 'Detection-validated' },
     ],
   },
+  'hero-api-inventory': {
+    icon: ICON.layers,
+    title: 'API Inventory',
+    sub: 'Imported OpenAPI inventories per target: what each API exposes, what changed, and what could be tested.',
+    actions: '<button type="button" class="btn btn-outline" data-on-click="apiInvRefresh">Refresh</button>',
+    stats: [
+      { id: 'ai-hs-targets', icon: ICON.globe, value: '—', label: 'Targets' },
+      { id: 'ai-hs-inventories', icon: ICON.ok, value: '—', label: 'With an inventory' },
+    ],
+  },
   'hero-factory': {
     icon: ICON.factory,
     title: 'Factory Health',

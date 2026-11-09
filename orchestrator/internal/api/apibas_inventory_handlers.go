@@ -263,3 +263,32 @@ func (h *Handler) DriftAPIBASInventory(w http.ResponseWriter, r *http.Request) {
 		"note":              "unserved means not seen in the observed routes, which is not proof the route is not served",
 	})
 }
+
+// ListAPIBASTargets lists registered targets with their newest inventory version. It never returns credential references.
+func (h *Handler) ListAPIBASTargets(w http.ResponseWriter, r *http.Request) {
+	recs, err := db.ListAPIBASTargetSummaries(r.Context(), h.db)
+	if err != nil {
+		jsonError(w, "could not list targets", http.StatusInternalServerError)
+		return
+	}
+	out := make([]map[string]any, 0, len(recs))
+	for _, t := range recs {
+		item := map[string]any{
+			"id": t.ID, "name": t.Name, "base_url": t.BaseURL, "environment": t.Environment, "enabled": t.Enabled,
+			"allowed_hosts": nonNilStrings(t.AllowedHosts), "allowed_paths": nonNilStrings(t.AllowedPaths),
+			"scenario_count": t.ScenarioCount, "created_by": t.CreatedBy, "created_at": t.CreatedAt, "inventory": nil,
+		}
+		if t.InventoryVersion > 0 {
+			item["inventory"] = map[string]any{"version": t.InventoryVersion, "operations": t.InventoryOps, "imported_at": t.InventoryAt}
+		}
+		out = append(out, item)
+	}
+	apibasRespond(w, http.StatusOK, map[string]any{"targets": out})
+}
+
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
