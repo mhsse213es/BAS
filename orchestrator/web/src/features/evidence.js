@@ -12,6 +12,7 @@ import { onRunEvent } from './live-run.js';
 import { loadDashboardITSM, openFinding } from './findings.js';
 import { loadRansomwareReadiness } from './ransomware.js';
 import { additionalAgentIds, closeModal, loadRuns, openBuilder, openModal, resolvedAllTargetIds, resolvedGroupTargetIds, scenarioFramework, viewRunResults } from './reports.js';
+import { createThrottledRefresh, isRunsTabActive } from './runs-refresh.js';
 import { ROLE, showTab, showTamperBanner } from './shell.js';
 import { renderDashAll, setDashAgents, setDashRuns, setDashFindings, setDashAlerts, setDashSchedules, dashRunById } from './dash-rich.js';
 import { effectiveness as dashEffectiveness, isAgentOnline } from './dash-model.js';
@@ -680,6 +681,8 @@ export function confirmRun() {
   });
 }
 
+var _requestRunsRefresh = createThrottledRefresh(function() { if (isRunsTabActive(document)) loadRuns(); }, 2000);
+
 export function connectWS() {
   if (state.socket) state.socket.close();
   var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -698,6 +701,9 @@ export function connectWS() {
       var msg = JSON.parse(evt.data);
       if (msg.type === 'run_event') {
         onRunEvent(msg);
+        // Step events also move the in-flight cards on Live Runs (throttled): the cards read the runs list, which
+        // used to be re-fetched only when a run finished, so they sat on "Starting…" until the run was opened.
+        _requestRunsRefresh();
         // A paused/resumed confirmation must refresh the Live Runs table --
         // onRunEvent above only updates the Live drawer (scoped to
         // whichever single run's drawer, if any, is currently open). Filtered
