@@ -20,18 +20,19 @@ A number is only worth quoting with its tier. Nothing here is live-validated.
 | Catalogued | Scenario file exists in `internal/apibas/catalog` | **120** |
 | Executable | Has a working adapter (REST, or one of the protocol adapters) | **120 / 120** |
 | Lab-validated | In both lab builds the vulnerable build FAILs as exploited and the fixed build PASSes with control enforced | **117 / 120** (97.5%) |
+| Workflow-verified | Reporting-obligation scenario that PASSed with control enforced in both builds, graded by the reporting adapter. Simulated receiver; not part of evaluated or validated | **1** (REPORT-001) |
 | Live-validated | Run against a real customer or staging API with real security telemetry | **0** |
 
 Lab-validated is evidence that the scenario and the grader work against a deliberately flawed lab. It is not evidence about any
 customer API.
 
-### Not lab-validated (3)
+### Not lab-validated (2) and one workflow-verified
 
 | Scenario | State | Why |
 |---|---|---|
 | API-BAS-ABUSE-002 | provisional | Timing scenario. Verdicts are valid, but the 250 ms ceiling has no approved requirement owner or rationale (decision D2 in `api-bas-remaining-work.md`), so it is held out of validated. In the first measured run this scenario was classed plain `evaluated` rather than `provisional`; timing results can vary between runs, so treat its class as unstable until timing qualification (D3) is done. |
-| API-BAS-REPORT-001 | unevaluated | Not a scenario fault. It grades PASS with control enforced in both builds, and its six fault cases (on time, exactly at the deadline, one second late, dispatch failed, receipt missing, misrouted) pass in both. But it is a workflow-obligation test, so its exploitability is `not_applicable`, and the coverage model only counts exploited or not-exploited verdicts as evaluated. The receiver is identical in both builds, so there is no vulnerable and fixed pair to validate, and the PASS is simulated (a workflow check, never a genuine CERT-In receipt). The report shows a blank reason because the grade carries none. The coverage model has no class for reporting-graded scenarios; this is a model gap. |
 | API-BAS-REPORT-002 | unevaluated | `deadline_not_defined_by_provision`: no CBUAE provision-derived deadline is recorded, so it cannot PASS on timeliness. |
+| API-BAS-REPORT-001 | **workflow-verified** | CERT-In six-hour obligation. PASS with control enforced in both builds, and its six fault cases (on time, exactly at the deadline, one second late, dispatch failed, receipt missing, misrouted) pass in both. It has no exploitability verdict and no vulnerable/fixed pair (the receiver is identical in both builds), and its PASS is simulated: a workflow check, never a genuine CERT-In receipt. So it has its own class and is counted in neither evaluated nor validated. |
 
 AUTHN-007 and GWAY-012 were first reported as not validated (error and evaluated). That was a measurement fault, not a scenario
 fault: both need TLS (a client certificate, an upstream certificate), and the measurement harness ran them on the plain-HTTP lab.

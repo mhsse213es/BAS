@@ -7,6 +7,7 @@ import (
 	"github.com/audspect/bas/internal/apibas/catalog"
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/grade"
+	"github.com/audspect/bas/internal/apibas/reporting"
 )
 
 // withoutAsync models the state before the async adapter exists: every protocol is supported
@@ -140,6 +141,60 @@ func TestFormatShowsDenominatorAndExclusions(t *testing.T) {
 	for _, want := range []string{"Evaluated:", "/", "unsupported (no adapter)", "API-BAS-ABUSE-010", "UNSUPPORTED_PROTOCOL"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("report missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func reportScenario() contract.Scenario {
+	return contract.Scenario{ID: "API-BAS-REPORT-X", Reporting: &reporting.Policy{}}
+}
+
+func enforcedPass() *grade.Outcome {
+	o := grade.Outcome{Result: grade.PASS, Exploitability: grade.ExploitNotApplicable, Control: grade.Enforced}
+	return &o
+}
+
+// A reporting scenario that PASSes with control enforced in both builds is workflow-verified: counted on its own line, in the
+// catalogue, and in neither Evaluated nor Validated.
+func TestWorkflowVerifiedIsSeparateFromEvaluatedAndValidated(t *testing.T) {
+	cat := []contract.Scenario{reportScenario()}
+	r := Build(cat, contract.ProtocolSupported, map[string]Verdicts{"API-BAS-REPORT-X": {Vulnerable: enforcedPass(), Fixed: enforcedPass()}})
+	if r.WorkflowVerified != 1 || r.Evaluated != 0 || r.Validated != 0 || r.Unevaluated != 0 {
+		t.Fatalf("workflow=%d evaluated=%d validated=%d unevaluated=%d, want 1/0/0/0", r.WorkflowVerified, r.Evaluated, r.Validated, r.Unevaluated)
+	}
+	if got := entry(r, "API-BAS-REPORT-X"); got.Status != WorkflowVerified || got.Reason == "" {
+		t.Errorf("entry = %+v, want workflow_verified with a reason", got)
+	}
+	if !r.Consistent() {
+		t.Errorf("classes do not sum to the catalogue: %+v", r)
+	}
+	if !strings.Contains(Format(r), "Workflow-verified (reporting obligations, simulated; not in Evaluated or Validated): 1") {
+		t.Error("the report does not print the workflow-verified line")
+	}
+}
+
+// Anything short of a PASS with control enforced in both builds stays unevaluated: skipped, failed, run in one build, or not a
+// reporting scenario.
+func TestWorkflowVerifiedRequiresPassEnforcedInBothBuilds(t *testing.T) {
+	skipped := &grade.Outcome{Result: grade.SKIPPED, Exploitability: grade.ExploitNotApplicable, Control: grade.ControlInconclusive, Reason: "deadline_not_defined_by_provision"}
+	failed := &grade.Outcome{Result: grade.FAIL, Exploitability: grade.ExploitNotApplicable, Control: grade.Failed}
+	plain := contract.Scenario{ID: "API-BAS-REPORT-X"}
+	cases := map[string]struct {
+		s contract.Scenario
+		v Verdicts
+	}{
+		"skipped":           {reportScenario(), Verdicts{Vulnerable: skipped, Fixed: skipped}},
+		"failed":            {reportScenario(), Verdicts{Vulnerable: failed, Fixed: failed}},
+		"fixed build only":  {reportScenario(), Verdicts{Fixed: enforcedPass()}},
+		"not a report type": {plain, Verdicts{Vulnerable: enforcedPass(), Fixed: enforcedPass()}},
+	}
+	for name, c := range cases {
+		r := Build([]contract.Scenario{c.s}, contract.ProtocolSupported, map[string]Verdicts{"API-BAS-REPORT-X": c.v})
+		if r.WorkflowVerified != 0 {
+			t.Errorf("%s was counted workflow-verified", name)
+		}
+		if !r.Consistent() {
+			t.Errorf("%s: classes do not sum: %+v", name, r)
 		}
 	}
 }

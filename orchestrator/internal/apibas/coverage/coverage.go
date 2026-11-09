@@ -13,6 +13,10 @@
 //     Unsupported (no adapter), Errored (execution or environment failure), and Unevaluated
 //     (implemented, but no valid verdict: skipped, or not run).
 //
+// A sixth class, WorkflowVerified, holds REPORT scenarios that grade a regulatory reporting obligation against the
+// reporting adapter. They have no exploitability verdict and no vulnerable/fixed pair, and their PASS is simulated, so they
+// are counted on their own line and never in Evaluated or Validated.
+//
 // An unsupported scenario is in Catalogued, and never in Evaluated or Validated.
 package coverage
 
@@ -41,6 +45,9 @@ const (
 	// It is evaluated and never validated.
 	Provisional Status = "provisional"
 	Evaluated   Status = "evaluated"
+	// WorkflowVerified: a reporting-obligation scenario that PASSed with control enforced in both builds, graded by the
+	// reporting adapter. Simulated; exploitability is not applicable. Never evaluated, never validated.
+	WorkflowVerified Status = "workflow_verified"
 	Unsupported Status = "unsupported"
 	Errored     Status = "error"
 	Unevaluated Status = "unevaluated"
@@ -61,6 +68,8 @@ type Report struct {
 	Evaluated   int // includes Validated
 	Validated   int
 	Provisional int // evaluated, held out of Validated by an unapproved timing claim
+	// WorkflowVerified counts reporting-obligation scenarios verified as a workflow only. Not part of Evaluated or Validated.
+	WorkflowVerified int
 	Unsupported int
 	Errored     int
 	Unevaluated int
@@ -108,6 +117,10 @@ func Build(catalog []contract.Scenario, supported func(protocol string) bool, re
 		r.Implemented++
 		v := results[s.ID]
 		switch {
+		case workflowVerified(s, v):
+			e.Status = WorkflowVerified
+			e.Reason = "reporting obligation graded by the reporting adapter; simulated receiver; exploitability not applicable"
+			r.WorkflowVerified++
 		case validated(v) && s.TimingClaim == "provisional":
 			e.Status = Provisional
 			e.Reason = s.TimingClaimReason
@@ -132,6 +145,20 @@ func Build(catalog []contract.Scenario, supported func(protocol string) bool, re
 		r.Entries = append(r.Entries, e)
 	}
 	return r
+}
+
+// workflowVerified reports whether a reporting-obligation scenario PASSed with control enforced in both builds. A REPORT
+// scenario that is skipped (for example because the provision states no deadline) or fails is not workflow-verified.
+func workflowVerified(s contract.Scenario, v Verdicts) bool {
+	if s.Reporting == nil || v.Vulnerable == nil || v.Fixed == nil {
+		return false
+	}
+	for _, o := range []*grade.Outcome{v.Vulnerable, v.Fixed} {
+		if o.Result != grade.PASS || o.Control != grade.Enforced {
+			return false
+		}
+	}
+	return true
 }
 
 func protocolOf(s contract.Scenario) string {
@@ -166,7 +193,7 @@ func unevaluatedReason(v Verdicts) string {
 // Consistent reports whether the classes add up to the catalog size, so no scenario is lost or
 // counted twice.
 func (r Report) Consistent() bool {
-	return r.Evaluated+r.Unsupported+r.Errored+r.Unevaluated == r.Catalogued &&
+	return r.Evaluated+r.WorkflowVerified+r.Unsupported+r.Errored+r.Unevaluated == r.Catalogued &&
 		r.Validated <= r.Evaluated && r.Implemented+r.Unsupported == r.Catalogued
 }
 
@@ -197,6 +224,7 @@ func Format(r Report) string {
 	fmt.Fprintf(&b, "Validated:    %d/%d (%s)  <- vulnerable FAILs as exploited and fixed PASSes enforced\n",
 		r.Validated, r.Catalogued, pct(r.Validated, r.Catalogued))
 	fmt.Fprintf(&b, "Provisional (evaluated, not validated; timing claim not approved): %d\n", r.Provisional)
+	fmt.Fprintf(&b, "Workflow-verified (reporting obligations, simulated; not in Evaluated or Validated): %d\n", r.WorkflowVerified)
 	fmt.Fprintf(&b, "Exclusions (denominator still includes them):\n")
 	fmt.Fprintf(&b, "  unsupported (no adapter):       %d\n", r.Unsupported)
 	fmt.Fprintf(&b, "  errored (execution/environment): %d\n", r.Errored)
