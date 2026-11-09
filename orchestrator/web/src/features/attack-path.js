@@ -1144,6 +1144,9 @@ export function toggleRowMenu(btn, id) {
 // Places an open row menu under its trigger button, clamped to the viewport.
 // Called when it opens and again on every scroll, so it follows its button.
 function placeRowMenu(btn, panel) {
+  // Re-measuring below resets max-height, which makes the browser clamp the panel's scroll position back to the top.
+  // Keep it and put it back, so repositioning never undoes the user's scrolling inside a long menu.
+  var keepScroll = panel.scrollTop;
   // Position as fixed viewport coordinates from the trigger button's own
   // rect (see the .row-menu-panel CSS comment for why fixed instead of
   // absolute), right-aligned under the button like a standard menu.
@@ -1170,6 +1173,7 @@ function placeRowMenu(btn, panel) {
       panel.style.maxHeight = Math.max(spaceBelow, 80) + 'px';
     }
   }
+  panel.scrollTop = keepScroll;
 }
 export function closeAllRowMenus() {
   document.querySelectorAll('.row-menu-panel.open').forEach(function(p) { p.classList.remove('open'); });
@@ -1202,7 +1206,11 @@ function triggerVisible(btn) {
   return true;
 }
 
-function repositionOpenRowMenus() {
+export function repositionOpenRowMenus(e) {
+  // The scroll listener is registered in the capture phase, so it also hears the menu's own scrolling. Re-placing the
+  // panel on its own scroll reset it to the top every time, so a long action list could not be scrolled. Only scrolling
+  // of something else (the page or the table) moves the trigger button, and only that needs a re-place.
+  if (e && e.target && e.target.nodeType === 1 && e.target.closest('.row-menu-panel')) return;
   document.querySelectorAll('.row-menu-panel.open').forEach(function(panel) {
     var btn = panel.parentElement && panel.parentElement.querySelector('.row-menu-btn');
     if (!btn || !triggerVisible(btn)) { panel.classList.remove('open'); return; }
