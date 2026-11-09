@@ -1,0 +1,53 @@
+id: "API-BAS-DATA-301"
+name: "HC-006: patient downloads another patient's medical image"
+category: DATA
+claim: cross_identity
+attack_objective: "Patient A downloads patient B's medical image and receives its storage reference."
+threat_model:
+  attacker: "authenticated patient A"
+  identity: patient-a
+  access_level: "patient, valid token, owns IMG-A-001 only"
+  objective: "Patient A downloads patient B's medical image and receives its storage reference."
+preconditions:
+  fixture: healthcare-two-patient
+  identities: [patient-a, patient-b]
+  object: IMG-B-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: patient-b
+    auth: valid
+    method: GET
+    path: "/api/health/images/IMG-B-001/download"
+    hypothesis: "Patient B, the owner, downloads their own image. If this fails, the scenario is not testable."
+  - id: "attack-data-301"
+    role: attack
+    identity: patient-a
+    auth: valid
+    method: GET
+    path: "/api/health/images/IMG-B-001/download"
+    hypothesis: "Patient A's download of IMG-B-001 is refused, and no storage reference comes back."
+denied_statuses: [403, 404]
+forbidden_values: ["BAS-SIM-IMG-B"]
+expected_control: "A patient cannot download another patient's medical image. The download is refused and no storage reference is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to patient A's download of IMG-B-001 carries no storage reference of patient B.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The download names IMG-B-001, owned by patient B, from patient A. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "Healthcare: medical image and report download authorization"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DATA-301 against the fixed build must PASS"
+  - "API-BAS-DATA-301 against the vulnerable build must FAIL (exploited)"

@@ -57,6 +57,14 @@ func newEnvWith(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string
 	// NBFC pack identities (fixture.NBFCTwoBorrower). Each caller ID is the identity name.
 	tokBorrowerA, tokBorrowerB, tokOfficer, tokNBFCAdmin := randomToken(t), randomToken(t), randomToken(t), randomToken(t)
 	revokedA := randomToken(t) // issued to customer-a, then revoked in the lab
+	// Healthcare pack identities (fixture.HealthcareTwoPatient). Each caller ID is the identity name.
+	hcTok_patient_a := randomToken(t)
+	hcTok_patient_b := randomToken(t)
+	hcTok_clinician_a := randomToken(t)
+	hcTok_clinician_b := randomToken(t)
+	hcTok_delegate_a := randomToken(t)
+	hcTok_bedside_device_a := randomToken(t)
+	hcTok_bedside_device_b := randomToken(t)
 	// Manufacturing pack identities (fixture.ManufacturingTwoPlant). Each caller ID is the identity name.
 	mfgTok_planner_a := randomToken(t)
 	mfgTok_operator_a := randomToken(t)
@@ -74,6 +82,7 @@ func newEnvWith(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string
 			tokA: "cust-a", tokB: "cust-b", revokedA: "cust-a",
 			tokBorrowerA: "borrower-a", tokBorrowerB: "borrower-b", tokOfficer: "loan-officer", tokNBFCAdmin: "nbfc-admin",
 			mfgTok_planner_a: "planner-a", mfgTok_operator_a: "operator-a", mfgTok_planner_b: "planner-b", mfgTok_operator_b: "operator-b", mfgTok_supplier_1: "supplier-1", mfgTok_supplier_2: "supplier-2", mfgTok_device_a: "device-a", mfgTok_device_b: "device-b", mfgTok_ot_engineer: "ot-engineer",
+			hcTok_patient_a: "patient-a", hcTok_patient_b: "patient-b", hcTok_clinician_a: "clinician-a", hcTok_clinician_b: "clinician-b", hcTok_delegate_a: "delegate-a", hcTok_bedside_device_a: "bedside-device-a", hcTok_bedside_device_b: "bedside-device-b",
 		},
 		Revoked:        []string{revokedA},
 		AdminToken:     adminTok,
@@ -111,6 +120,13 @@ func newEnvWith(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string
 		"apibas/lab/device-a": mfgTok_device_a,
 		"apibas/lab/device-b": mfgTok_device_b,
 		"apibas/lab/ot-engineer": mfgTok_ot_engineer,
+		"apibas/lab/patient-a": hcTok_patient_a,
+		"apibas/lab/patient-b": hcTok_patient_b,
+		"apibas/lab/clinician-a": hcTok_clinician_a,
+		"apibas/lab/clinician-b": hcTok_clinician_b,
+		"apibas/lab/delegate-a": hcTok_delegate_a,
+		"apibas/lab/bedside-device-a": hcTok_bedside_device_a,
+		"apibas/lab/bedside-device-b": hcTok_bedside_device_b,
 	}
 	return &env{
 		url: srv.URL, apiHits: hits, srv: srv, admin: admin, secrets: secrets, fx: fx,

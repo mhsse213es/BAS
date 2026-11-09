@@ -1,0 +1,56 @@
+id: "API-BAS-INTEG-301"
+name: "HC-009: bedside device posts a result for another patient"
+category: INTEG
+claim: cross_identity
+attack_objective: "Device B posts a laboratory value to patient A's result."
+threat_model:
+  attacker: "authenticated bedside device registered to patient B"
+  identity: bedside-device-b
+  access_level: "device identity, valid token, registered to LAB-B-001 only"
+  objective: "Device B posts a laboratory value to patient A's result."
+preconditions:
+  fixture: healthcare-two-patient
+  identities: [bedside-device-a, bedside-device-b, patient-a]
+  object: LAB-A-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: patient-a
+    auth: valid
+    method: GET
+    path: "/api/health/lab-results/LAB-A-001"
+    hypothesis: "Patient A, the owner, reads their own laboratory result. If this fails, the scenario is not testable."
+  - id: "attack-integ-301"
+    role: attack
+    identity: bedside-device-b
+    auth: valid
+    method: PATCH
+    path: "/api/health/lab-results/LAB-A-001"
+    body: '{"amount":"9.9"}'
+    hypothesis: "Device B's post to LAB-A-001 is refused, and the result value is not changed."
+denied_statuses: [403, 404]
+expected_control: "A device can post only to the result it is registered to. A post to another patient's result is refused and the value is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows LAB-A-001's value unchanged after device B's post.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The post names LAB-A-001, owned by patient A, from a device registered to patient B. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "Healthcare: medical device and hospital integration trust failure"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-INTEG-301 against the fixed build must PASS"
+  - "API-BAS-INTEG-301 against the vulnerable build must FAIL (exploited)"

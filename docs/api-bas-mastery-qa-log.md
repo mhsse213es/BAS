@@ -3799,3 +3799,15 @@ Walk of 5 approvals 2 per page: every approval exactly once, newest first, 3 pag
 - **Thin against API.txt's manufacturing list.** Covered: ERP/MES order authorization, production-order modification, BOM and CAD leakage, supplier purchase-order manipulation, telemetry and asset exposure, IoT device command authorization, OT management exposure. Not covered: inventory write paths, BOM write paths, machine-command safety interlocks, partner onboarding for manufacturing, and live-validated anything.
 - Pack records share the NBFC store type (`nbfcStore`); the name is historical. A rename would be a separate, mechanical change.
 - Not run on staging or against a real ERP, MES or OT environment.
+
+## API BAS healthcare pack and detection wiring (9 November 2026)
+
+### Built
+- Fixture `healthcare-two-patient`, lab routes `/api/health/...` (vulnerable and fixed), nine scenarios: AUTHZ-301 to 305, DATA-301 to 303, INTEG-301. All FAIL exploited on the vulnerable build and PASS enforced on the fixed build. AUTHZ-305 (delegate beyond consent) was first tagged property_level, which the runner skips for a non-owner attacker; it is cross_identity. A test proves the fixed build still gives the delegate the consented summary.
+- Detection: the 7 manufacturing and 7 of the 9 healthcare scenarios now declare APIBAS-REL-004 (fixture-validated, not live-SIEM). The phase34 oracle was hardcoded to the NBFC /loans list; it now maps each list route (loans, mfg assets, health export) to its record kind.
+- Measured: catalogue 136, lab-validated 133 (97.8%). Detection: vulnerable detected 77, fixed detected 64; 37 of 136 scenarios still not_evaluated.
+
+### Limits
+- REL-004 keys on the record owner. It cannot tell a treating clinician from one with no relationship (AUTHZ-302), so a legitimate treating read would also fire it.
+- AUTHZ-304 (patient alters own result) and AUTHZ-305 (consent scope) stay not_evaluated with stated reasons: they need new rules (result change by a non-device identity; consent-aware disclosure).
+- No regulatory mapping on manufacturing or healthcare scenarios. No HL7, DICOM, real FHIR server, break-glass, consent revocation. Not run on staging or any real environment.

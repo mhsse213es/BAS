@@ -431,7 +431,20 @@ func modeName(m lab.Mode) string {
 func isCollectionRequest(s contract.Scenario) bool {
 	attack := s.Steps[len(s.Steps)-1]
 	path, _, _ := strings.Cut(attack.Path, "?")
-	return strings.HasSuffix(path, "/loans")
+	return collectionKind(path) != ""
+}
+
+// collectionKind is the record kind a collection route lists, or "" when the path is not a collection route.
+func collectionKind(path string) string {
+	switch {
+	case strings.HasSuffix(path, "/loans"):
+		return "loan"
+	case strings.HasSuffix(path, "/mfg/assets"):
+		return "asset"
+	case strings.HasSuffix(path, "/health/export"):
+		return "patient_record"
+	}
+	return ""
 }
 
 // listDisclosureDetection is the expectation for a collection read. The list returns the records it discloses, and REL-004
@@ -447,8 +460,10 @@ func listDisclosureDetection(t *testing.T, fx fixture.Fixture, s contract.Scenar
 	if mode != lab.ModeVulnerable {
 		return detect.NotDetected
 	}
+	path, _, _ := strings.Cut(attack.Path, "?")
+	kind := collectionKind(path)
 	for _, o := range fx.Objects {
-		if o.Kind == "loan" && o.OwnerID != id.CustomerID {
+		if o.Kind == kind && o.OwnerID != id.CustomerID {
 			return detect.Detected
 		}
 	}

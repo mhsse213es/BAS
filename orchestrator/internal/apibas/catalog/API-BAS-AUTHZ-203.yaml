@@ -34,9 +34,13 @@ ground_truth:
   adapters: ["state", "response"]
   check: >
     The state shows PUR-S2-001's amount unchanged after supplier 1's change.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
 detection_assertion:
-  status: not_evaluated
-  reason: "No detection rule is wired for the manufacturing pack yet. The access event names the owner of the record, so a rule could be written, but none is claimed."
+  status: fixture_validated
+  reason: "The change names PUR-S2-001, owned by supplier 2, from supplier 1. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
 side_effect_class: STATE_CHANGE_SANDBOX
 cleanup:
   - "reset the lab to its fixture seed after the run"

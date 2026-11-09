@@ -1,0 +1,53 @@
+id: "API-BAS-AUTHZ-301"
+name: "HC-001: patient reads another patient's record"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "Patient A reads patient B's record and receives the diagnosis and insurance number."
+threat_model:
+  attacker: "authenticated patient A"
+  identity: patient-a
+  access_level: "patient, valid token, owns REC-A-001 only"
+  objective: "Patient A reads patient B's record and receives the diagnosis and insurance number."
+preconditions:
+  fixture: healthcare-two-patient
+  identities: [patient-a, patient-b]
+  object: REC-B-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: patient-b
+    auth: valid
+    method: GET
+    path: "/api/health/records/REC-B-001"
+    hypothesis: "Patient B, the owner, reads their own record. If this fails, the scenario is not testable."
+  - id: "attack-authz-301"
+    role: attack
+    identity: patient-a
+    auth: valid
+    method: GET
+    path: "/api/health/records/REC-B-001"
+    hypothesis: "Patient A's read of REC-B-001 is refused, and no diagnosis or insurance number comes back."
+denied_statuses: [403, 404]
+forbidden_values: ["BAS-SIM-DX-B", "BAS-SIM-INS-B"]
+expected_control: "A patient cannot read another patient's record. The read is refused and no clinical or insurance value is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to patient A's read of REC-B-001 carries no diagnosis or insurance number of patient B.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The read names REC-B-001, owned by patient B, from patient A. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "Healthcare: cross-patient record access"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-301 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-301 against the vulnerable build must FAIL (exploited)"

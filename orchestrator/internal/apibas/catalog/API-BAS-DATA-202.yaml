@@ -35,9 +35,13 @@ ground_truth:
   adapters: ["state", "response"]
   check: >
     The response to the asset list carries no identifier or telemetry key of another plant's machine.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
 detection_assertion:
-  status: not_evaluated
-  reason: "No detection rule is wired for the manufacturing pack yet. The access event names the owner of the record, so a rule could be written, but none is claimed."
+  status: fixture_validated
+  reason: "The asset list names the owner of every machine it returns, so a list that discloses plant B machines fires REL-004. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
 side_effect_class: READ_ONLY
 evidence:
   - sanitized_request

@@ -1,0 +1,52 @@
+id: "API-BAS-AUTHZ-304"
+name: "HC-004: patient alters their own diagnostic result"
+category: AUTHZ
+claim: function_level
+attack_objective: "Patient A changes the value of their own laboratory result."
+threat_model:
+  attacker: "authenticated patient A"
+  identity: patient-a
+  access_level: "patient, valid token, owns LAB-A-001, no authority to post results"
+  objective: "Patient A changes the value of their own laboratory result."
+preconditions:
+  fixture: healthcare-two-patient
+  identities: [patient-a]
+  object: LAB-A-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: patient-a
+    auth: valid
+    method: GET
+    path: "/api/health/lab-results/LAB-A-001"
+    hypothesis: "Patient A, the owner, reads their own laboratory result. If this fails, the scenario is not testable."
+  - id: "attack-authz-304"
+    role: attack
+    identity: patient-a
+    auth: valid
+    method: PATCH
+    path: "/api/health/lab-results/LAB-A-001"
+    body: '{"amount":"5.0"}'
+    hypothesis: "Patient A's change to LAB-A-001 is refused, and the result value is not changed."
+denied_statuses: [403, 404]
+expected_control: "Only the registered device can post a preliminary result. A patient's change is refused and the value is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows LAB-A-001's value unchanged after patient A's change.
+detection_assertion:
+  status: not_evaluated
+  reason: "The patient changes their own result, so no object owned by another identity is named. REL-004 cannot fire; a rule on result changes by a non-device identity does not exist yet."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "Healthcare: diagnostic-result modification by the patient"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-304 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-304 against the vulnerable build must FAIL (exploited)"

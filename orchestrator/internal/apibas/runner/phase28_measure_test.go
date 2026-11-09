@@ -27,6 +27,8 @@ func fixtureFor(t *testing.T, name string) fixture.Fixture {
 		return fixture.NBFCTwoBorrower()
 	case "manufacturing-two-plant":
 		return fixture.ManufacturingTwoPlant()
+	case "healthcare-two-patient":
+		return fixture.HealthcareTwoPatient()
 	}
 	t.Fatalf("unknown fixture %q", name)
 	return fixture.Fixture{}
