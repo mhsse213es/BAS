@@ -3611,3 +3611,42 @@ Decisions approved by the product owner:
 - Dispatch runs only when a caller invokes it. There is no worker queue yet.
 - Evidence references are not validated (see requirement 4).
 - Not run against a live lab or staging target.
+
+## API BAS assessment step 4: authorization, target scope, approval binding, audit, endpoints (9 November 2026)
+
+### Assumption recorded
+- The user said "start step 4" after the step 3 summary flagged that results use new `apibas_jobs` tables instead of `apibas_runs`. This step proceeds on that deviation. It is not an explicit approval of the deviation, so it remains open for the user to reverse.
+
+### What changed
+- Permissions (`internal/auth/permissions.go`): `CanRunAPIBAS` (Admin, Analyst), `CanManageAPIBASTargets` (Admin only), `CanApproveAPIBASProduction` (Admin only). Viewers get none.
+- Target registry (`apibas_targets`, `internal/db/apibas_targets_store.go`): a target carries the base URL, environment, allowed hosts, allowed scenarios and credential references. A job request names only a target and scenarios. The URL, environment, hosts and credentials always come from the registered target, so a request cannot point the runner at an unregistered host.
+- `SubmitForTarget` (`internal/apibas/jobs/target.go`) enforces, in order: target exists; enabled; environment is lab or staging (production is refused in the service); the base URL host is in the target's allowed hosts; every scenario is in the target's allowed scenarios; and no other job is queued or running on the target (per-target advisory lock in one transaction, `CreateAPIBASJobExclusive`). A repeated key returns the existing job, including while the target is busy.
+- Approval binding: `Binding` hashes target, environment, fixture, sorted scenarios and sorted hosts. `CheckApproval` rejects an unapproved, self-approved, other-requester, other-target or changed-configuration approval. The store refuses self-approval and a second approval (`apibas_approvals`). Production execution is NOT enabled in this release, so these rules are tested but not reachable in a run.
+- Cancellation: `Service.Cancel` stops a job this process is running. The job ends `cancelled` with no reports.
+- Endpoints (all under the existing `/api/apibas` licence gate): `POST /api/apibas/targets` (manage targets), `POST /api/apibas/jobs` (run), `GET /api/apibas/jobs/{id}` (view), `POST /api/apibas/jobs/{id}/cancel` (run). Submit returns 202 and starts the job in the background; a repeated key returns 200 with `created:false`.
+- Audit (`audit_logs`, written synchronously): `apibas.target.create`, `apibas.job.submit` (before dispatch; if it cannot be written, the job is failed and never started), `apibas.job.finish` (status, reason, timestamps), `apibas.job.cancel`, and `apibas.job.refused` (denied, with the reason). Each carries the actor.
+- Server startup (`cmd/server/main.go`): job execution is enabled only when `BAS_APIBAS_RUNNER` names the runner and the encryption key is usable; otherwise the endpoints answer 503 and the log says so. Jobs left running by an earlier process are failed at startup and every 5 minutes (jobs running over 30 minutes), which closes the step 3 gap that `ReconcileStale` had no caller.
+- Request bodies reject unknown fields and are capped at 1 MiB. Credentials in a target must be secret-store references; a plaintext value is refused and never echoed.
+
+### Acceptance requirements (section 5) after step 4
+1. No runner database access: done (step 2).
+2. Job idempotency: done (step 3), plus one active job per target.
+3. Approval binding: rules and store done and tested; not exercised by a run because production is disabled. Approval request and approve endpoints are NOT built; they come with production support.
+4. Result validation: unchanged. Evidence-reference validation is still NOT done (runner emits none).
+5. Auditability: requester, target, scope, timestamps, outcome and failure reason are recorded. The approver field applies to production only and is not recorded yet.
+6. Isolation: done (step 3).
+7. Failure semantics: done (step 3). Cancellation added.
+8. Production rejection: service, database constraint, and endpoint (403 plus a `refused` audit record) all tested.
+
+### Tests and results
+- `internal/apibas/jobs` (18 tests, Postgres container): scope (lab, staging, production, disabled, unknown, out-of-scope scenario, host outside allowed hosts), one active job per target, repeat key while busy, cancel of a running job, binding sensitivity to every field, approval rules, store refusal of self-approval and double approval, plus the 11 step 3 tests. Pass.
+- `internal/api`: new handler tests pass: role boundaries (no identity, viewer, analyst, admin), target registration refusals (plaintext credential, host not allowed, unknown or empty scenarios, bad environment, bad id, non-http URL, unknown body field), duplicate 409 with a single audit row, the submit flow (202, audit actor, idempotent repeat, 409 busy, 403 production with a refused audit row, 403 out of scope, 404 unknown target, job view without credential names), and 503 without a service. `TestRBACMatrix_*` pass with the four new routes listed.
+- `internal/auth`, `internal/license`, all `internal/apibas/...` packages pass (the runner package takes about 500 s). Windows cross-compile of server and runner passes.
+- The full `internal/api` suite was not re-run in this step. The earlier full run had one known timing flake (`TestStopIsIdempotent`, Aleef).
+
+### Not done (stated)
+- Scope is enforced per target host and scenario. The runner does not yet check each request path against a registered path list; path-level scope is not implemented.
+- Approval request and approve endpoints, and production execution.
+- Evidence-reference validation.
+- No live lab or staging run. Step 5 covers staging end-to-end.
+- The job endpoint dispatches in a background goroutine inside the server process; there is no external queue, so a server restart fails running jobs (by reconciliation) rather than resuming them.

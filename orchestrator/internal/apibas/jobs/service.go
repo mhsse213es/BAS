@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/audspect/bas/internal/apibas/runner"
@@ -54,6 +55,9 @@ type Service struct {
 	pool    *pgxpool.Pool
 	secrets secretstore.Store
 	cfg     Config
+
+	mu      sync.Mutex
+	running map[string]context.CancelFunc // job id -> cancel, for jobs this process is executing
 }
 
 // New returns a service. It rejects a missing runner path or a missing secret store, because a job cannot run without either.
@@ -77,23 +81,34 @@ func New(pool *pgxpool.Pool, secrets secretstore.Store, cfg Config) (*Service, e
 	if cfg.WorkDir == "" {
 		cfg.WorkDir = os.TempDir()
 	}
-	return &Service{pool: pool, secrets: secrets, cfg: cfg}, nil
+	return &Service{pool: pool, secrets: secrets, cfg: cfg, running: map[string]context.CancelFunc{}}, nil
 }
 
 // Submit records a queued job. It does not execute anything. A repeated Submit with the same Key returns the existing job
 // and created=false.
 func (s *Service) Submit(ctx context.Context, sp Spec) (db.APIBASJob, bool, error) {
+	if err := s.validateSpec(sp); err != nil {
+		return db.APIBASJob{}, false, err
+	}
+	return db.CreateAPIBASJob(ctx, s.pool, db.APIBASJob{
+		JobKey: sp.Key, RequestedBy: sp.RequestedBy, TargetBaseURL: sp.TargetBaseURL, Environment: sp.Environment,
+		Fixture: sp.Fixture, ScenarioIDs: sp.ScenarioIDs, CredentialRefs: sp.Credentials,
+	})
+}
+
+// validateSpec applies every submission rule that does not need the database.
+func (s *Service) validateSpec(sp Spec) error {
 	switch sp.Environment {
 	case "lab", "staging":
 	default:
-		return db.APIBASJob{}, false, ErrEnvironmentNotPermitted
+		return ErrEnvironmentNotPermitted
 	}
 	if sp.Key == "" || sp.RequestedBy == "" {
-		return db.APIBASJob{}, false, errors.New("apibas jobs: key and requester are required")
+		return errors.New("apibas jobs: key and requester are required")
 	}
 	for name, ref := range sp.Credentials {
 		if name == "" || !secretstore.ValidRef(ref) {
-			return db.APIBASJob{}, false, fmt.Errorf("apibas jobs: credential %q must reference the secret store", name)
+			return fmt.Errorf("apibas jobs: credential %q must reference the secret store", name)
 		}
 	}
 	// Validate the request shape now, so a job that could never run is refused at submission. The job ID and credentials
@@ -102,13 +117,19 @@ func (s *Service) Submit(ctx context.Context, sp Spec) (db.APIBASJob, bool, erro
 		SchemaVersion: runnerproto.SchemaVersion, JobID: "probe-job-id", TargetBaseURL: sp.TargetBaseURL,
 		Fixture: sp.Fixture, ScenarioIDs: sp.ScenarioIDs, AllowedHosts: sp.AllowedHosts, CredentialsFile: "probe",
 	}
-	if err := probe.Validate(); err != nil {
-		return db.APIBASJob{}, false, err
+	return probe.Validate()
+}
+
+// Cancel stops a job this process is executing. It returns false when the job is not running here (finished, queued, or run by
+// another process). The job then ends as 'cancelled' through Dispatch's normal outcome path.
+func (s *Service) Cancel(jobID string) bool {
+	s.mu.Lock()
+	cancel, ok := s.running[jobID]
+	s.mu.Unlock()
+	if ok {
+		cancel()
 	}
-	return db.CreateAPIBASJob(ctx, s.pool, db.APIBASJob{
-		JobKey: sp.Key, RequestedBy: sp.RequestedBy, TargetBaseURL: sp.TargetBaseURL, Environment: sp.Environment,
-		Fixture: sp.Fixture, ScenarioIDs: sp.ScenarioIDs, CredentialRefs: sp.Credentials,
-	})
+	return ok
 }
 
 // Dispatch executes a queued job. It returns started=false, with no error, when the job is not queued: a repeated dispatch
@@ -132,7 +153,17 @@ func (s *Service) Dispatch(ctx context.Context, jobID string) (started bool, err
 		return false, nil
 	}
 
-	outcome := s.execute(ctx, job)
+	runCtx, cancel := context.WithCancel(ctx)
+	s.mu.Lock()
+	s.running[jobID] = cancel
+	s.mu.Unlock()
+	defer func() {
+		cancel()
+		s.mu.Lock()
+		delete(s.running, jobID)
+		s.mu.Unlock()
+	}()
+	outcome := s.execute(runCtx, job)
 	if ferr := db.FinishAPIBASJob(dbCtx, s.pool, jobID, outcome.status, outcome.reason, outcome.reports); ferr != nil {
 		// The job stays 'running' until ReconcileStaleAPIBASJobs fails it. Say so in the log, without the report content.
 		log.Printf("[apibas] job %s: could not record its outcome: %v", jobID, ferr)

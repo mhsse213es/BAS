@@ -16,6 +16,27 @@ import (
 // assessment has no such build.
 func EnsureAPIBASJobSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS apibas_targets (
+			id                text        PRIMARY KEY CHECK (id ~ '^[a-z0-9][a-z0-9_-]{1,62}$'),
+			name              text        NOT NULL,
+			base_url          text        NOT NULL,
+			environment       text        NOT NULL CHECK (environment IN ('lab', 'staging', 'production')),
+			allowed_hosts     jsonb       NOT NULL DEFAULT '[]',
+			allowed_scenarios jsonb       NOT NULL DEFAULT '[]',
+			credential_refs   jsonb       NOT NULL DEFAULT '{}',
+			enabled           boolean     NOT NULL DEFAULT true,
+			created_by        text        NOT NULL,
+			created_at        timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE TABLE IF NOT EXISTS apibas_approvals (
+			id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+			binding_hash text        NOT NULL,
+			target_id    text        NOT NULL,
+			requested_by text        NOT NULL,
+			approved_by  text        NOT NULL DEFAULT '',
+			approved_at  timestamptz,
+			created_at   timestamptz NOT NULL DEFAULT NOW()
+		)`,
 		`CREATE TABLE IF NOT EXISTS apibas_jobs (
 			id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
 			job_key         text        NOT NULL UNIQUE,
@@ -31,6 +52,8 @@ func EnsureAPIBASJobSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			started_at      timestamptz,
 			finished_at     timestamptz
 		)`,
+		`ALTER TABLE apibas_jobs ADD COLUMN IF NOT EXISTS target_id text NOT NULL DEFAULT ''`,
+		`CREATE INDEX IF NOT EXISTS apibas_jobs_target_active_idx ON apibas_jobs (target_id) WHERE status IN ('queued', 'running')`,
 		`CREATE TABLE IF NOT EXISTS apibas_job_reports (
 			job_id         uuid        NOT NULL REFERENCES apibas_jobs(id) ON DELETE CASCADE,
 			scenario_id    text        NOT NULL,

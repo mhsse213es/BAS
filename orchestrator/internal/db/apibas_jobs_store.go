@@ -15,6 +15,7 @@ import (
 type APIBASJob struct {
 	ID            string
 	JobKey        string
+	TargetID      string
 	RequestedBy   string
 	TargetBaseURL string
 	Environment   string
@@ -22,11 +23,11 @@ type APIBASJob struct {
 	ScenarioIDs   []string
 	// CredentialRefs maps each runner secret name to its D4 secret-store reference. References are stored; values never are.
 	CredentialRefs map[string]string
-	Status        string
-	FailureReason string
-	CreatedAt     time.Time
-	StartedAt     *time.Time
-	FinishedAt    *time.Time
+	Status         string
+	FailureReason  string
+	CreatedAt      time.Time
+	StartedAt      *time.Time
+	FinishedAt     *time.Time
 }
 
 // APIBASJobReport is the stored verdict for one scenario of a job. Report is the runner's JSON for that scenario.
@@ -172,7 +173,7 @@ func ListAPIBASJobReports(ctx context.Context, pool *pgxpool.Pool, jobID string)
 	return out, rows.Err()
 }
 
-const apibasJobSelect = `SELECT id::text, job_key, requested_by, target_base_url, environment, fixture, scenario_ids::text,
+const apibasJobSelect = `SELECT id::text, job_key, target_id, requested_by, target_base_url, environment, fixture, scenario_ids::text,
 	credential_refs::text, status, failure_reason, created_at, started_at, finished_at FROM apibas_jobs`
 
 // ReconcileStaleAPIBASJobs fails every job that has been running longer than olderThan. A crash of the orchestrator during a run
@@ -191,7 +192,7 @@ func ReconcileStaleAPIBASJobs(ctx context.Context, pool *pgxpool.Pool, olderThan
 func scanAPIBASJob(row pgx.Row) (APIBASJob, error) {
 	var j APIBASJob
 	var scen, refs string
-	err := row.Scan(&j.ID, &j.JobKey, &j.RequestedBy, &j.TargetBaseURL, &j.Environment, &j.Fixture, &scen, &refs,
+	err := row.Scan(&j.ID, &j.JobKey, &j.TargetID, &j.RequestedBy, &j.TargetBaseURL, &j.Environment, &j.Fixture, &scen, &refs,
 		&j.Status, &j.FailureReason, &j.CreatedAt, &j.StartedAt, &j.FinishedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return APIBASJob{}, ErrAPIBASJobNotFound

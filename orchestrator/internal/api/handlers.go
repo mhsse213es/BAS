@@ -69,6 +69,7 @@ import (
 	"github.com/audspect/bas/internal/rwcontain"
 	"github.com/audspect/bas/internal/rwprevent"
 	"github.com/audspect/bas/internal/scenario"
+	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
 	"github.com/audspect/bas/internal/secretstore"
 	"github.com/audspect/bas/internal/taxii"
 	"github.com/audspect/bas/internal/threatcontent"
@@ -111,6 +112,10 @@ type Handler struct {
 	engine *scenario.Engine
 	// secrets resolves credential reference columns (nil until WithSecretStore; see secrets.go).
 	secrets secretstore.Store
+	// apibasJobs runs API BAS assessment jobs (nil until WithAPIBASJobs; job endpoints answer 503).
+	apibasJobs *apibasjobs.Service
+	// apibasAsyncHook replaces the background start of a job. Tests set it to keep a job queued.
+	apibasAsyncHook func(func())
 	// dbsimCheckRunner dispatches the dbsim read-only identity check to an
 	// agent. nil in production until the dbsim run API exists (the check
 	// endpoint answers 501 and no target becomes client-eligible).

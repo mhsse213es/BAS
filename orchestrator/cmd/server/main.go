@@ -27,6 +27,7 @@ import (
 	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
+	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
 	"github.com/audspect/bas/internal/secretstore"
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/dnssink"
@@ -988,8 +989,35 @@ func main() {
 		log.Printf("[secretstore] credential references unavailable: %v", secretErr)
 	}
 
+	// API BAS assessment execution. Disabled unless BAS_APIBAS_RUNNER names the runner binary and the secret store is usable;
+	// the job endpoints then answer 503. Jobs left running by an earlier process are failed now and periodically after.
+	var apibasJobs *apibasjobs.Service
+	if runnerPath := os.Getenv("BAS_APIBAS_RUNNER"); runnerPath != "" && secretStore != nil {
+		svc, jerr := apibasjobs.New(pool, secretStore, apibasjobs.Config{RunnerPath: runnerPath})
+		if jerr != nil {
+			log.Printf("[apibas] job execution disabled: %v", jerr)
+		} else {
+			apibasJobs = svc
+			if n, rerr := svc.ReconcileStale(context.Background(), 0); rerr != nil {
+				log.Printf("[apibas] startup reconcile failed: %v", rerr)
+			} else if n > 0 {
+				log.Printf("[apibas] failed %d job(s) left running by an earlier process", n)
+			}
+			go func() {
+				for range time.Tick(5 * time.Minute) {
+					if _, rerr := svc.ReconcileStale(context.Background(), 30*time.Minute); rerr != nil {
+						log.Printf("[apibas] reconcile failed: %v", rerr)
+					}
+				}
+			}()
+		}
+	} else {
+		log.Printf("[apibas] job execution disabled: set BAS_APIBAS_RUNNER and provision the encryption key to enable it")
+	}
+
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithSecretStore(secretStore).
+		WithAPIBASJobs(apibasJobs).
 		WithCloudSettings(cloudSettings).
 		WithDeploymentClass(cfg.Classification()).
 		WithEvidenceStore(evStore).
