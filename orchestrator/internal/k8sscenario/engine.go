@@ -257,7 +257,7 @@ func (e *Engine) Run(ctx context.Context, req RunRequest) Result {
 func (e *Engine) execute(ctx context.Context, req RunRequest, a *Action, plan []string) Result {
 	snap, err := a.snapshot(ctx, e.cfg.Client, req)
 	if err != nil {
-		return e.finish(context.WithoutCancel(ctx), req, plan, StateFailed, false, "snapshot: "+err.Error(), "")
+		return e.finish(context.WithoutCancel(ctx), req, plan, StateFailed, false, "snapshot: "+err.Error(), "", "not attempted", "")
 	}
 	observed := func() string {
 		if a.observation == nil {
@@ -308,12 +308,16 @@ func (e *Engine) execute(ctx context.Context, req RunRequest, a *Action, plan []
 	// Outcome and alert writes use a context the stop cannot cancel, so the record is kept even when the run was stopped.
 	fctx := context.WithoutCancel(ctx)
 	stop := context.Cause(ctx)
+	stopText := ""
+	if stop != nil {
+		stopText = stop.Error()
+	}
 	if rollbackErr != nil {
 		msg := "rollback not verified: " + rollbackErr.Error()
 		if stop != nil {
 			msg = "stopped: " + stop.Error() + "; " + msg
 		}
-		return e.finish(fctx, req, plan, StateCleanupFailed, verified, msg, observed())
+		return e.finish(fctx, req, plan, StateCleanupFailed, verified, msg, observed(), "failed", stopText)
 	}
 
 	state := StateCleaned
@@ -341,11 +345,13 @@ func (e *Engine) execute(ctx context.Context, req RunRequest, a *Action, plan []
 			msg = "stopped: " + stop.Error() + "; " + msg
 		}
 	}
-	return e.finish(fctx, req, plan, state, verified, msg, observed())
+	return e.finish(fctx, req, plan, state, verified, msg, observed(), "verified", stopText)
 }
 
 // finish records the outcome. A failed outcome write withholds the result. CLEANUP_FAILED always alerts.
-func (e *Engine) finish(ctx context.Context, req RunRequest, plan []string, state State, verified bool, msg, observation string) Result {
+// rollback is the verified restore result ("verified", "failed", "not attempted") and stop is why the run was stopped,
+// empty when it was not. Both are separate audit fields, so the trail can be queried without parsing the message.
+func (e *Engine) finish(ctx context.Context, req RunRequest, plan []string, state State, verified bool, msg, observation, rollback, stop string) Result {
 	res := Result{State: state, Plan: plan, Verified: verified, Error: msg, Observation: observation}
 	fields := runFields(req)
 	fields["state"] = string(state)
@@ -355,6 +361,10 @@ func (e *Engine) finish(ctx context.Context, req RunRequest, plan []string, stat
 	}
 	if observation != "" {
 		fields["observation"] = observation
+	}
+	fields["rollback"] = rollback
+	if stop != "" {
+		fields["stop"] = stop
 	}
 	if err := e.cfg.Audit.Write(ctx, Event{Type: EventOutcome, RunID: req.RunID, Fields: fields}); err != nil {
 		res.Withheld = true

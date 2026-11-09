@@ -79,6 +79,8 @@ func buildK8sScenarioService(pool *pgxpool.Pool) *api.K8sScenarioService {
 	})
 	log.Printf("[k8s-scenario] enabled for registered lab cluster %q (%s), namespace %q", rec.DisplayName, rec.ID, namespace)
 	return &api.K8sScenarioService{
+		// Refusals and cancellations are audited through this writer; without it they are silently dropped.
+		Audit:            db.NewK8sScenarioAudit(pool),
 		Engine:           engine,
 		Runs:             k8sRunAdapter{store: db.NewK8sRunStore(pool)},
 		Registry:         db.NewK8sClusterStore(pool),

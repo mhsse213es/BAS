@@ -209,10 +209,12 @@ func (h *Handler) ApproveK8sRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if approver == run.RequesterID {
+		auditRunRefusal(r, svc, run, "self-approval")
 		jsonError(w, "self-approval is not allowed", http.StatusForbidden)
 		return
 	}
 	if run.State != "PLANNED" {
+		auditRunRefusal(r, svc, run, "run is not awaiting approval")
 		jsonError(w, "run is not awaiting approval", http.StatusConflict)
 		return
 	}
@@ -267,6 +269,7 @@ func (h *Handler) ExecuteK8sRun(w http.ResponseWriter, r *http.Request) {
 	}
 	// Runs planned before cluster identity was stored have no registry ID. They are refused, never resolved by name.
 	if run.ClusterID == "" {
+		auditRunRefusal(r, svc, run, "planned before cluster identity was recorded")
 		jsonError(w, "this run was planned before cluster identity was recorded; plan it again", http.StatusConflict)
 		return
 	}
@@ -282,6 +285,7 @@ func (h *Handler) ExecuteK8sRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !found {
+		auditRunRefusal(r, svc, run, "cluster is no longer registered")
 		jsonError(w, "cluster is no longer registered", http.StatusConflict)
 		return
 	}
@@ -294,6 +298,7 @@ func (h *Handler) ExecuteK8sRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if profile == k8sscenario.ProfileControlled && (authz.ID != run.AuthorizationID || authz.CustomerRef != run.CustomerRef) {
+		auditRunRefusal(r, svc, run, "customer authorization changed since planning")
 		jsonError(w, "the customer authorization has changed since this run was planned; plan it again", http.StatusConflict)
 		return
 	}
