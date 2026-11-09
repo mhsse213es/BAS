@@ -185,15 +185,19 @@ func ConsumeAPIBASApproval(ctx context.Context, pool *pgxpool.Pool, id, jobID st
 }
 
 // APIBASApprovalFilter selects approvals for listing. State is "pending" (awaiting approval and not lapsed or revoked),
-// "approved" (approved, unexpired, unrevoked, unused) or "all". TargetID is optional.
+// "approved" (approved, unexpired, unrevoked, unused) or "all". TargetID and Requester are optional. AfterTime and AfterID
+// continue a previous page: only approvals strictly older than that position (created_at, then id) are returned.
 type APIBASApprovalFilter struct {
-	State    string
-	TargetID string
-	Limit    int
+	State     string
+	TargetID  string
+	Requester string
+	Limit     int
+	AfterTime *time.Time
+	AfterID   string
 }
 
-// ListAPIBASApprovals returns approvals newest first.
-func ListAPIBASApprovals(ctx context.Context, pool *pgxpool.Pool, f APIBASApprovalFilter) ([]APIBASApproval, error) {
+// ListAPIBASApprovals returns approvals newest first, at most Limit of them, and whether more follow.
+func ListAPIBASApprovals(ctx context.Context, pool *pgxpool.Pool, f APIBASApprovalFilter) (rows []APIBASApproval, more bool, err error) {
 	limit := f.Limit
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -207,27 +211,46 @@ func ListAPIBASApprovals(ctx context.Context, pool *pgxpool.Pool, f APIBASApprov
 	case "all":
 		cond = "TRUE"
 	default:
-		return nil, fmt.Errorf("list apibas approvals: unknown state %q", f.State)
+		return nil, false, fmt.Errorf("list apibas approvals: unknown state %q", f.State)
+	}
+	afterID := f.AfterID
+	if f.AfterTime != nil && afterID == "" {
+		afterID = "ffffffff-ffff-ffff-ffff-ffffffffffff"
 	}
 	q := `SELECT id::text, binding_hash, target_id, requested_by, approved_by, approved_at, created_at,
 	             expires_at, revoked_by, revoked_at, revoke_reason, consumed_by_job, consumed_at
-	        FROM apibas_approvals WHERE ($1 = '' OR target_id = $1) AND ` + cond + `
-	       ORDER BY created_at DESC LIMIT $2`
-	rows, err := pool.Query(ctx, q, f.TargetID, limit)
-	if err != nil {
-		return nil, fmt.Errorf("list apibas approvals: %w", err)
+	        FROM apibas_approvals
+	       WHERE ($1 = '' OR target_id = $1) AND ($2 = '' OR requested_by = $2)
+	         AND ($3::timestamptz IS NULL OR (created_at, id) < ($3::timestamptz, $4::uuid))
+	         AND ` + cond + `
+	       ORDER BY created_at DESC, id DESC LIMIT $5`
+	var afterArg any
+	if f.AfterTime != nil {
+		afterArg = *f.AfterTime
+	} else {
+		afterID = "00000000-0000-0000-0000-000000000000"
 	}
-	defer rows.Close()
+	res, err := pool.Query(ctx, q, f.TargetID, f.Requester, afterArg, afterID, limit+1)
+	if err != nil {
+		return nil, false, fmt.Errorf("list apibas approvals: %w", err)
+	}
+	defer res.Close()
 	out := []APIBASApproval{}
-	for rows.Next() {
+	for res.Next() {
 		var a APIBASApproval
-		if err := rows.Scan(&a.ID, &a.BindingHash, &a.TargetID, &a.RequestedBy, &a.ApprovedBy, &a.ApprovedAt, &a.CreatedAt,
+		if err := res.Scan(&a.ID, &a.BindingHash, &a.TargetID, &a.RequestedBy, &a.ApprovedBy, &a.ApprovedAt, &a.CreatedAt,
 			&a.ExpiresAt, &a.RevokedBy, &a.RevokedAt, &a.RevokeReason, &a.ConsumedByJob, &a.ConsumedAt); err != nil {
-			return nil, fmt.Errorf("list apibas approvals: %w", err)
+			return nil, false, fmt.Errorf("list apibas approvals: %w", err)
 		}
 		out = append(out, a)
 	}
-	return out, rows.Err()
+	if err := res.Err(); err != nil {
+		return nil, false, err
+	}
+	if len(out) > limit {
+		return out[:limit], true, nil
+	}
+	return out, false, nil
 }
 
 // GetAPIBASApproval returns one approval by id.

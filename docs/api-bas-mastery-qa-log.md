@@ -3763,3 +3763,19 @@ Three guards remain and the wiring sits behind all of them: (1) `AllowProduction
 - Tests: pending, approved, revoked and lapsed requests land in the right lists; `all` returns every one; limit and target filter work; the hash is absent; bad parameters give 400. RBAC matrix updated.
 - Not done: no pagination cursor beyond `limit`, no filter by requester, and no notification to approvers. Any holder of the view permission (including analysts) can see who requested what.
 - Not run on staging.
+
+## API BAS approvals: paging, requester filter, notifications (9 November 2026)
+
+### What changed
+- **Paging.** `GET /api/apibas/approvals` now returns `next_cursor` when more rows follow; pass it back as `cursor`. Keyset paging on (created_at, id), newest first, so rows created while paging cannot cause duplicates or skips within the walk. The cursor is an opaque token; an invalid one is 400.
+- **Requester filter.** `requested_by=<user id>` narrows the list.
+- **Notifications.** Requesting, approving and revoking an approval now emit `apibas_approval_requested` (severity warning), `apibas_approval_approved` and `apibas_approval_revoked` (info) through the existing notification service: stored in `notifications`, pushed live to connected browser sessions, and sent to enabled webhooks whose minimum severity allows them. Each carries the target id and metadata with the approval id, the requester and the actor. The binding hash is never published.
+
+### Tests (pass)
+Walk of 5 approvals 2 per page: every approval exactly once, newest first, 3 pages, last page has no cursor; requester filter returns only that requester; bad cursor is 400. Notification test captures the live pushes and checks the three events, their metadata, the absence of any hash, the warning severity on the request, that all three are persisted, and that the endpoints still work without the notification service.
+
+### Limits stated plainly
+- Notifications are a broadcast to every connected browser session and every matching webhook, not addressed to individual approvers, and there is no email. The approver permission is not checked per recipient; the notification text contains the target id and user ids, so anyone who can see notifications sees them.
+- The console does not render these event types specially yet (no UI work done); they appear wherever generic notifications appear.
+- Notification emission is best effort, as for other events: a storage failure is logged and does not stop the API call.
+- Not run on staging.

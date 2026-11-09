@@ -1,17 +1,21 @@
 package api
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/notifications"
 )
 
 // Production approval records. These endpoints only create, approve and show approvals. Production execution is still refused by
@@ -40,6 +44,19 @@ func approvalStatus(a db.APIBASApproval, now time.Time) string {
 		return "expired"
 	}
 	return "approved"
+}
+
+// emitAPIBASApproval raises a notification for an approval event: stored, pushed to connected browser sessions and sent to
+// enabled webhooks by the notification service. It is a broadcast, not addressed to individual approvers, and it never carries
+// the binding hash. A server without the notification service skips it.
+func (h *Handler) emitAPIBASApproval(ctx context.Context, typ notifications.EventType, sev notifications.Severity, a db.APIBASApproval, actor, msg string) {
+	if h.notifications == nil {
+		return
+	}
+	h.notifications.Emit(ctx, notifications.Event{
+		Type: typ, TargetID: a.TargetID, Severity: sev, Message: msg,
+		Metadata: map[string]any{"approval_id": a.ID, "target_id": a.TargetID, "requested_by": a.RequestedBy, "actor": actor},
+	})
 }
 
 func approvalView(a db.APIBASApproval) map[string]any {
@@ -95,6 +112,9 @@ func (h *Handler) RequestAPIBASApproval(w http.ResponseWriter, r *http.Request) 
 	_ = h.auditDurable(r.Context(), actor, "apibas.approval.request", "apibas-approval:"+id, map[string]any{
 		"target_id": t.ID, "fixture": b.Fixture, "scenario_ids": b.ScenarioIDs, "binding_hash": hash,
 	}, "success")
+	h.emitAPIBASApproval(r.Context(), notifications.EventAPIBASApprovalRequested, notifications.SeverityWarning,
+		db.APIBASApproval{ID: id, TargetID: t.ID, RequestedBy: actor}, actor,
+		"Production assessment approval requested for target "+t.ID+" by "+actor)
 	apibasRespond(w, http.StatusCreated, map[string]any{"id": id, "status": "pending", "binding_hash": hash})
 }
 
@@ -142,6 +162,8 @@ func (h *Handler) ApproveAPIBASApproval(w http.ResponseWriter, r *http.Request) 
 	_ = h.auditDurable(r.Context(), actor, "apibas.approval.approve", "apibas-approval:"+id, map[string]any{
 		"target_id": a.TargetID, "requested_by": a.RequestedBy, "binding_hash": a.BindingHash,
 	}, "success")
+	h.emitAPIBASApproval(r.Context(), notifications.EventAPIBASApprovalApproved, notifications.SeverityInfo, a, actor,
+		"Production assessment approval for target "+a.TargetID+" approved by "+actor)
 	got, err := db.GetAPIBASApproval(r.Context(), h.db, id)
 	if err != nil {
 		apibasRespond(w, http.StatusOK, map[string]any{"id": id, "status": "approved"})
@@ -195,6 +217,8 @@ func (h *Handler) RevokeAPIBASApproval(w http.ResponseWriter, r *http.Request) {
 	_ = h.auditDurable(r.Context(), actor, "apibas.approval.revoke", "apibas-approval:"+id, map[string]any{
 		"target_id": a.TargetID, "requested_by": a.RequestedBy, "approved_by": a.ApprovedBy, "reason": b.Reason,
 	}, "success")
+	h.emitAPIBASApproval(r.Context(), notifications.EventAPIBASApprovalRevoked, notifications.SeverityInfo, a, actor,
+		"Production assessment approval for target "+a.TargetID+" revoked by "+actor)
 	got, err := db.GetAPIBASApproval(r.Context(), h.db, id)
 	if err != nil {
 		apibasRespond(w, http.StatusOK, map[string]any{"id": id, "status": "revoked"})
@@ -203,8 +227,28 @@ func (h *Handler) RevokeAPIBASApproval(w http.ResponseWriter, r *http.Request) {
 	apibasRespond(w, http.StatusOK, approvalView(got))
 }
 
-// ListAPIBASApprovals lists approvals, newest first. GET /api/apibas/approvals?state=pending|approved|all&target_id=&limit=
-// The default is pending, which is what an approver needs. The binding hash is not returned.
+// encodeApprovalCursor and decodeApprovalCursor turn a list position (created_at, id) into an opaque token and back.
+func encodeApprovalCursor(a db.APIBASApproval) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(a.CreatedAt.UTC().Format(time.RFC3339Nano) + "|" + a.ID))
+}
+
+func decodeApprovalCursor(c string) (time.Time, string, bool) {
+	raw, err := base64.RawURLEncoding.DecodeString(c)
+	if err != nil {
+		return time.Time{}, "", false
+	}
+	ts, id, ok := strings.Cut(string(raw), "|")
+	t, terr := time.Parse(time.RFC3339Nano, ts)
+	if !ok || terr != nil || len(id) != 36 {
+		return time.Time{}, "", false
+	}
+	return t, id, true
+}
+
+// ListAPIBASApprovals lists approvals, newest first, a page at a time.
+// GET /api/apibas/approvals?state=pending|approved|all&target_id=&requested_by=&limit=&cursor=
+// The default state is pending, which is what an approver needs. next_cursor is present when more rows follow; pass it back as
+// cursor to continue. The binding hash is not returned.
 func (h *Handler) ListAPIBASApprovals(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	state := q.Get("state")
@@ -215,16 +259,24 @@ func (h *Handler) ListAPIBASApprovals(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "state must be pending, approved or all", http.StatusBadRequest)
 		return
 	}
-	limit := 0
+	f := db.APIBASApprovalFilter{State: state, TargetID: q.Get("target_id"), Requester: q.Get("requested_by")}
 	if v := q.Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > 200 {
 			jsonError(w, "limit must be between 1 and 200", http.StatusBadRequest)
 			return
 		}
-		limit = n
+		f.Limit = n
 	}
-	rows, err := db.ListAPIBASApprovals(r.Context(), h.db, db.APIBASApprovalFilter{State: state, TargetID: q.Get("target_id"), Limit: limit})
+	if c := q.Get("cursor"); c != "" {
+		t, id, ok := decodeApprovalCursor(c)
+		if !ok {
+			jsonError(w, "cursor is not valid", http.StatusBadRequest)
+			return
+		}
+		f.AfterTime, f.AfterID = &t, id
+	}
+	rows, more, err := db.ListAPIBASApprovals(r.Context(), h.db, f)
 	if err != nil {
 		jsonError(w, "could not list approvals", http.StatusInternalServerError)
 		return
@@ -233,7 +285,11 @@ func (h *Handler) ListAPIBASApprovals(w http.ResponseWriter, r *http.Request) {
 	for _, a := range rows {
 		out = append(out, approvalView(a))
 	}
-	apibasRespond(w, http.StatusOK, map[string]any{"approvals": out, "state": state})
+	resp := map[string]any{"approvals": out, "state": state}
+	if more && len(rows) > 0 {
+		resp["next_cursor"] = encodeApprovalCursor(rows[len(rows)-1])
+	}
+	apibasRespond(w, http.StatusOK, resp)
 }
 
 // GetAPIBASApproval shows one approval. GET /api/apibas/approvals/{id}
