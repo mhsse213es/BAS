@@ -57,12 +57,23 @@ func newEnvWith(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string
 	// NBFC pack identities (fixture.NBFCTwoBorrower). Each caller ID is the identity name.
 	tokBorrowerA, tokBorrowerB, tokOfficer, tokNBFCAdmin := randomToken(t), randomToken(t), randomToken(t), randomToken(t)
 	revokedA := randomToken(t) // issued to customer-a, then revoked in the lab
+	// Manufacturing pack identities (fixture.ManufacturingTwoPlant). Each caller ID is the identity name.
+	mfgTok_planner_a := randomToken(t)
+	mfgTok_operator_a := randomToken(t)
+	mfgTok_planner_b := randomToken(t)
+	mfgTok_operator_b := randomToken(t)
+	mfgTok_supplier_1 := randomToken(t)
+	mfgTok_supplier_2 := randomToken(t)
+	mfgTok_device_a := randomToken(t)
+	mfgTok_device_b := randomToken(t)
+	mfgTok_ot_engineer := randomToken(t)
 	l, err := lab.New(lab.Config{
 		Mode:    mode,
 		Fixture: fx,
 		Tokens: map[string]string{
 			tokA: "cust-a", tokB: "cust-b", revokedA: "cust-a",
 			tokBorrowerA: "borrower-a", tokBorrowerB: "borrower-b", tokOfficer: "loan-officer", tokNBFCAdmin: "nbfc-admin",
+			mfgTok_planner_a: "planner-a", mfgTok_operator_a: "operator-a", mfgTok_planner_b: "planner-b", mfgTok_operator_b: "operator-b", mfgTok_supplier_1: "supplier-1", mfgTok_supplier_2: "supplier-2", mfgTok_device_a: "device-a", mfgTok_device_b: "device-b", mfgTok_ot_engineer: "ot-engineer",
 		},
 		Revoked:        []string{revokedA},
 		AdminToken:     adminTok,
@@ -91,6 +102,15 @@ func newEnvWith(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string
 		"apibas/lab/borrower-b":         tokBorrowerB,
 		"apibas/lab/loan-officer":       tokOfficer,
 		"apibas/lab/nbfc-admin":         tokNBFCAdmin,
+		"apibas/lab/planner-a": mfgTok_planner_a,
+		"apibas/lab/operator-a": mfgTok_operator_a,
+		"apibas/lab/planner-b": mfgTok_planner_b,
+		"apibas/lab/operator-b": mfgTok_operator_b,
+		"apibas/lab/supplier-1": mfgTok_supplier_1,
+		"apibas/lab/supplier-2": mfgTok_supplier_2,
+		"apibas/lab/device-a": mfgTok_device_a,
+		"apibas/lab/device-b": mfgTok_device_b,
+		"apibas/lab/ot-engineer": mfgTok_ot_engineer,
 	}
 	return &env{
 		url: srv.URL, apiHits: hits, srv: srv, admin: admin, secrets: secrets, fx: fx,

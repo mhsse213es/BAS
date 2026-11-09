@@ -1,0 +1,52 @@
+id: "API-BAS-AUTHZ-202"
+name: "MFG-002: operator releases a production order"
+category: AUTHZ
+claim: function_level
+attack_objective: "The operator releases PROD-A-001 to the shop floor, a function reserved for the planner."
+threat_model:
+  attacker: "authenticated shop-floor operator"
+  identity: operator-a
+  access_level: "operator, valid token, assigned PROD-A-001, no planner role"
+  objective: "The operator releases PROD-A-001 to the shop floor, a function reserved for the planner."
+preconditions:
+  fixture: manufacturing-two-plant
+  identities: [planner-a, operator-a]
+  object: PROD-A-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: planner-a
+    auth: valid
+    method: GET
+    path: "/api/mfg/orders/PROD-A-001"
+    hypothesis: "Planner A, the owner, reads their own production order. If this fails, the scenario is not testable."
+  - id: "attack-authz-202"
+    role: attack
+    identity: operator-a
+    auth: valid
+    method: POST
+    path: "/api/mfg/orders/PROD-A-001/release"
+    body: '{}'
+    hypothesis: "The operator's release of PROD-A-001 is refused, and the order status does not change."
+denied_statuses: [403, 404]
+expected_control: "Only the owning planner can release a production order. An operator's release is refused and the status is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows PROD-A-001's status unchanged after the operator's release.
+detection_assertion:
+  status: not_evaluated
+  reason: "No detection rule is wired for the manufacturing pack yet. The access event names the owner of the record, so a rule could be written, but none is claimed."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "Manufacturing: unauthorized production-order modification (release requires the planner role)"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-202 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-202 against the vulnerable build must FAIL (exploited)"

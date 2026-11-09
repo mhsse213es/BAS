@@ -1,0 +1,50 @@
+id: "API-BAS-DATA-202"
+name: "MFG-006: asset inventory lists another plant's machines and telemetry keys"
+category: DATA
+claim: cross_identity
+attack_objective: "Planner A lists machine assets and receives plant B's machines with their telemetry keys."
+threat_model:
+  attacker: "authenticated planner at plant A"
+  identity: planner-a
+  access_level: "planner, valid token, owns ASSET-A-001 only"
+  objective: "Planner A lists machine assets and receives plant B's machines with their telemetry keys."
+preconditions:
+  fixture: manufacturing-two-plant
+  identities: [planner-a, planner-b]
+  object: ASSET-B-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: planner-b
+    auth: valid
+    method: GET
+    path: "/api/mfg/assets"
+    hypothesis: "Planner B, the owner, lists their own assets. If this fails, the scenario is not testable."
+  - id: "attack-data-202"
+    role: attack
+    identity: planner-a
+    auth: valid
+    method: GET
+    path: "/api/mfg/assets"
+    hypothesis: "The asset list returns only plant A's machines, so ASSET-B-001 and its telemetry key are not listed."
+denied_statuses: []
+forbidden_values: ["ASSET-B-001", "BAS-SIM-TELEM-B"]
+clean_is_enforcement: true
+expected_control: "The asset list returns only the caller's own machines. A list that reveals another plant's machine or telemetry key fails."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to the asset list carries no identifier or telemetry key of another plant's machine.
+detection_assertion:
+  status: not_evaluated
+  reason: "No detection rule is wired for the manufacturing pack yet. The access event names the owner of the record, so a rule could be written, but none is claimed."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "Manufacturing: machine telemetry and asset inventory exposure"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DATA-202 against the fixed build must PASS"
+  - "API-BAS-DATA-202 against the vulnerable build must FAIL (exploited)"

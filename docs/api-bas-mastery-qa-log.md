@@ -3779,3 +3779,23 @@ Walk of 5 approvals 2 per page: every approval exactly once, newest first, 3 pag
 - The console does not render these event types specially yet (no UI work done); they appear wherever generic notifications appear.
 - Notification emission is best effort, as for other events: a storage failure is logged and does not stop the API call.
 - Not run on staging.
+
+## API BAS manufacturing sector pack, first tranche (9 November 2026)
+
+### What was built
+- **Fixture** `manufacturing-two-plant` (`fixture.ManufacturingTwoPlant`): two plants each with a planner, an operator, a production order, a bill of materials and a machine asset; two suppliers with purchase orders; two IoT devices; one OT engineer who owns the OT management configuration. All values synthetic, protected values tagged BAS-SIM.
+- **Lab routes** (`lab/manufacturing.go`, `/api/mfg/...`), vulnerable and fixed builds, on the same pack store the NBFC records use (a fixture seeds one pack at a time): production-order read and release, bill-of-materials read, purchase-order read and change, asset listing, device read and command, OT configuration read.
+- **Seven scenarios**: AUTHZ-201 cross-plant production-order read; AUTHZ-202 operator releasing an order (function-level); AUTHZ-203 supplier changing another supplier's purchase order; AUTHZ-204 device commanding another device; DATA-201 bill of materials and CAD reference leakage; DATA-202 asset inventory and telemetry-key listing; INTEG-201 IT-side operator reaching the OT management configuration (IT/OT trust boundary).
+
+### Results
+- All seven: vulnerable build FAIL (exploited), fixed build PASS (control enforced). Every baseline is a read by the owner, so a failed baseline would show as not testable rather than a pass.
+- Whole runner package passes (475 s). Catalogue 127, executable 127, lab-validated 124 of 127 (97.6%); the three not validated are the same as before (ABUSE-002 provisional, REPORT-001 workflow-verified, REPORT-002 unevaluated).
+- Windows cross-compile of the lab binary and runner checked in the clean worktree.
+
+### Limits stated plainly
+- **No detection.** The seven scenarios declare `detection_assertion: not_evaluated`. The access event already names the record owner, so rules could be written, but none is wired or claimed. Detection `not_evaluated` count is now 42 of 127.
+- **No regulatory mapping.** None of the seven carries one.
+- **Machine commands are simulated.** The device command only records a status in the lab. Nothing drives equipment, and no OT protocol (Modbus, OPC UA) adapter exists.
+- **Thin against API.txt's manufacturing list.** Covered: ERP/MES order authorization, production-order modification, BOM and CAD leakage, supplier purchase-order manipulation, telemetry and asset exposure, IoT device command authorization, OT management exposure. Not covered: inventory write paths, BOM write paths, machine-command safety interlocks, partner onboarding for manufacturing, and live-validated anything.
+- Pack records share the NBFC store type (`nbfcStore`); the name is historical. A rename would be a separate, mechanical change.
+- Not run on staging or against a real ERP, MES or OT environment.

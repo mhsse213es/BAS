@@ -1,0 +1,49 @@
+id: "API-BAS-INTEG-201"
+name: "MFG-007: plant operator reaches the OT management configuration"
+category: INTEG
+claim: function_level
+attack_objective: "A plant operator reads the OT management configuration and receives the PLC administrator credential."
+threat_model:
+  attacker: "authenticated plant operator on the IT side"
+  identity: operator-a
+  access_level: "operator, valid token, no OT engineer role"
+  objective: "A plant operator reads the OT management configuration and receives the PLC administrator credential."
+preconditions:
+  fixture: manufacturing-two-plant
+  identities: [operator-a, ot-engineer]
+  object: OTCFG-A-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: ot-engineer
+    auth: valid
+    method: GET
+    path: "/api/mfg/ot/config/OTCFG-A-001"
+    hypothesis: "The OT engineer, the owner, reads the OT configuration. If this fails, the scenario is not testable."
+  - id: "attack-integ-201"
+    role: attack
+    identity: operator-a
+    auth: valid
+    method: GET
+    path: "/api/mfg/ot/config/OTCFG-A-001"
+    hypothesis: "The operator's read of OTCFG-A-001 is refused, and no OT credential comes back."
+denied_statuses: [403, 404]
+forbidden_values: ["BAS-SIM-OT-ADMIN-A"]
+expected_control: "The OT management plane is reachable only by the OT engineer. An IT-side operator is refused and no OT credential is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to the operator's read of OTCFG-A-001 carries no OT credential.
+detection_assertion:
+  status: not_evaluated
+  reason: "No detection rule is wired for the manufacturing pack yet. The access event names the owner of the record, so a rule could be written, but none is claimed."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "Manufacturing: OT management API exposure and IT/OT trust-boundary failure"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-INTEG-201 against the fixed build must PASS"
+  - "API-BAS-INTEG-201 against the vulnerable build must FAIL (exploited)"
