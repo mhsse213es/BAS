@@ -34,9 +34,13 @@ ground_truth:
   adapters: ["state", "response"]
   check: >
     The state shows PKEY-1-001 unchanged after partner 1's escalation.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-024
+  min_severity: high
 detection_assertion:
-  status: not_evaluated
-  reason: "The partner changes their own key, so no object owned by another identity is named and REL-004 cannot fire. A rule on key-scope changes by a non-staff identity does not exist yet."
+  status: fixture_validated
+  reason: "The escalation names a partner key and the caller is a partner, not support staff, so REL-024 fires on the attempt in either build. Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
 side_effect_class: STATE_CHANGE_SANDBOX
 cleanup:
   - "reset the lab to its fixture seed after the run"

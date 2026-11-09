@@ -3843,3 +3843,12 @@ Walk of 5 approvals 2 per page: every approval exactly once, newest first, 3 pag
 - Detection: six scenarios use REL-004. BIZ-401, INTEG-402 and INTEG-403 act on the caller's own object, so REL-004 cannot fire; they are `not_evaluated` with that reason. New rules (price change by a non-staff identity, key-scope change by a non-staff identity, delivery report by a non-carrier) would be needed.
 - No regulatory mapping (subscriber and shipment data are personal data, but regulatory verification is deferred by decision).
 - Pack records still use the NBFC store type name. Not run on staging or against a real carrier, OSS/BSS or partner portal.
+
+## API BAS detection rules REL-023, REL-024 and REL-025 (9 November 2026)
+
+- **REL-023** (retail order changed by a non-staff identity): `PATCH /api/retail/orders/` by a known role other than `agent`. Wired to BIZ-401.
+- **REL-024** (partner key scope changed by a non-staff identity): `POST /api/retail/partner-keys/*/escalate` by a known role other than `agent`. Wired to INTEG-402.
+- **REL-025** (delivery reported by a non-carrier identity): `POST /api/retail/shipments/*/callback` by a known role other than `carrier`. Wired to INTEG-403.
+- All three are attempt signals keyed on the route and the actor's role, in the style of REL-018 and REL-021, because these scenarios act on the caller's own object and REL-004 cannot see them. A read of the same resource, an unauthenticated request and the permitted role do not fire them (unit test `TestCommerceRoleRules`).
+- Measured: all 108 declared detection expectations match the detector (0 mismatches), the oracle states the expectation independently of the rules. Vulnerable detected 88, fixed detected 73; 35 of 145 scenarios without detection.
+- Limits: fixture-validated only, no live SIEM. The rules key on route text, so a renamed route needs the rule updated; a role-based rule trusts the lab's fixture role. In a real system the permitted role set would be configuration, not a constant.

@@ -354,6 +354,35 @@ var ElasticRules = []Rule{
 			return e.ActorRole == "delegate" && slices.Contains(e.DisclosedClasses, DisclosureClinicalRecord)
 		},
 	},
+	{
+		// REL-023 fires when a retail order is changed by an identity whose role is known and is not support staff. Order prices
+		// are set by an agent; the owner changing their own order is the client-controlled price the retail pack tests (RET-003).
+		// The attempt is the signal, whatever the outcome. The caller's own object is named, so REL-004 cannot see it.
+		ID: "APIBAS-REL-023", Name: "Retail order changed by a non-staff identity", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.ActorRole != "" && e.ActorRole != "agent" && strings.HasPrefix(e.Action, "PATCH /api/retail/orders/")
+		},
+	},
+	{
+		// REL-024 fires when a partner API key's scope is changed by an identity whose role is known and is not support staff.
+		// The partner changing their own key is the privilege escalation the partner pack tests (PART-002). The attempt is the
+		// signal, whatever the outcome.
+		ID: "APIBAS-REL-024", Name: "Partner key scope changed by a non-staff identity", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.ActorRole != "" && e.ActorRole != "agent" &&
+				strings.HasPrefix(e.Action, "POST /api/retail/partner-keys/") && strings.HasSuffix(e.Action, "/escalate")
+		},
+	},
+	{
+		// REL-025 fires when a shipment delivery callback is called by an identity whose role is known and is not the carrier.
+		// A shopper reporting their own shipment delivered is the callback trust failure the logistics pack tests (LOG-001). The
+		// attempt is the signal, whatever the outcome.
+		ID: "APIBAS-REL-025", Name: "Delivery reported by a non-carrier identity", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.ActorRole != "" && e.ActorRole != "carrier" &&
+				strings.HasPrefix(e.Action, "POST /api/retail/shipments/") && strings.HasSuffix(e.Action, "/callback")
+		},
+	},
 }
 
 // staffRole reports whether a role belongs to lender staff.

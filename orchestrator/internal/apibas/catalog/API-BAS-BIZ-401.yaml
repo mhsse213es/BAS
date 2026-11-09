@@ -34,9 +34,13 @@ ground_truth:
   adapters: ["state", "response"]
   check: >
     The state shows RORD-A-001's amount unchanged after shopper A's change.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-023
+  min_severity: high
 detection_assertion:
-  status: not_evaluated
-  reason: "The shopper changes the price of their own order, so no object owned by another identity is named and REL-004 cannot fire. A rule on price changes by a non-staff identity does not exist yet."
+  status: fixture_validated
+  reason: "The change names an order and the caller is a shopper, not support staff, so REL-023 fires on the attempt in either build. Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
 side_effect_class: STATE_CHANGE_SANDBOX
 cleanup:
   - "reset the lab to its fixture seed after the run"

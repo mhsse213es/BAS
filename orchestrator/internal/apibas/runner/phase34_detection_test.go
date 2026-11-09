@@ -138,6 +138,24 @@ func expectedDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, ru
 			return detect.Detected
 		}
 		return detect.NotDetected
+	case "APIBAS-REL-023", "APIBAS-REL-024", "APIBAS-REL-025":
+		// A role-restricted commerce route called by a caller whose role is not the permitted one. The attempt is the signal, in
+		// either build.
+		attack := s.Steps[len(s.Steps)-1]
+		permitted := map[string]string{"APIBAS-REL-023": "agent", "APIBAS-REL-024": "agent", "APIBAS-REL-025": "carrier"}[rule]
+		onRoute := false
+		switch rule {
+		case "APIBAS-REL-023":
+			onRoute = attack.Method == "PATCH" && strings.HasPrefix(attack.Path, "/api/retail/orders/")
+		case "APIBAS-REL-024":
+			onRoute = attack.Method == "POST" && strings.HasPrefix(attack.Path, "/api/retail/partner-keys/") && strings.HasSuffix(attack.Path, "/escalate")
+		case "APIBAS-REL-025":
+			onRoute = attack.Method == "POST" && strings.HasPrefix(attack.Path, "/api/retail/shipments/") && strings.HasSuffix(attack.Path, "/callback")
+		}
+		if onRoute && roleOf(t, fx, attack.Identity) != permitted {
+			return detect.Detected
+		}
+		return detect.NotDetected
 	case "APIBAS-REL-021":
 		// A laboratory result change by a caller whose role is not a device. The attempt is the signal, in either build.
 		attack := s.Steps[len(s.Steps)-1]

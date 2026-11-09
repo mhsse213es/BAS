@@ -34,9 +34,13 @@ ground_truth:
   adapters: ["state", "response"]
   check: >
     The state shows SHIP-A-001 unchanged after shopper A's delivery report.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-025
+  min_severity: high
 detection_assertion:
-  status: not_evaluated
-  reason: "The shopper reports on their own shipment, so no object owned by another identity is named and REL-004 cannot fire. A rule on delivery reports by a non-carrier identity does not exist yet."
+  status: fixture_validated
+  reason: "The callback names a shipment and the caller is a shopper, not the carrier, so REL-025 fires on the attempt in either build. Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
 side_effect_class: STATE_CHANGE_SANDBOX
 cleanup:
   - "reset the lab to its fixture seed after the run"
