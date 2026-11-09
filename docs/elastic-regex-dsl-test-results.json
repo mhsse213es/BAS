@@ -1,61 +1,61 @@
 {
  "keyword": {
   "fieldType": "keyword",
-  "strings": 582,
+  "strings": 10419,
   "results": [
    {
     "pattern": "\\s-[FTd]\\s",
     "flags": "",
     "status": "PASS",
-    "matches": 18
+    "matches": 99
    },
    {
     "pattern": "(.){200,}",
     "flags": "",
     "status": "PASS",
-    "matches": 15
+    "matches": 180
    },
    {
     "pattern": ".+:assumed-role/aws:.+",
     "flags": "",
     "status": "PASS",
-    "matches": 7
+    "matches": 81
    },
    {
     "pattern": "(?:\\s-[^-\\s]{0,20}i|\\s--inode\\s)",
     "flags": "",
     "status": "PASS",
-    "matches": 13
+    "matches": 106
    },
    {
     "pattern": "(?:\\s-[^-\\s]{0,20}d|\\s--directory\\s)",
     "flags": "",
     "status": "PASS",
-    "matches": 8
+    "matches": 206
    },
    {
     "pattern": "-(W|R)\\s?(\\s|\"|')([0-9a-fA-F]{2}\\s?){2,20}(\\s|\"|')",
     "flags": "",
     "status": "PASS",
-    "matches": 9
+    "matches": 86
    },
    {
     "pattern": "-D",
     "flags": "",
     "status": "PASS",
-    "matches": 3
+    "matches": 66
    },
    {
     "pattern": "\\s-O\\s",
     "flags": "",
     "status": "PASS",
-    "matches": 13
+    "matches": 42
    },
    {
     "pattern": "(?i)(ipfs\\.io/|ipfs\\.io\\s).+\\..+@.+\\.[a-z]+",
     "flags": "",
     "status": "PASS",
-    "matches": 21
+    "matches": 132
    },
    {
     "pattern": "^abc",
@@ -67,7 +67,7 @@
     "pattern": "abc$",
     "flags": "",
     "status": "PASS",
-    "matches": 15
+    "matches": 33
    },
    {
     "pattern": "^abc$",
@@ -79,187 +79,727 @@
     "pattern": "a|b",
     "flags": "",
     "status": "PASS",
-    "matches": 316
+    "matches": 5729
    },
    {
     "pattern": "x(a|b)y",
     "flags": "",
     "status": "PASS",
-    "matches": 7
+    "matches": 38
    },
    {
     "pattern": "\\d{3}-\\d{2}",
     "flags": "",
     "status": "PASS",
-    "matches": 1
+    "matches": 58
    },
    {
     "pattern": "\\w+@\\w+",
     "flags": "",
     "status": "PASS",
-    "matches": 41
+    "matches": 199
    },
    {
     "pattern": "a.c",
     "flags": "",
     "status": "PASS",
-    "matches": 46
+    "matches": 568
    },
    {
     "pattern": "a.c",
     "flags": "s",
     "status": "PASS",
-    "matches": 50
+    "matches": 572
    },
    {
     "pattern": "[a-c]+z",
     "flags": "",
     "status": "PASS",
-    "matches": 8
+    "matches": 72
    },
    {
     "pattern": "[^0-9]{4}",
     "flags": "",
     "status": "PASS",
-    "matches": 409
+    "matches": 9896
    },
    {
     "pattern": "a\\.b",
     "flags": "",
     "status": "PASS",
-    "matches": 6
+    "matches": 27
    },
    {
     "pattern": "a+?b",
     "flags": "",
     "status": "PASS",
-    "matches": 66
+    "matches": 498
    },
    {
     "pattern": "colou?r",
     "flags": "",
     "status": "PASS",
-    "matches": 4
+    "matches": 24
    },
    {
     "pattern": "<tag>&amp;~#\\\"",
     "flags": "",
     "status": "PASS",
-    "matches": 1
+    "matches": 11
    },
    {
     "pattern": "\\\\\\\\server\\\\share",
     "flags": "",
     "status": "PASS",
-    "matches": 2
+    "matches": 11
    },
    {
     "pattern": "\\S+\\.exe",
     "flags": "",
     "status": "PASS",
-    "matches": 6
+    "matches": 547
    },
    {
     "pattern": "\\W\\D",
     "flags": "",
     "status": "PASS",
-    "matches": 364
+    "matches": 9909
    },
    {
     "pattern": "abc",
     "flags": "i",
     "status": "PASS",
-    "matches": 63
+    "matches": 182
    },
    {
     "pattern": "(?i)ABC",
     "flags": "",
     "status": "PASS",
-    "matches": 63
+    "matches": 182
    },
    {
     "pattern": "[\\s,]x",
     "flags": "",
     "status": "PASS",
-    "matches": 31
+    "matches": 253
    },
    {
     "pattern": "a\\tb",
     "flags": "",
     "status": "PASS",
-    "matches": 6
+    "matches": 22
    },
    {
     "pattern": "a{2,}b",
     "flags": "",
     "status": "PASS",
-    "matches": 3
+    "matches": 143
    },
    {
     "pattern": "(?:ab)+c",
     "flags": "",
     "status": "PASS",
+    "matches": 132
+   },
+   {
+    "pattern": "\\s-[FTd]\\s",
+    "flags": "",
+    "status": "PASS",
+    "matches": 99
+   },
+   {
+    "pattern": "\\\\sessionresume_[a-zA-Z]{8}$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 15
+   },
+   {
+    "pattern": "(.){200,}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 180
+   },
+   {
+    "pattern": "^C:\\\\Windows\\\\SYSTEM32\\\\ntdll\\.dll\\+[a-z0-9]{4,6}\\|C:\\\\Windows\\\\System32\\\\KERNELBASE\\.dll\\+[a-z0-9]{4,6}\\|UNKNOWN\\([A-Z0-9]{16}\\)$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 4
+   },
+   {
+    "pattern": "cmd.{0,5}(?:/c|/r)(?:\\s|)\"set\\s[a-zA-Z]{3,6}.*(?:\\{\\d\\}){1,}\\\\\"\\s+?-f(?:.*\\)){1,}.*\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 111
+   },
+   {
+    "pattern": "\\\\mojo\\.5688\\.8052\\.(?:183894939787088877|35780273329370473)[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 11
+   },
+   {
+    "pattern": "\\\\wkssvc_?[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 35
+   },
+   {
+    "pattern": "\\\\ntsvcs[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 32
+   },
+   {
+    "pattern": "\\\\DserNamePipe[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 19
+   },
+   {
+    "pattern": "\\\\SearchTextHarvester[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 28
+   },
+   {
+    "pattern": "\\\\mypipe-(?:f|h)[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 33
+   },
+   {
+    "pattern": "\\\\windows\\.update\\.manager[0-9a-f]{2,3}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 28
+   },
+   {
+    "pattern": "\\\\ntsvcs_[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 28
+   },
+   {
+    "pattern": "\\\\scerpc_?[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 34
+   },
+   {
+    "pattern": "\\\\PGMessagePipe[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 20
+   },
+   {
+    "pattern": "\\\\MsFteWds[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 33
+   },
+   {
+    "pattern": "\\\\f4c3[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 32
+   },
+   {
+    "pattern": "\\\\fullduplex_[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 22
+   },
+   {
+    "pattern": "\\\\msrpc_[0-9a-f]{4}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 27
+   },
+   {
+    "pattern": "\\\\win\\\\msrpc_[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 22
+   },
+   {
+    "pattern": "\\\\f53f[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 31
+   },
+   {
+    "pattern": "\\\\rpc_[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 35
+   },
+   {
+    "pattern": "\\\\spoolss_[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 26
+   },
+   {
+    "pattern": "\\\\Winsock2\\\\CatalogChangeListener-[0-9a-f]{3}-0,",
+    "flags": "",
+    "status": "PASS",
+    "matches": 9
+   },
+   {
+    "pattern": "0x[a-fA-F0-9]{8}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 54
+   },
+   {
+    "pattern": "^[Cc]:\\\\[Pp]rogram[Dd]ata\\\\.{1,9}\\.exe",
+    "flags": "",
+    "status": "PASS",
+    "matches": 14
+   },
+   {
+    "pattern": "^[Cc]:\\\\.{1,9}\\.exe",
+    "flags": "",
+    "status": "PASS",
+    "matches": 18
+   },
+   {
+    "pattern": "\\$PSHome\\[\\s*\\d{1,3}\\s*\\]\\s*\\+\\s*\\$PSHome\\[",
+    "flags": "",
+    "status": "PASS",
+    "matches": 27
+   },
+   {
+    "pattern": "\\$ShellId\\[\\s*\\d{1,3}\\s*\\]\\s*\\+\\s*\\$ShellId\\[",
+    "flags": "",
+    "status": "PASS",
+    "matches": 37
+   },
+   {
+    "pattern": "\\$env:Public\\[\\s*\\d{1,3}\\s*\\]\\s*\\+\\s*\\$env:Public\\[",
+    "flags": "",
+    "status": "PASS",
+    "matches": 31
+   },
+   {
+    "pattern": "\\$env:ComSpec\\[(\\s*\\d{1,3}\\s*,){2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 46
+   },
+   {
+    "pattern": "\\*mdr\\*\\W\\s*\\)\\.Name",
+    "flags": "",
+    "status": "PASS",
+    "matches": 24
+   },
+   {
+    "pattern": "\\$VerbosePreference\\.ToString\\(",
+    "flags": "",
+    "status": "PASS",
+    "matches": 4
+   },
+   {
+    "pattern": "net\\s+user\\s+",
+    "flags": "",
+    "status": "PASS",
+    "matches": 39
+   },
+   {
+    "pattern": "cmd.{0,5}(?:/c|/r)(?:\\s|)\\\"set\\s[a-zA-Z]{3,6}.*(?:\\{\\d\\}){1,}\\\\\\\"\\s+?\\-f(?:.*\\)){1,}.*\\\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 111
+   },
+   {
+    "pattern": "\\[String\\]\\s*\\$VerbosePreference",
+    "flags": "",
+    "status": "PASS",
+    "matches": 20
+   },
+   {
+    "pattern": "HostId=[a-zA-Z0-9-]{36}\\s+EngineVersion=",
+    "flags": "",
+    "status": "PASS",
+    "matches": 25
+   },
+   {
+    "pattern": "^[a-zA-Z]:\\\\windows\\\\temp\\\\[a-zA-Z0-9]{10}\\.exe",
+    "flags": "",
+    "status": "PASS",
+    "matches": 11
+   },
+   {
+    "pattern": ".+:assumed-role/aws:.+",
+    "flags": "",
+    "status": "PASS",
+    "matches": 81
+   },
+   {
+    "pattern": "(?:\\s-[^-\\s]{0,20}i|\\s--inode\\s)",
+    "flags": "",
+    "status": "PASS",
+    "matches": 106
+   },
+   {
+    "pattern": "(?:\\s-[^-\\s]{0,20}d|\\s--directory\\s)",
+    "flags": "",
+    "status": "PASS",
+    "matches": 206
+   },
+   {
+    "pattern": "\\$env:ComSpec\\[(?:\\s*\\d{1,3}\\s*,){2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 46
+   },
+   {
+    "pattern": "\\\\*mdr\\*\\W\\s*\\)\\.Name",
+    "flags": "",
+    "status": "PASS",
+    "matches": 72
+   },
+   {
+    "pattern": "\\String\\]\\s*\\$VerbosePreference",
+    "flags": "",
+    "status": "PASS",
+    "matches": 38
+   },
+   {
+    "pattern": "\\{[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}\\}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 37
+   },
+   {
+    "pattern": "(?i)\\.exe[\\\"\\']?\\s+[^\\\"]{0,64}werfaultsecure\\.exe[\\\"\\']?\\s+\\d{2,10}",
+    "flags": "",
+    "status": "NO_DSL",
+    "reason": "bounded repeat of 32 or more of a negated class, followed by more pattern, in an unanchored regex"
+   },
+   {
+    "pattern": "-1[0-9]{3}\\\\Software\\\\Classes\\\\",
+    "flags": "",
+    "status": "PASS",
+    "matches": 16
+   },
+   {
+    "pattern": "cmd.{0,5}(?:/c|/r).+powershell.+(?:\\$\\{?input\\}?|noexit).+\\\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 94
+   },
+   {
+    "pattern": "\\\\Windows\\\\System32\\\\[a-zA-Z0-9]{8}\\.tmp$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 10
+   },
+   {
+    "pattern": "^%systemroot%\\\\[a-zA-Z]{8}\\.exe$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 12
+   },
+   {
+    "pattern": "(^[a-zA-Z]{4}$)|(^[a-zA-Z]{8}$)|(^[a-zA-Z]{16}$)",
+    "flags": "",
+    "status": "NO_DSL",
+    "reason": "anchor inside the pattern"
+   },
+   {
+    "pattern": "^[A-Za-z0-9]{16}$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 21
+   },
+   {
+    "pattern": "\\\\[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.txt$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 4
+   },
+   {
+    "pattern": "\\\\[a-zA-Z]{8}\\.tmp$",
+    "flags": "",
+    "status": "PASS",
     "matches": 40
+   },
+   {
+    "pattern": "cmd.{0,5}(?:/c|/r).+clip(?:\\.exe)?.{0,4}&&.+clipboard]::\\(\\s\\\\\"\\{\\d\\}.+-f.+\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 36
+   },
+   {
+    "pattern": "cmd.{0,5}(?:/c|/r).+powershell.+(?:\\$?\\{?input\\}?|noexit).+\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 117
+   },
+   {
+    "pattern": "net\\s+view",
+    "flags": "",
+    "status": "PASS",
+    "matches": 36
+   },
+   {
+    "pattern": "sc\\s+query",
+    "flags": "",
+    "status": "PASS",
+    "matches": 33
+   },
+   {
+    "pattern": "(?i)(set).*&&\\s?set.*(environment|invoke|\\$\\{?input).*&&.*\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 126
+   },
+   {
+    "pattern": "\\\\Windows\\\\__1\\d{9}\\.\\d{1,7}$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 4
+   },
+   {
+    "pattern": "C:\\\\__1\\d{9}\\.\\d{1,7}$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 4
+   },
+   {
+    "pattern": "D:\\\\__1\\d{9}\\.\\d{1,7}$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 3
+   },
+   {
+    "pattern": "(^0oa.*|[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,10})",
+    "flags": "",
+    "status": "NO_DSL",
+    "reason": "anchor inside the pattern"
+   },
+   {
+    "pattern": "-(W|R)\\s?(\\s|\"|')([0-9a-fA-F]{2}\\s?){2,20}(\\s|\"|')",
+    "flags": "",
+    "status": "PASS",
+    "matches": 86
+   },
+   {
+    "pattern": "://\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 92
+   },
+   {
+    "pattern": "cmd.{0,5}(?:/c|/r).+powershell.+(?:\\$\\{?input\\}?|noexit).+\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 94
+   },
+   {
+    "pattern": "(?i)(?:set).*&&\\s?set.*(?:environment|invoke|\\$\\{?input).*&&.*\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 126
+   },
+   {
+    "pattern": "ipconfig\\s+/all",
+    "flags": "",
+    "status": "PASS",
+    "matches": 33
+   },
+   {
+    "pattern": "netsh\\s+interface show interface",
+    "flags": "",
+    "status": "PASS",
+    "matches": 23
+   },
+   {
+    "pattern": "arp\\s+-a",
+    "flags": "",
+    "status": "PASS",
+    "matches": 37
+   },
+   {
+    "pattern": "nbtstat\\s+-n",
+    "flags": "",
+    "status": "PASS",
+    "matches": 20
+   },
+   {
+    "pattern": "net\\s+config",
+    "flags": "",
+    "status": "PASS",
+    "matches": 34
+   },
+   {
+    "pattern": "route\\s+print",
+    "flags": "",
+    "status": "PASS",
+    "matches": 26
+   },
+   {
+    "pattern": "(?:[Pp]rogram[Dd]ata|%(?:[Ll]ocal)?[Aa]pp[Dd]ata%|\\\\[Aa]pp[Dd]ata\\\\(?:[Ll]ocal(?:[Ll]ow)?|[Rr]oaming))\\\\[^\\\\]{1,256}$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 110
+   },
+   {
+    "pattern": "://[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 92
+   },
+   {
+    "pattern": "-D",
+    "flags": "",
+    "status": "PASS",
+    "matches": 66
+   },
+   {
+    "pattern": "(?i)(set).*&&\\s?set.*(environment|invoke|\\$?\\{?input).*&&.*\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 171
+   },
+   {
+    "pattern": "\\s-\\s*<",
+    "flags": "",
+    "status": "PASS",
+    "matches": 31
+   },
+   {
+    "pattern": "\\s-O\\s",
+    "flags": "",
+    "status": "PASS",
+    "matches": 42
+   },
+   {
+    "pattern": "\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+",
+    "flags": "",
+    "status": "PASS",
+    "matches": 72
+   },
+   {
+    "pattern": "\\{.*\\{.*\\{.*\\{.*\\{.*\\{.*\\{.*\\{.*\\{.*\\{",
+    "flags": "",
+    "status": "PASS",
+    "matches": 79
+   },
+   {
+    "pattern": "\\^.*\\^.*\\^.*\\^.*\\^",
+    "flags": "",
+    "status": "PASS",
+    "matches": 77
+   },
+   {
+    "pattern": "`.*`.*`.*`.*`",
+    "flags": "",
+    "status": "PASS",
+    "matches": 68
+   },
+   {
+    "pattern": "(?i)echo.*clip.*&&.*(Clipboard|i`?n`?v`?o`?k`?e`?)",
+    "flags": "",
+    "status": "PASS",
+    "matches": 105
+   },
+   {
+    "pattern": "\\n\\n\\n\\n\\n\\n",
+    "flags": "",
+    "status": "PASS",
+    "matches": 7
+   },
+   {
+    "pattern": "(?i)echo.*clip.*&&.*(?:Clipboard|i`?n`?v`?o`?k`?e`?)",
+    "flags": "",
+    "status": "PASS",
+    "matches": 105
+   },
+   {
+    "pattern": "(?i)&&set.*(\\{\\d\\}){2,}\\\\\"\\s+?-f.*&&.*cmd.*/c",
+    "flags": "",
+    "status": "PASS",
+    "matches": 51
+   },
+   {
+    "pattern": "(?i)(ipfs\\.io/|ipfs\\.io\\s).+\\..+@.+\\.[a-z]+",
+    "flags": "",
+    "status": "PASS",
+    "matches": 132
+   },
+   {
+    "pattern": "[a-zA-Z]:\\\\",
+    "flags": "",
+    "status": "PASS",
+    "matches": 597
+   },
+   {
+    "pattern": "-k\\s\\w{1,64}(?:\\s?(?:-p|-s))?",
+    "flags": "",
+    "status": "PASS",
+    "matches": 58
    }
   ]
  },
  "wildcard": {
   "fieldType": "wildcard",
-  "strings": 582,
+  "strings": 10419,
   "results": [
    {
     "pattern": "\\s-[FTd]\\s",
     "flags": "",
     "status": "PASS",
-    "matches": 18
+    "matches": 99
    },
    {
     "pattern": "(.){200,}",
     "flags": "",
     "status": "PASS",
-    "matches": 15
+    "matches": 180
    },
    {
     "pattern": ".+:assumed-role/aws:.+",
     "flags": "",
     "status": "PASS",
-    "matches": 7
+    "matches": 81
    },
    {
     "pattern": "(?:\\s-[^-\\s]{0,20}i|\\s--inode\\s)",
     "flags": "",
     "status": "PASS",
-    "matches": 13
+    "matches": 106
    },
    {
     "pattern": "(?:\\s-[^-\\s]{0,20}d|\\s--directory\\s)",
     "flags": "",
     "status": "PASS",
-    "matches": 8
+    "matches": 206
    },
    {
     "pattern": "-(W|R)\\s?(\\s|\"|')([0-9a-fA-F]{2}\\s?){2,20}(\\s|\"|')",
     "flags": "",
     "status": "PASS",
-    "matches": 9
+    "matches": 86
    },
    {
     "pattern": "-D",
     "flags": "",
     "status": "PASS",
-    "matches": 3
+    "matches": 66
    },
    {
     "pattern": "\\s-O\\s",
     "flags": "",
     "status": "PASS",
-    "matches": 13
+    "matches": 42
    },
    {
     "pattern": "(?i)(ipfs\\.io/|ipfs\\.io\\s).+\\..+@.+\\.[a-z]+",
     "flags": "",
     "status": "PASS",
-    "matches": 21
+    "matches": 132
    },
    {
     "pattern": "^abc",
@@ -271,7 +811,7 @@
     "pattern": "abc$",
     "flags": "",
     "status": "PASS",
-    "matches": 15
+    "matches": 33
    },
    {
     "pattern": "^abc$",
@@ -283,127 +823,667 @@
     "pattern": "a|b",
     "flags": "",
     "status": "PASS",
-    "matches": 316
+    "matches": 5729
    },
    {
     "pattern": "x(a|b)y",
     "flags": "",
     "status": "PASS",
-    "matches": 7
+    "matches": 38
    },
    {
     "pattern": "\\d{3}-\\d{2}",
     "flags": "",
     "status": "PASS",
-    "matches": 1
+    "matches": 58
    },
    {
     "pattern": "\\w+@\\w+",
     "flags": "",
     "status": "PASS",
-    "matches": 41
+    "matches": 199
    },
    {
     "pattern": "a.c",
     "flags": "",
     "status": "PASS",
-    "matches": 46
+    "matches": 568
    },
    {
     "pattern": "a.c",
     "flags": "s",
     "status": "PASS",
-    "matches": 50
+    "matches": 572
    },
    {
     "pattern": "[a-c]+z",
     "flags": "",
     "status": "PASS",
-    "matches": 8
+    "matches": 72
    },
    {
     "pattern": "[^0-9]{4}",
     "flags": "",
     "status": "PASS",
-    "matches": 409
+    "matches": 9896
    },
    {
     "pattern": "a\\.b",
     "flags": "",
     "status": "PASS",
-    "matches": 6
+    "matches": 27
    },
    {
     "pattern": "a+?b",
     "flags": "",
     "status": "PASS",
-    "matches": 66
+    "matches": 498
    },
    {
     "pattern": "colou?r",
     "flags": "",
     "status": "PASS",
-    "matches": 4
+    "matches": 24
    },
    {
     "pattern": "<tag>&amp;~#\\\"",
     "flags": "",
     "status": "PASS",
-    "matches": 1
+    "matches": 11
    },
    {
     "pattern": "\\\\\\\\server\\\\share",
     "flags": "",
     "status": "PASS",
-    "matches": 2
+    "matches": 11
    },
    {
     "pattern": "\\S+\\.exe",
     "flags": "",
     "status": "PASS",
-    "matches": 6
+    "matches": 547
    },
    {
     "pattern": "\\W\\D",
     "flags": "",
     "status": "PASS",
-    "matches": 364
+    "matches": 9909
    },
    {
     "pattern": "abc",
     "flags": "i",
     "status": "PASS",
-    "matches": 63
+    "matches": 182
    },
    {
     "pattern": "(?i)ABC",
     "flags": "",
     "status": "PASS",
-    "matches": 63
+    "matches": 182
    },
    {
     "pattern": "[\\s,]x",
     "flags": "",
     "status": "PASS",
-    "matches": 31
+    "matches": 253
    },
    {
     "pattern": "a\\tb",
     "flags": "",
     "status": "PASS",
-    "matches": 6
+    "matches": 22
    },
    {
     "pattern": "a{2,}b",
     "flags": "",
     "status": "PASS",
-    "matches": 3
+    "matches": 143
    },
    {
     "pattern": "(?:ab)+c",
     "flags": "",
     "status": "PASS",
+    "matches": 132
+   },
+   {
+    "pattern": "\\s-[FTd]\\s",
+    "flags": "",
+    "status": "PASS",
+    "matches": 99
+   },
+   {
+    "pattern": "\\\\sessionresume_[a-zA-Z]{8}$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 15
+   },
+   {
+    "pattern": "(.){200,}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 180
+   },
+   {
+    "pattern": "^C:\\\\Windows\\\\SYSTEM32\\\\ntdll\\.dll\\+[a-z0-9]{4,6}\\|C:\\\\Windows\\\\System32\\\\KERNELBASE\\.dll\\+[a-z0-9]{4,6}\\|UNKNOWN\\([A-Z0-9]{16}\\)$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 4
+   },
+   {
+    "pattern": "cmd.{0,5}(?:/c|/r)(?:\\s|)\"set\\s[a-zA-Z]{3,6}.*(?:\\{\\d\\}){1,}\\\\\"\\s+?-f(?:.*\\)){1,}.*\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 111
+   },
+   {
+    "pattern": "\\\\mojo\\.5688\\.8052\\.(?:183894939787088877|35780273329370473)[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 11
+   },
+   {
+    "pattern": "\\\\wkssvc_?[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 35
+   },
+   {
+    "pattern": "\\\\ntsvcs[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 32
+   },
+   {
+    "pattern": "\\\\DserNamePipe[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 19
+   },
+   {
+    "pattern": "\\\\SearchTextHarvester[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 28
+   },
+   {
+    "pattern": "\\\\mypipe-(?:f|h)[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 33
+   },
+   {
+    "pattern": "\\\\windows\\.update\\.manager[0-9a-f]{2,3}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 28
+   },
+   {
+    "pattern": "\\\\ntsvcs_[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 28
+   },
+   {
+    "pattern": "\\\\scerpc_?[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 34
+   },
+   {
+    "pattern": "\\\\PGMessagePipe[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 20
+   },
+   {
+    "pattern": "\\\\MsFteWds[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 33
+   },
+   {
+    "pattern": "\\\\f4c3[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 32
+   },
+   {
+    "pattern": "\\\\fullduplex_[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 22
+   },
+   {
+    "pattern": "\\\\msrpc_[0-9a-f]{4}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 27
+   },
+   {
+    "pattern": "\\\\win\\\\msrpc_[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 22
+   },
+   {
+    "pattern": "\\\\f53f[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 31
+   },
+   {
+    "pattern": "\\\\rpc_[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 35
+   },
+   {
+    "pattern": "\\\\spoolss_[0-9a-f]{2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 26
+   },
+   {
+    "pattern": "\\\\Winsock2\\\\CatalogChangeListener-[0-9a-f]{3}-0,",
+    "flags": "",
+    "status": "PASS",
+    "matches": 9
+   },
+   {
+    "pattern": "0x[a-fA-F0-9]{8}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 54
+   },
+   {
+    "pattern": "^[Cc]:\\\\[Pp]rogram[Dd]ata\\\\.{1,9}\\.exe",
+    "flags": "",
+    "status": "PASS",
+    "matches": 14
+   },
+   {
+    "pattern": "^[Cc]:\\\\.{1,9}\\.exe",
+    "flags": "",
+    "status": "PASS",
+    "matches": 18
+   },
+   {
+    "pattern": "\\$PSHome\\[\\s*\\d{1,3}\\s*\\]\\s*\\+\\s*\\$PSHome\\[",
+    "flags": "",
+    "status": "PASS",
+    "matches": 27
+   },
+   {
+    "pattern": "\\$ShellId\\[\\s*\\d{1,3}\\s*\\]\\s*\\+\\s*\\$ShellId\\[",
+    "flags": "",
+    "status": "PASS",
+    "matches": 37
+   },
+   {
+    "pattern": "\\$env:Public\\[\\s*\\d{1,3}\\s*\\]\\s*\\+\\s*\\$env:Public\\[",
+    "flags": "",
+    "status": "PASS",
+    "matches": 31
+   },
+   {
+    "pattern": "\\$env:ComSpec\\[(\\s*\\d{1,3}\\s*,){2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 46
+   },
+   {
+    "pattern": "\\*mdr\\*\\W\\s*\\)\\.Name",
+    "flags": "",
+    "status": "PASS",
+    "matches": 24
+   },
+   {
+    "pattern": "\\$VerbosePreference\\.ToString\\(",
+    "flags": "",
+    "status": "PASS",
+    "matches": 4
+   },
+   {
+    "pattern": "net\\s+user\\s+",
+    "flags": "",
+    "status": "PASS",
+    "matches": 39
+   },
+   {
+    "pattern": "cmd.{0,5}(?:/c|/r)(?:\\s|)\\\"set\\s[a-zA-Z]{3,6}.*(?:\\{\\d\\}){1,}\\\\\\\"\\s+?\\-f(?:.*\\)){1,}.*\\\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 111
+   },
+   {
+    "pattern": "\\[String\\]\\s*\\$VerbosePreference",
+    "flags": "",
+    "status": "PASS",
+    "matches": 20
+   },
+   {
+    "pattern": "HostId=[a-zA-Z0-9-]{36}\\s+EngineVersion=",
+    "flags": "",
+    "status": "PASS",
+    "matches": 25
+   },
+   {
+    "pattern": "^[a-zA-Z]:\\\\windows\\\\temp\\\\[a-zA-Z0-9]{10}\\.exe",
+    "flags": "",
+    "status": "PASS",
+    "matches": 11
+   },
+   {
+    "pattern": ".+:assumed-role/aws:.+",
+    "flags": "",
+    "status": "PASS",
+    "matches": 81
+   },
+   {
+    "pattern": "(?:\\s-[^-\\s]{0,20}i|\\s--inode\\s)",
+    "flags": "",
+    "status": "PASS",
+    "matches": 106
+   },
+   {
+    "pattern": "(?:\\s-[^-\\s]{0,20}d|\\s--directory\\s)",
+    "flags": "",
+    "status": "PASS",
+    "matches": 206
+   },
+   {
+    "pattern": "\\$env:ComSpec\\[(?:\\s*\\d{1,3}\\s*,){2}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 46
+   },
+   {
+    "pattern": "\\\\*mdr\\*\\W\\s*\\)\\.Name",
+    "flags": "",
+    "status": "PASS",
+    "matches": 72
+   },
+   {
+    "pattern": "\\String\\]\\s*\\$VerbosePreference",
+    "flags": "",
+    "status": "PASS",
+    "matches": 38
+   },
+   {
+    "pattern": "\\{[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}\\}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 37
+   },
+   {
+    "pattern": "(?i)\\.exe[\\\"\\']?\\s+[^\\\"]{0,64}werfaultsecure\\.exe[\\\"\\']?\\s+\\d{2,10}",
+    "flags": "",
+    "status": "NO_DSL",
+    "reason": "bounded repeat of 32 or more of a negated class, followed by more pattern, in an unanchored regex"
+   },
+   {
+    "pattern": "-1[0-9]{3}\\\\Software\\\\Classes\\\\",
+    "flags": "",
+    "status": "PASS",
+    "matches": 16
+   },
+   {
+    "pattern": "cmd.{0,5}(?:/c|/r).+powershell.+(?:\\$\\{?input\\}?|noexit).+\\\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 94
+   },
+   {
+    "pattern": "\\\\Windows\\\\System32\\\\[a-zA-Z0-9]{8}\\.tmp$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 10
+   },
+   {
+    "pattern": "^%systemroot%\\\\[a-zA-Z]{8}\\.exe$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 12
+   },
+   {
+    "pattern": "(^[a-zA-Z]{4}$)|(^[a-zA-Z]{8}$)|(^[a-zA-Z]{16}$)",
+    "flags": "",
+    "status": "NO_DSL",
+    "reason": "anchor inside the pattern"
+   },
+   {
+    "pattern": "^[A-Za-z0-9]{16}$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 21
+   },
+   {
+    "pattern": "\\\\[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.txt$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 4
+   },
+   {
+    "pattern": "\\\\[a-zA-Z]{8}\\.tmp$",
+    "flags": "",
+    "status": "PASS",
     "matches": 40
+   },
+   {
+    "pattern": "cmd.{0,5}(?:/c|/r).+clip(?:\\.exe)?.{0,4}&&.+clipboard]::\\(\\s\\\\\"\\{\\d\\}.+-f.+\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 36
+   },
+   {
+    "pattern": "cmd.{0,5}(?:/c|/r).+powershell.+(?:\\$?\\{?input\\}?|noexit).+\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 117
+   },
+   {
+    "pattern": "net\\s+view",
+    "flags": "",
+    "status": "PASS",
+    "matches": 36
+   },
+   {
+    "pattern": "sc\\s+query",
+    "flags": "",
+    "status": "PASS",
+    "matches": 33
+   },
+   {
+    "pattern": "(?i)(set).*&&\\s?set.*(environment|invoke|\\$\\{?input).*&&.*\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 126
+   },
+   {
+    "pattern": "\\\\Windows\\\\__1\\d{9}\\.\\d{1,7}$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 4
+   },
+   {
+    "pattern": "C:\\\\__1\\d{9}\\.\\d{1,7}$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 4
+   },
+   {
+    "pattern": "D:\\\\__1\\d{9}\\.\\d{1,7}$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 3
+   },
+   {
+    "pattern": "(^0oa.*|[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,10})",
+    "flags": "",
+    "status": "NO_DSL",
+    "reason": "anchor inside the pattern"
+   },
+   {
+    "pattern": "-(W|R)\\s?(\\s|\"|')([0-9a-fA-F]{2}\\s?){2,20}(\\s|\"|')",
+    "flags": "",
+    "status": "PASS",
+    "matches": 86
+   },
+   {
+    "pattern": "://\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 92
+   },
+   {
+    "pattern": "cmd.{0,5}(?:/c|/r).+powershell.+(?:\\$\\{?input\\}?|noexit).+\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 94
+   },
+   {
+    "pattern": "(?i)(?:set).*&&\\s?set.*(?:environment|invoke|\\$\\{?input).*&&.*\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 126
+   },
+   {
+    "pattern": "ipconfig\\s+/all",
+    "flags": "",
+    "status": "PASS",
+    "matches": 33
+   },
+   {
+    "pattern": "netsh\\s+interface show interface",
+    "flags": "",
+    "status": "PASS",
+    "matches": 23
+   },
+   {
+    "pattern": "arp\\s+-a",
+    "flags": "",
+    "status": "PASS",
+    "matches": 37
+   },
+   {
+    "pattern": "nbtstat\\s+-n",
+    "flags": "",
+    "status": "PASS",
+    "matches": 20
+   },
+   {
+    "pattern": "net\\s+config",
+    "flags": "",
+    "status": "PASS",
+    "matches": 34
+   },
+   {
+    "pattern": "route\\s+print",
+    "flags": "",
+    "status": "PASS",
+    "matches": 26
+   },
+   {
+    "pattern": "(?:[Pp]rogram[Dd]ata|%(?:[Ll]ocal)?[Aa]pp[Dd]ata%|\\\\[Aa]pp[Dd]ata\\\\(?:[Ll]ocal(?:[Ll]ow)?|[Rr]oaming))\\\\[^\\\\]{1,256}$",
+    "flags": "",
+    "status": "PASS",
+    "matches": 110
+   },
+   {
+    "pattern": "://[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}",
+    "flags": "",
+    "status": "PASS",
+    "matches": 92
+   },
+   {
+    "pattern": "-D",
+    "flags": "",
+    "status": "PASS",
+    "matches": 66
+   },
+   {
+    "pattern": "(?i)(set).*&&\\s?set.*(environment|invoke|\\$?\\{?input).*&&.*\"",
+    "flags": "",
+    "status": "PASS",
+    "matches": 171
+   },
+   {
+    "pattern": "\\s-\\s*<",
+    "flags": "",
+    "status": "PASS",
+    "matches": 31
+   },
+   {
+    "pattern": "\\s-O\\s",
+    "flags": "",
+    "status": "PASS",
+    "matches": 42
+   },
+   {
+    "pattern": "\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+.*\\+",
+    "flags": "",
+    "status": "PASS",
+    "matches": 72
+   },
+   {
+    "pattern": "\\{.*\\{.*\\{.*\\{.*\\{.*\\{.*\\{.*\\{.*\\{.*\\{",
+    "flags": "",
+    "status": "PASS",
+    "matches": 79
+   },
+   {
+    "pattern": "\\^.*\\^.*\\^.*\\^.*\\^",
+    "flags": "",
+    "status": "PASS",
+    "matches": 77
+   },
+   {
+    "pattern": "`.*`.*`.*`.*`",
+    "flags": "",
+    "status": "PASS",
+    "matches": 68
+   },
+   {
+    "pattern": "(?i)echo.*clip.*&&.*(Clipboard|i`?n`?v`?o`?k`?e`?)",
+    "flags": "",
+    "status": "PASS",
+    "matches": 105
+   },
+   {
+    "pattern": "\\n\\n\\n\\n\\n\\n",
+    "flags": "",
+    "status": "PASS",
+    "matches": 7
+   },
+   {
+    "pattern": "(?i)echo.*clip.*&&.*(?:Clipboard|i`?n`?v`?o`?k`?e`?)",
+    "flags": "",
+    "status": "PASS",
+    "matches": 105
+   },
+   {
+    "pattern": "(?i)&&set.*(\\{\\d\\}){2,}\\\\\"\\s+?-f.*&&.*cmd.*/c",
+    "flags": "",
+    "status": "PASS",
+    "matches": 51
+   },
+   {
+    "pattern": "(?i)(ipfs\\.io/|ipfs\\.io\\s).+\\..+@.+\\.[a-z]+",
+    "flags": "",
+    "status": "PASS",
+    "matches": 132
+   },
+   {
+    "pattern": "[a-zA-Z]:\\\\",
+    "flags": "",
+    "status": "PASS",
+    "matches": 597
+   },
+   {
+    "pattern": "-k\\s\\w{1,64}(?:\\s?(?:-p|-s))?",
+    "flags": "",
+    "status": "PASS",
+    "matches": 58
    }
   ]
  }

@@ -88,11 +88,12 @@ def test_translate_rule_adds_a_dsl_only_to_the_field_mapped_elastic_translation(
         assert "dsl" not in by[other]
 
 
-def test_a_regex_rule_under_ecs_windows_is_not_shipped_as_a_corrupt_query_and_has_no_dsl():
-    # pySigma's ecs_windows pipeline turns a regex value into the text of a Python object; that query can never match,
-    # so the Elastic translation is recorded as a failure rather than shipped, and there is nothing to add a DSL to.
+def test_a_regex_rule_under_ecs_windows_is_never_shipped_as_a_corrupt_query():
+    # pySigma's ecs_windows pipeline turns a regex value into the text of a Python object; that query can never match.
+    # The regex is recovered (see test_elastic_regex.py); if it cannot be, the translation is a failure, never that text.
     by = _translations("  sel:\n    CommandLine|re: 'a.*b'\n  condition: sel\n")
-    assert "elastic" not in by
+    assert "elastic" in by and "SigmaRegularExpression" not in by["elastic"]["query"]
+    assert "SigmaRegularExpression" not in by["elastic"]["dsl"]
 
 
 def test_empty_string_is_an_existing_field_with_no_characters():
@@ -121,7 +122,7 @@ def test_pure_ascii_value_gets_no_extra_variants():
 def test_regex_is_padded_rewritten_and_case_sensitive_unless_flagged():
     # Lucene regexp is anchored and has no \s: the pattern is wrapped in .* and \s becomes a class
     q = dsl("  sel:\n    f|re: '\\s-O\\s'\n")
-    assert q == {"regexp": {"f": {"value": ".*([ \t\n\r\f\v]-O[ \t\n\r\f\v]).*"}}}  # Sigma re is case-sensitive: no flag
+    assert q == {"regexp": {"f": {"value": ".*([ \t\n\r\f\v]-O[ \t\n\r\f\v]).*", "max_determinized_states": 200000}}}  # Sigma re is case-sensitive: no flag
     assert dsl("  sel:\n    f|re|i: 'abc'\n")["regexp"]["f"]["case_insensitive"] is True
     q = dsl("  sel:\n    f|re: '(?i)abc'\n")
     assert q["regexp"]["f"]["case_insensitive"] is True and q["regexp"]["f"]["value"] == ".*(abc).*"

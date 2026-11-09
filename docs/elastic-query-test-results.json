@@ -1,5 +1,5 @@
 {
- "tested": "2026-11-04",
+ "tested": "2026-11-09",
  "elasticsearch": "8.15.3",
  "lucene": [
   {
@@ -47,10 +47,8 @@
    "title": "Suspicious Curl File Upload - Linux",
    "mapping": "pipeline",
    "verification": "assumed",
-   "caseSensitive": true,
-   "filterNegatives": 1,
-   "status": "PASS",
-   "reason": ""
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-000009",
@@ -271,6 +269,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000035",
+   "title": "HackTool - Impacket File Indicators",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-000036",
@@ -567,10 +573,8 @@
    "title": "File and Directory Discovery - MacOS",
    "mapping": "pipeline",
    "verification": "assumed",
-   "caseSensitive": true,
-   "filterNegatives": 0,
-   "status": "PASS",
-   "reason": ""
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-000072",
@@ -707,6 +711,14 @@
    "verification": "none",
    "status": "UNTESTABLE",
    "reason": "two conditions on the same field cannot be satisfied by one value"
+  },
+  {
+   "id": "AUDRULE-000091",
+   "title": "Invoke-Obfuscation VAR+ Launcher - PowerShell",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-000092",
@@ -1825,6 +1837,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000218",
+   "title": "Ping Hex IP",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
+  },
+  {
    "id": "AUDRULE-000219",
    "title": "Renamed CreateDump Utility Execution",
    "mapping": "pipeline",
@@ -1913,6 +1933,22 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000231",
+   "title": "Service Installation with Suspicious Folder Pattern",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
+  },
+  {
+   "id": "AUDRULE-000233",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation - PowerShell",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-000234",
@@ -2761,6 +2797,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000328",
+   "title": "Suspicious SYSTEM User Process Creation",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
+  },
+  {
    "id": "AUDRULE-000329",
    "title": "Addition of SID History to Active Directory Object",
    "mapping": "pipeline",
@@ -2879,6 +2923,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000343",
+   "title": "Invoke-Obfuscation VAR+ Launcher",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-000344",
@@ -3311,6 +3363,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000394",
+   "title": "Renamed Powershell Under Powershell Channel",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
+  },
+  {
    "id": "AUDRULE-000395",
    "title": "File Deletion",
    "mapping": "pipeline",
@@ -3389,6 +3449,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000404",
+   "title": "Sliver C2 Default Service Installation",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-000406",
@@ -3606,7 +3674,7 @@
    "mapping": "pipeline",
    "verification": "assumed",
    "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-000433",
@@ -4552,7 +4620,7 @@
    "mapping": "pipeline",
    "verification": "assumed",
    "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-000543",
@@ -5205,6 +5273,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000617",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
+  },
+  {
    "id": "AUDRULE-000618",
    "title": "Process Access via TrolleyExpress Exclusion",
    "mapping": "pipeline",
@@ -5591,6 +5667,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000667",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation - System",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
+  },
+  {
    "id": "AUDRULE-000668",
    "title": "Potential Windows Defender Tampering Via Wmic.EXE",
    "mapping": "pipeline",
@@ -5729,6 +5813,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000686",
+   "title": "COM Object Execution via Xwizard.EXE",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-000687",
@@ -6157,6 +6249,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000739",
+   "title": "UAC Bypass via Sdclt",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-000740",
@@ -7159,6 +7259,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000863",
+   "title": "Invoke-Obfuscation STDIN+ Launcher",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
+  },
+  {
    "id": "AUDRULE-000864",
    "title": "Potentially Suspicious JWT Token Search Via CLI",
    "mapping": "pipeline",
@@ -7217,6 +7325,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000871",
+   "title": "HackTool - Potential Remote Credential Dumping Activity Via CrackMapExec Or Impacket-Secretsdump",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-000872",
@@ -7545,6 +7661,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000914",
+   "title": "Metasploit SMB Authentication",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
+  },
+  {
    "id": "AUDRULE-000915",
    "title": "Bypass UAC Using SilentCleanup Task",
    "mapping": "pipeline",
@@ -7645,6 +7769,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000927",
+   "title": "HackTool - CrackMapExec File Indicators",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
+  },
+  {
    "id": "AUDRULE-000928",
    "title": "Suspicious Calculator Usage",
    "mapping": "pipeline",
@@ -7673,6 +7805,14 @@
    "filterNegatives": 1,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000931",
+   "title": "Invoke-Obfuscation CLIP+ Launcher - PowerShell",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-000933",
@@ -7973,6 +8113,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000965",
+   "title": "Invoke-Obfuscation STDIN+ Launcher - Powershell",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-000966",
@@ -8357,6 +8505,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001012",
+   "title": "Potential Data Exfiltration Activity Via CommandLine Tools",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001013",
@@ -9159,6 +9315,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001105",
+   "title": "Invoke-Obfuscation Via Stdin - Powershell",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
+  },
+  {
    "id": "AUDRULE-001106",
    "title": "Shell Invocation Via Ssh - Linux",
    "mapping": "pipeline",
@@ -9587,6 +9751,14 @@
    "filterNegatives": 1,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001155",
+   "title": "Wmiexec Default Output File",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001156",
@@ -10334,7 +10506,7 @@
    "mapping": "pipeline",
    "verification": "assumed",
    "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001245",
@@ -10375,6 +10547,14 @@
    "filterNegatives": 1,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001249",
+   "title": "Suspicious WebDav Client Execution Via Rundll32.EXE",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001250",
@@ -10675,6 +10855,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001285",
+   "title": "Invoke-Obfuscation Via Stdin",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001286",
@@ -11253,6 +11441,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001353",
+   "title": "Suspicious Network Command",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001355",
@@ -12569,6 +12765,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001513",
+   "title": "Csc.EXE Execution Form Potentially Suspicious Parent",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
+  },
+  {
    "id": "AUDRULE-001514",
    "title": "User Added To Admin Group Via Dscl",
    "mapping": "pipeline",
@@ -12645,6 +12849,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001523",
+   "title": "File Download From IP Based URL Via CertOC.EXE",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001524",
@@ -13082,7 +13294,7 @@
    "mapping": "pipeline",
    "verification": "assumed",
    "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001573",
@@ -13293,6 +13505,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001595",
+   "title": "Add Potential Suspicious New Download Source To Winget",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001597",
@@ -13743,6 +13963,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001650",
+   "title": "Run PowerShell Script from Redirected Input Stream",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001651",
@@ -14278,7 +14506,7 @@
    "mapping": "pipeline",
    "verification": "assumed",
    "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001712",
@@ -14543,10 +14771,8 @@
    "title": "File and Directory Discovery - Linux",
    "mapping": "pipeline",
    "verification": "assumed",
-   "caseSensitive": true,
-   "filterNegatives": 0,
-   "status": "PASS",
-   "reason": ""
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001744",
@@ -14787,6 +15013,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001771",
+   "title": "Potential PowerShell Command Line Obfuscation",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
+  },
+  {
    "id": "AUDRULE-001772",
    "title": "Proxy Execution via Vshadow",
    "mapping": "pipeline",
@@ -14947,6 +15181,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001790",
+   "title": "Invoke-Obfuscation Via Use Clip - Powershell",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
+  },
+  {
    "id": "AUDRULE-001791",
    "title": "Potential Initial Access via DLL Search Order Hijacking",
    "mapping": "pipeline",
@@ -15043,6 +15285,14 @@
    "filterNegatives": 1,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001803",
+   "title": "Suspicious LNK Command-Line Padding with Whitespace Characters",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001806",
@@ -15205,6 +15455,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001824",
+   "title": "Suspicious Non PowerShell WSMAN COM Provider",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
+  },
+  {
    "id": "AUDRULE-001825",
    "title": "Potentially Suspicious Child Processes Spawned by ConHost",
    "mapping": "pipeline",
@@ -15341,6 +15599,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001839",
+   "title": "Invoke-Obfuscation Via Use Clip",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001840",
@@ -15621,6 +15887,14 @@
    "filterNegatives": 2,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001876",
+   "title": "Invoke-Obfuscation VAR++ LAUNCHER OBFUSCATION - PowerShell",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001877",
@@ -16118,7 +16392,7 @@
    "mapping": "pipeline",
    "verification": "documented",
    "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001937",
@@ -16269,6 +16543,14 @@
    "filterNegatives": 2,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001952",
+   "title": "Windows Binary Executed From WSL",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001953",
@@ -16539,6 +16821,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001981",
+   "title": "Uncommon Svchost Command Line Parameter",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-001982",
@@ -17385,6 +17675,14 @@
    "filterNegatives": 0,
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-002082",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation - Security",
+   "mapping": "pipeline",
+   "verification": "documented",
+   "status": "UNTESTABLE",
+   "reason": "could not build events: regular-expression value: no event is generated from a regex"
   },
   {
    "id": "AUDRULE-002083",
@@ -17585,8 +17883,8 @@
    "title": "Suspicious Curl File Upload - Linux",
    "fieldType": "keyword",
    "verification": "assumed",
-   "status": "PASS",
-   "reason": ""
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000009",
@@ -17763,6 +18061,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000035",
+   "title": "HackTool - Impacket File Indicators",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000036",
@@ -18001,8 +18307,8 @@
    "title": "File and Directory Discovery - MacOS",
    "fieldType": "keyword",
    "verification": "assumed",
-   "status": "PASS",
-   "reason": ""
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000072",
@@ -18115,6 +18421,14 @@
    "verification": "none",
    "status": "NO_DSL",
    "reason": "keyword-only rule: relies on every field's analyser, so it keeps its Lucene query"
+  },
+  {
+   "id": "AUDRULE-000091",
+   "title": "Invoke-Obfuscation VAR+ Launcher - PowerShell",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000092",
@@ -19013,6 +19327,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000218",
+   "title": "Ping Hex IP",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000219",
    "title": "Renamed CreateDump Utility Execution",
    "fieldType": "keyword",
@@ -19083,6 +19405,22 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000231",
+   "title": "Service Installation with Suspicious Folder Pattern",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
+   "id": "AUDRULE-000233",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation - PowerShell",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000234",
@@ -19765,6 +20103,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000328",
+   "title": "Suspicious SYSTEM User Process Creation",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000329",
    "title": "Addition of SID History to Active Directory Object",
    "fieldType": "keyword",
@@ -19859,6 +20205,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000343",
+   "title": "Invoke-Obfuscation VAR+ Launcher",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000344",
@@ -20205,6 +20559,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000394",
+   "title": "Renamed Powershell Under Powershell Channel",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000395",
    "title": "File Deletion",
    "fieldType": "keyword",
@@ -20267,6 +20629,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000404",
+   "title": "Sliver C2 Default Service Installation",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000406",
@@ -20441,8 +20811,8 @@
    "title": "Malicious Usage Of IMDS Credentials Outside Of AWS Infrastructure",
    "fieldType": "keyword",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000433",
@@ -21201,8 +21571,8 @@
    "title": "Potential Container Discovery Via Inodes Listing",
    "fieldType": "keyword",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000543",
@@ -21725,6 +22095,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000617",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000618",
    "title": "Process Access via TrolleyExpress Exclusion",
    "fieldType": "keyword",
@@ -22037,6 +22415,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000667",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation - System",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000668",
    "title": "Potential Windows Defender Tampering Via Wmic.EXE",
    "fieldType": "keyword",
@@ -22147,6 +22533,14 @@
    "verification": "assumed",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000686",
+   "title": "COM Object Execution via Xwizard.EXE",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000687",
@@ -22491,6 +22885,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000739",
+   "title": "UAC Bypass via Sdclt",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000740",
@@ -23293,6 +23695,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000863",
+   "title": "Invoke-Obfuscation STDIN+ Launcher",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000864",
    "title": "Potentially Suspicious JWT Token Search Via CLI",
    "fieldType": "keyword",
@@ -23339,6 +23749,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000871",
+   "title": "HackTool - Potential Remote Credential Dumping Activity Via CrackMapExec Or Impacket-Secretsdump",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000872",
@@ -23605,6 +24023,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000914",
+   "title": "Metasploit SMB Authentication",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000915",
    "title": "Bypass UAC Using SilentCleanup Task",
    "fieldType": "keyword",
@@ -23685,6 +24111,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000927",
+   "title": "HackTool - CrackMapExec File Indicators",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000928",
    "title": "Suspicious Calculator Usage",
    "fieldType": "keyword",
@@ -23707,6 +24141,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000931",
+   "title": "Invoke-Obfuscation CLIP+ Launcher - PowerShell",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000933",
@@ -23947,6 +24389,14 @@
    "verification": "assumed",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000965",
+   "title": "Invoke-Obfuscation STDIN+ Launcher - Powershell",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000966",
@@ -24259,6 +24709,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001012",
+   "title": "Potential Data Exfiltration Activity Via CommandLine Tools",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001013",
@@ -24901,6 +25359,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001105",
+   "title": "Invoke-Obfuscation Via Stdin - Powershell",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001106",
    "title": "Shell Invocation Via Ssh - Linux",
    "fieldType": "keyword",
@@ -25243,6 +25709,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001155",
+   "title": "Wmiexec Default Output File",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001156",
@@ -25841,8 +26315,8 @@
    "title": "Pnscan Binary Data Transmission Activity",
    "fieldType": "keyword",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001245",
@@ -25875,6 +26349,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001249",
+   "title": "Suspicious WebDav Client Execution Via Rundll32.EXE",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001250",
@@ -26115,6 +26597,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001285",
+   "title": "Invoke-Obfuscation Via Stdin",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001286",
@@ -26579,6 +27069,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001353",
+   "title": "Suspicious Network Command",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001355",
@@ -27637,6 +28135,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001513",
+   "title": "Csc.EXE Execution Form Potentially Suspicious Parent",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001514",
    "title": "User Added To Admin Group Via Dscl",
    "fieldType": "keyword",
@@ -27699,6 +28205,14 @@
    "verification": "assumed",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001523",
+   "title": "File Download From IP Based URL Via CertOC.EXE",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001524",
@@ -28049,8 +28563,8 @@
    "title": "Audit Rules Deleted Via Auditctl",
    "fieldType": "keyword",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001573",
@@ -28219,6 +28733,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001595",
+   "title": "Add Potential Suspicious New Download Source To Winget",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001597",
@@ -28579,6 +29101,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001650",
+   "title": "Run PowerShell Script from Redirected Input Stream",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001651",
@@ -29009,8 +29539,8 @@
    "title": "Download File To Potentially Suspicious Directory Via Wget",
    "fieldType": "keyword",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001712",
@@ -29225,8 +29755,8 @@
    "title": "File and Directory Discovery - Linux",
    "fieldType": "keyword",
    "verification": "assumed",
-   "status": "PASS",
-   "reason": ""
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001744",
@@ -29421,6 +29951,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001771",
+   "title": "Potential PowerShell Command Line Obfuscation",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001772",
    "title": "Proxy Execution via Vshadow",
    "fieldType": "keyword",
@@ -29549,6 +30087,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001790",
+   "title": "Invoke-Obfuscation Via Use Clip - Powershell",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001791",
    "title": "Potential Initial Access via DLL Search Order Hijacking",
    "fieldType": "keyword",
@@ -29627,6 +30173,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001803",
+   "title": "Suspicious LNK Command-Line Padding with Whitespace Characters",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001806",
@@ -29757,6 +30311,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001824",
+   "title": "Suspicious Non PowerShell WSMAN COM Provider",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001825",
    "title": "Potentially Suspicious Child Processes Spawned by ConHost",
    "fieldType": "keyword",
@@ -29867,6 +30429,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001839",
+   "title": "Invoke-Obfuscation Via Use Clip",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001840",
@@ -30091,6 +30661,14 @@
    "verification": "assumed",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001876",
+   "title": "Invoke-Obfuscation VAR++ LAUNCHER OBFUSCATION - PowerShell",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001877",
@@ -30489,8 +31067,8 @@
    "title": "Suspicious Network Communication With IPFS",
    "fieldType": "keyword",
    "verification": "documented",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001937",
@@ -30611,6 +31189,14 @@
    "verification": "assumed",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001952",
+   "title": "Windows Binary Executed From WSL",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001953",
@@ -30827,6 +31413,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001981",
+   "title": "Uncommon Svchost Command Line Parameter",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001982",
@@ -31507,6 +32101,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-002082",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation - Security",
+   "fieldType": "keyword",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-002083",
@@ -31675,8 +32277,8 @@
    "title": "Suspicious Curl File Upload - Linux",
    "fieldType": "wildcard",
    "verification": "assumed",
-   "status": "PASS",
-   "reason": ""
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000009",
@@ -31853,6 +32455,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000035",
+   "title": "HackTool - Impacket File Indicators",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000036",
@@ -32091,8 +32701,8 @@
    "title": "File and Directory Discovery - MacOS",
    "fieldType": "wildcard",
    "verification": "assumed",
-   "status": "PASS",
-   "reason": ""
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000072",
@@ -32205,6 +32815,14 @@
    "verification": "none",
    "status": "NO_DSL",
    "reason": "keyword-only rule: relies on every field's analyser, so it keeps its Lucene query"
+  },
+  {
+   "id": "AUDRULE-000091",
+   "title": "Invoke-Obfuscation VAR+ Launcher - PowerShell",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000092",
@@ -33103,6 +33721,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000218",
+   "title": "Ping Hex IP",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000219",
    "title": "Renamed CreateDump Utility Execution",
    "fieldType": "wildcard",
@@ -33173,6 +33799,22 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000231",
+   "title": "Service Installation with Suspicious Folder Pattern",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
+   "id": "AUDRULE-000233",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation - PowerShell",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000234",
@@ -33855,6 +34497,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000328",
+   "title": "Suspicious SYSTEM User Process Creation",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000329",
    "title": "Addition of SID History to Active Directory Object",
    "fieldType": "wildcard",
@@ -33949,6 +34599,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000343",
+   "title": "Invoke-Obfuscation VAR+ Launcher",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000344",
@@ -34296,6 +34954,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000394",
+   "title": "Renamed Powershell Under Powershell Channel",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000395",
    "title": "File Deletion",
    "fieldType": "wildcard",
@@ -34358,6 +35024,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000404",
+   "title": "Sliver C2 Default Service Installation",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000406",
@@ -34532,8 +35206,8 @@
    "title": "Malicious Usage Of IMDS Credentials Outside Of AWS Infrastructure",
    "fieldType": "wildcard",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000433",
@@ -35292,8 +35966,8 @@
    "title": "Potential Container Discovery Via Inodes Listing",
    "fieldType": "wildcard",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000543",
@@ -35816,6 +36490,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000617",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000618",
    "title": "Process Access via TrolleyExpress Exclusion",
    "fieldType": "wildcard",
@@ -36128,6 +36810,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000667",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation - System",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000668",
    "title": "Potential Windows Defender Tampering Via Wmic.EXE",
    "fieldType": "wildcard",
@@ -36238,6 +36928,14 @@
    "verification": "assumed",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000686",
+   "title": "COM Object Execution via Xwizard.EXE",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000687",
@@ -36582,6 +37280,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000739",
+   "title": "UAC Bypass via Sdclt",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000740",
@@ -37384,6 +38090,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000863",
+   "title": "Invoke-Obfuscation STDIN+ Launcher",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000864",
    "title": "Potentially Suspicious JWT Token Search Via CLI",
    "fieldType": "wildcard",
@@ -37430,6 +38144,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000871",
+   "title": "HackTool - Potential Remote Credential Dumping Activity Via CrackMapExec Or Impacket-Secretsdump",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000872",
@@ -37696,6 +38418,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000914",
+   "title": "Metasploit SMB Authentication",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000915",
    "title": "Bypass UAC Using SilentCleanup Task",
    "fieldType": "wildcard",
@@ -37776,6 +38506,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000927",
+   "title": "HackTool - CrackMapExec File Indicators",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000928",
    "title": "Suspicious Calculator Usage",
    "fieldType": "wildcard",
@@ -37798,6 +38536,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000931",
+   "title": "Invoke-Obfuscation CLIP+ Launcher - PowerShell",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000933",
@@ -38038,6 +38784,14 @@
    "verification": "assumed",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000965",
+   "title": "Invoke-Obfuscation STDIN+ Launcher - Powershell",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000966",
@@ -38350,6 +39104,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001012",
+   "title": "Potential Data Exfiltration Activity Via CommandLine Tools",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001013",
@@ -38992,6 +39754,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001105",
+   "title": "Invoke-Obfuscation Via Stdin - Powershell",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001106",
    "title": "Shell Invocation Via Ssh - Linux",
    "fieldType": "wildcard",
@@ -39334,6 +40104,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001155",
+   "title": "Wmiexec Default Output File",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001156",
@@ -39932,8 +40710,8 @@
    "title": "Pnscan Binary Data Transmission Activity",
    "fieldType": "wildcard",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001245",
@@ -39966,6 +40744,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001249",
+   "title": "Suspicious WebDav Client Execution Via Rundll32.EXE",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001250",
@@ -40206,6 +40992,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001285",
+   "title": "Invoke-Obfuscation Via Stdin",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001286",
@@ -40670,6 +41464,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001353",
+   "title": "Suspicious Network Command",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001355",
@@ -41728,6 +42530,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001513",
+   "title": "Csc.EXE Execution Form Potentially Suspicious Parent",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001514",
    "title": "User Added To Admin Group Via Dscl",
    "fieldType": "wildcard",
@@ -41790,6 +42600,14 @@
    "verification": "assumed",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001523",
+   "title": "File Download From IP Based URL Via CertOC.EXE",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001524",
@@ -42141,8 +42959,8 @@
    "title": "Audit Rules Deleted Via Auditctl",
    "fieldType": "wildcard",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001573",
@@ -42311,6 +43129,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001595",
+   "title": "Add Potential Suspicious New Download Source To Winget",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001597",
@@ -42671,6 +43497,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001650",
+   "title": "Run PowerShell Script from Redirected Input Stream",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001651",
@@ -43101,8 +43935,8 @@
    "title": "Download File To Potentially Suspicious Directory Via Wget",
    "fieldType": "wildcard",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001712",
@@ -43317,8 +44151,8 @@
    "title": "File and Directory Discovery - Linux",
    "fieldType": "wildcard",
    "verification": "assumed",
-   "status": "PASS",
-   "reason": ""
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001744",
@@ -43513,6 +44347,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001771",
+   "title": "Potential PowerShell Command Line Obfuscation",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001772",
    "title": "Proxy Execution via Vshadow",
    "fieldType": "wildcard",
@@ -43641,6 +44483,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001790",
+   "title": "Invoke-Obfuscation Via Use Clip - Powershell",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001791",
    "title": "Potential Initial Access via DLL Search Order Hijacking",
    "fieldType": "wildcard",
@@ -43719,6 +44569,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001803",
+   "title": "Suspicious LNK Command-Line Padding with Whitespace Characters",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001806",
@@ -43849,6 +44707,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-001824",
+   "title": "Suspicious Non PowerShell WSMAN COM Provider",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001825",
    "title": "Potentially Suspicious Child Processes Spawned by ConHost",
    "fieldType": "wildcard",
@@ -43959,6 +44825,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001839",
+   "title": "Invoke-Obfuscation Via Use Clip",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001840",
@@ -44183,6 +45057,14 @@
    "verification": "assumed",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001876",
+   "title": "Invoke-Obfuscation VAR++ LAUNCHER OBFUSCATION - PowerShell",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001877",
@@ -44581,8 +45463,8 @@
    "title": "Suspicious Network Communication With IPFS",
    "fieldType": "wildcard",
    "verification": "documented",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001937",
@@ -44703,6 +45585,14 @@
    "verification": "assumed",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001952",
+   "title": "Windows Binary Executed From WSL",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001953",
@@ -44919,6 +45809,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001981",
+   "title": "Uncommon Svchost Command Line Parameter",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001982",
@@ -45599,6 +46497,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-002082",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation - Security",
+   "fieldType": "wildcard",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-002083",
@@ -45771,9 +46677,8 @@
    "title": "Suspicious Curl File Upload - Linux",
    "fieldType": "text",
    "verification": "assumed",
-   "status": "FAIL",
-   "failure": "behaviour",
-   "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000009",
@@ -45967,6 +46872,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-000035",
+   "title": "HackTool - Impacket File Indicators",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000036",
@@ -46232,9 +47145,8 @@
    "title": "File and Directory Discovery - MacOS",
    "fieldType": "text",
    "verification": "assumed",
-   "status": "FAIL",
-   "failure": "behaviour",
-   "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000072",
@@ -46359,6 +47271,14 @@
    "verification": "none",
    "status": "NO_DSL",
    "reason": "keyword-only rule: relies on every field's analyser, so it keeps its Lucene query"
+  },
+  {
+   "id": "AUDRULE-000091",
+   "title": "Invoke-Obfuscation VAR+ Launcher - PowerShell",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000092",
@@ -47348,6 +48268,14 @@
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
   },
   {
+   "id": "AUDRULE-000218",
+   "title": "Ping Hex IP",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000219",
    "title": "Renamed CreateDump Utility Execution",
    "fieldType": "text",
@@ -47427,6 +48355,22 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-000231",
+   "title": "Service Installation with Suspicious Folder Pattern",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
+   "id": "AUDRULE-000233",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation - PowerShell",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000234",
@@ -48182,6 +49126,14 @@
    "reason": "matched the filtered negative; matched the filtered-upper negative"
   },
   {
+   "id": "AUDRULE-000328",
+   "title": "Suspicious SYSTEM User Process Creation",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000329",
    "title": "Addition of SID History to Active Directory Object",
    "fieldType": "text",
@@ -48287,6 +49239,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-000343",
+   "title": "Invoke-Obfuscation VAR+ Launcher",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000344",
@@ -48672,6 +49632,14 @@
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
   },
   {
+   "id": "AUDRULE-000394",
+   "title": "Renamed Powershell Under Powershell Channel",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000395",
    "title": "File Deletion",
    "fieldType": "text",
@@ -48740,6 +49708,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-000404",
+   "title": "Sliver C2 Default Service Installation",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000406",
@@ -48932,8 +49908,8 @@
    "title": "Malicious Usage Of IMDS Credentials Outside Of AWS Infrastructure",
    "fieldType": "text",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000433",
@@ -49773,8 +50749,8 @@
    "title": "Potential Container Discovery Via Inodes Listing",
    "fieldType": "text",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000543",
@@ -50351,6 +51327,14 @@
    "reason": ""
   },
   {
+   "id": "AUDRULE-000617",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000618",
    "title": "Process Access via TrolleyExpress Exclusion",
    "fieldType": "text",
@@ -50697,6 +51681,14 @@
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
   },
   {
+   "id": "AUDRULE-000667",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation - System",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000668",
    "title": "Potential Windows Defender Tampering Via Wmic.EXE",
    "fieldType": "text",
@@ -50820,6 +51812,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-000686",
+   "title": "COM Object Execution via Xwizard.EXE",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000687",
@@ -51199,6 +52199,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-000739",
+   "title": "UAC Bypass via Sdclt",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000740",
@@ -52089,6 +53097,14 @@
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
   },
   {
+   "id": "AUDRULE-000863",
+   "title": "Invoke-Obfuscation STDIN+ Launcher",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000864",
    "title": "Potentially Suspicious JWT Token Search Via CLI",
    "fieldType": "text",
@@ -52140,6 +53156,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-000871",
+   "title": "HackTool - Potential Remote Credential Dumping Activity Via CrackMapExec Or Impacket-Secretsdump",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000872",
@@ -52434,6 +53458,14 @@
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
   },
   {
+   "id": "AUDRULE-000914",
+   "title": "Metasploit SMB Authentication",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000915",
    "title": "Bypass UAC Using SilentCleanup Task",
    "fieldType": "text",
@@ -52524,6 +53556,14 @@
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
   },
   {
+   "id": "AUDRULE-000927",
+   "title": "HackTool - CrackMapExec File Indicators",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-000928",
    "title": "Suspicious Calculator Usage",
    "fieldType": "text",
@@ -52549,6 +53589,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-000931",
+   "title": "Invoke-Obfuscation CLIP+ Launcher - PowerShell",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000933",
@@ -52817,6 +53865,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-000965",
+   "title": "Invoke-Obfuscation STDIN+ Launcher - Powershell",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-000966",
@@ -53160,6 +54216,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-001012",
+   "title": "Potential Data Exfiltration Activity Via CommandLine Tools",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001013",
@@ -53879,6 +54943,14 @@
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
   },
   {
+   "id": "AUDRULE-001105",
+   "title": "Invoke-Obfuscation Via Stdin - Powershell",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001106",
    "title": "Shell Invocation Via Ssh - Linux",
    "fieldType": "text",
@@ -54261,6 +55333,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-001155",
+   "title": "Wmiexec Default Output File",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001156",
@@ -54925,8 +56005,8 @@
    "title": "Pnscan Binary Data Transmission Activity",
    "fieldType": "text",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001245",
@@ -54962,6 +56042,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-001249",
+   "title": "Suspicious WebDav Client Execution Via Rundll32.EXE",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001250",
@@ -55227,6 +56315,14 @@
    "verification": "documented",
    "status": "PASS",
    "reason": ""
+  },
+  {
+   "id": "AUDRULE-001285",
+   "title": "Invoke-Obfuscation Via Stdin",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001286",
@@ -55743,6 +56839,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-001353",
+   "title": "Suspicious Network Command",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001355",
@@ -56910,6 +58014,14 @@
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
   },
   {
+   "id": "AUDRULE-001513",
+   "title": "Csc.EXE Execution Form Potentially Suspicious Parent",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001514",
    "title": "User Added To Admin Group Via Dscl",
    "fieldType": "text",
@@ -56979,6 +58091,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-001523",
+   "title": "File Download From IP Based URL Via CertOC.EXE",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001524",
@@ -57371,8 +58491,8 @@
    "title": "Audit Rules Deleted Via Auditctl",
    "fieldType": "text",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001573",
@@ -57559,6 +58679,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-001595",
+   "title": "Add Potential Suspicious New Download Source To Winget",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001597",
@@ -57960,6 +59088,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-001650",
+   "title": "Run PowerShell Script from Redirected Input Stream",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001651",
@@ -58437,8 +59573,8 @@
    "title": "Download File To Potentially Suspicious Directory Via Wget",
    "fieldType": "text",
    "verification": "assumed",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001712",
@@ -58676,9 +59812,8 @@
    "title": "File and Directory Discovery - Linux",
    "fieldType": "text",
    "verification": "assumed",
-   "status": "FAIL",
-   "failure": "behaviour",
-   "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001744",
@@ -58892,6 +60027,14 @@
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
   },
   {
+   "id": "AUDRULE-001771",
+   "title": "Potential PowerShell Command Line Obfuscation",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001772",
    "title": "Proxy Execution via Vshadow",
    "fieldType": "text",
@@ -59033,6 +60176,14 @@
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
   },
   {
+   "id": "AUDRULE-001790",
+   "title": "Invoke-Obfuscation Via Use Clip - Powershell",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001791",
    "title": "Potential Initial Access via DLL Search Order Hijacking",
    "fieldType": "text",
@@ -59120,6 +60271,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-001803",
+   "title": "Suspicious LNK Command-Line Padding with Whitespace Characters",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001806",
@@ -59264,6 +60423,14 @@
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
   },
   {
+   "id": "AUDRULE-001824",
+   "title": "Suspicious Non PowerShell WSMAN COM Provider",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
+  },
+  {
    "id": "AUDRULE-001825",
    "title": "Potentially Suspicious Child Processes Spawned by ConHost",
    "fieldType": "text",
@@ -59386,6 +60553,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-001839",
+   "title": "Invoke-Obfuscation Via Use Clip",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001840",
@@ -59637,6 +60812,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "matched the filtered negative; matched the filtered negative; matched the filtered-upper negative; matched the filtered-upper negative"
+  },
+  {
+   "id": "AUDRULE-001876",
+   "title": "Invoke-Obfuscation VAR++ LAUNCHER OBFUSCATION - PowerShell",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001877",
@@ -60075,8 +61258,8 @@
    "title": "Suspicious Network Communication With IPFS",
    "fieldType": "text",
    "verification": "documented",
-   "status": "UNTESTABLE",
-   "reason": "regular-expression value: no event is generated from a regex"
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001937",
@@ -60212,6 +61395,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "matched the filtered negative; matched the filtered negative; matched the filtered-upper negative; matched the filtered-upper negative"
+  },
+  {
+   "id": "AUDRULE-001952",
+   "title": "Windows Binary Executed From WSL",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001953",
@@ -60452,6 +61643,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-001981",
+   "title": "Uncommon Svchost Command Line Parameter",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-001982",
@@ -61207,6 +62406,14 @@
    "status": "FAIL",
    "failure": "behaviour",
    "reason": "missed the exact-case positive; missed the upper-case positive; missed the lower-case positive"
+  },
+  {
+   "id": "AUDRULE-002082",
+   "title": "Invoke-Obfuscation Obfuscated IEX Invocation - Security",
+   "fieldType": "text",
+   "verification": "documented",
+   "status": "NO_DSL",
+   "reason": "not translated: no events could be built"
   },
   {
    "id": "AUDRULE-002083",

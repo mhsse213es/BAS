@@ -215,6 +215,9 @@ func dslHasLetterValue(n any) bool {
 	switch v := n.(type) {
 	case map[string]any:
 		for k, x := range v {
+			if k == "regexp" {
+				continue // a Sigma regex is case-sensitive unless flagged, so it may legitimately omit the flag
+			}
 			if s, ok := x.(string); ok && k == "value" {
 				if strings.ContainsFunc(s, unicode.IsLetter) {
 					return true

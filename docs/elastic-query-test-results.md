@@ -1,6 +1,6 @@
 # Elastic query test against a real Elasticsearch
 
-Tested 2026-11-04 on staging's Elasticsearch 8.15.3 (throwaway indices, deleted afterwards). Tool:
+Tested 2026-11-04 (regex recovery re-tested 2026-11-09) on staging's Elasticsearch 8.15.3 (throwaway indices, deleted afterwards). Tool:
 `scripts/rulelib-gen/esvalidate.py`. Per-rule results for every run: `docs/elastic-query-test-results.json`.
 
 ## Correction to the earlier version of this document
@@ -17,12 +17,13 @@ bundle has a test for it that fails on the old bundle (40 hits) and passes on th
 
 | | Rules |
 |---|---:|
-| Elastic queries shipped (1,735 field-mapped + 26 keyword-only) | 1,761 |
-| **PASS** | **1,726** |
+| Elastic queries shipped (1,773 field-mapped + 26 keyword-only) | 1,799 |
+| **PASS** | **1,723** |
 | **FAIL** | **0** |
-| **UNTESTABLE** | **35** |
+| **UNTESTABLE** | **76** |
 
-No query that passed before and is still shipped changed status. The 72 `PENDING_SAMPLE` rules are the identical
+No query that passed before changed to a failure. 3 regex rules that used to pass now show UNTESTABLE because the harness
+stopped building events from a regex (see "Regex rules recovered"); 47 of the 76 untestable are regex rules. The 72 `PENDING_SAMPLE` rules are the identical
 set and byte-identical in the bundle.
 
 ## Result: Elasticsearch DSL with `case_insensitive: true` (new, additive)
@@ -33,17 +34,18 @@ NOT). No EQL.
 
 | Field mapping used in the test | PASS | FAIL | UNTESTABLE | No DSL |
 |---|---:|---:|---:|---:|
-| all strings `keyword` | 1,685 | 0 | 24 | 52 |
-| all strings `wildcard` type | 1,685 | 0 | 24 | 52 |
-| all strings analysed `text` | 157 | 1,528 | 24 | 52 |
+| all strings `keyword` | 1,682 | 0 | 18 | 99 |
+| all strings `wildcard` type | 1,682 | 0 | 18 | 99 |
+| all strings analysed `text` | 157 | 1,525 | 18 | 99 |
 
 - **Different-case events:** every PASS also matched the same event upper-cased and lower-cased, and still rejected
   the benign event, the filtered event and the filtered event differing only in case. Of the 1,726 passing Lucene
   queries, 1,706 were case-sensitive; the DSL of those matches case variants.
 - **Mutation check:** removing `case_insensitive` failed 80 of 80 queries on a case miss; corrupting a value failed
   60 of 60; deleting a `must_not` failed 57 of 60 (2 untestable, 1 unaffected).
-- **52 rules have no DSL:** 26 keyword-only and 26 free-text search conditions. The 9 rules that use a regular
-  expression now have one (next section).
+- **99 rules show no rule-level DSL result:** 52 have no DSL (26 keyword-only, 26 free-text search conditions) and 47
+  are regex rules, which the rule harness cannot build events for; their regexes are tested by the pattern-level
+  test (next sections).
 - **Text mapping fails by design.** `term`/`prefix`/`wildcard` act on analysed tokens, so a DSL query does not
   work on an analysed `text` field. The DSL is for `keyword` and `wildcard`-typed fields (what ECS uses). Where a
   customer's fields are analysed `text`, the analyser already gives case-insensitivity and the Lucene query applies;
@@ -59,6 +61,29 @@ Behaviour of Elasticsearch 8.15.3 the translator works around (each tested):
    no character". The `wildcard` field type cannot express this; 2 rules' filtered-empty events are skipped on that
    type (20 rules contain an empty-string condition).
 3. A wildcard on an `ip` field is an error or matches nothing, so IPv4 prefixes become CIDR terms (see below).
+
+## Regex rules recovered (2026-11-09)
+
+Forty rules had no Elastic translation because pySigma's `ecs_windows` pipeline stringifies a regex value (the 40
+corrupt queries above). The generator now replaces each regex with a placeholder word before the pipeline runs and puts
+the real regex back afterwards, in the Lucene text (padded) and in the DSL (`regexp`): **39 rules gained an Elastic
+translation** (Elastic: 2,090 translated, 14 not available). The 40th, AUDRULE-000720 (WSASS), stays a failure: its
+regex is `.*X[^"]{0,64}Y` shaped, and Lucene's automaton for that fails on Elasticsearch 8.15.3 (HTTP 400, even at
+200,000 states). The generator refuses exactly that shape: a negated class or `.` bounded at 32 or more, followed by more
+pattern, in a regex not anchored at the start. AUDRULE-001186 and one more rule stay refused for a `^` inside an
+alternation.
+
+- **Pattern-level test, widened:** `esregex_diff.py` now takes every distinct regex in the shipped rules (123 patterns)
+  and compares the padded Lucene form and the DSL form with Python `re.search` on 10,419 strings, including strings
+  generated to match each pattern (`rxsample.py`), so agreement is never "nothing matches". **120 of 120 translated
+  patterns agree on `keyword` and on `wildcard` fields; 3 are refused** (`docs/elastic-regex-dsl-test-results.json`).
+  It found two real bugs before this passed: an empty alternative `(a|)` (Lucene rejects it; now written `(a|())`) and
+  the automaton blow-up above.
+- **Harness fix:** the rule-level test first treated the recovered rules as testable and failed 22 of them, because its
+  events were built from the stringified regex. Rules whose original detection holds a regex are now UNTESTABLE for the
+  rule-level test and covered by the pattern-level test instead.
+- **DSL regexp** carries `max_determinized_states: 200000` so a legitimately large pattern is not rejected at the default
+  10,000.
 
 ## Regular expressions in the DSL
 

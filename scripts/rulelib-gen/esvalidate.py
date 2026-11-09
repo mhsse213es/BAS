@@ -331,6 +331,10 @@ def gen(rules_path, out_path, backend="elastic"):
             rule = SigmaCollection.from_yaml(r["detection"]).rules[0]
             family = t.log_source_family(rule)
             mapping = spec.mappings.get(family) if family else None
+            from elastic_regex import protect_regexes
+            if protect_regexes(rule)[1]:
+                # a pipeline may stringify the regex, and events built from that text would be circular
+                raise Untestable("regular-expression value: no event is generated from a regex")
             if tr["mapping"] == "pipeline" and mapping:
                 mapping.pipeline().apply(rule)
             cond = rule.detection.parsed_condition[0]

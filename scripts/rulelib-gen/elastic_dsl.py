@@ -116,6 +116,9 @@ def _leaf(node):
     return _value(node.field, node.value)
 
 
+_REGEXES = {}  # placeholder word -> SigmaRegularExpression, for rules whose regex a pipeline stringified
+
+
 def _value(field, v):
     from sigma.types import (SigmaString, SigmaNumber, SigmaBool, SigmaNull, SigmaRegularExpression,
                              SigmaCIDRExpression, SigmaFieldReference, SigmaExists, SigmaCompareExpression,
@@ -124,6 +127,8 @@ def _value(field, v):
         # equivalent spellings (windash, base64 offsets): any one of them satisfies the condition
         kids = [_value(field, x) for x in v.values]
         return kids[0] if len(kids) == 1 else {"bool": {"should": kids, "minimum_should_match": 1}}
+    if isinstance(v, SigmaString) and _REGEXES and v.to_plain() in _REGEXES:
+        return _value(field, _REGEXES[v.to_plain()])
     if isinstance(v, SigmaString):
         if _is_ip_field(field):
             return _ip_leaf(field, v)
@@ -153,7 +158,8 @@ def _value(field, v):
                                                 multiline=Flag.MULTILINE in flags, dotall=Flag.DOTALL in flags)
         except elastic_regex.Unsupported as e:
             raise Unsupported("regular expression (%s)" % e)
-        body = {"value": value}
+        # a long bounded repeat can exceed Elasticsearch's default automaton size (10,000 states)
+        body = {"value": value, "max_determinized_states": 200000}
         if ci:
             body["case_insensitive"] = True
         return {"regexp": {field: body}}
@@ -180,7 +186,13 @@ def tree_to_dsl(tree):
     return json.dumps({"query": _node(tree)}, separators=(",", ":"), sort_keys=True)
 
 
-def rule_to_dsl(rule):
-    """DSL for a SigmaRule that has already been through the translation's processing pipeline."""
-    cond = rule.detection.parsed_condition[0]
-    return tree_to_dsl(cond.parsed.postprocess(rule.detection, cond))
+def rule_to_dsl(rule, regexes=None):
+    """DSL for a SigmaRule that has already been through the translation's processing pipeline. `regexes` maps the
+    placeholder words that stand in for regex values (see elastic_regex.protect_regexes)."""
+    global _REGEXES
+    _REGEXES = regexes or {}
+    try:
+        cond = rule.detection.parsed_condition[0]
+        return tree_to_dsl(cond.parsed.postprocess(rule.detection, cond))
+    finally:
+        _REGEXES = {}
