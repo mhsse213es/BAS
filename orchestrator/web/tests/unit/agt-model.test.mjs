@@ -143,3 +143,25 @@ test('stateTargets offers the other states, and none at all for a force-removed 
   assert.deepEqual(M.stateTargets('retired', true), []);
   assert.deepEqual(M.stateTargets('active', true), []);
 });
+
+// ── Threat Factory lab marker ──
+
+test('factoryLabBadge: only an agent Audspect flagged as the lab gets a marker', () => {
+  assert.equal(M.factoryLabBadge(ag('a1', 'FIN-WS-01')), null);
+  assert.equal(M.factoryLabBadge({ agentId: 'x', factoryLab: false }), null);
+  // Only a literal true counts: a string or number from a bad payload must not mark an agent as the lab.
+  assert.equal(M.factoryLabBadge({ agentId: 'x', factoryLab: 'true' }), null);
+  assert.equal(M.factoryLabBadge({ agentId: 'x', factoryLab: 1 }), null);
+  assert.equal(M.factoryLabBadge(undefined), null);
+});
+
+test('factoryLabBadge: a connected lab agent is ready; an offline or retired one is marked but not ready', () => {
+  const up = M.factoryLabBadge({ agentId: 'lab', factoryLab: true, status: 'idle', state: 'active' });
+  assert.equal(up.label, 'Threat Factory lab');
+  assert.equal(up.ready, true);
+  for (const o of [{ status: 'offline', state: 'active' }, { status: 'idle', state: 'retired' }, { status: 'idle', state: 'uninstalled' }]) {
+    const b = M.factoryLabBadge({ agentId: 'lab', factoryLab: true, ...o });
+    assert.equal(b.ready, false, JSON.stringify(o));
+    assert.match(b.title, /not connected/);
+  }
+});

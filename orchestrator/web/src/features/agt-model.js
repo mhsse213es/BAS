@@ -23,6 +23,22 @@ export function bucketOf(a) {
   return 'online';
 }
 
+// factoryLabBadge: the Threat Factory lab marker for an agent row, or null when the agent is not the lab. Audspect
+// sets the flag itself, from the configured lab agent ID, so a true flag is the server's own designation, not a
+// console setting. A lab agent that is offline or retired is still marked, but the title says it cannot take runs.
+export function factoryLabBadge(a) {
+  a = a || {};
+  if (a.factoryLab !== true) return null;
+  var up = a.status !== 'offline' && a.state !== 'retired' && a.state !== 'uninstalled';
+  return {
+    label: 'Threat Factory lab',
+    ready: up,
+    title: up
+      ? 'Audspect has designated this agent as the Threat Factory validation lab. Only factory-validation runs go to it; normal runs are refused.'
+      : 'Audspect has designated this agent as the Threat Factory validation lab, but it is not connected now, so factory-validation runs cannot be dispatched until it is back.',
+  };
+}
+
 // osFamily collapses an osVersion string to one of the demo's four families (Linux distributions fold
 // into "Linux"); anything it cannot place keeps its own first word, and an empty value is "Unknown".
 var LINUX = /^(linux|ubuntu|debian|rhel|red hat|centos|rocky|alma|fedora|suse|opensuse|sles|oracle|amazon|arch|kali|mint|alpine)/i;

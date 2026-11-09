@@ -577,7 +577,11 @@ type Agent struct {
 	TrayHidden *bool `json:"trayHidden"`
 	// ForceRemoved is true once an administrator force-removed the agent. That is permanent: the console offers
 	// no way to reactivate it, and the database refuses the change.
-	ForceRemoved bool       `json:"forceRemoved"`
+	ForceRemoved bool `json:"forceRemoved"`
+	// FactoryLab is true for the one agent Audspect has designated as the Threat Factory validation lab. The server
+	// sets it from the configured lab agent ID at startup (validationlab.EnsureSoleFactoryLabAgent); the console
+	// cannot change it. It is read-only here: the console only marks the agent.
+	FactoryLab bool       `json:"factoryLab"`
 	EnrolledAt   *time.Time `json:"enrolledAt,omitempty"`
 	LastUpdate   time.Time  `json:"lastUpdate"`
 	Sims         int        `json:"sims"` // scenario runs dispatched to this agent (all time)

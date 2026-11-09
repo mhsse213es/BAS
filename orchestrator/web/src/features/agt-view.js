@@ -162,6 +162,8 @@ document.addEventListener('click', function(e) {
 export function statusCellHtml(a, activeJob) {
   var b = M.bucketOf(a);
   var h = '<span class="rk-pill tone-' + M.STATUS_TONE[b] + '">' + x(M.STATUS_LABEL[b]) + '</span>';
+  var lab = M.factoryLabBadge(a);
+  if (lab) h += ' <span class="agt-flag agt-flag-lab' + (lab.ready ? '' : ' agt-flag-lab-down') + '" title="' + x(lab.title) + '">' + icon('shield') + x(lab.label) + (lab.ready ? '' : ' (not connected)') + '</span>';
   if (a.state && a.state !== 'active') h += ' ' + chip(a.state, a.state === 'retired' || a.state === 'uninstalled' ? 'muted' : 'warn');
   if (a.status !== 'offline' && !a.wsConnected) h += ' <span class="agt-flag" title="Heartbeat is reaching the server, but the WebSocket task channel is down -- dispatching a run to this agent will fail until it reconnects. Often a proxy/firewall blocking the WS Upgrade handshake.">' + icon('alert') + 'Task channel down</span>';
   if (a.status !== 'offline' && a.transport === 'legacy') h += ' <span class="agt-flag" title="This agent is on legacy transport -- it never completed mTLS bootstrap and cannot receive signed commands. Scenario dispatch will fail. Usually means it was installed without --ca-root; see the Deploy agent page for the current install command, or fetch the CA root manually from /api/config/ca-root.">' + icon('alert') + 'Legacy transport</span>';

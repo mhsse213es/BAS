@@ -955,7 +955,7 @@ const agentSelectColumns = `a.agent_id, a.hostname, a.ip_address, a.os_version, 
 	        COALESCE(sr.sims, 0) AS sims,
 	        a.stopped_by, COALESCE(u.username, a.stopped_by), a.stopped_at, a.stop_reason,
 	        a.group_id, g.name, a.uninstall_error, a.uninstall_error_at, a.uninstall_requested_at,
-	        COALESCE(a.transport, 'legacy'), a.tray_hidden, (a.force_removed_at IS NOT NULL)`
+	        COALESCE(a.transport, 'legacy'), a.tray_hidden, (a.force_removed_at IS NOT NULL), a.is_factory_lab`
 
 // agentFromJoins is the FROM/JOIN clause shared by every GetAgents query
 // that selects agentSelectColumns above.
@@ -982,7 +982,7 @@ func scanAgentRows(rows pgx.Rows, hub *ws.Hub, now time.Time) []models.Agent {
 			&stateStr, &policyRaw, &a.EnrolledAt, &a.Sims,
 			&a.StoppedBy, &a.StoppedByName, &a.StoppedAt, &a.StopReason,
 			&a.GroupID, &a.GroupName, &a.UninstallError, &a.UninstallErrorAt, &uninstallRequestedAt,
-			&a.Transport, &a.TrayHidden, &a.ForceRemoved); err != nil {
+			&a.Transport, &a.TrayHidden, &a.ForceRemoved, &a.FactoryLab); err != nil {
 			continue
 		}
 		// Connectivity is heartbeat-driven: a dead/rebooted agent stops updating
