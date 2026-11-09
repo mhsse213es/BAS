@@ -35,9 +35,13 @@ ground_truth:
   adapters: ["state", "response"]
   check: >
     The response to the delegate's read of REC-A-001 carries no diagnosis or insurance number.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-022
+  min_severity: high
 detection_assertion:
-  status: not_evaluated
-  reason: "The delegate reads a record owned by the patient under a valid consent. REL-004 fires on the legitimate summary read as well as on an over-disclosing one, so it cannot grade consent scope. A consent-aware rule does not exist yet."
+  status: fixture_validated
+  reason: "The vulnerable build returns the diagnosis and insurance number to the delegate, which REL-022 reads from the emitted classes. The fixed build returns the consented summary and nothing fires. Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
 side_effect_class: READ_ONLY
 evidence:
   - sanitized_request

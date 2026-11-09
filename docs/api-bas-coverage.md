@@ -91,7 +91,7 @@ Every protocol has an executable adapter and at least one lab-validated scenario
 | BFSI | 84 scenarios tagged, most on the generic orders fixture; payment workflows are BIZ-003 to 009 |
 | NBFC | 10 scenarios (AUTHZ-101 to 106, DATA-101 to 104). DATA-102 detection is `not_evaluated`. |
 | Manufacturing | 7 scenarios (AUTHZ-201 to 204, DATA-201, 202, INTEG-201) on `manufacturing-two-plant`: cross-plant production-order read, operator releasing an order, supplier changing another supplier's purchase order, device commanding another device (simulated, lab only), BOM and CAD leakage, asset and telemetry listing, IT-side access to the OT management configuration. Detection: all seven graded by APIBAS-REL-004 (fixture-validated). No regulatory mapping yet. Not covered: ERP/MES inventory and bill-of-materials write paths, machine-command safety interlocks, OT protocol (Modbus, OPC UA) adapters. |
-| Healthcare (FHIR, patient records) | 9 scenarios (AUTHZ-301 to 305, DATA-301 to 303, INTEG-301) on `healthcare-two-patient`: cross-patient record read, clinician without a treating relationship, prescription change, patient altering their own result, delegate beyond consent scope, medical image download, FHIR Observation read, records export, device posting to another patient's result. Not covered: HL7 v2 and DICOM adapters, real FHIR server, break-glass access, consent revocation, audit-log integrity. |
+| Healthcare (FHIR, patient records) | 9 scenarios (AUTHZ-301 to 305, DATA-301 to 303, INTEG-301) on `healthcare-two-patient`: cross-patient record read, clinician without a treating relationship, prescription change, patient altering their own result, delegate beyond consent scope, medical image download, FHIR Observation read, records export, device posting to another patient's result. Detection: eight graded by APIBAS-REL-004, AUTHZ-304 by REL-021 (result changed by a non-device identity) and AUTHZ-305 by REL-022 (clinical data to a delegate beyond consent); all fixture-validated. REL-004 cannot tell a treating clinician from one without a relationship (AUTHZ-302). Not covered: HL7 v2 and DICOM adapters, real FHIR server, break-glass access, consent revocation, audit-log integrity. |
 | Retail, logistics, telecom | **not started** |
 
 ## 5. India and UAE (API.txt section 4)
@@ -118,10 +118,10 @@ adapter exists.
 
 | Build | detected | not_detected | inconclusive | error |
 |---|---|---|---|---|
-| vulnerable | 77 | 21 | 1 | 0 |
-| fixed | 64 | 34 | 1 | 0 |
+| vulnerable | 79 | 21 | 1 | 0 |
+| fixed | 65 | 35 | 1 | 0 |
 
-37 of 136 scenarios have no detection block and are `not_evaluated`, which is a distinct state from a miss. Per-scenario reasons
+35 of 136 scenarios have no detection block and are `not_evaluated`, which is a distinct state from a miss. Per-scenario reasons
 are in `docs/api-bas-det001-tracker.md`. The counts above are raw; a not_detected on the fixed build means the control denied
 the request and the fixture raised no event, which is not automatically a gap. The per-scenario expectations decide that.
 

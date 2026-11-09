@@ -7,6 +7,7 @@ package detect
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -333,6 +334,25 @@ var ElasticRules = []Rule{
 		// a loan read is still a violation. REL-004 and REL-008 keep their ownership logic.
 		ID: "APIBAS-REL-020", Name: "Protected disclosure outside the policy for its resource", Severity: SeverityHigh, Threshold: 1,
 		Match: disclosureOutsidePolicy,
+	},
+	{
+		// REL-021 fires when a laboratory result is changed by an identity whose role is known and is not a device. Results are
+		// posted by the registered bedside device; a patient or clinician changing one is the diagnostic-result modification the
+		// healthcare pack tests (HC-004). The attempt is the signal, whatever the outcome. A device posting to another
+		// patient's result is a foreign-object access and is REL-004's.
+		ID: "APIBAS-REL-021", Name: "Laboratory result changed by a non-device identity", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.ActorRole != "" && e.ActorRole != "device" && strings.HasPrefix(e.Action, "PATCH /api/health/lab-results/")
+		},
+	},
+	{
+		// REL-022 fires when a response to a delegate emits a clinical field. A delegate acts under a summary-only consent, so a
+		// diagnosis or insurance number reaching one is a disclosure beyond the consent. It reads what the response emitted, not
+		// who owns the record, so a consented summary read does not fire it.
+		ID: "APIBAS-REL-022", Name: "Clinical data disclosed to a delegate beyond consent", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.ActorRole == "delegate" && slices.Contains(e.DisclosedClasses, DisclosureClinicalRecord)
+		},
 	},
 }
 

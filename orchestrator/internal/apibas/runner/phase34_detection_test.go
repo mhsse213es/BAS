@@ -138,6 +138,20 @@ func expectedDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, ru
 			return detect.Detected
 		}
 		return detect.NotDetected
+	case "APIBAS-REL-021":
+		// A laboratory result change by a caller whose role is not a device. The attempt is the signal, in either build.
+		attack := s.Steps[len(s.Steps)-1]
+		if attack.Method == "PATCH" && strings.HasPrefix(attack.Path, "/api/health/lab-results/") && roleOf(t, fx, attack.Identity) != "device" {
+			return detect.Detected
+		}
+		return detect.NotDetected
+	case "APIBAS-REL-022":
+		// A delegate receives a clinical field only when the build leaks it. The fixed build answers the consented summary.
+		attack := s.Steps[len(s.Steps)-1]
+		if mode == lab.ModeVulnerable && roleOf(t, fx, attack.Identity) == "delegate" && strings.HasPrefix(attack.Path, "/api/health/records/") {
+			return detect.Detected
+		}
+		return detect.NotDetected
 	case "APIBAS-REL-019":
 		// A privileged route called by a caller whose role is not the administrator. The attempt is the signal, in either build.
 		attack := s.Steps[len(s.Steps)-1]

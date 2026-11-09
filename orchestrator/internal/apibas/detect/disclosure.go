@@ -11,6 +11,7 @@ const (
 	DisclosureKYCIdentity       = "kyc_identity"       // identity evidence: PAN, Aadhaar reference
 	DisclosurePaymentCredential = "payment_credential" // a repayment debit mandate
 	DisclosureAccountIdentifier = "account_identifier" // a loan's disbursement account
+	DisclosureClinicalRecord    = "clinical_record"    // a patient's diagnosis or insurance number
 )
 
 // disclosurePolicy lists, for each class, the resource kinds it may appear on. Nothing is allowed by default: a class on a
@@ -20,6 +21,7 @@ var disclosurePolicy = map[string][]string{
 	DisclosureKYCIdentity:       {"kyc"},
 	DisclosurePaymentCredential: {"statement"},
 	DisclosureAccountIdentifier: {"loan"},
+	DisclosureClinicalRecord:    {"patient_record", "health_export"},
 }
 
 // disclosureResource names the resource kind an action reads, from the action's path. The query is not part of an action.
@@ -31,6 +33,10 @@ func disclosureResource(action string) string {
 		path = rest
 	}
 	switch {
+	case strings.HasPrefix(path, "/api/health/records/"):
+		return "patient_record"
+	case strings.HasPrefix(path, "/api/health/export"):
+		return "health_export"
 	case strings.HasPrefix(path, "/api/nbfc/kyc/"), strings.HasPrefix(path, "/api/nbfc/admin/kyc/"):
 		return "kyc"
 	case strings.HasSuffix(path, "/statement"):

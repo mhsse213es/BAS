@@ -34,9 +34,13 @@ ground_truth:
   adapters: ["state", "response"]
   check: >
     The state shows LAB-A-001's value unchanged after patient A's change.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-021
+  min_severity: high
 detection_assertion:
-  status: not_evaluated
-  reason: "The patient changes their own result, so no object owned by another identity is named. REL-004 cannot fire; a rule on result changes by a non-device identity does not exist yet."
+  status: fixture_validated
+  reason: "The patch names a laboratory result and the caller is a patient, not a device, so REL-021 fires on the attempt in either build. Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
 side_effect_class: STATE_CHANGE_SANDBOX
 cleanup:
   - "reset the lab to its fixture seed after the run"

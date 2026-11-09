@@ -3811,3 +3811,11 @@ Walk of 5 approvals 2 per page: every approval exactly once, newest first, 3 pag
 - REL-004 keys on the record owner. It cannot tell a treating clinician from one with no relationship (AUTHZ-302), so a legitimate treating read would also fire it.
 - AUTHZ-304 (patient alters own result) and AUTHZ-305 (consent scope) stay not_evaluated with stated reasons: they need new rules (result change by a non-device identity; consent-aware disclosure).
 - No regulatory mapping on manufacturing or healthcare scenarios. No HL7, DICOM, real FHIR server, break-glass, consent revocation. Not run on staging or any real environment.
+
+## API BAS detection rules REL-021 and REL-022 (9 November 2026)
+
+- **REL-021** (result changed by a non-device identity): fires on `PATCH /api/health/lab-results/` when the actor role is known and is not `device`. Attempt is the signal. Wired to AUTHZ-304.
+- **REL-022** (clinical data to a delegate beyond consent): fires when the actor role is `delegate` and the response emitted the new `clinical_record` disclosure class (diagnosis, insurance number). Reads what was emitted, not who owns the record, so the consented summary does not fire it. Vulnerable detected, fixed not detected. Wired to AUTHZ-305.
+- Supporting: `clinical_record` class allowed on the record and export resources so REL-020 stays quiet for owners; lab classifies `diagnosis` and `insurance_id`; the phase34 oracle states both rules' expectations independently of the detector; unit tests for both rules and the class policy.
+- Measured: all 99 declared detection expectations match (0 mismatches); detection `not_evaluated` is 35 of 136. Vulnerable detected 79, fixed detected 65.
+- Limits: fixture-validated only, no live SIEM. REL-022 trusts the lab's field classification, so a new clinical field needs a class entry. The report, storage and CAD references are not policy-governed classes. REL-021 and REL-022 have no Sentinel-specific mapping beyond the shared fixture event. REL-004 still cannot separate a treating clinician from an unrelated one.
