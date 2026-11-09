@@ -226,17 +226,24 @@ function runBarsSvg(runs) {
     out += '<rect x="' + x0.toFixed(1) + '" y="' + (78 - h).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="3" fill="' + colorOf(toneOf(v)) + '" data-tip="' + x(v + '%') + '"/>' +
       '<text x="' + (x0 + bw / 2).toFixed(1) + '" y="94" text-anchor="middle" class="axis-t">' + (isNaN(d) ? '' : (d.getMonth() + 1) + '/' + d.getDate()) + '</text>';
   });
-  return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg dp-pbars" role="img" aria-label="Prevention per run">' + out + '</svg>';
+  // A guide at 80%, the point where a run counts as strong (the same cut-off as toneOf), so the bar colours have a reference.
+  var guide = '<line x1="0" y1="22" x2="' + W + '" y2="22" class="dp-thr"/>';
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg dp-pbars" role="img" aria-label="Prevention per run">' + guide + out + '</svg>';
 }
 function renderPosture() {
   var pw = M.postureWindow(D.runs || [], 8), scored = M.scoredRuns(D.runs || []);
   if (!pw) { cell('dop-posture', emptyCard('Posture score', 'shield', D.runs ? 'No scored runs yet' : 'Loading…', D.runs ? 'Run a scenario to compute a prevention score.' : '')); return; }
   var t = toneOf(pw.pct), bars = scored.slice(0, 6).reverse();
   var tt = pw.trend === 'Improving' ? 'ok' : pw.trend === 'Degrading' ? 'warn' : 'muted';
-  cell('dop-posture', card('Posture score', '<div class="dp-posture">' + gaugeRing(pw.pct, colorOf(t), pw.pct, 'out of 100') +
-    '<div class="dp-posture-r"><div class="dp-two"><div><div class="dp-lbl">TREND</div><b class="dp-tone tone-' + tt + '">' + x(pw.trend) + '</b></div>' +
-    '<div class="dp-right"><div class="dp-lbl">VS TARGET</div><b class="dp-tone tone-muted">—</b> <span class="muted tiny">no target set</span></div></div>' +
-    runBarsSvg(bars) + '<p class="muted tiny">Prevention across the last ' + bars.length + ' validated run' + (bars.length === 1 ? '' : 's') + '.</p></div></div>'));
+  var verdict = t === 'ok' ? 'Strong' : t === 'warn' ? 'Moderate' : 'At risk';
+  var arrow = pw.trend === 'Improving' ? 'M12 19V5M5 12l7-7 7 7' : pw.trend === 'Degrading' ? 'M12 5v14M19 12l-7 7-7-7' : 'M5 12h14';
+  var trendIco = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + arrow + '"/></svg>';
+  cell('dop-posture', card('Posture score', '<div class="dp-posture">' +
+    '<div class="dp-gauge t-' + t + '" title="Prevention score, out of 100">' + ring(pw.pct, 168, 16, colorOf(t), pw.pct, verdict) + '</div>' +
+    '<div class="dp-posture-r"><div class="dp-stats">' +
+      '<div class="dp-stat"><span class="dp-stat-l">Trend</span><b class="dp-stat-v tone-' + tt + '">' + trendIco + x(pw.trend) + '</b></div>' +
+      '<div class="dp-stat"><span class="dp-stat-l">Target</span><b class="dp-stat-v tone-muted">Not set</b></div></div>' +
+    runBarsSvg(bars) + '<p class="muted tiny">Prevention across the last ' + bars.length + ' validated run' + (bars.length === 1 ? '' : 's') + '. The dashed line is 80%, the cut-off for a strong run.</p></div></div>'));
 }
 function renderCE() {
   var e = M.effectiveness(D.runs || []);

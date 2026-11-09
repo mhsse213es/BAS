@@ -107,6 +107,22 @@ td.num, th.num { text-align: right; }
 .dp-right { text-align: right; }
 .dp-tone { font-size: 20px; color: var(--kc, var(--text)); }
 .dp-pbars { display: block; width: 100%; height: auto; margin-top: 8px; }
+.dp-thr { stroke: var(--border-hi); stroke-width: 1; stroke-dasharray: 3 4; }
+
+/* Posture score: the gauge carries the card, so it gets size and a glow in its own tone; the rest stays quiet */
+.dp-posture { gap: 32px; }
+.dp-gauge { --g: var(--accent); flex: none; line-height: 0; }
+.dp-gauge.t-ok { --g: var(--success); }
+.dp-gauge.t-warn { --g: var(--warning); }
+.dp-gauge.t-bad { --g: var(--danger); }
+.dp-gauge .dp-ring { overflow: visible; }
+.dp-gauge .dp-ring circle:last-of-type { filter: drop-shadow(0 0 7px var(--g)); }
+.dp-gauge .dp-ring .dp-ring-v { font-size: 44px; font-weight: 700; font-family: var(--font-display); }
+.dp-gauge .dp-ring .donut-l { font-size: 12.5px; font-weight: 600; fill: var(--g); }
+.dp-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dp-stat { background: var(--elevated); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
+.dp-stat-l { font-size: 12px; color: var(--muted); }
+.dp-stat-v { font-size: 17px; display: inline-flex; align-items: center; gap: 6px; color: var(--kc, var(--text)); }
 .dp-sub { margin: 14px 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 
 /* Ransomware readiness */
