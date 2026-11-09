@@ -70,6 +70,26 @@ func (h *Handler) SetK8sControlledSwitch(w http.ResponseWriter, r *http.Request)
 	respond(w, map[string]any{"enabled": enabled, "stoppedRuns": stopped})
 }
 
+// auditRunRefusal records a refused approve or execute request with the run's identity. A refusal changes nothing, so
+// a failed write does not change the answer; the refusal is still returned to the caller.
+func auditRunRefusal(r *http.Request, svc *K8sScenarioService, run K8sRun, reason string) {
+	if svc == nil || svc.Audit == nil {
+		return
+	}
+	_ = svc.Audit.Write(r.Context(), k8sscenario.Event{Type: k8sscenario.EventRefused, RunID: run.ID, Fields: map[string]string{
+		"requester":       run.RequesterID,
+		"actor":           actorID(r),
+		"clusterId":       run.ClusterID,
+		"authorizationId": run.AuthorizationID,
+		"customerRef":     run.CustomerRef,
+		"cluster":         run.Cluster,
+		"namespace":       run.Namespace,
+		"action":          run.ActionID,
+		"approval":        run.ApprovalID,
+		"reason":          reason,
+	}})
+}
+
 // CancelK8sRun stops a running live run. Only the requester may cancel it. The engine stops further writes, rolls
 // back, and verifies the restore before the outcome is recorded. POST /api/k8s-scenarios/runs/{id}/cancel
 func (h *Handler) CancelK8sRun(w http.ResponseWriter, r *http.Request) {
