@@ -138,12 +138,15 @@ RUN cd /agents-legacy && zip -q bas-agent-windows-legacy-amd64-setup.zip bas-age
 # ── Package Builder (.deb, .rpm) ─────────────────────────────────────────────
 FROM debian:bookworm-slim AS packager
 ARG BAS_VERSION=1.6.0
-ENV BAS_VERSION=${BAS_VERSION}
+ARG AGENT_VERSION=dev
+ENV BAS_VERSION=${BAS_VERSION} AGENT_VERSION=${AGENT_VERSION}
 RUN apt-get update && apt-get install -y --no-install-recommends \
     dpkg alien rpm && \
     rm -rf /var/lib/apt/lists/*
 COPY --from=agent-builder /agents /binaries
 COPY packaging/build-agent-packages.sh /build-packages.sh
+COPY packaging/linux-deb /linux-deb
+COPY orchestrator/internal/api/agentinstall/install-agent-linux.sh /install-agent-linux.sh
 RUN bash /build-packages.sh
 
 # ── Combined Binary Manifest ─────────────────────────────────────────────────

@@ -1,0 +1,16 @@
+#!/bin/sh
+# prerm: stop and remove the service only when the package is being REMOVED. During an upgrade the service keeps running
+# on its old binary until postinst has swapped in the new one and checked it. Configuration and identity are kept.
+set -e
+
+case "$1" in
+  remove | deconfigure)
+    systemctl stop bas-agent.service 2>/dev/null || true
+    systemctl disable bas-agent.service 2>/dev/null || true
+    rm -f /etc/systemd/system/bas-agent.service
+    rm -rf /etc/systemd/system/bas-agent.service.d
+    rm -f /usr/local/bin/bas-agent /usr/local/bin/bas-agent.new
+    systemctl daemon-reload 2>/dev/null || true
+    ;;
+esac
+exit 0

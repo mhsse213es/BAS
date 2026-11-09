@@ -47,7 +47,8 @@ evidence:
   - sanitized_response
 industry_mapping:
   - "Healthcare: medical image and report download authorization"
-regulatory_mapping: []
+regulatory_mapping:
+  - IN-DPDP-S8-5
 negative_tests:
   - "API-BAS-DATA-301 against the fixed build must PASS"
   - "API-BAS-DATA-301 against the vulnerable build must FAIL (exploited)"

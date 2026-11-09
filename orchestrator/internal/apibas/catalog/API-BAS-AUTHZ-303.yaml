@@ -50,7 +50,8 @@ evidence:
   - state_diff
 industry_mapping:
   - "Healthcare: prescription modification by a clinician who does not treat the patient"
-regulatory_mapping: []
+regulatory_mapping:
+  - IN-DPDP-S8-5
 negative_tests:
   - "API-BAS-AUTHZ-303 against the fixed build must PASS"
   - "API-BAS-AUTHZ-303 against the vulnerable build must FAIL (exploited)"

@@ -2,6 +2,7 @@ import { state } from '../core/state.js';
 import { on } from '../core/actions.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { debCommand } from './deb-command.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
 import { _templates, _adversaries, renderTemplateGrid, syncAdversaryVisibility } from './adversaries.js';
 import { _agtDetailId, downloadAuditPack, downloadBoardScorecard, downloadFullReportCSV, downloadFullReportJSON, downloadFullReportPDF, downloadNavigatorLayer, loadAgtAttackPath, openAgentDetail, openFullReport, safeScan } from './agent-drawer.js';
@@ -1323,6 +1324,7 @@ export function injectServerURL() {
     set('win-server-url', c.serverURL);
     set('win-cli-cmd', c.windows);
     set('linux-cli-cmd', c.linux);
+    set('linux-deb-cmd', debCommand(c.linux, 'amd64'));
     set('mac-cmd', c.mac);
   };
   apicall('/api/config/connection').then(apply).catch(function() { apply({}); });
