@@ -3756,3 +3756,10 @@ Three guards remain and the wiring sits behind all of them: (1) `AllowProduction
 - No handler-level test for the new `approval_id` error mappings (they mirror the service errors that are tested).
 - Dispatch does not re-check the approval; the job already holds the consumed approval and the environment, and production dispatch is blocked by the same guards.
 - Not run on staging.
+
+## API BAS pending approvals list (9 November 2026)
+
+- `GET /api/apibas/approvals?state=pending|approved|all&target_id=&limit=` (view permission, same as reading one approval). Default state is `pending`: unapproved, unrevoked and within the 72 hour request window. `approved` means approved, unexpired, unrevoked and unused. `all` includes every state, with each row's own `status` (pending, approved, expired, revoked, used). Newest first; `limit` 1 to 200, default 50; invalid `state` or `limit` is 400. The binding hash is not returned.
+- Tests: pending, approved, revoked and lapsed requests land in the right lists; `all` returns every one; limit and target filter work; the hash is absent; bad parameters give 400. RBAC matrix updated.
+- Not done: no pagination cursor beyond `limit`, no filter by requester, and no notification to approvers. Any holder of the view permission (including analysts) can see who requested what.
+- Not run on staging.

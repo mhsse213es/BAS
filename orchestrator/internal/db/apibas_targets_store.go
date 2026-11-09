@@ -184,6 +184,52 @@ func ConsumeAPIBASApproval(ctx context.Context, pool *pgxpool.Pool, id, jobID st
 	return nil
 }
 
+// APIBASApprovalFilter selects approvals for listing. State is "pending" (awaiting approval and not lapsed or revoked),
+// "approved" (approved, unexpired, unrevoked, unused) or "all". TargetID is optional.
+type APIBASApprovalFilter struct {
+	State    string
+	TargetID string
+	Limit    int
+}
+
+// ListAPIBASApprovals returns approvals newest first.
+func ListAPIBASApprovals(ctx context.Context, pool *pgxpool.Pool, f APIBASApprovalFilter) ([]APIBASApproval, error) {
+	limit := f.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	var cond string
+	switch f.State {
+	case "pending":
+		cond = fmt.Sprintf("approved_by = '' AND revoked_at IS NULL AND created_at > NOW() - make_interval(secs => %d)", int(ApprovalRequestWindow.Seconds()))
+	case "approved":
+		cond = "approved_by <> '' AND revoked_at IS NULL AND consumed_at IS NULL AND expires_at > NOW()"
+	case "all":
+		cond = "TRUE"
+	default:
+		return nil, fmt.Errorf("list apibas approvals: unknown state %q", f.State)
+	}
+	q := `SELECT id::text, binding_hash, target_id, requested_by, approved_by, approved_at, created_at,
+	             expires_at, revoked_by, revoked_at, revoke_reason, consumed_by_job, consumed_at
+	        FROM apibas_approvals WHERE ($1 = '' OR target_id = $1) AND ` + cond + `
+	       ORDER BY created_at DESC LIMIT $2`
+	rows, err := pool.Query(ctx, q, f.TargetID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list apibas approvals: %w", err)
+	}
+	defer rows.Close()
+	out := []APIBASApproval{}
+	for rows.Next() {
+		var a APIBASApproval
+		if err := rows.Scan(&a.ID, &a.BindingHash, &a.TargetID, &a.RequestedBy, &a.ApprovedBy, &a.ApprovedAt, &a.CreatedAt,
+			&a.ExpiresAt, &a.RevokedBy, &a.RevokedAt, &a.RevokeReason, &a.ConsumedByJob, &a.ConsumedAt); err != nil {
+			return nil, fmt.Errorf("list apibas approvals: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 // GetAPIBASApproval returns one approval by id.
 func GetAPIBASApproval(ctx context.Context, pool *pgxpool.Pool, id string) (APIBASApproval, error) {
 	var a APIBASApproval

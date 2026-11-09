@@ -156,3 +156,66 @@ func TestAPIBASApprovalRevokeAndExpiry(t *testing.T) {
 		t.Error("revocation was not audited")
 	}
 }
+
+func TestAPIBASApprovalList(t *testing.T) {
+	h := jobsRouter(jobsHandler(t, true))
+	if rec := postAs(t, h, "/api/apibas/targets", targetBody("list-prod", "production"), auth.RoleAdmin, "admin1"); rec.Code != http.StatusCreated {
+		t.Fatalf("register: %d %s", rec.Code, rec.Body.String())
+	}
+	req := map[string]any{"target_id": "list-prod", "fixture": "orders-two-tenant", "scenario_ids": []string{"API-BAS-AUTHZ-001"}}
+	mk := func() string {
+		rec := postAs(t, h, "/api/apibas/approvals", req, auth.RoleAnalyst, "analyst1")
+		var c struct{ ID string }
+		_ = json.Unmarshal(rec.Body.Bytes(), &c)
+		if c.ID == "" {
+			t.Fatalf("request: %d %s", rec.Code, rec.Body.String())
+		}
+		return c.ID
+	}
+	list := func(query string) (int, []map[string]any) {
+		rec := getAsUser(t, h, "/api/apibas/approvals"+query, auth.RoleAnalyst, "analyst1")
+		var v struct{ Approvals []map[string]any }
+		_ = json.Unmarshal(rec.Body.Bytes(), &v)
+		return rec.Code, v.Approvals
+	}
+	has := func(rows []map[string]any, id string) bool {
+		for _, r := range rows {
+			if r["id"] == id {
+				return true
+			}
+		}
+		return false
+	}
+	pending, approved, revoked, stale := mk(), mk(), mk(), mk()
+	_ = postAs(t, h, "/api/apibas/approvals/"+approved+"/approve", map[string]any{}, auth.RoleAdmin, "admin2")
+	_ = postAs(t, h, "/api/apibas/approvals/"+revoked+"/revoke", map[string]any{}, auth.RoleAdmin, "admin2")
+	if _, err := sharedDB.Pool.Exec(context.Background(), `UPDATE apibas_approvals SET created_at = NOW() - interval '73 hours' WHERE id = $1::uuid`, stale); err != nil {
+		t.Fatal(err)
+	}
+	code, rows := list("?target_id=list-prod")
+	if code != http.StatusOK || !has(rows, pending) || has(rows, approved) || has(rows, revoked) || has(rows, stale) {
+		t.Errorf("default (pending): code=%d rows=%v", code, rows)
+	}
+	for _, r := range rows {
+		if _, leaked := r["binding_hash"]; leaked {
+			t.Error("the binding hash was returned")
+		}
+	}
+	if _, rows := list("?state=approved&target_id=list-prod"); !has(rows, approved) || has(rows, pending) || has(rows, revoked) {
+		t.Errorf("approved: %v", rows)
+	}
+	if _, rows := list("?state=all&target_id=list-prod"); !(has(rows, pending) && has(rows, approved) && has(rows, revoked) && has(rows, stale)) {
+		t.Errorf("all: %v", rows)
+	}
+	if _, rows := list("?state=all&target_id=list-prod&limit=2"); len(rows) != 2 {
+		t.Errorf("limit 2 returned %d rows", len(rows))
+	}
+	if _, rows := list("?target_id=no-such-target"); len(rows) != 0 {
+		t.Errorf("other target returned %d rows", len(rows))
+	}
+	for _, bad := range []string{"?state=bogus", "?limit=0", "?limit=500", "?limit=x"} {
+		if code, _ := list(bad); code != http.StatusBadRequest {
+			t.Errorf("%s: %d, want 400", bad, code)
+		}
+	}
+}

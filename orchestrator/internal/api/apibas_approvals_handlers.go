@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -200,6 +201,39 @@ func (h *Handler) RevokeAPIBASApproval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apibasRespond(w, http.StatusOK, approvalView(got))
+}
+
+// ListAPIBASApprovals lists approvals, newest first. GET /api/apibas/approvals?state=pending|approved|all&target_id=&limit=
+// The default is pending, which is what an approver needs. The binding hash is not returned.
+func (h *Handler) ListAPIBASApprovals(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	state := q.Get("state")
+	if state == "" {
+		state = "pending"
+	}
+	if state != "pending" && state != "approved" && state != "all" {
+		jsonError(w, "state must be pending, approved or all", http.StatusBadRequest)
+		return
+	}
+	limit := 0
+	if v := q.Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 200 {
+			jsonError(w, "limit must be between 1 and 200", http.StatusBadRequest)
+			return
+		}
+		limit = n
+	}
+	rows, err := db.ListAPIBASApprovals(r.Context(), h.db, db.APIBASApprovalFilter{State: state, TargetID: q.Get("target_id"), Limit: limit})
+	if err != nil {
+		jsonError(w, "could not list approvals", http.StatusInternalServerError)
+		return
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, a := range rows {
+		out = append(out, approvalView(a))
+	}
+	apibasRespond(w, http.StatusOK, map[string]any{"approvals": out, "state": state})
 }
 
 // GetAPIBASApproval shows one approval. GET /api/apibas/approvals/{id}
