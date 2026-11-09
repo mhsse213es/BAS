@@ -174,15 +174,18 @@ func (m *Mapper) GenerateReport(
 						Remediation:   r.Remediation,
 					}
 					cr.Evidence = append(cr.Evidence, ev)
-					// VETOED is excluded from Tested: Audspect's own agent
-					// refused to attempt this step under B5's
-					// destructive-action policy, so it is not evidence the
-					// control was tested at all. Counting it toward Tested
-					// while Passed/Failed both stay at zero would fall
-					// through the Tested>0/Failed==0 branch below and
-					// silently report the control "pass" when nothing was
-					// actually verified.
-					if r.Result == models.ResultVetoed {
+					// VETOED and ERROR are excluded from Tested — both stay in
+					// Evidence (we attempted the step), but neither is evidence
+					// the control was actually verified. VETOED: Audspect's own
+					// agent refused to attempt the step under B5's
+					// destructive-action policy. ERROR: BAS could not execute
+					// the technique (missing binary, spawn failure, timeout,
+					// malformed content). Counting either toward Tested while
+					// Passed/Failed both stay at zero would fall through the
+					// Tested>0/Failed==0 branch below and silently report the
+					// control "pass" when nothing was actually verified.
+					// (SKIPPED never reaches here — buildResultIndexes drops it.)
+					if r.Result == models.ResultVetoed || r.Result == models.ResultError {
 						continue
 					}
 					cr.Tested++
