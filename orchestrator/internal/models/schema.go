@@ -582,9 +582,9 @@ type Agent struct {
 	// sets it from the configured lab agent ID at startup (validationlab.EnsureSoleFactoryLabAgent); the console
 	// cannot change it. It is read-only here: the console only marks the agent.
 	FactoryLab bool       `json:"factoryLab"`
-	EnrolledAt   *time.Time `json:"enrolledAt,omitempty"`
-	LastUpdate   time.Time  `json:"lastUpdate"`
-	Sims         int        `json:"sims"` // scenario runs dispatched to this agent (all time)
+	EnrolledAt *time.Time `json:"enrolledAt,omitempty"`
+	LastUpdate time.Time  `json:"lastUpdate"`
+	Sims       int        `json:"sims"` // scenario runs dispatched to this agent (all time)
 	// StoppedBy/StoppedAt/StopReason are set when an Admin dispatches a
 	// durable remote stop (see StopAgent handler); cleared on re-enroll.
 	// StoppedBy holds the raw user ID (matches audit_logs.actor_id);
