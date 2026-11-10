@@ -50,7 +50,7 @@ receives only credential *names*.
 
 1. (Done) Persist a binding spec on a target, and run it through the orchestrator's job path.
 3. (Done, limited) Writes: PUT and PATCH with a read-back state check and an owner restore.
-4. Console: (done) store, run and follow bound jobs; past-jobs list done; still open: a form for write blocks.
+4. Console: (done) store, run and follow bound jobs; past-jobs list and write-block form done.
 
 
 ## Stored test data (added 10 November 2026)
@@ -167,3 +167,18 @@ Note: while building this I found the bound-job route (`POST /api/apibas/targets
 matrix on main. A concurrent commit (`7c59851c`, WAF) had removed exactly those two lines, most likely from a stale copy of both files. This
 change restores them, and `TestAPIBASRoutesAreRegistered` now names the API BAS routes the console and runbook depend on, because the RBAC
 matrix check cannot notice a route that is missing from both the router and the matrix.
+
+## Console: write-block form (added 10 November 2026)
+
+Under the test-data box the Binding card has a Write objects form. It edits the box; the box stays the source of truth, and the form stores
+nothing. Choose a PUT or PATCH operation from the inventory (authenticated, with a path parameter), enter the value of each path parameter for
+the test object, pick the owner from the identities already in the box, and give the attack body, the restore body, the read-back and any
+ignored fields. Add to test data checks the values the way the server will (JSON objects of at most 4 KiB that differ, a safe value for each
+path parameter, a read-back that is an authenticated GET with the same path parameters, at most 20 ignored fields), merges the object into
+the JSON, and turns on `allow_writes`. An object with the same operation and values is replaced, not duplicated. The list above the form shows
+each write object with Edit (loads it into the form) and Remove.
+
+The form refuses to touch a box that is not valid JSON, refuses an owner who is not an identity in the box, and never reads or writes a
+credential value. Adding, replacing or removing changes the box only: use Preview to check and Save to store.
+
+Not built: editing identities and read-only objects with a form (they stay in the JSON), and field-level editing of the bodies.

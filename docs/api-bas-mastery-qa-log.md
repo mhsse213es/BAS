@@ -4188,3 +4188,11 @@ no ModSecurity audit-log parsing, so `VerdictMissed` still isn't claimable from 
   no live evaluator to call one. The user has asked for the real new capability each of those needs to be built
   next (burst-driving harness, SIEM backend, multipart support, multi-node lab topology, second weakened-policy
   lab instance) rather than leaving them unwired.
+
+## API BAS write-block form (10 November 2026)
+
+- **Built:** a Write objects form on the Binding card that adds, edits and removes write objects in the test-data JSON: operation, path values, owner, attack and restore bodies, read-back, ignored fields. Pure helpers in `api-inventory-model.js` (`writeOperations`, `readChoices`, `buildWriteObject`, `mergeWriteObject`, `writeObjectsOf`, `removeObjectAt`, `identityNames`).
+- **Calls made:** the box stays the source of truth (the form merges into it and refuses a box that is not valid JSON); client checks mirror the server's so errors appear before a request; same operation and values replace; adding turns on `allow_writes`; the form stores nothing (Preview and Save are unchanged); identities and read objects stay JSON.
+- **Tests (pass):** model: operations offered, read-back choices and default, built object omits defaults and trims, 18 invalid inputs refused with a named problem, merge adds or replaces by operation and values without mutating its input, owner must be an identity, list and remove. jsdom: the form offers the inventory operations, inputs, identities and default read-back; adding puts the object in the box with `allow_writes`; invalid input changes nothing; a broken box is not edited; no identities means nothing is added; Edit then Add replaces; Remove; a hostile identity name and values appear as text only. Full web suite, lint and build run before push.
+- **Not run:** a browser against a live server; Playwright smoke.
+- **Limits:** identities and read objects are edited as JSON; bodies are edited as text.

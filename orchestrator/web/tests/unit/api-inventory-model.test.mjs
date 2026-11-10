@@ -4,6 +4,7 @@ import {
   classLabel, authTone, authLabel, envTone, classOptions, filterOps, parseObserved, parseBindingSpec,
   exampleBindingSpec, changeLines, errorText, MAX_OBSERVED,
   jobTone, resultTone, isFinalStatus, resultText, newJobKey, storedNote, exampleWriteBindingSpec, countsText, worstTone,
+  opKey, writeOperations, readChoices, defaultReadOperation, buildWriteObject, mergeWriteObject, writeObjectsOf, removeObjectAt, identityNames, MAX_WRITE_BODY,
 } from '../../src/features/api-inventory-model.js';
 
 const OPS = [
@@ -177,4 +178,118 @@ test('worstTone: a failure outranks an error, which outranks a skip, which outra
   assert.equal(worstTone({ pass: 5, fail: 0, error: 0, skipped: 0 }), 'ok');
   assert.equal(worstTone({ pass: 0, fail: 0, error: 0, skipped: 0 }), 'muted');
   assert.equal(worstTone(null), 'muted');
+});
+
+const WOPS = [
+  { method: 'GET', path: '/v2/orders/{orderId}', auth: 'required', path_params: ['orderId'] },
+  { method: 'PATCH', path: '/v2/orders/{orderId}', auth: 'required', path_params: ['orderId'] },
+  { method: 'PUT', path: '/v2/profiles/{pid}', auth: 'required', path_params: ['pid'] },
+  { method: 'GET', path: '/v2/profile-view/{pid}', auth: 'required', path_params: ['pid'] },
+  { method: 'GET', path: '/v2/public/{pid}', auth: 'none', path_params: ['pid'] },
+  { method: 'DELETE', path: '/v2/orders/{orderId}', auth: 'required', path_params: ['orderId'] },
+  { method: 'PATCH', path: '/v2/open/{id}', auth: 'none', path_params: ['id'] },
+  { method: 'PATCH', path: '/v2/noparam', auth: 'required', path_params: [] },
+];
+
+const FORM = () => ({ operation: 'PATCH /v2/orders/{orderId}', params: { orderId: 'ORD-A1' }, owner: 'alice', attack_body: '{"status":"hacked"}', restore_body: '{"status":"open"}', read_operation: '', ignore_fields: 'updated_at, etag' });
+
+test('writeOperations keeps authenticated PUT or PATCH with a path parameter only', () => {
+  assert.deepEqual(writeOperations(WOPS).map(opKey), ['PATCH /v2/orders/{orderId}', 'PUT /v2/profiles/{pid}']);
+  assert.deepEqual(writeOperations(null), []);
+});
+
+test('readChoices lists authenticated GETs with the same path parameters; the default is the same path', () => {
+  const patch = WOPS[1];
+  assert.deepEqual(readChoices(WOPS, patch), ['GET /v2/orders/{orderId}']);
+  assert.equal(defaultReadOperation(WOPS, patch), 'GET /v2/orders/{orderId}');
+  const put = WOPS[2];
+  assert.deepEqual(readChoices(WOPS, put), ['GET /v2/profile-view/{pid}'], 'a public GET is not an owner view');
+  assert.equal(defaultReadOperation(WOPS, put), '', 'no GET on the same path');
+  assert.deepEqual(readChoices(WOPS, null), []);
+});
+
+test('buildWriteObject builds the object the server expects, trimming and omitting defaults', () => {
+  const r = buildWriteObject(FORM(), WOPS);
+  assert.equal(r.error, '');
+  assert.deepEqual(r.object, { operation: 'PATCH /v2/orders/{orderId}', params: { orderId: 'ORD-A1' }, owner: 'alice',
+    write: { attack_body: '{"status":"hacked"}', restore_body: '{"status":"open"}', ignore_fields: ['updated_at', 'etag'] } });
+  // Naming the default read-back explicitly changes nothing; a different one is kept.
+  assert.equal(buildWriteObject({ ...FORM(), read_operation: 'GET /v2/orders/{orderId}' }, WOPS).object.write.read_operation, undefined);
+  const put = buildWriteObject({ ...FORM(), operation: 'PUT /v2/profiles/{pid}', params: { pid: 'P1' }, read_operation: 'GET /v2/profile-view/{pid}' }, WOPS);
+  assert.equal(put.error, '');
+  assert.equal(put.object.write.read_operation, 'GET /v2/profile-view/{pid}');
+});
+
+test('buildWriteObject refuses what the server would, naming the problem', () => {
+  const bad = {
+    'no operation': { operation: '' },
+    'a GET': { operation: 'GET /v2/orders/{orderId}' },
+    'a DELETE': { operation: 'DELETE /v2/orders/{orderId}' },
+    'public operation': { operation: 'PATCH /v2/open/{id}', params: { id: 'x1' } },
+    'empty param': { params: { orderId: '  ' } },
+    'traversal param': { params: { orderId: '../admin' } },
+    'slash param': { params: { orderId: 'a/b' } },
+    'no owner': { owner: ' ' },
+    'attack not JSON': { attack_body: 'status=hacked' },
+    'attack an array': { attack_body: '[1]' },
+    'attack empty': { attack_body: '' },
+    'restore missing': { restore_body: '' },
+    'bodies identical': { restore_body: '{"status":"hacked"}' },
+    'bodies equal as JSON': { restore_body: '{ "status" : "hacked" }' },
+    'body too large': { attack_body: '{"a":"' + 'x'.repeat(MAX_WRITE_BODY) + '"}' },
+    'read op not offered': { read_operation: 'GET /v2/profile-view/{pid}' },
+    'bad ignore field': { ignore_fields: 'ok, a b' },
+    'too many ignore fields': { ignore_fields: Array.from({ length: 21 }, (_, i) => 'f' + i).join(',') },
+  };
+  for (const [name, patch] of Object.entries(bad)) {
+    const r = buildWriteObject({ ...FORM(), ...patch }, WOPS);
+    assert.notEqual(r.error, '', name + ' was accepted');
+    assert.equal(r.object, null, name);
+  }
+  // A PUT with no GET on its own path needs a read-back chosen.
+  const noRead = buildWriteObject({ ...FORM(), operation: 'PUT /v2/profiles/{pid}', params: { pid: 'P1' } }, WOPS);
+  assert.match(noRead.error, /choose how to read it back/);
+});
+
+test('mergeWriteObject adds, replaces by operation and values, sets allow_writes and never mutates its input', () => {
+  const spec = { identities: [{ name: 'alice', credential_ref: 'a/x' }, { name: 'bob', credential_ref: 'b/x' }], objects: [{ operation: 'GET /v2/orders/{orderId}', params: { orderId: 'ORD-A1' }, owner: 'alice' }] };
+  const frozen = JSON.stringify(spec);
+  const obj = buildWriteObject(FORM(), WOPS).object;
+  const m = mergeWriteObject(spec, obj);
+  assert.equal(m.error, '');
+  assert.equal(m.replaced, false);
+  assert.equal(m.spec.allow_writes, true);
+  assert.equal(m.spec.objects.length, 2);
+  assert.equal(JSON.stringify(spec), frozen, 'the input spec must not change');
+  const again = mergeWriteObject(m.spec, { ...obj, write: { ...obj.write, restore_body: '{"status":"new"}' } });
+  assert.equal(again.replaced, true);
+  assert.equal(again.spec.objects.length, 2, 'same operation and values replace');
+  assert.equal(again.spec.objects[1].write.restore_body, '{"status":"new"}');
+  const other = mergeWriteObject(m.spec, { ...obj, params: { orderId: 'ORD-B1' }, owner: 'bob' });
+  assert.equal(other.spec.objects.length, 3, 'different values add');
+});
+
+test('mergeWriteObject refuses an owner who is not an identity, and a spec with no identities', () => {
+  const obj = buildWriteObject(FORM(), WOPS).object;
+  assert.match(mergeWriteObject({ identities: [{ name: 'bob' }], objects: [] }, obj).error, /not one of the identities/);
+  assert.match(mergeWriteObject({}, obj).error, /Add the identities first/);
+  assert.match(mergeWriteObject(null, obj).error, /Add the identities first/);
+});
+
+test('writeObjectsOf, removeObjectAt and identityNames read and edit a spec without mutating it', () => {
+  const spec = { identities: [{ name: 'alice' }, { name: 'bob' }, null], objects: [
+    { operation: 'GET /a/{id}', params: { id: '1' }, owner: 'alice' },
+    { operation: 'PATCH /v2/orders/{orderId}', params: { orderId: 'O1' }, owner: 'alice', write: { attack_body: '{"a":1}', restore_body: '{"a":2}' } },
+  ] };
+  assert.deepEqual(identityNames(spec), ['alice', 'bob']);
+  assert.deepEqual(identityNames(null), []);
+  const w = writeObjectsOf(spec);
+  assert.equal(w.length, 1);
+  assert.equal(w[0].index, 1);
+  assert.deepEqual(writeObjectsOf(null), []);
+  const frozen = JSON.stringify(spec);
+  const r = removeObjectAt(spec, 1);
+  assert.equal(r.objects.length, 1);
+  assert.equal(JSON.stringify(spec), frozen);
+  assert.equal(removeObjectAt(spec, 9).objects.length, 2, 'an out-of-range index removes nothing');
 });

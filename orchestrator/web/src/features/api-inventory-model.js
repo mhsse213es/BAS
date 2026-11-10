@@ -218,3 +218,122 @@ export function worstTone(results) {
   if (results.pass > 0) return 'ok';
   return 'muted';
 }
+
+// ---- write-block form: pure helpers. The form edits the test-data JSON; it never replaces it.
+
+const PARAM_RE = /^[A-Za-z0-9._~-]{1,128}$/;
+const FIELD_RE = /^[A-Za-z0-9_.-]{1,64}$/;
+export const MAX_WRITE_BODY = 4096;
+
+export function opKey(o) { return o.method + ' ' + o.path; }
+
+// writeOperations are the operations a write block can attach to: PUT or PATCH, with a path parameter, not declared public.
+export function writeOperations(ops) {
+  return (ops || []).filter((o) => (o.method === 'PUT' || o.method === 'PATCH') && Array.isArray(o.path_params) && o.path_params.length > 0 && o.auth !== 'none');
+}
+
+function paramSet(o) { return [...(o.path_params || [])].sort().join(','); }
+
+// readChoices are the GET operations an object of a write operation can be read back through: authenticated, same path parameters.
+export function readChoices(ops, writeOp) {
+  if (!writeOp) return [];
+  const want = paramSet(writeOp);
+  return (ops || []).filter((o) => o.method === 'GET' && o.auth !== 'none' && paramSet(o) === want).map(opKey);
+}
+
+// defaultReadOperation is the GET with the same path as the write ('' when there is none): what the server uses when none is named.
+export function defaultReadOperation(ops, writeOp) {
+  const k = 'GET ' + writeOp.path;
+  return readChoices(ops, writeOp).includes(k) ? k : '';
+}
+
+function jsonObjectError(text, label) {
+  const t = String(text == null ? '' : text).trim();
+  if (t.length < 2 || t.length > MAX_WRITE_BODY) return label + ' must be a JSON object of 2 to ' + MAX_WRITE_BODY + ' characters';
+  let v;
+  try { v = JSON.parse(t); } catch (e) { return label + ' is not valid JSON'; }
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return label + ' must be a JSON object';
+  return '';
+}
+
+// buildWriteObject checks the form's values the way the server will, and returns the object to add to the test data.
+export function buildWriteObject(v, ops) {
+  const fail = (error) => ({ object: null, error });
+  const op = writeOperations(ops).find((o) => opKey(o) === (v && v.operation));
+  if (!op) return fail('Choose a PUT or PATCH operation from the inventory');
+  const params = {};
+  for (const name of op.path_params) {
+    const val = String(v.params && v.params[name] != null ? v.params[name] : '').trim();
+    if (!PARAM_RE.test(val)) return fail('Enter a value for ' + name + ': 1 to 128 letters, digits and . _ ~ -');
+    params[name] = val;
+  }
+  const owner = String(v.owner == null ? '' : v.owner).trim();
+  if (!owner) return fail('Choose the identity that owns the object');
+  let e = jsonObjectError(v.attack_body, 'The attack body');
+  if (e) return fail(e);
+  e = jsonObjectError(v.restore_body, 'The restore body');
+  if (e) return fail(e);
+  const attack = String(v.attack_body).trim();
+  const restore = String(v.restore_body).trim();
+  if (attack === restore || JSON.stringify(JSON.parse(attack)) === JSON.stringify(JSON.parse(restore))) {
+    return fail('The attack body and the restore body are the same, so a successful write could not be told from none');
+  }
+  const choices = readChoices(ops, op);
+  const def = defaultReadOperation(ops, op);
+  const chosen = String(v.read_operation || '').trim();
+  if (chosen && !choices.includes(chosen)) return fail('The read-back must be an authenticated GET with the same path parameters');
+  if (!chosen && !def) return fail('No GET on the same path reads this object back; choose how to read it back');
+  const ignore = String(v.ignore_fields || '').split(',').map((f) => f.trim()).filter(Boolean);
+  if (ignore.length > 20) return fail('At most 20 ignored fields');
+  const badField = ignore.find((f) => !FIELD_RE.test(f));
+  if (badField) return fail('Ignored field "' + badField.slice(0, 40) + '" must be 1 to 64 letters, digits and . _ -');
+  const write = { attack_body: attack, restore_body: restore };
+  if (chosen && chosen !== def) write.read_operation = chosen;
+  if (ignore.length) write.ignore_fields = ignore;
+  return { object: { operation: opKey(op), params, owner, write }, error: '' };
+}
+
+function sameObject(a, b) {
+  if (a.operation !== b.operation) return false;
+  const pa = a.params || {};
+  const pb = b.params || {};
+  const ka = Object.keys(pa).sort();
+  const kb = Object.keys(pb).sort();
+  return ka.length === kb.length && ka.every((k, i) => k === kb[i] && pa[k] === pb[k]);
+}
+
+// mergeWriteObject returns the spec with the object added (or replacing the one for the same operation and values) and writes
+// allowed. The owner must already be one of the spec's identities. The input spec is not changed.
+export function mergeWriteObject(spec, object) {
+  const base = spec && typeof spec === 'object' && !Array.isArray(spec) ? spec : {};
+  const identities = Array.isArray(base.identities) ? base.identities : [];
+  if (!identities.some((i) => i && i.name === object.owner)) {
+    return { spec: null, error: 'The owner "' + object.owner + '" is not one of the identities in the test data. Add the identities first.', replaced: false };
+  }
+  const out = JSON.parse(JSON.stringify(base));
+  out.identities = identities.map((i) => ({ ...i }));
+  out.objects = Array.isArray(out.objects) ? out.objects : [];
+  out.allow_writes = true;
+  const at = out.objects.findIndex((o) => o && sameObject(o, object));
+  if (at >= 0) out.objects[at] = object; else out.objects.push(object);
+  return { spec: out, error: '', replaced: at >= 0 };
+}
+
+// writeObjectsOf lists the objects that carry a write block, with their position in the spec.
+export function writeObjectsOf(spec) {
+  const objs = spec && Array.isArray(spec.objects) ? spec.objects : [];
+  const out = [];
+  objs.forEach((o, index) => { if (o && o.write && typeof o.write === 'object') out.push({ index, operation: o.operation, params: o.params || {}, owner: o.owner, write: o.write }); });
+  return out;
+}
+
+// removeObjectAt returns the spec without the object at index. The input spec is not changed.
+export function removeObjectAt(spec, index) {
+  const out = JSON.parse(JSON.stringify(spec));
+  if (Array.isArray(out.objects) && index >= 0 && index < out.objects.length) out.objects.splice(index, 1);
+  return out;
+}
+
+export function identityNames(spec) {
+  return spec && Array.isArray(spec.identities) ? spec.identities.map((i) => i && i.name).filter(Boolean) : [];
+}

@@ -108,6 +108,8 @@ function renderDetail() {
   html += card('Recent jobs', jobsBody(), { sub: 'Newest first, this target only' });
   html += card('Binding preview', bindingBody(), { sub: 'Which scenarios would be generated; nothing is stored or run' });
   host.innerHTML = html;
+  apiInvWriteOp();
+  apiInvWriteSync();
 }
 
 function importBody() {
@@ -198,9 +200,9 @@ function bindingBody() {
   var prefill = S.stored ? JSON.stringify(S.stored.spec, null, 2) : '';
   return '<p class="ai-note">Test data as JSON: identities (a name and the <b>name</b> of a credential registered on the target, never its value) and the objects each identity owns. Reads, and PUT or PATCH writes with a <code>write</code> block and <code>allow_writes</code>, are bound. Saving checks the data against the newest inventory.</p>' +
     '<p class="' + (S.stored && S.stored.stale ? 'ai-warn' : 'ai-note') + '" id="api-inv-stored-note">' + (note ? x(note) : 'No test data is stored for this target (or your role cannot read it).') + '</p>' +
-    '<textarea id="api-inv-binding" class="ai-text" rows="14" spellcheck="false" aria-label="Binding test data">' + x(prefill) + '</textarea>' +
+    '<textarea id="api-inv-binding" class="ai-text" rows="14" spellcheck="false" aria-label="Binding test data"' + on('input', 'apiInvWriteSync') + '>' + x(prefill) + '</textarea>' +
     '<div class="ai-row">' + btn('Fill a read example', 'apiInvExample') + btn('Fill a write example', 'apiInvExampleWrite') + btn('Preview', 'apiInvPlanBinding') +
-    btn('Save', 'apiInvSaveBinding', [], 'btn-primary') + (S.stored ? btn('Remove stored data', 'apiInvDeleteBinding') : '') + '</div><div id="api-inv-binding-result"></div>' +
+    btn('Save', 'apiInvSaveBinding', [], 'btn-primary') + (S.stored ? btn('Remove stored data', 'apiInvDeleteBinding') : '') + '</div><div id="api-inv-binding-result"></div>' + writeFormHtml() +
     '<h4 class="ai-h">Run the stored test data</h4><p class="ai-note">Queues a job through the normal approval and scope checks. Production targets are refused, and write scenarios need the target to have allowed paths. Needs permission to run API BAS.</p>' +
     '<div class="ai-row">' + btn('Run stored test data', 'apiInvRunBound', [], 'btn-primary') + '</div><div id="api-inv-job"></div>';
 }
@@ -261,6 +263,7 @@ export function apiInvDrift() {
 export function apiInvExample() {
   var t = el('api-inv-binding');
   if (t && S.inv) t.value = JSON.stringify(M.exampleBindingSpec(S.inv.listed_operations), null, 2);
+  apiInvWriteSync();
 }
 
 function planHtml(r) {
@@ -328,6 +331,7 @@ export function apiInvDeleteBinding() {
 export function apiInvExampleWrite() {
   var t = el('api-inv-binding');
   if (t && S.inv) t.value = JSON.stringify(M.exampleWriteBindingSpec(S.inv.listed_operations), null, 2);
+  apiInvWriteSync();
 }
 
 // apiInvRunBound queues a job from the stored test data and follows it until it ends.
@@ -383,4 +387,148 @@ function jobHtml(j) {
     '<p>' + pill(j.status, M.jobTone(j.status)) + (j.failure_reason ? ' <span class="ai-err">' + x(j.failure_reason) + '</span>' : '') + '</p>' +
     (rows ? '<div class="tbl-wrap"><table><thead><tr><th>Scenario</th><th>Result</th><th>Exploitability</th><th>Control</th><th>Meaning</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '') +
     (M.isFinalStatus(j.status) ? '' : '<p class="ai-note">Running. This page checks every few seconds.</p>');
+}
+
+// ---- write-block form. It edits the test-data box above it (the box stays the source of truth) and stores nothing itself.
+
+function writeFormHtml() {
+  var wops = S.inv ? M.writeOperations(S.inv.listed_operations) : [];
+  if (!wops.length) {
+    return '<h4 class="ai-h">Write objects</h4><p class="ai-note">This inventory has no authenticated PUT or PATCH operation with a path parameter, so there is nothing to write-test.</p>';
+  }
+  var opts = wops.map(function(o) { return '<option value="' + x(M.opKey(o)) + '">' + x(M.opKey(o)) + '</option>'; }).join('');
+  return '<h4 class="ai-h">Write objects</h4>' +
+    '<p class="ai-warn">A write scenario really tries to change the object named here. A successful change is undone by the restore body, sent as the owner before the run and again after. Use a test object you accept being changed. Adding an object here turns on <code>allow_writes</code> in the test data.</p>' +
+    '<div id="api-inv-wlist"></div>' +
+    '<div class="ai-form">' +
+    '<label class="ai-lbl">Operation<select id="api-inv-w-op" class="ai-in"' + on('change', 'apiInvWriteOp') + '>' + opts + '</select></label>' +
+    '<div id="api-inv-w-params"></div>' +
+    '<label class="ai-lbl">Owner (an identity in the test data)<select id="api-inv-w-owner" class="ai-in"></select></label>' +
+    '<label class="ai-lbl">Attack body (JSON the other identity sends)<textarea id="api-inv-w-attack" class="ai-text" rows="3" spellcheck="false"></textarea></label>' +
+    '<label class="ai-lbl">Restore body (JSON the owner sends to put the object back)<textarea id="api-inv-w-restore" class="ai-text" rows="3" spellcheck="false"></textarea></label>' +
+    '<label class="ai-lbl">Read the object back through<select id="api-inv-w-read" class="ai-in"></select></label>' +
+    '<label class="ai-lbl">Ignored response fields (comma separated, for example updated_at)<input id="api-inv-w-ignore" class="ai-in" type="text" spellcheck="false"></label>' +
+    '<div class="ai-row">' + btn('Add to test data', 'apiInvWriteApply', [], 'btn-primary') + btn('Clear form', 'apiInvWriteClear') + '</div></div>' +
+    '<div id="api-inv-w-result"></div>';
+}
+
+// readSpecLoose reads the test-data box as JSON without requiring the full outline, so the form can start from an empty box.
+function readSpecLoose() {
+  var t = el('api-inv-binding');
+  var raw = t ? t.value.trim() : '';
+  if (raw === '') return { spec: {}, error: '' };
+  var v;
+  try { v = JSON.parse(raw); } catch (e) { return { spec: null, error: 'The test data above is not valid JSON, so the form cannot change it. Fix it first.' }; }
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return { spec: null, error: 'The test data must be a JSON object.' };
+  return { spec: v, error: '' };
+}
+
+function putSpec(spec) {
+  var t = el('api-inv-binding');
+  if (t) t.value = JSON.stringify(spec, null, 2);
+  apiInvWriteSync();
+}
+
+function wmsg(html) { var o = el('api-inv-w-result'); if (o) o.innerHTML = html; }
+
+function currentWriteOp() {
+  var sel = el('api-inv-w-op');
+  if (!sel || !S.inv) return null;
+  return M.writeOperations(S.inv.listed_operations).filter(function(o) { return M.opKey(o) === sel.value; })[0] || null;
+}
+
+// apiInvWriteOp (re)draws the path-parameter inputs and the read-back choices for the chosen operation.
+export function apiInvWriteOp() {
+  var op = currentWriteOp();
+  var params = el('api-inv-w-params');
+  var read = el('api-inv-w-read');
+  if (!op || !params || !read) return;
+  params.innerHTML = op.path_params.map(function(n) {
+    return '<label class="ai-lbl">Value of {' + x(n) + '} for the test object<input class="ai-in" type="text" data-param="' + x(n) + '" spellcheck="false"></label>';
+  }).join('');
+  var def = M.defaultReadOperation(S.inv.listed_operations, op);
+  var choices = M.readChoices(S.inv.listed_operations, op);
+  read.innerHTML = '<option value="">' + (def ? 'Same path (' + x(def) + ')' : 'Choose…') + '</option>' +
+    choices.filter(function(c) { return c !== def; }).map(function(c) { return '<option value="' + x(c) + '">' + x(c) + '</option>'; }).join('');
+}
+
+// apiInvWriteSync redraws the list of write objects and the owner choices from the box. It runs on every edit of the box.
+export function apiInvWriteSync() {
+  var list = el('api-inv-wlist');
+  var owner = el('api-inv-w-owner');
+  var r = readSpecLoose();
+  if (owner) {
+    var keep = owner.value;
+    var names = r.spec ? M.identityNames(r.spec) : [];
+    owner.innerHTML = names.length ? names.map(function(n) { return '<option value="' + x(n) + '"' + (n === keep ? ' selected' : '') + '>' + x(n) + '</option>'; }).join('')
+      : '<option value="">(add identities to the test data first)</option>';
+  }
+  if (!list) return;
+  if (r.error) { list.innerHTML = '<p class="ai-note">' + x(r.error) + '</p>'; return; }
+  var ws = M.writeObjectsOf(r.spec);
+  if (!ws.length) { list.innerHTML = '<p class="ai-note">No write objects in the test data yet.</p>'; return; }
+  list.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Operation</th><th>Values</th><th>Owner</th><th>Read back through</th><th></th></tr></thead><tbody>' + ws.map(function(w) {
+    var vals = Object.keys(w.params).sort().map(function(k) { return k + '=' + w.params[k]; }).join(', ');
+    return '<tr><td class="ai-mono">' + x(w.operation) + '</td><td class="ai-mono">' + x(vals) + '</td><td>' + x(w.owner) + '</td><td class="ai-mono">' +
+      x(w.write.read_operation || 'same path') + '</td><td>' + btn('Edit', 'apiInvWriteEdit', [w.index]) + ' ' + btn('Remove', 'apiInvWriteRemove', [w.index]) + '</td></tr>';
+  }).join('') + '</tbody></table></div>';
+}
+
+function formValues() {
+  var params = {};
+  var inputs = document.querySelectorAll('#api-inv-w-params [data-param]');
+  for (var i = 0; i < inputs.length; i++) params[inputs[i].getAttribute('data-param')] = inputs[i].value;
+  var v = function(id) { var e = el(id); return e ? e.value : ''; };
+  return { operation: v('api-inv-w-op'), params: params, owner: v('api-inv-w-owner'), attack_body: v('api-inv-w-attack'), restore_body: v('api-inv-w-restore'),
+    read_operation: v('api-inv-w-read'), ignore_fields: v('api-inv-w-ignore') };
+}
+
+// apiInvWriteApply checks the form and merges the object into the test-data box. Nothing is saved or run.
+export function apiInvWriteApply() {
+  if (!S.inv) return;
+  var built = M.buildWriteObject(formValues(), S.inv.listed_operations);
+  if (built.error) { wmsg('<p class="ai-err">' + x(built.error) + '</p>'); return; }
+  var cur = readSpecLoose();
+  if (cur.error) { wmsg('<p class="ai-err">' + x(cur.error) + '</p>'); return; }
+  var merged = M.mergeWriteObject(cur.spec, built.object);
+  if (merged.error) { wmsg('<p class="ai-err">' + x(merged.error) + '</p>'); return; }
+  putSpec(merged.spec);
+  wmsg('<p class="ai-ok">' + (merged.replaced ? 'Replaced the matching object in the test data.' : 'Added to the test data.') + ' It is not saved yet: use Preview to check it and Save to store it.</p>');
+}
+
+export function apiInvWriteClear() {
+  ['api-inv-w-attack', 'api-inv-w-restore', 'api-inv-w-ignore'].forEach(function(id) { var e = el(id); if (e) e.value = ''; });
+  apiInvWriteOp();
+  wmsg('');
+}
+
+// apiInvWriteEdit loads one write object from the box into the form, so changing it and adding it again replaces it.
+export function apiInvWriteEdit(index) {
+  var cur = readSpecLoose();
+  if (cur.error) { wmsg('<p class="ai-err">' + x(cur.error) + '</p>'); return; }
+  var w = M.writeObjectsOf(cur.spec).filter(function(o) { return o.index === index; })[0];
+  if (!w) return;
+  var sel = el('api-inv-w-op');
+  if (sel) {
+    var has = Array.prototype.some.call(sel.options, function(o) { return o.value === w.operation; });
+    if (!has) { wmsg('<p class="ai-err">' + x(w.operation) + ' is not a PUT or PATCH operation in the current inventory, so the form cannot edit it. Edit the JSON above.</p>'); return; }
+    sel.value = w.operation;
+  }
+  apiInvWriteOp();
+  var inputs = document.querySelectorAll('#api-inv-w-params [data-param]');
+  for (var i = 0; i < inputs.length; i++) inputs[i].value = w.params[inputs[i].getAttribute('data-param')] || '';
+  var set = function(id, val) { var e = el(id); if (e) e.value = val; };
+  set('api-inv-w-owner', w.owner);
+  set('api-inv-w-attack', w.write.attack_body || '');
+  set('api-inv-w-restore', w.write.restore_body || '');
+  set('api-inv-w-read', w.write.read_operation || '');
+  set('api-inv-w-ignore', Array.isArray(w.write.ignore_fields) ? w.write.ignore_fields.join(', ') : '');
+  wmsg('<p class="ai-note">Loaded. Change what you need and choose Add to test data to replace it.</p>');
+}
+
+export function apiInvWriteRemove(index) {
+  var cur = readSpecLoose();
+  if (cur.error) { wmsg('<p class="ai-err">' + x(cur.error) + '</p>'); return; }
+  putSpec(M.removeObjectAt(cur.spec, index));
+  wmsg('<p class="ai-note">Removed from the test data. Not saved yet.</p>');
 }

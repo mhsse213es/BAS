@@ -186,3 +186,124 @@ test('Refresh reloads the list', async () => {
   await settle();
   assert.equal(calls.filter((c) => c.path.endsWith('/shop-1/jobs')).length, before + 1);
 });
+
+function fillForm(doc, v) {
+  const set = (id, val) => { doc.getElementById(id).value = val; };
+  const p = doc.querySelector('#api-inv-w-params [data-param="orderId"]');
+  p.value = v.orderId;
+  set('api-inv-w-owner', v.owner);
+  set('api-inv-w-attack', v.attack);
+  set('api-inv-w-restore', v.restore);
+  set('api-inv-w-ignore', v.ignore || '');
+}
+
+const GOOD = { orderId: 'ORD-A1', owner: 'alice', attack: '{"status":"hacked"}', restore: '{"status":"open"}', ignore: 'updated_at, etag' };
+
+test('the write form offers the inventory PUT or PATCH operations, path inputs, identities and the default read-back', async () => {
+  const { dom } = await setup();
+  const doc = dom.window.document;
+  assert.deepEqual([...doc.getElementById('api-inv-w-op').options].map((o) => o.value), ['PATCH /v2/orders/{orderId}']);
+  assert.ok(doc.querySelector('#api-inv-w-params [data-param="orderId"]'));
+  assert.deepEqual([...doc.getElementById('api-inv-w-owner').options].map((o) => o.value), ['alice', 'bob']);
+  assert.match(doc.getElementById('api-inv-w-read').options[0].textContent, /Same path \(GET \/v2\/orders\/\{orderId\}\)/);
+  assert.match(doc.getElementById('api-inv-wlist').textContent, /No write objects/);
+  assert.match(doc.querySelector('.ai-warn').textContent, /really tries to change/);
+});
+
+test('adding from the form puts the object in the test-data box with allow_writes, and lists it', async () => {
+  const { dom, m } = await setup();
+  const doc = dom.window.document;
+  fillForm(doc, GOOD);
+  m.apiInvWriteApply();
+  const spec = JSON.parse(doc.getElementById('api-inv-binding').value);
+  assert.equal(spec.allow_writes, true);
+  const w = spec.objects.find((o) => o.write);
+  assert.deepEqual(w, { operation: 'PATCH /v2/orders/{orderId}', params: { orderId: 'ORD-A1' }, owner: 'alice',
+    write: { attack_body: '{"status":"hacked"}', restore_body: '{"status":"open"}', ignore_fields: ['updated_at', 'etag'] } });
+  assert.equal(spec.identities.length, 2, 'the identities are kept');
+  assert.match(doc.getElementById('api-inv-w-result').textContent, /Added to the test data.*not saved yet/s);
+  assert.match(doc.getElementById('api-inv-wlist').textContent, /ORD-A1/);
+});
+
+test('an invalid form changes nothing and says why', async () => {
+  const { dom, m } = await setup();
+  const doc = dom.window.document;
+  const before = doc.getElementById('api-inv-binding').value;
+  fillForm(doc, { ...GOOD, attack: 'status=hacked' });
+  m.apiInvWriteApply();
+  assert.equal(doc.getElementById('api-inv-binding').value, before);
+  assert.match(doc.getElementById('api-inv-w-result').textContent, /attack body is not valid JSON/i);
+  fillForm(doc, { ...GOOD, restore: GOOD.attack });
+  m.apiInvWriteApply();
+  assert.match(doc.getElementById('api-inv-w-result').textContent, /same/);
+  assert.equal(doc.getElementById('api-inv-binding').value, before);
+});
+
+test('the form will not edit a box that is not valid JSON', async () => {
+  const { dom, m } = await setup();
+  const doc = dom.window.document;
+  const box = doc.getElementById('api-inv-binding');
+  box.value = '{broken';
+  fillForm(doc, GOOD);
+  m.apiInvWriteApply();
+  assert.equal(box.value, '{broken');
+  assert.match(doc.getElementById('api-inv-w-result').textContent, /not valid JSON/);
+  m.apiInvWriteSync();
+  assert.match(doc.getElementById('api-inv-wlist').textContent, /not valid JSON/);
+});
+
+test('with no identities in the box there is no owner to choose, and nothing is added', async () => {
+  const { dom, m } = await setup();
+  const doc = dom.window.document;
+  const box = doc.getElementById('api-inv-binding');
+  box.value = '';
+  m.apiInvWriteSync();
+  assert.match(doc.getElementById('api-inv-w-owner').textContent, /add identities/i);
+  fillForm(doc, { ...GOOD, owner: '' });
+  m.apiInvWriteApply();
+  assert.equal(box.value, '');
+  assert.match(doc.getElementById('api-inv-w-result').textContent, /Choose the identity/);
+});
+
+test('Edit loads an object into the form and adding it again replaces it', async () => {
+  const { dom, m } = await setup();
+  const doc = dom.window.document;
+  fillForm(doc, GOOD);
+  m.apiInvWriteApply();
+  const read = () => JSON.parse(doc.getElementById('api-inv-binding').value);
+  const n = read().objects.length;
+  const idx = read().objects.findIndex((o) => o.write);
+  doc.getElementById('api-inv-w-attack').value = '';
+  m.apiInvWriteEdit(idx);
+  assert.equal(doc.getElementById('api-inv-w-attack').value, '{"status":"hacked"}');
+  assert.equal(doc.querySelector('#api-inv-w-params [data-param="orderId"]').value, 'ORD-A1');
+  assert.equal(doc.getElementById('api-inv-w-ignore').value, 'updated_at, etag');
+  doc.getElementById('api-inv-w-restore').value = '{"status":"reopened"}';
+  m.apiInvWriteApply();
+  assert.equal(read().objects.length, n, 'the same operation and values replace rather than add');
+  assert.equal(read().objects[idx].write.restore_body, '{"status":"reopened"}');
+  assert.match(doc.getElementById('api-inv-w-result').textContent, /Replaced/);
+});
+
+test('Remove takes a write object out of the box', async () => {
+  const { dom, m } = await setup();
+  const doc = dom.window.document;
+  fillForm(doc, GOOD);
+  m.apiInvWriteApply();
+  const idx = JSON.parse(doc.getElementById('api-inv-binding').value).objects.findIndex((o) => o.write);
+  m.apiInvWriteRemove(idx);
+  assert.equal(JSON.parse(doc.getElementById('api-inv-binding').value).objects.some((o) => o.write), false);
+  assert.match(doc.getElementById('api-inv-wlist').textContent, /No write objects/);
+});
+
+test('a hostile identity name or object value reaches the form as text only', async () => {
+  const { dom, m } = await setup();
+  const doc = dom.window.document;
+  const evil = '<img src=x onerror=alert(3)>';
+  doc.getElementById('api-inv-binding').value = JSON.stringify({ identities: [{ name: evil, credential_ref: 'a/b' }, { name: 'bob', credential_ref: 'c/d' }], objects: [
+    { operation: 'PATCH /v2/orders/{orderId}', params: { orderId: evil }, owner: evil, write: { attack_body: '{"a":1}', restore_body: '{"a":2}', read_operation: evil } }] });
+  m.apiInvWriteSync();
+  assert.equal(doc.querySelectorAll('img,script').length, 0);
+  assert.ok(doc.getElementById('api-inv-wlist').textContent.includes(evil));
+  assert.ok([...doc.getElementById('api-inv-w-owner').options].some((o) => o.textContent === evil));
+});
