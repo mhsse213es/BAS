@@ -35,8 +35,9 @@ for cve, d in sorted(corr["detail"].items()):
         f"    vendor_version_build_relationship: {q('Ubuntu OVAL dpkg evr less-than state (vendor fixed version per package)')}",
         f"    status: {q('PENDING_HUMAN_REVIEW')}",
         f"    open_issue: {q('Curator review required (open)') if cve in OPEN else q('none recorded')}",
-        f"    curator: {q('')}",
-        f"    independent_reviewer: {q('')}",
+        f"    curator: {q('Tausif')}",
+        f"    independent_reviewer: {q('Zain')}",
+        f"    reviewer_status: {q('designated, review not yet performed')}",
         f"    review_date: {q('')}",
     ]
 listed = {c for c, d in corr["detail"].items() if d.get("status") == "FIXED_VERSION_CORRESPONDING"}
@@ -55,8 +56,9 @@ for cve in sorted(OPEN - listed):
         f"    vendor_version_build_relationship: {q('not established')}",
         f"    status: {q('PENDING_HUMAN_REVIEW')}",
         f"    open_issue: {q('Curator review required (open)')}",
-        f"    curator: {q('')}",
-        f"    independent_reviewer: {q('')}",
+        f"    curator: {q('Tausif')}",
+        f"    independent_reviewer: {q('Zain')}",
+        f"    reviewer_status: {q('designated, review not yet performed')}",
         f"    review_date: {q('')}",
     ]
 for r in kb:
@@ -74,8 +76,9 @@ for r in kb:
         f"    vendor_version_build_relationship: {q('KB article title build; product named in KB article text')}",
         f"    status: {q('PENDING_HUMAN_REVIEW')}",
         f"    open_issue: {q('none recorded')}",
-        f"    curator: {q('')}",
-        f"    independent_reviewer: {q('')}",
+        f"    curator: {q('Tausif')}",
+        f"    independent_reviewer: {q('Zain')}",
+        f"    reviewer_status: {q('designated, review not yet performed')}",
         f"    review_date: {q('')}",
     ]
 lines += [
