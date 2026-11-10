@@ -128,6 +128,53 @@ func TestWafScenarioJSONHandler_RoutingCache_ReturnsRealFailOutcome(t *testing.T
 	}
 }
 
+// Review Focus: a SEVENTH scenario, whose fixtures use baseline/weakened evidence pairs rather than a flat
+// VectorFixture, must still serve through the same shared closure with no handler changes (closes WAF QA log item
+// #4 for the last two scenarios that had no scenario-specific handler test: policy-integrity and legitimate-traffic).
+// The "vectorId" the response carries is the real policy-gap scenario ID (GAP-*), not a wafcatalog vector ID --
+// EvaluatePolicyIntegrityScenario still returns the same ScenarioResult/VectorAssertion shape the handler renders.
+func TestWafScenarioJSONHandler_PolicyIntegrity_ReturnsRealFailOutcome(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.wafScenarioJSONHandler("policy-integrity")(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/policy-integrity", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"outcome":"fail"`) {
+		t.Error(`body missing "outcome":"fail"`)
+	}
+	if !strings.Contains(body, `"vectorId":"GAP-002"`) {
+		t.Error(`body missing "vectorId":"GAP-002"`)
+	}
+	if !strings.Contains(body, `"scenarioName":"Policy Integrity and Misconfiguration Exposure"`) {
+		t.Error("body missing scenarioName for the correct scenario")
+	}
+}
+
+// Review Focus: an EIGHTH scenario, graded as a false-positive claim (a legitimate request incorrectly blocked)
+// rather than a prevention claim, must still serve through the same shared closure with no handler changes.
+func TestWafScenarioJSONHandler_LegitimateTraffic_ReturnsRealFailOutcome(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.wafScenarioJSONHandler("legitimate-traffic")(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/legitimate-traffic", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"outcome":"fail"`) {
+		t.Error(`body missing "outcome":"fail"`)
+	}
+	if !strings.Contains(body, `"vectorId":"API-001"`) {
+		t.Error(`body missing "vectorId":"API-001"`)
+	}
+	if !strings.Contains(body, `"scenarioName":"Legitimate Traffic and Business-Flow Integrity"`) {
+		t.Error("body missing scenarioName for the correct scenario")
+	}
+}
+
 // Review Focus: a THIRD scenario, spanning two real catalogs
 // internally (wafcatalog + wafapiflow), must serve correctly through
 // the same shared closure with no handler changes.

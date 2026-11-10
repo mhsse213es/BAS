@@ -3943,13 +3943,23 @@ a different evidence shape (`BaselineEvidence`/`WeakenedEvidence` pairs and a fa
 the flat `vectorId` shape the existing closure tests assert on, and writing a correct assertion for either needs
 reading their JSON response shape first -- left for a follow-up rather than guessed.
 
+**Follow-up, same day:** read the two response shapes rather than guessing, and both tests are now added.
+`internal/api/waf_assessment_handlers.go`'s `wafScenarioJSONHandler` is fully generic over
+`reporting.BuildScenarioReport`'s output regardless of which package produced it: `EvaluatePolicyIntegrityScenario`
+(the baseline/weakened-pair evidence) and `EvaluateScenario` under a `ClaimFalsePositive` claim (legitimate-traffic)
+both still return the same `ScenarioResult`/`VectorAssertion` shape the handler renders, so no handler code needed
+to change. Added `TestWafScenarioJSONHandler_PolicyIntegrity_ReturnsRealFailOutcome` (slug `policy-integrity`,
+`vectorId` is the real policy-gap scenario id `GAP-002`, the one seeded with a confirmed exclusion-rule bypass) and
+`..._LegitimateTraffic_...` (slug `legitimate-traffic`, `vectorId` `API-001`, the one seeded incorrectly blocked).
+All 10 enterprise WAF scenarios now have a dedicated handler test; **WAF QA log item #4 is closed in full.**
+
 Item #3 (3 scenarios wire only 2 vectors each, no deliberately-untested vector to exercise the Incomplete path) was
 **not closed this round**: its own resolution path calls for a new third attack vector per family in `wafcatalog`,
 which is new content, not a test-density fix, and was not picked up here.
 
 ### Tests and results
 - `go test ./internal/api/... -run "TestWafScenarioJSONHandler|TestGetWAFExploitPreventionScenario|RBAC|Matrix" -v`:
-  all pass (18 tests, including the 3 new ones, and `TestRBACMatrix_NoDrift`) -- no route changes were needed, since
-  WAF scenario content is slug-driven through the existing generic handler closure.
+  all pass (20 tests after the follow-up below, including `TestRBACMatrix_NoDrift`) -- no route changes were needed,
+  since WAF scenario content is slug-driven through the existing generic handler closure.
 - `go build ./...`, `go vet ./internal/apibas/... ./internal/api/...`: clean on the final tree (origin/main plus
   only this change).

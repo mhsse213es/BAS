@@ -30,17 +30,31 @@ This is the single place to check before claiming WAF Mastery is "done" or makin
 
 **Resolution path:** add a third, deliberately-fixture-omitted vector to each of these 3 scenarios' catalogs if/when a reviewer wants per-scenario Incomplete coverage, not just suite-wide coverage.
 
-### 4. Only 5 of 10 enterprise scenarios have a dedicated handler-level test
-
-**Status:** Open, deferred as low-risk — found during the same final whole-branch review.
-
-**What's confirmed (verified directly 2026-10-16):** `internal/api/waf_assessment_handlers_test.go` has dedicated tests for exactly 5 scenarios: Exploit Prevention (`TestGetWAFExploitPreventionScenario_ReturnsRealFailOutcome` + its HTML counterpart), HTTP Protocol Integrity, API Protection, Detection/Telemetry, and Origin Resilience. The other 5 (Automated Abuse, Policy Integrity, Routing/Cache, File Upload, Legitimate Traffic) rely only on the generic `wafScenarioJSONHandler`/`wafScenarioHTMLHandler` closure's own tests plus `internal/wafassessment`'s own package-level tests — never exercised through a scenario-specific handler test.
-
-**Why it's deferred:** the generic handler closure is itself tested, and each scenario's underlying `EvaluateScenario` call is tested at the `wafassessment` package level — this is a gap in handler-level test density, not in logical coverage.
-
-**Resolution path:** add the remaining 5 scenario-specific handler tests if/when a regression in the generic closure's routing needs scenario-level evidence to debug.
-
 ## Resolved items
+
+### 4. Only 5 of 10 enterprise scenarios have a dedicated handler-level test — RESOLVED 2026-11-10
+
+**Status:** Resolved, in two passes the same day (see `docs/api-bas-mastery-qa-log.md`, "REQ-007: WAF assessment
+hardening" and its same-day follow-up, for full detail).
+
+**What was wrong:** `internal/api/waf_assessment_handlers_test.go` had dedicated tests for only 5 of the 10
+enterprise scenarios (Exploit Prevention, HTTP Protocol Integrity, API Protection, Detection/Telemetry, Origin
+Resilience); the other 5 (Automated Abuse, Policy Integrity, Routing/Cache, File Upload, Legitimate Traffic) relied
+only on the generic closure's own test plus the `wafassessment` package-level tests.
+
+**What changed:** added `TestWafScenarioJSONHandler_AutomatedAbuse_ReturnsRealFailOutcome`,
+`..._FileUpload_...`, `..._RoutingCache_...`, `..._PolicyIntegrity_...`, and `..._LegitimateTraffic_...`, each
+asserting the real `outcome`/`vectorId`/`scenarioName` for that scenario through the same shared
+`wafScenarioJSONHandler` closure — no handler code changed, since the closure is already generic over
+`reporting.BuildScenarioReport`'s output regardless of which evaluator (`EvaluateScenario`,
+`EvaluatePolicyIntegrityScenario`, or a `ClaimFalsePositive`-graded call) produced it. Policy Integrity's `vectorId`
+is a real policy-gap scenario id (`GAP-002`), not a `wafcatalog` vector id, confirming the handler renders whatever
+`VectorAssertion.VectorID` the evaluator set, not a hardcoded catalog lookup.
+
+All 10 enterprise scenarios now have a dedicated handler-level test. `go test ./internal/api/... -run
+"TestWafScenarioJSONHandler|TestGetWAFExploitPreventionScenario|RBAC|Matrix"`: 20/20 pass, including
+`TestRBACMatrix_NoDrift`.
+
 
 ### 0. `TestRBACMatrix_NoDrift` — the pre-existing emailgw/webgw drift referenced throughout this doc is now RESOLVED, by a different concurrent session
 
