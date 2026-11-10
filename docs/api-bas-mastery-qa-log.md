@@ -4388,3 +4388,46 @@ no ModSecurity audit-log parsing, so `VerdictMissed` still isn't claimable from 
   `wafassessment`/`wafmodsec`/`modsecwaf`/`wafdetection`/`wafval`/`api` tests green.
 - **Not run:** staging; the remaining 1 scenario (`origin-resilience`) is next.
 - **Limits:** `WAFDETECT-002`/`WAFDETECT-005` remain genuinely unwired for the reasons above.
+
+## REQ-007 follow-up #12 (FINAL): a real undocumented route, exposed origin port, and node reuse closes `origin-resilience` partially -- all 10 scenarios now have live wiring (10 November 2026)
+
+- **Built:** `lab/wafmodsec/nginx/default.conf` gained a real `location = /legacy-search` block with
+  `modsecurity off;` -- a genuine, undocumented secondary route proxying to the same origin as `/search` but
+  never registered with ModSecurity. `docker-compose.yml`'s `origin` service gained its own separately-published
+  host port (`8890`), a real, deliberately simulated direct-origin-reachability misconfiguration. New
+  `internal/wafmodsec/originresilience.go` (`RunOriginResilienceLive`) resolves 3 of 5 contributing scenarios:
+  `WAFORIGIN-001` (routing coverage gap, SQLI-001 via `/search` vs `/legacy-search`), `WAFORIGIN-002` (direct
+  origin reachability, XSS-001 via the WAF edge vs directly against `origin:8890`), both resolving `Inconclusive`
+  (the same disclosed audit-log-parsing limitation as everywhere else); `WAFORIGIN-005` (cross-node consistency)
+  reuses `waf`/`waf-weakened` -- the same two containers policy-integrity already built -- as its two "nodes,"
+  driving PATHTRAV-001 independently against each. New dedicated route
+  `GET /api/waf/scenarios/origin-resilience/live` -- its own handler (`wafOriginResilienceLiveJSONHandler`),
+  since this scenario genuinely needs THREE real targets (baseline, direct-origin, weakened).
+- **Found and fixed:** `WAFORIGIN-005` genuinely caught `waf` and `waf-weakened` disagreeing on PATHTRAV-001
+  (one blocks 403, one lets it through 200) -- a real `waforigin.ConsistencyDrift`, forcing the whole scenario
+  to `ScenarioFail` via the non-offsetting rule. This is a STRONGER, more honest result than the Inconclusive
+  predicted going in, not a bug: a real cross-node disagreement, though its cause (a known, deliberate policy
+  difference built for a different scenario) is the same one already disclosed for policy-integrity's GAP-001.
+  Also a FIFTH occurrence of the same `EvidenceSource`-hardcoding bug fixed four times before
+  (`EvaluateScenarioWithSeverities`, `EvaluateLegitimateTrafficScenario`, `EvaluatePolicyIntegrityScenario`,
+  `EvaluateDetectionTelemetryScenario`): `evaluateContributingOriginVector` always labeled every assertion
+  `"fixture"` across all three of its dispatch kinds, and `OriginResilienceFixture` had no `EvidenceSource`
+  field at all -- fixed the same way, new RED-first test.
+- **Calls made:** `WAFORIGIN-003` (fail-open during WAF unavailability) needs actually taking the WAF container
+  down mid-test, a disruptive, differently-shaped build than an HTTP probe. `WAFORIGIN-004` (TLS downgrade with
+  a forged proxy header) needs a real TLS listener negotiating a deliberately deprecated protocol version, a
+  separate, more involved piece of infrastructure this lab doesn't have. Both stay unwired, disclosed.
+- **Tests (pass):** 1 new RED-first unit test in `wafassessment` for the `EvidenceSource` override; 1 new live
+  test (`TestLive_OriginResilienceScenario_ThreeOfFiveVectorsLive`) and its API counterpart
+  (`TestWafOriginResilienceLiveJSONHandler_RealLab_ReturnsRealLiveOutcome`), both run against all three real
+  targets -- `WAFORIGIN-001`/`002` resolve `Inconclusive`, `WAFORIGIN-005` resolves `drift_detected`, overall
+  `outcome:"fail"`, `evidenceSource:"live_execution"`. A dedicated 503 test covers 5 combinations of the three
+  URLs partially unset. `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the new route matrixed. Ran
+  the full `wafmodsec` live suite together (all 10 scenarios) to check for the same cross-test contamination
+  class of bug the automated-abuse rate limiter hit -- none found. `go build ./...`/`go vet ./...` clean;
+  targeted `wafassessment`/`wafmodsec`/`modsecwaf`/`waforigin`/`wafval`/`api` tests green.
+- **Not run:** staging.
+- **Limits:** `WAFORIGIN-003`/`WAFORIGIN-004` remain genuinely unwired for the reasons above. This closes
+  REQ-007's live-wiring push: all 10 enterprise WAF scenarios now have a `/live` route backed by at least one
+  real, non-fixture probe against the self-hosted ModSecurity + OWASP CRS lab; per-vector gaps remain,
+  individually disclosed, none silently overclaimed.

@@ -301,12 +301,54 @@ suite together (all 9 scenarios) to check for the same cross-test contamination 
 rate limiter hit -- none found, since this probe drives a single request against `/search`, a path the rate
 limiter doesn't touch.
 
+**Ninth same-day follow-up: a real undocumented route, a real exposed origin port, and reusing waf/waf-weakened
+as two nodes closes `origin-resilience` partially -- REQ-007's 10th and final scenario now has live wiring.**
+`nginx/default.conf` gained a real `location = /legacy-search` block with `modsecurity off;` -- a genuine,
+undocumented secondary route proxying to the same origin as `/search` but never registered with ModSecurity
+(confirmed via `conf.d/modsecurity.conf` setting `modsecurity on;` at the http context, which this location
+deliberately overrides). `docker-compose.yml`'s `origin` service gained its own separately-published host port
+(`8890`), a real, deliberately simulated direct-origin-reachability misconfiguration -- a common real finding
+where a backend behind a CDN/WAF is also directly internet-reachable.
+
+New `internal/wafmodsec/originresilience.go` (`RunOriginResilienceLive`) resolves 3 of
+`AudspectOriginResilienceScenario`'s 5 contributing scenarios: `WAFORIGIN-001` (routing coverage gap) drives
+SQLI-001 against `/search` (baseline, blocked) and `/legacy-search` (bypass, reaches origin);
+`WAFORIGIN-002` (direct origin reachability) drives XSS-001 against the WAF edge (baseline, blocked) and
+directly against `origin:8890` (bypass, reaches origin); both bypass legs resolve `Inconclusive`, the same
+disclosed audit-log-parsing limitation as everywhere else. `WAFORIGIN-005` (cross-node consistency) reuses
+`waf`/`waf-weakened` -- the same two containers policy-integrity already built -- as its two "nodes," driving
+PATHTRAV-001 independently against each, and genuinely caught them disagreeing (`waf` blocks 403,
+`waf-weakened` lets it through 200): a real `waforigin.ConsistencyDrift`, forcing the whole scenario to
+`ScenarioFail` via the non-offsetting rule. This is a STRONGER, more honest result than the Inconclusive
+predicted going in -- a real finding, not a coverage gap -- though its cause (a known, deliberate policy
+difference built for a different scenario) is the same one already disclosed for policy-integrity's GAP-001,
+not independent configuration decay between nominally-identical replicas.
+
+**Found and fixed a FIFTH occurrence of the same `EvidenceSource`-hardcoding bug** fixed four times before:
+`evaluateContributingOriginVector` always labeled every assertion `"fixture"` across all three of its dispatch
+kinds (bypass, protocol, consistency), and `OriginResilienceFixture` had no `EvidenceSource` field at all --
+fixed the same way, new RED-first test.
+
+`WAFORIGIN-003` (fail-open during WAF unavailability) needs actually taking the WAF container down mid-test, a
+disruptive, differently-shaped build than an HTTP probe. `WAFORIGIN-004` (TLS downgrade with a forged proxy
+header) needs a real TLS listener negotiating a deliberately deprecated protocol version, a separate, more
+involved piece of infrastructure this lab doesn't have. Both stay unwired.
+
+Wired into the API too, as its OWN dedicated handler (`wafOriginResilienceLiveJSONHandler`/
+`GET /api/waf/scenarios/origin-resilience/live`) -- this scenario genuinely needs THREE real targets (baseline,
+direct-origin, weakened), the only one in this lab that does. Same refusal discipline: 503 if any of
+`WAF_MODSEC_LAB_URL`/`WAF_MODSEC_ORIGIN_DIRECT_URL`/`WAF_MODSEC_WEAKENED_LAB_URL` is unset.
+`TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the new route matrixed; ran the full `wafmodsec` live
+suite together (all 10 scenarios) to check for the same cross-test contamination class of bug the
+automated-abuse rate limiter hit -- none found.
+
 **Resolution path for what's left:** extend `BuildRequest`'s remaining PayloadLocation cases (header:/body:json:/body:xml:);
 add audit-log parsing to `wafmodsec`'s core bridge so a real `VerdictMissed` becomes claimable there too; a
 per-rule ModSecurity override to unblock `policy-integrity`'s `GAP-002`/`GAP-004`; per-account aggregation / a
-bot-management layer / stateful lockout logic to unblock `automated-abuse`'s remaining 5 vectors; a
-multi-node/dual-path lab topology to unblock `origin-resilience`; a real SIEM ingest pipeline and archival
-storage to unblock `detection-telemetry`'s remaining 2 vectors.
+bot-management layer / stateful lockout logic to unblock `automated-abuse`'s remaining 5 vectors; a real SIEM
+ingest pipeline and archival storage to unblock `detection-telemetry`'s remaining 2 vectors; container-stop
+orchestration to unblock `origin-resilience`'s `WAFORIGIN-003`; a real TLS listener with a deliberately
+deprecated protocol to unblock `WAFORIGIN-004`.
 
 See `lab/wafmodsec/README.md` for how to run the lab and every live test (`go test ./internal/wafmodsec/... -run TestLive_ -v`).
 

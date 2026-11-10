@@ -117,6 +117,31 @@ func TestEvaluateOriginResilienceScenario_DriftAmongPassesPlusUntested_ReturnsFa
 	}
 }
 
+// Review Focus: this package has hardcoded EvidenceSourceFixture four
+// times before in sibling evaluators (EvaluateScenarioWithSeverities,
+// EvaluateLegitimateTrafficScenario, EvaluatePolicyIntegrityScenario,
+// EvaluateDetectionTelemetryScenario) -- this is the same class of bug
+// in a fifth. A fixture built from a real live probe must propagate its
+// own EvidenceSource across all three dispatch kinds (bypass, protocol,
+// consistency), not have it silently overwritten to "fixture".
+func TestEvaluateContributingOriginVector_FixtureEvidenceSourceOverride_PropagatesToAssertion(t *testing.T) {
+	bypassScenarios, _, _, attackCatalog := mustOriginCatalog(t)
+	fixture := OriginResilienceFixture{
+		BaselineEvidence: blocked("WAFORIGIN-001-baseline").Results,
+		BypassEvidence:   blocked("WAFORIGIN-001-bypass").Results,
+		EvidenceSource:   EvidenceSourceLiveExecution,
+	}
+	assertion, err := evaluateContributingOriginVector(originCatalogs{
+		bypassByID: indexBypass(bypassScenarios), attackByID: indexAttack(attackCatalog),
+	}, "WAFORIGIN-001", originResiliencePolicyBasis, fixture)
+	if err != nil {
+		t.Fatalf("evaluateContributingOriginVector: %v", err)
+	}
+	if assertion.EvidenceSource != EvidenceSourceLiveExecution {
+		t.Errorf("EvidenceSource = %q, want %q", assertion.EvidenceSource, EvidenceSourceLiveExecution)
+	}
+}
+
 func TestEvaluateOriginResilienceScenario_UnknownID_ReturnsError(t *testing.T) {
 	scenario, err := NewEnterpriseScenario("S-ORIGIN-2", "n", "o", []string{"WAFORIGIN-DOES-NOT-EXIST"}, "p", "e", "prov")
 	if err != nil {

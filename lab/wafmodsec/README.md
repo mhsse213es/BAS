@@ -39,6 +39,15 @@ already uses elsewhere in this repo.
   git-ignored runtime data), together give `detection-telemetry` a real,
   host-readable WAF audit trail -- see `docker-compose.yml`'s own doc
   comment and `internal/wafmodsec/auditlog.go` for how it's read.
+- `nginx/default.conf`'s `location = /legacy-search` block (`modsecurity
+  off;`) -- a real, undocumented secondary route for origin-resilience's
+  `WAFORIGIN-001` (routing coverage gap): proxies to the same origin as
+  `/search` but was never registered with ModSecurity.
+- `origin`'s own separately-published host port `8890` -- a real,
+  deliberately simulated direct-origin-reachability misconfiguration for
+  `WAFORIGIN-002`: a common real finding where a backend behind a CDN/WAF
+  is also directly internet-reachable, letting an attacker skip the WAF
+  entirely.
 
 ## Running it
 
@@ -111,7 +120,7 @@ WAF_MODSEC_LAB_URL=http://localhost:8888 \
   go test ./internal/api/... -run TestWafExploitPreventionLiveJSONHandler -v
 ```
 
-## Wired into the other 9 enterprise scenarios -- partially
+## Wired into the other 10 enterprise scenarios -- partially
 
 Beyond exploit-prevention, 4 more scenarios now have *some* live-capable
 vectors, each with its own `Run<Scenario>Live(ctx, client)` in
@@ -127,6 +136,7 @@ vectors, each with its own `Run<Scenario>Live(ctx, client)` in
 | `automated-abuse` | `RATE-001` (1/6) | `Blocked` |
 | `policy-integrity` | `GAP-001` (1/6) | `Inconclusive` |
 | `detection-telemetry` | `WAFDETECT-001`, `WAFDETECT-003`, `WAFDETECT-004` (3/5) | `present`, `correct`, `within_sla` |
+| `origin-resilience` | `WAFORIGIN-001`, `WAFORIGIN-002`, `WAFORIGIN-005` (3/5) | `Inconclusive`, `Inconclusive`, `drift_detected` |
 
 `api-protection`'s `APIFLOW-005` comes from `internal/wafapiflow`, a
 sibling catalog to `wafcatalog` with its own, structurally identical
@@ -279,30 +289,62 @@ downstream system (a real SIEM ingest pipeline, real long-term archival
 storage) that reading the WAF's own log file, however real, cannot stand
 in for.
 
+`origin-resilience`'s `WAFORIGIN-001` (routing coverage gap) reuses
+SQLI-001's shape against a real, undocumented `/legacy-search` route
+(`modsecurity off;` -- see `nginx/default.conf`'s own doc comment) instead
+of `/search`; `WAFORIGIN-002` (direct origin reachability) reuses
+XSS-001's shape sent directly to `origin`'s own separately-published
+port `8890`, skipping the WAF entirely; both bypass legs reach origin
+without being blocked, which this bridge (no audit-log parsing) can only
+resolve `Inconclusive`, never `Missed` -- the same disclosed limitation
+as everywhere else. `WAFORIGIN-005` (cross-node consistency) reuses
+`waf`/`waf-weakened` (the same two containers policy-integrity already
+built) as its two "nodes," driving PATHTRAV-001 independently against
+each -- and genuinely caught them disagreeing (`waf` blocks, 403;
+`waf-weakened` lets it through, 200), resolving a real
+`waforigin.ConsistencyDrift`, which forces the whole scenario's overall
+outcome to `ScenarioFail` via the non-offsetting rule. This is a
+stronger, more honest result than Inconclusive would have been: it's not
+a coverage gap, it's a real finding that the two nodes' policies
+genuinely differ -- though the drift's cause (a known, deliberate policy
+difference built for a different scenario) is the same one already
+disclosed for policy-integrity's GAP-001, not independent configuration
+decay between two nominally-identical replicas.
+
+**Found and fixed a FIFTH occurrence of the same `EvidenceSource`
+hardcoding bug** fixed four times before: `evaluateContributingOriginVector`
+always labeled every assertion `"fixture"` across all three of its
+dispatch kinds (bypass, protocol, consistency), and `OriginResilienceFixture`
+had no `EvidenceSource` field at all -- fixed the same way, new RED-first
+test.
+
+`WAFORIGIN-003` (fail-open during WAF unavailability) needs actually
+taking the WAF container down mid-test, a disruptive, differently-shaped
+build than an HTTP probe. `WAFORIGIN-004` (TLS downgrade with a forged
+proxy header) needs a real TLS listener negotiating a deliberately
+deprecated protocol version, a separate, more involved piece of
+infrastructure this lab doesn't have. Both stay unwired.
+
 ```sh
 WAF_MODSEC_LAB_URL=http://localhost:8888 \
 WAF_MODSEC_WEAKENED_LAB_URL=http://localhost:8889 \
+WAF_MODSEC_ORIGIN_DIRECT_URL=http://localhost:8890 \
 WAF_MODSEC_AUDIT_LOG_PATH=./audit-logs/audit.log \
   go test ./internal/wafmodsec/... -run TestLive_ -v
 ```
 
-**1 scenario gets NO live wiring, for real, disclosed reasons -- not an
-oversight:**
+**All 10 scenarios now have SOME live wiring -- the remaining gaps are
+per-vector, for real, disclosed reasons, not an oversight:**
 - `automated-abuse`'s other 5 vectors (`RATE-002`, `BOTABUSE-001..004`):
   `RATE-002` needs per-account aggregation across sessions/source
   addresses this lab's origin has no concept of; `BOTABUSE-001` needs a
   bot-management/JS-challenge layer CRS does not provide; `BOTABUSE-002`
   needs a second, header-keyed rate-limit zone; `BOTABUSE-003/004` need
-  real stateful lockout/CAPTCHA logic at the origin, and `BOTABUSE-004`
-  specifically needs the same multi-node topology `origin-resilience`
-  below is blocked on. Each is a materially different, bigger build than
-  the single `limit_req` zone `RATE-001` needed.
-- `origin-resilience` (`WAFORIGIN-001..005`): deployment-topology claims
-  (direct-origin reachability, fail-open behavior, cross-node config
-  consistency) that need a multi-node/dual-path network setup this lab's
-  single WAF-fronted, non-host-exposed origin doesn't have.
+  real stateful lockout/CAPTCHA logic at the origin.
 - `policy-integrity`'s other 5 vectors (`GAP-002..006`): see above.
 - `detection-telemetry`'s other 2 vectors (`WAFDETECT-002`, `WAFDETECT-005`):
+  see above.
+- `origin-resilience`'s other 2 vectors (`WAFORIGIN-003`, `WAFORIGIN-004`):
   see above.
 
 ## What this proves, and what it doesn't (yet)
@@ -311,7 +353,7 @@ oversight:**
 `modsecwaf.Client.Send` (real HTTP) ->
 `wafmodsec.BuildCollectionResults` (real response -> `wafval.Observation`) ->
 `wafval.EvaluateClaim` (real verdict) -- working end to end against a real,
-running WAF engine, across 9 enterprise scenarios now. This is a stronger
+running WAF engine, across all 10 enterprise scenarios now. This is a stronger
 resolution than `internal/avdefender`'s own precedent (the Defender bridge
 was built but never run against a live tenant); this one has actually been
 run, live, in this session.

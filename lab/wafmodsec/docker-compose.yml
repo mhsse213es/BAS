@@ -35,6 +35,16 @@ services:
     restart: unless-stopped
     environment:
       HTTP_PORT: "8080"
+    # Published directly to the host for origin-resilience's WAFORIGIN-002
+    # (direct-origin reachability): a real, common misconfiguration where
+    # the backend behind a CDN/WAF is ALSO directly internet-reachable,
+    # letting an attacker skip the WAF entirely by targeting the origin's
+    # own address instead of the documented edge. Every other live test in
+    # this lab deliberately goes through "waf" (8888) only -- this port
+    # exists solely so WAFORIGIN-002 has a real bypass path to send the
+    # SAME payload to, never used by any other scenario.
+    ports:
+      - "8890:8080"
     networks: [wafmodsec-lab]
 
   waf:

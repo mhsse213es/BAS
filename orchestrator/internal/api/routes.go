@@ -284,14 +284,13 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Get("/api/waf/scenarios/"+slug, h.wafScenarioJSONHandler(slug))
 			r.Get("/api/waf/scenarios/"+slug+".html", h.wafScenarioHTMLHandler(slug))
 		}
-		// 9 of the 10 scenarios above, evaluated against a REAL, running
+		// All 10 scenarios above are now evaluated against a REAL, running
 		// ModSecurity + OWASP CRS lab (lab/wafmodsec) instead of a fixture --
 		// only the subset of each scenario's vectors its own
 		// internal/wafmodsec.Run<Scenario>Live function actually drives live
-		// (the rest surface through untestedVectorIds). The last
-		// scenario has no live route: it needs real new capability (a
-		// multi-node lab topology) that doesn't exist yet -- see
-		// docs/waf-mastery-qa-log.md item #1. Same
+		// (the rest surface through untestedVectorIds; see
+		// docs/waf-mastery-qa-log.md item #1 for exactly which vectors and
+		// why). Same
 		// read-only, JWT-only tier as the fixture-backed routes above: the
 		// live target is a fixed, operator-configured URL
 		// (wafModsecLabURLEnv), never taken from the request, so there is no
@@ -320,6 +319,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// audit log, not another HTTP client -- see
 		// wafDetectionTelemetryLiveJSONHandler's own doc comment.
 		r.Get("/api/waf/scenarios/detection-telemetry/live", h.wafDetectionTelemetryLiveJSONHandler)
+		// origin-resilience needs THREE real targets (baseline, direct-
+		// origin, weakened), so it can't go through any of the shapes
+		// above either -- see wafOriginResilienceLiveJSONHandler's own
+		// doc comment.
+		r.Get("/api/waf/scenarios/origin-resilience/live", h.wafOriginResilienceLiveJSONHandler)
 		// AV/NGAV efficacy assessment scenarios (internal/avefficacy),
 		// same read-only, slug-registry shape as /api/waf/scenarios:
 		// each slug is a fixture-backed scenario evaluation layered

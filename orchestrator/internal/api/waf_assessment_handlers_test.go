@@ -294,6 +294,35 @@ func TestWafDetectionTelemetryLiveJSONHandler_NoLabConfigured_Returns503(t *test
 	}
 }
 
+// Review Focus: origin-resilience's live handler needs all three of the
+// baseline, direct-origin, and weakened URLs set -- it must refuse (503)
+// when any single one alone is missing.
+func TestWafOriginResilienceLiveJSONHandler_NoLabConfigured_Returns503(t *testing.T) {
+	h := &Handler{}
+	cases := []struct {
+		name     string
+		baseline string
+		direct   string
+		weakened string
+	}{
+		{"all unset", "", "", ""},
+		{"baseline only", "http://localhost:8888", "", ""},
+		{"direct only", "", "http://localhost:8890", ""},
+		{"weakened only", "", "", "http://localhost:8889"},
+		{"baseline+direct, no weakened", "http://localhost:8888", "http://localhost:8890", ""},
+	}
+	for _, c := range cases {
+		t.Setenv(wafModsecLabURLEnv, c.baseline)
+		t.Setenv(wafModsecOriginDirectURLEnv, c.direct)
+		t.Setenv(wafModsecWeakenedLabURLEnv, c.weakened)
+		rr := httptest.NewRecorder()
+		h.wafOriginResilienceLiveJSONHandler(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/origin-resilience/live", nil))
+		if rr.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s: status = %d, want %d", c.name, rr.Code, http.StatusServiceUnavailable)
+		}
+	}
+}
+
 func TestGetWAFExploitPreventionScenarioHTML_RendersFailOutcome(t *testing.T) {
 	h := &Handler{}
 	rr := httptest.NewRecorder()

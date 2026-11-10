@@ -43,6 +43,16 @@ const wafModsecAuditLogPathEnv = "WAF_MODSEC_AUDIT_LOG_PATH"
 
 func getenvWafModsecAuditLogPath() string { return os.Getenv(wafModsecAuditLogPathEnv) }
 
+// wafModsecOriginDirectURLEnv names the environment variable the live
+// origin-resilience endpoint needs: the origin container's own
+// separately-published host URL (lab/wafmodsec/docker-compose.yml's
+// "origin" service port 8890 -- see its own doc comment), reachable
+// directly, bypassing the WAF entirely. Same refusal discipline: unset
+// means 503, never a silent fixture fallback.
+const wafModsecOriginDirectURLEnv = "WAF_MODSEC_ORIGIN_DIRECT_URL"
+
+func getenvWafModsecOriginDirectURL() string { return os.Getenv(wafModsecOriginDirectURLEnv) }
+
 // wafScenarioVectorResponse is one contributing vector's evaluated
 // outcome in the JSON shape served by wafScenarioJSONHandler --
 // camelCase field names per this package's existing JSON convention.
@@ -251,6 +261,52 @@ func (h *Handler) wafDetectionTelemetryLiveJSONHandler(w http.ResponseWriter, r 
 	scenario, result, err := wafmodsec.RunDetectionTelemetryLive(r.Context(), client, auditLogPath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("running live detection-telemetry scenario against %s: %v", labURL, err), http.StatusBadGateway)
+		return
+	}
+	assertions := make([]wafScenarioVectorResponse, 0, len(result.Assertions))
+	for _, a := range result.Assertions {
+		assertions = append(assertions, wafScenarioVectorResponse{
+			VectorID:       a.VectorID,
+			Severity:       string(a.Severity),
+			Verdict:        string(a.Verdict),
+			EvidenceSource: string(a.EvidenceSource),
+			Reason:         a.Reason,
+		})
+	}
+	respond(w, wafScenarioResponse{
+		ScenarioID:        scenario.ID,
+		ScenarioName:      scenario.Name,
+		Objective:         scenario.Objective,
+		Outcome:           string(result.Outcome),
+		Summary:           result.Summary,
+		Assertions:        assertions,
+		UntestedVectorIDs: result.UntestedVectorIDs,
+	})
+}
+
+// wafOriginResilienceLiveJSONHandler serves the live origin-resilience
+// scenario. It cannot use the shared wafScenarioLiveJSONHandler/
+// liveScenarioRunner factory, nor either other dedicated handler's
+// shape -- this scenario genuinely needs THREE real targets: the
+// baseline WAF, the origin's own directly-published port (bypassing the
+// WAF), and the weakened WAF instance already built for policy-
+// integrity, reused here as origin-resilience's second cross-node
+// "node". Same refusal discipline: 503 if any of the three is unset,
+// 502 if any configured target is unreachable.
+func (h *Handler) wafOriginResilienceLiveJSONHandler(w http.ResponseWriter, r *http.Request) {
+	baselineURL := getenvWafModsecLabURL()
+	directURL := getenvWafModsecOriginDirectURL()
+	weakenedURL := getenvWafModsecWeakenedLabURL()
+	if baselineURL == "" || directURL == "" || weakenedURL == "" {
+		http.Error(w, fmt.Sprintf("no live WAF lab configured: set %s, %s, and %s (see lab/wafmodsec/README.md)", wafModsecLabURLEnv, wafModsecOriginDirectURLEnv, wafModsecWeakenedLabURLEnv), http.StatusServiceUnavailable)
+		return
+	}
+	baselineClient := modsecwaf.NewClient(modsecwaf.Config{BaseURL: baselineURL})
+	directClient := modsecwaf.NewClient(modsecwaf.Config{BaseURL: directURL})
+	weakenedClient := modsecwaf.NewClient(modsecwaf.Config{BaseURL: weakenedURL})
+	scenario, result, err := wafmodsec.RunOriginResilienceLive(r.Context(), baselineClient, directClient, weakenedClient)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("running live origin-resilience scenario against %s/%s/%s: %v", baselineURL, directURL, weakenedURL, err), http.StatusBadGateway)
 		return
 	}
 	assertions := make([]wafScenarioVectorResponse, 0, len(result.Assertions))
