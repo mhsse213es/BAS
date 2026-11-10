@@ -220,32 +220,61 @@ func runJob(path string) int {
 	if err := checkTarget(req.TargetBaseURL, strings.Join(req.AllowedHosts, ",")); err != nil {
 		return emitFailure(base, err.Error())
 	}
-	fx, ok := map[string]fixture.Fixture{
-		"orders-two-tenant":   fixture.OrdersTwoTenant(),
-		"orders-no-protected": fixture.OrdersNoProtected(),
-		"orders-paged":        fixture.OrdersPaged(),
-	}[req.Fixture]
-	if !ok {
-		return emitFailure(base, "unknown fixture")
+	// A customer-bound job carries its own scenarios (rebuilt here from the plan) and runs against the customer's API with no
+	// independent state reader, so the runner grades read-only scenarios on the response alone and refuses anything else.
+	plan, err := req.CheckBound()
+	if err != nil {
+		return emitFailure(base, err.Error())
 	}
 	creds, err := runnerproto.LoadCredentials(req.CredentialsFile)
 	if err != nil {
 		return emitFailure(base, err.Error())
 	}
-	admin := runner.NewLabAdmin(req.TargetBaseURL, creds["apibas/lab/admin"])
-	r, err := runner.New(runner.Config{
-		BaseURL: req.TargetBaseURL, Fixture: fx, Secrets: creds,
-		State: admin, Reporting: admin, Reset: admin, Events: admin,
-		HTTP: &http.Client{Timeout: 10 * time.Second}, AllowedPaths: req.AllowedPaths,
-	})
+	var cfg runner.Config
+	var boundScenarios map[string]contract.Scenario
+	if plan != nil {
+		boundScenarios = make(map[string]contract.Scenario, len(plan.Scenarios))
+		for _, sc := range plan.Scenarios {
+			boundScenarios[sc.ID] = sc
+		}
+		cfg = runner.Config{
+			BaseURL: req.TargetBaseURL, Fixture: plan.Fixture, Secrets: creds, State: runner.NoState{},
+			HTTP: &http.Client{Timeout: 10 * time.Second}, AllowedPaths: req.AllowedPaths,
+		}
+	} else {
+		fx, ok := map[string]fixture.Fixture{
+			"orders-two-tenant":   fixture.OrdersTwoTenant(),
+			"orders-no-protected": fixture.OrdersNoProtected(),
+			"orders-paged":        fixture.OrdersPaged(),
+		}[req.Fixture]
+		if !ok {
+			return emitFailure(base, "unknown fixture")
+		}
+		admin := runner.NewLabAdmin(req.TargetBaseURL, creds["apibas/lab/admin"])
+		cfg = runner.Config{
+			BaseURL: req.TargetBaseURL, Fixture: fx, Secrets: creds,
+			State: admin, Reporting: admin, Reset: admin, Events: admin,
+			HTTP: &http.Client{Timeout: 10 * time.Second}, AllowedPaths: req.AllowedPaths,
+		}
+	}
+	r, err := runner.New(cfg)
 	if err != nil {
 		return emitFailure(base, "runner setup failed")
 	}
 	reports := make([]runner.Report, 0, len(req.ScenarioIDs))
 	for _, id := range req.ScenarioIDs {
-		scen, err := findScenario(id)
-		if err != nil {
-			return emitFailure(base, "scenario not in the catalog")
+		var scen contract.Scenario
+		if boundScenarios != nil {
+			bs, found := boundScenarios[id]
+			if !found {
+				return emitFailure(base, "scenario not in the bound plan")
+			}
+			scen = bs
+		} else {
+			var ferr error
+			if scen, ferr = findScenario(id); ferr != nil {
+				return emitFailure(base, "scenario not in the catalog")
+			}
 		}
 		if err := runner.CheckScope(req.AllowedPaths, scen); err != nil {
 			return emitFailure(base, err.Error())

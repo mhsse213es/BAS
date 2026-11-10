@@ -37,6 +37,7 @@ func jobsRouter(h *Handler) http.Handler {
 	r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Put("/api/apibas/targets/{id}/binding", h.SaveAPIBASBinding)
 	r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Get("/api/apibas/targets/{id}/binding", h.GetAPIBASBinding)
 	r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Delete("/api/apibas/targets/{id}/binding", h.DeleteAPIBASBinding)
+	r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/targets/{id}/binding/jobs", h.RunAPIBASBinding)
 	return r
 }
 

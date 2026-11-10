@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
+	"github.com/audspect/bas/internal/apibas/runnerproto"
 	"github.com/audspect/bas/internal/apibas/scope"
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/db"
@@ -237,8 +238,13 @@ func (h *Handler) SubmitAPIBASJob(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid body", http.StatusBadRequest)
 		return
 	}
+	h.submitJob(w, r, actor, b, nil)
+}
+
+// submitJob queues the job for a validated request and starts it in the background. bound is set for a customer-bound job.
+func (h *Handler) submitJob(w http.ResponseWriter, r *http.Request, actor string, b apibasJobBody, bound *runnerproto.BoundPlan) {
 	job, created, err := h.apibasJobs.SubmitForTarget(r.Context(), apibasjobs.TargetRequest{
-		Key: b.Key, RequestedBy: actor, TargetID: b.TargetID, Fixture: b.Fixture, ScenarioIDs: b.ScenarioIDs, ApprovalID: b.ApprovalID,
+		Key: b.Key, RequestedBy: actor, TargetID: b.TargetID, Fixture: b.Fixture, ScenarioIDs: b.ScenarioIDs, ApprovalID: b.ApprovalID, Bound: bound,
 	})
 	if err != nil {
 		h.writeAPIBASSubmitError(w, r, actor, b, err)

@@ -11,7 +11,7 @@ import (
 )
 
 const goodRequest = `{
-  "schema_version": 1,
+  "schema_version": 2,
   "job_id": "job-20261104-0001",
   "target_base_url": "http://127.0.0.1:8099",
   "fixture": "orders-two-tenant",
@@ -35,7 +35,7 @@ func TestDecodeJobRequestAcceptsValid(t *testing.T) {
 func TestDecodeJobRequestRefusesBadInput(t *testing.T) {
 	cases := map[string]string{
 		"unknown field":     strings.Replace(goodRequest, `"fixture"`, `"fixture_typo_scope": "x", "fixture"`, 1),
-		"wrong schema":      strings.Replace(goodRequest, `"schema_version": 1`, `"schema_version": 2`, 1),
+		"wrong schema":      strings.Replace(goodRequest, `"schema_version": 2`, `"schema_version": 99`, 1),
 		"bad job id":        strings.Replace(goodRequest, "job-20261104-0001", "../etc", 1),
 		"non-http target":   strings.Replace(goodRequest, "http://127.0.0.1:8099", "file:///etc/passwd", 1),
 		"no scenarios":      strings.Replace(goodRequest, `["API-BAS-AUTHZ-001"]`, `[]`, 1),

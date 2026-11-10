@@ -29,8 +29,7 @@ receives only credential *names*.
   `READ_ONLY` with it (tested). Write operations are reported as skipped.
 - **Response evidence only.** A pass proves the attack was refused and leaked none of the protected values supplied. It cannot see a
   leak of a value the customer did not supply, and says nothing about other objects, roles or parameters.
-- **No job.** A plan is not yet persisted on a target or run through the orchestrator's job path. Running one today means calling the
-  runner with `plan.Fixture`, `plan.Scenarios`, `NoState` and the credentials by hand, as the end-to-end test does.
+- Running a plan as a job is covered in "Running stored test data as a job" below.
 - No function-level, property-level, data-exposure, resource or SSRF binding. List endpoints and multi-step flows are not bound.
 - No detection and no regulatory mapping on bound scenarios.
 
@@ -51,9 +50,8 @@ receives only credential *names*.
 
 ## Next steps
 
-1. Persist a binding spec on a target and run a plan through the orchestrator's job path (runner request carrying the bound
-   scenarios and fixture, audited, approval-bound like other jobs).
-2. A console page for the preview and for entering test data (the next item).
+1. (Done) Persist a binding spec on a target, and run it through the orchestrator's job path.
+2. Console: store, run and show bound jobs (the page still previews typed data only).
 3. A target-side state check (a customer-provided read endpoint) so write operations can be bound.
 
 
@@ -76,3 +74,32 @@ target), routes `PUT|GET|DELETE /api/apibas/targets/{id}/binding`, all requiring
 - Credential values are still never stored; the spec holds credential names only.
 
 Not built: history of spec versions (saving replaces), and editing in the console (the page still previews a spec typed into it).
+
+## Running stored test data as a job (added 10 November 2026)
+
+`POST /api/apibas/targets/{id}/binding/jobs` with `{"key": "...", "approval_id": "..."}` (the run permission, like any job). It queues a
+job from the target's stored test data and newest inventory and starts it in the background, through the same submission path as other
+jobs: the target must be enabled, its environment permitted (production stays refused in this release), its host registered, only one
+active job per target, and an approval for production. The caller chooses only the key; scenarios, fixture, credentials and scope come
+from the target, its inventory and its stored test data.
+
+- **Scenarios are generated, not catalogued.** The job's scenario ids are the bound ids (901 and up) and its fixture is
+  `bound:<sha256 of the plan>`. The plan is the inventory and test data as they were at submission; it is stored with the job
+  (`apibas_job_plans`), so a later edit of either cannot change what ran. Because an approval binds the fixture name, a production
+  approval would bind the exact test data and inventory.
+- **The runner rebuilds the scenarios itself.** The request carries the plan; the runner calls the same `binding.Bind`, checks the plan
+  hashes to the fixture name and produces exactly the requested scenario ids, and refuses otherwise. A plan altered after submission,
+  or a request whose fixture and plan disagree, fails the job with no report. Schema version is now 2.
+- **Graded on the response alone.** Bound jobs run with `NoState` and no lab endpoints; only read-only scenarios exist in a plan.
+- **Scope.** The target's registered allowed paths bound a bound job like any other (checked per scenario by the runner); a staging or
+  production target must have them. The registered scenario list does not apply (bound scenarios are not in the catalogue).
+- **Credentials.** Each identity's credential name must be one of the target's registered credential names, or the job is refused as
+  outside the target's scope. The job reads secrets only through the target's existing secret-store references.
+- **Stale data is refused (409).** If a newer inventory has been imported since the test data was saved, save it again first.
+- **Audit** is the existing `apibas.job.submit` / `apibas.job.refused` / `apibas.job.finish` records, with the bound fixture and scenario ids.
+
+Verified end to end with the real runner binary and a real database: a vulnerable spec-shaped API grades FAIL and a fixed one PASS for the
+same bound scenarios; an unregistered credential, a path outside scope, an altered plan and a missing plan row are each refused with no
+report. Not run on staging or against a real customer API.
+
+Not built: results are in the job as for any job but the console does not show them; no scheduling; no write operations.

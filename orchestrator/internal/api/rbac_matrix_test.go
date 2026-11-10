@@ -422,6 +422,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPut, "/api/apibas/targets/{id}/binding", tierPermission, auth.CanManageAPIBASTargets},
 	{http.MethodGet, "/api/apibas/targets/{id}/binding", tierPermission, auth.CanManageAPIBASTargets},
 	{http.MethodDelete, "/api/apibas/targets/{id}/binding", tierPermission, auth.CanManageAPIBASTargets},
+	{http.MethodPost, "/api/apibas/targets/{id}/binding/jobs", tierPermission, auth.CanRunAPIBAS},
 	{http.MethodPost, "/api/aleef/engagements", tierPermission, auth.CanAuthorizeAleef},
 	{http.MethodPost, "/api/aleef/runs", tierPermission, auth.CanRunAleef},
 	{http.MethodGet, "/api/aleef/runs/{id}", tierPermission, auth.CanViewAleef},

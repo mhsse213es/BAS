@@ -62,5 +62,13 @@ As an Analyst: `POST /api/apibas/jobs` with `{"key":"stg-run-001","target_id":"s
 7. **Credential handling.** `docker exec` is not available (distroless); instead check the job row: `SELECT credential_refs FROM apibas_jobs` shows references only, and `SELECT * FROM apibas_targets` shows no values.
 8. **Licence.** With a licence lacking API BAS the endpoints must be refused by the product gate.
 
+## 6a. Customer-bound job (optional, after section 6)
+Needs an inventory and stored test data on a registered staging target (see `docs/api-bas-scenario-binding.md`). The target must list the identities' credential names in its credential references and carry allowed path prefixes.
+1. `PUT /api/apibas/targets/{id}/binding` with the test data; expect 200 with the scenarios that would be generated.
+2. `POST /api/apibas/targets/{id}/binding/jobs` with `{"key": "<unique>"}`; expect 202. A repeated key returns the same job with `created: false`.
+3. Poll `GET /api/apibas/jobs/{id}`: scenario ids are `API-BAS-AUTHZ-9xx`; a vulnerable route grades FAIL, an enforcing one PASS.
+4. Import a changed spec, then repeat step 2 with a new key; expect 409 until step 1 is repeated.
+5. Check `SELECT job_id, inventory_version FROM apibas_job_plans` shows the plan and that no credential value appears in it.
+
 ## 7. Clean up
 Stop both labs, remove the UFW rules you opened, delete the lab tokens from your shell history, and record results in `docs/api-bas-mastery-qa-log.md`, including every check that failed.

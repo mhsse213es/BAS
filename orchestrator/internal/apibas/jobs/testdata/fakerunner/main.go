@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/audspect/bas/internal/apibas/runnerproto"
 )
 
 func main() {
@@ -88,7 +90,7 @@ func emit(jobID, target string, scenarios []string, status, reason string) {
 		Outcome    outcome
 	}
 	doc := map[string]any{
-		"schema_version":  1,
+		"schema_version":  runnerproto.SchemaVersion,
 		"job_id":          jobID,
 		"target_base_url": target,
 		"status":          status,

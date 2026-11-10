@@ -8,6 +8,8 @@ package runnerproto
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,13 +19,16 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strings"
 
+	"github.com/audspect/bas/internal/apibas/binding"
+	"github.com/audspect/bas/internal/apibas/openapi"
 	"github.com/audspect/bas/internal/apibas/runner"
 	"github.com/audspect/bas/internal/apibas/scope"
 )
 
 // SchemaVersion is the only contract version accepted by both sides. A change to either struct bumps it.
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 // Result statuses. A runner that cannot finish reports StatusFailed with no reports.
 const (
@@ -46,6 +51,79 @@ type JobRequest struct {
 	AllowedPaths []string `json:"allowed_paths,omitempty"`
 	// CredentialsFile is the path of a JSON object mapping secret reference to value. It must be readable by the owner only.
 	CredentialsFile string `json:"credentials_file"`
+	// Bound carries the test data and inventory a customer-bound job runs from. The runner rebuilds the scenarios from it with
+	// the same code the orchestrator used at submission. Present exactly when Fixture is BoundFixture(Bound).
+	Bound *BoundPlan `json:"bound,omitempty"`
+}
+
+// BoundPlan is the input of a customer-bound job: the target's inventory and the test data bound against it.
+type BoundPlan struct {
+	InventoryVersion int               `json:"inventory_version"`
+	Inventory        openapi.Inventory `json:"inventory"`
+	Spec             binding.Spec      `json:"spec"`
+}
+
+// BoundFixturePrefix starts the fixture name of every customer-bound job. The rest is the SHA-256 of the plan, so an approval
+// bound to the fixture name is bound to the exact test data and inventory.
+const BoundFixturePrefix = "bound:"
+
+// IsBoundFixture reports whether a fixture name denotes a customer-bound job.
+func IsBoundFixture(name string) bool { return strings.HasPrefix(name, BoundFixturePrefix) }
+
+// BoundFixture returns the fixture name for a plan.
+func BoundFixture(b BoundPlan) (string, error) {
+	raw, err := json.Marshal(b)
+	if err != nil {
+		return "", fmt.Errorf("runnerproto: encode bound plan: %w", err)
+	}
+	sum := sha256.Sum256(raw)
+	return BoundFixturePrefix + hex.EncodeToString(sum[:]), nil
+}
+
+// BoundScenarioIDs rebuilds a plan's scenarios and returns their ids in order, so the orchestrator and the runner agree on
+// what the job runs. It fails when the test data no longer binds.
+func BoundScenarioIDs(b BoundPlan) (*binding.Plan, []string, error) {
+	plan, err := binding.Bind(&b.Inventory, b.Spec)
+	if err != nil {
+		return nil, nil, err
+	}
+	ids := make([]string, 0, len(plan.Scenarios))
+	for _, s := range plan.Scenarios {
+		ids = append(ids, s.ID)
+	}
+	if len(ids) == 0 {
+		return nil, nil, errors.New("runnerproto: the test data binds no scenario")
+	}
+	return plan, ids, nil
+}
+
+// CheckBound verifies that a bound request is internally consistent: the plan is present, it hashes to the fixture name, and it
+// rebuilds exactly the scenario ids requested. A request whose fixture is not bound must not carry a plan.
+func (q JobRequest) CheckBound() (*binding.Plan, error) {
+	if !IsBoundFixture(q.Fixture) {
+		if q.Bound != nil {
+			return nil, errors.New("runnerproto: a plan is present but the fixture is not a bound fixture")
+		}
+		return nil, nil
+	}
+	if q.Bound == nil {
+		return nil, errors.New("runnerproto: a bound fixture needs its plan")
+	}
+	want, err := BoundFixture(*q.Bound)
+	if err != nil {
+		return nil, err
+	}
+	if want != q.Fixture {
+		return nil, errors.New("runnerproto: the plan does not match the fixture hash")
+	}
+	plan, ids, err := BoundScenarioIDs(*q.Bound)
+	if err != nil {
+		return nil, fmt.Errorf("runnerproto: the plan does not bind: %w", err)
+	}
+	if !slices.Equal(ids, q.ScenarioIDs) {
+		return nil, errors.New("runnerproto: the plan does not produce the requested scenarios")
+	}
+	return plan, nil
 }
 
 // JobResult is the runner's only output. The orchestrator validates it against the request before persisting.

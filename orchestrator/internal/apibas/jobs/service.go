@@ -212,6 +212,19 @@ func (s *Service) execute(parent context.Context, job db.APIBASJob) outcome {
 		SchemaVersion: runnerproto.SchemaVersion, JobID: job.ID, TargetBaseURL: job.TargetBaseURL,
 		Fixture: job.Fixture, ScenarioIDs: job.ScenarioIDs, AllowedHosts: hostnames(job.AllowedHosts), AllowedPaths: job.AllowedPaths, CredentialsFile: credsPath,
 	}
+	if runnerproto.IsBoundFixture(job.Fixture) {
+		rawPlan, perr := db.GetAPIBASJobPlan(parent, s.pool, job.ID)
+		var bp runnerproto.BoundPlan
+		if perr == nil {
+			dec := json.NewDecoder(bytes.NewReader(rawPlan))
+			dec.DisallowUnknownFields()
+			perr = dec.Decode(&bp)
+		}
+		if perr != nil {
+			return outcome{status: "failed", reason: "the bound plan is unavailable"}
+		}
+		req.Bound = &bp
+	}
 	reqBytes, err := json.Marshal(req)
 	if err != nil {
 		return outcome{status: "failed", reason: "job request could not be encoded"}

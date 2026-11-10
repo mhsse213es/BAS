@@ -11,6 +11,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/audspect/bas/internal/apibas/runnerproto"
 	"github.com/audspect/bas/internal/db"
 )
 
@@ -33,6 +34,9 @@ type TargetRequest struct {
 	ScenarioIDs []string
 	// ApprovalID names the approval a production assessment uses. Ignored for lab and staging.
 	ApprovalID string
+	// Bound makes this a customer-bound job: its scenarios and fixture come from the plan, not the catalogue, and Fixture and
+	// ScenarioIDs are derived from it. The plan is stored with the job.
+	Bound *runnerproto.BoundPlan
 }
 
 // SubmitForTarget validates a request against its registered target and records a queued job. It enforces, in this order:
@@ -40,6 +44,26 @@ type TargetRequest struct {
 // target's base URL host is in its registered allowed hosts; every scenario is in its registered allowed scenarios; and no
 // other assessment is active on the target. A repeated Key returns the existing job with created=false.
 func (s *Service) SubmitForTarget(ctx context.Context, r TargetRequest) (db.APIBASJob, bool, error) {
+	job, created, err := s.submitForTarget(ctx, r)
+	if err != nil || !created || r.Bound == nil {
+		return job, created, err
+	}
+	// The plan is saved before the caller dispatches. If it cannot be, the job is failed so it can never run without it.
+	raw, merr := json.Marshal(r.Bound)
+	if merr == nil {
+		merr = db.SaveAPIBASJobPlan(ctx, s.pool, job.ID, r.Bound.InventoryVersion, raw)
+	}
+	if merr != nil {
+		bg := context.WithoutCancel(ctx)
+		if ok, _ := db.StartAPIBASJob(bg, s.pool, job.ID); ok {
+			_ = db.FinishAPIBASJob(bg, s.pool, job.ID, "failed", "the bound plan could not be stored", nil)
+		}
+		return db.APIBASJob{}, false, errors.New("apibas jobs: the bound plan could not be stored")
+	}
+	return job, true, nil
+}
+
+func (s *Service) submitForTarget(ctx context.Context, r TargetRequest) (db.APIBASJob, bool, error) {
 	if r.Key == "" || r.RequestedBy == "" || r.TargetID == "" {
 		return db.APIBASJob{}, false, errors.New("apibas jobs: key, requester and target are required")
 	}
@@ -58,11 +82,30 @@ func (s *Service) SubmitForTarget(ctx context.Context, r TargetRequest) (db.APIB
 	if err != nil || !slices.Contains(t.AllowedHosts, u.Host) {
 		return db.APIBASJob{}, false, fmt.Errorf("%w: target host is not in its allowed hosts", ErrScopeViolation)
 	}
+	if r.Bound != nil {
+		fx, err := runnerproto.BoundFixture(*r.Bound)
+		if err != nil {
+			return db.APIBASJob{}, false, err
+		}
+		_, ids, err := runnerproto.BoundScenarioIDs(*r.Bound)
+		if err != nil {
+			return db.APIBASJob{}, false, fmt.Errorf("apibas jobs: the test data does not bind: %w", err)
+		}
+		r.Fixture, r.ScenarioIDs = fx, ids
+		// Every identity must use a credential registered on the target. A job never reaches for a secret the operator did not
+		// attach to this target.
+		for _, idn := range r.Bound.Spec.Identities {
+			if _, ok := t.CredentialRefs[idn.CredentialRef]; !ok {
+				return db.APIBASJob{}, false, fmt.Errorf("%w: credential %q is not registered on this target", ErrScopeViolation, idn.CredentialRef)
+			}
+		}
+	}
 	if len(r.ScenarioIDs) == 0 {
 		return db.APIBASJob{}, false, errors.New("apibas jobs: at least one scenario is required")
 	}
 	for _, id := range r.ScenarioIDs {
-		if !slices.Contains(t.AllowedScenarios, id) {
+		// Bound scenarios are generated from the target's own inventory; the registered path scope bounds them instead.
+		if r.Bound == nil && !slices.Contains(t.AllowedScenarios, id) {
 			return db.APIBASJob{}, false, fmt.Errorf("%w: scenario %q is not allowed on this target", ErrScopeViolation, id)
 		}
 	}

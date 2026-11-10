@@ -85,6 +85,12 @@ func EnsureAPIBASJobSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at          timestamptz NOT NULL DEFAULT NOW(),
 			validated_inventory integer     NOT NULL CHECK (validated_inventory >= 1)
 		)`,
+		`CREATE TABLE IF NOT EXISTS apibas_job_plans (
+			job_id             uuid        PRIMARY KEY REFERENCES apibas_jobs(id) ON DELETE CASCADE,
+			inventory_version  integer     NOT NULL,
+			plan               jsonb       NOT NULL,
+			created_at         timestamptz NOT NULL DEFAULT NOW()
+		)`,
 		`CREATE TABLE IF NOT EXISTS apibas_job_reports (
 			job_id         uuid        NOT NULL REFERENCES apibas_jobs(id) ON DELETE CASCADE,
 			scenario_id    text        NOT NULL,
