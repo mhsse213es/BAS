@@ -43,20 +43,46 @@ KEV vendors among the 500 Critical entries are dominated by non-Ubuntu products:
 
 ## 4. Caveats that change how to read the numbers
 
-1. **Package correspondence is not checked.** The script counts a fixed version from any package in a matching definition. Example: CVE-2021-44228 (Log4Shell, affects Log4j 2) matches the focal definition, but its fixed version is for `apache-log4j1.2` (1.2.17-9ubuntu0.1), a different product. That row is a **false positive**. The 20 "fixed identified" rows therefore overstate usable mappings. A manual review of all 22 matches is required before any figure is reported as usable coverage.
+1. **Correction to the first write-up.** The raw run counted a fixed version from any package in a matching definition, so the raw 20 overstated usable mappings. The example I first gave was **wrong**: CVE-2021-44228 (Log4Shell) is correctly mapped to `liblog4j2-java < 2.15.0`. I had misread an extraction that pulled in a line from a neighbouring Log4j 1.2 definition. The hand review and the correspondence step below supersede the raw count.
 2. **Ubuntu OVAL entries are per Ubuntu package, not per vendor product.** A KEV "product" such as "Linux Kernel" or "Adobe Acrobat" does not map to an Ubuntu package without a curated mapping (gap G4). The spike cannot produce a usable product mapping by itself.
 3. **Some CVE IDs in the matches carry seven-digit numbers** (for example CVE-2026-111497, CVE-2026-109618). These were not independently verified in this run.
 4. **456 of 1,773 KEVs have no CVSS v3 score** in NVD. Excluding them is correct for the approved definition, but it means the Critical population is defined by CVSS v3 availability, not by severity alone.
 
-## 5. What the spike establishes
+## 5. Hand review of the 22 matches
 
-- The approved measurement works end to end: KEV join, CVSS-based Critical classification, per-release OVAL matching, and reproducible provenance.
-- **Ubuntu OVAL alone covers about 4% of current Critical KEVs** before correspondence checks, so Level 1 coverage for a Linux-only verdict would be small. Windows (MSRC) is needed to cover the majority of Critical KEV products. That was the planned next step.
-- The raw fixed-version count must not be reported as "usable fixed-version coverage" until package correspondence (gap G4) is implemented and the 22 matches are reviewed.
+Each match was judged on whether the Ubuntu package is the product the KEV entry describes.
 
-## 6. Recommended next steps
+| Judgement | Count | Examples |
+|---|---|---|
+| Product match | 13 | brotli, apache2, firefox, roundcube, activemq, cacti, redis, liblog4j2-java (Log4Shell and CVE-2021-45046), roundcube |
+| Family match | 6 | Tomcat (`libtomcat*-java`), Spring (`libspring-*-java`), PHP (`libapache2-mod-php*`), WebKit (`gir1.2-javascriptcoregtk`, `libqt5webkit5`) |
+| Needs review | 1 | CVE-2020-15999 (Chrome FreeType) maps to `freetype2-demos`, a demo binary, not the library |
+| False match | 1 | CVE-2015-4852 (WebLogic) maps to `openjdk-8-demo`; WebLogic is not an Ubuntu product |
+| No resolvable package | 1 | CVE-2025-39682 (Linux kernel): a definition matches but no package name resolves |
 
-1. Hand-review the 22 matched CVEs against their KEV product, and record which are true mappings.
-2. Implement package correspondence in the spike: a fixed version counts only when the OVAL package name corresponds to the KEV product through a reviewed mapping (G4).
-3. Run the MSRC CVRF spike for Windows Critical KEVs, which covers most of the population.
-4. Decide with the owner whether a KEV with no CVSS v3 score should be scored from v2 for display only, while staying excluded from the Critical denominator.
+One further anomaly: CVE-2022-26486 (Firefox) has a jammy fixed value, `1:1snap1-0ubuntu1`, that looks like a snap transitional version. It was kept, and it needs review.
+
+## 6. Package correspondence result
+
+The reviewed map (`product_map.json`) ties each KEV vendor|product to the Ubuntu package names that count as that product. A fixed version counts only when it comes from a corresponding package.
+
+| Status | Count | % of 500 |
+|---|---|---|
+| NO_UBUNTU_OVAL_MATCH | 478 | 95.6% |
+| **FIXED_VERSION_CORRESPONDING** | **19** | **3.8%** (13 product, 6 family) |
+| NO_CORRESPONDING_PACKAGE | 2 | 0.4% |
+| NO_RESOLVABLE_PACKAGE | 1 | 0.2% |
+
+**Limitation on these numbers.** The map was built after the hand review of these same 22 matches, so the 19 are validated on the set that informed the map. They are not a blind test. Recall beyond these products is unmeasured: the run found no OVAL match for any Critical KEV outside these 22, and that is a measurement of the matches Ubuntu OVAL contains, not of how many Critical KEVs Ubuntu has a fix for.
+
+## 7. What the spike establishes
+
+- The measurement works end to end: KEV join, CVSS-based Critical classification, per-release OVAL matching, package correspondence, and provenance.
+- **Usable Ubuntu fixed-version coverage of Critical KEVs is about 3.8%** (19 of 500). Ubuntu covers a small share of the Critical KEV population, which is mostly non-Ubuntu products. Windows (MSRC) is needed to cover the majority.
+- Only the 19 correspondence-checked fixes may be reported as usable. The raw count of 20 must not be used.
+
+## 8. Recommended next steps
+
+1. Owner review of `product_map.json`, plus the three open rows (CVE-2020-15999, CVE-2022-26486, CVE-2025-39682).
+2. Run the MSRC spike for Windows Critical KEVs, which covers most of the population.
+3. Decide with the owner whether a KEV with no CVSS v3 score should be scored from v2 for display only, while staying excluded from the Critical denominator.

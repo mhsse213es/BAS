@@ -1,0 +1,23 @@
+{
+  "_status": "analyst-curated for the spike; owner review PENDING. Each entry names the KEV vendor|product and the Ubuntu binary/source package names (regex, anchored) that count as that product. A package not matched here cannot satisfy a fixed-version claim.",
+  "entries": [
+    {"key": "Google|Brotli", "packages": ["brotli"], "class": "PRODUCT"},
+    {"key": "PHP Group|PHP", "packages": ["libapache2-mod-php[0-9.]*", "php[0-9.]*(-[a-z]+)?"], "class": "FAMILY"},
+    {"key": "Roundcube|Webmail", "packages": ["roundcube(-core)?"], "class": "PRODUCT"},
+    {"key": "Roundcube|Roundcube Webmail", "packages": ["roundcube(-core)?"], "class": "PRODUCT"},
+    {"key": "Apache|HTTP Server", "packages": ["apache2(-bin)?"], "class": "PRODUCT"},
+    {"key": "Apache|Apache", "packages": ["apache2(-bin)?"], "class": "PRODUCT"},
+    {"key": "Apache|Tomcat", "packages": ["libtomcat[0-9]*-(embed-)?java", "tomcat[0-9]*"], "class": "FAMILY"},
+    {"key": "Apple|Multiple Products", "packages": ["gir1\\.2-javascriptcoregtk[-0-9.]*", "libwpewebkit[-0-9.]*", "libqt5webkit5", "webkit2gtk[-0-9.]*"], "class": "FAMILY"},
+    {"key": "Apple|iOS, iPadOS, and macOS", "packages": ["gir1\\.2-javascriptcoregtk[-0-9.]*", "libwpewebkit[-0-9.]*", "libqt5webkit5", "webkit2gtk[-0-9.]*"], "class": "FAMILY"},
+    {"key": "Mozilla|Firefox", "packages": ["firefox(-esr)?"], "class": "PRODUCT"},
+    {"key": "Apache|ActiveMQ", "packages": ["activemq"], "class": "PRODUCT"},
+    {"key": "Apache|Log4j2", "packages": ["liblog4j2-java"], "class": "PRODUCT"},
+    {"key": "Cacti|Cacti", "packages": ["cacti"], "class": "PRODUCT"},
+    {"key": "VMware|Spring Framework", "packages": ["libspring-[a-z-]*-java", "spring[0-9.-]*"], "class": "FAMILY"},
+    {"key": "Redis|Debian-specific Redis Servers", "packages": ["redis(-server|-tools)?"], "class": "PRODUCT"},
+    {"key": "Google|Chrome FreeType", "packages": ["libfreetype[0-9]*"], "class": "PRODUCT"},
+    {"key": "Oracle|WebLogic Server", "packages": [], "class": "NO_UBUNTU_PRODUCT"},
+    {"key": "Linux|Kernel", "packages": ["linux-(image|modules|headers)[-a-z0-9.]*"], "class": "PRODUCT"}
+  ]
+}
