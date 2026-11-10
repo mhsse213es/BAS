@@ -1253,6 +1253,9 @@ func main() {
 	// BAS has not yet re-confirmed. Dispatches a targeted single-technique
 	// posture re-run on the original agent. Results in the audit log + WS push.
 	go handler.StartRevalidationLoop(context.Background())
+	// Scheduled API BAS assessments: due schedules are claimed and queued once a minute. A server with job execution disabled
+	// records each due run as not run instead of leaving it pending.
+	handler.StartAPIBASScheduler(context.Background(), time.Minute)
 
 	// ── Attack-Path Scheduler ─────────────────────────────────────────────
 	// Ticks every 60 s and re-dispatches fleet-wide attack-path collection

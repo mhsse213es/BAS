@@ -337,3 +337,60 @@ export function removeObjectAt(spec, index) {
 export function identityNames(spec) {
   return spec && Array.isArray(spec.identities) ? spec.identities.map((i) => i && i.name).filter(Boolean) : [];
 }
+
+// ---- schedule: pure helpers
+
+export const MAX_EVERY_HOURS = 720;
+
+// parseEveryHours reads the interval box: a whole number of hours from 1 to 720.
+export function parseEveryHours(v) {
+  const t = String(v == null ? '' : v).trim();
+  if (!/^[0-9]{1,4}$/.test(t)) return { hours: 0, error: 'Enter a whole number of hours, from 1 to ' + MAX_EVERY_HOURS };
+  const n = Number(t);
+  if (n < 1 || n > MAX_EVERY_HOURS) return { hours: 0, error: 'The interval must be from 1 to ' + MAX_EVERY_HOURS + ' hours' };
+  return { hours: n, error: '' };
+}
+
+export function everyLabel(h) {
+  if (h === 1) return 'every hour';
+  if (h === 24) return 'every day';
+  if (h === 168) return 'every week';
+  if (h % 24 === 0 && h < 168) return 'every ' + (h / 24) + ' days';
+  return 'every ' + h + ' hours';
+}
+
+// scheduleState says what a schedule is doing. 'paused' means it turned itself off after repeated failures to queue its job.
+export function scheduleState(s) {
+  if (!s) return 'none';
+  if (s.paused_for_failures) return 'paused';
+  return s.enabled ? 'on' : 'off';
+}
+
+export function scheduleTone(s) {
+  const st = scheduleState(s);
+  if (st === 'paused') return 'bad';
+  if (st === 'on') return 'ok';
+  return 'muted';
+}
+
+// scheduleNote is the sentence under the form: what runs, when next, and how the last attempt went.
+export function scheduleNote(s) {
+  if (!s) return 'No schedule. The stored test data runs only when you run it.';
+  const st = scheduleState(s);
+  const parts = [];
+  if (st === 'paused') {
+    parts.push('Paused after ' + s.consecutive_failures + ' runs in a row could not be queued. Fix the cause, then save the schedule again to resume.');
+  } else if (st === 'off') {
+    parts.push('The schedule is off.');
+  } else {
+    parts.push('Runs ' + everyLabel(s.every_hours) + (s.include_writes ? ', including write scenarios' : ', read scenarios only') + '. Next run ' + whenText(s.next_run_at) + '.');
+  }
+  if (s.last_result) parts.push('Last attempt' + (s.last_run_at ? ' ' + whenText(s.last_run_at) : '') + ': ' + s.last_result + '.');
+  return parts.join(' ');
+}
+
+function whenText(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return 'at an unknown time';
+  return d.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+}

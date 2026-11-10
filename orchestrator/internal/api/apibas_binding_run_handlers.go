@@ -7,9 +7,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/audspect/bas/internal/apibas/openapi"
-	"github.com/audspect/bas/internal/apibas/runnerproto"
-	"github.com/audspect/bas/internal/db"
 )
 
 // apibasBindingRunBody is what a caller chooses when running a target's stored test data. Everything else (the target, its
@@ -45,38 +42,15 @@ func (h *Handler) RunAPIBASBinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	stored, err := db.GetAPIBASBinding(r.Context(), h.db, id)
-	if errors.Is(err, db.ErrAPIBASBindingNotFound) {
-		jsonError(w, "no test data stored for this target", http.StatusNotFound)
+	bound, perr := h.buildBoundPlan(r.Context(), id, true)
+	if perr != nil {
+		var be *buildBoundPlanError
+		if errors.As(perr, &be) {
+			jsonError(w, be.Msg, be.Status)
+		} else {
+			jsonError(w, "could not build the plan", http.StatusInternalServerError)
+		}
 		return
 	}
-	if err != nil {
-		jsonError(w, "could not read the test data", http.StatusInternalServerError)
-		return
-	}
-	spec, err := decodeBindingSpec(stored.Spec)
-	if err != nil {
-		jsonError(w, "the stored test data is unreadable", http.StatusInternalServerError)
-		return
-	}
-	rec, err := db.GetAPIBASInventory(r.Context(), h.db, id, 0)
-	if errors.Is(err, db.ErrAPIBASInventoryNotFound) {
-		jsonError(w, "no inventory for this target", http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		jsonError(w, "could not read the inventory", http.StatusInternalServerError)
-		return
-	}
-	if rec.Version != stored.ValidatedInventory {
-		jsonError(w, "the test data was checked against an older inventory; save it again first", http.StatusConflict)
-		return
-	}
-	var inv openapi.Inventory
-	if err := json.Unmarshal(rec.Body, &inv); err != nil {
-		jsonError(w, "the stored inventory is unreadable", http.StatusInternalServerError)
-		return
-	}
-	bound := runnerproto.BoundPlan{InventoryVersion: rec.Version, Inventory: inv, Spec: spec}
 	h.submitJob(w, r, actor, apibasJobBody{Key: body.Key, TargetID: id, ApprovalID: body.ApprovalID}, &bound)
 }

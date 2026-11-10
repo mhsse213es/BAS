@@ -9,7 +9,7 @@ import { card, pill, chip, seg, empty, kv } from '../core/kit.js';
 import { setHeroStat } from './shell-ui.js';
 import * as M from './api-inventory-model.js';
 
-var S = { targets: [], sel: '', inv: null, cls: 'all', version: 0, versions: [], stored: null, jobs: [], polls: {} };
+var S = { targets: [], sel: '', inv: null, cls: 'all', version: 0, versions: [], stored: null, jobs: [], schedule: null, polls: {} };
 var MAX_ROWS = 500;
 
 function el(id) { return document.getElementById(id); }
@@ -67,7 +67,7 @@ function renderTargets() {
 }
 
 export function apiInvSelect(id) {
-  S.sel = id; S.cls = 'all'; S.version = 0; S.inv = null; S.versions = []; S.stored = null; S.jobs = []; S.polls = {};
+  S.sel = id; S.cls = 'all'; S.version = 0; S.inv = null; S.versions = []; S.stored = null; S.jobs = []; S.schedule = null; S.polls = {};
   renderTargets();
   loadDetail(0);
 }
@@ -77,8 +77,9 @@ function loadDetail(version) {
   S.version = version || 0;
   var q = S.version ? '?version=' + encodeURIComponent(S.version) : '';
   // The stored test data needs the manage permission; for anyone else the read is refused and the page simply shows none.
-  return Promise.all([apicall(base() + '/inventory' + q), apicall(base() + '/inventory/versions'), apicall(base() + '/binding').catch(function() { return null; }), apicall(base() + '/jobs').catch(function() { return null; })]).then(function(res) {
+  return Promise.all([apicall(base() + '/inventory' + q), apicall(base() + '/inventory/versions'), apicall(base() + '/binding').catch(function() { return null; }), apicall(base() + '/jobs').catch(function() { return null; }), apicall(base() + '/schedule').catch(function() { return null; })]).then(function(res) {
     S.jobs = (res[3] && Array.isArray(res[3].jobs)) ? res[3].jobs : [];
+    S.schedule = (res[4] && !M.errorText(res[4]) && res[4].target_id) ? res[4] : null;
     var inv = res[0], vers = res[1];
     S.stored = (res[2] && !M.errorText(res[2]) && res[2].spec) ? res[2] : null;
     S.inv = (inv && !M.errorText(inv) && inv.listed_operations) ? inv : null;
@@ -107,6 +108,7 @@ function renderDetail() {
   html += card('Drift against observed routes', driftBody(), { sub: 'Compares routes you list with this inventory; nothing is requested from the target' });
   html += card('Recent jobs', jobsBody(), { sub: 'Newest first, this target only' });
   html += card('Binding preview', bindingBody(), { sub: 'Which scenarios would be generated; nothing is stored or run' });
+  html += card('Schedule', scheduleBody(), { sub: 'Run the stored test data on an interval' });
   host.innerHTML = html;
   apiInvWriteOp();
   apiInvWriteSync();
@@ -531,4 +533,47 @@ export function apiInvWriteRemove(index) {
   if (cur.error) { wmsg('<p class="ai-err">' + x(cur.error) + '</p>'); return; }
   putSpec(M.removeObjectAt(cur.spec, index));
   wmsg('<p class="ai-note">Removed from the test data. Not saved yet.</p>');
+}
+
+// ---- schedule card
+
+function scheduleBody() {
+  var s = S.schedule;
+  var t = S.targets.filter(function(a) { return a.id === S.sel; })[0];
+  if (t && t.environment === 'production') {
+    return '<p class="ai-note">A production target cannot be scheduled: each production run needs its own approval by a second person.</p>';
+  }
+  var state = M.scheduleState(s);
+  var pill1 = s ? pill(state === 'paused' ? 'paused' : state, M.scheduleTone(s)) + ' ' : '';
+  return '<p class="ai-note">Runs this target\'s stored test data on a fixed interval, through the same checks as a manual run: the target must be enabled, its scope and credentials must be registered, and nothing else may be running on it. The first run is one interval after you save. A run missed while the server is down is run once, not made up. Needs permission to manage targets.</p>' +
+    '<p class="' + (state === 'paused' ? 'ai-warn' : 'ai-note') + '" id="api-inv-sched-note">' + pill1 + x(M.scheduleNote(s)) + '</p>' +
+    '<div class="ai-form">' +
+    '<label class="ai-lbl">Run every (hours, 1 to ' + M.MAX_EVERY_HOURS + '; 24 is daily, 168 weekly)<input id="api-inv-sched-hours" class="ai-in" type="text" inputmode="numeric" value="' + x(String(s ? s.every_hours : 24)) + '" spellcheck="false"></label>' +
+    '<label class="ai-lbl"><span><input id="api-inv-sched-writes" type="checkbox"' + (s && s.include_writes ? ' checked' : '') + '> Include write scenarios. A write that succeeds changes the customer\'s object while nobody is watching; leave this off unless the objects are meant for it. The target needs registered allowed paths.</span></label>' +
+    '<label class="ai-lbl"><span><input id="api-inv-sched-enabled" type="checkbox"' + (!s || s.enabled ? ' checked' : '') + '> Schedule is on</span></label>' +
+    '<div class="ai-row">' + btn(s ? 'Save schedule' : 'Create schedule', 'apiInvSaveSchedule', [], 'btn-primary') + (s ? btn('Remove schedule', 'apiInvRemoveSchedule') : '') + '</div></div>' +
+    '<div id="api-inv-sched-result"></div>';
+}
+
+// apiInvSaveSchedule stores the schedule. Saving a paused schedule resumes it.
+export function apiInvSaveSchedule() {
+  var out = el('api-inv-sched-result');
+  if (!out) return;
+  var p = M.parseEveryHours(el('api-inv-sched-hours') ? el('api-inv-sched-hours').value : '');
+  if (p.error) { out.innerHTML = '<p class="ai-err">' + x(p.error) + '</p>'; return; }
+  var body = { every_hours: p.hours, include_writes: !!(el('api-inv-sched-writes') && el('api-inv-sched-writes').checked), enabled: !!(el('api-inv-sched-enabled') && el('api-inv-sched-enabled').checked) };
+  apicall(base() + '/schedule', { method: 'PUT', body: JSON.stringify(body) }).then(function(r) {
+    var err = M.errorText(r);
+    if (err) { out.innerHTML = '<p class="ai-err">' + x(err) + '</p>'; return; }
+    showToast('Schedule saved.', 'ok');
+    S.schedule = r;
+    renderDetail();
+  }).catch(function(e) { out.innerHTML = '<p class="ai-err">' + failText(e) + '</p>'; });
+}
+
+export function apiInvRemoveSchedule() {
+  fetch(base() + '/schedule', { method: 'DELETE', credentials: 'same-origin' }).then(function(r) {
+    if (r.status === 200) { showToast('Schedule removed.', 'ok'); S.schedule = null; renderDetail(); return null; }
+    return r.json().then(function(b) { showToast(M.errorText(b) || 'Could not remove the schedule.', 'err'); });
+  }).catch(function(e) { showToast('Could not reach the server: ' + (e && e.message ? e.message : 'request failed'), 'err'); });
 }

@@ -5,6 +5,7 @@ import {
   exampleBindingSpec, changeLines, errorText, MAX_OBSERVED,
   jobTone, resultTone, isFinalStatus, resultText, newJobKey, storedNote, exampleWriteBindingSpec, countsText, worstTone,
   opKey, writeOperations, readChoices, defaultReadOperation, buildWriteObject, mergeWriteObject, writeObjectsOf, removeObjectAt, identityNames, MAX_WRITE_BODY,
+  parseEveryHours, everyLabel, scheduleState, scheduleTone, scheduleNote,
 } from '../../src/features/api-inventory-model.js';
 
 const OPS = [
@@ -292,4 +293,44 @@ test('writeObjectsOf, removeObjectAt and identityNames read and edit a spec with
   assert.equal(r.objects.length, 1);
   assert.equal(JSON.stringify(spec), frozen);
   assert.equal(removeObjectAt(spec, 9).objects.length, 2, 'an out-of-range index removes nothing');
+});
+
+test('parseEveryHours accepts whole hours from 1 to 720 only', () => {
+  assert.deepEqual(parseEveryHours(' 24 '), { hours: 24, error: '' });
+  assert.equal(parseEveryHours('1').hours, 1);
+  assert.equal(parseEveryHours('720').hours, 720);
+  for (const bad of ['', '0', '721', '9999', '1.5', '-1', 'abc', '1e2', '0x10', null, undefined, '12345']) {
+    const r = parseEveryHours(bad);
+    assert.equal(r.hours, 0, String(bad));
+    assert.notEqual(r.error, '', String(bad));
+  }
+});
+
+test('everyLabel reads the common intervals naturally', () => {
+  assert.equal(everyLabel(1), 'every hour');
+  assert.equal(everyLabel(6), 'every 6 hours');
+  assert.equal(everyLabel(24), 'every day');
+  assert.equal(everyLabel(48), 'every 2 days');
+  assert.equal(everyLabel(168), 'every week');
+  assert.equal(everyLabel(336), 'every 336 hours');
+});
+
+test('scheduleState and scheduleTone: a paused schedule is a problem, an off one is quiet', () => {
+  assert.equal(scheduleState(null), 'none');
+  assert.equal(scheduleState({ enabled: true }), 'on');
+  assert.equal(scheduleState({ enabled: false }), 'off');
+  assert.equal(scheduleState({ enabled: false, paused_for_failures: true }), 'paused');
+  assert.equal(scheduleTone({ enabled: true }), 'ok');
+  assert.equal(scheduleTone({ enabled: false }), 'muted');
+  assert.equal(scheduleTone({ enabled: false, paused_for_failures: true }), 'bad');
+});
+
+test('scheduleNote says what runs, whether writes are included, and the last attempt', () => {
+  assert.match(scheduleNote(null), /No schedule/);
+  const on = scheduleNote({ enabled: true, every_hours: 6, include_writes: true, next_run_at: '2026-11-11T02:00:00Z', last_result: 'queued', last_run_at: '2026-11-10T20:00:00Z' });
+  assert.match(on, /every 6 hours, including write scenarios/);
+  assert.match(on, /Next run 2026-11-11 02:00 UTC/);
+  assert.match(on, /Last attempt 2026-11-10 20:00 UTC: queued/);
+  assert.match(scheduleNote({ enabled: false, every_hours: 6 }), /schedule is off/);
+  assert.match(scheduleNote({ enabled: true, every_hours: 1, next_run_at: 'garbage' }), /unknown time/);
 });

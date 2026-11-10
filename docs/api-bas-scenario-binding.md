@@ -182,3 +182,16 @@ The form refuses to touch a box that is not valid JSON, refuses an owner who is 
 credential value. Adding, replacing or removing changes the box only: use Preview to check and Save to store.
 
 Not built: editing identities and read-only objects with a form (they stay in the JSON), and field-level editing of the bodies.
+
+## Scheduled runs (added 10 November 2026)
+
+A target can run its stored test data on a fixed interval. `PUT|GET|DELETE /api/apibas/targets/{id}/schedule` (save and remove need the manage-targets permission, read needs view). The body is `{"every_hours": 1-720, "include_writes": false, "enabled": true}`; one schedule per target. The console has a Schedule card under the binding card.
+
+- **Same checks as a manual run.** A due run builds the plan the same way as `POST .../binding/jobs` (shared `buildBoundPlan`) and submits through `SubmitForTarget`: the target must be enabled, its host, scope and registered credentials must match, write runs need allowed paths, and only one assessment may be active on a target. The job is audited as submitted by `schedule:<creator>` with `scheduled: true`, and the job key is `sched-<target>-<due time>`, so one due run can produce only one job.
+- **Lab and staging only.** Saving a schedule for a production target is refused: a production run needs a fresh approval by a second person each time, which a schedule cannot give.
+- **Writes are off by default.** Scheduled runs leave out write scenarios unless `include_writes` is set, because nobody is watching a scheduled run and a write that succeeds changes the customer's object. The stored test data is not changed; a copy of the spec with `allow_writes` cleared is used. Including writes needs the target to register allowed paths.
+- **Timing.** The first run is one interval after saving. The server checks once a minute. A run missed while the server was down is run once, and the next run is one interval from then; missed runs are not made up. Two orchestrators never claim the same run (`FOR UPDATE SKIP LOCKED`).
+- **Skips and failures.** If another assessment is running on the target, the run is skipped and recorded (not a fault). If a job cannot be queued (stale test data, a disabled target, a missing credential, audit failure), the attempt is recorded as `not run: <reason>` and counts as a failure. After 5 failures in a row the schedule pauses itself (`paused_for_failures`); saving it again resumes it. A queued job that later fails or finds problems is a normal job result and does not count.
+- **Not built:** time-of-day or weekday schedules (the interval is in hours), run-now from the schedule card (use Run stored test data), notifications when a schedule pauses, and schedules for catalogue (non-bound) jobs.
+
+Tests: `internal/db/apibas_schedule_store_test.go`, `internal/api/apibas_schedule_test.go`, and the Schedule card tests in `api-inventory-dom.test.mjs` and `api-inventory-model.test.mjs`.

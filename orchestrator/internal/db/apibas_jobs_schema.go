@@ -85,6 +85,21 @@ func EnsureAPIBASJobSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at          timestamptz NOT NULL DEFAULT NOW(),
 			validated_inventory integer     NOT NULL CHECK (validated_inventory >= 1)
 		)`,
+		`CREATE TABLE IF NOT EXISTS apibas_schedules (
+			target_id            text        PRIMARY KEY REFERENCES apibas_targets(id) ON DELETE CASCADE,
+			every_hours          integer     NOT NULL CHECK (every_hours BETWEEN 1 AND 720),
+			include_writes       boolean     NOT NULL DEFAULT false,
+			enabled              boolean     NOT NULL DEFAULT true,
+			next_run_at          timestamptz NOT NULL,
+			created_by           text        NOT NULL,
+			created_at           timestamptz NOT NULL DEFAULT NOW(),
+			updated_at           timestamptz NOT NULL DEFAULT NOW(),
+			last_run_at          timestamptz,
+			last_job_id          text        NOT NULL DEFAULT '',
+			last_result          text        NOT NULL DEFAULT '',
+			consecutive_failures integer     NOT NULL DEFAULT 0
+		)`,
+		`CREATE INDEX IF NOT EXISTS apibas_schedules_due_idx ON apibas_schedules (next_run_at) WHERE enabled`,
 		`CREATE TABLE IF NOT EXISTS apibas_job_plans (
 			job_id             uuid        PRIMARY KEY REFERENCES apibas_jobs(id) ON DELETE CASCADE,
 			inventory_version  integer     NOT NULL,

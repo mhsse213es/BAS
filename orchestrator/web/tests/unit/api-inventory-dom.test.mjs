@@ -22,8 +22,8 @@ function storedBinding(stale) {
   };
 }
 
-async function setup({ stale = false, jobReason = 'EVIDENCE_INCONCLUSIVE', jobs = null, jobStatus = 'completed' } = {}) {
-  const dom = new JSDOM('<!doctype html><body><div id="api-inv-targets"></div><div id="api-inv-detail"></div></body>');
+async function setup({ stale = false, jobReason = 'EVIDENCE_INCONCLUSIVE', jobs = null, jobStatus = 'completed', schedule = null, environment = 'lab', scheduleRefusal = '' } = {}) {
+  const dom = new JSDOM('<!doctype html><body><div id="toast"></div><div id="api-inv-targets"></div><div id="api-inv-detail"></div></body>');
   globalThis.document = dom.window.document;
   globalThis.window = dom.window;
   const store = {};
@@ -33,7 +33,14 @@ async function setup({ stale = false, jobReason = 'EVIDENCE_INCONCLUSIVE', jobs 
     const method = (opts && opts.method) || 'GET';
     calls.push({ path, method, body: opts && opts.body });
     const ok = (b, status = 200) => ({ status, json: async () => b });
-    if (path === '/api/apibas/targets') return ok({ targets: [{ id: 'shop-1', name: EVIL, base_url: 'http://x', environment: 'lab', enabled: true, inventory: { version: 1, operations: 2, imported_at: '2026-11-10T00:00:00Z' } }] });
+    if (path === '/api/apibas/targets') return ok({ targets: [{ id: 'shop-1', name: EVIL, base_url: 'http://x', environment: environment, enabled: true, inventory: { version: 1, operations: 2, imported_at: '2026-11-10T00:00:00Z' } }] });
+    if (path.endsWith('/shop-1/schedule')) {
+      if (method === 'GET') return schedule ? ok(schedule) : ok({ error: 'no schedule for this target' }, 404);
+      if (method === 'DELETE') return ok({ removed: true });
+      if (scheduleRefusal) return ok({ error: scheduleRefusal }, 400);
+      const b = JSON.parse(opts.body);
+      return ok({ target_id: 'shop-1', every_hours: b.every_hours, include_writes: b.include_writes, enabled: b.enabled, next_run_at: '2026-11-11T02:00:00Z', created_by: 'admin1', consecutive_failures: 0 });
+    }
     if (path.endsWith('/inventory/versions')) return ok({ versions: [{ version: 1, operations: 2, imported_at: '2026-11-10T00:00:00Z', imported_by: 'admin1' }] });
     if (path.endsWith('/inventory')) return ok(inventory());
     if (path.endsWith('/binding/jobs')) return ok({ id: 'job-1', status: 'queued', created: true }, 202);
@@ -306,4 +313,90 @@ test('a hostile identity name or object value reaches the form as text only', as
   assert.equal(doc.querySelectorAll('img,script').length, 0);
   assert.ok(doc.getElementById('api-inv-wlist').textContent.includes(evil));
   assert.ok([...doc.getElementById('api-inv-w-owner').options].some((o) => o.textContent === evil));
+});
+
+const SCHED = (over = {}) => ({ target_id: 'shop-1', every_hours: 24, include_writes: false, enabled: true, next_run_at: '2026-11-11T02:00:00Z', created_by: 'admin1',
+  last_run_at: '2026-11-10T02:00:00Z', last_job_id: 'job-9', last_result: 'queued', consecutive_failures: 0, ...over });
+
+test('the schedule card says there is none, and creating one sends the typed interval by PUT', async () => {
+  const { dom, m, calls } = await setup();
+  const doc = dom.window.document;
+  assert.match(doc.getElementById('api-inv-sched-note').textContent, /No schedule/);
+  assert.equal(doc.getElementById('api-inv-sched-writes').checked, false, 'writes are off by default');
+  doc.getElementById('api-inv-sched-hours').value = '12';
+  m.apiInvSaveSchedule();
+  await settle();
+  const put = calls.find((c) => c.path.endsWith('/shop-1/schedule') && c.method === 'PUT');
+  assert.ok(put, 'the schedule was sent');
+  assert.deepEqual(JSON.parse(put.body), { every_hours: 12, include_writes: false, enabled: true });
+  assert.match(doc.getElementById('api-inv-sched-note').textContent, /every 12 hours/);
+});
+
+test('an invalid interval sends nothing and says why', async () => {
+  const { dom, m, calls } = await setup();
+  const doc = dom.window.document;
+  for (const bad of ['', '0', '721', 'abc', '1.5', '-3']) {
+    doc.getElementById('api-inv-sched-hours').value = bad;
+    m.apiInvSaveSchedule();
+    assert.match(doc.getElementById('api-inv-sched-result').textContent, /hours/, bad);
+  }
+  assert.equal(calls.some((c) => c.path.endsWith('/schedule') && c.method === 'PUT'), false);
+});
+
+test('including writes is sent only when ticked', async () => {
+  const { dom, m, calls } = await setup();
+  const doc = dom.window.document;
+  doc.getElementById('api-inv-sched-writes').checked = true;
+  doc.getElementById('api-inv-sched-enabled').checked = false;
+  m.apiInvSaveSchedule();
+  await settle();
+  const put = calls.find((c) => c.method === 'PUT' && c.path.endsWith('/schedule'));
+  assert.deepEqual(JSON.parse(put.body), { every_hours: 24, include_writes: true, enabled: false });
+});
+
+test('an existing schedule is shown with its next run and last result, and can be removed', async () => {
+  const { dom, m, calls } = await setup({ schedule: SCHED() });
+  const doc = dom.window.document;
+  const note = doc.getElementById('api-inv-sched-note').textContent;
+  assert.match(note, /every day/);
+  assert.match(note, /read scenarios only/);
+  assert.match(note, /2026-11-11 02:00 UTC/);
+  assert.match(note, /Last attempt.*queued/);
+  assert.equal(doc.getElementById('api-inv-sched-hours').value, '24');
+  m.apiInvRemoveSchedule();
+  await settle();
+  assert.ok(calls.some((c) => c.method === 'DELETE' && c.path.endsWith('/shop-1/schedule')));
+  assert.match(doc.getElementById('api-inv-sched-note').textContent, /No schedule/);
+});
+
+test('a paused schedule says it is paused and how to resume it', async () => {
+  const { dom } = await setup({ schedule: SCHED({ enabled: false, paused_for_failures: true, consecutive_failures: 5, last_result: 'not run: the test data was checked against an older inventory; save it again first' }) });
+  const note = dom.window.document.getElementById('api-inv-sched-note');
+  assert.match(note.textContent, /Paused after 5 runs/);
+  assert.match(note.textContent, /save the schedule again to resume/i);
+  assert.match(note.textContent, /older inventory/);
+  assert.equal(note.className, 'ai-warn');
+});
+
+test('text from a schedule result reaches the page as text only', async () => {
+  const { dom } = await setup({ schedule: SCHED({ last_result: '<img src=x onerror=alert(5)>' }) });
+  const doc = dom.window.document;
+  assert.equal(doc.querySelectorAll('img').length, 0);
+  assert.ok(doc.getElementById('api-inv-sched-note').textContent.includes('<img src=x onerror=alert(5)>'));
+});
+
+test('a production target is not offered a schedule', async () => {
+  const { dom } = await setup({ environment: 'production' });
+  const doc = dom.window.document;
+  assert.equal(doc.getElementById('api-inv-sched-hours'), null);
+  assert.match(doc.getElementById('api-inv-detail').textContent, /production target cannot be scheduled/);
+});
+
+test('a server refusal is shown and the card keeps its state', async () => {
+  const { dom, m } = await setup({ scheduleRefusal: 'including writes needs the target to register allowed paths' });
+  const doc = dom.window.document;
+  doc.getElementById('api-inv-sched-writes').checked = true;
+  m.apiInvSaveSchedule();
+  await settle();
+  assert.match(doc.getElementById('api-inv-sched-result').textContent, /register allowed paths/);
 });
