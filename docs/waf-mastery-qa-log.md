@@ -8,19 +8,59 @@ This is the single place to check before claiming WAF Mastery is "done" or makin
 
 ## Open items
 
-### 1. Real WAF vendor adapter — deferred by design, no live appliance integration exists
-
-**Status:** Open, deferred by design (stated in `internal/wafval`'s own package doc comment, not an oversight).
-
-**What's needed:** `internal/wafval` is explicitly "vendor-neutral" and "I/O-free" — it grades evidence it's handed, but produces none itself. A real adapter would need to drive an actual deployed WAF (Cloudflare, F5, AWS WAF, ModSecurity, etc.) with live test requests and pull its real enforcement/detection decisions back as `wafval.Observation` values.
-
-**Why it's blocked:** `internal/wafval/wafval.go:7-8` states this directly: "The lab adapter that produces observations is a separate, deferred package." No lab/vendor access has been set up for this initiative, the same shape as AV/NGAV Mastery's own Defender-vertical gap (see `docs/av-mastery-qa-log.md` item #1).
-
-**What this means today:** every one of the 10 customer-facing enterprise assessment scenarios in `internal/wafassessment` is fixture-backed only — each scenario's own `*Fixtures()` function hand-authors `wafval.CollectionResult` values rather than observing a real WAF. This is disclosed in-band in each scenario's `EvidenceRequirement` field ("fixture-backed in this phase").
-
-**Resolution path:** build a real `wafval.Observation` producer against a specific vendor's API/logs once lab or vendor access exists — mirrors the AV/NGAV Defender-vertical resolution path exactly.
-
 ## Resolved items
+
+### 1. Real WAF vendor adapter — RESOLVED (partial) 2026-11-10 -- self-hosted, no vendor tenant used or needed
+
+**Status:** Resolved for one real engine, with an honestly bounded scope. The user confirmed up front that no
+commercial WAF tenant (Cloudflare, F5, AWS WAF, etc.) is available for this initiative; rather than stay blocked on
+that, this used the same self-owned-target philosophy `internal/apibas/lab` already uses elsewhere in this repo:
+self-host a real, open-source WAF engine instead of a vendor API.
+
+**What was built:** `lab/wafmodsec/docker-compose.yml` runs a real ModSecurity + OWASP CRS v4 WAF
+(`owasp/modsecurity-crs`, nginx variant, pinned by image digest) in front of a permissive HTTP echo origin
+(`mendhak/http-https-echo`, also pinned by digest) -- no vendor account, tenant, or signup involved anywhere.
+`internal/vendors/modsecwaf` (`client.go`) is a real, I/O-performing HTTP client: `BuildRequest` turns a real
+`wafcatalog.RequestTemplate` into a genuine `*http.Request` (implements the `""` and `"query:<param>"`
+`PayloadLocation` forms only -- other forms return an explicit error rather than being silently misinterpreted),
+and `Client.Send` executes it against the live container. `internal/wafmodsec` (`bridge.go`) mirrors
+`internal/avdefender`'s split from `internal/vendors/defender` exactly: it turns the real raw HTTP response into
+two independent `wafval.CollectionResult` values -- the WAF engine's own enforcement decision (HTTP status code)
+and the origin app's own receipt confirmation (the echo server's distinctive JSON body, present only when a
+request actually reached it) -- both derived from the one proxied response, which is legitimate because the echo
+origin's body is produced by a genuinely separate process/container, not inferred.
+
+**Live-verified, not just built:** `internal/wafmodsec/live_test.go`'s `TestLive_RealWAFCatalogVectors_AgainstLiveModSecurityLab`
+was actually run against the real running container this session (gated behind `WAF_MODSEC_LAB_URL`, so it never
+runs in the normal `go test ./...` suite). It drives 4 real `wafcatalog` vectors end to end -- `SQLI-001`,
+`XSS-001`, `PATHTRAV-001`, `HTTPPARSE-002`, one per family, chosen because each uses only the `PayloadLocation`
+forms `BuildRequest` implements -- both malicious and benign legs, and asserts the real `wafval.Verdict`
+`wafval.EvaluateClaim` derives from the real response. All 8 sub-tests passed against the live container:
+malicious legs resolved to `VerdictBlocked` (`403` from ModSecurity for SQLi/XSS/path-traversal, `405` from
+nginx's own method whitelist for the TRACE verb-tampering case -- both equally prevent origin reach, which is all
+this axis models), benign legs resolved to `VerdictAllowed`. `lab/wafmodsec/smoke.sh` is a standalone curl-based
+re-check of the same 8 cases, also run and passing. This is a stronger resolution than the AV/NGAV Defender-bridge
+precedent this doc's old text pointed at -- that bridge was built but never run against a live tenant; this one
+has been run, live, for real.
+
+**What's still genuinely open (disclosed, not hidden):**
+- Only 4 of the catalog's 65 vectors are wired -- the rest need `header:`/`body:json:`/`body:multipart:` support in
+  `modsecwaf.BuildRequest`, which does not exist yet (explicit error today, not silent misinterpretation).
+- `wafmodsec` does not parse ModSecurity's audit log, so it never asserts `wafval.DetectionMatched`/`DetectionNotMatched`
+  -- an allowed-through malicious request resolves to `VerdictInconclusive` under `ClaimPrevention`, not
+  `VerdictMissed`, until that follow-up lands.
+- Not wired into any `internal/wafassessment` enterprise scenario or `internal/api` handler yet -- every scenario
+  there is still fixture-backed, exactly as before. This proves the adapter chain works live; it does not yet make
+  any scenario optionally-live.
+- This closes the gap for ModSecurity/CRS specifically, not for a commercial vendor API (Cloudflare/F5/AWS WAF) --
+  if/when the user gets a real tenant for one of those, that integration is still new work, on the
+  `internal/vendors/defender`-style pattern this now has a second real example of.
+
+**Resolution path for what's left:** extend `BuildRequest`'s PayloadLocation cases, add audit-log parsing to
+`wafmodsec`, and wire one `wafassessment` scenario (or a new one) to call the live adapter instead of reading a
+fixture when a lab/live flag is set -- each a bounded, separately-scoped follow-up.
+
+See `lab/wafmodsec/README.md` for how to run the lab and its own live test.
 
 ### 3. Three of the 9 new enterprise scenarios wire only 2 vectors each, with no deliberately-untested one — RESOLVED 2026-11-10
 

@@ -3987,6 +3987,45 @@ by design, needs real lab/vendor access that does not exist for this initiative)
 - `go build ./...`, `go vet ./internal/apibas/... ./internal/api/...`: clean on the final tree (origin/main plus
   only this change).
 
+## REQ-007 follow-up #3: real WAF vendor adapter, self-hosted (10 November 2026)
+
+Closed `docs/waf-mastery-qa-log.md` item #1 (no live WAF vendor adapter) -- partially, but genuinely, not by
+deferring again. The user confirmed no commercial WAF tenant (Cloudflare/F5/AWS WAF) is available; rather than
+stay blocked, this self-hosted a real open-source WAF engine instead, the same self-owned-target approach
+`internal/apibas/lab` already uses elsewhere in this repo.
+
+**Built:** `lab/wafmodsec/docker-compose.yml` -- a real ModSecurity + OWASP CRS v4 WAF (`owasp/modsecurity-crs`,
+pinned by digest) in front of a permissive echo origin (`mendhak/http-https-echo`, pinned by digest), no vendor
+account/tenant anywhere. `internal/vendors/modsecwaf` (new package) is a real HTTP client:
+`BuildRequest(baseURL, wafcatalog.RequestTemplate) (*http.Request, error)` implements the `""` and
+`"query:<param>"` `PayloadLocation` forms, erroring explicitly on anything else; `Client.Send` executes it for
+real. `internal/wafmodsec` (new package) mirrors `internal/avdefender`'s split from `internal/vendors/defender`:
+`BuildCollectionResults` turns one real HTTP response into two independent `wafval.CollectionResult`s -- the WAF
+engine's enforcement decision (HTTP status) and the origin app's own receipt confirmation (the echo server's
+distinctive JSON body, present only if the request actually reached it) -- legitimately independent because the
+echo origin is a genuinely separate container/process, not an inference.
+
+**Live-verified this session, not just built:** `internal/wafmodsec/live_test.go`'s
+`TestLive_RealWAFCatalogVectors_AgainstLiveModSecurityLab` (skipped unless `WAF_MODSEC_LAB_URL` is set, so it never
+runs in the normal suite) was run against the real running container: 4 real `wafcatalog` vectors end to end
+(`SQLI-001`, `XSS-001`, `PATHTRAV-001`, `HTTPPARSE-002` -- one per family, chosen for using only the
+`PayloadLocation` forms `BuildRequest` implements), both malicious and benign legs, asserting the real
+`wafval.Verdict` `wafval.EvaluateClaim` derives from the real response. All 8 sub-tests passed: malicious legs
+`VerdictBlocked` (403 from ModSecurity for SQLi/XSS/path-traversal, 405 from nginx's own method whitelist for
+TRACE verb tampering), benign legs `VerdictAllowed`. `lab/wafmodsec/smoke.sh` independently re-confirms the same 8
+cases via curl. This is stronger than the AV/NGAV Defender-bridge precedent this gap's old text pointed at --
+that bridge was built but never run against a live tenant; this one has actually been run, live.
+
+**Tests:** `go test ./internal/wafmodsec/... ./internal/vendors/modsecwaf/...` (unit, no live dependency) green;
+the same packages' live test green against the running container (`WAF_MODSEC_LAB_URL=http://localhost:8888`);
+`go build ./...`, `go vet ./internal/wafmodsec/... ./internal/vendors/modsecwaf/...` clean on the final tree.
+
+**Not done (disclosed, see `docs/waf-mastery-qa-log.md` item #1's resolution for detail):** only 4/65 vectors
+wired (header:/body: PayloadLocation forms unimplemented); no ModSecurity audit-log parsing, so a real Missed
+verdict isn't claimable yet (resolves Inconclusive instead); not wired into any `wafassessment` scenario or
+`internal/api` handler -- the adapter is proven standalone, scenarios stay fixture-backed; and this resolves the
+gap for ModSecurity specifically, not for a commercial vendor if the user later gets a real tenant.
+
 ## API BAS binding spec persisted on targets (10 November 2026)
 
 - **Built:** table `apibas_target_bindings`, store functions, `PUT|GET|DELETE /api/apibas/targets/{id}/binding` (manage-targets permission), and `POST .../binding/plan` with an empty body previewing the stored spec. Design in `docs/api-bas-scenario-binding.md`.

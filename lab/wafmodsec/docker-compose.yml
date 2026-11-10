@@ -1,0 +1,55 @@
+# wafmodsec lab: a real, self-hosted ModSecurity + OWASP CRS WAF (the
+# "waf" service) in front of a permissive echo origin (the "origin"
+# service). No vendor account or tenant is needed -- this is a live,
+# fully self-owned WAF engine, exercised the same way internal/apibas/lab
+# is: real HTTP requests, real enforcement decisions, never a fixture.
+#
+# "origin" always answers 200 and echoes back the request it received
+# (method, path, headers, body) as JSON. That echo is itself evidence:
+# if a request got through the WAF, origin's response contains it: if
+# ModSecurity blocked it, the client gets ModSecurity's own block page
+# (403) instead and origin never saw the request at all. One real HTTP
+# round trip through "waf" therefore yields two independent signals --
+# the WAF engine's enforcement decision and the origin's own receipt
+# confirmation -- exactly the two mechanisms wafval.Observation expects.
+#
+# Images pinned by digest (resolved 2026-11-10), not by rolling tag --
+# the upstream coreruleset/modsecurity-crs-docker README itself warns
+# rolling tags "should not be used in production"; this is a lab, but
+# the same reproducibility concern applies to a Claude-run lab.
+#
+# Usage: docker compose up -d   (from this directory)
+#        curl http://localhost:8888/search?q=hello   -> origin echo (allowed)
+#        curl "http://localhost:8888/search?q=%27%20UNION%20SELECT%20NULL--"  -> 403 (blocked)
+#        docker compose down -v
+name: wafmodsec-lab
+
+networks:
+  wafmodsec-lab:
+    driver: bridge
+
+services:
+  origin:
+    image: mendhak/http-https-echo@sha256:0fefe04350131d7bb28355e3bf037062643e45f4a8a32f23679529e1b09d8ce4
+    hostname: origin
+    restart: unless-stopped
+    environment:
+      HTTP_PORT: "8080"
+    networks: [wafmodsec-lab]
+
+  waf:
+    image: owasp/modsecurity-crs@sha256:b8d5bbf88c643800e31b248993858c335e4907ba0ee473d0c81c5726fb2c1bdc
+    hostname: waf
+    restart: unless-stopped
+    depends_on: [origin]
+    environment:
+      BACKEND: "http://origin:8080"
+      PORT: "8080"
+      MODSEC_RULE_ENGINE: "On"
+      PARANOIA: "1"
+      BLOCKING_PARANOIA: "1"
+      ANOMALY_INBOUND: "5"
+      ANOMALY_OUTBOUND: "4"
+    ports:
+      - "8888:8080"
+    networks: [wafmodsec-lab]
