@@ -112,7 +112,7 @@ func TestAPIBASRoutesAreRegistered(t *testing.T) {
 			"POST /api/apibas/targets/{id}/inventory", "GET /api/apibas/targets/{id}/inventory", "GET /api/apibas/targets/{id}/inventory/versions",
 			"POST /api/apibas/targets/{id}/inventory/drift", "POST /api/apibas/targets/{id}/binding/plan",
 			"PUT /api/apibas/targets/{id}/binding", "GET /api/apibas/targets/{id}/binding", "DELETE /api/apibas/targets/{id}/binding",
-			"POST /api/apibas/targets/{id}/binding/jobs", "POST /api/apibas/jobs", "GET /api/apibas/jobs/{id}",
+			"POST /api/apibas/targets/{id}/binding/jobs", "POST /api/apibas/jobs", "GET /api/apibas/jobs", "GET /api/apibas/jobs/{id}",
 			"PUT /api/apibas/targets/{id}/schedule", "GET /api/apibas/targets/{id}/schedule", "DELETE /api/apibas/targets/{id}/schedule",
 		} {
 			if !have[want] {

@@ -22,7 +22,7 @@ function storedBinding(stale) {
   };
 }
 
-async function setup({ stale = false, jobReason = 'EVIDENCE_INCONCLUSIVE', jobs = null, jobStatus = 'completed', schedule = null, environment = 'lab', scheduleRefusal = '', planBound = null, jobsNext = '', jobsPage2 = null, jobsFiltered = null } = {}) {
+async function setup({ stale = false, jobReason = 'EVIDENCE_INCONCLUSIVE', jobs = null, jobStatus = 'completed', schedule = null, environment = 'lab', scheduleRefusal = '', planBound = null, jobsNext = '', jobsPage2 = null, jobsFiltered = null, allJobs = null, allNext = '', allPage2 = null, allFail = false } = {}) {
   const dom = new JSDOM('<!doctype html><body><div id="toast"></div><div id="api-inv-targets"></div><div id="api-inv-detail"></div></body>');
   globalThis.document = dom.window.document;
   globalThis.window = dom.window;
@@ -56,6 +56,14 @@ async function setup({ stale = false, jobReason = 'EVIDENCE_INCONCLUSIVE', jobs 
           results: { pass: 1, fail: 1, error: 0, skipped: 1 } },
         { id: 'job-0', requested_by: 'a1', environment: 'lab', status: 'failed', failure_reason: 'execution timed out', bound: false, scenarios: 1, created_at: '2026-11-09T01:00:00Z',
           results: { pass: 0, fail: 0, error: 0, skipped: 0 } }] });
+    }
+    if (path === '/api/apibas/jobs' || path.startsWith('/api/apibas/jobs?')) {
+      if (allFail) return ok({ error: 'could not list jobs' }, 500);
+      if (path.includes('before=') && allPage2) return ok({ jobs: allPage2 });
+      const base = allJobs || [
+        { id: 'aj-2', target_id: 'shop-1', requested_by: 'schedule:' + EVIL, scheduled: true, environment: 'lab', status: 'completed', failure_reason: '', bound: true, scenarios: 2, created_at: '2026-11-10T03:00:00Z', results: { pass: 2, fail: 0, error: 0, skipped: 0 } },
+        { id: 'aj-1', target_id: 'gone-9', requested_by: 'a1', scheduled: false, environment: 'staging', status: 'failed', failure_reason: 'x', bound: false, scenarios: 1, created_at: '2026-11-09T03:00:00Z', results: { pass: 0, fail: 1, error: 0, skipped: 0 } }];
+      return ok(allNext ? { jobs: base, next: allNext } : { jobs: base });
     }
     if (path === '/api/apibas/jobs/job-1') {
       return ok({ id: 'job-1', status: jobStatus, environment: 'lab', failure_reason: '', started_at: null, finished_at: null,
@@ -523,4 +531,53 @@ test('an existing time-of-day schedule opens in time-of-day mode with its values
   assert.equal(doc.getElementById('api-inv-sched-days').value, 'sat');
   assert.equal(doc.getElementById('api-inv-sched-interval').hidden, true);
   assert.match(doc.getElementById('api-inv-sched-note').textContent, /Sat at 03:15 UTC/);
+});
+
+const allCalls = (calls) => calls.filter((c) => c.path === '/api/apibas/jobs' || c.path.startsWith('/api/apibas/jobs?'));
+
+test('the all-targets list loads on page load and shows target, environment, source and results as text', async () => {
+  const { dom, calls } = await setup();
+  const doc = dom.window.document;
+  assert.ok(allCalls(calls).length >= 1, 'the list was requested');
+  const list = doc.getElementById('api-inv-all-list');
+  assert.match(list.textContent, /scheduled/);
+  assert.ok(list.textContent.includes(EVIL), 'the hostile target name is shown literally');
+  assert.ok(list.textContent.includes('gone-9'), 'a job of a target that is no longer listed still shows its id');
+  assert.match(list.textContent, /manual/);
+  assert.equal(doc.querySelectorAll('#api-inv-all-list img, #api-inv-all-list script').length, 0);
+});
+
+test('changing a filter asks the server with only known choices and the target list offers the registered targets', async () => {
+  const { dom, m, calls } = await setup();
+  const doc = dom.window.document;
+  assert.ok([...doc.getElementById('api-inv-all-target').options].some((o) => o.value === 'shop-1'));
+  doc.getElementById('api-inv-all-env').value = 'staging';
+  doc.getElementById('api-inv-all-source').value = 'scheduled';
+  doc.getElementById('api-inv-all-status').value = 'failed';
+  doc.getElementById('api-inv-all-target').value = 'shop-1';
+  m.apiInvAllJobsFilter();
+  await settle();
+  const last = allCalls(calls).pop();
+  assert.equal(last.path, '/api/apibas/jobs?status=failed&environment=staging&source=scheduled&target_id=shop-1');
+  // The chosen values stay selected after the list is redrawn.
+  assert.equal(doc.getElementById('api-inv-all-env').value, 'staging');
+});
+
+test('load more adds the next page without repeating a job, using the server cursor unchanged', async () => {
+  const { dom, m, calls } = await setup({ allNext: 'CURSOR_1', allPage2: [
+    { id: 'aj-1', target_id: 'gone-9', requested_by: 'a1', scheduled: false, environment: 'staging', status: 'failed', bound: false, scenarios: 1, created_at: '2026-11-09T03:00:00Z', results: { pass: 0, fail: 1, error: 0, skipped: 0 } },
+    { id: 'aj-0', target_id: 'shop-1', requested_by: 'a1', scheduled: false, environment: 'lab', status: 'completed', bound: false, scenarios: 1, created_at: '2026-11-08T03:00:00Z', results: { pass: 1, fail: 0, error: 0, skipped: 0 } }] });
+  const doc = dom.window.document;
+  m.apiInvAllJobsMore();
+  await settle();
+  assert.ok(allCalls(calls).some((c) => c.path.includes('before=CURSOR_1')));
+  const rows = doc.querySelectorAll('#api-inv-all-list tbody tr');
+  assert.equal(rows.length, 3, 'aj-1 is not listed twice');
+});
+
+test('a failed all-targets list says so in the card and the rest of the page still works', async () => {
+  const { dom } = await setup({ allFail: true });
+  const doc = dom.window.document;
+  assert.match(doc.getElementById('api-inv-all-list').textContent, /could not list jobs/);
+  assert.ok(doc.getElementById('api-inv-binding'), 'the selected target is still shown');
 });

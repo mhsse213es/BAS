@@ -12,6 +12,7 @@ import (
 // and no credential reference.
 type APIBASJobSummary struct {
 	ID            string
+	TargetID      string
 	RequestedBy   string
 	Environment   string
 	Fixture       string
@@ -34,6 +35,10 @@ const MaxAPIBASJobList = 100
 type APIBASJobListOptions struct {
 	Limit  int    // clamped to 1..MaxAPIBASJobList
 	Status string // one of queued, running, completed, failed, cancelled; empty for all
+	// Environment narrows to jobs of one environment (lab, staging or production); empty for all.
+	Environment string
+	// Source is "scheduled" for jobs a schedule queued, "manual" for the rest, or empty for both.
+	Source string
 	// BeforeAt and BeforeID continue after the last job of the previous page (its creation time and id). Both are set, or neither.
 	BeforeAt *time.Time
 	BeforeID string
@@ -48,7 +53,13 @@ func ValidAPIBASJobStatus(s string) bool {
 	return false
 }
 
-// ListAPIBASJobSummaries returns a target's jobs, newest first, with the count of each grade. It asks for one more row than the page
+// ValidAPIBASJobSource reports whether s is a source a list can filter on.
+func ValidAPIBASJobSource(s string) bool { return s == "scheduled" || s == "manual" }
+
+// ValidAPIBASEnvironment reports whether s is an environment a list can filter on.
+func ValidAPIBASEnvironment(s string) bool { return s == "lab" || s == "staging" || s == "production" }
+
+// ListAPIBASJobSummaries returns a target's jobs, or every target's when targetID is empty, newest first, with the count of each grade. It asks for one more row than the page
 // holds and reports whether that row existed, so a caller knows if another page follows without a second query.
 func ListAPIBASJobSummaries(ctx context.Context, pool *pgxpool.Pool, targetID string, opts APIBASJobListOptions) (jobs []APIBASJobSummary, more bool, err error) {
 	limit := opts.Limit
@@ -61,6 +72,12 @@ func ListAPIBASJobSummaries(ctx context.Context, pool *pgxpool.Pool, targetID st
 	if opts.Status != "" && !ValidAPIBASJobStatus(opts.Status) {
 		return nil, false, fmt.Errorf("list apibas jobs: unknown status %q", opts.Status)
 	}
+	if opts.Environment != "" && !ValidAPIBASEnvironment(opts.Environment) {
+		return nil, false, fmt.Errorf("list apibas jobs: unknown environment %q", opts.Environment)
+	}
+	if opts.Source != "" && !ValidAPIBASJobSource(opts.Source) {
+		return nil, false, fmt.Errorf("list apibas jobs: unknown source %q", opts.Source)
+	}
 	if (opts.BeforeAt == nil) != (opts.BeforeID == "") {
 		return nil, false, fmt.Errorf("list apibas jobs: a continuation needs both a time and an id")
 	}
@@ -69,18 +86,20 @@ func ListAPIBASJobSummaries(ctx context.Context, pool *pgxpool.Pool, targetID st
 		beforeAt = *opts.BeforeAt
 	}
 	rows, err := pool.Query(ctx, `
-		SELECT j.id::text, j.requested_by, j.environment, j.fixture, j.status, j.failure_reason, jsonb_array_length(j.scenario_ids),
+		SELECT j.id::text, j.target_id, j.requested_by, j.environment, j.fixture, j.status, j.failure_reason, jsonb_array_length(j.scenario_ids),
 		       j.created_at, j.started_at, j.finished_at,
 		       COUNT(r.*) FILTER (WHERE r.result = 'PASS'), COUNT(r.*) FILTER (WHERE r.result = 'FAIL'),
 		       COUNT(r.*) FILTER (WHERE r.result = 'ERROR'), COUNT(r.*) FILTER (WHERE r.result = 'SKIPPED')
 		  FROM apibas_jobs j
 		  LEFT JOIN apibas_job_reports r ON r.job_id = j.id
-		 WHERE j.target_id = $1
+		 WHERE ($1 = '' OR j.target_id = $1)
 		   AND ($2 = '' OR j.status = $2)
 		   AND ($3::timestamptz IS NULL OR (j.created_at, j.id::text) < ($3::timestamptz, $4))
+		   AND ($6 = '' OR j.environment = $6)
+		   AND ($7 = '' OR ($7 = 'scheduled') = (left(j.requested_by, 9) = 'schedule:'))
 		 GROUP BY j.id
 		 ORDER BY j.created_at DESC, j.id::text DESC
-		 LIMIT $5`, targetID, opts.Status, beforeAt, opts.BeforeID, limit+1)
+		 LIMIT $5`, targetID, opts.Status, beforeAt, opts.BeforeID, limit+1, opts.Environment, opts.Source)
 	if err != nil {
 		return nil, false, fmt.Errorf("list apibas jobs: %w", err)
 	}
@@ -88,7 +107,7 @@ func ListAPIBASJobSummaries(ctx context.Context, pool *pgxpool.Pool, targetID st
 	out := []APIBASJobSummary{}
 	for rows.Next() {
 		var s APIBASJobSummary
-		if err := rows.Scan(&s.ID, &s.RequestedBy, &s.Environment, &s.Fixture, &s.Status, &s.FailureReason, &s.ScenarioCount,
+		if err := rows.Scan(&s.ID, &s.TargetID, &s.RequestedBy, &s.Environment, &s.Fixture, &s.Status, &s.FailureReason, &s.ScenarioCount,
 			&s.CreatedAt, &s.StartedAt, &s.FinishedAt, &s.Pass, &s.Fail, &s.Error, &s.Skipped); err != nil {
 			return nil, false, fmt.Errorf("read apibas job: %w", err)
 		}

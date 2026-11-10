@@ -519,3 +519,21 @@ export function exampleGraphQLSpec(op) {
     objects: [obj('alice', 'A'), obj('bob', 'B')],
   };
 }
+
+// ---- jobs across all targets
+
+export const JOB_ENVIRONMENTS = [['', 'All environments'], ['lab', 'Lab'], ['staging', 'Staging'], ['production', 'Production']];
+export const JOB_SOURCES = [['', 'Manual and scheduled'], ['manual', 'Manual only'], ['scheduled', 'Scheduled only']];
+
+// allJobsQuery builds the query string for the all-targets job list. A filter value that is not one of the known choices is left out, and
+// a target id is sent only if it is one of the known targets, so the page never sends what the server would refuse.
+export function allJobsQuery(f, knownTargets, before) {
+  const q = [];
+  const flt = f || {};
+  if (validJobStatus(flt.status || '') && flt.status) q.push('status=' + encodeURIComponent(flt.status));
+  if (JOB_ENVIRONMENTS.some((e) => e[0] === flt.environment) && flt.environment) q.push('environment=' + encodeURIComponent(flt.environment));
+  if (JOB_SOURCES.some((e) => e[0] === flt.source) && flt.source) q.push('source=' + encodeURIComponent(flt.source));
+  if (flt.target && (knownTargets || []).indexOf(flt.target) >= 0) q.push('target_id=' + encodeURIComponent(flt.target));
+  if (before) q.push('before=' + encodeURIComponent(before));
+  return q.length ? '?' + q.join('&') : '';
+}

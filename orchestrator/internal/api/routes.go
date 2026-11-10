@@ -682,6 +682,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Post("/api/apibas/targets", h.CreateAPIBASTarget)
 		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets", h.ListAPIBASTargets)
 		r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/jobs", h.SubmitAPIBASJob)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/jobs", h.ListAPIBASJobs)
 		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/jobs/{id}", h.GetAPIBASJob)
 		r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/jobs/{id}/cancel", h.CancelAPIBASJob)
 		r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/approvals", h.RequestAPIBASApproval)

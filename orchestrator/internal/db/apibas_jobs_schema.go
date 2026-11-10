@@ -62,6 +62,8 @@ func EnsureAPIBASJobSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE apibas_jobs ADD COLUMN IF NOT EXISTS allowed_hosts jsonb NOT NULL DEFAULT '[]'`,
 		`ALTER TABLE apibas_jobs ADD COLUMN IF NOT EXISTS allowed_paths jsonb NOT NULL DEFAULT '[]'`,
 		`ALTER TABLE apibas_targets ADD COLUMN IF NOT EXISTS allowed_paths jsonb NOT NULL DEFAULT '[]'`,
+		`CREATE INDEX IF NOT EXISTS apibas_jobs_created_idx ON apibas_jobs (created_at DESC, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS apibas_jobs_target_created_idx ON apibas_jobs (target_id, created_at DESC, id DESC)`,
 		`CREATE INDEX IF NOT EXISTS apibas_jobs_target_active_idx ON apibas_jobs (target_id) WHERE status IN ('queued', 'running')`,
 		`CREATE TABLE IF NOT EXISTS apibas_target_inventories (
 			id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),

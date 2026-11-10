@@ -20,6 +20,32 @@ import (
 // reports are read with GET /api/apibas/jobs/{id}.
 func (h *Handler) ListAPIBASTargetJobs(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if _, err := db.GetAPIBASTarget(r.Context(), h.db, id); errors.Is(err, db.ErrAPIBASTargetNotFound) {
+		jsonError(w, "target not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		jsonError(w, "could not read target", http.StatusInternalServerError)
+		return
+	}
+	h.listAPIBASJobs(w, r, id)
+}
+
+// ListAPIBASJobs lists jobs across every target, newest first. GET /api/apibas/jobs?target_id=T&environment=E&source=S&status=S&limit=N&before=C
+//
+// It takes the same permission as one target's list and returns the same summaries, each with its target_id, so one view can show what ran
+// anywhere. target_id narrows to one target (an unknown id gives an empty list, not an error, so a deleted target's history can still be
+// asked for), environment to lab, staging or production, and source to "scheduled" or "manual". The other parameters are as for a target's list.
+func (h *Handler) ListAPIBASJobs(w http.ResponseWriter, r *http.Request) {
+	target := r.URL.Query().Get("target_id")
+	if len(target) > 64 {
+		jsonError(w, "target_id is too long", http.StatusBadRequest)
+		return
+	}
+	h.listAPIBASJobs(w, r, target)
+}
+
+// listAPIBASJobs reads the paging and filter parameters and writes the page. An empty targetID means every target.
+func (h *Handler) listAPIBASJobs(w http.ResponseWriter, r *http.Request, targetID string) {
 	limit := 25
 	if v := r.URL.Query().Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -37,6 +63,20 @@ func (h *Handler) ListAPIBASTargetJobs(w http.ResponseWriter, r *http.Request) {
 		}
 		opts.Status = v
 	}
+	if v := r.URL.Query().Get("environment"); v != "" {
+		if !db.ValidAPIBASEnvironment(v) {
+			jsonError(w, "environment must be one of lab, staging, production", http.StatusBadRequest)
+			return
+		}
+		opts.Environment = v
+	}
+	if v := r.URL.Query().Get("source"); v != "" {
+		if !db.ValidAPIBASJobSource(v) {
+			jsonError(w, "source must be scheduled or manual", http.StatusBadRequest)
+			return
+		}
+		opts.Source = v
+	}
 	if v := r.URL.Query().Get("before"); v != "" {
 		at, jobID, ok := parseJobCursor(v)
 		if !ok {
@@ -45,14 +85,7 @@ func (h *Handler) ListAPIBASTargetJobs(w http.ResponseWriter, r *http.Request) {
 		}
 		opts.BeforeAt, opts.BeforeID = &at, jobID
 	}
-	if _, err := db.GetAPIBASTarget(r.Context(), h.db, id); errors.Is(err, db.ErrAPIBASTargetNotFound) {
-		jsonError(w, "target not found", http.StatusNotFound)
-		return
-	} else if err != nil {
-		jsonError(w, "could not read target", http.StatusInternalServerError)
-		return
-	}
-	jobs, more, err := db.ListAPIBASJobSummaries(r.Context(), h.db, id, opts)
+	jobs, more, err := db.ListAPIBASJobSummaries(r.Context(), h.db, targetID, opts)
 	if err != nil {
 		jsonError(w, "could not list jobs", http.StatusInternalServerError)
 		return
@@ -60,7 +93,8 @@ func (h *Handler) ListAPIBASTargetJobs(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, len(jobs))
 	for _, j := range jobs {
 		out = append(out, map[string]any{
-			"id": j.ID, "requested_by": j.RequestedBy, "environment": j.Environment, "status": j.Status, "failure_reason": j.FailureReason,
+			"id": j.ID, "target_id": j.TargetID, "requested_by": j.RequestedBy, "scheduled": strings.HasPrefix(j.RequestedBy, "schedule:"),
+			"environment": j.Environment, "status": j.Status, "failure_reason": j.FailureReason,
 			"bound": runnerproto.IsBoundFixture(j.Fixture), "scenarios": j.ScenarioCount,
 			"created_at": j.CreatedAt, "started_at": j.StartedAt, "finished_at": j.FinishedAt,
 			"results": map[string]int{"pass": j.Pass, "fail": j.Fail, "error": j.Error, "skipped": j.Skipped},

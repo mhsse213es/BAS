@@ -29,6 +29,7 @@ export function loadApiInventory() {
     }
     S.targets = r.targets;
     renderTargets();
+    loadAllJobs();
     setHeroStat('ai-hs-targets', S.targets.length);
     setHeroStat('ai-hs-inventories', S.targets.filter(function(t) { return t.inventory; }).length);
     if (S.sel && S.targets.some(function(t) { return t.id === S.sel; })) return loadDetail(S.version);
@@ -63,8 +64,93 @@ function renderTargets() {
       '<td>' + btn('Open', 'apiInvSelect', [t.id]) + '</td></tr>';
   }).join('');
   host.innerHTML = card('Targets', '<div class="tbl-wrap"><table><thead><tr><th>Target</th><th>Environment</th><th>Base URL</th><th>Inventory</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>',
-    { sub: S.targets.length + ' registered' });
+    { sub: S.targets.length + ' registered' }) +
+    card('Jobs across all targets', allJobsBody(), { sub: 'Newest first, every target' });
 }
+
+// ---- jobs across all targets
+
+var ALL = { jobs: [], next: '', loaded: false, error: '', status: '', environment: '', source: '', target: '' };
+
+function allSelect(id, label, choices, current) {
+  var opts = choices.map(function(c) {
+    return '<option value="' + x(c[0]) + '"' + (c[0] === current ? ' selected' : '') + '>' + x(c[1]) + '</option>';
+  }).join('');
+  return '<label class="ai-lbl">' + label + '<select id="' + id + '" class="ai-in"' + on('change', 'apiInvAllJobsFilter') + '>' + opts + '</select></label>';
+}
+
+function targetName(id) {
+  var t = S.targets.filter(function(a) { return a.id === id; })[0];
+  return t ? t.name : id;
+}
+
+function allJobsRows() {
+  if (ALL.error) return '<p class="ai-err">' + x(ALL.error) + '</p>';
+  if (!ALL.loaded) return '<p class="ai-note">Loading…</p>';
+  if (!ALL.jobs.length) return empty('runs', 'No jobs match', 'Change the filters, or run a target\'s stored test data.');
+  var rows = ALL.jobs.map(function(j) {
+    return '<tr><td>' + x(fmtDate(j.created_at)) + '</td><td><b>' + x(targetName(j.target_id)) + '</b><div class="ai-sub">' + x(j.target_id) + '</div></td>' +
+      '<td>' + pill(j.environment, M.envTone(j.environment)) + '</td>' +
+      '<td>' + (j.scheduled ? chip('scheduled', 'info') : chip('manual', 'muted')) + ' ' + (j.bound ? chip('bound', 'info') : chip('catalogue', 'muted')) + '</td>' +
+      '<td>' + pill(j.status, M.jobTone(j.status)) + '</td><td>' + pill(M.countsText(j.results), M.worstTone(j.results)) + '<div class="ai-sub">' + x(j.scenarios) + ' scenario(s)</div></td>' +
+      '<td>' + btn('View', 'apiInvAllJob', [j.id]) + '</td></tr>';
+  }).join('');
+  return '<div class="tbl-wrap"><table><thead><tr><th>Created</th><th>Target</th><th>Environment</th><th>Kind</th><th>Status</th><th>Results</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    (ALL.next ? '<div class="ai-row">' + btn('Load more', 'apiInvAllJobsMore') + '</div>' : '');
+}
+
+function allJobsBody() {
+  var targets = [['', 'All targets']].concat(S.targets.map(function(t) { return [t.id, t.name]; }));
+  return '<div class="ai-row">' + allSelect('api-inv-all-target', 'Target', targets, ALL.target) +
+    allSelect('api-inv-all-env', 'Environment', M.JOB_ENVIRONMENTS, ALL.environment) +
+    allSelect('api-inv-all-source', 'Source', M.JOB_SOURCES, ALL.source) +
+    allSelect('api-inv-all-status', 'Status', M.JOB_STATUSES, ALL.status) +
+    btn('Refresh', 'apiInvAllJobsRefresh') + '</div><div id="api-inv-all-list">' + allJobsRows() + '</div><div id="api-inv-alljobview"></div>';
+}
+
+function allQuery(before) {
+  return M.allJobsQuery(ALL, S.targets.map(function(t) { return t.id; }), before);
+}
+
+function paintAll() {
+  var host = el('api-inv-all-list');
+  if (host) host.innerHTML = allJobsRows();
+}
+
+// loadAllJobs reads the newest page for the current filters. A failure is shown in the card, not as a toast, because it runs on page load.
+function loadAllJobs() {
+  return apicall('/api/apibas/jobs' + allQuery('')).then(function(r) {
+    var err = M.errorText(r);
+    if (err || !r || !Array.isArray(r.jobs)) { ALL.error = err || 'The server returned an unexpected answer.'; ALL.loaded = true; ALL.jobs = []; ALL.next = ''; paintAll(); return; }
+    ALL.error = ''; ALL.loaded = true; ALL.jobs = r.jobs; ALL.next = typeof r.next === 'string' ? r.next : '';
+    paintAll();
+  }).catch(function(e) { ALL.error = 'Could not reach the server: ' + (e && e.message ? e.message : 'request failed'); ALL.loaded = true; paintAll(); });
+}
+
+export function apiInvAllJobsRefresh() { loadAllJobs(); }
+
+// apiInvAllJobsFilter reads the four choices and starts the list again from the newest job.
+export function apiInvAllJobsFilter() {
+  function val(id) { return el(id) ? el(id).value : ''; }
+  ALL.target = val('api-inv-all-target'); ALL.environment = val('api-inv-all-env'); ALL.source = val('api-inv-all-source'); ALL.status = val('api-inv-all-status');
+  loadAllJobs();
+}
+
+// apiInvAllJobsMore adds the next page below the jobs already shown. The cursor comes from the server and is passed back unchanged.
+export function apiInvAllJobsMore() {
+  if (!ALL.next) return;
+  var key = allQuery('');
+  apicall('/api/apibas/jobs' + allQuery(ALL.next)).then(function(r) {
+    if (key !== allQuery('') || !r || !Array.isArray(r.jobs)) return; // the filters changed while this was loading
+    var have = {};
+    ALL.jobs.forEach(function(j) { have[j.id] = true; });
+    ALL.jobs = ALL.jobs.concat(r.jobs.filter(function(j) { return !have[j.id]; }));
+    ALL.next = typeof r.next === 'string' ? r.next : '';
+    paintAll();
+  }).catch(function(e) { showToast('Could not load more jobs: ' + (e && e.message ? e.message : 'request failed'), 'err'); });
+}
+
+export function apiInvAllJob(id) { followJob(id, 'api-inv-alljobview'); }
 
 export function apiInvSelect(id) {
   S.sel = id; S.cls = 'all'; S.version = 0; S.inv = null; S.versions = []; S.stored = null; S.jobs = []; S.jobsNext = ''; S.jobsStatus = ''; S.schedule = null; S.polls = {};

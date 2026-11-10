@@ -289,3 +289,11 @@ When a schedule turns itself off, one `apibas_schedule_paused` notification is r
 - **When.** Once, by the run that makes the fifth failure in a row, or at the moment a time-of-day schedule's stored clock settings cannot be read. Failures one to four raise nothing; a schedule that is already paused is never claimed, so it cannot announce itself again. Saving the schedule resumes it, and a later pause announces again.
 - **Content.** `target_id`, `consecutive_failures` (0 for an unreadable clock) and `reason`, and a message that says the schedule will not run again until it is saved again. The reason is the same text a viewer sees as the schedule's last result, cut to 200 characters. It can name a credential reference or a stale-inventory condition, never a credential value. Webhooks leave the platform, so review where they point before relying on this.
 - **Not covered.** A run that was skipped because another assessment was running, or a job that ran and found problems, is not a pause and raises nothing here.
+
+## Jobs across all targets (added 10 November 2026)
+
+`GET /api/apibas/jobs` lists jobs of every target, newest first, with the same permission as one target's list (view API BAS runs) and the same summary per job (counts of each grade, no report bodies, no credential references). Each job also carries `target_id` and `scheduled` (true when a schedule queued it).
+
+Parameters, all optional: `target_id`, `environment` (`lab`, `staging`, `production`), `source` (`scheduled` or `manual`), `status` (as for a target's list), `limit` (1 to 100, default 25) and `before` (the `next` value of the previous page, passed back unchanged). An unknown parameter value is a 400. A `target_id` that matches nothing, including a deleted target, gives an empty list, not an error. The per-target list is the same code with the target fixed.
+
+The console shows this as a "Jobs across all targets" card under the target table, with target, environment, source and status choices, Refresh, Load more and View (the same job view as a target's own list). It loads when the page loads; a failure is shown in the card and does not stop the rest of the page.

@@ -5,7 +5,7 @@ import {
   exampleBindingSpec, changeLines, errorText, MAX_OBSERVED,
   jobTone, resultTone, isFinalStatus, resultText, newJobKey, storedNote, exampleWriteBindingSpec, countsText, worstTone,
   opKey, writeOperations, readChoices, defaultReadOperation, buildWriteObject, mergeWriteObject, writeObjectsOf, removeObjectAt, identityNames, MAX_WRITE_BODY,
-  parseEveryHours, parseClock, clockLabel, everyLabel, scheduleState, scheduleTone, scheduleNote,
+  allJobsQuery, parseEveryHours, parseClock, clockLabel, everyLabel, scheduleState, scheduleTone, scheduleNote,
   boundKindLabel, boundWho, exampleChecksSpec, validJobStatus, JOB_STATUSES, graphQLExampleOp, opFullKey, exampleGraphQLSpec,
 } from '../../src/features/api-inventory-model.js';
 
@@ -436,4 +436,16 @@ test('clockLabel names every day, a list of days, and the timezone', () => {
   assert.equal(clockLabel({ at: '02:30', timezone: 'Asia/Kolkata', days: [] }), 'every day at 02:30 Asia/Kolkata');
   assert.equal(clockLabel({ at: '09:00', timezone: 'UTC', days: ['mon', 'fri'] }), 'Mon, Fri at 09:00 UTC');
   assert.match(scheduleNote({ enabled: true, at: '09:00', timezone: 'UTC', days: ['sun'], next_run_at: '2026-11-15T09:00:00Z' }), /Runs Sun at 09:00 UTC, read scenarios only/);
+});
+
+test('allJobsQuery sends only known filters, a known target and the cursor, in a fixed order', () => {
+  const known = ['shop-1', 'shop-2'];
+  assert.equal(allJobsQuery({}, known, ''), '');
+  assert.equal(allJobsQuery(null, known, ''), '');
+  assert.equal(allJobsQuery({ status: 'failed', environment: 'staging', source: 'scheduled', target: 'shop-2' }, known, 'C_1'),
+    '?status=failed&environment=staging&source=scheduled&target_id=shop-2&before=C_1');
+  // Unknown choices are dropped rather than sent.
+  assert.equal(allJobsQuery({ status: 'bogus', environment: 'prod', source: 'robot', target: 'nope' }, known, ''), '');
+  // A cursor is encoded.
+  assert.equal(allJobsQuery({}, known, 'a b&c'), '?before=a%20b%26c');
 });
