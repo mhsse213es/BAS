@@ -20,17 +20,39 @@ This is the single place to check before claiming WAF Mastery is "done" or makin
 
 **Resolution path:** build a real `wafval.Observation` producer against a specific vendor's API/logs once lab or vendor access exists — mirrors the AV/NGAV Defender-vertical resolution path exactly.
 
-### 3. Three of the 9 new enterprise scenarios wire only 2 vectors each, with no deliberately-untested one
-
-**Status:** Open, deferred as low-risk — found during the final whole-branch review (2026-10-16, fresh Sonnet subagent, 0 Critical/0 Important findings overall).
-
-**What's confirmed (verified directly 2026-10-16):** `AudspectHTTPProtocolIntegrityFixtures()` (HTTPPARSE-001 Missed, HTTPPARSE-002 Blocked), `AudspectFileUploadFixtures()`-equivalent in `catalog_fileupload.go` (FILEUP-001 Missed, FILEUP-002 Blocked), and the routing/cache scenario in `catalog_routingcache.go` (CACHE-001 Missed, CACHE-002 Blocked) each wire exactly 2 vectors, both with fixtures supplied — no vector is left out of the fixture map to exercise the `ScenarioIncomplete`-via-`UntestedVectorIDs` path.
-
-**Why it's deferred:** `EvaluateScenario`'s `Incomplete`-without-failure branch is already covered by other scenarios' own seed data (confirmed at Phase 4 of the exploit-prevention scenario and reused by the shared `aggregateByPrecedence` rule) — this is a gap in these 3 scenarios' own seed data, not an uncovered code path overall.
-
-**Resolution path:** add a third, deliberately-fixture-omitted vector to each of these 3 scenarios' catalogs if/when a reviewer wants per-scenario Incomplete coverage, not just suite-wide coverage.
-
 ## Resolved items
+
+### 3. Three of the 9 new enterprise scenarios wire only 2 vectors each, with no deliberately-untested one — RESOLVED 2026-11-10
+
+**Status:** Resolved (see `docs/api-bas-mastery-qa-log.md`, "REQ-007: WAF assessment hardening", same-day follow-up,
+for full detail).
+
+**What was wrong (found 2026-10-16):** `AudspectHTTPProtocolIntegrityFixtures()` (HTTPPARSE-001 Missed,
+HTTPPARSE-002 Blocked), `catalog_fileupload.go`'s fixtures (FILEUP-001 Missed, FILEUP-002 Blocked), and
+`catalog_routingcache.go`'s fixtures (CACHE-001 Missed, CACHE-002 Blocked) each wired exactly 2 vectors, both with
+fixtures supplied — no vector was left out of the fixture map to exercise the `ScenarioIncomplete`-via-
+`UntestedVectorIDs` path for these 3 scenarios specifically (the path itself was already covered suite-wide by
+other scenarios' own seed data, e.g. the exploit-prevention and policy-integrity scenarios' own untested legs).
+
+**What changed:** added one genuinely new, real, CWE-mapped `wafcatalog` vector per family rather than inventing a
+throwaway scenario-only placeholder: `FILEUP-003` (path traversal via a crafted upload filename, CWE-22),
+`HTTPPARSE-003` (HTTP response splitting via CRLF injection into a reflected header, CWE-93), and `CACHE-003`
+(cache poisoning via parameter cloaking with an unkeyed query-string parameter, CWE-20). Each was wired into its
+scenario's `ContributingVectorIDs` (2→3) but deliberately left out of that scenario's own `*Fixtures()` map, so
+`EvaluateScenario`'s `aggregateByPrecedence` now puts the new ID into `UntestedVectorIDs` for that scenario
+directly — proven by three new `..._IsDeliberatelyUntested` tests, one per scenario, asserting both that the
+fixture map has no entry for the new ID and that `UntestedVectorIDs` contains it (outcome stays `ScenarioFail`:
+the pre-existing Missed vector still wins by the non-offsetting precedence rule, since this closes an
+evidence-density gap, not an outcome-changing one).
+
+The routing-cache scenario's own doc comment previously said "named honestly rather than padded with invented
+vectors" — that stance was about not fabricating a vector with no CWE grounding just to pad a count; CACHE-003 is
+a real, independently documented cache-poisoning technique (unkeyed/cloaked parameters, distinct from CACHE-001's
+unkeyed header and CACHE-002's extension-based deception), so the comment was updated rather than contradicted.
+
+`wafcatalog`'s total seed count moved 62→65; `TestAudspectWAFAttackCatalog_ReturnsValidatedCatalog` and the three
+per-family `..._ValidAndUnique` tests were updated to match. Full `go build ./...`, `go vet`, and the
+`wafcatalog`/`wafassessment`/`internal/api` test suites are green.
 
 ### 4. Only 5 of 10 enterprise scenarios have a dedicated handler-level test — RESOLVED 2026-11-10
 

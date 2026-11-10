@@ -3957,6 +3957,29 @@ Item #3 (3 scenarios wire only 2 vectors each, no deliberately-untested vector t
 **not closed this round**: its own resolution path calls for a new third attack vector per family in `wafcatalog`,
 which is new content, not a test-density fix, and was not picked up here.
 
+**Follow-up, same day (item #3 closed in full):** added one genuinely new, real, CWE-mapped `wafcatalog` vector per
+affected family -- `FILEUP-003` (path traversal via a crafted upload filename, CWE-22), `HTTPPARSE-003` (HTTP
+response splitting via CRLF header injection, CWE-93), `CACHE-003` (cache poisoning via parameter cloaking on an
+unkeyed query parameter, CWE-20) -- following the exact `NewAttackVector` construction pattern every other vector
+in the catalog already uses (malicious/benign `RequestTemplate` pair, `StandardsMapping`, provenance string).
+Wired each into its scenario's `ContributingVectorIDs` (`AudspectHTTPProtocolIntegrityScenario`,
+`AudspectFileUploadContentTrustScenario`, `AudspectRoutingCacheIntegrityScenario`: 2->3 vectors) but deliberately
+left each out of that scenario's own `*Fixtures()` map, so `EvaluateScenario` now puts each new ID into
+`UntestedVectorIDs` for that specific scenario (outcome stays `ScenarioFail`, since the pre-existing Missed vector
+still wins by precedence -- this closes an evidence-density gap, not an outcome change). Three new
+`TestAudspect*Fixtures_*IsDeliberatelyUntested` tests (one per scenario) assert both that the fixture map omits
+the new ID and that `UntestedVectorIDs` contains it; the existing `..._ReferencesExactTwoVectors` tests were
+renamed/updated to `...ExactThreeVectors`. `wafcatalog`'s seed total moved 62->65 vectors;
+`TestAudspectWAFAttackCatalog_ReturnsValidatedCatalog` and the 3 per-family `..._ValidAndUnique` tests were updated
+to match. `docs/waf-mastery-qa-log.md` item #3 moved from Open to Resolved.
+
+Tests: `go test ./internal/wafcatalog/... ./internal/wafassessment/...` and the same `internal/api` filter as
+above, all green; `go build ./...`, `go vet ./internal/wafcatalog/... ./internal/wafassessment/... ./internal/api/...`
+clean on the final tree.
+
+Every item on `docs/waf-mastery-qa-log.md` is now Resolved except item #1 (no live vendor WAF adapter -- deferred
+by design, needs real lab/vendor access that does not exist for this initiative).
+
 ### Tests and results
 - `go test ./internal/api/... -run "TestWafScenarioJSONHandler|TestGetWAFExploitPreventionScenario|RBAC|Matrix" -v`:
   all pass (20 tests after the follow-up below, including `TestRBACMatrix_NoDrift`) -- no route changes were needed,
