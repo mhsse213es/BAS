@@ -218,10 +218,10 @@ func TestWafExploitPreventionLiveJSONHandler_NoLabConfigured_Returns503(t *testi
 	}
 }
 
-// Review Focus: the other 4 live scenario endpoints share
+// Review Focus: the other 5 live scenario endpoints share
 // wafScenarioLiveJSONHandler with exploit-prevention's -- this proves the
 // 503 refusal path generically, for each one's own Run<Scenario>Live,
-// rather than retesting the shared handler body 4 more times.
+// rather than retesting the shared handler body 5 more times.
 func TestWafScenarioLiveJSONHandler_NoLabConfigured_Returns503(t *testing.T) {
 	t.Setenv(wafModsecLabURLEnv, "")
 	h := &Handler{}
@@ -230,6 +230,7 @@ func TestWafScenarioLiveJSONHandler_NoLabConfigured_Returns503(t *testing.T) {
 		wafmodsec.RunRoutingCacheIntegrityLive,
 		wafmodsec.RunAPIProtectionLive,
 		wafmodsec.RunLegitimateTrafficLive,
+		wafmodsec.RunFileUploadContentTrustLive,
 	} {
 		rr := httptest.NewRecorder()
 		h.wafScenarioLiveJSONHandler(run)(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/x/live", nil))

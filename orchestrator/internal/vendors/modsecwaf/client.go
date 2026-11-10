@@ -10,9 +10,11 @@
 package modsecwaf
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strings"
@@ -52,14 +54,35 @@ type RawResponse struct {
 	Body       []byte
 }
 
+// multipartPlaceholderFilename is the fixed filename used when Payload is
+// the file's CONTENT ("body:multipart:<field>" with field != "filename") --
+// the attack lives in the content, not the name, so the name is arbitrary
+// and stays constant across requests.
+const multipartPlaceholderFilename = "upload.bin"
+
+// multipartPlaceholderContent is the fixed, inert file content used when
+// Payload is the file's NAME ("body:multipart:filename") -- the attack
+// lives in the filename, not the content, so the content is arbitrary.
+const multipartPlaceholderContent = "test"
+
 // BuildRequest turns one wafcatalog.RequestTemplate into a real *http.Request
-// against baseURL. It implements exactly the two PayloadLocation forms this
-// package's live thin slice uses today -- "" (no payload; method+path alone,
-// e.g. HTTP verb tampering) and "query:<param>" (a single query-string
-// parameter) -- and returns an error for any other form rather than silently
-// misinterpreting it. Extending this to header:/body: forms is a deliberate
-// follow-up, not an oversight: see lab/wafmodsec/docker-compose.yml's own doc
-// comment on this version's scope.
+// against baseURL. It implements three PayloadLocation forms: "" (no
+// payload; method+path alone, e.g. HTTP verb tampering), "query:<param>" (a
+// single query-string parameter), and "body:multipart:<field>" (a real
+// multipart/form-data body) -- and returns an error for any other form
+// rather than silently misinterpreting it. header:/body:json:/body:xml:
+// forms remain a deliberate, disclosed gap: see
+// lab/wafmodsec/docker-compose.yml's own doc comment on this version's
+// scope.
+//
+// For "body:multipart:<field>", <field> == "filename" means Payload IS the
+// file's name (e.g. a path-traversal string) -- content is the fixed
+// multipartPlaceholderContent. Any other <field> means Payload IS the
+// file's content, sent as the form field named <field>, under the fixed
+// multipartPlaceholderFilename. Either way the raw Payload is sent
+// verbatim, unescaped, exactly like every other PayloadLocation form --
+// this is what lets a real WAF's multipart parser see the genuine attack
+// string, not a sanitized stand-in.
 func BuildRequest(baseURL string, tmpl wafcatalog.RequestTemplate) (*http.Request, error) {
 	u, err := url.Parse(strings.TrimRight(baseURL, "/") + tmpl.Path)
 	if err != nil {
@@ -68,15 +91,44 @@ func BuildRequest(baseURL string, tmpl wafcatalog.RequestTemplate) (*http.Reques
 	switch {
 	case tmpl.PayloadLocation == "":
 		// No payload to place; method+path alone is the whole request.
+		return http.NewRequest(tmpl.Method, u.String(), nil)
 	case strings.HasPrefix(tmpl.PayloadLocation, "query:"):
 		param := strings.TrimPrefix(tmpl.PayloadLocation, "query:")
 		q := u.Query()
 		q.Set(param, tmpl.Payload)
 		u.RawQuery = q.Encode()
+		return http.NewRequest(tmpl.Method, u.String(), nil)
+	case strings.HasPrefix(tmpl.PayloadLocation, "body:multipart:"):
+		field := strings.TrimPrefix(tmpl.PayloadLocation, "body:multipart:")
+		var body bytes.Buffer
+		w := multipart.NewWriter(&body)
+		var part io.Writer
+		var content string
+		if field == "filename" {
+			part, err = w.CreateFormFile("file", tmpl.Payload)
+			content = multipartPlaceholderContent
+		} else {
+			part, err = w.CreateFormFile(field, multipartPlaceholderFilename)
+			content = tmpl.Payload
+		}
+		if err != nil {
+			return nil, fmt.Errorf("modsecwaf: building multipart part for %q: %w", tmpl.PayloadLocation, err)
+		}
+		if _, err := part.Write([]byte(content)); err != nil {
+			return nil, fmt.Errorf("modsecwaf: writing multipart content for %q: %w", tmpl.PayloadLocation, err)
+		}
+		if err := w.Close(); err != nil {
+			return nil, fmt.Errorf("modsecwaf: closing multipart writer for %q: %w", tmpl.PayloadLocation, err)
+		}
+		req, err := http.NewRequest(tmpl.Method, u.String(), &body)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		return req, nil
 	default:
-		return nil, fmt.Errorf("modsecwaf: unsupported PayloadLocation %q (only \"\" and \"query:<param>\" are implemented)", tmpl.PayloadLocation)
+		return nil, fmt.Errorf("modsecwaf: unsupported PayloadLocation %q (only \"\", \"query:<param>\", and \"body:multipart:<field>\" are implemented)", tmpl.PayloadLocation)
 	}
-	return http.NewRequest(tmpl.Method, u.String(), nil)
 }
 
 // Send builds a real request from tmpl and executes it against the live WAF,

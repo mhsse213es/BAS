@@ -104,6 +104,7 @@ vectors, each with its own `Run<Scenario>Live(ctx, client)` in
 | `routing-cache-integrity` | `CACHE-002`, `CACHE-003` (2/3) | `Inconclusive`, `Blocked` |
 | `api-protection` | `API-003`, `APIFLOW-005` (2/8) | `Inconclusive`, `Inconclusive` |
 | `legitimate-traffic` | `SQLI-001`, `XSS-001`, `PATHTRAV-001`, `RATE-001` benign legs (4/6) | all `Allowed` |
+| `file-upload-content-trust` | `FILEUP-001`, `FILEUP-003` (2/3) | `Inconclusive`, `Blocked` |
 
 `api-protection`'s `APIFLOW-005` comes from `internal/wafapiflow`, a
 sibling catalog to `wafcatalog` with its own, structurally identical
@@ -115,20 +116,37 @@ BENIGN counterpart, not its malicious payload -- it evaluates
 `wafval.ClaimFalsePositive`, and `BuildCollectionResults` is claim-agnostic,
 so no change was needed there either.
 
-The `CACHE-002`/`API-003`/`APIFLOW-005` `Inconclusive` verdicts are a real,
-confirmed finding, not an adapter gap: CRS genuinely allows all three
-through (200, verified by curl against the running container) because it
-has no business-logic or cache-layer awareness to catch a
-static-extension cache-deception trick, a `fields=*` over-exposure, or an
-absurd `limit=` value -- an honest statement about this specific generic
-WAF engine's scope, same category as the `CACHE-*` note below.
+The `CACHE-002`/`API-003`/`APIFLOW-005`/`FILEUP-001` `Inconclusive` verdicts
+are a real, confirmed finding, not an adapter gap: CRS genuinely allows all
+four through (200, verified by curl against the running container) because
+it has no business-logic, cache-layer, or (at this paranoia level)
+upload-content-inspection awareness to catch a static-extension
+cache-deception trick, a `fields=*` over-exposure, an absurd `limit=`
+value, or a PHP web shell hidden in an uploaded file's content -- an
+honest statement about this specific generic WAF engine's configured
+scope, not a bug anywhere in this chain.
+
+`file-upload-content-trust` needed `modsecwaf.BuildRequest` to grow real
+multipart/form-data support (`"body:multipart:<field>"`): `<field> ==
+"filename"` means Payload is the file's NAME (so `FILEUP-003`'s path
+traversal travels verbatim in the real `Content-Disposition` header, which
+CRS's generic traversal rule catches regardless of which field carries it
+-- `Blocked`); any other `<field>` means Payload is the file's CONTENT,
+under a fixed filename (so `FILEUP-001`'s PHP web shell is the literal
+uploaded bytes). `FILEUP-002` (a decompression-bomb archive) stays
+unwired: its catalog `Payload` is a human description
+("`<highly compressed archive engineered to expand to many GB on
+extraction>`"), not real bytes, and this lab's origin has no
+archive-extraction logic for a bomb to even detonate against -- there is
+no honest way to replay this one yet, even with multipart support in
+place.
 
 ```sh
 WAF_MODSEC_LAB_URL=http://localhost:8888 \
   go test ./internal/wafmodsec/... -run TestLive_ -v
 ```
 
-**5 scenarios get NO live wiring, for real, disclosed reasons -- not an
+**4 scenarios get NO live wiring, for real, disclosed reasons -- not an
 oversight:**
 - `automated-abuse` (`RATE-001/002`, `BOTABUSE-001..004`): every vector is
   a multi-request, timed-burst/behavioral claim ("50 requests in 2
@@ -141,9 +159,6 @@ oversight:**
   pipeline completeness and timing (event-to-alert latency, archive
   completeness) -- there is no HTTP request to replay at all; this needs
   a real alerting backend, not a WAF.
-- `file-upload-content-trust` (`FILEUP-001..003`): every vector's
-  `PayloadLocation` is `body:multipart:...`, a real, disclosed
-  `modsecwaf.BuildRequest` gap.
 - `origin-resilience` (`WAFORIGIN-001..005`): deployment-topology claims
   (direct-origin reachability, fail-open behavior, cross-node config
   consistency) that need a multi-node/dual-path network setup this lab's
@@ -159,16 +174,16 @@ oversight:**
 `modsecwaf.Client.Send` (real HTTP) ->
 `wafmodsec.BuildCollectionResults` (real response -> `wafval.Observation`) ->
 `wafval.EvaluateClaim` (real verdict) -- working end to end against a real,
-running WAF engine, across 5 enterprise scenarios now. This is a stronger
+running WAF engine, across 6 enterprise scenarios now. This is a stronger
 resolution than `internal/avdefender`'s own precedent (the Defender bridge
 was built but never run against a live tenant); this one has actually been
 run, live, in this session.
 
 **Does not (yet) prove / cover:**
 - Only a handful of the catalog's 65+ vectors are wired -- the ones whose
-  `PayloadLocation` is `""` or `query:<param>`. Header-based
-  (`header:X-Forwarded-Host`), body-based (`body:json:...`), and
-  multipart-based (`body:multipart:...`) forms are real gaps in
+  `PayloadLocation` is `""`, `query:<param>`, or `body:multipart:<field>`.
+  Header-based (`header:X-Forwarded-Host`) and other body-based
+  (`body:json:...`, `body:xml:...`) forms are real gaps in
   `modsecwaf.BuildRequest`, documented there, not silently unsupported.
 - `wafmodsec` never parses ModSecurity's audit log, so it never asserts
   `wafval.DetectionMatched`/`DetectionNotMatched` -- an allowed-through

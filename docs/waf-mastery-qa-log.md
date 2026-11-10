@@ -152,12 +152,33 @@ curl-confirmed ground truth from the third follow-up exactly (`HTTPPARSE-002` bl
 `CACHE-002`/`API-003`/`APIFLOW-005` inconclusive, all 4 legitimate-traffic benign legs allowed), every assertion
 `evidenceSource:"live_execution"`, none `"fixture"`.
 
-**Resolution path for what's left:** extend `BuildRequest`'s PayloadLocation cases to cover more vectors; add
-audit-log parsing to `wafmodsec` so a real `VerdictMissed` becomes claimable; a second, deliberately-weakened lab
-instance to unblock `policy-integrity`; a burst-driving harness (plus real rate-limit config in the lab) to unblock
-`automated-abuse`; multipart support in `modsecwaf.BuildRequest` to unblock `file-upload-content-trust`; a
-multi-node/dual-path lab topology to unblock `origin-resilience`; a real alerting backend to unblock
-`detection-telemetry`.
+**Fifth same-day follow-up: built real multipart support and unblocked `file-upload-content-trust`.** User response
+to the disclosed 5-scenario gap: "if each needs real new capability so be it" -- greenlighting real new work
+instead of leaving them unwired. Started with the most tractable: `modsecwaf.BuildRequest` gained a real
+`"body:multipart:<field>"` case (RED-first: 2 new tests proving the raw payload travels verbatim on the wire,
+then implemented with Go's `mime/multipart`). `<field> == "filename"` sends Payload as the file's NAME (a fixed,
+inert placeholder content); any other `<field>` sends Payload as the file's CONTENT (a fixed placeholder
+filename) -- either way the real attack string reaches the WAF unescaped, same discipline as every other
+PayloadLocation form.
+
+New `internal/wafmodsec/fileuploadcontenttrust.go` wires 2 of `AudspectFileUploadContentTrustScenario`'s 3
+vectors: `FILEUP-003` (path-traversal filename) is curl-confirmed `Blocked` -- CRS's generic traversal rule fires
+on the filename regardless of which field carries it. `FILEUP-001` (PHP web-shell content) is curl-confirmed
+`Inconclusive` -- CRS's default rule set does not inspect uploaded file content for embedded PHP, a genuine,
+confirmed finding about this configuration, not a bug. `FILEUP-002` (a decompression-bomb archive) stays
+unwired even with multipart support in place: its catalog `Payload` is a human description, not real bytes, and
+this lab's origin has no archive-extraction logic for a bomb to even detonate against -- multipart support alone
+doesn't make this one honestly replayable.
+
+Wired into the API too, same loop as the other 5 live routes: `GET /api/waf/scenarios/file-upload-content-trust/live`.
+Live-verified end to end (adapter + scenario + API), `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the
+new route matrixed.
+
+**Resolution path for what's left:** extend `BuildRequest`'s remaining PayloadLocation cases (header:/body:json:/body:xml:);
+add audit-log parsing to `wafmodsec` so a real `VerdictMissed` becomes claimable; a second, deliberately-weakened
+lab instance to unblock `policy-integrity`; a burst-driving harness (plus real rate-limit config in the lab) to
+unblock `automated-abuse`; a multi-node/dual-path lab topology to unblock `origin-resilience`; a real alerting
+backend to unblock `detection-telemetry`.
 
 See `lab/wafmodsec/README.md` for how to run the lab and every live test (`go test ./internal/wafmodsec/... -run TestLive_ -v`).
 

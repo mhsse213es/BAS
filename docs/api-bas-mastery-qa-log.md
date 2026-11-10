@@ -4189,7 +4189,7 @@ no ModSecurity audit-log parsing, so `VerdictMissed` still isn't claimable from 
   next (burst-driving harness, SIEM backend, multipart support, multi-node lab topology, second weakened-policy
   lab instance) rather than leaving them unwired.
 
-## API BAS write-block form (10 November 2026)
+## API BAS Write objects form (10 November 2026)
 
 - **Built:** a Write objects form on the Binding card that adds, edits and removes write objects in the test-data JSON: operation, path values, owner, attack and restore bodies, read-back, ignored fields. Pure helpers in `api-inventory-model.js` (`writeOperations`, `readChoices`, `buildWriteObject`, `mergeWriteObject`, `writeObjectsOf`, `removeObjectAt`, `identityNames`).
 - **Calls made:** the box stays the source of truth (the form merges into it and refuses a box that is not valid JSON); client checks mirror the server's so errors appear before a request; same operation and values replace; adding turns on `allow_writes`; the form stores nothing (Preview and Save are unchanged); identities and read objects stay JSON.
@@ -4203,3 +4203,28 @@ no ModSecurity audit-log parsing, so `VerdictMissed` still isn't claimable from 
 - **Calls made:** inventory paths are full request paths (basePath prefixed) so scope, binding and drift work unchanged; only http and https schemes produce servers; other swagger versions are refused by name; the old "Swagger 2.0 is rejected" test case was removed because that behaviour is intentionally replaced.
 - **Tests (pass):** document facts and prefixing, parameters, bodies and responses, auth and classes, defaults never kept, equivalence with the OpenAPI 3 fixture on shared operations, variants and refusals, basePath ignored for OpenAPI 3 documents. `go test ./internal/apibas/openapi` passes.
 - **Not run:** a real customer Swagger document; GraphQL still not imported.
+
+## REQ-007 follow-up #8: real multipart support closes `file-upload-content-trust` partially (10 November 2026)
+
+- **Built:** `modsecwaf.BuildRequest` gained a real `"body:multipart:<field>"` case using Go's `mime/multipart` --
+  `<field> == "filename"` sends Payload as the file's NAME (fixed, inert placeholder content); any other `<field>`
+  sends Payload as the file's CONTENT (fixed placeholder filename). Either way the raw Payload reaches the wire
+  unescaped, matching every other PayloadLocation form's discipline. New
+  `internal/wafmodsec/fileuploadcontenttrust.go` (`RunFileUploadContentTrustLive`) wires 2 of
+  `AudspectFileUploadContentTrustScenario`'s 3 vectors; new route `GET /api/waf/scenarios/file-upload-content-trust/live`
+  registered through the same `liveScenarios` loop as the other 5.
+- **Calls made:** `FILEUP-002` (decompression bomb) stays unwired even with multipart support in place -- its
+  catalog `Payload` is a human description, not real bytes, and this lab's origin has no archive-extraction logic
+  for a bomb to detonate against; multipart support alone doesn't make every multipart vector honestly replayable.
+- **Tests (pass):** 2 new unit tests in `modsecwaf` (RED-first, asserting the raw wire bytes carry the literal
+  payload -- one reads the parsed part content, the other reads the raw `Content-Disposition` header directly
+  since Go's own `Part.FileName()` accessor sanitizes path-traversal strings via `filepath.Base`, which would have
+  hidden exactly the bug this test exists to catch); 1 new live test
+  (`TestLive_FileUploadContentTrustScenario_TwoOfThreeVectorsLive`) and its API counterpart, both run against the
+  real container -- `FILEUP-003` curl-confirmed `Blocked`, `FILEUP-001` curl-confirmed `Inconclusive` (CRS's
+  default rule set doesn't inspect upload content for embedded PHP, a real finding, not a bug).
+  `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the new route matrixed. `go build ./...`/`go vet ./...`
+  clean; full `wafassessment`/`wafmodsec`/`modsecwaf` suites green.
+- **Not run:** staging; the remaining 4 scenarios (`automated-abuse`, `detection-telemetry`, `origin-resilience`,
+  `policy-integrity`) are next, per the user's "if each needs real new capability so be it."
+- **Limits:** `FILEUP-002` remains genuinely unwired; `modsecwaf.BuildRequest` still lacks `header:`/`body:json:`/`body:xml:` forms.
