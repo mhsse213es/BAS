@@ -55,3 +55,24 @@ receives only credential *names*.
    scenarios and fixture, audited, approval-bound like other jobs).
 2. A console page for the preview and for entering test data (the next item).
 3. A target-side state check (a customer-provided read endpoint) so write operations can be bound.
+
+
+## Stored test data (added 10 November 2026)
+
+A target keeps one binding spec, so the test data is entered once. Table `apibas_target_bindings` (one row per target, removed with the
+target), routes `PUT|GET|DELETE /api/apibas/targets/{id}/binding`, all requiring the manage-targets permission.
+
+- **Saving validates.** The spec is bound against the newest inventory before it is stored; a spec that does not bind (unknown owner,
+  bad path value, unknown operation, shared credential, unknown field) is refused and nothing changes. The inventory version it was
+  checked against is stored.
+- **Stale is reported, not hidden.** If a newer inventory has been imported since, `GET` returns `stale: true` with both versions.
+  The spec is not re-validated or edited automatically; saving it again re-checks it against the newest inventory.
+- **Reading needs the manage permission**, not the view permission, because the protected values can themselves be sensitive
+  (a name, an address). The preview route still needs only view.
+- **Preview from stored data:** `POST .../binding/plan` with an empty body uses the stored spec; with a body it previews that
+  body without storing it. With neither it answers 400 saying so.
+- **Audit** records `apibas.binding.save` (inventory version, counts of identities, objects, scenarios, skipped) and
+  `apibas.binding.delete`. It never records names or values.
+- Credential values are still never stored; the spec holds credential names only.
+
+Not built: history of spec versions (saving replaces), and editing in the console (the page still previews a spec typed into it).

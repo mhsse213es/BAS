@@ -3986,3 +3986,10 @@ by design, needs real lab/vendor access that does not exist for this initiative)
   since WAF scenario content is slug-driven through the existing generic handler closure.
 - `go build ./...`, `go vet ./internal/apibas/... ./internal/api/...`: clean on the final tree (origin/main plus
   only this change).
+
+## API BAS binding spec persisted on targets (10 November 2026)
+
+- **Built:** table `apibas_target_bindings`, store functions, `PUT|GET|DELETE /api/apibas/targets/{id}/binding` (manage-targets permission), and `POST .../binding/plan` with an empty body previewing the stored spec. Design in `docs/api-bas-scenario-binding.md`.
+- **Calls made:** one spec per target, replaced on save (no history); reading needs the manage permission because protected values can be sensitive; save validates against the newest inventory and refuses a spec that does not bind; staleness is reported rather than auto-fixed; audit stores counts only.
+- **Tests (pass):** nothing stored gives 404 on read and delete and a clear 400 on empty-body preview; save without an inventory gives 404; an unknown owner and an unknown field are refused and nothing is stored; save then read back keeps content and shows `stale:false`; preview from stored spec gives the same 2 scenarios; replacing keeps one row and changes `updated_by`; importing a changed inventory flips `stale` to true with both versions; an analyst gets 403 on read and write; delete then 404; the RBAC matrix lists the three routes. Existing plan test (body supplied) still passes.
+- **Limits:** no spec history; console still previews typed data rather than editing the stored spec; running the stored plan as a job is the next step.

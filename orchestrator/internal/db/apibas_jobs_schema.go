@@ -78,6 +78,13 @@ func EnsureAPIBASJobSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			body            jsonb       NOT NULL,
 			UNIQUE (target_id, version)
 		)`,
+		`CREATE TABLE IF NOT EXISTS apibas_target_bindings (
+			target_id           text        PRIMARY KEY REFERENCES apibas_targets(id) ON DELETE CASCADE,
+			spec                jsonb       NOT NULL,
+			updated_by          text        NOT NULL,
+			updated_at          timestamptz NOT NULL DEFAULT NOW(),
+			validated_inventory integer     NOT NULL CHECK (validated_inventory >= 1)
+		)`,
 		`CREATE TABLE IF NOT EXISTS apibas_job_reports (
 			job_id         uuid        NOT NULL REFERENCES apibas_jobs(id) ON DELETE CASCADE,
 			scenario_id    text        NOT NULL,

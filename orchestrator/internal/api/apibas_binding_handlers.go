@@ -1,10 +1,15 @@
 package api
 
 import (
-	"encoding/json"
+	"bytes"
+	"errors"
+	"io"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/audspect/bas/internal/apibas/binding"
+	"github.com/audspect/bas/internal/db"
 )
 
 // PlanAPIBASBinding previews how a target's stored inventory binds to test data the caller supplies: which scenarios would be
@@ -12,10 +17,25 @@ import (
 // receives no credential value (only the names of credentials the runner would resolve). The newest inventory is used, or the
 // version named by ?version=.
 func (h *Handler) PlanAPIBASBinding(w http.ResponseWriter, r *http.Request) {
-	var spec binding.Spec
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&spec); err != nil {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err != nil {
+		jsonError(w, "the test data is too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		// No body: preview the test data stored on the target.
+		b, err := db.GetAPIBASBinding(r.Context(), h.db, chi.URLParam(r, "id"))
+		if errors.Is(err, db.ErrAPIBASBindingNotFound) {
+			jsonError(w, "no test data stored for this target; send it in the body", http.StatusBadRequest)
+			return
+		} else if err != nil {
+			jsonError(w, "could not read the test data", http.StatusInternalServerError)
+			return
+		}
+		raw = b.Spec
+	}
+	spec, err := decodeBindingSpec(raw)
+	if err != nil {
 		jsonError(w, "invalid body", http.StatusBadRequest)
 		return
 	}
