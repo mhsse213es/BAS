@@ -176,7 +176,7 @@ mappings:
     mapping_class: "PRODUCT"
     evidence_source: "Canonical Ubuntu OVAL CVE feed (focal, jammy, noble); see req021-spike/results.json for file SHA-256 and generator timestamp"
     affected_component: "Ubuntu packages named in OVAL: [\"activemq\"]"
-    fixed_versions: {"focal": {"corresponding": ["activemq"], "fixed": ["activemq < 5.15.11-1ubuntu0.1~esm1"]}, "jammy": {"corresponding": ["activemq"], "fixed": ["activemq < 5.16.1-1ubuntu0.1", "activemq < 5.16.1-1ubuntu0.1~esm1"]}}
+    fixed_versions: {"focal": {"corresponding": ["activemq"], "fixed": ["activemq < 5.15.11-1ubuntu0.1~esm1"]}, "jammy": {"corresponding": ["activemq"], "fixed": ["activemq < 5.16.1-1ubuntu0.1"]}}
     vendor_version_build_relationship: "Ubuntu OVAL dpkg evr less-than state (vendor fixed version per package)"
     status: "SELF_RECORDED_NOT_INDEPENDENT"
     open_issue: "none recorded"
