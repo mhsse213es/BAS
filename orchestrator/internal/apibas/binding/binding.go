@@ -74,10 +74,35 @@ type WriteSpec struct {
 	IgnoreFields []string `json:"ignore_fields,omitempty"`
 }
 
+// FunctionSpec is one privileged read-only route that an ordinary identity must not be able to call. Privileged is an identity that
+// is allowed to call it (it proves the route works), Ordinary is the identity that must be refused, and ProtectedValues are
+// distinctive values the privileged response contains and an ordinary identity must never receive. Without them a 2xx to the
+// ordinary identity could not be told from a harmless one, so at least one is required.
+type FunctionSpec struct {
+	Operation       string            `json:"operation"` // a GET, for example "GET /v2/admin/users/{userId}"
+	Params          map[string]string `json:"params,omitempty"`
+	Privileged      string            `json:"privileged"`
+	Ordinary        string            `json:"ordinary"`
+	ProtectedValues []string          `json:"protected_values"`
+}
+
+// PropertySpec is one object the owner reads, whose response must not contain values the owner should not see (an internal flag, a
+// stored hash, another party's data). ForbiddenValues are distinctive values of those properties, at least one is required, and
+// they are checked in the owner's own response.
+type PropertySpec struct {
+	Operation       string            `json:"operation"` // a GET, for example "GET /v2/profiles/{pid}"
+	Params          map[string]string `json:"params,omitempty"`
+	Owner           string            `json:"owner"`
+	ForbiddenValues []string          `json:"forbidden_values"`
+}
+
 // Spec is the customer-supplied test data.
 type Spec struct {
 	Identities []IdentitySpec `json:"identities"`
 	Objects    []ObjectSpec   `json:"objects"`
+	// Functions and Properties add function-level and property-level read checks. Both are optional and read-only.
+	Functions  []FunctionSpec `json:"functions,omitempty"`
+	Properties []PropertySpec `json:"properties,omitempty"`
 	// AllowWrites acknowledges that the objects listed with a write block may be changed while the test runs, and are put back by the
 	// restore request afterwards. Without it no write is bound.
 	AllowWrites bool `json:"allow_writes,omitempty"`
@@ -90,6 +115,9 @@ type Bound struct {
 	Attacker   string `json:"attacker"`
 	Victim     string `json:"victim"`
 	Path       string `json:"path"`
+	// Kind is "function" or "property" for those checks; empty for an object-level check. For a function check Attacker is the ordinary
+	// identity and Victim the privileged one; for a property check both are the owner.
+	Kind string `json:"kind,omitempty"`
 	// Write is true for a scenario that attempts a state change; its result is judged by reading the object back.
 	Write bool `json:"write,omitempty"`
 }
@@ -135,6 +163,7 @@ func planLimits(writes bool) []string {
 	out := []string{
 		"Only object-level operations on objects the customer supplied are bound: reads, and PUT or PATCH writes when the test data allows them. DELETE and other operations are skipped because a repeated request cannot put the object back.",
 		"A read scenario is graded on the HTTP response alone. It proves the attack was refused and leaked none of the protected values supplied; it cannot see a leak of a value the customer did not supply.",
+		"Function-level and property-level checks are read-only and graded on the response alone: they find a privileged route that answers an ordinary identity, or a forbidden value in an owner's response, only for the routes, identities and values supplied. Writing a field that should be read-only (mass assignment) is not tested.",
 		"The scenarios have no detection integration (detection is not evaluated) and no regulatory mapping.",
 		"An operation passes only for the objects and identities supplied. It says nothing about other objects, roles or parameters.",
 	}
@@ -170,7 +199,7 @@ func (s Spec) Validate(inv *openapi.Inventory) error {
 		}
 		creds[id.CredentialRef] = true
 	}
-	if len(s.Objects) == 0 {
+	if len(s.Objects) == 0 && len(s.Functions) == 0 && len(s.Properties) == 0 {
 		return errors.New("binding: no test objects supplied")
 	}
 	ops := map[string]openapi.Operation{}
@@ -211,6 +240,78 @@ func (s Spec) Validate(inv *openapi.Inventory) error {
 			return fmt.Errorf("binding: object %d repeats an earlier object", i+1)
 		}
 		seen[key] = true
+	}
+	return s.checkExtras(names, ops, inv != nil)
+}
+
+// checkExtras validates the function-level and property-level entries.
+func (s Spec) checkExtras(names map[string]bool, ops map[string]openapi.Operation, haveInventory bool) error {
+	checkRead := func(kind string, n int, operation string, params map[string]string, values []string, what string) error {
+		if haveInventory {
+			op, ok := ops[operation]
+			if !ok {
+				return fmt.Errorf("binding: %s %d: operation %q is not in the inventory", kind, n, truncate(operation, 80))
+			}
+			if op.Method != "GET" {
+				return fmt.Errorf("binding: %s %d: %s is not a GET; only read-only routes are checked here", kind, n, op.Key())
+			}
+			if op.Auth == openapi.AuthNone {
+				return fmt.Errorf("binding: %s %d: the specification declares %s public, so there is nothing to refuse", kind, n, op.Key())
+			}
+			if err := checkParams(op, ObjectSpec{Params: params}); err != nil {
+				return fmt.Errorf("binding: %s %d: %w", kind, n, err)
+			}
+		}
+		for k, v := range params {
+			if !paramValueRE.MatchString(v) {
+				return fmt.Errorf("binding: %s %d: value of %q must be 1 to 128 letters, digits and . _ ~ -", kind, n, truncate(k, 40))
+			}
+		}
+		if len(values) == 0 {
+			return fmt.Errorf("binding: %s %d needs at least one %s: without one, a successful response could not be told from a harmless one", kind, n, what)
+		}
+		if len(values) > 20 {
+			return fmt.Errorf("binding: %s %d: at most 20 values", kind, n)
+		}
+		for _, v := range values {
+			if len(v) < 4 || len(v) > 200 || strings.ContainsAny(v, "\r\n\x00") {
+				return fmt.Errorf("binding: %s %d: a %s must be 4 to 200 characters on one line", kind, n, what)
+			}
+		}
+		return nil
+	}
+	seenF := map[string]bool{}
+	for i, f := range s.Functions {
+		n := i + 1
+		if !names[f.Privileged] || !names[f.Ordinary] {
+			return fmt.Errorf("binding: function %d: privileged and ordinary must be listed identities", n)
+		}
+		if f.Privileged == f.Ordinary {
+			return fmt.Errorf("binding: function %d: the privileged and ordinary identities must differ", n)
+		}
+		if err := checkRead("function", n, f.Operation, f.Params, f.ProtectedValues, "protected value"); err != nil {
+			return err
+		}
+		key := f.Operation + "|" + f.Ordinary + "|" + fmt.Sprint(sortedParams(f.Params))
+		if seenF[key] {
+			return fmt.Errorf("binding: function %d repeats an earlier function", n)
+		}
+		seenF[key] = true
+	}
+	seenP := map[string]bool{}
+	for i, p := range s.Properties {
+		n := i + 1
+		if !names[p.Owner] {
+			return fmt.Errorf("binding: property check %d: owner %q is not a listed identity", n, truncate(p.Owner, 40))
+		}
+		if err := checkRead("property check", n, p.Operation, p.Params, p.ForbiddenValues, "forbidden value"); err != nil {
+			return err
+		}
+		key := p.Operation + "|" + p.Owner + "|" + fmt.Sprint(sortedParams(p.Params))
+		if seenP[key] {
+			return fmt.Errorf("binding: property check %d repeats an earlier check", n)
+		}
+		seenP[key] = true
 	}
 	return nil
 }
@@ -416,6 +517,36 @@ func Bind(inv *openapi.Inventory, spec Spec) (*Plan, error) {
 			next++
 		}
 	}
+	for _, f := range spec.Functions {
+		if next > 999 {
+			return nil, fmt.Errorf("binding: more than %d scenarios; supply fewer objects", MaxScenarios)
+		}
+		op := opsByKey[f.Operation]
+		objID := fmt.Sprintf("bound-%d", next)
+		plan.Fixture.Objects = append(plan.Fixture.Objects, fixture.Object{ID: objID, OwnerID: f.Privileged, Status: "bound"})
+		sc := scenarioForFunction(next, op, f, objID, resolvePath(op, f.Params))
+		if err := sc.Validate(); err != nil {
+			return nil, fmt.Errorf("binding: generated scenario is invalid (a binder bug): %w", err)
+		}
+		plan.Scenarios = append(plan.Scenarios, sc)
+		plan.Bound = append(plan.Bound, Bound{ScenarioID: sc.ID, Operation: op.Key(), Attacker: f.Ordinary, Victim: f.Privileged, Path: sc.Steps[1].Path, Kind: "function"})
+		next++
+	}
+	for _, p := range spec.Properties {
+		if next > 999 {
+			return nil, fmt.Errorf("binding: more than %d scenarios; supply fewer objects", MaxScenarios)
+		}
+		op := opsByKey[p.Operation]
+		objID := fmt.Sprintf("bound-%d", next)
+		plan.Fixture.Objects = append(plan.Fixture.Objects, fixture.Object{ID: objID, OwnerID: p.Owner, Status: "bound"})
+		sc := scenarioForProperty(next, op, p, objID, resolvePath(op, p.Params))
+		if err := sc.Validate(); err != nil {
+			return nil, fmt.Errorf("binding: generated scenario is invalid (a binder bug): %w", err)
+		}
+		plan.Scenarios = append(plan.Scenarios, sc)
+		plan.Bound = append(plan.Bound, Bound{ScenarioID: sc.ID, Operation: op.Key(), Attacker: p.Owner, Victim: p.Owner, Path: sc.Steps[1].Path, Kind: "property"})
+		next++
+	}
 	if len(plan.Scenarios) == 0 && len(plan.Skipped) == 0 {
 		return nil, errors.New("binding: nothing in the inventory can be bound to the objects supplied")
 	}
@@ -466,6 +597,81 @@ func firstOtherOwner(objs []ObjectSpec, owner string) string {
 	}
 	sort.Strings(names)
 	return names[0]
+}
+
+// scenarioForFunction builds the function-level check: a privileged identity calls a privileged read-only route (the baseline, which
+// shows the route works), then an ordinary identity calls it. The ordinary identity must be refused and must receive none of the
+// protected values the privileged response carries.
+func scenarioForFunction(n int, op openapi.Operation, f FunctionSpec, objID, path string) contract.Scenario {
+	id := fmt.Sprintf("API-BAS-AUTHZ-%03d", n)
+	objective := fmt.Sprintf("%s calls the privileged function %s that is meant for %s.", f.Ordinary, op.Key(), f.Privileged)
+	return contract.Scenario{
+		ID:              id,
+		Name:            fmt.Sprintf("Bound: %s cannot call the privileged function %s", f.Ordinary, op.Key()),
+		Category:        "AUTHZ",
+		Claim:           "function_level",
+		AttackObjective: objective,
+		ThreatModel: contract.ThreatModel{
+			Attacker: "an authenticated ordinary identity of the customer's API", Identity: f.Ordinary,
+			AccessLevel: "valid credential supplied by the customer, without the privilege the function needs", Objective: objective,
+		},
+		Preconditions: contract.Preconditions{Fixture: FixtureName, Identities: []string{f.Ordinary, f.Privileged}, Object: objID},
+		Steps: []contract.Step{
+			{ID: "baseline-privileged", Role: "baseline", Identity: f.Privileged, Auth: "valid", Method: "GET", Path: path,
+				Hypothesis: "The privileged identity calls the function. If this fails, the scenario is not testable."},
+			{ID: "attack-ordinary-identity", Role: "attack", Identity: f.Ordinary, Auth: "valid", Method: "GET", Path: path,
+				Hypothesis: "An ordinary identity's call to the privileged function is refused and returns none of the protected values."},
+		},
+		DeniedStatuses:  []int{403, 404},
+		ForbiddenValues: f.ProtectedValues,
+		ExpectedControl: "An ordinary identity cannot call a privileged function. The request is refused and no protected value from the privileged response is returned.",
+		GroundTruth: contract.GroundTruth{
+			Adapters: []string{"state", "response"},
+			Check:    "The response to the ordinary identity's call carries none of the protected values supplied. The target offers no independent state, so this is response evidence only.",
+		},
+		DetectionAssert: contract.DetectionAssertion{
+			Status: "not_evaluated", Reason: "Bound to a customer API with no detection integration.",
+		},
+		SideEffectClass: "READ_ONLY",
+		Evidence:        []string{"sanitized_request", "sanitized_response"},
+	}
+}
+
+// scenarioForProperty builds the property-level read check: the owner reads their own object (the baseline), then reads it again and
+// the response is checked for values the owner should never receive. A clean 2xx is the pass, because the request is meant to succeed.
+func scenarioForProperty(n int, op openapi.Operation, p PropertySpec, objID, path string) contract.Scenario {
+	id := fmt.Sprintf("API-BAS-AUTHZ-%03d", n)
+	objective := fmt.Sprintf("%s reads their own object through %s and looks for properties they should not receive.", p.Owner, op.Key())
+	return contract.Scenario{
+		ID:              id,
+		Name:            fmt.Sprintf("Bound: %s's own response from %s carries no forbidden property", p.Owner, op.Key()),
+		Category:        "AUTHZ",
+		Claim:           "property_level",
+		AttackObjective: objective,
+		ThreatModel: contract.ThreatModel{
+			Attacker: "an authenticated identity of the customer's API reading its own object", Identity: p.Owner,
+			AccessLevel: "valid credential supplied by the customer, owning the requested object", Objective: objective,
+		},
+		Preconditions: contract.Preconditions{Fixture: FixtureName, Identities: []string{p.Owner}, Object: objID},
+		Steps: []contract.Step{
+			{ID: "baseline-owner", Role: "baseline", Identity: p.Owner, Auth: "valid", Method: "GET", Path: path,
+				Hypothesis: "The owner reads their own object. If this fails, the scenario is not testable."},
+			{ID: "attack-read-own-object", Role: "attack", Identity: p.Owner, Auth: "valid", Method: "GET", Path: path,
+				Hypothesis: "The owner's response carries none of the forbidden property values."},
+		},
+		CleanIsEnforced: true,
+		ForbiddenValues: p.ForbiddenValues,
+		ExpectedControl: "The API returns an object's allowed properties only. None of the forbidden property values supplied appears in the owner's response.",
+		GroundTruth: contract.GroundTruth{
+			Adapters: []string{"state", "response"},
+			Check:    "The owner's response carries none of the forbidden values supplied. A property whose value was not supplied cannot be seen, so this is response evidence only.",
+		},
+		DetectionAssert: contract.DetectionAssertion{
+			Status: "not_evaluated", Reason: "Bound to a customer API with no detection integration.",
+		},
+		SideEffectClass: "READ_ONLY",
+		Evidence:        []string{"sanitized_request", "sanitized_response"},
+	}
 }
 
 func scenarioFor(n int, op openapi.Operation, victim ObjectSpec, attacker, objID, path string) contract.Scenario {

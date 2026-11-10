@@ -195,3 +195,31 @@ A target can run its stored test data on a fixed interval. `PUT|GET|DELETE /api/
 - **Not built:** time-of-day or weekday schedules (the interval is in hours), run-now from the schedule card (use Run stored test data), notifications when a schedule pauses, and schedules for catalogue (non-bound) jobs.
 
 Tests: `internal/db/apibas_schedule_store_test.go`, `internal/api/apibas_schedule_test.go`, and the Schedule card tests in `api-inventory-dom.test.mjs` and `api-inventory-model.test.mjs`.
+
+## Function-level and property-level checks (added 10 November 2026)
+
+The test data can carry two more kinds of read-only check next to `objects`. Both are optional; a spec may now hold only these (`objects` can be empty or absent).
+
+**Function level, `functions`.** A privileged read-only route that an ordinary identity must not be able to call.
+
+```json
+{ "operation": "GET /v2/admin/reports/{reportId}", "params": {"reportId": "R-1"},
+  "privileged": "admin", "ordinary": "alice", "protected_values": ["a value only the admin response contains"] }
+```
+
+The scenario calls the route as `privileged` (the baseline, which shows the route works; if it fails the result is SKIPPED, not a pass), then as `ordinary`. It passes when the ordinary call is refused (403 or 404) and carries none of the protected values; it fails when a protected value comes back. A 2xx without a protected value is reported as inconclusive, which is why at least one value is required.
+
+**Property level, `properties`.** An object whose response must not contain values its owner should not see.
+
+```json
+{ "operation": "GET /v2/profiles/{pid}", "params": {"pid": "P-ALICE"}, "owner": "alice",
+  "forbidden_values": ["a value alice must never receive"] }
+```
+
+The scenario reads the object as `owner` twice (baseline, then the checked read). It passes when the response is a clean 2xx with none of the forbidden values, and fails when one appears.
+
+Rules checked when saving: identities must be listed (and differ for a function), the operation must be a GET in the inventory that the specification does not declare public, path values must match the route, and at least one value (4 to 200 characters, one line, at most 20) is required. Duplicates are refused. The plan marks each check with its `kind` (`function` or `property`), and the console shows the kind and a plain description of who does what. "Fill a function and property example" starts from placeholders.
+
+**What this does not test.** Both checks are graded on the response alone and only for the routes, identities and values supplied. Writing a field that should be read-only (mass assignment) is not tested; neither are function-level checks on routes that change state, because a repeated request could not put the state back. The plan's limits say so.
+
+Tests: `internal/apibas/binding/function_property_test.go` (plan shape, 21 refusals, round trip, and the real runner against a flawed server, where both checks FAIL as exploited, and a fixed one, where both PASS), the API test `TestAPIBASFunctionAndPropertyChecksSaveAndRun`, and the web model and page tests.

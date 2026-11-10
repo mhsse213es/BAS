@@ -6,6 +6,7 @@ import {
   jobTone, resultTone, isFinalStatus, resultText, newJobKey, storedNote, exampleWriteBindingSpec, countsText, worstTone,
   opKey, writeOperations, readChoices, defaultReadOperation, buildWriteObject, mergeWriteObject, writeObjectsOf, removeObjectAt, identityNames, MAX_WRITE_BODY,
   parseEveryHours, everyLabel, scheduleState, scheduleTone, scheduleNote,
+  boundKindLabel, boundWho, exampleChecksSpec,
 } from '../../src/features/api-inventory-model.js';
 
 const OPS = [
@@ -333,4 +334,43 @@ test('scheduleNote says what runs, whether writes are included, and the last att
   assert.match(on, /Last attempt 2026-11-10 20:00 UTC: queued/);
   assert.match(scheduleNote({ enabled: false, every_hours: 6 }), /schedule is off/);
   assert.match(scheduleNote({ enabled: true, every_hours: 1, next_run_at: 'garbage' }), /unknown time/);
+});
+
+test('parseBindingSpec accepts function and property checks without an objects list', () => {
+  assert.equal(parseBindingSpec('{"identities":[],"functions":[]}').error, '');
+  assert.equal(parseBindingSpec('{"identities":[],"properties":[]}').error, '');
+  assert.match(parseBindingSpec('{"identities":[]}').error, /objects/);
+  assert.match(parseBindingSpec('{"identities":[],"functions":{}}').error, /objects/);
+});
+
+test('boundKindLabel and boundWho describe each kind of check in its own words', () => {
+  assert.equal(boundKindLabel({}), 'read');
+  assert.equal(boundKindLabel({ kind: 'function' }), 'function');
+  assert.equal(boundKindLabel({ kind: 'property' }), 'property');
+  assert.equal(boundKindLabel(null), 'read');
+  assert.equal(boundWho({ attacker: 'alice', victim: 'bob' }), 'alice → bob');
+  assert.match(boundWho({ kind: 'function', attacker: 'alice', victim: 'admin' }), /alice \(ordinary\).*admin \(privileged\)/);
+  assert.equal(boundWho({ kind: 'property', attacker: 'alice', victim: 'alice' }), 'alice reads their own object');
+  assert.equal(boundWho(null), '');
+});
+
+test('exampleChecksSpec picks a privileged-looking GET for the function and holds only placeholders', () => {
+  const ops = [
+    { method: 'GET', path: '/v2/orders/{orderId}', auth: 'required', path_params: ['orderId'], classes: ['object_level_authorization'] },
+    { method: 'GET', path: '/v2/admin/reports/{reportId}', auth: 'required', path_params: ['reportId'], classes: ['function_level_authorization'] },
+    { method: 'GET', path: '/v2/catalog', auth: 'none' },
+    { method: 'PATCH', path: '/v2/orders/{orderId}', auth: 'required', path_params: ['orderId'] },
+  ];
+  const s = exampleChecksSpec(ops);
+  assert.equal(s.functions[0].operation, 'GET /v2/admin/reports/{reportId}');
+  assert.deepEqual(s.functions[0].params, { reportId: 'REPLACE-F' });
+  assert.equal(s.properties[0].operation, 'GET /v2/orders/{orderId}');
+  assert.deepEqual(s.properties[0].params, { orderId: 'REPLACE-P' });
+  assert.deepEqual(s.objects, []);
+  assert.notEqual(s.functions[0].privileged, s.functions[0].ordinary);
+  assert.ok(s.identities.every((i) => i.credential_ref.startsWith('REPLACE/')));
+  // With no usable operation it still gives a fillable skeleton.
+  const empty = exampleChecksSpec([]);
+  assert.match(empty.functions[0].operation, /^GET /);
+  assert.match(empty.properties[0].operation, /^GET /);
 });

@@ -71,7 +71,8 @@ export function parseBindingSpec(text) {
   if (raw.length > (1 << 20)) return { spec: null, error: 'The test data is too large' };
   let spec;
   try { spec = JSON.parse(raw); } catch (e) { return { spec: null, error: 'The test data is not valid JSON: ' + (e && e.message ? e.message : 'parse error') }; }
-  if (!spec || typeof spec !== 'object' || Array.isArray(spec) || !Array.isArray(spec.identities) || !Array.isArray(spec.objects)) {
+  const checks = spec && (Array.isArray(spec.functions) || Array.isArray(spec.properties));
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec) || !Array.isArray(spec.identities) || (!Array.isArray(spec.objects) && !checks)) {
     return { spec: null, error: 'The test data needs an "identities" list and an "objects" list' };
   }
   return { spec, error: '' };
@@ -393,4 +394,48 @@ function whenText(iso) {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return 'at an unknown time';
   return d.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+}
+
+// ---- function-level and property-level checks
+
+// boundKindLabel is the chip on a bound scenario: what kind of check it is.
+export function boundKindLabel(b) {
+  if (b && b.kind === 'function') return 'function';
+  if (b && b.kind === 'property') return 'property';
+  return 'read';
+}
+
+// boundWho says who does what in a bound scenario, in words that match its kind.
+export function boundWho(b) {
+  if (!b) return '';
+  if (b.kind === 'function') return b.attacker + ' (ordinary) calls a function of ' + b.victim + ' (privileged)';
+  if (b.kind === 'property') return b.attacker + ' reads their own object';
+  return b.attacker + ' → ' + b.victim;
+}
+
+// exampleChecksSpec proposes a function check on the most privileged-looking authenticated GET and a property check on the first
+// authenticated GET with a path parameter. Credential names and values are placeholders; nothing here is a real value.
+export function exampleChecksSpec(ops) {
+  const gets = (ops || []).filter((o) => o.method === 'GET' && o.auth !== 'none');
+  const fnOp = gets.find((o) => (o.classes || []).includes('function_level_authorization')) || gets[0];
+  const propOp = gets.find((o) => Array.isArray(o.path_params) && o.path_params.length > 0) || gets[0];
+  const params = (op, suffix) => {
+    const p = {};
+    ((op && op.path_params) || []).forEach((n) => { p[n] = 'REPLACE-' + suffix; });
+    return p;
+  };
+  const key = (op, fallback) => (op ? op.method + ' ' + op.path : fallback);
+  return {
+    identities: [
+      { name: 'admin', credential_ref: 'REPLACE/admin-credential-name' },
+      { name: 'alice', credential_ref: 'REPLACE/alice-credential-name' },
+    ],
+    objects: [],
+    functions: [
+      { operation: key(fnOp, 'GET /admin/path'), params: params(fnOp, 'F'), privileged: 'admin', ordinary: 'alice', protected_values: ['a value only the admin response contains'] },
+    ],
+    properties: [
+      { operation: key(propOp, 'GET /path/{id}'), params: params(propOp, 'P'), owner: 'alice', forbidden_values: ['a value alice must never receive'] },
+    ],
+  };
 }

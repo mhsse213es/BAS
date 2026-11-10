@@ -203,7 +203,7 @@ function bindingBody() {
   return '<p class="ai-note">Test data as JSON: identities (a name and the <b>name</b> of a credential registered on the target, never its value) and the objects each identity owns. Reads, and PUT or PATCH writes with a <code>write</code> block and <code>allow_writes</code>, are bound. Saving checks the data against the newest inventory.</p>' +
     '<p class="' + (S.stored && S.stored.stale ? 'ai-warn' : 'ai-note') + '" id="api-inv-stored-note">' + (note ? x(note) : 'No test data is stored for this target (or your role cannot read it).') + '</p>' +
     '<textarea id="api-inv-binding" class="ai-text" rows="14" spellcheck="false" aria-label="Binding test data"' + on('input', 'apiInvWriteSync') + '>' + x(prefill) + '</textarea>' +
-    '<div class="ai-row">' + btn('Fill a read example', 'apiInvExample') + btn('Fill a write example', 'apiInvExampleWrite') + btn('Preview', 'apiInvPlanBinding') +
+    '<div class="ai-row">' + btn('Fill a read example', 'apiInvExample') + btn('Fill a write example', 'apiInvExampleWrite') + btn('Fill a function and property example', 'apiInvExampleChecks') + btn('Preview', 'apiInvPlanBinding') +
     btn('Save', 'apiInvSaveBinding', [], 'btn-primary') + (S.stored ? btn('Remove stored data', 'apiInvDeleteBinding') : '') + '</div><div id="api-inv-binding-result"></div>' + writeFormHtml() +
     '<h4 class="ai-h">Run the stored test data</h4><p class="ai-note">Queues a job through the normal approval and scope checks. Production targets are refused, and write scenarios need the target to have allowed paths. Needs permission to run API BAS.</p>' +
     '<div class="ai-row">' + btn('Run stored test data', 'apiInvRunBound', [], 'btn-primary') + '</div><div id="api-inv-job"></div>';
@@ -270,8 +270,8 @@ export function apiInvExample() {
 
 function planHtml(r) {
   var bound = (r.bound || []).map(function(b) {
-    return '<tr><td class="ai-mono">' + x(b.scenario_id) + '</td><td class="ai-mono">' + x(b.operation) + '</td><td>' + (b.write ? chip('write', 'warn') : chip('read', 'info')) +
-      '</td><td>' + x(b.attacker) + ' → ' + x(b.victim) + '</td><td class="ai-mono">' + x(b.path) + '</td></tr>';
+    return '<tr><td class="ai-mono">' + x(b.scenario_id) + '</td><td class="ai-mono">' + x(b.operation) + '</td><td>' + (b.write ? chip('write', 'warn') : chip(M.boundKindLabel(b), 'info')) +
+      '</td><td>' + x(M.boundWho(b)) + '</td><td class="ai-mono">' + x(b.path) + '</td></tr>';
   }).join('');
   var skipped = (r.skipped || []).map(function(s) { return '<tr><td class="ai-mono">' + x(s.operation) + '</td><td>' + x(s.reason) + '</td></tr>'; }).join('');
   var writes = (r.bound || []).some(function(b) { return b.write; });
@@ -576,4 +576,11 @@ export function apiInvRemoveSchedule() {
     if (r.status === 200) { showToast('Schedule removed.', 'ok'); S.schedule = null; renderDetail(); return null; }
     return r.json().then(function(b) { showToast(M.errorText(b) || 'Could not remove the schedule.', 'err'); });
   }).catch(function(e) { showToast('Could not reach the server: ' + (e && e.message ? e.message : 'request failed'), 'err'); });
+}
+
+// apiInvExampleChecks fills a starting point for function-level and property-level read checks.
+export function apiInvExampleChecks() {
+  var t = el('api-inv-binding');
+  if (t && S.inv) t.value = JSON.stringify(M.exampleChecksSpec(S.inv.listed_operations), null, 2);
+  apiInvWriteSync();
 }

@@ -4290,3 +4290,10 @@ no ModSecurity audit-log parsing, so `VerdictMissed` still isn't claimable from 
 - **Not run:** staging; the remaining 3 scenarios (`detection-telemetry`, `origin-resilience`, `policy-integrity`)
   are next.
 - **Limits:** `RATE-002`/`BOTABUSE-001..004` remain genuinely unwired for the reasons above.
+
+## API BAS function-level and property-level bound checks (10 November 2026)
+
+- **Built:** `functions` and `properties` in the binding spec, with validation, two scenario builders (`function_level` and `property_level` claims, read-only), `kind` on the plan, console example, kind chip and wording. A spec with only these is valid.
+- **Calls made (recommendations, flag any you want changed):** read-only GET routes only, because a repeated request cannot restore a change; at least one distinctive value is required for each check, because the grader can only call a 2xx an exploit when a supplied value appears (otherwise it is inconclusive, never a pass); function check = privileged baseline then ordinary attack, expecting 403 or 404; property check = the owner reads their own object and a clean 2xx is the pass; mass assignment (writing a read-only field) deliberately left out and stated in the plan's limits.
+- **Tests (pass):** binding: plan shape, fixture owners, kinds, limits text, only-checks specs, 21 refusals, JSON round trip, and the real runner against a spec-shaped server (flawed: both FAIL exploited; fixed: both PASS enforced). API: saving refuses an unknown identity and a missing value, the saved plan shows both kinds, and a bound job queues with a bound fixture and two scenarios. Web: outline check, kind labels, example, preview text. `runnerproto` and `jobs` packages unaffected.
+- **Not run:** against a real customer API; mass assignment; checks on state-changing functions.

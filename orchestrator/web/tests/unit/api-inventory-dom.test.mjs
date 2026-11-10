@@ -22,7 +22,7 @@ function storedBinding(stale) {
   };
 }
 
-async function setup({ stale = false, jobReason = 'EVIDENCE_INCONCLUSIVE', jobs = null, jobStatus = 'completed', schedule = null, environment = 'lab', scheduleRefusal = '' } = {}) {
+async function setup({ stale = false, jobReason = 'EVIDENCE_INCONCLUSIVE', jobs = null, jobStatus = 'completed', schedule = null, environment = 'lab', scheduleRefusal = '', planBound = null } = {}) {
   const dom = new JSDOM('<!doctype html><body><div id="toast"></div><div id="api-inv-targets"></div><div id="api-inv-detail"></div></body>');
   globalThis.document = dom.window.document;
   globalThis.window = dom.window;
@@ -41,6 +41,7 @@ async function setup({ stale = false, jobReason = 'EVIDENCE_INCONCLUSIVE', jobs 
       const b = JSON.parse(opts.body);
       return ok({ target_id: 'shop-1', every_hours: b.every_hours, include_writes: b.include_writes, enabled: b.enabled, next_run_at: '2026-11-11T02:00:00Z', created_by: 'admin1', consecutive_failures: 0 });
     }
+    if (path.endsWith('/binding/plan') && planBound) return ok({ inventory_version: 1, scenarios: planBound.length, bound: planBound, skipped: [], limits: [] });
     if (path.endsWith('/inventory/versions')) return ok({ versions: [{ version: 1, operations: 2, imported_at: '2026-11-10T00:00:00Z', imported_by: 'admin1' }] });
     if (path.endsWith('/inventory')) return ok(inventory());
     if (path.endsWith('/binding/jobs')) return ok({ id: 'job-1', status: 'queued', created: true }, 202);
@@ -399,4 +400,29 @@ test('a server refusal is shown and the card keeps its state', async () => {
   m.apiInvSaveSchedule();
   await settle();
   assert.match(doc.getElementById('api-inv-sched-result').textContent, /register allowed paths/);
+});
+
+test('the function and property example fills the box with both checks, and the preview shows their kinds', async () => {
+  const { dom, m, calls } = await setup({ planBound: [
+    { scenario_id: 'API-BAS-AUTHZ-901', operation: 'GET /v2/admin/reports/{reportId}', attacker: 'alice', victim: 'admin', path: '/v2/admin/reports/R-1', kind: 'function' },
+    { scenario_id: 'API-BAS-AUTHZ-902', operation: 'GET /v2/orders/{orderId}', attacker: 'alice', victim: 'alice', path: '/v2/orders/O-1', kind: 'property' },
+    { scenario_id: 'API-BAS-AUTHZ-903', operation: 'GET /v2/orders/{orderId}', attacker: 'bob', victim: 'alice', path: '/v2/orders/O-2' },
+  ] });
+  const doc = dom.window.document;
+  m.apiInvExampleChecks();
+  const spec = JSON.parse(doc.getElementById('api-inv-binding').value);
+  assert.equal(spec.functions.length, 1);
+  assert.equal(spec.properties.length, 1);
+  assert.deepEqual(spec.objects, []);
+  m.apiInvPlanBinding();
+  await settle();
+  const post = calls.find((c) => c.path.includes('/binding/plan'));
+  assert.ok(post, 'the plan was requested');
+  assert.equal(JSON.parse(post.body).functions[0].privileged, 'admin');
+  const out = doc.getElementById('api-inv-binding-result').textContent;
+  assert.match(out, /alice \(ordinary\) calls a function of admin \(privileged\)/);
+  assert.match(out, /alice reads their own object/);
+  assert.match(out, /bob → alice/);
+  assert.match(out, /function/);
+  assert.match(out, /property/);
 });
