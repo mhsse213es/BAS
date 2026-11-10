@@ -99,6 +99,21 @@ type PropertySpec struct {
 	ForbiddenValues []string          `json:"forbidden_values"`
 }
 
+// MassAssignSpec is one mass-assignment check: the owner updates their own object with a request that also sets fields the API should
+// never let them set (a role, a price, an owner id). It passes when the update is refused or those fields are left as they were.
+// AttackBody must set every one of ForbiddenFields. RestoreBody puts the object back, before the run and after; if the API would
+// accept the forbidden fields, the restore should set them back too. The object is read back through ReadOperation (default: the GET on
+// the same path), which must return the forbidden fields at its top level, or a change to them could not be seen.
+type MassAssignSpec struct {
+	Operation       string            `json:"operation"` // a PUT or PATCH, for example "PATCH /v2/profiles/{pid}"
+	Params          map[string]string `json:"params,omitempty"`
+	Owner           string            `json:"owner"`
+	AttackBody      string            `json:"attack_body"`
+	ForbiddenFields []string          `json:"forbidden_fields"`
+	RestoreBody     string            `json:"restore_body"`
+	ReadOperation   string            `json:"read_operation,omitempty"`
+}
+
 // Spec is the customer-supplied test data.
 type Spec struct {
 	Identities []IdentitySpec `json:"identities"`
@@ -106,6 +121,8 @@ type Spec struct {
 	// Functions and Properties add function-level and property-level read checks. Both are optional and read-only.
 	Functions  []FunctionSpec `json:"functions,omitempty"`
 	Properties []PropertySpec `json:"properties,omitempty"`
+	// MassAssignments are write checks on the owner's own object. They need AllowWrites, like any write.
+	MassAssignments []MassAssignSpec `json:"mass_assignments,omitempty"`
 	// AllowWrites acknowledges that the objects listed with a write block may be changed while the test runs, and are put back by the
 	// restore request afterwards. Without it no write is bound.
 	AllowWrites bool `json:"allow_writes,omitempty"`
@@ -131,6 +148,8 @@ type Probe struct {
 	Identity string
 	Path     string
 	Ignore   []string
+	// Watch narrows the comparison to these top-level response fields (mass assignment).
+	Watch []string
 }
 
 // Restore is the owner's request that puts one object back to the supplied state.
@@ -159,12 +178,13 @@ type Plan struct {
 	Writes   bool      `json:"-"`
 	Probes   []Probe   `json:"-"`
 	Restores []Restore `json:"-"`
-	// GraphQL is true when any scenario is a GraphQL query.
+	// GraphQL is true when any scenario is a GraphQL query. Mass is true when any scenario is a mass-assignment check.
 	GraphQL bool `json:"-"`
+	Mass    bool `json:"-"`
 }
 
 // planLimits states what a bound plan does not claim. It is part of every plan.
-func planLimits(writes, graphql bool) []string {
+func planLimits(writes, graphql, mass bool) []string {
 	out := []string{
 		"Only object-level operations on objects the customer supplied are bound: reads, and PUT or PATCH writes when the test data allows them. DELETE and other operations are skipped because a repeated request cannot put the object back.",
 		"A read scenario is graded on the HTTP response alone. It proves the attack was refused and leaked none of the protected values supplied; it cannot see a leak of a value the customer did not supply.",
@@ -176,6 +196,11 @@ func planLimits(writes, graphql bool) []string {
 		out = append(out,
 			"A GraphQL query is sent as a POST to the endpoint with the field's arguments written into the query text. A GraphQL API usually answers a refused query with HTTP 200 and an errors entry, so the scenario passes when the other identity's response carries none of the protected values, and fails when one appears. To rule out a baseline that was itself an error, the owner's own response must contain a protected value, otherwise the result is SKIPPED.",
 			"Only GraphQL queries with scalar, enum or custom-scalar arguments are bound. Mutations, subscriptions, list or input-object arguments, and union return types are skipped.",
+		)
+	}
+	if mass {
+		out = append(out,
+			"A mass-assignment check sends the owner's own update, with the forbidden fields set, and compares only those fields before and after through the read route. It cannot see a forbidden field the read route does not return, nested fields, or an effect elsewhere in the system, and the update's other changes are not judged. The object is put back by the restore request; if the API accepted the forbidden fields, restore them too.",
 		)
 	}
 	if writes {
@@ -210,7 +235,7 @@ func (s Spec) Validate(inv *openapi.Inventory) error {
 		}
 		creds[id.CredentialRef] = true
 	}
-	if len(s.Objects) == 0 && len(s.Functions) == 0 && len(s.Properties) == 0 {
+	if len(s.Objects) == 0 && len(s.Functions) == 0 && len(s.Properties) == 0 && len(s.MassAssignments) == 0 {
 		return errors.New("binding: no test objects supplied")
 	}
 	ops := map[string]openapi.Operation{}
@@ -333,7 +358,7 @@ func (s Spec) checkExtras(names map[string]bool, ops map[string]openapi.Operatio
 		}
 		seenP[key] = true
 	}
-	return nil
+	return s.checkMassAssignments(names, ops, haveInventory)
 }
 
 var ignoreFieldRE = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
@@ -476,7 +501,7 @@ func Bind(inv *openapi.Inventory, spec Spec) (*Plan, error) {
 	if err := spec.Validate(inv); err != nil {
 		return nil, err
 	}
-	plan := &Plan{Fixture: fixture.Fixture{Name: FixtureName}, Limits: planLimits(false, false), Bound: []Bound{}, Skipped: []Skipped{}}
+	plan := &Plan{Fixture: fixture.Fixture{Name: FixtureName}, Limits: planLimits(false, false, false), Bound: []Bound{}, Skipped: []Skipped{}}
 	for _, id := range spec.Identities {
 		plan.Fixture.Identities = append(plan.Fixture.Identities, fixture.Identity{Name: id.Name, CustomerID: id.Name, TokenRef: id.CredentialRef})
 	}
@@ -574,10 +599,33 @@ func Bind(inv *openapi.Inventory, spec Spec) (*Plan, error) {
 		plan.Bound = append(plan.Bound, Bound{ScenarioID: sc.ID, Operation: op.Key(), Attacker: p.Owner, Victim: p.Owner, Path: sc.Steps[1].Path, Kind: "property"})
 		next++
 	}
+	for _, m := range spec.MassAssignments {
+		if next > 999 {
+			return nil, fmt.Errorf("binding: more than %d scenarios; supply fewer objects", MaxScenarios)
+		}
+		op := opsByKey[m.Operation]
+		rd, err := readOperationFor(opsByKey, op, &WriteSpec{ReadOperation: m.ReadOperation})
+		if err != nil {
+			return nil, err
+		}
+		readPath := resolvePath(rd, m.Params)
+		objID := fmt.Sprintf("bound-%d", next)
+		plan.Fixture.Objects = append(plan.Fixture.Objects, fixture.Object{ID: objID, OwnerID: m.Owner, Status: "bound"})
+		sc := scenarioForMass(next, op, m, objID, resolvePath(op, m.Params), readPath)
+		if err := sc.Validate(); err != nil {
+			return nil, fmt.Errorf("binding: generated scenario is invalid (a binder bug): %w", err)
+		}
+		plan.Scenarios = append(plan.Scenarios, sc)
+		plan.Writes, plan.Mass = true, true
+		plan.Probes = append(plan.Probes, Probe{Key: objID, Identity: m.Owner, Path: readPath, Watch: m.ForbiddenFields})
+		plan.Restores = append(plan.Restores, Restore{Key: objID, Identity: m.Owner, Method: op.Method, Path: resolvePath(op, m.Params), Body: m.RestoreBody})
+		plan.Bound = append(plan.Bound, Bound{ScenarioID: sc.ID, Operation: op.Key(), Attacker: m.Owner, Victim: m.Owner, Path: sc.Steps[1].Path, Kind: "mass_assignment", Write: true})
+		next++
+	}
 	if len(plan.Scenarios) == 0 && len(plan.Skipped) == 0 {
 		return nil, errors.New("binding: nothing in the inventory can be bound to the objects supplied")
 	}
-	plan.Limits = planLimits(plan.Writes, plan.GraphQL)
+	plan.Limits = planLimits(plan.Writes, plan.GraphQL, plan.Mass)
 	return plan, nil
 }
 
@@ -1016,6 +1064,116 @@ func scenarioForGraphQL(n int, op openapi.Operation, victim ObjectSpec, attacker
 			Status: "not_evaluated", Reason: "Bound to a customer API with no detection integration.",
 		},
 		SideEffectClass: "READ_ONLY",
+		Evidence:        []string{"sanitized_request", "sanitized_response"},
+	}
+}
+
+// ---- mass assignment
+
+var forbiddenFieldRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
+// checkMassAssignments validates the mass-assignment checks.
+func (s Spec) checkMassAssignments(names map[string]bool, ops map[string]openapi.Operation, haveInventory bool) error {
+	seen := map[string]bool{}
+	for i, m := range s.MassAssignments {
+		n := i + 1
+		if !s.AllowWrites {
+			return fmt.Errorf("binding: mass assignment %d: it changes the owner's object, so allow_writes must be true, acknowledging the object may be changed during the test", n)
+		}
+		if !names[m.Owner] {
+			return fmt.Errorf("binding: mass assignment %d: owner %q is not a listed identity", n, truncate(m.Owner, 40))
+		}
+		if haveInventory {
+			op, ok := ops[m.Operation]
+			if !ok {
+				return fmt.Errorf("binding: mass assignment %d: operation %q is not in the inventory", n, truncate(m.Operation, 80))
+			}
+			if !isWriteMethod(op.Method) {
+				return fmt.Errorf("binding: mass assignment %d: %s is not a PUT or PATCH", n, op.Key())
+			}
+			if err := checkParams(op, ObjectSpec{Params: m.Params}); err != nil {
+				return fmt.Errorf("binding: mass assignment %d: %w", n, err)
+			}
+			if _, err := readOperationFor(ops, op, &WriteSpec{ReadOperation: m.ReadOperation}); err != nil {
+				return fmt.Errorf("binding: mass assignment %d: %w", n, err)
+			}
+		}
+		for k, v := range m.Params {
+			if !paramValueRE.MatchString(v) {
+				return fmt.Errorf("binding: mass assignment %d: value of %q must be 1 to 128 letters, digits and . _ ~ -", n, truncate(k, 40))
+			}
+		}
+		for name, body := range map[string]string{"attack_body": m.AttackBody, "restore_body": m.RestoreBody} {
+			if err := checkJSONObject(body); err != nil {
+				return fmt.Errorf("binding: mass assignment %d: %s %w", n, name, err)
+			}
+		}
+		if bytes.Equal(bytes.TrimSpace([]byte(m.AttackBody)), bytes.TrimSpace([]byte(m.RestoreBody))) {
+			return fmt.Errorf("binding: mass assignment %d: attack_body and restore_body are identical", n)
+		}
+		if len(m.ForbiddenFields) == 0 || len(m.ForbiddenFields) > 10 {
+			return fmt.Errorf("binding: mass assignment %d needs 1 to 10 forbidden_fields: the fields the owner must not be able to set", n)
+		}
+		var attack map[string]any
+		_ = json.Unmarshal([]byte(m.AttackBody), &attack)
+		dup := map[string]bool{}
+		for _, f := range m.ForbiddenFields {
+			if !forbiddenFieldRE.MatchString(f) {
+				return fmt.Errorf("binding: mass assignment %d: forbidden field %q must be 1 to 64 letters, digits, _ and -", n, truncate(f, 40))
+			}
+			if dup[f] {
+				return fmt.Errorf("binding: mass assignment %d: forbidden field %q is listed twice", n, f)
+			}
+			dup[f] = true
+			if _, ok := attack[f]; !ok {
+				return fmt.Errorf("binding: mass assignment %d: attack_body does not set the forbidden field %q, so the attempt would not test it", n, f)
+			}
+		}
+		key := m.Operation + "|" + m.Owner + "|" + fmt.Sprint(sortedParams(m.Params))
+		if seen[key] {
+			return fmt.Errorf("binding: mass assignment %d repeats an earlier check", n)
+		}
+		seen[key] = true
+	}
+	return nil
+}
+
+// scenarioForMass builds the mass-assignment check: the owner reads their own object (the baseline), then sends a legitimate-looking
+// update that also sets fields the API should never let them set. The check passes when the update is refused, or accepted with those
+// fields left as they were; it fails when the owner reads back a changed value in one of them. Only the listed fields are compared,
+// so the update's ordinary changes are not mistaken for the flaw.
+func scenarioForMass(n int, op openapi.Operation, m MassAssignSpec, objID, path, readPath string) contract.Scenario {
+	id := fmt.Sprintf("API-BAS-AUTHZ-%03d", n)
+	objective := fmt.Sprintf("%s sets the fields %s of their own object through %s.", m.Owner, strings.Join(m.ForbiddenFields, ", "), op.Key())
+	return contract.Scenario{
+		ID:              id,
+		Name:            fmt.Sprintf("Bound: %s cannot set %s through %s", m.Owner, strings.Join(m.ForbiddenFields, ", "), op.Key()),
+		Category:        "AUTHZ",
+		Claim:           "property_level",
+		AttackObjective: objective,
+		ThreatModel: contract.ThreatModel{
+			Attacker: "an authenticated identity of the customer's API changing its own object", Identity: m.Owner,
+			AccessLevel: "valid credential supplied by the customer, owning the object it updates", Objective: objective,
+		},
+		Preconditions: contract.Preconditions{Fixture: FixtureName, Identities: []string{m.Owner}, Object: objID},
+		Steps: []contract.Step{
+			{ID: "baseline-owner", Role: "baseline", Identity: m.Owner, Auth: "valid", Method: "GET", Path: readPath,
+				Hypothesis: "The owner reads their own object. If this fails, the scenario is not testable."},
+			{ID: "attack-set-forbidden-fields", Role: "attack", Identity: m.Owner, Auth: "valid", Method: op.Method, Path: path, Body: m.AttackBody,
+				Hypothesis: "An update that also sets fields the owner must not control is refused, or accepted with those fields unchanged."},
+		},
+		DeniedStatuses:  []int{400, 403, 404, 422},
+		CleanIsEnforced: true,
+		ExpectedControl: "The API does not let an identity set fields it is not allowed to control. After the update the owner reads back the forbidden fields unchanged.",
+		GroundTruth: contract.GroundTruth{
+			Adapters: []string{"state", "response"},
+			Check:    "The owner's object, read back as the owner before and after the update, has the same value in each forbidden field. Only those fields are compared, and only if the read route returns them.",
+		},
+		DetectionAssert: contract.DetectionAssertion{
+			Status: "not_evaluated", Reason: "Bound to a customer API with no detection integration.",
+		},
+		SideEffectClass: "STATE_CHANGE_SANDBOX",
+		Cleanup:         []string{"The owner sends the supplied restore request, before the run and again after, to put the object back to the supplied state."},
 		Evidence:        []string{"sanitized_request", "sanitized_response"},
 	}
 }

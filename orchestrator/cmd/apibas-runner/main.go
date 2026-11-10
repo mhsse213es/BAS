@@ -250,7 +250,7 @@ func runJob(path string) int {
 			}
 			probes := make([]runner.Probe, 0, len(plan.Probes))
 			for _, p := range plan.Probes {
-				probes = append(probes, runner.Probe{Key: p.Key, TokenRef: tokenRef(p.Identity), Path: p.Path, Ignore: p.Ignore})
+				probes = append(probes, runner.Probe{Key: p.Key, TokenRef: tokenRef(p.Identity), Path: p.Path, Ignore: p.Ignore, Watch: p.Watch})
 			}
 			restores := make([]runner.Restore, 0, len(plan.Restores))
 			for _, rs := range plan.Restores {

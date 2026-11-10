@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
+	"github.com/audspect/bas/internal/apibas/binding"
 	"github.com/audspect/bas/internal/apibas/openapi"
 	"github.com/audspect/bas/internal/apibas/runnerproto"
 	"github.com/audspect/bas/internal/db"
@@ -55,9 +56,24 @@ func (h *Handler) buildBoundPlan(ctx context.Context, targetID string, includeWr
 		return runnerproto.BoundPlan{}, &buildBoundPlanError{http.StatusInternalServerError, "the stored inventory is unreadable"}
 	}
 	if !includeWrites {
-		spec.AllowWrites = false
+		spec = withoutWrites(spec)
 	}
 	return runnerproto.BoundPlan{InventoryVersion: rec.Version, Inventory: inv, Spec: spec}, nil
+}
+
+// withoutWrites returns a copy of the spec that attempts no write: objects that carry a write block and every mass-assignment check
+// are left out, and allow_writes is cleared. Clearing allow_writes alone would make the spec invalid, because a write block needs it.
+func withoutWrites(spec binding.Spec) binding.Spec {
+	out := spec
+	out.AllowWrites = false
+	out.Objects = make([]binding.ObjectSpec, 0, len(spec.Objects))
+	for _, ob := range spec.Objects {
+		if ob.Write == nil {
+			out.Objects = append(out.Objects, ob)
+		}
+	}
+	out.MassAssignments = nil
+	return out
 }
 
 // apibasScheduleBody is what a caller chooses when scheduling a target's stored test data.

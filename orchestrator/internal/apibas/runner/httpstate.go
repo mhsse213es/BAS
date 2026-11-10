@@ -31,6 +31,10 @@ type Probe struct {
 	TokenRef string
 	Path     string
 	Ignore   []string
+	// Watch, when set, narrows the comparison to these top-level response fields: only a change to one of them is a change of state.
+	// The response must contain at least one of them, otherwise a change could never be seen and the read is an error. Ignore is not
+	// used with Watch.
+	Watch []string
 }
 
 // Restore puts one object back to the state the customer supplied, by repeating the write as its owner.
@@ -110,9 +114,38 @@ func (h *HTTPState) Snapshot(ctx context.Context) (map[string]StateRecord, error
 		if resp.StatusCode >= 500 {
 			return nil, fmt.Errorf("state read returned %d", resp.StatusCode)
 		}
-		out[p.Key] = StateRecord{ID: p.Key, Status: strconv.Itoa(resp.StatusCode), Tag: fingerprint(raw, p.Ignore)}
+		tag := fingerprint(raw, p.Ignore)
+		if len(p.Watch) > 0 {
+			var werr error
+			if tag, werr = watchFingerprint(raw, p.Watch); werr != nil {
+				return nil, werr
+			}
+		}
+		out[p.Key] = StateRecord{ID: p.Key, Status: strconv.Itoa(resp.StatusCode), Tag: tag}
 	}
 	return out, nil
+}
+
+// watchFingerprint hashes only the watched top-level fields of a JSON object response. A field that is absent is not the same as one
+// that is present with a null value. It fails when the response is not a JSON object or holds none of the watched fields, because a
+// change to them could not then be seen and a clean comparison would prove nothing.
+func watchFingerprint(raw []byte, watch []string) (string, error) {
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil || obj == nil {
+		return "", errors.New("the read route did not return a JSON object, so the watched fields cannot be compared")
+	}
+	picked := map[string]any{}
+	for _, k := range watch {
+		if v, ok := obj[k]; ok {
+			picked[k] = v
+		}
+	}
+	if len(picked) == 0 {
+		return "", errors.New("the read route does not return any of the watched fields, so a change to them could not be seen")
+	}
+	norm, _ := json.Marshal(drop(picked, nil))
+	sum := sha256.Sum256(norm)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // fingerprint hashes a response body. JSON is normalised (keys sorted, ignored fields dropped at any depth); anything else is hashed

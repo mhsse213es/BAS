@@ -248,3 +248,23 @@ An object names the operation as `QUERY /graphql#field`. `params` holds the fiel
 - **Limits.** A pass says nothing about values the customer did not supply, and a GraphQL path must be inside the target's allowed paths for the run to be sent. The plan states these.
 
 Tests: `internal/apibas/binding/graphql_bind_test.go` (typed literals, 28 refusals, selection normalisation, and the real runner against a GraphQL-style server: vulnerable FAILs, fixed PASSes with a 200 refusal, erroring baseline is SKIPPED), `internal/apibas/contract/graphql_step_test.go`, `TestAPIBASGraphQLQueriesBindAndRun`, and the web example tests.
+
+## Mass assignment checks (added 10 November 2026)
+
+A mass-assignment check asks whether an owner can set fields on their own object that the API should never let them set (a role, a price, an owner id). It goes in `mass_assignments` in the test data and needs `allow_writes: true`, because it changes the owner's object.
+
+```json
+{ "allow_writes": true,
+  "mass_assignments": [{
+    "operation": "PATCH /v2/profiles/{pid}", "params": {"pid": "P-1"}, "owner": "alice",
+    "attack_body": "{\"name\":\"New\",\"role\":\"admin\"}",
+    "forbidden_fields": ["role"],
+    "restore_body": "{\"name\":\"Old\",\"role\":\"user\"}" }] }
+```
+
+- **What runs.** The owner reads their object (baseline), sends `attack_body` with the forbidden fields set, then the object is read back as the owner. `attack_body` must set every forbidden field, or the attempt would not test it. The object is read through the GET on the same path, or `read_operation`.
+- **Grading.** Only the forbidden fields are compared, before and after, so the update's ordinary changes are not mistaken for the flaw. A refusal (400, 403, 404, 422) or an accepted update that leaves those fields unchanged PASSES. A changed forbidden field FAILS.
+- **Never a pass by blindness.** If the read route returns none of the forbidden fields, a change could not be seen, so the result is ERROR, not PASS.
+- **Cleanup.** `restore_body` is sent as the owner before the run and again after. If the API accepted a forbidden field, the restore must set it back too; the plan states this. Production is refused and the job needs registered allowed paths, as for any write.
+- **Limits.** Top-level fields only; nested fields, fields the read route does not return, and effects elsewhere in the system are not seen.
+- **Schedules.** A scheduled run without `include_writes` now leaves out both write objects and mass-assignment checks and builds the rest, instead of only clearing `allow_writes`.
