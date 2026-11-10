@@ -281,3 +281,11 @@ A mass-assignment check asks whether an owner can set fields on their own object
 - After each run the next run is the next clock occurrence, not "now plus 24 hours", so a run does not drift and follows daylight-saving changes. A local time skipped by a clock change runs just after the jump; one that happens twice runs at its first occurrence. A run missed while the server was down is run once, as for interval schedules.
 - If the stored clock settings can no longer be read (for example a timezone name that was removed), the schedule pauses itself with a reason instead of running at a guessed time. Saving it again resumes it.
 - The view returns `at`, `timezone` and `days` instead of `every_hours` for a time-of-day schedule. Existing interval schedules are unchanged. Everything else (lab and staging only, same submission checks, writes off by default, audit as `schedule:<creator>`) is as before.
+
+## Notification when a schedule pauses (added 10 November 2026)
+
+When a schedule turns itself off, one `apibas_schedule_paused` notification is raised (severity `error`, so webhooks filtered at warning or above receive it). It is stored, pushed to connected console sessions and sent to enabled webhooks, like the approval events. It is a broadcast, not addressed to a person.
+
+- **When.** Once, by the run that makes the fifth failure in a row, or at the moment a time-of-day schedule's stored clock settings cannot be read. Failures one to four raise nothing; a schedule that is already paused is never claimed, so it cannot announce itself again. Saving the schedule resumes it, and a later pause announces again.
+- **Content.** `target_id`, `consecutive_failures` (0 for an unreadable clock) and `reason`, and a message that says the schedule will not run again until it is saved again. The reason is the same text a viewer sees as the schedule's last result, cut to 200 characters. It can name a credential reference or a stale-inventory condition, never a credential value. Webhooks leave the platform, so review where they point before relying on this.
+- **Not covered.** A run that was skipped because another assessment was running, or a job that ran and found problems, is not a pause and raises nothing here.

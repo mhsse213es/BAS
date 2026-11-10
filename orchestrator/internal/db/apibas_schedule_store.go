@@ -105,28 +105,35 @@ func DeleteAPIBASSchedule(ctx context.Context, pool *pgxpool.Pool, targetID stri
 // LOCKED, so two orchestrators never claim the same run, and each returned schedule carries the time it was due (DueAt) so the job
 // key is the same wherever it is derived.
 func ClaimDueAPIBASSchedules(ctx context.Context, pool *pgxpool.Pool, now time.Time, limit int) ([]APIBASSchedule, error) {
+	due, _, err := ClaimDueAPIBASSchedulesReportingPauses(ctx, pool, now, limit)
+	return due, err
+}
+
+// ClaimDueAPIBASSchedulesReportingPauses is ClaimDueAPIBASSchedules that also returns the schedules it paused because their clock
+// settings could not be read, each with LastResult set to the reason, so the caller can tell someone.
+func ClaimDueAPIBASSchedulesReportingPauses(ctx context.Context, pool *pgxpool.Pool, now time.Time, limit int) (due, paused []APIBASSchedule, err error) {
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("begin claim: %w", err)
+		return nil, nil, fmt.Errorf("begin claim: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	rows, err := tx.Query(ctx, `SELECT `+apibasScheduleColumns+` FROM apibas_schedules
 		 WHERE enabled AND next_run_at <= $1 ORDER BY next_run_at LIMIT $2 FOR UPDATE SKIP LOCKED`, now, limit)
 	if err != nil {
-		return nil, fmt.Errorf("claim apibas schedules: %w", err)
+		return nil, nil, fmt.Errorf("claim apibas schedules: %w", err)
 	}
 	var out []APIBASSchedule
 	for rows.Next() {
 		s, err := scanAPIBASSchedule(rows)
 		if err != nil {
 			rows.Close()
-			return nil, fmt.Errorf("scan apibas schedule: %w", err)
+			return nil, nil, fmt.Errorf("scan apibas schedule: %w", err)
 		}
 		out = append(out, s)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for i := range out {
 		s := &out[i]
@@ -136,9 +143,12 @@ func ClaimDueAPIBASSchedules(ctx context.Context, pool *pgxpool.Pool, now time.T
 			// A schedule whose clock settings can no longer be read is paused rather than run at a guessed time.
 			n, cerr := NextClockRun(now, s.AtTime, s.Timezone, s.Days)
 			if cerr != nil {
-				if _, err := tx.Exec(ctx, `UPDATE apibas_schedules SET enabled = false, last_result = $2 WHERE target_id = $1`, s.TargetID, "paused: "+truncateText(cerr.Error(), 200)); err != nil {
-					return nil, fmt.Errorf("pause apibas schedule: %w", err)
+				reason := "paused: " + truncateText(cerr.Error(), 200)
+				if _, err := tx.Exec(ctx, `UPDATE apibas_schedules SET enabled = false, last_result = $2 WHERE target_id = $1`, s.TargetID, reason); err != nil {
+					return nil, nil, fmt.Errorf("pause apibas schedule: %w", err)
 				}
+				s.LastResult, s.Enabled = reason, false
+				paused = append(paused, *s)
 				out = append(out[:i], out[i+1:]...)
 				i--
 				continue
@@ -147,23 +157,36 @@ func ClaimDueAPIBASSchedules(ctx context.Context, pool *pgxpool.Pool, now time.T
 		}
 		s.NextRunAt = next
 		if _, err := tx.Exec(ctx, `UPDATE apibas_schedules SET next_run_at = $2, last_run_at = $3 WHERE target_id = $1`, s.TargetID, next, now); err != nil {
-			return nil, fmt.Errorf("advance apibas schedule: %w", err)
+			return nil, nil, fmt.Errorf("advance apibas schedule: %w", err)
 		}
 	}
-	return out, tx.Commit(ctx)
+	return out, paused, tx.Commit(ctx)
 }
 
 // RecordAPIBASScheduleResult stores what a scheduled run did. A failure to queue the job counts toward pausing the schedule, which
 // pauses itself at APIBASScheduleMaxFailures in a row so a broken schedule does not retry for ever. A success resets the count.
 func RecordAPIBASScheduleResult(ctx context.Context, pool *pgxpool.Pool, targetID, jobID, result string, failed bool) error {
-	_, err := pool.Exec(ctx, `
-		UPDATE apibas_schedules
+	_, err := RecordAPIBASScheduleOutcome(ctx, pool, targetID, jobID, result, failed)
+	return err
+}
+
+// RecordAPIBASScheduleOutcome is RecordAPIBASScheduleResult that also reports whether this call is the one that paused the schedule
+// (it was enabled before and is not now), so a pause is announced once. The row is locked while it is read and changed.
+func RecordAPIBASScheduleOutcome(ctx context.Context, pool *pgxpool.Pool, targetID, jobID, result string, failed bool) (paused bool, err error) {
+	err = pool.QueryRow(ctx, `
+		WITH old AS (SELECT enabled FROM apibas_schedules WHERE target_id = $1 FOR UPDATE)
+		UPDATE apibas_schedules s
 		   SET last_job_id = $2, last_result = $3,
-		       consecutive_failures = CASE WHEN $4 THEN consecutive_failures + 1 ELSE 0 END,
-		       enabled = CASE WHEN $4 AND consecutive_failures + 1 >= $5 THEN false ELSE enabled END
-		 WHERE target_id = $1`, targetID, jobID, result, failed, APIBASScheduleMaxFailures)
-	if err != nil {
-		return fmt.Errorf("record apibas schedule result: %w", err)
+		       consecutive_failures = CASE WHEN $4 THEN s.consecutive_failures + 1 ELSE 0 END,
+		       enabled = CASE WHEN $4 AND s.consecutive_failures + 1 >= $5 THEN false ELSE s.enabled END
+		  FROM old
+		 WHERE s.target_id = $1
+		RETURNING old.enabled AND NOT s.enabled`, targetID, jobID, result, failed, APIBASScheduleMaxFailures).Scan(&paused)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil // the schedule was removed while the run was being queued
 	}
-	return nil
+	if err != nil {
+		return false, fmt.Errorf("record apibas schedule result: %w", err)
+	}
+	return paused, nil
 }

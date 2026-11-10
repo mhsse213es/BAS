@@ -16,6 +16,7 @@ import (
 	"github.com/audspect/bas/internal/apibas/openapi"
 	"github.com/audspect/bas/internal/apibas/runnerproto"
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/notifications"
 )
 
 // buildBoundPlanError carries the HTTP status and message a failed plan build maps to, so the manual run and the scheduler refuse
@@ -266,9 +267,12 @@ func (h *Handler) DeleteAPIBASSchedule(w http.ResponseWriter, r *http.Request) {
 
 // RunDueAPIBASSchedules claims the schedules due at now and queues one job for each. It returns how many it claimed.
 func (h *Handler) RunDueAPIBASSchedules(ctx context.Context, now time.Time) (int, error) {
-	due, err := db.ClaimDueAPIBASSchedules(ctx, h.db, now, 20)
+	due, paused, err := db.ClaimDueAPIBASSchedulesReportingPauses(ctx, h.db, now, 20)
 	if err != nil {
 		return 0, err
+	}
+	for _, p := range paused {
+		h.emitAPIBASSchedulePaused(ctx, p.TargetID, 0, p.LastResult)
 	}
 	for _, s := range due {
 		h.runScheduled(ctx, s)
@@ -281,7 +285,10 @@ func (h *Handler) RunDueAPIBASSchedules(ctx context.Context, now time.Time) (int
 // job per target), and is audited as submitted by the person who created the schedule, marked scheduled.
 func (h *Handler) runScheduled(ctx context.Context, s db.APIBASSchedule) {
 	fail := func(result string) {
-		_ = db.RecordAPIBASScheduleResult(ctx, h.db, s.TargetID, "", truncateResult(result), true)
+		res := truncateResult(result)
+		if paused, _ := db.RecordAPIBASScheduleOutcome(ctx, h.db, s.TargetID, "", res, true); paused {
+			h.emitAPIBASSchedulePaused(ctx, s.TargetID, db.APIBASScheduleMaxFailures, res)
+		}
 	}
 	if h.apibasJobs == nil {
 		fail("job execution is not configured on this server")
@@ -322,6 +329,26 @@ func (h *Handler) runScheduled(ctx context.Context, s db.APIBASSchedule) {
 	jobID := job.ID
 	h.apibasAsync(func() { h.runAPIBASJob(actor, jobID) })
 	_ = db.RecordAPIBASScheduleResult(ctx, h.db, s.TargetID, job.ID, "queued", false)
+}
+
+// emitAPIBASSchedulePaused announces that a schedule turned itself off, once: stored, pushed to connected sessions and sent to enabled
+// webhooks. failures is the run count that caused it, or 0 when the clock settings could not be read. The reason is the same text a
+// viewer sees in the schedule, cut to 200 characters. A server without the notification service skips it.
+func (h *Handler) emitAPIBASSchedulePaused(ctx context.Context, targetID string, failures int, reason string) {
+	if h.notifications == nil {
+		return
+	}
+	if len(reason) > 200 {
+		reason = reason[:200]
+	}
+	msg := "The scheduled assessment for API BAS target " + targetID + " paused itself and will not run again until its schedule is saved again. " + reason
+	if failures > 0 {
+		msg = fmt.Sprintf("The scheduled assessment for API BAS target %s paused itself after %d runs in a row could not be queued, and will not run again until its schedule is saved again. Last reason: %s", targetID, failures, reason)
+	}
+	h.notifications.Emit(ctx, notifications.Event{
+		Type: notifications.EventAPIBASSchedulePaused, TargetID: targetID, Severity: notifications.SeverityError, Message: msg,
+		Metadata: map[string]any{"target_id": targetID, "consecutive_failures": failures, "reason": reason},
+	})
 }
 
 func truncateResult(s string) string {
