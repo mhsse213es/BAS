@@ -91,11 +91,54 @@ Live-verified: `TestWafExploitPreventionLiveJSONHandler_RealLab_ReturnsRealLiveO
 A second, fast unit test (`..._NoLabConfigured_Returns503`) proves the refusal path with no live dependency.
 `TestRBACMatrix_NoDrift`/`TestRBACMatrix_AuthorizationBoundary` both pass with the new route matrixed.
 
-**Resolution path for what's left:** extend `BuildRequest`'s PayloadLocation cases to cover more vectors in this
-scenario (and others); add audit-log parsing to `wafmodsec` so a real `VerdictMissed` becomes claimable; wire the
-other 9 enterprise scenarios so a console user can see a live result for more than this one.
+**Third same-day follow-up: wired 4 more of the other 9 scenarios, partially; disclosed why the remaining 5
+genuinely can't be yet.** Same `Run<Scenario>Live(ctx, client)` pattern as `RunExploitPreventionLive`, one new file
+each in `internal/wafmodsec`:
 
-See `lab/wafmodsec/README.md` for how to run the lab and all three live tests.
+| Scenario | Live vectors | Verdicts (confirmed against the real lab) |
+|---|---|---|
+| `http-protocol-integrity` | `HTTPPARSE-002` (1/3) | `Blocked` |
+| `routing-cache-integrity` | `CACHE-002`, `CACHE-003` (2/3) | `Inconclusive`, `Blocked` |
+| `api-protection` | `API-003`, `APIFLOW-005` (2/8) | `Inconclusive`, `Inconclusive` |
+| `legitimate-traffic` | `SQLI-001`/`XSS-001`/`PATHTRAV-001`/`RATE-001` benign legs (4/6) | all `Allowed` |
+
+`api-protection` mixes two independent catalogs (`wafcatalog`'s `API-003` and `wafapiflow`'s `APIFLOW-005`) through
+one `modsecwaf.Client` via a small local converter (`apiflowToWafcatalogTemplate`) between their structurally
+identical `RequestTemplate` types -- no change to `modsecwaf` itself. `legitimate-traffic` drives each vector's
+BENIGN counterpart (not its malicious payload), evaluated as `wafval.ClaimFalsePositive` -- `BuildCollectionResults`
+needed no change either, since it reports Enforcement/Origin from the raw response the same way regardless of
+which leg produced it.
+
+The `Inconclusive` verdicts on `CACHE-002`/`API-003`/`APIFLOW-005` are a real, curl-confirmed finding against the
+live container, not an adapter bug: CRS genuinely returns 200 for all three, because a generic WAF has no
+business-logic or cache-layer awareness to catch a static-extension cache-deception trick, a `fields=*`
+over-exposure, or an absurd `limit=` value.
+
+This surfaced a SECOND occurrence of the exact `EvidenceSource`-hardcoding bug fixed in the API follow-up above:
+`EvaluateLegitimateTrafficScenario` (in `falsepositive.go`) had the identical hardcode-to-`EvidenceSourceFixture`
+bug as `EvaluateScenarioWithSeverities`, just never caught because nothing had driven live evidence through it
+yet. Fixed the same way, with the same new-test-first proof
+(`TestEvaluateLegitimateTrafficScenario_FixtureEvidenceSourceOverride_PropagatesToAssertion`).
+
+**5 scenarios get NO live wiring, for real, disclosed reasons:**
+- `automated-abuse` -- every vector (`RATE-001/002`, `BOTABUSE-001..004`) is a multi-request, timed-burst
+  behavioral claim; a single `modsecwaf.Client.Send` call can't honestly represent "50 requests in 2 seconds" or
+  "the 501st request in a 60-second window." Driving one request and calling it a rate-limit test would be a false
+  claim, not a thin slice.
+- `detection-telemetry` -- evidence is SIEM/alert-pipeline completeness and timing; there is no HTTP request to
+  replay at all.
+- `file-upload-content-trust` -- every vector is `body:multipart:...`, a real, disclosed `BuildRequest` gap.
+- `origin-resilience` -- deployment-topology claims (direct-origin reachability, fail-open, cross-node consistency)
+  need a multi-node/dual-path network setup this lab's single WAF-fronted origin doesn't have.
+- `policy-integrity` -- a genuine two-leg baseline-vs-weakened policy comparison; this lab has exactly one fixed
+  CRS configuration, with no second, deliberately-weakened policy to compare against.
+
+**Resolution path for what's left:** extend `BuildRequest`'s PayloadLocation cases to cover more vectors; add
+audit-log parsing to `wafmodsec` so a real `VerdictMissed` becomes claimable; a second, deliberately-weakened lab
+instance to unblock `policy-integrity`; a burst-driving harness to unblock `automated-abuse`; API routes for the 4
+newly-live-partial scenarios so the console can show them, mirroring exploit-prevention's.
+
+See `lab/wafmodsec/README.md` for how to run the lab and every live test (`go test ./internal/wafmodsec/... -run TestLive_ -v`).
 
 ### 3. Three of the 9 new enterprise scenarios wire only 2 vectors each, with no deliberately-untested one — RESOLVED 2026-11-10
 

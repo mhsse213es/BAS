@@ -4114,3 +4114,40 @@ no ModSecurity audit-log parsing, so `VerdictMissed` still isn't claimable from 
 - **Tests (pass):** 11 model tests (tones, final statuses, result sentences never read ERROR/SKIPPED as pass, job keys, stored-note wording, write example) and 6 jsdom tests with hostile strings: target names, stored values (including a `</textarea>` breakout) and result reasons render as text with no created elements; run queues with a fresh `ui-` key and shows an inconclusive result as not a pass; stale data queues nothing; invalid JSON sends no PUT and valid JSON is PUT as typed; empty-box preview sends an empty body. Full web suite 721 pass, lint 0 errors, build ok. The action-registry guard gives the same two findings as clean main.
 - **Not run:** Playwright smoke, a browser against a live server, a real bound job from the page.
 - **Limits:** no list of past bound jobs per target, write blocks are edited as JSON, the page shows only the job it just started.
+
+## REQ-007 follow-up #6: wired 4 more of the other 9 scenarios live, partially (10 November 2026)
+
+- **Built:** `Run<Scenario>Live(ctx, client)` in `internal/wafmodsec` for 4 more scenarios, same pattern as
+  `RunExploitPreventionLive`: `http-protocol-integrity` (`HTTPPARSE-002`, 1/3), `routing-cache-integrity`
+  (`CACHE-002`/`CACHE-003`, 2/3), `api-protection` (`API-003`/`APIFLOW-005`, 2/8, mixing `wafcatalog` and
+  `wafapiflow` via a small `apiflowToWafcatalogTemplate` converter), `legitimate-traffic`
+  (`SQLI-001`/`XSS-001`/`PATHTRAV-001`/`RATE-001` BENIGN legs, 4/6, evaluated as `ClaimFalsePositive`).
+- **Calls made:** only vectors whose `PayloadLocation` is `""`/`query:<param>` are wired; the rest of each
+  scenario surfaces through `UntestedVectorIDs`, same non-offsetting precedence as before. 5 scenarios
+  (`automated-abuse`, `detection-telemetry`, `file-upload-content-trust`, `origin-resilience`,
+  `policy-integrity`) get NO live wiring at all this round -- each has a fundamentally different evidence shape
+  (multi-request timing, SIEM telemetry, multipart-only payloads, deployment topology, two-leg policy
+  comparison) that a single-request HTTP client genuinely cannot represent honestly; forcing a live test for any
+  of them would be a false claim, not a thin slice, and `docs/waf-mastery-qa-log.md` item #1 states why for each.
+- **Found and fixed a second occurrence of the EvidenceSource-hardcoding bug:**
+  `EvaluateLegitimateTrafficScenario` (in `wafassessment/falsepositive.go`) had the identical
+  hardcode-to-`EvidenceSourceFixture` bug fixed in follow-up #5's `EvaluateScenarioWithSeverities` -- just never
+  caught there because nothing had driven live evidence through that specific evaluator yet. Fixed the same way
+  (use `fixture.EvidenceSource` when set, default to `EvidenceSourceFixture` otherwise), proven by a new test
+  written RED-first, `TestEvaluateLegitimateTrafficScenario_FixtureEvidenceSourceOverride_PropagatesToAssertion`.
+- **Tests (pass):** 5 new live tests (`TestLive_HTTPProtocolIntegrityScenario_OneOfThreeVectorsLive`,
+  `TestLive_RoutingCacheIntegrityScenario_TwoOfThreeVectorsLive`,
+  `TestLive_APIProtectionScenario_TwoOfEightVectorsLive`,
+  `TestLive_LegitimateTrafficScenario_FourOfSixVectorsLive`, plus the EvidenceSource regression test above) all
+  ran against the real running container -- verdicts matched curl-confirmed ground truth exactly: `HTTPPARSE-002`
+  Blocked, `CACHE-003` Blocked, `CACHE-002`/`API-003`/`APIFLOW-005` Inconclusive (CRS genuinely returns 200 for
+  all three -- a real finding about this generic WAF's scope, not an adapter bug), all 4 legitimate-traffic
+  benign legs Allowed. Full `wafassessment`, `wafmodsec`, `modsecwaf`, `wafapiflow`, `wafcatalog` suites green;
+  `go build ./...`/`go vet ./...` clean.
+- **Not run:** staging; no `internal/api` route exists yet for any of these 4 newly-partial-live scenarios
+  (exploit-prevention remains the only one with a live HTTP endpoint), so the console UI still shows only the
+  fixture-backed result for them.
+- **Limits:** the 5 unwired scenarios need real new capability, not just more wiring -- a burst-driving harness
+  (automated-abuse), a real alerting backend (detection-telemetry), multipart support in `modsecwaf.BuildRequest`
+  (file-upload-content-trust), a multi-node/dual-path lab topology (origin-resilience), and a second,
+  deliberately-weakened WAF config to compare against (policy-integrity).
