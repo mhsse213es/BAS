@@ -64,9 +64,9 @@ func TestAPIBASInventoryImportAndRead(t *testing.T) {
 	if rec := sendRaw(t, h, http.MethodPost, "/api/apibas/targets/nope/inventory", spec, auth.RoleAdmin, "admin1"); rec.Code != http.StatusNotFound {
 		t.Errorf("unknown target: %d, want 404", rec.Code)
 	}
-	// A document that is not OpenAPI is a 400 with a reason, and stores nothing.
-	rec := sendRaw(t, h, http.MethodPost, base, "swagger: '2.0'\npaths:\n  /a:\n    get: {}\n", auth.RoleAdmin, "admin1")
-	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "Swagger 2.0") {
+	// A document in an unsupported version is a 400 with a reason, and stores nothing.
+	rec := sendRaw(t, h, http.MethodPost, base, "swagger: '1.2'\npaths:\n  /a:\n    get: {}\n", auth.RoleAdmin, "admin1")
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "unsupported swagger version") {
 		t.Errorf("swagger: %d %s", rec.Code, rec.Body.String())
 	}
 	if rec := getAsUser(t, h, base, auth.RoleAdmin, "admin1"); rec.Code != http.StatusNotFound {
@@ -200,6 +200,31 @@ func TestAPIBASInventoryDrift(t *testing.T) {
 	} {
 		if rec := postAs(t, h, drift, body, auth.RoleAnalyst, "a1"); rec.Code != http.StatusBadRequest {
 			t.Errorf("%s: %d, want 400", name, rec.Code)
+		}
+	}
+}
+
+func TestAPIBASInventoryImportsSwaggerAndGraphQL(t *testing.T) {
+	h := jobsRouter(jobsHandler(t, true))
+	if rec := postAs(t, h, "/api/apibas/targets", targetBody("inv-t5", "lab"), auth.RoleAdmin, "admin1"); rec.Code != http.StatusCreated {
+		t.Fatalf("register: %d", rec.Code)
+	}
+	base := "/api/apibas/targets/inv-t5/inventory"
+	for name, file := range map[string]string{"swagger": "shop_swagger2.yaml", "graphql": "shop.graphql"} {
+		b, err := os.ReadFile("../apibas/openapi/testdata/" + file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec := sendRaw(t, h, http.MethodPost, base, string(b), auth.RoleAdmin, "admin1")
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("%s import: %d %s", name, rec.Code, rec.Body.String())
+		}
+		got := getAsUser(t, h, base, auth.RoleAdmin, "admin1").Body.String()
+		if strings.Contains(got, "hunter2-super-secret-example") {
+			t.Errorf("%s: a default value came back through the API", name)
+		}
+		if name == "graphql" && (!strings.Contains(got, `"field":"order"`) || !strings.Contains(got, `"method":"QUERY"`)) {
+			t.Errorf("graphql operations were not returned with method and field: %.300s", got)
 		}
 	}
 }

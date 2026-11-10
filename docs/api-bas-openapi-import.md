@@ -28,7 +28,7 @@ but not seen in use, and which are in use but not described.
 - It does not select or run scenarios. Catalogue scenarios are written against the lab's routes, so mapping a customer operation to
   a specific scenario needs a binding step that does not exist yet.
 - There is no console page for inventories yet (the API below is the interface).
-- It reads OpenAPI 3.x and Swagger 2.0 (see "Swagger 2.0" below). It does not read SOAP/WSDL, GraphQL schemas, gRPC or AsyncAPI.
+- It reads OpenAPI 3.x, Swagger 2.0 and GraphQL schemas (see below). It does not read SOAP/WSDL, gRPC or AsyncAPI.
 - It does not discover routes. Observed routes come from a file the user supplies.
 
 ## Safety (a specification is untrusted input)
@@ -77,7 +77,7 @@ The suggested scope is shown and never applied: changing a target's allowed path
 2. A binding step from inventory operations to catalogue scenarios (which identities, which object IDs, which fixtures) so an
    imported API can be assessed, not only listed.
 3. Applying the scope suggestion to a target as an audited action (target update does not exist yet).
-4. GraphQL schema import.
+4. Binding GraphQL operations to test data.
 
 ## Swagger 2.0
 
@@ -88,3 +88,17 @@ Added 10 November 2026. A document with `swagger: "2.0"` (or an unquoted `2.0`) 
 - Response fields come from the 2xx response's `schema`, through `definitions`, to the same depth limits as OpenAPI 3.
 - Security uses the same rules (`security`, with `[]` meaning public). Default and example values are never kept, as with OpenAPI 3.
 - Other `swagger` versions (1.2, 3.0) are rejected with the version named. Tests: `swagger_test.go`, fixture `testdata/shop_swagger2.yaml`, which also checks that the same API in either format gets the same classes and authentication.
+
+## GraphQL schemas
+
+Added 10 November 2026. A GraphQL schema is imported from SDL (a `.graphql` file) or from an introspection result (`{"data":{"__schema":...}}` or the bare `{"__schema":...}`) at the same import route. The importer only reads the document; it never contacts an API.
+
+- A GraphQL API has one HTTP endpoint, so the inventory's operations are the root fields of Query, Mutation and Subscription (root types come from the `schema` block, else `Query`, `Mutation`, `Subscription`; `extend type` merges). Each field is one operation: `Method` is `QUERY`, `MUTATION` or `SUBSCRIPTION`, `Path` is `/graphql` (a schema does not say where it is served, and a warning says so), and the new `Field` property names the root field. The operation key is `QUERY /graphql#order`.
+- Arguments are recorded by name as body fields, and the fields of input-object arguments are included, so a mutable field inside an input is seen. Response fields come from the return type (unions through their members), to the same depth and node limits as OpenAPI, cycles bounded. Default values and descriptions beyond a 200 character summary are never kept.
+- Authentication is `unspecified` unless a field carries an auth-like directive (`@auth`, `@authenticated`, `@hasRole`, and similar), which makes it `required`. Because a schema declares nothing else, no GraphQL operation is flagged as public.
+- Candidate classes use the same name rules as REST, applied to arguments and return fields: object-level (an id-like argument), function-level (a privileged word in the field name, split from camelCase or snake_case), property-level (a mutation with a mutable field), data exposure, resource consumption (a paging argument on a query), server-side request (a destination-like argument), lifecycle (`@deprecated`).
+- Errors name the line for SDL. Limits: the document size, 1,000,000 tokens, 20,000 types, 200,000 fields, 5,000 operations.
+- **Not supported:** binding GraphQL operations to test data and running them. The binding step skips them with a message saying so. Federation directives are read as ordinary directives. Query documents and fragments are refused (this is a schema import).
+- Drift compares REST method and path, so documented GraphQL operations show as not observed against a route list.
+
+Tests: `graphql_test.go`, fixture `testdata/shop.graphql`, the binding refusal in `binding_test.go`, and the API test `TestAPIBASInventoryImportsSwaggerAndGraphQL`.

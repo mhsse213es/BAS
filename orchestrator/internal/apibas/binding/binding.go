@@ -433,6 +433,8 @@ func unbindable(op openapi.Operation, objs []ObjectSpec, allowWrites bool) strin
 		}
 	case "DELETE":
 		return "it destroys the object, and a repeated request cannot put the object back, so it is not bound"
+	case "QUERY", "MUTATION", "SUBSCRIPTION":
+		return "it is a GraphQL operation; GraphQL schemas are inventoried and classified, but binding them to test data is not supported yet"
 	default:
 		return "its effect cannot be undone by repeating the request, so the object could not be restored after the test; it is not bound"
 	}

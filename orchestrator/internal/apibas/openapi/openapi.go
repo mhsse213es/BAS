@@ -1,4 +1,4 @@
-// Package openapi imports an OpenAPI 3 or Swagger 2.0 document into an endpoint inventory for API BAS.
+// Package openapi imports an OpenAPI 3, Swagger 2.0 or GraphQL schema document into an endpoint inventory for API BAS.
 //
 // The importer only reads the bytes it is given. It never fetches a remote $ref or a server URL, it follows local references
 // (#/...) only, and it bounds document size, reference depth and operation count, because a specification is untrusted input.
@@ -44,6 +44,7 @@ const (
 type Operation struct {
 	Method           string   `json:"method"`
 	Path             string   `json:"path"`
+	Field            string   `json:"field,omitempty"` // GraphQL: the root field; Method is QUERY, MUTATION or SUBSCRIPTION
 	OperationID      string   `json:"operation_id,omitempty"`
 	Summary          string   `json:"summary,omitempty"`
 	Tags             []string `json:"tags,omitempty"`
@@ -60,8 +61,13 @@ type Operation struct {
 	Classes          []Class  `json:"classes,omitempty"`
 }
 
-// Key is "METHOD path", the identity of an operation.
-func (o Operation) Key() string { return o.Method + " " + o.Path }
+// Key is "METHOD path", the identity of an operation. A GraphQL root field adds "#field", because every field shares one path.
+func (o Operation) Key() string {
+	if o.Field != "" {
+		return o.Method + " " + o.Path + "#" + o.Field
+	}
+	return o.Method + " " + o.Path
+}
 
 // Inventory is the result of an import.
 type Inventory struct {
@@ -81,6 +87,9 @@ func Import(data []byte) (*Inventory, error) {
 	}
 	if len(data) > MaxDocumentBytes {
 		return nil, fmt.Errorf("openapi: the document is %d bytes, over the %d byte limit", len(data), MaxDocumentBytes)
+	}
+	if looksLikeGraphQL(data) {
+		return importGraphQL(data)
 	}
 	var root map[string]any
 	if err := yaml.NewDecoder(bytes.NewReader(data)).Decode(&root); err != nil {

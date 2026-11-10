@@ -1,0 +1,74 @@
+# A shop schema for the importer tests. The default value below must never reach the inventory.
+directive @auth(role: String = "hunter2-super-secret-example") on FIELD_DEFINITION
+directive @cacheControl(maxAge: Int) repeatable on FIELD_DEFINITION | OBJECT
+
+"""
+The root types. A \""" inside a block string is an escape.
+"""
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+scalar DateTime
+
+enum Status {
+  OPEN
+  SHIPPED
+}
+
+interface Node {
+  id: ID!
+}
+
+type Customer implements Node & Auditable {
+  id: ID!
+  email: String!
+  national_id: String
+  orders(first: Int = 10, after: String): [Order!]!
+}
+
+interface Auditable {
+  createdAt: DateTime
+}
+
+type Order implements Node {
+  id: ID!
+  total: Float!
+  status: Status!
+  customer: Customer
+  notes: [String!] @deprecated(reason: "use comments")
+}
+
+union SearchResult = Order | Customer
+
+input OrderPatch {
+  amount: Float
+  note: String
+  status: Status
+}
+
+input CallbackInput {
+  callback_url: String!
+}
+
+type Query {
+  "Fetch one order by id."
+  order(id: ID!): Order
+  orders(limit: Int = 25, offset: Int): [Order!]!
+  me: Customer @auth(role: "user")
+  search(term: String!): [SearchResult!]!
+  legacyOrder(orderId: ID!): Order @deprecated(reason: "use order")
+  adminAuditLog(since: DateTime): [String!]!
+}
+
+type Mutation {
+  updateOrder(id: ID!, patch: OrderPatch!): Order
+  approveOrder(orderId: ID!): Order
+  registerWebhook(input: CallbackInput!): Boolean
+  deleteAccount: Boolean
+}
+
+extend type Query {
+  catalog: [Order!]!
+}

@@ -135,7 +135,7 @@ function opsBody() {
   var filter = seg(M.classOptions(i.listed_operations, i.classes), S.cls, 'apiInvFilter');
   var shown = ops.slice(0, MAX_ROWS);
   var rows = shown.map(function(o) {
-    return '<tr><td>' + chip(o.method, 'info') + '</td><td class="ai-mono">' + x(o.path) + '</td>' +
+    return '<tr><td>' + chip(o.method, 'info') + '</td><td class="ai-mono">' + x(o.path + (o.field ? '#' + o.field : '')) + '</td>' +
       '<td>' + pill(M.authLabel(o.auth), M.authTone(o.auth)) + (o.deprecated ? ' ' + chip('deprecated', 'warn') : '') + '</td>' +
       '<td>' + (o.classes || []).map(function(c) { return chip(M.classLabel(c), 'accent'); }).join(' ') + '</td></tr>';
   }).join('');

@@ -255,3 +255,28 @@ func TestNoStateRefusesAScenarioThatChangesState(t *testing.T) {
 }
 
 var _ = contract.Scenario{}
+
+func TestGraphQLOperationsAreSkippedWithTheirOwnReason(t *testing.T) {
+	inv, err := openapi.Import([]byte("type Query { order(id: ID!): String }\ntype Mutation { setStatus(id: ID!): String }\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := binding.Spec{
+		Identities: []binding.IdentitySpec{{Name: "alice", CredentialRef: "shop/alice"}, {Name: "bob", CredentialRef: "shop/bob"}},
+		Objects: []binding.ObjectSpec{
+			{Operation: "QUERY /graphql#order", Params: map[string]string{}, Owner: "alice"},
+		},
+	}
+	plan, err := binding.Bind(inv, spec)
+	if err != nil {
+		t.Fatalf("Bind: %v", err)
+	}
+	if len(plan.Scenarios) != 0 {
+		t.Errorf("a GraphQL operation was bound: %d scenarios", len(plan.Scenarios))
+	}
+	for _, op := range []string{"QUERY /graphql#order", "MUTATION /graphql#setStatus"} {
+		if got := skipReason(plan, op); !strings.Contains(got, "GraphQL") {
+			t.Errorf("%s: reason %q, want it to say GraphQL", op, got)
+		}
+	}
+}
