@@ -1526,3 +1526,4 @@ body.theme-light {
 .ai-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
 .ai-text { width: 100%; box-sizing: border-box; font-family: var(--font-mono); font-size: 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; resize: vertical; }
 tr.ai-sel { background: var(--accent-dim); }
+.ai-warn { color: var(--warning-text); background: var(--warning-dim); border: 1px solid var(--warning-border); border-radius: var(--radius); font-size: 13px; margin: 8px 0; padding: 8px 10px; }

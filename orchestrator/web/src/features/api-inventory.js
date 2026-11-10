@@ -9,7 +9,7 @@ import { card, pill, chip, seg, empty, kv } from '../core/kit.js';
 import { setHeroStat } from './shell-ui.js';
 import * as M from './api-inventory-model.js';
 
-var S = { targets: [], sel: '', inv: null, cls: 'all', version: 0, versions: [] };
+var S = { targets: [], sel: '', inv: null, cls: 'all', version: 0, versions: [], stored: null, pollToken: 0 };
 var MAX_ROWS = 500;
 
 function el(id) { return document.getElementById(id); }
@@ -67,7 +67,7 @@ function renderTargets() {
 }
 
 export function apiInvSelect(id) {
-  S.sel = id; S.cls = 'all'; S.version = 0; S.inv = null; S.versions = [];
+  S.sel = id; S.cls = 'all'; S.version = 0; S.inv = null; S.versions = []; S.stored = null; S.pollToken++;
   renderTargets();
   loadDetail(0);
 }
@@ -76,8 +76,10 @@ function loadDetail(version) {
   if (!S.sel) { renderDetail(); return Promise.resolve(true); }
   S.version = version || 0;
   var q = S.version ? '?version=' + encodeURIComponent(S.version) : '';
-  return Promise.all([apicall(base() + '/inventory' + q), apicall(base() + '/inventory/versions')]).then(function(res) {
+  // The stored test data needs the manage permission; for anyone else the read is refused and the page simply shows none.
+  return Promise.all([apicall(base() + '/inventory' + q), apicall(base() + '/inventory/versions'), apicall(base() + '/binding').catch(function() { return null; })]).then(function(res) {
     var inv = res[0], vers = res[1];
+    S.stored = (res[2] && !M.errorText(res[2]) && res[2].spec) ? res[2] : null;
     S.inv = (inv && !M.errorText(inv) && inv.listed_operations) ? inv : null;
     S.versions = (vers && Array.isArray(vers.versions)) ? vers.versions : [];
     renderDetail();
@@ -161,9 +163,15 @@ function driftBody() {
 }
 
 function bindingBody() {
-  return '<p class="ai-note">Test data as JSON: identities (a name and the <b>name</b> of a credential, never its value) and objects each identity owns. Only read-only object-level operations are bound.</p>' +
-    '<textarea id="api-inv-binding" class="ai-text" rows="12" spellcheck="false" aria-label="Binding test data"></textarea>' +
-    '<div class="ai-row">' + btn('Fill an example', 'apiInvExample') + btn('Preview binding', 'apiInvPlanBinding', [], 'btn-primary') + '</div><div id="api-inv-binding-result"></div>';
+  var note = M.storedNote(S.stored);
+  var prefill = S.stored ? JSON.stringify(S.stored.spec, null, 2) : '';
+  return '<p class="ai-note">Test data as JSON: identities (a name and the <b>name</b> of a credential registered on the target, never its value) and the objects each identity owns. Reads, and PUT or PATCH writes with a <code>write</code> block and <code>allow_writes</code>, are bound. Saving checks the data against the newest inventory.</p>' +
+    '<p class="' + (S.stored && S.stored.stale ? 'ai-warn' : 'ai-note') + '" id="api-inv-stored-note">' + (note ? x(note) : 'No test data is stored for this target (or your role cannot read it).') + '</p>' +
+    '<textarea id="api-inv-binding" class="ai-text" rows="14" spellcheck="false" aria-label="Binding test data">' + x(prefill) + '</textarea>' +
+    '<div class="ai-row">' + btn('Fill a read example', 'apiInvExample') + btn('Fill a write example', 'apiInvExampleWrite') + btn('Preview', 'apiInvPlanBinding') +
+    btn('Save', 'apiInvSaveBinding', [], 'btn-primary') + (S.stored ? btn('Remove stored data', 'apiInvDeleteBinding') : '') + '</div><div id="api-inv-binding-result"></div>' +
+    '<h4 class="ai-h">Run the stored test data</h4><p class="ai-note">Queues a job through the normal approval and scope checks. Production targets are refused, and write scenarios need the target to have allowed paths. Needs permission to run API BAS.</p>' +
+    '<div class="ai-row">' + btn('Run stored test data', 'apiInvRunBound', [], 'btn-primary') + '</div><div id="api-inv-job"></div>';
 }
 
 export function apiInvLoadFile(inputEl) {
@@ -224,23 +232,120 @@ export function apiInvExample() {
   if (t && S.inv) t.value = JSON.stringify(M.exampleBindingSpec(S.inv.listed_operations), null, 2);
 }
 
+function planHtml(r) {
+  var bound = (r.bound || []).map(function(b) {
+    return '<tr><td class="ai-mono">' + x(b.scenario_id) + '</td><td class="ai-mono">' + x(b.operation) + '</td><td>' + (b.write ? chip('write', 'warn') : chip('read', 'info')) +
+      '</td><td>' + x(b.attacker) + ' → ' + x(b.victim) + '</td><td class="ai-mono">' + x(b.path) + '</td></tr>';
+  }).join('');
+  var skipped = (r.skipped || []).map(function(s) { return '<tr><td class="ai-mono">' + x(s.operation) + '</td><td>' + x(s.reason) + '</td></tr>'; }).join('');
+  var writes = (r.bound || []).some(function(b) { return b.write; });
+  return '<p class="ai-ok">' + x(r.scenarios) + ' scenario(s) from inventory version ' + x(r.inventory_version) + '.</p>' +
+    (writes ? '<p class="ai-warn">Write scenarios try to change the listed objects. A successful change is undone by your restore request, before and after the run. If a restore is refused the result is an error and the object must be checked by hand.</p>' : '') +
+    (bound ? '<h4 class="ai-h">Scenarios</h4><div class="tbl-wrap"><table><thead><tr><th>Scenario</th><th>Operation</th><th>Kind</th><th>Attacker → owner</th><th>Request path</th></tr></thead><tbody>' + bound + '</tbody></table></div>' : '') +
+    (skipped ? '<h4 class="ai-h">Not bound</h4><div class="tbl-wrap"><table><thead><tr><th>Operation</th><th>Why</th></tr></thead><tbody>' + skipped + '</tbody></table></div>' : '') +
+    '<h4 class="ai-h">What a result would and would not show</h4><ul class="ai-list">' + (r.limits || []).map(function(l) { return '<li>' + x(l) + '</li>'; }).join('') + '</ul>';
+}
+
+function failText(e) { return x(e && e.message ? e.message : 'The request failed'); }
+
+// apiInvPlanBinding previews the typed test data, or the stored data when the box is empty. Nothing is stored or run.
 export function apiInvPlanBinding() {
   var t = el('api-inv-binding');
-  var p = M.parseBindingSpec(t ? t.value : '');
   var out = el('api-inv-binding-result');
   if (!out) return;
-  if (p.error) { out.innerHTML = '<p class="ai-err">' + x(p.error) + '</p>'; return; }
+  var typed = t ? t.value.trim() : '';
+  var body = '';
+  if (typed !== '') {
+    var p = M.parseBindingSpec(typed);
+    if (p.error) { out.innerHTML = '<p class="ai-err">' + x(p.error) + '</p>'; return; }
+    body = JSON.stringify(p.spec);
+  } else if (!S.stored) {
+    out.innerHTML = '<p class="ai-err">Enter test data, or save some first.</p>';
+    return;
+  }
   var q = S.version ? '?version=' + encodeURIComponent(S.version) : '';
-  apicall(base() + '/binding/plan' + q, { method: 'POST', body: JSON.stringify(p.spec) }).then(function(r) {
+  apicall(base() + '/binding/plan' + q, { method: 'POST', body: body }).then(function(r) {
+    var err = M.errorText(r);
+    out.innerHTML = err ? '<p class="ai-err">' + x(err) + '</p>' : planHtml(r);
+  }).catch(function(e) { out.innerHTML = '<p class="ai-err">' + failText(e) + '</p>'; });
+}
+
+// apiInvSaveBinding stores the typed test data on the target. The server checks it against the newest inventory first.
+export function apiInvSaveBinding() {
+  var t = el('api-inv-binding');
+  var out = el('api-inv-binding-result');
+  if (!out) return;
+  var p = M.parseBindingSpec(t ? t.value : '');
+  if (p.error) { out.innerHTML = '<p class="ai-err">' + x(p.error) + '</p>'; return; }
+  apicall(base() + '/binding', { method: 'PUT', body: JSON.stringify(p.spec) }).then(function(r) {
     var err = M.errorText(r);
     if (err) { out.innerHTML = '<p class="ai-err">' + x(err) + '</p>'; return; }
-    var bound = (r.bound || []).map(function(b) {
-      return '<tr><td class="ai-mono">' + x(b.scenario_id) + '</td><td class="ai-mono">' + x(b.operation) + '</td><td>' + x(b.attacker) + ' → ' + x(b.victim) + '</td><td class="ai-mono">' + x(b.path) + '</td></tr>';
-    }).join('');
-    var skipped = (r.skipped || []).map(function(s) { return '<tr><td class="ai-mono">' + x(s.operation) + '</td><td>' + x(s.reason) + '</td></tr>'; }).join('');
-    out.innerHTML = '<p class="ai-ok">' + x(r.scenarios) + ' scenario(s) would be generated from inventory version ' + x(r.inventory_version) + '.</p>' +
-      (bound ? '<h4 class="ai-h">Would be generated</h4><div class="tbl-wrap"><table><thead><tr><th>Scenario</th><th>Operation</th><th>Attacker → owner</th><th>Request path</th></tr></thead><tbody>' + bound + '</tbody></table></div>' : '') +
-      (skipped ? '<h4 class="ai-h">Not bound</h4><div class="tbl-wrap"><table><thead><tr><th>Operation</th><th>Why</th></tr></thead><tbody>' + skipped + '</tbody></table></div>' : '') +
-      '<h4 class="ai-h">What a result would and would not show</h4><ul class="ai-list">' + (r.limits || []).map(function(l) { return '<li>' + x(l) + '</li>'; }).join('') + '</ul>';
-  }).catch(function(e) { out.innerHTML = '<p class="ai-err">' + x(e && e.message ? e.message : 'The request failed') + '</p>'; });
+    showToast('Test data stored.', 'ok');
+    var html = planHtml(r);
+    loadDetail(S.version).then(function() { var o2 = el('api-inv-binding-result'); if (o2) o2.innerHTML = html; });
+  }).catch(function(e) { out.innerHTML = '<p class="ai-err">' + failText(e) + '</p>'; });
+}
+
+// apiInvDeleteBinding removes the stored test data. It can be typed again, so there is no confirmation step.
+export function apiInvDeleteBinding() {
+  fetch(base() + '/binding', { method: 'DELETE', credentials: 'same-origin' }).then(function(r) {
+    if (r.status === 204) { showToast('Stored test data removed.', 'ok'); S.stored = null; return loadDetail(S.version); }
+    return r.json().then(function(b) { showToast(M.errorText(b) || 'Could not remove the test data.', 'err'); });
+  }).catch(function(e) { showToast('Could not reach the server: ' + (e && e.message ? e.message : 'request failed'), 'err'); });
+}
+
+export function apiInvExampleWrite() {
+  var t = el('api-inv-binding');
+  if (t && S.inv) t.value = JSON.stringify(M.exampleWriteBindingSpec(S.inv.listed_operations), null, 2);
+}
+
+// apiInvRunBound queues a job from the stored test data and follows it until it ends.
+export function apiInvRunBound() {
+  var out = el('api-inv-job');
+  if (!out) return;
+  if (!S.stored) { out.innerHTML = '<p class="ai-err">Save test data first. A job runs the stored data, not the box above.</p>'; return; }
+  if (S.stored.stale) { out.innerHTML = '<p class="ai-err">' + x(M.storedNote(S.stored)) + '</p>'; return; }
+  out.innerHTML = '<p class="ai-note">Queuing…</p>';
+  apicall(base() + '/binding/jobs', { method: 'POST', body: JSON.stringify({ key: M.newJobKey() }) }).then(function(r) {
+    var err = M.errorText(r);
+    if (err || !r.id) { out.innerHTML = '<p class="ai-err">' + x(err || 'The server did not return a job.') + '</p>'; return; }
+    followJob(r.id);
+  }).catch(function(e) { out.innerHTML = '<p class="ai-err">' + failText(e) + '</p>'; });
+}
+
+var POLL_MS = 3000;
+var MAX_POLLS = 200;
+
+function followJob(id) {
+  var token = ++S.pollToken;
+  var n = 0;
+  function tick() {
+    if (token !== S.pollToken) return;
+    apicall('/api/apibas/jobs/' + encodeURIComponent(id)).then(function(j) {
+      if (token !== S.pollToken) return;
+      var out = el('api-inv-job');
+      if (!out) return;
+      var err = M.errorText(j);
+      if (err) { out.innerHTML = '<p class="ai-err">' + x(err) + '</p>'; return; }
+      out.innerHTML = jobHtml(j);
+      if (M.isFinalStatus(j.status)) return;
+      if (++n >= MAX_POLLS) { out.innerHTML += '<p class="ai-note">Stopped following after 10 minutes. The job may still be running; reload the page to look again.</p>'; return; }
+      setTimeout(tick, POLL_MS);
+    }).catch(function(e) {
+      var out = el('api-inv-job');
+      if (out && token === S.pollToken) out.innerHTML = '<p class="ai-err">Lost contact with the server: ' + failText(e) + '</p>';
+    });
+  }
+  tick();
+}
+
+function jobHtml(j) {
+  var rows = (j.reports || []).map(function(rp) {
+    return '<tr><td class="ai-mono">' + x(rp.scenario_id) + '</td><td>' + pill(rp.result, M.resultTone(rp.result)) + '</td>' +
+      '<td>' + x(rp.exploitability) + '</td><td>' + x(rp.control) + '</td><td>' + x(M.resultText(rp)) + '</td></tr>';
+  }).join('');
+  return kv([['Job', j.id], ['Status', j.status], ['Environment', j.environment], ['Started', j.started_at ? fmtDate(j.started_at) : '—'], ['Finished', j.finished_at ? fmtDate(j.finished_at) : '—']]) +
+    '<p>' + pill(j.status, M.jobTone(j.status)) + (j.failure_reason ? ' <span class="ai-err">' + x(j.failure_reason) + '</span>' : '') + '</p>' +
+    (rows ? '<div class="tbl-wrap"><table><thead><tr><th>Scenario</th><th>Result</th><th>Exploitability</th><th>Control</th><th>Meaning</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '') +
+    (M.isFinalStatus(j.status) ? '' : '<p class="ai-note">Running. This page checks every few seconds.</p>');
 }

@@ -50,7 +50,7 @@ receives only credential *names*.
 
 1. (Done) Persist a binding spec on a target, and run it through the orchestrator's job path.
 3. (Done, limited) Writes: PUT and PATCH with a read-back state check and an owner restore.
-4. Console: store, run and show bound jobs, and edit write blocks.
+4. Console: (done) store, run and follow bound jobs; still open: past-jobs list and a form for write blocks.
 
 
 ## Stored test data (added 10 November 2026)
@@ -135,3 +135,17 @@ ERROR: the object's state is unknown and must be checked by hand. The runner nev
 **What this does not show.** A change to anything the read route does not return, or to a field listed as ignored, is invisible. It
 says nothing about other objects, roles or methods. Restore is the customer's request; the platform cannot confirm the object is
 byte-for-byte as it was.
+
+## Console: stored test data and bound jobs (added 10 November 2026)
+
+The API Inventory page's Binding card now covers the whole flow for the selected target:
+
+- **Stored test data.** The box is prefilled with the target's stored spec (shown only to roles that may manage targets; for others the read is refused and the page says none is stored). A line under the box says who saved it, when, and whether a newer inventory has made it stale.
+- **Fill examples.** "Fill a read example" and "Fill a write example" propose test data from the inventory (the write example starts from the first authenticated PUT or PATCH and holds only placeholders, including a restore body to replace).
+- **Preview** shows the scenarios (marked read or write), the operations not bound and why, the limits of a result, and a warning when any scenario writes. With the box empty it previews the stored data.
+- **Save** stores the typed data after the server checks it against the newest inventory. **Remove stored data** deletes it (no confirmation step, since it can be typed again).
+- **Run stored test data** queues a job from the stored data with a fresh idempotency key and follows it every 3 seconds (up to 10 minutes) until it ends. The page refuses to run stale data and says to save it again. Results show each scenario's grade with a plain sentence; an error or a skip is stated as not a pass.
+
+Everything the server returns is escaped before it reaches the page, including the stored values (the textarea cannot be broken out of). The page never takes or shows a credential value. Tested in jsdom with hostile strings in target names, stored values and result reasons.
+
+Not built: a list of past bound jobs per target (the page follows the job it just started), editing write blocks with a form (they are JSON), and a browser run of the page against a live server.
