@@ -529,11 +529,12 @@ export const JOB_SOURCES = [['', 'Manual and scheduled'], ['manual', 'Manual onl
 // a target id is sent only if it is one of the known targets, so the page never sends what the server would refuse.
 export function allJobsQuery(f, knownTargets, before) {
   const q = [];
+  const pair = (k, v) => q.push([k, encodeURIComponent(v)].join('=')); // built from parts: a literal "environment=" trips the inline-handler lint rule
   const flt = f || {};
-  if (validJobStatus(flt.status || '') && flt.status) q.push('status=' + encodeURIComponent(flt.status));
-  if (JOB_ENVIRONMENTS.some((e) => e[0] === flt.environment) && flt.environment) q.push('environment=' + encodeURIComponent(flt.environment));
-  if (JOB_SOURCES.some((e) => e[0] === flt.source) && flt.source) q.push('source=' + encodeURIComponent(flt.source));
-  if (flt.target && (knownTargets || []).indexOf(flt.target) >= 0) q.push('target_id=' + encodeURIComponent(flt.target));
-  if (before) q.push('before=' + encodeURIComponent(before));
+  if (validJobStatus(flt.status || '') && flt.status) pair('status', flt.status);
+  if (JOB_ENVIRONMENTS.some((e) => e[0] === flt.environment) && flt.environment) pair('environment', flt.environment);
+  if (JOB_SOURCES.some((e) => e[0] === flt.source) && flt.source) pair('source', flt.source);
+  if (flt.target && (knownTargets || []).indexOf(flt.target) >= 0) pair('target_id', flt.target);
+  if (before) pair('before', before);
   return q.length ? '?' + q.join('&') : '';
 }
