@@ -3,9 +3,6 @@ package wafassessment
 import "github.com/audspect/bas/internal/wafval"
 
 // EvidenceSource names where a VectorAssertion's evidence came from.
-// EvidenceSourceLiveExecution is declared for forward compatibility
-// only -- no code in this package can produce it; every assertion
-// this phase renders is EvidenceSourceFixture.
 type EvidenceSource string
 
 const (
@@ -13,10 +10,17 @@ const (
 	EvidenceSourceLiveExecution EvidenceSource = "live_execution"
 )
 
-// VectorFixture is one contributing vector's synthetic evidence.
+// VectorFixture is one contributing vector's evidence. EvidenceSource
+// labels where Results actually came from -- left unset (the zero value)
+// by every hand-authored fixture in this package, which EvaluateScenarioWithSeverities
+// defaults to EvidenceSourceFixture; a caller driving real traffic (e.g.
+// internal/wafmodsec) sets it to EvidenceSourceLiveExecution explicitly so
+// the resulting VectorAssertion -- and anything rendering it, like
+// internal/api's JSON handlers -- never mislabels live evidence as a fixture.
 type VectorFixture struct {
-	VectorID string
-	Results  []wafval.CollectionResult
+	VectorID       string
+	Results        []wafval.CollectionResult
+	EvidenceSource EvidenceSource
 }
 
 // EvaluateContributingVector grades one contributing vector's evidence

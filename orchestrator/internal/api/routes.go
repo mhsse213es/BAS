@@ -283,6 +283,15 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Get("/api/waf/scenarios/"+slug, h.wafScenarioJSONHandler(slug))
 			r.Get("/api/waf/scenarios/"+slug+".html", h.wafScenarioHTMLHandler(slug))
 		}
+		// Exploit-prevention evaluated against a REAL, running ModSecurity +
+		// OWASP CRS lab (lab/wafmodsec) instead of a fixture -- 3 of the
+		// scenario's 8 vectors only (see
+		// internal/wafmodsec.ExploitPreventionLiveVectorIDs). Same read-only,
+		// JWT-only tier as the fixture-backed routes above: the live target
+		// is a fixed, operator-configured URL (wafModsecLabURLEnv), never
+		// taken from the request, so there is no SSRF surface from this
+		// being Viewer-reachable.
+		r.Get("/api/waf/scenarios/exploit-prevention/live", h.wafExploitPreventionLiveJSONHandler)
 		// AV/NGAV efficacy assessment scenarios (internal/avefficacy),
 		// same read-only, slug-registry shape as /api/waf/scenarios:
 		// each slug is a fixture-backed scenario evaluation layered
@@ -656,7 +665,6 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Put("/api/apibas/targets/{id}/binding", h.SaveAPIBASBinding)
 		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Get("/api/apibas/targets/{id}/binding", h.GetAPIBASBinding)
 		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Delete("/api/apibas/targets/{id}/binding", h.DeleteAPIBASBinding)
-		r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/targets/{id}/binding/jobs", h.RunAPIBASBinding)
 		// Aleef API discovery (separate licence add-on, license.ProductAleef via productPrefixes).
 		r.With(auth.RequirePermission(auth.CanAuthorizeAleef)).Post("/api/aleef/engagements", h.CreateAleefEngagement)
 		r.With(auth.RequirePermission(auth.CanRunAleef)).Post("/api/aleef/runs", h.StartAleefRun)

@@ -49,8 +49,8 @@ has been run, live, for real.
 - `wafmodsec` does not parse ModSecurity's audit log, so it never asserts `wafval.DetectionMatched`/`DetectionNotMatched`
   -- an allowed-through malicious request resolves to `VerdictInconclusive` under `ClaimPrevention`, not
   `VerdictMissed`, until that follow-up lands.
-- Wired into exactly ONE of the 10 `internal/wafassessment` enterprise scenarios (see follow-up below) and no
-  `internal/api` handler -- a console user still sees the fixture-backed result for every scenario today.
+- Wired into exactly ONE of the 10 `internal/wafassessment` enterprise scenarios and exactly one `internal/api`
+  route (see follow-ups below) -- a console user still sees the fixture-backed result for every other scenario.
 - This closes the gap for ModSecurity/CRS specifically, not for a commercial vendor API (Cloudflare/F5/AWS WAF) --
   if/when the user gets a real tenant for one of those, that integration is still new work, on the
   `internal/vendors/defender`-style pattern this now has a second real example of.
@@ -66,12 +66,36 @@ all 3 live vectors resolved `VerdictBlocked`, the other 5 came back in `Untested
 real outcome was `ScenarioIncomplete` -- correct, since 5 of 8 vectors have no live evidence yet, and precedence
 never lets an untested vector pass silently.
 
+**Second same-day follow-up: wired into the API, `GET /api/waf/scenarios/exploit-prevention/live`.** Serves the
+above through `internal/wafmodsec.RunExploitPreventionLive`, in the exact same JSON shape every other
+`/api/waf/scenarios/<slug>` route uses, registered at the same `tierAny` (Viewer+Analyst+Admin, JWT-only) tier --
+safe at that tier because the live target comes from the server's own `WAF_MODSEC_LAB_URL` environment variable,
+never from the request, so there is no SSRF surface from this being broadly readable. Missing that env var returns
+`503` naming it, rather than ever silently falling back to the fixture-backed result; an unreachable lab returns
+`502`.
+
+This surfaced a real, pre-existing honesty gap worth fixing properly rather than working around: `wafassessment`'s
+`EvaluateScenarioWithSeverities` hardcoded every `VectorAssertion.EvidenceSource` to `EvidenceSourceFixture` --
+`EvidenceSourceLiveExecution` existed only "for forward compatibility," per its own doc comment, with no code path
+able to produce it. Serving this route as-is would have mislabeled genuinely live evidence as a fixture in the
+JSON response. Fixed with one small, backward-compatible addition: `VectorFixture` gained an `EvidenceSource`
+field; `EvaluateScenarioWithSeverities` now uses it when set and falls back to `EvidenceSourceFixture` when it
+isn't (every existing hand-authored fixture across all 10 scenarios leaves it unset, so none of their behavior
+changed -- proven by the full existing `wafassessment` suite staying green, plus one new test,
+`TestEvaluateScenario_FixtureEvidenceSourceOverride_PropagatesToAssertion`). `BuildExploitPreventionLiveFixtures`
+now sets `EvidenceSourceLiveExecution` on its 3 live fixtures.
+
+Live-verified: `TestWafExploitPreventionLiveJSONHandler_RealLab_ReturnsRealLiveOutcome` drives the handler itself
+(no router, no mock) against the real running container -- `outcome":"incomplete"`, the 3 live vectors render
+`"evidenceSource":"live_execution"`, no assertion anywhere renders `"fixture"`, and the 5 untested IDs are present.
+A second, fast unit test (`..._NoLabConfigured_Returns503`) proves the refusal path with no live dependency.
+`TestRBACMatrix_NoDrift`/`TestRBACMatrix_AuthorizationBoundary` both pass with the new route matrixed.
+
 **Resolution path for what's left:** extend `BuildRequest`'s PayloadLocation cases to cover more vectors in this
 scenario (and others); add audit-log parsing to `wafmodsec` so a real `VerdictMissed` becomes claimable; wire the
-other 9 enterprise scenarios and/or an `internal/api` handler so a console user can actually see a live result,
-not just a test proving the chain works.
+other 9 enterprise scenarios so a console user can see a live result for more than this one.
 
-See `lab/wafmodsec/README.md` for how to run the lab and both live tests.
+See `lab/wafmodsec/README.md` for how to run the lab and all three live tests.
 
 ### 3. Three of the 9 new enterprise scenarios wire only 2 vectors each, with no deliberately-untested one — RESOLVED 2026-11-10
 

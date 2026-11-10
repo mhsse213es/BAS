@@ -76,6 +76,22 @@ The other 5 vectors get no fixture at all, so they surface through
 live evidence is `ScenarioIncomplete` (3 genuinely `Blocked`, 5 genuinely
 untested), never silently upgraded to `ScenarioPass`.
 
+## Hitting it over HTTP
+
+`GET /api/waf/scenarios/exploit-prevention/live` serves exactly the above,
+through `internal/wafmodsec.RunExploitPreventionLive`, in the same JSON
+shape as every other `/api/waf/scenarios/<slug>` route. It needs
+`WAF_MODSEC_LAB_URL` set in the *server's own environment* (not the
+request) -- unset, it returns `503` naming the variable rather than
+silently serving the fixture-backed result; an unreachable lab returns
+`502`. Every assertion it returns carries `"evidenceSource":"live_execution"`,
+never `"fixture"` -- see `wafassessment.VectorFixture.EvidenceSource`.
+
+```sh
+WAF_MODSEC_LAB_URL=http://localhost:8888 \
+  go test ./internal/api/... -run TestWafExploitPreventionLiveJSONHandler -v
+```
+
 ## What this proves, and what it doesn't (yet)
 
 **Proves:** a genuinely live adapter chain --
@@ -98,13 +114,19 @@ run, live, in this session.
   malicious request resolves to `VerdictInconclusive` under
   `ClaimPrevention`, not `VerdictMissed`, until that follow-up lands.
 - Wired into exactly ONE scenario (`AudspectExploitPreventionScenario`,
-  3 of its 8 vectors) -- not the other 9 enterprise scenarios, and not any
-  `internal/api` handler, so a console user still sees the fixture-backed
-  result, not this live one. `wafassessment` itself was NOT modified to do
-  this: `BuildExploitPreventionLiveFixtures` lives entirely in
-  `internal/wafmodsec` and calls `wafassessment.EvaluateScenario` exactly
-  like any other caller would, by design -- wafassessment stays
-  vendor-neutral and I/O-free.
+  3 of its 8 vectors) and exactly one `internal/api` route
+  (`GET /api/waf/scenarios/exploit-prevention/live`) -- the other 9
+  enterprise scenarios, and the console UI, still only ever show the
+  fixture-backed result. `wafassessment` itself needed one small,
+  backward-compatible change to support this honestly: `VectorFixture`
+  gained an `EvidenceSource` field (previously hardcoded to
+  `EvidenceSourceFixture` for every assertion) so a caller driving real
+  traffic can mark its own evidence `EvidenceSourceLiveExecution` instead
+  -- every existing hand-authored fixture leaves it unset and still
+  defaults to `EvidenceSourceFixture`, so nothing else changed behavior.
+  `wafassessment` still performs no I/O itself: the live-wiring glue lives
+  entirely in `internal/wafmodsec`, which calls `wafassessment.EvaluateScenario`
+  exactly like any other caller would.
 - CRS doesn't have rules for every `wafcatalog` family by design (e.g. no
   generic WAF engine inspects cache-key composition) -- some vectors
   (`CACHE-*`) would likely never show a real block against this specific

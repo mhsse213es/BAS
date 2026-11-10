@@ -4,9 +4,21 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/audspect/bas/internal/reporting"
+	"github.com/audspect/bas/internal/vendors/modsecwaf"
+	"github.com/audspect/bas/internal/wafmodsec"
 )
+
+// wafModsecLabURLEnv names the environment variable an operator sets to
+// point the live exploit-prevention endpoint at a running
+// lab/wafmodsec container (e.g. "http://localhost:8888"). Unset is the
+// normal state in production and in this test suite -- the handler
+// refuses cleanly rather than ever falling back to a fixture silently.
+const wafModsecLabURLEnv = "WAF_MODSEC_LAB_URL"
+
+func getenvWafModsecLabURL() string { return os.Getenv(wafModsecLabURLEnv) }
 
 // wafScenarioVectorResponse is one contributing vector's evaluated
 // outcome in the JSON shape served by wafScenarioJSONHandler --
@@ -82,6 +94,54 @@ func (h *Handler) wafScenarioHTMLHandler(slug string) http.HandlerFunc {
 		writeBufferedReport(w, "text/html; charset=utf-8", "", "waf enterprise scenario html",
 			func(out io.Writer) error { return reporting.WAFScenarioReportHTML(out, rep) })
 	}
+}
+
+// wafExploitPreventionLiveJSONHandler serves the exploit-prevention
+// scenario evaluated against a REAL, running ModSecurity + OWASP CRS lab
+// (lab/wafmodsec) instead of the hand-authored fixture
+// wafScenarioJSONHandler("exploit-prevention") serves. Only 3 of the
+// scenario's 8 vectors (SQLI-001, XSS-001, PATHTRAV-001) are driven live --
+// see internal/wafmodsec.ExploitPreventionLiveVectorIDs -- the other 5 come
+// back in untestedVectorIds, exactly as wafassessment.EvaluateScenario
+// renders any vector with no fixture. Every assertion this serves carries
+// evidenceSource "live_execution", never "fixture" -- see
+// wafassessment.VectorFixture.EvidenceSource.
+//
+// Returns 503 if wafModsecLabURLEnv is unset (no lab configured) and 502 if
+// the configured lab is unreachable -- it never falls back to the
+// fixture-backed result on either failure, which would silently relabel
+// stale/absent evidence as current.
+func (h *Handler) wafExploitPreventionLiveJSONHandler(w http.ResponseWriter, r *http.Request) {
+	baseURL := getenvWafModsecLabURL()
+	if baseURL == "" {
+		http.Error(w, fmt.Sprintf("no live WAF lab configured: set %s to a running lab/wafmodsec URL (see lab/wafmodsec/README.md)", wafModsecLabURLEnv), http.StatusServiceUnavailable)
+		return
+	}
+	client := modsecwaf.NewClient(modsecwaf.Config{BaseURL: baseURL})
+	scenario, result, err := wafmodsec.RunExploitPreventionLive(r.Context(), client)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("running live exploit-prevention scenario against %s: %v", baseURL, err), http.StatusBadGateway)
+		return
+	}
+	assertions := make([]wafScenarioVectorResponse, 0, len(result.Assertions))
+	for _, a := range result.Assertions {
+		assertions = append(assertions, wafScenarioVectorResponse{
+			VectorID:       a.VectorID,
+			Severity:       string(a.Severity),
+			Verdict:        string(a.Verdict),
+			EvidenceSource: string(a.EvidenceSource),
+			Reason:         a.Reason,
+		})
+	}
+	respond(w, wafScenarioResponse{
+		ScenarioID:        scenario.ID,
+		ScenarioName:      scenario.Name,
+		Objective:         scenario.Objective,
+		Outcome:           string(result.Outcome),
+		Summary:           result.Summary,
+		Assertions:        assertions,
+		UntestedVectorIDs: result.UntestedVectorIDs,
+	})
 }
 
 // GetWAFExploitPreventionScenario is a thin, already-shipped wrapper

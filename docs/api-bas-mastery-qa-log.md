@@ -4052,6 +4052,38 @@ running container; `go build ./...`, `go vet ./internal/wafmodsec/...` clean.
 **Still not done:** the other 9 enterprise scenarios, and no `internal/api` handler exposes this live path, so a
 console user still only ever sees the fixture-backed result.
 
+## REQ-007 follow-up #5: wired the live adapter into the API (10 November 2026)
+
+Closed the "no `internal/api` handler" gap from the follow-up above. New route `GET
+/api/waf/scenarios/exploit-prevention/live`, served by `internal/api`'s new `wafExploitPreventionLiveJSONHandler`,
+through `internal/wafmodsec.RunExploitPreventionLive` (new convenience function bundling scenario+fixtures+catalog
++evaluate into one call). Same JSON shape, same `tierAny` RBAC tier as every other `/api/waf/scenarios/<slug>`
+route -- safe there because the live target is the server's own `WAF_MODSEC_LAB_URL` env var, never request input,
+so there's no SSRF surface. Missing env var -> `503` naming it; unreachable lab -> `502`; never a silent fixture
+fallback either way.
+
+**Real fix, not a workaround, for a real honesty gap this surfaced:** `wafassessment.EvaluateScenarioWithSeverities`
+hardcoded `EvidenceSource: EvidenceSourceFixture` on every `VectorAssertion` -- `EvidenceSourceLiveExecution`
+existed only as a documented, unused forward-compat stub. Serving this route unchanged would have rendered real
+live evidence as `"evidenceSource":"fixture"` in the JSON response -- exactly the kind of mislabeling this
+project's standing scoring-honesty rule exists to catch. Fixed properly: `VectorFixture` gained an `EvidenceSource`
+field; the evaluator uses it when set, defaults to `EvidenceSourceFixture` when not (every existing fixture across
+all 10 scenarios leaves it unset, so no existing behavior changed -- the full `wafassessment` suite stayed green,
+plus one new regression test proving both the override and the default). `BuildExploitPreventionLiveFixtures` now
+sets `EvidenceSourceLiveExecution` on its 3 live fixtures.
+
+**Tests:** `TestEvaluateScenario_FixtureEvidenceSourceOverride_PropagatesToAssertion` (new, `wafassessment`, unit);
+`TestWafExploitPreventionLiveJSONHandler_NoLabConfigured_Returns503` (new, `internal/api`, unit, no live
+dependency); `TestWafExploitPreventionLiveJSONHandler_RealLab_ReturnsRealLiveOutcome` (new, `internal/api`, live
+-- ran against the real running container: `outcome":"incomplete"`, 3 vectors `"evidenceSource":"live_execution"`,
+zero `"fixture"` labels anywhere in the body, 5 untested IDs present). `TestRBACMatrix_NoDrift` and
+`TestRBACMatrix_AuthorizationBoundary` both pass with the new route matrixed. `go build ./...`, `go vet ./...`
+clean on the final tree.
+
+**Still not done:** the other 9 enterprise scenarios aren't live-capable, so the console only gets a live result
+for exploit-prevention; `modsecwaf.BuildRequest` still covers only the `""`/`query:<param>` PayloadLocation forms;
+no ModSecurity audit-log parsing, so `VerdictMissed` still isn't claimable from live evidence.
+
 ## API BAS binding spec persisted on targets (10 November 2026)
 
 - **Built:** table `apibas_target_bindings`, store functions, `PUT|GET|DELETE /api/apibas/targets/{id}/binding` (manage-targets permission), and `POST .../binding/plan` with an empty body previewing the stored spec. Design in `docs/api-bas-scenario-binding.md`.
