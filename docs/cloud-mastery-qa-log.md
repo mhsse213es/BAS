@@ -19,6 +19,8 @@ Read this before making any external claim about cloud coverage. Every item belo
 
 ## Open items (for the single live-QA session)
 
+Exact resources, permissions and preflight checks to provision per provider for O-1 through O-5: `docs/cloud-tenant-trial-checklist.md`.
+
 Status key: **OPEN** = needs a live account or a decision. **MODEL** = known limit of the current evaluation model; documented, not fixed.
 
 ### O-1 — Azure tenant readiness (sub-project 2) — OPEN, tenant action
