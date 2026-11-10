@@ -308,7 +308,12 @@ test('threat actor library: sc-card style and a Collapse button', async ({ page 
   await boot(page);
   await page.route('**/api/caldera/adversaries', (r) => r.fulfill({ status: 200, contentType: 'application/json',
     body: JSON.stringify([{ id: 'a1', name: 'APT29', description: 'A group.', tactics: ['collection', 'discovery'], abilityCount: 79 }]) }));
+  // With no scenarios loaded the page shows "No scenarios loaded" and no category list, so one is supplied.
+  await page.route('**/api/scenarios', (r) => r.request().method() !== 'GET' ? r.fallback() : r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify([{ id: 'b1', name: 'Builtin One', description: 'd', productLine: 'common', supportedOs: ['windows'], mitrePhases: [], steps: [], tags: [] }]) }));
   await openTab(page, 'scenarios');
+  await page.evaluate(() => document.querySelector('[data-on-click="loadScenarios"]').click());
+  await expect(page.locator('#sc-tile-grid')).toContainText('Builtin One');
   await page.evaluate(() => document.querySelector('[data-on-click="loadAdversariesStop"]').click());
   // The library is its own entry in the category list, after Adversary Templates, and shows only when opened.
   await expect(page.locator('#adversary-section')).toBeHidden();
