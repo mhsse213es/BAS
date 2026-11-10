@@ -188,7 +188,7 @@ func planLimits(writes, graphql, mass bool) []string {
 	out := []string{
 		"Only object-level operations on objects the customer supplied are bound: reads, and PUT or PATCH writes when the test data allows them. DELETE and other operations are skipped because a repeated request cannot put the object back.",
 		"A read scenario is graded on the HTTP response alone. It proves the attack was refused and leaked none of the protected values supplied; it cannot see a leak of a value the customer did not supply.",
-		"Function-level and property-level checks are read-only and graded on the response alone: they find a privileged route that answers an ordinary identity, or a forbidden value in an owner's response, only for the routes, identities and values supplied. Writing a field that should be read-only (mass assignment) is not tested.",
+		"Function-level and property-level checks are read-only and graded on the response alone: they find a privileged route that answers an ordinary identity, or a forbidden value in an owner's response, only for the routes, identities and values supplied. Writing a field that should be read-only (mass assignment) is tested only by a mass_assignments check, and none is supplied here.",
 		"The scenarios have no detection integration (detection is not evaluated) and no regulatory mapping.",
 		"An operation passes only for the objects and identities supplied. It says nothing about other objects, roles or parameters.",
 	}

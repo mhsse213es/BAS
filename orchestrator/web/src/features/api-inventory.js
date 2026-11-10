@@ -195,7 +195,7 @@ function renderDetail() {
   html += card('Drift against observed routes', driftBody(), { sub: 'Compares routes you list with this inventory; nothing is requested from the target' });
   html += card('Recent jobs', jobsBody(), { sub: 'Newest first, this target only' });
   html += card('Binding preview', bindingBody(), { sub: 'Which scenarios would be generated; nothing is stored or run' });
-  html += card('Schedule', scheduleBody(), { sub: 'Run the stored test data on an interval' });
+  html += card('Schedule', scheduleBody(), { sub: 'Run the stored test data on an interval or at a time of day' });
   host.innerHTML = html;
   apiInvWriteOp();
   apiInvWriteSync();

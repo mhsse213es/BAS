@@ -78,7 +78,7 @@ func TestFunctionAndPropertyChecksBindToReadOnlyScenarios(t *testing.T) {
 		t.Errorf("bound: %+v", plan.Bound)
 	}
 	if !strings.Contains(strings.Join(plan.Limits, " "), "mass assignment") {
-		t.Errorf("the limits do not say mass assignment is not tested: %v", plan.Limits)
+		t.Errorf("the limits do not mention mass assignment: %v", plan.Limits)
 	}
 	// The objects exist in the fixture owned by the identity that makes the baseline call.
 	owners := map[string]string{}
