@@ -30,7 +30,7 @@ func main() {
 
 func run(args []string, out io.Writer) error {
 	fs := flag.NewFlagSet("apibas-inventory", flag.ContinueOnError)
-	specPath := fs.String("spec", "", "OpenAPI 3.x document (JSON or YAML)")
+	specPath := fs.String("spec", "", "OpenAPI 3.x or Swagger 2.0 document (JSON or YAML)")
 	observedPath := fs.String("observed", "", "optional file of observed routes, one METHOD /path per line")
 	asJSON := fs.Bool("json", false, "print the report as JSON")
 	if err := fs.Parse(args); err != nil {

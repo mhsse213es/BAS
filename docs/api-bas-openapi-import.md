@@ -28,7 +28,7 @@ but not seen in use, and which are in use but not described.
 - It does not select or run scenarios. Catalogue scenarios are written against the lab's routes, so mapping a customer operation to
   a specific scenario needs a binding step that does not exist yet.
 - There is no console page for inventories yet (the API below is the interface).
-- It does not read Swagger 2.0 (reported with a clear error), SOAP/WSDL, GraphQL schemas, gRPC or AsyncAPI.
+- It reads OpenAPI 3.x and Swagger 2.0 (see "Swagger 2.0" below). It does not read SOAP/WSDL, GraphQL schemas, gRPC or AsyncAPI.
 - It does not discover routes. Observed routes come from a file the user supplies.
 
 ## Safety (a specification is untrusted input)
@@ -42,7 +42,7 @@ but not seen in use, and which are in use but not described.
 ## Calls made (not discussed with the owner; change if wrong)
 
 1. Parse-only package plus a CLI first; storing inventories on targets, an API and console come later.
-2. Only OpenAPI 3.x; Swagger 2.0 is rejected rather than half-supported.
+2. OpenAPI 3.x and Swagger 2.x; other versions are rejected by name rather than half-supported.
 3. Class rules are name-and-shape heuristics (regular expressions on parameter, field and path-segment names). They will miss
    unusual naming and will flag benign fields. The privileged-action list (approve, settle, refund, disburse, release, override,
    impersonate) was extended after running the importer on the Aleef bank specification in the repo.
@@ -77,4 +77,14 @@ The suggested scope is shown and never applied: changing a target's allowed path
 2. A binding step from inventory operations to catalogue scenarios (which identities, which object IDs, which fixtures) so an
    imported API can be assessed, not only listed.
 3. Applying the scope suggestion to a target as an audited action (target update does not exist yet).
-4. Swagger 2.0, then GraphQL schema import.
+4. GraphQL schema import.
+
+## Swagger 2.0
+
+Added 10 November 2026. A document with `swagger: "2.0"` (or an unquoted `2.0`) is imported into the same inventory.
+
+- The base URL is `schemes` (http and https only; https if none), `host` and `basePath`. Every path in a Swagger 2.0 document is relative to `basePath`, so the inventory keeps full request paths with `basePath` in front. A `basePath` that does not start with a slash is ignored with a warning, and with no `host` there are no servers.
+- The request body is the `in: body` parameter's schema; `in: formData` parameters become body field names. Body content types come from the operation's `consumes`, else the document's, else JSON for a body and url-encoded for a form. A form with a file parameter is also multipart.
+- Response fields come from the 2xx response's `schema`, through `definitions`, to the same depth limits as OpenAPI 3.
+- Security uses the same rules (`security`, with `[]` meaning public). Default and example values are never kept, as with OpenAPI 3.
+- Other `swagger` versions (1.2, 3.0) are rejected with the version named. Tests: `swagger_test.go`, fixture `testdata/shop_swagger2.yaml`, which also checks that the same API in either format gets the same classes and authentication.

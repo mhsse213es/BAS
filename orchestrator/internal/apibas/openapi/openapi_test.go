@@ -197,7 +197,6 @@ components:
 func TestRejectedDocuments(t *testing.T) {
 	cases := map[string]string{
 		"empty":   "",
-		"swagger": "swagger: \"2.0\"\npaths:\n  /a:\n    get: {}\n",
 		"no ver":  "paths:\n  /a:\n    get: {}\n",
 		"no path": "openapi: 3.0.0\npaths: {}\n",
 		"no ops":  "openapi: 3.0.0\npaths:\n  /a: {}\n",

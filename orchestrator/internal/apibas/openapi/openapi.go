@@ -1,4 +1,4 @@
-// Package openapi imports an OpenAPI 3 document into an endpoint inventory for API BAS.
+// Package openapi imports an OpenAPI 3 or Swagger 2.0 document into an endpoint inventory for API BAS.
 //
 // The importer only reads the bytes it is given. It never fetches a remote $ref or a server URL, it follows local references
 // (#/...) only, and it bounds document size, reference depth and operation count, because a specification is untrusted input.
@@ -90,13 +90,26 @@ func Import(data []byte) (*Inventory, error) {
 		return nil, errors.New("openapi: the document has no content")
 	}
 	ver, _ := root["openapi"].(string)
-	if _, isSwagger := root["swagger"]; isSwagger && ver == "" {
-		return nil, errors.New("openapi: this is a Swagger 2.0 document; only OpenAPI 3.x is supported, convert it first")
+	swagger := false
+	if sv, isSwagger := root["swagger"]; isSwagger && ver == "" {
+		// An unquoted 2.0 is read by YAML as the number 2.
+		s := strings.TrimSpace(fmt.Sprint(sv))
+		if s == "2" {
+			s = "2.0"
+		}
+		if !strings.HasPrefix(s, "2.") {
+			return nil, fmt.Errorf("openapi: unsupported swagger version %q; only Swagger 2.x and OpenAPI 3.x are supported", truncate(s, 24))
+		}
+		ver, swagger = s, true
+	} else if !strings.HasPrefix(ver, "3.") {
+		return nil, fmt.Errorf("openapi: unsupported or missing openapi version %q; only Swagger 2.x and OpenAPI 3.x are supported", truncate(ver, 24))
 	}
-	if !strings.HasPrefix(ver, "3.") {
-		return nil, fmt.Errorf("openapi: unsupported or missing openapi version %q; only 3.x is supported", truncate(ver, 24))
+	r := &resolver{root: root, swagger: swagger}
+	for _, c := range asList(root["consumes"]) {
+		if cs, ok := c.(string); ok {
+			r.consumes = append(r.consumes, cs)
+		}
 	}
-	r := &resolver{root: root}
 	inv := &Inventory{OpenAPIVersion: ver}
 	if info, ok := root["info"].(map[string]any); ok {
 		inv.Title, _ = info["title"].(string)
@@ -106,6 +119,32 @@ func Import(data []byte) (*Inventory, error) {
 		if m, ok := s.(map[string]any); ok {
 			if u, _ := m["url"].(string); u != "" {
 				inv.Servers = append(inv.Servers, u)
+			}
+		}
+	}
+	// Swagger 2.0 has no servers: the base URL is its schemes, host and basePath, and every path is relative to basePath. The
+	// inventory keeps full request paths, so the basePath is put in front of each one.
+	prefix := ""
+	if swagger {
+		if bp, _ := root["basePath"].(string); bp != "" {
+			if strings.HasPrefix(bp, "/") {
+				prefix = strings.TrimRight(bp, "/")
+			} else {
+				inv.Warnings = append(inv.Warnings, fmt.Sprintf("basePath %q does not start with a slash and was ignored", truncate(bp, 40)))
+			}
+		}
+		if host, _ := root["host"].(string); host != "" {
+			schemes := []string{}
+			for _, sc := range asList(root["schemes"]) {
+				if v, ok := sc.(string); ok && (v == "http" || v == "https") {
+					schemes = append(schemes, v)
+				}
+			}
+			if len(schemes) == 0 {
+				schemes = []string{"https"}
+			}
+			for _, sc := range schemes {
+				inv.Servers = append(inv.Servers, sc+"://"+host+prefix)
 			}
 		}
 	}
@@ -138,7 +177,7 @@ func Import(data []byte) (*Inventory, error) {
 			if len(inv.Operations) >= MaxOperations {
 				return nil, fmt.Errorf("openapi: more than %d operations; refusing to import", MaxOperations)
 			}
-			inv.Operations = append(inv.Operations, r.operation(strings.ToUpper(m), p, opRaw, shared, globalSec, globalSet))
+			inv.Operations = append(inv.Operations, r.operation(strings.ToUpper(m), prefix+p, opRaw, shared, globalSec, globalSet))
 		}
 	}
 	if len(inv.Operations) == 0 {
@@ -150,6 +189,8 @@ func Import(data []byte) (*Inventory, error) {
 }
 
 type resolver struct {
+	swagger  bool     // the document is Swagger 2.0
+	consumes []string // the document-level consumes of a Swagger 2.0 document
 	root     map[string]any
 	warnings []string
 	warned   map[string]bool
@@ -213,6 +254,7 @@ func (r *resolver) operation(method, path string, op map[string]any, shared []an
 	}
 	// Parameters: operation-level overrides path-level by (in, name).
 	seen := map[string]bool{}
+	bodyDeclared, formDeclared := false, false
 	for _, raw := range append(asList(op["parameters"]), shared...) {
 		p, ok := r.deref(raw).(map[string]any)
 		if !ok {
@@ -225,6 +267,13 @@ func (r *resolver) operation(method, path string, op map[string]any, shared []an
 		}
 		seen[in+"/"+name] = true
 		switch in {
+		case "body":
+			// Swagger 2.0: the request body is a parameter whose schema is the body.
+			o.BodyFields = append(o.BodyFields, r.schemaFields(p["schema"], 0)...)
+			bodyDeclared = true
+		case "formData":
+			o.BodyFields = append(o.BodyFields, name)
+			formDeclared = true
 		case "path":
 			o.PathParams = append(o.PathParams, name)
 		case "query":
@@ -237,6 +286,30 @@ func (r *resolver) operation(method, path string, op map[string]any, shared []an
 	for _, name := range templateParams(path) {
 		if !contains(o.PathParams, name) {
 			o.PathParams = append(o.PathParams, name)
+		}
+	}
+	if r.swagger && (bodyDeclared || formDeclared) {
+		// The operation's consumes replaces the document's. With neither, a body is JSON and a form is url-encoded.
+		cts := r.consumes
+		if own := asList(op["consumes"]); len(own) > 0 || op["consumes"] != nil {
+			cts = nil
+			for _, c := range own {
+				if cs, ok := c.(string); ok {
+					cts = append(cts, cs)
+				}
+			}
+		}
+		if len(cts) == 0 {
+			if bodyDeclared {
+				cts = []string{"application/json"}
+			} else {
+				cts = []string{"application/x-www-form-urlencoded"}
+			}
+		}
+		o.BodyContentTypes = append(o.BodyContentTypes, cts...)
+		if formDeclared && !contains(cts, "multipart/form-data") && !contains(cts, "application/x-www-form-urlencoded") {
+			// A file parameter makes the request multipart whatever the declaration says.
+			o.BodyContentTypes = append(o.BodyContentTypes, "multipart/form-data")
 		}
 	}
 	if body, ok := r.deref(op["requestBody"]).(map[string]any); ok {
@@ -256,6 +329,9 @@ func (r *resolver) operation(method, path string, op map[string]any, shared []an
 				continue
 			}
 			if rm, ok := r.deref(rv).(map[string]any); ok {
+				if r.swagger {
+					o.ResponseFields = append(o.ResponseFields, r.schemaFields(rm["schema"], 0)...)
+				}
 				if content, ok := rm["content"].(map[string]any); ok {
 					for _, mt := range content {
 						if m, ok := mt.(map[string]any); ok {
@@ -271,6 +347,7 @@ func (r *resolver) operation(method, path string, op map[string]any, shared []an
 	for _, s := range []*[]string{&o.PathParams, &o.QueryParams, &o.HeaderParams, &o.BodyContentTypes, &o.ResponseCodes} {
 		sort.Strings(*s)
 	}
+	o.BodyContentTypes = uniqSorted(o.BodyContentTypes)
 	o.BodyFields = uniqSorted(o.BodyFields)
 	o.ResponseFields = uniqSorted(o.ResponseFields)
 	return o

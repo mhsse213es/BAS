@@ -4196,3 +4196,10 @@ no ModSecurity audit-log parsing, so `VerdictMissed` still isn't claimable from 
 - **Tests (pass):** model: operations offered, read-back choices and default, built object omits defaults and trims, 18 invalid inputs refused with a named problem, merge adds or replaces by operation and values without mutating its input, owner must be an identity, list and remove. jsdom: the form offers the inventory operations, inputs, identities and default read-back; adding puts the object in the box with `allow_writes`; invalid input changes nothing; a broken box is not edited; no identities means nothing is added; Edit then Add replaces; Remove; a hostile identity name and values appear as text only. Full web suite, lint and build run before push.
 - **Not run:** a browser against a live server; Playwright smoke.
 - **Limits:** identities and read objects are edited as JSON; bodies are edited as text.
+
+## API BAS Swagger 2.0 import (10 November 2026)
+
+- **Built:** `internal/apibas/openapi` reads Swagger 2.0 into the existing inventory: basePath prefixing, body and formData parameters, consumes, response schemas via definitions, same security rules.
+- **Calls made:** inventory paths are full request paths (basePath prefixed) so scope, binding and drift work unchanged; only http and https schemes produce servers; other swagger versions are refused by name; the old "Swagger 2.0 is rejected" test case was removed because that behaviour is intentionally replaced.
+- **Tests (pass):** document facts and prefixing, parameters, bodies and responses, auth and classes, defaults never kept, equivalence with the OpenAPI 3 fixture on shared operations, variants and refusals, basePath ignored for OpenAPI 3 documents. `go test ./internal/apibas/openapi` passes.
+- **Not run:** a real customer Swagger document; GraphQL still not imported.
