@@ -83,9 +83,25 @@ Every permission and preflight-check name below was read from the current code (
 - Azure credentials load from a file (`CLOUD_AZURE_SECRETS_FILE`), not the environment — the server refuses to start otherwise.
 - None of this provisions a meaningful ongoing cloud spend. It's a small fixed footprint seeded once (a couple of buckets, one backup vault, one storage account, one Recovery Services vault) — materially different from Stratus's per-run ephemeral infrastructure cost.
 
+## AWS — Stratus Red Team sandbox (separate account, parked)
+
+This is a cloud account requirement too, so it belongs in this doc even though the work on it is parked. Keep it a **different account** from the three discovery-trial accounts above: Stratus needs create/delete rights to provision ephemeral attack infrastructure, a materially bigger blast radius than the read-only role those accounts use, and the owner decision (`R-21`) was explicit that it must stay isolated from everything else, including the discovery sandbox.
+
+**Account:** one dedicated AWS account, owned by Audspect, isolated from customer accounts, operational accounts, and the discovery-trial account above. Not provisioned yet (confirmed 2026-11-09).
+
+**Before any detonation-capable code is written, the account needs:**
+- Ownership confirmed.
+- A per-run budget guardrail and an account-level budget alert (Audspect owns the spend — warmup, detonate, cleanup, and any leaked-resource recovery).
+- Permissions **scoped to the eventual approved technique set only** — this cannot be finalized yet, because the technique registry itself (`R-21` Priority 3: "fixed technique registry — versioned, reviewed, reversible techniques only") hasn't been built. Provisioning the account doesn't require that registry first; scoping its permissions precisely does.
+- The pinned `stratus` binary, checksum-verified against the official GitHub release and signed through Audspect's own process (no upstream signature exists to verify against — see `R-21`'s verification findings).
+
+**What it is not:** a read-only account like the three above. It will hold real create/delete permissions (IAM, storage, compute, depending on which techniques are eventually approved) and real, if ephemeral, billable resources.
+
+**Full decision record, approval conditions, and current status:** `docs/cloud-open-decisions.md` (`R-21`), tracked as `O-15` in `docs/cloud-mastery-qa-log.md`.
+
 ## What this does not cover
 
-- Stratus Red Team (`R-21`/`O-15`) — separate dedicated sandbox account, parked.
+- Building any part of Stratus Red Team itself (registry, approval, executor) — the section above names the account requirement; the build is parked (`R-21`/`O-15`).
 - State-changing cloud actions of any kind — none exist in the code this checklist tests.
 - GCP folder/org hierarchy inheritance beyond the documented limitation.
 - Kubernetes on managed platforms (`O-12`) or multi-node K3s (`O-13`) — unrelated to this checklist, tracked separately.
