@@ -180,33 +180,28 @@ func TestInterpretARTExecutionErrors(t *testing.T) {
 		name   string
 		r      ExecResult
 		stdout string
-		// wantSkip marks a case whose output means the environment could not run
-		// the technique at all (missing prerequisite / absent required binary):
-		// that is a SKIP, not a BAS execution error. The rest stay errors.
-		wantSkip bool
 	}{
-		{"invalid syntax (T1112)", ExecResult{ExitCode: 1}, "ERROR: Invalid syntax.", false},
-		{"invalid key name (T1112)", ExecResult{ExitCode: 1}, "ERROR: Invalid key name.", false},
-		{"scheduler contention (T1082)", ExecResult{ExitCode: -1}, "schedule timeout: resource locks unavailable within 30s", false},
-		{"step timeout (T1059.003)", ExecResult{ExitCode: -1}, "step exceeded execute timeout of 120s", false},
-		{"dns failure (T1105)", ExecResult{ExitCode: 1}, "ssh: Could not resolve hostname adversary-host: No such host is known.", false},
-		{"binary cannot execute (T1003.001)", ExecResult{ExitCode: 1}, "The system cannot execute the specified program.", true},
-		{"prereq not found (T1105 OneDrive)", ExecResult{ExitCode: 1}, "OneDriveStandaloneUpdater.exe not found at C:\\...\\OneDrive. Test cannot continue.", true},
-		{"interactive prompt (T1003.002 sam)", ExecResult{ExitCode: -1}, "File C:\\Windows\\TEMP\\sam already exists. Overwrite (Yes/No)?", false},
-		{"arch mismatch (T1082)", ExecResult{ExitCode: 1}, "Could not load file or assembly ... An attempt was made to load a program with an incorrect format.", false},
-		{"msi invalid cmdline (T1569.002)", ExecResult{ExitCode: 1639}, "DESCRIPTION:", false},
-		{"curl cannot open (T1105)", ExecResult{ExitCode: 26}, "curl: cannot open 'c:\\temp\\atomictestfile.txt'", true},
-		{"generic nonzero, no signal", ExecResult{ExitCode: 1}, "Directory: C:\\temp", false},
+		{"invalid syntax (T1112)", ExecResult{ExitCode: 1}, "ERROR: Invalid syntax."},
+		{"invalid key name (T1112)", ExecResult{ExitCode: 1}, "ERROR: Invalid key name."},
+		{"scheduler contention (T1082)", ExecResult{ExitCode: -1}, "schedule timeout: resource locks unavailable within 30s"},
+		{"step timeout (T1059.003)", ExecResult{ExitCode: -1}, "step exceeded execute timeout of 120s"},
+		{"dns failure (T1105)", ExecResult{ExitCode: 1}, "ssh: Could not resolve hostname adversary-host: No such host is known."},
+		{"binary cannot execute (T1003.001)", ExecResult{ExitCode: 1}, "The system cannot execute the specified program."},
+		{"prereq not found (T1105 OneDrive)", ExecResult{ExitCode: 1}, "OneDriveStandaloneUpdater.exe not found at C:\\...\\OneDrive. Test cannot continue."},
+		{"interactive prompt (T1003.002 sam)", ExecResult{ExitCode: -1}, "File C:\\Windows\\TEMP\\sam already exists. Overwrite (Yes/No)?"},
+		{"arch mismatch (T1082)", ExecResult{ExitCode: 1}, "Could not load file or assembly ... An attempt was made to load a program with an incorrect format."},
+		{"msi invalid cmdline (T1569.002)", ExecResult{ExitCode: 1639}, "DESCRIPTION:"},
+		{"curl cannot open (T1105)", ExecResult{ExitCode: 26}, "curl: cannot open 'c:\\temp\\atomictestfile.txt'"},
+		{"generic nonzero, no signal", ExecResult{ExitCode: 1}, "Directory: C:\\temp"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			want := models.ResultError
-			if c.wantSkip {
-				want = models.ResultSkipped
-			}
+			// Every classified execution error — including a missing binary or
+			// unmet prerequisite — is ERROR here; the ExecutionFailure taxonomy
+			// (tested in execution_failure_test.go) attributes owner afterwards.
 			got, detail := interpretART(c.r, c.stdout)
-			if got != want {
-				t.Errorf("interpretART(%q, exit=%d) = %q, want %q (detail=%q)", c.stdout, c.r.ExitCode, got, want, detail)
+			if got != models.ResultError {
+				t.Errorf("interpretART(%q, exit=%d) = %q, want error (detail=%q)", c.stdout, c.r.ExitCode, got, detail)
 			}
 		})
 	}
@@ -301,33 +296,26 @@ func TestInterpretCustom_VerdictLineNotNecessarilyFirst(t *testing.T) {
 // (Technique Executed). They are NOT successful attacks — a bad path, a missing
 // runtime dependency, or a resource that already existed. Critically, several of
 // these surface on a ZERO exit code (PowerShell non-terminating errors), so they
-// must NOT classify as FAIL. Most are ERROR; the ones whose output means the
-// environment lacked a prerequisite (so the technique never ran) are SKIP, not a
-// BAS error. Strings are verbatim from the report.
+// must classify as ERROR, not FAIL. The ExecutionFailure taxonomy then attributes
+// each ERROR to its owner (environment vs content). Strings are verbatim from the
+// report.
 func TestInterpretARTAtomicArtifactsAreErrors(t *testing.T) {
 	cases := []struct {
 		name   string
 		r      ExecResult
 		stdout string
-		// wantSkip: the technique could not run because a prerequisite was absent
-		// (not applicable here), so it is a SKIP rather than a BAS execution error.
-		wantSkip bool
 	}{
-		{"F-02 invalid dump path (exit 0)", ExecResult{ExitCode: 0}, `The path 'C:\Windows\system32\"C:\Windows\TEMP\nanodump.dmp"' is invalid.`, false},
-		{"F-03 IWR IE engine missing (exit 0)", ExecResult{ExitCode: 0}, "IWR : The response content cannot be parsed because the Internet Explorer engine is not available, or Internet Explorer's first-launch configuration is not complete.", true},
-		{"F-06 SilentProcessExit folder invalid (exit 0)", ExecResult{ExitCode: 0}, "SilentProcessExit folder is not valid", false},
-		{"F-105 item already exists (exit 0)", ExecResult{ExitCode: 0}, "New-Item : The item already exists.", false},
-		{"not a valid win32 application", ExecResult{ExitCode: 1}, "The program or feature could not be started because it is not a valid Win32 application.", false},
+		{"F-02 invalid dump path (exit 0)", ExecResult{ExitCode: 0}, `The path 'C:\Windows\system32\"C:\Windows\TEMP\nanodump.dmp"' is invalid.`},
+		{"F-03 IWR IE engine missing (exit 0)", ExecResult{ExitCode: 0}, "IWR : The response content cannot be parsed because the Internet Explorer engine is not available, or Internet Explorer's first-launch configuration is not complete."},
+		{"F-06 SilentProcessExit folder invalid (exit 0)", ExecResult{ExitCode: 0}, "SilentProcessExit folder is not valid"},
+		{"F-105 item already exists (exit 0)", ExecResult{ExitCode: 0}, "New-Item : The item already exists."},
+		{"not a valid win32 application", ExecResult{ExitCode: 1}, "The program or feature could not be started because it is not a valid Win32 application."},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			want := models.ResultError
-			if c.wantSkip {
-				want = models.ResultSkipped
-			}
 			got, detail := interpretART(c.r, c.stdout)
-			if got != want {
-				t.Errorf("interpretART(%q, exit=%d) = %q, want %q (detail=%q)", c.stdout, c.r.ExitCode, got, want, detail)
+			if got != models.ResultError {
+				t.Errorf("interpretART(%q, exit=%d) = %q, want error (detail=%q)", c.stdout, c.r.ExitCode, got, detail)
 			}
 		})
 	}

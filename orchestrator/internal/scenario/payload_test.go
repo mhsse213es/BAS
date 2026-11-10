@@ -176,12 +176,11 @@ func TestInterpretARTSkipAndPrereq(t *testing.T) {
 	}{
 		// An explicit skip marker (e.g. missing external payload) stays SKIPPED.
 		{"explicit skip marker", "SKIP: requires external payload gsecdump.exe", models.ResultSkipped},
-		// A missing binary/path means the environment could not run the technique
-		// at all — it was never tested. That is a SKIP (not applicable here), not a
-		// security finding and not a BAS execution error, so it must not FAIL a
-		// factory validation.
-		{"not recognized", "'foo.exe' is not recognized as an internal or external command", models.ResultSkipped},
-		{"cannot find path", "cd : Cannot find path 'C:\\x' because it does not exist.", models.ResultSkipped},
+		// A missing binary/path means the test could not execute — that is an
+		// ERROR (BAS problem), not a security finding and not a deliberate skip.
+		// The ExecutionFailure taxonomy attributes it to owner=environment.
+		{"not recognized", "'foo.exe' is not recognized as an internal or external command", models.ResultError},
+		{"cannot find path", "cd : Cannot find path 'C:\\x' because it does not exist.", models.ResultError},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
