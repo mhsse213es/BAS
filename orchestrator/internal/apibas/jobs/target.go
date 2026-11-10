@@ -87,9 +87,19 @@ func (s *Service) submitForTarget(ctx context.Context, r TargetRequest) (db.APIB
 		if err != nil {
 			return db.APIBASJob{}, false, err
 		}
-		_, ids, err := runnerproto.BoundScenarioIDs(*r.Bound)
+		plan, ids, err := runnerproto.BoundScenarioIDs(*r.Bound)
 		if err != nil {
 			return db.APIBASJob{}, false, fmt.Errorf("apibas jobs: the test data does not bind: %w", err)
+		}
+		if plan.Writes {
+			// A write that succeeds changes the customer's object. It is never attempted against production, and only where the
+			// operator registered path prefixes to hold it.
+			if t.Environment == "production" {
+				return db.APIBASJob{}, false, fmt.Errorf("%w: write scenarios are not run against production", ErrEnvironmentNotPermitted)
+			}
+			if len(t.AllowedPaths) == 0 {
+				return db.APIBASJob{}, false, fmt.Errorf("%w: write scenarios need the target to register allowed paths", ErrScopeViolation)
+			}
 		}
 		r.Fixture, r.ScenarioIDs = fx, ids
 		// Every identity must use a credential registered on the target. A job never reaches for a secret the operator did not

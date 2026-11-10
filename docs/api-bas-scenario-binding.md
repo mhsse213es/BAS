@@ -24,9 +24,7 @@ receives only credential *names*.
 
 ## What it does not do
 
-- **No write operations.** A change to state needs an independent check that state did not change, and a customer's API offers
-  none. `runner.NoState` returns an empty snapshot, so it can never show a change; the runner refuses to run any scenario that is not
-  `READ_ONLY` with it (tested). Write operations are reported as skipped.
+- **Writes are limited and opt-in.** Only PUT and PATCH on objects the customer lists with a write block are bound; see "Binding writes" below. DELETE, POST and every other state-changing operation are skipped with a reason.
 - **Response evidence only.** A pass proves the attack was refused and leaked none of the protected values supplied. It cannot see a
   leak of a value the customer did not supply, and says nothing about other objects, roles or parameters.
 - Running a plan as a job is covered in "Running stored test data as a job" below.
@@ -51,8 +49,8 @@ receives only credential *names*.
 ## Next steps
 
 1. (Done) Persist a binding spec on a target, and run it through the orchestrator's job path.
-2. Console: store, run and show bound jobs (the page still previews typed data only).
-3. A target-side state check (a customer-provided read endpoint) so write operations can be bound.
+3. (Done, limited) Writes: PUT and PATCH with a read-back state check and an owner restore.
+4. Console: store, run and show bound jobs, and edit write blocks.
 
 
 ## Stored test data (added 10 November 2026)
@@ -103,3 +101,37 @@ same bound scenarios; an unregistered credential, a path outside scope, an alter
 report. Not run on staging or against a real customer API.
 
 Not built: results are in the job as for any job but the console does not show them; no scheduling; no write operations.
+
+## Binding writes (added 10 November 2026)
+
+A customer API has no administrative view of its records, so a write is judged the one way its own interface allows: the object is
+read back through its normal read route, as its owner, before and after the other identity's attempt. A difference means the attempt
+changed it (graded FAIL, exploited); a refusal (403 or 404) with no difference is PASS; an accepted write with no visible difference
+is SKIPPED as inconclusive, never PASS; a probe that fails or returns a server error is ERROR.
+
+**Test data.** Set `allow_writes: true` (the customer's acknowledgement that the listed objects may change during the test) and give
+each PUT/PATCH object a `write` block:
+
+    {"operation": "PATCH /v2/orders/{orderId}", "params": {"orderId": "ORD-A1"}, "owner": "alice",
+     "write": {"attack_body": "{\"status\":\"hacked\"}", "restore_body": "{\"status\":\"open\"}",
+               "read_operation": "GET /v2/orders/{orderId}", "ignore_fields": ["updated_at"]}}
+
+`read_operation` defaults to the GET with the same path. `ignore_fields` drops values that change on every read (timestamps, request
+ids). Both bodies must be JSON objects of at most 4 KiB and must differ. The read operation must be a GET, not declared public, and
+take the same path parameters.
+
+**Restore.** A write that succeeds changes the customer's object. The runner sends the owner's `restore_body` (same method and path)
+before the run, which proves the restore works and starts from a known state, and again after. A restore the target refuses is an
+ERROR: the object's state is unknown and must be checked by hand. The runner never reports PASS in that case.
+
+**Safeguards.**
+- Only PUT and PATCH are bound. DELETE destroys the object and POST effects cannot be undone by repeating a request, so both are
+  skipped with a reason.
+- Without `allow_writes`, no write is bound, and a write block without it is refused.
+- Write jobs need the target to register allowed paths (even a lab target), and the state reads and restores are held to them.
+- Write jobs are refused against production, even once production execution is enabled.
+- Reads and restores do not follow redirects, so they stay on the registered host.
+
+**What this does not show.** A change to anything the read route does not return, or to a field listed as ignored, is invisible. It
+says nothing about other objects, roles or methods. Restore is the customer's request; the platform cannot confirm the object is
+byte-for-byte as it was.

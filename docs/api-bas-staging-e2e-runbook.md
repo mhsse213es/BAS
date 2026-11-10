@@ -69,6 +69,7 @@ Needs an inventory and stored test data on a registered staging target (see `doc
 3. Poll `GET /api/apibas/jobs/{id}`: scenario ids are `API-BAS-AUTHZ-9xx`; a vulnerable route grades FAIL, an enforcing one PASS.
 4. Import a changed spec, then repeat step 2 with a new key; expect 409 until step 1 is repeated.
 5. Check `SELECT job_id, inventory_version FROM apibas_job_plans` shows the plan and that no credential value appears in it.
+6. Writes (only with a test object you accept being changed): add `allow_writes` and a `write` block to the test data (see the binding doc). Run a job and read the object afterwards as its owner; it must be as supplied whatever the verdict. Break the restore body on purpose and confirm the job reports ERROR, not PASS. Confirm a target without allowed paths refuses a write job.
 
 ## 7. Clean up
 Stop both labs, remove the UFW rules you opened, delete the lab tokens from your shell history, and record results in `docs/api-bas-mastery-qa-log.md`, including every check that failed.

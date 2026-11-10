@@ -241,6 +241,31 @@ func runJob(path string) int {
 			BaseURL: req.TargetBaseURL, Fixture: plan.Fixture, Secrets: creds, State: runner.NoState{},
 			HTTP: &http.Client{Timeout: 10 * time.Second}, AllowedPaths: req.AllowedPaths,
 		}
+		if plan.Writes {
+			// Write scenarios are judged by reading each object back as its owner, and are cleaned up by the owner's restore
+			// request. Both stay inside the job's allowed paths.
+			tokenRef := func(identity string) string {
+				id, _ := plan.Fixture.Identity(identity)
+				return id.TokenRef
+			}
+			probes := make([]runner.Probe, 0, len(plan.Probes))
+			for _, p := range plan.Probes {
+				probes = append(probes, runner.Probe{Key: p.Key, TokenRef: tokenRef(p.Identity), Path: p.Path, Ignore: p.Ignore})
+			}
+			restores := make([]runner.Restore, 0, len(plan.Restores))
+			for _, rs := range plan.Restores {
+				restores = append(restores, runner.Restore{Key: rs.Key, TokenRef: tokenRef(rs.Identity), Method: rs.Method, Path: rs.Path, Body: rs.Body})
+			}
+			st, serr := runner.NewHTTPState(req.TargetBaseURL, probes, creds, cfg.HTTP, req.AllowedPaths)
+			if serr != nil {
+				return emitFailure(base, serr.Error())
+			}
+			rr, rerr := runner.NewHTTPRestore(req.TargetBaseURL, restores, creds, cfg.HTTP, req.AllowedPaths)
+			if rerr != nil {
+				return emitFailure(base, rerr.Error())
+			}
+			cfg.State, cfg.Reset = st, rr
+		}
 	} else {
 		fx, ok := map[string]fixture.Fixture{
 			"orders-two-tenant":   fixture.OrdersTwoTenant(),
