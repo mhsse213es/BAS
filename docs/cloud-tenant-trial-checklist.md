@@ -1,10 +1,10 @@
 # Cloud BAS — tenant trial checklist (live testing, before a client environment)
 
 **Date:** 2026-11-10
-**Scope:** what to provision in AWS, Azure and GCP to run everything *already built* in `orchestrator/internal/cloudgraph` against a real account — discovery, the authorization evaluators, preflight, the two read-only probes, and audit-log/event correlation.
+**Scope:** what to provision in AWS, Azure, GCP and Kubernetes to run everything *already built* in `orchestrator/internal/cloudgraph` against a real account or cluster — discovery, the authorization evaluators, preflight, the two read-only cloud probes, audit-log/event correlation, and the Kubernetes static RBAC/pod/network-policy analysis.
 **Out of scope:** Stratus Red Team (`R-21` in `docs/cloud-open-decisions.md`, tracked as `O-15`). That is a separate, state-changing execution subsystem on its own dedicated sandbox account, parked pending provisioning. Do not reuse that account for this checklist, and do not reuse this checklist's account(s) for Stratus once it resumes — the permission footprints and risk profiles are deliberately different.
 
-Every permission and preflight-check name below was read from the current code (`aws_discovery.go`, `azure_discovery.go`, `azure_preflight.go`, `gcp_discovery.go`, `gcp_preflight.go`, `probe.go`, `probe_aws.go`, `cloud_event_sources.go`, `cloud_scenarios.go`) on 2026-11-10, not reconstructed from memory. None of this has been run against a real account yet — see the open items this closes, listed per provider below.
+Every permission and preflight-check name below was read from the current code (`aws_discovery.go`, `azure_discovery.go`, `azure_preflight.go`, `gcp_discovery.go`, `gcp_preflight.go`, `probe.go`, `probe_aws.go`, `cloud_event_sources.go`, `cloud_scenarios.go`, `k8s_discovery.go`, `k8s_rbac_analysis.go`) on 2026-11-10, not reconstructed from memory. None of this has been run against a real account yet — see the open items this closes, listed per provider below.
 
 ## Two kinds of identity, in every provider
 
@@ -89,6 +89,34 @@ Every permission and preflight-check name below was read from the current code (
 
 **Closes:** `O-3` (live GCP discovery), part of `O-4` (Data Access logs, once enabled), part of `O-5` (GCP side).
 
+## Kubernetes
+
+**Status:** the Safe-profile discovery and static RBAC/pod/network-policy analysis is already proven live, on one cluster — `kind-bas-lab` (single-node `kind`), scenarios S9 and S10 (`docs/k8s-bas/lab-run-2026-11-04.md`). What this checklist is for is a *second* cluster to broaden that proof, or to set one up from scratch the same way. What's genuinely open is listed at the end of this section.
+
+**Cluster registration:** display name, API server URL, cluster CA fingerprint (read from `/version`), and a **cluster class** — `lab`, `non-production`, or `production` — set by an administrator, never by the requester. For this checklist, register it as `lab`: Safe-profile analysis works on any class, but the Lab-profile network probes below only run on a lab-classified cluster (`docs/k8s-bas/SPEC-first-wave.md` §1–3).
+
+**Discovery identity (read-only, Safe profile).** The lab uses a ServiceAccount `kube-system/bas-discovery` bound to a ClusterRole with `get`/`list` on exactly the resources `k8s_discovery.go` lists: `namespaces`, `pods`, `serviceaccounts`, `roles` and `rolebindings` (`rbac.authorization.k8s.io`, namespaced), `clusterroles` and `clusterrolebindings` (same group, cluster-scoped), `replicasets`/`deployments`/`statefulsets`/`daemonsets` (`apps`), `jobs`/`cronjobs` (`batch`), `networkpolicies` (`networking.k8s.io` — added as a separate ClusterRole in `orchestrator/testdata/k8s-netpol/lab-discovery-rbac.yaml` so it doesn't widen the base role), and optionally `helmcharts.helm.cattle.io` (a CRD; its absence is read as "none," not a gap, if Rancher isn't installed).
+
+**This base ClusterRole is not committed anywhere in the repo.** It exists only as whatever was manually applied to `kind-bas-lab` — `lab-discovery-rbac.yaml` only *adds* the NetworkPolicy rule to it, and assumes it already exists. Before setting up a second cluster, either find and commit the original manifest, or write a new one from the resource list above — otherwise it has to be re-derived by hand every time.
+
+**Resources to seed, so the static analysis has real findings to produce (not an empty cluster):**
+
+| Resource | Purpose |
+|---|---|
+| A pod whose ServiceAccount is bound to a role granting `list`/`get` on `secrets`, `create` on `pods`, `create` on `pods/exec`, or `escalate` on `roles` | Exercises the privilege-escalation catalogue (`k8s_rbac_analysis.go`'s `k8sPrivilegeCatalog`) |
+| A mix of pods with and without `automountServiceAccountToken: false` | Token-exposure analysis |
+| Pods with varying security contexts (privileged, hostNetwork, hostPath, `runAsNonRoot` unset) | Dangerous-pod-configuration analysis |
+| Two namespaces with a NetworkPolicy restricting traffic between them, plus a listener pod/Service pair in one and a prober identity in the other (the lab uses `np-app`/`np-db`, default-deny ingress on `np-db` with one allow rule) | Network-policy boundary analysis — this is exactly scenario S9 |
+
+**The Lab-profile network probes are their own, separate trust boundary** — the same distinction as Stratus vs. discovery for cloud, just smaller in scope: they create and delete real, short-lived pods to test actual connectivity, not just read RBAC/policy objects. The lab's `bas-probe` ServiceAccount (`orchestrator/testdata/k8s-netpol/lab-probe-rbac.yaml`) is scoped to `create`/`get`/`list`/`delete` on `pods` and `get` on `pods/log` in exactly one namespace, with `automountServiceAccountToken: false`, bound only via a namespaced `Role` — never a `ClusterRole`. Lab cluster only, never customer production, per the execution-profile table in `SPEC-first-wave.md`.
+
+**What's open:**
+- `O-12` — managed platforms (EKS, AKS, GKE, OpenShift). Each is its own cloud-account provisioning exercise on top of (not instead of) the AWS/Azure/GCP work above, since a managed cluster lives inside a cloud account.
+- `O-13` — a genuine multi-node K3s environment; `kind-bas-lab` is single-node.
+- `O-14`'s node-proxy attack-path route is modelled from RBAC grants only and has never been checked against real kubelet behaviour.
+
+**What this is not:** the `Controlled` execution profile — state-changing actions against a customer's cluster under a signed customer authorization (`docs/k8s-bas/customer-authorization.md`). That's the live-engagement path, not something to provision for internal pre-client testing.
+
 ## Cross-cutting, all three providers
 
 - **One allow-list covers everything:** `CLOUD_ALLOWED_ACCOUNTS` must name these exact accounts before the server will touch them at all, regardless of credentials. It applies to discovery, every plan run, campaigns, scenario runs, preflight, and the probes. An older, probe-specific `CLOUD_PROBE_ALLOWED_ACCOUNTS` variable existed earlier and is no longer read — don't set it expecting it to do anything.
@@ -118,4 +146,4 @@ This is a cloud account requirement too, so it belongs in this doc even though t
 - Building any part of Stratus Red Team itself (registry, approval, executor) — the section above names the account requirement; the build is parked (`R-21`/`O-15`).
 - State-changing cloud actions of any kind — none exist in the code this checklist tests.
 - GCP folder/org hierarchy inheritance beyond the documented limitation.
-- Kubernetes on managed platforms (`O-12`) or multi-node K3s (`O-13`) — unrelated to this checklist, tracked separately.
+- The `Controlled` Kubernetes execution profile (state-changing actions against a customer's cluster under a signed customer authorization) — see the Kubernetes section above for what Safe/Lab-profile testing needs instead.
