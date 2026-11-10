@@ -29,6 +29,12 @@ Every permission and preflight-check name below was read from the current code (
 | 1 AWS Backup vault with a backup plan and at least one recovery point | So `backup-assurance-aws` has something real to discover and evaluate |
 | CloudTrail available (a trail, or just the default 90-day event history) | `cloudtrail:LookupEvents`, `O-4` |
 
+**Credentials:** the standard AWS SDK default chain (environment variables, shared credentials file, or an instance role) — no file-based mechanism like Azure's below. Region comes from that same config; `cloudtrail:LookupEvents` is regional, so run discovery/observe in the same region the test actions happened in, or use a multi-region trail.
+
+**Cross-account grant detection does not need a second AWS account.** `aws_crossaccount.go` reads bucket-policy principals that name another account ID as text in the policy document — it never queries or assumes into that account. One account with a bucket policy naming a foreign account ID is enough to exercise it.
+
+**Optional, for multi-account fan-out (`RunMultiAccount`, Phase 3):** a second AWS account, same provider, to actually exercise the concurrent fan-out code with two real accounts rather than one. Not required for anything else in this checklist.
+
 **Caveat (from `docs/aws/README.md`):** `organizations:ListPoliciesForTarget`/`DescribePolicy` only succeed from the Organization's management account or a registered delegated administrator. From any other account the SCP check reports "could not read policies" — handled gracefully, but it validates nothing. Either run the BAS role from the management account, or register the test account as a delegated admin for the Organizations service.
 
 **To exercise the Observe/evidence-correlation path for real** (not just the graph prediction): have a test identity actually perform one benign read (e.g. a real `s3:GetObject` on its own test object) once, then confirm the server's CloudTrail read finds that event. That is a permission on the *test identity*, not the BAS server's role.
@@ -42,6 +48,8 @@ Every permission and preflight-check name below was read from the current code (
 **Tenant/subscription:** one subscription. For management-group testing, it should sit under a management group (even one level under root).
 
 **App registration + consent:** Graph application permissions `User.Read.All`, `Application.Read.All`, admin consent granted. Service principal given **Reader** on the subscription, ideally also Reader at the management-group root so `mg-hierarchy-readable` passes.
+
+**Credentials:** loaded from the file named by `CLOUD_AZURE_SECRETS_FILE` — four keys, `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SUBSCRIPTION_ID`. The server refuses to start if `AZURE_CLIENT_SECRET` is set in the process environment instead.
 
 **Preflight checks this must satisfy** (`azure_preflight.go`, 7 checks): `token-graph`, `token-arm`, `subscription-visible`, `rbac-readable`, `deny-assignments-readable`, `mg-hierarchy-readable`, `graph-users-readable`.
 
@@ -64,6 +72,10 @@ Every permission and preflight-check name below was read from the current code (
 
 **Service account** (read-only): `resourcemanager.projects.getIamPolicy`, `resourcemanager.projects.get`, `iam.roles.get`, `iam.serviceAccounts.list`, `storage.buckets.list`, `storage.buckets.getIamPolicy`, `iam.denypolicies.list`.
 
+**APIs that must be enabled on the project first** — disabled by default on a fresh project, a common first-run failure: Cloud Resource Manager API (`cloudresourcemanager.googleapis.com`), IAM API (`iam.googleapis.com`), Cloud Storage API (`storage.googleapis.com`), Cloud Logging API (`logging.googleapis.com`).
+
+**Credentials:** Application Default Credentials — a service-account JSON key file via `GOOGLE_APPLICATION_CREDENTIALS`, or workload identity. No secrets-file mechanism like Azure's.
+
 **Preflight checks this must satisfy** (`gcp_preflight.go`, 6 checks): `project-ancestry-readable`, `project-iam-readable`, `ancestor-iam-readable`, `deny-policies-readable`, `buckets-readable`, `service-accounts-readable`.
 
 **Resources to seed:**
@@ -79,8 +91,10 @@ Every permission and preflight-check name below was read from the current code (
 
 ## Cross-cutting, all three providers
 
-- `CLOUD_ALLOWED_ACCOUNTS` (and the separate, narrower probe allow-list) must name these exact accounts before the server will touch them at all, regardless of credentials.
-- Azure credentials load from a file (`CLOUD_AZURE_SECRETS_FILE`), not the environment — the server refuses to start otherwise.
+- **One allow-list covers everything:** `CLOUD_ALLOWED_ACCOUNTS` must name these exact accounts before the server will touch them at all, regardless of credentials. It applies to discovery, every plan run, campaigns, scenario runs, preflight, and the probes. An older, probe-specific `CLOUD_PROBE_ALLOWED_ACCOUNTS` variable existed earlier and is no longer read — don't set it expecting it to do anything.
+- Azure credentials load from a file (`CLOUD_AZURE_SECRETS_FILE`), not the environment — the server refuses to start otherwise. AWS and GCP use their SDKs' own standard credential mechanisms (see each section above).
+- **Who can run any of this:** the API routes for discovery/plan runs, scenario runs, campaigns, preflight and the probes all require the `CanRunScenario` permission; cloud topology import and path-finding require `CanImportCloudTopology`. Whoever runs the trial needs one of those roles.
+- **Running more than one account/provider at once:** discovery allows one pass per account at a time (a second concurrent request gets a 409) and caps total concurrent passes server-wide (`CLOUD_DISCOVERY_MAX_CONCURRENT`, `CLOUD_DISCOVERY_MAX_QUEUED`, `CLOUD_DISCOVERY_QUEUE_WAIT`). The defaults are fine for a handful of trial accounts; just don't expect to fire discovery at all three providers at the exact same instant without some queuing.
 - None of this provisions a meaningful ongoing cloud spend. It's a small fixed footprint seeded once (a couple of buckets, one backup vault, one storage account, one Recovery Services vault) — materially different from Stratus's per-run ephemeral infrastructure cost.
 
 ## AWS — Stratus Red Team sandbox (separate account, parked)
