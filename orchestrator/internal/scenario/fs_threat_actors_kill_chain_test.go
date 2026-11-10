@@ -11,29 +11,44 @@ import (
 // REQ-019 acceptance gate: the five bank-targeting threat-actor kill chains
 // added to complete the FS threat-actor library (Carbanak, Cobalt Group,
 // Silence, TA505, FIN8) must each parse, be Windows-only, carry exactly the
-// intended five-stage ATT&CK technique sequence, and be telemetry-safe
-// (every step production_safe + reversible with a command and a name).
+// intended ATT&CK technique sequence, and be safe to run (each step is either
+// production_safe + reversible, or explicitly lab-only).
 //
-// It follows the fin7-kill-chain FS-actor pattern (narrative citations in the
-// description, no per-step provenance fields), so — like fin7 and the rest of
-// the non-ransomware library — these steps intentionally set none of the
-// optional threat_intel_sources / family_attribution_confidence fields.
+// Carbanak, Cobalt Group, Silence and TA505 are the enterprise-grade rebuilds
+// (black-basta standard): a full initial-access -> ... -> objective arc with
+// the impact/destructive stages lab-gated, per-step grounding
+// (threat_intel_sources + family_attribution_confidence), and real detectable
+// actions scored PASS/FAIL on the control outcome. FIN8 still follows the
+// earlier fin7-style pattern (narrative citations in the description, no
+// per-step provenance fields); its enterprise rebuild is tracked separately.
 func TestFSThreatActorKillChains_ParseWindowsOnlyWithExpectedTechniques(t *testing.T) {
 	cases := []struct {
 		file       string
 		techniques []string
 	}{
 		{
+			// Enterprise-grade rebuild (black-basta standard): initial-access
+			// -> service persistence -> firewall evasion -> LSASS cred access
+			// -> payment-app discovery -> operator screen capture -> HTTPS C2
+			// -> fraudulent-transfer objective (lab-gated).
 			file:       "carbanak-kill-chain.yaml",
-			techniques: []string{"T1033", "T1056.001", "T1125", "T1074.001", "T1071.001"},
+			techniques: []string{"T1566.001", "T1543.003", "T1686", "T1003.001", "T1057", "T1113", "T1071.001", "T1078"},
 		},
 		{
+			// Enterprise-grade rebuild: initial-access -> encoded loader ->
+			// security-software discovery -> regsvr32 Squiblydoo -> service
+			// persistence -> scheduled-task persistence -> DNS C2 ->
+			// ATM/card-processing manipulation objective (lab-gated).
 			file:       "cobalt-group-kill-chain.yaml",
-			techniques: []string{"T1518.001", "T1087.002", "T1059.001", "T1021.002", "T1071.004"},
+			techniques: []string{"T1566.001", "T1059.001", "T1518.001", "T1218.010", "T1543.003", "T1053.005", "T1071.004", "T1565.002"},
 		},
 		{
+			// Enterprise-grade rebuild: initial-access -> encoded loader ->
+			// operator screen capture -> LSASS cred access -> network
+			// topology mapping -> Run-key persistence -> ingress reachability
+			// -> Atmosphere ATM cash-dispense objective (lab-gated).
 			file:       "silence-kill-chain.yaml",
-			techniques: []string{"T1087.001", "T1016", "T1115", "T1047", "T1105"},
+			techniques: []string{"T1566.001", "T1059.001", "T1113", "T1003.001", "T1018", "T1547.001", "T1105", "T1565.001"},
 		},
 		{
 			// Enterprise-grade reference chain (black-basta standard): full

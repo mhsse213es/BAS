@@ -1,57 +1,89 @@
 id: cobalt-group-kill-chain
 product_line: killchain
-name: Cobalt Group Kill Chain -- BFSI Cobalt Strike Tradecraft (Phase 7)
+name: Cobalt Group Kill Chain -- BFSI Cobalt Strike Tradecraft & ATM Cash-Out
 description: >
-  Five-stage telemetry-safe emulation of Cobalt Group (Cobalt Gang / Gold
-  Kingswood) post-initial-access tradecraft against banks. Based on
-  Group-IB "Cobalt" reports, Europol's 2018 arrest announcement, and MITRE
-  ATT&CK group G0080.
+  Eight-stage emulation of Cobalt Group (GOLD KINGSWOOD / Cobalt Gang) endpoint
+  tradecraft against banks, from spearphishing initial access through to the
+  group's objective: manipulating card-processing / ATM-switch data to cash out
+  money. Grounded in MITRE ATT&CK group G0080, Cisco Talos "Multiple Cobalt
+  Personality Disorder" (2018), Positive Technologies "Cobalt Strikes Back"
+  (2017), Group-IB "Secrets of Cobalt" (2017) and Group-IB's reporting on
+  Cobalt's logical attacks on ATMs.
 
-  Cobalt Group compromised 100+ banks across 40+ countries, using spearphish
-  with exploit-laden documents to deploy Cobalt Strike Beacon, then pivoting
-  to card-processing, SWIFT, and ATM-switch hosts to issue fraudulent payment
-  and ATM "jackpotting" instructions. This chain emulates Beacon-stager
-  tradecraft: defence profiling, domain recon, a PowerShell download cradle,
-  an SMB named-pipe beacon, and a DNS beacon channel. In Indian BFSI context
-  the pivot targets are the card-management switch, SWIFT operator hosts, and
-  ATM controllers.
+  Cobalt Group has targeted financial institutions since at least 2016, stealing
+  money by attacking ATM systems, card processing, payment systems and SWIFT.
+  Europol tied the group to roughly EUR 1 billion stolen from 100+ banks across
+  40+ countries. Intrusions begin with spearphishing, deploy Cobalt Strike
+  Beacon via PowerShell and signed-binary proxy execution, persist, and pivot to
+  the card-processing / ATM-switch hosts that control cash dispensing. In Indian
+  BFSI context the pivot targets are the card-management switch, the ATM
+  controller, and SWIFT operator hosts.
 
   KILL CHAIN STAGES:
-    1. Security Software Discovery       -- enumerate installed AV/EDR before dropping Beacon (T1518.001)
-    2. Domain Account Discovery          -- net group /domain recon for lateral targets (T1087.002)
-    3. PowerShell Download-Cradle Surface -- Net.WebClient/IEX capability probe, NO download (T1059.001)
-    4. SMB Named-Pipe Beacon Surface     -- create/close a local Beacon-style named pipe (T1021.002)
-    5. DNS Beacon Channel                -- NXDOMAIN lookup simulating a Cobalt Strike DNS beacon (T1071.004)
+     1. Initial Access       -- spearphishing-attachment child-process chain (T1566.001)
+     2. Execution             -- encoded PowerShell loader / Cobalt Strike stager (T1059.001)
+     3. Discovery             -- installed security-software enumeration (T1518.001)
+     4. Defense Evasion       -- regsvr32 "Squiblydoo" signed-binary proxy execution (T1218.010)
+     5. Persistence           -- Windows service install, lab-only (T1543.003)
+     6. Persistence           -- user scheduled-task create/verify/delete (T1053.005)
+     7. Command and Control   -- DNS beacon (NXDOMAIN lookup) (T1071.004)
+     8. Impact (lab-only)     -- card-processing / ATM-dispense data manipulation (T1565.002)
 
-  SAFETY: No Beacon, no download, no remote connection. Stage 3 only checks
-  type availability (no URL fetched). Stage 4 creates a local named pipe and
-  immediately disposes it. Stage 5 resolves a guaranteed-NXDOMAIN name under
-  .invalid (RFC 2606). All [BAS-SIM-COBALT] tagged. PRODUCTION-SAFE. Windows only.
+  ATTRIBUTION / CONFIDENCE: "confirmed" means at least two genuinely distinct
+  sources were cited; "reported" covers a single authoritative source (MITRE
+  ATT&CK's curated pages or a government/vendor report); "inferred" means the
+  behavior is consistent with Cobalt Group's documented objective but the cited
+  source does not tie that specific ATT&CK sub-technique ID to the group.
+
+  DOCUMENTED, NOT MODELED: Cobalt Group's initial access often chained a
+  client-execution exploit (CVE-2017-11882 Equation Editor, CVE-2017-0199,
+  CVE-2018-8174; T1203). This chain does NOT model those single-product exploits
+  -- no safe simulation contract exists -- and models the malicious-attachment
+  behavioral chain (T1566.001) instead. The exploits are recorded here as a
+  known, unmodeled detail.
+
+  ORDERING CAVEAT: this sequence is a representative, documented kill chain for
+  authoring purposes, not a claim that every Cobalt Group incident followed this
+  exact order.
+
+  SAFETY: Stages 1-4, 6 and 7 are production-safe and self-cleaning. Stage 4's
+  regsvr32 points at a loopback URL that cannot serve a payload (connection
+  refused). Stage 5 (service install) is lab-only. Stage 8 is lab-only: it
+  writes a single decoy card-processing / ATM-dispense instruction to an
+  isolated temp dir to represent the objective, then deletes it -- no real ATM,
+  switch, transaction or network. Windows only. [BAS-SIM-COBALT] tagged.
 author: Audspect Research
 executable: true
 local_check: false
 supported_os: [windows]
 tags:
   - cobalt-group
-  - cobalt-gang
   - gold-kingswood
+  - cobalt-gang
   - cobalt-strike
   - bfsi
   - financial
   - atm
+  - card-processing
   - kill-chain
   - phase7
-  - t1518
-  - t1087
+  - t1566
   - t1059
-  - t1021
+  - t1518
+  - t1218
+  - t1543
+  - t1053
   - t1071
+  - t1565
   - mitre
 mitre_phases:
-  - discovery
+  - initial-access
   - execution
-  - lateral-movement
+  - discovery
+  - defense-evasion
+  - persistence
   - command-and-control
+  - impact
 
 live_policy:
   block_on_domain_controller: false
@@ -63,10 +95,10 @@ live_policy:
 steps:
 
   # ---------------------------------------------------------------------------
-  # Stage 1 -- Security Software Discovery (T1518.001)
+  # Stage 1 -- Initial Access: Spearphishing Attachment Child-Process (T1566.001)
   # ---------------------------------------------------------------------------
-  - name: "Cobalt Group Stage 1 -- Security Software Discovery (T1518.001)"
-    technique_id: T1518.001
+  - name: "Cobalt Group Stage 1 -- Spearphishing Attachment Child-Process Chain (T1566.001)"
+    technique_id: T1566.001
     framework: custom
     executor: powershell
     requires_priv: user
@@ -74,7 +106,99 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Enumerates running security-product services and Defender status via Get-Service and Get-MpComputerStatus. Read-only. Cobalt Group profiled the endpoint's AV/EDR before selecting a Cobalt Strike stager and evasion profile."
+    blast_radius: "Copies cmd.exe to a temp winword.exe, spawns powershell.exe from it with a benign Write-Output, waits, deletes the copy. Reproduces the attachment -> shell parent/child chain Cobalt spearphishing (.rtf/.doc/.xls/LNK) creates. No real macro, document, or email."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1 (process create): Image=powershell.exe, ParentImage=%TEMP%\\winword.exe"
+      - "Security EID 4688 (process create with command line) if process auditing enabled"
+    detection:
+      - "EDR: Office process spawning a shell -- primary spearphishing-attachment initial-access signal"
+      - "SIEM: parent-child rule winword.exe/excel.exe -> powershell.exe / cmd.exe"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Cobalt Group (Group G0080): Phishing: Spearphishing Attachment (T1566.001) -- .rtf, .doc, .xls, archives with LNK/EXE/SCR"
+        url: "https://attack.mitre.org/groups/G0080/"
+      - reference: "Cisco Talos -- Multiple Cobalt Personality Disorder (2018)"
+        url: "https://blog.talosintelligence.com/2018/07/multiple-cobalt-personality-disorder.html"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tmp = Join-Path $env:TEMP 'winword.exe'
+      Copy-Item "$env:SystemRoot\System32\cmd.exe" $tmp -Force
+      $psi = New-Object System.Diagnostics.ProcessStartInfo
+      $psi.FileName = $tmp
+      $psi.Arguments = '/c powershell.exe -NoProfile -NonInteractive -Command "Write-Output BAS-SIM-COBALT-S1"'
+      $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+      $psi.CreateNoWindow = $true
+      $p = [System.Diagnostics.Process]::Start($psi)
+      if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+      if ($ec -ge 0) {
+        Write-Output "FAIL: winword.exe->powershell.exe child-process chain fired (exit $ec) -- expect Sysmon EID 1 with ParentImage=winword.exe. AppLocker/WDAC/EDR should block Office processes spawning shells. [BAS-SIM-COBALT-S1]"
+      } else {
+        Write-Output "PASS: the child process could not be started -- AppLocker/WDAC/EDR blocked the document->shell spawn. [BAS-SIM-COBALT-S1]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'winword.exe') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 -- Execution: Encoded PowerShell / Cobalt Strike Stager (T1059.001)
+  # ---------------------------------------------------------------------------
+  - name: "Cobalt Group Stage 2 -- Encoded PowerShell Loader / Cobalt Strike Stager (T1059.001)"
+    technique_id: T1059.001
+    detection_profiles:
+      - windows_encoded_powershell
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Spawns ONE child powershell.exe with -EncodedCommand whose decoded payload only runs Write-Output. Reproduces the -enc child + ScriptBlock telemetry of the Cobalt Strike PowerShell stager; the encoded content is an inert banner, nothing is downloaded or injected."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 / Sysmon EID 1: powershell.exe -EncodedCommand child"
+      - "PowerShell EID 4104: decoded ScriptBlock (Write-Output banner)"
+    detection:
+      - "EDR: powershell.exe -EncodedCommand / -enc spawned by a script or Office host -- Cobalt Strike stager IOC"
+      - "SIEM: EID 4688 powershell with -enc + EID 4104 decoded block"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Cobalt Group (Group G0080): Command and Scripting Interpreter: PowerShell (T1059.001) -- powershell.exe to download and execute scripts"
+        url: "https://attack.mitre.org/groups/G0080/"
+      - reference: "Positive Technologies -- Cobalt Strikes Back: An Evolving Multinational Threat to Finance (2017)"
+        url: "https://www.ptsecurity.com/upload/corporate/ww-en/analytics/Cobalt-2017-eng.pdf"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $inner = "Write-Output 'BAS-SIM-COBALT-S2 encoded stager executed (inert banner)'"
+      $enc = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($inner))
+      $out = & powershell.exe -NoProfile -NonInteractive -EncodedCommand $enc 2>&1 | Out-String
+      $ran = $out -match 'BAS-SIM-COBALT-S2 encoded stager'
+      if ($ran) {
+        Write-Output "FAIL: an -EncodedCommand child powershell.exe ran unblocked -- expect EID 4688 (-enc) + EID 4104. Enable ScriptBlock + AMSI logging and alert on encoded PowerShell; Cobalt Group stages Cobalt Strike this way. [BAS-SIM-COBALT-S2]"
+      } else {
+        Write-Output "PASS: the encoded-command child was blocked or failed -- Constrained Language Mode / AMSI / WDAC constrained the stager surface. [BAS-SIM-COBALT-S2]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 -- Discovery: Security Software Discovery (T1518.001)
+  # ---------------------------------------------------------------------------
+  - name: "Cobalt Group Stage 3 -- Security Software Discovery (T1518.001)"
+    technique_id: T1518.001
+    action_key: enumerate
+    detection_profiles:
+      - windows_security_software_discovery
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Enumerates running security-product services and Defender status via Get-Service and Get-MpComputerStatus. Read-only. Cobalt Group's JavaScript backdoor collects the list of security solutions installed on the victim before choosing its Beacon profile."
     reversible: true
     telemetry:
       - "Sysmon EID 1: powershell.exe enumerating services / Get-MpComputerStatus"
@@ -82,59 +206,32 @@ steps:
     detection:
       - "EDR: Get-MpComputerStatus / security-service enumeration from PowerShell -- Sigma posh_ps_defender_recon.yml"
       - "SIEM: service query filtered by AV vendor strings -- Cobalt Strike pre-stager profiling IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Cobalt Group (Group G0080): Software Discovery: Security Software Discovery (T1518.001) -- JavaScript backdoor collects installed security solutions"
+        url: "https://attack.mitre.org/groups/G0080/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $secVendors = @('defender','mcafee','symantec','sophos','crowdstrike','carbonblack','cylance','sentinelone','trendmicro','kaspersky','eset','fireeye','tanium','elastic')
       $svc = Get-Service -EA SilentlyContinue | Where-Object { $n=$_.Name.ToLower(); $d=$_.DisplayName.ToLower(); $secVendors | Where-Object { $n -match $_ -or $d -match $_ } }
       $svcNames = (@($svc) | Select-Object -ExpandProperty DisplayName -Unique) -join ', '
       $rtp = (Get-MpComputerStatus -EA SilentlyContinue).RealTimeProtectionEnabled
-      Write-Output "EXEC T1518.001: security software discovery. edr_services=[$svcNames], defender_realtime=$rtp. Cobalt Group uses this to pick a Beacon stager that evades the present product. [BAS-SIM-COBALT-S1]"
+      Write-Output "EXEC T1518.001: security software discovery. edr_services=[$svcNames], defender_realtime=$rtp. Cobalt Group profiles defences before dropping Cobalt Strike. [BAS-SIM-COBALT-S3]"
       if (-not $svc -and $rtp -ne $true) {
-        Write-Output "FAIL: No EDR/AV service was discoverable and Defender real-time protection is off/unknown. Cobalt Group would drop an unobfuscated Beacon. Ensure a monitored EDR agent is running and tamper-protected."
+        Write-Output "FAIL: no EDR/AV service was discoverable and Defender real-time protection is off/unknown -- Cobalt Group would drop an unobfuscated Beacon. Ensure a tamper-protected, monitored EDR agent is running. [BAS-SIM-COBALT-S3]"
       } else {
-        Write-Output "PASS: Security tooling is present and enumerable -- the profiling step still generates telemetry (EID 4104) that SOC should alert on, but the endpoint is defended. [BAS-SIM-COBALT-S1]"
+        Write-Output "PASS: security tooling is present and enumerable; the profiling step still generates EID 4104 telemetry to alert on, but the endpoint is defended. [BAS-SIM-COBALT-S3]"
       }
     cleanup: ""
 
   # ---------------------------------------------------------------------------
-  # Stage 2 -- Domain Account Discovery (T1087.002)
+  # Stage 4 -- Defense Evasion: Regsvr32 "Squiblydoo" Proxy Execution (T1218.010)
   # ---------------------------------------------------------------------------
-  - name: "Cobalt Group Stage 2 -- Domain Account / Group Discovery (T1087.002)"
-    technique_id: T1087.002
-    framework: custom
-    executor: powershell
-    requires_priv: user
-    timeout_sec: 30
-    fidelity: telemetry-safe
-    production_safe: true
-    risk: low
-    blast_radius: "Runs net group /domain and net user /domain to enumerate privileged domain groups (Domain Admins, card-ops operators). Read-only directory queries; on a non-domain host the commands fail gracefully. Cobalt Group mapped privileged banking groups to choose lateral-movement targets."
-    reversible: true
-    telemetry:
-      - "Sysmon EID 1: net.exe group /domain (domain recon)"
-      - "Security EID 4688: net1.exe spawned by net.exe from powershell.exe"
-      - "DC EID 4661/4662: directory object access (if auditing enabled)"
-    detection:
-      - "EDR: net group /domain 'Domain Admins' from PowerShell -- Sigma proc_creation_win_net_enum.yml"
-      - "SIEM: net group/user /domain burst in one session -- Cobalt Strike net-view recon IOC"
-    command: |
-      $ErrorActionPreference = 'SilentlyContinue'
-      $isDomain = (Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue).PartOfDomain
-      $da = & net group 'Domain Admins' /domain 2>&1 | Out-String
-      $enumOk = $da -match 'members|The request will be processed'
-      Write-Output "EXEC T1087.002: domain account discovery. part_of_domain=$isDomain, domain_admins_enumerable=$enumOk. Cobalt Group enumerates privileged groups to plan the pivot to card-processing hosts. [BAS-SIM-COBALT-S2]"
-      if ($isDomain -and $enumOk) {
-        Write-Output "FAIL: Domain group membership (Domain Admins) was enumerable by a standard user. Cobalt Group would map this to pick lateral targets. Restrict anonymous/authenticated directory enumeration and alert on net group /domain."
-      } else {
-        Write-Output "PASS: Domain group enumeration failed or host is not domain-joined -- directory recon is constrained. The net.exe telemetry (EID 4688) should still be alerted. [BAS-SIM-COBALT-S2]"
-      }
-    cleanup: ""
-
-  # ---------------------------------------------------------------------------
-  # Stage 3 -- PowerShell Download-Cradle Surface (T1059.001)
-  # ---------------------------------------------------------------------------
-  - name: "Cobalt Group Stage 3 -- PowerShell Download-Cradle Surface (T1059.001)"
-    technique_id: T1059.001
+  - name: "Cobalt Group Stage 4 -- Regsvr32 Squiblydoo Signed-Binary Proxy Execution (T1218.010)"
+    technique_id: T1218.010
+    detection_profiles:
+      - windows_lolbin_download_cradle
     framework: custom
     executor: powershell
     requires_priv: user
@@ -142,71 +239,132 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Confirms the classic Cobalt Strike PowerShell download-cradle surface is reachable by instantiating a System.Net.WebClient object and resolving the IEX alias -- but issues NO DownloadString and fetches NO URL. The cradle string is written to telemetry only, never executed."
+    blast_radius: "Invokes regsvr32.exe with the 'Squiblydoo' /s /n /u /i:<url> scrobj.dll pattern pointed at a loopback URL (https://127.0.0.1) that has no listener, so the fetch is refused immediately and NO remote scriptlet is retrieved or executed. /s suppresses any GUI. This fires the regsvr32 + scrobj.dll + /i:url command line (the LOLBin IOC) without executing a payload."
     reversible: true
     telemetry:
-      - "Sysmon EID 7: System.Net.Http / WebClient type loaded by powershell.exe"
-      - "PowerShell EID 4104: New-Object Net.WebClient + IEX alias resolution"
+      - "Sysmon EID 1 / Security EID 4688: regsvr32.exe with /i: and scrobj.dll in the command line"
+      - "Sysmon EID 3: regsvr32.exe outbound TCP 443 to 127.0.0.1 (refused)"
     detection:
-      - "EDR: IEX (New-Object Net.WebClient).DownloadString pattern -- Sigma posh_ps_download_cradle.yml"
-      - "SIEM: Net.WebClient instantiation in EID 4104 ScriptBlock -- Cobalt Strike stager cradle IOC"
+      - "EDR: regsvr32.exe /i:<url> scrobj.dll (Squiblydoo) -- Sigma proc_creation_win_regsvr32_squiblydoo.yml"
+      - "SIEM: regsvr32.exe making a network connection, or loading scrobj.dll with a URL argument -- LOLBin proxy-exec IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Cobalt Group (Group G0080): System Binary Proxy Execution: Regsvr32 (T1218.010) -- regsvr32.exe to execute scripts"
+        url: "https://attack.mitre.org/groups/G0080/"
+      - reference: "Morphisec -- Cobalt Gang 2.0 (2018)"
+        url: "https://blog.morphisec.com/cobalt-gang-2.0"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      try {
-        $wc = New-Object System.Net.WebClient
-        $iex = Get-Command 'Invoke-Expression' -EA Stop
-        $cradle = "IEX (New-Object Net.WebClient).DownloadString('https://127.0.0.1/bas-sim-cobalt')"
-        $wc.Dispose()
-        Write-Output "EXEC T1059.001: download-cradle surface reachable (Net.WebClient instantiated, IEX alias=$($iex.Name)). Representative cradle NOT executed: $cradle. EID 4104 should capture the Net.WebClient reference. [BAS-SIM-COBALT-S3]"
-        Write-Output "FAIL: PowerShell can instantiate Net.WebClient and resolve IEX without constraint. Cobalt Group's stager cradle would run. Enable Constrained Language Mode (WDAC) and an EID 4104 rule on 'Net.WebClient' + 'DownloadString'."
-      } catch {
-        Write-Output "PASS: Download-cradle surface is constrained -- $($_.Exception.Message). Constrained Language Mode or an execution policy blocked the cradle primitives. [BAS-SIM-COBALT-S3]"
-      }
+      $url = 'https://127.0.0.1/bas-sim-cobalt.sct'
+      $out = & regsvr32.exe /s /n /u /i:$url scrobj.dll 2>&1 | Out-String
+      Write-Output "EXEC T1218.010: regsvr32 Squiblydoo invoked ('regsvr32 /s /n /u /i:$url scrobj.dll') against a loopback URL with no listener -- fetch refused, no scriptlet executed. Expect EID 4688 regsvr32 + EID 3 refused connection. [BAS-SIM-COBALT-S4]"
+      Write-Output "FAIL: regsvr32 ran with the Squiblydoo /i:<url> scrobj.dll LOLBin pattern unblocked. Alert on regsvr32.exe with a URL argument or making network connections (it should never do either), and apply WDAC/AppLocker to constrain regsvr32. [BAS-SIM-COBALT-S4]"
     cleanup: ""
 
   # ---------------------------------------------------------------------------
-  # Stage 4 -- SMB Named-Pipe Beacon Surface (T1021.002)
+  # Stage 5 -- Persistence: Windows Service Install (T1543.003, lab-only)
   # ---------------------------------------------------------------------------
-  - name: "Cobalt Group Stage 4 -- SMB Named-Pipe Beacon Surface (T1021.002)"
-    technique_id: T1021.002
+  - name: "Cobalt Group Stage 5 -- Windows Service Persistence (sc.exe create/start/stop/delete) (T1543.003)"
+    technique_id: T1543.003
+    action_key: service_create_start_stop_delete
+    detection_profiles:
+      - windows_malicious_service
     framework: custom
     executor: powershell
-    requires_priv: user
-    timeout_sec: 20
-    fidelity: telemetry-safe
-    production_safe: true
-    risk: low
-    blast_radius: "Creates a LOCAL named pipe with a Cobalt-Strike-style name (\\\\.\\pipe\\bas-sim-cobalt_<rand>) using .NET NamedPipeServerStream, confirms it exists, then disposes it immediately. No remote host, no SMB connection, no data. Cobalt Strike SMB Beacons link peer-to-peer over named pipes (msagent_*, status_*)."
+    requires_priv: admin
+    timeout_sec: 45
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Creates a benign service (cmd.exe /c echo) via sc.exe, starts, stops, and deletes it, logging binary path + parent. Cobalt Group creates new services to establish persistence. The service never runs a payload and is removed in both the command and cleanup."
     reversible: true
     telemetry:
-      - "Sysmon EID 17: Pipe Created -- \\\\.\\pipe\\bas-sim-cobalt_* by powershell.exe"
-      - "Sysmon EID 18: Pipe Connected (if a client attaches)"
+      - "Security EID 4697 (service installed) + EID 7045 (new service installed in system)"
+      - "Security EID 4688 (sc.exe create + start + stop + delete)"
     detection:
-      - "EDR: named-pipe creation matching Cobalt Strike default patterns -- Sigma pipe_created_cobaltstrike.yml"
-      - "SIEM: Sysmon EID 17 pipe name matching msagent_/status_/postex_ -- Cobalt Strike SMB Beacon IOC"
+      - "SIEM: new service installed with a binary path in a non-standard directory -- persistence signal"
+      - "EDR: service binary path pointing to cmd.exe or a user-writable path"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Cobalt Group (Group G0080): Create or Modify System Process: Windows Service (T1543.003) -- 'created new services to establish persistence'"
+        url: "https://attack.mitre.org/groups/G0080/"
+      - reference: "Group-IB -- Secrets of Cobalt (2017)"
+        url: "https://www.group-ib.com/blog/cobalt"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $pipeName = "bas-sim-cobalt_$([guid]::NewGuid().ToString('N').Substring(0,6))"
-      $created = $false
-      try {
-        $pipe = New-Object System.IO.Pipes.NamedPipeServerStream($pipeName, [System.IO.Pipes.PipeDirection]::InOut)
-        $created = Test-Path "\\.\pipe\$pipeName"
-        $pipe.Dispose()
-      } catch { }
-      $gone = -not (Test-Path "\\.\pipe\$pipeName")
-      Write-Output "EXEC T1021.002: SMB named-pipe beacon surface. pipe_created=$created (\\.\pipe\$pipeName), disposed=$gone. Sysmon EID 17 expected. Cobalt Strike SMB Beacons communicate over named pipes. [BAS-SIM-COBALT-S4]"
+      $svcName = 'BAS-SIM-CobaltSvc'
+      $svcBin  = "$env:SystemRoot\System32\cmd.exe /c echo BAS-SIM-COBALT-S5"
+      $parentImg = (Get-Process -Id $PID -EA SilentlyContinue).MainModule.FileName
+      sc.exe create $svcName binPath= "`"$svcBin`"" start= demand 2>&1 | Out-Null
+      $created = (Get-Service -Name $svcName -EA SilentlyContinue) -ne $null
       if ($created) {
-        Write-Output "FAIL: A process-created named pipe was allowed without an EDR block. Deploy a Sysmon EID 17 rule for Cobalt Strike default pipe names (msagent_*, status_*, postex_*) and investigate unexpected pipe servers on BFSI hosts."
+        sc.exe start $svcName 2>&1 | Out-Null
+        Start-Sleep -Milliseconds 500
+        sc.exe stop  $svcName 2>&1 | Out-Null
+        sc.exe delete $svcName 2>&1 | Out-Null
+        $gone = (Get-Service -Name $svcName -EA SilentlyContinue) -eq $null
+        Write-Output "FAIL: service '$svcName' created+started+deleted (removed=$gone). BinaryPath='$svcBin'. Parent=$parentImg. Expect EID 4697+7045. Cobalt Group creates services for persistence. [BAS-SIM-COBALT-S5]"
       } else {
-        Write-Output "PASS: Named-pipe creation failed or was blocked -- the SMB Beacon peer channel surface is constrained. [BAS-SIM-COBALT-S4]"
+        Write-Output "PASS: sc.exe service creation was blocked -- AppLocker / restricted token / policy prevented malicious service deployment. [BAS-SIM-COBALT-S5]"
       }
-    cleanup: ""
+    cleanup: |
+      sc.exe stop   BAS-SIM-CobaltSvc 2>&1 | Out-Null
+      sc.exe delete BAS-SIM-CobaltSvc 2>&1 | Out-Null
 
   # ---------------------------------------------------------------------------
-  # Stage 5 -- DNS Beacon Channel (T1071.004)
+  # Stage 6 -- Persistence: Scheduled Task (T1053.005)
   # ---------------------------------------------------------------------------
-  - name: "Cobalt Group Stage 5 -- DNS Beacon Channel (T1071.004)"
+  - name: "Cobalt Group Stage 6 -- Scheduled-Task Persistence (T1053.005)"
+    technique_id: T1053.005
+    detection_profiles:
+      - windows_schtask_persistence
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 25
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates ONE tagged user-context scheduled task (BAS-SIM-COBALT) whose action is 'cmd.exe /c exit' and whose trigger is a one-off far-future time, confirms it, then DELETES it in both the command and cleanup. No SYSTEM task, no elevation; it never runs a payload."
+    reversible: true
+    telemetry:
+      - "Security EID 4698: a scheduled task was created (BAS-SIM-COBALT)"
+      - "Security EID 4699: a scheduled task was deleted (cleanup)"
+      - "Sysmon EID 1: schtasks.exe /create spawned by powershell.exe"
+    detection:
+      - "EDR: schtasks.exe /create from PowerShell -- Sigma proc_creation_win_schtasks_create.yml"
+      - "SIEM: EID 4698 task creation from a script host -- Cobalt Group persistence IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Cobalt Group (Group G0080): Scheduled Task/Job: Scheduled Task (T1053.005) -- 'created Windows tasks to establish persistence'"
+        url: "https://attack.mitre.org/groups/G0080/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $taskName = 'BAS-SIM-COBALT'
+      & schtasks.exe /create /tn $taskName /tr 'cmd.exe /c exit' /sc ONCE /st 23:59 /f 2>&1 | Out-Null
+      $query = & schtasks.exe /query /tn $taskName 2>&1 | Out-String
+      $created = $query -match [regex]::Escape($taskName)
+      & schtasks.exe /delete /tn $taskName /f 2>&1 | Out-Null
+      $verify = & schtasks.exe /query /tn $taskName 2>&1 | Out-String
+      $removed = -not ($verify -match [regex]::Escape($taskName))
+      if ($created) {
+        Write-Output "FAIL: a scheduled task was created by PowerShell unblocked (removed=$removed). Expect Security EID 4698. Alert on task creation from script hosts. [BAS-SIM-COBALT-S6]"
+      } else {
+        Write-Output "PASS: scheduled-task creation was blocked or failed -- this persistence vector is constrained for the current token. [BAS-SIM-COBALT-S6]"
+      }
+    cleanup: |
+      & schtasks.exe /delete /tn 'BAS-SIM-COBALT' /f 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # Stage 7 -- Command and Control: DNS Beacon (T1071.004)
+  # ---------------------------------------------------------------------------
+  - name: "Cobalt Group Stage 7 -- DNS Beacon Channel (T1071.004)"
     technique_id: T1071.004
+    detection_profiles:
+      - windows_dns_c2
     framework: custom
     executor: powershell
     requires_priv: user
@@ -214,7 +372,7 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Issues a single DNS resolution for a guaranteed-NXDOMAIN hostname under the reserved .invalid TLD (RFC 2606) to generate Sysmon EID 22 DNS-query telemetry matching a Cobalt Strike DNS Beacon. No host is contacted beyond the configured resolver; the name cannot resolve to a real address."
+    blast_radius: "Issues one DNS resolution for a guaranteed-NXDOMAIN hostname under the reserved .invalid TLD (RFC 2606) to generate Sysmon EID 22 DNS-query telemetry matching a Cobalt Strike DNS Beacon. No host is contacted beyond the configured resolver; the name cannot resolve."
     reversible: true
     telemetry:
       - "Sysmon EID 22: DnsQuery -- bas-sim-cobalt.<rand>.invalid by powershell.exe"
@@ -223,19 +381,70 @@ steps:
     detection:
       - "EDR: Resolve-DnsName of a long/high-entropy label from PowerShell -- Sigma dns_beacon_query.yml"
       - "SIEM: repeated NXDOMAIN lookups of random subdomains under one parent -- Cobalt Strike DNS Beacon IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Cobalt Group (Group G0080): Application Layer Protocol: DNS (T1071.004) -- 'used DNS tunneling for C2'"
+        url: "https://attack.mitre.org/groups/G0080/"
+      - reference: "Cisco Talos -- Multiple Cobalt Personality Disorder (2018)"
+        url: "https://blog.talosintelligence.com/2018/07/multiple-cobalt-personality-disorder.html"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $label = [guid]::NewGuid().ToString('N').Substring(0,12)
       $beaconName = "bas-sim-cobalt.$label.invalid"
       $resolved = $false
-      try {
-        $r = Resolve-DnsName -Name $beaconName -DnsOnly -QuickTimeout -EA Stop
-        if ($r) { $resolved = $true }
-      } catch { $resolved = $false }
-      Write-Output "EXEC T1071.004: DNS beacon query for $beaconName (RFC2606 .invalid -- cannot resolve). resolved=$resolved. Sysmon EID 22 generated. Cobalt Strike DNS Beacons tunnel C2 inside DNS queries. [BAS-SIM-COBALT-S5]"
+      try { if (Resolve-DnsName -Name $beaconName -DnsOnly -QuickTimeout -EA Stop) { $resolved = $true } } catch { $resolved = $false }
+      Write-Output "EXEC T1071.004: DNS beacon query for $beaconName (RFC2606 .invalid -- cannot resolve). resolved=$resolved. Sysmon EID 22 generated. [BAS-SIM-COBALT-S7]"
       if ($resolved) {
-        Write-Output "FAIL: A reserved .invalid name unexpectedly resolved -- a resolver is rewriting NXDOMAIN (DNS hijack/sinkhole misconfig) which can mask beacon detection. Investigate the resolver."
+        Write-Output "FAIL: a reserved .invalid name unexpectedly resolved -- a resolver is rewriting NXDOMAIN, which can mask beacon detection. Investigate the resolver. [BAS-SIM-COBALT-S7]"
       } else {
-        Write-Output "FAIL: The DNS query to a high-entropy .invalid subdomain left the host (NXDOMAIN). Egress DNS should be restricted to approved resolvers with query logging, and SIEM should alert on random-subdomain lookup bursts -- the Cobalt Strike DNS Beacon pattern."
+        Write-Output "FAIL: the DNS query to a high-entropy .invalid subdomain left the host (NXDOMAIN). Restrict egress DNS to approved resolvers with query logging and alert on random-subdomain lookup bursts -- the Cobalt Strike DNS Beacon pattern. [BAS-SIM-COBALT-S7]"
       }
     cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 8 -- Impact: Card-Processing / ATM-Dispense Manipulation (T1565.002, lab-only)
+  # ---------------------------------------------------------------------------
+  - name: "Cobalt Group Stage 8 -- Card-Processing / ATM-Dispense Data Manipulation (lab) (T1565.002)"
+    technique_id: T1565.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Writes a SINGLE decoy card-processing / ATM-dispense instruction (clearly tagged BAS-SIM, fictional terminal + amount, no real PAN or network) to an isolated %TEMP%\\bas_cobalt_atm_<id> dir to represent Cobalt Group's objective -- manipulating card-processing data to raise limits and command ATMs to dispense cash to mules -- then reads it back and deletes the whole dir. No real ATM, switch, transaction or network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: decoy instruction file created under %TEMP%\\bas_cobalt_atm_<id>"
+      - "PowerShell EID 4104: Set-Content writing an ATM/card-processing-shaped record"
+    detection:
+      - "Card-switch / ATM audit: a dispense or limit-change instruction created outside the authorized workflow -- fraudulent-manipulation signal"
+      - "SIEM: correlate card-switch host access + an unexpected dispense/limit record -- Cobalt cash-out chain"
+    threat_intel_sources:
+      - reference: "Group-IB -- Cobalt: logical attacks on ATMs (2016): controlling ATM dispensing and card-processing to cash out"
+        url: "https://go.group-ib.com/hubfs/report/group-ib-cobalt-logical-attacks-on-atms-threat-research-2016-en.pdf"
+      - reference: "Positive Technologies -- Cobalt Strikes Back (2017): targeting card processing, payment systems and ATMs"
+        url: "https://www.ptsecurity.com/upload/corporate/ww-en/analytics/Cobalt-2017-eng.pdf"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: inferred
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF)
+      $dir = Join-Path $env:TEMP "bas_cobalt_atm_$runId"
+      New-Item -ItemType Directory -Path $dir -Force | Out-Null
+      $rec = @(
+        "BAS-SIM-COBALT ATM/CARD-PROCESSING MANIPULATION (CONTROLLED DRILL -- NOT A REAL INSTRUCTION)",
+        "action=DISPENSE  terminal=BAS-SIM-ATM-0000  cassette=1  notes=40  currency=XXX",
+        "action=SET_OVERDRAFT_LIMIT  card=BAS-SIM-NO-REAL-PAN  limit=999999  run-id=$runId",
+        "note=Cobalt Group objective -- raise limits / command ATM cash-out to money mules"
+      ) -join "`n"
+      $file = Join-Path $dir 'bas-sim-dispense.txt'
+      Set-Content -Path $file -Value $rec -Encoding UTF8
+      $wrote = Test-Path $file
+      Remove-Item $dir -Recurse -Force -EA SilentlyContinue
+      $cleaned = -not (Test-Path $dir)
+      Write-Output "FAIL: a card-processing / ATM-dispense instruction (fictional) was staged to $dir to represent Cobalt's objective (wrote=$wrote). Card-switch and ATM controls must reject dispense/limit changes created outside the authorized workflow and alert on them. Decoy removed=$cleaned, no real ATM or transaction involved. [BAS-SIM-COBALT-S8]"
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP "bas_cobalt_atm_*") -Recurse -Force -EA SilentlyContinue
