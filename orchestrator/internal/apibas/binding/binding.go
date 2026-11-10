@@ -58,6 +58,9 @@ type ObjectSpec struct {
 	ProtectedValues []string          `json:"protected_values,omitempty"`
 	// Write is required for an object of a PUT or PATCH operation and forbidden otherwise.
 	Write *WriteSpec `json:"write,omitempty"`
+	// Selection is for a GraphQL query only: the fields to request from the returned object, for example "id total customer { email }".
+	// Params then hold the values of the field's arguments. It is required when the field returns an object and refused otherwise.
+	Selection string `json:"selection,omitempty"`
 }
 
 // WriteSpec describes how a write is attempted against an object and how the object is checked and put back. The target offers no
@@ -156,16 +159,24 @@ type Plan struct {
 	Writes   bool      `json:"-"`
 	Probes   []Probe   `json:"-"`
 	Restores []Restore `json:"-"`
+	// GraphQL is true when any scenario is a GraphQL query.
+	GraphQL bool `json:"-"`
 }
 
 // planLimits states what a bound plan does not claim. It is part of every plan.
-func planLimits(writes bool) []string {
+func planLimits(writes, graphql bool) []string {
 	out := []string{
 		"Only object-level operations on objects the customer supplied are bound: reads, and PUT or PATCH writes when the test data allows them. DELETE and other operations are skipped because a repeated request cannot put the object back.",
 		"A read scenario is graded on the HTTP response alone. It proves the attack was refused and leaked none of the protected values supplied; it cannot see a leak of a value the customer did not supply.",
 		"Function-level and property-level checks are read-only and graded on the response alone: they find a privileged route that answers an ordinary identity, or a forbidden value in an owner's response, only for the routes, identities and values supplied. Writing a field that should be read-only (mass assignment) is not tested.",
 		"The scenarios have no detection integration (detection is not evaluated) and no regulatory mapping.",
 		"An operation passes only for the objects and identities supplied. It says nothing about other objects, roles or parameters.",
+	}
+	if graphql {
+		out = append(out,
+			"A GraphQL query is sent as a POST to the endpoint with the field's arguments written into the query text. A GraphQL API usually answers a refused query with HTTP 200 and an errors entry, so the scenario passes when the other identity's response carries none of the protected values, and fails when one appears. To rule out a baseline that was itself an error, the owner's own response must contain a protected value, otherwise the result is SKIPPED.",
+			"Only GraphQL queries with scalar, enum or custom-scalar arguments are bound. Mutations, subscriptions, list or input-object arguments, and union return types are skipped.",
+		)
 	}
 	if writes {
 		out = append(out,
@@ -218,8 +229,17 @@ func (s Spec) Validate(inv *openapi.Inventory) error {
 			if !ok {
 				return fmt.Errorf("binding: object %d: operation %q is not in the inventory", i+1, truncate(ob.Operation, 80))
 			}
-			if err := checkParams(op, ob); err != nil {
-				return fmt.Errorf("binding: object %d: %w", i+1, err)
+			if op.Field != "" {
+				if err := checkGraphQLObject(op, ob); err != nil {
+					return fmt.Errorf("binding: object %d: %w", i+1, err)
+				}
+			} else {
+				if err := checkParams(op, ob); err != nil {
+					return fmt.Errorf("binding: object %d: %w", i+1, err)
+				}
+				if ob.Selection != "" {
+					return fmt.Errorf("binding: object %d: a selection is only for GraphQL operations", i+1)
+				}
 			}
 		}
 		if err := s.checkWrite(i+1, ob, ops, inv != nil); err != nil {
@@ -456,7 +476,7 @@ func Bind(inv *openapi.Inventory, spec Spec) (*Plan, error) {
 	if err := spec.Validate(inv); err != nil {
 		return nil, err
 	}
-	plan := &Plan{Fixture: fixture.Fixture{Name: FixtureName}, Limits: planLimits(false), Bound: []Bound{}, Skipped: []Skipped{}}
+	plan := &Plan{Fixture: fixture.Fixture{Name: FixtureName}, Limits: planLimits(false, false), Bound: []Bound{}, Skipped: []Skipped{}}
 	for _, id := range spec.Identities {
 		plan.Fixture.Identities = append(plan.Fixture.Identities, fixture.Identity{Name: id.Name, CustomerID: id.Name, TokenRef: id.CredentialRef})
 	}
@@ -506,6 +526,13 @@ func Bind(inv *openapi.Inventory, spec Spec) (*Plan, error) {
 				plan.Writes = true
 				plan.Probes = append(plan.Probes, Probe{Key: objID, Identity: victim.Owner, Path: readPath, Ignore: victim.Write.IgnoreFields})
 				plan.Restores = append(plan.Restores, Restore{Key: objID, Identity: victim.Owner, Method: op.Method, Path: resolvePath(op, victim.Params), Body: victim.Write.RestoreBody})
+			} else if op.Field != "" {
+				body, err := graphQLBody(op, victim)
+				if err != nil {
+					return nil, fmt.Errorf("binding: %w", err)
+				}
+				sc = scenarioForGraphQL(next, op, victim, attacker, objID, body)
+				plan.GraphQL = true
 			} else {
 				sc = scenarioFor(next, op, victim, attacker, objID, resolvePath(op, victim.Params))
 			}
@@ -550,7 +577,7 @@ func Bind(inv *openapi.Inventory, spec Spec) (*Plan, error) {
 	if len(plan.Scenarios) == 0 && len(plan.Skipped) == 0 {
 		return nil, errors.New("binding: nothing in the inventory can be bound to the objects supplied")
 	}
-	plan.Limits = planLimits(plan.Writes)
+	plan.Limits = planLimits(plan.Writes, plan.GraphQL)
 	return plan, nil
 }
 
@@ -558,14 +585,21 @@ func Bind(inv *openapi.Inventory, spec Spec) (*Plan, error) {
 func unbindable(op openapi.Operation, objs []ObjectSpec, allowWrites bool) string {
 	switch op.Method {
 	case "GET":
+	case "QUERY":
+		if op.Returns == "" {
+			return "the inventory was imported before GraphQL argument types were recorded; import the schema again"
+		}
+		if op.ReturnsUnion {
+			return "it returns a union, which needs fragments that bound GraphQL queries do not support"
+		}
 	case "PUT", "PATCH":
 		if !allowWrites {
 			return "it changes state; the test data does not set allow_writes, so no write is attempted"
 		}
 	case "DELETE":
 		return "it destroys the object, and a repeated request cannot put the object back, so it is not bound"
-	case "QUERY", "MUTATION", "SUBSCRIPTION":
-		return "it is a GraphQL operation; GraphQL schemas are inventoried and classified, but binding them to test data is not supported yet"
+	case "MUTATION", "SUBSCRIPTION":
+		return "it is a GraphQL " + strings.ToLower(op.Method) + "; only GraphQL queries are bound, because a mutation changes state a repeated request cannot put back"
 	default:
 		return "its effect cannot be undone by repeating the request, so the object could not be restored after the test; it is not bound"
 	}
@@ -741,6 +775,247 @@ func scenarioForWrite(n int, op openapi.Operation, victim ObjectSpec, attacker, 
 		},
 		SideEffectClass: "STATE_CHANGE_SANDBOX",
 		Cleanup:         []string{"The owner sends the supplied restore request, before the run and again after, to put the object back to the supplied state."},
+		Evidence:        []string{"sanitized_request", "sanitized_response"},
+	}
+}
+
+// ---- GraphQL queries
+
+var (
+	gqlIntRE   = regexp.MustCompile(`^-?[0-9]{1,15}$`)
+	gqlFloatRE = regexp.MustCompile(`^-?[0-9]{1,15}(\.[0-9]{1,15})?$`)
+	gqlEnumRE  = regexp.MustCompile(`^[_A-Za-z][_0-9A-Za-z]{0,63}$`)
+	gqlNameRE  = regexp.MustCompile(`^[_A-Za-z][_0-9A-Za-z]*$`)
+)
+
+const (
+	maxSelectionBytes  = 500
+	maxSelectionTokens = 120
+	maxSelectionDepth  = 5
+)
+
+// checkGraphQLObject validates an object that names a GraphQL operation. Only a query is bound; other kinds are skipped later with a
+// reason. A query needs a protected value because a refused query is usually an HTTP 200, so without a value to look for a clean
+// response proves nothing.
+func checkGraphQLObject(op openapi.Operation, ob ObjectSpec) error {
+	if op.Method != "QUERY" {
+		return nil
+	}
+	if op.Returns == "" {
+		return errors.New("the inventory was imported before GraphQL argument types were recorded; import the schema again")
+	}
+	if op.ReturnsUnion {
+		return nil // skipped when binding, with its reason
+	}
+	if _, err := graphQLQuery(op, ob); err != nil {
+		return err
+	}
+	if len(ob.ProtectedValues) == 0 {
+		return errors.New("a GraphQL query needs at least one protected value: a refused query is usually an HTTP 200, so without a value to look for a clean response proves nothing")
+	}
+	return nil
+}
+
+// graphQLBody is the JSON request body for the object's query.
+func graphQLBody(op openapi.Operation, ob ObjectSpec) (string, error) {
+	q, err := graphQLQuery(op, ob)
+	if err != nil {
+		return "", err
+	}
+	raw, err := json.Marshal(map[string]string{"query": q})
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// graphQLQuery writes the query text. Argument values are written as literals of their declared type after being checked, so a value
+// can never add to the query. The selection is re-emitted token by token for the same reason.
+func graphQLQuery(op openapi.Operation, ob ObjectSpec) (string, error) {
+	known := map[string]bool{}
+	for _, a := range op.Args {
+		known[a.Name] = true
+	}
+	for k := range ob.Params {
+		if !known[k] {
+			return "", fmt.Errorf("%q is not an argument of %s", truncate(k, 40), op.Key())
+		}
+	}
+	var args []string
+	for _, a := range op.Args {
+		v, given := ob.Params[a.Name]
+		if !given {
+			if a.Required {
+				return "", fmt.Errorf("a value for argument %q is required", a.Name)
+			}
+			continue
+		}
+		if a.List {
+			return "", fmt.Errorf("argument %q takes a list; lists are not supported in bound GraphQL queries", a.Name)
+		}
+		lit, err := graphQLLiteral(a, v)
+		if err != nil {
+			return "", err
+		}
+		args = append(args, a.Name+": "+lit)
+	}
+	q := "query { " + op.Field
+	if len(args) > 0 {
+		q += "(" + strings.Join(args, ", ") + ")"
+	}
+	switch {
+	case op.ReturnsComposite:
+		sel, err := normalizeSelection(ob.Selection)
+		if err != nil {
+			return "", err
+		}
+		q += " { " + sel + " }"
+	case strings.TrimSpace(ob.Selection) != "":
+		return "", fmt.Errorf("%s returns %s, which has no fields to select; remove the selection", op.Key(), truncate(op.Returns, 40))
+	}
+	return q + " }", nil
+}
+
+// graphQLLiteral writes one argument value as a literal of its type. Input objects and anything unknown are refused.
+func graphQLLiteral(a openapi.OpArg, v string) (string, error) {
+	bad := func(what string) (string, error) {
+		return "", fmt.Errorf("the value for argument %q must be %s", a.Name, what)
+	}
+	switch {
+	case a.Type == "Int":
+		if !gqlIntRE.MatchString(v) {
+			return bad("a whole number")
+		}
+		return v, nil
+	case a.Type == "Float":
+		if !gqlFloatRE.MatchString(v) {
+			return bad("a number")
+		}
+		return v, nil
+	case a.Type == "Boolean":
+		if v != "true" && v != "false" {
+			return bad("true or false")
+		}
+		return v, nil
+	case a.Kind == "ENUM":
+		if !gqlEnumRE.MatchString(v) {
+			return bad("an enum value name")
+		}
+		return v, nil
+	case a.Kind == "SCALAR":
+		if !paramValueRE.MatchString(v) {
+			return bad("1 to 128 letters, digits and . _ ~ -")
+		}
+		return `"` + v + `"`, nil
+	}
+	return "", fmt.Errorf("argument %q has the type %s (%s), which bound GraphQL queries do not support; only scalar, enum and custom-scalar arguments are", a.Name, truncate(a.Type, 40), strings.ToLower(a.Kind))
+}
+
+// normalizeSelection checks a selection set and writes it back with single spaces. It accepts field names and nested braces only:
+// no arguments, aliases, fragments, directives or variables, and no introspection fields.
+func normalizeSelection(sel string) (string, error) {
+	if strings.TrimSpace(sel) == "" {
+		return "", errors.New("a selection is required: list the fields to request, for example \"id total customer { email }\"")
+	}
+	if len(sel) > maxSelectionBytes {
+		return "", fmt.Errorf("the selection is longer than %d characters", maxSelectionBytes)
+	}
+	var toks []string
+	i := 0
+	for i < len(sel) {
+		c := sel[i]
+		switch {
+		case c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ',':
+			i++
+		case c == '{' || c == '}':
+			toks = append(toks, string(c))
+			i++
+		case c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'):
+			j := i + 1
+			for j < len(sel) && (sel[j] == '_' || (sel[j] >= 'a' && sel[j] <= 'z') || (sel[j] >= 'A' && sel[j] <= 'Z') || (sel[j] >= '0' && sel[j] <= '9')) {
+				j++
+			}
+			name := sel[i:j]
+			if !gqlNameRE.MatchString(name) || strings.HasPrefix(name, "__") {
+				return "", fmt.Errorf("the selection may not name %q", truncate(name, 40))
+			}
+			toks = append(toks, name)
+			i = j
+		default:
+			return "", fmt.Errorf("the selection may hold field names and braces only; found %q", string(rune(c)))
+		}
+		if len(toks) > maxSelectionTokens {
+			return "", fmt.Errorf("the selection has more than %d parts", maxSelectionTokens)
+		}
+	}
+	depth, prev := 0, ""
+	for _, t := range toks {
+		switch t {
+		case "{":
+			if prev == "" || prev == "{" || prev == "}" {
+				return "", errors.New("a brace must follow a field name")
+			}
+			depth++
+			if depth > maxSelectionDepth {
+				return "", fmt.Errorf("the selection nests more than %d levels", maxSelectionDepth)
+			}
+		case "}":
+			if depth == 0 {
+				return "", errors.New("the selection has a closing brace with no opening brace")
+			}
+			if prev == "{" {
+				return "", errors.New("the selection has an empty pair of braces")
+			}
+			depth--
+		}
+		prev = t
+	}
+	if depth != 0 {
+		return "", errors.New("the selection has an opening brace with no closing brace")
+	}
+	if toks[0] == "{" || toks[0] == "}" {
+		return "", errors.New("the selection must start with a field name")
+	}
+	return strings.Join(toks, " "), nil
+}
+
+// scenarioForGraphQL builds the cross-identity read check for a GraphQL query: the owner sends the query (the baseline), then the other
+// identity sends the same query. The owner's response must contain a protected value, so the baseline is known to have returned the
+// data; the other identity's response must contain none. A refused query is normally HTTP 200 with an errors entry, so a clean 2xx is
+// the pass and a 403 or 404 is too.
+func scenarioForGraphQL(n int, op openapi.Operation, victim ObjectSpec, attacker, objID, body string) contract.Scenario {
+	id := fmt.Sprintf("API-BAS-AUTHZ-%03d", n)
+	objective := fmt.Sprintf("%s queries an object owned by %s through the GraphQL field %s.", attacker, victim.Owner, op.Field)
+	return contract.Scenario{
+		ID:              id,
+		Name:            fmt.Sprintf("Bound: %s cannot query %s's object through GraphQL %s", attacker, victim.Owner, op.Field),
+		Category:        "AUTHZ",
+		Claim:           "cross_identity",
+		AttackObjective: objective,
+		ThreatModel: contract.ThreatModel{
+			Attacker: "an authenticated identity of the customer's GraphQL API", Identity: attacker,
+			AccessLevel: "valid credential supplied by the customer, owns none of the requested object", Objective: objective,
+		},
+		Preconditions: contract.Preconditions{Fixture: FixtureName, Identities: []string{attacker, victim.Owner}, Object: objID},
+		Steps: []contract.Step{
+			{ID: "baseline-owner", Role: "baseline", Identity: victim.Owner, Auth: "valid", Method: "POST", Path: op.Path, Body: body, GraphQLQuery: true,
+				Hypothesis: "The owner queries their own object and receives a protected value. If this fails, the scenario is not testable."},
+			{ID: "attack-other-identity", Role: "attack", Identity: attacker, Auth: "valid", Method: "POST", Path: op.Path, Body: body, GraphQLQuery: true,
+				Hypothesis: "Another identity's query for the owner's object returns none of the owner's protected values."},
+		},
+		DeniedStatuses:          []int{403, 404},
+		CleanIsEnforced:         true,
+		RequireBaselineEvidence: true,
+		ForbiddenValues:         victim.ProtectedValues,
+		ExpectedControl:         "An identity cannot read an object it does not own through GraphQL. The query is refused, or answered without the object, and no protected value supplied for the object is returned.",
+		GroundTruth: contract.GroundTruth{
+			Adapters: []string{"state", "response"},
+			Check:    "The response to the other identity's query carries none of the protected values supplied for the object, and the owner's own response carries at least one. The target offers no independent state, so this is response evidence only.",
+		},
+		DetectionAssert: contract.DetectionAssertion{
+			Status: "not_evaluated", Reason: "Bound to a customer API with no detection integration.",
+		},
+		SideEffectClass: "READ_ONLY",
 		Evidence:        []string{"sanitized_request", "sanitized_response"},
 	}
 }

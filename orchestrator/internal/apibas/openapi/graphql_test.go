@@ -125,7 +125,7 @@ func TestGraphQLDefaultValuesAreNeverKept(t *testing.T) {
 
 func TestGraphQLWarningsSayWhatIsAssumed(t *testing.T) {
 	w := strings.Join(loadGraphQL(t).Warnings, " | ")
-	for _, s := range []string{"does not say where it is served", "authentication", "not bound to test data"} {
+	for _, s := range []string{"does not say where it is served", "authentication", "only GraphQL queries can be bound"} {
 		if !strings.Contains(w, s) {
 			t.Errorf("warnings do not mention %q: %s", s, w)
 		}

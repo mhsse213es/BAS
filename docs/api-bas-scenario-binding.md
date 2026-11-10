@@ -229,3 +229,22 @@ Tests: `internal/apibas/binding/function_property_test.go` (plan shape, 21 refus
 `GET /api/apibas/targets/{id}/jobs` now takes `status` (one of `queued`, `running`, `completed`, `failed`, `cancelled`) and `before`. When more jobs follow the page, the response carries `next`; pass it back unchanged as `before` for the next page. The order is newest first, with the job id breaking ties, so two jobs created at the same instant are neither skipped nor repeated. `limit` is still 1 to 100 (default 25), and `next` is present only when a further job really exists. Bad `status` or `before` values are refused with 400 and never reach the query. The Recent jobs card has a Status choice and a Load more button; changing the status starts again from the newest job, and a page that arrives after the status changed is dropped.
 
 Not built: a list across all targets, and filtering by date or requester.
+
+## GraphQL queries in the bound test data (added 10 November 2026)
+
+A target whose inventory came from a GraphQL schema can now be bound and run. Only **queries** are bound: they read, so a repeated request leaves nothing to put back. Mutations and subscriptions are skipped with a reason, as are queries that return a union (they need fragments), take list or input-object arguments, or come from an inventory imported before argument types were recorded (import the schema again).
+
+An object names the operation as `QUERY /graphql#field`. `params` holds the field's argument values, and `selection` lists the fields to request from the returned object (required when the field returns an object, refused when it returns a scalar):
+
+```json
+{ "operation": "QUERY /graphql#order", "params": {"id": "ORD-A1"}, "owner": "alice",
+  "selection": "id total customer { email }", "protected_values": ["alice-private-note"] }
+```
+
+- **How the query is written.** The runner sends `POST /graphql` with `{"query": "query { order(id: \"ORD-A1\") { id total } }"}`. Argument values are checked against the argument's declared type and written as literals (strings and IDs quoted, Int, Float and Boolean bare, enums by name), so a value cannot add to the query. The selection is re-emitted token by token and accepts field names and nested braces only; arguments, aliases, fragments, directives, variables and `__` fields are refused.
+- **Grading.** A GraphQL API usually answers a refused query with HTTP 200 and an `errors` entry, so a status code cannot decide the result. The owner sends the query (baseline), then the other identity sends the same query. The scenario fails if the other identity's response contains a protected value, and passes if it does not (a 403 or 404 also passes). At least one protected value is required for every GraphQL object.
+- **A baseline that is itself an error.** A server that answers every query with an error would look clean to the attacker too. The scenario therefore sets `require_baseline_evidence`: the owner's own response must contain a protected value, otherwise the result is SKIPPED (precondition missing), never a pass.
+- **Read-only is checked, not trusted.** The contract refuses a POST in a READ_ONLY scenario unless the step is marked `graphql_query` and its body is a JSON object whose only key is `query`, whose document starts with `query`, and which contains neither `mutation` nor `subscription`.
+- **Limits.** A pass says nothing about values the customer did not supply, and a GraphQL path must be inside the target's allowed paths for the run to be sent. The plan states these.
+
+Tests: `internal/apibas/binding/graphql_bind_test.go` (typed literals, 28 refusals, selection normalisation, and the real runner against a GraphQL-style server: vulnerable FAILs, fixed PASSes with a 200 refusal, erroring baseline is SKIPPED), `internal/apibas/contract/graphql_step_test.go`, `TestAPIBASGraphQLQueriesBindAndRun`, and the web example tests.

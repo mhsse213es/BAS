@@ -82,6 +82,10 @@ export function parseBindingSpec(text) {
 // placeholders for names the runner resolves later; the page never takes a credential value.
 export function exampleBindingSpec(ops) {
   const op = (ops || []).find((o) => o.method === 'GET' && Array.isArray(o.path_params) && o.path_params.length > 0 && o.auth !== 'none');
+  if (!op) {
+    const gq = graphQLExampleOp(ops);
+    if (gq) return exampleGraphQLSpec(gq);
+  }
   const params = (suffix) => {
     const p = {};
     (op ? op.path_params : ['id']).forEach((n) => { p[n] = 'REPLACE-' + suffix; });
@@ -446,4 +450,47 @@ export const JOB_STATUSES = [['', 'All'], ['queued', 'Queued'], ['running', 'Run
 
 export function validJobStatus(v) {
   return JOB_STATUSES.some((s) => s[0] === v);
+}
+
+// ---- GraphQL read example
+
+// graphQLQueryOps are the query fields a bound GraphQL check can use: a query that does not return a union and whose arguments are
+// plain values (no lists, no input objects).
+function usableGraphQL(o) {
+  return o && o.method === 'QUERY' && o.field && o.returns && !o.returns_union && Array.isArray(o.args || []) &&
+    (o.args || []).every((a) => !a.list && (a.kind === 'SCALAR' || a.kind === 'ENUM'));
+}
+
+// graphQLExampleOp picks the first usable query that takes a required argument, which is what makes an object belong to someone.
+export function graphQLExampleOp(ops) {
+  const list = (ops || []).filter(usableGraphQL);
+  return list.find((o) => (o.args || []).some((a) => a.required)) || list[0] || null;
+}
+
+// opFullKey is the operation name the test data uses: "METHOD path", with "#field" for a GraphQL field.
+export function opFullKey(o) {
+  return o.method + ' ' + o.path + (o.field ? '#' + o.field : '');
+}
+
+// exampleGraphQLSpec is a starting point for a GraphQL query. Argument values and the selection are placeholders to replace.
+export function exampleGraphQLSpec(op) {
+  const params = (suffix) => {
+    const p = {};
+    (op.args || []).filter((a) => a.required).forEach((a) => {
+      p[a.name] = a.type === 'Int' || a.type === 'Float' ? '1' : a.type === 'Boolean' ? 'true' : 'REPLACE-' + suffix;
+    });
+    return p;
+  };
+  const obj = (owner, suffix) => {
+    const o = { operation: opFullKey(op), params: params(suffix), owner, protected_values: ['a value only ' + owner + ' may see'] };
+    if (op.returns_composite) o.selection = 'id';
+    return o;
+  };
+  return {
+    identities: [
+      { name: 'alice', credential_ref: 'REPLACE/alice-credential-name' },
+      { name: 'bob', credential_ref: 'REPLACE/bob-credential-name' },
+    ],
+    objects: [obj('alice', 'A'), obj('bob', 'B')],
+  };
 }

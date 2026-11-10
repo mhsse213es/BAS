@@ -59,6 +59,22 @@ type Operation struct {
 	ResponseCodes    []string `json:"response_codes,omitempty"`
 	ResponseFields   []string `json:"response_fields,omitempty"`
 	Classes          []Class  `json:"classes,omitempty"`
+	// GraphQL root fields only: the arguments the field takes, the named type it returns, and whether that type has fields to select.
+	// Binding needs them to write a query. A schema imported before they were recorded has Returns empty and must be imported again.
+	Args             []OpArg `json:"args,omitempty"`
+	Returns          string  `json:"returns,omitempty"`
+	ReturnsComposite bool    `json:"returns_composite,omitempty"`
+	ReturnsUnion     bool    `json:"returns_union,omitempty"`
+}
+
+// OpArg is one argument of a GraphQL field. Type is the named type with list and non-null wrappers removed, Kind says what that type
+// is (SCALAR, ENUM, INPUT_OBJECT and so on), List says the argument takes a list, and Required says it must be given.
+type OpArg struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Kind     string `json:"kind"`
+	List     bool   `json:"list,omitempty"`
+	Required bool   `json:"required,omitempty"`
 }
 
 // Key is "METHOD path", the identity of an operation. A GraphQL root field adds "#field", because every field shares one path.

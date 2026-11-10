@@ -6,7 +6,7 @@ import {
   jobTone, resultTone, isFinalStatus, resultText, newJobKey, storedNote, exampleWriteBindingSpec, countsText, worstTone,
   opKey, writeOperations, readChoices, defaultReadOperation, buildWriteObject, mergeWriteObject, writeObjectsOf, removeObjectAt, identityNames, MAX_WRITE_BODY,
   parseEveryHours, everyLabel, scheduleState, scheduleTone, scheduleNote,
-  boundKindLabel, boundWho, exampleChecksSpec, validJobStatus, JOB_STATUSES,
+  boundKindLabel, boundWho, exampleChecksSpec, validJobStatus, JOB_STATUSES, graphQLExampleOp, opFullKey, exampleGraphQLSpec,
 } from '../../src/features/api-inventory-model.js';
 
 const OPS = [
@@ -379,4 +379,46 @@ test('validJobStatus accepts the filter choices only', () => {
   for (const ok of ['', 'queued', 'running', 'completed', 'failed', 'cancelled']) assert.equal(validJobStatus(ok), true, ok);
   for (const bad of ['bogus', 'COMPLETED', "failed'--", null, undefined, 'all']) assert.equal(validJobStatus(bad), false, String(bad));
   assert.equal(JOB_STATUSES[0][0], '');
+});
+
+const GQL_OPS = [
+  { method: 'QUERY', path: '/graphql', field: 'orders', returns: 'Order', returns_composite: true, args: [{ name: 'limit', type: 'Int', kind: 'SCALAR' }], auth: 'unspecified' },
+  { method: 'QUERY', path: '/graphql', field: 'anything', returns: 'U', returns_composite: true, returns_union: true, args: [], auth: 'unspecified' },
+  { method: 'QUERY', path: '/graphql', field: 'byIds', returns: 'Order', returns_composite: true, args: [{ name: 'ids', type: 'ID', kind: 'SCALAR', list: true, required: true }], auth: 'unspecified' },
+  { method: 'QUERY', path: '/graphql', field: 'order', returns: 'Order', returns_composite: true, args: [{ name: 'id', type: 'ID', kind: 'SCALAR', required: true }], auth: 'unspecified' },
+  { method: 'QUERY', path: '/graphql', field: 'note', returns: 'String', args: [{ name: 'id', type: 'ID', kind: 'SCALAR', required: true }, { name: 'n', type: 'Int', kind: 'SCALAR', required: true }], auth: 'unspecified' },
+  { method: 'MUTATION', path: '/graphql', field: 'setStatus', returns: 'Order', returns_composite: true, args: [{ name: 'id', type: 'ID', kind: 'SCALAR', required: true }] },
+];
+
+test('graphQLExampleOp prefers a usable query with a required argument, and skips unions, lists and mutations', () => {
+  assert.equal(graphQLExampleOp(GQL_OPS).field, 'order');
+  assert.equal(graphQLExampleOp([GQL_OPS[1], GQL_OPS[2], GQL_OPS[5]]), null);
+  assert.equal(graphQLExampleOp([GQL_OPS[0]]).field, 'orders');
+  assert.equal(graphQLExampleOp([]), null);
+  assert.equal(graphQLExampleOp(null), null);
+  const inputArg = { method: 'QUERY', path: '/graphql', field: 'f', returns: 'O', args: [{ name: 'x', type: 'F', kind: 'INPUT_OBJECT', required: true }] };
+  assert.equal(graphQLExampleOp([inputArg]), null);
+});
+
+test('opFullKey names a GraphQL field with # and a REST operation without', () => {
+  assert.equal(opFullKey(GQL_OPS[3]), 'QUERY /graphql#order');
+  assert.equal(opFullKey({ method: 'GET', path: '/v2/a/{id}' }), 'GET /v2/a/{id}');
+});
+
+test('exampleBindingSpec builds GraphQL test data when the inventory has no REST read, with a selection and typed placeholders', () => {
+  const s = exampleBindingSpec(GQL_OPS);
+  assert.equal(s.objects.length, 2);
+  assert.equal(s.objects[0].operation, 'QUERY /graphql#order');
+  assert.deepEqual(s.objects[0].params, { id: 'REPLACE-A' });
+  assert.equal(s.objects[0].selection, 'id');
+  assert.deepEqual(s.objects[1].params, { id: 'REPLACE-B' });
+  assert.ok(s.objects.every((o) => o.protected_values.length === 1));
+  assert.ok(s.identities.every((i) => i.credential_ref.startsWith('REPLACE/')));
+  // A scalar return needs no selection, and Int arguments get a number.
+  const only = exampleGraphQLSpec(GQL_OPS[4]);
+  assert.equal(only.objects[0].selection, undefined);
+  assert.deepEqual(only.objects[0].params, { id: 'REPLACE-A', n: '1' });
+  // A REST read still wins when there is one.
+  const rest = exampleBindingSpec([{ method: 'GET', path: '/v2/o/{id}', auth: 'required', path_params: ['id'] }].concat(GQL_OPS));
+  assert.equal(rest.objects[0].operation, 'GET /v2/o/{id}');
 });

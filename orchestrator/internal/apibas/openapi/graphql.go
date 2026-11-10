@@ -33,8 +33,10 @@ var graphQLKinds = []string{"QUERY", "MUTATION", "SUBSCRIPTION"}
 var authDirective = regexp.MustCompile(`(?i)^(auth|authenticated|requiresauth|requires_auth|isauthenticated|hasrole|has_role|requirerole|requires|secured|protected|private|authorize|authorized|permission|permissions)$`)
 
 type gArg struct {
-	Name string
-	Type string // the named type with list and non-null wrappers removed
+	Name     string
+	Type     string // the named type with list and non-null wrappers removed
+	List     bool   // the argument takes a list
+	Required bool   // the outermost type is non-null
 }
 
 type gField struct {
@@ -110,7 +112,7 @@ func importGraphQL(data []byte) (*Inventory, error) {
 	inv.Warnings = append(inv.Warnings,
 		"a GraphQL schema does not say where it is served; operations are recorded under "+DefaultGraphQLPath,
 		"a GraphQL schema does not declare authentication per field; authentication is unspecified unless a field carries an auth-like directive",
-		"GraphQL operations are inventoried and classified only; they are not bound to test data or run")
+		"only GraphQL queries can be bound to test data; mutations and subscriptions are inventoried and classified only")
 	inv.Warnings = append(inv.Warnings, r.warnings...)
 	classifyGraphQL(inv)
 	return inv, nil
@@ -130,7 +132,11 @@ func (w *gWalker) operation(kind string, f gField) Operation {
 		o.Auth = AuthRequired
 	}
 	o.BodyContentTypes = []string{"application/json"}
+	o.Returns = f.Type
+	o.ReturnsComposite = w.composite(f.Type)
+	o.ReturnsUnion = w.kindOf(f.Type) == "UNION"
 	for _, a := range f.Args {
+		o.Args = append(o.Args, OpArg{Name: a.Name, Type: a.Type, Kind: w.kindOf(a.Type), List: a.List, Required: a.Required})
 		o.BodyFields = append(o.BodyFields, a.Name)
 		// The fields of an input object argument are body fields too, so a mutable field is seen inside an input.
 		o.BodyFields = append(o.BodyFields, w.inputFields(a.Type, 0)...)
@@ -139,6 +145,27 @@ func (w *gWalker) operation(kind string, f gField) Operation {
 	o.BodyFields = uniqSorted(o.BodyFields)
 	o.ResponseFields = uniqSorted(o.ResponseFields)
 	return o
+}
+
+// kindOf is what a named type is. The built-in scalars are not declared in a schema document, so they are known by name.
+func (w *gWalker) kindOf(name string) string {
+	switch name {
+	case "ID", "String", "Int", "Float", "Boolean":
+		return "SCALAR"
+	}
+	if t := w.s.Types[name]; t != nil && t.Kind != "" {
+		return t.Kind
+	}
+	return "UNKNOWN"
+}
+
+// composite says whether a type has fields to select (an object, interface or union), so a query on it needs a selection.
+func (w *gWalker) composite(name string) bool {
+	switch w.kindOf(name) {
+	case "OBJECT", "INTERFACE", "UNION":
+		return true
+	}
+	return false
 }
 
 func (w *gWalker) inputFields(typeName string, depth int) []string {
@@ -272,6 +299,23 @@ type introRef struct {
 	OfType *introRef `json:"ofType"`
 }
 
+// info is the named type with wrappers removed, whether the argument is a list, and whether the outermost wrapper is non-null.
+func (r *introRef) info() (name string, list, required bool) {
+	if r != nil && r.Kind == "NON_NULL" {
+		required = true
+	}
+	for i := 0; r != nil && i < 16; i++ {
+		if r.Kind == "LIST" {
+			list = true
+		}
+		if r.Name != "" {
+			return r.Name, list, required
+		}
+		r = r.OfType
+	}
+	return "", list, required
+}
+
 func (r *introRef) base() string {
 	for i := 0; r != nil && i < 16; i++ {
 		if r.Name != "" {
@@ -349,7 +393,8 @@ func parseIntrospection(data []byte) (*gSchema, error) {
 			}
 			g := gField{Name: f.Name, Desc: f.Description, Deprecated: f.IsDeprecated, Type: f.Type.base()}
 			for _, a := range f.Args {
-				g.Args = append(g.Args, gArg{Name: a.Name, Type: a.Type.base()})
+				n, list, req := a.Type.info()
+				g.Args = append(g.Args, gArg{Name: a.Name, Type: n, List: list, Required: req})
 			}
 			gt.Fields = append(gt.Fields, g)
 		}
@@ -573,28 +618,34 @@ func (p *sdlParser) directives() (deprecated, auth bool, err error) {
 
 // typeRef consumes a type reference and returns the named type with wrappers removed.
 func (p *sdlParser) typeRef() (string, error) {
-	var base string
+	n, _, _, err := p.typeRefInfo()
+	return n, err
+}
+
+// typeRefInfo consumes a type reference and returns the named type, whether it is a list, and whether the outermost type is non-null.
+func (p *sdlParser) typeRefInfo() (name string, list, required bool, err error) {
 	if p.isPunct("[") {
 		p.pos++
-		inner, err := p.typeRef()
-		if err != nil {
-			return "", err
+		inner, _, _, ierr := p.typeRefInfo()
+		if ierr != nil {
+			return "", false, false, ierr
 		}
-		if err := p.expectPunct("]"); err != nil {
-			return "", err
+		if eerr := p.expectPunct("]"); eerr != nil {
+			return "", false, false, eerr
 		}
-		base = inner
+		name, list = inner, true
 	} else {
-		n, err := p.name()
-		if err != nil {
-			return "", err
+		n, nerr := p.name()
+		if nerr != nil {
+			return "", false, false, nerr
 		}
-		base = n
+		name = n
 	}
 	if p.isPunct("!") {
 		p.pos++
+		required = true
 	}
-	return base, nil
+	return name, list, required, nil
 }
 
 // skipValue consumes a default value: a literal, a variable, or a bracketed list or object.
@@ -642,12 +693,14 @@ func (p *sdlParser) argsDef() ([]gArg, error) {
 		if err := p.expectPunct(":"); err != nil {
 			return nil, err
 		}
-		t, err := p.typeRef()
+		t, isList, isReq, err := p.typeRefInfo()
 		if err != nil {
 			return nil, err
 		}
+		hasDefault := false
 		if p.isPunct("=") {
 			p.pos++
+			hasDefault = true
 			if err := p.skipValue(); err != nil {
 				return nil, err
 			}
@@ -655,7 +708,8 @@ func (p *sdlParser) argsDef() ([]gArg, error) {
 		if _, _, err := p.directives(); err != nil {
 			return nil, err
 		}
-		args = append(args, gArg{Name: n, Type: t})
+		// An argument with a default does not have to be given, even when its type is non-null.
+		args = append(args, gArg{Name: n, Type: t, List: isList, Required: isReq && !hasDefault})
 	}
 	p.pos++
 	return args, nil

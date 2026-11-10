@@ -340,6 +340,22 @@ func (r *Runner) run(ctx context.Context, s contract.Scenario, tag string) (Repo
 		ev.Baseline = grade.Exchange{Status: baseExch.Status}
 	}
 
+	// A scenario for an API that reports failures as HTTP 200 must see its own data in the baseline, or a clean attack response could
+	// just be the same error.
+	if s.RequireBaselineEvidence && !ev.Transport && ev.Baseline.Status == baselineWant(s) {
+		found := false
+		for _, v := range s.ForbiddenValues {
+			if v != "" && bytes.Contains(baseExch.raw, []byte(v)) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return r.finish(ctx, sandbox, r.skip(rep, grade.ReasonPreconditionMissing,
+				"the owner's own request did not return any of the protected values, so the check cannot be told apart from an error response")), nil
+		}
+	}
+
 	// The state is read between baseline and attack, so a baseline write is
 	// never blamed on the attacker.
 	var mid map[string]StateRecord
@@ -601,6 +617,14 @@ func oversizedHits(s contract.Scenario, raw []byte) int {
 		n++
 	}
 	return n
+}
+
+// baselineWant is the status a legitimate baseline returns for the scenario: 200 unless it declares another.
+func baselineWant(s contract.Scenario) int {
+	if s.BaselineStatus != 0 {
+		return s.BaselineStatus
+	}
+	return 200
 }
 
 func (r *Runner) skip(rep Report, reason, detail string) Report {

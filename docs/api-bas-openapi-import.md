@@ -77,7 +77,7 @@ The suggested scope is shown and never applied: changing a target's allowed path
 2. A binding step from inventory operations to catalogue scenarios (which identities, which object IDs, which fixtures) so an
    imported API can be assessed, not only listed.
 3. Applying the scope suggestion to a target as an audited action (target update does not exist yet).
-4. Binding GraphQL operations to test data.
+4. GraphQL mutations (they change state, so a repeated request cannot restore it) and union return types.
 
 ## Swagger 2.0
 
@@ -98,7 +98,7 @@ Added 10 November 2026. A GraphQL schema is imported from SDL (a `.graphql` file
 - Authentication is `unspecified` unless a field carries an auth-like directive (`@auth`, `@authenticated`, `@hasRole`, and similar), which makes it `required`. Because a schema declares nothing else, no GraphQL operation is flagged as public.
 - Candidate classes use the same name rules as REST, applied to arguments and return fields: object-level (an id-like argument), function-level (a privileged word in the field name, split from camelCase or snake_case), property-level (a mutation with a mutable field), data exposure, resource consumption (a paging argument on a query), server-side request (a destination-like argument), lifecycle (`@deprecated`).
 - Errors name the line for SDL. Limits: the document size, 1,000,000 tokens, 20,000 types, 200,000 fields, 5,000 operations.
-- **Not supported:** binding GraphQL operations to test data and running them. The binding step skips them with a message saying so. Federation directives are read as ordinary directives. Query documents and fragments are refused (this is a schema import).
+- **Binding:** GraphQL queries can be bound to test data and run (see "GraphQL queries in the bound test data" in `api-bas-scenario-binding.md`); mutations and subscriptions are inventoried and classified only. Federation directives are read as ordinary directives. Query documents and fragments are refused (this is a schema import).
 - Drift compares REST method and path, so documented GraphQL operations show as not observed against a route list.
 
 Tests: `graphql_test.go`, fixture `testdata/shop.graphql`, the binding refusal in `binding_test.go`, and the API test `TestAPIBASInventoryImportsSwaggerAndGraphQL`.
