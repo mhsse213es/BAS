@@ -60,19 +60,64 @@ living-off-the-land + service-installed backdoor surface.
 | Build | `go build ./...` | clean |
 | `internal/contentregistry` structural check unaffected | `go test ./internal/contentregistry/` | PASS |
 
-## NOT done / honest gaps
+## Status of the three closure decisions
 
-- **Not run against a real Windows agent.** Syntax and load are verified; live
-  execution + telemetry/detection observation on staging is deferred to the
-  user (consistent with other kill-chain deliverables). The PASS/FAIL posture
-  logic is reviewed but not exercised end-to-end on a live endpoint.
-- **Eval score not self-bumped.** REQ-019 is left at its current 3/5 in the
-  assessment report. Moving it to 5 is the assessor's call after testing the
-  content via POC-28/29 — not a self-assigned score (scoring-honesty).
-- **No per-step threat-intel provenance fields.** These follow the fin7 FS-actor
-  style (narrative citations only), matching their library siblings, rather than
-  the newer per-step `threat_intel_sources`/`family_attribution_confidence`
-  grounding used by the recent ransomware chains (black-basta/medusa/rhysida).
-  Adding structured grounding is an available follow-up quality pass.
-- **Not rebuilt/deployed.** Needs the normal `install.sh --upgrade`; the signed
-  YAMLs ship in the scenario corpus.
+1. **Live Windows validation — OUTSTANDING (see runbook below).** Syntax + load
+   are verified; execution and detection validation are NOT done. Not treated
+   as operational validation.
+2. **Eval score — LEFT AT 3/5.** The assessor independently evaluates POC-28/29
+   before any re-score. Implementation completion is not evidence of
+   effectiveness.
+3. **Threat-intel grounding — DEFERRED, TRACKED (see follow-up below).**
+   Narrative citations are used this iteration; their sources are traceable
+   (listed below). Structured fields are a tracked follow-up.
+
+## Staging live-validation runbook (REQ-019 decision #1 — OUTSTANDING)
+
+Scenarios are **bind-mounted**, not baked into the image
+(`packaging/compose/docker-compose.yml`: `- ./scenarios:/scenarios`,
+`SCENARIOS_DIR=/scenarios`), and `packaging/build.sh` copies `scenarios/` into
+the bundle after a `verify-all` signature gate (which these 5 `.sig` pass). So
+reaching staging is the normal release path — not a code rebuild of content:
+
+1. **Merge** PR #19 to `main`.
+2. **Build the bundle** (heavy job, build host): `bash packaging/build.sh` — it
+   runs `signer.go verify-all` over `scenarios/` and copies them in. Fails
+   closed on any bad/missing signature.
+3. **Deploy** on staging (`ssh audspect-staging`, i.e. zain@192.168.10.78):
+   `sudo bash install.sh --upgrade --config setup.conf` — never `--install`
+   over existing data, never raw docker compose.
+4. **Confirm load** (human API, :9543, JWT as admin@k.com): the 5 ids —
+   `carbanak-kill-chain`, `cobalt-group-kill-chain`, `silence-kill-chain`,
+   `ta505-kill-chain`, `fin8-kill-chain` — appear in `GET /api/scenarios`
+   (Enterprise/killchain tier). Scenario-signature verification runs at load;
+   a tampered/CRLF file would be refused.
+5. **Run against a live Windows agent** (one enrolled on :9443 mTLS): launch
+   each via `POST /api/scenarios/{id}/run` (or the Runs UI), live mode.
+6. **Capture execution telemetry + detection results** per stage and compare to
+   the `telemetry:`/`detection:` blocks each scenario documents — e.g. Sysmon
+   EID 1/3/7/11/13/17/22, Security EID 4688/4698/7045, PowerShell EID 4104,
+   WMI-Activity EID 5857. Record the step PASS/FAIL posture and whether the
+   SOC/EDR actually alerted. Submit detections via
+   `POST /api/scenarios/runs/{runId}/detections`.
+
+Only after step 6 is this "operationally validated". I can drive steps 4–6 via
+the :9543 API once the user has completed the merge + build + deploy (steps
+1–3, their heavy-job role), if they want me to.
+
+## Tracked follow-up — structured threat-intel grounding (decision #3)
+
+Deferred this iteration; tracked for a later pass. Add per-step
+`threat_intel_sources` + `family_attribution_confidence` (+ `last_reviewed`) to
+all 25 steps, matching the newer ransomware chains (black-basta/medusa/rhysida),
+for auditability and consistency. The structural gate
+(`contentregistry.stepProvenanceProblems`) requires: every source has a
+`reference`; `confirmed` needs >=2 sources; non-`unsourced` needs >=1. Confidence
+must be graded honestly per step, not blanket-`confirmed`.
+
+**Narrative sources used this iteration (traceable):**
+- Carbanak — Kaspersky "Carbanak APT" (2015); Group-IB *Anunak*; MITRE ATT&CK G0008.
+- Cobalt Group — Group-IB "Cobalt" reports; Europol 2018 arrest; MITRE ATT&CK G0080.
+- Silence — Group-IB "Silence: Moving into the darkside"; MITRE ATT&CK G0091.
+- TA505 — Proofpoint / IBM X-Force TA505 reporting; MITRE ATT&CK G0092.
+- FIN8 — Bitdefender/Symantec BADHATCH & Sardonic analyses; MITRE ATT&CK G0061.
