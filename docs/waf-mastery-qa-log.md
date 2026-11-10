@@ -218,9 +218,46 @@ header-keyed rate-limit zone, real stateful lockout/CAPTCHA logic, and/or the sa
 as the other 6 live routes: `GET /api/waf/scenarios/automated-abuse/live`. `TestRBACMatrix_NoDrift`/
 `AuthorizationBoundary` pass with the new route matrixed.
 
+**Seventh same-day follow-up: built a real second, weakened WAF instance, unblocked `GAP-001` in
+`policy-integrity`.** `lab/wafmodsec/docker-compose.yml` gained `waf-weakened`, identical to the baseline `waf`
+service except `MODSEC_RULE_ENGINE=DetectionOnly` instead of `On` -- ModSecurity's real `SecRuleEngine` directive,
+not a simulated weakening. Curl-confirmed against both real containers first: baseline (`:8888`) blocks
+POLICY-001's XSS payload (403); weakened (`:8889`) lets the identical payload reach origin (200).
+
+`GAP-001` is one of 4 "paired" weakness types `wafval.Pair`/`EvaluatePolicyGap` compares baseline-vs-weakened, not
+a single-request claim. New `internal/wafmodsec/policyintegrity.go` drives POLICY-001's malicious leg against
+BOTH clients and feeds both raw responses through the same `BuildCollectionResults` every single-leg scenario
+already uses -- no new evidence-mapping function needed this time, since a pair is just two ordinary single-shot
+responses, not an aggregate like the burst harness needed. `PolicyDifferentiationConfirmed` is hardcoded `true`,
+honestly: the two containers' differing `MODSEC_RULE_ENGINE` is known directly from `docker-compose.yml`, not
+inferred from behavior. The overall verdict resolves `Inconclusive`, not `Missed`/`DetectedButAllowed` -- same
+disclosed audit-log-parsing limitation as every other live-wired vector in this package, now proven to hold for
+a two-leg comparison too.
+
+**Found and fixed a THIRD occurrence of the same `EvidenceSource`-hardcoding bug** fixed twice before
+(`EvaluateScenarioWithSeverities`, `EvaluateLegitimateTrafficScenario`): `EvaluatePolicyIntegrityScenario` always
+labeled every assertion `"fixture"`, and `PolicyGapFixture` had no `EvidenceSource` field to override it with at
+all -- fixed the same way (new field, defaults to fixture when unset), new RED-first test.
+
+This weakening is honestly WAF-WIDE (`MODSEC_RULE_ENGINE=DetectionOnly` disables blocking for every rule),
+broader than GAP-001's own literal "the matching rule... was switched to detection-only" (a single-rule
+override) -- disclosed, not overclaimed. `GAP-002`/`GAP-004` (exclusion rule, priority conflict) are also paired
+weaknesses but need a per-rule ModSecurity override mounted on a weakened instance, a different, more involved
+build than a single env var toggle -- not built this round. `GAP-003`/`GAP-005`/`GAP-006` need
+`modsecwaf.BuildRequest`'s still-missing `body:json:`/`path:` forms.
+
+Wired into the API too, but as its OWN dedicated handler
+(`wafPolicyIntegrityLiveJSONHandler`/`GET /api/waf/scenarios/policy-integrity/live`), not through the shared
+`liveScenarios` loop -- that loop's `liveScenarioRunner` type builds exactly one `*modsecwaf.Client`, but this
+scenario genuinely needs two (baseline + weakened). Same refusal discipline: 503 if either of
+`WAF_MODSEC_LAB_URL`/`WAF_MODSEC_WEAKENED_LAB_URL` is unset. `TestRBACMatrix_NoDrift`/`AuthorizationBoundary`
+pass with the new route matrixed; ran the full `wafmodsec` live suite together (all 8 scenarios) to check for the
+SAME cross-test contamination class of bug the automated-abuse rate limiter hit -- none found, since GAP-001
+drives single requests, not a burst, against a path (`/search`) the rate limiter doesn't touch.
+
 **Resolution path for what's left:** extend `BuildRequest`'s remaining PayloadLocation cases (header:/body:json:/body:xml:);
-add audit-log parsing to `wafmodsec` so a real `VerdictMissed` becomes claimable; a second, deliberately-weakened
-lab instance to unblock `policy-integrity`; per-account aggregation / a bot-management layer / stateful
+add audit-log parsing to `wafmodsec` so a real `VerdictMissed` becomes claimable; a per-rule ModSecurity override
+to unblock `policy-integrity`'s `GAP-002`/`GAP-004`; per-account aggregation / a bot-management layer / stateful
 lockout logic to unblock `automated-abuse`'s remaining 5 vectors; a multi-node/dual-path lab topology to unblock
 `origin-resilience`; a real alerting backend to unblock `detection-telemetry`.
 

@@ -4304,3 +4304,43 @@ no ModSecurity audit-log parsing, so `VerdictMissed` still isn't claimable from 
 - **Calls made:** keyset (cursor) paging, not offsets, so new jobs arriving while someone pages do not shift the pages; a cross-target list was left out because the console works one target at a time; the card drops a page that arrives after the filter changed.
 - **Tests (pass):** API: walking three at a time visits all seven jobs exactly once in newest-first order (two jobs share a creation time), the last page has no cursor, a page holding every job has no cursor, the status filter alone and with paging, and six kinds of bad input refused with 400. Web: Load more appends and passes the cursor back unchanged, the filter requests that status from the first page, an empty filtered list names the status, an unknown status is treated as All. The earlier list tests still pass.
 - **Not run:** a browser against a real server with hundreds of jobs.
+
+## REQ-007 follow-up #10: a real second, weakened WAF instance closes `policy-integrity` partially (10 November 2026)
+
+- **Built:** `lab/wafmodsec/docker-compose.yml` gained `waf-weakened`, identical to the baseline `waf` service
+  except `MODSEC_RULE_ENGINE=DetectionOnly` instead of `On` (ModSecurity's real `SecRuleEngine` directive, not a
+  simulated weakening), published on `http://localhost:8889`. Curl-confirmed against both real containers first:
+  baseline (`:8888`) blocks POLICY-001's XSS payload (403); weakened (`:8889`) lets the identical payload reach
+  origin (200). New `internal/wafmodsec/policyintegrity.go` (`RunPolicyIntegrityLive`) drives GAP-001's
+  referenced vector against BOTH clients and feeds both raw responses through the same `BuildCollectionResults`
+  every single-leg scenario already uses -- `GAP-001` is one of 4 "paired" weakness types
+  `wafval.Pair`/`EvaluatePolicyGap` compares baseline-vs-weakened, not a single-request claim.
+  `PolicyDifferentiationConfirmed` is hardcoded `true`, honestly: the two containers' differing
+  `MODSEC_RULE_ENGINE` is known directly from `docker-compose.yml`, not inferred from behavior. New dedicated
+  route `GET /api/waf/scenarios/policy-integrity/live` -- its own handler
+  (`wafPolicyIntegrityLiveJSONHandler`), NOT through the shared `liveScenarios` loop, since that loop's
+  `liveScenarioRunner` type builds exactly one `*modsecwaf.Client` and this scenario genuinely needs two.
+- **Found and fixed:** a THIRD occurrence of the same `EvidenceSource`-hardcoding bug fixed twice before
+  (`EvaluateScenarioWithSeverities`, `EvaluateLegitimateTrafficScenario`): `EvaluatePolicyIntegrityScenario`
+  always labeled every assertion `"fixture"`, and `PolicyGapFixture` had no `EvidenceSource` field at all --
+  fixed the same way (new field, defaults to fixture when unset), new RED-first test.
+- **Calls made:** the weakening is honestly WAF-WIDE (`MODSEC_RULE_ENGINE=DetectionOnly` disables blocking for
+  every rule), broader than GAP-001's own literal "the matching rule... was switched to detection-only" (a
+  single-rule override) -- disclosed, not overclaimed. The overall verdict resolves `Inconclusive`, not
+  `Missed`/`DetectedButAllowed`, since `wafmodsec` never parses the audit log -- same disclosed limitation as
+  every other live-wired vector, now proven to hold for a two-leg comparison too. `GAP-002`/`GAP-004`
+  (exclusion rule, priority conflict) are also paired weaknesses but need a per-rule ModSecurity override
+  mounted on a weakened instance, a different, more involved build than a single env var toggle --
+  `GAP-003`/`GAP-005`/`GAP-006` need `modsecwaf.BuildRequest`'s still-missing `body:json:`/`path:` forms.
+- **Tests (pass):** 1 new RED-first unit test in `wafassessment` for the `EvidenceSource` override; 1 new live
+  test (`TestLive_PolicyIntegrityScenario_OneOfSixVectorsLive`) and its API counterpart
+  (`TestWafPolicyIntegrityLiveJSONHandler_RealLab_ReturnsRealLiveOutcome`), both run against the real baseline
+  AND weakened containers -- `GAP-001` resolves `Inconclusive`, `evidenceSource:"live_execution"`. A dedicated
+  503 test (`TestWafPolicyIntegrityLiveJSONHandler_NoLabConfigured_Returns503`) covers all 3 combinations of
+  either/both URLs unset. `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the new route matrixed. Ran
+  the full `wafmodsec` live suite together (all 8 scenarios) to check for the same cross-test contamination
+  class of bug the automated-abuse rate limiter hit -- none found, since GAP-001 drives single requests against
+  `/search`, a path the rate limiter doesn't touch. `go build ./...`/`go vet ./...` clean; targeted
+  `wafassessment`/`wafmodsec`/`modsecwaf`/`wafpolicygap`/`wafval`/`api` tests green.
+- **Not run:** staging; the remaining 2 scenarios (`detection-telemetry`, `origin-resilience`) are next.
+- **Limits:** `GAP-002`/`GAP-003`/`GAP-004`/`GAP-005`/`GAP-006` remain genuinely unwired for the reasons above.

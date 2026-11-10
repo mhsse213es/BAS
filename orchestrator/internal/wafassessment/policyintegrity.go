@@ -22,6 +22,12 @@ type PolicyGapFixture struct {
 	WeakenedEvidence                []wafval.CollectionResult
 	PolicyDifferentiationConfirmed bool
 	CoverageEvidence               []wafval.CollectionResult
+
+	// EvidenceSource labels the assertion this fixture produces --
+	// EvidenceSourceLiveExecution when set, EvidenceSourceFixture (the
+	// zero value) otherwise. Existing fixtures leave this unset, so
+	// their behavior is unchanged.
+	EvidenceSource EvidenceSource
 }
 
 // EvaluateContributingPolicyGapVector grades one policy-gap scenario's
@@ -88,11 +94,15 @@ func EvaluatePolicyIntegrityScenario(scenario EnterpriseScenario, policyBasis st
 		if err != nil {
 			return VectorAssertion{}, false, fmt.Errorf("evaluating policy-gap scenario %q: %w", gapID, err)
 		}
+		src := fixture.EvidenceSource
+		if src == "" {
+			src = EvidenceSourceFixture
+		}
 		return VectorAssertion{
 			VectorID:       gapID,
 			Severity:       vector.Severity,
 			Verdict:        verdict,
-			EvidenceSource: EvidenceSourceFixture,
+			EvidenceSource: src,
 			Reason:         reason,
 		}, true, nil
 	})

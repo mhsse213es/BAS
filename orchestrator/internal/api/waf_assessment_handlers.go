@@ -22,6 +22,16 @@ const wafModsecLabURLEnv = "WAF_MODSEC_LAB_URL"
 
 func getenvWafModsecLabURL() string { return os.Getenv(wafModsecLabURLEnv) }
 
+// wafModsecWeakenedLabURLEnv names the second environment variable the live
+// policy-integrity endpoint needs -- that scenario's GAP-001 is a genuine
+// two-leg baseline-vs-weakened comparison, so it requires a SECOND, real
+// WAF instance (lab/wafmodsec/docker-compose.yml's "waf-weakened" service)
+// alongside wafModsecLabURLEnv's baseline one. Same refusal discipline:
+// unset means 503, never a silent single-leg fallback.
+const wafModsecWeakenedLabURLEnv = "WAF_MODSEC_WEAKENED_LAB_URL"
+
+func getenvWafModsecWeakenedLabURL() string { return os.Getenv(wafModsecWeakenedLabURLEnv) }
+
 // wafScenarioVectorResponse is one contributing vector's evaluated
 // outcome in the JSON shape served by wafScenarioJSONHandler --
 // camelCase field names per this package's existing JSON convention.
@@ -165,6 +175,49 @@ func (h *Handler) wafScenarioLiveJSONHandler(run liveScenarioRunner) http.Handle
 // routes.go -- no per-scenario method is added for them.
 func (h *Handler) wafExploitPreventionLiveJSONHandler(w http.ResponseWriter, r *http.Request) {
 	h.wafScenarioLiveJSONHandler(wafmodsec.RunExploitPreventionLive)(w, r)
+}
+
+// wafPolicyIntegrityLiveJSONHandler serves the live policy-integrity
+// scenario. It cannot use the shared wafScenarioLiveJSONHandler/
+// liveScenarioRunner factory -- that factory builds exactly one
+// *modsecwaf.Client, but RunPolicyIntegrityLive genuinely needs two (a
+// baseline and a weakened WAF instance) to evaluate GAP-001's two-leg
+// comparison -- so this is its own dedicated handler, same refusal
+// discipline as the shared one: 503 if either URL is unset, 502 if either
+// configured lab is unreachable, never a silent fallback.
+func (h *Handler) wafPolicyIntegrityLiveJSONHandler(w http.ResponseWriter, r *http.Request) {
+	baselineURL := getenvWafModsecLabURL()
+	weakenedURL := getenvWafModsecWeakenedLabURL()
+	if baselineURL == "" || weakenedURL == "" {
+		http.Error(w, fmt.Sprintf("no live WAF lab configured: set both %s and %s to running lab/wafmodsec URLs (see lab/wafmodsec/README.md)", wafModsecLabURLEnv, wafModsecWeakenedLabURLEnv), http.StatusServiceUnavailable)
+		return
+	}
+	baselineClient := modsecwaf.NewClient(modsecwaf.Config{BaseURL: baselineURL})
+	weakenedClient := modsecwaf.NewClient(modsecwaf.Config{BaseURL: weakenedURL})
+	scenario, result, err := wafmodsec.RunPolicyIntegrityLive(r.Context(), baselineClient, weakenedClient)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("running live policy-integrity scenario against %s/%s: %v", baselineURL, weakenedURL, err), http.StatusBadGateway)
+		return
+	}
+	assertions := make([]wafScenarioVectorResponse, 0, len(result.Assertions))
+	for _, a := range result.Assertions {
+		assertions = append(assertions, wafScenarioVectorResponse{
+			VectorID:       a.VectorID,
+			Severity:       string(a.Severity),
+			Verdict:        string(a.Verdict),
+			EvidenceSource: string(a.EvidenceSource),
+			Reason:         a.Reason,
+		})
+	}
+	respond(w, wafScenarioResponse{
+		ScenarioID:        scenario.ID,
+		ScenarioName:      scenario.Name,
+		Objective:         scenario.Objective,
+		Outcome:           string(result.Outcome),
+		Summary:           result.Summary,
+		Assertions:        assertions,
+		UntestedVectorIDs: result.UntestedVectorIDs,
+	})
 }
 
 // GetWAFExploitPreventionScenario is a thin, already-shipped wrapper

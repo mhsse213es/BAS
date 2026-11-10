@@ -29,6 +29,11 @@ already uses elsewhere in this repo.
   live test's own path -- see each file's own doc comment for exactly how
   and why this is safe, including a real cross-test contamination bug
   this scoping fixes.
+- `waf-weakened` -- a SECOND `owasp/modsecurity-crs` instance, identical to
+  `waf` except `MODSEC_RULE_ENGINE=DetectionOnly` instead of `On`, published
+  on `http://localhost:8889`. `policy-integrity`'s `GAP-001` is a genuine
+  two-leg baseline-vs-weakened comparison -- this gives it a real second
+  policy to compare against, not a simulated one.
 
 ## Running it
 
@@ -115,6 +120,7 @@ vectors, each with its own `Run<Scenario>Live(ctx, client)` in
 | `legitimate-traffic` | `SQLI-001`, `XSS-001`, `PATHTRAV-001`, `RATE-001` benign legs (4/6) | all `Allowed` |
 | `file-upload-content-trust` | `FILEUP-001`, `FILEUP-003` (2/3) | `Inconclusive`, `Blocked` |
 | `automated-abuse` | `RATE-001` (1/6) | `Blocked` |
+| `policy-integrity` | `GAP-001` (1/6) | `Inconclusive` |
 
 `api-protection`'s `APIFLOW-005` comes from `internal/wafapiflow`, a
 sibling catalog to `wafcatalog` with its own, structurally identical
@@ -186,12 +192,50 @@ hygiene, not a production concern.
 `RATE-002` and all 4 `BOTABUSE-*` vectors remain unwired; see below for
 why each is a bigger, different piece of work than this one was.
 
+`policy-integrity`'s `GAP-001` (detection-only mode) needed a SECOND, real
+WAF instance -- `waf-weakened` above, identical to `waf` except
+`MODSEC_RULE_ENGINE=DetectionOnly` instead of `On`. `GAP-001` is one of 4
+"paired" weakness types (`WeaknessType.IsPaired()`) that `wafval.Pair`/
+`EvaluatePolicyGap` compares baseline-vs-weakened, not a single-request
+claim -- `internal/wafmodsec/policyintegrity.go` drives POLICY-001's
+malicious leg against BOTH clients and feeds both raw responses through
+the same `BuildCollectionResults` the single-leg scenarios use.
+`PolicyDifferentiationConfirmed` is hardcoded `true`, honestly: the two
+containers' differing `MODSEC_RULE_ENGINE` is known directly from
+`docker-compose.yml`, not inferred from behavior. Curl-confirmed against
+both real containers first: the baseline (`:8888`) blocks POLICY-001's
+payload (403); the weakened instance (`:8889`) lets the identical payload
+reach origin (200).
+
+This weakening is honestly WAF-WIDE -- `MODSEC_RULE_ENGINE=DetectionOnly`
+disables blocking for every rule, broader than GAP-001's own literal "the
+matching rule... was switched to detection-only" (a single-rule override).
+A per-rule detection-only toggle would need a custom ModSecurity rule
+override mounted on a weakened instance, not just an env var -- not built
+this round. The overall verdict resolves `Inconclusive`, not
+`Missed`/`DetectedButAllowed`: `wafmodsec` never parses the audit log, so
+an allowed-through weakened leg can never assert a resolved Detection
+axis -- the same disclosed limitation every other live-wired vector in
+this package already carries, now proven to hold for a two-leg comparison
+too. Found and fixed, a THIRD occurrence of the same `EvidenceSource`
+hardcoding bug fixed twice before: `EvaluatePolicyIntegrityScenario` always
+labeled every assertion `"fixture"`, and `PolicyGapFixture` had no
+`EvidenceSource` field at all -- fixed the same way, new RED-first test.
+
+`GAP-002`/`GAP-004` (exclusion rule, priority conflict) are also paired
+weaknesses but need a per-rule ModSecurity override mounted on a weakened
+instance (`SecRuleUpdateActionById`/a custom exclusion), a different,
+more involved build than a single env var toggle -- not built this round.
+`GAP-003`/`GAP-005`/`GAP-006` need `modsecwaf.BuildRequest`'s still-missing
+`body:json:`/`path:` PayloadLocation forms.
+
 ```sh
 WAF_MODSEC_LAB_URL=http://localhost:8888 \
+WAF_MODSEC_WEAKENED_LAB_URL=http://localhost:8889 \
   go test ./internal/wafmodsec/... -run TestLive_ -v
 ```
 
-**3 scenarios get NO live wiring, for real, disclosed reasons -- not an
+**2 scenarios get NO live wiring, for real, disclosed reasons -- not an
 oversight:**
 - `automated-abuse`'s other 5 vectors (`RATE-002`, `BOTABUSE-001..004`):
   `RATE-002` needs per-account aggregation across sessions/source
@@ -210,10 +254,7 @@ oversight:**
   (direct-origin reachability, fail-open behavior, cross-node config
   consistency) that need a multi-node/dual-path network setup this lab's
   single WAF-fronted, non-host-exposed origin doesn't have.
-- `policy-integrity` (`GAP-001..006`): a genuine two-leg
-  baseline-vs-weakened policy COMPARISON (`wafpolicygap.EvaluatePolicyGap`)
-  -- this lab has exactly one fixed CRS configuration, so there is no
-  second, deliberately-weakened policy to compare against yet.
+- `policy-integrity`'s other 5 vectors (`GAP-002..006`): see above.
 
 ## What this proves, and what it doesn't (yet)
 
@@ -221,7 +262,7 @@ oversight:**
 `modsecwaf.Client.Send` (real HTTP) ->
 `wafmodsec.BuildCollectionResults` (real response -> `wafval.Observation`) ->
 `wafval.EvaluateClaim` (real verdict) -- working end to end against a real,
-running WAF engine, across 7 enterprise scenarios now. This is a stronger
+running WAF engine, across 8 enterprise scenarios now. This is a stronger
 resolution than `internal/avdefender`'s own precedent (the Defender bridge
 was built but never run against a live tenant); this one has actually been
 run, live, in this session.

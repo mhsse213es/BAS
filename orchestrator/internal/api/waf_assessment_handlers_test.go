@@ -244,6 +244,31 @@ func TestWafScenarioLiveJSONHandler_NoLabConfigured_Returns503(t *testing.T) {
 	}
 }
 
+// Review Focus: policy-integrity's live handler needs BOTH env vars set --
+// it must refuse (503) when either one alone is missing, not just when
+// both are, since a single configured lab can't drive a two-leg comparison.
+func TestWafPolicyIntegrityLiveJSONHandler_NoLabConfigured_Returns503(t *testing.T) {
+	h := &Handler{}
+	cases := []struct {
+		name     string
+		baseline string
+		weakened string
+	}{
+		{"both unset", "", ""},
+		{"baseline only", "http://localhost:8888", ""},
+		{"weakened only", "", "http://localhost:8889"},
+	}
+	for _, c := range cases {
+		t.Setenv(wafModsecLabURLEnv, c.baseline)
+		t.Setenv(wafModsecWeakenedLabURLEnv, c.weakened)
+		rr := httptest.NewRecorder()
+		h.wafPolicyIntegrityLiveJSONHandler(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/policy-integrity/live", nil))
+		if rr.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s: status = %d, want %d", c.name, rr.Code, http.StatusServiceUnavailable)
+		}
+	}
+}
+
 func TestGetWAFExploitPreventionScenarioHTML_RendersFailOutcome(t *testing.T) {
 	h := &Handler{}
 	rr := httptest.NewRecorder()

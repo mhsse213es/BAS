@@ -284,15 +284,14 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Get("/api/waf/scenarios/"+slug, h.wafScenarioJSONHandler(slug))
 			r.Get("/api/waf/scenarios/"+slug+".html", h.wafScenarioHTMLHandler(slug))
 		}
-		// 7 of the 10 scenarios above, evaluated against a REAL, running
+		// 8 of the 10 scenarios above, evaluated against a REAL, running
 		// ModSecurity + OWASP CRS lab (lab/wafmodsec) instead of a fixture --
 		// only the subset of each scenario's vectors its own
 		// internal/wafmodsec.Run<Scenario>Live function actually drives live
-		// (the rest surface through untestedVectorIds). The other 3
+		// (the rest surface through untestedVectorIds). The other 2
 		// scenarios have no live route: each needs real new capability
-		// (a SIEM backend, a multi-node lab topology, a second
-		// weakened-policy lab instance) that doesn't exist yet -- see
-		// docs/waf-mastery-qa-log.md item #1. Same
+		// (a SIEM backend, a multi-node lab topology) that doesn't exist yet
+		// -- see docs/waf-mastery-qa-log.md item #1. Same
 		// read-only, JWT-only tier as the fixture-backed routes above: the
 		// live target is a fixed, operator-configured URL
 		// (wafModsecLabURLEnv), never taken from the request, so there is no
@@ -312,6 +311,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		for _, ls := range liveScenarios {
 			r.Get("/api/waf/scenarios/"+ls.slug+"/live", h.wafScenarioLiveJSONHandler(ls.run))
 		}
+		// policy-integrity needs a SECOND WAF lab instance (a genuine
+		// two-leg baseline-vs-weakened comparison), so it can't go through
+		// the single-client liveScenarios loop above -- see
+		// wafPolicyIntegrityLiveJSONHandler's own doc comment.
+		r.Get("/api/waf/scenarios/policy-integrity/live", h.wafPolicyIntegrityLiveJSONHandler)
 		// AV/NGAV efficacy assessment scenarios (internal/avefficacy),
 		// same read-only, slug-registry shape as /api/waf/scenarios:
 		// each slug is a fixture-backed scenario evaluation layered
