@@ -1,7 +1,7 @@
 import { x } from './core/escape.js';
 import { closeFactoryDrawerOnBackdrop, closeFactorySource, recheckFactoryHealth, openFactorySource, fhTableQuery, clearFhTableQuery, setFhPer, fhPage, fhSortBy, toggleFhCols, fhColToggle, fhSelectRow, fhSelectAll, clearFhSelection, fhRowKeydown, exportFhCsv, exportFhSelected } from './features/factory-health.js';
 import { stopEvent } from './core/actions.js';
-import { apiInvSelect, apiInvImport, apiInvLoadFile, apiInvFilter, apiInvVersion, apiInvDrift, apiInvExample, apiInvPlanBinding, apiInvRefresh, apiInvSaveBinding, apiInvDeleteBinding, apiInvExampleWrite, apiInvRunBound, apiInvJob, apiInvJobsRefresh, apiInvWriteOp, apiInvWriteSync, apiInvWriteApply, apiInvWriteClear, apiInvWriteEdit, apiInvWriteRemove, apiInvSaveSchedule, apiInvRemoveSchedule, apiInvExampleChecks } from './features/api-inventory.js';
+import { apiInvSelect, apiInvImport, apiInvLoadFile, apiInvFilter, apiInvVersion, apiInvDrift, apiInvExample, apiInvPlanBinding, apiInvRefresh, apiInvSaveBinding, apiInvDeleteBinding, apiInvExampleWrite, apiInvRunBound, apiInvJob, apiInvJobsRefresh, apiInvWriteOp, apiInvWriteSync, apiInvWriteApply, apiInvWriteClear, apiInvWriteEdit, apiInvWriteRemove, apiInvSaveSchedule, apiInvRemoveSchedule, apiInvExampleChecks, apiInvJobsFilter, apiInvJobsMore } from './features/api-inventory.js';
 import { loadThreatPriorityActors, onThreatPrioritySearch, clearTpTableQuery, setTpPer, tpPage, tpSortBy, toggleTpCols, tpColToggle, tpSelectRow, tpSelectAll, clearTpSelection, tpRowKeydown, exportTpCsv, exportTpSelected, closeThreatPriorityDetail, closeThreatPriorityDetailOnBackdrop, tpGo } from './features/tp-view.js';
 import { toggleExpCols, setExpPer, expPage, expSortBy, expColToggle, expSelectRow, expSelectAll, clearExpSelection, expRowKeydown, exportExpCsv, exportExpSelected, clearExpTableQuery, expGo } from './features/exp-view.js';
 import { setRecLimit } from './features/attack-path.js';
@@ -131,6 +131,8 @@ export const ACTIONS = {
   apiInvSaveSchedule,
   apiInvRemoveSchedule,
   apiInvExampleChecks,
+  apiInvJobsFilter,
+  apiInvJobsMore,
   openFactorySource,
   fhTableQuery,
   toggleExpCols,

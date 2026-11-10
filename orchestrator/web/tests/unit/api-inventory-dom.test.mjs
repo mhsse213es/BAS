@@ -22,7 +22,7 @@ function storedBinding(stale) {
   };
 }
 
-async function setup({ stale = false, jobReason = 'EVIDENCE_INCONCLUSIVE', jobs = null, jobStatus = 'completed', schedule = null, environment = 'lab', scheduleRefusal = '', planBound = null } = {}) {
+async function setup({ stale = false, jobReason = 'EVIDENCE_INCONCLUSIVE', jobs = null, jobStatus = 'completed', schedule = null, environment = 'lab', scheduleRefusal = '', planBound = null, jobsNext = '', jobsPage2 = null, jobsFiltered = null } = {}) {
   const dom = new JSDOM('<!doctype html><body><div id="toast"></div><div id="api-inv-targets"></div><div id="api-inv-detail"></div></body>');
   globalThis.document = dom.window.document;
   globalThis.window = dom.window;
@@ -47,7 +47,10 @@ async function setup({ stale = false, jobReason = 'EVIDENCE_INCONCLUSIVE', jobs 
     if (path.endsWith('/binding/jobs')) return ok({ id: 'job-1', status: 'queued', created: true }, 202);
     if (path.endsWith('/binding') && method === 'GET') return ok(storedBinding(stale));
     if (path.endsWith('/binding') && method === 'PUT') return ok({ inventory_version: 1, scenarios: 0, bound: [], skipped: [], limits: [] });
-    if (path.endsWith('/shop-1/jobs')) {
+    if (path.includes('/shop-1/jobs')) {
+      if (path.includes('before=') && jobsPage2) return ok({ jobs: jobsPage2 });
+      if (path.includes('status=') && jobsFiltered) return ok({ jobs: jobsFiltered });
+      if (jobsNext && jobs) return ok({ jobs, next: jobsNext });
       return ok({ jobs: jobs || [
         { id: 'job-1', requested_by: EVIL, environment: 'lab', status: 'completed', failure_reason: '', bound: true, scenarios: 3, created_at: '2026-11-10T01:00:00Z',
           results: { pass: 1, fail: 1, error: 0, skipped: 1 } },
@@ -425,4 +428,56 @@ test('the function and property example fills the box with both checks, and the 
   assert.match(out, /bob → alice/);
   assert.match(out, /function/);
   assert.match(out, /property/);
+});
+
+function jobRow(id, status) {
+  return { id, requested_by: 'a1', environment: 'lab', status, failure_reason: '', bound: true, scenarios: 1, created_at: '2026-11-09T01:00:00Z', results: { pass: 1, fail: 0, error: 0, skipped: 0 } };
+}
+
+test('Load more adds the next page below the jobs shown, with the cursor passed back unchanged', async () => {
+  const { dom, m, calls } = await setup({ jobs: [jobRow('job-a', 'completed'), jobRow('job-b', 'completed')], jobsNext: '2026-11-09T01:00:00Z_aaaaaaaa-0000-0000-0000-000000000001', jobsPage2: [jobRow('job-c', 'failed')] });
+  const doc = dom.window.document;
+  assert.ok(doc.querySelector('[data-a="apiInvJobsMore"]') || /Load more/.test(doc.getElementById('api-inv-jobs-list').textContent), 'a Load more button is shown while a cursor exists');
+  m.apiInvJobsMore();
+  await settle();
+  const more = calls.find((c) => c.path.includes('/shop-1/jobs') && c.path.includes('before='));
+  assert.ok(more, 'the next page was requested');
+  assert.match(decodeURIComponent(more.path), /before=2026-11-09T01:00:00Z_aaaaaaaa-0000-0000-0000-000000000001/);
+  const list = doc.getElementById('api-inv-jobs-list');
+  assert.equal(list.querySelectorAll('tbody tr').length, 3);
+  assert.ok(!/Load more/.test(list.textContent), 'no button once the last page is shown');
+});
+
+test('choosing a status asks the server for that status and starts again from the newest job', async () => {
+  const { dom, m, calls } = await setup({ jobs: [jobRow('job-a', 'completed')], jobsFiltered: [jobRow('job-f', 'failed')] });
+  const doc = dom.window.document;
+  doc.getElementById('api-inv-jobs-status').value = 'failed';
+  m.apiInvJobsFilter();
+  await settle();
+  const f = calls.find((c) => c.path.includes('/shop-1/jobs') && c.path.includes('status=failed'));
+  assert.ok(f, 'the filtered list was requested');
+  assert.ok(!f.path.includes('before='), 'a filter starts from the first page');
+  assert.equal(doc.getElementById('api-inv-jobs-list').querySelectorAll('tbody tr').length, 1);
+  assert.match(doc.getElementById('api-inv-jobs-list').textContent, /failed/);
+});
+
+test('an empty filtered list says which status has none', async () => {
+  const { dom, m } = await setup({ jobs: [jobRow('job-a', 'completed')], jobsFiltered: [] });
+  const doc = dom.window.document;
+  doc.getElementById('api-inv-jobs-status').value = 'cancelled';
+  m.apiInvJobsFilter();
+  await settle();
+  assert.match(doc.getElementById('api-inv-jobs-list').textContent, /No cancelled jobs/);
+});
+
+test('a status that is not in the list is treated as All', async () => {
+  const { dom, m, calls } = await setup({ jobs: [jobRow('job-a', 'completed')] });
+  const sel = dom.window.document.getElementById('api-inv-jobs-status');
+  const opt = dom.window.document.createElement('option');
+  opt.value = "failed'; DROP TABLE x;--";
+  sel.appendChild(opt);
+  sel.value = opt.value;
+  m.apiInvJobsFilter();
+  await settle();
+  assert.equal(calls.some((c) => c.path.includes('DROP')), false);
 });

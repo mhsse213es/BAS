@@ -6,7 +6,7 @@ import {
   jobTone, resultTone, isFinalStatus, resultText, newJobKey, storedNote, exampleWriteBindingSpec, countsText, worstTone,
   opKey, writeOperations, readChoices, defaultReadOperation, buildWriteObject, mergeWriteObject, writeObjectsOf, removeObjectAt, identityNames, MAX_WRITE_BODY,
   parseEveryHours, everyLabel, scheduleState, scheduleTone, scheduleNote,
-  boundKindLabel, boundWho, exampleChecksSpec,
+  boundKindLabel, boundWho, exampleChecksSpec, validJobStatus, JOB_STATUSES,
 } from '../../src/features/api-inventory-model.js';
 
 const OPS = [
@@ -373,4 +373,10 @@ test('exampleChecksSpec picks a privileged-looking GET for the function and hold
   const empty = exampleChecksSpec([]);
   assert.match(empty.functions[0].operation, /^GET /);
   assert.match(empty.properties[0].operation, /^GET /);
+});
+
+test('validJobStatus accepts the filter choices only', () => {
+  for (const ok of ['', 'queued', 'running', 'completed', 'failed', 'cancelled']) assert.equal(validJobStatus(ok), true, ok);
+  for (const bad of ['bogus', 'COMPLETED', "failed'--", null, undefined, 'all']) assert.equal(validJobStatus(bad), false, String(bad));
+  assert.equal(JOB_STATUSES[0][0], '');
 });

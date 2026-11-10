@@ -439,3 +439,11 @@ export function exampleChecksSpec(ops) {
     ],
   };
 }
+
+// ---- job list filter
+
+export const JOB_STATUSES = [['', 'All'], ['queued', 'Queued'], ['running', 'Running'], ['completed', 'Completed'], ['failed', 'Failed'], ['cancelled', 'Cancelled']];
+
+export function validJobStatus(v) {
+  return JOB_STATUSES.some((s) => s[0] === v);
+}

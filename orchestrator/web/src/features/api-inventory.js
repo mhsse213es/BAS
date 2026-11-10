@@ -9,7 +9,7 @@ import { card, pill, chip, seg, empty, kv } from '../core/kit.js';
 import { setHeroStat } from './shell-ui.js';
 import * as M from './api-inventory-model.js';
 
-var S = { targets: [], sel: '', inv: null, cls: 'all', version: 0, versions: [], stored: null, jobs: [], schedule: null, polls: {} };
+var S = { targets: [], sel: '', inv: null, cls: 'all', version: 0, versions: [], stored: null, jobs: [], jobsNext: '', jobsStatus: '', schedule: null, polls: {} };
 var MAX_ROWS = 500;
 
 function el(id) { return document.getElementById(id); }
@@ -67,7 +67,7 @@ function renderTargets() {
 }
 
 export function apiInvSelect(id) {
-  S.sel = id; S.cls = 'all'; S.version = 0; S.inv = null; S.versions = []; S.stored = null; S.jobs = []; S.schedule = null; S.polls = {};
+  S.sel = id; S.cls = 'all'; S.version = 0; S.inv = null; S.versions = []; S.stored = null; S.jobs = []; S.jobsNext = ''; S.jobsStatus = ''; S.schedule = null; S.polls = {};
   renderTargets();
   loadDetail(0);
 }
@@ -79,6 +79,7 @@ function loadDetail(version) {
   // The stored test data needs the manage permission; for anyone else the read is refused and the page simply shows none.
   return Promise.all([apicall(base() + '/inventory' + q), apicall(base() + '/inventory/versions'), apicall(base() + '/binding').catch(function() { return null; }), apicall(base() + '/jobs').catch(function() { return null; }), apicall(base() + '/schedule').catch(function() { return null; })]).then(function(res) {
     S.jobs = (res[3] && Array.isArray(res[3].jobs)) ? res[3].jobs : [];
+    S.jobsNext = (res[3] && typeof res[3].next === 'string') ? res[3].next : '';
     S.schedule = (res[4] && !M.errorText(res[4]) && res[4].target_id) ? res[4] : null;
     var inv = res[0], vers = res[1];
     S.stored = (res[2] && !M.errorText(res[2]) && res[2].spec) ? res[2] : null;
@@ -169,30 +170,66 @@ function driftBody() {
 }
 
 function jobsRows() {
+  if (!S.jobs.length && S.jobsStatus) return empty('runs', 'No ' + S.jobsStatus + ' jobs', 'Choose another status, or All.');
   if (!S.jobs.length) return empty('runs', 'No jobs yet', 'Run the stored test data below, or submit a job through the API.');
   var rows = S.jobs.map(function(j) {
     return '<tr><td>' + x(fmtDate(j.created_at)) + '</td><td>' + x(j.requested_by) + '</td><td>' + (j.bound ? chip('bound', 'info') : chip('catalogue', 'muted')) + '</td>' +
       '<td>' + pill(j.status, M.jobTone(j.status)) + '</td><td>' + pill(M.countsText(j.results), M.worstTone(j.results)) + '<div class="ai-sub">' + x(j.scenarios) + ' scenario(s)</div></td>' +
       '<td>' + btn('View', 'apiInvJob', [j.id]) + '</td></tr>';
   }).join('');
-  return '<div class="tbl-wrap"><table><thead><tr><th>Created</th><th>By</th><th>Kind</th><th>Status</th><th>Results</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  return '<div class="tbl-wrap"><table><thead><tr><th>Created</th><th>By</th><th>Kind</th><th>Status</th><th>Results</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    (S.jobsNext ? '<div class="ai-row">' + btn('Load more', 'apiInvJobsMore') + '</div>' : '');
 }
 
 function jobsBody() {
-  return '<div class="ai-row">' + btn('Refresh', 'apiInvJobsRefresh') + '</div><div id="api-inv-jobs-list">' + jobsRows() + '</div><div id="api-inv-jobview"></div>';
+  var opts = M.JOB_STATUSES.map(function(st) {
+    return '<option value="' + x(st[0]) + '"' + (st[0] === S.jobsStatus ? ' selected' : '') + '>' + x(st[1]) + '</option>';
+  }).join('');
+  return '<div class="ai-row"><label class="ai-lbl">Status<select id="api-inv-jobs-status" class="ai-in"' + on('change', 'apiInvJobsFilter') + '>' + opts + '</select></label>' +
+    btn('Refresh', 'apiInvJobsRefresh') + '</div><div id="api-inv-jobs-list">' + jobsRows() + '</div><div id="api-inv-jobview"></div>';
+}
+
+function jobsQuery(extra) {
+  var q = [];
+  if (S.jobsStatus) q.push('status=' + encodeURIComponent(S.jobsStatus));
+  if (extra) q.push(extra);
+  return q.length ? '?' + q.join('&') : '';
 }
 
 function refreshJobs() {
   if (!S.sel) return Promise.resolve();
-  return apicall(base() + '/jobs').then(function(r) {
+  return apicall(base() + '/jobs' + jobsQuery('')).then(function(r) {
     if (!r || !Array.isArray(r.jobs)) return;
     S.jobs = r.jobs;
+    S.jobsNext = typeof r.next === 'string' ? r.next : '';
     var host = el('api-inv-jobs-list');
     if (host) host.innerHTML = jobsRows();
   }).catch(function() { /* the list keeps what it had */ });
 }
 
 export function apiInvJobsRefresh() { refreshJobs(); }
+
+// apiInvJobsFilter applies the status choice and starts the list again from the newest job.
+export function apiInvJobsFilter() {
+  var sel = el('api-inv-jobs-status');
+  S.jobsStatus = M.validJobStatus(sel ? sel.value : '') ? sel.value : '';
+  refreshJobs();
+}
+
+// apiInvJobsMore adds the next page below the jobs already shown. The cursor comes from the server and is passed back unchanged.
+export function apiInvJobsMore() {
+  if (!S.sel || !S.jobsNext) return;
+  var status = S.jobsStatus;
+  apicall(base() + '/jobs' + jobsQuery('before=' + encodeURIComponent(S.jobsNext))).then(function(r) {
+    if (status !== S.jobsStatus || !r || !Array.isArray(r.jobs)) return; // the filter changed while this was loading
+    var have = {};
+    S.jobs.forEach(function(j) { have[j.id] = true; });
+    S.jobs = S.jobs.concat(r.jobs.filter(function(j) { return !have[j.id]; }));
+    S.jobsNext = typeof r.next === 'string' ? r.next : '';
+    var host = el('api-inv-jobs-list');
+    if (host) host.innerHTML = jobsRows();
+  }).catch(function(e) { showToast('Could not load more jobs: ' + (e && e.message ? e.message : 'request failed'), 'err'); });
+}
 
 // apiInvJob shows one job from the list, following it if it has not ended.
 export function apiInvJob(id) { followJob(id, 'api-inv-jobview'); }

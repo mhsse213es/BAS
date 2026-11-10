@@ -223,3 +223,9 @@ Rules checked when saving: identities must be listed (and differ for a function)
 **What this does not test.** Both checks are graded on the response alone and only for the routes, identities and values supplied. Writing a field that should be read-only (mass assignment) is not tested; neither are function-level checks on routes that change state, because a repeated request could not put the state back. The plan's limits say so.
 
 Tests: `internal/apibas/binding/function_property_test.go` (plan shape, 21 refusals, round trip, and the real runner against a flawed server, where both checks FAIL as exploited, and a fixed one, where both PASS), the API test `TestAPIBASFunctionAndPropertyChecksSaveAndRun`, and the web model and page tests.
+
+## Job list paging and status filter (added 10 November 2026)
+
+`GET /api/apibas/targets/{id}/jobs` now takes `status` (one of `queued`, `running`, `completed`, `failed`, `cancelled`) and `before`. When more jobs follow the page, the response carries `next`; pass it back unchanged as `before` for the next page. The order is newest first, with the job id breaking ties, so two jobs created at the same instant are neither skipped nor repeated. `limit` is still 1 to 100 (default 25), and `next` is present only when a further job really exists. Bad `status` or `before` values are refused with 400 and never reach the query. The Recent jobs card has a Status choice and a Load more button; changing the status starts again from the newest job, and a page that arrives after the status changed is dropped.
+
+Not built: a list across all targets, and filtering by date or requester.
