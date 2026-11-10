@@ -1,5 +1,6 @@
-# REQ-021 product-string alias register. A proposal until reviewed.
-# Unresolved or ambiguous strings are UNRESOLVED and remain UNKNOWN.
+# REQ-021 product-string alias register.
+# PROPOSED = the observed string appears in the KB article text (evidence
+# only; still needs reviewer approval). UNRESOLVED = not supported; stays UNKNOWN.
 # No matcher uses this file yet. curator: Tausif. designated reviewer: Zain.
 # review_date is blank until the reviewer's actual review; never backdate.
 schema: 1
@@ -8,9 +9,9 @@ aliases:
     cve: "CVE-2017-8543"
     observed_string: "Windows 10 for 32-bit Systems"
     source: "MSRC CVRF 2017-Jun; KB article https://support.microsoft.com/help/4022727"
-    canonical_product: "Windows 10 for 32-bit Systems"
-    classification: "PROPOSED"
-    mapping_rationale: "Same Windows 10 release and architecture. Confirm this exact string appears in the KB article before the alias is used; if the article uses a different string, keep UNKNOWN."
+    canonical_product: null
+    classification: "UNRESOLVED"
+    mapping_rationale: "Exact string not found in the KB article text; the article uses different wording. Remains UNKNOWN unless a reviewer confirms an alias."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -19,9 +20,9 @@ aliases:
     cve: "CVE-2017-8543"
     observed_string: "Windows 10 for x64-based Systems"
     source: "MSRC CVRF 2017-Jun; KB article https://support.microsoft.com/help/4022727"
-    canonical_product: "Windows 10 for x64-based Systems"
-    classification: "PROPOSED"
-    mapping_rationale: "Same Windows 10 release and architecture. Confirm this exact string appears in the KB article before the alias is used; if the article uses a different string, keep UNKNOWN."
+    canonical_product: null
+    classification: "UNRESOLVED"
+    mapping_rationale: "Exact string not found in the KB article text; the article uses different wording. Remains UNKNOWN unless a reviewer confirms an alias."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -30,9 +31,9 @@ aliases:
     cve: "CVE-2017-8543"
     observed_string: "Windows 10 Version 1511 for 32-bit Systems"
     source: "MSRC CVRF 2017-Jun; KB article https://support.microsoft.com/help/4022714"
-    canonical_product: "Windows 10 Version 1511 for 32-bit Systems"
-    classification: "PROPOSED"
-    mapping_rationale: "Same Windows 10 release and architecture. Confirm this exact string appears in the KB article before the alias is used; if the article uses a different string, keep UNKNOWN."
+    canonical_product: null
+    classification: "UNRESOLVED"
+    mapping_rationale: "Exact string not found in the KB article text; the article uses different wording. Remains UNKNOWN unless a reviewer confirms an alias."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -41,9 +42,9 @@ aliases:
     cve: "CVE-2017-8543"
     observed_string: "Windows 10 Version 1511 for x64-based Systems"
     source: "MSRC CVRF 2017-Jun; KB article https://support.microsoft.com/help/4022714"
-    canonical_product: "Windows 10 Version 1511 for x64-based Systems"
-    classification: "PROPOSED"
-    mapping_rationale: "Same Windows 10 release and architecture. Confirm this exact string appears in the KB article before the alias is used; if the article uses a different string, keep UNKNOWN."
+    canonical_product: null
+    classification: "UNRESOLVED"
+    mapping_rationale: "Exact string not found in the KB article text; the article uses different wording. Remains UNKNOWN unless a reviewer confirms an alias."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -52,9 +53,9 @@ aliases:
     cve: "CVE-2017-8543"
     observed_string: "Windows 10 Version 1607 for 32-bit Systems"
     source: "MSRC CVRF 2017-Jun; KB article https://support.microsoft.com/help/4025339"
-    canonical_product: "Windows 10 Version 1607 for 32-bit Systems"
-    classification: "PROPOSED"
-    mapping_rationale: "Same Windows 10 release and architecture. Confirm this exact string appears in the KB article before the alias is used; if the article uses a different string, keep UNKNOWN."
+    canonical_product: null
+    classification: "UNRESOLVED"
+    mapping_rationale: "Exact string not found in the KB article text; the article uses different wording. Remains UNKNOWN unless a reviewer confirms an alias."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -63,9 +64,9 @@ aliases:
     cve: "CVE-2017-8543"
     observed_string: "Windows 10 Version 1607 for x64-based Systems"
     source: "MSRC CVRF 2017-Jun; KB article https://support.microsoft.com/help/4025339"
-    canonical_product: "Windows 10 Version 1607 for x64-based Systems"
-    classification: "PROPOSED"
-    mapping_rationale: "Same Windows 10 release and architecture. Confirm this exact string appears in the KB article before the alias is used; if the article uses a different string, keep UNKNOWN."
+    canonical_product: null
+    classification: "UNRESOLVED"
+    mapping_rationale: "Exact string not found in the KB article text; the article uses different wording. Remains UNKNOWN unless a reviewer confirms an alias."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -74,9 +75,9 @@ aliases:
     cve: "CVE-2017-8543"
     observed_string: "Windows 10 Version 1703 for 32-bit Systems"
     source: "MSRC CVRF 2017-Jun; KB article https://support.microsoft.com/help/4025342"
-    canonical_product: "Windows 10 Version 1703 for 32-bit Systems"
-    classification: "PROPOSED"
-    mapping_rationale: "Same Windows 10 release and architecture. Confirm this exact string appears in the KB article before the alias is used; if the article uses a different string, keep UNKNOWN."
+    canonical_product: null
+    classification: "UNRESOLVED"
+    mapping_rationale: "Exact string not found in the KB article text; the article uses different wording. Remains UNKNOWN unless a reviewer confirms an alias."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -85,9 +86,9 @@ aliases:
     cve: "CVE-2017-8543"
     observed_string: "Windows 10 Version 1703 for x64-based Systems"
     source: "MSRC CVRF 2017-Jun; KB article https://support.microsoft.com/help/4025342"
-    canonical_product: "Windows 10 Version 1703 for x64-based Systems"
-    classification: "PROPOSED"
-    mapping_rationale: "Same Windows 10 release and architecture. Confirm this exact string appears in the KB article before the alias is used; if the article uses a different string, keep UNKNOWN."
+    canonical_product: null
+    classification: "UNRESOLVED"
+    mapping_rationale: "Exact string not found in the KB article text; the article uses different wording. Remains UNKNOWN unless a reviewer confirms an alias."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -96,9 +97,9 @@ aliases:
     cve: "CVE-2017-8543"
     observed_string: "Windows Server 2016  (Server Core installation)"
     source: "MSRC CVRF 2017-Jun; KB article https://support.microsoft.com/help/4025339"
-    canonical_product: "Windows Server 2016"
-    classification: "PROPOSED"
-    mapping_rationale: "Server Core installation of the same release; the KB build is the one Microsoft lists for this release. Confirm the KB article covers Server Core with the same build."
+    canonical_product: null
+    classification: "UNRESOLVED"
+    mapping_rationale: "Exact string not found in the KB article text. Article does not state coverage of this edition, so no alias is supported."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -109,7 +110,7 @@ aliases:
     source: "MSRC CVRF 2020-Jan; KB article https://support.microsoft.com/help/4534271"
     canonical_product: null
     classification: "UNRESOLVED"
-    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build itself. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
+    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -120,7 +121,7 @@ aliases:
     source: "MSRC CVRF 2020-Jan; KB article https://support.microsoft.com/help/4534271"
     canonical_product: null
     classification: "UNRESOLVED"
-    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build itself. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
+    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -131,7 +132,7 @@ aliases:
     source: "MSRC CVRF 2020-Jan; KB article https://support.microsoft.com/help/4534293"
     canonical_product: null
     classification: "UNRESOLVED"
-    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build itself. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
+    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -142,7 +143,7 @@ aliases:
     source: "MSRC CVRF 2020-Jan; KB article https://support.microsoft.com/help/4534306"
     canonical_product: null
     classification: "UNRESOLVED"
-    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build itself. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
+    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -153,7 +154,7 @@ aliases:
     source: "MSRC CVRF 2020-Jan; KB article https://support.microsoft.com/help/4534306"
     canonical_product: null
     classification: "UNRESOLVED"
-    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build itself. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
+    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -164,7 +165,7 @@ aliases:
     source: "MSRC CVRF 2020-Jan; KB article https://support.microsoft.com/help/4534293"
     canonical_product: null
     classification: "UNRESOLVED"
-    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build itself. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
+    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -175,7 +176,7 @@ aliases:
     source: "MSRC CVRF 2020-Jan; KB article https://support.microsoft.com/help/4534293"
     canonical_product: null
     classification: "UNRESOLVED"
-    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build itself. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
+    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -186,7 +187,7 @@ aliases:
     source: "MSRC CVRF 2020-Jan; KB article https://support.microsoft.com/help/4534276"
     canonical_product: null
     classification: "UNRESOLVED"
-    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build itself. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
+    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -197,7 +198,7 @@ aliases:
     source: "MSRC CVRF 2020-Jan; KB article https://support.microsoft.com/help/4534271"
     canonical_product: null
     classification: "UNRESOLVED"
-    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build itself. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
+    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -208,7 +209,7 @@ aliases:
     source: "MSRC CVRF 2020-Jan; KB article https://support.microsoft.com/help/4534271"
     canonical_product: null
     classification: "UNRESOLVED"
-    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build itself. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
+    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -219,7 +220,7 @@ aliases:
     source: "MSRC CVRF 2020-Jan; KB article https://support.microsoft.com/help/4534276"
     canonical_product: null
     classification: "UNRESOLVED"
-    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build itself. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
+    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -230,7 +231,7 @@ aliases:
     source: "MSRC CVRF 2020-Jan; KB article https://support.microsoft.com/help/4534271"
     canonical_product: null
     classification: "UNRESOLVED"
-    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build itself. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
+    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -241,7 +242,7 @@ aliases:
     source: "MSRC CVRF 2020-Jan; KB article https://support.microsoft.com/help/4534271"
     canonical_product: null
     classification: "UNRESOLVED"
-    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build itself. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
+    mapping_rationale: "Describes a .NET Framework component on an OS, not the OS build. The KB build cannot be attributed to the OS product reliably. Remains UNKNOWN."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -250,9 +251,9 @@ aliases:
     cve: "CVE-2020-1350"
     observed_string: "Windows Server 2019 (Server Core installation)"
     source: "MSRC CVRF 2020-Jul; KB article https://support.microsoft.com/help/4558998"
-    canonical_product: "Windows Server 2019"
-    classification: "PROPOSED"
-    mapping_rationale: "Server Core installation of the same release; the KB build is the one Microsoft lists for this release. Confirm the KB article covers Server Core with the same build."
+    canonical_product: null
+    classification: "UNRESOLVED"
+    mapping_rationale: "Exact string not found in the KB article text. Article does not state coverage of this edition, so no alias is supported."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -261,9 +262,9 @@ aliases:
     cve: "CVE-2020-1350"
     observed_string: "Windows Server, version 2004 (Server Core installation)"
     source: "MSRC CVRF 2020-Jul; KB article https://support.microsoft.com/help/4565503"
-    canonical_product: "Windows Server, version 2004"
-    classification: "PROPOSED"
-    mapping_rationale: "Server Core installation of the same release; the KB build is the one Microsoft lists for this release. Confirm the KB article covers Server Core with the same build."
+    canonical_product: null
+    classification: "UNRESOLVED"
+    mapping_rationale: "Exact string not found in the KB article text. Article does not state coverage of this edition, so no alias is supported."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
@@ -272,9 +273,9 @@ aliases:
     cve: "CVE-2020-1350"
     observed_string: "Windows Server 2016 (Server Core installation)"
     source: "MSRC CVRF 2020-Jul; KB article https://support.microsoft.com/help/4565511"
-    canonical_product: "Windows Server 2016"
-    classification: "PROPOSED"
-    mapping_rationale: "Server Core installation of the same release; the KB build is the one Microsoft lists for this release. Confirm the KB article covers Server Core with the same build."
+    canonical_product: null
+    classification: "UNRESOLVED"
+    mapping_rationale: "Exact string not found in the KB article text. Article does not state coverage of this edition, so no alias is supported."
     curator: "Tausif"
     independent_reviewer: "Zain"
     reviewer_status: "designated, review not yet performed"
