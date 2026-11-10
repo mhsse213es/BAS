@@ -36,8 +36,12 @@ func TestFSThreatActorKillChains_ParseWindowsOnlyWithExpectedTechniques(t *testi
 			techniques: []string{"T1087.001", "T1016", "T1115", "T1047", "T1105"},
 		},
 		{
+			// Enterprise-grade reference chain (black-basta standard): full
+			// initial-access -> loader -> persistence -> discovery -> collection
+			// -> exfil -> impact -> recovery-inhibition arc, with the impact and
+			// VSS-deletion stages lab-gated.
 			file:       "ta505-kill-chain.yaml",
-			techniques: []string{"T1518", "T1547.001", "T1059.001", "T1053.005", "T1071.001"},
+			techniques: []string{"T1566.001", "T1059.001", "T1547.001", "T1053.005", "T1518.001", "T1560.001", "T1567.002", "T1486", "T1490", "T1490"},
 		},
 		{
 			file:       "fin8-kill-chain.yaml",
@@ -87,11 +91,17 @@ func TestFSThreatActorKillChains_ParseWindowsOnlyWithExpectedTechniques(t *testi
 				if strings.TrimSpace(st.Command) == "" {
 					t.Errorf("step %d (%s): command is empty", i, st.TechniqueID)
 				}
-				if !st.ProductionSafe {
-					t.Errorf("step %d (%s): production_safe = false, want true (telemetry-safe chain)", i, st.TechniqueID)
-				}
-				if !st.Reversible {
-					t.Errorf("step %d (%s): reversible = false, want true (telemetry-safe chain)", i, st.TechniqueID)
+				// A step is either production-safe + reversible, or it is an
+				// explicitly lab-only step (fidelity: lab-only) -- the pattern
+				// that lets the impact/destructive stages do the real thing
+				// safely. A non-production-safe step that is NOT lab-only would
+				// be an unguarded destructive action.
+				if st.ProductionSafe {
+					if !st.Reversible {
+						t.Errorf("step %d (%s): production_safe but reversible = false", i, st.TechniqueID)
+					}
+				} else if st.Fidelity != "lab-only" {
+					t.Errorf("step %d (%s): production_safe = false but fidelity = %q, want lab-only", i, st.TechniqueID, st.Fidelity)
 				}
 				// A [BAS-SIM-...] marker must be present so operators can
 				// distinguish simulation output from a real intrusion.

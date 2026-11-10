@@ -1,59 +1,103 @@
 id: ta505-kill-chain
 product_line: killchain
-name: TA505 Kill Chain -- BFSI Loader & Persistence Tradecraft (Phase 7)
+name: TA505 / Cl0p Kill Chain — BFSI Loader, Data-Theft & Double-Extortion
 description: >
-  Five-stage telemetry-safe emulation of TA505 (Hive0065 / the Clop & Dridex
-  operators) post-initial-access tradecraft against financial institutions.
-  Based on Proofpoint / IBM X-Force TA505 reporting and MITRE ATT&CK group
-  G0092.
+  Ten-stage emulation of TA505 (Hive0065 / the Dridex & Cl0p operators)
+  tradecraft against financial institutions, from malicious-document initial
+  access through loader, persistence, and the Cl0p data-theft + encryption +
+  recovery-inhibition objective. Grounded in MITRE ATT&CK group G0092 (TA505)
+  and software S0611 (Clop), and CISA/FBI Advisory AA23-158A (#StopRansomware:
+  CL0P Ransomware Gang Exploits MOVEit Vulnerability).
 
   TA505 ran some of the largest financially-motivated campaigns on record --
-  Dridex banking trojan, FlawedAmmyy/FlawedGrace RATs, Locky and later Clop
-  ransomware -- against banks, retailers and payment processors. After a
-  malicious-document initial access it establishes persistence and stages a
-  loader before pulling down its RAT. This chain emulates that loader-and-
-  persistence phase: software inventory, Run-key persistence, an encoded
-  PowerShell loader, scheduled-task persistence, and a Dridex-style HTTPS C2
-  beacon.
+  the Dridex banking trojan, FlawedAmmyy/FlawedGrace and SDBbot RATs delivered
+  by the Get2 loader, and later Cl0p ransomware with mass data-theft
+  extortion (the 2023 MOVEit campaign hit banks, insurers and payment
+  processors). This chain emulates the endpoint phase a bank's controls must
+  catch: a malspam-document child-process chain, an encoded PowerShell loader,
+  Run-key and scheduled-task persistence, security-software discovery, data
+  collection + archive staging, cloud-exfil reachability, and -- lab-gated --
+  the Cl0p encryption and shadow-copy deletion objective.
 
   KILL CHAIN STAGES:
-    1. Installed Software Discovery   -- Uninstall-key inventory for targeting (T1518)
-    2. Registry Run-Key Persistence   -- write + verify + REMOVE a tagged HKCU Run value (T1547.001)
-    3. Encoded PowerShell Loader      -- spawn a benign -EncodedCommand child (T1059.001)
-    4. Scheduled-Task Persistence     -- create + verify + DELETE a tagged user task (T1053.005)
-    5. Outbound HTTPS C2 Beacon       -- RFC5737 HTTPS probe simulating Dridex C2 (T1071.001)
+     1. Initial Access        -- malspam-document child-process chain (excel.exe -> powershell.exe) (T1566.001)
+     2. Execution             -- encoded PowerShell loader child (Get2-style) (T1059.001)
+     3. Persistence A         -- HKCU Run-key value create/verify/remove (T1547.001)
+     4. Persistence B         -- user scheduled-task create/verify/delete (T1053.005)
+     5. Discovery             -- installed security-software enumeration (T1518.001)
+     6. Collection            -- isolated decoy data staged + archived, then removed (T1560.001)
+     7. Exfiltration          -- cloud-storage egress reachability probe, NO upload (T1567.002)
+     8. Impact (lab-only)     -- sandboxed Cl0p-style file-encryption simulation (T1486)
+     9. Recovery Inhibition A -- VSS + backup-catalog enumeration, read-only (T1490)
+    10. Recovery Inhibition B -- vssadmin shadow-copy deletion, lab-only + env-gated (T1490)
 
-  SAFETY: Stages 2 and 4 make a SINGLE reversible change under BAS-owned,
-  clearly-tagged names (HKCU only, user task only) and remove it in both the
-  command body and the cleanup block. Stage 3's encoded payload only runs
-  Write-Output. Stage 5 uses RFC5737 (192.0.2.x, non-routable). No RAT, no
-  download, no real C2. All [BAS-SIM-TA505] tagged. PRODUCTION-SAFE. Windows only.
+  ATTRIBUTION / CONFIDENCE: per-step threat_intel_sources and
+  family_attribution_confidence are set. "confirmed" means at least two
+  genuinely distinct sources were cited; "reported" covers a single
+  authoritative source (MITRE ATT&CK's own curated pages or a government
+  advisory); "inferred" means the behavior is consistent with TA505/Cl0p's
+  documented toolset but the cited source does not tie this specific behavior
+  to the group. A single source's authority, however strong, cannot by itself
+  be "confirmed" under the >=2-citation structural floor.
+
+  DOCUMENTED, NOT MODELED: AA23-158A's headline initial-access vector is the
+  MOVEit Transfer SQL-injection CVE-2023-34362 (T1190). This chain does NOT
+  model T1190 -- no safe simulation contract exists for a single-product web
+  exploit, and adding one is only worth doing with a real control-validation
+  objective, not to raise technique count. It is recorded here as a known,
+  unmodeled gap, never represented as tested coverage. Stage 1 models the
+  group's long-running malspam-attachment path (T1566.001) instead.
+
+  ORDERING CAVEAT: this sequence is a representative, documented kill chain for
+  authoring purposes, not a claim that every TA505/Cl0p incident follows this
+  exact order.
+
+  SAFETY: Stages 1-7 and 9 are production-safe and self-cleaning. No real
+  macro/email, no real RAT, no credential theft, no real upload (egress is a
+  reachability probe only), no user data touched (Stage 6 archives its OWN
+  decoy files in an isolated temp dir and deletes them). Stage 8 is lab-only
+  and operates only on <=3 self-created dummy files in an isolated range dir
+  with file/size caps and forced cleanup -- no real cryptography on real data.
+  Stage 10 is lab-only AND default-disabled: it requires the operator to set
+  BAS_CONFIRM_VSS_DELETE=true in an isolated lab and deletes at most ONE (the
+  oldest) C: shadow copy. Windows only. [BAS-SIM-TA505] tagged throughout.
 author: Audspect Research
 executable: true
 local_check: false
 supported_os: [windows]
 tags:
   - ta505
+  - cl0p
   - clop
   - dridex
   - flawedammyy
+  - sdbbot
   - bfsi
   - financial
   - loader
   - persistence
+  - data-theft
+  - double-extortion
   - kill-chain
   - phase7
-  - t1518
-  - t1547
+  - t1566
   - t1059
+  - t1547
   - t1053
-  - t1071
+  - t1518
+  - t1560
+  - t1567
+  - t1486
+  - t1490
   - mitre
 mitre_phases:
-  - discovery
-  - persistence
+  - initial-access
   - execution
-  - command-and-control
+  - persistence
+  - discovery
+  - collection
+  - exfiltration
+  - impact
 
 live_policy:
   block_on_domain_controller: false
@@ -65,10 +109,10 @@ live_policy:
 steps:
 
   # ---------------------------------------------------------------------------
-  # Stage 1 -- Installed Software Discovery (T1518)
+  # Stage 1 -- Initial Access: Malspam Document Child-Process Chain (T1566.001)
   # ---------------------------------------------------------------------------
-  - name: "TA505 Stage 1 -- Installed Software Discovery (T1518)"
-    technique_id: T1518
+  - name: "TA505 Stage 1 -- Malspam Document Child-Process Chain (excel.exe -> powershell.exe) (T1566.001)"
+    technique_id: T1566.001
     framework: custom
     executor: powershell
     requires_priv: user
@@ -76,32 +120,47 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Reads the registry Uninstall keys (HKLM/HKCU) to inventory installed software. Read-only. TA505's FlawedAmmyy/FlawedGrace RATs profile installed software -- banking clients, remote-admin tools, security products -- to choose follow-on modules."
+    blast_radius: "Copies cmd.exe to a temp excel.exe, spawns powershell.exe from it with a benign Write-Output, waits, deletes the copy. Reproduces the Office-attachment -> shell parent/child chain TA505 malspam creates. No real macro, document, or email."
     reversible: true
     telemetry:
-      - "PowerShell EID 4104: Get-ItemProperty over ...\\Uninstall\\*"
-      - "Sysmon EID 1: powershell.exe reading Uninstall registry hive"
+      - "Sysmon EID 1 (process create): Image=powershell.exe, ParentImage=%TEMP%\\excel.exe"
+      - "Security EID 4688 (process create with command line) if process auditing enabled"
     detection:
-      - "EDR: bulk read of Uninstall registry keys from PowerShell -- Sigma posh_ps_software_discovery.yml"
-      - "SIEM: software-inventory enumeration shortly after document-macro execution -- TA505 profiling IOC"
+      - "EDR: Office process (excel.exe) spawning a shell -- primary malspam-attachment initial-access signal"
+      - "SIEM: parent-child rule excel.exe/winword.exe -> powershell.exe / cmd.exe"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- TA505 (Group G0092): Phishing: Spearphishing Attachment (T1566.001)"
+        url: "https://attack.mitre.org/groups/G0092/"
+      - reference: "Proofpoint -- TA505 threat-actor profile (malicious-attachment email campaigns)"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $paths = @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
-                 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
-                 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*')
-      $apps = foreach ($p in $paths) { Get-ItemProperty $p -EA SilentlyContinue | Where-Object { $_.DisplayName } | Select-Object -ExpandProperty DisplayName }
-      $apps = $apps | Sort-Object -Unique
-      $count = @($apps).Count
-      $remoteTools = $apps | Where-Object { $_ -match 'AnyDesk|TeamViewer|Ammyy|VNC|RDP|LogMeIn|ScreenConnect' }
-      Write-Output "EXEC T1518: installed software discovery. apps=$count, remote_admin_tools=[$([string]::Join(', ',$remoteTools))]. TA505 inventories software to select RAT modules. [BAS-SIM-TA505-S1]"
-      Write-Output "FAIL: Full installed-software inventory was readable from the registry without an EDR block. Alert on bulk Uninstall-key enumeration from powershell.exe following macro execution -- a TA505 pre-loader profiling step."
-    cleanup: ""
+      $tmp = Join-Path $env:TEMP 'excel.exe'
+      Copy-Item "$env:SystemRoot\System32\cmd.exe" $tmp -Force
+      $psi = New-Object System.Diagnostics.ProcessStartInfo
+      $psi.FileName = $tmp
+      $psi.Arguments = '/c powershell.exe -NoProfile -NonInteractive -Command "Write-Output BAS-SIM-TA505-S1"'
+      $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+      $psi.CreateNoWindow = $true
+      $p = [System.Diagnostics.Process]::Start($psi)
+      if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+      if ($ec -ge 0) {
+        Write-Output "FAIL: excel.exe->powershell.exe child-process chain fired (exit $ec) -- expect Sysmon EID 1 with ParentImage=excel.exe. A document-spawned shell is the TA505 malspam IOC; AppLocker/WDAC/EDR should block Office processes spawning shells. [BAS-SIM-TA505-S1]"
+      } else {
+        Write-Output "PASS: the child process could not be started -- AppLocker/WDAC/EDR blocked the document->shell spawn. [BAS-SIM-TA505-S1]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'excel.exe') -Force -ErrorAction SilentlyContinue
 
   # ---------------------------------------------------------------------------
-  # Stage 2 -- Registry Run-Key Persistence (T1547.001)
+  # Stage 2 -- Execution: Encoded PowerShell Loader (T1059.001)
   # ---------------------------------------------------------------------------
-  - name: "TA505 Stage 2 -- Registry Run-Key Persistence (T1547.001)"
-    technique_id: T1547.001
+  - name: "TA505 Stage 2 -- Encoded PowerShell Loader Child (Get2-style) (T1059.001)"
+    technique_id: T1059.001
+    detection_profiles:
+      - windows_encoded_powershell
     framework: custom
     executor: powershell
     requires_priv: user
@@ -109,14 +168,59 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Writes ONE tagged value (BAS-SIM-TA505) to the current user's HKCU Run key whose data is an inert comment, confirms it exists, then DELETES it in both the command and the cleanup block. HKCU only -- no HKLM, no system-wide autostart. The value never points at a real executable and is removed before the step ends."
+    blast_radius: "Spawns ONE child powershell.exe with -EncodedCommand whose decoded payload only runs Write-Output. Reproduces the -enc child-process + ScriptBlock telemetry of a TA505 Get2 loader; the encoded content is an inert banner, nothing is downloaded or executed."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 / Sysmon EID 1: powershell.exe -EncodedCommand child of powershell.exe"
+      - "PowerShell EID 4104: decoded ScriptBlock (Write-Output banner)"
+    detection:
+      - "EDR: powershell.exe -EncodedCommand / -enc spawned by a script or Office host -- Sigma proc_creation_win_powershell_encoded.yml"
+      - "SIEM: EID 4688 powershell with -enc + EID 4104 decoded block -- TA505 loader IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- TA505 (Group G0092): Command and Scripting Interpreter: PowerShell (T1059.001); Get2 downloader"
+        url: "https://attack.mitre.org/groups/G0092/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $inner = "Write-Output 'BAS-SIM-TA505-S2 encoded loader executed (inert banner)'"
+      $enc = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($inner))
+      $out = & powershell.exe -NoProfile -NonInteractive -EncodedCommand $enc 2>&1 | Out-String
+      $ran = $out -match 'BAS-SIM-TA505-S2 encoded loader'
+      if ($ran) {
+        Write-Output "FAIL: an -EncodedCommand child powershell.exe ran unblocked -- expect EID 4688 (-enc) + EID 4104 (decoded block). Enable ScriptBlock + AMSI logging and alert on encoded PowerShell from script/Office hosts; TA505 stages its loader this way. [BAS-SIM-TA505-S2]"
+      } else {
+        Write-Output "PASS: the encoded-command child was blocked or failed to execute -- Constrained Language Mode / AMSI / WDAC constrained the loader surface. [BAS-SIM-TA505-S2]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 -- Persistence A: Registry Run-Key (T1547.001)
+  # ---------------------------------------------------------------------------
+  - name: "TA505 Stage 3 -- Registry Run-Key Persistence (HKCU) (T1547.001)"
+    technique_id: T1547.001
+    detection_profiles:
+      - windows_runkey_persistence
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes ONE tagged value (BAS-SIM-TA505) to the current user's HKCU Run key whose data is an inert comment, confirms it, then DELETES it in both the command and cleanup. HKCU only -- no HKLM, no system-wide autostart; the value never points at a real executable."
     reversible: true
     telemetry:
       - "Sysmon EID 13: registry value set under HKCU\\...\\Run (BAS-SIM-TA505)"
       - "PowerShell EID 4104: New-ItemProperty ...\\Run"
     detection:
       - "EDR: new value under HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run -- Sigma registry_set_run_key.yml"
-      - "SIEM: Sysmon EID 13 Run-key write from powershell.exe -- TA505 persistence IOC"
+      - "SIEM: Sysmon EID 13 Run-key write from a script host -- TA505 persistence IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- TA505 (Group G0092): Boot or Logon Autostart Execution: Registry Run Keys (T1547.001)"
+        url: "https://attack.mitre.org/groups/G0092/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
@@ -125,54 +229,21 @@ steps:
       $set = (Get-ItemProperty -Path $runKey -Name $name -EA SilentlyContinue).$name
       Remove-ItemProperty -Path $runKey -Name $name -EA SilentlyContinue
       $removed = -not (Get-ItemProperty -Path $runKey -Name $name -EA SilentlyContinue)
-      Write-Output "EXEC T1547.001: Run-key persistence. value_written=$([bool]$set) (HKCU, inert), value_removed=$removed. Sysmon EID 13 expected. TA505 persists its loader via a Run key. [BAS-SIM-TA505-S2]"
       if ($set) {
-        Write-Output "FAIL: A value was written to the HKCU Run key by PowerShell without an EDR block (then removed by this test). Alert on Sysmon EID 13 Run-key writes from script hosts and baseline autostart entries on BFSI workstations."
+        Write-Output "FAIL: a value was written to the HKCU Run key by PowerShell unblocked (removed=$removed). Expect Sysmon EID 13. Alert on Run-key writes from script hosts and baseline autostart entries on BFSI workstations. [BAS-SIM-TA505-S3]"
       } else {
-        Write-Output "PASS: The Run-key write was blocked -- autostart persistence via HKCU Run is constrained. [BAS-SIM-TA505-S2]"
+        Write-Output "PASS: the Run-key write was blocked -- autostart persistence via HKCU Run is constrained. [BAS-SIM-TA505-S3]"
       }
     cleanup: |
       Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'BAS-SIM-TA505' -EA SilentlyContinue
 
   # ---------------------------------------------------------------------------
-  # Stage 3 -- Encoded PowerShell Loader (T1059.001)
-  # ---------------------------------------------------------------------------
-  - name: "TA505 Stage 3 -- Encoded PowerShell Loader (T1059.001)"
-    technique_id: T1059.001
-    framework: custom
-    executor: powershell
-    requires_priv: user
-    timeout_sec: 20
-    fidelity: telemetry-safe
-    production_safe: true
-    risk: low
-    blast_radius: "Spawns ONE child powershell.exe with -EncodedCommand whose decoded payload only runs Write-Output. This reproduces the -enc child-process and ScriptBlock telemetry of a TA505 loader without executing anything harmful -- the encoded content is an inert banner string."
-    reversible: true
-    telemetry:
-      - "Security EID 4688 / Sysmon EID 1: powershell.exe -EncodedCommand child of powershell.exe"
-      - "PowerShell EID 4104: decoded ScriptBlock (Write-Output banner)"
-    detection:
-      - "EDR: powershell.exe -EncodedCommand / -enc spawned by a script host -- Sigma proc_creation_win_powershell_encoded.yml"
-      - "SIEM: EID 4688 powershell with -enc + EID 4104 decoded block -- TA505 loader IOC"
-    command: |
-      $ErrorActionPreference = 'SilentlyContinue'
-      $inner = "Write-Output 'BAS-SIM-TA505 encoded loader executed (inert banner)'"
-      $enc = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($inner))
-      $out = & powershell.exe -NoProfile -NonInteractive -EncodedCommand $enc 2>&1 | Out-String
-      $ran = $out -match 'BAS-SIM-TA505 encoded loader'
-      Write-Output "EXEC T1059.001: encoded PowerShell loader. child_enc_ran=$ran. A -EncodedCommand child was spawned (EID 4688 with -enc) and the decoded block logged (EID 4104). Payload was an inert banner only. TA505 stages its loader as encoded PowerShell. [BAS-SIM-TA505-S3]"
-      if ($ran) {
-        Write-Output "FAIL: An -EncodedCommand child powershell.exe ran without an EDR block. Alert on powershell.exe with -enc/-EncodedCommand spawned by Office/script hosts, and enable ScriptBlock + AMSI logging to decode the payload."
-      } else {
-        Write-Output "PASS: The encoded-command child was blocked or failed to execute -- the encoded-loader surface is constrained. [BAS-SIM-TA505-S3]"
-      }
-    cleanup: ""
-
-  # ---------------------------------------------------------------------------
-  # Stage 4 -- Scheduled-Task Persistence (T1053.005)
+  # Stage 4 -- Persistence B: Scheduled Task (T1053.005)
   # ---------------------------------------------------------------------------
   - name: "TA505 Stage 4 -- Scheduled-Task Persistence (T1053.005)"
     technique_id: T1053.005
+    detection_profiles:
+      - windows_schtask_persistence
     framework: custom
     executor: powershell
     requires_priv: user
@@ -180,7 +251,7 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Creates ONE tagged user-context scheduled task (BAS-SIM-TA505) whose action is 'cmd.exe /c exit' and whose trigger is a one-off far-future time, confirms it exists, then DELETES it in both the command and the cleanup block. No SYSTEM task, no elevation, the task never runs a payload and is removed before the step ends."
+    blast_radius: "Creates ONE tagged user-context scheduled task (BAS-SIM-TA505) whose action is 'cmd.exe /c exit' and whose trigger is a one-off far-future time, confirms it, then DELETES it in both the command and cleanup. No SYSTEM task, no elevation; it never runs a payload."
     reversible: true
     telemetry:
       - "Security EID 4698: a scheduled task was created (BAS-SIM-TA505)"
@@ -189,6 +260,11 @@ steps:
     detection:
       - "EDR: schtasks.exe /create from PowerShell -- Sigma proc_creation_win_schtasks_create.yml"
       - "SIEM: EID 4698 task creation from a script host on an operator workstation -- TA505 persistence IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- TA505 (Group G0092): Scheduled Task/Job: Scheduled Task (T1053.005)"
+        url: "https://attack.mitre.org/groups/G0092/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $taskName = 'BAS-SIM-TA505'
@@ -198,53 +274,306 @@ steps:
       & schtasks.exe /delete /tn $taskName /f 2>&1 | Out-Null
       $verify = & schtasks.exe /query /tn $taskName 2>&1 | Out-String
       $removed = -not ($verify -match [regex]::Escape($taskName))
-      Write-Output "EXEC T1053.005: scheduled-task persistence. task_created=$created (user context, inert action), task_removed=$removed. Security EID 4698 expected. TA505 persists its loader via schtasks. [BAS-SIM-TA505-S4]"
       if ($created) {
-        Write-Output "FAIL: A scheduled task was created by PowerShell without an EDR block (then deleted by this test). Alert on EID 4698 task creation from script hosts and review non-standard tasks on BFSI workstations."
+        Write-Output "FAIL: a scheduled task was created by PowerShell unblocked (removed=$removed). Expect Security EID 4698. Alert on task creation from script hosts and review non-standard tasks on BFSI workstations. [BAS-SIM-TA505-S4]"
       } else {
-        Write-Output "PASS: Scheduled-task creation was blocked or failed -- this persistence vector is constrained for the current token. [BAS-SIM-TA505-S4]"
+        Write-Output "PASS: scheduled-task creation was blocked or failed -- this persistence vector is constrained for the current token. [BAS-SIM-TA505-S4]"
       }
     cleanup: |
       & schtasks.exe /delete /tn 'BAS-SIM-TA505' /f 2>&1 | Out-Null
 
   # ---------------------------------------------------------------------------
-  # Stage 5 -- Outbound HTTPS C2 Beacon (T1071.001)
+  # Stage 5 -- Discovery: Security Software Discovery (T1518.001)
   # ---------------------------------------------------------------------------
-  - name: "TA505 Stage 5 -- Outbound HTTPS C2 Beacon Pattern (T1071.001)"
-    technique_id: T1071.001
+  - name: "TA505 Stage 5 -- Security Software Discovery (T1518.001)"
+    technique_id: T1518.001
+    action_key: enumerate
+    detection_profiles:
+      - windows_security_software_discovery
     framework: custom
     executor: powershell
     requires_priv: user
-    timeout_sec: 20
+    timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Issues one Invoke-WebRequest to https://192.0.2.3 (RFC 5737 TEST-NET-1 -- non-routable) to generate Sysmon EID 3 + WinHTTP telemetry matching a Dridex/Clop HTTPS C2 check-in. No real C2 channel, no data sent beyond the URL path."
+    blast_radius: "Enumerates running security-product services and Defender status via Get-Service and Get-MpComputerStatus. Read-only. TA505 profiles AV/EDR before deploying its RAT/ransomware so it can disable or evade the present product."
     reversible: true
     telemetry:
-      - "Sysmon EID 3: TCP 443 to 192.0.2.3 (Invoke-WebRequest -- Dridex C2 beacon)"
-      - "PowerShell EID 4104: Invoke-WebRequest HTTPS call"
-      - "Firewall EID 5157: outbound TCP 443 to 192.0.2.3 blocked (if logging enabled)"
+      - "Sysmon EID 1: powershell.exe enumerating services / Get-MpComputerStatus"
+      - "PowerShell EID 4104: Get-Service filtered for AV/EDR vendor names"
     detection:
-      - "EDR: Invoke-WebRequest / Net.WebClient in PowerShell -- Sigma posh_ps_web_request.yml"
-      - "SIEM: Sysmon EID 3 TCP 443 from powershell.exe to a non-CDN IP -- TA505/Dridex C2 IOC"
-      - "Proxy: CONNECT to 192.0.2.3:443 must be blocked at egress and alert"
+      - "EDR: Get-MpComputerStatus / security-service enumeration from PowerShell -- Sigma posh_ps_defender_recon.yml"
+      - "SIEM: service query filtered by AV vendor strings -- pre-deployment profiling IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- TA505 (Group G0092): Software Discovery: Security Software Discovery (T1518.001)"
+        url: "https://attack.mitre.org/groups/G0092/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: inferred
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $beaconUrl = 'https://192.0.2.3/bas-sim-ta505'
-      $blocked = $false; $timedOut = $false; $result = $null
-      try {
-        $result = Invoke-WebRequest -Uri $beaconUrl -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
-      } catch [System.Net.WebException] {
-        $m = $_.Exception.Message
-        if ($m -match 'timed out|timeout|TimedOut') { $timedOut = $true }
-        elseif ($m -match 'blocked|denied|forbidden|refused|proxy') { $blocked = $true }
-        else { $timedOut = $true }
-      } catch { $blocked = $true }
-      Write-Output "EXEC T1071.001: HTTPS C2 beacon probe to $beaconUrl (RFC5737 non-routable). status=$($result.StatusCode), timed_out=$timedOut, blocked=$blocked. Sysmon EID 3 TCP 443 generated. [BAS-SIM-TA505-S5]"
-      if ($blocked) {
-        Write-Output "PASS: Outbound HTTPS to the RFC5737 address was blocked by proxy or firewall -- the Dridex/Clop C2 beacon would be intercepted. [BAS-SIM-TA505-S5]"
+      $secVendors = @('defender','mcafee','symantec','sophos','crowdstrike','carbonblack','cylance','sentinelone','trendmicro','kaspersky','eset','fireeye','tanium','elastic')
+      $svc = Get-Service -EA SilentlyContinue | Where-Object { $n=$_.Name.ToLower(); $d=$_.DisplayName.ToLower(); $secVendors | Where-Object { $n -match $_ -or $d -match $_ } }
+      $svcNames = (@($svc) | Select-Object -ExpandProperty DisplayName -Unique) -join ', '
+      $rtp = (Get-MpComputerStatus -EA SilentlyContinue).RealTimeProtectionEnabled
+      Write-Output "EXEC T1518.001: security software discovery. edr_services=[$svcNames], defender_realtime=$rtp. TA505 profiles defences before deploying its RAT/ransomware. [BAS-SIM-TA505-S5]"
+      if (-not $svc -and $rtp -ne $true) {
+        Write-Output "FAIL: no EDR/AV service was discoverable and Defender real-time protection is off/unknown -- TA505 would deploy its payload unopposed. Ensure a tamper-protected, monitored EDR agent is running. [BAS-SIM-TA505-S5]"
       } else {
-        Write-Output "FAIL: HTTPS beacon to 192.0.2.3 was NOT blocked by the egress firewall/proxy. Enforce an explicit egress allow-list for BFSI workstations and alert on Sysmon EID 3 from powershell.exe to unlisted IPs."
+        Write-Output "PASS: security tooling is present and enumerable; the profiling step still generates EID 4104 telemetry to alert on, but the endpoint is defended. [BAS-SIM-TA505-S5]"
       }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 6 -- Collection: Decoy Data Staging + Archive (T1560.001)
+  # ---------------------------------------------------------------------------
+  - name: "TA505 Stage 6 -- Data Collection and Archive Staging (T1560.001)"
+    technique_id: T1560.001
+    detection_profiles:
+      - windows_archive_staging
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates an isolated %TEMP%\\bas-sim-ta505-stage dir with <=3 BAS-owned decoy files, compresses them to a .zip with Compress-Archive (the archive-before-exfil pattern), then DELETES the dir and zip in both the command and cleanup. No user or system data is read or staged -- only BAS's own tagged decoys."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: file create under %TEMP%\\bas-sim-ta505-stage + a .zip archive"
+      - "PowerShell EID 4104: Compress-Archive invocation"
+    detection:
+      - "EDR: Compress-Archive / makecab / 7-Zip creating a large archive from user-data paths -- pre-exfil staging IOC"
+      - "SIEM: archive creation burst followed by cloud egress -- Cl0p data-theft staging pattern"
+    threat_intel_sources:
+      - reference: "CISA/FBI Advisory AA23-158A -- #StopRansomware: CL0P Ransomware Gang Exploits MOVEit Vulnerability (data theft prior to extortion)"
+        url: "https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-158a"
+      - reference: "MITRE ATT&CK -- Clop (Software S0611): Archive Collected Data (T1560)"
+        url: "https://attack.mitre.org/software/S0611/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $stage = Join-Path $env:TEMP 'bas-sim-ta505-stage'
+      $zip   = Join-Path $env:TEMP 'bas-sim-ta505-stage.zip'
+      New-Item -ItemType Directory -Path $stage -Force -EA SilentlyContinue | Out-Null
+      1..3 | ForEach-Object { Set-Content -Path (Join-Path $stage "decoy_$_.txt") -Value "BAS-SIM-TA505 synthetic decoy $_ -- not real data" -EA SilentlyContinue }
+      Remove-Item $zip -Force -EA SilentlyContinue
+      Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force -EA SilentlyContinue
+      $staged = (Get-ChildItem -Path $stage -EA SilentlyContinue).Count
+      $archived = Test-Path $zip
+      Remove-Item $stage -Recurse -Force -EA SilentlyContinue
+      Remove-Item $zip -Force -EA SilentlyContinue
+      if ($archived) {
+        Write-Output "FAIL: $staged decoy file(s) were collected and archived to a .zip unblocked (archive removed by this test). Expect Sysmon EID 11 + EID 4104 Compress-Archive. Alert on archive creation from user-data paths feeding a later egress step -- the Cl0p data-theft staging pattern. [BAS-SIM-TA505-S6]"
+      } else {
+        Write-Output "PASS: archive staging was blocked or failed -- the collect-and-compress-before-exfil step is constrained. [BAS-SIM-TA505-S6]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas-sim-ta505-stage') -Recurse -Force -EA SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas-sim-ta505-stage.zip') -Force -EA SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 7 -- Exfiltration: Cloud Storage Egress Reachability (T1567.002)
+  # ---------------------------------------------------------------------------
+  - name: "TA505 Stage 7 -- Cloud Storage Egress Reachability (T1567.002)"
+    technique_id: T1567.002
+    detection_profiles:
+      - windows_cloud_egress
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Tests whether the endpoint can reach public cloud-storage endpoints via a benign TCP/443 connect probe. NO account, NO upload, NO data -- reachability only; the socket is closed immediately. Generates Sysmon EID 22 (DNS) + EID 3 (outbound TLS attempt)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 22: DNS queries to public cloud-storage hostnames"
+      - "Sysmon EID 3: outbound TCP/443 to cloud-storage endpoints"
+    detection:
+      - "Proxy/CASB: uploads to unsanctioned cloud storage -- DLP/CASB egress policy trigger"
+      - "SIEM: a workstation reaching consumer cloud-storage APIs -- Cl0p exfil / shadow-IT IOC"
+    threat_intel_sources:
+      - reference: "CISA/FBI Advisory AA23-158A -- #StopRansomware: CL0P (exfiltration of stolen data for extortion)"
+        url: "https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-158a"
+      - reference: "MITRE ATT&CK -- Clop (Software S0611): Exfiltration Over Web Service (T1567)"
+        url: "https://attack.mitre.org/software/S0611/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $endpoints = @('storage.googleapis.com','s3.amazonaws.com','blob.core.windows.net','api.dropboxapi.com','g.api.mega.co.nz')
+      $reachable = @()
+      foreach ($e in $endpoints) {
+        try {
+          $tcp = New-Object System.Net.Sockets.TcpClient
+          $iar = $tcp.BeginConnect($e, 443, $null, $null)
+          if ($iar.AsyncWaitHandle.WaitOne(3000, $false) -and $tcp.Connected) { $reachable += $e }
+          $tcp.Close()
+        } catch {}
+      }
+      Write-Output "EXEC T1567.002: probed cloud-storage egress reachability. reachable=[$($reachable -join ', ')] (probe only, no upload). Cl0p exfiltrates stolen data to actor-controlled storage before extortion. [BAS-SIM-TA505-S7]"
+      if ($reachable.Count -gt 0) {
+        Write-Output "FAIL: the endpoint can directly reach $($reachable.Count) public cloud-storage endpoint(s) on TCP/443 -- a real data-theft egress path. Route egress through a proxy/CASB enforcing a sanctioned-tenant allowlist with DLP upload inspection. [BAS-SIM-TA505-S7]"
+      } else {
+        Write-Output "PASS: no direct egress to public cloud-storage endpoints -- uploads are forced through a controlled path or blocked. [BAS-SIM-TA505-S7]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 8 -- Impact: Sandboxed Cl0p-style Encryption Simulation (T1486, lab-only)
+  # ---------------------------------------------------------------------------
+  - name: "TA505 Stage 8 -- Cl0p Encryption Simulation (lab -- isolated temp dir, forced cleanup) (T1486)"
+    technique_id: T1486
+    action_key: ransomware_sim_sandboxed
+    detection_profiles:
+      - windows_ransomware_encryption
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Creates an isolated %TEMP%\\bas_ta505_range_<id>\\ with <=3 benign dummy files, XOR-encrypts them in place with a .Cl0p-style extension, drops a marker ransom/extortion note, XOR-decrypts to restore, then deletes the whole range dir. File cap + size cap + cleanup verification enforced. Cl0p's real encryptor is RSA+RC4; this simulation never performs real cryptography on real data."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11 (file create/modify): bas_ta505_range_<id>\\ directory + .Cl0p files"
+      - "Security EID 4663 (file write) if object-access auditing enabled"
+    detection:
+      - "EDR: rapid sequential file modification across multiple files -- encryption behaviour"
+      - "SIEM: high file-modify rate from powershell.exe on a %TEMP% path -- ransomware staging signal"
+    threat_intel_sources:
+      - reference: "CISA/FBI Advisory AA23-158A -- #StopRansomware: CL0P (data encryption as the extortion endpoint)"
+        url: "https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-158a"
+      - reference: "MITRE ATT&CK -- Clop (Software S0611): Data Encrypted for Impact (T1486)"
+        url: "https://attack.mitre.org/software/S0611/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId   = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $maxFiles = 3
+      $maxBytes = 10240
+      $rangeDir = Join-Path $env:TEMP "bas_ta505_range_$runId"
+      New-Item -ItemType Directory -Path $rangeDir -Force | Out-Null
+      $dummies = @('finance_q4.txt','customer_export.txt','payments.txt')
+      foreach ($f in $dummies[0..($maxFiles-1)]) {
+        $content = "BAS-SIM-TA505 DUMMY DATA run-id=$runId file=$f " * 10
+        if ([System.Text.Encoding]::UTF8.GetByteCount($content) -gt $maxBytes) { $content = $content.Substring(0,$maxBytes/2) }
+        Set-Content -Path (Join-Path $rangeDir $f) -Value $content -Encoding UTF8
+      }
+      $key = 0xC1
+      $encFiles = @()
+      Get-ChildItem -Path $rangeDir -File | ForEach-Object {
+        $bytes  = [System.IO.File]::ReadAllBytes($_.FullName)
+        $xored  = $bytes | ForEach-Object { $_ -bxor $key }
+        $locked = $_.FullName + '.Cl0p'
+        [System.IO.File]::WriteAllBytes($locked, [byte[]]$xored)
+        Remove-Item $_.FullName -Force
+        $encFiles += $locked
+      }
+      $noteFile = Join-Path $rangeDir 'README_RESTORE_BAS_SIM.txt'
+      Set-Content -Path $noteFile -Value "BAS-SIM-TA505 EXTORTION NOTE -- run-id=$runId -- THIS IS A CONTROLLED DRILL, your files are not really encrypted" -Encoding UTF8
+      Write-Output "FAIL: $($encFiles.Count) file(s) XOR-encrypted in $rangeDir with a .Cl0p extension + extortion note -- expect an EDR encryption-behaviour alert. Restoring now. [BAS-SIM-TA505-S8]"
+      foreach ($enc in $encFiles) {
+        $bytes = [System.IO.File]::ReadAllBytes($enc)
+        $plain = $bytes | ForEach-Object { $_ -bxor $key }
+        $orig  = $enc -replace '\.Cl0p$',''
+        [System.IO.File]::WriteAllBytes($orig, [byte[]]$plain)
+        Remove-Item $enc -Force
+      }
+      Remove-Item $noteFile -Force -EA SilentlyContinue
+      Remove-Item $rangeDir -Recurse -Force -EA SilentlyContinue
+      $cleaned = -not (Test-Path $rangeDir)
+      Write-Output "CLEANUP: range directory removed=$cleaned. No encrypted data remains. [BAS-SIM-TA505-S8]"
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP "bas_ta505_range_*") -Recurse -Force -EA SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 9 -- Recovery Inhibition A: VSS + Backup Catalog Enumeration (T1490)
+  # ---------------------------------------------------------------------------
+  - name: "TA505 Stage 9 -- VSS + Backup Catalog Enumeration (T1490)"
+    technique_id: T1490
+    action_key: enumerate
+    detection_profiles:
+      - windows_vss_inhibition
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Read-only enumeration of VSS shadow copies and the wbadmin backup catalog. No shadows deleted, no backup jobs modified."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (vssadmin.exe + wbadmin.exe invocations)"
+    detection:
+      - "SIEM: vssadmin list shadows from a non-backup process -- ransomware pre-deletion recon"
+      - "EDR: wbadmin get versions -- backup-catalog discovery before destruction"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Clop (Software S0611): Inhibit System Recovery (T1490) -- deletes volume shadow copies"
+        url: "https://attack.mitre.org/software/S0611/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $vssOut = & vssadmin list shadows 2>&1
+      $shadowCount = ([regex]::Matches(($vssOut -join "`n"), 'Shadow Copy ID')).Count
+      $wbaOut = & wbadmin get versions 2>&1
+      $backupCount = ([regex]::Matches(($wbaOut -join "`n"), 'Backup time')).Count
+      Write-Output "EXEC T1490: VSS enumeration -- $shadowCount shadow copy/copies found; backup catalog $backupCount version(s) via wbadmin. Cl0p enumerates these before deletion. No copies removed. [BAS-SIM-TA505-S9]"
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 10 -- Recovery Inhibition B: vssadmin VSS Deletion (T1490, lab-only + gated)
+  # ---------------------------------------------------------------------------
+  - name: "TA505 Stage 10 -- VSS Shadow Copy Deletion (lab -- requires BAS_CONFIRM_VSS_DELETE=true) (T1490)"
+    technique_id: T1490
+    action_key: vss_delete
+    detection_profiles:
+      - windows_vss_inhibition
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Deletes ONE oldest VSS shadow copy of C: via vssadmin.exe. Requires explicit BAS_CONFIRM_VSS_DELETE=true and verifies a snapshot exists first; default-disabled without the flag. Cl0p deletes shadow copies to inhibit recovery before extortion."
+    reversible: false
+    telemetry:
+      - "Security EID 8224 (VSS service shutdown) + EID 524 (shadow copy deletion)"
+      - "Security EID 4688 (vssadmin.exe with delete command)"
+    detection:
+      - "EDR: vssadmin.exe with 'delete shadows' argument -- #1 ransomware pre-encryption technique"
+      - "SIEM: shadow-copy count decrease; alert if the count drops to 0"
+    threat_intel_sources:
+      - reference: "CISA/FBI Advisory AA23-158A -- #StopRansomware: CL0P (inhibit recovery as part of the ransomware objective)"
+        url: "https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-158a"
+      - reference: "MITRE ATT&CK -- Clop (Software S0611): Inhibit System Recovery (T1490)"
+        url: "https://attack.mitre.org/software/S0611/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $confirm = $env:BAS_CONFIRM_VSS_DELETE
+      if (-not $confirm -or $confirm -ne 'true') {
+        Write-Output "SKIP: BAS_CONFIRM_VSS_DELETE not set to 'true' -- VSS deletion skipped (default-disabled per safety policy). Set the env var explicitly in an isolated lab to enable. [BAS-SIM-TA505-S10]"
+        return
+      }
+      $shadows = Get-WmiObject Win32_ShadowCopy -EA SilentlyContinue | Where-Object { $_.VolumeName -match 'C:' }
+      if (-not $shadows -or @($shadows).Count -eq 0) {
+        Write-Output "SKIP: no C: VSS shadow copies exist -- nothing to delete. Create one first with: vssadmin create shadow /for=C:  [BAS-SIM-TA505-S10]"
+        return
+      }
+      $oldest = @($shadows | Sort-Object InstallDate)[0]
+      $id = $oldest.ID
+      & vssadmin delete shadows /Shadow=$id /Quiet 2>&1 | Out-Null
+      $remaining = @(Get-WmiObject Win32_ShadowCopy -EA SilentlyContinue | Where-Object { $_.VolumeName -match 'C:' }).Count
+      Write-Output "FAIL: VSS shadow copy $id deleted -- expect EID 8224/524. $remaining shadow copy/copies remaining on C:. Create a new snapshot to restore recovery capability. [BAS-SIM-TA505-S10]"
     cleanup: ""
