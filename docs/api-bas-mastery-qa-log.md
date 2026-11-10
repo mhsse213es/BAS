@@ -4026,6 +4026,32 @@ verdict isn't claimable yet (resolves Inconclusive instead); not wired into any 
 `internal/api` handler -- the adapter is proven standalone, scenarios stay fixture-backed; and this resolves the
 gap for ModSecurity specifically, not for a commercial vendor if the user later gets a real tenant.
 
+## REQ-007 follow-up #4: wired the live adapter into one wafassessment scenario (10 November 2026)
+
+Closed part of the "not wired into any scenario" gap disclosed in the follow-up above. New file
+`internal/wafmodsec/exploitprevention.go`: `BuildExploitPreventionLiveFixtures(ctx, client)` drives 3 of
+`wafassessment.AudspectExploitPreventionScenario`'s 8 contributing vectors (`SQLI-001`, `XSS-001`,
+`PATHTRAV-001` -- the ones `modsecwaf.BuildRequest` can replay) against the live ModSecurity lab and returns a
+`map[string]wafassessment.VectorFixture` built from the real responses via the existing `BuildCollectionResults`.
+The other 5 vectors (`SQLI-002/003`, `XSS-002/003`, `PATHTRAV-002`) get no entry at all, deliberately -- the
+caller passes this map straight to the real, completely unmodified `wafassessment.EvaluateScenario`, so those 5
+surface through its own `UntestedVectorIDs` path rather than a fixture standing in for them. `wafassessment`
+itself was not touched by any of this: the live-wiring glue lives entirely in `internal/wafmodsec`, which already
+depends on `wafval` and `vendors/modsecwaf` -- no import cycle, and `wafassessment` stays exactly as
+vendor-neutral/I-O-free as before.
+
+**Live-verified:** `TestLive_ExploitPreventionScenario_ThreeOfEightVectorsLive` (same `WAF_MODSEC_LAB_URL` gate)
+calls the real `AudspectExploitPreventionScenario()`, builds the live fixtures, and runs the real
+`EvaluateScenario` against them -- against the actual running container, not a mock. Result: all 3 live vectors
+resolved `VerdictBlocked`, the 5 others came back in `UntestedVectorIDs`, and the scenario's genuine outcome was
+`ScenarioIncomplete` (never silently `ScenarioPass` just because nothing live failed).
+
+**Tests:** `go test ./internal/wafmodsec/...` (unit, no live dependency) green; the live test green against the
+running container; `go build ./...`, `go vet ./internal/wafmodsec/...` clean.
+
+**Still not done:** the other 9 enterprise scenarios, and no `internal/api` handler exposes this live path, so a
+console user still only ever sees the fixture-backed result.
+
 ## API BAS binding spec persisted on targets (10 November 2026)
 
 - **Built:** table `apibas_target_bindings`, store functions, `PUT|GET|DELETE /api/apibas/targets/{id}/binding` (manage-targets permission), and `POST .../binding/plan` with an empty body previewing the stored spec. Design in `docs/api-bas-scenario-binding.md`.
