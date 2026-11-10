@@ -1,0 +1,236 @@
+id: carbanak-kill-chain
+product_line: killchain
+name: Carbanak Kill Chain -- BFSI Operator Surveillance & Payment Fraud (Phase 7)
+description: >
+  Five-stage telemetry-safe emulation of the Carbanak (Anunak) group's
+  post-initial-access tradecraft against financial institutions. Based on
+  Kaspersky "Carbanak APT" (2015), Group-IB Anunak reports, and MITRE ATT&CK
+  group G0008.
+
+  Carbanak stole ~$1bn from 100+ banks by compromising operator workstations,
+  silently recording their screens and keystrokes to learn internal money-
+  transfer procedures, then issuing fraudulent SWIFT/card-processing and ATM
+  "jackpotting" commands that mimicked legitimate operator behaviour. In Indian
+  BFSI context the targets are CBS operator desktops, card-management consoles,
+  and ATM-switch administration hosts.
+
+  KILL CHAIN STAGES:
+    1. Operator / Privileged-User Discovery  -- identify logged-on banking operators and local admins (T1033)
+    2. Keylogging Surface Assessment          -- input-capture API availability, no hook installed (T1056.001)
+    3. Video / Screen Recording Surface       -- screen-capture capability probe, no frame captured (T1125)
+    4. Local Data Staging                     -- self-created decoy staging dir for captured data, then removed (T1074.001)
+    5. Outbound HTTPS C2 Beacon               -- loopback/RFC5737 HTTPS probe simulating the Carbanak panel (T1071.001)
+
+  SAFETY: No keyboard hook, no screen/video frame captured, no real C2. Every
+  stage is read-only except Stage 4, which creates and then deletes its OWN
+  tagged decoy directory under %TEMP%. HTTP probe uses RFC5737 (192.0.2.x,
+  non-routable). All [BAS-SIM-CARBANAK] tagged. PRODUCTION-SAFE. Windows only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - carbanak
+  - anunak
+  - bfsi
+  - financial
+  - cbs
+  - atm
+  - operator-surveillance
+  - kill-chain
+  - phase7
+  - t1033
+  - t1056
+  - t1125
+  - t1074
+  - t1071
+  - mitre
+mitre_phases:
+  - discovery
+  - collection
+  - command-and-control
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 -- Operator / Privileged-User Discovery (T1033)
+  # ---------------------------------------------------------------------------
+  - name: "Carbanak Stage 1 -- Logged-on Operator and Privileged-User Discovery (T1033)"
+    technique_id: T1033
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Runs whoami, quser, and reads the local Administrators group to identify who is interactively logged on and which accounts are privileged. Read-only. Carbanak selected which operator desktops to surveil by first learning which privileged banking users were active on a host."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: whoami.exe / quser.exe spawned by powershell.exe"
+      - "Security EID 4688: quser.exe (session enumeration)"
+      - "PowerShell EID 4104: Get-LocalGroupMember Administrators"
+    detection:
+      - "EDR: quser.exe / whoami /all from PowerShell parent -- Sigma proc_creation_win_whoami.yml"
+      - "SIEM: quser + local-admin enumeration in one session -- operator-surveillance pre-stage IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $me = & whoami.exe /all 2>&1 | Out-String
+      $sessions = & quser.exe 2>&1 | Out-String
+      $admins = (Get-LocalGroupMember -Group 'Administrators' -EA SilentlyContinue | ForEach-Object { $_.Name }) -join ', '
+      $sessionCount = (@($sessions -split "`n") | Where-Object { $_ -match '\S' }).Count - 1
+      Write-Output "EXEC T1033: operator discovery. active_sessions=$sessionCount, local_admins=[$admins]. Carbanak uses this to pick which operator desktop to record. [BAS-SIM-CARBANAK-S1]"
+      if ($admins) {
+        Write-Output "FAIL: Local Administrators membership is enumerable with the current token and interactive sessions are visible. Carbanak would target the privileged operator session for screen/keystroke capture. Restrict quser/whoami via EDR and monitor local-admin enumeration."
+      } else {
+        Write-Output "PASS: Local admin membership could not be enumerated with this token. Operator-selection recon is constrained. [BAS-SIM-CARBANAK-S1]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 -- Keylogging Surface Assessment (T1056.001)
+  # ---------------------------------------------------------------------------
+  - name: "Carbanak Stage 2 -- Keylogging Input-Capture Surface (T1056.001)"
+    technique_id: T1056.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Loads user32.dll and resolves the GetAsyncKeyState / SetWindowsHookEx symbols to confirm the keylogging API surface is reachable -- but installs NO keyboard hook and captures NO keystrokes. Carbanak's keylogger module hooked operator input to steal CBS/SWIFT credentials and transfer PINs."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 7: user32.dll loaded by powershell.exe"
+      - "PowerShell EID 4104: Add-Type with GetAsyncKeyState P/Invoke signature"
+    detection:
+      - "EDR: PowerShell defining a GetAsyncKeyState / SetWindowsHookEx P/Invoke -- Sigma posh_ps_keylogger.yml"
+      - "SIEM: Add-Type user32 keyboard-hook signature in EID 4104 -- Carbanak keylogger module IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        Add-Type -Namespace BasSim -Name Kbd -MemberDefinition '[DllImport("user32.dll")] public static extern short GetAsyncKeyState(int k);' -ErrorAction Stop
+        # Capability confirmed; we deliberately do NOT poll any key.
+        Write-Output "EXEC T1056.001: keylogging API surface reachable (GetAsyncKeyState resolved via user32.dll). NO hook installed, NO keystroke read. EID 4104 should show the P/Invoke signature. Carbanak hooked operator keyboards to capture transfer credentials. [BAS-SIM-CARBANAK-S2]"
+        Write-Output "FAIL: PowerShell resolved the keyboard-input API without an EDR block. A ScriptBlock rule matching 'GetAsyncKeyState' or 'SetWindowsHookEx' should alert. Enable PowerShell ScriptBlock logging and an AMSI keylogger signature."
+      } catch {
+        Write-Output "PASS: Keylogging API surface was not reachable from PowerShell -- $($_.Exception.Message). [BAS-SIM-CARBANAK-S2]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 -- Video / Screen Recording Surface (T1125)
+  # ---------------------------------------------------------------------------
+  - name: "Carbanak Stage 3 -- Video / Screen Recording Surface Assessment (T1125)"
+    technique_id: T1125
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Loads the System.Windows.Forms / System.Drawing assemblies and reads screen geometry plus the presence of the avicap32.dll video-capture library -- the surface Carbanak's video module used to record operator desktops. Reads dimensions only: NO frame, NO video file, NO capture device opened."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 7: System.Drawing.dll / avicap32.dll probed by powershell.exe"
+      - "PowerShell EID 4104: Add-Type System.Drawing + Screen.AllScreens"
+    detection:
+      - "EDR: PowerShell loading System.Drawing and probing avicap32 -- Sigma posh_ps_screen_capture.yml"
+      - "SIEM: Screen.AllScreens / avicap reference in EID 4104 -- Carbanak video module IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        Add-Type -AssemblyName 'System.Windows.Forms' -ErrorAction Stop
+        Add-Type -AssemblyName 'System.Drawing' -ErrorAction Stop
+        $screens = [System.Windows.Forms.Screen]::AllScreens
+        $avicap = Test-Path "$env:WINDIR\System32\avicap32.dll"
+        Write-Output "EXEC T1125: video/screen recording surface. displays=$($screens.Count), avicap32_present=$avicap. System.Drawing loaded -- Sysmon EID 7 expected. NO frame captured. Carbanak recorded operator desktops to learn money-transfer procedures. [BAS-SIM-CARBANAK-S3]"
+        Write-Output "FAIL: Screen/video-capture assemblies loaded by PowerShell without an EDR block. An EID 4104 rule matching 'Screen.AllScreens' or 'avicap32' should alert on operator-surveillance workstations."
+      } catch {
+        Write-Output "PASS: Screen/video-capture surface was restricted -- $($_.Exception.Message). [BAS-SIM-CARBANAK-S3]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 -- Local Data Staging (T1074.001)
+  # ---------------------------------------------------------------------------
+  - name: "Carbanak Stage 4 -- Local Data Staging Directory (T1074.001)"
+    technique_id: T1074.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a SINGLE BAS-owned staging directory (%TEMP%\\bas-sim-carbanak-stage) with a decoy marker file, enumerates it to mimic the Carbanak collection folder, then DELETES it in both the command and the cleanup block. Touches only its own self-created tagged directory -- no user or system data is read, moved, or staged."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: file create under %TEMP%\\bas-sim-carbanak-stage"
+      - "PowerShell EID 4104: New-Item / Set-Content in a staging folder"
+    detection:
+      - "EDR: rapid create of a hidden staging folder under %TEMP% -- Carbanak collection-folder IOC"
+      - "SIEM: EID 11 file-create burst in a single temp subfolder followed by compression/exfil -- staging pattern"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $stage = Join-Path $env:TEMP 'bas-sim-carbanak-stage'
+      New-Item -ItemType Directory -Path $stage -Force -EA SilentlyContinue | Out-Null
+      Set-Content -Path (Join-Path $stage 'BAS-SIM-CARBANAK-decoy.txt') -Value 'BAS-SIM-CARBANAK synthetic decoy -- not real data' -EA SilentlyContinue
+      $files = (Get-ChildItem -Path $stage -EA SilentlyContinue).Count
+      Write-Output "EXEC T1074.001: local staging directory created at $stage (files=$files, BAS-owned decoy only). Carbanak staged keystroke logs and screen captures in a hidden collection folder before exfil. EID 11 expected. [BAS-SIM-CARBANAK-S4]"
+      Remove-Item -Path $stage -Recurse -Force -EA SilentlyContinue
+      $removed = -not (Test-Path $stage)
+      Write-Output "FAIL: A staging directory was created and populated under %TEMP% without an EDR block (then removed by this test, removed=$removed). Monitor for burst file-creation in a single temp subfolder feeding a later compression/exfil step -- the Carbanak collection pattern."
+    cleanup: |
+      Remove-Item -Path (Join-Path $env:TEMP 'bas-sim-carbanak-stage') -Recurse -Force -EA SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 -- Outbound HTTPS C2 Beacon (T1071.001)
+  # ---------------------------------------------------------------------------
+  - name: "Carbanak Stage 5 -- Outbound HTTPS C2 Beacon Pattern (T1071.001)"
+    technique_id: T1071.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues one Invoke-WebRequest to https://192.0.2.1 (RFC 5737 TEST-NET-1 -- guaranteed non-routable) to generate Sysmon EID 3 + WinHTTP telemetry matching the Carbanak panel beacon. No real C2 channel, no data sent beyond the URL path."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: TCP 443 to 192.0.2.1 (Invoke-WebRequest -- Carbanak panel beacon)"
+      - "PowerShell EID 4104: Invoke-WebRequest HTTPS call"
+      - "Firewall EID 5157: outbound TCP 443 to 192.0.2.1 blocked (if logging enabled)"
+    detection:
+      - "EDR: Invoke-WebRequest / Net.WebClient in PowerShell -- Sigma posh_ps_web_request.yml"
+      - "SIEM: Sysmon EID 3 TCP 443 from powershell.exe to a non-CDN IP -- Carbanak C2 IOC"
+      - "Proxy: CONNECT to 192.0.2.1:443 must be blocked at egress and alert"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $beaconUrl = 'https://192.0.2.1/bas-sim-carbanak'
+      $blocked = $false; $timedOut = $false; $result = $null
+      try {
+        $result = Invoke-WebRequest -Uri $beaconUrl -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+      } catch [System.Net.WebException] {
+        $m = $_.Exception.Message
+        if ($m -match 'timed out|timeout|TimedOut') { $timedOut = $true }
+        elseif ($m -match 'blocked|denied|forbidden|refused|proxy') { $blocked = $true }
+        else { $timedOut = $true }
+      } catch { $blocked = $true }
+      Write-Output "EXEC T1071.001: HTTPS C2 beacon probe to $beaconUrl (RFC5737 non-routable). status=$($result.StatusCode), timed_out=$timedOut, blocked=$blocked. Sysmon EID 3 TCP 443 generated. [BAS-SIM-CARBANAK-S5]"
+      if ($blocked) {
+        Write-Output "PASS: Outbound HTTPS to the RFC5737 address was blocked by proxy or firewall -- the Carbanak beacon would be intercepted. [BAS-SIM-CARBANAK-S5]"
+      } else {
+        Write-Output "FAIL: HTTPS beacon to 192.0.2.1 was NOT blocked by the egress firewall/proxy. Enforce an explicit egress allow-list for BFSI workstations and alert on Sysmon EID 3 from powershell.exe to unlisted IPs."
+      }
+    cleanup: ""

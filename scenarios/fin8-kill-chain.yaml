@@ -1,0 +1,235 @@
+id: fin8-kill-chain
+product_line: killchain
+name: FIN8 Kill Chain -- BFSI Living-off-the-Land & Backdoor Tradecraft (Phase 7)
+description: >
+  Five-stage telemetry-safe emulation of FIN8 (Syssphinx) post-initial-access
+  tradecraft against financial and payment-processing targets. Based on
+  Bitdefender/Symantec BADHATCH & Sardonic analyses and MITRE ATT&CK group
+  G0061.
+
+  FIN8 is a financially-motivated actor known for intermittent, carefully
+  targeted campaigns against banks, retailers and POS/payment processors. It
+  favours living-off-the-land tradecraft -- WMI for reconnaissance and
+  execution, heavily obfuscated PowerShell, and the BADHATCH / Sardonic
+  backdoors installed as services. This chain emulates that phase: WMI
+  reconnaissance, security-software profiling, PowerShell deobfuscation, a
+  Windows-service persistence-surface check, and a Sardonic-style HTTPS C2
+  beacon. In Indian BFSI context the targets are card-switch and
+  payment-gateway hosts.
+
+  KILL CHAIN STAGES:
+    1. WMI Reconnaissance            -- read-only Win32_* queries, Create NOT invoked (T1047)
+    2. Security Software Discovery   -- AV/EDR profiling before backdoor install (T1518.001)
+    3. PowerShell Deobfuscation      -- in-process base64 decode of an inert string (T1140)
+    4. Service Persistence Surface   -- admin/SCM capability check, NO service created (T1543.003)
+    5. Outbound HTTPS C2 Beacon      -- RFC5737 HTTPS probe simulating Sardonic C2 (T1071.001)
+
+  SAFETY: All stages read-only. Stage 1 queries WMI but never invokes a
+  method. Stage 3 decodes an inert banner string in-process (no execution).
+  Stage 4 only inspects whether service creation would be possible (token /
+  SCM check) and creates NOTHING. Stage 5 uses RFC5737 (192.0.2.x,
+  non-routable). All [BAS-SIM-FIN8] tagged. PRODUCTION-SAFE. Windows only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - fin8
+  - syssphinx
+  - badhatch
+  - sardonic
+  - bfsi
+  - financial
+  - pos
+  - living-off-the-land
+  - kill-chain
+  - phase7
+  - t1047
+  - t1518
+  - t1140
+  - t1543
+  - t1071
+  - mitre
+mitre_phases:
+  - discovery
+  - defense-evasion
+  - persistence
+  - command-and-control
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 -- WMI Reconnaissance (T1047)
+  # ---------------------------------------------------------------------------
+  - name: "FIN8 Stage 1 -- WMI Reconnaissance (T1047)"
+    technique_id: T1047
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues read-only WMI/CIM queries (Win32_OperatingSystem, Win32_BIOS, Win32_ComputerSystem, Win32_Process) to inventory the host the way FIN8's tooling does. The Win32_Process.Create method is explicitly NOT invoked -- nothing is executed via WMI. Generates WMI-Activity operational telemetry."
+    reversible: true
+    telemetry:
+      - "Microsoft-Windows-WMI-Activity/Operational EID 5857/5858: provider queries"
+      - "PowerShell EID 4104: Get-CimInstance Win32_OperatingSystem / Win32_Process"
+    detection:
+      - "EDR: burst of Win32_* CIM queries from PowerShell -- Sigma posh_ps_wmi_recon.yml"
+      - "SIEM: WMI-Activity EID 5857 for Win32_Process from powershell.exe -- FIN8 WMI-recon IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $os  = Get-CimInstance Win32_OperatingSystem -EA SilentlyContinue
+      $bios = Get-CimInstance Win32_BIOS -EA SilentlyContinue
+      $cs  = Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue
+      $procCount = @(Get-CimInstance Win32_Process -EA SilentlyContinue).Count
+      Write-Output "EXEC T1047: WMI reconnaissance (read-only). os=$($os.Caption), manufacturer=$($cs.Manufacturer), model=$($cs.Model), bios=$($bios.SMBIOSBIOSVersion), processes=$procCount. Win32_Process.Create NOT invoked. FIN8 uses WMI for recon and (separately) execution. WMI-Activity EID 5857 expected. [BAS-SIM-FIN8-S1]"
+      Write-Output "FAIL: Read-only WMI inventory queries ran unblocked. Enable WMI-Activity operational logging and alert on Win32_Process/Service query bursts from powershell.exe -- FIN8's precursor to WMI-based execution and service persistence."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 -- Security Software Discovery (T1518.001)
+  # ---------------------------------------------------------------------------
+  - name: "FIN8 Stage 2 -- Security Software Discovery (T1518.001)"
+    technique_id: T1518.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Enumerates running security-product services and Defender status via Get-Service and Get-MpComputerStatus. Read-only. FIN8 profiles the endpoint's AV/EDR before installing the BADHATCH/Sardonic backdoor and choosing its evasion approach."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: powershell.exe enumerating services / Get-MpComputerStatus"
+      - "PowerShell EID 4104: Get-Service filtered for AV/EDR vendor names"
+    detection:
+      - "EDR: Get-MpComputerStatus / security-service enumeration from PowerShell -- Sigma posh_ps_defender_recon.yml"
+      - "SIEM: service query filtered by AV vendor strings -- FIN8 pre-backdoor profiling IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $secVendors = @('defender','mcafee','symantec','sophos','crowdstrike','carbonblack','cylance','sentinelone','trendmicro','kaspersky','eset','fireeye','tanium','elastic')
+      $svc = Get-Service -EA SilentlyContinue | Where-Object { $n=$_.Name.ToLower(); $d=$_.DisplayName.ToLower(); $secVendors | Where-Object { $n -match $_ -or $d -match $_ } }
+      $svcNames = (@($svc) | Select-Object -ExpandProperty DisplayName -Unique) -join ', '
+      $rtp = (Get-MpComputerStatus -EA SilentlyContinue).RealTimeProtectionEnabled
+      Write-Output "EXEC T1518.001: security software discovery. edr_services=[$svcNames], defender_realtime=$rtp. FIN8 profiles defences before installing BADHATCH/Sardonic. [BAS-SIM-FIN8-S2]"
+      if (-not $svc -and $rtp -ne $true) {
+        Write-Output "FAIL: No EDR/AV service was discoverable and Defender real-time protection is off/unknown. FIN8 would install its backdoor unopposed. Ensure a tamper-protected, monitored EDR agent is running."
+      } else {
+        Write-Output "PASS: Security tooling is present and enumerable -- the profiling step still generates EID 4104 telemetry to alert on, but the endpoint is defended. [BAS-SIM-FIN8-S2]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 -- PowerShell Deobfuscation (T1140)
+  # ---------------------------------------------------------------------------
+  - name: "FIN8 Stage 3 -- PowerShell Deobfuscation Surface (T1140)"
+    technique_id: T1140
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Decodes a base64 string IN-PROCESS with [Convert]::FromBase64String and reports the decoded banner -- the decoded content is an inert [BAS-SIM-FIN8] marker string and is NEVER executed, invoked, or written to disk. FIN8 wraps its loader in layered base64/obfuscation; this reproduces the decode telemetry only."
+    reversible: true
+    telemetry:
+      - "PowerShell EID 4104: [Convert]::FromBase64String / [Text.Encoding] decode in ScriptBlock"
+      - "AMSI: decoded buffer scanned (if AMSI providers active)"
+    detection:
+      - "EDR: FromBase64String + Encoding.GetString chain in PowerShell -- Sigma posh_ps_base64_decode.yml"
+      - "SIEM: base64-decode ScriptBlock (EID 4104) shortly after an encoded-command child -- FIN8 deobfuscation IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes('BAS-SIM-FIN8 deobfuscated marker -- inert, not executed'))
+      $decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64))
+      $ok = $decoded -match 'BAS-SIM-FIN8 deobfuscated marker'
+      Write-Output "EXEC T1140: PowerShell deobfuscation. decode_ran=$ok, decoded_len=$($decoded.Length). Content is an inert marker and was NOT executed. EID 4104 should capture the FromBase64String chain. FIN8 layers base64/obfuscation around its loader. [BAS-SIM-FIN8-S3]"
+      Write-Output "FAIL: An in-process base64 decode chain ran in PowerShell without an EDR/AMSI block. Enable ScriptBlock + AMSI logging and alert on FromBase64String followed by Invoke-Expression / Reflection.Assembly::Load -- the FIN8 deobfuscate-then-run pattern."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 -- Service Persistence Surface (T1543.003)
+  # ---------------------------------------------------------------------------
+  - name: "FIN8 Stage 4 -- Windows Service Persistence Surface (T1543.003)"
+    technique_id: T1543.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Inspects ONLY whether Windows-service creation would be possible for the current token: checks local-admin membership and enumerates existing services via sc.exe query. It creates NO service, writes NO registry, and installs NOTHING. FIN8 installs BADHATCH/Sardonic as a Windows service (Sysmon/EID 7045) for persistence."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: sc.exe query spawned by powershell.exe"
+      - "PowerShell EID 4104: administrators-group / privilege check"
+    detection:
+      - "EDR: service enumeration + privilege check preceding a service install -- FIN8 persistence-prep IOC"
+      - "SIEM: baseline EID 7045 (service installed); alert on new services with script-host or temp-path binaries"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+      $principal = New-Object System.Security.Principal.WindowsPrincipal($id)
+      $isAdmin = $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+      $svcCount = @(& sc.exe query type= service state= all 2>&1 | Select-String 'SERVICE_NAME').Count
+      Write-Output "EXEC T1543.003: service-persistence surface check. current_token_is_admin=$isAdmin, services_enumerated=$svcCount. NO service created. FIN8 installs BADHATCH/Sardonic as a service for persistence. [BAS-SIM-FIN8-S4]"
+      if ($isAdmin) {
+        Write-Output "FAIL: The current token can create Windows services (local admin). FIN8 would install its backdoor as a service (EID 7045). Enforce least privilege, and alert on new services whose binary path is a script host, %TEMP%, or an unsigned binary."
+      } else {
+        Write-Output "PASS: The current token is not local admin -- direct Windows-service persistence is not available to it. Service-install telemetry (EID 7045) should still be baselined. [BAS-SIM-FIN8-S4]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 -- Outbound HTTPS C2 Beacon (T1071.001)
+  # ---------------------------------------------------------------------------
+  - name: "FIN8 Stage 5 -- Outbound HTTPS C2 Beacon Pattern (T1071.001)"
+    technique_id: T1071.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues one Invoke-WebRequest to https://192.0.2.4 (RFC 5737 TEST-NET-1 -- non-routable) to generate Sysmon EID 3 + WinHTTP telemetry matching a Sardonic HTTPS C2 check-in. No real C2 channel, no data sent beyond the URL path."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: TCP 443 to 192.0.2.4 (Invoke-WebRequest -- Sardonic C2 beacon)"
+      - "PowerShell EID 4104: Invoke-WebRequest HTTPS call"
+      - "Firewall EID 5157: outbound TCP 443 to 192.0.2.4 blocked (if logging enabled)"
+    detection:
+      - "EDR: Invoke-WebRequest / Net.WebClient in PowerShell -- Sigma posh_ps_web_request.yml"
+      - "SIEM: Sysmon EID 3 TCP 443 from powershell.exe to a non-CDN IP -- FIN8/Sardonic C2 IOC"
+      - "Proxy: CONNECT to 192.0.2.4:443 must be blocked at egress and alert"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $beaconUrl = 'https://192.0.2.4/bas-sim-fin8'
+      $blocked = $false; $timedOut = $false; $result = $null
+      try {
+        $result = Invoke-WebRequest -Uri $beaconUrl -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+      } catch [System.Net.WebException] {
+        $m = $_.Exception.Message
+        if ($m -match 'timed out|timeout|TimedOut') { $timedOut = $true }
+        elseif ($m -match 'blocked|denied|forbidden|refused|proxy') { $blocked = $true }
+        else { $timedOut = $true }
+      } catch { $blocked = $true }
+      Write-Output "EXEC T1071.001: HTTPS C2 beacon probe to $beaconUrl (RFC5737 non-routable). status=$($result.StatusCode), timed_out=$timedOut, blocked=$blocked. Sysmon EID 3 TCP 443 generated. [BAS-SIM-FIN8-S5]"
+      if ($blocked) {
+        Write-Output "PASS: Outbound HTTPS to the RFC5737 address was blocked by proxy or firewall -- the Sardonic C2 beacon would be intercepted. [BAS-SIM-FIN8-S5]"
+      } else {
+        Write-Output "FAIL: HTTPS beacon to 192.0.2.4 was NOT blocked by the egress firewall/proxy. Enforce an explicit egress allow-list for BFSI workstations and alert on Sysmon EID 3 from powershell.exe to unlisted IPs."
+      }
+    cleanup: ""

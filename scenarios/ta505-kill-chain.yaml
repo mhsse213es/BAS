@@ -1,0 +1,250 @@
+id: ta505-kill-chain
+product_line: killchain
+name: TA505 Kill Chain -- BFSI Loader & Persistence Tradecraft (Phase 7)
+description: >
+  Five-stage telemetry-safe emulation of TA505 (Hive0065 / the Clop & Dridex
+  operators) post-initial-access tradecraft against financial institutions.
+  Based on Proofpoint / IBM X-Force TA505 reporting and MITRE ATT&CK group
+  G0092.
+
+  TA505 ran some of the largest financially-motivated campaigns on record --
+  Dridex banking trojan, FlawedAmmyy/FlawedGrace RATs, Locky and later Clop
+  ransomware -- against banks, retailers and payment processors. After a
+  malicious-document initial access it establishes persistence and stages a
+  loader before pulling down its RAT. This chain emulates that loader-and-
+  persistence phase: software inventory, Run-key persistence, an encoded
+  PowerShell loader, scheduled-task persistence, and a Dridex-style HTTPS C2
+  beacon.
+
+  KILL CHAIN STAGES:
+    1. Installed Software Discovery   -- Uninstall-key inventory for targeting (T1518)
+    2. Registry Run-Key Persistence   -- write + verify + REMOVE a tagged HKCU Run value (T1547.001)
+    3. Encoded PowerShell Loader      -- spawn a benign -EncodedCommand child (T1059.001)
+    4. Scheduled-Task Persistence     -- create + verify + DELETE a tagged user task (T1053.005)
+    5. Outbound HTTPS C2 Beacon       -- RFC5737 HTTPS probe simulating Dridex C2 (T1071.001)
+
+  SAFETY: Stages 2 and 4 make a SINGLE reversible change under BAS-owned,
+  clearly-tagged names (HKCU only, user task only) and remove it in both the
+  command body and the cleanup block. Stage 3's encoded payload only runs
+  Write-Output. Stage 5 uses RFC5737 (192.0.2.x, non-routable). No RAT, no
+  download, no real C2. All [BAS-SIM-TA505] tagged. PRODUCTION-SAFE. Windows only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - ta505
+  - clop
+  - dridex
+  - flawedammyy
+  - bfsi
+  - financial
+  - loader
+  - persistence
+  - kill-chain
+  - phase7
+  - t1518
+  - t1547
+  - t1059
+  - t1053
+  - t1071
+  - mitre
+mitre_phases:
+  - discovery
+  - persistence
+  - execution
+  - command-and-control
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 -- Installed Software Discovery (T1518)
+  # ---------------------------------------------------------------------------
+  - name: "TA505 Stage 1 -- Installed Software Discovery (T1518)"
+    technique_id: T1518
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Reads the registry Uninstall keys (HKLM/HKCU) to inventory installed software. Read-only. TA505's FlawedAmmyy/FlawedGrace RATs profile installed software -- banking clients, remote-admin tools, security products -- to choose follow-on modules."
+    reversible: true
+    telemetry:
+      - "PowerShell EID 4104: Get-ItemProperty over ...\\Uninstall\\*"
+      - "Sysmon EID 1: powershell.exe reading Uninstall registry hive"
+    detection:
+      - "EDR: bulk read of Uninstall registry keys from PowerShell -- Sigma posh_ps_software_discovery.yml"
+      - "SIEM: software-inventory enumeration shortly after document-macro execution -- TA505 profiling IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $paths = @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+                 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+                 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*')
+      $apps = foreach ($p in $paths) { Get-ItemProperty $p -EA SilentlyContinue | Where-Object { $_.DisplayName } | Select-Object -ExpandProperty DisplayName }
+      $apps = $apps | Sort-Object -Unique
+      $count = @($apps).Count
+      $remoteTools = $apps | Where-Object { $_ -match 'AnyDesk|TeamViewer|Ammyy|VNC|RDP|LogMeIn|ScreenConnect' }
+      Write-Output "EXEC T1518: installed software discovery. apps=$count, remote_admin_tools=[$([string]::Join(', ',$remoteTools))]. TA505 inventories software to select RAT modules. [BAS-SIM-TA505-S1]"
+      Write-Output "FAIL: Full installed-software inventory was readable from the registry without an EDR block. Alert on bulk Uninstall-key enumeration from powershell.exe following macro execution -- a TA505 pre-loader profiling step."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 -- Registry Run-Key Persistence (T1547.001)
+  # ---------------------------------------------------------------------------
+  - name: "TA505 Stage 2 -- Registry Run-Key Persistence (T1547.001)"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes ONE tagged value (BAS-SIM-TA505) to the current user's HKCU Run key whose data is an inert comment, confirms it exists, then DELETES it in both the command and the cleanup block. HKCU only -- no HKLM, no system-wide autostart. The value never points at a real executable and is removed before the step ends."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 13: registry value set under HKCU\\...\\Run (BAS-SIM-TA505)"
+      - "PowerShell EID 4104: New-ItemProperty ...\\Run"
+    detection:
+      - "EDR: new value under HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run -- Sigma registry_set_run_key.yml"
+      - "SIEM: Sysmon EID 13 Run-key write from powershell.exe -- TA505 persistence IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+      $name   = 'BAS-SIM-TA505'
+      New-ItemProperty -Path $runKey -Name $name -Value 'cmd.exe /c rem bas-sim-ta505-inert' -PropertyType String -Force -EA SilentlyContinue | Out-Null
+      $set = (Get-ItemProperty -Path $runKey -Name $name -EA SilentlyContinue).$name
+      Remove-ItemProperty -Path $runKey -Name $name -EA SilentlyContinue
+      $removed = -not (Get-ItemProperty -Path $runKey -Name $name -EA SilentlyContinue)
+      Write-Output "EXEC T1547.001: Run-key persistence. value_written=$([bool]$set) (HKCU, inert), value_removed=$removed. Sysmon EID 13 expected. TA505 persists its loader via a Run key. [BAS-SIM-TA505-S2]"
+      if ($set) {
+        Write-Output "FAIL: A value was written to the HKCU Run key by PowerShell without an EDR block (then removed by this test). Alert on Sysmon EID 13 Run-key writes from script hosts and baseline autostart entries on BFSI workstations."
+      } else {
+        Write-Output "PASS: The Run-key write was blocked -- autostart persistence via HKCU Run is constrained. [BAS-SIM-TA505-S2]"
+      }
+    cleanup: |
+      Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'BAS-SIM-TA505' -EA SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 -- Encoded PowerShell Loader (T1059.001)
+  # ---------------------------------------------------------------------------
+  - name: "TA505 Stage 3 -- Encoded PowerShell Loader (T1059.001)"
+    technique_id: T1059.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Spawns ONE child powershell.exe with -EncodedCommand whose decoded payload only runs Write-Output. This reproduces the -enc child-process and ScriptBlock telemetry of a TA505 loader without executing anything harmful -- the encoded content is an inert banner string."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 / Sysmon EID 1: powershell.exe -EncodedCommand child of powershell.exe"
+      - "PowerShell EID 4104: decoded ScriptBlock (Write-Output banner)"
+    detection:
+      - "EDR: powershell.exe -EncodedCommand / -enc spawned by a script host -- Sigma proc_creation_win_powershell_encoded.yml"
+      - "SIEM: EID 4688 powershell with -enc + EID 4104 decoded block -- TA505 loader IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $inner = "Write-Output 'BAS-SIM-TA505 encoded loader executed (inert banner)'"
+      $enc = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($inner))
+      $out = & powershell.exe -NoProfile -NonInteractive -EncodedCommand $enc 2>&1 | Out-String
+      $ran = $out -match 'BAS-SIM-TA505 encoded loader'
+      Write-Output "EXEC T1059.001: encoded PowerShell loader. child_enc_ran=$ran. A -EncodedCommand child was spawned (EID 4688 with -enc) and the decoded block logged (EID 4104). Payload was an inert banner only. TA505 stages its loader as encoded PowerShell. [BAS-SIM-TA505-S3]"
+      if ($ran) {
+        Write-Output "FAIL: An -EncodedCommand child powershell.exe ran without an EDR block. Alert on powershell.exe with -enc/-EncodedCommand spawned by Office/script hosts, and enable ScriptBlock + AMSI logging to decode the payload."
+      } else {
+        Write-Output "PASS: The encoded-command child was blocked or failed to execute -- the encoded-loader surface is constrained. [BAS-SIM-TA505-S3]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 -- Scheduled-Task Persistence (T1053.005)
+  # ---------------------------------------------------------------------------
+  - name: "TA505 Stage 4 -- Scheduled-Task Persistence (T1053.005)"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 25
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates ONE tagged user-context scheduled task (BAS-SIM-TA505) whose action is 'cmd.exe /c exit' and whose trigger is a one-off far-future time, confirms it exists, then DELETES it in both the command and the cleanup block. No SYSTEM task, no elevation, the task never runs a payload and is removed before the step ends."
+    reversible: true
+    telemetry:
+      - "Security EID 4698: a scheduled task was created (BAS-SIM-TA505)"
+      - "Security EID 4699: a scheduled task was deleted (cleanup)"
+      - "Sysmon EID 1: schtasks.exe /create spawned by powershell.exe"
+    detection:
+      - "EDR: schtasks.exe /create from PowerShell -- Sigma proc_creation_win_schtasks_create.yml"
+      - "SIEM: EID 4698 task creation from a script host on an operator workstation -- TA505 persistence IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $taskName = 'BAS-SIM-TA505'
+      & schtasks.exe /create /tn $taskName /tr 'cmd.exe /c exit' /sc ONCE /st 23:59 /f 2>&1 | Out-Null
+      $query = & schtasks.exe /query /tn $taskName 2>&1 | Out-String
+      $created = $query -match [regex]::Escape($taskName)
+      & schtasks.exe /delete /tn $taskName /f 2>&1 | Out-Null
+      $verify = & schtasks.exe /query /tn $taskName 2>&1 | Out-String
+      $removed = -not ($verify -match [regex]::Escape($taskName))
+      Write-Output "EXEC T1053.005: scheduled-task persistence. task_created=$created (user context, inert action), task_removed=$removed. Security EID 4698 expected. TA505 persists its loader via schtasks. [BAS-SIM-TA505-S4]"
+      if ($created) {
+        Write-Output "FAIL: A scheduled task was created by PowerShell without an EDR block (then deleted by this test). Alert on EID 4698 task creation from script hosts and review non-standard tasks on BFSI workstations."
+      } else {
+        Write-Output "PASS: Scheduled-task creation was blocked or failed -- this persistence vector is constrained for the current token. [BAS-SIM-TA505-S4]"
+      }
+    cleanup: |
+      & schtasks.exe /delete /tn 'BAS-SIM-TA505' /f 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 -- Outbound HTTPS C2 Beacon (T1071.001)
+  # ---------------------------------------------------------------------------
+  - name: "TA505 Stage 5 -- Outbound HTTPS C2 Beacon Pattern (T1071.001)"
+    technique_id: T1071.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues one Invoke-WebRequest to https://192.0.2.3 (RFC 5737 TEST-NET-1 -- non-routable) to generate Sysmon EID 3 + WinHTTP telemetry matching a Dridex/Clop HTTPS C2 check-in. No real C2 channel, no data sent beyond the URL path."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: TCP 443 to 192.0.2.3 (Invoke-WebRequest -- Dridex C2 beacon)"
+      - "PowerShell EID 4104: Invoke-WebRequest HTTPS call"
+      - "Firewall EID 5157: outbound TCP 443 to 192.0.2.3 blocked (if logging enabled)"
+    detection:
+      - "EDR: Invoke-WebRequest / Net.WebClient in PowerShell -- Sigma posh_ps_web_request.yml"
+      - "SIEM: Sysmon EID 3 TCP 443 from powershell.exe to a non-CDN IP -- TA505/Dridex C2 IOC"
+      - "Proxy: CONNECT to 192.0.2.3:443 must be blocked at egress and alert"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $beaconUrl = 'https://192.0.2.3/bas-sim-ta505'
+      $blocked = $false; $timedOut = $false; $result = $null
+      try {
+        $result = Invoke-WebRequest -Uri $beaconUrl -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+      } catch [System.Net.WebException] {
+        $m = $_.Exception.Message
+        if ($m -match 'timed out|timeout|TimedOut') { $timedOut = $true }
+        elseif ($m -match 'blocked|denied|forbidden|refused|proxy') { $blocked = $true }
+        else { $timedOut = $true }
+      } catch { $blocked = $true }
+      Write-Output "EXEC T1071.001: HTTPS C2 beacon probe to $beaconUrl (RFC5737 non-routable). status=$($result.StatusCode), timed_out=$timedOut, blocked=$blocked. Sysmon EID 3 TCP 443 generated. [BAS-SIM-TA505-S5]"
+      if ($blocked) {
+        Write-Output "PASS: Outbound HTTPS to the RFC5737 address was blocked by proxy or firewall -- the Dridex/Clop C2 beacon would be intercepted. [BAS-SIM-TA505-S5]"
+      } else {
+        Write-Output "FAIL: HTTPS beacon to 192.0.2.3 was NOT blocked by the egress firewall/proxy. Enforce an explicit egress allow-list for BFSI workstations and alert on Sysmon EID 3 from powershell.exe to unlisted IPs."
+      }
+    cleanup: ""
