@@ -12,6 +12,7 @@ import (
 	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/telnetsink"
+	"github.com/audspect/bas/internal/wafmodsec"
 	"github.com/audspect/bas/internal/webhooksink"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -283,15 +284,32 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Get("/api/waf/scenarios/"+slug, h.wafScenarioJSONHandler(slug))
 			r.Get("/api/waf/scenarios/"+slug+".html", h.wafScenarioHTMLHandler(slug))
 		}
-		// Exploit-prevention evaluated against a REAL, running ModSecurity +
-		// OWASP CRS lab (lab/wafmodsec) instead of a fixture -- 3 of the
-		// scenario's 8 vectors only (see
-		// internal/wafmodsec.ExploitPreventionLiveVectorIDs). Same read-only,
-		// JWT-only tier as the fixture-backed routes above: the live target
-		// is a fixed, operator-configured URL (wafModsecLabURLEnv), never
-		// taken from the request, so there is no SSRF surface from this
-		// being Viewer-reachable.
-		r.Get("/api/waf/scenarios/exploit-prevention/live", h.wafExploitPreventionLiveJSONHandler)
+		// 5 of the 10 scenarios above, evaluated against a REAL, running
+		// ModSecurity + OWASP CRS lab (lab/wafmodsec) instead of a fixture --
+		// only the subset of each scenario's vectors its own
+		// internal/wafmodsec.Run<Scenario>Live function actually drives live
+		// (the rest surface through untestedVectorIds). The other 5
+		// scenarios have no live route: each needs real new capability
+		// (a burst-driving harness, a SIEM backend, multipart support, a
+		// multi-node lab topology, a second weakened-policy lab instance)
+		// that doesn't exist yet -- see docs/waf-mastery-qa-log.md item #1.
+		// Same read-only, JWT-only tier as the fixture-backed routes above:
+		// the live target is a fixed, operator-configured URL
+		// (wafModsecLabURLEnv), never taken from the request, so there is no
+		// SSRF surface from this being Viewer-reachable.
+		liveScenarios := []struct {
+			slug string
+			run  liveScenarioRunner
+		}{
+			{"exploit-prevention", wafmodsec.RunExploitPreventionLive},
+			{"http-protocol-integrity", wafmodsec.RunHTTPProtocolIntegrityLive},
+			{"routing-cache-integrity", wafmodsec.RunRoutingCacheIntegrityLive},
+			{"api-protection", wafmodsec.RunAPIProtectionLive},
+			{"legitimate-traffic", wafmodsec.RunLegitimateTrafficLive},
+		}
+		for _, ls := range liveScenarios {
+			r.Get("/api/waf/scenarios/"+ls.slug+"/live", h.wafScenarioLiveJSONHandler(ls.run))
+		}
 		// AV/NGAV efficacy assessment scenarios (internal/avefficacy),
 		// same read-only, slug-registry shape as /api/waf/scenarios:
 		// each slug is a fixture-backed scenario evaluation layered

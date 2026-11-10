@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/audspect/bas/internal/wafmodsec"
 )
 
 func TestGetWAFExploitPreventionScenario_ReturnsRealFailOutcome(t *testing.T) {
@@ -213,6 +215,30 @@ func TestWafExploitPreventionLiveJSONHandler_NoLabConfigured_Returns503(t *testi
 	}
 	if !strings.Contains(rr.Body.String(), wafModsecLabURLEnv) {
 		t.Errorf("body should name %s so an operator knows what to set, got: %s", wafModsecLabURLEnv, rr.Body.String())
+	}
+}
+
+// Review Focus: the other 4 live scenario endpoints share
+// wafScenarioLiveJSONHandler with exploit-prevention's -- this proves the
+// 503 refusal path generically, for each one's own Run<Scenario>Live,
+// rather than retesting the shared handler body 4 more times.
+func TestWafScenarioLiveJSONHandler_NoLabConfigured_Returns503(t *testing.T) {
+	t.Setenv(wafModsecLabURLEnv, "")
+	h := &Handler{}
+	for _, run := range []liveScenarioRunner{
+		wafmodsec.RunHTTPProtocolIntegrityLive,
+		wafmodsec.RunRoutingCacheIntegrityLive,
+		wafmodsec.RunAPIProtectionLive,
+		wafmodsec.RunLegitimateTrafficLive,
+	} {
+		rr := httptest.NewRecorder()
+		h.wafScenarioLiveJSONHandler(run)(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/x/live", nil))
+		if rr.Code != http.StatusServiceUnavailable {
+			t.Errorf("status = %d, want %d", rr.Code, http.StatusServiceUnavailable)
+		}
+		if !strings.Contains(rr.Body.String(), wafModsecLabURLEnv) {
+			t.Errorf("body should name %s, got: %s", wafModsecLabURLEnv, rr.Body.String())
+		}
 	}
 }
 

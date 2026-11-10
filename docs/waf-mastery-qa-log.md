@@ -133,10 +133,31 @@ yet. Fixed the same way, with the same new-test-first proof
 - `policy-integrity` -- a genuine two-leg baseline-vs-weakened policy comparison; this lab has exactly one fixed
   CRS configuration, with no second, deliberately-weakened policy to compare against.
 
+**Fourth same-day follow-up: wired the other 4 live-partial scenarios into the API too.** `wafExploitPreventionLiveJSONHandler`'s
+body was pulled out into a new shared `wafScenarioLiveJSONHandler(run liveScenarioRunner)` -- the live counterpart
+of the existing fixture-backed `wafScenarioJSONHandler(slug)` factory, parameterized by `internal/wafmodsec`'s
+`Run<Scenario>Live` function instead of a slug. 4 new routes registered the same way, through a `liveScenarios`
+slice in `routes.go` (exploit-prevention's own route now goes through the same loop):
+
+- `GET /api/waf/scenarios/http-protocol-integrity/live`
+- `GET /api/waf/scenarios/routing-cache-integrity/live`
+- `GET /api/waf/scenarios/api-protection/live`
+- `GET /api/waf/scenarios/legitimate-traffic/live`
+
+Same `tierAny` RBAC tier, same 503-if-unconfigured/502-if-unreachable refusal, same never-falls-back-to-fixture
+guarantee as exploit-prevention's route -- all inherited for free from the shared handler, not reimplemented per
+route. `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with all 4 new routes matrixed. Live-verified: all 4
+routes hit via the handler itself (no router, no mock) against the real running container, verdicts matching the
+curl-confirmed ground truth from the third follow-up exactly (`HTTPPARSE-002` blocked, `CACHE-003` blocked,
+`CACHE-002`/`API-003`/`APIFLOW-005` inconclusive, all 4 legitimate-traffic benign legs allowed), every assertion
+`evidenceSource:"live_execution"`, none `"fixture"`.
+
 **Resolution path for what's left:** extend `BuildRequest`'s PayloadLocation cases to cover more vectors; add
 audit-log parsing to `wafmodsec` so a real `VerdictMissed` becomes claimable; a second, deliberately-weakened lab
-instance to unblock `policy-integrity`; a burst-driving harness to unblock `automated-abuse`; API routes for the 4
-newly-live-partial scenarios so the console can show them, mirroring exploit-prevention's.
+instance to unblock `policy-integrity`; a burst-driving harness (plus real rate-limit config in the lab) to unblock
+`automated-abuse`; multipart support in `modsecwaf.BuildRequest` to unblock `file-upload-content-trust`; a
+multi-node/dual-path lab topology to unblock `origin-resilience`; a real alerting backend to unblock
+`detection-telemetry`.
 
 See `lab/wafmodsec/README.md` for how to run the lab and every live test (`go test ./internal/wafmodsec/... -run TestLive_ -v`).
 

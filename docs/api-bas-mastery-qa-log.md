@@ -4160,3 +4160,31 @@ no ModSecurity audit-log parsing, so `VerdictMissed` still isn't claimable from 
 - **Tests (pass):** API: empty target lists `[]`; two jobs ordered newest first with status and grade counts, another target's job absent, no credential or report data in the body; limit applied and 0, -1, 101, x refused; unknown target 404; unauthenticated refused; RBAC matrix lists the route; real-router route check. Web: countsText and worstTone (11 model tests in total plus these), jsdom: list shows kind, status, counts with a hostile requester name as text, empty list message, View renders results in its own panel and leaves the run panel untouched, a still-running job is followed without refreshing the list, a stopped follow stops polling, Refresh reloads. Full web suite and build run before push.
 - **Not run:** a browser against a live server; Playwright smoke.
 - **Limits:** no pagination past 100, no status/kind filter, no cross-target list.
+
+## REQ-007 follow-up #7: wired the other 4 live-partial scenarios into the API (10 November 2026)
+
+- **Built:** `wafExploitPreventionLiveJSONHandler`'s body extracted into a new shared
+  `wafScenarioLiveJSONHandler(run liveScenarioRunner)` in `internal/api` -- the live counterpart of the existing
+  fixture-backed `wafScenarioJSONHandler(slug)` factory, parameterized by one of `internal/wafmodsec`'s
+  `Run<Scenario>Live` functions instead of a slug. 4 new routes registered through a `liveScenarios` slice in
+  `routes.go` (exploit-prevention's own route now goes through the same loop, not a standalone line):
+  `GET /api/waf/scenarios/http-protocol-integrity/live`, `.../routing-cache-integrity/live`,
+  `.../api-protection/live`, `.../legitimate-traffic/live`.
+- **Calls made:** same `tierAny` RBAC tier, same 503-if-`WAF_MODSEC_LAB_URL`-unset / 502-if-unreachable refusal,
+  same never-falls-back-to-fixture guarantee as exploit-prevention's route -- all inherited for free from the one
+  shared handler rather than reimplemented per route, so there was no new SSRF/auth surface to re-review per
+  scenario.
+- **Tests (pass):** `TestWafScenarioLiveJSONHandler_NoLabConfigured_Returns503` (new, parameterized over all 4
+  new runners, no live dependency) and `TestWafScenarioLiveJSONHandler_RealLab_FourMoreScenarios` (new, live --
+  hits each handler directly, no router, no mock, against the real running container). Verdicts matched the
+  curl-confirmed ground truth from follow-up #6 exactly: `HTTPPARSE-002` blocked, `CACHE-003` blocked,
+  `CACHE-002`/`API-003`/`APIFLOW-005` inconclusive, all 4 legitimate-traffic benign legs allowed; every assertion
+  `evidenceSource:"live_execution"`, none `"fixture"`. `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with
+  all 4 new routes matrixed. `go build ./...`/`go vet ./...` clean; full `wafassessment`/`wafmodsec`/`modsecwaf`
+  suites green.
+- **Not run:** staging; the console UI does not render these `/live` routes yet (no frontend change was made).
+- **Limits:** same 5-scenario gap as follow-up #6 -- `automated-abuse`, `detection-telemetry`,
+  `file-upload-content-trust`, `origin-resilience`, `policy-integrity` still have no live route because they have
+  no live evaluator to call one. The user has asked for the real new capability each of those needs to be built
+  next (burst-driving harness, SIEM backend, multipart support, multi-node lab topology, second weakened-policy
+  lab instance) rather than leaving them unwired.
