@@ -50,7 +50,7 @@ receives only credential *names*.
 
 1. (Done) Persist a binding spec on a target, and run it through the orchestrator's job path.
 3. (Done, limited) Writes: PUT and PATCH with a read-back state check and an owner restore.
-4. Console: (done) store, run and follow bound jobs; still open: past-jobs list and a form for write blocks.
+4. Console: (done) store, run and follow bound jobs; past-jobs list done; still open: a form for write blocks.
 
 
 ## Stored test data (added 10 November 2026)
@@ -149,3 +149,21 @@ The API Inventory page's Binding card now covers the whole flow for the selected
 Everything the server returns is escaped before it reaches the page, including the stored values (the textarea cannot be broken out of). The page never takes or shows a credential value. Tested in jsdom with hostile strings in target names, stored values and result reasons.
 
 Not built: a list of past bound jobs per target (the page follows the job it just started), editing write blocks with a form (they are JSON), and a browser run of the page against a live server.
+
+## Past jobs per target (added 10 November 2026)
+
+`GET /api/apibas/targets/{id}/jobs?limit=N` (view permission; default 25, at most 100) lists a target's jobs, newest first. Each row has the
+status and failure reason, whether it was a bound job, the scenario count, the times, and how many scenarios graded pass, fail, error and
+skipped. It carries no report bodies, run tags or credential references; one job's reports are read with `GET /api/apibas/jobs/{id}`.
+
+The API Inventory page shows this as a Recent jobs card: created, requester, kind (bound or catalogue), status, and a result pill coloured by
+the worst grade (a failure outranks an error, an error outranks a skip, and a skip is never green). View opens the job's results in the
+card's own panel and follows it until it ends; the run panel above is not disturbed. When a followed job ends, the list refreshes.
+Selecting another target stops any following.
+
+Not built: pagination beyond 100, filtering by status or kind, and listing jobs across targets.
+
+Note: while building this I found the bound-job route (`POST /api/apibas/targets/{id}/binding/jobs`) missing from `routes.go` and the RBAC
+matrix on main. A concurrent commit (`7c59851c`, WAF) had removed exactly those two lines, most likely from a stale copy of both files. This
+change restores them, and `TestAPIBASRoutesAreRegistered` now names the API BAS routes the console and runbook depend on, because the RBAC
+matrix check cannot notice a route that is missing from both the router and the matrix.

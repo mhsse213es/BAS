@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   classLabel, authTone, authLabel, envTone, classOptions, filterOps, parseObserved, parseBindingSpec,
   exampleBindingSpec, changeLines, errorText, MAX_OBSERVED,
-  jobTone, resultTone, isFinalStatus, resultText, newJobKey, storedNote, exampleWriteBindingSpec,
+  jobTone, resultTone, isFinalStatus, resultText, newJobKey, storedNote, exampleWriteBindingSpec, countsText, worstTone,
 } from '../../src/features/api-inventory-model.js';
 
 const OPS = [
@@ -160,4 +160,21 @@ test('exampleWriteBindingSpec allows writes, uses a PUT or PATCH and holds only 
   const noGet = exampleWriteBindingSpec([ops[1]]);
   assert.match(noGet.objects[0].write.read_operation, /^GET /);
   assert.equal(exampleWriteBindingSpec(null).objects.length, 2);
+});
+
+test('countsText lists only the non-zero grades, worst first', () => {
+  assert.equal(countsText({ pass: 2, fail: 1, error: 0, skipped: 3 }), '1 fail · 2 pass · 3 skipped');
+  assert.equal(countsText({ pass: 0, fail: 0, error: 1, skipped: 0 }), '1 error');
+  assert.equal(countsText({ pass: 0, fail: 0, error: 0, skipped: 0 }), 'no results');
+  assert.equal(countsText(null), 'no results');
+  assert.equal(countsText({ pass: 'x' }), 'no results');
+});
+
+test('worstTone: a failure outranks an error, which outranks a skip, which outranks a pass', () => {
+  assert.equal(worstTone({ pass: 5, fail: 1, error: 1, skipped: 1 }), 'bad');
+  assert.equal(worstTone({ pass: 5, fail: 0, error: 1, skipped: 1 }), 'warn');
+  assert.equal(worstTone({ pass: 5, fail: 0, error: 0, skipped: 1 }), 'muted', 'a skip must not read as green');
+  assert.equal(worstTone({ pass: 5, fail: 0, error: 0, skipped: 0 }), 'ok');
+  assert.equal(worstTone({ pass: 0, fail: 0, error: 0, skipped: 0 }), 'muted');
+  assert.equal(worstTone(null), 'muted');
 });

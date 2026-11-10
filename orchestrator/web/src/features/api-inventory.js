@@ -9,7 +9,7 @@ import { card, pill, chip, seg, empty, kv } from '../core/kit.js';
 import { setHeroStat } from './shell-ui.js';
 import * as M from './api-inventory-model.js';
 
-var S = { targets: [], sel: '', inv: null, cls: 'all', version: 0, versions: [], stored: null, pollToken: 0 };
+var S = { targets: [], sel: '', inv: null, cls: 'all', version: 0, versions: [], stored: null, jobs: [], polls: {} };
 var MAX_ROWS = 500;
 
 function el(id) { return document.getElementById(id); }
@@ -67,7 +67,7 @@ function renderTargets() {
 }
 
 export function apiInvSelect(id) {
-  S.sel = id; S.cls = 'all'; S.version = 0; S.inv = null; S.versions = []; S.stored = null; S.pollToken++;
+  S.sel = id; S.cls = 'all'; S.version = 0; S.inv = null; S.versions = []; S.stored = null; S.jobs = []; S.polls = {};
   renderTargets();
   loadDetail(0);
 }
@@ -77,7 +77,8 @@ function loadDetail(version) {
   S.version = version || 0;
   var q = S.version ? '?version=' + encodeURIComponent(S.version) : '';
   // The stored test data needs the manage permission; for anyone else the read is refused and the page simply shows none.
-  return Promise.all([apicall(base() + '/inventory' + q), apicall(base() + '/inventory/versions'), apicall(base() + '/binding').catch(function() { return null; })]).then(function(res) {
+  return Promise.all([apicall(base() + '/inventory' + q), apicall(base() + '/inventory/versions'), apicall(base() + '/binding').catch(function() { return null; }), apicall(base() + '/jobs').catch(function() { return null; })]).then(function(res) {
+    S.jobs = (res[3] && Array.isArray(res[3].jobs)) ? res[3].jobs : [];
     var inv = res[0], vers = res[1];
     S.stored = (res[2] && !M.errorText(res[2]) && res[2].spec) ? res[2] : null;
     S.inv = (inv && !M.errorText(inv) && inv.listed_operations) ? inv : null;
@@ -104,6 +105,7 @@ function renderDetail() {
   html += card('Inventory', inventoryMeta() + '<div id="api-inv-ops">' + opsBody() + '</div>', { sub: 'Candidate test classes, not findings' });
   html += card('Versions', versionsBody(), { sub: S.versions.length + ' kept' });
   html += card('Drift against observed routes', driftBody(), { sub: 'Compares routes you list with this inventory; nothing is requested from the target' });
+  html += card('Recent jobs', jobsBody(), { sub: 'Newest first, this target only' });
   html += card('Binding preview', bindingBody(), { sub: 'Which scenarios would be generated; nothing is stored or run' });
   host.innerHTML = html;
 }
@@ -161,6 +163,35 @@ function driftBody() {
     '<textarea id="api-inv-observed" class="ai-text" rows="6" spellcheck="false" aria-label="Observed routes"></textarea>' +
     '<div class="ai-row">' + btn('Compare', 'apiInvDrift', [], 'btn-primary') + '</div><div id="api-inv-drift-result"></div>';
 }
+
+function jobsRows() {
+  if (!S.jobs.length) return empty('runs', 'No jobs yet', 'Run the stored test data below, or submit a job through the API.');
+  var rows = S.jobs.map(function(j) {
+    return '<tr><td>' + x(fmtDate(j.created_at)) + '</td><td>' + x(j.requested_by) + '</td><td>' + (j.bound ? chip('bound', 'info') : chip('catalogue', 'muted')) + '</td>' +
+      '<td>' + pill(j.status, M.jobTone(j.status)) + '</td><td>' + pill(M.countsText(j.results), M.worstTone(j.results)) + '<div class="ai-sub">' + x(j.scenarios) + ' scenario(s)</div></td>' +
+      '<td>' + btn('View', 'apiInvJob', [j.id]) + '</td></tr>';
+  }).join('');
+  return '<div class="tbl-wrap"><table><thead><tr><th>Created</th><th>By</th><th>Kind</th><th>Status</th><th>Results</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function jobsBody() {
+  return '<div class="ai-row">' + btn('Refresh', 'apiInvJobsRefresh') + '</div><div id="api-inv-jobs-list">' + jobsRows() + '</div><div id="api-inv-jobview"></div>';
+}
+
+function refreshJobs() {
+  if (!S.sel) return Promise.resolve();
+  return apicall(base() + '/jobs').then(function(r) {
+    if (!r || !Array.isArray(r.jobs)) return;
+    S.jobs = r.jobs;
+    var host = el('api-inv-jobs-list');
+    if (host) host.innerHTML = jobsRows();
+  }).catch(function() { /* the list keeps what it had */ });
+}
+
+export function apiInvJobsRefresh() { refreshJobs(); }
+
+// apiInvJob shows one job from the list, following it if it has not ended.
+export function apiInvJob(id) { followJob(id, 'api-inv-jobview'); }
 
 function bindingBody() {
   var note = M.storedNote(S.stored);
@@ -309,31 +340,35 @@ export function apiInvRunBound() {
   apicall(base() + '/binding/jobs', { method: 'POST', body: JSON.stringify({ key: M.newJobKey() }) }).then(function(r) {
     var err = M.errorText(r);
     if (err || !r.id) { out.innerHTML = '<p class="ai-err">' + x(err || 'The server did not return a job.') + '</p>'; return; }
-    followJob(r.id);
+    followJob(r.id, 'api-inv-job');
   }).catch(function(e) { out.innerHTML = '<p class="ai-err">' + failText(e) + '</p>'; });
 }
 
 var POLL_MS = 3000;
 var MAX_POLLS = 200;
 
-function followJob(id) {
-  var token = ++S.pollToken;
+// followJob renders a job into the element outId and re-checks it until it ends. Each panel follows one job at a time; starting
+// another in the same panel, or selecting another target, stops the earlier one.
+function followJob(id, outId) {
+  outId = outId || 'api-inv-job';
+  var token = (S.polls[outId] || 0) + 1;
+  S.polls[outId] = token;
   var n = 0;
   function tick() {
-    if (token !== S.pollToken) return;
+    if (S.polls[outId] !== token) return;
     apicall('/api/apibas/jobs/' + encodeURIComponent(id)).then(function(j) {
-      if (token !== S.pollToken) return;
-      var out = el('api-inv-job');
+      if (S.polls[outId] !== token) return;
+      var out = el(outId);
       if (!out) return;
       var err = M.errorText(j);
       if (err) { out.innerHTML = '<p class="ai-err">' + x(err) + '</p>'; return; }
       out.innerHTML = jobHtml(j);
-      if (M.isFinalStatus(j.status)) return;
-      if (++n >= MAX_POLLS) { out.innerHTML += '<p class="ai-note">Stopped following after 10 minutes. The job may still be running; reload the page to look again.</p>'; return; }
+      if (M.isFinalStatus(j.status)) { refreshJobs(); return; }
+      if (++n >= MAX_POLLS) { out.innerHTML += '<p class="ai-note">Stopped following after 10 minutes. The job may still be running; use Refresh to look again.</p>'; return; }
       setTimeout(tick, POLL_MS);
     }).catch(function(e) {
-      var out = el('api-inv-job');
-      if (out && token === S.pollToken) out.innerHTML = '<p class="ai-err">Lost contact with the server: ' + failText(e) + '</p>';
+      var out = el(outId);
+      if (out && S.polls[outId] === token) out.innerHTML = '<p class="ai-err">Lost contact with the server: ' + failText(e) + '</p>';
     });
   }
   tick();

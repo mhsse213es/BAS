@@ -197,3 +197,24 @@ export function exampleWriteBindingSpec(ops) {
     ],
   };
 }
+
+// countsText summarises a job's grades for a list row: only the non-zero ones, worst first.
+export function countsText(results) {
+  if (!results) return 'no results';
+  const parts = [];
+  [['fail', 'fail'], ['error', 'error'], ['pass', 'pass'], ['skipped', 'skipped']].forEach((p) => {
+    const n = Number(results[p[0]]) || 0;
+    if (n > 0) parts.push(n + ' ' + p[1]);
+  });
+  return parts.length ? parts.join(' · ') : 'no results';
+}
+
+// worstTone gives a job row the tone of its worst grade: a failure outranks an error, which outranks a skip.
+export function worstTone(results) {
+  if (!results) return 'muted';
+  if (results.fail > 0) return 'bad';
+  if (results.error > 0) return 'warn';
+  if (results.skipped > 0) return 'muted';
+  if (results.pass > 0) return 'ok';
+  return 'muted';
+}

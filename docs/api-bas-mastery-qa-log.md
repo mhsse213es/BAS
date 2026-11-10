@@ -4151,3 +4151,12 @@ no ModSecurity audit-log parsing, so `VerdictMissed` still isn't claimable from 
   (automated-abuse), a real alerting backend (detection-telemetry), multipart support in `modsecwaf.BuildRequest`
   (file-upload-content-trust), a multi-node/dual-path lab topology (origin-resilience), and a second,
   deliberately-weakened WAF config to compare against (policy-integrity).
+
+## API BAS past-jobs list (10 November 2026)
+
+- **Built:** `GET /api/apibas/targets/{id}/jobs` (store `ListAPIBASJobSummaries`, handler `ListAPIBASTargetJobs`, view permission) and a Recent jobs card on the API Inventory page with View, Refresh and refresh-on-completion. Each panel follows one job at a time. Described in `docs/api-bas-scenario-binding.md`.
+- **Defect found and fixed:** the bound-job route was missing from `routes.go` and the RBAC matrix on main after concurrent commit `7c59851c` removed those two lines (a stale-copy overwrite). Nothing failed because API tests use their own test router and the matrix check only compares router and matrix with each other. Restored, and `TestAPIBASRoutesAreRegistered` now walks the real router for the API BAS routes.
+- **Calls made:** list rows carry counts only (no reports, run tags or credential refs); worst-grade tone with a skip never green; limit default 25, max 100, invalid values 400; each follow panel independent; selecting a target stops following.
+- **Tests (pass):** API: empty target lists `[]`; two jobs ordered newest first with status and grade counts, another target's job absent, no credential or report data in the body; limit applied and 0, -1, 101, x refused; unknown target 404; unauthenticated refused; RBAC matrix lists the route; real-router route check. Web: countsText and worstTone (11 model tests in total plus these), jsdom: list shows kind, status, counts with a hostile requester name as text, empty list message, View renders results in its own panel and leaves the run panel untouched, a still-running job is followed without refreshing the list, a stopped follow stops polling, Refresh reloads. Full web suite and build run before push.
+- **Not run:** a browser against a live server; Playwright smoke.
+- **Limits:** no pagination past 100, no status/kind filter, no cross-target list.
