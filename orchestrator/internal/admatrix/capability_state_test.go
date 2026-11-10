@@ -250,10 +250,20 @@ func TestCapabilityStates_ACLExposureCheckCitesRealScenarioContent(t *testing.T)
 	if err != nil {
 		t.Fatalf("parse %s: %v", path, err)
 	}
-	if len(sc.Steps) != 1 {
-		t.Fatalf("expected exactly 1 step in %s, got %d", path, len(sc.Steps))
+	// The scenario is multi-step (Stage 0 builds shared context; Stages 1-5 each audit a distinct
+	// ACL exposure variant independently). This primitive's own Cleanup citation names "Stage 1"
+	// (privileged group DACL exposure) specifically, so that is the step graded here.
+	const stageName = "ACL Stage 1 — Privileged Group DACL Exposure (Domain/Enterprise/Schema Admins)"
+	var step *scenario.Step
+	for i := range sc.Steps {
+		if sc.Steps[i].Name == stageName {
+			step = &sc.Steps[i]
+			break
+		}
 	}
-	step := sc.Steps[0]
+	if step == nil {
+		t.Fatalf("expected a step named %q in %s", stageName, path)
+	}
 
 	byID := capStatesByID(t)
 	cs := byID["acl-privilege-exposure-check"]
