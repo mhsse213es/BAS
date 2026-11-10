@@ -1,6 +1,7 @@
 package tcv
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -71,6 +72,23 @@ func TestBundlePackagedEvents_DuplicateHashYieldsOneEvent(t *testing.T) {
 	}
 	if events[0].Payload["path"] != "scenarios/a.yaml" {
 		t.Errorf("first path must win, got %v", events[0].Payload["path"])
+	}
+}
+
+// TestBundleManifest_ParsesShellOutputFormat pins the contract with
+// packaging/bundle-manifest.sh: this literal is the exact compact shape the
+// script writes. If the script's format changes, this test must change too.
+func TestBundleManifest_ParsesShellOutputFormat(t *testing.T) {
+	const shellOutput = `{"schema":1,"bundle_id":"bas-1.0","packaged_at":"2026-11-10T09:00:00Z","entries":[{"path":"alpha.yaml","sha256":"aaaa"},{"path":"detection-profiles/beta.yaml","sha256":"bbbb"}]}`
+	var m BundleManifest
+	if err := json.Unmarshal([]byte(shellOutput), &m); err != nil {
+		t.Fatalf("shell output does not parse: %v", err)
+	}
+	if err := m.Validate(); err != nil {
+		t.Fatalf("shell output fails Validate: %v", err)
+	}
+	if len(m.Entries) != 2 || m.Entries[1].Path != "detection-profiles/beta.yaml" {
+		t.Errorf("entries = %+v, want two entries with forward-slash paths", m.Entries)
 	}
 }
 
