@@ -268,3 +268,16 @@ A mass-assignment check asks whether an owner can set fields on their own object
 - **Cleanup.** `restore_body` is sent as the owner before the run and again after. If the API accepted a forbidden field, the restore must set it back too; the plan states this. Production is refused and the job needs registered allowed paths, as for any write.
 - **Limits.** Top-level fields only; nested fields, fields the read route does not return, and effects elsewhere in the system are not seen.
 - **Schedules.** A scheduled run without `include_writes` now leaves out both write objects and mass-assignment checks and builds the rest, instead of only clearing `allow_writes`.
+
+## Time-of-day schedules (added 10 November 2026)
+
+`PUT /api/apibas/targets/{id}/schedule` now takes either an interval or a time of day, not both:
+
+```json
+{ "at": "02:30", "timezone": "Asia/Kolkata", "days": ["mon", "fri"], "include_writes": false }
+```
+
+- `at` is HH:MM on a 24 hour clock. `timezone` is an IANA name (default `UTC`; zone data is built into the server binary). `days` are `sun`..`sat`; empty means every day. `timezone` and `days` are refused without `at`. The first run is the next time the clock reaches `at` on an allowed day.
+- After each run the next run is the next clock occurrence, not "now plus 24 hours", so a run does not drift and follows daylight-saving changes. A local time skipped by a clock change runs just after the jump; one that happens twice runs at its first occurrence. A run missed while the server was down is run once, as for interval schedules.
+- If the stored clock settings can no longer be read (for example a timezone name that was removed), the schedule pauses itself with a reason instead of running at a guessed time. Saving it again resumes it.
+- The view returns `at`, `timezone` and `days` instead of `every_hours` for a time-of-day schedule. Existing interval schedules are unchanged. Everything else (lab and staging only, same submission checks, writes off by default, audit as `schedule:<creator>`) is as before.

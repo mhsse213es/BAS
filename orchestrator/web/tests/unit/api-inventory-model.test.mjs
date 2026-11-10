@@ -5,7 +5,7 @@ import {
   exampleBindingSpec, changeLines, errorText, MAX_OBSERVED,
   jobTone, resultTone, isFinalStatus, resultText, newJobKey, storedNote, exampleWriteBindingSpec, countsText, worstTone,
   opKey, writeOperations, readChoices, defaultReadOperation, buildWriteObject, mergeWriteObject, writeObjectsOf, removeObjectAt, identityNames, MAX_WRITE_BODY,
-  parseEveryHours, everyLabel, scheduleState, scheduleTone, scheduleNote,
+  parseEveryHours, parseClock, clockLabel, everyLabel, scheduleState, scheduleTone, scheduleNote,
   boundKindLabel, boundWho, exampleChecksSpec, validJobStatus, JOB_STATUSES, graphQLExampleOp, opFullKey, exampleGraphQLSpec,
 } from '../../src/features/api-inventory-model.js';
 
@@ -421,4 +421,19 @@ test('exampleBindingSpec builds GraphQL test data when the inventory has no REST
   // A REST read still wins when there is one.
   const rest = exampleBindingSpec([{ method: 'GET', path: '/v2/o/{id}', auth: 'required', path_params: ['id'] }].concat(GQL_OPS));
   assert.equal(rest.objects[0].operation, 'GET /v2/o/{id}');
+});
+
+test('parseClock accepts HH:MM, defaults the timezone, orders days, and refuses bad input', () => {
+  assert.deepEqual(parseClock('02:30', '', '').fields, { at: '02:30', timezone: 'UTC' });
+  assert.deepEqual(parseClock(' 23:59 ', 'Asia/Kolkata', 'Fri mon,MON').fields, { at: '23:59', timezone: 'Asia/Kolkata', days: ['mon', 'fri'] });
+  for (const at of ['', '2:30', '24:00', '12:60', '12:30:00', 'ab:cd']) assert.ok(parseClock(at, 'UTC', '').error, at);
+  for (const tz of ['a b', '../x', 'x'.repeat(65), 'UTC;drop']) assert.ok(parseClock('02:30', tz, '').error, tz);
+  assert.ok(parseClock('02:30', 'UTC', 'monday').error);
+});
+
+test('clockLabel names every day, a list of days, and the timezone', () => {
+  assert.equal(clockLabel({ at: '02:30' }), 'every day at 02:30 UTC');
+  assert.equal(clockLabel({ at: '02:30', timezone: 'Asia/Kolkata', days: [] }), 'every day at 02:30 Asia/Kolkata');
+  assert.equal(clockLabel({ at: '09:00', timezone: 'UTC', days: ['mon', 'fri'] }), 'Mon, Fri at 09:00 UTC');
+  assert.match(scheduleNote({ enabled: true, at: '09:00', timezone: 'UTC', days: ['sun'], next_run_at: '2026-11-15T09:00:00Z' }), /Runs Sun at 09:00 UTC, read scenarios only/);
 });

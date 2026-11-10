@@ -356,6 +356,31 @@ export function parseEveryHours(v) {
   return { hours: n, error: '' };
 }
 
+const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+// parseClock checks the time-of-day fields of the schedule form and returns the request fields, or an error. Days are three-letter
+// names separated by commas or spaces; empty means every day. The server checks the timezone name.
+export function parseClock(at, timezone, days) {
+  const a = String(at == null ? '' : at).trim();
+  if (!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(a)) return { fields: null, error: 'The time must be HH:MM on a 24 hour clock, for example 02:30' };
+  const tz = String(timezone == null ? '' : timezone).trim() || 'UTC';
+  if (tz.length > 64 || !/^[A-Za-z0-9_+\-/]+$/.test(tz)) return { fields: null, error: 'The timezone must be a name such as Asia/Kolkata or UTC' };
+  const list = String(days == null ? '' : days).toLowerCase().split(/[\s,]+/).filter(Boolean);
+  for (const d of list) {
+    if (DAY_NAMES.indexOf(d) < 0) return { fields: null, error: 'Days must be from sun, mon, tue, wed, thu, fri, sat' };
+  }
+  const fields = { at: a, timezone: tz };
+  if (list.length) fields.days = DAY_NAMES.filter((d) => list.indexOf(d) >= 0);
+  return { fields, error: '' };
+}
+
+// clockLabel describes a time-of-day schedule: "every day at 02:30 Asia/Kolkata" or "Mon, Fri at 02:30 UTC".
+export function clockLabel(s) {
+  const when = s.at + ' ' + (s.timezone || 'UTC');
+  if (!Array.isArray(s.days) || s.days.length === 0 || s.days.length === 7) return 'every day at ' + when;
+  return s.days.map((d) => d.charAt(0).toUpperCase() + d.slice(1)).join(', ') + ' at ' + when;
+}
+
 export function everyLabel(h) {
   if (h === 1) return 'every hour';
   if (h === 24) return 'every day';
@@ -388,7 +413,7 @@ export function scheduleNote(s) {
   } else if (st === 'off') {
     parts.push('The schedule is off.');
   } else {
-    parts.push('Runs ' + everyLabel(s.every_hours) + (s.include_writes ? ', including write scenarios' : ', read scenarios only') + '. Next run ' + whenText(s.next_run_at) + '.');
+    parts.push('Runs ' + (s.at ? clockLabel(s) : everyLabel(s.every_hours)) + (s.include_writes ? ', including write scenarios' : ', read scenarios only') + '. Next run ' + whenText(s.next_run_at) + '.');
   }
   if (s.last_result) parts.push('Last attempt' + (s.last_run_at ? ' ' + whenText(s.last_run_at) : '') + ': ' + s.last_result + '.');
   return parts.join(' ');

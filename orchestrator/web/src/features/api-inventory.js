@@ -582,23 +582,45 @@ function scheduleBody() {
   }
   var state = M.scheduleState(s);
   var pill1 = s ? pill(state === 'paused' ? 'paused' : state, M.scheduleTone(s)) + ' ' : '';
-  return '<p class="ai-note">Runs this target\'s stored test data on a fixed interval, through the same checks as a manual run: the target must be enabled, its scope and credentials must be registered, and nothing else may be running on it. The first run is one interval after you save. A run missed while the server is down is run once, not made up. Needs permission to manage targets.</p>' +
+  return '<p class="ai-note">Runs this target\'s stored test data on an interval or at a time of day, through the same checks as a manual run: the target must be enabled, its scope and credentials must be registered, and nothing else may be running on it. The first run is one interval after you save, or the next time the clock reaches the chosen time. A run missed while the server is down is run once, not made up. Needs permission to manage targets.</p>' +
     '<p class="' + (state === 'paused' ? 'ai-warn' : 'ai-note') + '" id="api-inv-sched-note">' + pill1 + x(M.scheduleNote(s)) + '</p>' +
     '<div class="ai-form">' +
-    '<label class="ai-lbl">Run every (hours, 1 to ' + M.MAX_EVERY_HOURS + '; 24 is daily, 168 weekly)<input id="api-inv-sched-hours" class="ai-in" type="text" inputmode="numeric" value="' + x(String(s ? s.every_hours : 24)) + '" spellcheck="false"></label>' +
+    '<label class="ai-lbl">When<select id="api-inv-sched-mode" class="ai-in"' + on('change', 'apiInvSchedMode') + '><option value="interval"' + (s && s.at ? '' : ' selected') + '>Every so many hours</option><option value="clock"' + (s && s.at ? ' selected' : '') + '>At a time of day</option></select></label>' +
+    '<div id="api-inv-sched-clock"' + (s && s.at ? '' : ' hidden') + '>' +
+    '<label class="ai-lbl">Time (HH:MM, 24 hour)<input id="api-inv-sched-at" class="ai-in" type="text" value="' + x(s && s.at ? s.at : '02:00') + '" spellcheck="false"></label>' +
+    '<label class="ai-lbl">Timezone (a name such as Asia/Kolkata or UTC)<input id="api-inv-sched-tz" class="ai-in" type="text" value="' + x(s && s.timezone ? s.timezone : 'UTC') + '" spellcheck="false"></label>' +
+    '<label class="ai-lbl">Days (sun, mon, tue, wed, thu, fri, sat; empty is every day)<input id="api-inv-sched-days" class="ai-in" type="text" value="' + x(s && Array.isArray(s.days) ? s.days.join(', ') : '') + '" spellcheck="false"></label></div>' +
+    '<div id="api-inv-sched-interval"' + (s && s.at ? ' hidden' : '') + '>' +
+    '<label class="ai-lbl">Run every (hours, 1 to ' + M.MAX_EVERY_HOURS + '; 24 is daily, 168 weekly)<input id="api-inv-sched-hours" class="ai-in" type="text" inputmode="numeric" value="' + x(String(s && s.every_hours ? s.every_hours : 24)) + '" spellcheck="false"></label></div>' +
     '<label class="ai-lbl"><span><input id="api-inv-sched-writes" type="checkbox"' + (s && s.include_writes ? ' checked' : '') + '> Include write scenarios. A write that succeeds changes the customer\'s object while nobody is watching; leave this off unless the objects are meant for it. The target needs registered allowed paths.</span></label>' +
     '<label class="ai-lbl"><span><input id="api-inv-sched-enabled" type="checkbox"' + (!s || s.enabled ? ' checked' : '') + '> Schedule is on</span></label>' +
     '<div class="ai-row">' + btn(s ? 'Save schedule' : 'Create schedule', 'apiInvSaveSchedule', [], 'btn-primary') + (s ? btn('Remove schedule', 'apiInvRemoveSchedule') : '') + '</div></div>' +
     '<div id="api-inv-sched-result"></div>';
 }
 
+// apiInvSchedMode shows the fields for the chosen way of scheduling.
+export function apiInvSchedMode() {
+  var clock = el('api-inv-sched-mode') && el('api-inv-sched-mode').value === 'clock';
+  if (el('api-inv-sched-clock')) el('api-inv-sched-clock').hidden = !clock;
+  if (el('api-inv-sched-interval')) el('api-inv-sched-interval').hidden = clock;
+}
+
 // apiInvSaveSchedule stores the schedule. Saving a paused schedule resumes it.
 export function apiInvSaveSchedule() {
   var out = el('api-inv-sched-result');
   if (!out) return;
-  var p = M.parseEveryHours(el('api-inv-sched-hours') ? el('api-inv-sched-hours').value : '');
-  if (p.error) { out.innerHTML = '<p class="ai-err">' + x(p.error) + '</p>'; return; }
-  var body = { every_hours: p.hours, include_writes: !!(el('api-inv-sched-writes') && el('api-inv-sched-writes').checked), enabled: !!(el('api-inv-sched-enabled') && el('api-inv-sched-enabled').checked) };
+  var clock = el('api-inv-sched-mode') && el('api-inv-sched-mode').value === 'clock';
+  var when;
+  if (clock) {
+    var c = M.parseClock(el('api-inv-sched-at').value, el('api-inv-sched-tz').value, el('api-inv-sched-days').value);
+    if (c.error) { out.innerHTML = '<p class="ai-err">' + x(c.error) + '</p>'; return; }
+    when = c.fields;
+  } else {
+    var p = M.parseEveryHours(el('api-inv-sched-hours') ? el('api-inv-sched-hours').value : '');
+    if (p.error) { out.innerHTML = '<p class="ai-err">' + x(p.error) + '</p>'; return; }
+    when = { every_hours: p.hours };
+  }
+  var body = Object.assign({}, when, { include_writes: !!(el('api-inv-sched-writes') && el('api-inv-sched-writes').checked), enabled: !!(el('api-inv-sched-enabled') && el('api-inv-sched-enabled').checked) });
   apicall(base() + '/schedule', { method: 'PUT', body: JSON.stringify(body) }).then(function(r) {
     var err = M.errorText(r);
     if (err) { out.innerHTML = '<p class="ai-err">' + x(err) + '</p>'; return; }

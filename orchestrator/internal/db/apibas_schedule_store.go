@@ -22,6 +22,11 @@ const APIBASScheduleMaxFailures = 5
 type APIBASSchedule struct {
 	TargetID            string
 	EveryHours          int
+	// AtTime, Timezone and Days make a time-of-day schedule: run at AtTime ("HH:MM") in Timezone on Days (comma-joined weekday names,
+	// empty for every day). When AtTime is set EveryHours is stored as 24 and not used.
+	AtTime              string
+	Timezone            string
+	Days                string
 	IncludeWrites       bool // false: write scenarios in the stored test data are left out of scheduled runs
 	Enabled             bool
 	NextRunAt           time.Time
@@ -36,12 +41,12 @@ type APIBASSchedule struct {
 	DueAt time.Time
 }
 
-const apibasScheduleColumns = `target_id, every_hours, include_writes, enabled, next_run_at, created_by, created_at, updated_at, last_run_at, last_job_id, last_result, consecutive_failures`
+const apibasScheduleColumns = `target_id, every_hours, include_writes, enabled, next_run_at, created_by, created_at, updated_at, last_run_at, last_job_id, last_result, consecutive_failures, at_time, timezone, run_days`
 
 func scanAPIBASSchedule(row pgx.Row, extra ...any) (APIBASSchedule, error) {
 	var s APIBASSchedule
 	dest := append([]any{&s.TargetID, &s.EveryHours, &s.IncludeWrites, &s.Enabled, &s.NextRunAt, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
-		&s.LastRunAt, &s.LastJobID, &s.LastResult, &s.ConsecutiveFailures}, extra...)
+		&s.LastRunAt, &s.LastJobID, &s.LastResult, &s.ConsecutiveFailures, &s.AtTime, &s.Timezone, &s.Days}, extra...)
 	err := row.Scan(dest...)
 	return s, err
 }
@@ -61,12 +66,13 @@ func PutAPIBASSchedule(ctx context.Context, pool *pgxpool.Pool, rec APIBASSchedu
 		return rec, fmt.Errorf("lock apibas target: %w", err)
 	}
 	out, err := scanAPIBASSchedule(tx.QueryRow(ctx, `
-		INSERT INTO apibas_schedules (target_id, every_hours, include_writes, enabled, next_run_at, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO apibas_schedules (target_id, every_hours, include_writes, enabled, next_run_at, created_by, at_time, timezone, run_days)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (target_id) DO UPDATE
 		   SET every_hours = EXCLUDED.every_hours, include_writes = EXCLUDED.include_writes, enabled = EXCLUDED.enabled,
+		       at_time = EXCLUDED.at_time, timezone = EXCLUDED.timezone, run_days = EXCLUDED.run_days,
 		       next_run_at = EXCLUDED.next_run_at, created_by = EXCLUDED.created_by, updated_at = NOW(), consecutive_failures = 0
-		RETURNING `+apibasScheduleColumns, rec.TargetID, rec.EveryHours, rec.IncludeWrites, rec.Enabled, rec.NextRunAt, rec.CreatedBy))
+		RETURNING `+apibasScheduleColumns, rec.TargetID, rec.EveryHours, rec.IncludeWrites, rec.Enabled, rec.NextRunAt, rec.CreatedBy, rec.AtTime, rec.Timezone, rec.Days))
 	if err != nil {
 		return rec, fmt.Errorf("save apibas schedule: %w", err)
 	}
@@ -99,31 +105,52 @@ func DeleteAPIBASSchedule(ctx context.Context, pool *pgxpool.Pool, targetID stri
 // LOCKED, so two orchestrators never claim the same run, and each returned schedule carries the time it was due (DueAt) so the job
 // key is the same wherever it is derived.
 func ClaimDueAPIBASSchedules(ctx context.Context, pool *pgxpool.Pool, now time.Time, limit int) ([]APIBASSchedule, error) {
-	rows, err := pool.Query(ctx, `
-		WITH due AS (
-			SELECT target_id, next_run_at AS due_at FROM apibas_schedules
-			 WHERE enabled AND next_run_at <= $1 ORDER BY next_run_at LIMIT $2 FOR UPDATE SKIP LOCKED)
-		UPDATE apibas_schedules s
-		   SET next_run_at = $1 + make_interval(hours => s.every_hours), last_run_at = $1
-		  FROM due
-		 WHERE s.target_id = due.target_id
-		RETURNING s.target_id, s.every_hours, s.include_writes, s.enabled, s.next_run_at, s.created_by, s.created_at, s.updated_at,
-		          s.last_run_at, s.last_job_id, s.last_result, s.consecutive_failures, due.due_at`, now, limit)
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("begin claim: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `SELECT `+apibasScheduleColumns+` FROM apibas_schedules
+		 WHERE enabled AND next_run_at <= $1 ORDER BY next_run_at LIMIT $2 FOR UPDATE SKIP LOCKED`, now, limit)
 	if err != nil {
 		return nil, fmt.Errorf("claim apibas schedules: %w", err)
 	}
-	defer rows.Close()
 	var out []APIBASSchedule
 	for rows.Next() {
-		var due time.Time
-		s, err := scanAPIBASSchedule(rows, &due)
+		s, err := scanAPIBASSchedule(rows)
 		if err != nil {
+			rows.Close()
 			return nil, fmt.Errorf("scan apibas schedule: %w", err)
 		}
-		s.DueAt = due
 		out = append(out, s)
 	}
-	return out, rows.Err()
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range out {
+		s := &out[i]
+		s.DueAt = s.NextRunAt
+		next := now.Add(time.Duration(s.EveryHours) * time.Hour)
+		if s.AtTime != "" {
+			// A schedule whose clock settings can no longer be read is paused rather than run at a guessed time.
+			n, cerr := NextClockRun(now, s.AtTime, s.Timezone, s.Days)
+			if cerr != nil {
+				if _, err := tx.Exec(ctx, `UPDATE apibas_schedules SET enabled = false, last_result = $2 WHERE target_id = $1`, s.TargetID, "paused: "+truncateText(cerr.Error(), 200)); err != nil {
+					return nil, fmt.Errorf("pause apibas schedule: %w", err)
+				}
+				out = append(out[:i], out[i+1:]...)
+				i--
+				continue
+			}
+			next = n
+		}
+		s.NextRunAt = next
+		if _, err := tx.Exec(ctx, `UPDATE apibas_schedules SET next_run_at = $2, last_run_at = $3 WHERE target_id = $1`, s.TargetID, next, now); err != nil {
+			return nil, fmt.Errorf("advance apibas schedule: %w", err)
+		}
+	}
+	return out, tx.Commit(ctx)
 }
 
 // RecordAPIBASScheduleResult stores what a scheduled run did. A failure to queue the job counts toward pausing the schedule, which

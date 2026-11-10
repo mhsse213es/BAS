@@ -39,7 +39,7 @@ async function setup({ stale = false, jobReason = 'EVIDENCE_INCONCLUSIVE', jobs 
       if (method === 'DELETE') return ok({ removed: true });
       if (scheduleRefusal) return ok({ error: scheduleRefusal }, 400);
       const b = JSON.parse(opts.body);
-      return ok({ target_id: 'shop-1', every_hours: b.every_hours, include_writes: b.include_writes, enabled: b.enabled, next_run_at: '2026-11-11T02:00:00Z', created_by: 'admin1', consecutive_failures: 0 });
+      return ok({ target_id: 'shop-1', every_hours: b.every_hours, at: b.at, timezone: b.timezone, days: b.days, include_writes: b.include_writes, enabled: b.enabled, next_run_at: '2026-11-11T02:00:00Z', created_by: 'admin1', consecutive_failures: 0 });
     }
     if (path.endsWith('/binding/plan') && planBound) return ok({ inventory_version: 1, scenarios: planBound.length, bound: planBound, skipped: [], limits: [] });
     if (path.endsWith('/inventory/versions')) return ok({ versions: [{ version: 1, operations: 2, imported_at: '2026-11-10T00:00:00Z', imported_by: 'admin1' }] });
@@ -480,4 +480,47 @@ test('a status that is not in the list is treated as All', async () => {
   m.apiInvJobsFilter();
   await settle();
   assert.equal(calls.some((c) => c.path.includes('DROP')), false);
+});
+
+test('choosing a time of day shows its fields, sends at, timezone and days, and names the schedule by its clock', async () => {
+  const { dom, m, calls } = await setup();
+  const doc = dom.window.document;
+  assert.equal(doc.getElementById('api-inv-sched-clock').hidden, true);
+  doc.getElementById('api-inv-sched-mode').value = 'clock';
+  m.apiInvSchedMode();
+  assert.equal(doc.getElementById('api-inv-sched-clock').hidden, false);
+  assert.equal(doc.getElementById('api-inv-sched-interval').hidden, true);
+  doc.getElementById('api-inv-sched-at').value = '02:30';
+  doc.getElementById('api-inv-sched-tz').value = 'Asia/Kolkata';
+  doc.getElementById('api-inv-sched-days').value = 'Fri, mon';
+  m.apiInvSaveSchedule();
+  await settle();
+  const put = calls.find((c) => c.method === 'PUT' && c.path.endsWith('/schedule'));
+  assert.deepEqual(JSON.parse(put.body), { at: '02:30', timezone: 'Asia/Kolkata', days: ['mon', 'fri'], include_writes: false, enabled: true });
+  assert.match(doc.getElementById('api-inv-sched-note').textContent, /Mon, Fri at 02:30 Asia\/Kolkata/);
+});
+
+test('a bad time, timezone or day sends nothing and says why', async () => {
+  const { dom, m, calls } = await setup();
+  const doc = dom.window.document;
+  doc.getElementById('api-inv-sched-mode').value = 'clock';
+  m.apiInvSchedMode();
+  for (const [at, tz, days, want] of [['2:30', 'UTC', '', /HH:MM/], ['25:00', 'UTC', '', /HH:MM/], ['02:30', 'a b', '', /timezone/], ['02:30', 'UTC', 'monday', /Days/]]) {
+    doc.getElementById('api-inv-sched-at').value = at;
+    doc.getElementById('api-inv-sched-tz').value = tz;
+    doc.getElementById('api-inv-sched-days').value = days;
+    m.apiInvSaveSchedule();
+    assert.match(doc.getElementById('api-inv-sched-result').textContent, want, at + tz + days);
+  }
+  assert.equal(calls.some((c) => c.path.endsWith('/schedule') && c.method === 'PUT'), false);
+});
+
+test('an existing time-of-day schedule opens in time-of-day mode with its values', async () => {
+  const { dom } = await setup({ schedule: SCHED({ every_hours: undefined, at: '03:15', timezone: 'UTC', days: ['sat'] }) });
+  const doc = dom.window.document;
+  assert.equal(doc.getElementById('api-inv-sched-mode').value, 'clock');
+  assert.equal(doc.getElementById('api-inv-sched-at').value, '03:15');
+  assert.equal(doc.getElementById('api-inv-sched-days').value, 'sat');
+  assert.equal(doc.getElementById('api-inv-sched-interval').hidden, true);
+  assert.match(doc.getElementById('api-inv-sched-note').textContent, /Sat at 03:15 UTC/);
 });

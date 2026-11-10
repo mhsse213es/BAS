@@ -99,6 +99,9 @@ func EnsureAPIBASJobSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			last_result          text        NOT NULL DEFAULT '',
 			consecutive_failures integer     NOT NULL DEFAULT 0
 		)`,
+		`ALTER TABLE apibas_schedules ADD COLUMN IF NOT EXISTS at_time text NOT NULL DEFAULT ''`,
+		`ALTER TABLE apibas_schedules ADD COLUMN IF NOT EXISTS timezone text NOT NULL DEFAULT ''`,
+		`ALTER TABLE apibas_schedules ADD COLUMN IF NOT EXISTS run_days text NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS apibas_schedules_due_idx ON apibas_schedules (next_run_at) WHERE enabled`,
 		`CREATE TABLE IF NOT EXISTS apibas_job_plans (
 			job_id             uuid        PRIMARY KEY REFERENCES apibas_jobs(id) ON DELETE CASCADE,

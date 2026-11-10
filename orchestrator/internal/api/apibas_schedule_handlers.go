@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -80,6 +81,12 @@ func withoutWrites(spec binding.Spec) binding.Spec {
 type apibasScheduleBody struct {
 	// EveryHours is the interval between runs, 1 to 720. The first run is one interval from now.
 	EveryHours int `json:"every_hours"`
+	// At, Timezone and Days schedule a time of day instead of an interval: At is "HH:MM" (24 hour), Timezone an IANA name (default
+	// UTC), Days a list of sun..sat (default every day). Give either every_hours or at, not both. The first run is the next time the
+	// clock reaches At.
+	At       string   `json:"at"`
+	Timezone string   `json:"timezone"`
+	Days     []string `json:"days"`
 	// IncludeWrites lets scheduled runs include the write scenarios in the stored test data. Off by default: a write that succeeds
 	// changes the customer's object, and nobody is watching a scheduled run.
 	IncludeWrites bool `json:"include_writes"`
@@ -89,7 +96,10 @@ type apibasScheduleBody struct {
 
 type apibasScheduleView struct {
 	TargetID            string     `json:"target_id"`
-	EveryHours          int        `json:"every_hours"`
+	EveryHours          int        `json:"every_hours,omitempty"`
+	At                  string     `json:"at,omitempty"`
+	Timezone            string     `json:"timezone,omitempty"`
+	Days                []string   `json:"days,omitempty"`
 	IncludeWrites       bool       `json:"include_writes"`
 	Enabled             bool       `json:"enabled"`
 	NextRunAt           time.Time  `json:"next_run_at"`
@@ -103,8 +113,16 @@ type apibasScheduleView struct {
 }
 
 func scheduleView(s db.APIBASSchedule) apibasScheduleView {
+	every := s.EveryHours
+	var days []string
+	if s.AtTime != "" {
+		every = 0
+		if s.Days != "" {
+			days = strings.Split(s.Days, ",")
+		}
+	}
 	return apibasScheduleView{
-		TargetID: s.TargetID, EveryHours: s.EveryHours, IncludeWrites: s.IncludeWrites, Enabled: s.Enabled, NextRunAt: s.NextRunAt,
+		TargetID: s.TargetID, EveryHours: every, At: s.AtTime, Timezone: s.Timezone, Days: days, IncludeWrites: s.IncludeWrites, Enabled: s.Enabled, NextRunAt: s.NextRunAt,
 		CreatedBy: s.CreatedBy, LastRunAt: s.LastRunAt, LastJobID: s.LastJobID, LastResult: s.LastResult,
 		ConsecutiveFailures: s.ConsecutiveFailures, PausedForFailures: !s.Enabled && s.ConsecutiveFailures >= db.APIBASScheduleMaxFailures,
 	}
@@ -128,9 +146,37 @@ func (h *Handler) SaveAPIBASSchedule(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid body", http.StatusBadRequest)
 		return
 	}
-	if body.EveryHours < 1 || body.EveryHours > 720 {
-		jsonError(w, "every_hours must be between 1 and 720", http.StatusBadRequest)
-		return
+	now := time.Now().UTC()
+	every, first, days := body.EveryHours, time.Time{}, ""
+	if body.At != "" {
+		if body.EveryHours != 0 {
+			jsonError(w, "give either every_hours or at, not both", http.StatusBadRequest)
+			return
+		}
+		if body.Timezone == "" {
+			body.Timezone = "UTC"
+		}
+		var derr error
+		if days, derr = db.NormalizeClockDays(body.Days); derr != nil {
+			jsonError(w, derr.Error(), http.StatusBadRequest)
+			return
+		}
+		var cerr error
+		if first, cerr = db.NextClockRun(now, body.At, body.Timezone, days); cerr != nil {
+			jsonError(w, cerr.Error(), http.StatusBadRequest)
+			return
+		}
+		every = 24
+	} else {
+		if body.Timezone != "" || len(body.Days) > 0 {
+			jsonError(w, "timezone and days go with at", http.StatusBadRequest)
+			return
+		}
+		if body.EveryHours < 1 || body.EveryHours > 720 {
+			jsonError(w, "every_hours must be between 1 and 720, or give at", http.StatusBadRequest)
+			return
+		}
+		first = now.Add(time.Duration(body.EveryHours) * time.Hour)
 	}
 	id := chi.URLParam(r, "id")
 	t, err := db.GetAPIBASTarget(r.Context(), h.db, id)
@@ -159,8 +205,8 @@ func (h *Handler) SaveAPIBASSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 	enabled := body.Enabled == nil || *body.Enabled
 	saved, err := db.PutAPIBASSchedule(r.Context(), h.db, db.APIBASSchedule{
-		TargetID: id, EveryHours: body.EveryHours, IncludeWrites: body.IncludeWrites, Enabled: enabled,
-		NextRunAt: time.Now().UTC().Add(time.Duration(body.EveryHours) * time.Hour), CreatedBy: actor,
+		TargetID: id, EveryHours: every, IncludeWrites: body.IncludeWrites, Enabled: enabled,
+		NextRunAt: first, CreatedBy: actor, AtTime: body.At, Timezone: body.Timezone, Days: days,
 	})
 	if errors.Is(err, db.ErrAPIBASTargetNotFound) {
 		jsonError(w, "target not found", http.StatusNotFound)
@@ -171,7 +217,8 @@ func (h *Handler) SaveAPIBASSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if aerr := h.auditDurable(r.Context(), actor, "apibas.schedule.set", "apibas-target:"+id, map[string]any{
-		"every_hours": saved.EveryHours, "include_writes": saved.IncludeWrites, "enabled": saved.Enabled,
+		"every_hours": scheduleView(saved).EveryHours, "at": saved.AtTime, "timezone": saved.Timezone, "days": saved.Days,
+		"include_writes": saved.IncludeWrites, "enabled": saved.Enabled,
 	}, "success"); aerr != nil {
 		jsonError(w, "the schedule was stored but its audit record could not be written", http.StatusInternalServerError)
 		return
