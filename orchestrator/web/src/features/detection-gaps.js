@@ -11,18 +11,28 @@ import * as G from './gap-model.js';
 // reviewed verification found no alert), and the SigmaHQ rules and per-SIEM queries that could close each gap.
 // The server (/api/scenarios/runs/{id}/detection-gaps) decides every status from evidence; this only shows it.
 
-var S = { runId: '', backend: '', data: null, deps: { retest: null, deployments: [] }, seq: 0 };
+var S = { runId: '', backend: '', data: null, deps: { retest: null, deployments: [] }, seq: 0, keepOpen: [] };
 
 function el(id) { return document.getElementById(id); }
 
 // Called by the verification page whenever the selected run changes ('' clears the panel).
+// openTechniqueIds lists the technique rows that are open in the panel as it is now.
+function openTechniqueIds(box) {
+  return Array.prototype.map.call(box.querySelectorAll('details.gap-t[open]'), function(n) { return n.getAttribute('data-tid'); });
+}
+
 export function gapLoad(runId) {
+  var again = !!runId && runId === S.runId; // the same run reloaded (after Mark deployed, a re-test or a SIEM change), not a different run
   S.runId = runId || '';
   S.data = null;
   S.deps = { retest: null, deployments: [] };
   var box = el('gap-panel');
   if (!box) return;
-  if (!S.runId) { box.innerHTML = ''; setDisplay(box, 'none'); return; }
+  if (!S.runId) { box.innerHTML = ''; setDisplay(box, 'none'); S.keepOpen = []; return; }
+  // The panel is replaced by a loading placeholder below, so what the person had open must be remembered first. While a load is
+  // already in flight there are no rows on the page, so what was remembered then is kept.
+  if (!again) S.keepOpen = [];
+  else if (box.querySelector('details.gap-t')) S.keepOpen = openTechniqueIds(box);
   setDisplay(box, '');
   box.innerHTML = '<section class="rk-card">' + empty('refresh', 'Loading detection gaps…') + '</section>';
   var seq = ++S.seq; // a slow answer for an earlier run must not overwrite the current one
@@ -102,7 +112,8 @@ function render() {
   var d = S.data;
   if (!box || !d) return;
   // Re-rendering (after Mark deployed, a re-test, or switching SIEM) must not fold away what the person had open.
-  var openIds = Array.prototype.map.call(box.querySelectorAll('details.gap-t[open]'), function(n) { return n.getAttribute('data-tid'); });
+  var openIds = box.querySelector('details.gap-t') ? openTechniqueIds(box) : S.keepOpen;
+  S.keepOpen = [];
   var tiles = G.summaryTiles(d.summary).map(function(t) {
     return '<div class="gap-tile tone-' + x(t.tone) + '"><div class="gap-n">' + t.count + '</div><div class="gap-l">' + x(t.status) + '</div></div>';
   }).join('');
