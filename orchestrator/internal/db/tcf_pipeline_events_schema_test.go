@@ -7,6 +7,47 @@ import (
 	"github.com/audspect/bas/internal/db"
 )
 
+// TestEnsureTCFPipelineEventsSchema_UpgradesOldCHECKToAcceptBundlePackaged
+// simulates a database created before bundle_packaged existed (the original
+// 12-value CHECK) and asserts the migration widens it, so bundle_packaged
+// inserts succeed and the migration is safe to re-run.
+func TestEnsureTCFPipelineEventsSchema_UpgradesOldCHECKToAcceptBundlePackaged(t *testing.T) {
+	ctx := context.Background()
+	pool := sharedDB.Pool
+
+	if err := db.EnsureTCFPipelineEventsSchema(ctx, pool); err != nil {
+		t.Fatalf("EnsureTCFPipelineEventsSchema: %v", err)
+	}
+	// Recreate the pre-change constraint (12 values, no bundle_packaged).
+	if _, err := pool.Exec(ctx, `ALTER TABLE tcf_pipeline_events DROP CONSTRAINT IF EXISTS tcf_pipeline_events_event_type_check`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `ALTER TABLE tcf_pipeline_events ADD CONSTRAINT tcf_pipeline_events_event_type_check CHECK (event_type IN (
+		'threat_observed','threat_eligible',
+		'generation_attempted','generation_failed','content_created',
+		'validation_dispatched','validation_resulted','validated_coverage',
+		'published_executable','superseded','retired','rejected'))`); err != nil {
+		t.Fatal(err)
+	}
+	// Before the migration, bundle_packaged must be rejected.
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO tcf_pipeline_events (event_type, event_time, source_table, source_pk, idempotency_key)
+		 VALUES ('bundle_packaged', now(), 'bundle_manifest', 'b/x', 'tpe-upgrade-pre')`); err == nil {
+		t.Fatal("bundle_packaged must be rejected by the old CHECK (test setup is wrong otherwise)")
+	}
+	// Run the migration (twice, to prove it is idempotent).
+	for i := 0; i < 2; i++ {
+		if err := db.EnsureTCFPipelineEventsSchema(ctx, pool); err != nil {
+			t.Fatalf("EnsureTCFPipelineEventsSchema run %d: %v", i+1, err)
+		}
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO tcf_pipeline_events (event_type, event_time, source_table, source_pk, idempotency_key)
+		 VALUES ('bundle_packaged', now(), 'bundle_manifest', 'b/x', 'tpe-upgrade-post')`); err != nil {
+		t.Fatalf("bundle_packaged must be accepted after the migration: %v", err)
+	}
+}
+
 func TestEnsureTCFPipelineEventsSchema(t *testing.T) {
 	ctx := context.Background()
 	pool := sharedDB.Pool

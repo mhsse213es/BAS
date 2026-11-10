@@ -24,6 +24,10 @@ const (
 	EventSuperseded           EventType = "superseded"
 	EventRetired              EventType = "retired"
 	EventRejected             EventType = "rejected"
+	// EventBundlePackaged marks stage 4 (packaging) of the content-velocity
+	// clock: a registry content version shipped in a signed, verified bundle.
+	// Recorded by the post-build ingest command, not by the build itself.
+	EventBundlePackaged EventType = "bundle_packaged"
 )
 
 // Event is one append-only row for the tcf_pipeline_events ledger. It
