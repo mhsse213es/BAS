@@ -255,11 +255,58 @@ pass with the new route matrixed; ran the full `wafmodsec` live suite together (
 SAME cross-test contamination class of bug the automated-abuse rate limiter hit -- none found, since GAP-001
 drives single requests, not a burst, against a path (`/search`) the rate limiter doesn't touch.
 
+**Eighth same-day follow-up: read the WAF's own real audit log, unblocked 3 of 5 `detection-telemetry`
+vectors.** `lab/wafmodsec/docker-compose.yml`'s `waf` service redirects `MODSEC_AUDIT_LOG` from the image's
+default `/dev/stdout` to a real file under a new bind-mounted `audit-logs/` directory (confirmed by reading the
+image's own `modsecurity.conf.template` inside the running container: `MODSEC_AUDIT_LOG` substitutes verbatim
+into ModSecurity's real `SecAuditLog` directive) -- this lab's Go code now reads that file with an ordinary file
+open, exactly as a real log-shipping agent would, not a SIEM and not a `docker logs` shell-out. New
+`internal/wafmodsec/auditlog.go`'s `FindAuditLogEntry` scans the real JSON-per-line audit format (confirmed
+empirically: one newline-delimited JSON object per relevant transaction) for a uniquely marked probe request and
+returns its real `time_stamp`/`unique_id`.
+
+New `internal/wafmodsec/detectiontelemetry.go` drives ONE real malicious request (reusing SQLI-001's shape, a
+unique marker appended) and correlates it against the audit log to resolve 3 of `AudspectDetectionTelemetryScenario`'s
+5 contributing scenarios: `WAFDETECT-001` (WAF event-log completeness -- the audit log genuinely IS the WAF's
+own event log, no scope stretch), `WAFDETECT-003` (alert correlation -- this lab has no separate alert-queue
+system, so the same audit-log record stands in as "alert evidence", disclosed as not a true SIEM-fed alert
+queue), `WAFDETECT-004` (response timing -- the audit log's own real write latency against the real send time,
+resolving `within_sla` against the scenario's 5-minute SLA since ModSecurity writes the audit record
+synchronously with the blocking response).
+
+**Real precision bug found and fixed before it could manufacture a false result:** the audit log's `time_stamp`
+is ctime-formatted with only second precision (no fractional seconds). Comparing it directly against a
+sub-second `time.Now()` would make `alertObservedAt` appear to precede `eventObservedAt` on roughly half of all
+real runs purely from precision mismatch (`wafdetection.EvaluateResponseTiming` treats that ordering as
+`Inconclusive`, not a crash, but it would still be wrong on half of all real runs). Fixed by flooring
+`eventObservedAt` to the same second-level precision before comparing -- matching granularity to the coarser of
+the two real clocks, not fabricating precision neither side has.
+
+**Found and fixed a FOURTH occurrence of the same `EvidenceSource`-hardcoding bug** fixed three times before
+(`EvaluateScenarioWithSeverities`, `EvaluateLegitimateTrafficScenario`, `EvaluatePolicyIntegrityScenario`):
+`EvaluateDetectionTelemetryScenario` always labeled every assertion `"fixture"`, and `DetectionFixture` had no
+`EvidenceSource` field at all -- fixed the same way (new field, defaults to fixture when unset), new RED-first
+test.
+
+`WAFDETECT-002` (SIEM-record completeness) and `WAFDETECT-005` (evidence-archive completeness) remain unwired:
+both need a genuinely separate downstream system (a real SIEM ingest pipeline, real long-term archival storage)
+that reading the WAF's own log file, however real, cannot stand in for.
+
+Wired into the API too, as its OWN dedicated handler (`wafDetectionTelemetryLiveJSONHandler`/
+`GET /api/waf/scenarios/detection-telemetry/live`) -- this scenario's evidence comes from a filesystem path, not
+a second HTTP client, so it doesn't fit the shared `liveScenarios` loop or the two-client policy-integrity
+pattern either. Same refusal discipline: 503 if either `WAF_MODSEC_LAB_URL`/`WAF_MODSEC_AUDIT_LOG_PATH` is unset.
+`TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the new route matrixed; ran the full `wafmodsec` live
+suite together (all 9 scenarios) to check for the same cross-test contamination class of bug the automated-abuse
+rate limiter hit -- none found, since this probe drives a single request against `/search`, a path the rate
+limiter doesn't touch.
+
 **Resolution path for what's left:** extend `BuildRequest`'s remaining PayloadLocation cases (header:/body:json:/body:xml:);
-add audit-log parsing to `wafmodsec` so a real `VerdictMissed` becomes claimable; a per-rule ModSecurity override
-to unblock `policy-integrity`'s `GAP-002`/`GAP-004`; per-account aggregation / a bot-management layer / stateful
-lockout logic to unblock `automated-abuse`'s remaining 5 vectors; a multi-node/dual-path lab topology to unblock
-`origin-resilience`; a real alerting backend to unblock `detection-telemetry`.
+add audit-log parsing to `wafmodsec`'s core bridge so a real `VerdictMissed` becomes claimable there too; a
+per-rule ModSecurity override to unblock `policy-integrity`'s `GAP-002`/`GAP-004`; per-account aggregation / a
+bot-management layer / stateful lockout logic to unblock `automated-abuse`'s remaining 5 vectors; a
+multi-node/dual-path lab topology to unblock `origin-resilience`; a real SIEM ingest pipeline and archival
+storage to unblock `detection-telemetry`'s remaining 2 vectors.
 
 See `lab/wafmodsec/README.md` for how to run the lab and every live test (`go test ./internal/wafmodsec/... -run TestLive_ -v`).
 

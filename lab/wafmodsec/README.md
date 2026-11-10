@@ -34,6 +34,11 @@ already uses elsewhere in this repo.
   on `http://localhost:8889`. `policy-integrity`'s `GAP-001` is a genuine
   two-leg baseline-vs-weakened comparison -- this gives it a real second
   policy to compare against, not a simulated one.
+- `waf`'s `MODSEC_AUDIT_LOG` env var, redirected from the image's default
+  `/dev/stdout` to a real file, and `audit-logs/` (bind-mounted,
+  git-ignored runtime data), together give `detection-telemetry` a real,
+  host-readable WAF audit trail -- see `docker-compose.yml`'s own doc
+  comment and `internal/wafmodsec/auditlog.go` for how it's read.
 
 ## Running it
 
@@ -121,6 +126,7 @@ vectors, each with its own `Run<Scenario>Live(ctx, client)` in
 | `file-upload-content-trust` | `FILEUP-001`, `FILEUP-003` (2/3) | `Inconclusive`, `Blocked` |
 | `automated-abuse` | `RATE-001` (1/6) | `Blocked` |
 | `policy-integrity` | `GAP-001` (1/6) | `Inconclusive` |
+| `detection-telemetry` | `WAFDETECT-001`, `WAFDETECT-003`, `WAFDETECT-004` (3/5) | `present`, `correct`, `within_sla` |
 
 `api-protection`'s `APIFLOW-005` comes from `internal/wafapiflow`, a
 sibling catalog to `wafcatalog` with its own, structurally identical
@@ -229,13 +235,58 @@ more involved build than a single env var toggle -- not built this round.
 `GAP-003`/`GAP-005`/`GAP-006` need `modsecwaf.BuildRequest`'s still-missing
 `body:json:`/`path:` PayloadLocation forms.
 
+`detection-telemetry`'s `WAFDETECT-001`/`WAFDETECT-003`/`WAFDETECT-004`
+needed a real audit trail to read, not another HTTP round trip: `waf`'s
+`MODSEC_AUDIT_LOG` is redirected to a real file under `audit-logs/`
+(confirmed by reading the image's own `modsecurity.conf.template` inside
+the running container -- `MODSEC_AUDIT_LOG` substitutes verbatim into
+ModSecurity's real `SecAuditLog` directive), bind-mounted so this lab's
+Go code reads it with an ordinary file open, exactly as a real log-
+shipping agent would -- no SIEM, no `docker logs` shell-out, no
+simulated evidence. New `internal/wafmodsec/auditlog.go`'s
+`FindAuditLogEntry` scans the real JSON-per-line audit format (confirmed
+empirically: one newline-delimited JSON object per relevant transaction,
+never concatenated) for a uniquely marked probe request and returns its
+real `time_stamp`/`unique_id`. `internal/wafmodsec/detectiontelemetry.go`
+drives ONE real malicious request (reusing SQLI-001's shape, marker
+appended) and correlates it: `WAFDETECT-001` (WAF event-log completeness)
+-- the audit log genuinely IS the WAF's own event log, no scope stretch;
+`WAFDETECT-003` (alert correlation) -- this lab has no separate alert-
+queue system, so the same audit-log record stands in as "alert evidence",
+disclosed as not a true SIEM-fed alert queue; `WAFDETECT-004` (response
+timing) -- the audit log's own real write latency against the real send
+time, resolving `within_sla` against the scenario's 5-minute SLA (real
+latency is near-instant: ModSecurity writes the audit record
+synchronously with the blocking response).
+
+The audit log's `time_stamp` field is ctime-formatted with only
+SECOND precision (no fractional seconds at all) -- comparing it directly
+against a sub-second `time.Now()` would manufacture a false "alert
+precedes its own event" ordering on roughly half of all real runs, purely
+from precision mismatch, not a real ordering problem. `eventObservedAt`
+is floored to the same second-level precision before comparing, matching
+granularity to the coarser of the two real clocks rather than fabricating
+precision neither side has.
+
+**Found and fixed a FOURTH occurrence of the same `EvidenceSource`
+hardcoding bug** fixed three times before: `EvaluateDetectionTelemetryScenario`
+always labeled every assertion `"fixture"`, and `DetectionFixture` had no
+`EvidenceSource` field at all -- fixed the same way, new RED-first test.
+
+`WAFDETECT-002` (SIEM-record completeness) and `WAFDETECT-005` (evidence-
+archive completeness) remain unwired: both need a genuinely separate
+downstream system (a real SIEM ingest pipeline, real long-term archival
+storage) that reading the WAF's own log file, however real, cannot stand
+in for.
+
 ```sh
 WAF_MODSEC_LAB_URL=http://localhost:8888 \
 WAF_MODSEC_WEAKENED_LAB_URL=http://localhost:8889 \
+WAF_MODSEC_AUDIT_LOG_PATH=./audit-logs/audit.log \
   go test ./internal/wafmodsec/... -run TestLive_ -v
 ```
 
-**2 scenarios get NO live wiring, for real, disclosed reasons -- not an
+**1 scenario gets NO live wiring, for real, disclosed reasons -- not an
 oversight:**
 - `automated-abuse`'s other 5 vectors (`RATE-002`, `BOTABUSE-001..004`):
   `RATE-002` needs per-account aggregation across sessions/source
@@ -246,15 +297,13 @@ oversight:**
   specifically needs the same multi-node topology `origin-resilience`
   below is blocked on. Each is a materially different, bigger build than
   the single `limit_req` zone `RATE-001` needed.
-- `detection-telemetry` (`WAFDETECT-001..005`): evidence is SIEM/alert
-  pipeline completeness and timing (event-to-alert latency, archive
-  completeness) -- there is no HTTP request to replay at all; this needs
-  a real alerting backend, not a WAF.
 - `origin-resilience` (`WAFORIGIN-001..005`): deployment-topology claims
   (direct-origin reachability, fail-open behavior, cross-node config
   consistency) that need a multi-node/dual-path network setup this lab's
   single WAF-fronted, non-host-exposed origin doesn't have.
 - `policy-integrity`'s other 5 vectors (`GAP-002..006`): see above.
+- `detection-telemetry`'s other 2 vectors (`WAFDETECT-002`, `WAFDETECT-005`):
+  see above.
 
 ## What this proves, and what it doesn't (yet)
 
@@ -262,7 +311,7 @@ oversight:**
 `modsecwaf.Client.Send` (real HTTP) ->
 `wafmodsec.BuildCollectionResults` (real response -> `wafval.Observation`) ->
 `wafval.EvaluateClaim` (real verdict) -- working end to end against a real,
-running WAF engine, across 8 enterprise scenarios now. This is a stronger
+running WAF engine, across 9 enterprise scenarios now. This is a stronger
 resolution than `internal/avdefender`'s own precedent (the Defender bridge
 was built but never run against a live tenant); this one has actually been
 run, live, in this session.

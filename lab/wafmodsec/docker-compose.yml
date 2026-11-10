@@ -50,6 +50,18 @@ services:
       BLOCKING_PARANOIA: "1"
       ANOMALY_INBOUND: "5"
       ANOMALY_OUTBOUND: "4"
+      # Real detection/telemetry evidence for detection-telemetry
+      # (WAFDETECT-001/003/004): the image's own modsecurity.conf.template
+      # substitutes MODSEC_AUDIT_LOG verbatim into ModSecurity's real
+      # SecAuditLog directive (confirmed by reading the template inside
+      # the running container) -- redirecting it from the image's default
+      # /dev/stdout to a real file under ./audit-logs (bind-mounted below)
+      # gives this lab's Go code direct, ordinary file access to
+      # ModSecurity's own structured JSON audit trail (one line per
+      # relevant transaction: time_stamp, unique_id, request.uri,
+      # matched rules), exactly as a real log-shipping agent would read
+      # it -- no SIEM, no docker-logs shell-out, no simulated evidence.
+      MODSEC_AUDIT_LOG: "/var/log/modsecurity/audit/audit.log"
     ports:
       - "8888:8080"
     networks: [wafmodsec-lab]
@@ -63,6 +75,7 @@ services:
     volumes:
       - ./nginx/00-limit-req-zone.conf:/etc/nginx/templates/conf.d/00-limit-req-zone.conf.template:ro
       - ./nginx/default.conf:/etc/nginx/templates/conf.d/default.conf.template:ro
+      - ./audit-logs:/var/log/modsecurity/audit
 
   # A second, deliberately weakened instance for policy-integrity's GAP-001
   # (detection-only mode): the ONLY difference from "waf" above is

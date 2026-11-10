@@ -269,6 +269,31 @@ func TestWafPolicyIntegrityLiveJSONHandler_NoLabConfigured_Returns503(t *testing
 	}
 }
 
+// Review Focus: detection-telemetry's live handler needs both the lab URL
+// and the audit log path set -- it must refuse (503) when either one
+// alone is missing.
+func TestWafDetectionTelemetryLiveJSONHandler_NoLabConfigured_Returns503(t *testing.T) {
+	h := &Handler{}
+	cases := []struct {
+		name         string
+		labURL       string
+		auditLogPath string
+	}{
+		{"both unset", "", ""},
+		{"lab URL only", "http://localhost:8888", ""},
+		{"audit log path only", "", "/tmp/audit.log"},
+	}
+	for _, c := range cases {
+		t.Setenv(wafModsecLabURLEnv, c.labURL)
+		t.Setenv(wafModsecAuditLogPathEnv, c.auditLogPath)
+		rr := httptest.NewRecorder()
+		h.wafDetectionTelemetryLiveJSONHandler(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/detection-telemetry/live", nil))
+		if rr.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s: status = %d, want %d", c.name, rr.Code, http.StatusServiceUnavailable)
+		}
+	}
+}
+
 func TestGetWAFExploitPreventionScenarioHTML_RendersFailOutcome(t *testing.T) {
 	h := &Handler{}
 	rr := httptest.NewRecorder()

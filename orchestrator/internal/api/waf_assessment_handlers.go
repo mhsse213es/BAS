@@ -32,6 +32,17 @@ const wafModsecWeakenedLabURLEnv = "WAF_MODSEC_WEAKENED_LAB_URL"
 
 func getenvWafModsecWeakenedLabURL() string { return os.Getenv(wafModsecWeakenedLabURLEnv) }
 
+// wafModsecAuditLogPathEnv names the environment variable the live
+// detection-telemetry endpoint needs: a real filesystem path to the
+// baseline lab's ModSecurity audit log file (lab/wafmodsec/docker-
+// compose.yml's MODSEC_AUDIT_LOG bind mount). That scenario's evidence
+// comes from reading the WAF's own real audit trail, not another HTTP
+// round trip, so it needs a path, not a second client. Same refusal
+// discipline: unset means 503, never a silent fixture fallback.
+const wafModsecAuditLogPathEnv = "WAF_MODSEC_AUDIT_LOG_PATH"
+
+func getenvWafModsecAuditLogPath() string { return os.Getenv(wafModsecAuditLogPathEnv) }
+
 // wafScenarioVectorResponse is one contributing vector's evaluated
 // outcome in the JSON shape served by wafScenarioJSONHandler --
 // camelCase field names per this package's existing JSON convention.
@@ -197,6 +208,49 @@ func (h *Handler) wafPolicyIntegrityLiveJSONHandler(w http.ResponseWriter, r *ht
 	scenario, result, err := wafmodsec.RunPolicyIntegrityLive(r.Context(), baselineClient, weakenedClient)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("running live policy-integrity scenario against %s/%s: %v", baselineURL, weakenedURL, err), http.StatusBadGateway)
+		return
+	}
+	assertions := make([]wafScenarioVectorResponse, 0, len(result.Assertions))
+	for _, a := range result.Assertions {
+		assertions = append(assertions, wafScenarioVectorResponse{
+			VectorID:       a.VectorID,
+			Severity:       string(a.Severity),
+			Verdict:        string(a.Verdict),
+			EvidenceSource: string(a.EvidenceSource),
+			Reason:         a.Reason,
+		})
+	}
+	respond(w, wafScenarioResponse{
+		ScenarioID:        scenario.ID,
+		ScenarioName:      scenario.Name,
+		Objective:         scenario.Objective,
+		Outcome:           string(result.Outcome),
+		Summary:           result.Summary,
+		Assertions:        assertions,
+		UntestedVectorIDs: result.UntestedVectorIDs,
+	})
+}
+
+// wafDetectionTelemetryLiveJSONHandler serves the live detection-
+// telemetry scenario. It cannot use the shared wafScenarioLiveJSONHandler/
+// liveScenarioRunner factory -- that factory builds a *modsecwaf.Client
+// to make another HTTP round trip, but this scenario's evidence comes
+// from reading the WAF's own real audit log file (see
+// internal/wafmodsec/detectiontelemetry.go), so it needs both a client
+// (to drive the one correlated probe) AND a filesystem path. Same
+// refusal discipline: 503 if either is unset, 502 if the lab is
+// unreachable or the audit log can't be read.
+func (h *Handler) wafDetectionTelemetryLiveJSONHandler(w http.ResponseWriter, r *http.Request) {
+	labURL := getenvWafModsecLabURL()
+	auditLogPath := getenvWafModsecAuditLogPath()
+	if labURL == "" || auditLogPath == "" {
+		http.Error(w, fmt.Sprintf("no live WAF lab configured: set both %s and %s (see lab/wafmodsec/README.md)", wafModsecLabURLEnv, wafModsecAuditLogPathEnv), http.StatusServiceUnavailable)
+		return
+	}
+	client := modsecwaf.NewClient(modsecwaf.Config{BaseURL: labURL})
+	scenario, result, err := wafmodsec.RunDetectionTelemetryLive(r.Context(), client, auditLogPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("running live detection-telemetry scenario against %s: %v", labURL, err), http.StatusBadGateway)
 		return
 	}
 	assertions := make([]wafScenarioVectorResponse, 0, len(result.Assertions))

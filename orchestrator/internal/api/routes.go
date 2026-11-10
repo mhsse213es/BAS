@@ -284,14 +284,14 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Get("/api/waf/scenarios/"+slug, h.wafScenarioJSONHandler(slug))
 			r.Get("/api/waf/scenarios/"+slug+".html", h.wafScenarioHTMLHandler(slug))
 		}
-		// 8 of the 10 scenarios above, evaluated against a REAL, running
+		// 9 of the 10 scenarios above, evaluated against a REAL, running
 		// ModSecurity + OWASP CRS lab (lab/wafmodsec) instead of a fixture --
 		// only the subset of each scenario's vectors its own
 		// internal/wafmodsec.Run<Scenario>Live function actually drives live
-		// (the rest surface through untestedVectorIds). The other 2
-		// scenarios have no live route: each needs real new capability
-		// (a SIEM backend, a multi-node lab topology) that doesn't exist yet
-		// -- see docs/waf-mastery-qa-log.md item #1. Same
+		// (the rest surface through untestedVectorIds). The last
+		// scenario has no live route: it needs real new capability (a
+		// multi-node lab topology) that doesn't exist yet -- see
+		// docs/waf-mastery-qa-log.md item #1. Same
 		// read-only, JWT-only tier as the fixture-backed routes above: the
 		// live target is a fixed, operator-configured URL
 		// (wafModsecLabURLEnv), never taken from the request, so there is no
@@ -316,6 +316,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// the single-client liveScenarios loop above -- see
 		// wafPolicyIntegrityLiveJSONHandler's own doc comment.
 		r.Get("/api/waf/scenarios/policy-integrity/live", h.wafPolicyIntegrityLiveJSONHandler)
+		// detection-telemetry needs a filesystem path to the WAF's real
+		// audit log, not another HTTP client -- see
+		// wafDetectionTelemetryLiveJSONHandler's own doc comment.
+		r.Get("/api/waf/scenarios/detection-telemetry/live", h.wafDetectionTelemetryLiveJSONHandler)
 		// AV/NGAV efficacy assessment scenarios (internal/avefficacy),
 		// same read-only, slug-registry shape as /api/waf/scenarios:
 		// each slug is a fixture-backed scenario evaluation layered
