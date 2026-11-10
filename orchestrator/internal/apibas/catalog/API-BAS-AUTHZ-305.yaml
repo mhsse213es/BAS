@@ -1,0 +1,55 @@
+id: "API-BAS-AUTHZ-305"
+name: "HC-005: delegate reads beyond the consent scope"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "The delegate reads REC-A-001 and receives the diagnosis and insurance number, which the consent does not cover."
+threat_model:
+  attacker: "authenticated delegate of patient A"
+  identity: delegate-a
+  access_level: "delegate, valid token, summary-only consent for REC-A-001"
+  objective: "The delegate reads REC-A-001 and receives the diagnosis and insurance number, which the consent does not cover."
+preconditions:
+  fixture: healthcare-two-patient
+  identities: [patient-a, delegate-a]
+  object: REC-A-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: patient-a
+    auth: valid
+    method: GET
+    path: "/api/health/records/REC-A-001"
+    hypothesis: "Patient A, the owner, reads their own record. If this fails, the scenario is not testable."
+  - id: "attack-authz-305"
+    role: attack
+    identity: delegate-a
+    auth: valid
+    method: GET
+    path: "/api/health/records/REC-A-001"
+    hypothesis: "The delegate receives at most the summary the consent allows, and no diagnosis or insurance number."
+denied_statuses: [403, 404]
+forbidden_values: ["BAS-SIM-DX-A", "BAS-SIM-INS-A"]
+clean_is_enforcement: true
+expected_control: "A delegate sees only what the patient's consent allows. A response carrying the diagnosis or insurance number fails."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to the delegate's read of REC-A-001 carries no diagnosis or insurance number.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-022
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The vulnerable build returns the diagnosis and insurance number to the delegate, which REL-022 reads from the emitted classes. The fixed build returns the consented summary and nothing fires. Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "Healthcare: patient consent and delegated-access violations"
+regulatory_mapping:
+  - IN-DPDP-S8-5
+negative_tests:
+  - "API-BAS-AUTHZ-305 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-305 against the vulnerable build must FAIL (exploited)"

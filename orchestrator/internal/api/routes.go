@@ -12,6 +12,7 @@ import (
 	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/telnetsink"
+	"github.com/audspect/bas/internal/wafmodsec"
 	"github.com/audspect/bas/internal/webhooksink"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -283,6 +284,46 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Get("/api/waf/scenarios/"+slug, h.wafScenarioJSONHandler(slug))
 			r.Get("/api/waf/scenarios/"+slug+".html", h.wafScenarioHTMLHandler(slug))
 		}
+		// All 10 scenarios above are now evaluated against a REAL, running
+		// ModSecurity + OWASP CRS lab (lab/wafmodsec) instead of a fixture --
+		// only the subset of each scenario's vectors its own
+		// internal/wafmodsec.Run<Scenario>Live function actually drives live
+		// (the rest surface through untestedVectorIds; see
+		// docs/waf-mastery-qa-log.md item #1 for exactly which vectors and
+		// why). Same
+		// read-only, JWT-only tier as the fixture-backed routes above: the
+		// live target is a fixed, operator-configured URL
+		// (wafModsecLabURLEnv), never taken from the request, so there is no
+		// SSRF surface from this being Viewer-reachable.
+		liveScenarios := []struct {
+			slug string
+			run  liveScenarioRunner
+		}{
+			{"exploit-prevention", wafmodsec.RunExploitPreventionLive},
+			{"http-protocol-integrity", wafmodsec.RunHTTPProtocolIntegrityLive},
+			{"routing-cache-integrity", wafmodsec.RunRoutingCacheIntegrityLive},
+			{"api-protection", wafmodsec.RunAPIProtectionLive},
+			{"legitimate-traffic", wafmodsec.RunLegitimateTrafficLive},
+			{"file-upload-content-trust", wafmodsec.RunFileUploadContentTrustLive},
+			{"automated-abuse", wafmodsec.RunAutomatedAbuseLive},
+		}
+		for _, ls := range liveScenarios {
+			r.Get("/api/waf/scenarios/"+ls.slug+"/live", h.wafScenarioLiveJSONHandler(ls.run))
+		}
+		// policy-integrity needs a SECOND WAF lab instance (a genuine
+		// two-leg baseline-vs-weakened comparison), so it can't go through
+		// the single-client liveScenarios loop above -- see
+		// wafPolicyIntegrityLiveJSONHandler's own doc comment.
+		r.Get("/api/waf/scenarios/policy-integrity/live", h.wafPolicyIntegrityLiveJSONHandler)
+		// detection-telemetry needs a filesystem path to the WAF's real
+		// audit log, not another HTTP client -- see
+		// wafDetectionTelemetryLiveJSONHandler's own doc comment.
+		r.Get("/api/waf/scenarios/detection-telemetry/live", h.wafDetectionTelemetryLiveJSONHandler)
+		// origin-resilience needs THREE real targets (baseline, direct-
+		// origin, weakened), so it can't go through any of the shapes
+		// above either -- see wafOriginResilienceLiveJSONHandler's own
+		// doc comment.
+		r.Get("/api/waf/scenarios/origin-resilience/live", h.wafOriginResilienceLiveJSONHandler)
 		// AV/NGAV efficacy assessment scenarios (internal/avefficacy),
 		// same read-only, slug-registry shape as /api/waf/scenarios:
 		// each slug is a fixture-backed scenario evaluation layered
@@ -608,6 +649,16 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanCloneScenario)).Post("/api/scenarios/{id}/clone", h.CloneScenario)
 		r.With(auth.RequirePermission(auth.CanUpdateScenario)).Put("/api/scenarios/{id}", h.UpdateScenario)
 		r.With(auth.RequirePermission(auth.CanDeleteScenario)).Delete("/api/scenarios/{id}", h.DeleteScenario)
+
+		// Content import: Sigma/YARA rules and chains become DRAFTS that cannot run until an Admin approves them
+		// (content:transition). Importing needs only scenario-creation rights.
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Post("/api/content-import/sigma", h.ImportSigma)
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Post("/api/content-import/yara", h.ImportYARA)
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Post("/api/content-import/chain", h.ImportChain)
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Get("/api/content-import/drafts", h.ListImportDrafts)
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Get("/api/content-import/drafts/{id}", h.GetImportDraft)
+		r.With(auth.RequirePermission(auth.CanTransitionContent)).Post("/api/content-import/drafts/{id}/approve", h.ApproveImportDraft)
+		r.With(auth.RequirePermission(auth.CanTransitionContent)).Post("/api/content-import/drafts/{id}/reject", h.RejectImportDraft)
 		r.With(auth.RequirePermission(auth.CanViewContentArtifact)).Get("/api/content-registry/versions/{vid}/artifact", h.GetContentArtifact)
 		r.With(auth.RequirePermission(auth.CanTransitionContent)).Post("/api/content-registry/versions/{vid}/transition", h.TransitionContentVersion)
 		r.With(auth.RequirePermission(auth.CanViewContentMigrationReport)).Get("/api/content-registry/migration-report", h.GetContentMigrationReport)
@@ -628,6 +679,30 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// API BAS stored results (read-only). Authorization is the permission; installs are isolated by database.
 		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/runs", h.ListAPIBASRuns)
 		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/runs/{id}", h.GetAPIBASRun)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Post("/api/apibas/targets", h.CreateAPIBASTarget)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets", h.ListAPIBASTargets)
+		r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/jobs", h.SubmitAPIBASJob)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/jobs", h.ListAPIBASJobs)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/jobs/{id}", h.GetAPIBASJob)
+		r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/jobs/{id}/cancel", h.CancelAPIBASJob)
+		r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/approvals", h.RequestAPIBASApproval)
+		r.With(auth.RequirePermission(auth.CanApproveAPIBASProduction)).Post("/api/apibas/approvals/{id}/approve", h.ApproveAPIBASApproval)
+		r.With(auth.RequirePermission(auth.CanApproveAPIBASProduction)).Post("/api/apibas/approvals/{id}/revoke", h.RevokeAPIBASApproval)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/approvals", h.ListAPIBASApprovals)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/approvals/{id}", h.GetAPIBASApproval)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Post("/api/apibas/targets/{id}/inventory", h.ImportAPIBASInventory)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets/{id}/inventory", h.GetAPIBASInventory)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets/{id}/inventory/versions", h.ListAPIBASInventoryVersions)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Post("/api/apibas/targets/{id}/inventory/drift", h.DriftAPIBASInventory)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Post("/api/apibas/targets/{id}/binding/plan", h.PlanAPIBASBinding)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Put("/api/apibas/targets/{id}/binding", h.SaveAPIBASBinding)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Get("/api/apibas/targets/{id}/binding", h.GetAPIBASBinding)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Delete("/api/apibas/targets/{id}/binding", h.DeleteAPIBASBinding)
+		r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/targets/{id}/binding/jobs", h.RunAPIBASBinding)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets/{id}/jobs", h.ListAPIBASTargetJobs)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Put("/api/apibas/targets/{id}/schedule", h.SaveAPIBASSchedule)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets/{id}/schedule", h.GetAPIBASSchedule)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Delete("/api/apibas/targets/{id}/schedule", h.DeleteAPIBASSchedule)
 		// Aleef API discovery (separate licence add-on, license.ProductAleef via productPrefixes).
 		r.With(auth.RequirePermission(auth.CanAuthorizeAleef)).Post("/api/aleef/engagements", h.CreateAleefEngagement)
 		r.With(auth.RequirePermission(auth.CanRunAleef)).Post("/api/aleef/runs", h.StartAleefRun)

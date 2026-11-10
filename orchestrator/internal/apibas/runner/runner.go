@@ -35,6 +35,7 @@ import (
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/grade"
+	"github.com/audspect/bas/internal/apibas/scope"
 	"github.com/audspect/bas/internal/apibas/latency"
 	"github.com/audspect/bas/internal/apibas/reporting"
 	"strconv"
@@ -104,6 +105,8 @@ type Config struct {
 	ClientCerts map[string]tls.Certificate
 	// RogueURL fills the {rogue_url} placeholder: an upstream whose certificate the runner does not trust (GWAY-012).
 	RogueURL string
+	// AllowedPaths restricts every scenario request to these path prefixes (whole segments). Empty means no restriction.
+	AllowedPaths []string
 	// DetectionWindow is how long the detection stage waits for the SIEM to deliver the run's events.
 	// Zero means DefaultDetectionWindow. Events delivered after the window are not seen.
 	DetectionWindow time.Duration
@@ -151,6 +154,22 @@ type Exchange struct {
 	raw      []byte
 	// request is the path and body sent, used to skip forbidden values the attacker sent.
 	request string
+}
+
+// CheckScope reports the first step of s whose request path cannot be shown to lie inside allowed. It checks the fixed part of
+// each step path (before any placeholder), so a scenario that could leave the scope is refused before anything is sent. An
+// empty allowed list restricts nothing.
+func CheckScope(allowed []string, s contract.Scenario) error {
+	if len(allowed) == 0 {
+		return nil
+	}
+	for _, st := range s.Steps {
+		prefix := scope.StaticPrefix(st.Path)
+		if prefix == "" || !scope.Allowed(allowed, prefix) {
+			return fmt.Errorf("scenario %s step %s requests a path outside the target's allowed paths", s.ID, st.ID)
+		}
+	}
+	return nil
 }
 
 // Report is the complete output of one scenario execution.
@@ -265,6 +284,9 @@ func (r *Runner) run(ctx context.Context, s contract.Scenario, tag string) (Repo
 	if r.cfg.State == nil {
 		return r.skip(rep, grade.ReasonAdapterUnavailable, "state adapter is not configured"), nil
 	}
+	if _, noState := r.cfg.State.(NoState); noState && s.SideEffectClass != "READ_ONLY" {
+		return r.skip(rep, grade.ReasonAdapterUnavailable, "the target offers no independent state, so only read-only scenarios can run"), nil
+	}
 	sandbox := s.SideEffectClass == "STATE_CHANGE_SANDBOX"
 	if sandbox && r.cfg.Reset == nil {
 		return r.skip(rep, grade.ReasonAdapterUnavailable, "sandbox scenario needs a reset adapter"), nil
@@ -316,6 +338,22 @@ func (r *Runner) run(ctx context.Context, s contract.Scenario, tag string) (Repo
 		ev.Transport = true
 	} else {
 		ev.Baseline = grade.Exchange{Status: baseExch.Status}
+	}
+
+	// A scenario for an API that reports failures as HTTP 200 must see its own data in the baseline, or a clean attack response could
+	// just be the same error.
+	if s.RequireBaselineEvidence && !ev.Transport && ev.Baseline.Status == baselineWant(s) {
+		found := false
+		for _, v := range s.ForbiddenValues {
+			if v != "" && bytes.Contains(baseExch.raw, []byte(v)) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return r.finish(ctx, sandbox, r.skip(rep, grade.ReasonPreconditionMissing,
+				"the owner's own request did not return any of the protected values, so the check cannot be told apart from an error response")), nil
+		}
 	}
 
 	// The state is read between baseline and attack, so a baseline write is
@@ -492,6 +530,10 @@ func attackAuth(st contract.Step) string {
 func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj fixture.Object, protect *fixture.Object) (Exchange, bool) {
 	path := strings.ReplaceAll(step.Path, "{object}", obj.ID)
 	ex := Exchange{StepID: step.ID, Identity: step.Identity, Auth: attackAuth(step), Method: step.Method, Path: path}
+	// Backstop for CheckScope: a request outside the registered path scope is never sent.
+	if len(r.cfg.AllowedPaths) > 0 && !scope.Allowed(r.cfg.AllowedPaths, path) {
+		return ex, true
+	}
 
 	// {lab_url} lets a body name the target itself, for the SSRF scenario.
 	payload := strings.ReplaceAll(step.Body, "{lab_url}", r.cfg.BaseURL)
@@ -575,6 +617,14 @@ func oversizedHits(s contract.Scenario, raw []byte) int {
 		n++
 	}
 	return n
+}
+
+// baselineWant is the status a legitimate baseline returns for the scenario: 200 unless it declares another.
+func baselineWant(s contract.Scenario) int {
+	if s.BaselineStatus != 0 {
+		return s.BaselineStatus
+	}
+	return 200
 }
 
 func (r *Runner) skip(rep Report, reason, detail string) Report {

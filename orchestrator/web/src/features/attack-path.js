@@ -2,8 +2,9 @@ import { state } from '../core/state.js';
 import { on } from '../core/actions.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { debCommand } from './deb-command.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
-import { _templates, renderTemplateGrid } from './adversaries.js';
+import { _templates, _adversaries, renderTemplateGrid, syncAdversaryVisibility } from './adversaries.js';
 import { _agtDetailId, downloadAuditPack, downloadBoardScorecard, downloadFullReportCSV, downloadFullReportJSON, downloadFullReportPDF, downloadNavigatorLayer, loadAgtAttackPath, openAgentDetail, openFullReport, safeScan } from './agent-drawer.js';
 import { openAllowReinstallModal, openReinstateAgentModal, openRemoveAgentModal, openRevokeAgentModal, openStopAgentModal, openUninstallAgentModal } from './agent-actions.js';
 import { loadAuditLogs, loadBackups, loadLicenseInfo } from './audit-logs.js';
@@ -1144,6 +1145,9 @@ export function toggleRowMenu(btn, id) {
 // Places an open row menu under its trigger button, clamped to the viewport.
 // Called when it opens and again on every scroll, so it follows its button.
 function placeRowMenu(btn, panel) {
+  // Re-measuring below resets max-height, which makes the browser clamp the panel's scroll position back to the top.
+  // Keep it and put it back, so repositioning never undoes the user's scrolling inside a long menu.
+  var keepScroll = panel.scrollTop;
   // Position as fixed viewport coordinates from the trigger button's own
   // rect (see the .row-menu-panel CSS comment for why fixed instead of
   // absolute), right-aligned under the button like a standard menu.
@@ -1170,6 +1174,7 @@ function placeRowMenu(btn, panel) {
       panel.style.maxHeight = Math.max(spaceBelow, 80) + 'px';
     }
   }
+  panel.scrollTop = keepScroll;
 }
 export function closeAllRowMenus() {
   document.querySelectorAll('.row-menu-panel.open').forEach(function(p) { p.classList.remove('open'); });
@@ -1202,7 +1207,11 @@ function triggerVisible(btn) {
   return true;
 }
 
-function repositionOpenRowMenus() {
+export function repositionOpenRowMenus(e) {
+  // The scroll listener is registered in the capture phase, so it also hears the menu's own scrolling. Re-placing the
+  // panel on its own scroll reset it to the top every time, so a long action list could not be scrolled. Only scrolling
+  // of something else (the page or the table) moves the trigger button, and only that needs a re-place.
+  if (e && e.target && e.target.nodeType === 1 && e.target.closest('.row-menu-panel')) return;
   document.querySelectorAll('.row-menu-panel.open').forEach(function(panel) {
     var btn = panel.parentElement && panel.parentElement.querySelector('.row-menu-btn');
     if (!btn || !triggerVisible(btn)) { panel.classList.remove('open'); return; }
@@ -1315,6 +1324,7 @@ export function injectServerURL() {
     set('win-server-url', c.serverURL);
     set('win-cli-cmd', c.windows);
     set('linux-cli-cmd', c.linux);
+    set('linux-deb-cmd', debCommand(c.linux, 'amd64'));
     set('mac-cmd', c.mac);
   };
   apicall('/api/config/connection').then(apply).catch(function() { apply({}); });
@@ -1693,17 +1703,21 @@ function paintScenarios() {
   }
   var catList = scenarioSectionOrder().map(function(sec) { return { key: sec.key, label: sec.label, icon: sec.key }; });
   if (_templates.length) catList.push({ key: 'templates', label: 'Adversary Templates' });
+  // The Threat Actor Library follows the Adversary Templates in the list; it opens as its own view.
+  if (_adversaries.length) catList.push({ key: 'actors', label: 'Threat Actor Library' });
   var allList = scnAllView(pool, scnFilters().source);
   var rows = scnCategoryRows(catList, allList.length, function(key) {
-    return key === 'phishing' ? ph.total : key === 'templates' ? _templates.length : pool.filter(function(s) { return scenarioProductOf(s) === key; }).length;
+    return key === 'phishing' ? ph.total : key === 'templates' ? _templates.length : key === 'actors' ? _adversaries.length : pool.filter(function(s) { return scenarioProductOf(s) === key; }).length;
   }, subs);
   cats.innerHTML = scnCatsHtml(rows, view);
 
-  var special = view === 'phishing' || view === 'templates';
+  var special = view === 'phishing' || view === 'templates' || view === 'actors';
+  syncAdversaryVisibility();
   hideFilterSelects(special);
   tools.innerHTML = scnToolbarHtml(special);
 
   if (view === 'phishing') { renderPhishingLibrary(true); return; }
+  if (view === 'actors') { grid.innerHTML = ''; return; }
   if (view === 'templates') {
     setDisplay(document.getElementById('sc-tmpl-filters'), 'flex');
     renderTemplateGrid();

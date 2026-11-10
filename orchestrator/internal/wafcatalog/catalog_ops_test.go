@@ -20,8 +20,8 @@ func TestCacheWeaknessVectors_ValidAndUnique(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cacheWeaknessVectors: %v", err)
 	}
-	if len(vectors) != 2 {
-		t.Fatalf("len(vectors) = %d, want 2", len(vectors))
+	if len(vectors) != 3 {
+		t.Fatalf("len(vectors) = %d, want 3", len(vectors))
 	}
 	if err := ValidateCatalog(vectors); err != nil {
 		t.Errorf("ValidateCatalog: %v", err)

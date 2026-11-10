@@ -56,6 +56,16 @@ export function footOf(s, cat) {
   };
 }
 
+// What each registry stage means, shown as the pill's tooltip. Threat-intel scenarios are generated automatically from
+// the intel feed, so they all start as Draft; none is runnable until a version has been validated and approved.
+var LIFECYCLE_HELP = {
+  DRAFT: 'Draft: generated automatically from threat intelligence and not yet validated. It cannot run until a version is validated and approved.',
+  VALIDATING: 'Validating: being checked in the validation lab. It cannot run until validation finishes and a version is approved.',
+  VALIDATED: 'Validated: it passed checks and is waiting for approval. It cannot run until approved.',
+  REJECTED: 'Rejected: it failed validation or review. It cannot run.',
+  RETIRED: 'Retired: withdrawn from use. It cannot run.'
+};
+
 // Availability pill from the content registry: executable means an approved or signed version exists.
 export function availOf(s) {
   var r = s.registry;
@@ -65,7 +75,7 @@ export function availOf(s) {
     return { key: 'ok', tone: 'ok', label: 'Available', title: 'Executable version v' + r.executableVersion + ' (' + t + ')' };
   }
   var lc = String(r.latestLifecycle || 'draft');
-  return { key: 'pending', tone: 'warn', label: lc.charAt(0).toUpperCase() + lc.slice(1).toLowerCase().replace(/_/g, ' '), title: 'Not executable until approved' };
+  return { key: 'pending', tone: 'warn', label: lc.charAt(0).toUpperCase() + lc.slice(1).toLowerCase().replace(/_/g, ' '), title: LIFECYCLE_HELP[lc.toUpperCase()] || 'Not executable until approved' };
 }
 
 // Search text: id, name, description, tags, ATT&CK phases and techniques, emulated actor.

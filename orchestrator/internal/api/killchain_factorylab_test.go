@@ -29,7 +29,7 @@ func TestFactoryLabGate_StageRefusedOnLabAgent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if runID != "" || !strings.Contains(skip, "factory-owned lab agent cannot be dispatched to in mode posture") {
+		if runID != "" || !strings.Contains(skip, "factory validation lab and cannot run posture scenarios") {
 			t.Fatalf("runID=%q skip=%q, want the factory-lab refusal and no run", runID, skip)
 		}
 	})

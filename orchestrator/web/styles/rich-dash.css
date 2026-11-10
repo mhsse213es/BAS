@@ -10,6 +10,20 @@
 
 /* Grids. Cells wrap one card each and stretch it to the row height. */
 .dp-g5 { display: grid; gap: 14px; grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: 4px; }
+/* Operational KPI row. The number leads and its trend sits beside it on the same line, so a tile reads as one
+   sentence (what, how much, which way) instead of a stack. Scoped to this row: the tile is shared with other pages. */
+#dop-kpis .rk-kpi {
+  display: grid; grid-template-columns: minmax(0, 1fr) 88px; grid-template-areas: "top top" "val spark" "sub sub";
+  align-content: start; column-gap: 10px; padding: 16px 18px 15px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--kc, var(--accent)) 8%, var(--surface)), var(--surface) 62%);
+}
+#dop-kpis .rk-kpi::after { display: none; }
+#dop-kpis .rk-kpi-top { grid-area: top; gap: 10px; font-size: 12.5px; }
+#dop-kpis .rk-kpi-ico { width: 30px; height: 30px; border-radius: 9px; background: color-mix(in srgb, var(--kc, var(--accent)) 18%, transparent); }
+#dop-kpis .rk-kpi-val { grid-area: val; align-self: end; margin-top: 14px; font-size: 34px; line-height: 1; }
+#dop-kpis .rk-kpi.tone-warn .rk-kpi-val, #dop-kpis .rk-kpi.tone-bad .rk-kpi-val { color: var(--kc); }
+#dop-kpis .rk-kpi-spark { grid-area: spark; align-self: end; margin: 0; min-width: 0; }
+#dop-kpis .rk-kpi-sub { grid-area: sub; margin-top: 12px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .dp-side { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) 300px; margin-bottom: 14px; }
 .dp-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .dp-cell { display: grid; min-width: 0; }
@@ -107,6 +121,24 @@ td.num, th.num { text-align: right; }
 .dp-right { text-align: right; }
 .dp-tone { font-size: 20px; color: var(--kc, var(--text)); }
 .dp-pbars { display: block; width: 100%; height: auto; margin-top: 8px; }
+.dp-thr { stroke: var(--border-hi); stroke-width: 1; stroke-dasharray: 3 4; }
+
+/* Posture score: the gauge carries the card, so it gets size and a glow in its own tone; the rest stays quiet */
+.dp-posture { gap: 32px; }
+.dp-gauge { --g: var(--accent); flex: none; line-height: 0; }
+.dp-gauge.t-ok { --g: var(--success); }
+.dp-gauge.t-warn { --g: var(--warning); }
+.dp-gauge.t-bad { --g: var(--danger); }
+.dp-gauge .dp-ring { overflow: visible; }
+.dp-gauge .dp-ring circle:last-of-type { filter: drop-shadow(0 0 7px var(--g)); }
+.dp-gauge .dp-ring .dp-ring-v { font-size: 44px; font-weight: 700; font-family: var(--font-display); }
+.dp-gauge .dp-ring .donut-l { font-size: 12.5px; font-weight: 600; fill: var(--g); }
+.dp-risk { gap: 10px; padding: 4px 0 2px; }
+.dp-risk-note { margin: 0; max-width: 30ch; text-align: center; }
+.dp-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dp-stat { background: var(--elevated); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
+.dp-stat-l { font-size: 12px; color: var(--muted); }
+.dp-stat-v { font-size: 17px; display: inline-flex; align-items: center; gap: 6px; color: var(--kc, var(--text)); }
 .dp-sub { margin: 14px 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 
 /* Ransomware readiness */

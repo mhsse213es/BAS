@@ -1,0 +1,54 @@
+id: "API-BAS-DATA-401"
+name: "TEL-002: usage listing includes other subscribers' call logs"
+category: DATA
+claim: cross_identity
+attack_objective: "Subscriber A lists usage records and receives subscriber B's usage with its call log."
+threat_model:
+  attacker: "authenticated subscriber A"
+  identity: subscriber-a
+  access_level: "subscriber, valid token, owns USG-A-001 only"
+  objective: "Subscriber A lists usage records and receives subscriber B's usage with its call log."
+preconditions:
+  fixture: commerce-telecom-two-tenant
+  identities: [subscriber-a, subscriber-b]
+  object: USG-B-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: subscriber-b
+    auth: valid
+    method: GET
+    path: "/api/telecom/usage"
+    hypothesis: "Subscriber B, the owner, lists their own usage. If this fails, the scenario is not testable."
+  - id: "attack-data-401"
+    role: attack
+    identity: subscriber-a
+    auth: valid
+    method: GET
+    path: "/api/telecom/usage"
+    hypothesis: "The usage list returns only subscriber A's records, so USG-B-001 and its call log are not listed."
+denied_statuses: []
+forbidden_values: ["USG-B-001", "BAS-SIM-CALLS-B"]
+clean_is_enforcement: true
+expected_control: "The usage list returns only the caller's own records. A list that reveals another subscriber's usage or call log fails."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to the usage list carries no identifier or call log of another subscriber.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The usage list names the owner of every record it returns, so a list that discloses subscriber B fires REL-004. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "Telecom: subscriber and usage-data exposure"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DATA-401 against the fixed build must PASS"
+  - "API-BAS-DATA-401 against the vulnerable build must FAIL (exploited)"

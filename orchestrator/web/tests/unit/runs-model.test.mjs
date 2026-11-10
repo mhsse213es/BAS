@@ -81,3 +81,12 @@ test('table helpers: numeric detection, sorting numbers, paging text', () => {
   assert.equal(M.rangeText(13, 1, 8), 'Showing 9–13 of 13');
   assert.equal(M.rangeText(0, 0, 8), 'No rows match the filter');
 });
+
+test('weekSeries gives the calendar date for each day, ending on the newest run day', () => {
+  const w = M.weekSeries([R({ startedAt: '2026-10-26T10:00:00' })]);
+  assert.equal(w.dates.length, 7);
+  assert.equal(w.dates[6], '26 Oct');
+  assert.equal(w.dates[0], '20 Oct');
+  assert.equal(w.labels[6], 'Mon');
+  assert.deepEqual(M.weekSeries([]).dates, []);
+});

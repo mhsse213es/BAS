@@ -196,6 +196,9 @@ func TestInterpretARTExecutionErrors(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			// Every classified execution error — including a missing binary or
+			// unmet prerequisite — is ERROR here; the ExecutionFailure taxonomy
+			// (tested in execution_failure_test.go) attributes owner afterwards.
 			got, detail := interpretART(c.r, c.stdout)
 			if got != models.ResultError {
 				t.Errorf("interpretART(%q, exit=%d) = %q, want error (detail=%q)", c.stdout, c.r.ExitCode, got, detail)
@@ -293,7 +296,9 @@ func TestInterpretCustom_VerdictLineNotNecessarilyFirst(t *testing.T) {
 // (Technique Executed). They are NOT successful attacks — a bad path, a missing
 // runtime dependency, or a resource that already existed. Critically, several of
 // these surface on a ZERO exit code (PowerShell non-terminating errors), so they
-// must classify as ERROR, not FAIL. Strings are verbatim from the report.
+// must classify as ERROR, not FAIL. The ExecutionFailure taxonomy then attributes
+// each ERROR to its owner (environment vs content). Strings are verbatim from the
+// report.
 func TestInterpretARTAtomicArtifactsAreErrors(t *testing.T) {
 	cases := []struct {
 		name   string

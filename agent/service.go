@@ -481,15 +481,22 @@ func svcUninstall() error {
 		}
 	}
 	if !removedAny {
-		// No service is registered, but an earlier, partial uninstall may have left the agent's data behind.
-		if rep := cleanAgentFootprint(nil, nil); len(rep.Removed)+len(rep.Deferred) > 0 {
-			fmt.Printf("[+] No service was registered; the leftover agent data was removed\n")
-			return nil
-		}
+		// A removal that failed means the service is still registered: leave its data alone (the agent still needs it)
+		// and report the failure, instead of cleaning up and claiming success.
 		if lastErr != nil {
-			return lastErr
+			return uninstallOutcome(false, lastErr, 0)
 		}
-		return fmt.Errorf("service %q not found", svcName)
+		// No service is registered, but an earlier, partial uninstall may have left the agent's data behind.
+		rep := cleanAgentFootprint(nil, nil)
+		if err := uninstallOutcome(false, nil, len(rep.Removed)+len(rep.Deferred)); err != nil {
+			return fmt.Errorf("service %q not found", svcName)
+		}
+		fmt.Printf("[+] No service was registered; the leftover agent data was removed\n")
+		return nil
+	}
+	if lastErr != nil {
+		// One of the two registrations (current or legacy name) could not be removed: the agent would come back.
+		return uninstallOutcome(true, lastErr, 0)
 	}
 
 	// Everything below is best-effort cleanup: the tray autostart entry/
@@ -566,7 +573,9 @@ func uninstallServiceRegistration(m *mgr.Mgr, name string) (removed bool, err er
 	// uninstall never hangs.
 	fmt.Printf("[*] Stopping %s...\n", name)
 	if err := stopServiceAndWait(s, 15*time.Second, 500*time.Millisecond, terminateProcessByPID); err != nil {
-		return false, fmt.Errorf("stop service %q: %w", name, err)
+		// A service that will not stop can still be deleted: Windows removes it as soon as its process ends.
+		// Giving up here used to leave the agent registered and running.
+		fmt.Printf("[~] Could not stop %s (%v); deleting it anyway\n", name, err)
 	}
 
 	if err := s.Delete(); err != nil {
@@ -591,6 +600,18 @@ func uninstallServiceRegistration(m *mgr.Mgr, name string) (removed bool, err er
 
 	fmt.Printf("[+] Service %q uninstalled\n", name)
 	return true, nil
+}
+
+// uninstallOutcome decides whether an uninstall succeeded. A service that could not be removed is a failure whatever
+// else was cleaned, because the agent would still be installed and would start again at the next boot.
+func uninstallOutcome(removedAny bool, lastErr error, footprintItems int) error {
+	if lastErr != nil {
+		return lastErr
+	}
+	if !removedAny && footprintItems == 0 {
+		return fmt.Errorf("no agent service or leftover agent data was found")
+	}
+	return nil
 }
 
 func svcRun() error {

@@ -10,6 +10,7 @@ import (
 	"github.com/audspect/bas/internal/apibas/coverage"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/lab"
+	"github.com/audspect/bas/internal/apibas/runner"
 )
 
 // fixtureFor returns the lab fixture a scenario names in its preconditions.
@@ -24,6 +25,14 @@ func fixtureFor(t *testing.T, name string) fixture.Fixture {
 		return fixture.OrdersPaged()
 	case "nbfc-two-borrower":
 		return fixture.NBFCTwoBorrower()
+	case "manufacturing-two-plant":
+		return fixture.ManufacturingTwoPlant()
+	case "healthcare-two-patient":
+		return fixture.HealthcareTwoPatient()
+	case "commerce-telecom-two-tenant":
+		return fixture.CommerceTelecomTwoTenant()
+	case "upi-two-customer":
+		return fixture.UPITwoCustomer()
 	}
 	t.Fatalf("unknown fixture %q", name)
 	return fixture.Fixture{}
@@ -54,8 +63,15 @@ func TestPhase28_MeasuredCoverage(t *testing.T) {
 			notEvaluated++
 		}
 		for _, mode := range []lab.Mode{lab.ModeVulnerable, lab.ModeFixed} {
-			e := newEnvFaults(t, mode, fx, s.Preconditions.LabFaults)
-			rep := e.run(t, s, e.state)
+			// AUTHN-007 and GWAY-012 need TLS (a client certificate, an upstream certificate). The plain-HTTP lab cannot
+			// run them, so they are measured on the TLS environment their own acceptance test uses.
+			var rep runner.Report
+			if tlsGraded[s.ID] {
+				rep = newTLSEnv(t, mode, fx, true, true).run(t, s)
+			} else {
+				e := newEnvFaults(t, mode, fx, s.Preconditions.LabFaults)
+				rep = e.run(t, s, e.state)
+			}
 			out := rep.Outcome
 			if s.Detection != nil {
 				detection[modeName(mode)][rep.Outcome.Detection]++

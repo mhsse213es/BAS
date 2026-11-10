@@ -1,0 +1,54 @@
+id: "API-BAS-DATA-302"
+name: "HC-007: FHIR Observation read for another patient"
+category: DATA
+claim: cross_identity
+attack_objective: "Patient A reads patient B's FHIR Observation and receives the result and its report reference."
+threat_model:
+  attacker: "authenticated patient A"
+  identity: patient-a
+  access_level: "patient, valid token, owns LAB-A-001 only"
+  objective: "Patient A reads patient B's FHIR Observation and receives the result and its report reference."
+preconditions:
+  fixture: healthcare-two-patient
+  identities: [patient-a, patient-b]
+  object: LAB-B-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: patient-b
+    auth: valid
+    method: GET
+    path: "/api/health/fhir/Observation/LAB-B-001"
+    hypothesis: "Patient B, the subject, reads their own Observation. If this fails, the scenario is not testable."
+  - id: "attack-data-302"
+    role: attack
+    identity: patient-a
+    auth: valid
+    method: GET
+    path: "/api/health/fhir/Observation/LAB-B-001"
+    hypothesis: "Patient A's read of Observation LAB-B-001 is refused, and no report reference comes back."
+denied_statuses: [403, 404]
+forbidden_values: ["BAS-SIM-LABREF-B"]
+expected_control: "FHIR resource-level authorization limits an Observation to its subject and registered device. Another patient's read is refused."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to patient A's read of Observation LAB-B-001 carries no report reference of patient B.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The read names LAB-B-001, owned by patient B, from patient A. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "Healthcare: FHIR resource-level authorization failure"
+regulatory_mapping:
+  - IN-DPDP-S8-5
+negative_tests:
+  - "API-BAS-DATA-302 against the fixed build must PASS"
+  - "API-BAS-DATA-302 against the vulnerable build must FAIL (exploited)"

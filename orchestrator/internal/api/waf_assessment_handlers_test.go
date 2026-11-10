@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/audspect/bas/internal/wafmodsec"
 )
 
 func TestGetWAFExploitPreventionScenario_ReturnsRealFailOutcome(t *testing.T) {
@@ -58,6 +60,72 @@ func TestWafScenarioJSONHandler_HTTPProtocolIntegrity_ReturnsRealFailOutcome(t *
 		t.Error(`body missing "vectorId":"HTTPPARSE-001"`)
 	}
 	if !strings.Contains(body, `"scenarioName":"HTTP Protocol Integrity and Parser Consistency"`) {
+		t.Error("body missing scenarioName for the correct scenario")
+	}
+}
+
+// Review Focus: a FOURTH scenario must serve correctly through the same shared closure with no handler changes
+// (closes WAF QA log item #4 in part: automated-abuse had no scenario-specific handler test).
+func TestWafScenarioJSONHandler_AutomatedAbuse_ReturnsRealFailOutcome(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.wafScenarioJSONHandler("automated-abuse")(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/automated-abuse", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"outcome":"fail"`) {
+		t.Error(`body missing "outcome":"fail"`)
+	}
+	if !strings.Contains(body, `"vectorId":"BOTABUSE-004"`) {
+		t.Error(`body missing "vectorId":"BOTABUSE-004"`)
+	}
+	if !strings.Contains(body, `"scenarioName":"Automated Abuse and Resource Protection"`) {
+		t.Error("body missing scenarioName for the correct scenario")
+	}
+}
+
+// Review Focus: a FIFTH scenario must serve correctly through the same shared closure with no handler changes
+// (closes WAF QA log item #4 in part: file-upload had no scenario-specific handler test).
+func TestWafScenarioJSONHandler_FileUpload_ReturnsRealFailOutcome(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.wafScenarioJSONHandler("file-upload-content-trust")(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/file-upload-content-trust", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"outcome":"fail"`) {
+		t.Error(`body missing "outcome":"fail"`)
+	}
+	if !strings.Contains(body, `"vectorId":"FILEUP-001"`) {
+		t.Error(`body missing "vectorId":"FILEUP-001"`)
+	}
+	if !strings.Contains(body, `"scenarioName":"File Upload and Content Trust"`) {
+		t.Error("body missing scenarioName for the correct scenario")
+	}
+}
+
+// Review Focus: a SIXTH scenario must serve correctly through the same shared closure with no handler changes
+// (closes WAF QA log item #4 in part: routing-cache had no scenario-specific handler test).
+func TestWafScenarioJSONHandler_RoutingCache_ReturnsRealFailOutcome(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.wafScenarioJSONHandler("routing-cache-integrity")(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/routing-cache-integrity", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"outcome":"fail"`) {
+		t.Error(`body missing "outcome":"fail"`)
+	}
+	if !strings.Contains(body, `"vectorId":"CACHE-001"`) {
+		t.Error(`body missing "vectorId":"CACHE-001"`)
+	}
+	if !strings.Contains(body, `"scenarioName":"Application Routing and Cache Integrity"`) {
 		t.Error("body missing scenarioName for the correct scenario")
 	}
 }
@@ -129,6 +197,129 @@ func TestWafScenarioJSONHandler_OriginResilience_ReturnsRealFailOutcome(t *testi
 	}
 	if !strings.Contains(body, `"verdict":"drift_detected"`) {
 		t.Error(`body missing "verdict":"drift_detected" (the real consistency verdict, not a wafval one)`)
+	}
+}
+
+// Review Focus: the live exploit-prevention endpoint must refuse cleanly,
+// never silently fall back to the fixture-backed result, when no live WAF
+// lab is configured -- WAF_MODSEC_LAB_URL unset is the normal state in this
+// test suite and in production unless an operator has set it.
+func TestWafExploitPreventionLiveJSONHandler_NoLabConfigured_Returns503(t *testing.T) {
+	t.Setenv(wafModsecLabURLEnv, "")
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.wafExploitPreventionLiveJSONHandler(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/exploit-prevention/live", nil))
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusServiceUnavailable)
+	}
+	if !strings.Contains(rr.Body.String(), wafModsecLabURLEnv) {
+		t.Errorf("body should name %s so an operator knows what to set, got: %s", wafModsecLabURLEnv, rr.Body.String())
+	}
+}
+
+// Review Focus: the other 6 live scenario endpoints share
+// wafScenarioLiveJSONHandler with exploit-prevention's -- this proves the
+// 503 refusal path generically, for each one's own Run<Scenario>Live,
+// rather than retesting the shared handler body 6 more times.
+func TestWafScenarioLiveJSONHandler_NoLabConfigured_Returns503(t *testing.T) {
+	t.Setenv(wafModsecLabURLEnv, "")
+	h := &Handler{}
+	for _, run := range []liveScenarioRunner{
+		wafmodsec.RunHTTPProtocolIntegrityLive,
+		wafmodsec.RunRoutingCacheIntegrityLive,
+		wafmodsec.RunAPIProtectionLive,
+		wafmodsec.RunLegitimateTrafficLive,
+		wafmodsec.RunFileUploadContentTrustLive,
+		wafmodsec.RunAutomatedAbuseLive,
+	} {
+		rr := httptest.NewRecorder()
+		h.wafScenarioLiveJSONHandler(run)(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/x/live", nil))
+		if rr.Code != http.StatusServiceUnavailable {
+			t.Errorf("status = %d, want %d", rr.Code, http.StatusServiceUnavailable)
+		}
+		if !strings.Contains(rr.Body.String(), wafModsecLabURLEnv) {
+			t.Errorf("body should name %s, got: %s", wafModsecLabURLEnv, rr.Body.String())
+		}
+	}
+}
+
+// Review Focus: policy-integrity's live handler needs BOTH env vars set --
+// it must refuse (503) when either one alone is missing, not just when
+// both are, since a single configured lab can't drive a two-leg comparison.
+func TestWafPolicyIntegrityLiveJSONHandler_NoLabConfigured_Returns503(t *testing.T) {
+	h := &Handler{}
+	cases := []struct {
+		name     string
+		baseline string
+		weakened string
+	}{
+		{"both unset", "", ""},
+		{"baseline only", "http://localhost:8888", ""},
+		{"weakened only", "", "http://localhost:8889"},
+	}
+	for _, c := range cases {
+		t.Setenv(wafModsecLabURLEnv, c.baseline)
+		t.Setenv(wafModsecWeakenedLabURLEnv, c.weakened)
+		rr := httptest.NewRecorder()
+		h.wafPolicyIntegrityLiveJSONHandler(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/policy-integrity/live", nil))
+		if rr.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s: status = %d, want %d", c.name, rr.Code, http.StatusServiceUnavailable)
+		}
+	}
+}
+
+// Review Focus: detection-telemetry's live handler needs both the lab URL
+// and the audit log path set -- it must refuse (503) when either one
+// alone is missing.
+func TestWafDetectionTelemetryLiveJSONHandler_NoLabConfigured_Returns503(t *testing.T) {
+	h := &Handler{}
+	cases := []struct {
+		name         string
+		labURL       string
+		auditLogPath string
+	}{
+		{"both unset", "", ""},
+		{"lab URL only", "http://localhost:8888", ""},
+		{"audit log path only", "", "/tmp/audit.log"},
+	}
+	for _, c := range cases {
+		t.Setenv(wafModsecLabURLEnv, c.labURL)
+		t.Setenv(wafModsecAuditLogPathEnv, c.auditLogPath)
+		rr := httptest.NewRecorder()
+		h.wafDetectionTelemetryLiveJSONHandler(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/detection-telemetry/live", nil))
+		if rr.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s: status = %d, want %d", c.name, rr.Code, http.StatusServiceUnavailable)
+		}
+	}
+}
+
+// Review Focus: origin-resilience's live handler needs all three of the
+// baseline, direct-origin, and weakened URLs set -- it must refuse (503)
+// when any single one alone is missing.
+func TestWafOriginResilienceLiveJSONHandler_NoLabConfigured_Returns503(t *testing.T) {
+	h := &Handler{}
+	cases := []struct {
+		name     string
+		baseline string
+		direct   string
+		weakened string
+	}{
+		{"all unset", "", "", ""},
+		{"baseline only", "http://localhost:8888", "", ""},
+		{"direct only", "", "http://localhost:8890", ""},
+		{"weakened only", "", "", "http://localhost:8889"},
+		{"baseline+direct, no weakened", "http://localhost:8888", "http://localhost:8890", ""},
+	}
+	for _, c := range cases {
+		t.Setenv(wafModsecLabURLEnv, c.baseline)
+		t.Setenv(wafModsecOriginDirectURLEnv, c.direct)
+		t.Setenv(wafModsecWeakenedLabURLEnv, c.weakened)
+		rr := httptest.NewRecorder()
+		h.wafOriginResilienceLiveJSONHandler(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/origin-resilience/live", nil))
+		if rr.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s: status = %d, want %d", c.name, rr.Code, http.StatusServiceUnavailable)
+		}
 	}
 }
 

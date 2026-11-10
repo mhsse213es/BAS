@@ -30,7 +30,7 @@ import (
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/runner"
-	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/apibas/runnerproto"
 )
 
 func main() {
@@ -42,8 +42,12 @@ func main() {
 	machine := flag.String("machine", "", "display label for the record; identity comes from the environment fingerprint, not this label")
 	fixedTarget := flag.String("fixed-target", "", "lab base URL of the fixed build; required with -calibrate")
 	calDir := flag.String("calibration-dir", "internal/apibas/calibration/records", "directory the calibration record is written to")
-	buildLabel := flag.String("build", "", "which build the target is: vulnerable or fixed; required when APIBAS_DB_DSN is set")
+	jobRequest := flag.String("job-request", "", "orchestrator mode: run the JobRequest in this file and write a JobResult to stdout")
 	flag.Parse()
+
+	if *jobRequest != "" {
+		os.Exit(runJob(*jobRequest))
+	}
 
 	if err := checkTarget(*target, *allow); err != nil {
 		log.Fatal(err)
@@ -92,16 +96,9 @@ func main() {
 		runCalibration(r, fixed, scen, *machine, *calDir)
 		return
 	}
-	dsn := os.Getenv("APIBAS_DB_DSN")
-	if dsn != "" && *buildLabel != "vulnerable" && *buildLabel != "fixed" {
-		log.Fatal("-build must be vulnerable or fixed when APIBAS_DB_DSN is set")
-	}
 	rep, err := r.Run(context.Background(), scen)
 	if err != nil {
 		log.Fatal(err)
-	}
-	if dsn != "" {
-		persistRun(dsn, rep, *buildLabel)
 	}
 
 	enc := json.NewEncoder(os.Stdout)
@@ -203,30 +200,130 @@ func secretsFromEnv() (runner.SecretResolver, string, error) {
 	return m, admin, nil
 }
 
-// persistRun stores one run in apibas_runs. The report is the same JSON printed to stdout. The database is
-// reached only through APIBAS_DB_DSN, so the credential never appears on the command line.
-func persistRun(dsn string, rep runner.Report, build string) {
-	ctx := context.Background()
-	pool, err := db.Connect(ctx, dsn)
+// runJob executes one orchestrator job. It reads a validated JobRequest, loads the job's credentials from the file the
+// request names, runs each scenario, and writes one JobResult to stdout. It returns the process exit status. A failure at
+// any point writes a failed result with a reason and no reports, so a crash or error can never look like success.
+func runJob(path string) int {
+	f, err := os.Open(path)
 	if err != nil {
-		log.Fatalf("persist: %v", err)
+		return emitFailure(runnerproto.JobResult{}, "job request unreadable")
 	}
-	defer pool.Close()
-	if err := db.EnsureAPIBASRunSchema(ctx, pool); err != nil {
-		log.Fatalf("persist schema: %v", err)
-	}
-	raw, err := json.Marshal(rep)
+	req, err := runnerproto.DecodeJobRequest(f)
+	f.Close()
 	if err != nil {
-		log.Fatalf("persist encode: %v", err)
+		return emitFailure(runnerproto.JobResult{}, err.Error())
 	}
-	id, err := db.SaveAPIBASRun(ctx, pool, db.APIBASRun{
-		RunTag: rep.RunTag, ScenarioID: rep.ScenarioID, Build: build,
-		Result: string(rep.Outcome.Result), Exploitability: string(rep.Outcome.Exploitability),
-		Control: string(rep.Outcome.Control), Detection: rep.Outcome.Detection,
-		Reason: string(rep.Outcome.Reason), Report: raw,
-	})
+	base := runnerproto.JobResult{
+		SchemaVersion: runnerproto.SchemaVersion, JobID: req.JobID,
+		TargetBaseURL: req.TargetBaseURL, ScenarioIDs: req.ScenarioIDs,
+	}
+	if err := checkTarget(req.TargetBaseURL, strings.Join(req.AllowedHosts, ",")); err != nil {
+		return emitFailure(base, err.Error())
+	}
+	// A customer-bound job carries its own scenarios (rebuilt here from the plan) and runs against the customer's API with no
+	// independent state reader, so the runner grades read-only scenarios on the response alone and refuses anything else.
+	plan, err := req.CheckBound()
 	if err != nil {
-		log.Fatalf("persist: %v", err)
+		return emitFailure(base, err.Error())
 	}
-	log.Printf("stored apibas run %s (%s, %s)", id, rep.ScenarioID, build)
+	creds, err := runnerproto.LoadCredentials(req.CredentialsFile)
+	if err != nil {
+		return emitFailure(base, err.Error())
+	}
+	var cfg runner.Config
+	var boundScenarios map[string]contract.Scenario
+	if plan != nil {
+		boundScenarios = make(map[string]contract.Scenario, len(plan.Scenarios))
+		for _, sc := range plan.Scenarios {
+			boundScenarios[sc.ID] = sc
+		}
+		cfg = runner.Config{
+			BaseURL: req.TargetBaseURL, Fixture: plan.Fixture, Secrets: creds, State: runner.NoState{},
+			HTTP: &http.Client{Timeout: 10 * time.Second}, AllowedPaths: req.AllowedPaths,
+		}
+		if plan.Writes {
+			// Write scenarios are judged by reading each object back as its owner, and are cleaned up by the owner's restore
+			// request. Both stay inside the job's allowed paths.
+			tokenRef := func(identity string) string {
+				id, _ := plan.Fixture.Identity(identity)
+				return id.TokenRef
+			}
+			probes := make([]runner.Probe, 0, len(plan.Probes))
+			for _, p := range plan.Probes {
+				probes = append(probes, runner.Probe{Key: p.Key, TokenRef: tokenRef(p.Identity), Path: p.Path, Ignore: p.Ignore, Watch: p.Watch})
+			}
+			restores := make([]runner.Restore, 0, len(plan.Restores))
+			for _, rs := range plan.Restores {
+				restores = append(restores, runner.Restore{Key: rs.Key, TokenRef: tokenRef(rs.Identity), Method: rs.Method, Path: rs.Path, Body: rs.Body})
+			}
+			st, serr := runner.NewHTTPState(req.TargetBaseURL, probes, creds, cfg.HTTP, req.AllowedPaths)
+			if serr != nil {
+				return emitFailure(base, serr.Error())
+			}
+			rr, rerr := runner.NewHTTPRestore(req.TargetBaseURL, restores, creds, cfg.HTTP, req.AllowedPaths)
+			if rerr != nil {
+				return emitFailure(base, rerr.Error())
+			}
+			cfg.State, cfg.Reset = st, rr
+		}
+	} else {
+		fx, ok := map[string]fixture.Fixture{
+			"orders-two-tenant":   fixture.OrdersTwoTenant(),
+			"orders-no-protected": fixture.OrdersNoProtected(),
+			"orders-paged":        fixture.OrdersPaged(),
+		}[req.Fixture]
+		if !ok {
+			return emitFailure(base, "unknown fixture")
+		}
+		admin := runner.NewLabAdmin(req.TargetBaseURL, creds["apibas/lab/admin"])
+		cfg = runner.Config{
+			BaseURL: req.TargetBaseURL, Fixture: fx, Secrets: creds,
+			State: admin, Reporting: admin, Reset: admin, Events: admin,
+			HTTP: &http.Client{Timeout: 10 * time.Second}, AllowedPaths: req.AllowedPaths,
+		}
+	}
+	r, err := runner.New(cfg)
+	if err != nil {
+		return emitFailure(base, "runner setup failed")
+	}
+	reports := make([]runner.Report, 0, len(req.ScenarioIDs))
+	for _, id := range req.ScenarioIDs {
+		var scen contract.Scenario
+		if boundScenarios != nil {
+			bs, found := boundScenarios[id]
+			if !found {
+				return emitFailure(base, "scenario not in the bound plan")
+			}
+			scen = bs
+		} else {
+			var ferr error
+			if scen, ferr = findScenario(id); ferr != nil {
+				return emitFailure(base, "scenario not in the catalog")
+			}
+		}
+		if err := runner.CheckScope(req.AllowedPaths, scen); err != nil {
+			return emitFailure(base, err.Error())
+		}
+		rep, err := r.Run(context.Background(), scen)
+		if err != nil {
+			return emitFailure(base, "scenario did not complete")
+		}
+		reports = append(reports, rep)
+	}
+	base.Status = runnerproto.StatusCompleted
+	base.Reports = reports
+	if err := runnerproto.EncodeResult(os.Stdout, base); err != nil {
+		return 1
+	}
+	return 0
+}
+
+// emitFailure writes a failed JobResult. The reason is kept short and never carries a credential value.
+func emitFailure(base runnerproto.JobResult, reason string) int {
+	base.SchemaVersion = runnerproto.SchemaVersion
+	base.Status = runnerproto.StatusFailed
+	base.Error = reason
+	base.Reports = nil
+	_ = runnerproto.EncodeResult(os.Stdout, base)
+	return 1
 }

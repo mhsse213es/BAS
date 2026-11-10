@@ -77,6 +77,13 @@ const (
 	CanViewVariantCoverage Permission = "variants:coverage:view"
 	CanViewVariantStats    Permission = "variants:stats:view"
 	CanViewAPIBASRuns      Permission = "apibas:runs:view"
+	// CanRunAPIBAS starts an API BAS assessment job against a registered lab or staging target.
+	CanRunAPIBAS Permission = "apibas:jobs:run"
+	// CanManageAPIBASTargets registers and changes API BAS targets (scope and credential references). Admin only.
+	CanManageAPIBASTargets Permission = "apibas:targets:manage"
+	// CanApproveAPIBASProduction approves a production assessment. Admin only. Production execution is not enabled
+	// in this release; the permission and the approval binding exist so enabling it later needs no new model.
+	CanApproveAPIBASProduction Permission = "apibas:production:approve"
 
 	// Aleef API discovery (separate licence add-on). View reads runs, findings and regressions; run creates
 	// engagements, starts and stops runs and records prior-knowledge reviews. Viewer holds neither.
@@ -341,7 +348,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 
 		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true, CanManageComponents: true,
 
-		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true, CanViewAleef: true, CanRunAleef: true, CanAuthorizeAleef: true,
+		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true, CanRunAPIBAS: true, CanManageAPIBASTargets: true, CanApproveAPIBASProduction: true, CanViewAleef: true, CanRunAleef: true, CanAuthorizeAleef: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
@@ -412,7 +419,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 
 		CanViewContentArtifact: true,
 
-		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true, CanViewAleef: true, CanRunAleef: true,
+		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true, CanRunAPIBAS: true, CanViewAleef: true, CanRunAleef: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,

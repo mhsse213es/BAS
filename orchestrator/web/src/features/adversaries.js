@@ -414,7 +414,7 @@ export function confirmTmplRun() {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-var _adversaries = [];
+export var _adversaries = [];
 var _advDrawerID = null;
 var ADV_COLLAPSE_KEY = 'adversary_library_collapsed';
 // Starts collapsed: the library sits below every scenario card, so it used to take a long scroll to pass. The
@@ -445,10 +445,17 @@ export function toggleAdversarySection() {
   paintAdversaryCollapse();
 }
 
+// The library is its own view in the Scenarios list (after Adversary Templates), shown only when that view is open.
+export function syncAdversaryVisibility() {
+  var section = document.getElementById('adversary-section');
+  if (section) setDisplay(section, _adversaries.length && state.scenarioView === 'actors' ? '' : 'none');
+}
+
 export function loadAdversaries() {
   apicall('/api/caldera/adversaries').then(function(data) {
     _adversaries = (data || []).filter(function(a) { return a.name; });
     renderAdversaryLibrary();
+    if (state.scenarios.length) renderScenarios();
   }).catch(function() { /* Caldera not configured — silently skip */ });
 }
 export function loadAdversariesStop(el, event) { event.stopPropagation(); loadAdversaries(); }
@@ -467,7 +474,7 @@ export function renderAdversaryLibrary() {
            (a.tactics || []).some(function(t) { return t.toLowerCase().indexOf(q) !== -1; });
   });
 
-  setDisplay(section, _adversaries.length ? '' : 'none');
+  syncAdversaryVisibility();
   paintAdversaryCollapse();
   if (cnt) cnt.textContent = _adversaries.length;
 

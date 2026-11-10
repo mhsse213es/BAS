@@ -132,6 +132,33 @@ func TestEvaluatePolicyIntegrityScenario_OneMissedAmongPassesPlusUntested_Return
 	}
 }
 
+// Review Focus: a PolicyGapFixture built from real live evidence must carry
+// EvidenceSourceLiveExecution through to the assertion, not be silently
+// relabeled "fixture" -- the same hardcoding bug already fixed twice
+// elsewhere in this package (EvaluateScenarioWithSeverities,
+// EvaluateLegitimateTrafficScenario).
+func TestEvaluatePolicyIntegrityScenario_FixtureEvidenceSourceOverride_PropagatesToAssertion(t *testing.T) {
+	scenario, err := NewEnterpriseScenario("S-POLICY-3", "n", "o", []string{"GAP-001"}, "p", "e", "prov")
+	if err != nil {
+		t.Fatalf("NewEnterpriseScenario: %v", err)
+	}
+	fixtures := map[string]PolicyGapFixture{
+		"GAP-001": {
+			BaselineEvidence:               blocked("GAP-001-baseline").Results,
+			WeakenedEvidence:               blocked("GAP-001-weakened").Results,
+			PolicyDifferentiationConfirmed: true,
+			EvidenceSource:                 EvidenceSourceLiveExecution,
+		},
+	}
+	result, err := EvaluatePolicyIntegrityScenario(scenario, "owasp-crs-default", fixtures)
+	if err != nil {
+		t.Fatalf("EvaluatePolicyIntegrityScenario: %v", err)
+	}
+	if len(result.Assertions) != 1 || result.Assertions[0].EvidenceSource != EvidenceSourceLiveExecution {
+		t.Errorf("Assertions = %+v, want exactly 1 with EvidenceSource %q", result.Assertions, EvidenceSourceLiveExecution)
+	}
+}
+
 func TestEvaluatePolicyIntegrityScenario_UnknownGapID_ReturnsError(t *testing.T) {
 	scenario, err := NewEnterpriseScenario("S-POLICY-2", "n", "o", []string{"GAP-DOES-NOT-EXIST"}, "p", "e", "prov")
 	if err != nil {

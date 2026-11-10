@@ -7,6 +7,7 @@ import { apicall } from '../core/api.js';
 import { card, icon } from '../core/kit.js';
 import { chartSlot, CHART_COLORS } from '../core/charts.js';
 import * as R from './runs-res-model.js';
+import { splitReverted, cleanupTile } from './restore-model.js';
 
 var LEGEND = function(items) { return '<div class="legend">' + items.map(function(i) { return '<span><i class="lg-' + i[0] + '"></i>' + x(i[1]) + '</span>'; }).join('') + '</div>'; };
 
@@ -129,9 +130,13 @@ export function evidenceExtra(steps) {
 }
 
 export function endpointExtra(run) {
-  var n = ((run && run.reverted) || []).length;
-  if (!n) return '';
-  return row(2, [numTile('Changes reverted', n, 'cleaned up by the agent', 'ok'), ringTile('Cleanup', 100, 'every captured change reverted', 'ok')]);
+  var s = splitReverted(run && run.reverted);
+  if (!s.reverted.length && !s.incomplete.length) return '';
+  var c = cleanupTile(s);
+  // a failed restore is shown as such: never "100% reverted" beside a list that says otherwise
+  return row(s.incomplete.length ? 3 : 2, [numTile('Changes reverted', s.reverted.length, 'cleaned up by the agent', 'ok')]
+    .concat(s.incomplete.length ? [numTile('Not fully restored', s.incomplete.length, 'the endpoint may behave differently', 'bad')] : [])
+    .concat([ringTile('Cleanup', c.pct, c.label, c.tone)]));
 }
 
 export function reportsExtra(run) {

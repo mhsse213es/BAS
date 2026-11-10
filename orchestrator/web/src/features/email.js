@@ -174,7 +174,11 @@ var EG_CATALOG = [
 // the static templates they're launched from).
 var CAMPAIGN_CATALOG = [
   { id: 'bec-supplier-fraud', name: 'Business Email Compromise — Supplier Payment Fraud' },
-  { id: 'credential-phishing-url-chain', name: 'Credential Phishing — Static Lure Then Click-Time Bypass Probe' }
+  { id: 'credential-phishing-url-chain', name: 'Credential Phishing — Static Lure Then Click-Time Bypass Probe' },
+  { id: 'malware-post-delivery-response', name: 'Malware Delivery — Post-Delivery Threat Response' },
+  { id: 'exfiltration-credential-to-data-theft', name: 'Credential Harvest Then Outbound Data Exfiltration' },
+  { id: 'trust-configuration-weakness', name: 'Relay-Path Anti-Spoofing Policy Bypass' },
+  { id: 'mailbox-compromise-consequence', name: 'Compromised-Account Reply-Chain Then Weaponized Follow-Up' }
 ];
 
 // Computed fresh on every call, not cached at module load: email.js and shell.js import each

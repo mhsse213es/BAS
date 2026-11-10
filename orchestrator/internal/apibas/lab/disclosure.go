@@ -14,6 +14,8 @@ var disclosedFieldClass = map[string]string{
 	"aadhaar_ref":          detect.DisclosureKYCIdentity,
 	"debit_mandate":        detect.DisclosurePaymentCredential,
 	"disbursement_account": detect.DisclosureAccountIdentifier,
+	"diagnosis":            detect.DisclosureClinicalRecord,
+	"insurance_id":         detect.DisclosureClinicalRecord,
 }
 
 // emittedDisclosureFields walks a response body as it is serialised and returns the protected field names it contains,

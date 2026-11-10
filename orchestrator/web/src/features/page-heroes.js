@@ -91,6 +91,7 @@ var HEROES = {
     title: 'Scenarios',
     sub: 'Explore and launch security scenarios to validate your security controls.',
     actions:
+      '<button type="button" id="sc-import-btn" class="btn btn-outline" data-on-click="openContentImport">Import Sigma / YARA</button>' +
       '<button type="button" id="sc-upload-btn" class="btn btn-outline" data-on-click="pickScenarioUploadFile">' + svg('<path d="M12 16V5M7 9l5-5 5 5M5 20h14"/>') + 'Upload YAML</button>' +
       '<button type="button" id="sc-new-btn" class="btn btn-primary" data-on-click="openBuilder" data-args="[null]">' + svg('<path d="M12 5v14M5 12h14"/>') + 'New Scenario</button>',
     stats: [
@@ -317,6 +318,16 @@ var HEROES = {
       { id: 'adc-hs-composed', icon: ICON.layers, value: '—', label: 'Scenario-composed' },
       { id: 'adc-hs-executed', icon: ICON.runs, value: '—', label: 'Executed vs real AD' },
       { id: 'adc-hs-detected', icon: ICON.ok, value: '—', label: 'Detection-validated' },
+    ],
+  },
+  'hero-api-inventory': {
+    icon: ICON.layers,
+    title: 'API Inventory',
+    sub: 'Imported OpenAPI inventories per target: what each API exposes, what changed, and what could be tested.',
+    actions: '<button type="button" class="btn btn-outline" data-on-click="apiInvRefresh">Refresh</button>',
+    stats: [
+      { id: 'ai-hs-targets', icon: ICON.globe, value: '—', label: 'Targets' },
+      { id: 'ai-hs-inventories', icon: ICON.ok, value: '—', label: 'With an inventory' },
     ],
   },
   'hero-factory': {

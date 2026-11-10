@@ -102,3 +102,11 @@ test('skippedNote lists at most five names and counts the rest', () => {
   const actors = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((name) => ({ name }));
   assert.match(M.skippedNote({ minTechniques: 2, actors }), /\(A, B, C, D, E and 2 more\)/);
 });
+
+test('availOf explains what Draft and the other stages mean', () => {
+  const draft = M.availOf(S({ registry: { latestLifecycle: 'DRAFT' } }));
+  assert.equal(draft.label, 'Draft');
+  assert.match(draft.title, /generated automatically.*not yet validated/);
+  assert.match(M.availOf(S({ registry: { latestLifecycle: 'VALIDATING' } })).title, /validation lab/);
+  assert.match(M.availOf(S({ registry: { latestLifecycle: 'REJECTED' } })).title, /cannot run/);
+});

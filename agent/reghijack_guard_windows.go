@@ -88,11 +88,36 @@ func defaultGuardRoots() []guardRoot {
 		guardRoot{"HKLM", `SOFTWARE\Microsoft\Command Processor`},
 		guardRoot{"HKCU", `Software\Microsoft\Command Processor`},
 		guardRoot{"HKCU", `Environment`},
-		// Security configuration a test must not leave changed: UAC, Defender policy, LSA, WDigest.
-		guardRoot{"HKLM", `SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System`},
-		guardRoot{"HKLM", `SOFTWARE\Policies\Microsoft\Windows Defender`},
+		// Security configuration a test must not leave changed: UAC and shell policies (NoRun, DisableTaskMgr,
+		// DisableRegistryTools), every Microsoft policy (Defender, Firewall, BitLocker, Windows Update), LSA, WDigest.
+		guardRoot{"HKLM", `SOFTWARE\Microsoft\Windows\CurrentVersion\Policies`},
+		guardRoot{"HKCU", `Software\Microsoft\Windows\CurrentVersion\Policies`},
+		guardRoot{"HKLM", `SOFTWARE\Policies\Microsoft`},
+		guardRoot{"HKCU", `Software\Policies\Microsoft`},
 		guardRoot{"HKLM", `SYSTEM\CurrentControlSet\Control\Lsa`},
 		guardRoot{"HKLM", `SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest`},
+		// Found by the static scan of the shipped Windows atomics (scripts/scenario-scan): other places a test
+		// writes that change how the machine behaves. Each is small; a root too large to record is reported, not guessed.
+		guardRoot{"HKLM", `SYSTEM\CurrentControlSet\Control\Terminal Server`}, // RDP on or off
+		guardRoot{"HKLM", `SYSTEM\CurrentControlSet\Control\Session Manager`},
+		guardRoot{"HKLM", `SYSTEM\CurrentControlSet\Control\SafeBoot`},
+		guardRoot{"HKLM", `SYSTEM\CurrentControlSet\Control\NetworkProvider`},
+		guardRoot{"HKLM", `SYSTEM\CurrentControlSet\Control\FileSystem`},
+		guardRoot{"HKLM", `SYSTEM\CurrentControlSet\Control\WMI\Autologger`}, // ETW sessions switched off
+		guardRoot{"HKLM", `SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters`},
+		guardRoot{"HKLM", `SYSTEM\CurrentControlSet\Services\W32Time`},
+		guardRoot{"HKLM", `SYSTEM\CurrentControlSet\Services\TermService\Parameters`},
+		guardRoot{"HKCU", `Software\Microsoft\Windows\CurrentVersion\Internet Settings`}, // proxy and security zones
+		guardRoot{"HKCU", `Software\Microsoft\Windows\CurrentVersion\Winlogon`},
+		guardRoot{"HKLM", `SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels`}, // event log channels switched off
+		guardRoot{"HKLM", `SOFTWARE\Microsoft\Active Setup\Installed Components`},
+		guardRoot{"HKCU", `Software\Microsoft\Active Setup\Installed Components`},
+		guardRoot{"HKLM", `SOFTWARE\Microsoft\.NETFramework`},
+		guardRoot{"HKLM", `SOFTWARE\Microsoft\Provisioning\Commands`},
+		guardRoot{"HKCU", `Software\Microsoft\Office\16.0\Excel\Security`}, // macro security
+		guardRoot{"HKCU", `Software\Microsoft\Office\16.0\Word\Security`},
+		guardRoot{"HKCU", `Software\Microsoft\Office\16.0\Outlook\Security`},
+		guardRoot{"HKCU", `Software\Microsoft\Office\16.0\PowerPoint\Security`},
 	)
 	return roots
 }

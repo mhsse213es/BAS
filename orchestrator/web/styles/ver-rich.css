@@ -90,7 +90,12 @@
 .gap-n { font-size: 22px; font-weight: 700; line-height: 1.1; }
 .gap-l { color: var(--muted); font-size: 12px; margin-top: 2px; }
 .gap-t { margin: 0 16px 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-.gap-t-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gap-t-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+.gap-t-head::-webkit-details-marker { display: none; }
+.gap-chev { width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .12s; flex: none; }
+.gap-t[open] > .gap-t-head .gap-chev { transform: rotate(45deg); }
+.gap-t > .tbl-wrap, .gap-t > .gap-deps, .gap-t > .gap-none { margin-top: 8px; }
+@media (prefers-reduced-motion: reduce) { .gap-chev { transition: none; } }
 .gap-reason { margin: 4px 0 8px; }
 .gap-none { padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); font-size: 13px; }
 .gap-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }

@@ -103,6 +103,35 @@ func TestEvaluateDetectionTelemetryScenario_AllPassing_ReturnsPass(t *testing.T)
 	}
 }
 
+// Review Focus: this package has twice before hardcoded EvidenceSourceFixture
+// on every assertion regardless of what the fixture itself carried
+// (EvaluateScenarioWithSeverities, EvaluateLegitimateTrafficScenario,
+// EvaluatePolicyIntegrityScenario) -- this is the same class of bug in a
+// fourth evaluator. A fixture built from a real live probe must propagate
+// its own EvidenceSource, not have it silently overwritten to "fixture".
+func TestEvaluateDetectionTelemetryScenario_FixtureEvidenceSourceOverride_PropagatesToAssertion(t *testing.T) {
+	scenario, err := NewEnterpriseScenario("S-DETECT-6", "n", "o", []string{"WAFDETECT-001"}, "p", "e", "prov")
+	if err != nil {
+		t.Fatalf("NewEnterpriseScenario: %v", err)
+	}
+	fixtures := map[string]DetectionFixture{
+		"WAFDETECT-001": {
+			CompletenessEvidence: wafval.CollectionResult{Coverage: wafval.CoverageFound, Observations: []wafval.Observation{{EvidenceKind: wafval.EvidenceObserved}}},
+			EvidenceSource:       EvidenceSourceLiveExecution,
+		},
+	}
+	result, err := EvaluateDetectionTelemetryScenario(scenario, fixtures)
+	if err != nil {
+		t.Fatalf("EvaluateDetectionTelemetryScenario: %v", err)
+	}
+	if len(result.Assertions) != 1 {
+		t.Fatalf("Assertions = %+v, want exactly 1", result.Assertions)
+	}
+	if got := result.Assertions[0].EvidenceSource; got != EvidenceSourceLiveExecution {
+		t.Errorf("EvidenceSource = %q, want %q", got, EvidenceSourceLiveExecution)
+	}
+}
+
 func TestEvaluateDetectionTelemetryScenario_UnknownID_ReturnsError(t *testing.T) {
 	scenario, err := NewEnterpriseScenario("S-DETECT-5", "n", "o", []string{"WAFDETECT-DOES-NOT-EXIST"}, "p", "e", "prov")
 	if err != nil {

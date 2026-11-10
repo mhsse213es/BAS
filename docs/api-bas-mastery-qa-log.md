@@ -3541,3 +3541,929 @@ Decisions approved by the product owner:
 - Writes still go to plaintext only. No reference is written yet, so the resolver path is exercised only by tests until phase 2 migration runs.
 - Remaining consumers listed above.
 - Phase 2 migration job, phase 3 column drop, D5 rotation: not started.
+
+## API BAS assessment step 2: runner process contract, no database access (4 November 2026)
+
+### Scope (approved order, step 2 of 6)
+- Approved design: `docs/api-bas-assessment-design.md` (status APPROVED; acceptance requirements in section 5).
+- This step covers the runner side only. The orchestrator job path (step 3) is not built yet.
+
+### What changed
+- `orchestrator/internal/apibas/runnerproto/runnerproto.go` (new): the contract. `JobRequest` (job ID, target, fixture, scenario IDs, allowed hosts, credentials file path) and `JobResult` (status, reports, reason). `DecodeJobRequest` refuses unknown fields and invalid values. `ValidateResult` is the orchestrator's gate: schema version, job ID, target, scenario set and report count, and each report's scenario ID and run tag. A failed result must carry a reason and no reports. A completed result must carry no reason. `LoadCredentials` refuses a file readable by group or others (Unix), and never echoes file content in errors.
+- `orchestrator/cmd/apibas-runner/main.go`: new `-job-request <file>` mode. It reads one request, runs the scenarios, and writes one `JobResult` to stdout. Exit status 0 only for a completed result. Every failure path writes `status: failed` with a short reason and no reports. The `persistRun` function, the `APIBAS_DB_DSN` environment variable, the `-build` flag and the database import are removed. The CLI no longer writes to PostgreSQL.
+
+### Acceptance requirements (section 5) status after this step
+1. No runner database access: DONE. The runner has no database import and reads no DSN.
+2. Job idempotency: NOT STARTED. Belongs to step 3 (job key and dispatch).
+3. Approval binding: NOT STARTED. Step 4.
+4. Result validation: PARTIAL. Schema, job ID, target, scenario set, report count, scenario ID and run tag are checked. Evidence-reference validation is NOT done: the runner's report carries no evidence references yet. Stated gap; must be added before step 3 persists anything.
+5. Auditability: NOT STARTED. Steps 3 and 4.
+6. Isolation: PARTIAL. Credentials arrive by file, not argument, and the file is read by the owner only. The environment allow-list for the child process is enforced by the orchestrator, so it belongs to step 3.
+7. Failure semantics: DONE at the contract level. A crash, malformed output or partial run cannot be validated as completed.
+8. Production rejection: NOT STARTED. Step 3 and 4 (execution service).
+
+### Tests and results
+- `go test ./internal/apibas/runnerproto/`: 6 tests pass. Valid and invalid requests; unknown fields refused; result false-success cases refused (job mismatch, target mismatch, wrong scenario, missing reports, missing run tag, failed with reports, failed with no reason, completed with an error, unknown status); truncated and unknown-field result refused; credentials file format and permission checks.
+- Smoke test of the runner job mode against an unreachable target (`http://127.0.0.1:1`): the run executed and wrote a completed document whose verdict is `ERROR` / `TARGET_UNREACHABLE`; exit status 0. A missing credentials file produced `status: failed` with exit status 1 and no reports.
+- Interpretation recorded: job status `completed` means execution finished and every verdict is recorded. It does not mean the target passed. The grade is in each report's outcome.
+- Windows cross-compile: `cmd/apibas-runner`, `cmd/apibas-lab`, `cmd/server`: pass.
+- Full lab-backed end-to-end run of job mode: NOT run here (needs a running lab with tokens). To run in step 5 on staging.
+
+### Not done (stated)
+- Steps 3 to 6 of the approved order.
+- No UI work has started. The approved order holds the UI until execution and persistence work end to end.
+
+## API BAS assessment step 3: orchestrator job creation, dispatch, lifecycle, persistence (9 November 2026)
+
+### Deviation from the approved design (stated)
+- The design (section 2.4) said results would reuse `apibas_runs`. That table only accepts `build` = vulnerable or fixed, which are lab concepts with no meaning for a target assessment. Step 3 uses two new tables instead: `apibas_jobs` (lifecycle, requester, target, environment, scenario set, credential references) and `apibas_job_reports` (one row per scenario). The lab table is unchanged. This needs approval before step 4 relies on it.
+
+### What changed
+- `internal/db/apibas_jobs_schema.go` (new): tables. `environment` is constrained to `lab` or `staging` at the storage layer too, so production is refused in the database as well as in the service.
+- `internal/db/apibas_jobs_store.go` (new): `CreateAPIBASJob` (idempotent on `job_key`), `StartAPIBASJob` (queued to running only), `FinishAPIBASJob` (terminal states; a completed job stores its reports in the same transaction; failed and cancelled jobs store none), `ReconcileStaleAPIBASJobs`, and read helpers. Only credential references are stored, never values.
+- `internal/apibas/jobs/service.go` (new): `Submit`, `Dispatch`, `ReconcileStale`. Dispatch resolves credentials from the secret store, writes them to a private per-job directory (mode 0600), starts the runner with `-job-request`, and removes the directory on every path. The child's environment is an explicit allow-list (empty on Linux; SYSTEMROOT, TEMP and TMP on Windows). Stdout is capped at 32 MiB and stderr is discarded. The result is persisted only after `runnerproto.ValidateResult` passes. Timeout, cancellation, overflow, malformed output, exit errors and runner-reported failure each end in a failed or cancelled job with no reports.
+- `internal/apibas/jobs/testdata/fakerunner/main.go` (new): a test stand-in for the runner, driven by the fixture field, so every failure mode is exercised deterministically.
+- `cmd/server/main.go`, `internal/testutil/testdb.go`: create the job tables at startup and in the test bootstrap.
+
+### Defects found and fixed during this step
+1. A cancelled job could stay `running`: the outcome write used the cancelled context. Database writes now use `context.WithoutCancel`.
+2. The Windows runner child failed to start: the test built the stand-in without `.exe`. Fixed in the test. `New` now also refuses a missing runner binary at startup, instead of failing at the first job.
+
+### Acceptance requirements (section 5) status after step 3
+1. No runner database access: done (step 2).
+2. Job idempotency: done. The same key returns the same job; a repeated dispatch starts nothing. Tested.
+3. Approval binding: not started (step 4).
+4. Result validation: done for schema, job ID, target, scenario set and run tags. Evidence-reference validation is still NOT done, because the runner emits no evidence references. Stated gap.
+5. Auditability: partly. Requester, target, environment, scenario set, timestamps, outcome and failure reason are stored on the job. Writes to `audit_logs` and the approver field are step 4.
+6. Isolation: done for the environment allow-list, the credential file mode, and removal after the run. Tested with a parent variable that must not reach the child.
+7. Failure semantics: done and tested for every failure mode.
+8. Production rejection: done in the service and in the database. Tested.
+
+### Tests and results
+- `go test ./internal/apibas/jobs/`: 11 pass against the Postgres test container. Covered: idempotent submit; production and plaintext credential refusal; completed dispatch persists reports once, and a retry does not re-run; failure modes (malformed, mismatched job, runner-reported failure, non-zero exit after a complete-looking document) store no reports; timeout; cancellation; parent environment not inherited; credential reaches the child, is removed afterwards, and the job holds only the reference; unresolvable credential fails before running; stale running jobs reconciled; store refuses inconsistent terminal states.
+- `go test ./internal/db/` for the APIBAS, secret store and app-role tests: pass.
+- `go test ./internal/apibas/runnerproto/`: pass.
+- Windows cross-compile of server, runner and lab: pass.
+
+### Not done (stated)
+- No HTTP endpoint creates or dispatches a job. Step 4 adds authorization first.
+- `ReconcileStale` exists but has no periodic caller yet. It must run at startup and on a timer before any job is dispatched in production.
+- Dispatch runs only when a caller invokes it. There is no worker queue yet.
+- Evidence references are not validated (see requirement 4).
+- Not run against a live lab or staging target.
+
+## API BAS assessment step 4: authorization, target scope, approval binding, audit, endpoints (9 November 2026)
+
+### Assumption recorded
+- The user said "start step 4" after the step 3 summary flagged that results use new `apibas_jobs` tables instead of `apibas_runs`. This step proceeds on that deviation. It is not an explicit approval of the deviation, so it remains open for the user to reverse.
+
+### What changed
+- Permissions (`internal/auth/permissions.go`): `CanRunAPIBAS` (Admin, Analyst), `CanManageAPIBASTargets` (Admin only), `CanApproveAPIBASProduction` (Admin only). Viewers get none.
+- Target registry (`apibas_targets`, `internal/db/apibas_targets_store.go`): a target carries the base URL, environment, allowed hosts, allowed scenarios and credential references. A job request names only a target and scenarios. The URL, environment, hosts and credentials always come from the registered target, so a request cannot point the runner at an unregistered host.
+- `SubmitForTarget` (`internal/apibas/jobs/target.go`) enforces, in order: target exists; enabled; environment is lab or staging (production is refused in the service); the base URL host is in the target's allowed hosts; every scenario is in the target's allowed scenarios; and no other job is queued or running on the target (per-target advisory lock in one transaction, `CreateAPIBASJobExclusive`). A repeated key returns the existing job, including while the target is busy.
+- Approval binding: `Binding` hashes target, environment, fixture, sorted scenarios and sorted hosts. `CheckApproval` rejects an unapproved, self-approved, other-requester, other-target or changed-configuration approval. The store refuses self-approval and a second approval (`apibas_approvals`). Production execution is NOT enabled in this release, so these rules are tested but not reachable in a run.
+- Cancellation: `Service.Cancel` stops a job this process is running. The job ends `cancelled` with no reports.
+- Endpoints (all under the existing `/api/apibas` licence gate): `POST /api/apibas/targets` (manage targets), `POST /api/apibas/jobs` (run), `GET /api/apibas/jobs/{id}` (view), `POST /api/apibas/jobs/{id}/cancel` (run). Submit returns 202 and starts the job in the background; a repeated key returns 200 with `created:false`.
+- Audit (`audit_logs`, written synchronously): `apibas.target.create`, `apibas.job.submit` (before dispatch; if it cannot be written, the job is failed and never started), `apibas.job.finish` (status, reason, timestamps), `apibas.job.cancel`, and `apibas.job.refused` (denied, with the reason). Each carries the actor.
+- Server startup (`cmd/server/main.go`): job execution is enabled only when `BAS_APIBAS_RUNNER` names the runner and the encryption key is usable; otherwise the endpoints answer 503 and the log says so. Jobs left running by an earlier process are failed at startup and every 5 minutes (jobs running over 30 minutes), which closes the step 3 gap that `ReconcileStale` had no caller.
+- Request bodies reject unknown fields and are capped at 1 MiB. Credentials in a target must be secret-store references; a plaintext value is refused and never echoed.
+
+### Acceptance requirements (section 5) after step 4
+1. No runner database access: done (step 2).
+2. Job idempotency: done (step 3), plus one active job per target.
+3. Approval binding: rules and store done and tested; not exercised by a run because production is disabled. Approval request and approve endpoints are NOT built; they come with production support.
+4. Result validation: unchanged. Evidence-reference validation is still NOT done (runner emits none).
+5. Auditability: requester, target, scope, timestamps, outcome and failure reason are recorded. The approver field applies to production only and is not recorded yet.
+6. Isolation: done (step 3).
+7. Failure semantics: done (step 3). Cancellation added.
+8. Production rejection: service, database constraint, and endpoint (403 plus a `refused` audit record) all tested.
+
+### Tests and results
+- `internal/apibas/jobs` (18 tests, Postgres container): scope (lab, staging, production, disabled, unknown, out-of-scope scenario, host outside allowed hosts), one active job per target, repeat key while busy, cancel of a running job, binding sensitivity to every field, approval rules, store refusal of self-approval and double approval, plus the 11 step 3 tests. Pass.
+- `internal/api`: new handler tests pass: role boundaries (no identity, viewer, analyst, admin), target registration refusals (plaintext credential, host not allowed, unknown or empty scenarios, bad environment, bad id, non-http URL, unknown body field), duplicate 409 with a single audit row, the submit flow (202, audit actor, idempotent repeat, 409 busy, 403 production with a refused audit row, 403 out of scope, 404 unknown target, job view without credential names), and 503 without a service. `TestRBACMatrix_*` pass with the four new routes listed.
+- `internal/auth`, `internal/license`, all `internal/apibas/...` packages pass (the runner package takes about 500 s). Windows cross-compile of server and runner passes.
+- The full `internal/api` suite was not re-run in this step. The earlier full run had one known timing flake (`TestStopIsIdempotent`, Aleef).
+
+### Not done (stated)
+- Scope is enforced per target host and scenario. The runner does not yet check each request path against a registered path list; path-level scope is not implemented.
+- Approval request and approve endpoints, and production execution.
+- Evidence-reference validation.
+- No live lab or staging run. Step 5 covers staging end-to-end.
+- The job endpoint dispatches in a background goroutine inside the server process; there is no external queue, so a server restart fails running jobs (by reconciliation) rather than resuming them.
+
+## API BAS assessment step 5: end-to-end verification (9 November 2026)
+
+### Status
+- LOCAL end-to-end: done and passing. STAGING end-to-end: NOT RUN. Staging (192.168.10.78) was offered, but SSH key authentication from the build host was refused (`Permission denied (publickey,password)`). Passwords were not tried. The staging procedure is in `docs/api-bas-staging-e2e-runbook.md` for someone with access. Step 6 (UI) must not start until that runbook passes.
+
+### Local end-to-end result
+- `TestEndToEndRealRunnerAgainstRealLab` builds the real `apibas-runner` and `apibas-lab`, starts a vulnerable and a fixed lab on loopback, registers a target for each, and runs a job through `SubmitForTarget`, `Dispatch`, the secret store and Postgres, with the runner as a child process with an empty environment. Vulnerable build: `completed`, FAIL, exploited, control failed, detection detected. Fixed build: `completed`, PASS, not exploited, control enforced, detection detected. Pass.
+
+### Defects found by this step (all fixed)
+1. **Non-loopback targets could never run.** The runner accepts loopback or hosts passed in its allow-list, and the service never passed the target's allowed hosts. Any staging target would have been refused at run time. Jobs now store the target's allowed hosts and the service passes their bare hostnames (`apibas_jobs.allowed_hosts`, `hostnames()`; unit-tested including IPv6). The local test cannot prove this on a real LAN host, so staging must.
+2. **The runner was not in the orchestrator image.** `BAS_APIBAS_RUNNER` could not point anywhere in a deployed container. `orchestrator/Dockerfile` now builds `/apibas-runner` (plain `go build`, not garble, because the runner's report types have no json tags and garble breaks reflection-based output). `docker-compose.yml` passes `BAS_APIBAS_RUNNER` through from `.env`, empty by default, so existing installs are unchanged. The Dockerfile change was NOT built into an image here; only the Linux runner build and `docker compose config` were checked.
+3. **First upgrade of an existing install would abort.** `install.sh --upgrade` refused when the encryption key was missing, but an install from before this work has never had one. A marker `<DATA_DIR>/.db-key-issued` now records that a key was issued. No marker and no key: the upgrade generates one (nothing can be encrypted under a key that never existed). Marker present and key missing: the upgrade still refuses. Shell tests: 13 pass as root and as UID 1000 in Linux, including both cases.
+4. **No way to store a target credential.** Targets accept only secret-store references and nothing could write one. `POST /api/apibas/targets` now accepts a write-only `credentials` map: values are encrypted into the secret store, the target keeps references only, and the values are never returned, audited or stored in the target row (audit lists names only). A name given both as a reference and a value is refused before anything is stored. Tested.
+
+### Tests and results
+- `internal/apibas/jobs` (all, including end-to-end and the hostname test): pass.
+- `internal/api`: target and job handler tests, the write-only credential test, RBAC matrix tests: pass.
+- `packaging/compose/tests/db_encryption_key_test.sh`: 13 of 13, root and UID 1000. `setup-install-state.test.sh`: pass.
+- `GOOS=linux` runner build and `docker compose config`: pass.
+
+### Not done (stated)
+- Staging run (section above). Also not verified on staging: the compose mount of `/etc/audspect/secrets`, the image build, the container's temp directory for per-job files, and runner access to a LAN host.
+- No credential rotation or update path for an existing target (registration only).
+- Evidence references still not validated; path-level scope not implemented.
+
+## API BAS assessment: evidence reference validation and path-level scope (9 November 2026)
+
+### What changed
+- **Path scope (new package `internal/apibas/scope`).** A target now carries `allowed_paths`: path prefixes compared by whole segment (`/api/orders` covers `/api/orders/ORD-1`, not `/api/orders-admin`). Matching is case-sensitive and refuses anything it cannot reason about: not rooted, backslash or NUL, empty or `.`/`..` segments, or percent-encoded forms that decode to those or to a slash.
+- **Registration.** `allowed_paths` is validated (no bare `/`, no query or fragment, no dot segments) and is required for staging and production targets. A lab target may omit it, which means unrestricted (loopback lab only). Paths are copied onto each job, like allowed hosts.
+- **Runner enforcement, two layers.** (1) Before a scenario runs, `runner.CheckScope` checks the fixed part of every step path (before any placeholder); a scenario that could leave scope fails the job before anything is sent, with a reason naming the step. (2) `Runner.do` refuses to send any path outside scope even if (1) was bypassed. Because paths must be rooted, absolute URLs and `@host` authority tricks are refused as a side effect.
+- **Orchestrator enforcement.** `ValidateResult` re-checks every recorded exchange path against the job's scope, so a misbehaving runner cannot store evidence of an out-of-scope request.
+- **Evidence reference validation.** `ValidateResult` now requires each report to have a well-formed run tag (`[A-Za-z0-9_-]{6,64}`) unique within the job, and each exchange to have a step id, a known HTTP method, status 0 or 100 to 599, and a non-negative leak count. A result failing any check is not stored, so every evidence reference the results API later builds (`<run tag>#<index>`) resolves to a valid, in-scope exchange.
+- **Approvals.** `Binding` now includes the allowed paths, so changing the path scope invalidates an approval (production is still not executable).
+
+### Tests (all pass)
+- `scope`: segment matching, traversal and encoded forms, empty list, prefix validity, static prefix.
+- `runnerproto`: evidence field checks, duplicate and malformed run tags, path-scope enforcement on recorded exchanges, no-scope behaviour.
+- `runner`: `CheckScope` table (placeholders, siblings, traversal, absolute URL, authority smuggling) and the send-time refusal without network access.
+- `jobs` end-to-end with the real runner and lab: unscoped vulnerable FAIL and fixed PASS as before; a target scoped to `/api` completes PASS; a target scoped to `/health` fails the job with "outside the target's allowed paths" and stores no report.
+- `api`: registration refusals and acceptance; RBAC matrix tests unchanged and passing. Existing non-lab test targets now carry a default path scope.
+
+### Limits stated plainly
+- The exchange record is made by the runner; the orchestrator validates its shape and scope but cannot independently confirm the request was actually sent. Validation catches malformed or out-of-scope evidence, not a runner that fabricates in-scope exchanges. (The runner is a trusted binary shipped in the same image.)
+- The runner's lab-admin channel (state reads, reset, events, authenticated with the admin token) is outside this scope check. It is only used against lab-style targets that expose that interface.
+- Scenarios that deliberately use traversal or odd path forms (for example path-normalisation tests) cannot run on a target with a path scope; they fail the pre-check by design. Unscoped lab targets still run them.
+- Submission does not pre-check scenarios against the target's paths; a mismatch is reported when the job runs (job `failed`, reason names the step, no reports).
+- Existing staging or production targets registered before this change have no paths and would be refused only at registration of new ones; none exist outside tests. No migration needed beyond the added columns (`apibas_targets.allowed_paths`, `apibas_jobs.allowed_paths`, created at startup).
+- Not run on staging (see the staging runbook).
+
+## API BAS production approval endpoints (9 November 2026)
+
+### What changed
+- `POST /api/apibas/approvals` (permission: run API BAS): records a request to approve one exact production configuration (target, fixture, scenario set). The server loads the target, refuses non-production targets (400), unknown targets (404) and scenarios outside the target's allow-list (403), and computes the binding hash itself from the target's registered hosts and paths, so the requester cannot choose what is bound.
+- `POST /api/apibas/approvals/{id}/approve` (permission: approve production, Admin only): records the approver. Refused with 403 when the approver is the requester, 409 when already approved, 404 when unknown. Refusals are audited (`apibas.approval.refused`). The SQL update also enforces both rules, so a race cannot approve twice or let the requester approve.
+- `GET /api/apibas/approvals/{id}`: status (pending or approved), requester, approver, times, and `executable:false`.
+- Audit actions: `apibas.approval.request`, `apibas.approval.approve`, `apibas.approval.refused`. RBAC matrix updated; the matrix tests pass.
+
+### Tests
+Full flow in `TestAPIBASApprovalFlow`: staging target refused, unknown target, out-of-scope scenario, analyst can request but not approve (RBAC), admin cannot approve own request, a different admin approves, a third gets 409, unknown id 404, GET shows approved with the approver and `executable:false`, audit rows present.
+
+### Not done (stated)
+- Production execution remains refused by the job service (unchanged by decision for the first release). An approved record does not make anything run; `jobs.CheckApproval` is still not called by any execution path.
+- Approvals do not expire and cannot be revoked or listed. Before production execution is enabled they need an expiry, single-use consumption and a revoke endpoint.
+- Not run on staging.
+
+## API BAS approvals: expiry, revoke, single use (9 November 2026)
+
+### What changed
+- **Expiry.** A granted approval expires 24 hours after it is approved (`expires_at`, set by the database at approval time). A request left unapproved for more than 72 hours can no longer be approved. Both windows are constants in `db` (`ApprovalValidity`, `ApprovalRequestWindow`); they are not configurable yet.
+- **Revoke.** `POST /api/apibas/approvals/{id}/revoke` (Admin-only approve permission) with an optional reason (max 500 characters). Works on pending and approved approvals; 409 if already revoked or already used; 404 if unknown. A revoked request cannot be approved. Audited as `apibas.approval.revoke` (refusals as `apibas.approval.refused`). Any holder of the approve permission may revoke, including the requester if they are an Admin.
+- **Single use.** `db.ConsumeAPIBASApproval` marks an approval used by a job in one conditional update (approved, unexpired, unrevoked, unused), so jobs racing for one approval cannot both get it. A used approval cannot be revoked.
+- **Check rules.** `jobs.CheckApproval` now also refuses revoked, used, expired, and approvals with no recorded expiry (including any approval created before this change), and takes the current time as an argument.
+- **View.** `GET /api/apibas/approvals/{id}` reports status `pending`, `approved`, `expired`, `revoked` or `used`, plus expiry, revoker and reason, and the using job. Still `executable:false`.
+- Schema: six columns added to `apibas_approvals`, created at startup.
+
+### Tests
+Store lifecycle test: expiry about 24 hours ahead; first consume wins and a second is refused; 8 concurrent consumers produce exactly one winner; revoked, pending and expired approvals cannot be consumed; a used approval cannot be revoked; a stale or revoked request cannot be approved. Handler test: revoke, double revoke, analyst forbidden, approve-after-revoke, expired and used status, revoke-after-use, audit row. `CheckApproval` table extended. RBAC matrix updated.
+
+### Not done (stated)
+- Nothing calls `ConsumeAPIBASApproval` or `CheckApproval` yet: production execution is still refused, so no job consumes an approval. Wiring them into the execution path (check, then consume inside the same step that creates the job) is the work that enables production.
+- No list endpoint for pending approvals, and no notification to approvers.
+- Not run on staging.
+
+## API BAS approvals wired into the job path (9 November 2026)
+
+### What changed
+- `TargetRequest` and `POST /api/apibas/jobs` accept an `approval_id`. For a production target the service, in order: finds an existing job with the same key (returned without spending anything); requires an approval (`ErrApprovalRequired`, HTTP 403); loads it; runs `CheckApproval` against the requester, the target, and a binding hash it recomputes from the target's current hosts and paths plus the requested fixture and scenario set (`ErrApprovalInvalid`, HTTP 403 with the reason: not approved, revoked, used, expired, wrong requester, wrong target, configuration changed); then creates the job and consumes the approval in ONE transaction (`db.CreateAPIBASJobExclusiveWithApproval`). If the approval was just used, revoked or expired between check and insert, nothing is created. If the job insert fails, the approval stays unused.
+- Lab and staging are unchanged and ignore `approval_id`.
+- `jobs.Config.AllowProduction` (default false) gates all of it. Without it production is refused with `ErrEnvironmentNotPermitted` before any approval is looked at, even when a valid approval is offered. The server does not set it: there is no environment variable or setting that turns it on.
+- The job's submit audit record now includes the approval id; refusals are audited as `apibas.job.refused` with the reason.
+
+### Production is still not executable, by design
+Three guards remain and the wiring sits behind all of them: (1) `AllowProduction` is false and not exposed; (2) the `apibas_jobs.environment` CHECK still admits only lab and staging, so even with the switch on, inserting a production job fails and the transaction rolls back; (3) the endpoint reports `executable:false`. Enabling production needs a deliberate change to each, after the staging run proves approval, audit, cancel and timeout.
+
+### Tests (pass)
+- With the switch on: no approval, unknown approval, pending, other requester, changed scenario set, revoked and expired approvals are all refused with the right error and none spends an approval. A fully valid approval passes every check, the job-table constraint then refuses the insert, the approval is left unused and no job row exists.
+- With the switch off: a valid approval is still refused as environment not permitted.
+- Atomic consumption (using a staging-shaped job, since the constraint blocks production rows): first job consumes the approval and records its id; a second job with the same approval is refused and not created; a repeated job key returns the first job without needing an approval; 8 concurrent jobs racing for one approval create exactly one; an expired approval creates nothing.
+
+### Not done (stated)
+- The end-to-end production path (approval request, approval, submit, execute, report) has not run, because guard (2) blocks the insert. It can only be exercised after the constraint is widened in a staging environment.
+- No handler-level test for the new `approval_id` error mappings (they mirror the service errors that are tested).
+- Dispatch does not re-check the approval; the job already holds the consumed approval and the environment, and production dispatch is blocked by the same guards.
+- Not run on staging.
+
+## API BAS pending approvals list (9 November 2026)
+
+- `GET /api/apibas/approvals?state=pending|approved|all&target_id=&limit=` (view permission, same as reading one approval). Default state is `pending`: unapproved, unrevoked and within the 72 hour request window. `approved` means approved, unexpired, unrevoked and unused. `all` includes every state, with each row's own `status` (pending, approved, expired, revoked, used). Newest first; `limit` 1 to 200, default 50; invalid `state` or `limit` is 400. The binding hash is not returned.
+- Tests: pending, approved, revoked and lapsed requests land in the right lists; `all` returns every one; limit and target filter work; the hash is absent; bad parameters give 400. RBAC matrix updated.
+- Not done: no pagination cursor beyond `limit`, no filter by requester, and no notification to approvers. Any holder of the view permission (including analysts) can see who requested what.
+- Not run on staging.
+
+## API BAS approvals: paging, requester filter, notifications (9 November 2026)
+
+### What changed
+- **Paging.** `GET /api/apibas/approvals` now returns `next_cursor` when more rows follow; pass it back as `cursor`. Keyset paging on (created_at, id), newest first, so rows created while paging cannot cause duplicates or skips within the walk. The cursor is an opaque token; an invalid one is 400.
+- **Requester filter.** `requested_by=<user id>` narrows the list.
+- **Notifications.** Requesting, approving and revoking an approval now emit `apibas_approval_requested` (severity warning), `apibas_approval_approved` and `apibas_approval_revoked` (info) through the existing notification service: stored in `notifications`, pushed live to connected browser sessions, and sent to enabled webhooks whose minimum severity allows them. Each carries the target id and metadata with the approval id, the requester and the actor. The binding hash is never published.
+
+### Tests (pass)
+Walk of 5 approvals 2 per page: every approval exactly once, newest first, 3 pages, last page has no cursor; requester filter returns only that requester; bad cursor is 400. Notification test captures the live pushes and checks the three events, their metadata, the absence of any hash, the warning severity on the request, that all three are persisted, and that the endpoints still work without the notification service.
+
+### Limits stated plainly
+- Notifications are a broadcast to every connected browser session and every matching webhook, not addressed to individual approvers, and there is no email. The approver permission is not checked per recipient; the notification text contains the target id and user ids, so anyone who can see notifications sees them.
+- The console does not render these event types specially yet (no UI work done); they appear wherever generic notifications appear.
+- Notification emission is best effort, as for other events: a storage failure is logged and does not stop the API call.
+- Not run on staging.
+
+## API BAS manufacturing sector pack, first tranche (9 November 2026)
+
+### What was built
+- **Fixture** `manufacturing-two-plant` (`fixture.ManufacturingTwoPlant`): two plants each with a planner, an operator, a production order, a bill of materials and a machine asset; two suppliers with purchase orders; two IoT devices; one OT engineer who owns the OT management configuration. All values synthetic, protected values tagged BAS-SIM.
+- **Lab routes** (`lab/manufacturing.go`, `/api/mfg/...`), vulnerable and fixed builds, on the same pack store the NBFC records use (a fixture seeds one pack at a time): production-order read and release, bill-of-materials read, purchase-order read and change, asset listing, device read and command, OT configuration read.
+- **Seven scenarios**: AUTHZ-201 cross-plant production-order read; AUTHZ-202 operator releasing an order (function-level); AUTHZ-203 supplier changing another supplier's purchase order; AUTHZ-204 device commanding another device; DATA-201 bill of materials and CAD reference leakage; DATA-202 asset inventory and telemetry-key listing; INTEG-201 IT-side operator reaching the OT management configuration (IT/OT trust boundary).
+
+### Results
+- All seven: vulnerable build FAIL (exploited), fixed build PASS (control enforced). Every baseline is a read by the owner, so a failed baseline would show as not testable rather than a pass.
+- Whole runner package passes (475 s). Catalogue 127, executable 127, lab-validated 124 of 127 (97.6%); the three not validated are the same as before (ABUSE-002 provisional, REPORT-001 workflow-verified, REPORT-002 unevaluated).
+- Windows cross-compile of the lab binary and runner checked in the clean worktree.
+
+### Limits stated plainly
+- **No detection.** The seven scenarios declare `detection_assertion: not_evaluated`. The access event already names the record owner, so rules could be written, but none is wired or claimed. Detection `not_evaluated` count is now 42 of 127.
+- **No regulatory mapping.** None of the seven carries one.
+- **Machine commands are simulated.** The device command only records a status in the lab. Nothing drives equipment, and no OT protocol (Modbus, OPC UA) adapter exists.
+- **Thin against API.txt's manufacturing list.** Covered: ERP/MES order authorization, production-order modification, BOM and CAD leakage, supplier purchase-order manipulation, telemetry and asset exposure, IoT device command authorization, OT management exposure. Not covered: inventory write paths, BOM write paths, machine-command safety interlocks, partner onboarding for manufacturing, and live-validated anything.
+- Pack records share the NBFC store type (`nbfcStore`); the name is historical. A rename would be a separate, mechanical change.
+- Not run on staging or against a real ERP, MES or OT environment.
+
+## API BAS healthcare pack and detection wiring (9 November 2026)
+
+### Built
+- Fixture `healthcare-two-patient`, lab routes `/api/health/...` (vulnerable and fixed), nine scenarios: AUTHZ-301 to 305, DATA-301 to 303, INTEG-301. All FAIL exploited on the vulnerable build and PASS enforced on the fixed build. AUTHZ-305 (delegate beyond consent) was first tagged property_level, which the runner skips for a non-owner attacker; it is cross_identity. A test proves the fixed build still gives the delegate the consented summary.
+- Detection: the 7 manufacturing and 7 of the 9 healthcare scenarios now declare APIBAS-REL-004 (fixture-validated, not live-SIEM). The phase34 oracle was hardcoded to the NBFC /loans list; it now maps each list route (loans, mfg assets, health export) to its record kind.
+- Measured: catalogue 136, lab-validated 133 (97.8%). Detection: vulnerable detected 77, fixed detected 64; 37 of 136 scenarios still not_evaluated.
+
+### Limits
+- REL-004 keys on the record owner. It cannot tell a treating clinician from one with no relationship (AUTHZ-302), so a legitimate treating read would also fire it.
+- AUTHZ-304 (patient alters own result) and AUTHZ-305 (consent scope) stay not_evaluated with stated reasons: they need new rules (result change by a non-device identity; consent-aware disclosure).
+- No regulatory mapping on manufacturing or healthcare scenarios. No HL7, DICOM, real FHIR server, break-glass, consent revocation. Not run on staging or any real environment.
+
+## API BAS detection rules REL-021 and REL-022 (9 November 2026)
+
+- **REL-021** (result changed by a non-device identity): fires on `PATCH /api/health/lab-results/` when the actor role is known and is not `device`. Attempt is the signal. Wired to AUTHZ-304.
+- **REL-022** (clinical data to a delegate beyond consent): fires when the actor role is `delegate` and the response emitted the new `clinical_record` disclosure class (diagnosis, insurance number). Reads what was emitted, not who owns the record, so the consented summary does not fire it. Vulnerable detected, fixed not detected. Wired to AUTHZ-305.
+- Supporting: `clinical_record` class allowed on the record and export resources so REL-020 stays quiet for owners; lab classifies `diagnosis` and `insurance_id`; the phase34 oracle states both rules' expectations independently of the detector; unit tests for both rules and the class policy.
+- Measured: all 99 declared detection expectations match (0 mismatches); detection `not_evaluated` is 35 of 136. Vulnerable detected 79, fixed detected 65.
+- Limits: fixture-validated only, no live SIEM. REL-022 trusts the lab's field classification, so a new clinical field needs a class entry. The report, storage and CAD references are not policy-governed classes. REL-021 and REL-022 have no Sentinel-specific mapping beyond the shared fixture event. REL-004 still cannot separate a treating clinician from an unrelated one.
+
+## API BAS regulatory mapping for healthcare and manufacturing (9 November 2026)
+
+- **Healthcare:** new registry entry IN-DPDP-S8-5 (DPDP Act 2023 section 8(5), reasonable security safeguards). Clause text is verbatim from the committed source PDF (page 7) and uses the existing source hash. Mapped: AUTHZ-301, 302, 303, 305, DATA-301, 302, 303, INTEG-301, each with its control requirement, expected behaviour, evidence and four stated gaps. Status **unverified**: DPDP commencement is not verified against a notification and no named reviewer has confirmed it.
+- **Not mapped, deliberately:** AUTHZ-304 (a patient altering their own result is not a breach of another person's data). UAE healthcare: the committed PDPL excludes Personal Health Data that has its own legislation (scope article, point e; Federal Law 2 of 2019 is named in the preamble and is not in the source set).
+- **Manufacturing: no mapping.** The registry holds no applicable source. DPDP does not fit production orders, BOMs or device commands. An industrial-security standard or sector regulation (for example IEC 62443) would have to be obtained, committed with its hash and reviewed first; nothing was invented.
+- **Test change:** the registry load test named DPDP s12(3) as the one mapping allowed to stay unverified. It now states the rule: any mapping with commencement not verified must stay unverified, and every other mapping still needs a reviewer and matching hash. No reviewer was faked.
+- Registry, contract and coverage tests pass. A mapping is a candidate, never a compliance finding.
+
+## API BAS retail, logistics and telecom pack (9 November 2026)
+
+### Built
+- Fixture `commerce-telecom-two-tenant`: two shoppers (order + shipment), two subscribers (subscriber record, SIM, usage), two partners (API key), a carrier and a support agent. Protected values tagged BAS-SIM.
+- Lab routes `/api/retail/...` and `/api/telecom/...` in `lab/commerce.go`, vulnerable and fixed builds, on the shared pack store. A SIM swap and a key-scope change are recorded as status changes in the lab; nothing is provisioned.
+- Nine scenarios, chosen to add coverage rather than repeat the generic BIZ and INTEG scenarios (refund, coupon, stock, partner quote and webhook replay already exist): AUTHZ-401 shipment read, AUTHZ-402 shipment redirect, AUTHZ-403 SIM swap, DATA-401 usage list, DATA-402 subscriber record, BIZ-401 order price set by the owner (property-level), INTEG-401 partner key read, INTEG-402 key scope escalation (property-level), INTEG-403 carrier callback by a non-carrier (function-level).
+
+### Results
+- All nine: vulnerable build FAIL (exploited), fixed build PASS (control enforced).
+- Measured: catalogue 145, lab-validated 142 of 145 (97.9%). All 105 declared detection expectations match the detector (0 mismatches); vulnerable detected 85, fixed detected 70; 38 of 145 scenarios without detection.
+
+### Limits
+- Detection: six scenarios use REL-004. BIZ-401, INTEG-402 and INTEG-403 act on the caller's own object, so REL-004 cannot fire; they are `not_evaluated` with that reason. New rules (price change by a non-staff identity, key-scope change by a non-staff identity, delivery report by a non-carrier) would be needed.
+- No regulatory mapping (subscriber and shipment data are personal data, but regulatory verification is deferred by decision).
+- Pack records still use the NBFC store type name. Not run on staging or against a real carrier, OSS/BSS or partner portal.
+
+## API BAS detection rules REL-023, REL-024 and REL-025 (9 November 2026)
+
+- **REL-023** (retail order changed by a non-staff identity): `PATCH /api/retail/orders/` by a known role other than `agent`. Wired to BIZ-401.
+- **REL-024** (partner key scope changed by a non-staff identity): `POST /api/retail/partner-keys/*/escalate` by a known role other than `agent`. Wired to INTEG-402.
+- **REL-025** (delivery reported by a non-carrier identity): `POST /api/retail/shipments/*/callback` by a known role other than `carrier`. Wired to INTEG-403.
+- All three are attempt signals keyed on the route and the actor's role, in the style of REL-018 and REL-021, because these scenarios act on the caller's own object and REL-004 cannot see them. A read of the same resource, an unauthenticated request and the permitted role do not fire them (unit test `TestCommerceRoleRules`).
+- Measured: all 108 declared detection expectations match the detector (0 mismatches), the oracle states the expectation independently of the rules. Vulnerable detected 88, fixed detected 73; 35 of 145 scenarios without detection.
+- Limits: fixture-validated only, no live SIEM. The rules key on route text, so a renamed route needs the rule updated; a role-based rule trusts the lab's fixture role. In a real system the permitted role set would be configuration, not a constant.
+
+## API BAS OpenAPI import, first tranche (9 November 2026)
+
+- **Built:** package `internal/apibas/openapi` (import, classify, drift) and command `cmd/apibas-inventory`. Design, limits and calls in `docs/api-bas-openapi-import.md`. The owner opted out of design questions; the design calls are listed in that document for review.
+- **Tests (all pass):** document facts; path-level parameters and `$ref` resolution through nested objects and array items; effective authentication (inherited, none, optional); candidate classes per operation including negative cases (a health path is not unauthenticated, the newest version is not lifecycle); example values never reach the inventory; remote `$ref` (https and file) reported not followed; reference loop and recursive schema terminate; schema fan-out (12 properties x 8 levels) bounded by a node budget and reported; rejected inputs (empty, Swagger 2.0, no version, no paths, no operations, invalid, oversize); JSON accepted; operation limit; scope suggestion; drift (template match, query ignored, deeper path not matched, deprecated in use). CLI: report content, drift from an observed file, JSON output, bad input.
+- **Run on a real document:** the Aleef bank OpenAPI in the repo (20 operations). 17 object-level, 3 property-level, 3 data-exposure and 4 lifecycle candidates. It showed that `approve` and `settle` routes were not flagged as function-level, so the privileged-action list was extended and a test added.
+- **Limits:** parse-only. No persistence, API, console or scenario binding. OpenAPI 3.x only. Class rules are name heuristics and will both miss and over-flag. Observed routes come from a user-supplied file; nothing is discovered. A class is a reason to test, not a finding.
+
+## API BAS UPI / open-banking pack (9 November 2026)
+
+### Why
+Driven by `Assessment/BAS_Evaluation_Detailed_Report.md`'s roadmap item for REQ-016 (API attacks, BOLA/auth bypass):
+"no dedicated open-banking/UPI API-abuse suite." Everything else in `internal/apibas` already covers BOLA, auth-bypass and
+rate-limit generically; this pack adds the India UPI / open-banking-specific scenario content the report named, reusing the
+existing catalog/lab/runner machinery rather than building anything new architecturally.
+
+### Built
+- Fixture `upi-two-customer` (`internal/apibas/fixture/upi.go`): two UPI customers, one merchant/PSP, with a VPA-linked
+  account, a transaction, a standing-instruction mandate and two Account Aggregator consents (one active, one revoked) each.
+- Lab routes `/api/upi/...` (`internal/apibas/lab/upi.go`), vulnerable and fixed builds, on the shared pack store (the same
+  `nbfcStore` healthcare, manufacturing and commerce already share). The VPA-validate endpoint reuses the gateway's existing
+  per-caller rate counter (`gwRateKey`/`gwOverLimit`) rather than a new one.
+- Six scenarios: AUTHZ-501 (cross-customer transaction read), AUTHZ-502 (cross-customer VPA/linked-account read), AUTHZ-503
+  (mandate executed by a caller who is not the assigned merchant), AUTHZ-504 (cross-customer mandate read), DATA-501 (a
+  revoked Account Aggregator consent still accepted for a financial-information fetch), GWAY-501 (VPA-validate rate limit
+  bypassed by rotating X-Forwarded-For, the same bypass shape as GWAY-009). All six: vulnerable build FAIL (exploited),
+  fixed build PASS (control enforced).
+- Detection: AUTHZ-501/502/504 and DATA-501 graded by the existing APIBAS-REL-004/REL-020 rules. GWAY-501 by the existing
+  REL-005. AUTHZ-503 needed one new wiring: `detect.ActionClass` did not classify `POST /api/upi/mandates/{id}/execute` as
+  anything privileged, so REL-007 never fired; added a case classifying it as `ClassFinancialApproval` (the same class as a
+  loan decision), since executing a standing-instruction mandate collects a debit. All six now fire in both builds.
+- `TestPhase38_UPIScenariosBothBuilds` (new), plus the identities added to the shared test harness (`acceptance_test.go`)
+  and the fixture lookup `TestPhase28_MeasuredCoverage` uses (`phase28_measure_test.go`'s `fixtureFor` was missing a case for
+  the new fixture name; without it the whole measured-coverage test would have failed with `unknown fixture`, not just
+  skipped the new scenarios).
+- Measured: catalogue 145 -> 151, lab-validated 142/145 -> 148/151 (97.9% -> 98.0%), no new exclusions (the same ABUSE-002
+  provisional / REPORT-001 workflow-verified / REPORT-002 unevaluated as before). Detection: all 114 declared expectations
+  now match (`TestPhase34_DetectionMatchesDeclaredExpectations`, 0 mismatches), up from 108; vulnerable detected 93, fixed
+  detected 78; not_evaluated stays 35 of 151 (every new scenario declared a detection block).
+
+### Limits
+- Fixture/lab-validated only, same as every other pack: no live UPI switch, NPCI integration, or real PSP. No live SIEM;
+  REL-004/005/007/020 are fixture-validated against the Elastic Security fixture, not a real SIEM.
+- No regulatory mapping: the registry (`internal/apibas/regulatory/registry.yaml`) has no sourced NPCI UPI procedural
+  guideline or RBI Master Direction on Account Aggregators committed under `sources/`. `industry_mapping` on each scenario
+  names the applicable framework in plain English; this is not a reviewed, sourced compliance mapping and should not be
+  read as one.
+- Not covered: QR-code/intent-flow payment initiation, refund/chargeback flows, PSP-side settlement, a real Account
+  Aggregator's consent-handle (ReBIT) protocol. The pack tests the same BOLA/auth-bypass/rate-limit technique classes
+  already proven elsewhere in `internal/apibas`, applied to UPI/open-banking-shaped objects, not a from-scratch AA/UPI
+  protocol implementation.
+- Not run on staging or against any real environment.
+
+## API BAS inventory storage on targets (9 November 2026)
+
+- **Built:** table `apibas_target_inventories` (versioned per target, parsed inventory plus source SHA-256 and size; the raw document is never stored); store functions with a locked-target save, dedupe on source hash, prune to 50 versions; four routes (import, read with `?version=` and `?class=`, version list, drift) with existing permissions; `openapi.Compare` for what changed between versions; JSON tags on the inventory types. Design calls (the owner opted out of design questions) are recorded in `docs/api-bas-openapi-import.md`.
+- **Tests (all pass):** store: versions, identical re-import writes nothing, previous version returned for comparison, version list carries no bodies, other target unaffected, unknown target refused, prune keeps the newest 50, eight concurrent imports get eight distinct versions. API: viewer cannot import, unknown target 404, Swagger 2.0 rejected with a reason and nothing stored, first import (all added, classes, scope suggestion), identical re-import unchanged, second import reports one added, one removed and one authentication change, version/class reads, bad class and bad version 400, example values never come back, 8 MiB oversize 413, drift (counts, input validation). RBAC matrix includes the four routes and its drift test passes.
+- **Limits:** no console page. Suggested scope is shown, never applied. Drift compares against routes the caller supplies; nothing is discovered. The importer's class rules are name heuristics. Inventories are not yet used to select scenarios or build a job. The new table follows the same creation path as the other API BAS tables; no separate role grant was added (none exists for `apibas_jobs`).
+
+## API BAS scenario binding, first tranche (9 November 2026)
+
+- **Built:** package `internal/apibas/binding` (customer test data plus an inventory produce validated read-only cross-identity scenarios and a fixture); `runner.NoState` with a runner guard that refuses any non-read-only scenario when the state reader is `NoState`; preview route `POST /api/apibas/targets/{id}/binding/plan` (view permission, stores nothing). Design and limits in `docs/api-bas-scenario-binding.md`. The owner delegated design calls; they are listed there.
+- **Why read-only only:** the runner needs a state reader, and a customer API has none. An empty reader would let a state-changing attack grade as if nothing changed, so writes are skipped with a reason rather than bound with a weaker claim.
+- **Tests (all pass):** generated scenarios pass `Validate`, are READ_ONLY GET-only, use ids 901+, build correct paths and attacker/victim; skipped operations carry reasons (write, public, one owner, no objects); 16 invalid specs rejected (one identity, bad or duplicate names, shared credential, unknown owner or operation, missing or extra path parameter, traversal, slash and query in a value, short or multi-line protected value, duplicate object); 99-scenario limit; **end to end through the real runner** against a spec-shaped API: vulnerable API gives FAIL exploited, fixed API gives PASS enforced; `NoState` plus a STATE_CHANGE scenario gives SKIPPED ADAPTER_UNAVAILABLE. API: plan before an inventory 404, plan with two skipped/bound sets, no credential reference echoed, unknown field and bad input 400, unauthenticated refused; RBAC matrix includes the route.
+- **Limits:** no persistence of a binding spec, no job through the orchestrator (a plan can only be run by calling the runner directly, as the test does), no function-, property-level or data-exposure binding, response evidence only, no detection or regulatory mapping.
+
+## REQ-007: WAF assessment hardening -- scenario-specific handler test coverage (9 November 2026)
+
+(REQ-016, the open-banking/UPI API-abuse suite named alongside REQ-007 in the same request, was built concurrently
+by a separate session -- see "API BAS UPI / open-banking pack" above. An independent attempt at the same suite was
+made in parallel in this session; once the collision was found -- same scenario-ID range and, worse, a literal
+`net/http.ServeMux` route collision on `GET /api/upi/transactions/{id}` -- that attempt was discarded rather than
+merged, per this repo's standing rule for concurrent sessions on `main`: sync and discard on collision.)
+
+### Scope
+Closed a bounded part of the two open, deferred-as-low-risk items already on record in `docs/waf-mastery-qa-log.md`
+(items #3 and #4). Did not touch item #1 (no live vendor WAF adapter exists, deferred by design) or item #12's
+"nothing sends a request to a WAF" gap -- both need a real lab/vendor target this round did not add.
+
+### Changes (item #4: scenario-specific handler test density)
+Added the handler-specific tests named in item #4's own resolution path for 3 of the 5 scenarios that had none, on
+the existing `wafScenarioJSONHandler` closure test pattern used by Exploit Prevention and HTTP Protocol Integrity:
+`internal/api/waf_assessment_handlers_test.go` gained `TestWafScenarioJSONHandler_AutomatedAbuse_ReturnsRealFailOutcome`
+(slug `automated-abuse`, vector `BOTABUSE-004`), `..._FileUpload_...` (slug `file-upload-content-trust`, vector
+`FILEUP-001`), and `..._RoutingCache_...` (slug `routing-cache-integrity`, vector `CACHE-001`).
+
+**Not done:** Policy Integrity and Legitimate Traffic still have no scenario-specific handler test. Their fixtures use
+a different evidence shape (`BaselineEvidence`/`WeakenedEvidence` pairs and a false-positive claim, respectively) than
+the flat `vectorId` shape the existing closure tests assert on, and writing a correct assertion for either needs
+reading their JSON response shape first -- left for a follow-up rather than guessed.
+
+**Follow-up, same day:** read the two response shapes rather than guessing, and both tests are now added.
+`internal/api/waf_assessment_handlers.go`'s `wafScenarioJSONHandler` is fully generic over
+`reporting.BuildScenarioReport`'s output regardless of which package produced it: `EvaluatePolicyIntegrityScenario`
+(the baseline/weakened-pair evidence) and `EvaluateScenario` under a `ClaimFalsePositive` claim (legitimate-traffic)
+both still return the same `ScenarioResult`/`VectorAssertion` shape the handler renders, so no handler code needed
+to change. Added `TestWafScenarioJSONHandler_PolicyIntegrity_ReturnsRealFailOutcome` (slug `policy-integrity`,
+`vectorId` is the real policy-gap scenario id `GAP-002`, the one seeded with a confirmed exclusion-rule bypass) and
+`..._LegitimateTraffic_...` (slug `legitimate-traffic`, `vectorId` `API-001`, the one seeded incorrectly blocked).
+All 10 enterprise WAF scenarios now have a dedicated handler test; **WAF QA log item #4 is closed in full.**
+
+Item #3 (3 scenarios wire only 2 vectors each, no deliberately-untested vector to exercise the Incomplete path) was
+**not closed this round**: its own resolution path calls for a new third attack vector per family in `wafcatalog`,
+which is new content, not a test-density fix, and was not picked up here.
+
+**Follow-up, same day (item #3 closed in full):** added one genuinely new, real, CWE-mapped `wafcatalog` vector per
+affected family -- `FILEUP-003` (path traversal via a crafted upload filename, CWE-22), `HTTPPARSE-003` (HTTP
+response splitting via CRLF header injection, CWE-93), `CACHE-003` (cache poisoning via parameter cloaking on an
+unkeyed query parameter, CWE-20) -- following the exact `NewAttackVector` construction pattern every other vector
+in the catalog already uses (malicious/benign `RequestTemplate` pair, `StandardsMapping`, provenance string).
+Wired each into its scenario's `ContributingVectorIDs` (`AudspectHTTPProtocolIntegrityScenario`,
+`AudspectFileUploadContentTrustScenario`, `AudspectRoutingCacheIntegrityScenario`: 2->3 vectors) but deliberately
+left each out of that scenario's own `*Fixtures()` map, so `EvaluateScenario` now puts each new ID into
+`UntestedVectorIDs` for that specific scenario (outcome stays `ScenarioFail`, since the pre-existing Missed vector
+still wins by precedence -- this closes an evidence-density gap, not an outcome change). Three new
+`TestAudspect*Fixtures_*IsDeliberatelyUntested` tests (one per scenario) assert both that the fixture map omits
+the new ID and that `UntestedVectorIDs` contains it; the existing `..._ReferencesExactTwoVectors` tests were
+renamed/updated to `...ExactThreeVectors`. `wafcatalog`'s seed total moved 62->65 vectors;
+`TestAudspectWAFAttackCatalog_ReturnsValidatedCatalog` and the 3 per-family `..._ValidAndUnique` tests were updated
+to match. `docs/waf-mastery-qa-log.md` item #3 moved from Open to Resolved.
+
+Tests: `go test ./internal/wafcatalog/... ./internal/wafassessment/...` and the same `internal/api` filter as
+above, all green; `go build ./...`, `go vet ./internal/wafcatalog/... ./internal/wafassessment/... ./internal/api/...`
+clean on the final tree.
+
+Every item on `docs/waf-mastery-qa-log.md` is now Resolved except item #1 (no live vendor WAF adapter -- deferred
+by design, needs real lab/vendor access that does not exist for this initiative).
+
+### Tests and results
+- `go test ./internal/api/... -run "TestWafScenarioJSONHandler|TestGetWAFExploitPreventionScenario|RBAC|Matrix" -v`:
+  all pass (20 tests after the follow-up below, including `TestRBACMatrix_NoDrift`) -- no route changes were needed,
+  since WAF scenario content is slug-driven through the existing generic handler closure.
+- `go build ./...`, `go vet ./internal/apibas/... ./internal/api/...`: clean on the final tree (origin/main plus
+  only this change).
+
+## REQ-007 follow-up #3: real WAF vendor adapter, self-hosted (10 November 2026)
+
+Closed `docs/waf-mastery-qa-log.md` item #1 (no live WAF vendor adapter) -- partially, but genuinely, not by
+deferring again. The user confirmed no commercial WAF tenant (Cloudflare/F5/AWS WAF) is available; rather than
+stay blocked, this self-hosted a real open-source WAF engine instead, the same self-owned-target approach
+`internal/apibas/lab` already uses elsewhere in this repo.
+
+**Built:** `lab/wafmodsec/docker-compose.yml` -- a real ModSecurity + OWASP CRS v4 WAF (`owasp/modsecurity-crs`,
+pinned by digest) in front of a permissive echo origin (`mendhak/http-https-echo`, pinned by digest), no vendor
+account/tenant anywhere. `internal/vendors/modsecwaf` (new package) is a real HTTP client:
+`BuildRequest(baseURL, wafcatalog.RequestTemplate) (*http.Request, error)` implements the `""` and
+`"query:<param>"` `PayloadLocation` forms, erroring explicitly on anything else; `Client.Send` executes it for
+real. `internal/wafmodsec` (new package) mirrors `internal/avdefender`'s split from `internal/vendors/defender`:
+`BuildCollectionResults` turns one real HTTP response into two independent `wafval.CollectionResult`s -- the WAF
+engine's enforcement decision (HTTP status) and the origin app's own receipt confirmation (the echo server's
+distinctive JSON body, present only if the request actually reached it) -- legitimately independent because the
+echo origin is a genuinely separate container/process, not an inference.
+
+**Live-verified this session, not just built:** `internal/wafmodsec/live_test.go`'s
+`TestLive_RealWAFCatalogVectors_AgainstLiveModSecurityLab` (skipped unless `WAF_MODSEC_LAB_URL` is set, so it never
+runs in the normal suite) was run against the real running container: 4 real `wafcatalog` vectors end to end
+(`SQLI-001`, `XSS-001`, `PATHTRAV-001`, `HTTPPARSE-002` -- one per family, chosen for using only the
+`PayloadLocation` forms `BuildRequest` implements), both malicious and benign legs, asserting the real
+`wafval.Verdict` `wafval.EvaluateClaim` derives from the real response. All 8 sub-tests passed: malicious legs
+`VerdictBlocked` (403 from ModSecurity for SQLi/XSS/path-traversal, 405 from nginx's own method whitelist for
+TRACE verb tampering), benign legs `VerdictAllowed`. `lab/wafmodsec/smoke.sh` independently re-confirms the same 8
+cases via curl. This is stronger than the AV/NGAV Defender-bridge precedent this gap's old text pointed at --
+that bridge was built but never run against a live tenant; this one has actually been run, live.
+
+**Tests:** `go test ./internal/wafmodsec/... ./internal/vendors/modsecwaf/...` (unit, no live dependency) green;
+the same packages' live test green against the running container (`WAF_MODSEC_LAB_URL=http://localhost:8888`);
+`go build ./...`, `go vet ./internal/wafmodsec/... ./internal/vendors/modsecwaf/...` clean on the final tree.
+
+**Not done (disclosed, see `docs/waf-mastery-qa-log.md` item #1's resolution for detail):** only 4/65 vectors
+wired (header:/body: PayloadLocation forms unimplemented); no ModSecurity audit-log parsing, so a real Missed
+verdict isn't claimable yet (resolves Inconclusive instead); not wired into any `wafassessment` scenario or
+`internal/api` handler -- the adapter is proven standalone, scenarios stay fixture-backed; and this resolves the
+gap for ModSecurity specifically, not for a commercial vendor if the user later gets a real tenant.
+
+## REQ-007 follow-up #4: wired the live adapter into one wafassessment scenario (10 November 2026)
+
+Closed part of the "not wired into any scenario" gap disclosed in the follow-up above. New file
+`internal/wafmodsec/exploitprevention.go`: `BuildExploitPreventionLiveFixtures(ctx, client)` drives 3 of
+`wafassessment.AudspectExploitPreventionScenario`'s 8 contributing vectors (`SQLI-001`, `XSS-001`,
+`PATHTRAV-001` -- the ones `modsecwaf.BuildRequest` can replay) against the live ModSecurity lab and returns a
+`map[string]wafassessment.VectorFixture` built from the real responses via the existing `BuildCollectionResults`.
+The other 5 vectors (`SQLI-002/003`, `XSS-002/003`, `PATHTRAV-002`) get no entry at all, deliberately -- the
+caller passes this map straight to the real, completely unmodified `wafassessment.EvaluateScenario`, so those 5
+surface through its own `UntestedVectorIDs` path rather than a fixture standing in for them. `wafassessment`
+itself was not touched by any of this: the live-wiring glue lives entirely in `internal/wafmodsec`, which already
+depends on `wafval` and `vendors/modsecwaf` -- no import cycle, and `wafassessment` stays exactly as
+vendor-neutral/I-O-free as before.
+
+**Live-verified:** `TestLive_ExploitPreventionScenario_ThreeOfEightVectorsLive` (same `WAF_MODSEC_LAB_URL` gate)
+calls the real `AudspectExploitPreventionScenario()`, builds the live fixtures, and runs the real
+`EvaluateScenario` against them -- against the actual running container, not a mock. Result: all 3 live vectors
+resolved `VerdictBlocked`, the 5 others came back in `UntestedVectorIDs`, and the scenario's genuine outcome was
+`ScenarioIncomplete` (never silently `ScenarioPass` just because nothing live failed).
+
+**Tests:** `go test ./internal/wafmodsec/...` (unit, no live dependency) green; the live test green against the
+running container; `go build ./...`, `go vet ./internal/wafmodsec/...` clean.
+
+**Still not done:** the other 9 enterprise scenarios, and no `internal/api` handler exposes this live path, so a
+console user still only ever sees the fixture-backed result.
+
+## REQ-007 follow-up #5: wired the live adapter into the API (10 November 2026)
+
+Closed the "no `internal/api` handler" gap from the follow-up above. New route `GET
+/api/waf/scenarios/exploit-prevention/live`, served by `internal/api`'s new `wafExploitPreventionLiveJSONHandler`,
+through `internal/wafmodsec.RunExploitPreventionLive` (new convenience function bundling scenario+fixtures+catalog
++evaluate into one call). Same JSON shape, same `tierAny` RBAC tier as every other `/api/waf/scenarios/<slug>`
+route -- safe there because the live target is the server's own `WAF_MODSEC_LAB_URL` env var, never request input,
+so there's no SSRF surface. Missing env var -> `503` naming it; unreachable lab -> `502`; never a silent fixture
+fallback either way.
+
+**Real fix, not a workaround, for a real honesty gap this surfaced:** `wafassessment.EvaluateScenarioWithSeverities`
+hardcoded `EvidenceSource: EvidenceSourceFixture` on every `VectorAssertion` -- `EvidenceSourceLiveExecution`
+existed only as a documented, unused forward-compat stub. Serving this route unchanged would have rendered real
+live evidence as `"evidenceSource":"fixture"` in the JSON response -- exactly the kind of mislabeling this
+project's standing scoring-honesty rule exists to catch. Fixed properly: `VectorFixture` gained an `EvidenceSource`
+field; the evaluator uses it when set, defaults to `EvidenceSourceFixture` when not (every existing fixture across
+all 10 scenarios leaves it unset, so no existing behavior changed -- the full `wafassessment` suite stayed green,
+plus one new regression test proving both the override and the default). `BuildExploitPreventionLiveFixtures` now
+sets `EvidenceSourceLiveExecution` on its 3 live fixtures.
+
+**Tests:** `TestEvaluateScenario_FixtureEvidenceSourceOverride_PropagatesToAssertion` (new, `wafassessment`, unit);
+`TestWafExploitPreventionLiveJSONHandler_NoLabConfigured_Returns503` (new, `internal/api`, unit, no live
+dependency); `TestWafExploitPreventionLiveJSONHandler_RealLab_ReturnsRealLiveOutcome` (new, `internal/api`, live
+-- ran against the real running container: `outcome":"incomplete"`, 3 vectors `"evidenceSource":"live_execution"`,
+zero `"fixture"` labels anywhere in the body, 5 untested IDs present). `TestRBACMatrix_NoDrift` and
+`TestRBACMatrix_AuthorizationBoundary` both pass with the new route matrixed. `go build ./...`, `go vet ./...`
+clean on the final tree.
+
+**Still not done:** the other 9 enterprise scenarios aren't live-capable, so the console only gets a live result
+for exploit-prevention; `modsecwaf.BuildRequest` still covers only the `""`/`query:<param>` PayloadLocation forms;
+no ModSecurity audit-log parsing, so `VerdictMissed` still isn't claimable from live evidence.
+
+## API BAS binding spec persisted on targets (10 November 2026)
+
+- **Built:** table `apibas_target_bindings`, store functions, `PUT|GET|DELETE /api/apibas/targets/{id}/binding` (manage-targets permission), and `POST .../binding/plan` with an empty body previewing the stored spec. Design in `docs/api-bas-scenario-binding.md`.
+- **Calls made:** one spec per target, replaced on save (no history); reading needs the manage permission because protected values can be sensitive; save validates against the newest inventory and refuses a spec that does not bind; staleness is reported rather than auto-fixed; audit stores counts only.
+- **Tests (pass):** nothing stored gives 404 on read and delete and a clear 400 on empty-body preview; save without an inventory gives 404; an unknown owner and an unknown field are refused and nothing is stored; save then read back keeps content and shows `stale:false`; preview from stored spec gives the same 2 scenarios; replacing keeps one row and changes `updated_by`; importing a changed inventory flips `stale` to true with both versions; an analyst gets 403 on read and write; delete then 404; the RBAC matrix lists the three routes. Existing plan test (body supplied) still passes.
+- **Limits:** no spec history; console still previews typed data rather than editing the stored spec; running the stored plan as a job is the next step.
+
+## API BAS bound jobs: run stored test data through the orchestrator (10 November 2026)
+
+- **Built:** `POST /api/apibas/targets/{id}/binding/jobs`; `runnerproto.BoundPlan` plus `BoundFixture`, `BoundScenarioIDs`, `CheckBound` (schema version 2); `jobs.TargetRequest.Bound`; table `apibas_job_plans`; a bound branch in `apibas-runner -job-request`; `submitJob` split out of the job handler so both routes share it. Design in `docs/api-bas-scenario-binding.md`.
+- **Calls made:** the plan travels in the runner request and the runner rebuilds scenarios with the same `Bind` (nothing serialised from the scenario types); fixture is `bound:<plan hash>` so an approval binds the exact plan; the registered scenario allow-list is not applied to bound scenarios and the path scope is; every identity credential must be a credential name registered on the target; stale test data is refused with 409; the caller chooses only a key.
+- **Tests (pass):** real runner binary + real database: vulnerable API FAIL, fixed API PASS for both bound scenarios; replayed key returns the same job; unregistered credential refused as a scope violation; narrow path scope fails the job with no report; a plan edited after submission fails ("does not match", no report); a missing plan row fails ("plan is unavailable"). Protocol: consistent request accepted, same plan same fixture name, 7 inconsistent requests refused (missing, altered, edited protected value, wrong or fewer ids, unbound fixture, truncated hash, plan that no longer binds), ordinary request with a plan refused. API: no test data 404, missing key 400, caller-chosen scenarios 400, queued 202 with bound fixture and stored plan, replay 200, stale 409, unregistered credential 403, no service 503; RBAC matrix lists the route. Existing protocol, jobs and API BAS tests updated to schema version 2 and pass.
+- **Not run:** staging, a real customer API, production approval path with a bound job.
+- **Limits:** results are stored like any job's but the console does not show bound jobs; no scheduling; read-only object-level only.
+
+## API BAS write binding (10 November 2026)
+
+- **Built:** `allow_writes` and per-object `write` blocks in the binding spec; `binding` generates STATE_CHANGE_SANDBOX scenarios for PUT/PATCH with probes and restores; `runner.HTTPState` (reads each object as its owner, fingerprints the response minus ignored fields) and `runner.HTTPRestore` (owner's restore request as the sandbox reset); runner job mode uses them for write plans; job submission refuses write plans on production and on targets with no allowed paths. Design in `docs/api-bas-scenario-binding.md`.
+- **Calls made:** state is judged by owner read-back through the customer's own read route (independent of the attack response, but blind to anything that route does not return); only PUT/PATCH are bound (DELETE and POST cannot be restored by repeating a request); restore is a customer-supplied body sent before and after, and a failed restore is ERROR; `allow_writes` is the explicit acknowledgement; write jobs need registered paths and never run on production; accepted-but-no-visible-change is SKIPPED inconclusive (existing grader), not PASS; no redirects followed.
+- **Tests (pass):** binding: write plan builds valid STATE_CHANGE_SANDBOX scenarios with baseline read, attack write, probes and restores, write-specific limits (read-only plan carries none); DELETE and POST skipped with reasons; 15 invalid specs refused (writes not allowed, write op without block, block on GET or DELETE, non-JSON, array, empty, missing, identical or oversized bodies, unknown/non-GET/mismatched read operation, bad and too many ignore fields). Real runner against an API that really changes: vulnerable FAIL and objects restored, fixed PASS, accepted-no-effect SKIPPED inconclusive, refused restore ERROR (never PASS), probes and restores outside allowed paths refused at construction, NoState still refuses a write scenario. Jobs with the real runner binary and database: vulnerable FAIL with both objects left as supplied, fixed PASS, no allowed paths refused, production refused. API: write preview needs allow_writes, marks scenarios as writes with the restore limit, stores, and a write job on a target with no paths is 403.
+- **Not run:** staging, a real customer API, a restore that is only approximately idempotent.
+- **Limits:** invisible changes (fields the read route omits), object-level PUT/PATCH only, console does not edit write blocks yet.
+
+## API BAS console: stored test data and bound jobs (10 November 2026)
+
+- **Built:** Binding card on the API Inventory page: stored data prefill and status line, read and write examples, preview (typed or stored, read/write marked, write warning), save, remove, run stored data with polling and a results table. Model helpers in `api-inventory-model.js`; actions registered in `globals.js`; `.ai-warn` style. Described in `docs/api-bas-scenario-binding.md`.
+- **Calls made:** run uses only stored data (not the box) so what runs is what was validated; stale data is refused client-side as well as by the server; delete has no confirm step (re-enterable, and browser dialogs avoided); a result's meaning is stated in a sentence, with ERROR and SKIPPED said to be not a pass; polling stops after 10 minutes.
+- **Tests (pass):** 11 model tests (tones, final statuses, result sentences never read ERROR/SKIPPED as pass, job keys, stored-note wording, write example) and 6 jsdom tests with hostile strings: target names, stored values (including a `</textarea>` breakout) and result reasons render as text with no created elements; run queues with a fresh `ui-` key and shows an inconclusive result as not a pass; stale data queues nothing; invalid JSON sends no PUT and valid JSON is PUT as typed; empty-box preview sends an empty body. Full web suite 721 pass, lint 0 errors, build ok. The action-registry guard gives the same two findings as clean main.
+- **Not run:** Playwright smoke, a browser against a live server, a real bound job from the page.
+- **Limits:** no list of past bound jobs per target, write blocks are edited as JSON, the page shows only the job it just started.
+
+## REQ-007 follow-up #6: wired 4 more of the other 9 scenarios live, partially (10 November 2026)
+
+- **Built:** `Run<Scenario>Live(ctx, client)` in `internal/wafmodsec` for 4 more scenarios, same pattern as
+  `RunExploitPreventionLive`: `http-protocol-integrity` (`HTTPPARSE-002`, 1/3), `routing-cache-integrity`
+  (`CACHE-002`/`CACHE-003`, 2/3), `api-protection` (`API-003`/`APIFLOW-005`, 2/8, mixing `wafcatalog` and
+  `wafapiflow` via a small `apiflowToWafcatalogTemplate` converter), `legitimate-traffic`
+  (`SQLI-001`/`XSS-001`/`PATHTRAV-001`/`RATE-001` BENIGN legs, 4/6, evaluated as `ClaimFalsePositive`).
+- **Calls made:** only vectors whose `PayloadLocation` is `""`/`query:<param>` are wired; the rest of each
+  scenario surfaces through `UntestedVectorIDs`, same non-offsetting precedence as before. 5 scenarios
+  (`automated-abuse`, `detection-telemetry`, `file-upload-content-trust`, `origin-resilience`,
+  `policy-integrity`) get NO live wiring at all this round -- each has a fundamentally different evidence shape
+  (multi-request timing, SIEM telemetry, multipart-only payloads, deployment topology, two-leg policy
+  comparison) that a single-request HTTP client genuinely cannot represent honestly; forcing a live test for any
+  of them would be a false claim, not a thin slice, and `docs/waf-mastery-qa-log.md` item #1 states why for each.
+- **Found and fixed a second occurrence of the EvidenceSource-hardcoding bug:**
+  `EvaluateLegitimateTrafficScenario` (in `wafassessment/falsepositive.go`) had the identical
+  hardcode-to-`EvidenceSourceFixture` bug fixed in follow-up #5's `EvaluateScenarioWithSeverities` -- just never
+  caught there because nothing had driven live evidence through that specific evaluator yet. Fixed the same way
+  (use `fixture.EvidenceSource` when set, default to `EvidenceSourceFixture` otherwise), proven by a new test
+  written RED-first, `TestEvaluateLegitimateTrafficScenario_FixtureEvidenceSourceOverride_PropagatesToAssertion`.
+- **Tests (pass):** 5 new live tests (`TestLive_HTTPProtocolIntegrityScenario_OneOfThreeVectorsLive`,
+  `TestLive_RoutingCacheIntegrityScenario_TwoOfThreeVectorsLive`,
+  `TestLive_APIProtectionScenario_TwoOfEightVectorsLive`,
+  `TestLive_LegitimateTrafficScenario_FourOfSixVectorsLive`, plus the EvidenceSource regression test above) all
+  ran against the real running container -- verdicts matched curl-confirmed ground truth exactly: `HTTPPARSE-002`
+  Blocked, `CACHE-003` Blocked, `CACHE-002`/`API-003`/`APIFLOW-005` Inconclusive (CRS genuinely returns 200 for
+  all three -- a real finding about this generic WAF's scope, not an adapter bug), all 4 legitimate-traffic
+  benign legs Allowed. Full `wafassessment`, `wafmodsec`, `modsecwaf`, `wafapiflow`, `wafcatalog` suites green;
+  `go build ./...`/`go vet ./...` clean.
+- **Not run:** staging; no `internal/api` route exists yet for any of these 4 newly-partial-live scenarios
+  (exploit-prevention remains the only one with a live HTTP endpoint), so the console UI still shows only the
+  fixture-backed result for them.
+- **Limits:** the 5 unwired scenarios need real new capability, not just more wiring -- a burst-driving harness
+  (automated-abuse), a real alerting backend (detection-telemetry), multipart support in `modsecwaf.BuildRequest`
+  (file-upload-content-trust), a multi-node/dual-path lab topology (origin-resilience), and a second,
+  deliberately-weakened WAF config to compare against (policy-integrity).
+
+## API BAS past-jobs list (10 November 2026)
+
+- **Built:** `GET /api/apibas/targets/{id}/jobs` (store `ListAPIBASJobSummaries`, handler `ListAPIBASTargetJobs`, view permission) and a Recent jobs card on the API Inventory page with View, Refresh and refresh-on-completion. Each panel follows one job at a time. Described in `docs/api-bas-scenario-binding.md`.
+- **Defect found and fixed:** the bound-job route was missing from `routes.go` and the RBAC matrix on main after concurrent commit `7c59851c` removed those two lines (a stale-copy overwrite). Nothing failed because API tests use their own test router and the matrix check only compares router and matrix with each other. Restored, and `TestAPIBASRoutesAreRegistered` now walks the real router for the API BAS routes.
+- **Calls made:** list rows carry counts only (no reports, run tags or credential refs); worst-grade tone with a skip never green; limit default 25, max 100, invalid values 400; each follow panel independent; selecting a target stops following.
+- **Tests (pass):** API: empty target lists `[]`; two jobs ordered newest first with status and grade counts, another target's job absent, no credential or report data in the body; limit applied and 0, -1, 101, x refused; unknown target 404; unauthenticated refused; RBAC matrix lists the route; real-router route check. Web: countsText and worstTone (11 model tests in total plus these), jsdom: list shows kind, status, counts with a hostile requester name as text, empty list message, View renders results in its own panel and leaves the run panel untouched, a still-running job is followed without refreshing the list, a stopped follow stops polling, Refresh reloads. Full web suite and build run before push.
+- **Not run:** a browser against a live server; Playwright smoke.
+- **Limits:** no pagination past 100, no status/kind filter, no cross-target list.
+
+## REQ-007 follow-up #7: wired the other 4 live-partial scenarios into the API (10 November 2026)
+
+- **Built:** `wafExploitPreventionLiveJSONHandler`'s body extracted into a new shared
+  `wafScenarioLiveJSONHandler(run liveScenarioRunner)` in `internal/api` -- the live counterpart of the existing
+  fixture-backed `wafScenarioJSONHandler(slug)` factory, parameterized by one of `internal/wafmodsec`'s
+  `Run<Scenario>Live` functions instead of a slug. 4 new routes registered through a `liveScenarios` slice in
+  `routes.go` (exploit-prevention's own route now goes through the same loop, not a standalone line):
+  `GET /api/waf/scenarios/http-protocol-integrity/live`, `.../routing-cache-integrity/live`,
+  `.../api-protection/live`, `.../legitimate-traffic/live`.
+- **Calls made:** same `tierAny` RBAC tier, same 503-if-`WAF_MODSEC_LAB_URL`-unset / 502-if-unreachable refusal,
+  same never-falls-back-to-fixture guarantee as exploit-prevention's route -- all inherited for free from the one
+  shared handler rather than reimplemented per route, so there was no new SSRF/auth surface to re-review per
+  scenario.
+- **Tests (pass):** `TestWafScenarioLiveJSONHandler_NoLabConfigured_Returns503` (new, parameterized over all 4
+  new runners, no live dependency) and `TestWafScenarioLiveJSONHandler_RealLab_FourMoreScenarios` (new, live --
+  hits each handler directly, no router, no mock, against the real running container). Verdicts matched the
+  curl-confirmed ground truth from follow-up #6 exactly: `HTTPPARSE-002` blocked, `CACHE-003` blocked,
+  `CACHE-002`/`API-003`/`APIFLOW-005` inconclusive, all 4 legitimate-traffic benign legs allowed; every assertion
+  `evidenceSource:"live_execution"`, none `"fixture"`. `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with
+  all 4 new routes matrixed. `go build ./...`/`go vet ./...` clean; full `wafassessment`/`wafmodsec`/`modsecwaf`
+  suites green.
+- **Not run:** staging; the console UI does not render these `/live` routes yet (no frontend change was made).
+- **Limits:** same 5-scenario gap as follow-up #6 -- `automated-abuse`, `detection-telemetry`,
+  `file-upload-content-trust`, `origin-resilience`, `policy-integrity` still have no live route because they have
+  no live evaluator to call one. The user has asked for the real new capability each of those needs to be built
+  next (burst-driving harness, SIEM backend, multipart support, multi-node lab topology, second weakened-policy
+  lab instance) rather than leaving them unwired.
+
+## API BAS Write objects form (10 November 2026)
+
+- **Built:** a Write objects form on the Binding card that adds, edits and removes write objects in the test-data JSON: operation, path values, owner, attack and restore bodies, read-back, ignored fields. Pure helpers in `api-inventory-model.js` (`writeOperations`, `readChoices`, `buildWriteObject`, `mergeWriteObject`, `writeObjectsOf`, `removeObjectAt`, `identityNames`).
+- **Calls made:** the box stays the source of truth (the form merges into it and refuses a box that is not valid JSON); client checks mirror the server's so errors appear before a request; same operation and values replace; adding turns on `allow_writes`; the form stores nothing (Preview and Save are unchanged); identities and read objects stay JSON.
+- **Tests (pass):** model: operations offered, read-back choices and default, built object omits defaults and trims, 18 invalid inputs refused with a named problem, merge adds or replaces by operation and values without mutating its input, owner must be an identity, list and remove. jsdom: the form offers the inventory operations, inputs, identities and default read-back; adding puts the object in the box with `allow_writes`; invalid input changes nothing; a broken box is not edited; no identities means nothing is added; Edit then Add replaces; Remove; a hostile identity name and values appear as text only. Full web suite, lint and build run before push.
+- **Not run:** a browser against a live server; Playwright smoke.
+- **Limits:** identities and read objects are edited as JSON; bodies are edited as text.
+
+## API BAS Swagger 2.0 import (10 November 2026)
+
+- **Built:** `internal/apibas/openapi` reads Swagger 2.0 into the existing inventory: basePath prefixing, body and formData parameters, consumes, response schemas via definitions, same security rules.
+- **Calls made:** inventory paths are full request paths (basePath prefixed) so scope, binding and drift work unchanged; only http and https schemes produce servers; other swagger versions are refused by name; the old "Swagger 2.0 is rejected" test case was removed because that behaviour is intentionally replaced.
+- **Tests (pass):** document facts and prefixing, parameters, bodies and responses, auth and classes, defaults never kept, equivalence with the OpenAPI 3 fixture on shared operations, variants and refusals, basePath ignored for OpenAPI 3 documents. `go test ./internal/apibas/openapi` passes.
+- **Not run:** a real customer Swagger document; GraphQL still not imported.
+
+## REQ-007 follow-up #8: real multipart support closes `file-upload-content-trust` partially (10 November 2026)
+
+- **Built:** `modsecwaf.BuildRequest` gained a real `"body:multipart:<field>"` case using Go's `mime/multipart` --
+  `<field> == "filename"` sends Payload as the file's NAME (fixed, inert placeholder content); any other `<field>`
+  sends Payload as the file's CONTENT (fixed placeholder filename). Either way the raw Payload reaches the wire
+  unescaped, matching every other PayloadLocation form's discipline. New
+  `internal/wafmodsec/fileuploadcontenttrust.go` (`RunFileUploadContentTrustLive`) wires 2 of
+  `AudspectFileUploadContentTrustScenario`'s 3 vectors; new route `GET /api/waf/scenarios/file-upload-content-trust/live`
+  registered through the same `liveScenarios` loop as the other 5.
+- **Calls made:** `FILEUP-002` (decompression bomb) stays unwired even with multipart support in place -- its
+  catalog `Payload` is a human description, not real bytes, and this lab's origin has no archive-extraction logic
+  for a bomb to detonate against; multipart support alone doesn't make every multipart vector honestly replayable.
+- **Tests (pass):** 2 new unit tests in `modsecwaf` (RED-first, asserting the raw wire bytes carry the literal
+  payload -- one reads the parsed part content, the other reads the raw `Content-Disposition` header directly
+  since Go's own `Part.FileName()` accessor sanitizes path-traversal strings via `filepath.Base`, which would have
+  hidden exactly the bug this test exists to catch); 1 new live test
+  (`TestLive_FileUploadContentTrustScenario_TwoOfThreeVectorsLive`) and its API counterpart, both run against the
+  real container -- `FILEUP-003` curl-confirmed `Blocked`, `FILEUP-001` curl-confirmed `Inconclusive` (CRS's
+  default rule set doesn't inspect upload content for embedded PHP, a real finding, not a bug).
+  `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the new route matrixed. `go build ./...`/`go vet ./...`
+  clean; full `wafassessment`/`wafmodsec`/`modsecwaf` suites green.
+- **Not run:** staging; the remaining 4 scenarios (`automated-abuse`, `detection-telemetry`, `origin-resilience`,
+  `policy-integrity`) are next, per the user's "if each needs real new capability so be it."
+- **Limits:** `FILEUP-002` remains genuinely unwired; `modsecwaf.BuildRequest` still lacks `header:`/`body:json:`/`body:xml:` forms.
+
+## API BAS GraphQL schema import (10 November 2026)
+
+- **Built:** `internal/apibas/openapi/graphql.go` reads GraphQL SDL (hand-written lexer and parser, no new dependency) and introspection JSON into the existing inventory, one operation per root field, with `Field` added to `Operation` and the key `QUERY /graphql#field`. GraphQL-specific classification. Binding skips GraphQL operations with its own reason. The inventory table shows `path#field`.
+- **Calls made:** endpoint recorded as `/graphql` with a warning, because a schema does not say where it is served; authentication unspecified unless an auth-like directive is present (no operation is called public); schema import only, so query documents are refused; binding and running GraphQL left out on purpose (a mutation cannot be restored the way the PUT/PATCH write flow does); a hand-written SDL parser instead of a dependency, bounded by token, type, field and operation limits.
+- **Regression found and fixed:** my Swagger commit `9beca523` broke `TestAPIBASInventoryImportAndRead`, which expected Swagger 2.0 to be rejected; I had run only `internal/apibas/...`, not `internal/api`. The test now uses an unsupported version (1.2). Lesson: run the API package when an importer's behaviour changes.
+- **Tests (pass):** SDL operations and unique keys; arguments, input fields, response fields, unions, summaries, auth directive, `@deprecated`, `extend type`; classes; defaults never kept; warnings; introspection (wrapped and bare, deprecated, `__` fields skipped); 10 refusals; error names the line; OpenAPI documents not mistaken for GraphQL; legacy shapes (BOM, commas, renamed roots, recursive types, duplicate fields, oversize); camelCase privileged names; binding skip reason; API import through the router. `go test` for `openapi`, `binding` and the API inventory and RBAC tests pass.
+- **Not run:** a real customer schema or live introspection result; federation schemas; the full `internal/api` suite.
+
+## API BAS scheduled assessments (10 November 2026)
+
+- **Built:** table `apibas_schedules`; `PUT|GET|DELETE /api/apibas/targets/{id}/schedule`; a scheduler loop started by the server once a minute; a Schedule card on the API Inventory page. `buildBoundPlan` was pulled out of `RunAPIBASBinding` so the manual run and the scheduler refuse stored data for the same reasons.
+- **Calls made (design was mine; flag if you want any changed):** interval in hours (1 to 720), not cron; first run one interval after saving; lab and staging only, because production approvals are single-use and second-person; writes off by default (`include_writes`), and needing allowed paths; manage-targets permission to create (unattended runs are an admin decision); a run missed during downtime runs once, not made up; a busy target is a skip, not a failure; 5 failures to queue in a row pause the schedule; runs are audited as `schedule:<creator>`.
+- **Tests (pass):** store: bounds enforced by the table, claim only when due, due time carried for the job key, next run moves out by the interval, disabled never claimed, failure count and pause, success resets, resume on save, concurrent claims never overlap (4 callers, 6 schedules). API: validation (hours, unknown field, no stored data, writes need allowed paths, production refused), RBAC (viewer and analyst cannot save or delete, analyst can read), save/read/replace/delete, a due run queues one bound job with a stored plan and the creator as requester, a claimed run is not claimed twice, a busy target is skipped without counting as a failure, stale data fails with the reason and pauses at 5, saving again resumes, writes are left out of a scheduled plan unless asked and the stored spec is untouched. Web: card states (none, on, off, paused), interval validation (6 bad inputs), writes only when ticked, hostile result text as text, production target not offered a schedule, server refusal shown. Routes and RBAC matrix updated.
+- **Not run:** a real scheduled run end to end (job executing against a staging API); the server loop under a real restart; the Schedule card in a browser. Time-of-day schedules, notifications on pause and catalogue-job schedules are not built.
+
+## REQ-007 follow-up #9: a real burst harness and real lab rate limiting close `automated-abuse` partially (10 November 2026)
+
+- **Built:** two genuinely new pieces, not wiring. (1) `lab/wafmodsec/nginx/00-limit-req-zone.conf` +
+  `nginx/default.conf`, mounted into the `waf` container via its own documented template directory, add a real
+  nginx `limit_req_zone`/`limit_req` (`rate=2r/s burst=3 nodelay`) -- CRS itself does no rate limiting, so without
+  this there is no real limit for `RATE-001` to test. (2) `modsecwaf.Client.SendBurst(ctx, tmpl, n)` fires a
+  real, bounded burst of `n` concurrent requests and collects every response -- a single `Client.Send` round trip
+  cannot represent "N requests in a short window" at all. Curl-confirmed against the real container first: a
+  burst of 10 to `/api/quote` returns some `200`s then `503`s once the limit is exceeded. New
+  `internal/wafmodsec/automatedabuse.go` (`RunAutomatedAbuseLive`) wires 1 of
+  `AudspectAutomatedAbuseScenario`'s 6 vectors (`RATE-001`); new route `GET /api/waf/scenarios/automated-abuse/live`
+  registered through the same `liveScenarios` loop as the other 6.
+- **Calls made:** `wafmodsec.BuildBurstCollectionResults` must keep the WAF-engine and origin-app mechanisms
+  describing the SAME subset of requests (the blocked ones when enforcement fired, the allowed ones when it
+  didn't) -- deriving them independently (any-blocked vs. any-reached) described two different requests as one
+  event and resolved `Inconclusive` by contradiction, caught by a RED-first test before this shipped.
+  `RATE-002`/`BOTABUSE-001..004` stay unwired: each needs a materially different, bigger build (per-account
+  session aggregation, a bot-management/JS-challenge layer, a second header-keyed rate-limit zone, real stateful
+  lockout/CAPTCHA logic, and/or the multi-node topology `origin-resilience` needs) than the single `limit_req`
+  zone `RATE-001` needed.
+- **Tests (pass):** 1 new unit test in `modsecwaf` (`SendBurst` against an `httptest.Server`, proves every
+  response is collected, not just the first/last); 2 new unit tests in `wafmodsec` for
+  `BuildBurstCollectionResults` (RED-first -- the first version's independent-derivation bug surfaced here, and a
+  second RED-first correction: the "no enforcement" case resolves `Inconclusive`, not `Missed`, since this bridge
+  never parses the audit log, same disclosed limitation as every other evaluator in this package); 1 new live
+  test (`TestLive_AutomatedAbuseScenario_OneOfSixVectorsLive`) and its API counterpart, both run against the real
+  container -- `RATE-001` resolves `Blocked`. `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the new
+  route matrixed. `go build ./...`/`go vet ./...` clean across the whole repo; full `wafassessment`/`wafmodsec`/
+  `modsecwaf` suites green. `internal/api`'s own full suite is large (hundreds of Postgres-testcontainer-backed
+  tests, several minutes) -- ran the specific new/changed tests directly (`TestRBACMatrix_*`,
+  `TestWafScenarioLiveJSONHandler_*`, `TestWafExploitPreventionLiveJSONHandler_*`), all green, including two real
+  cross-test regressions caught this way before push (see below); a full end-to-end run of `internal/api` was
+  attempted but killed mid-run by the host's own low-memory protection, unrelated to this change -- not retried
+  this round.
+- **Found and fixed:** the first version of `nginx/default.conf` put `limit_req` in the generic `location /`
+  block, which matches every path -- this rate-limited every OTHER live test too (same client IP, same shared
+  container across a run), surfacing as false `incorrectly_blocked`/503 results on unrelated vectors
+  (`legitimate-traffic`'s `XSS-001`/`PATHTRAV-001`/`RATE-001` benign legs, `file-upload-content-trust`'s
+  `FILEUP-001`). Fixed by scoping `limit_req` to an exact-match `location = /api/quote` block; curl-reconfirmed
+  `/search` and other paths unaffected while `/api/quote` still rate-limits. Separately, the leaky bucket from a
+  10-request burst takes a few seconds to drain, so a later live test hitting the same path moments later in the
+  same process could still see stale 503s -- fixed with a 3s `time.Sleep` at the end of the automated-abuse live
+  test itself, test-isolation hygiene, not production code.
+- **Not run:** staging; the remaining 3 scenarios (`detection-telemetry`, `origin-resilience`, `policy-integrity`)
+  are next.
+- **Limits:** `RATE-002`/`BOTABUSE-001..004` remain genuinely unwired for the reasons above.
+
+## API BAS function-level and property-level bound checks (10 November 2026)
+
+- **Built:** `functions` and `properties` in the binding spec, with validation, two scenario builders (`function_level` and `property_level` claims, read-only), `kind` on the plan, console example, kind chip and wording. A spec with only these is valid.
+- **Calls made (recommendations, flag any you want changed):** read-only GET routes only, because a repeated request cannot restore a change; at least one distinctive value is required for each check, because the grader can only call a 2xx an exploit when a supplied value appears (otherwise it is inconclusive, never a pass); function check = privileged baseline then ordinary attack, expecting 403 or 404; property check = the owner reads their own object and a clean 2xx is the pass; mass assignment (writing a read-only field) deliberately left out and stated in the plan's limits.
+- **Tests (pass):** binding: plan shape, fixture owners, kinds, limits text, only-checks specs, 21 refusals, JSON round trip, and the real runner against a spec-shaped server (flawed: both FAIL exploited; fixed: both PASS enforced). API: saving refuses an unknown identity and a missing value, the saved plan shows both kinds, and a bound job queues with a bound fixture and two scenarios. Web: outline check, kind labels, example, preview text. `runnerproto` and `jobs` packages unaffected.
+- **Not run:** against a real customer API; mass assignment; checks on state-changing functions.
+
+## API BAS job list paging and status filter (10 November 2026)
+
+- **Built:** `status` and `before` on the target jobs list, a `next` cursor (creation time and job id), keyset paging with an id tie-break, a one-extra-row check so `next` appears only when another job exists, a Status choice and Load more on the card.
+- **Calls made:** keyset (cursor) paging, not offsets, so new jobs arriving while someone pages do not shift the pages; a cross-target list was left out because the console works one target at a time; the card drops a page that arrives after the filter changed.
+- **Tests (pass):** API: walking three at a time visits all seven jobs exactly once in newest-first order (two jobs share a creation time), the last page has no cursor, a page holding every job has no cursor, the status filter alone and with paging, and six kinds of bad input refused with 400. Web: Load more appends and passes the cursor back unchanged, the filter requests that status from the first page, an empty filtered list names the status, an unknown status is treated as All. The earlier list tests still pass.
+- **Not run:** a browser against a real server with hundreds of jobs.
+
+## REQ-007 follow-up #10: a real second, weakened WAF instance closes `policy-integrity` partially (10 November 2026)
+
+- **Built:** `lab/wafmodsec/docker-compose.yml` gained `waf-weakened`, identical to the baseline `waf` service
+  except `MODSEC_RULE_ENGINE=DetectionOnly` instead of `On` (ModSecurity's real `SecRuleEngine` directive, not a
+  simulated weakening), published on `http://localhost:8889`. Curl-confirmed against both real containers first:
+  baseline (`:8888`) blocks POLICY-001's XSS payload (403); weakened (`:8889`) lets the identical payload reach
+  origin (200). New `internal/wafmodsec/policyintegrity.go` (`RunPolicyIntegrityLive`) drives GAP-001's
+  referenced vector against BOTH clients and feeds both raw responses through the same `BuildCollectionResults`
+  every single-leg scenario already uses -- `GAP-001` is one of 4 "paired" weakness types
+  `wafval.Pair`/`EvaluatePolicyGap` compares baseline-vs-weakened, not a single-request claim.
+  `PolicyDifferentiationConfirmed` is hardcoded `true`, honestly: the two containers' differing
+  `MODSEC_RULE_ENGINE` is known directly from `docker-compose.yml`, not inferred from behavior. New dedicated
+  route `GET /api/waf/scenarios/policy-integrity/live` -- its own handler
+  (`wafPolicyIntegrityLiveJSONHandler`), NOT through the shared `liveScenarios` loop, since that loop's
+  `liveScenarioRunner` type builds exactly one `*modsecwaf.Client` and this scenario genuinely needs two.
+- **Found and fixed:** a THIRD occurrence of the same `EvidenceSource`-hardcoding bug fixed twice before
+  (`EvaluateScenarioWithSeverities`, `EvaluateLegitimateTrafficScenario`): `EvaluatePolicyIntegrityScenario`
+  always labeled every assertion `"fixture"`, and `PolicyGapFixture` had no `EvidenceSource` field at all --
+  fixed the same way (new field, defaults to fixture when unset), new RED-first test.
+- **Calls made:** the weakening is honestly WAF-WIDE (`MODSEC_RULE_ENGINE=DetectionOnly` disables blocking for
+  every rule), broader than GAP-001's own literal "the matching rule... was switched to detection-only" (a
+  single-rule override) -- disclosed, not overclaimed. The overall verdict resolves `Inconclusive`, not
+  `Missed`/`DetectedButAllowed`, since `wafmodsec` never parses the audit log -- same disclosed limitation as
+  every other live-wired vector, now proven to hold for a two-leg comparison too. `GAP-002`/`GAP-004`
+  (exclusion rule, priority conflict) are also paired weaknesses but need a per-rule ModSecurity override
+  mounted on a weakened instance, a different, more involved build than a single env var toggle --
+  `GAP-003`/`GAP-005`/`GAP-006` need `modsecwaf.BuildRequest`'s still-missing `body:json:`/`path:` forms.
+- **Tests (pass):** 1 new RED-first unit test in `wafassessment` for the `EvidenceSource` override; 1 new live
+  test (`TestLive_PolicyIntegrityScenario_OneOfSixVectorsLive`) and its API counterpart
+  (`TestWafPolicyIntegrityLiveJSONHandler_RealLab_ReturnsRealLiveOutcome`), both run against the real baseline
+  AND weakened containers -- `GAP-001` resolves `Inconclusive`, `evidenceSource:"live_execution"`. A dedicated
+  503 test (`TestWafPolicyIntegrityLiveJSONHandler_NoLabConfigured_Returns503`) covers all 3 combinations of
+  either/both URLs unset. `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the new route matrixed. Ran
+  the full `wafmodsec` live suite together (all 8 scenarios) to check for the same cross-test contamination
+  class of bug the automated-abuse rate limiter hit -- none found, since GAP-001 drives single requests against
+  `/search`, a path the rate limiter doesn't touch. `go build ./...`/`go vet ./...` clean; targeted
+  `wafassessment`/`wafmodsec`/`modsecwaf`/`wafpolicygap`/`wafval`/`api` tests green.
+- **Not run:** staging; the remaining 2 scenarios (`detection-telemetry`, `origin-resilience`) are next.
+- **Limits:** `GAP-002`/`GAP-003`/`GAP-004`/`GAP-005`/`GAP-006` remain genuinely unwired for the reasons above.
+
+## REQ-007 follow-up #11: reading the WAF's own real audit log closes `detection-telemetry` partially (10 November 2026)
+
+- **Built:** `lab/wafmodsec/docker-compose.yml`'s `waf` service redirects `MODSEC_AUDIT_LOG` from the image's
+  default `/dev/stdout` to a real file under a new bind-mounted `audit-logs/` directory (confirmed by reading
+  the image's own `modsecurity.conf.template` inside the running container: `MODSEC_AUDIT_LOG` substitutes
+  verbatim into ModSecurity's real `SecAuditLog` directive) -- read with an ordinary file open, not a SIEM and
+  not a `docker logs` shell-out. New `internal/wafmodsec/auditlog.go` (`FindAuditLogEntry`) scans the real
+  JSON-per-line audit format (confirmed empirically: one newline-delimited JSON object per relevant
+  transaction) for a uniquely marked probe request's real `time_stamp`/`unique_id`. New
+  `internal/wafmodsec/detectiontelemetry.go` (`RunDetectionTelemetryLive`) drives ONE real malicious request
+  (reusing SQLI-001's shape, marker appended) and correlates it to resolve 3 of
+  `AudspectDetectionTelemetryScenario`'s 5 contributing scenarios: `WAFDETECT-001` (WAF event-log completeness
+  -- the audit log genuinely IS the WAF's own event log), `WAFDETECT-003` (alert correlation -- this lab has no
+  separate alert-queue system, so the same audit-log record stands in as "alert evidence", disclosed as not a
+  true SIEM-fed alert queue), `WAFDETECT-004` (response timing -- the audit log's own real write latency,
+  resolving `within_sla` against the 5-minute SLA). New dedicated route
+  `GET /api/waf/scenarios/detection-telemetry/live` -- its own handler (`wafDetectionTelemetryLiveJSONHandler`),
+  since this scenario's evidence comes from a filesystem path, not a second HTTP client.
+- **Found and fixed:** a precision bug before it could manufacture a false result -- the audit log's
+  `time_stamp` is ctime-formatted with only second precision, so comparing it directly against a sub-second
+  `time.Now()` would make the alert appear to precede its own event on roughly half of all real runs. Fixed by
+  flooring `eventObservedAt` to the same second-level precision. Also a FOURTH occurrence of the same
+  `EvidenceSource`-hardcoding bug fixed three times before (`EvaluateScenarioWithSeverities`,
+  `EvaluateLegitimateTrafficScenario`, `EvaluatePolicyIntegrityScenario`): `EvaluateDetectionTelemetryScenario`
+  always labeled every assertion `"fixture"`, and `DetectionFixture` had no `EvidenceSource` field at all --
+  fixed the same way, new RED-first test.
+- **Calls made:** `WAFDETECT-002` (SIEM-record completeness) and `WAFDETECT-005` (evidence-archive
+  completeness) remain unwired -- both need a genuinely separate downstream system (a real SIEM ingest
+  pipeline, real long-term archival storage) that reading the WAF's own log file, however real, cannot stand in
+  for; disclosed, not overclaimed.
+- **Tests (pass):** 1 new RED-first unit test in `wafassessment` for the `EvidenceSource` override; 3 new unit
+  tests for `FindAuditLogEntry` (marker present, marker absent, file not yet written); 1 new live test
+  (`TestLive_DetectionTelemetryScenario_ThreeOfFiveVectorsLive`) and its API counterpart
+  (`TestWafDetectionTelemetryLiveJSONHandler_RealLab_ReturnsRealLiveOutcome`), both run against the real
+  container and its real audit log -- resolves `present`/`correct`/`within_sla`, `evidenceSource:"live_execution"`.
+  A dedicated 503 test covers all 3 combinations of either/both of `WAF_MODSEC_LAB_URL`/`WAF_MODSEC_AUDIT_LOG_PATH`
+  unset. `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the new route matrixed. Ran the full
+  `wafmodsec` live suite together (all 9 scenarios) to check for the same cross-test contamination class of bug
+  the automated-abuse rate limiter hit -- none found, since this probe drives a single request against
+  `/search`, a path the rate limiter doesn't touch. `go build ./...`/`go vet ./...` clean; targeted
+  `wafassessment`/`wafmodsec`/`modsecwaf`/`wafdetection`/`wafval`/`api` tests green.
+- **Not run:** staging; the remaining 1 scenario (`origin-resilience`) is next.
+- **Limits:** `WAFDETECT-002`/`WAFDETECT-005` remain genuinely unwired for the reasons above.
+
+## REQ-007 follow-up #12 (FINAL): a real undocumented route, exposed origin port, and node reuse closes `origin-resilience` partially -- all 10 scenarios now have live wiring (10 November 2026)
+
+- **Built:** `lab/wafmodsec/nginx/default.conf` gained a real `location = /legacy-search` block with
+  `modsecurity off;` -- a genuine, undocumented secondary route proxying to the same origin as `/search` but
+  never registered with ModSecurity. `docker-compose.yml`'s `origin` service gained its own separately-published
+  host port (`8890`), a real, deliberately simulated direct-origin-reachability misconfiguration. New
+  `internal/wafmodsec/originresilience.go` (`RunOriginResilienceLive`) resolves 3 of 5 contributing scenarios:
+  `WAFORIGIN-001` (routing coverage gap, SQLI-001 via `/search` vs `/legacy-search`), `WAFORIGIN-002` (direct
+  origin reachability, XSS-001 via the WAF edge vs directly against `origin:8890`), both resolving `Inconclusive`
+  (the same disclosed audit-log-parsing limitation as everywhere else); `WAFORIGIN-005` (cross-node consistency)
+  reuses `waf`/`waf-weakened` -- the same two containers policy-integrity already built -- as its two "nodes,"
+  driving PATHTRAV-001 independently against each. New dedicated route
+  `GET /api/waf/scenarios/origin-resilience/live` -- its own handler (`wafOriginResilienceLiveJSONHandler`),
+  since this scenario genuinely needs THREE real targets (baseline, direct-origin, weakened).
+- **Found and fixed:** `WAFORIGIN-005` genuinely caught `waf` and `waf-weakened` disagreeing on PATHTRAV-001
+  (one blocks 403, one lets it through 200) -- a real `waforigin.ConsistencyDrift`, forcing the whole scenario
+  to `ScenarioFail` via the non-offsetting rule. This is a STRONGER, more honest result than the Inconclusive
+  predicted going in, not a bug: a real cross-node disagreement, though its cause (a known, deliberate policy
+  difference built for a different scenario) is the same one already disclosed for policy-integrity's GAP-001.
+  Also a FIFTH occurrence of the same `EvidenceSource`-hardcoding bug fixed four times before
+  (`EvaluateScenarioWithSeverities`, `EvaluateLegitimateTrafficScenario`, `EvaluatePolicyIntegrityScenario`,
+  `EvaluateDetectionTelemetryScenario`): `evaluateContributingOriginVector` always labeled every assertion
+  `"fixture"` across all three of its dispatch kinds, and `OriginResilienceFixture` had no `EvidenceSource`
+  field at all -- fixed the same way, new RED-first test.
+- **Calls made:** `WAFORIGIN-003` (fail-open during WAF unavailability) needs actually taking the WAF container
+  down mid-test, a disruptive, differently-shaped build than an HTTP probe. `WAFORIGIN-004` (TLS downgrade with
+  a forged proxy header) needs a real TLS listener negotiating a deliberately deprecated protocol version, a
+  separate, more involved piece of infrastructure this lab doesn't have. Both stay unwired, disclosed.
+- **Tests (pass):** 1 new RED-first unit test in `wafassessment` for the `EvidenceSource` override; 1 new live
+  test (`TestLive_OriginResilienceScenario_ThreeOfFiveVectorsLive`) and its API counterpart
+  (`TestWafOriginResilienceLiveJSONHandler_RealLab_ReturnsRealLiveOutcome`), both run against all three real
+  targets -- `WAFORIGIN-001`/`002` resolve `Inconclusive`, `WAFORIGIN-005` resolves `drift_detected`, overall
+  `outcome:"fail"`, `evidenceSource:"live_execution"`. A dedicated 503 test covers 5 combinations of the three
+  URLs partially unset. `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the new route matrixed. Ran
+  the full `wafmodsec` live suite together (all 10 scenarios) to check for the same cross-test contamination
+  class of bug the automated-abuse rate limiter hit -- none found. `go build ./...`/`go vet ./...` clean;
+  targeted `wafassessment`/`wafmodsec`/`modsecwaf`/`waforigin`/`wafval`/`api` tests green.
+- **Not run:** staging.
+- **Limits:** `WAFORIGIN-003`/`WAFORIGIN-004` remain genuinely unwired for the reasons above. This closes
+  REQ-007's live-wiring push: all 10 enterprise WAF scenarios now have a `/live` route backed by at least one
+  real, non-fixture probe against the self-hosted ModSecurity + OWASP CRS lab; per-vector gaps remain,
+  individually disclosed, none silently overclaimed.
+
+## API BAS GraphQL binding (10 November 2026)
+
+- **Built:** GraphQL queries bound to test data and run through the existing job path. The importer now records each field's argument types (name, named type, kind, list, required, default-aware) and return type (composite, union). Binding writes the query text, a `selection` field on objects, typed literals and a POST scenario. The contract gained a checked `graphql_query` step flag and a `require_baseline_evidence` scenario flag; the runner skips a scenario whose baseline lacks a protected value. Console: the read example produces GraphQL test data for a GraphQL inventory; the plan notes how GraphQL is graded.
+- **Calls made (recommendations):** queries only, because mutations and subscriptions change state; protected values are mandatory, because a refusal is usually HTTP 200; a clean response passes and a leaked value fails, since a status code cannot decide GraphQL; the baseline must itself return a protected value, so an erroring server is SKIPPED rather than passed (this is a general runner option, used only by GraphQL scenarios, so no existing scenario changed behaviour); argument values are written as typed literals and the selection is re-tokenised, rather than using variables, because the schema's wrapped types are not all recorded; unions, lists and input objects are skipped, not guessed at.
+- **Tests (pass):** binding: query text and typed literals, mutations and unions skipped with reasons, an old inventory told to import again, 28 refusals, selection normalisation, the real runner against a GraphQL-style server (vulnerable FAIL exploited; fixed server refusing with 200 and errors PASS; erroring baseline SKIPPED PRECONDITION_MISSING). Contract: a read-only GraphQL POST is accepted only when the body proves it (14 refused forms, 3 allowed forms), baseline evidence needs values. API: a GraphQL schema imports, the inventory carries argument and return types, 4 bad specs are refused with 400, a good one saves with a plan that shows the GraphQL scenarios, and a bound job queues. Web: GraphQL example operation choice and placeholders.
+- **Not run:** a real GraphQL API, introspection from a live endpoint, and the console in a browser. A schema imported before this change must be imported again to be bound.
+
+## API BAS mass assignment (10 November 2026)
+
+- **Built:** `mass_assignments` in the binding spec (`MassAssignSpec`), scenario `scenarioForMass` (claim property_level, STATE_CHANGE_SANDBOX, owner baseline then owner update, restore before and after), and a `Watch` option on the runner's state probe that compares only the named top-level fields and errors if the read route returns none of them. The runner binary passes `Watch` through. Scheduled runs without writes now drop write objects and mass assignments (`withoutWrites`).
+- **Calls made (recommendations):** the owner attacks their own object, since mass assignment is a self-service flaw; only listed fields are compared; accepted-but-unchanged is a PASS because the control held; a read route that hides the fields is an ERROR; the attack body must contain each forbidden field; no console editor change yet (test data is edited as JSON).
+- **Tests (pass):** binding validation (16 refusals), plan shape, and the real runner against a changing API: vulnerable FAIL, ignoring PASS, strict 422 PASS, read route without the fields ERROR, with the object restored in every mode. API: refused without allow_writes or with an untested field, preview shows the check, a scheduled plan without writes builds.
+- **Not run:** a real customer API, the console in a browser, a staging run. Console has no mass-assignment form or example.
+
+## API BAS time-of-day schedules (10 November 2026)
+
+- **Built:** `at`/`timezone`/`days` on the schedule (columns `at_time`, `timezone`, `run_days`, added with `ADD COLUMN IF NOT EXISTS`; `every_hours` stored as 24 for these so the existing CHECK is untouched), `db.NextClockRun`, `ValidateClock`, `NormalizeClockDays`, and a claim that now runs as a transaction so each schedule's next run is computed per row in Go. Console: a "When" choice on the Schedule card with time, timezone and days fields.
+- **Calls made (recommendations):** one schedule kind per target, interval or clock; weekdays as names; timezone names resolved from embedded zone data so a minimal container works; a skipped local time runs just after the jump and a repeated one at its first occurrence; an unreadable clock pauses the schedule rather than guessing; no cron expressions (a clock time plus weekdays covers the stated need and is harder to get wrong).
+- **Tests (pass):** clock logic across 11 cases (UTC, India, weekdays, one day a week, both daylight-saving changes in New York, a skipped and a repeated local time) and validation; API: 9 refused bodies, view and first-run time in the chosen zone with weekdays ordered, switching back to an interval clears the clock, a due clock run advances to the next 03:15 and is claimed once, an unreadable clock pauses; existing schedule tests unchanged; web: mode switch, request body, 4 bad inputs, existing clock schedule opens in clock mode; `internal/db` and all API BAS API tests pass.
+- **Not run:** a real scheduled run across a daylight-saving change, a multi-server claim race on the new transaction, the console in a browser. Daylight-saving shifts other than one hour are approximated.
+
+## API BAS schedule pause notification (10 November 2026)
+
+- **Built:** event `apibas_schedule_paused`; `db.RecordAPIBASScheduleOutcome` (reports whether this call is the one that turned the schedule off, using a row lock and the previous state, so a pause is announced once), `db.ClaimDueAPIBASSchedulesReportingPauses` (returns schedules paused for an unreadable clock); the old functions remain as wrappers so no caller changed. `emitAPIBASSchedulePaused` in the schedule handlers.
+- **Calls made (recommendations):** severity error; broadcast like the approval events; the reason text is included (already visible to viewers) but cut to 200 characters; skipped-because-busy runs do not notify; no new console screen, because the notification centre already shows any stored event.
+- **Tests (pass):** no notice on failures 1-4, exactly one on the fifth with the reason and count, none on a further tick, stored in the database, a second pause after resuming announces again; an unreadable clock announces with count 0; no notification service still pauses without panicking; the store reports a pause only on the pausing call and treats a removed schedule as neither error nor pause; the existing approval notification test and all schedule tests pass.
+- **Not run:** delivery to a real webhook, the console notification centre in a browser, and two servers racing on the same schedule.
+
+## API BAS cross-target job list (10 November 2026)
+
+- **Built:** `GET /api/apibas/jobs` (`ListAPIBASJobs`), sharing one body with the per-target list (`listAPIBASJobs`); `db.ListAPIBASJobSummaries` takes an empty target to mean all targets and gained `Environment` and `Source` filters and a `TargetID` on each summary; RBAC matrix row, route on the real router and the test router. Console: "Jobs across all targets" card with four filters, Refresh, Load more, View; query building in the tested model (`allJobsQuery`).
+- **Calls made (recommendations):** same permission as the per-target list rather than a new one, since it exposes nothing that list does not; unknown target filter gives an empty list so deleted targets' history stays reachable; "scheduled" is derived from `requested_by` starting with `schedule:` (how scheduled runs are already recorded) rather than a new column; no cross-target cancel or run from the list.
+- **Tests (pass):** all targets appear with their target and scheduled flag; target, environment, source and status filters; unknown target is empty; paging walks each job once; 7 bad parameters give 400; unauthenticated is refused; no credential or report body in the summary; the per-target list test unchanged; RBAC matrix and route-registration tests; web model and DOM tests (hostile text shown as text, filters send only known values, load more does not repeat a job, a failed list is shown in the card).
+- **Indexes:** the job table had no index on creation time, so two were added (`created_at DESC, id DESC` for the all-targets order, and `target_id, created_at DESC, id DESC` for one target's), created with `IF NOT EXISTS`. The status filter and the grade counts are not indexed.
+- **Not run:** the console in a browser, and a very large job history (query timing was not measured).

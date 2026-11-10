@@ -1,0 +1,53 @@
+id: "API-BAS-AUTHZ-501"
+name: "UPI-001: customer reads another customer's UPI transaction"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "UPI customer A reads UPI customer B's transaction TXN-B-001."
+threat_model:
+  attacker: "authenticated UPI customer A"
+  identity: upi-cust-a
+  access_level: "standard customer, valid token, owns TXN-A-001 only"
+  objective: "UPI customer A reads UPI customer B's transaction TXN-B-001."
+preconditions:
+  fixture: upi-two-customer
+  identities: [upi-cust-a, upi-cust-b]
+  object: TXN-B-001
+steps:
+  - id: "baseline-owner-transaction"
+    role: baseline
+    identity: upi-cust-b
+    auth: valid
+    method: GET
+    path: "/api/upi/transactions/TXN-B-001"
+    hypothesis: "Customer B, the owner, reads their own transaction. If this fails, the scenario is not testable."
+  - id: "attack-read-other-transaction"
+    role: attack
+    identity: upi-cust-a
+    auth: valid
+    method: GET
+    path: "/api/upi/transactions/TXN-B-001"
+    hypothesis: "Customer A's read of TXN-B-001 is refused, and no protected value of that transaction comes back."
+denied_statuses: [403, 404]
+forbidden_values: ["BAS-SIM-UTR-B"]
+expected_control: "Customer A cannot read customer B's UPI transaction. The read is refused and no protected value of TXN-B-001 is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to customer A's read of TXN-B-001 carries no protected value of that transaction.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The cross-owner read is an access event naming another owner's transaction (REL-004). Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "UPI / open banking: a payer sees only their own transaction records (RBI UPI procedural guidelines; NPCI UPI dispute-resolution framework)"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-501 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-501 against the vulnerable build must FAIL (exploited)"

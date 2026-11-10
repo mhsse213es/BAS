@@ -1,0 +1,57 @@
+id: "API-BAS-AUTHZ-303"
+name: "HC-003: clinician changes another clinician's patient's prescription"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "Clinician B changes the dose on patient A's prescription."
+threat_model:
+  attacker: "authenticated clinician B"
+  identity: clinician-b
+  access_level: "clinician, valid token, treats patient B only"
+  objective: "Clinician B changes the dose on patient A's prescription."
+preconditions:
+  fixture: healthcare-two-patient
+  identities: [clinician-a, clinician-b, patient-a]
+  object: RX-A-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: patient-a
+    auth: valid
+    method: GET
+    path: "/api/health/prescriptions/RX-A-001"
+    hypothesis: "Patient A, the owner, reads their own prescription. If this fails, the scenario is not testable."
+  - id: "attack-authz-303"
+    role: attack
+    identity: clinician-b
+    auth: valid
+    method: PATCH
+    path: "/api/health/prescriptions/RX-A-001"
+    body: '{"amount":"999"}'
+    hypothesis: "Clinician B's change to RX-A-001 is refused, and the dose is not changed."
+denied_statuses: [403, 404]
+expected_control: "Only the treating clinician can change an active prescription. Another clinician's change is refused and the dose is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows RX-A-001's dose unchanged after clinician B's change.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The change names RX-A-001, owned by patient A, from a clinician who does not treat the patient. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "Healthcare: prescription modification by a clinician who does not treat the patient"
+regulatory_mapping:
+  - IN-DPDP-S8-5
+negative_tests:
+  - "API-BAS-AUTHZ-303 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-303 against the vulnerable build must FAIL (exploited)"

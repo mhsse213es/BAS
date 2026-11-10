@@ -61,12 +61,13 @@ func TestRegistryLoadsWithCandidatesAndUnmapped(t *testing.T) {
 	if len(r.Mappings) == 0 {
 		t.Fatal("no mappings")
 	}
-	// DPDP s12(3) stays unverified: its commencement is not verified. The other mappings are verified only with a named
-	// reviewer and the reviewed hash equal to the committed source hash, which Validate enforces.
+	// A mapping whose commencement is not verified stays unverified (the DPDP Act mappings, s12(3) and s8(5)). The other
+	// mappings are verified only with a named reviewer and the reviewed hash equal to the committed source hash, which
+	// Validate enforces.
 	for _, m := range r.Mappings {
-		if m.ControlRef == "IN-DPDP-S12-3" {
+		if m.Commencement == CommencementNotVerified {
 			if m.Status != StatusUnverified {
-				t.Errorf("DPDP s12(3): status %q; it must stay unverified until its commencement is verified", m.Status)
+				t.Errorf("%s: status %q; it must stay unverified until its commencement is verified", m.ControlRef, m.Status)
 			}
 			continue
 		}

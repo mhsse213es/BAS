@@ -20,6 +20,8 @@ type SystemSnapshot struct {
 	Guard any
 	// Health is the platform-specific "does Windows still open things the same way" reference taken with the snapshot.
 	Health any
+	// Procs is the platform-specific set of processes running when the snapshot was taken (Windows: for the stray-process sweep).
+	Procs any
 }
 
 func newSnapshot(runID string) *SystemSnapshot {

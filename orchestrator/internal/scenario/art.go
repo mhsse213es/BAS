@@ -469,6 +469,36 @@ func artUnixPlatform(platforms []string) string {
 	return ""
 }
 
+// safeArgDefault returns a lab-safe default for an ART input argument that the
+// atomic itself left without a default, so a validation run executes against a
+// harmless local target instead of a bogus `bas-placeholder-<name>` path (which
+// makes network-target atomics like T1046 error out). Returns "" when no sane
+// default is known, leaving the placeholder fallback unchanged. The value is
+// deliberately loopback so a customer run never scans or connects to a real
+// host it was not explicitly given.
+func safeArgDefault(name string) string {
+	// Only names that are unambiguously a network target get a default. Names
+	// that are commonly file paths (target, destination, server, address),
+	// adapter names (network), or ambiguous (range) are deliberately excluded:
+	// injecting a loopback value where a path is expected would just break the
+	// atomic in a way that is hard to see. `port` is excluded on purpose — it is
+	// often a LISTEN / firewall-rule parameter, so a real value (e.g. 445) could
+	// open a real service on the host; it must fall through to the placeholder.
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "ip", "ip_address", "ipaddress", "host", "hostname",
+		"target_host", "targethost", "remote_host", "remote_ip", "dest_ip",
+		"computer_name", "computername":
+		return "127.0.0.1"
+	case "subnet", "cidr", "ip_range", "iprange":
+		return "127.0.0.0/24"
+	case "url":
+		return "http://127.0.0.1"
+	case "dns_server", "dnsserver":
+		return "127.0.0.1"
+	}
+	return ""
+}
+
 func artResolveArgs(cmd string, args map[string]artInputArg, techniqueID, testName string) string {
 	if cmd == "" {
 		return ""
@@ -479,7 +509,11 @@ func artResolveArgs(cmd string, args map[string]artInputArg, techniqueID, testNa
 		}
 		def := arg.Default
 		if def == "" {
-			def = `$env:TEMP\bas-placeholder-` + name
+			if safe := safeArgDefault(name); safe != "" {
+				def = safe
+			} else {
+				def = `$env:TEMP\bas-placeholder-` + name
+			}
 		}
 		cmd = strings.ReplaceAll(cmd, "#{"+name+"}", def)
 	}

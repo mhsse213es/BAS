@@ -514,14 +514,9 @@ func buildDetectionSources(results []models.SimulationResult) []DetectionSource 
 		})
 	}
 
-	// Fallback/demo data if none were detected or no telemetry exists
-	if len(sources) == 0 {
-		sources = []DetectionSource{
-			{Product: "Trellix", Detections: 18, MinMTTDMs: 4500, AvgMTTDMs: 8200},
-			{Product: "Defender", Detections: 14, MinMTTDMs: 2100, AvgMTTDMs: 4900},
-			{Product: "SIEM", Detections: 5, MinMTTDMs: 12000, AvgMTTDMs: 25400},
-		}
-	}
+	// No detection from a named product means an empty ranking, and the report says so. This used to substitute
+	// invented figures (Trellix 18, Defender 14, SIEM 5) when nothing was detected, so a report on an endpoint with no
+	// connected detection product still ranked products that were never there.
 
 	sort.SliceStable(sources, func(i, j int) bool {
 		if sources[i].Detections != sources[j].Detections {

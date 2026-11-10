@@ -164,3 +164,14 @@
 
 /* Note above the Threat-Intel grid: actors skipped for having too few techniques. */
 .sc-skip-note { margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; background: var(--elevated); color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+
+/* Import detection content (Sigma/YARA/chain) dialog */
+.ci-modal { max-width: 760px; }
+.ci-modal .init-mbd { max-height: 70vh; overflow: auto; }
+.ci-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 10px; }
+.ci-toolbar select, .ci-toolbar input { height: 34px; margin: 0; }
+.ci-row { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.ci-modal h4 { margin: 18px 0 8px; font-size: 13px; }
+.ci-draft { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 0 0 10px; }
+.ci-cmd { margin: 6px 0; padding: 8px; max-height: 120px; overflow: auto; font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; background: var(--surface-2, rgba(127,127,127,0.08)); border-radius: 6px; }
+.ci-actions { display: flex; gap: 8px; margin-top: 6px; }

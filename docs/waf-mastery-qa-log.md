@@ -8,39 +8,405 @@ This is the single place to check before claiming WAF Mastery is "done" or makin
 
 ## Open items
 
-### 1. Real WAF vendor adapter — deferred by design, no live appliance integration exists
-
-**Status:** Open, deferred by design (stated in `internal/wafval`'s own package doc comment, not an oversight).
-
-**What's needed:** `internal/wafval` is explicitly "vendor-neutral" and "I/O-free" — it grades evidence it's handed, but produces none itself. A real adapter would need to drive an actual deployed WAF (Cloudflare, F5, AWS WAF, ModSecurity, etc.) with live test requests and pull its real enforcement/detection decisions back as `wafval.Observation` values.
-
-**Why it's blocked:** `internal/wafval/wafval.go:7-8` states this directly: "The lab adapter that produces observations is a separate, deferred package." No lab/vendor access has been set up for this initiative, the same shape as AV/NGAV Mastery's own Defender-vertical gap (see `docs/av-mastery-qa-log.md` item #1).
-
-**What this means today:** every one of the 10 customer-facing enterprise assessment scenarios in `internal/wafassessment` is fixture-backed only — each scenario's own `*Fixtures()` function hand-authors `wafval.CollectionResult` values rather than observing a real WAF. This is disclosed in-band in each scenario's `EvidenceRequirement` field ("fixture-backed in this phase").
-
-**Resolution path:** build a real `wafval.Observation` producer against a specific vendor's API/logs once lab or vendor access exists — mirrors the AV/NGAV Defender-vertical resolution path exactly.
-
-### 3. Three of the 9 new enterprise scenarios wire only 2 vectors each, with no deliberately-untested one
-
-**Status:** Open, deferred as low-risk — found during the final whole-branch review (2026-10-16, fresh Sonnet subagent, 0 Critical/0 Important findings overall).
-
-**What's confirmed (verified directly 2026-10-16):** `AudspectHTTPProtocolIntegrityFixtures()` (HTTPPARSE-001 Missed, HTTPPARSE-002 Blocked), `AudspectFileUploadFixtures()`-equivalent in `catalog_fileupload.go` (FILEUP-001 Missed, FILEUP-002 Blocked), and the routing/cache scenario in `catalog_routingcache.go` (CACHE-001 Missed, CACHE-002 Blocked) each wire exactly 2 vectors, both with fixtures supplied — no vector is left out of the fixture map to exercise the `ScenarioIncomplete`-via-`UntestedVectorIDs` path.
-
-**Why it's deferred:** `EvaluateScenario`'s `Incomplete`-without-failure branch is already covered by other scenarios' own seed data (confirmed at Phase 4 of the exploit-prevention scenario and reused by the shared `aggregateByPrecedence` rule) — this is a gap in these 3 scenarios' own seed data, not an uncovered code path overall.
-
-**Resolution path:** add a third, deliberately-fixture-omitted vector to each of these 3 scenarios' catalogs if/when a reviewer wants per-scenario Incomplete coverage, not just suite-wide coverage.
-
-### 4. Only 5 of 10 enterprise scenarios have a dedicated handler-level test
-
-**Status:** Open, deferred as low-risk — found during the same final whole-branch review.
-
-**What's confirmed (verified directly 2026-10-16):** `internal/api/waf_assessment_handlers_test.go` has dedicated tests for exactly 5 scenarios: Exploit Prevention (`TestGetWAFExploitPreventionScenario_ReturnsRealFailOutcome` + its HTML counterpart), HTTP Protocol Integrity, API Protection, Detection/Telemetry, and Origin Resilience. The other 5 (Automated Abuse, Policy Integrity, Routing/Cache, File Upload, Legitimate Traffic) rely only on the generic `wafScenarioJSONHandler`/`wafScenarioHTMLHandler` closure's own tests plus `internal/wafassessment`'s own package-level tests — never exercised through a scenario-specific handler test.
-
-**Why it's deferred:** the generic handler closure is itself tested, and each scenario's underlying `EvaluateScenario` call is tested at the `wafassessment` package level — this is a gap in handler-level test density, not in logical coverage.
-
-**Resolution path:** add the remaining 5 scenario-specific handler tests if/when a regression in the generic closure's routing needs scenario-level evidence to debug.
-
 ## Resolved items
+
+### 1. Real WAF vendor adapter — RESOLVED (partial) 2026-11-10 -- self-hosted, no vendor tenant used or needed
+
+**Status:** Resolved for one real engine, with an honestly bounded scope. The user confirmed up front that no
+commercial WAF tenant (Cloudflare, F5, AWS WAF, etc.) is available for this initiative; rather than stay blocked on
+that, this used the same self-owned-target philosophy `internal/apibas/lab` already uses elsewhere in this repo:
+self-host a real, open-source WAF engine instead of a vendor API.
+
+**What was built:** `lab/wafmodsec/docker-compose.yml` runs a real ModSecurity + OWASP CRS v4 WAF
+(`owasp/modsecurity-crs`, nginx variant, pinned by image digest) in front of a permissive HTTP echo origin
+(`mendhak/http-https-echo`, also pinned by digest) -- no vendor account, tenant, or signup involved anywhere.
+`internal/vendors/modsecwaf` (`client.go`) is a real, I/O-performing HTTP client: `BuildRequest` turns a real
+`wafcatalog.RequestTemplate` into a genuine `*http.Request` (implements the `""` and `"query:<param>"`
+`PayloadLocation` forms only -- other forms return an explicit error rather than being silently misinterpreted),
+and `Client.Send` executes it against the live container. `internal/wafmodsec` (`bridge.go`) mirrors
+`internal/avdefender`'s split from `internal/vendors/defender` exactly: it turns the real raw HTTP response into
+two independent `wafval.CollectionResult` values -- the WAF engine's own enforcement decision (HTTP status code)
+and the origin app's own receipt confirmation (the echo server's distinctive JSON body, present only when a
+request actually reached it) -- both derived from the one proxied response, which is legitimate because the echo
+origin's body is produced by a genuinely separate process/container, not inferred.
+
+**Live-verified, not just built:** `internal/wafmodsec/live_test.go`'s `TestLive_RealWAFCatalogVectors_AgainstLiveModSecurityLab`
+was actually run against the real running container this session (gated behind `WAF_MODSEC_LAB_URL`, so it never
+runs in the normal `go test ./...` suite). It drives 4 real `wafcatalog` vectors end to end -- `SQLI-001`,
+`XSS-001`, `PATHTRAV-001`, `HTTPPARSE-002`, one per family, chosen because each uses only the `PayloadLocation`
+forms `BuildRequest` implements -- both malicious and benign legs, and asserts the real `wafval.Verdict`
+`wafval.EvaluateClaim` derives from the real response. All 8 sub-tests passed against the live container:
+malicious legs resolved to `VerdictBlocked` (`403` from ModSecurity for SQLi/XSS/path-traversal, `405` from
+nginx's own method whitelist for the TRACE verb-tampering case -- both equally prevent origin reach, which is all
+this axis models), benign legs resolved to `VerdictAllowed`. `lab/wafmodsec/smoke.sh` is a standalone curl-based
+re-check of the same 8 cases, also run and passing. This is a stronger resolution than the AV/NGAV Defender-bridge
+precedent this doc's old text pointed at -- that bridge was built but never run against a live tenant; this one
+has been run, live, for real.
+
+**What's still genuinely open (disclosed, not hidden):**
+- Only 4 of the catalog's 65 vectors are wired -- the rest need `header:`/`body:json:`/`body:multipart:` support in
+  `modsecwaf.BuildRequest`, which does not exist yet (explicit error today, not silent misinterpretation).
+- `wafmodsec` does not parse ModSecurity's audit log, so it never asserts `wafval.DetectionMatched`/`DetectionNotMatched`
+  -- an allowed-through malicious request resolves to `VerdictInconclusive` under `ClaimPrevention`, not
+  `VerdictMissed`, until that follow-up lands.
+- Wired into exactly ONE of the 10 `internal/wafassessment` enterprise scenarios and exactly one `internal/api`
+  route (see follow-ups below) -- a console user still sees the fixture-backed result for every other scenario.
+- This closes the gap for ModSecurity/CRS specifically, not for a commercial vendor API (Cloudflare/F5/AWS WAF) --
+  if/when the user gets a real tenant for one of those, that integration is still new work, on the
+  `internal/vendors/defender`-style pattern this now has a second real example of.
+
+**Same-day follow-up: wired into `AudspectExploitPreventionScenario`.** `internal/wafmodsec/exploitprevention.go`'s
+`BuildExploitPreventionLiveFixtures` drives 3 of that scenario's 8 contributing vectors (`SQLI-001`, `XSS-001`,
+`PATHTRAV-001` -- the ones `BuildRequest` can replay) against the live lab and hands the result to the real,
+UNMODIFIED `wafassessment.EvaluateScenario` -- `wafassessment` itself was not touched, keeping it vendor-neutral
+and I/O-free; the live-wiring glue lives entirely in `internal/wafmodsec`, which is free to depend on it. The
+other 5 vectors get no fixture at all, on purpose, so they surface through `UntestedVectorIDs` rather than being
+papered over. `TestLive_ExploitPreventionScenario_ThreeOfEightVectorsLive` ran this against the real container:
+all 3 live vectors resolved `VerdictBlocked`, the other 5 came back in `UntestedVectorIDs`, and the scenario's
+real outcome was `ScenarioIncomplete` -- correct, since 5 of 8 vectors have no live evidence yet, and precedence
+never lets an untested vector pass silently.
+
+**Second same-day follow-up: wired into the API, `GET /api/waf/scenarios/exploit-prevention/live`.** Serves the
+above through `internal/wafmodsec.RunExploitPreventionLive`, in the exact same JSON shape every other
+`/api/waf/scenarios/<slug>` route uses, registered at the same `tierAny` (Viewer+Analyst+Admin, JWT-only) tier --
+safe at that tier because the live target comes from the server's own `WAF_MODSEC_LAB_URL` environment variable,
+never from the request, so there is no SSRF surface from this being broadly readable. Missing that env var returns
+`503` naming it, rather than ever silently falling back to the fixture-backed result; an unreachable lab returns
+`502`.
+
+This surfaced a real, pre-existing honesty gap worth fixing properly rather than working around: `wafassessment`'s
+`EvaluateScenarioWithSeverities` hardcoded every `VectorAssertion.EvidenceSource` to `EvidenceSourceFixture` --
+`EvidenceSourceLiveExecution` existed only "for forward compatibility," per its own doc comment, with no code path
+able to produce it. Serving this route as-is would have mislabeled genuinely live evidence as a fixture in the
+JSON response. Fixed with one small, backward-compatible addition: `VectorFixture` gained an `EvidenceSource`
+field; `EvaluateScenarioWithSeverities` now uses it when set and falls back to `EvidenceSourceFixture` when it
+isn't (every existing hand-authored fixture across all 10 scenarios leaves it unset, so none of their behavior
+changed -- proven by the full existing `wafassessment` suite staying green, plus one new test,
+`TestEvaluateScenario_FixtureEvidenceSourceOverride_PropagatesToAssertion`). `BuildExploitPreventionLiveFixtures`
+now sets `EvidenceSourceLiveExecution` on its 3 live fixtures.
+
+Live-verified: `TestWafExploitPreventionLiveJSONHandler_RealLab_ReturnsRealLiveOutcome` drives the handler itself
+(no router, no mock) against the real running container -- `outcome":"incomplete"`, the 3 live vectors render
+`"evidenceSource":"live_execution"`, no assertion anywhere renders `"fixture"`, and the 5 untested IDs are present.
+A second, fast unit test (`..._NoLabConfigured_Returns503`) proves the refusal path with no live dependency.
+`TestRBACMatrix_NoDrift`/`TestRBACMatrix_AuthorizationBoundary` both pass with the new route matrixed.
+
+**Third same-day follow-up: wired 4 more of the other 9 scenarios, partially; disclosed why the remaining 5
+genuinely can't be yet.** Same `Run<Scenario>Live(ctx, client)` pattern as `RunExploitPreventionLive`, one new file
+each in `internal/wafmodsec`:
+
+| Scenario | Live vectors | Verdicts (confirmed against the real lab) |
+|---|---|---|
+| `http-protocol-integrity` | `HTTPPARSE-002` (1/3) | `Blocked` |
+| `routing-cache-integrity` | `CACHE-002`, `CACHE-003` (2/3) | `Inconclusive`, `Blocked` |
+| `api-protection` | `API-003`, `APIFLOW-005` (2/8) | `Inconclusive`, `Inconclusive` |
+| `legitimate-traffic` | `SQLI-001`/`XSS-001`/`PATHTRAV-001`/`RATE-001` benign legs (4/6) | all `Allowed` |
+
+`api-protection` mixes two independent catalogs (`wafcatalog`'s `API-003` and `wafapiflow`'s `APIFLOW-005`) through
+one `modsecwaf.Client` via a small local converter (`apiflowToWafcatalogTemplate`) between their structurally
+identical `RequestTemplate` types -- no change to `modsecwaf` itself. `legitimate-traffic` drives each vector's
+BENIGN counterpart (not its malicious payload), evaluated as `wafval.ClaimFalsePositive` -- `BuildCollectionResults`
+needed no change either, since it reports Enforcement/Origin from the raw response the same way regardless of
+which leg produced it.
+
+The `Inconclusive` verdicts on `CACHE-002`/`API-003`/`APIFLOW-005` are a real, curl-confirmed finding against the
+live container, not an adapter bug: CRS genuinely returns 200 for all three, because a generic WAF has no
+business-logic or cache-layer awareness to catch a static-extension cache-deception trick, a `fields=*`
+over-exposure, or an absurd `limit=` value.
+
+This surfaced a SECOND occurrence of the exact `EvidenceSource`-hardcoding bug fixed in the API follow-up above:
+`EvaluateLegitimateTrafficScenario` (in `falsepositive.go`) had the identical hardcode-to-`EvidenceSourceFixture`
+bug as `EvaluateScenarioWithSeverities`, just never caught because nothing had driven live evidence through it
+yet. Fixed the same way, with the same new-test-first proof
+(`TestEvaluateLegitimateTrafficScenario_FixtureEvidenceSourceOverride_PropagatesToAssertion`).
+
+**5 scenarios get NO live wiring, for real, disclosed reasons:**
+- `automated-abuse` -- every vector (`RATE-001/002`, `BOTABUSE-001..004`) is a multi-request, timed-burst
+  behavioral claim; a single `modsecwaf.Client.Send` call can't honestly represent "50 requests in 2 seconds" or
+  "the 501st request in a 60-second window." Driving one request and calling it a rate-limit test would be a false
+  claim, not a thin slice.
+- `detection-telemetry` -- evidence is SIEM/alert-pipeline completeness and timing; there is no HTTP request to
+  replay at all.
+- `file-upload-content-trust` -- every vector is `body:multipart:...`, a real, disclosed `BuildRequest` gap.
+- `origin-resilience` -- deployment-topology claims (direct-origin reachability, fail-open, cross-node consistency)
+  need a multi-node/dual-path network setup this lab's single WAF-fronted origin doesn't have.
+- `policy-integrity` -- a genuine two-leg baseline-vs-weakened policy comparison; this lab has exactly one fixed
+  CRS configuration, with no second, deliberately-weakened policy to compare against.
+
+**Fourth same-day follow-up: wired the other 4 live-partial scenarios into the API too.** `wafExploitPreventionLiveJSONHandler`'s
+body was pulled out into a new shared `wafScenarioLiveJSONHandler(run liveScenarioRunner)` -- the live counterpart
+of the existing fixture-backed `wafScenarioJSONHandler(slug)` factory, parameterized by `internal/wafmodsec`'s
+`Run<Scenario>Live` function instead of a slug. 4 new routes registered the same way, through a `liveScenarios`
+slice in `routes.go` (exploit-prevention's own route now goes through the same loop):
+
+- `GET /api/waf/scenarios/http-protocol-integrity/live`
+- `GET /api/waf/scenarios/routing-cache-integrity/live`
+- `GET /api/waf/scenarios/api-protection/live`
+- `GET /api/waf/scenarios/legitimate-traffic/live`
+
+Same `tierAny` RBAC tier, same 503-if-unconfigured/502-if-unreachable refusal, same never-falls-back-to-fixture
+guarantee as exploit-prevention's route -- all inherited for free from the shared handler, not reimplemented per
+route. `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with all 4 new routes matrixed. Live-verified: all 4
+routes hit via the handler itself (no router, no mock) against the real running container, verdicts matching the
+curl-confirmed ground truth from the third follow-up exactly (`HTTPPARSE-002` blocked, `CACHE-003` blocked,
+`CACHE-002`/`API-003`/`APIFLOW-005` inconclusive, all 4 legitimate-traffic benign legs allowed), every assertion
+`evidenceSource:"live_execution"`, none `"fixture"`.
+
+**Fifth same-day follow-up: built real multipart support and unblocked `file-upload-content-trust`.** User response
+to the disclosed 5-scenario gap: "if each needs real new capability so be it" -- greenlighting real new work
+instead of leaving them unwired. Started with the most tractable: `modsecwaf.BuildRequest` gained a real
+`"body:multipart:<field>"` case (RED-first: 2 new tests proving the raw payload travels verbatim on the wire,
+then implemented with Go's `mime/multipart`). `<field> == "filename"` sends Payload as the file's NAME (a fixed,
+inert placeholder content); any other `<field>` sends Payload as the file's CONTENT (a fixed placeholder
+filename) -- either way the real attack string reaches the WAF unescaped, same discipline as every other
+PayloadLocation form.
+
+New `internal/wafmodsec/fileuploadcontenttrust.go` wires 2 of `AudspectFileUploadContentTrustScenario`'s 3
+vectors: `FILEUP-003` (path-traversal filename) is curl-confirmed `Blocked` -- CRS's generic traversal rule fires
+on the filename regardless of which field carries it. `FILEUP-001` (PHP web-shell content) is curl-confirmed
+`Inconclusive` -- CRS's default rule set does not inspect uploaded file content for embedded PHP, a genuine,
+confirmed finding about this configuration, not a bug. `FILEUP-002` (a decompression-bomb archive) stays
+unwired even with multipart support in place: its catalog `Payload` is a human description, not real bytes, and
+this lab's origin has no archive-extraction logic for a bomb to even detonate against -- multipart support alone
+doesn't make this one honestly replayable.
+
+Wired into the API too, same loop as the other 5 live routes: `GET /api/waf/scenarios/file-upload-content-trust/live`.
+Live-verified end to end (adapter + scenario + API), `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the
+new route matrixed.
+
+**Sixth same-day follow-up: built a real burst-driving harness and real lab rate limiting, unblocked `RATE-001` in
+`automated-abuse`.** Two new pieces, both genuinely new capability, not wiring: (1) a real nginx `limit_req_zone`/
+`limit_req` (`lab/wafmodsec/nginx/00-limit-req-zone.conf` + `nginx/default.conf`, mounted into the `waf` container
+via its own documented template mechanism, `rate=2r/s burst=3 nodelay`) -- CRS itself does no rate limiting, so
+without this there is nothing for `RATE-001` to honestly test; (2) `modsecwaf.Client.SendBurst`, which fires a
+real, bounded burst of N concurrent requests and collects every response -- a single `Client.Send` round trip
+cannot represent "N requests in a short window" at all. Curl-confirmed against the real container before writing
+any Go: a burst of 10 to `/api/quote` returns some `200`s then `503`s once the declared limit is exceeded.
+
+`wafmodsec.BuildBurstCollectionResults` turns the burst's responses into the same two `wafval.CollectionResult`
+mechanisms `BuildCollectionResults` derives from one response. First attempt derived Enforcement and Origin
+independently (any blocked -> Enforcement=Blocked; any reached origin -> Origin=OriginReceived) and hit a real,
+caught bug: `wafval.EvaluateClaim` cross-checks both mechanisms as two views of the SAME event, so reporting
+"some reached" and "some blocked" as independent facts described two different requests as one event and
+resolved `Inconclusive` by contradiction. Fixed by deriving both from the same `blocked > 0` boolean -- Origin
+reports the blocked subset's own state (never reached) when enforcement fired, the allowed subset's (reached)
+only when nothing was ever blocked -- RED-first, 2 new tests, same single-shot invariant `BuildCollectionResults`
+already relied on, now proven to hold for an aggregate too. A second RED-first mistake: the "no enforcement"
+test originally expected `VerdictMissed`; this bridge never parses the audit log, so (same disclosed limitation
+as every other evaluator here) it correctly resolves `Inconclusive` instead -- the test's expectation was wrong,
+not the code.
+
+A third, real bug surfaced only by running the FULL suite (not just the new tests in isolation): the first
+version of `nginx/default.conf` put `limit_req` inside the generic `location /` block, which matches every
+path -- this silently rate-limited every OTHER live test too, since they all share the one running container and
+client IP across a test run. `TestWafScenarioLiveJSONHandler_RealLab_SixMoreScenarios` and
+`TestLive_LegitimateTrafficScenario_FourOfSixVectorsLive` both started failing with false
+`incorrectly_blocked`/503 results on vectors that have nothing to do with rate limiting (`XSS-001`,
+`PATHTRAV-001`, `RATE-001`'s own benign leg) -- caught before push, not after. Fixed by scoping `limit_req` to an
+exact-match `location = /api/quote` block, leaving the generic `location /` untouched; confirmed by curl that
+`/search` and other paths are no longer affected while `/api/quote` still rate-limits. A second, related issue:
+even scoped correctly, the leaky bucket from a 10-request burst takes a few seconds to drain, so a different
+live test hitting the same path moments later (same process, sequential execution) could still see stale 503s --
+fixed with a 3s `time.Sleep` at the end of the automated-abuse live test itself (test-isolation hygiene, not
+production code).
+
+New `internal/wafmodsec/automatedabuse.go` wires 1 of `AudspectAutomatedAbuseScenario`'s 6 vectors: `RATE-001`,
+live-confirmed `Blocked`. `RATE-002` and all 4 `BOTABUSE-*` vectors remain unwired -- each needs a materially
+different, bigger build (per-account session aggregation, a bot-management/JS-challenge layer, a second
+header-keyed rate-limit zone, real stateful lockout/CAPTCHA logic, and/or the same multi-node topology
+`origin-resilience` needs) than the single `limit_req` zone `RATE-001` needed. Wired into the API too, same loop
+as the other 6 live routes: `GET /api/waf/scenarios/automated-abuse/live`. `TestRBACMatrix_NoDrift`/
+`AuthorizationBoundary` pass with the new route matrixed.
+
+**Seventh same-day follow-up: built a real second, weakened WAF instance, unblocked `GAP-001` in
+`policy-integrity`.** `lab/wafmodsec/docker-compose.yml` gained `waf-weakened`, identical to the baseline `waf`
+service except `MODSEC_RULE_ENGINE=DetectionOnly` instead of `On` -- ModSecurity's real `SecRuleEngine` directive,
+not a simulated weakening. Curl-confirmed against both real containers first: baseline (`:8888`) blocks
+POLICY-001's XSS payload (403); weakened (`:8889`) lets the identical payload reach origin (200).
+
+`GAP-001` is one of 4 "paired" weakness types `wafval.Pair`/`EvaluatePolicyGap` compares baseline-vs-weakened, not
+a single-request claim. New `internal/wafmodsec/policyintegrity.go` drives POLICY-001's malicious leg against
+BOTH clients and feeds both raw responses through the same `BuildCollectionResults` every single-leg scenario
+already uses -- no new evidence-mapping function needed this time, since a pair is just two ordinary single-shot
+responses, not an aggregate like the burst harness needed. `PolicyDifferentiationConfirmed` is hardcoded `true`,
+honestly: the two containers' differing `MODSEC_RULE_ENGINE` is known directly from `docker-compose.yml`, not
+inferred from behavior. The overall verdict resolves `Inconclusive`, not `Missed`/`DetectedButAllowed` -- same
+disclosed audit-log-parsing limitation as every other live-wired vector in this package, now proven to hold for
+a two-leg comparison too.
+
+**Found and fixed a THIRD occurrence of the same `EvidenceSource`-hardcoding bug** fixed twice before
+(`EvaluateScenarioWithSeverities`, `EvaluateLegitimateTrafficScenario`): `EvaluatePolicyIntegrityScenario` always
+labeled every assertion `"fixture"`, and `PolicyGapFixture` had no `EvidenceSource` field to override it with at
+all -- fixed the same way (new field, defaults to fixture when unset), new RED-first test.
+
+This weakening is honestly WAF-WIDE (`MODSEC_RULE_ENGINE=DetectionOnly` disables blocking for every rule),
+broader than GAP-001's own literal "the matching rule... was switched to detection-only" (a single-rule
+override) -- disclosed, not overclaimed. `GAP-002`/`GAP-004` (exclusion rule, priority conflict) are also paired
+weaknesses but need a per-rule ModSecurity override mounted on a weakened instance, a different, more involved
+build than a single env var toggle -- not built this round. `GAP-003`/`GAP-005`/`GAP-006` need
+`modsecwaf.BuildRequest`'s still-missing `body:json:`/`path:` forms.
+
+Wired into the API too, but as its OWN dedicated handler
+(`wafPolicyIntegrityLiveJSONHandler`/`GET /api/waf/scenarios/policy-integrity/live`), not through the shared
+`liveScenarios` loop -- that loop's `liveScenarioRunner` type builds exactly one `*modsecwaf.Client`, but this
+scenario genuinely needs two (baseline + weakened). Same refusal discipline: 503 if either of
+`WAF_MODSEC_LAB_URL`/`WAF_MODSEC_WEAKENED_LAB_URL` is unset. `TestRBACMatrix_NoDrift`/`AuthorizationBoundary`
+pass with the new route matrixed; ran the full `wafmodsec` live suite together (all 8 scenarios) to check for the
+SAME cross-test contamination class of bug the automated-abuse rate limiter hit -- none found, since GAP-001
+drives single requests, not a burst, against a path (`/search`) the rate limiter doesn't touch.
+
+**Eighth same-day follow-up: read the WAF's own real audit log, unblocked 3 of 5 `detection-telemetry`
+vectors.** `lab/wafmodsec/docker-compose.yml`'s `waf` service redirects `MODSEC_AUDIT_LOG` from the image's
+default `/dev/stdout` to a real file under a new bind-mounted `audit-logs/` directory (confirmed by reading the
+image's own `modsecurity.conf.template` inside the running container: `MODSEC_AUDIT_LOG` substitutes verbatim
+into ModSecurity's real `SecAuditLog` directive) -- this lab's Go code now reads that file with an ordinary file
+open, exactly as a real log-shipping agent would, not a SIEM and not a `docker logs` shell-out. New
+`internal/wafmodsec/auditlog.go`'s `FindAuditLogEntry` scans the real JSON-per-line audit format (confirmed
+empirically: one newline-delimited JSON object per relevant transaction) for a uniquely marked probe request and
+returns its real `time_stamp`/`unique_id`.
+
+New `internal/wafmodsec/detectiontelemetry.go` drives ONE real malicious request (reusing SQLI-001's shape, a
+unique marker appended) and correlates it against the audit log to resolve 3 of `AudspectDetectionTelemetryScenario`'s
+5 contributing scenarios: `WAFDETECT-001` (WAF event-log completeness -- the audit log genuinely IS the WAF's
+own event log, no scope stretch), `WAFDETECT-003` (alert correlation -- this lab has no separate alert-queue
+system, so the same audit-log record stands in as "alert evidence", disclosed as not a true SIEM-fed alert
+queue), `WAFDETECT-004` (response timing -- the audit log's own real write latency against the real send time,
+resolving `within_sla` against the scenario's 5-minute SLA since ModSecurity writes the audit record
+synchronously with the blocking response).
+
+**Real precision bug found and fixed before it could manufacture a false result:** the audit log's `time_stamp`
+is ctime-formatted with only second precision (no fractional seconds). Comparing it directly against a
+sub-second `time.Now()` would make `alertObservedAt` appear to precede `eventObservedAt` on roughly half of all
+real runs purely from precision mismatch (`wafdetection.EvaluateResponseTiming` treats that ordering as
+`Inconclusive`, not a crash, but it would still be wrong on half of all real runs). Fixed by flooring
+`eventObservedAt` to the same second-level precision before comparing -- matching granularity to the coarser of
+the two real clocks, not fabricating precision neither side has.
+
+**Found and fixed a FOURTH occurrence of the same `EvidenceSource`-hardcoding bug** fixed three times before
+(`EvaluateScenarioWithSeverities`, `EvaluateLegitimateTrafficScenario`, `EvaluatePolicyIntegrityScenario`):
+`EvaluateDetectionTelemetryScenario` always labeled every assertion `"fixture"`, and `DetectionFixture` had no
+`EvidenceSource` field at all -- fixed the same way (new field, defaults to fixture when unset), new RED-first
+test.
+
+`WAFDETECT-002` (SIEM-record completeness) and `WAFDETECT-005` (evidence-archive completeness) remain unwired:
+both need a genuinely separate downstream system (a real SIEM ingest pipeline, real long-term archival storage)
+that reading the WAF's own log file, however real, cannot stand in for.
+
+Wired into the API too, as its OWN dedicated handler (`wafDetectionTelemetryLiveJSONHandler`/
+`GET /api/waf/scenarios/detection-telemetry/live`) -- this scenario's evidence comes from a filesystem path, not
+a second HTTP client, so it doesn't fit the shared `liveScenarios` loop or the two-client policy-integrity
+pattern either. Same refusal discipline: 503 if either `WAF_MODSEC_LAB_URL`/`WAF_MODSEC_AUDIT_LOG_PATH` is unset.
+`TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the new route matrixed; ran the full `wafmodsec` live
+suite together (all 9 scenarios) to check for the same cross-test contamination class of bug the automated-abuse
+rate limiter hit -- none found, since this probe drives a single request against `/search`, a path the rate
+limiter doesn't touch.
+
+**Ninth same-day follow-up: a real undocumented route, a real exposed origin port, and reusing waf/waf-weakened
+as two nodes closes `origin-resilience` partially -- REQ-007's 10th and final scenario now has live wiring.**
+`nginx/default.conf` gained a real `location = /legacy-search` block with `modsecurity off;` -- a genuine,
+undocumented secondary route proxying to the same origin as `/search` but never registered with ModSecurity
+(confirmed via `conf.d/modsecurity.conf` setting `modsecurity on;` at the http context, which this location
+deliberately overrides). `docker-compose.yml`'s `origin` service gained its own separately-published host port
+(`8890`), a real, deliberately simulated direct-origin-reachability misconfiguration -- a common real finding
+where a backend behind a CDN/WAF is also directly internet-reachable.
+
+New `internal/wafmodsec/originresilience.go` (`RunOriginResilienceLive`) resolves 3 of
+`AudspectOriginResilienceScenario`'s 5 contributing scenarios: `WAFORIGIN-001` (routing coverage gap) drives
+SQLI-001 against `/search` (baseline, blocked) and `/legacy-search` (bypass, reaches origin);
+`WAFORIGIN-002` (direct origin reachability) drives XSS-001 against the WAF edge (baseline, blocked) and
+directly against `origin:8890` (bypass, reaches origin); both bypass legs resolve `Inconclusive`, the same
+disclosed audit-log-parsing limitation as everywhere else. `WAFORIGIN-005` (cross-node consistency) reuses
+`waf`/`waf-weakened` -- the same two containers policy-integrity already built -- as its two "nodes," driving
+PATHTRAV-001 independently against each, and genuinely caught them disagreeing (`waf` blocks 403,
+`waf-weakened` lets it through 200): a real `waforigin.ConsistencyDrift`, forcing the whole scenario to
+`ScenarioFail` via the non-offsetting rule. This is a STRONGER, more honest result than the Inconclusive
+predicted going in -- a real finding, not a coverage gap -- though its cause (a known, deliberate policy
+difference built for a different scenario) is the same one already disclosed for policy-integrity's GAP-001,
+not independent configuration decay between nominally-identical replicas.
+
+**Found and fixed a FIFTH occurrence of the same `EvidenceSource`-hardcoding bug** fixed four times before:
+`evaluateContributingOriginVector` always labeled every assertion `"fixture"` across all three of its dispatch
+kinds (bypass, protocol, consistency), and `OriginResilienceFixture` had no `EvidenceSource` field at all --
+fixed the same way, new RED-first test.
+
+`WAFORIGIN-003` (fail-open during WAF unavailability) needs actually taking the WAF container down mid-test, a
+disruptive, differently-shaped build than an HTTP probe. `WAFORIGIN-004` (TLS downgrade with a forged proxy
+header) needs a real TLS listener negotiating a deliberately deprecated protocol version, a separate, more
+involved piece of infrastructure this lab doesn't have. Both stay unwired.
+
+Wired into the API too, as its OWN dedicated handler (`wafOriginResilienceLiveJSONHandler`/
+`GET /api/waf/scenarios/origin-resilience/live`) -- this scenario genuinely needs THREE real targets (baseline,
+direct-origin, weakened), the only one in this lab that does. Same refusal discipline: 503 if any of
+`WAF_MODSEC_LAB_URL`/`WAF_MODSEC_ORIGIN_DIRECT_URL`/`WAF_MODSEC_WEAKENED_LAB_URL` is unset.
+`TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the new route matrixed; ran the full `wafmodsec` live
+suite together (all 10 scenarios) to check for the same cross-test contamination class of bug the
+automated-abuse rate limiter hit -- none found.
+
+**Resolution path for what's left:** extend `BuildRequest`'s remaining PayloadLocation cases (header:/body:json:/body:xml:);
+add audit-log parsing to `wafmodsec`'s core bridge so a real `VerdictMissed` becomes claimable there too; a
+per-rule ModSecurity override to unblock `policy-integrity`'s `GAP-002`/`GAP-004`; per-account aggregation / a
+bot-management layer / stateful lockout logic to unblock `automated-abuse`'s remaining 5 vectors; a real SIEM
+ingest pipeline and archival storage to unblock `detection-telemetry`'s remaining 2 vectors; container-stop
+orchestration to unblock `origin-resilience`'s `WAFORIGIN-003`; a real TLS listener with a deliberately
+deprecated protocol to unblock `WAFORIGIN-004`.
+
+See `lab/wafmodsec/README.md` for how to run the lab and every live test (`go test ./internal/wafmodsec/... -run TestLive_ -v`).
+
+### 3. Three of the 9 new enterprise scenarios wire only 2 vectors each, with no deliberately-untested one — RESOLVED 2026-11-10
+
+**Status:** Resolved (see `docs/api-bas-mastery-qa-log.md`, "REQ-007: WAF assessment hardening", same-day follow-up,
+for full detail).
+
+**What was wrong (found 2026-10-16):** `AudspectHTTPProtocolIntegrityFixtures()` (HTTPPARSE-001 Missed,
+HTTPPARSE-002 Blocked), `catalog_fileupload.go`'s fixtures (FILEUP-001 Missed, FILEUP-002 Blocked), and
+`catalog_routingcache.go`'s fixtures (CACHE-001 Missed, CACHE-002 Blocked) each wired exactly 2 vectors, both with
+fixtures supplied — no vector was left out of the fixture map to exercise the `ScenarioIncomplete`-via-
+`UntestedVectorIDs` path for these 3 scenarios specifically (the path itself was already covered suite-wide by
+other scenarios' own seed data, e.g. the exploit-prevention and policy-integrity scenarios' own untested legs).
+
+**What changed:** added one genuinely new, real, CWE-mapped `wafcatalog` vector per family rather than inventing a
+throwaway scenario-only placeholder: `FILEUP-003` (path traversal via a crafted upload filename, CWE-22),
+`HTTPPARSE-003` (HTTP response splitting via CRLF injection into a reflected header, CWE-93), and `CACHE-003`
+(cache poisoning via parameter cloaking with an unkeyed query-string parameter, CWE-20). Each was wired into its
+scenario's `ContributingVectorIDs` (2→3) but deliberately left out of that scenario's own `*Fixtures()` map, so
+`EvaluateScenario`'s `aggregateByPrecedence` now puts the new ID into `UntestedVectorIDs` for that scenario
+directly — proven by three new `..._IsDeliberatelyUntested` tests, one per scenario, asserting both that the
+fixture map has no entry for the new ID and that `UntestedVectorIDs` contains it (outcome stays `ScenarioFail`:
+the pre-existing Missed vector still wins by the non-offsetting precedence rule, since this closes an
+evidence-density gap, not an outcome-changing one).
+
+The routing-cache scenario's own doc comment previously said "named honestly rather than padded with invented
+vectors" — that stance was about not fabricating a vector with no CWE grounding just to pad a count; CACHE-003 is
+a real, independently documented cache-poisoning technique (unkeyed/cloaked parameters, distinct from CACHE-001's
+unkeyed header and CACHE-002's extension-based deception), so the comment was updated rather than contradicted.
+
+`wafcatalog`'s total seed count moved 62→65; `TestAudspectWAFAttackCatalog_ReturnsValidatedCatalog` and the three
+per-family `..._ValidAndUnique` tests were updated to match. Full `go build ./...`, `go vet`, and the
+`wafcatalog`/`wafassessment`/`internal/api` test suites are green.
+
+### 4. Only 5 of 10 enterprise scenarios have a dedicated handler-level test — RESOLVED 2026-11-10
+
+**Status:** Resolved, in two passes the same day (see `docs/api-bas-mastery-qa-log.md`, "REQ-007: WAF assessment
+hardening" and its same-day follow-up, for full detail).
+
+**What was wrong:** `internal/api/waf_assessment_handlers_test.go` had dedicated tests for only 5 of the 10
+enterprise scenarios (Exploit Prevention, HTTP Protocol Integrity, API Protection, Detection/Telemetry, Origin
+Resilience); the other 5 (Automated Abuse, Policy Integrity, Routing/Cache, File Upload, Legitimate Traffic) relied
+only on the generic closure's own test plus the `wafassessment` package-level tests.
+
+**What changed:** added `TestWafScenarioJSONHandler_AutomatedAbuse_ReturnsRealFailOutcome`,
+`..._FileUpload_...`, `..._RoutingCache_...`, `..._PolicyIntegrity_...`, and `..._LegitimateTraffic_...`, each
+asserting the real `outcome`/`vectorId`/`scenarioName` for that scenario through the same shared
+`wafScenarioJSONHandler` closure — no handler code changed, since the closure is already generic over
+`reporting.BuildScenarioReport`'s output regardless of which evaluator (`EvaluateScenario`,
+`EvaluatePolicyIntegrityScenario`, or a `ClaimFalsePositive`-graded call) produced it. Policy Integrity's `vectorId`
+is a real policy-gap scenario id (`GAP-002`), not a `wafcatalog` vector id, confirming the handler renders whatever
+`VectorAssertion.VectorID` the evaluator set, not a hardcoded catalog lookup.
+
+All 10 enterprise scenarios now have a dedicated handler-level test. `go test ./internal/api/... -run
+"TestWafScenarioJSONHandler|TestGetWAFExploitPreventionScenario|RBAC|Matrix"`: 20/20 pass, including
+`TestRBACMatrix_NoDrift`.
+
 
 ### 0. `TestRBACMatrix_NoDrift` — the pre-existing emailgw/webgw drift referenced throughout this doc is now RESOLVED, by a different concurrent session
 

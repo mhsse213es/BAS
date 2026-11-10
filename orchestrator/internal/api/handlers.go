@@ -30,6 +30,7 @@ import (
 	"github.com/audspect/bas/internal/actions"
 	"github.com/audspect/bas/internal/admatrix"
 	"github.com/audspect/bas/internal/analytics"
+	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
 	"github.com/audspect/bas/internal/artifactgen"
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/cloudgraph"
@@ -111,6 +112,10 @@ type Handler struct {
 	engine *scenario.Engine
 	// secrets resolves credential reference columns (nil until WithSecretStore; see secrets.go).
 	secrets secretstore.Store
+	// apibasJobs runs API BAS assessment jobs (nil until WithAPIBASJobs; job endpoints answer 503).
+	apibasJobs *apibasjobs.Service
+	// apibasAsyncHook replaces the background start of a job. Tests set it to keep a job queued.
+	apibasAsyncHook func(func())
 	// dbsimCheckRunner dispatches the dbsim read-only identity check to an
 	// agent. nil in production until the dbsim run API exists (the check
 	// endpoint answers 501 and no target becomes client-eligible).
@@ -950,7 +955,7 @@ const agentSelectColumns = `a.agent_id, a.hostname, a.ip_address, a.os_version, 
 	        COALESCE(sr.sims, 0) AS sims,
 	        a.stopped_by, COALESCE(u.username, a.stopped_by), a.stopped_at, a.stop_reason,
 	        a.group_id, g.name, a.uninstall_error, a.uninstall_error_at, a.uninstall_requested_at,
-	        COALESCE(a.transport, 'legacy'), a.tray_hidden, (a.force_removed_at IS NOT NULL)`
+	        COALESCE(a.transport, 'legacy'), a.tray_hidden, (a.force_removed_at IS NOT NULL), a.is_factory_lab`
 
 // agentFromJoins is the FROM/JOIN clause shared by every GetAgents query
 // that selects agentSelectColumns above.
@@ -977,7 +982,7 @@ func scanAgentRows(rows pgx.Rows, hub *ws.Hub, now time.Time) []models.Agent {
 			&stateStr, &policyRaw, &a.EnrolledAt, &a.Sims,
 			&a.StoppedBy, &a.StoppedByName, &a.StoppedAt, &a.StopReason,
 			&a.GroupID, &a.GroupName, &a.UninstallError, &a.UninstallErrorAt, &uninstallRequestedAt,
-			&a.Transport, &a.TrayHidden, &a.ForceRemoved); err != nil {
+			&a.Transport, &a.TrayHidden, &a.ForceRemoved, &a.FactoryLab); err != nil {
 			continue
 		}
 		// Connectivity is heartbeat-driven: a dead/rebooted agent stops updating
@@ -2248,7 +2253,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		return "", "factory-validation dispatch requires the factory-owned lab agent", nil
 	}
 	if o.Mode != "factory-validation" && isFactoryLab {
-		return "", "the factory-owned lab agent cannot be dispatched to in mode " + o.Mode, nil
+		return "", "this agent is the factory validation lab and cannot run " + o.Mode + " scenarios. If it should be an ordinary agent, remove VALIDATION_LAB_AGENT_ID from the server configuration and restart the orchestrator", nil
 	}
 
 	// ── OS compatibility check ────────────────────────────────────────────────
@@ -3572,6 +3577,11 @@ func scanRunRows(rows pgx.Rows) ([]runRow, error) {
 func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 	agentID := r.URL.Query().Get("agentId")
 	scenarioID := r.URL.Query().Get("scenarioId")
+	// The factory validation lab runs content checks on its own agent every few minutes. Those runs are the
+	// product's internal quality loop, not customer assessments: left in, they flood Live Runs and skew every
+	// figure the console computes from this list (posture, coverage, reports). They stay out of the list unless the
+	// caller asks for them (includeFactory=1) or is looking at one specific agent, such as the lab agent's drawer.
+	includeFactory := r.URL.Query().Get("includeFactory") == "1" || agentID != ""
 
 	rows, err := h.db.Query(r.Context(),
 		`SELECT id, scenario_id, agent_id, sweep_id, em_sweep_id, name, status, results, score, initiated_by, started_at, completed_at,
@@ -3580,8 +3590,9 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 		 FROM scenario_runs
 		 WHERE ($1 = '' OR agent_id = $1)
 		   AND ($2 = '' OR scenario_id = $2)
+		   AND ($3 OR execution_kind <> 'factory_validation')
 		 ORDER BY started_at DESC LIMIT 100`,
-		agentID, scenarioID,
+		agentID, scenarioID, includeFactory,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)

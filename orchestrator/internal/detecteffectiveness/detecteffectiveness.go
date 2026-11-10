@@ -143,6 +143,7 @@ func Compute(ctx context.Context, pool *pgxpool.Pool, scenarioID, agentID string
 		`SELECT id, scenario_id, name, agent_id, results, detection_summary, started_at
 		   FROM scenario_runs
 		  WHERE status IN ('completed', 'partial')
+		    AND execution_kind <> 'factory_validation'
 		    AND results IS NOT NULL
 		    AND ($1 = '' OR scenario_id = $1)
 		    AND ($2 = '' OR agent_id = $2)

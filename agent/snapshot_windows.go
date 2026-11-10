@@ -91,6 +91,7 @@ func captureSnapshot(runID string) *SystemSnapshot {
 	// Registry locations that decide what runs and how Windows behaves; put back at the end of the run.
 	s.Guard = captureRegGuard(runID)
 	s.Health = captureHealth()
+	s.Procs = captureProcs()
 
 	return s
 }
@@ -178,6 +179,14 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 		}
 	}
 
+	// ── Stray processes next: whatever the run left running may hold files or respawn what is restored below ──
+	if base, ok := s.Procs.(procBaseline); ok {
+		for _, line := range sweepStrayProcesses(base) {
+			log.Printf("[restore] %s", line)
+			reverted = append(reverted, line)
+		}
+	}
+
 	var health *healthState
 	if h, ok := s.Health.(*healthState); ok && h != nil {
 		health = h
@@ -247,7 +256,7 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 		}
 	}
 
-	// ── Services — stop and disable newly added ───────────────────────────────
+	// ── Services — stop and disable newly added; delete those that are safe to delete ───────────────────────────────
 	origSvcs := toSet(s.Lists["services"])
 	if out, err := snapCmd("sc", "query", "type=", "all", "state=", "all"); err == nil {
 		for _, line := range strings.Split(string(out), "\n") {
@@ -256,9 +265,7 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 			}
 			name := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "SERVICE_NAME:"))
 			if name != "" && !origSvcs[name] {
-				snapCmdRun("sc", "stop", name)                         //nolint
-				snapCmdRun("sc", "config", name, "start=", "disabled") //nolint
-				reverted = append(reverted, "service stopped: "+name)
+				reverted = append(reverted, removeNewService(name))
 			}
 		}
 	}

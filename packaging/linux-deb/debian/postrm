@@ -1,0 +1,17 @@
+#!/bin/sh
+# postrm: "remove" keeps the customer's configuration, certificates and agent identity (so a re-install enrols as the
+# same agent). "purge" deletes them all, as an explicit request to erase the agent from this host.
+#
+# A purge does not tell the server the host is gone: the agent binary no longer exists at this point. Remove the
+# endpoint in the console (Agents, Force Remove) if it should disappear there too.
+set -e
+
+case "$1" in
+  purge)
+    rm -rf /etc/bas-agent /etc/audspect-agent /etc/audspect/certs /etc/audspect/certs.replaced-* \
+           /var/lib/bas-agent /var/lib/audspect-agent /var/log/bas-agent
+    rmdir /etc/audspect 2>/dev/null || true
+    ;;
+esac
+systemctl daemon-reload 2>/dev/null || true
+exit 0

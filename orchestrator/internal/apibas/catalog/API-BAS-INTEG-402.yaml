@@ -1,0 +1,56 @@
+id: "API-BAS-INTEG-402"
+name: "PART-002: partner escalates their own API key to write scope"
+category: INTEG
+claim: property_level
+attack_objective: "Partner 1 changes their own key's scope from read to write. The change is recorded in the lab; nothing is provisioned."
+threat_model:
+  attacker: "authenticated partner 1"
+  identity: partner-1
+  access_level: "partner, valid token, owns PKEY-1-001 with read scope, no authority to change scope"
+  objective: "Partner 1 changes their own key's scope from read to write. The change is recorded in the lab; nothing is provisioned."
+preconditions:
+  fixture: commerce-telecom-two-tenant
+  identities: [partner-1]
+  object: PKEY-1-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: partner-1
+    auth: valid
+    method: GET
+    path: "/api/retail/partner-keys/PKEY-1-001"
+    hypothesis: "Partner 1, the owner, reads their own key record. If this fails, the scenario is not testable."
+  - id: "attack-integ-402"
+    role: attack
+    identity: partner-1
+    auth: valid
+    method: POST
+    path: "/api/retail/partner-keys/PKEY-1-001/escalate"
+    body: '{}'
+    hypothesis: "Partner 1's scope escalation on PKEY-1-001 is refused, and the key stays read scope."
+denied_statuses: [403]
+expected_control: "Only support staff can change a key's scope. The partner's escalation is refused and the key stays read scope."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows PKEY-1-001 unchanged after partner 1's escalation.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-024
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The escalation names a partner key and the caller is a partner, not support staff, so REL-024 fires on the attempt in either build. Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "Partner onboarding and API-key privilege misuse (scope escalation)"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-INTEG-402 against the fixed build must PASS"
+  - "API-BAS-INTEG-402 against the vulnerable build must FAIL (exploited)"

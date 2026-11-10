@@ -70,7 +70,8 @@ function drawLine(cfg, W) {
 }
 
 function drawBar(cfg, W) {
-  const H = cfg.h || 170, L = 34, R = 6, T = 10, B = 24;
+  const sub = Array.isArray(cfg.sublabels) ? cfg.sublabels : null; // optional second line under each label (e.g. the date)
+  const H = cfg.h || 170, L = 34, R = 6, T = 10, B = sub ? 38 : 24;
   const labels = cfg.labels || [];
   const n = labels.length;
   if (!n) return '';
@@ -98,7 +99,10 @@ function drawBar(cfg, W) {
         out += '<rect x="' + bx + '" y="' + y(v) + '" width="' + (bw - 1) + '" height="' + (y(0) - y(v)) + '" rx="3" fill="' + s.color + '" data-tip="' + esc(lb + ' · ' + (s.name || 'Value') + ': ' + v) + '"/>';
       });
     }
-    if (i % labelEvery === 0) out += '<text x="' + cx + '" y="' + (H - 6) + '" class="axis-t" text-anchor="middle">' + esc(lb) + '</text>';
+    if (i % labelEvery === 0) {
+      out += '<text x="' + cx + '" y="' + (H - (sub ? 20 : 6)) + '" class="axis-t" text-anchor="middle">' + esc(lb) + '</text>';
+      if (sub && sub[i]) out += '<text x="' + cx + '" y="' + (H - 6) + '" class="axis-t" text-anchor="middle" opacity=".75">' + esc(sub[i]) + '</text>';
+    }
   });
   return out + '</svg>';
 }

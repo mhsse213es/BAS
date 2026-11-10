@@ -122,6 +122,8 @@ There is currently no macOS agent build step in the pipeline, despite macOS-spec
 
 `BINARIES.sha256` is **not** computed by hashing local binaries — it's generated inside the Dockerfile's agent-builder stage (from the same binaries endpoints actually download) and extracted from the built image via `docker create` + `docker cp` (distroless has no shell, so this filesystem-level extraction is the only option). It's then RSA-signed with the same `private_key.pem` from Step 0b, staged into `orchestrator/agents/`, and copied into the delivery bundle.
 
+**Previous-release hashes (`#prev` lines).** An agent installed before an upgrade still runs its old binary. If the new manifest dropped that hash, the server would quarantine the agent as an unknown binary, and only an operator can release a quarantined agent. So the manifest also lists the previous release's hashes as `#prev <hash>  <file>` lines; the server then marks those agents `outdated` (degraded) and returns them to `active` once they run a current binary. The previous manifest is the newest earlier release under `dist\` (`Get-PreviousReleaseManifest` / `build.sh`), not `git HEAD`, because a build overwrites the committed manifest without committing it. `windows-build.ps1` and `build.sh` pass it to the image build as `PREVIOUS_MANIFEST_B64`; the Dockerfile's `binaries-manifest` stage carries it with `packaging/carry-previous-manifest.sh` and fails the build if any previous hash is missing. `Update-OrchestratorAgentArtifacts` checks the regenerated manifest again before signing it, and `sign-binaries.sh` (the Linux path) carries it too. Agents have no self-update, so an `outdated` agent still needs the new binary installed on its host.
+
 ### Step 6-7 — Copy Bundle Files, Write VERSION
 
 Copies scenarios (with `.yaml.sig` files), the dashboard `wwwroot`, and ART external payloads into the delivery folder, and writes a plain `VERSION` file containing the version string.
@@ -183,6 +185,7 @@ At `dist\` root: `bas-install-<version>.zip`, `.zip.sha256`, and (if GPG signing
 | `docker: no space left on device` | Old images/build cache filling disk | `docker builder prune -a -f && docker image prune -f` |
 | `error running keyboxd` (GPG) | Git-for-Windows' MSYS gpg's keyboxd not launchable from PowerShell | Prefer a full Gpg4win install over Git-for-Windows' bundled gpg; or remove `use-keyboxd` from `%USERPROFILE%\.gnupg\common.conf` |
 | Agent binary trust all yellow after upgrade | `BINARIES.sha256` not refreshed for the new agent build | Re-run the full pipeline (not `-SkipBuild`) so Step 5c re-extracts and re-signs it |
+| Agents quarantined (not `outdated`) after an upgrade | The new `BINARIES.sha256` has no `#prev` lines: the build found no earlier release under `dist\`, or the image was built without `PREVIOUS_MANIFEST_B64` (`-SkipBuild` reuses an old image) | `grep -c '^#prev' agents/BINARIES.sha256` should be above 0 after the first upgrade. Rebuild the full pipeline with the earlier `dist\bas-install-<version>` still in place. A quarantined agent must still be released by an operator |
 
 ---
 

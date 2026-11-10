@@ -247,10 +247,10 @@ var realScenarioEvidenceByID = map[string]realScenarioEvidence{
 	"acl-privilege-exposure-check": {
 		Cleanup: []string{"No cleanup required: the check only reads privileged objects' access-control lists; no state change (scenarios/acl-privilege-exposure-audit.yaml Stage 1)."},
 		EvidenceRequirements: []string{
-			"SIEM: a non-tier-0 principal holds a takeover-enabling right (GenericAll/GenericWrite/WriteDacl/WriteOwner/ForceChangePassword/AddMember/AddSelf/AllExtendedRights) over a privileged object — ACL exposure IOC",
+			"SIEM: non-tier-0 ACE with GenericAll/GenericWrite/WriteDacl/WriteOwner on a privileged group",
 		},
 		TelemetrySources: []string{
-			"DC: access-control read of privileged objects' security descriptors (nTSecurityDescriptor) — not separately audited by default",
+			"Sysmon EID 1: powershell.exe reading group ACLs via DirectoryServices",
 		},
 		Limitations: aclExposureCheckLimitations,
 	},
@@ -260,7 +260,7 @@ var realScenarioEvidenceByID = map[string]realScenarioEvidence{
 			"SIEM: a certificate template enrollable by a non-tier-0 principal carries an ESC1-4-class misconfiguration (enrollee-supplied subject + authentication EKU, Any-Purpose/no EKU, enrollment-agent EKU, or a non-tier-0-writable template DACL) — AD CS template exposure IOC",
 		},
 		TelemetrySources: []string{
-			"DC: LDAP read of pKICertificateTemplate objects under the Configuration partition — not separately audited by default",
+			"DC: LDAP read of pKICertificateTemplate objects under CN=Certificate Templates,CN=Public Key Services,CN=Services,<Configuration NC> — not separately audited by default",
 		},
 		Limitations: adcsExposureCheckLimitations,
 	},

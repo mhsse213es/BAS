@@ -1,0 +1,53 @@
+id: "API-BAS-AUTHZ-502"
+name: "UPI-002: customer reads another customer's VPA-linked account"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "UPI customer A reads UPI customer B's VPA record VPA-B-001 and its linked account."
+threat_model:
+  attacker: "authenticated UPI customer A"
+  identity: upi-cust-a
+  access_level: "standard customer, valid token, owns VPA-A-001 only"
+  objective: "UPI customer A reads UPI customer B's VPA record VPA-B-001 and its linked account."
+preconditions:
+  fixture: upi-two-customer
+  identities: [upi-cust-a, upi-cust-b]
+  object: VPA-B-001
+steps:
+  - id: "baseline-owner-vpa"
+    role: baseline
+    identity: upi-cust-b
+    auth: valid
+    method: GET
+    path: "/api/upi/vpa/VPA-B-001"
+    hypothesis: "Customer B, the owner, reads their own VPA record. If this fails, the scenario is not testable."
+  - id: "attack-read-other-vpa"
+    role: attack
+    identity: upi-cust-a
+    auth: valid
+    method: GET
+    path: "/api/upi/vpa/VPA-B-001"
+    hypothesis: "Customer A's read of VPA-B-001 is refused, and the linked account is not returned."
+denied_statuses: [403, 404]
+forbidden_values: ["BAS-SIM-UPI-ACC-B"]
+expected_control: "Customer A cannot read customer B's VPA record. The read is refused and the linked account is never disclosed."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to customer A's read of VPA-B-001 carries no value of the linked account.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The cross-owner read is an access event naming another owner's VPA (REL-004). Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "UPI / open banking: a VPA's linked account is disclosed to its owner alone (NPCI UPI procedural guidelines on linked-account confidentiality)"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-502 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-502 against the vulnerable build must FAIL (exploited)"

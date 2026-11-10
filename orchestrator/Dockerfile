@@ -138,12 +138,15 @@ RUN cd /agents-legacy && zip -q bas-agent-windows-legacy-amd64-setup.zip bas-age
 # ── Package Builder (.deb, .rpm) ─────────────────────────────────────────────
 FROM debian:bookworm-slim AS packager
 ARG BAS_VERSION=1.6.0
-ENV BAS_VERSION=${BAS_VERSION}
+ARG AGENT_VERSION=dev
+ENV BAS_VERSION=${BAS_VERSION} AGENT_VERSION=${AGENT_VERSION}
 RUN apt-get update && apt-get install -y --no-install-recommends \
     dpkg alien rpm && \
     rm -rf /var/lib/apt/lists/*
 COPY --from=agent-builder /agents /binaries
 COPY packaging/build-agent-packages.sh /build-packages.sh
+COPY packaging/linux-deb /linux-deb
+COPY orchestrator/internal/api/agentinstall/install-agent-linux.sh /install-agent-linux.sh
 RUN bash /build-packages.sh
 
 # ── Combined Binary Manifest ─────────────────────────────────────────────────
@@ -155,7 +158,12 @@ RUN bash /build-packages.sh
 # reference only against stages already declared earlier in the file,
 # regardless of the dependency graph it then builds in.
 FROM alpine AS binaries-manifest
+# The previous release's BINARIES.sha256, base64, from the build script. Its hashes are kept in the new manifest as
+# "#prev" lines, so an agent still on that release is marked "outdated" instead of being quarantined as an unknown
+# binary after an upgrade. Empty means the build had no earlier release to carry.
+ARG PREVIOUS_MANIFEST_B64=""
 RUN mkdir /agents
+COPY packaging/carry-previous-manifest.sh /carry-previous-manifest.sh
 COPY --from=agent-builder /agents/bas-agent-linux-amd64 /agents/bas-agent-linux-arm64 \
      /agents/bas-agent-windows-amd64.exe /agents/bas-agent-darwin-amd64 /agents/bas-agent-darwin-arm64 \
      /agents/bas-agent-windows-amd64-setup.zip \
@@ -174,6 +182,16 @@ RUN cd /agents && sha256sum \
       bas-agent-installer-darwin-arm64 bas-agent-installer-darwin-amd64 \
       bas-agent-linux-amd64.deb bas-agent-linux-arm64.deb bas-agent-linux-amd64.rpm \
     > /agents/BINARIES.sha256
+# This manifest is the one the final image ships and the signing steps later sign, so the previous hashes must be
+# in it here. verify fails the build if any of them is missing.
+RUN if [ -n "$PREVIOUS_MANIFEST_B64" ]; then \
+      printf '%s' "$PREVIOUS_MANIFEST_B64" | base64 -d > /tmp/previous.sha256 && \
+      n="$(sh /carry-previous-manifest.sh carry /agents/BINARIES.sha256 /tmp/previous.sha256)" && \
+      sh /carry-previous-manifest.sh verify /agents/BINARIES.sha256 /tmp/previous.sha256 && \
+      echo "carried $n previous-release hash(es) into BINARIES.sha256"; \
+    else \
+      echo "WARNING: no previous manifest supplied - agents still on the last release will be quarantined after the upgrade"; \
+    fi
 
 # ── Dashboard (G1c): Node only here, never in the final image ─────────────────
 FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS web
@@ -227,9 +245,14 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     garble -literals build \
     -ldflags="-s -w -X main.Version=${BAS_VERSION} -X github.com/audspect/bas/internal/license.buildTier=${BAS_BUILD_TIER} -X main.expectedWWWManifestHash=$(cat /web-manifest.sha256) -X github.com/audspect/bas/internal/integrity.orchestratorManifestExpected=true" \
     -o /bin/orchestrator ./cmd/server
+# API BAS assessment runner. The orchestrator starts it as a child process (BAS_APIBAS_RUNNER=/apibas-runner). Built with plain
+# go build, not garble: its report types carry no json tags, and garble renames fields that encoding/json reads by name.
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /bin/apibas-runner ./cmd/apibas-runner
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=builder /bin/orchestrator /orchestrator
+COPY --from=builder /bin/apibas-runner /apibas-runner
 COPY --from=binaries-manifest /agents/BINARIES.sha256 /agents/BINARIES.sha256
 COPY --from=agent-builder /agents /agents
 COPY --from=agent-legacy-builder /agents-legacy/bas-agent-windows-legacy-amd64.exe /agents/bas-agent-windows-legacy-amd64.exe

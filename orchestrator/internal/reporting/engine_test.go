@@ -896,4 +896,60 @@ func TestBuildFromEMSweep_NotFound(t *testing.T) {
 			t.Fatal("expected an error for an unknown EM sweep id")
 		}
 	})
+}
+
+// "Not prevented only" and "Not detected only" must list defence failures and detection gaps, not steps that never
+// produced a security outcome. A skipped step was not run and an ERROR is the BAS hitting a problem; the score already
+// leaves both out, so the filters must too. A step the controls stopped is "prevented", not a missed detection.
+func TestFilterResults_OnlyRealOutcomesAppearUnderTheNotFilters(t *testing.T) {
+	res := func(id string, r models.CheckResult, verdict string) models.SimulationResult {
+		return models.SimulationResult{Technique: models.AttackTechnique{ID: id}, Result: r, DetectionVerdict: verdict}
+	}
+	results := []models.SimulationResult{
+		res("T-fail-undetected", models.ResultFail, "undetected"),
+		res("T-fail-detected", models.ResultFail, "detected"),
+		res("T-pass-prevented", models.ResultPass, "prevented"),
+		res("T-blocked-detected", models.ResultBlocked, "detected"),
+		res("T-error", models.ResultError, ""),
+		res("T-skipped", models.ResultSkipped, ""),
+	}
+	ids := func(rs []models.SimulationResult) map[string]bool {
+		m := map[string]bool{}
+		for _, r := range rs {
+			m[r.Technique.ID] = true
+		}
+		return m
+	}
+	np := ids(FilterResults(results, "not_prevented"))
+	if !np["T-fail-undetected"] || !np["T-fail-detected"] || len(np) != 2 {
+		t.Errorf("not_prevented = %v, want only the two FAIL results (not pass/blocked, not error/skipped)", np)
+	}
+	nd := ids(FilterResults(results, "not_detected"))
+	if !nd["T-fail-undetected"] || len(nd) != 1 {
+		t.Errorf("not_detected = %v, want only T-fail-undetected (not detected, not prevented-by-control, not error/skipped)", nd)
+	}
+	pv := ids(FilterResults(results, "prevented"))
+	if !pv["T-pass-prevented"] || !pv["T-blocked-detected"] || len(pv) != 2 {
+		t.Errorf("prevented = %v", pv)
+	}
+	dt := ids(FilterResults(results, "detected"))
+	if !dt["T-fail-detected"] || !dt["T-blocked-detected"] || len(dt) != 2 {
+		t.Errorf("detected = %v", dt)
+	}
+	if got := len(FilterResults(results, "all")); got != len(results) {
+		t.Errorf("all = %d results, want every one of the %d", got, len(results))
+	}
+}
+
+// Rows with no prevented/detected/undetected verdict (no detection sweep ran, or every step errored or was skipped)
+// must not produce a breakdown: it printed "Techniques missed 0 / 0" beside a run that executed techniques.
+func TestBuildCoverageBreakdown_NoVerdictsMeansNoBreakdown(t *testing.T) {
+	rows := []TechniqueRow{{TechniqueID: "T1059.001", DetectionVerdict: ""}, {TechniqueID: "T1547.001", DetectionVerdict: "error"}}
+	if cb := buildCoverageBreakdown(rows); cb.HasData || cb.Attempted != 0 {
+		t.Fatalf("breakdown = %+v, want none", cb)
+	}
+	cb := buildCoverageBreakdown([]TechniqueRow{{TechniqueID: "T1", DetectionVerdict: "prevented"}, {TechniqueID: "T2", DetectionVerdict: "undetected"}})
+	if !cb.HasData || cb.Attempted != 2 || cb.Prevented != 1 || cb.Missed != 1 {
+		t.Fatalf("breakdown = %+v", cb)
+	}
 }

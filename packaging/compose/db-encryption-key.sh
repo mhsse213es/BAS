@@ -22,6 +22,14 @@ DB_KEY_FILE="${DB_KEY_DIR}/db-encryption.key"
 DB_KEY_UID="${DB_KEY_UID:-0}"
 DB_KEY_GID="${DB_KEY_GID:-65532}"
 DB_KEY_PBKDF2_ITER=600000
+# Marker file that records "this install has been issued a key". The installer points it into DATA_DIR. When it is unset,
+# provisioning behaves as before (an upgrade never generates a key).
+DB_KEY_MARKER="${DB_KEY_MARKER:-}"
+
+# _dbkey_mark: record that a verified key exists for this install.
+_dbkey_mark() {
+  [[ -n "$DB_KEY_MARKER" ]] && : > "$DB_KEY_MARKER" || true
+}
 
 _dbkey_err() { echo "ERROR: $*" >&2; }
 _dbkey_info() { echo "$*"; }
@@ -87,10 +95,13 @@ db_key_provision() {
       db_key_perms_ok "$DB_KEY_FILE" || { _dbkey_err "${DB_KEY_FILE} does not have the expected owner and mode"; return 1; }
       _dbkey_info "Encryption key ownership and mode repaired."
     fi
+    _dbkey_mark
     _dbkey_info "Encryption key present and verified."
     return 0
   fi
-  if [[ "$mode" == "upgrade" ]]; then
+  # An upgrade of an install that was never issued a key (no marker) may generate one: nothing can be encrypted under a key that
+  # never existed. With a marker the key was issued before and has been lost, so generating a new one would orphan data.
+  if [[ "$mode" == "upgrade" && ( -z "$DB_KEY_MARKER" || -e "$DB_KEY_MARKER" ) ]]; then
     _dbkey_err "the encryption key is missing at ${DB_KEY_FILE}."
     _dbkey_err "An upgrade does not generate a key: stored credentials would become unreadable. Restore it from the recovery copy with: install.sh --import-db-key <recovery file>"
     return 1
@@ -98,6 +109,7 @@ db_key_provision() {
   db_key_generate || { _dbkey_err "could not generate the encryption key at ${DB_KEY_FILE}"; return 1; }
   db_key_content_ok "$DB_KEY_FILE" && db_key_perms_ok "$DB_KEY_FILE" \
     || { _dbkey_err "the generated key did not verify"; return 1; }
+  _dbkey_mark
   _dbkey_info "Encryption key generated at ${DB_KEY_FILE} (root:${DB_KEY_GID}, 0640)."
 }
 

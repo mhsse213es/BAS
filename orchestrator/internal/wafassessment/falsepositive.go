@@ -55,11 +55,15 @@ func EvaluateLegitimateTrafficScenario(scenario EnterpriseScenario, fixtures map
 		if err != nil {
 			return VectorAssertion{}, false, err
 		}
+		src := fixture.EvidenceSource
+		if src == "" {
+			src = EvidenceSourceFixture
+		}
 		return VectorAssertion{
 			VectorID:       vectorID,
 			Severity:       severityByID[vectorID],
 			Verdict:        result.Verdict,
-			EvidenceSource: EvidenceSourceFixture,
+			EvidenceSource: src,
 			Reason:         result.Reason,
 		}, true, nil
 	})

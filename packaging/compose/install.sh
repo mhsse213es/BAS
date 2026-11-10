@@ -1272,6 +1272,7 @@ mode_install() {
   chmod 700 "${DATA_DIR}/signing"
   log "Created: ${DATA_DIR}"
   # Interim database encryption key, kept outside DATA_DIR so dumps and the upgrade backup do not capture it.
+  DB_KEY_MARKER="${DATA_DIR}/.db-key-issued"
   db_key_provision fresh || { err "encryption key provisioning failed; installation stopped at step 3"; exit 1; }
 
   step "4/10  Loading Docker images (air-gap safe -no pull)"
@@ -1377,6 +1378,7 @@ mode_upgrade() {
 
   # The encryption key must exist and verify before anything changes. An upgrade never generates one: that would make
   # every stored credential unreadable.
+  DB_KEY_MARKER="${DATA_DIR}/.db-key-issued"
   db_key_provision upgrade || { err "encryption key check failed; the upgrade was not started"; exit 1; }
 
   # Detect an upgrade FROM a pre-mTLS install: BAS_ENROLL_PORT's absence

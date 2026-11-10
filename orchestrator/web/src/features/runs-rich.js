@@ -68,7 +68,7 @@ export function chartsHtml(runs) {
   var segs = M.outcomeSegments(runs).map(function(s) { return { label: s.label, value: s.value, color: SEG_COLOR[s.key] || CHART_COLORS.info }; });
   var legend = '<div class="legend"><span><i class="lg-ok"></i>Passed</span><span><i class="lg-bad"></i>Failed</span></div>';
   var bars = wk.total
-    ? chartSlot({ type: 'bar', stacked: true, labels: wk.labels, h: 170, yMax: Math.max(4, Math.ceil(wk.peak / 4) * 4), series: [{ name: 'Passed', color: CHART_COLORS.ok, data: wk.passed }, { name: 'Failed', color: CHART_COLORS.bad, data: wk.failed }] })
+    ? chartSlot({ type: 'bar', stacked: true, labels: wk.labels, sublabels: wk.dates, h: 170, yMax: Math.max(4, Math.ceil(wk.peak / 4) * 4), series: [{ name: 'Passed', color: CHART_COLORS.ok, data: wk.passed }, { name: 'Failed', color: CHART_COLORS.bad, data: wk.failed }] })
     : empty('runs', 'No completed or failed runs', 'The last seven days up to the newest run.');
   return '<div class="rk-grid g2">' +
     card('Runs this week', bars, { actions: legend }) +

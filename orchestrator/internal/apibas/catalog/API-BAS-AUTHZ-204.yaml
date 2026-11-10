@@ -1,0 +1,56 @@
+id: "API-BAS-AUTHZ-204"
+name: "MFG-004: device commands another device"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "Device A sends a stop command to device B. The command is recorded in the lab; no equipment is driven."
+threat_model:
+  attacker: "authenticated IoT device A"
+  identity: device-a
+  access_level: "device identity, valid token, owns DEV-A-001 only"
+  objective: "Device A sends a stop command to device B. The command is recorded in the lab; no equipment is driven."
+preconditions:
+  fixture: manufacturing-two-plant
+  identities: [device-a, device-b]
+  object: DEV-B-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: device-b
+    auth: valid
+    method: GET
+    path: "/api/mfg/devices/DEV-B-001"
+    hypothesis: "Device B reads its own record. If this fails, the scenario is not testable."
+  - id: "attack-authz-204"
+    role: attack
+    identity: device-a
+    auth: valid
+    method: POST
+    path: "/api/mfg/devices/DEV-B-001/command"
+    body: '{"command":"stop"}'
+    hypothesis: "Device A's command to DEV-B-001 is refused, and the device status does not change."
+denied_statuses: [403, 404]
+expected_control: "A device can command only itself. A command to another device is refused and its status is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows DEV-B-001's status unchanged after device A's command.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The command names DEV-B-001, owned by device B, from device A. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "Manufacturing: IoT device identity and command authorization (simulated; no real equipment)"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-204 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-204 against the vulnerable build must FAIL (exploited)"

@@ -1,0 +1,56 @@
+id: "API-BAS-BIZ-401"
+name: "RET-003: shopper sets the price of their own order"
+category: BIZ
+claim: property_level
+attack_objective: "Shopper A sets the amount of their own order to a token value."
+threat_model:
+  attacker: "authenticated shopper A"
+  identity: shopper-a
+  access_level: "shopper, valid token, owns RORD-A-001, no pricing authority"
+  objective: "Shopper A sets the amount of their own order to a token value."
+preconditions:
+  fixture: commerce-telecom-two-tenant
+  identities: [shopper-a]
+  object: RORD-A-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: shopper-a
+    auth: valid
+    method: GET
+    path: "/api/retail/orders/RORD-A-001"
+    hypothesis: "Shopper A, the owner, reads their own order. If this fails, the scenario is not testable."
+  - id: "attack-biz-401"
+    role: attack
+    identity: shopper-a
+    auth: valid
+    method: PATCH
+    path: "/api/retail/orders/RORD-A-001"
+    body: '{"amount":"1"}'
+    hypothesis: "Shopper A's price change on RORD-A-001 is refused, and the amount is unchanged."
+denied_statuses: [403]
+expected_control: "Only support staff can change an order price. The owner's change is refused and the amount is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows RORD-A-001's amount unchanged after shopper A's change.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-023
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The change names an order and the caller is a shopper, not support staff, so REL-023 fires on the attempt in either build. Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "Retail: pricing, discount and refund manipulation (client-controlled price)"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-BIZ-401 against the fixed build must PASS"
+  - "API-BAS-BIZ-401 against the vulnerable build must FAIL (exploited)"

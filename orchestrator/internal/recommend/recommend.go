@@ -171,6 +171,7 @@ func loadCoverage(ctx context.Context, pool *pgxpool.Pool) (map[string]coverageR
 		       r->>'result'                      AS verdict
 		FROM scenario_runs sr, jsonb_array_elements(sr.results) r
 		WHERE sr.status IN ('completed', 'partial')
+		  AND sr.execution_kind <> 'factory_validation'
 		  AND r->'technique'->>'id' IS NOT NULL
 		  AND r->'technique'->>'id' <> ''
 		  AND r->>'executedAt' IS NOT NULL

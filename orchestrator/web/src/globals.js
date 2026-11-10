@@ -1,6 +1,7 @@
 import { x } from './core/escape.js';
 import { closeFactoryDrawerOnBackdrop, closeFactorySource, recheckFactoryHealth, openFactorySource, fhTableQuery, clearFhTableQuery, setFhPer, fhPage, fhSortBy, toggleFhCols, fhColToggle, fhSelectRow, fhSelectAll, clearFhSelection, fhRowKeydown, exportFhCsv, exportFhSelected } from './features/factory-health.js';
 import { stopEvent } from './core/actions.js';
+import { apiInvSelect, apiInvImport, apiInvLoadFile, apiInvFilter, apiInvVersion, apiInvDrift, apiInvExample, apiInvPlanBinding, apiInvRefresh, apiInvSaveBinding, apiInvDeleteBinding, apiInvExampleWrite, apiInvRunBound, apiInvJob, apiInvJobsRefresh, apiInvWriteOp, apiInvWriteSync, apiInvWriteApply, apiInvWriteClear, apiInvWriteEdit, apiInvWriteRemove, apiInvSaveSchedule, apiInvSchedMode, apiInvAllJobsRefresh, apiInvAllJobsFilter, apiInvAllJobsMore, apiInvAllJob, apiInvRemoveSchedule, apiInvExampleChecks, apiInvJobsFilter, apiInvJobsMore } from './features/api-inventory.js';
 import { loadThreatPriorityActors, onThreatPrioritySearch, clearTpTableQuery, setTpPer, tpPage, tpSortBy, toggleTpCols, tpColToggle, tpSelectRow, tpSelectAll, clearTpSelection, tpRowKeydown, exportTpCsv, exportTpSelected, closeThreatPriorityDetail, closeThreatPriorityDetailOnBackdrop, tpGo } from './features/tp-view.js';
 import { toggleExpCols, setExpPer, expPage, expSortBy, expColToggle, expSelectRow, expSelectAll, clearExpSelection, expRowKeydown, exportExpCsv, exportExpSelected, clearExpTableQuery, expGo } from './features/exp-view.js';
 import { setRecLimit } from './features/attack-path.js';
@@ -30,6 +31,7 @@ import { openKevDetail, openControlDetail } from './features/dash-rich.js';
 import { bulkPushSelectedFindings, loadFindings, loadSLAReport, openFinding, openFindingsWithStatus, openRemediation, pushFindingToITSM, quickTriageFinding, remBulkTicket, remSingleTicket, revalidateRemediation, exportFindings, fndGo, fndTech, setFindingSearch, setFindingSev, setFindingStatus, setFindingTab, setRemFilter, setRemView, toggleRemEndpoint, setRemSearch, toggleAllFindingChecksFromChecked, toggleFindingCheck } from './features/findings.js';
 import { closeInitiativeAttachDrawer, closeInitiativeAttachDrawerOnBackdrop, closeInitiativeCreateDrawer, closeInitiativeCreateDrawerOnBackdrop, closeInitiativeDrawer, closeInitiativeDrawerOnBackdrop, initiativeArchiveAction, initiativeAttachSelect, initiativeCloseAction, initiativeDeleteFromMenu, initiativeDetachJob, initiativeRenderAttachList, initiativeSetFilter, initiativeSearch, initiativeClearFilters, initiativeCardKeydown, loadInitiatives, openInitiativeAttachDrawer, openInitiativeCreateDrawer, openInitiativeDrawer, submitInitiativeAttach, submitInitiativeCreate } from './features/initiatives.js';
 import { openAddConnectorFor, openAddResponseConnectorFor, refreshResponseConnectors, closeConnectorForm, closeRespondModal, closeResponseConnectorForm, connectorProjectSelectChange, deleteConnector, deleteResponseConnector, fetchConnectorProjects, openAddConnector, openAddResponseConnector, openEditConnector, openEditResponseConnector, openRespondModal, renderConnectorSettings, renderRespondFields, renderResponseConnectorFields, saveConnectorForm, saveResponseConnectorForm, submitRespondAction, testConnectorById, testConnectorForm, testResponseConnectorById } from './features/integrations.js';
+import { openContentImport, closeContentImport, closeContentImportOnBackdrop, ciKindChange, submitContentImport, approveImportDraft, rejectImportDraft } from './features/content-import.js';
 import { clearIOCFilters, closeIOCAddModal, closeIOCAddOnBackdrop, closeIOCDrawer, closeIOCDrawerOnBackdrop, closeIOCImportOnBackdrop, openIOCAddModal, setIOCType, submitIOCAdd, closeIOCImportModal, closeResults, closeResultsOnBackdrop, loadIOCRegistry, loadIOCRegistryOnEnter, openIOCDetail, openIOCImportModal, setRunIOCSearchFromInput, setRunIOCTypeFilter, submitIOCImport, toggleIOCSuppressed, toggleRunIOCRow } from './features/iocs.js';
 import { closeRunLive, closeRunLiveOnBackdrop, closeSweepDrilldown, closeSweepDrilldownOnBackdrop, openRunPanelAction, openRunScenarioAction, openSweepDrilldown, openSweepReport, toggleLiveStepAction } from './features/live-run.js';
 import { abortExecution, abortExecutionStop, approveExStep, closeExerciseDetail, closeExerciseDetailOnBackdrop, closeOpenAEVDetail, closeOpenAEVDetailOnBackdrop, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory, toggleAPScore } from './features/openaev.js';
@@ -105,6 +107,37 @@ export const ACTIONS = {
   closeCovDrawerOnBackdrop,
   recalcCoverage,
   recheckFactoryHealth,
+  apiInvSelect,
+  apiInvImport,
+  apiInvLoadFile,
+  apiInvFilter,
+  apiInvVersion,
+  apiInvDrift,
+  apiInvExample,
+  apiInvPlanBinding,
+  apiInvRefresh,
+  apiInvSaveBinding,
+  apiInvDeleteBinding,
+  apiInvExampleWrite,
+  apiInvRunBound,
+  apiInvJob,
+  apiInvJobsRefresh,
+  apiInvWriteOp,
+  apiInvWriteSync,
+  apiInvWriteApply,
+  apiInvWriteClear,
+  apiInvWriteEdit,
+  apiInvWriteRemove,
+  apiInvSaveSchedule,
+  apiInvSchedMode,
+  apiInvAllJobsRefresh,
+  apiInvAllJobsFilter,
+  apiInvAllJobsMore,
+  apiInvAllJob,
+  apiInvRemoveSchedule,
+  apiInvExampleChecks,
+  apiInvJobsFilter,
+  apiInvJobsMore,
   openFactorySource,
   fhTableQuery,
   toggleExpCols,
@@ -462,6 +495,13 @@ export const ACTIONS = {
   pauseCampaign,
   pauseRun,
   pickScenarioUploadFile,
+  openContentImport,
+  closeContentImport,
+  closeContentImportOnBackdrop,
+  ciKindChange,
+  submitContentImport,
+  approveImportDraft,
+  rejectImportDraft,
   pickerSelectAll,
   pickerToggle,
   pollVariantRun,

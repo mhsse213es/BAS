@@ -605,6 +605,12 @@ func buildCoverageBreakdown(matrix []TechniqueRow) CoverageBreakdown {
 			gapped = append(gapped, row)
 		}
 	}
+	if cb.Attempted == 0 {
+		// Rows exist but none carries a prevented/detected/undetected verdict (no post-run detection sweep ran, or
+		// every step errored or was skipped). Reporting HasData with 0 of 0 printed "Techniques missed 0 / 0" and
+		// "Techniques prevented 0 / 0" beside a run that executed techniques; no breakdown is the honest answer.
+		return CoverageBreakdown{}
+	}
 	if cb.Attempted > 0 {
 		cb.PreventionRate = cb.Prevented * 100 / cb.Attempted
 		cb.DetectionCoverage = (cb.Prevented + cb.DetectedOnly) * 100 / cb.Attempted
@@ -3422,8 +3428,17 @@ func FilterResults(results []models.SimulationResult, filter string) []models.Si
 		if r.Result == models.ResultVetoed {
 			continue
 		}
+		// The same holds for SKIPPED and ERROR steps. A skipped step was not run, and an ERROR means the BAS hit a
+		// problem (timeout, missing prerequisite, ...): neither says anything about the customer's controls, and the
+		// score already leaves both out. Listing them under "Not prevented" or "Not detected" made the report claim
+		// defence failures that never happened.
+		if r.Result == models.ResultSkipped || r.Result == models.ResultError {
+			continue
+		}
 		isPrevented := r.Result == models.ResultPass || r.Result == models.ResultBlocked
 		isDetected := r.DetectionVerdict == "detected"
+		// A step the controls stopped has the verdict "prevented": that is an outcome of the control, not a miss.
+		isStoppedByControl := r.DetectionVerdict == "prevented"
 		switch filter {
 		case "prevented":
 			if isPrevented {
@@ -3438,7 +3453,7 @@ func FilterResults(results []models.SimulationResult, filter string) []models.Si
 				filtered = append(filtered, r)
 			}
 		case "not_detected":
-			if !isDetected {
+			if !isDetected && !isStoppedByControl {
 				filtered = append(filtered, r)
 			}
 		}
@@ -3806,6 +3821,10 @@ type EnvRestoration struct {
 	// counts from, so a step the whole-run safety net later confirmed
 	// removed (verdict "rescued") never appears here.
 	LeakedItems []LeakedCleanupItem `json:"leakedItems,omitempty"`
+	// RestoreIssues are the agent's own post-restore findings: after putting recorded changes back it asks Windows
+	// whether things still open the way they did (and whether a recorded change could be restored at all). One entry per
+	// "restore incomplete:" line the agent reported, with that machine prefix removed. A run with any is never "clean".
+	RestoreIssues []string `json:"restoreIssues,omitempty"`
 }
 
 // LeakedCleanupItem is one step's cleanup-failure detail: which step, what
@@ -3890,6 +3909,12 @@ func buildEnvRestoration(matrix []TechniqueRow, reverted []string) EnvRestoratio
 		StepsTotal:    len(matrix),
 		RevertedCount: len(reverted),
 	}
+	const incompletePrefix = "restore incomplete: "
+	for _, line := range reverted {
+		if strings.HasPrefix(line, incompletePrefix) {
+			e.RestoreIssues = append(e.RestoreIssues, strings.TrimPrefix(line, incompletePrefix))
+		}
+	}
 	for _, r := range matrix {
 		switch r.CleanupVerdict {
 		case "reverted":
@@ -3952,7 +3977,21 @@ func buildEnvRestoration(matrix []TechniqueRow, reverted []string) EnvRestoratio
 		e.ExecSummary += fmt.Sprintf(" %d of these were cleaned by the safety-net sweep, not by their own script.", e.StepsRescued)
 	}
 
-	e.HasData = e.StepsTotal > 0
+	// The endpoint is only "clean" if the agent's verification found nothing wrong either.
+	if n := len(e.RestoreIssues); n > 0 {
+		note := fmt.Sprintf(" The endpoint was not fully restored: %d item(s) the agent could not put back or verify (listed below).", n)
+		switch {
+		case n > 3:
+			e.ImpactLevel, e.StatusLabel = "persistent", "Failed"
+			e.ImpactLabel = fmt.Sprintf("Endpoint Not Fully Restored (%d)", n)
+		case e.ImpactLevel == "clean":
+			e.ImpactLevel, e.StatusLabel = "minor", "Attention Required"
+			e.ImpactLabel = fmt.Sprintf("Endpoint Not Fully Restored (%d)", n)
+		}
+		e.ExecSummary += note
+	}
+
+	e.HasData = e.StepsTotal > 0 || len(e.RestoreIssues) > 0
 	return e
 }
 

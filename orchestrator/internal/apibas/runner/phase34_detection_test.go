@@ -138,6 +138,38 @@ func expectedDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, ru
 			return detect.Detected
 		}
 		return detect.NotDetected
+	case "APIBAS-REL-023", "APIBAS-REL-024", "APIBAS-REL-025":
+		// A role-restricted commerce route called by a caller whose role is not the permitted one. The attempt is the signal, in
+		// either build.
+		attack := s.Steps[len(s.Steps)-1]
+		permitted := map[string]string{"APIBAS-REL-023": "agent", "APIBAS-REL-024": "agent", "APIBAS-REL-025": "carrier"}[rule]
+		onRoute := false
+		switch rule {
+		case "APIBAS-REL-023":
+			onRoute = attack.Method == "PATCH" && strings.HasPrefix(attack.Path, "/api/retail/orders/")
+		case "APIBAS-REL-024":
+			onRoute = attack.Method == "POST" && strings.HasPrefix(attack.Path, "/api/retail/partner-keys/") && strings.HasSuffix(attack.Path, "/escalate")
+		case "APIBAS-REL-025":
+			onRoute = attack.Method == "POST" && strings.HasPrefix(attack.Path, "/api/retail/shipments/") && strings.HasSuffix(attack.Path, "/callback")
+		}
+		if onRoute && roleOf(t, fx, attack.Identity) != permitted {
+			return detect.Detected
+		}
+		return detect.NotDetected
+	case "APIBAS-REL-021":
+		// A laboratory result change by a caller whose role is not a device. The attempt is the signal, in either build.
+		attack := s.Steps[len(s.Steps)-1]
+		if attack.Method == "PATCH" && strings.HasPrefix(attack.Path, "/api/health/lab-results/") && roleOf(t, fx, attack.Identity) != "device" {
+			return detect.Detected
+		}
+		return detect.NotDetected
+	case "APIBAS-REL-022":
+		// A delegate receives a clinical field only when the build leaks it. The fixed build answers the consented summary.
+		attack := s.Steps[len(s.Steps)-1]
+		if mode == lab.ModeVulnerable && roleOf(t, fx, attack.Identity) == "delegate" && strings.HasPrefix(attack.Path, "/api/health/records/") {
+			return detect.Detected
+		}
+		return detect.NotDetected
 	case "APIBAS-REL-019":
 		// A privileged route called by a caller whose role is not the administrator. The attempt is the signal, in either build.
 		attack := s.Steps[len(s.Steps)-1]
@@ -431,7 +463,22 @@ func modeName(m lab.Mode) string {
 func isCollectionRequest(s contract.Scenario) bool {
 	attack := s.Steps[len(s.Steps)-1]
 	path, _, _ := strings.Cut(attack.Path, "?")
-	return strings.HasSuffix(path, "/loans")
+	return collectionKind(path) != ""
+}
+
+// collectionKind is the record kind a collection route lists, or "" when the path is not a collection route.
+func collectionKind(path string) string {
+	switch {
+	case strings.HasSuffix(path, "/loans"):
+		return "loan"
+	case strings.HasSuffix(path, "/mfg/assets"):
+		return "asset"
+	case strings.HasSuffix(path, "/health/export"):
+		return "patient_record"
+	case strings.HasSuffix(path, "/telecom/usage"):
+		return "usage"
+	}
+	return ""
 }
 
 // listDisclosureDetection is the expectation for a collection read. The list returns the records it discloses, and REL-004
@@ -447,8 +494,10 @@ func listDisclosureDetection(t *testing.T, fx fixture.Fixture, s contract.Scenar
 	if mode != lab.ModeVulnerable {
 		return detect.NotDetected
 	}
+	path, _, _ := strings.Cut(attack.Path, "?")
+	kind := collectionKind(path)
 	for _, o := range fx.Objects {
-		if o.Kind == "loan" && o.OwnerID != id.CustomerID {
+		if o.Kind == kind && o.OwnerID != id.CustomerID {
 			return detect.Detected
 		}
 	}

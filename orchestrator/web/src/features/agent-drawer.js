@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { debCommand } from './deb-command.js';
 import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
 import { loadAgents } from './attack-path.js';
@@ -30,7 +31,7 @@ export function updateLinuxDownloadCmd(arch, type) {
   // arch: 'amd64' or 'arm64'
   // type: 'deb' or 'rpm'
   if (type === 'deb') {
-    document.getElementById('linux-deb-cmd').textContent = 'sudo dpkg -i bas-agent-linux-' + arch + '.deb && sudo systemctl start bas-agent';
+    document.getElementById('linux-deb-cmd').textContent = debCommand((document.getElementById('linux-cli-cmd') || {}).textContent, arch);
   } else if (type === 'rpm') {
     document.getElementById('linux-rpm-cmd').textContent = 'sudo rpm -i bas-agent-linux-' + arch + '.rpm && sudo systemctl start bas-agent';
   }

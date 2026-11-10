@@ -27,6 +27,7 @@ import (
 	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
+	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
 	"github.com/audspect/bas/internal/secretstore"
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/dnssink"
@@ -294,6 +295,9 @@ func main() {
 	if err := db.EnsureAgentUninstallSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] agent uninstall schema bootstrap: %v", err)
 	}
+	if err := db.EnsureContentImportSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] content import schema bootstrap: %v", err)
+	}
 	if err := db.EnsureRecoverySchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] recovery schema bootstrap: %v", err)
 	}
@@ -338,6 +342,9 @@ func main() {
 	}
 	if err := db.EnsureAPIBASRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] apibas run schema: %v", err)
+	}
+	if err := db.EnsureAPIBASJobSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] apibas job schema: %v", err)
 	}
 	if err := db.EnsureSecretStoreSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] secret store schema: %v", err)
@@ -985,8 +992,35 @@ func main() {
 		log.Printf("[secretstore] credential references unavailable: %v", secretErr)
 	}
 
+	// API BAS assessment execution. Disabled unless BAS_APIBAS_RUNNER names the runner binary and the secret store is usable;
+	// the job endpoints then answer 503. Jobs left running by an earlier process are failed now and periodically after.
+	var apibasJobs *apibasjobs.Service
+	if runnerPath := os.Getenv("BAS_APIBAS_RUNNER"); runnerPath != "" && secretStore != nil {
+		svc, jerr := apibasjobs.New(pool, secretStore, apibasjobs.Config{RunnerPath: runnerPath})
+		if jerr != nil {
+			log.Printf("[apibas] job execution disabled: %v", jerr)
+		} else {
+			apibasJobs = svc
+			if n, rerr := svc.ReconcileStale(context.Background(), 0); rerr != nil {
+				log.Printf("[apibas] startup reconcile failed: %v", rerr)
+			} else if n > 0 {
+				log.Printf("[apibas] failed %d job(s) left running by an earlier process", n)
+			}
+			go func() {
+				for range time.Tick(5 * time.Minute) {
+					if _, rerr := svc.ReconcileStale(context.Background(), 30*time.Minute); rerr != nil {
+						log.Printf("[apibas] reconcile failed: %v", rerr)
+					}
+				}
+			}()
+		}
+	} else {
+		log.Printf("[apibas] job execution disabled: set BAS_APIBAS_RUNNER and provision the encryption key to enable it")
+	}
+
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithSecretStore(secretStore).
+		WithAPIBASJobs(apibasJobs).
 		WithCloudSettings(cloudSettings).
 		WithDeploymentClass(cfg.Classification()).
 		WithEvidenceStore(evStore).
@@ -1097,15 +1131,18 @@ func main() {
 		log.Printf("[contentregistry] migration deferred: %d intake failures (load error: %v)", bootIntakeFailures, scenarioLoadErr)
 	}
 
+	// The lab flag follows the configured ID in BOTH directions, every start. A set ID makes that agent the sole
+	// factory lab (is_factory_lab is required for dispatch, see EnsureSoleFactoryLabAgent) so an operator never
+	// flags it by hand; an EMPTY ID clears every flag. Without the empty case, removing VALIDATION_LAB_AGENT_ID
+	// from setup.conf left the old agent flagged in the database, and ordinary runs on it were refused as "lab
+	// agent" with the lab itself switched off. Non-fatal: the agent may just not be enrolled yet.
+	if err := validationlab.EnsureSoleFactoryLabAgent(context.Background(), pool, cfg.ValidationLabAgentID); err != nil {
+		log.Printf("[validationlab] WARNING: could not apply is_factory_lab for %q: %v", cfg.ValidationLabAgentID, err)
+	}
+	if cfg.ValidationLabAgentID == "" {
+		log.Printf("[validationlab] disabled: VALIDATION_LAB_AGENT_ID is not set, so no agent is a factory lab")
+	}
 	if cfg.ValidationLabAgentID != "" {
-		// Make the configured agent the sole factory lab so an operator never
-		// flags it by hand -- is_factory_lab is required for dispatch (see
-		// EnsureSoleFactoryLabAgent). Non-fatal: the agent may just not be
-		// enrolled yet, and the orchestrator below refuses cleanly until the
-		// flag lands on a later restart.
-		if err := validationlab.EnsureSoleFactoryLabAgent(context.Background(), pool, cfg.ValidationLabAgentID); err != nil {
-			log.Printf("[validationlab] WARNING: could not set is_factory_lab for %s: %v", cfg.ValidationLabAgentID, err)
-		}
 		pollMinutes := cfg.ValidationLabPollMinutes
 		if pollMinutes <= 0 {
 			pollMinutes = 5
@@ -1216,6 +1253,9 @@ func main() {
 	// BAS has not yet re-confirmed. Dispatches a targeted single-technique
 	// posture re-run on the original agent. Results in the audit log + WS push.
 	go handler.StartRevalidationLoop(context.Background())
+	// Scheduled API BAS assessments: due schedules are claimed and queued once a minute. A server with job execution disabled
+	// records each due run as not run instead of leaving it pending.
+	handler.StartAPIBASScheduler(context.Background(), time.Minute)
 
 	// ── Attack-Path Scheduler ─────────────────────────────────────────────
 	// Ticks every 60 s and re-dispatches fleet-wide attack-path collection

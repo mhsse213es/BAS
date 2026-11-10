@@ -19,6 +19,9 @@ function Update-BinaryManifestEntries {
     $lines = $ManifestContent -split "`n" | Where-Object { $_ -ne "" } | ForEach-Object { $_.TrimEnd("`r") }
     $matched = @{}
     $updated = foreach ($line in $lines) {
+        # A "#prev <hash>  <file>" line (a previous release's hash) names a file too, but it is not an entry:
+        # replacing it would overwrite the previous hash with the current one and lose it. Keep it byte-identical.
+        if ($line.TrimStart().StartsWith('#')) { $line; continue }
         $parts = $line -split "  ", 2
         if ($parts.Count -ne 2) { $line; continue }
         $filename = $parts[1]
@@ -49,10 +52,81 @@ function Add-ManifestEntryIfMissing {
     )
     $lines = $ManifestContent -split "`n" | Where-Object { $_ -ne "" } | ForEach-Object { $_.TrimEnd("`r") }
     foreach ($line in $lines) {
+        if ($line.TrimStart().StartsWith('#')) { continue }   # a #prev line for this name does not make the entry present
         $parts = $line -split "  ", 2
         if ($parts.Count -eq 2 -and $parts[1] -eq $FileName) { return $ManifestContent }
     }
     return ($lines -join "`n") + "`n" + ("0" * 64) + "  $FileName`n"
+}
+
+function Get-PreviousReleaseManifest {
+    # The BINARIES.sha256 of the newest release before $Version that is still under $DistDir
+    # (dist\bas-install-<version>\BINARIES.sha256), or "" when there is none. That is the manifest the previous
+    # release shipped, so it names the binaries agents in the field are actually running. It is deliberately not
+    # `git show HEAD:...`: each build overwrites the committed manifest without committing it, so HEAD can be several
+    # releases old.
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$DistDir,
+        [Parameter(Mandatory)][string]$Version
+    )
+    $current = $null
+    [void][version]::TryParse(($Version -replace '^v', ''), [ref]$current)
+    $best = ""
+    $bestVersion = $null
+    foreach ($d in @(Get-ChildItem -LiteralPath $DistDir -Directory -Filter 'bas-install-*' -ErrorAction SilentlyContinue)) {
+        $name = $d.Name -replace '^bas-install-', ''
+        if ($name -eq ($Version -replace '^v', '')) { continue }                  # not the release being built
+        $v = $null
+        if (-not [version]::TryParse($name, [ref]$v)) { continue }                 # not a numeric version directory
+        if ($null -ne $current -and $v -ge $current) { continue }                  # only earlier releases
+        $manifest = Join-Path $d.FullName 'BINARIES.sha256'
+        if (-not (Test-Path -LiteralPath $manifest)) { continue }
+        if ($null -eq $bestVersion -or $v -gt $bestVersion) { $best = $manifest; $bestVersion = $v }
+    }
+    return $best
+}
+
+function Get-ManifestHashEntries {
+    # Every "<hash>  <file>" entry and every "#prev <hash>  <file>" line of a manifest. Comments, blank lines and lines
+    # that are not a 64-hex hash followed by a file name are skipped.
+    param([Parameter(Mandatory)][string]$Path)
+    foreach ($raw in (Get-Content -LiteralPath $Path)) {
+        $t = $raw.Trim()
+        if ($t -eq '') { continue }
+        $isPrev = $false
+        if ($t -match '^#prev\s+(.*)$') { $t = $Matches[1]; $isPrev = $true }
+        elseif ($t.StartsWith('#')) { continue }
+        if ($t -match '^([0-9a-fA-F]{64})\s+(\S+)$') {
+            [pscustomobject]@{ Hash = $Matches[1].ToLowerInvariant(); File = $Matches[2]; Prev = $isPrev }
+        }
+    }
+}
+
+function Test-ManifestCarriesPrevious {
+    # Returns the problems that would leave agents on the previous release quarantined, as strings; an empty result
+    # means the manifest is good. A problem is a hash of the previous release (or one it carried) that is neither an
+    # entry nor a #prev line in $Manifest, or a #prev line the server could not read.
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)][string]$Manifest,
+        [Parameter(Mandatory)][string]$Previous
+    )
+    $have = @{}
+    foreach ($e in @(Get-ManifestHashEntries -Path $Manifest)) { $have[$e.Hash] = $true }
+    $problems = @()
+    foreach ($e in @(Get-ManifestHashEntries -Path $Previous)) {
+        if (-not $have.ContainsKey($e.Hash)) {
+            $have[$e.Hash] = $true
+            $problems += ("missing: {0}  {1}" -f $e.Hash, $e.File)
+        }
+    }
+    foreach ($raw in (Get-Content -LiteralPath $Manifest)) {
+        $t = $raw.Trim()
+        if ($t.StartsWith('#prev') -and $t -notmatch '^#prev [0-9a-fA-F]{64}  \S+$') { $problems += "malformed: $t" }
+    }
+    # Emit the problems one by one (nothing at all when there are none). Callers wrap the call in @(...).
+    return $problems
 }
 
 function Update-OrchestratorAgentArtifacts {
@@ -68,7 +142,11 @@ function Update-OrchestratorAgentArtifacts {
         # Without this, re-verification only proved *some* trusted
         # certificate signed the file, which a stale file left over from a
         # retired certificate would also satisfy.
-        [string]$ExpectedThumbprint = ""
+        [string]$ExpectedThumbprint = "",
+        # The previous release's BINARIES.sha256 (Get-PreviousReleaseManifest). The regenerated manifest must still
+        # carry every one of its hashes as an entry or a "#prev" line, or agents still on that release are quarantined
+        # after the upgrade. Empty means there is no earlier release to carry.
+        [string]$PreviousManifest = ""
     )
 
     $artifacts = @{
@@ -212,6 +290,22 @@ function Update-OrchestratorAgentArtifacts {
             return $false
         }
         [System.IO.File]::WriteAllText($manifestPath, $updatedManifest)
+
+        # The manifest signed below is the one the server ships. The image's own manifest step carries the previous
+        # release's hashes into it (orchestrator/Dockerfile, PREVIOUS_MANIFEST_B64); fail here rather than sign and ship
+        # one that would quarantine every agent still on the last release.
+        if ($PreviousManifest -ne "") {
+            if (-not (Test-Path -LiteralPath $PreviousManifest)) {
+                Write-Error "Update-OrchestratorAgentArtifacts: previous manifest not found: $PreviousManifest" -ErrorAction Continue
+                return $false
+            }
+            $carryProblems = @(Test-ManifestCarriesPrevious -Manifest $manifestPath -Previous $PreviousManifest)
+            if ($carryProblems.Count -gt 0) {
+                Write-Error ("Update-OrchestratorAgentArtifacts: the manifest in $OrchestratorTag does not carry the previous release's hashes " +
+                    "(was the image built without the previous manifest, or with -SkipBuild?):`n  " + ($carryProblems -join "`n  ")) -ErrorAction Continue
+                return $false
+            }
+        }
 
         Push-Location $OrchestratorDir
         try {

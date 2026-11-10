@@ -20,6 +20,16 @@ func TestEveryProtectedNBFCFieldIsClassified(t *testing.T) {
 	}
 }
 
+// The healthcare clinical fields are classified. Its other protected fields (report and storage references) are not
+// policy-governed disclosure classes yet and are deliberately absent.
+func TestHealthcareClinicalFieldsAreClassified(t *testing.T) {
+	for _, f := range []string{"diagnosis", "insurance_id"} {
+		if _, ok := disclosedFieldClass[f]; !ok {
+			t.Errorf("clinical field %q has no disclosure class", f)
+		}
+	}
+}
+
 // The walk finds protected names inside nested objects and lists, and returns names only.
 func TestEmittedDisclosureFieldsWalksAndReturnsNamesOnly(t *testing.T) {
 	body := map[string]any{

@@ -123,6 +123,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureAgentUninstallSchema: %w", err)
 	}
+	if err := db.EnsureContentImportSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureContentImportSchema: %w", err)
+	}
 	if err := db.EnsureRecoverySchema(ctx, pool); err != nil {
 		pool.Close()
 		_ = container.Terminate(context.Background())
@@ -172,6 +177,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		pool.Close()
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureAPIBASRunSchema: %w", err)
+	}
+	if err := db.EnsureAPIBASJobSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureAPIBASJobSchema: %w", err)
 	}
 	// Mirrors cmd/server: the credential reference columns must exist for the connector read paths.
 	if err := db.EnsureSecretStoreSchema(ctx, pool); err != nil {

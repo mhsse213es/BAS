@@ -12,6 +12,7 @@ import { onRunEvent } from './live-run.js';
 import { loadDashboardITSM, openFinding } from './findings.js';
 import { loadRansomwareReadiness } from './ransomware.js';
 import { additionalAgentIds, closeModal, loadRuns, openBuilder, openModal, resolvedAllTargetIds, resolvedGroupTargetIds, scenarioFramework, viewRunResults } from './reports.js';
+import { createThrottledRefresh, isRunsTabActive } from './runs-refresh.js';
 import { ROLE, showTab, showTamperBanner } from './shell.js';
 import { renderDashAll, setDashAgents, setDashRuns, setDashFindings, setDashAlerts, setDashSchedules, dashRunById } from './dash-rich.js';
 import { effectiveness as dashEffectiveness, isAgentOnline } from './dash-model.js';
@@ -271,6 +272,24 @@ function renderEvidencePanel(c) {
   });
   tlHtml += '</div>';
   html += section('Detection Timeline', null, tlHtml);
+
+  // ── 4b. Execution assessment (only for a step that did not run to a result) ──
+  if (c.executionFailure) {
+    var ef = c.executionFailure;
+    var efStatus = { not_executed: 'Not executed', timed_out: 'Timed out', execution_error: 'Execution error', cancelled: 'Cancelled' }[ef.executionStatus] || 'Not executed';
+    var efHtml = kv('Execution status', x(efStatus))
+      + kv('Security verdict', 'Not assessed')
+      + kv('Why', x(ef.reason || ''))
+      + kv('Evidence confidence', 'None')
+      + kv('What to do', x(ef.remediation || ''))
+      + '<details style="margin-top:0.4rem"><summary style="cursor:pointer;font-size:0.7rem;color:var(--muted)">Technical diagnostics</summary>'
+      + kv('Category', x((ef.category || '').replace(/_/g, ' ')))
+      + kv('Failure stage', x((ef.stage || '').replace(/_/g, ' ')))
+      + kv('Owner', ef.owner === 'audspect' ? 'Audspect (content or agent)' : 'Endpoint environment')
+      + (ef.rawError ? kv('Raw error', '<code style="font-size:0.68rem;word-break:break-word">' + x(ef.rawError) + '</code>') : '')
+      + '</details>';
+    html += section('Execution assessment', 'Not counted in the score', efHtml);
+  }
 
   // ── 5. Cleanup (only if cleanup verdict exists) ──
   if (c.cleanupVerdict) {
@@ -680,6 +699,8 @@ export function confirmRun() {
   });
 }
 
+var _requestRunsRefresh = createThrottledRefresh(function() { if (isRunsTabActive(document)) loadRuns(); }, 2000);
+
 export function connectWS() {
   if (state.socket) state.socket.close();
   var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -698,6 +719,9 @@ export function connectWS() {
       var msg = JSON.parse(evt.data);
       if (msg.type === 'run_event') {
         onRunEvent(msg);
+        // Step events also move the in-flight cards on Live Runs (throttled): the cards read the runs list, which
+        // used to be re-fetched only when a run finished, so they sat on "Starting…" until the run was opened.
+        _requestRunsRefresh();
         // A paused/resumed confirmation must refresh the Live Runs table --
         // onRunEvent above only updates the Live drawer (scoped to
         // whichever single run's drawer, if any, is currently open). Filtered

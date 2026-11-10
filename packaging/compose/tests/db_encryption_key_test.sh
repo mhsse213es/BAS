@@ -47,8 +47,11 @@ db_key_provision fresh >/dev/null 2>&1
 after=$(sha256sum "$DB_KEY_FILE" | cut -d' ' -f1)
 [[ "$before" == "$after" ]] && ok "re-running provisioning keeps the existing key" || bad "provisioning replaced an existing key"
 
-# --- upgrade with a missing key refuses and creates nothing ---
+# --- upgrade with a missing key refuses and creates nothing, once a key has been issued before (marker present) ---
 fresh_env upgrade_missing
+mkdir -p "$TESTDIR/upgrade_missing"
+export DB_KEY_MARKER="$TESTDIR/upgrade_missing/marker"
+: > "$DB_KEY_MARKER"
 if db_key_provision upgrade >/dev/null 2>&1; then
   bad "upgrade generated a key where none existed"
 elif [[ -e "$DB_KEY_FILE" ]]; then
@@ -56,6 +59,24 @@ elif [[ -e "$DB_KEY_FILE" ]]; then
 else
   ok "upgrade refuses to generate a key when none exists"
 fi
+
+# --- upgrade of an install that was never issued a key (no marker) generates one and records the marker ---
+fresh_env upgrade_first
+mkdir -p "$TESTDIR/upgrade_first"
+export DB_KEY_MARKER="$TESTDIR/upgrade_first/marker"
+if db_key_provision upgrade >/dev/null 2>&1 && db_key_content_ok "$DB_KEY_FILE" && [[ -e "$DB_KEY_MARKER" ]]; then
+  ok "first upgrade of an install with no key generates one and records the marker"
+else
+  bad "first upgrade did not generate a key and marker"
+fi
+# --- after that, losing the key is refused: the marker proves one was issued ---
+rm -f "$DB_KEY_FILE"
+if db_key_provision upgrade >/dev/null 2>&1; then
+  bad "upgrade regenerated a key that had been issued before"
+else
+  ok "upgrade refuses to regenerate a key once the marker exists"
+fi
+unset DB_KEY_MARKER
 
 # --- upgrade with a valid key succeeds ---
 fresh_env upgrade_present

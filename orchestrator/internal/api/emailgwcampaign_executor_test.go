@@ -3,6 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +31,82 @@ func TestEmailGWCampaignGateStringsMatchEmailGWEfficacyVerdicts(t *testing.T) {
 	}
 	if len(stage.Gate.PermittedVerdicts) != 1 || stage.Gate.PermittedVerdicts[0] != string(emailgwefficacy.VerdictConfirmedFailure) {
 		t.Errorf("PermittedVerdicts = %v, want exactly [%q]", stage.Gate.PermittedVerdicts, emailgwefficacy.VerdictConfirmedFailure)
+	}
+}
+
+// TestAllEmailGWCampaignTemplates_InjectedStagesResolveToWiredExpectations
+// guards every registered campaign template, not just the ones built
+// first: every StageKindInjected stage's ExpectationID must resolve
+// via emailgwefficacy.ExpectationByID, and the resolved expectation
+// must be genuinely wired for real injection (EnvelopeFrom or
+// OutboundSenderMailbox set) -- never a fixture-only or unknown ID
+// silently accepted into a live campaign. This is exactly the kind of
+// drift TestEmailGWInjectionGaps_MatchesExecuteEmailGWRunsOwnCheck
+// guards for standalone scenario runs; campaigns need their own
+// version since a template's stage list is a second, independent
+// place an unwired ID could be introduced by mistake.
+func TestAllEmailGWCampaignTemplates_InjectedStagesResolveToWiredExpectations(t *testing.T) {
+	ids := []string{
+		emailgwcampaign.BECSupplierFraudCampaignID,
+		emailgwcampaign.CredentialPhishingURLChainCampaignID,
+		emailgwcampaign.MalwarePostDeliveryResponseCampaignID,
+		emailgwcampaign.ExfiltrationCampaignID,
+		emailgwcampaign.TrustConfigWeaknessCampaignID,
+		emailgwcampaign.MailboxCompromiseCampaignID,
+	}
+	for _, id := range ids {
+		tmpl, ok := emailgwcampaign.TemplateByID(id)
+		if !ok {
+			t.Errorf("template %q: TemplateByID returned false", id)
+			continue
+		}
+		for _, stage := range tmpl.Stages {
+			if stage.Kind != emailgwcampaign.StageKindInjected {
+				continue
+			}
+			exp, ok := emailgwefficacy.ExpectationByID(stage.ExpectationID)
+			if !ok {
+				t.Errorf("template %q stage %q: ExpectationID %q does not resolve via ExpectationByID", id, stage.Key, stage.ExpectationID)
+				continue
+			}
+			if exp.EnvelopeFrom == "" && exp.OutboundSenderMailbox == "" {
+				t.Errorf("template %q stage %q: ExpectationID %q resolves but is not wired for real injection (empty EnvelopeFrom and OutboundSenderMailbox) -- a campaign stage must never silently no-op", id, stage.Key, stage.ExpectationID)
+			}
+		}
+	}
+}
+
+// TestConsoleCampaignCatalogListsEveryRegisteredTemplate guards
+// against the same staleness emailgwefficacy's own
+// TestConsoleCatalogListsEveryExpectationTheServerCanRun already found
+// once for EG_CATALOG (it stopped at EG-010 while the server ran
+// EG-020): CAMPAIGN_CATALOG in web/src/features/email.js is the
+// console's own hand-kept copy of emailgwcampaign's registered
+// template IDs (ListEmailGWCampaigns lists live campaign *runs*, not
+// the static templates), so nothing else keeps the two in sync.
+func TestConsoleCampaignCatalogListsEveryRegisteredTemplate(t *testing.T) {
+	ids := []string{
+		emailgwcampaign.BECSupplierFraudCampaignID,
+		emailgwcampaign.CredentialPhishingURLChainCampaignID,
+		emailgwcampaign.MalwarePostDeliveryResponseCampaignID,
+		emailgwcampaign.ExfiltrationCampaignID,
+		emailgwcampaign.TrustConfigWeaknessCampaignID,
+		emailgwcampaign.MailboxCompromiseCampaignID,
+	}
+	path := filepath.Join("..", "..", "web", "src", "features", "email.js")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("console source not available from this checkout: %v", err)
+	}
+	src := string(raw)
+	var missing []string
+	for _, id := range ids {
+		if !strings.Contains(src, "'"+id+"'") {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) > 0 {
+		t.Errorf("%d registered campaign template(s) missing from CAMPAIGN_CATALOG in web/src/features/email.js: %v", len(missing), missing)
 	}
 }
 
