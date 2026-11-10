@@ -19,8 +19,8 @@ import (
 // the impact/destructive stages lab-gated, per-step grounding
 // (threat_intel_sources + family_attribution_confidence), and real detectable
 // actions scored PASS/FAIL on the control outcome. FIN8 still follows the
-// earlier fin7-style pattern (narrative citations in the description, no
-// per-step provenance fields); its enterprise rebuild is tracked separately.
+// conservative enterprise rebuild: PoS track-data collection is documented,
+// not modeled, and its impact is the ransomware objective.
 func TestFSThreatActorKillChains_ParseWindowsOnlyWithExpectedTechniques(t *testing.T) {
 	cases := []struct {
 		file       string
@@ -59,8 +59,13 @@ func TestFSThreatActorKillChains_ParseWindowsOnlyWithExpectedTechniques(t *testi
 			techniques: []string{"T1566.001", "T1059.001", "T1547.001", "T1053.005", "T1518.001", "T1560.001", "T1567.002", "T1486", "T1490", "T1490"},
 		},
 		{
+			// Conservative enterprise rebuild: initial-access -> encoded payload
+			// -> WMI recon (read-only) -> LSASS probe -> security discovery ->
+			// WMI subscription audit (read-only) -> loopback ADMIN$ probe ->
+			// file-target recon -> sandboxed ransomware objective (lab-gated).
+			// PoS track-data collection is documented, not modeled.
 			file:       "fin8-kill-chain.yaml",
-			techniques: []string{"T1047", "T1518.001", "T1140", "T1543.003", "T1071.001"},
+			techniques: []string{"T1566.001", "T1059.001", "T1047", "T1003.001", "T1518.001", "T1546.003", "T1021.002", "T1083", "T1486"},
 		},
 	}
 

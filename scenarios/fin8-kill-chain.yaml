@@ -1,34 +1,61 @@
 id: fin8-kill-chain
 product_line: killchain
-name: FIN8 Kill Chain -- BFSI Living-off-the-Land & Backdoor Tradecraft (Phase 7)
+name: FIN8 / Syssphinx Kill Chain - BFSI Ransomware Endgame
 description: >
-  Five-stage telemetry-safe emulation of FIN8 (Syssphinx) post-initial-access
-  tradecraft against financial and payment-processing targets. Based on
-  Bitdefender/Symantec BADHATCH & Sardonic analyses and MITRE ATT&CK group
-  G0061.
+  Nine-stage emulation of the FIN8 (Syssphinx) group's endpoint tradecraft
+  against financial-services organisations, from malicious-document initial
+  access through to the group's ransomware objective. Grounded in MITRE ATT&CK
+  group G0061 and software S1081 (BADHATCH), S0197 (PUNCHTRACK), S1085
+  (Sardonic) and S0481 (Ragnar Locker), FireEye "Know Your Enemy" (2016),
+  Bitdefender's BADHATCH and Sardonic analyses (2021), and Symantec's FIN8
+  Sardonic/Noberus reporting (2023).
 
-  FIN8 is a financially-motivated actor known for intermittent, carefully
-  targeted campaigns against banks, retailers and POS/payment processors. It
-  favours living-off-the-land tradecraft -- WMI for reconnaissance and
-  execution, heavily obfuscated PowerShell, and the BADHATCH / Sardonic
-  backdoors installed as services. This chain emulates that phase: WMI
-  reconnaissance, security-software profiling, PowerShell deobfuscation, a
-  Windows-service persistence-surface check, and a Sardonic-style HTTPS C2
-  beacon. In Indian BFSI context the targets are card-switch and
-  payment-gateway hosts.
+  FIN8 is a financially-motivated group active since at least 2016. Its
+  early campaigns targeted hospitality and retail point-of-sale environments
+  for payment-card data. From 2021 it shifted to deploying ransomware
+  (Ragnar Locker, White Rabbit, and Noberus/ALPHV-BlackCat) via its revamped
+  Sardonic backdoor. This chain models the ransomware-era arc, because it is
+  the impact class defenders must validate against in a financial estate.
 
   KILL CHAIN STAGES:
-    1. WMI Reconnaissance            -- read-only Win32_* queries, Create NOT invoked (T1047)
-    2. Security Software Discovery   -- AV/EDR profiling before backdoor install (T1518.001)
-    3. PowerShell Deobfuscation      -- in-process base64 decode of an inert string (T1140)
-    4. Service Persistence Surface   -- admin/SCM capability check, NO service created (T1543.003)
-    5. Outbound HTTPS C2 Beacon      -- RFC5737 HTTPS probe simulating Sardonic C2 (T1071.001)
+     1. Initial Access       - malicious-macro document child-process chain (T1566.001)
+     2. Execution            - encoded PowerShell payload (T1059.001)
+     3. Discovery            - WMI system reconnaissance, read-only (T1047)
+     4. Credential Access    - LSASS read-handle probe (T1003.001)
+     5. Discovery            - security-software discovery (T1518.001)
+     6. Persistence          - WMI event-subscription surface audit, read-only (T1546.003)
+     7. Lateral Movement     - SMB admin-share reachability probe, loopback (T1021.002)
+     8. Discovery            - BFSI file-target reconnaissance (T1083)
+     9. Impact (lab-only)    - ransomware encryption simulation, sandboxed (T1486)
 
-  SAFETY: All stages read-only. Stage 1 queries WMI but never invokes a
-  method. Stage 3 decodes an inert banner string in-process (no execution).
-  Stage 4 only inspects whether service creation would be possible (token /
-  SCM check) and creates NOTHING. Stage 5 uses RFC5737 (192.0.2.x,
-  non-routable). All [BAS-SIM-FIN8] tagged. PRODUCTION-SAFE. Windows only.
+  DOCUMENTED, NOT MODELED: FIN8's point-of-sale payment-card track-data
+  collection (PUNCHTRACK, S0197) is recorded here but deliberately NOT
+  simulated. No safe, self-contained stage exists that exercises card-data
+  scraping without handling payment-card-shaped data, and this scenario will
+  not produce or handle such data. Detection of PoS scraping belongs to the
+  endpoint memory-scraping and cardholder-data-environment controls, which are
+  out of scope for this chain.
+
+  Also documented, not modeled: FIN8's local privilege escalation via
+  CVE-2016-0167 (T1068) and svchost.exe code injection (T1055.004). No safe
+  simulation contract exists for a live exploit or live injection.
+
+  ATTRIBUTION / CONFIDENCE: "confirmed" means at least two distinct sources
+  were cited; "reported" means a single authoritative source (MITRE curated
+  page or vendor report); "inferred" means the behaviour fits FIN8's documented
+  toolset but the cited source does not tie that specific sub-technique to the
+  group.
+
+  ORDERING CAVEAT: this is a representative, documented kill chain for
+  authoring purposes, not a claim that every FIN8 incident followed this order.
+
+  SAFETY: Stages 1-8 are production-safe and reversible, and every change is
+  removed in both the command and cleanup. Stage 6 is READ-ONLY: it enumerates
+  existing WMI event subscriptions and creates none. Stage 7 probes loopback
+  only, never a remote host. Stage 9 is lab-only: it XOR-encrypts at most three
+  benign dummy files in an isolated temp directory, then restores and deletes
+  them. It never performs real cryptography on real data. Windows only.
+  [BAS-SIM-FIN8] tagged throughout.
 author: Audspect Research
 executable: true
 local_check: false
@@ -40,21 +67,27 @@ tags:
   - sardonic
   - bfsi
   - financial
-  - pos
-  - living-off-the-land
+  - ransomware
   - kill-chain
   - phase7
+  - t1566
+  - t1059
   - t1047
+  - t1003
   - t1518
-  - t1140
-  - t1543
-  - t1071
+  - t1546
+  - t1021
+  - t1083
+  - t1486
   - mitre
 mitre_phases:
+  - initial-access
+  - execution
   - discovery
-  - defense-evasion
+  - credential-access
   - persistence
-  - command-and-control
+  - lateral-movement
+  - impact
 
 live_policy:
   block_on_domain_controller: false
@@ -66,10 +99,10 @@ live_policy:
 steps:
 
   # ---------------------------------------------------------------------------
-  # Stage 1 -- WMI Reconnaissance (T1047)
+  # Stage 1 - Initial Access: Malicious-Macro Document Child-Process (T1566.001)
   # ---------------------------------------------------------------------------
-  - name: "FIN8 Stage 1 -- WMI Reconnaissance (T1047)"
-    technique_id: T1047
+  - name: "FIN8 Stage 1 - Malicious-Macro Document Child-Process Chain (T1566.001)"
+    technique_id: T1566.001
     framework: custom
     executor: powershell
     requires_priv: user
@@ -77,29 +110,89 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Issues read-only WMI/CIM queries (Win32_OperatingSystem, Win32_BIOS, Win32_ComputerSystem, Win32_Process) to inventory the host the way FIN8's tooling does. The Win32_Process.Create method is explicitly NOT invoked -- nothing is executed via WMI. Generates WMI-Activity operational telemetry."
+    blast_radius: "Copies cmd.exe to a temp winword.exe, spawns powershell.exe from it with a benign Write-Output, waits, deletes the copy. Reproduces the Word-macro to shell parent/child chain FIN8 spearphishing creates. No real macro, document, or email."
     reversible: true
     telemetry:
-      - "Microsoft-Windows-WMI-Activity/Operational EID 5857/5858: provider queries"
-      - "PowerShell EID 4104: Get-CimInstance Win32_OperatingSystem / Win32_Process"
+      - "Sysmon EID 1 (process create): Image=powershell.exe, ParentImage=%TEMP%\\winword.exe"
+      - "Security EID 4688 (process create with command line) if process auditing enabled"
     detection:
-      - "EDR: burst of Win32_* CIM queries from PowerShell -- Sigma posh_ps_wmi_recon.yml"
-      - "SIEM: WMI-Activity EID 5857 for Win32_Process from powershell.exe -- FIN8 WMI-recon IOC"
+      - "EDR: Office process spawning a shell - primary malicious-macro initial-access signal"
+      - "SIEM: parent-child rule winword.exe to powershell.exe or cmd.exe"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK - FIN8 (Group G0061): Phishing: Spearphishing Attachment (T1566.001) - Word documents with embedded malicious macros"
+        url: "https://attack.mitre.org/groups/G0061/"
+      - reference: "FireEye - Know Your Enemy: New Financially-Motivated and Spear-Phishing Group (2016)"
+        url: "https://www.mandiant.com/resources/blog/know-your-enemy-new-financially-motivated-spear-phishing-group"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $os  = Get-CimInstance Win32_OperatingSystem -EA SilentlyContinue
-      $bios = Get-CimInstance Win32_BIOS -EA SilentlyContinue
-      $cs  = Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue
-      $procCount = @(Get-CimInstance Win32_Process -EA SilentlyContinue).Count
-      Write-Output "EXEC T1047: WMI reconnaissance (read-only). os=$($os.Caption), manufacturer=$($cs.Manufacturer), model=$($cs.Model), bios=$($bios.SMBIOSBIOSVersion), processes=$procCount. Win32_Process.Create NOT invoked. FIN8 uses WMI for recon and (separately) execution. WMI-Activity EID 5857 expected. [BAS-SIM-FIN8-S1]"
-      Write-Output "FAIL: Read-only WMI inventory queries ran unblocked. Enable WMI-Activity operational logging and alert on Win32_Process/Service query bursts from powershell.exe -- FIN8's precursor to WMI-based execution and service persistence."
+      $tmp = Join-Path $env:TEMP 'winword.exe'
+      Copy-Item "$env:SystemRoot\System32\cmd.exe" $tmp -Force
+      $psi = New-Object System.Diagnostics.ProcessStartInfo
+      $psi.FileName = $tmp
+      $psi.Arguments = '/c powershell.exe -NoProfile -NonInteractive -Command "Write-Output BAS-SIM-FIN8-S1"'
+      $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+      $psi.CreateNoWindow = $true
+      $p = [System.Diagnostics.Process]::Start($psi)
+      if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+      if ($ec -ge 0) {
+        Write-Output "FAIL: winword.exe to powershell.exe child-process chain fired (exit $ec) - expect Sysmon EID 1 with ParentImage=winword.exe. AppLocker/WDAC/EDR should block Office processes spawning shells. [BAS-SIM-FIN8-S1]"
+      } else {
+        Write-Output "PASS: the child process could not be started - AppLocker/WDAC/EDR blocked the document-to-shell spawn. [BAS-SIM-FIN8-S1]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'winword.exe') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 - Execution: Encoded PowerShell Payload (T1059.001)
+  # ---------------------------------------------------------------------------
+  - name: "FIN8 Stage 2 - Encoded PowerShell Payload (T1059.001)"
+    technique_id: T1059.001
+    detection_profiles:
+      - windows_encoded_powershell
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Spawns ONE child powershell.exe with -EncodedCommand whose decoded payload only runs Write-Output. Reproduces the -enc child and ScriptBlock telemetry of a FIN8 PowerShell payload. The encoded content is an inert banner; nothing is downloaded or injected."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 / Sysmon EID 1: powershell.exe -EncodedCommand child"
+      - "PowerShell EID 4104: decoded ScriptBlock (Write-Output banner)"
+    detection:
+      - "EDR: powershell.exe -EncodedCommand spawned by an Office or script host - FIN8 payload IOC"
+      - "SIEM: EID 4688 powershell with -enc plus EID 4104 decoded block"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK - FIN8 (Group G0061): Command and Scripting Interpreter: PowerShell (T1059.001) - spearphishing payloads executed as PowerShell"
+        url: "https://attack.mitre.org/groups/G0061/"
+      - reference: "Bitdefender - BADHATCH: FIN8 PowerShell backdoor analysis (2021)"
+        url: "https://www.bitdefender.com/files/News/CaseStudies/study/394/Bitdefender-PR-Whitepaper-BADHATCH-creat5237-en-EN.pdf"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $inner = "Write-Output 'BAS-SIM-FIN8-S2 encoded payload executed (inert banner)'"
+      $enc = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($inner))
+      $out = & powershell.exe -NoProfile -NonInteractive -EncodedCommand $enc 2>&1 | Out-String
+      $ran = $out -match 'BAS-SIM-FIN8-S2 encoded payload'
+      if ($ran) {
+        Write-Output "FAIL: an -EncodedCommand child powershell.exe ran unblocked - expect EID 4688 (-enc) plus EID 4104. Enable ScriptBlock and AMSI logging and alert on encoded PowerShell. [BAS-SIM-FIN8-S2]"
+      } else {
+        Write-Output "PASS: the encoded-command child was blocked or failed - Constrained Language Mode, AMSI, or WDAC constrained the payload surface. [BAS-SIM-FIN8-S2]"
+      }
     cleanup: ""
 
   # ---------------------------------------------------------------------------
-  # Stage 2 -- Security Software Discovery (T1518.001)
+  # Stage 3 - Discovery: WMI System Reconnaissance, read-only (T1047)
   # ---------------------------------------------------------------------------
-  - name: "FIN8 Stage 2 -- Security Software Discovery (T1518.001)"
-    technique_id: T1518.001
+  - name: "FIN8 Stage 3 - WMI System Reconnaissance, read-only (T1047)"
+    technique_id: T1047
+    action_key: enumerate
     framework: custom
     executor: powershell
     requires_priv: user
@@ -107,33 +200,176 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Enumerates running security-product services and Defender status via Get-Service and Get-MpComputerStatus. Read-only. FIN8 profiles the endpoint's AV/EDR before installing the BADHATCH/Sardonic backdoor and choosing its evasion approach."
+    blast_radius: "Issues read-only WMI/CIM queries (Win32_OperatingSystem, Win32_ComputerSystem, Win32_Process) to inventory the host, as FIN8's WMI-based tooling does. Win32_Process.Create is NOT invoked, so nothing is executed through WMI. Generates WMI-Activity operational telemetry."
     reversible: true
     telemetry:
-      - "Sysmon EID 1: powershell.exe enumerating services / Get-MpComputerStatus"
-      - "PowerShell EID 4104: Get-Service filtered for AV/EDR vendor names"
+      - "Microsoft-Windows-WMI-Activity/Operational EID 5857: provider queries"
+      - "PowerShell EID 4104: Get-CimInstance Win32_Process / Win32_OperatingSystem"
     detection:
-      - "EDR: Get-MpComputerStatus / security-service enumeration from PowerShell -- Sigma posh_ps_defender_recon.yml"
-      - "SIEM: service query filtered by AV vendor strings -- FIN8 pre-backdoor profiling IOC"
+      - "EDR: burst of Win32_* CIM queries from PowerShell - Sigma posh_ps_wmi_recon"
+      - "SIEM: WMI-Activity EID 5857 for Win32_Process from powershell.exe - FIN8 WMI-recon IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK - FIN8 (Group G0061): Windows Management Instrumentation (T1047) - WMI used for execution and reconnaissance"
+        url: "https://attack.mitre.org/groups/G0061/"
+      - reference: "Symantec Threat Hunter Team - FIN8 Sardonic backdoor and Noberus ransomware (2023)"
+        url: "https://symantec-enterprise-blogs.security.com/blogs/threat-intelligence/syssphinx-fin8-backdoor"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $os = Get-CimInstance Win32_OperatingSystem -EA SilentlyContinue
+      $cs = Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue
+      $procCount = @(Get-CimInstance Win32_Process -EA SilentlyContinue).Count
+      Write-Output "EXEC T1047: WMI reconnaissance (read-only). os=$($os.Caption), domain=$($cs.Domain), model=$($cs.Model), processes=$procCount. Win32_Process.Create NOT invoked. Expect WMI-Activity EID 5857. [BAS-SIM-FIN8-S3]"
+      Write-Output "FAIL: read-only WMI inventory queries ran unblocked. Enable WMI-Activity operational logging and alert on Win32_Process or Service query bursts from powershell.exe - the precursor to FIN8 WMI execution. [BAS-SIM-FIN8-S3]"
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 - Credential Access: LSASS Read-Handle Probe (T1003.001)
+  # ---------------------------------------------------------------------------
+  - name: "FIN8 Stage 4 - LSASS Handle Access (PROCESS_VM_READ), Invoke-Mimikatz-style (T1003.001)"
+    technique_id: T1003.001
+    action_key: handle_probe
+    detection_profiles:
+      - windows_credential_access
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "Opens a read handle to lsass.exe with PROCESS_VM_READ, then immediately closes it. No memory is read or dumped. FIN8 harvests credentials with Invoke-Mimikatz or Windows Credentials Editor; this fires the LSASS handle-access telemetry without touching memory."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 10: SourceImage=powershell.exe TargetImage=lsass.exe GrantedAccess=0x1010"
+    detection:
+      - "EDR: handle to LSASS with VM_READ - Sigma sysmon_lsass_memdump family"
+      - "SIEM: cross-process handle to lsass.exe from a script host - credential-dumping IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK - FIN8 (Group G0061): OS Credential Dumping: LSASS Memory (T1003.001) - harvests credentials using Invoke-Mimikatz or Windows Credentials Editor"
+        url: "https://attack.mitre.org/groups/G0061/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sig = @'
+      using System;
+      using System.Runtime.InteropServices;
+      public static class BasFin8 {
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr OpenProcess(uint a, bool i, int pid);
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern bool CloseHandle(IntPtr h);
+      }
+      '@
+      try { Add-Type -TypeDefinition $sig -ErrorAction Stop } catch { Write-Output "SKIP: could not compile the P/Invoke probe. [BAS-SIM-FIN8-S4]"; return }
+      $lsass = Get-Process lsass -EA SilentlyContinue | Select-Object -First 1
+      if (-not $lsass) { Write-Output "SKIP: lsass.exe not found. [BAS-SIM-FIN8-S4]"; return }
+      $h = [BasFin8]::OpenProcess(0x1010, $false, $lsass.Id)
+      if ($h -ne [IntPtr]::Zero) {
+        [void][BasFin8]::CloseHandle($h)
+        Write-Output "FAIL: opened a PROCESS_VM_READ handle to LSASS unblocked - credential memory is reachable. Expect Sysmon EID 10 GrantedAccess=0x1010. Enable RunAsPPL or Credential Guard. [BAS-SIM-FIN8-S4]"
+      } else {
+        $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        Write-Output "PASS: access to LSASS was DENIED (Win32 error $err) - RunAsPPL, Credential Guard, or EDR protected LSASS memory. [BAS-SIM-FIN8-S4]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 - Discovery: Security Software Discovery (T1518.001)
+  # ---------------------------------------------------------------------------
+  - name: "FIN8 Stage 5 - Security Software Discovery (T1518.001)"
+    technique_id: T1518.001
+    action_key: enumerate
+    detection_profiles:
+      - windows_security_software_discovery
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Enumerates running security-product services and Defender status (read-only). FIN8 profiles installed security products before deploying its backdoor."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: powershell.exe enumerating services and Get-MpComputerStatus"
+      - "PowerShell EID 4104: Get-Service filtered for AV and EDR vendor names"
+    detection:
+      - "EDR: Get-MpComputerStatus or security-service enumeration from PowerShell - Sigma posh_ps_defender_recon"
+      - "SIEM: service query filtered by AV vendor strings - FIN8 pre-backdoor profiling IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK - FIN8 (Group G0061): Software Discovery: Security Software Discovery (T1518.001)"
+        url: "https://attack.mitre.org/groups/G0061/"
+      - reference: "Bitdefender - FIN8 Sardonic backdoor whitepaper (2021)"
+        url: "https://www.bitdefender.com/files/News/CaseStudies/study/401/Bitdefender-PR-Whitepaper-FIN8-creat5619-en-EN.pdf"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $secVendors = @('defender','mcafee','symantec','sophos','crowdstrike','carbonblack','cylance','sentinelone','trendmicro','kaspersky','eset','fireeye','tanium','elastic')
       $svc = Get-Service -EA SilentlyContinue | Where-Object { $n=$_.Name.ToLower(); $d=$_.DisplayName.ToLower(); $secVendors | Where-Object { $n -match $_ -or $d -match $_ } }
       $svcNames = (@($svc) | Select-Object -ExpandProperty DisplayName -Unique) -join ', '
       $rtp = (Get-MpComputerStatus -EA SilentlyContinue).RealTimeProtectionEnabled
-      Write-Output "EXEC T1518.001: security software discovery. edr_services=[$svcNames], defender_realtime=$rtp. FIN8 profiles defences before installing BADHATCH/Sardonic. [BAS-SIM-FIN8-S2]"
+      Write-Output "EXEC T1518.001: security software discovery. edr_services=[$svcNames], defender_realtime=$rtp. FIN8 profiles defences before deploying its backdoor. [BAS-SIM-FIN8-S5]"
       if (-not $svc -and $rtp -ne $true) {
-        Write-Output "FAIL: No EDR/AV service was discoverable and Defender real-time protection is off/unknown. FIN8 would install its backdoor unopposed. Ensure a tamper-protected, monitored EDR agent is running."
+        Write-Output "FAIL: no EDR or AV service was discoverable and Defender real-time protection is off or unknown - FIN8 would deploy its backdoor unopposed. Ensure a tamper-protected, monitored EDR agent is running. [BAS-SIM-FIN8-S5]"
       } else {
-        Write-Output "PASS: Security tooling is present and enumerable -- the profiling step still generates EID 4104 telemetry to alert on, but the endpoint is defended. [BAS-SIM-FIN8-S2]"
+        Write-Output "PASS: security tooling is present and enumerable; the profiling step still generates EID 4104 telemetry to alert on, and the endpoint is defended. [BAS-SIM-FIN8-S5]"
       }
     cleanup: ""
 
   # ---------------------------------------------------------------------------
-  # Stage 3 -- PowerShell Deobfuscation (T1140)
+  # Stage 6 - Persistence: WMI Event-Subscription Surface Audit, read-only (T1546.003)
   # ---------------------------------------------------------------------------
-  - name: "FIN8 Stage 3 -- PowerShell Deobfuscation Surface (T1140)"
-    technique_id: T1140
+  - name: "FIN8 Stage 6 - WMI Event-Subscription Surface Audit, read-only (T1546.003)"
+    technique_id: T1546.003
+    action_key: enumerate
+    detection_profiles:
+      - windows_wmi_persistence
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "READ-ONLY. Enumerates existing __EventFilter, __EventConsumer and __FilterToConsumerBinding instances in root\\subscription. Creates, modifies and deletes NOTHING. FIN8 persists with WMI event subscriptions; this audits the host for them the way a defender or an attacker would survey the surface."
+    reversible: true
+    telemetry:
+      - "Microsoft-Windows-WMI-Activity/Operational: subscription-class queries"
+      - "PowerShell EID 4104: Get-CimInstance against root/subscription"
+    detection:
+      - "EDR: Get-CimInstance against root/subscription from a script host - WMI persistence reconnaissance"
+      - "SIEM: unexpected __EventConsumer creation (Sysmon EID 19/20/21) - FIN8 WMI persistence IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK - FIN8 (Group G0061): Event Triggered Execution: Windows Management Instrumentation Event Subscription (T1546.003)"
+        url: "https://attack.mitre.org/groups/G0061/"
+      - reference: "FireEye - Know Your Enemy: FIN8 WMI event-subscription persistence (2016)"
+        url: "https://www.mandiant.com/resources/blog/know-your-enemy-new-financially-motivated-spear-phishing-group"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $filters   = @(Get-CimInstance -Namespace root/subscription -ClassName __EventFilter -EA SilentlyContinue)
+      $consumers = @(Get-CimInstance -Namespace root/subscription -ClassName __EventConsumer -EA SilentlyContinue)
+      $bindings  = @(Get-CimInstance -Namespace root/subscription -ClassName __FilterToConsumerBinding -EA SilentlyContinue)
+      $fc = $filters.Count; $cc = $consumers.Count; $bc = $bindings.Count
+      Write-Output "EXEC T1546.003: WMI subscription surface audit (READ-ONLY, nothing created). filters=$fc, consumers=$cc, bindings=$bc. [BAS-SIM-FIN8-S6]"
+      if ($fc -gt 0 -or $cc -gt 0 -or $bc -gt 0) {
+        $names = (@($consumers) | ForEach-Object { $_.Name }) -join ', '
+        Write-Output "FAIL: WMI event subscriptions are present (consumers: [$names]). Each must be reviewed against a known-good baseline; unexplained consumers are FIN8-style WMI persistence. [BAS-SIM-FIN8-S6]"
+      } else {
+        Write-Output "PASS: no WMI event subscriptions present - the WMI persistence surface is clean on this endpoint. [BAS-SIM-FIN8-S6]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 7 - Lateral Movement: SMB Admin-Share Probe, loopback only (T1021.002)
+  # ---------------------------------------------------------------------------
+  - name: "FIN8 Stage 7 - SMB Admin-Share Lateral Movement Probe, loopback (T1021.002)"
+    technique_id: T1021.002
+    detection_profiles:
+      - windows_smb_lateral_probe
     framework: custom
     executor: powershell
     requires_priv: user
@@ -141,95 +377,152 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Decodes a base64 string IN-PROCESS with [Convert]::FromBase64String and reports the decoded banner -- the decoded content is an inert [BAS-SIM-FIN8] marker string and is NEVER executed, invoked, or written to disk. FIN8 wraps its loader in layered base64/obfuscation; this reproduces the decode telemetry only."
+    blast_radius: "Tests whether \\\\127.0.0.1\\ADMIN$ is accessible with the current user token via net use on loopback. Disconnects immediately. Generates Security EID 4624 Type 3 and Sysmon EID 3 on loopback only. No remote host is contacted."
     reversible: true
     telemetry:
-      - "PowerShell EID 4104: [Convert]::FromBase64String / [Text.Encoding] decode in ScriptBlock"
-      - "AMSI: decoded buffer scanned (if AMSI providers active)"
+      - "Sysmon EID 1: net.exe with use and ADMIN$ argument"
+      - "Security EID 4624: Logon Type 3 from 127.0.0.1 to ADMIN$"
+      - "Security EID 5140: network share ADMIN$ accessed"
     detection:
-      - "EDR: FromBase64String + Encoding.GetString chain in PowerShell -- Sigma posh_ps_base64_decode.yml"
-      - "SIEM: base64-decode ScriptBlock (EID 4104) shortly after an encoded-command child -- FIN8 deobfuscation IOC"
+      - "EDR: net use to ADMIN$ from PowerShell - Sigma proc_creation_win_net_admin_share_access"
+      - "SIEM: EID 5140 access to ADMIN$ outside an IT provisioning window - lateral movement IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK - FIN8 (Group G0061): Remote Services: SMB/Windows Admin Shares (T1021.002) - SMB and smbexec-style lateral movement"
+        url: "https://attack.mitre.org/groups/G0061/"
+      - reference: "Elisity - How to Stop Lateral Movement in Black Basta, Akira, and LockBit Ransomware Attacks"
+        url: "https://www.elisity.com/blog/how-to-stop-lateral-movement-in-black-basta-akira-and-lockbit-ransomware-attacks"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes('BAS-SIM-FIN8 deobfuscated marker -- inert, not executed'))
-      $decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64))
-      $ok = $decoded -match 'BAS-SIM-FIN8 deobfuscated marker'
-      Write-Output "EXEC T1140: PowerShell deobfuscation. decode_ran=$ok, decoded_len=$($decoded.Length). Content is an inert marker and was NOT executed. EID 4104 should capture the FromBase64String chain. FIN8 layers base64/obfuscation around its loader. [BAS-SIM-FIN8-S3]"
-      Write-Output "FAIL: An in-process base64 decode chain ran in PowerShell without an EDR/AMSI block. Enable ScriptBlock + AMSI logging and alert on FromBase64String followed by Invoke-Expression / Reflection.Assembly::Load -- the FIN8 deobfuscate-then-run pattern."
-    cleanup: ""
+      $netOut = & net use '\\127.0.0.1\ADMIN$' 2>&1 | Out-String
+      & net use '\\127.0.0.1\ADMIN$' /delete 2>&1 | Out-Null
+      $accessible = $netOut -match 'command completed successfully'
+      $authFailed = $netOut -match 'System error 5|Access is denied|System error 1326|logon failure'
+      if ($accessible) {
+        Write-Output "EXEC T1021.002: \\\\127.0.0.1\\ADMIN$ accessible with current token (disconnected). FIN8 would use harvested credentials here to move laterally. Security EID 5140 logged. [BAS-SIM-FIN8-S7]"
+        Write-Output "FAIL: ADMIN$ share accessible from user context - disable admin shares through GPO (AutoShareWks=0) or enforce SMB signing and LAPS. [BAS-SIM-FIN8-S7]"
+      } elseif ($authFailed) {
+        Write-Output "PASS: ADMIN$ access denied (auth failure or disabled) - lateral movement via the admin share is blocked. [BAS-SIM-FIN8-S7]"
+      } else {
+        Write-Output "INFO: ADMIN$ probe result inconclusive: $($netOut.Trim()). [BAS-SIM-FIN8-S7]"
+      }
+    cleanup: |
+      & net use '\\127.0.0.1\ADMIN$' /delete 2>&1 | Out-Null
 
   # ---------------------------------------------------------------------------
-  # Stage 4 -- Service Persistence Surface (T1543.003)
+  # Stage 8 - Discovery: BFSI File-Target Reconnaissance (T1083)
   # ---------------------------------------------------------------------------
-  - name: "FIN8 Stage 4 -- Windows Service Persistence Surface (T1543.003)"
-    technique_id: T1543.003
+  - name: "FIN8 Stage 8 - BFSI File-Target Reconnaissance (T1083)"
+    technique_id: T1083
+    action_key: enumerate
+    detection_profiles:
+      - windows_file_discovery
     framework: custom
     executor: powershell
     requires_priv: user
-    timeout_sec: 20
+    timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Inspects ONLY whether Windows-service creation would be possible for the current token: checks local-admin membership and enumerates existing services via sc.exe query. It creates NO service, writes NO registry, and installs NOTHING. FIN8 installs BADHATCH/Sardonic as a Windows service (Sysmon/EID 7045) for persistence."
+    blast_radius: "Read-only directory listing of common user document locations (Documents, Desktop, Downloads) for file-name patterns associated with financial records. Lists names and counts only; opens and reads no file contents."
     reversible: true
     telemetry:
-      - "Sysmon EID 1: sc.exe query spawned by powershell.exe"
-      - "PowerShell EID 4104: administrators-group / privilege check"
+      - "Sysmon EID 1: powershell.exe enumerating user profile directories"
+      - "PowerShell EID 4104: Get-ChildItem with financial-keyword name filters"
     detection:
-      - "EDR: service enumeration + privilege check preceding a service install -- FIN8 persistence-prep IOC"
-      - "SIEM: baseline EID 7045 (service installed); alert on new services with script-host or temp-path binaries"
+      - "EDR: recursive enumeration of user document folders filtered by financial keywords - pre-exfiltration staging IOC"
+      - "SIEM: Get-ChildItem bursts over Documents and Desktop from a script host"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK - FIN8 (Group G0061): File and Directory Discovery (T1083)"
+        url: "https://attack.mitre.org/groups/G0061/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: inferred
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
-      $principal = New-Object System.Security.Principal.WindowsPrincipal($id)
-      $isAdmin = $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
-      $svcCount = @(& sc.exe query type= service state= all 2>&1 | Select-String 'SERVICE_NAME').Count
-      Write-Output "EXEC T1543.003: service-persistence surface check. current_token_is_admin=$isAdmin, services_enumerated=$svcCount. NO service created. FIN8 installs BADHATCH/Sardonic as a service for persistence. [BAS-SIM-FIN8-S4]"
-      if ($isAdmin) {
-        Write-Output "FAIL: The current token can create Windows services (local admin). FIN8 would install its backdoor as a service (EID 7045). Enforce least privilege, and alert on new services whose binary path is a script host, %TEMP%, or an unsigned binary."
+      $roots = @("$env:USERPROFILE\Documents", "$env:USERPROFILE\Desktop", "$env:USERPROFILE\Downloads")
+      $keywords = @('invoice','statement','payroll','swift','ledger','customer','account','kyc')
+      $hits = foreach ($r in $roots) {
+        if (Test-Path $r) {
+          Get-ChildItem -Path $r -File -Recurse -Depth 2 -EA SilentlyContinue |
+            Where-Object { $n = $_.Name.ToLower(); $keywords | Where-Object { $n -match $_ } }
+        }
+      }
+      $hitCount = @($hits).Count
+      Write-Output "EXEC T1083: financial-keyword file-name discovery over user document folders (names only, no content read). matches=$hitCount. [BAS-SIM-FIN8-S8]"
+      if ($hitCount -gt 0) {
+        Write-Output "FAIL: $hitCount file(s) with financial-record names are discoverable in user document folders - restrict unmanaged financial records and monitor enumeration bursts. [BAS-SIM-FIN8-S8]"
       } else {
-        Write-Output "PASS: The current token is not local admin -- direct Windows-service persistence is not available to it. Service-install telemetry (EID 7045) should still be baselined. [BAS-SIM-FIN8-S4]"
+        Write-Output "PASS: no financial-record file names discovered in the user document folders. [BAS-SIM-FIN8-S8]"
       }
     cleanup: ""
 
   # ---------------------------------------------------------------------------
-  # Stage 5 -- Outbound HTTPS C2 Beacon (T1071.001)
+  # Stage 9 - Impact: Ransomware Encryption Simulation, lab-only (T1486)
   # ---------------------------------------------------------------------------
-  - name: "FIN8 Stage 5 -- Outbound HTTPS C2 Beacon Pattern (T1071.001)"
-    technique_id: T1071.001
+  - name: "FIN8 Stage 9 - Ransomware Encryption Simulation, sandboxed (lab) (T1486)"
+    technique_id: T1486
+    action_key: ransomware_sim_sandboxed
+    detection_profiles:
+      - windows_ransomware_encryption
     framework: custom
     executor: powershell
     requires_priv: user
-    timeout_sec: 20
-    fidelity: telemetry-safe
-    production_safe: true
-    risk: low
-    blast_radius: "Issues one Invoke-WebRequest to https://192.0.2.4 (RFC 5737 TEST-NET-1 -- non-routable) to generate Sysmon EID 3 + WinHTTP telemetry matching a Sardonic HTTPS C2 check-in. No real C2 channel, no data sent beyond the URL path."
+    timeout_sec: 60
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Creates an isolated %TEMP%\\bas_range_<id> directory with at most 3 benign dummy files, XOR-encrypts them in place, drops a marker ransom note, XOR-decrypts to restore, and deletes the whole directory. File-count and size caps are enforced and cleanup is verified. FIN8's ransomware-era families (Ragnar Locker, White Rabbit, Noberus) use strong ciphers; this simulation performs NO real cryptography on real data."
     reversible: true
     telemetry:
-      - "Sysmon EID 3: TCP 443 to 192.0.2.4 (Invoke-WebRequest -- Sardonic C2 beacon)"
-      - "PowerShell EID 4104: Invoke-WebRequest HTTPS call"
-      - "Firewall EID 5157: outbound TCP 443 to 192.0.2.4 blocked (if logging enabled)"
+      - "Sysmon EID 11 (file create/modify): bas_range_<id> directory and .bas_locked files"
+      - "Security EID 4663 (file write) if object access auditing enabled"
     detection:
-      - "EDR: Invoke-WebRequest / Net.WebClient in PowerShell -- Sigma posh_ps_web_request.yml"
-      - "SIEM: Sysmon EID 3 TCP 443 from powershell.exe to a non-CDN IP -- FIN8/Sardonic C2 IOC"
-      - "Proxy: CONNECT to 192.0.2.4:443 must be blocked at egress and alert"
+      - "EDR: rapid sequential file modification across multiple files - encryption behaviour"
+      - "SIEM: high file-modify rate from powershell.exe under a %TEMP% path - ransomware staging signal"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK - FIN8 (Group G0061) and Ragnar Locker (S0481): Data Encrypted for Impact (T1486)"
+        url: "https://attack.mitre.org/software/S0481/"
+      - reference: "Symantec Threat Hunter Team - FIN8 Sardonic backdoor delivering Noberus ransomware (2023)"
+        url: "https://symantec-enterprise-blogs.security.com/blogs/threat-intelligence/syssphinx-fin8-backdoor"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $beaconUrl = 'https://192.0.2.4/bas-sim-fin8'
-      $blocked = $false; $timedOut = $false; $result = $null
-      try {
-        $result = Invoke-WebRequest -Uri $beaconUrl -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
-      } catch [System.Net.WebException] {
-        $m = $_.Exception.Message
-        if ($m -match 'timed out|timeout|TimedOut') { $timedOut = $true }
-        elseif ($m -match 'blocked|denied|forbidden|refused|proxy') { $blocked = $true }
-        else { $timedOut = $true }
-      } catch { $blocked = $true }
-      Write-Output "EXEC T1071.001: HTTPS C2 beacon probe to $beaconUrl (RFC5737 non-routable). status=$($result.StatusCode), timed_out=$timedOut, blocked=$blocked. Sysmon EID 3 TCP 443 generated. [BAS-SIM-FIN8-S5]"
-      if ($blocked) {
-        Write-Output "PASS: Outbound HTTPS to the RFC5737 address was blocked by proxy or firewall -- the Sardonic C2 beacon would be intercepted. [BAS-SIM-FIN8-S5]"
-      } else {
-        Write-Output "FAIL: HTTPS beacon to 192.0.2.4 was NOT blocked by the egress firewall/proxy. Enforce an explicit egress allow-list for BFSI workstations and alert on Sysmon EID 3 from powershell.exe to unlisted IPs."
+      $runId   = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $maxFiles = 3
+      $maxBytes = 10240
+      $rangeDir = Join-Path $env:TEMP "bas_range_$runId"
+      New-Item -ItemType Directory -Path $rangeDir -Force | Out-Null
+      $dummies = @('finance_q4.txt','customer_export.txt','swift_ops.txt')
+      foreach ($f in $dummies[0..($maxFiles-1)]) {
+        $content = "BAS-SIM DUMMY DATA run-id=$runId file=$f" * 10
+        if ([System.Text.Encoding]::UTF8.GetByteCount($content) -gt $maxBytes) { $content = $content.Substring(0,$maxBytes/2) }
+        Set-Content -Path (Join-Path $rangeDir $f) -Value $content -Encoding UTF8
       }
-    cleanup: ""
+      $key = 0xAB
+      $encFiles = @()
+      Get-ChildItem -Path $rangeDir -File | ForEach-Object {
+        $bytes  = [System.IO.File]::ReadAllBytes($_.FullName)
+        $xored  = $bytes | ForEach-Object { $_ -bxor $key }
+        $locked = $_.FullName + '.bas_locked'
+        [System.IO.File]::WriteAllBytes($locked, [byte[]]$xored)
+        Remove-Item $_.FullName -Force
+        $encFiles += $locked
+      }
+      $noteFile = Join-Path $rangeDir 'README_RESTORE_BAS_SIM.txt'
+      Set-Content -Path $noteFile -Value "BAS-SIM RANSOM NOTE - run-id=$runId - THIS IS A CONTROLLED DRILL" -Encoding UTF8
+      Write-Output "EXEC: $($encFiles.Count) file(s) XOR-encrypted in $rangeDir - expect EDR encryption-behaviour alert. Restoring now. [BAS-SIM-FIN8-S9]"
+      foreach ($enc in $encFiles) {
+        $bytes  = [System.IO.File]::ReadAllBytes($enc)
+        $plain  = $bytes | ForEach-Object { $_ -bxor $key }
+        $orig   = $enc -replace '\.bas_locked$',''
+        [System.IO.File]::WriteAllBytes($orig, [byte[]]$plain)
+        Remove-Item $enc -Force
+      }
+      Remove-Item $noteFile -Force -ErrorAction SilentlyContinue
+      Remove-Item $rangeDir -Recurse -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $rangeDir)
+      Write-Output "CLEANUP: range directory removed=$cleaned. No encrypted data remains. [BAS-SIM-FIN8-S9]"
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP "bas_range_*") -Recurse -Force -ErrorAction SilentlyContinue
