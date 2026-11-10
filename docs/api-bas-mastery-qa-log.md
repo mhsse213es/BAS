@@ -4243,3 +4243,50 @@ no ModSecurity audit-log parsing, so `VerdictMissed` still isn't claimable from 
 - **Calls made (design was mine; flag if you want any changed):** interval in hours (1 to 720), not cron; first run one interval after saving; lab and staging only, because production approvals are single-use and second-person; writes off by default (`include_writes`), and needing allowed paths; manage-targets permission to create (unattended runs are an admin decision); a run missed during downtime runs once, not made up; a busy target is a skip, not a failure; 5 failures to queue in a row pause the schedule; runs are audited as `schedule:<creator>`.
 - **Tests (pass):** store: bounds enforced by the table, claim only when due, due time carried for the job key, next run moves out by the interval, disabled never claimed, failure count and pause, success resets, resume on save, concurrent claims never overlap (4 callers, 6 schedules). API: validation (hours, unknown field, no stored data, writes need allowed paths, production refused), RBAC (viewer and analyst cannot save or delete, analyst can read), save/read/replace/delete, a due run queues one bound job with a stored plan and the creator as requester, a claimed run is not claimed twice, a busy target is skipped without counting as a failure, stale data fails with the reason and pauses at 5, saving again resumes, writes are left out of a scheduled plan unless asked and the stored spec is untouched. Web: card states (none, on, off, paused), interval validation (6 bad inputs), writes only when ticked, hostile result text as text, production target not offered a schedule, server refusal shown. Routes and RBAC matrix updated.
 - **Not run:** a real scheduled run end to end (job executing against a staging API); the server loop under a real restart; the Schedule card in a browser. Time-of-day schedules, notifications on pause and catalogue-job schedules are not built.
+
+## REQ-007 follow-up #9: a real burst harness and real lab rate limiting close `automated-abuse` partially (10 November 2026)
+
+- **Built:** two genuinely new pieces, not wiring. (1) `lab/wafmodsec/nginx/00-limit-req-zone.conf` +
+  `nginx/default.conf`, mounted into the `waf` container via its own documented template directory, add a real
+  nginx `limit_req_zone`/`limit_req` (`rate=2r/s burst=3 nodelay`) -- CRS itself does no rate limiting, so without
+  this there is no real limit for `RATE-001` to test. (2) `modsecwaf.Client.SendBurst(ctx, tmpl, n)` fires a
+  real, bounded burst of `n` concurrent requests and collects every response -- a single `Client.Send` round trip
+  cannot represent "N requests in a short window" at all. Curl-confirmed against the real container first: a
+  burst of 10 to `/api/quote` returns some `200`s then `503`s once the limit is exceeded. New
+  `internal/wafmodsec/automatedabuse.go` (`RunAutomatedAbuseLive`) wires 1 of
+  `AudspectAutomatedAbuseScenario`'s 6 vectors (`RATE-001`); new route `GET /api/waf/scenarios/automated-abuse/live`
+  registered through the same `liveScenarios` loop as the other 6.
+- **Calls made:** `wafmodsec.BuildBurstCollectionResults` must keep the WAF-engine and origin-app mechanisms
+  describing the SAME subset of requests (the blocked ones when enforcement fired, the allowed ones when it
+  didn't) -- deriving them independently (any-blocked vs. any-reached) described two different requests as one
+  event and resolved `Inconclusive` by contradiction, caught by a RED-first test before this shipped.
+  `RATE-002`/`BOTABUSE-001..004` stay unwired: each needs a materially different, bigger build (per-account
+  session aggregation, a bot-management/JS-challenge layer, a second header-keyed rate-limit zone, real stateful
+  lockout/CAPTCHA logic, and/or the multi-node topology `origin-resilience` needs) than the single `limit_req`
+  zone `RATE-001` needed.
+- **Tests (pass):** 1 new unit test in `modsecwaf` (`SendBurst` against an `httptest.Server`, proves every
+  response is collected, not just the first/last); 2 new unit tests in `wafmodsec` for
+  `BuildBurstCollectionResults` (RED-first -- the first version's independent-derivation bug surfaced here, and a
+  second RED-first correction: the "no enforcement" case resolves `Inconclusive`, not `Missed`, since this bridge
+  never parses the audit log, same disclosed limitation as every other evaluator in this package); 1 new live
+  test (`TestLive_AutomatedAbuseScenario_OneOfSixVectorsLive`) and its API counterpart, both run against the real
+  container -- `RATE-001` resolves `Blocked`. `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the new
+  route matrixed. `go build ./...`/`go vet ./...` clean across the whole repo; full `wafassessment`/`wafmodsec`/
+  `modsecwaf` suites green. `internal/api`'s own full suite is large (hundreds of Postgres-testcontainer-backed
+  tests, several minutes) -- ran the specific new/changed tests directly (`TestRBACMatrix_*`,
+  `TestWafScenarioLiveJSONHandler_*`, `TestWafExploitPreventionLiveJSONHandler_*`), all green, including two real
+  cross-test regressions caught this way before push (see below); a full end-to-end run of `internal/api` was
+  attempted but killed mid-run by the host's own low-memory protection, unrelated to this change -- not retried
+  this round.
+- **Found and fixed:** the first version of `nginx/default.conf` put `limit_req` in the generic `location /`
+  block, which matches every path -- this rate-limited every OTHER live test too (same client IP, same shared
+  container across a run), surfacing as false `incorrectly_blocked`/503 results on unrelated vectors
+  (`legitimate-traffic`'s `XSS-001`/`PATHTRAV-001`/`RATE-001` benign legs, `file-upload-content-trust`'s
+  `FILEUP-001`). Fixed by scoping `limit_req` to an exact-match `location = /api/quote` block; curl-reconfirmed
+  `/search` and other paths unaffected while `/api/quote` still rate-limits. Separately, the leaky bucket from a
+  10-request burst takes a few seconds to drain, so a later live test hitting the same path moments later in the
+  same process could still see stale 503s -- fixed with a 3s `time.Sleep` at the end of the automated-abuse live
+  test itself, test-isolation hygiene, not production code.
+- **Not run:** staging; the remaining 3 scenarios (`detection-telemetry`, `origin-resilience`, `policy-integrity`)
+  are next.
+- **Limits:** `RATE-002`/`BOTABUSE-001..004` remain genuinely unwired for the reasons above.

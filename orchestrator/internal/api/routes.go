@@ -284,15 +284,15 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Get("/api/waf/scenarios/"+slug, h.wafScenarioJSONHandler(slug))
 			r.Get("/api/waf/scenarios/"+slug+".html", h.wafScenarioHTMLHandler(slug))
 		}
-		// 6 of the 10 scenarios above, evaluated against a REAL, running
+		// 7 of the 10 scenarios above, evaluated against a REAL, running
 		// ModSecurity + OWASP CRS lab (lab/wafmodsec) instead of a fixture --
 		// only the subset of each scenario's vectors its own
 		// internal/wafmodsec.Run<Scenario>Live function actually drives live
-		// (the rest surface through untestedVectorIds). The other 4
+		// (the rest surface through untestedVectorIds). The other 3
 		// scenarios have no live route: each needs real new capability
-		// (a burst-driving harness, a SIEM backend, a multi-node lab
-		// topology, a second weakened-policy lab instance) that doesn't
-		// exist yet -- see docs/waf-mastery-qa-log.md item #1. Same
+		// (a SIEM backend, a multi-node lab topology, a second
+		// weakened-policy lab instance) that doesn't exist yet -- see
+		// docs/waf-mastery-qa-log.md item #1. Same
 		// read-only, JWT-only tier as the fixture-backed routes above: the
 		// live target is a fixed, operator-configured URL
 		// (wafModsecLabURLEnv), never taken from the request, so there is no
@@ -307,6 +307,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			{"api-protection", wafmodsec.RunAPIProtectionLive},
 			{"legitimate-traffic", wafmodsec.RunLegitimateTrafficLive},
 			{"file-upload-content-trust", wafmodsec.RunFileUploadContentTrustLive},
+			{"automated-abuse", wafmodsec.RunAutomatedAbuseLive},
 		}
 		for _, ls := range liveScenarios {
 			r.Get("/api/waf/scenarios/"+ls.slug+"/live", h.wafScenarioLiveJSONHandler(ls.run))

@@ -71,6 +71,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/waf/scenarios/file-upload-content-trust", tierAny, ""},
 	{http.MethodGet, "/api/waf/scenarios/file-upload-content-trust.html", tierAny, ""},
 	{http.MethodGet, "/api/waf/scenarios/file-upload-content-trust/live", tierAny, ""},
+	{http.MethodGet, "/api/waf/scenarios/automated-abuse/live", tierAny, ""},
 	{http.MethodGet, "/api/waf/scenarios/detection-telemetry", tierAny, ""},
 	{http.MethodGet, "/api/waf/scenarios/detection-telemetry.html", tierAny, ""},
 	{http.MethodGet, "/api/waf/scenarios/legitimate-traffic", tierAny, ""},

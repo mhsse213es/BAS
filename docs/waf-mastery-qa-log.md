@@ -174,11 +174,55 @@ Wired into the API too, same loop as the other 5 live routes: `GET /api/waf/scen
 Live-verified end to end (adapter + scenario + API), `TestRBACMatrix_NoDrift`/`AuthorizationBoundary` pass with the
 new route matrixed.
 
+**Sixth same-day follow-up: built a real burst-driving harness and real lab rate limiting, unblocked `RATE-001` in
+`automated-abuse`.** Two new pieces, both genuinely new capability, not wiring: (1) a real nginx `limit_req_zone`/
+`limit_req` (`lab/wafmodsec/nginx/00-limit-req-zone.conf` + `nginx/default.conf`, mounted into the `waf` container
+via its own documented template mechanism, `rate=2r/s burst=3 nodelay`) -- CRS itself does no rate limiting, so
+without this there is nothing for `RATE-001` to honestly test; (2) `modsecwaf.Client.SendBurst`, which fires a
+real, bounded burst of N concurrent requests and collects every response -- a single `Client.Send` round trip
+cannot represent "N requests in a short window" at all. Curl-confirmed against the real container before writing
+any Go: a burst of 10 to `/api/quote` returns some `200`s then `503`s once the declared limit is exceeded.
+
+`wafmodsec.BuildBurstCollectionResults` turns the burst's responses into the same two `wafval.CollectionResult`
+mechanisms `BuildCollectionResults` derives from one response. First attempt derived Enforcement and Origin
+independently (any blocked -> Enforcement=Blocked; any reached origin -> Origin=OriginReceived) and hit a real,
+caught bug: `wafval.EvaluateClaim` cross-checks both mechanisms as two views of the SAME event, so reporting
+"some reached" and "some blocked" as independent facts described two different requests as one event and
+resolved `Inconclusive` by contradiction. Fixed by deriving both from the same `blocked > 0` boolean -- Origin
+reports the blocked subset's own state (never reached) when enforcement fired, the allowed subset's (reached)
+only when nothing was ever blocked -- RED-first, 2 new tests, same single-shot invariant `BuildCollectionResults`
+already relied on, now proven to hold for an aggregate too. A second RED-first mistake: the "no enforcement"
+test originally expected `VerdictMissed`; this bridge never parses the audit log, so (same disclosed limitation
+as every other evaluator here) it correctly resolves `Inconclusive` instead -- the test's expectation was wrong,
+not the code.
+
+A third, real bug surfaced only by running the FULL suite (not just the new tests in isolation): the first
+version of `nginx/default.conf` put `limit_req` inside the generic `location /` block, which matches every
+path -- this silently rate-limited every OTHER live test too, since they all share the one running container and
+client IP across a test run. `TestWafScenarioLiveJSONHandler_RealLab_SixMoreScenarios` and
+`TestLive_LegitimateTrafficScenario_FourOfSixVectorsLive` both started failing with false
+`incorrectly_blocked`/503 results on vectors that have nothing to do with rate limiting (`XSS-001`,
+`PATHTRAV-001`, `RATE-001`'s own benign leg) -- caught before push, not after. Fixed by scoping `limit_req` to an
+exact-match `location = /api/quote` block, leaving the generic `location /` untouched; confirmed by curl that
+`/search` and other paths are no longer affected while `/api/quote` still rate-limits. A second, related issue:
+even scoped correctly, the leaky bucket from a 10-request burst takes a few seconds to drain, so a different
+live test hitting the same path moments later (same process, sequential execution) could still see stale 503s --
+fixed with a 3s `time.Sleep` at the end of the automated-abuse live test itself (test-isolation hygiene, not
+production code).
+
+New `internal/wafmodsec/automatedabuse.go` wires 1 of `AudspectAutomatedAbuseScenario`'s 6 vectors: `RATE-001`,
+live-confirmed `Blocked`. `RATE-002` and all 4 `BOTABUSE-*` vectors remain unwired -- each needs a materially
+different, bigger build (per-account session aggregation, a bot-management/JS-challenge layer, a second
+header-keyed rate-limit zone, real stateful lockout/CAPTCHA logic, and/or the same multi-node topology
+`origin-resilience` needs) than the single `limit_req` zone `RATE-001` needed. Wired into the API too, same loop
+as the other 6 live routes: `GET /api/waf/scenarios/automated-abuse/live`. `TestRBACMatrix_NoDrift`/
+`AuthorizationBoundary` pass with the new route matrixed.
+
 **Resolution path for what's left:** extend `BuildRequest`'s remaining PayloadLocation cases (header:/body:json:/body:xml:);
 add audit-log parsing to `wafmodsec` so a real `VerdictMissed` becomes claimable; a second, deliberately-weakened
-lab instance to unblock `policy-integrity`; a burst-driving harness (plus real rate-limit config in the lab) to
-unblock `automated-abuse`; a multi-node/dual-path lab topology to unblock `origin-resilience`; a real alerting
-backend to unblock `detection-telemetry`.
+lab instance to unblock `policy-integrity`; per-account aggregation / a bot-management layer / stateful
+lockout logic to unblock `automated-abuse`'s remaining 5 vectors; a multi-node/dual-path lab topology to unblock
+`origin-resilience`; a real alerting backend to unblock `detection-telemetry`.
 
 See `lab/wafmodsec/README.md` for how to run the lab and every live test (`go test ./internal/wafmodsec/... -run TestLive_ -v`).
 

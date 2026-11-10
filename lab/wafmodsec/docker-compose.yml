@@ -53,3 +53,13 @@ services:
     ports:
       - "8888:8080"
     networks: [wafmodsec-lab]
+    # Real per-client rate limiting for RATE-001 (automated-abuse): these
+    # mount into the image's documented template directory
+    # (/etc/nginx/templates/<path>.template -> rendered to
+    # /etc/nginx/<path> at container start). nginx/default.conf is a
+    # byte-for-byte copy of the image's own shipped conf.d/default.conf
+    # plus one added `limit_req` line -- see both files' own doc comments
+    # for why this is safe and what it enforces.
+    volumes:
+      - ./nginx/00-limit-req-zone.conf:/etc/nginx/templates/conf.d/00-limit-req-zone.conf.template:ro
+      - ./nginx/default.conf:/etc/nginx/templates/conf.d/default.conf.template:ro
