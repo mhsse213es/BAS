@@ -66,6 +66,16 @@ func matchMapping(m Mapping, host Host) []Result {
 				Verdict: Unknown, Reason: "no fixed version recorded for installed package"})
 			continue
 		}
+		if !ValidVersion(installed) {
+			out = append(out, Result{CVE: m.CVE, MappingID: m.ID, Package: pkg, Installed: installed,
+				Verdict: Unknown, Reason: "malformed installed version"})
+			continue
+		}
+		if bad := firstInvalid(fixes); bad != "" {
+			out = append(out, Result{CVE: m.CVE, MappingID: m.ID, Package: pkg, Installed: installed,
+				Verdict: Unknown, Reason: "malformed fixed version " + bad})
+			continue
+		}
 		out = append(out, judge(m, pkg, installed, fixes))
 	}
 	if len(out) == 0 {
@@ -93,6 +103,16 @@ func judge(m Mapping, pkg, installed string, fixes []PackageFix) Result {
 	}
 	return Result{CVE: m.CVE, MappingID: m.ID, Package: pkg, Installed: installed,
 		Verdict: first, Reason: "compared with reviewed fixed version"}
+}
+
+// firstInvalid returns the first fixed version that fails ValidVersion, or "".
+func firstInvalid(fixes []PackageFix) string {
+	for _, f := range fixes {
+		if !ValidVersion(f.Version) {
+			return f.Version
+		}
+	}
+	return ""
 }
 
 func fixesFor(all []PackageFix, pkg string) []PackageFix {

@@ -33,6 +33,38 @@ func DpkgCompare(a, b string) int {
 	return 0
 }
 
+// ValidVersion reports whether v is a version the matcher can compare safely.
+// It requires a non-empty upstream part, a numeric epoch if a colon is present,
+// and only characters Debian allows: letters, digits, and . + - ~ :
+// (no spaces). Anything else is rejected so the caller returns UNKNOWN.
+func ValidVersion(v string) bool {
+	if v == "" {
+		return false
+	}
+	if i := strings.IndexByte(v, ':'); i >= 0 {
+		if n, err := strconv.ParseInt(v[:i], 10, 64); err != nil || n < 0 {
+			return false
+		}
+		v = v[i+1:]
+	}
+	if i := strings.LastIndexByte(v, '-'); i >= 0 {
+		if i == 0 {
+			return false
+		}
+		v = v[:i]
+	}
+	if v == "" {
+		return false
+	}
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if !(isDigit(c) || isAlpha(c) || c == '.' || c == '+' || c == '~' || c == ':' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
 func splitVersion(v string) (epoch int64, upstream, revision string) {
 	if i := strings.IndexByte(v, ':'); i >= 0 {
 		if n, err := strconv.ParseInt(v[:i], 10, 64); err == nil && n >= 0 {
