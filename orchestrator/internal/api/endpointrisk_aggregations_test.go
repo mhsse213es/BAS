@@ -305,6 +305,17 @@ func TestParseInstalledSoftware_ParsesValidLinesSkipsMalformed(t *testing.T) {
 	}
 }
 
+func TestParseInstalledSoftware_AcceptsFourFieldLinuxFormat(t *testing.T) {
+	raw := "roundcube|1.4.3+dfsg.1-1|all|installed\nfirefox|97.0.2|amd64|installed\n"
+	got := parseInstalledSoftware(raw)
+	if len(got) != 2 {
+		t.Fatalf("got %d apps, want 2: %+v", len(got), got)
+	}
+	if got[0].Name != "roundcube" || got[0].Version != "1.4.3+dfsg.1-1" {
+		t.Errorf("apps[0] = %+v, want roundcube/1.4.3+dfsg.1-1", got[0])
+	}
+}
+
 func TestParseInstalledSoftware_EmptyInput(t *testing.T) {
 	if got := parseInstalledSoftware(""); len(got) != 0 {
 		t.Errorf("got %d apps, want 0", len(got))
