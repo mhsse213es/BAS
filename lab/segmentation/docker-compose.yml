@@ -11,32 +11,32 @@ networks:
     driver: bridge
     internal: true
     ipam:
-      config: [{ subnet: 172.31.10.0/24 }]
+      config: [{ subnet: 172.31.10.0/24, gateway: 172.31.10.254 }]
   seg-swift:
     driver: bridge
     internal: true
     ipam:
-      config: [{ subnet: 172.31.20.0/24 }]
+      config: [{ subnet: 172.31.20.0/24, gateway: 172.31.20.254 }]
   seg-cde:
     driver: bridge
     internal: true
     ipam:
-      config: [{ subnet: 172.31.30.0/24 }]
+      config: [{ subnet: 172.31.30.0/24, gateway: 172.31.30.254 }]
   seg-atm:
     driver: bridge
     internal: true
     ipam:
-      config: [{ subnet: 172.31.40.0/24 }]
+      config: [{ subnet: 172.31.40.0/24, gateway: 172.31.40.254 }]
   seg-app:
     driver: bridge
     internal: true
     ipam:
-      config: [{ subnet: 172.31.50.0/24 }]
+      config: [{ subnet: 172.31.50.0/24, gateway: 172.31.50.254 }]
   seg-db:
     driver: bridge
     internal: true
     ipam:
-      config: [{ subnet: 172.31.60.0/24 }]
+      config: [{ subnet: 172.31.60.0/24, gateway: 172.31.60.254 }]
 
 volumes:
   seg-logs:
