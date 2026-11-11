@@ -21,6 +21,12 @@ func ParseFirewallLog(data []byte) ([]FirewallEvent, error) {
 		if len(fields) == 0 {
 			continue
 		}
+		// Only TCP and UDP carry probe tuples. Other packets (ICMP, say) that
+		// reach the catch-all are not evidence for any probe, so skip them
+		// rather than failing the whole log.
+		if p := fields["ip.protocol"]; p != "6" && p != "17" {
+			continue
+		}
 		ev, err := eventFromFields(fields)
 		if err != nil {
 			return nil, fmt.Errorf("firewall log record %d: %w", i, err)

@@ -86,10 +86,22 @@ func Evaluate(expect Expect, ev Evidence) (Verdict, string) {
 	// The firewall accepted a flow it must deny. The target may still have
 	// refused it (no listener), but the path is open: that is a breach.
 	if hasAction(ev.Events, "ACCEPT") {
-		return FAIL, "firewall accepted a prohibited flow"
+		return FAIL, "firewall accepted a prohibited flow (" + firstRule(ev.Events, "ACCEPT") + ")"
 	}
 	if hasAction(ev.Events, "DROP", "REJECT") {
-		return PASS, "blocked with firewall evidence"
+		return PASS, "blocked with firewall evidence (" + firstRule(ev.Events, "DROP", "REJECT") + ")"
 	}
 	return UNKNOWN, "no attributable enforcement evidence"
+}
+
+// firstRule names the first rule whose action matches, for the verdict reason.
+func firstRule(events []FirewallEvent, actions ...string) string {
+	for _, e := range events {
+		for _, a := range actions {
+			if e.Action == a {
+				return e.RuleID
+			}
+		}
+	}
+	return "unknown rule"
 }

@@ -109,28 +109,28 @@ services:
   swift-gateway:
     <<: *listener
     environment: { GW: 172.31.20.1 }
-    command: ["sh", "-c", "ip route replace default via $$GW && while true; do nc -l -p 8443 >/dev/null </dev/null; done"]
+    command: ["sh", "-c", "ip route replace default via $$GW && exec nc -lk -p 8443 -e /bin/true"]
     networks:
       seg-swift: { ipv4_address: 172.31.20.10 }
 
   cde-app:
     <<: *listener
     environment: { GW: 172.31.30.1 }
-    command: ["sh", "-c", "ip route replace default via $$GW && while true; do nc -l -p 8443 >/dev/null </dev/null; done"]
+    command: ["sh", "-c", "ip route replace default via $$GW && exec nc -lk -p 8443 -e /bin/true"]
     networks:
       seg-cde: { ipv4_address: 172.31.30.10 }
 
   atm-mgmt:
     <<: *listener
     environment: { GW: 172.31.40.1 }
-    command: ["sh", "-c", "ip route replace default via $$GW && while true; do nc -l -p 9000 >/dev/null </dev/null; done"]
+    command: ["sh", "-c", "ip route replace default via $$GW && exec nc -lk -p 9000 -e /bin/true"]
     networks:
       seg-atm: { ipv4_address: 172.31.40.10 }
 
   core-app:
     <<: *listener
     environment: { GW: 172.31.50.1 }
-    command: ["sh", "-c", "ip route replace default via $$GW && while true; do nc -l -p 8080 >/dev/null </dev/null; done"]
+    command: ["sh", "-c", "ip route replace default via $$GW && exec nc -lk -p 8080 -e /bin/true"]
     networks:
       seg-app: { ipv4_address: 172.31.50.10 }
 

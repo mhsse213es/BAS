@@ -234,3 +234,57 @@ func TestRunScenario_SpacesProbesByProbeGap(t *testing.T) {
 		t.Fatalf("3 probes took %s; want at least %s of gaps", elapsed, 2*probeGap)
 	}
 }
+
+// flakyProvider fails the first firewall read (a half-written record, say) and
+// returns the record on the second read.
+type flakyProvider struct {
+	fakeProvider
+	calls int
+	late  []FirewallEvent
+}
+
+func (f *flakyProvider) FirewallEvents(_ context.Context, _ TimeWindow) ([]FirewallEvent, bool, error) {
+	f.calls++
+	if f.calls == 1 {
+		return nil, false, errors.New("half-written record")
+	}
+	return f.late, true, nil
+}
+
+func TestRunScenario_TransientLogReadErrorIsRetried(t *testing.T) {
+	noGap(t)
+	start := time.Unix(100, 0)
+	p := &flakyProvider{
+		fakeProvider: fakeProvider{result: ProbeResult{Outcome: OutcomeTimeout, Start: start, End: start.Add(time.Second)}},
+		late:         []FirewallEvent{{Time: start, RuleID: "SEG-DENY-SWIFT-1", Action: "DROP", SrcIP: "10.0.0.c", DstIP: "10.0.0.s", DstPort: 8443, Proto: "tcp"}},
+	}
+	s := Scenario{ID: "s", Probes: []ProbeSpec{{ID: "p", Src: ZoneCorp, Dst: ZoneSWIFT, DstPort: 8443, Proto: "tcp", Expect: ExpectDeny}}}
+	got, err := RunScenario(context.Background(), p, s, 0)
+	if err != nil {
+		t.Fatalf("RunScenario: %v", err)
+	}
+	if got.Outcomes[0].Verdict != PASS {
+		t.Fatalf("got %s (%s), want PASS after a retry", got.Outcomes[0].Verdict, got.Outcomes[0].Reason)
+	}
+}
+
+func TestRunScenario_CancelledDuringLastProbeReturnsError(t *testing.T) {
+	noGap(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	p := &cancellingProvider{cancel: cancel}
+	s := Scenario{ID: "s", Probes: []ProbeSpec{{ID: "p", Src: ZoneCorp, Dst: ZoneSWIFT, DstPort: 8443, Proto: "tcp", Expect: ExpectDeny}}}
+	if _, err := RunScenario(ctx, p, s, 0); err == nil {
+		t.Fatal("want an error: the run was cancelled, so its last probe must not be reported as a result")
+	}
+}
+
+// cancellingProvider cancels the run while its probe is in flight.
+type cancellingProvider struct {
+	fakeProvider
+	cancel context.CancelFunc
+}
+
+func (c *cancellingProvider) Probe(_ context.Context, _ ProbeRequest) (ProbeResult, error) {
+	c.cancel()
+	return ProbeResult{}, errors.New("interrupted")
+}

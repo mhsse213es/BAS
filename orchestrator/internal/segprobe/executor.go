@@ -2,6 +2,7 @@ package segprobe
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -56,6 +57,10 @@ func RunScenario(ctx context.Context, p Provider, s Scenario, runIndex int) (Run
 			return RunResult{}, err
 		}
 		out.Outcomes = append(out.Outcomes, runProbe(ctx, p, spec))
+		// A cancelled probe must not be reported as a result of this run.
+		if err := ctx.Err(); err != nil {
+			return RunResult{}, err
+		}
 	}
 	return out, nil
 }
@@ -168,8 +173,22 @@ func readEvidence(ctx context.Context, p Provider, req ProbeRequest, res ProbeRe
 	for {
 		window := TimeWindow{From: res.Start.Add(-evidenceSlack), To: res.End.Add(evidenceSlack)}
 		all, available, err := p.FirewallEvents(ctx, window)
-		if err != nil || !available {
+		if err != nil && errors.Is(err, errCollectorDown) {
+			// A stopped collector will not recover within the wait: grade UNKNOWN now.
 			return nil, false
+		}
+		if err != nil || !available {
+			// A read or parse error may be transient (a half-written record):
+			// retry until the deadline, then report the log unavailable.
+			if !time.Now().Before(deadline) {
+				return nil, false
+			}
+			select {
+			case <-ctx.Done():
+				return nil, false
+			case <-time.After(evidencePollInterval):
+			}
+			continue
 		}
 		events := MatchEvidence(req, res, all, evidenceSlack)
 		if len(events) > 0 || !time.Now().Before(deadline) {

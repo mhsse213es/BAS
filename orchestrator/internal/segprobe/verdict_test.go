@@ -1,6 +1,7 @@
 package segprobe
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -88,5 +89,19 @@ func TestEvaluate_DeniedButFirewallAccepted_IsFail(t *testing.T) {
 	v, reason := Evaluate(ExpectDeny, ev)
 	if v != FAIL {
 		t.Fatalf("got %s (%s), want FAIL: firewall accepted a prohibited flow", v, reason)
+	}
+}
+
+// The verdict must name the rule that decided it, so QA evidence shows which
+// firewall rule blocked the probe.
+func TestEvaluate_BlockReasonNamesRule(t *testing.T) {
+	ev := Evidence{
+		ProbeResult:       ProbeResult{Outcome: OutcomeTimeout},
+		Events:            []FirewallEvent{{RuleID: "SEG-DENY-DB-1", Action: "DROP"}},
+		FirewallAvailable: true,
+	}
+	v, reason := Evaluate(ExpectDeny, ev)
+	if v != PASS || !strings.Contains(reason, "SEG-DENY-DB-1") {
+		t.Fatalf("got %s (%q); want PASS naming SEG-DENY-DB-1", v, reason)
 	}
 }
