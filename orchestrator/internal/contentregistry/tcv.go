@@ -16,7 +16,7 @@ import (
 // published_executable fires on publish regardless of validation, but
 // validated_coverage fires ONLY on ->VALIDATED, so a hand-authored
 // PUBLISHED_LOCAL version is never recorded as validated coverage.
-func (r *Registry) recordLifecycleEvent(ctx context.Context, versionID string, to Lifecycle, eventID string, at time.Time) {
+func (r *Registry) recordLifecycleEvent(ctx context.Context, versionID string, to Lifecycle, eventID string, at time.Time, reasonCode ExclusionReason) {
 	var typ tcv.EventType
 	switch to {
 	case LifecycleValidating:
@@ -38,7 +38,7 @@ func (r *Registry) recordLifecycleEvent(ctx context.Context, versionID string, t
 		EventTime:        at,
 		SourceTable:      "content_version_events",
 		SourcePK:         eventID,
-		Payload:          map[string]any{"to_lifecycle": string(to)},
+		Payload:          tcv.LifecyclePayload(string(to), string(reasonCode)),
 	}); err != nil {
 		log.Printf("[contentregistry/tcv] record %s for %s: %v", typ, versionID, err)
 	}

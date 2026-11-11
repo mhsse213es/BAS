@@ -303,7 +303,25 @@ func hasGenerationProvenance(ctx context.Context, q rowQuerier, versionID string
 
 // Transition moves one version through the state machine, writing the
 // update and its event in one transaction.
+// RejectVersion is the only way to move content to REJECTED. The exclusion
+// code is required and must be one of the five spec codes (see exclusion.go).
+func (r *Registry) RejectVersion(ctx context.Context, versionID string, actor string, code ExclusionReason, note string) error {
+	if err := ValidateRejection(LifecycleRejected, code); err != nil {
+		return err
+	}
+	return r.transition(ctx, versionID, LifecycleRejected, actor, note, code)
+}
+
+// Transition moves content to any lifecycle except REJECTED. A REJECTED target
+// is refused here; callers must use RejectVersion so the reason is recorded.
 func (r *Registry) Transition(ctx context.Context, versionID string, to Lifecycle, actor, reason string) error {
+	if err := ValidateRejection(to, ""); err != nil {
+		return err
+	}
+	return r.transition(ctx, versionID, to, actor, reason, "")
+}
+
+func (r *Registry) transition(ctx context.Context, versionID string, to Lifecycle, actor, reason string, code ExclusionReason) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -355,9 +373,9 @@ func (r *Registry) Transition(ctx context.Context, versionID string, to Lifecycl
 	var eventID string
 	var eventAt time.Time
 	if err := tx.QueryRow(ctx,
-		`INSERT INTO content_version_events (content_version_id, from_lifecycle, to_lifecycle, from_trust, to_trust, actor, reason)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, at`,
-		versionID, lc, string(to), trust, string(newTrust), actor, reason).Scan(&eventID, &eventAt); err != nil {
+		`INSERT INTO content_version_events (content_version_id, from_lifecycle, to_lifecycle, from_trust, to_trust, actor, reason, reason_code)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,NULLIF($8,'')) RETURNING id, at`,
+		versionID, lc, string(to), trust, string(newTrust), actor, reason, string(code)).Scan(&eventID, &eventAt); err != nil {
 		return err
 	}
 	if err := r.recordCoverageIfExecutable(ctx, tx, versionID, Origin(origin), newTrust, to); err != nil {
@@ -369,6 +387,6 @@ func (r *Registry) Transition(ctx context.Context, versionID string, to Lifecycl
 	// SLA ledger: emit the lifecycle milestone post-commit and log-and-continue
 	// -- a telemetry failure must never roll back a real transition; the Task-6
 	// reconciler heals any gap by reading content_version_events directly.
-	r.recordLifecycleEvent(ctx, versionID, to, eventID, eventAt)
+	r.recordLifecycleEvent(ctx, versionID, to, eventID, eventAt, code)
 	return nil
 }
