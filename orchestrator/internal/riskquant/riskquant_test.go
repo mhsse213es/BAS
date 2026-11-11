@@ -86,3 +86,19 @@ func TestStatementStatesLimits(t *testing.T) {
 		t.Error("summary must carry the method and its limitations")
 	}
 }
+
+// Each item carries the inputs it was computed from, so a signed report can show them.
+func TestItemsCarryTheirInputs(t *testing.T) {
+	f := rng(1, 2, 4)
+	m := rng(10, 20, 30)
+	s, err := Compute("USD", []Exposure{{ID: "T1", Frequency: f, Magnitude: m}, {ID: "T2"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Items[0].Frequency == nil || *s.Items[0].Frequency != *f || *s.Items[0].Magnitude != *m {
+		t.Errorf("quantified item must carry its inputs, got %+v", s.Items[0])
+	}
+	if s.Items[1].Frequency != nil || s.Items[1].Magnitude != nil {
+		t.Errorf("unquantified item must carry no inputs, got %+v", s.Items[1])
+	}
+}

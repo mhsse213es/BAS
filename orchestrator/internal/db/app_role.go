@@ -83,6 +83,9 @@ func EnsureAppRole(ctx context.Context, pool *pgxpool.Pool, appPassword string) 
 		// narrow).
 		`REVOKE UPDATE, DELETE ON audit_logs FROM ` + appRole,
 
+		// Risk-input history is append-only (docs/superpowers/specs/2026-11-11-risk-inputs-design.md).
+		`REVOKE UPDATE, DELETE ON risk_exposure_input_history FROM ` + appRole,
+
 		// Content Registry immutability (TCF Phase 1 §4.2). A table-level
 		// REVOKE also removes column privileges, so the column GRANT must
 		// come after it -- otherwise the blanket grant above would keep

@@ -43,7 +43,10 @@ type Item struct {
 	ID         string
 	Label      string
 	Quantified bool
-	ALE        Range
+	// Frequency and Magnitude are the inputs this item was computed from; nil when not quantified.
+	Frequency *Range
+	Magnitude *Range
+	ALE       Range
 }
 
 // Summary is the result for a set of exposures.
@@ -73,13 +76,15 @@ func Compute(currency string, exposures []Exposure) (Summary, error) {
 			s.Items = append(s.Items, it)
 			continue
 		}
-		if err := checkRange(e.Frequency); err != nil {
+		if err := ValidateRange(e.Frequency); err != nil {
 			return Summary{}, fmt.Errorf("riskquant: %s frequency: %w", e.ID, err)
 		}
-		if err := checkRange(e.Magnitude); err != nil {
+		if err := ValidateRange(e.Magnitude); err != nil {
 			return Summary{}, fmt.Errorf("riskquant: %s magnitude: %w", e.ID, err)
 		}
 		it.Quantified = true
+		it.Frequency = copyRange(e.Frequency)
+		it.Magnitude = copyRange(e.Magnitude)
 		it.ALE = Range{
 			Low:    e.Frequency.Low * e.Magnitude.Low,
 			Likely: e.Frequency.Likely * e.Magnitude.Likely,
@@ -93,7 +98,13 @@ func Compute(currency string, exposures []Exposure) (Summary, error) {
 	return s, nil
 }
 
-func checkRange(r *Range) error {
+func copyRange(r *Range) *Range {
+	c := *r
+	return &c
+}
+
+// ValidateRange reports whether a range is finite, non-negative and ordered low <= likely <= high.
+func ValidateRange(r *Range) error {
 	for _, v := range []float64{r.Low, r.Likely, r.High} {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
 			return errors.New("must be finite")

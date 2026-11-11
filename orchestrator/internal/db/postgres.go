@@ -1192,6 +1192,48 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at    timestamptz NOT NULL DEFAULT NOW()
 		)`,
 
+		// risk_settings: singleton deployment setting for the estimated annual loss figure.
+		// The currency has no default and is stored explicitly. Unset means no loss figure is produced.
+		`CREATE TABLE IF NOT EXISTS risk_settings (
+			id         int         PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+			currency   text        NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
+			updated_by text        NOT NULL,
+			updated_at timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
+		// risk_exposure_input: current customer-entered inputs per ATT&CK technique. The CHECKs reject
+		// negative, non-finite (including NaN, which sorts above Infinity in Postgres) and unordered values
+		// even if the application layer is bypassed.
+		`CREATE TABLE IF NOT EXISTS risk_exposure_input (
+			technique_id text        PRIMARY KEY,
+			label        text        NOT NULL DEFAULT '',
+  freq_low double precision NOT NULL CHECK (freq_low >= 0 AND freq_low < 'Infinity'::float8),
+  freq_likely double precision NOT NULL CHECK (freq_likely >= 0 AND freq_likely < 'Infinity'::float8),
+  freq_high double precision NOT NULL CHECK (freq_high >= 0 AND freq_high < 'Infinity'::float8),
+  mag_low double precision NOT NULL CHECK (mag_low >= 0 AND mag_low < 'Infinity'::float8),
+  mag_likely double precision NOT NULL CHECK (mag_likely >= 0 AND mag_likely < 'Infinity'::float8),
+  mag_high double precision NOT NULL CHECK (mag_high >= 0 AND mag_high < 'Infinity'::float8),
+			updated_by   text        NOT NULL,
+			updated_at   timestamptz NOT NULL DEFAULT NOW(),
+			version      bigint      NOT NULL DEFAULT 1,
+			CHECK (freq_low <= freq_likely AND freq_likely <= freq_high),
+			CHECK (mag_low <= mag_likely AND mag_likely <= mag_high)
+		)`,
+
+		// risk_exposure_input_history: append-only record of every change. Each row holds the value before
+		// and after, the actor and the time, so any past value can be reconstructed. The runtime role is
+		// denied UPDATE and DELETE on this table (see app_role.go).
+		`CREATE TABLE IF NOT EXISTS risk_exposure_input_history (
+			id           bigserial   PRIMARY KEY,
+			technique_id text        NOT NULL,
+			action       text        NOT NULL CHECK (action IN ('set', 'clear')),
+			previous     jsonb,
+			current      jsonb,
+			actor        text        NOT NULL,
+			changed_at   timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_risk_input_history_tech ON risk_exposure_input_history (technique_id, changed_at)`,
+
 		// report_schedules: recurring, emailed report deliveries. Each row is one
 		// scheduled report (board/compliance/audit_pack) for one scope, delivered
 		// to a recipient list on a daily/weekly/monthly cadence. See
