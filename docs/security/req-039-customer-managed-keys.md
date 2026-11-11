@@ -1,6 +1,6 @@
 # REQ-039: Customer-managed keys at rest (Level 5)
 
-Status: P0 implemented on branch `p0-db-tls`. The full KMS work (P1/P2) is not started. Level 5 is not claimed.
+Status: P0 code delivered on `main` (`bb787ada`), with the backup-key separation (P0.3) following on top. P0 is not closed: operational validation is outstanding (see "Not verified"). The full KMS work (P1/P2) is not started. Level 5 is not claimed.
 
 Approved scope (2026-11-11): complete sensitive-data protection. This covers connector credentials, CA private key, configurations, results, evidence, database backups and upgrade backups. Host disk encryption is defence in depth only.
 
@@ -48,15 +48,32 @@ Limits:
 - Restore onto a new host needs the database key too (`export-db-key` / `import-db-key`, see P0.4).
 - Restore has not been run end to end on a host. See "Not verified".
 
-## P0.3 Backup protection: specification
+## P0.3 Backup protection
 
-Current state:
-- The backup engine encrypts each archive with AES-256-CBC, PBKDF2, using `DATA_DIR/.backup_key`.
-- That key sits in the same directory as the archives. Copying a `.tar.enc` off the host without `.backup_key` gives nothing away. Copying it together with `.backup_key` gives everything away. The archive contains `.env`, which holds the database and JWT secrets.
+Previous state (closed for new archives, see below): archives were encrypted with `DATA_DIR/.backup_key`, next to the archives. Anyone with an archive and that file could read the archive, which includes `.env` (database and JWT secrets).
 
-Finding (open): the backup key is co-located with the data it protects. This is a gap for Level 5.
+Current state (`packaging/compose/backup-key.sh`):
+- New archives are encrypted with `/etc/audspect/secrets/backup-encryption.key`, root-only (0600), outside `DATA_DIR`. It sits beside the database encryption key.
+- New archives use only that key. If it is missing, the archive is not written. There is no fallback to the co-located key.
+- Restore tries the new key first. The legacy co-located key is tried only for archives that do not open with the new key, and the restore prints a notice naming it.
+- The legacy key is never deleted by the installer. It is removed only at the end of the historical cleanup below.
+- Covered by `packaging/compose/tests/backup_key_test.sh` (13 checks): round-trip, a DATA_DIR-only copy cannot decrypt a new archive, no fallback when the new key is missing, legacy restore with notice, wrong key refused, legacy-key reporting.
 
-Target: the archive key is wrapped under the customer KMS (P1). Until then, operators must keep `.backup_key` off the backup media.
+Trade-off, accepted deliberately: a previous installer version cannot read archives made by this version, because it only knows the co-located key. Rolling back the software and then restoring an archive made after the upgrade therefore fails. To restore such an archive, use this version's installer, which keeps the new key. Do not copy the new key next to the archives to work around this.
+
+Target: the archive key is wrapped under the customer KMS (P1). The new key is still a host-local key; a root user on the host can read it.
+
+Recovery if the backup key is unavailable:
+1. Restore the key from its offline copy to `/etc/audspect/secrets/backup-encryption.key` (owner root, mode 0600), then run `install.sh --restore <archive>`.
+2. If no offline copy exists, archives made with that key cannot be decrypted. There is no fallback and no plaintext path. Make the offline copy as soon as the key is provisioned, and check that it opens an archive.
+
+Historical cleanup (not yet done). Earlier backups hold plaintext CA keys (upgrade backups as `pki/ca-key.pem`; archives inside `.tar.enc`). Do not delete them immediately:
+1. Create a new backup with this version. Verify its checksum.
+2. Verify the CA key can be recovered from it (`ca_backup_unwrap` on its `pki` directory, or the restore pre-check).
+3. Run a restore test on a clean host.
+4. List every historical backup holding plaintext CA material: `ca_backup_plaintext_report` lists upgrade backups; archives must be opened with the legacy key to check.
+5. Remove those backups with secure erasure. A filesystem delete does not erase data on SSDs or copy-on-write filesystems. Record what was removed and how.
+6. Remove the legacy key `DATA_DIR/.backup_key` last, once no archive needs it.
 
 Restore procedure (documented; not yet drilled):
 1. Stop the service. Run `install.sh --restore <archive>`. Type `RESTORE` to confirm.
@@ -80,7 +97,8 @@ Keys and who can read them on a Linux host:
 | Database TLS key | `DATA_DIR/dbtls/server.key` | 0600, owned by UID 70 | root, the postgres container |
 | Database TLS certificate | `DATA_DIR/dbtls/server.crt` | 0644 | everyone (public) |
 | CA private key (live) | `DATA_DIR/pki/ca-key.pem` | 0600, owned by UID 65532 | root, the orchestrator |
-| Backup key | `DATA_DIR/.backup_key` | 0600 root:root | root |
+| Backup key | `/etc/audspect/secrets/backup-encryption.key` | 0600 root:root | root |
+| Legacy backup key (historical) | `DATA_DIR/.backup_key` | 0600 root:root | root; removed after cleanup |
 
 Authorization: only root on the host operates keys. Changing a key is an installer operation, not a database or API operation.
 
@@ -90,7 +108,7 @@ Rotation:
 - Database TLS certificate: regenerate (see P0.1 limits).
 - Database encryption key: no rotation procedure yet. Export and import exist (`export-db-key` / `import-db-key`). Rotation needs a re-encryption run and is P1.
 - CA: rotation means a new CA and re-enrolling every agent. Not planned for P0.
-- Backup key: no rotation procedure yet (P0.3 target).
+- Backup key: no rotation procedure yet. Rotating it needs a new key and a re-encryption of retained archives, or keeping the old key for them (P1).
 
 Recovery:
 
@@ -99,7 +117,7 @@ Recovery:
 | Database encryption key | Stored credentials unreadable | Restore from the `export-db-key` recovery copy (passphrase protected) |
 | CA key, with no backup | Fleet must re-enroll | Restore from a backup whose wrapped key unwraps |
 | Database TLS material | Orchestrator cannot connect until regenerated | Move `dbtls` aside and rerun the installer, then restart |
-| Backup key | Archives unreadable | No recovery; keep an off-host copy of `.backup_key` |
+| Backup key | New archives unreadable | Restore from the offline copy (see P0.3 recovery) |
 | Host disk | Everything | Restore on a new host with the database key imported first |
 
 Every recovery path needs the database key. It is the single point the Level 5 KMS work must replace.
@@ -110,7 +128,7 @@ Each criterion must have a test or an inspection that proves it.
 
 1. No plaintext database connection: `SHOW ssl` on, and the orchestrator refuses any non-`verify-full` DSN. P0.1 test: met.
 2. No plaintext CA private key in any backup or archive created by the installer. P0.2 test: met for new backups; legacy backups listed, not yet removed.
-3. Every backup and archive is encrypted under a key that is not stored beside it. Not met: `.backup_key` is co-located (P0.3 finding).
+3. Every backup and archive is encrypted under a key that is not stored beside it. Met for new archives (P0.3, `backup-key.sh`). Not met for historical archives until the cleanup above is done; the legacy key is still beside them.
 4. KEK never exported from the KMS/HSM. Not started.
 5. DEK memory lifetime and cache limits are explicit and tested. Not started.
 6. Revocation fails closed: a revoked key makes the platform unreadable, with a clear error. Not started.

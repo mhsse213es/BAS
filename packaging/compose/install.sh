@@ -76,6 +76,8 @@ source "${SCRIPT_DIR}/db-encryption-key.sh"
 source "${SCRIPT_DIR}/db-tls.sh"
 [[ -f "${SCRIPT_DIR}/ca-backup.sh" ]] || { echo "missing ${SCRIPT_DIR}/ca-backup.sh" >&2; exit 1; }
 source "${SCRIPT_DIR}/ca-backup.sh"
+[[ -f "${SCRIPT_DIR}/backup-key.sh" ]] || { echo "missing ${SCRIPT_DIR}/backup-key.sh" >&2; exit 1; }
+source "${SCRIPT_DIR}/backup-key.sh"
 readonly SCRIPT_DIR
 
 # Bundled (offline) Docker installer, shared with setup.sh.
@@ -1327,14 +1329,10 @@ mode_install() {
     log "TLS certificates installed"
   fi
 
-  # Backup archive encryption key -- generated once, never touches the app
-  # container or the database. Losing this file makes existing backups
-  # unrecoverable; --status reminds the operator to preserve it.
-  if [[ ! -f "${DATA_DIR}/.backup_key" ]]; then
-    openssl rand -base64 48 > "${DATA_DIR}/.backup_key"
-    chmod 600 "${DATA_DIR}/.backup_key"
-    chown root:root "${DATA_DIR}/.backup_key"
-  fi
+  # Backup archive encryption key (backup-key.sh, P0.3): outside DATA_DIR, so
+  # a copy of the backup directory cannot be decrypted with it. Losing this
+  # file makes archives unrecoverable; keep an offline copy.
+  backup_key_provision || { err "backup encryption key could not be created; installation stopped"; exit 1; }
 
   step "6/10  Writing .env (root-readable only)"
   _write_env
@@ -1389,6 +1387,10 @@ mode_upgrade() {
   db_key_provision upgrade || { err "encryption key check failed; the upgrade was not started"; exit 1; }
   DB_TLS_DIR="${DATA_DIR}/dbtls"
   db_tls_ensure || { err "database TLS check failed; the upgrade was not started"; exit 1; }
+  backup_key_provision || { err "backup encryption key could not be created; the upgrade was not started"; exit 1; }
+  if backup_key_legacy_present; then
+    warn "Legacy backup key ${BACKUP_KEY_LEGACY} is still present. It opens only older archives. Keep it until the historical-backup cleanup in docs/security/req-039-customer-managed-keys.md is complete."
+  fi
 
   # Detect an upgrade FROM a pre-mTLS install: BAS_ENROLL_PORT's absence
   # from the existing .env means the current deployment predates the
@@ -2006,7 +2008,7 @@ EOF
 
 _encrypt_backup_archive() {
   local in_file="$1" out_file="$2"
-  openssl enc -aes-256-cbc -pbkdf2 -salt -in "$in_file" -out "$out_file" -pass "file:${DATA_DIR}/.backup_key"
+  backup_key_encrypt "$in_file" "$out_file"
 }
 
 # _push_remote_backup copies the finished local archive to REMOTE_BACKUP_PATH.
@@ -2185,8 +2187,8 @@ mode_restore() {
   local work_dir tar_path
   work_dir=$(mktemp -d)
   tar_path="${work_dir}/archive.tar"
-  openssl enc -d -aes-256-cbc -pbkdf2 -in "$archive" -out "$tar_path" -pass "file:${DATA_DIR}/.backup_key" \
-    || { err "Decryption failed -- wrong .backup_key or corrupt archive."; rm -rf "$work_dir"; exit 1; }
+  backup_key_decrypt "$archive" "$tar_path" \
+    || { err "Decryption failed -- no available backup key opens this archive (backup-key.sh), or the archive is corrupt."; rm -rf "$work_dir"; exit 1; }
   tar -xf "$tar_path" -C "$work_dir"
   [[ -f "${work_dir}/manifest.json" ]] || { err "Archive missing manifest.json -- refusing to restore."; rm -rf "$work_dir"; exit 1; }
   # Check the archive's CA key can be unwrapped BEFORE anything is changed (P0.2).

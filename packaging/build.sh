@@ -186,6 +186,7 @@ cp "${REPO_ROOT}/packaging/compose/install.sh"                "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/compose/db-encryption-key.sh"           "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/compose/db-tls.sh"                      "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/compose/ca-backup.sh"                   "${BUILD_DIR}/"
+cp "${REPO_ROOT}/packaging/compose/backup-key.sh"                  "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/compose/setup-install-state.sh"         "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/compose/systemd/bas-compose.service" "${BUILD_DIR}/systemd/"
 
