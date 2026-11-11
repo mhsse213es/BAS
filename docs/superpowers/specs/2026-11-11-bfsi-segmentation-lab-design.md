@@ -1,6 +1,6 @@
 # BFSI Segmentation Lab, Phase 1 Design
 
-Status: DRAFT, awaiting approval. Nothing here is built yet.
+Status: APPROVED (2026-11-11). Phase 1 built and gates G1 to G6 proven live on staging (`docs/segmentation-mastery-qa-log.md`). Phase 2 (API, database, console) built (`docs/segmentation-phase2-qa-log.md`). Phase 3 (customer networks) is blocked until a customer network is available to probe.
 
 ## Intent
 
