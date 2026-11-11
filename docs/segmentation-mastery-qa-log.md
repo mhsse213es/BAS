@@ -21,7 +21,7 @@ Scope: emulated BFSI lab on the staging host (`audspect-staging`, Docker, 12 con
 | G6 log collector stopped → UNKNOWN | TestLive_G6_LogDisabled_IsUnknown | PASS |
 | Three runs identical and all PASS, per pack | TestLive_ThreeRunsIdentical | PASS |
 
-Final live run: `live-run3.log` on staging, `exit=0`, 8/8 top-level tests PASS.
+Final live run: `live-run4.log` on staging (commit 9b02d703), `exit=0`, 8/8 top-level tests PASS. Earlier runs: `live-run3.log` (before the review minors were closed).
 
 ## Repeated-run CLI output (final binary)
 ```
@@ -43,3 +43,14 @@ Final live run: `live-run3.log` on staging, `exit=0`, 8/8 top-level tests PASS.
 - Customer-network probes (Phase 3).
 - Windows `connection refused` mapping: the runner is Linux-only; refused is verified on Linux.
 - Pack-level pass/fail rollup (Phase 2 reporting).
+
+## Closure (commit 9b02d703 and the review fix before it)
+- Review finding (Important): a deny probe whose target refused, while the firewall ACCEPTed, was UNKNOWN. Now FAIL. Test: `TestEvaluate_DeniedButFirewallAccepted_IsFail`.
+- Review minors, all closed:
+  - Verdict reasons name the deciding rule, e.g. `blocked with firewall evidence (SEG-DENY-DB-1)`. Test: `TestEvaluate_BlockReasonNamesRule`.
+  - ICMP and other non-TCP/UDP log records are skipped, not fatal. Test: `TestParseFirewallLog_SkipsNonTransportRecords`.
+  - Transient log read/parse errors are retried to the deadline; collector-down is still immediate UNKNOWN. Test: `TestRunScenario_TransientLogReadErrorIsRetried`.
+  - A run cancelled during a probe returns an error. Test: `TestRunScenario_CancelledDuringLastProbeReturnsError`.
+  - Listeners are persistent (`nc -lk -e /bin/true`), so a positive control cannot land in a restart gap. Verified 5/5 connects on staging.
+- CLI after closure: swift 9/9 PASS, cde-atm 12/12 PASS, core-banking 12/12 PASS; all stable across 3 runs.
+- The lab was shut down after the run (`docker compose down`, logs kept).
