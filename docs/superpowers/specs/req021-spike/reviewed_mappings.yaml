@@ -26,13 +26,13 @@ mappings:
     mapping_class: "FAMILY"
     evidence_source: "Canonical Ubuntu OVAL CVE feed (focal, jammy, noble); see req021-spike/results.json for file SHA-256 and generator timestamp"
     affected_component: "Ubuntu packages named in OVAL: [\"gir1.2-javascriptcoregtk-4.0\", \"libqt5webkit5\", \"libwpewebkit-1.0-3\"]"
-    fixed_versions: {"focal": {"corresponding": ["gir1.2-javascriptcoregtk-4.0"], "fixed": ["gir1.2-javascriptcoregtk-4.0 < 2.30.6-0ubuntu0.20.04.1"]}, "jammy": {"corresponding": ["libqt5webkit5", "libwpewebkit-1.0-3"], "fixed": []}, "noble": {"corresponding": ["libqt5webkit5"], "fixed": []}}
+    fixed_versions: {"focal": {"corresponding": ["gir1.2-javascriptcoregtk-4.0"], "fixed": ["gir1.2-javascriptcoregtk-4.0 < 2.30.6-0ubuntu0.20.04.1"]}}
     vendor_version_build_relationship: "Ubuntu OVAL dpkg evr less-than state (vendor fixed version per package)"
     status: "APPROVED"
     open_issue: "none recorded"
     curator: "Tausif"
     independent_reviewer: "Zain"
-    reviewer_status: "approved by Zain on 2026-11-11 (Review.txt, personal statement); Zain's cited sources; AI-assisted tracker check of versions (2026-11-11)"
+    reviewer_status: "focal only; jammy/noble UNVERIFIED per Zain review; approved by Zain on 2026-11-11 (Review.txt, personal statement); Zain's cited sources; AI-assisted tracker check of versions (2026-11-11)"
     review_date: "2026-11-10"
   - id: "UBUNTU-CVE-2021-1871"
     cve: "CVE-2021-1871"
@@ -41,13 +41,13 @@ mappings:
     mapping_class: "FAMILY"
     evidence_source: "Canonical Ubuntu OVAL CVE feed (focal, jammy, noble); see req021-spike/results.json for file SHA-256 and generator timestamp"
     affected_component: "Ubuntu packages named in OVAL: [\"gir1.2-javascriptcoregtk-4.0\", \"libqt5webkit5\", \"libwpewebkit-1.0-3\"]"
-    fixed_versions: {"focal": {"corresponding": ["gir1.2-javascriptcoregtk-4.0"], "fixed": ["gir1.2-javascriptcoregtk-4.0 < 2.32.0-0ubuntu0.20.04.1"]}, "jammy": {"corresponding": ["libqt5webkit5", "libwpewebkit-1.0-3"], "fixed": []}, "noble": {"corresponding": ["libqt5webkit5"], "fixed": []}}
+    fixed_versions: {"focal": {"corresponding": ["gir1.2-javascriptcoregtk-4.0"], "fixed": ["gir1.2-javascriptcoregtk-4.0 < 2.32.0-0ubuntu0.20.04.1"]}}
     vendor_version_build_relationship: "Ubuntu OVAL dpkg evr less-than state (vendor fixed version per package)"
     status: "APPROVED"
     open_issue: "none recorded"
     curator: "Tausif"
     independent_reviewer: "Zain"
-    reviewer_status: "approved by Zain on 2026-11-11 (Review.txt, personal statement); Zain's cited sources; AI-assisted tracker check of versions (2026-11-11)"
+    reviewer_status: "focal only; jammy/noble UNVERIFIED per Zain review; approved by Zain on 2026-11-11 (Review.txt, personal statement); Zain's cited sources; AI-assisted tracker check of versions (2026-11-11)"
     review_date: "2026-11-10"
   - id: "UBUNTU-CVE-2021-40438"
     cve: "CVE-2021-40438"
