@@ -92,7 +92,7 @@ Criteria 1 to 3 are unchanged from req-039.
 
 ## 10. Decisions (approved 2026-11-11)
 
-1. **First production provider: Vault Transit.** Built against Vault's HTTP API (`internal/kms/vault`), with seven tests on a fake Vault server. It refuses exportable transit keys and treats a deleted key as revoked. **Not verified against a real Vault.** That needs the Vault image, which is a download I have not been approved to pull. PKCS#11 and cloud KMS follow.
+1. **First production provider: Vault Transit.** Built against Vault's HTTP API (`internal/kms/vault`), with seven tests on a fake Vault server. It refuses exportable transit keys and treats a deleted key as revoked. **Verified against a real Vault** (Vault v2.2.1 (0e7c41b936218bd2401ab0f891c93bec10e2e8e4), built 2026-10-22T16:27:49Z, dev server, `hashicorp/vault:latest`): wrap and unwrap through Vault, refusal of an exportable key, and revocation after a real key deletion through the envelope layer. The integration tests skip unless `VAULT_TEST_ADDR` and `VAULT_TEST_TOKEN` are set. Dev mode is not a production Vault. PKCS#11 and cloud KMS follow.
 2. **Level 5 requires a provider.** A host without a KMS or HSM is below Level 5 and is reported that way. No file-backed KEK is offered as a Level 5 option. **Policy recorded; enforcement not yet wired into the installer or the Level reporting.**
 3. **Backup recovery when the provider is lost: escrow of the wrapped data key,** protected by its own passphrase, stored off the host like the current P0.3 recovery copy. **Design decided; not implemented.**
 4. **Provider credentials on the host: a root-only token file, rotatable without touching data.** `vault.LoadToken` reads it. **Installer permission checks and rotation not yet implemented.**
@@ -103,6 +103,6 @@ Criteria 1 to 3 are unchanged from req-039.
 - `internal/kms`: provider interface and status values.
 - `internal/kms/memprovider`: test-only provider.
 - `internal/envelope`: sealing and opening with revocation-checked caching. Twelve tests pass.
-- `internal/kms/vault`: Vault Transit provider. Seven tests pass against a fake server; not yet run against Vault.
+- `internal/kms/vault`: Vault Transit provider. Seven unit tests (fake server) and three integration tests pass against a real Vault dev server.
 
 Nothing is wired into the application yet. Connector credentials, the CA key, configurations, results, evidence and backups all still use their current schemes.
