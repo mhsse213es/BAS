@@ -1,0 +1,469 @@
+id: carbanak-kill-chain
+product_line: killchain
+name: Carbanak / Anunak Kill Chain -- BFSI Operator Fraud & Fund Theft
+description: >
+  Eight-stage emulation of the Carbanak (Anunak / Carbon Spider) group's
+  endpoint tradecraft against banks, from malicious-document initial access
+  through to the group's objective: using legitimate banking-operator
+  credentials to initiate fraudulent transfers. Grounded in MITRE ATT&CK group
+  G0008 and software S0030 (Carbanak), Kaspersky's "Carbanak APT: The Great
+  Bank Robbery" (2015), Group-IB/Fox-IT "Anunak: APT against financial
+  institutions" (2014), and Europol's 2018 EUR 1 billion arrest announcement.
+
+  Carbanak compromised 100+ banks and reportedly stole up to USD 1 billion by
+  installing itself as a service on operator workstations, dumping credentials,
+  and silently capturing operator screens to learn internal money-transfer
+  procedures -- then issuing fraudulent SWIFT/card-processing transactions and
+  ATM "cash-out" commands that mimicked legitimate operator behaviour, using
+  the operators' own valid credentials. In Indian BFSI context the targets are
+  CBS operator desktops, card-management consoles, and SWIFT operator hosts.
+
+  KILL CHAIN STAGES:
+     1. Initial Access       -- malspam-document child-process chain (winword.exe -> powershell.exe) (T1566.001)
+     2. Persistence           -- Windows service install (Carbanak runs as a service), lab-only (T1543.003)
+     3. Defense Evasion       -- netsh firewall rule add/remove (T1686)
+     4. Credential Access     -- LSASS read-handle probe, Mimikatz-style (T1003.001)
+     5. Discovery             -- process enumeration for CBS/payment applications (T1057)
+     6. Collection            -- operator screen capture, in-memory only, NO file written (T1113)
+     7. Command and Control   -- HTTPS C2 beacon to a non-routable address (T1071.001)
+     8. Impact (lab-only)     -- fraudulent-transfer simulation via valid operator credentials (T1078)
+
+  ATTRIBUTION / CONFIDENCE: "confirmed" means at least two genuinely distinct
+  sources were cited; "reported" covers a single authoritative source (MITRE
+  ATT&CK's curated pages or a government/vendor report); "inferred" means the
+  behavior is consistent with Carbanak's documented toolset but the cited
+  source does not tie this specific behavior to the group.
+
+  DOCUMENTED, NOT MODELED: Carbanak's signature C2 included a VBScript ("ggldr")
+  that tunnels C2 through Google Apps Script/Sheets/Forms (T1102.002, Forcepoint
+  2017). This chain does NOT model that path -- simulating it safely would
+  require contacting Google's live services. Stage 7 models a generic HTTPS
+  beacon to a non-routable address instead, and ggldr is recorded here as a
+  known, unmodeled detail.
+
+  ORDERING CAVEAT: this sequence is a representative, documented kill chain for
+  authoring purposes, not a claim that every Carbanak incident followed this
+  exact order.
+
+  SAFETY: Stages 1, 3, 4, 5, 6 and 7 are production-safe and self-cleaning.
+  Stage 2 (service install) is lab-only. Stage 6 captures an operator screen
+  into an in-memory bitmap, reads its dimensions, and disposes it -- NO
+  screenshot is written to disk or transmitted. Stage 8 is lab-only: it writes
+  a single decoy "fraudulent transfer" record to an isolated temp dir to
+  represent the objective, then deletes it -- no real transaction, no network,
+  no credentials used. Windows only. [BAS-SIM-CARBANAK] tagged throughout.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - carbanak
+  - anunak
+  - carbon-spider
+  - bfsi
+  - financial
+  - cbs
+  - swift
+  - operator-fraud
+  - kill-chain
+  - phase7
+  - t1566
+  - t1543
+  - t1686
+  - t1003
+  - t1057
+  - t1113
+  - t1071
+  - t1078
+  - mitre
+mitre_phases:
+  - initial-access
+  - persistence
+  - defense-evasion
+  - credential-access
+  - discovery
+  - collection
+  - command-and-control
+  - impact
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 -- Initial Access: Malspam Document Child-Process Chain (T1566.001)
+  # ---------------------------------------------------------------------------
+  - name: "Carbanak Stage 1 -- Malspam Document Child-Process Chain (winword.exe -> powershell.exe) (T1566.001)"
+    technique_id: T1566.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Copies cmd.exe to a temp winword.exe, spawns powershell.exe from it with a benign Write-Output, waits, deletes the copy. Reproduces the Word-attachment -> shell parent/child chain Carbanak spearphishing creates. No real macro, document, or email."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1 (process create): Image=powershell.exe, ParentImage=%TEMP%\\winword.exe"
+      - "Security EID 4688 (process create with command line) if process auditing enabled"
+    detection:
+      - "EDR: Office process (winword.exe) spawning a shell -- primary spearphishing-attachment initial-access signal"
+      - "SIEM: parent-child rule winword.exe/excel.exe -> powershell.exe / cmd.exe"
+    threat_intel_sources:
+      - reference: "Kaspersky Lab GReAT -- CARBANAK APT: The Great Bank Robbery (2015): spearphishing emails with malicious Word (.doc) attachments as initial access"
+        url: "https://media.kasperskycontenthub.com/wp-content/uploads/sites/43/2018/03/08064518/Carbanak_APT_eng.pdf"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tmp = Join-Path $env:TEMP 'winword.exe'
+      Copy-Item "$env:SystemRoot\System32\cmd.exe" $tmp -Force
+      $psi = New-Object System.Diagnostics.ProcessStartInfo
+      $psi.FileName = $tmp
+      $psi.Arguments = '/c powershell.exe -NoProfile -NonInteractive -Command "Write-Output BAS-SIM-CARBANAK-S1"'
+      $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+      $psi.CreateNoWindow = $true
+      $p = [System.Diagnostics.Process]::Start($psi)
+      if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+      if ($ec -ge 0) {
+        Write-Output "FAIL: winword.exe->powershell.exe child-process chain fired (exit $ec) -- expect Sysmon EID 1 with ParentImage=winword.exe. AppLocker/WDAC/EDR should block Office processes spawning shells. [BAS-SIM-CARBANAK-S1]"
+      } else {
+        Write-Output "PASS: the child process could not be started -- AppLocker/WDAC/EDR blocked the document->shell spawn. [BAS-SIM-CARBANAK-S1]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'winword.exe') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 -- Persistence: Windows Service Install (T1543.003, lab-only)
+  # ---------------------------------------------------------------------------
+  - name: "Carbanak Stage 2 -- Windows Service Persistence (sc.exe create/start/stop/delete) (T1543.003)"
+    technique_id: T1543.003
+    action_key: service_create_start_stop_delete
+    detection_profiles:
+      - windows_malicious_service
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 45
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Creates a benign service (cmd.exe /c echo) via sc.exe, starts, stops, and deletes it, logging the binary path + parent process. Carbanak malware installs itself as a Windows service to gain persistence and SYSTEM privileges. The service never runs a payload and is removed in both the command and cleanup."
+    reversible: true
+    telemetry:
+      - "Security EID 4697 (service installed) + EID 7045 (new service installed in system)"
+      - "Security EID 4688 (sc.exe create + start + stop + delete)"
+    detection:
+      - "SIEM: new service installed with a binary path in a non-standard directory -- persistence signal"
+      - "EDR: service binary path pointing to cmd.exe or a user-writable path"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Carbanak (Group G0008): Create or Modify System Process: Windows Service (T1543.003) -- 'Carbanak malware installs itself as a service'"
+        url: "https://attack.mitre.org/groups/G0008/"
+      - reference: "Kaspersky Lab GReAT -- CARBANAK APT: The Great Bank Robbery (2015)"
+        url: "https://media.kasperskycontenthub.com/wp-content/uploads/sites/43/2018/03/08064518/Carbanak_APT_eng.pdf"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $svcName = 'BAS-SIM-CarbanakSvc'
+      $svcBin  = "$env:SystemRoot\System32\cmd.exe /c echo BAS-SIM-CARBANAK-S2"
+      $parentImg = (Get-Process -Id $PID -EA SilentlyContinue).MainModule.FileName
+      sc.exe create $svcName binPath= "`"$svcBin`"" start= demand 2>&1 | Out-Null
+      $created = (Get-Service -Name $svcName -EA SilentlyContinue) -ne $null
+      if ($created) {
+        sc.exe start $svcName 2>&1 | Out-Null
+        Start-Sleep -Milliseconds 500
+        sc.exe stop  $svcName 2>&1 | Out-Null
+        sc.exe delete $svcName 2>&1 | Out-Null
+        $gone = (Get-Service -Name $svcName -EA SilentlyContinue) -eq $null
+        Write-Output "FAIL: service '$svcName' created+started+deleted (removed=$gone). BinaryPath='$svcBin'. Parent=$parentImg. Expect EID 4697+7045. Carbanak installs itself as a service for SYSTEM-level persistence. [BAS-SIM-CARBANAK-S2]"
+      } else {
+        Write-Output "PASS: sc.exe service creation was blocked -- AppLocker / restricted token / policy prevented malicious service deployment. [BAS-SIM-CARBANAK-S2]"
+      }
+    cleanup: |
+      sc.exe stop   BAS-SIM-CarbanakSvc 2>&1 | Out-Null
+      sc.exe delete BAS-SIM-CarbanakSvc 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 -- Defense Evasion: Host Firewall Rule Manipulation (T1686)
+  # ---------------------------------------------------------------------------
+  - name: "Carbanak Stage 3 -- Host Firewall Rule Manipulation via netsh (T1686)"
+    technique_id: T1686
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Adds a tagged, benign OUTBOUND BLOCK rule (to the non-routable 192.0.2.0/24 range) via netsh advfirewall, confirms it, then deletes it in both the command and cleanup. A block rule to a non-routable range weakens nothing; it only generates the netsh firewall-modification telemetry that Carbanak's own netsh use produces."
+    reversible: true
+    telemetry:
+      - "Security EID 4688: netsh.exe advfirewall firewall add rule"
+      - "Windows Firewall EID 2004 (rule added) / 2006 (rule deleted) if firewall policy auditing enabled"
+    detection:
+      - "EDR: netsh.exe advfirewall firewall add/set rule from a script host -- firewall-tampering signal"
+      - "SIEM: EID 2004 firewall rule added outside of a change window -- defense-evasion IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Carbanak (Group G0008): Disable or Modify System Firewall (T1686) -- 'Carbanak may use netsh to add local firewall rule exceptions'"
+        url: "https://attack.mitre.org/groups/G0008/"
+      - reference: "Group-IB and Fox-IT -- Anunak: APT against financial institutions (2014)"
+        url: "http://www.group-ib.com/files/Anunak_APT_against_financial_institutions.pdf"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $ruleName = 'BAS-SIM-CARBANAK-S3'
+      & netsh advfirewall firewall add rule name="$ruleName" dir=out action=block remoteip=192.0.2.0/24 2>&1 | Out-Null
+      $show = & netsh advfirewall firewall show rule name="$ruleName" 2>&1 | Out-String
+      $added = $show -match [regex]::Escape($ruleName)
+      & netsh advfirewall firewall delete rule name="$ruleName" 2>&1 | Out-Null
+      $verify = & netsh advfirewall firewall show rule name="$ruleName" 2>&1 | Out-String
+      $removed = -not ($verify -match [regex]::Escape($ruleName))
+      if ($added) {
+        Write-Output "FAIL: a firewall rule was added via netsh unblocked (removed=$removed). Expect EID 4688 netsh.exe + firewall EID 2004. Carbanak uses netsh to alter the host firewall; alert on netsh advfirewall changes from non-management processes. [BAS-SIM-CARBANAK-S3]"
+      } else {
+        Write-Output "PASS: the netsh firewall modification was blocked or failed -- host firewall tampering is constrained for the current token. [BAS-SIM-CARBANAK-S3]"
+      }
+    cleanup: |
+      & netsh advfirewall firewall delete rule name="BAS-SIM-CARBANAK-S3" 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 -- Credential Access: LSASS Read-Handle Probe (T1003.001)
+  # ---------------------------------------------------------------------------
+  - name: "Carbanak Stage 4 -- LSASS Handle Access (PROCESS_VM_READ), Mimikatz-style (T1003.001)"
+    technique_id: T1003.001
+    action_key: handle_probe
+    detection_profiles:
+      - windows_credential_access
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "Opens a read handle to lsass.exe with PROCESS_VM_READ, then immediately closes it. No memory is read or dumped. Carbanak obtains credentials with tools such as Mimikatz; this fires the LSASS handle-access telemetry (the credential-theft detection signal) without touching memory."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 10: SourceImage=powershell.exe TargetImage=lsass.exe GrantedAccess=0x1010"
+    detection:
+      - "EDR: handle to LSASS with VM_READ -- Sigma sysmon_lsass_memdump.yml family"
+      - "SIEM: cross-process handle to lsass.exe from a script host -- credential-dumping IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Carbanak (Group G0008): Obtain Capabilities: Tool (T1588.002) -- 'obtained and used open-source tools such as PsExec and Mimikatz'"
+        url: "https://attack.mitre.org/groups/G0008/"
+      - reference: "MITRE ATT&CK -- Carbanak (Software S0030): OS Credential Dumping (T1003)"
+        url: "https://attack.mitre.org/software/S0030/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sig = @'
+      using System;
+      using System.Runtime.InteropServices;
+      public static class BasCarb {
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr OpenProcess(uint a, bool i, int pid);
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern bool CloseHandle(IntPtr h);
+      }
+      '@
+      try { Add-Type -TypeDefinition $sig -ErrorAction Stop } catch { Write-Output "SKIP: could not compile the P/Invoke probe. [BAS-SIM-CARBANAK-S4]"; return }
+      $lsass = Get-Process lsass -EA SilentlyContinue | Select-Object -First 1
+      if (-not $lsass) { Write-Output "SKIP: lsass.exe not found. [BAS-SIM-CARBANAK-S4]"; return }
+      $h = [BasCarb]::OpenProcess(0x1010, $false, $lsass.Id)
+      if ($h -ne [IntPtr]::Zero) {
+        [void][BasCarb]::CloseHandle($h)
+        Write-Output "FAIL: opened a PROCESS_VM_READ handle to LSASS unblocked -- credential memory is reachable. Expect Sysmon EID 10 GrantedAccess=0x1010. Enable RunAsPPL / Credential Guard. [BAS-SIM-CARBANAK-S4]"
+      } else {
+        $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        Write-Output "PASS: access to LSASS was DENIED (Win32 error $err) -- RunAsPPL / Credential Guard / EDR protected LSASS memory. [BAS-SIM-CARBANAK-S4]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 -- Discovery: Process Enumeration for Payment Applications (T1057)
+  # ---------------------------------------------------------------------------
+  - name: "Carbanak Stage 5 -- Process Enumeration for CBS/Payment Applications (T1057)"
+    technique_id: T1057
+    action_key: enumerate
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Enumerates running processes (read-only) and matches them against names associated with core-banking, card-management, ATM and payment middleware. Carbanak performs process discovery to find the financial applications whose operators it will surveil and defraud."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: tasklist.exe / Get-Process via powershell.exe"
+      - "PowerShell EID 4104: Get-Process with targeted name matching"
+    detection:
+      - "EDR: process enumeration followed by targeted string matching -- Carbanak pre-surveillance recon"
+      - "SIEM: Get-Process / tasklist from a script host correlated with later screen-capture activity"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Carbanak (Software S0030): Process Discovery (T1057)"
+        url: "https://attack.mitre.org/software/S0030/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $finTargets = @('finacle','flexcube','temenos','t24','bancs','infosys','neft','rtgs','swift','pos','atm','upi','payment','banking','cbs','wincor','diebold','ncr')
+      $procs = Get-Process -EA SilentlyContinue | Select-Object Name, Id, MainWindowTitle
+      $matched = $procs | Where-Object { $n=$_.Name.ToLower(); $t=$_.MainWindowTitle.ToLower(); $finTargets | Where-Object { $n -match $_ -or $t -match $_ } }
+      $procCount = @($procs).Count; $matchCount = @($matched).Count
+      Write-Output "EXEC T1057: $procCount processes enumerated; financial-application matches=$matchCount. Carbanak uses this to choose which operator desktop to surveil. [BAS-SIM-CARBANAK-S5]"
+      if ($matchCount -gt 0) {
+        $names = ($matched | Select-Object -ExpandProperty Name -Unique) -join ', '
+        Write-Output "FAIL: financial/banking application process(es) found: [$names]. Carbanak would target these operators for screen/keystroke surveillance. Isolate CBS/card-ops workstations with application allowlisting. [BAS-SIM-CARBANAK-S5]"
+      } else {
+        Write-Output "PASS: no known financial-application processes found on this endpoint -- no direct payment-system exposure to Carbanak recon. [BAS-SIM-CARBANAK-S5]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 6 -- Collection: Operator Screen Capture (T1113)
+  # ---------------------------------------------------------------------------
+  - name: "Carbanak Stage 6 -- Operator Screen Capture (in-memory only) (T1113)"
+    technique_id: T1113
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Loads System.Drawing / System.Windows.Forms, performs ONE Graphics.CopyFromScreen into an in-memory Bitmap, reads its dimensions, and disposes it. NO screenshot is written to disk, kept, or transmitted. This fires the exact screen-capture API chain Carbanak uses to record operators, without retaining any pixels."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 7: System.Drawing.dll / System.Windows.Forms.dll loaded by powershell.exe"
+      - "PowerShell EID 4104: Add-Type System.Drawing + Graphics.CopyFromScreen"
+    detection:
+      - "EDR: PowerShell invoking CopyFromScreen / Screen.AllScreens -- Sigma posh_ps_screen_capture.yml"
+      - "SIEM: Graphics.CopyFromScreen in EID 4104 ScriptBlock on an operator workstation -- Carbanak surveillance IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Carbanak (Software S0030): Screen Capture (T1113)"
+        url: "https://attack.mitre.org/software/S0030/"
+      - reference: "Kaspersky Lab GReAT -- CARBANAK APT: The Great Bank Robbery (2015): recorded operator desktops to learn money-transfer procedures"
+        url: "https://media.kasperskycontenthub.com/wp-content/uploads/sites/43/2018/03/08064518/Carbanak_APT_eng.pdf"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        Add-Type -AssemblyName 'System.Windows.Forms' -ErrorAction Stop
+        Add-Type -AssemblyName 'System.Drawing' -ErrorAction Stop
+        $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+        $bmp = New-Object System.Drawing.Bitmap($b.Width, $b.Height)
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+        $dims = "$($bmp.Width)x$($bmp.Height)"
+        $g.Dispose(); $bmp.Dispose()
+        Write-Output "FAIL: a screen capture (CopyFromScreen) executed unblocked, capturing a $dims frame into memory (NOT written to disk, NOT kept). Expect Sysmon EID 7 + EID 4104. Carbanak captures operator screens to replay their workflow; a ScriptBlock rule on 'CopyFromScreen' should alert. [BAS-SIM-CARBANAK-S6]"
+      } catch {
+        Write-Output "PASS: screen-capture assemblies/API were blocked or unavailable -- $($_.Exception.Message). The operator-surveillance surface is constrained. [BAS-SIM-CARBANAK-S6]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 7 -- Command and Control: HTTPS Beacon (T1071.001)
+  # ---------------------------------------------------------------------------
+  - name: "Carbanak Stage 7 -- Outbound HTTPS C2 Beacon (T1071.001)"
+    technique_id: T1071.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues one Invoke-WebRequest to https://192.0.2.1 (RFC 5737 TEST-NET-1, non-routable) to generate Sysmon EID 3 + WinHTTP telemetry matching the Carbanak HTTPS beacon. No real C2 channel, no data sent beyond the URL path."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: TCP 443 to 192.0.2.1 (Invoke-WebRequest)"
+      - "PowerShell EID 4104: Invoke-WebRequest HTTPS call"
+    detection:
+      - "EDR: Invoke-WebRequest / Net.WebClient in PowerShell -- Sigma posh_ps_web_request.yml"
+      - "SIEM: Sysmon EID 3 TCP 443 from powershell.exe to a non-CDN IP -- Carbanak C2 IOC"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Carbanak (Software S0030): Application Layer Protocol: Web Protocols (T1071.001)"
+        url: "https://attack.mitre.org/software/S0030/"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $beaconUrl = 'https://192.0.2.1/bas-sim-carbanak'
+      $blocked = $false; $timedOut = $false; $result = $null
+      try {
+        $result = Invoke-WebRequest -Uri $beaconUrl -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+      } catch [System.Net.WebException] {
+        $m = $_.Exception.Message
+        if ($m -match 'timed out|timeout|TimedOut') { $timedOut = $true }
+        elseif ($m -match 'blocked|denied|forbidden|refused|proxy') { $blocked = $true }
+        else { $timedOut = $true }
+      } catch { $blocked = $true }
+      Write-Output "EXEC T1071.001: HTTPS beacon probe to $beaconUrl (RFC5737 non-routable). status=$($result.StatusCode), timed_out=$timedOut, blocked=$blocked. Sysmon EID 3 generated. [BAS-SIM-CARBANAK-S7]"
+      if ($blocked) {
+        Write-Output "PASS: outbound HTTPS to the RFC5737 address was blocked by proxy/firewall -- the Carbanak beacon would be intercepted. [BAS-SIM-CARBANAK-S7]"
+      } else {
+        Write-Output "FAIL: HTTPS beacon to 192.0.2.1 was NOT blocked by the egress firewall/proxy. Enforce an egress allow-list for BFSI workstations and alert on Sysmon EID 3 from powershell.exe to unlisted IPs. [BAS-SIM-CARBANAK-S7]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 8 -- Impact: Fraudulent-Transfer Simulation (T1078, lab-only)
+  # ---------------------------------------------------------------------------
+  - name: "Carbanak Stage 8 -- Fraudulent Transfer via Valid Operator Credentials (lab) (T1078)"
+    technique_id: T1078
+    detection_profiles:
+      - windows_file_discovery
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Writes a SINGLE decoy SWIFT MT103-style transfer record (clearly tagged BAS-SIM, fictional accounts, no real IBAN/BIC) to an isolated %TEMP%\\bas_carbanak_fraud_<id> dir to represent Carbanak's objective -- issuing a fraudulent transfer using a banking operator's valid credentials -- then reads it back and deletes the whole dir. No real transaction, no network, no credentials used."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: decoy transfer file created under %TEMP%\\bas_carbanak_fraud_<id>"
+      - "PowerShell EID 4104: Set-Content writing a transaction-shaped record"
+    detection:
+      - "Application/CBS audit: a SWIFT/transfer message created outside the authorized maker-checker workflow -- fraudulent-transaction signal"
+      - "SIEM: correlate operator screen-capture + credential access + an unexpected transfer record -- Carbanak fraud chain"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- Carbanak (Group G0008): Valid Accounts (T1078) -- 'used legitimate credentials of banking employees to perform operations that sent them millions of dollars'"
+        url: "https://attack.mitre.org/groups/G0008/"
+      - reference: "Europol -- Mastermind Behind EUR 1 Billion Cyber Bank Robbery Arrested in Spain (2018)"
+        url: "https://www.europol.europa.eu/newsroom/news/mastermind-behind-eur-1-billion-cyber-bank-robbery-arrested-in-spain"
+    last_reviewed: "2026-11-10"
+    family_attribution_confidence: confirmed
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF)
+      $dir = Join-Path $env:TEMP "bas_carbanak_fraud_$runId"
+      New-Item -ItemType Directory -Path $dir -Force | Out-Null
+      $rec = @(
+        "BAS-SIM-CARBANAK FRAUDULENT TRANSFER (CONTROLLED DRILL -- NOT A REAL TRANSACTION)",
+        ":20:BAS-SIM-$runId",
+        ":32A:260101BASX000000100000,00",
+        ":50K:/BAS-SIM-ORIGINATOR (fictional operator account)",
+        ":59:/BAS-SIM-MULE (fictional beneficiary)",
+        ":70:Carbanak objective -- transfer initiated with an operator's valid credentials"
+      ) -join "`n"
+      $file = Join-Path $dir 'bas-sim-mt103.txt'
+      Set-Content -Path $file -Value $rec -Encoding UTF8
+      $wrote = Test-Path $file
+      Remove-Item $dir -Recurse -Force -EA SilentlyContinue
+      $cleaned = -not (Test-Path $dir)
+      Write-Output "FAIL: a fraudulent-transfer record (SWIFT MT103-shaped, fictional) was staged to $dir to represent Carbanak's objective (wrote=$wrote). CBS/SWIFT controls must enforce maker-checker and flag any transfer created outside that workflow. Decoy removed=$cleaned, no real transaction occurred. [BAS-SIM-CARBANAK-S8]"
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP "bas_carbanak_fraud_*") -Recurse -Force -EA SilentlyContinue
