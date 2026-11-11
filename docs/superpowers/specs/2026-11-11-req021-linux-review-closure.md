@@ -28,3 +28,10 @@
 ## Not a claim
 
 Closing this review does not validate Windows coverage and does not authorize production use.
+
+## Update 2026-11-11 (follow-up checks)
+
+- **FreeType binary:** Launchpad confirms `libfreetype6` is the binary package for focal. The page lists the current focal versions (2.10.1-2ubuntu0.4), not the first fix (0.1). The 0.1 threshold rests on Zain's USN-4593-1 citation, which still returns 503. Jammy and noble binary versions are not checked.
+- **USN citations:** all retried notices (USN-4593-1, 4854-1, 5932-1, 7300-1, 7400-1) still return 503. Still unverified.
+- **Commit `43025b8e` message:** states 19 Ubuntu rows less R8, R9, and O2. Correct count is 18 Ubuntu rows. Not amended, since the commit is pushed. The approved total of 21 is correct.
+- **REQ-018:** draft PR opened for branch `content-velocity-measurement`: https://github.com/mhsse213es/BAS/pull/20
