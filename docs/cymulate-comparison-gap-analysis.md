@@ -27,13 +27,13 @@ means a missing kind of test, not a missing number of rows.
 
 | | Cymulate export | Audspect now |
 |---|---|---|
-| Size | 11,103 requests, 8 attack types, 48 sub-categories | 62 vectors in 17 families (`internal/wafcatalog`) |
+| Size | 11,103 requests, 8 attack types, 48 sub-categories | 65 vectors in 17 families (`internal/wafcatalog`; the package test asserts 65) |
 | Attack types | XSS 7,806; path traversal 1,604; file inclusion 618; command injection 574; SQL injection 294; SSRF 119; NoSQL 53; XML 35 | All eight present, plus LDAP and XPath injection, file upload, HTTP parser discrepancy, API and auth abuse, rate limit, cache, policy misconfiguration |
 | Methods | POST 8,941; GET 2,162 | not tracked per vector |
 | Platform tag | OS agnostic, Linux, Windows | not tracked per vector |
 
 **Still missing**
-1. **Payload depth inside each family.** The families exist, but Cymulate varies the payload a lot: Unix and Windows path
+1. **Payload depth inside each family.** The families exist, but Cymulate varies the payload a lot. Priority: command injection is where the export's failures concentrate (517 of 574 requests got through, 90%), so it has the highest value of any WAF depth gap: Unix and Windows path
    traversal with encoded payloads (about 990 requests), Unix and Windows command injection, SQL injection by type (error-based,
    blind, passive, Oracle, MSSQL, WAF-bypass), and XSS in polyglot, event-handler, URI and hex-encoded forms. Audspect has 6 XSS
    vectors, 3 SQL injection and 2 path traversal.
@@ -50,9 +50,9 @@ and three XSS variants (commit `8b70131a`); the CVE catalog, verdict contract an
 
 | | Cymulate export | Audspect now |
 |---|---|---|
-| Size | 14,683 messages, 9 attack types, 2,925 distinct attachment paths | 20 scenarios, EG-001 to EG-020 (console catalog) |
+| Size | 14,683 messages, 9 attack types, 2,925 distinct attachment paths | 29 scenarios, EG-001 to EG-029 (console catalog) |
 | Attack types | malware 5,380; dummy 3,108; ransomware 1,719; payload 1,717; worm 1,690; true-type 675; links 167; policy 136; exploit 91 | spoofing, impersonation, credential phishing, malicious attachment, payment diversion, outbound DLP, auto-forwarding, post-delivery response, auth exceptions, detection-to-response, QR lure, PDF and Office links, internal spoof, reply-chain hijack, relay bypass, plus four attachment cases (EG-017 to EG-020) |
-| Attachment shapes | first file type across 40+ kinds (documents with macros, scripts, executables, databases, slides); chains up to 5 levels deep, such as a document inside a zip inside a zip | four: a script, a double extension, a mismatched file type and a blocked extension, one container level |
+| Attachment shapes | first file type across 40+ kinds (documents with macros, scripts, executables, databases, slides); chains up to 5 levels deep, such as a document inside a zip inside a zip | EG-017 to EG-029: script and executable extensions, a mismatched file type, a blocked extension, ZIP, nested ZIP (three levels), tar.gz, attached message, 7z, CAB, password-protected ZIP, and macro-type Office files (no macro inside). Deepest nesting is three levels; Cymulate goes to about five. RAR and ARJ are not covered. |
 
 **Still missing**
 1. **Nested and archive containers.** Zip, Rar, Tar, Cab, Arj, mail-message and calendar attachments, and files nested several levels
@@ -110,7 +110,7 @@ under that rule; adding real malware samples is not.
 | Removable device | yes (USB in the multichannel scenario) |
 | ICMP tunneling | **no** (deferred earlier) |
 | Open ports | **no** |
-| Browser HTTP and HTTPS (a browser uploading) | **no** |
+| Browser HTTP and HTTPS (a browser uploading) | yes: `dlp-exfiltration-browser-upload` (built 2026-10-28) |
 | Gmail with append | **no** |
 
 Audspect also has channels the export lacks: AI prompts, database export, clipboard, print and archive staging.
