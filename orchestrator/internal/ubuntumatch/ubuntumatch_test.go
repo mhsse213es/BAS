@@ -115,20 +115,47 @@ func TestMatchDisagreeingFixesAreUnknown(t *testing.T) {
 	}
 }
 
-// The real register must produce no results while no row has an independent
-// reviewer. This test is the gate: it fails if a row becomes eligible without review data.
-func TestRealRegisterProducesNoResultsYet(t *testing.T) {
+// The real register's eligible set is pinned to the rows Zain approved on
+// 2026-11-11 (Review.txt). Any change to that set must be a deliberate review
+// decision, so this test fails if a row becomes eligible or loses eligibility unexpectedly.
+func TestRealRegisterEligibleSetMatchesReview(t *testing.T) {
 	reg, err := LoadRegister("../../../docs/superpowers/specs/req021-spike/reviewed_mappings.yaml")
 	if err != nil {
 		t.Fatalf("load real register: %v", err)
 	}
+	want := map[string]bool{
+		"UBUNTU-CVE-2020-12641": true, "UBUNTU-CVE-2020-15999": true, "UBUNTU-CVE-2021-1870": true,
+		"UBUNTU-CVE-2021-1871": true, "UBUNTU-CVE-2021-40438": true, "UBUNTU-CVE-2021-44026": true,
+		"UBUNTU-CVE-2021-44228": true, "UBUNTU-CVE-2021-45046": true, "UBUNTU-CVE-2022-26486": true,
+		"UBUNTU-CVE-2022-46169": true, "UBUNTU-CVE-2023-46604": true, "UBUNTU-CVE-2024-38475": true,
+		"UBUNTU-CVE-2024-42009": true, "UBUNTU-CVE-2024-9680": true, "UBUNTU-CVE-2025-24201": true,
+		"UBUNTU-CVE-2025-24813": true, "UBUNTU-CVE-2026-109618": true, "UBUNTU-CVE-2026-111497": true,
+		"WINDOWS-CVE-2017-8543-4025339-Windows_Server_2016": true,
+		"WINDOWS-CVE-2020-1350-4558998-Windows_Server_2019": true,
+		"WINDOWS-CVE-2020-1350-4565511-Windows_Server_2016": true,
+	}
+	got := map[string]bool{}
 	for _, m := range reg.Mappings {
 		if m.Eligible() {
-			t.Fatalf("mapping %s is eligible, but no independent review is on record", m.ID)
+			got[m.ID] = true
 		}
 	}
-	host := Host{Release: "jammy", Packages: map[string]string{"firefox": "1.0", "roundcube": "1.0"}}
-	if got := Match(reg, host); len(got) != 0 {
-		t.Fatalf("real register produced %d results before independent review: %+v", len(got), got)
+	for id := range want {
+		if !got[id] {
+			t.Errorf("expected eligible after review, but not eligible: %s", id)
+		}
+	}
+	for id := range got {
+		if !want[id] {
+			t.Errorf("eligible but not in the review decisions: %s", id)
+		}
+	}
+	// CONDITIONAL, REJECTED, and NOT_COUNTED rows must never be eligible.
+	for _, id := range []string{"UBUNTU-CVE-2022-0543", "UBUNTU-CVE-2022-22965", "OPEN-CVE-2025-39682"} {
+		for _, m := range reg.Mappings {
+			if m.ID == id && m.Eligible() {
+				t.Errorf("%s is CONDITIONAL, REJECTED, or NOT_COUNTED and must not be eligible", id)
+			}
+		}
 	}
 }
