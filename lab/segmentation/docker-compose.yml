@@ -1,0 +1,145 @@
+# BFSI segmentation lab (Phase 1). Six zones as isolated Docker networks; the
+# only path between zones is seg-fw, which runs default-deny firewall rules
+# (see fw/rules) and logs every decision. No host ports are published.
+#
+# Each zone container sets its default route to the zone's seg-fw address at
+# startup, so any traffic leaving its own subnet must pass the firewall.
+name: seg-lab
+
+networks:
+  seg-corp:
+    driver: bridge
+    internal: true
+    ipam:
+      config: [{ subnet: 172.31.10.0/24 }]
+  seg-swift:
+    driver: bridge
+    internal: true
+    ipam:
+      config: [{ subnet: 172.31.20.0/24 }]
+  seg-cde:
+    driver: bridge
+    internal: true
+    ipam:
+      config: [{ subnet: 172.31.30.0/24 }]
+  seg-atm:
+    driver: bridge
+    internal: true
+    ipam:
+      config: [{ subnet: 172.31.40.0/24 }]
+  seg-app:
+    driver: bridge
+    internal: true
+    ipam:
+      config: [{ subnet: 172.31.50.0/24 }]
+  seg-db:
+    driver: bridge
+    internal: true
+    ipam:
+      config: [{ subnet: 172.31.60.0/24 }]
+
+volumes:
+  seg-logs:
+
+x-probe: &probe
+  image: alpine:3.20
+  cap_add: [NET_ADMIN]
+  volumes:
+    - ./bin:/usr/local/bin:ro
+  command: ["sh", "-c", "ip route replace default via $$GW && exec sleep infinity"]
+
+x-listener: &listener
+  image: alpine:3.20
+  cap_add: [NET_ADMIN]
+
+services:
+  seg-fw:
+    build: ./fw
+    hostname: seg-fw
+    cap_add: [NET_ADMIN]
+    sysctls:
+      net.ipv4.ip_forward: "1"
+    volumes:
+      - ./fw/rules:/rules:ro
+      - seg-logs:/var/log/seg
+    networks:
+      seg-corp: { ipv4_address: 172.31.10.1 }
+      seg-swift: { ipv4_address: 172.31.20.1 }
+      seg-cde: { ipv4_address: 172.31.30.1 }
+      seg-atm: { ipv4_address: 172.31.40.1 }
+      seg-app: { ipv4_address: 172.31.50.1 }
+      seg-db: { ipv4_address: 172.31.60.1 }
+
+  probe-corp:
+    <<: *probe
+    environment: { GW: 172.31.10.1 }
+    networks:
+      seg-corp: { ipv4_address: 172.31.10.10 }
+
+  probe-swift:
+    <<: *probe
+    environment: { GW: 172.31.20.1 }
+    networks:
+      seg-swift: { ipv4_address: 172.31.20.20 }
+
+  probe-cde:
+    <<: *probe
+    environment: { GW: 172.31.30.1 }
+    networks:
+      seg-cde: { ipv4_address: 172.31.30.20 }
+
+  probe-atm:
+    <<: *probe
+    environment: { GW: 172.31.40.1 }
+    networks:
+      seg-atm: { ipv4_address: 172.31.40.20 }
+
+  probe-app:
+    <<: *probe
+    environment: { GW: 172.31.50.1 }
+    networks:
+      seg-app: { ipv4_address: 172.31.50.20 }
+
+  probe-db:
+    <<: *probe
+    environment: { GW: 172.31.60.1 }
+    networks:
+      seg-db: { ipv4_address: 172.31.60.20 }
+
+  swift-gateway:
+    <<: *listener
+    environment: { GW: 172.31.20.1 }
+    command: ["sh", "-c", "ip route replace default via $$GW && while true; do nc -l -p 8443 >/dev/null </dev/null; done"]
+    networks:
+      seg-swift: { ipv4_address: 172.31.20.10 }
+
+  cde-app:
+    <<: *listener
+    environment: { GW: 172.31.30.1 }
+    command: ["sh", "-c", "ip route replace default via $$GW && while true; do nc -l -p 8443 >/dev/null </dev/null; done"]
+    networks:
+      seg-cde: { ipv4_address: 172.31.30.10 }
+
+  atm-mgmt:
+    <<: *listener
+    environment: { GW: 172.31.40.1 }
+    command: ["sh", "-c", "ip route replace default via $$GW && while true; do nc -l -p 9000 >/dev/null </dev/null; done"]
+    networks:
+      seg-atm: { ipv4_address: 172.31.40.10 }
+
+  core-app:
+    <<: *listener
+    environment: { GW: 172.31.50.1 }
+    command: ["sh", "-c", "ip route replace default via $$GW && while true; do nc -l -p 8080 >/dev/null </dev/null; done"]
+    networks:
+      seg-app: { ipv4_address: 172.31.50.10 }
+
+  core-db:
+    image: postgres:16-alpine
+    cap_add: [NET_ADMIN]
+    environment:
+      POSTGRES_PASSWORD: seg-lab-only
+      GW: 172.31.60.1
+    command: ["sh", "-c", "ip route replace default via $$GW && exec docker-entrypoint.sh postgres"]
+    networks:
+      seg-db: { ipv4_address: 172.31.60.10 }
