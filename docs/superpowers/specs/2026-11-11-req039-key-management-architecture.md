@@ -90,18 +90,19 @@ The current pgcrypto values and the current backup archives must stay readable t
 
 Criteria 1 to 3 are unchanged from req-039.
 
-## 10. Decisions needed from you
+## 10. Decisions (approved 2026-11-11)
 
-1. **First production provider:** Vault Transit or PKCS#11. The choice decides which test target I build against. I need access to a Vault instance (or permission to pull the Vault image), or a SoftHSM for PKCS#11.
-2. **Customers with no KMS or HSM.** The KEK must come from a provider. Options: (a) require a provider for Level 5 and document that a host without one is Level 4 or lower; (b) allow a file-backed provider on the host, labelled as weaker, so it cannot be claimed as Level 5.
-3. **Backup recovery when the provider is lost.** Options: (a) customer-held escrow of a wrapped DEK, with its own passphrase, kept off the host (matches the current P0.3 model); (b) no escrow, and the customer accepts that losing the provider loses its backups. Recommendation: (a), with an escrow file the customer stores like the current recovery copy.
-4. **Where provider credentials are kept on the host** (section 6). Recommendation: a root-only file with rotation, which the installer can replace without touching the data.
-5. **Audit sink.** Key operations need an immutable record. Recommendation: the existing `audit_logs` table, which the runtime role cannot update or delete.
+1. **First production provider: Vault Transit.** Built against Vault's HTTP API (`internal/kms/vault`), with seven tests on a fake Vault server. It refuses exportable transit keys and treats a deleted key as revoked. **Not verified against a real Vault.** That needs the Vault image, which is a download I have not been approved to pull. PKCS#11 and cloud KMS follow.
+2. **Level 5 requires a provider.** A host without a KMS or HSM is below Level 5 and is reported that way. No file-backed KEK is offered as a Level 5 option. **Policy recorded; enforcement not yet wired into the installer or the Level reporting.**
+3. **Backup recovery when the provider is lost: escrow of the wrapped data key,** protected by its own passphrase, stored off the host like the current P0.3 recovery copy. **Design decided; not implemented.**
+4. **Provider credentials on the host: a root-only token file, rotatable without touching data.** `vault.LoadToken` reads it. **Installer permission checks and rotation not yet implemented.**
+5. **Audit: the existing `audit_logs` table,** which the runtime role cannot update or delete. **Decided; key-operation events not yet emitted.**
 
 ## 11. What is built with this document
 
 - `internal/kms`: provider interface and status values.
 - `internal/kms/memprovider`: test-only provider.
 - `internal/envelope`: sealing and opening with revocation-checked caching. Twelve tests pass.
+- `internal/kms/vault`: Vault Transit provider. Seven tests pass against a fake server; not yet run against Vault.
 
 Nothing is wired into the application yet. Connector credentials, the CA key, configurations, results, evidence and backups all still use their current schemes.
