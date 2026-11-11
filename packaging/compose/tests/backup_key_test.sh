@@ -174,6 +174,38 @@ openssl rand -base64 48 > "$NEW_KEY"
 if backup_key_recovery_confirm >/dev/null 2>&1; then bad "confirmation survived a key change"; else ok "a key change invalidates the confirmation"; fi
 cp "$TESTDIR/key.bak" "$NEW_KEY"
 
+# --- import: a clean host restores the key from the recovery copy ---
+IMP_DIR="$TESTDIR/clean/secrets"
+IMP_KEY="$IMP_DIR/backup-encryption.key"
+IMP_DATA="$TESTDIR/clean/data"; mkdir -p "$IMP_DATA"
+ORIG_KEY_HASH=$(sha256sum "$NEW_KEY" | cut -d' ' -f1)
+cp "$RECOV" "$TESTDIR/recovery-import.enc"
+if BACKUP_KEY_FILE="$IMP_KEY" DATA_DIR="$IMP_DATA" BACKUP_KEY_MARKER="$IMP_DATA/.backup-key-recovery-verified"    BAS_BACKUP_KEY_PASSPHRASE="$PASSPHRASE" backup_key_import "$TESTDIR/recovery-import.enc" >/dev/null 2>&1; then
+  ok "import accepts the recovery copy on a clean host"
+else
+  bad "import failed on a clean host"
+fi
+if [[ "$(sha256sum "$IMP_KEY" | cut -d' ' -f1)" == "$ORIG_KEY_HASH" ]]; then ok "imported key is byte-identical to the original"; else bad "imported key differs"; fi
+if [[ -f "$IMP_DATA/.backup-key-recovery-verified" ]]; then ok "import records the recovery confirmation"; else bad "import left no confirmation"; fi
+if BACKUP_KEY_FILE="$IMP_KEY" DATA_DIR="$IMP_DATA" BACKUP_KEY_MARKER="$IMP_DATA/.backup-key-recovery-verified" backup_key_recovery_confirm >/dev/null 2>&1; then ok "gate passes after import"; else bad "gate refused after import"; fi
+
+# import never replaces an existing key
+if BACKUP_KEY_FILE="$IMP_KEY" BAS_BACKUP_KEY_PASSPHRASE="$PASSPHRASE" backup_key_import "$TESTDIR/recovery-import.enc" >/dev/null 2>&1; then
+  bad "import replaced an existing key"
+else
+  ok "import refuses to replace an existing key"
+fi
+
+# wrong passphrase: nothing written
+rm -f "$IMP_KEY"
+if BACKUP_KEY_FILE="$IMP_KEY" BAS_BACKUP_KEY_PASSPHRASE="wrong passphrase value" backup_key_import "$TESTDIR/recovery-import.enc" >/dev/null 2>&1; then
+  bad "import accepted the wrong passphrase"
+elif [[ ! -e "$IMP_KEY" ]]; then
+  ok "wrong passphrase writes no key"
+else
+  bad "a key was written after a failed import"
+fi
+
 echo "---"
 echo "passed: $pass  failed: $fail  skipped: $skip"
 [[ "$fail" -eq 0 ]]

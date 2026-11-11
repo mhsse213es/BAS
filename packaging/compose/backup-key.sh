@@ -147,3 +147,33 @@ backup_key_recovery_confirm() {
   umask "$old_umask"
   echo "Backup key recovery copy verified at ${dest}."
 }
+
+# backup_key_import SRC: a clean host installs the key from a recovery copy. Refuses to replace an existing key.
+# Writes the same confirmation marker the gate checks, since the copy has just been verified against the key it installs.
+backup_key_import() {
+  local src="$1" dir tmp h
+  [[ -f "$src" ]] || { _bk_err "recovery copy ${src} not found"; return 1; }
+  [[ ! -s "$BACKUP_KEY_FILE" ]] || { _bk_err "a backup key already exists at ${BACKUP_KEY_FILE}; it was left unchanged"; return 1; }
+  _bk_passphrase || return 1
+  dir=$(dirname "$BACKUP_KEY_FILE")
+  mkdir -p "$dir" || { _bk_err "cannot create ${dir}"; return 1; }
+  local old_umask
+  old_umask=$(umask); umask 077
+  tmp=$(mktemp "${dir}/.backup-encryption.key.XXXXXX") || { umask "$old_umask"; return 1; }
+  umask "$old_umask"
+  if ! BAS_BACKUP_KEY_PASSPHRASE_ENC="$BAS_BACKUP_KEY_PASSPHRASE" openssl enc -d -aes-256-cbc -pbkdf2 -iter "$BACKUP_KEY_PBKDF2_ITER"         -pass env:BAS_BACKUP_KEY_PASSPHRASE_ENC -in "$src" -out "$tmp" 2>/dev/null; then
+    rm -f "$tmp"; _bk_err "import failed: wrong passphrase or a damaged recovery copy"; return 1
+  fi
+  if [[ ! -s "$tmp" ]]; then rm -f "$tmp"; _bk_err "the recovery copy holds an empty key"; return 1; fi
+  chmod 600 "$tmp" || { rm -f "$tmp"; return 1; }
+  if [[ "$(id -u)" == "0" ]]; then chown root:root "$tmp" || { rm -f "$tmp"; return 1; }; fi
+  mv -f "$tmp" "$BACKUP_KEY_FILE" || { rm -f "$tmp"; _bk_err "could not place the backup key"; return 1; }
+  h=$(_bk_key_hash)
+  if [[ -n "$h" && -d "$(dirname "$BACKUP_KEY_MARKER")" ]]; then
+    old_umask=$(umask); umask 077
+    printf '%s
+' "$h" > "$BACKUP_KEY_MARKER"
+    umask "$old_umask"
+  fi
+  echo "Backup key restored to ${BACKUP_KEY_FILE} from the recovery copy."
+}

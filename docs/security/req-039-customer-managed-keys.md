@@ -46,7 +46,7 @@ Evidence:
 Limits:
 - The wrap key and the wrapped backup are on the same host. Anyone with root on the host can unwrap backups. The backup is protected against copies taken off the host without the host's key directory. This is not HSM protection; that is P1.
 - Restore onto a new host needs the database key too (`export-db-key` / `import-db-key`, see P0.4).
-- Restore has not been run end to end on a host. See "Not verified".
+- Restore has been run at component level only (see the restore drill section).
 
 ## P0.3 Backup protection
 
@@ -146,6 +146,26 @@ Each criterion must have a test or an inspection that proves it.
 11. Results, evidence and configurations are encrypted at rest by the application, not only by disk encryption. Not started.
 
 Level 5 is not claimed until 1 through 11 pass.
+
+## Restore drill (component level)
+
+`packaging/compose/tests/restore_drill.sh` runs the whole loop in a Linux container with a real TLS PostgreSQL:
+1. Populate a source host: database with 1000 rows, pki (CA key and certificate), certificates, `.env`, a legacy co-located `.backup_key`, the backup key and database key, and both recovery copies (written off-host).
+2. Back up with the installer's logic: recovery gate, `_package_config`, `pg_dump`, encryption with the new key.
+3. Destroy the source: database, data directory and secrets.
+4. Restore onto a clean host with no keys. Negatives first: no key, missing recovery copy, wrong passphrase. Then import the database key and the backup key, decrypt, check the CA pre-check (including a corrupted wrapped key and a freshly generated database key), restore the database, install the CA key.
+
+Result: 44 of 44 checks pass. The database checksum matches the source (1000 rows), and the CA key and certificate are byte-identical.
+
+What the drill found and fixed:
+- No import for the backup key existed. Added `backup_key_import` (tests in `backup_key_test.sh`).
+- A clean host's fresh install generates its own database key, which cannot open the archived CA key. The restore now says exactly how to recover: move the fresh key aside, run `--import-db-key`, retry.
+
+What the drill does not cover (still open):
+- `install.sh --restore` itself was not run. The drill calls the same helpers, but not the installer's restore function, on a running stack.
+- No real populated host, no real upgrade and rollback, no failed-upgrade test.
+- Container runs as root with no systemd, so file ownership of the real service users (65532 and 70) is set by the drill, not by the installer.
+- The restore procedure needs the database key recovery copy as well as the backup key recovery copy. Both must be kept off the host.
 
 ## Build and packaging
 

@@ -159,6 +159,7 @@ while [[ $# -gt 0 ]]; do
     --export-db-key)   MODE="export-db-key"; shift; DB_KEY_RECOVERY_PATH="${1:-}" ;;
     --import-db-key)   MODE="import-db-key"; shift; DB_KEY_RECOVERY_PATH="${1:-}" ;;
     --export-backup-key) MODE="export-backup-key"; shift; BAS_BACKUP_KEY_RECOVERY_PATH="${1:-}" ;;
+    --import-backup-key) MODE="import-backup-key"; shift; BAS_BACKUP_KEY_RECOVERY_PATH="${1:-}" ;;
     --restore)
       MODE="restore"
       shift
@@ -2213,6 +2214,12 @@ mode_restore() {
     info "No .sha256 sidecar found for this archive -- skipping integrity check."
   fi
 
+  if [[ ! -s "$BACKUP_KEY_FILE" ]]; then
+    info "No backup key on this host. Restoring it from the recovery copy."
+    _backup_key_prompt_inputs || exit 1
+    backup_key_import "${BAS_BACKUP_KEY_RECOVERY_PATH:-}"       || { err "Restore stopped before any change: the backup key could not be imported. Pass --import-backup-key <file> first, or set BAS_BACKUP_KEY_RECOVERY_PATH and BAS_BACKUP_KEY_PASSPHRASE."; exit 1; }
+  fi
+
   step "2/8  Decrypting and reading manifest"
   local work_dir tar_path
   work_dir=$(mktemp -d)
@@ -2226,7 +2233,7 @@ mode_restore() {
   tar -xf "${work_dir}/config.tar" -C "${work_dir}/cfg" || { err "Configuration archive unreadable -- refusing to restore."; rm -rf "$work_dir"; exit 1; }
   if [[ -f "${work_dir}/cfg/pki/ca-key.pem.wrapped" ]]; then
     cp "${work_dir}/cfg/pki/ca-key.pem.wrapped" "${work_dir}/pkicheck/"
-    ca_backup_unwrap "${work_dir}/pkicheck"       || { err "The CA key in this archive does not unwrap with this host's database encryption key. Nothing was changed. Import the original database key (import-db-key) and retry."; rm -rf "$work_dir"; exit 1; }
+    ca_backup_unwrap "${work_dir}/pkicheck"       || { err "The CA key in this archive does not unwrap with this host's database encryption key. Nothing was changed. On a fresh host the installer generated a new database key, which cannot open it: move /etc/audspect/secrets/db-encryption.key aside, run install.sh --import-db-key <recovery file>, then retry the restore."; rm -rf "$work_dir"; exit 1; }
   fi
   local archive_version
   archive_version=$(grep -o '"basVersion"[^,]*' "${work_dir}/manifest.json" | grep -o '"[^"]*"$' | tr -d '"')
@@ -2461,5 +2468,6 @@ case "$MODE" in
   restore)        mode_restore "$RESTORE_ARCHIVE" ;;
   export-db-key) db_key_export "$DB_KEY_RECOVERY_PATH" ;;
   import-db-key) db_key_import "$DB_KEY_RECOVERY_PATH" ;;
+  import-backup-key) _backup_key_prompt_inputs && backup_key_import "$BAS_BACKUP_KEY_RECOVERY_PATH" || exit 1 ;;
   export-backup-key) _backup_key_prompt_inputs && backup_key_export "$BAS_BACKUP_KEY_RECOVERY_PATH" && backup_key_verify_recovery "$BAS_BACKUP_KEY_RECOVERY_PATH" && echo "Recovery copy verified." || exit 1 ;;
 esac
