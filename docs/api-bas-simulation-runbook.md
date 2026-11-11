@@ -2,7 +2,15 @@
 
 This runbook shows how to run every API BAS check we have, from a single scenario to a full customer-style assessment, on a developer machine or a lab. It covers what each level proves and what it does not.
 
-Read this first: lab results show that a scenario and its grader work against a deliberately flawed lab. They are not evidence about any customer's API. No customer or staging API has been run yet (see section 6).
+**Status (11 November 2026):**
+
+| Level | What it proves | Status |
+|---|---|---|
+| 1. Lab validation | The scenarios and the grader work against the built-in lab | **Executed.** 148 of 151 validated; evidence in `docs/api-bas-evidence/level1-2026-11-11/`. |
+| 2. Product path | The orchestrator's job lifecycle, authorisation, persistence and audit | **Not executed.** Commands below are written, not yet run. |
+| 3. Customer API | Compatibility with an external API | **Not executed.** Blocked until the OpenAPI mismatch in section 3 is resolved. |
+
+Passing level 1 does not establish level 2 or level 3 readiness. Read this first: lab results show that a scenario and its grader work against a deliberately flawed lab. They are not evidence about any customer's API. No customer or staging API has been run yet (see section 6).
 
 ## 0. What you need
 
@@ -23,7 +31,9 @@ No server, no database. This runs all 151 catalogued scenarios against the lab i
     cd orchestrator
     go test ./internal/apibas/runner/ -run 'TestPhase28_MeasuredCoverage$' -count=1 -v -timeout 25m
 
-Expected: for each scenario, the vulnerable build grades FAIL with exploitability `exploited`, and the fixed build grades PASS with control `enforced`. The coverage doc (`docs/api-bas-coverage.md`) records the last measured result: 148 of 151 lab-validated, one reporting scenario workflow-verified (`API-BAS-REPORT-001`), and two not validated (`API-BAS-ABUSE-002`, `API-BAS-REPORT-002`). If your numbers differ, check the coverage doc's date and the catalogue before assuming a regression.
+Expected: for each scenario, the vulnerable build grades FAIL with exploitability `exploited`, and the fixed build grades PASS with control `enforced`. The 11 November 2026 run matched this: 148 of 151 validated; `API-BAS-ABUSE-002` is provisional (its timing ceiling is unapproved, though its verdicts match); `API-BAS-REPORT-001` is workflow-verified (simulated receiver); `API-BAS-REPORT-002` is unevaluated (no deadline in the provision). The full evidence, including a verdict per scenario, is in `docs/api-bas-evidence/level1-2026-11-11/`. If your numbers differ, check that file's commit and the catalogue before assuming a regression.
+
+To get a verdict per scenario, the test must write them out; it does not do that by default. The evidence used a temporary change that was not committed.
 
 Run the single end-to-end test that drives the real runner and lab binaries against real Postgres:
 
