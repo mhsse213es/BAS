@@ -75,6 +75,12 @@ func runProbe(ctx context.Context, p Provider, spec ProbeSpec) ProbeOutcome {
 		return errOutcome(fmt.Sprintf("probe execution failed: %v", err))
 	}
 
+	// Same-zone traffic never crosses seg-fw, so no firewall evidence exists
+	// and none is required. Its verdict rests on the connection alone.
+	if spec.Src == spec.Dst {
+		return sameZoneOutcome(spec, res)
+	}
+
 	window := TimeWindow{From: res.Start.Add(-evidenceSlack), To: res.End.Add(evidenceSlack)}
 	all, available, err := p.FirewallEvents(ctx, window)
 	if err != nil {
@@ -88,4 +94,16 @@ func runProbe(ctx context.Context, p Provider, spec ProbeSpec) ProbeOutcome {
 		FirewallAvailable: available,
 	})
 	return ProbeOutcome{Spec: spec, Verdict: verdict, Reason: reason, Result: res, Events: events}
+}
+
+// sameZoneOutcome grades a same-zone positive control. Only an allow probe is
+// valid here (the loader enforces it). A connection that fails means the
+// control itself is broken, so the result is ERROR, not a segmentation finding.
+func sameZoneOutcome(spec ProbeSpec, res ProbeResult) ProbeOutcome {
+	if res.Outcome == OutcomeConnected {
+		return ProbeOutcome{Spec: spec, Verdict: PASS, Result: res,
+			Reason: "same-zone reachability confirmed; no firewall crossing"}
+	}
+	return ProbeOutcome{Spec: spec, Verdict: ERROR, Result: res,
+		Reason: fmt.Sprintf("same-zone positive control failed: %s", res.Outcome)}
 }

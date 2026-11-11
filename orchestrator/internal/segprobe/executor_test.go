@@ -82,3 +82,36 @@ func TestRunScenario_FirewallLogErrorIsUnknownNotPass(t *testing.T) {
 		t.Fatalf("got %s, want UNKNOWN", got.Outcomes[0].Verdict)
 	}
 }
+
+// A same-zone probe never crosses seg-fw, so its verdict must not depend on
+// the firewall log: connected is PASS even when the log is unreadable.
+func TestRunScenario_SameZoneConnected_IsPassWithoutFirewall(t *testing.T) {
+	start := time.Unix(100, 0)
+	p := &fakeProvider{
+		result: ProbeResult{Outcome: OutcomeConnected, Start: start, End: start.Add(time.Millisecond)},
+		fwErr:  errors.New("log unreadable"),
+	}
+	s := Scenario{ID: "s", Probes: []ProbeSpec{{ID: "p", Src: ZoneSWIFT, Dst: ZoneSWIFT, DstPort: 8443, Proto: "tcp", Expect: ExpectAllow}}}
+	got, err := RunScenario(context.Background(), p, s, 0)
+	if err != nil {
+		t.Fatalf("RunScenario: %v", err)
+	}
+	if got.Outcomes[0].Verdict != PASS {
+		t.Fatalf("got %s (%s), want PASS", got.Outcomes[0].Verdict, got.Outcomes[0].Reason)
+	}
+}
+
+func TestRunScenario_SameZoneRefused_IsError(t *testing.T) {
+	start := time.Unix(100, 0)
+	p := &fakeProvider{
+		result: ProbeResult{Outcome: OutcomeRefused, Start: start, End: start.Add(time.Millisecond)},
+	}
+	s := Scenario{ID: "s", Probes: []ProbeSpec{{ID: "p", Src: ZoneATM, Dst: ZoneATM, DstPort: 9000, Proto: "tcp", Expect: ExpectAllow}}}
+	got, err := RunScenario(context.Background(), p, s, 0)
+	if err != nil {
+		t.Fatalf("RunScenario: %v", err)
+	}
+	if got.Outcomes[0].Verdict != ERROR {
+		t.Fatalf("got %s, want ERROR: a failed positive control means the probe is broken", got.Outcomes[0].Verdict)
+	}
+}
