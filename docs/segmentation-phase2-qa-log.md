@@ -37,3 +37,6 @@ Plan: `docs/superpowers/plans/2026-11-11-segmentation-phase2-api-ui.md`. Scope a
 
 ## Full package run
 (see entry added after the run completes)
+
+## Full package run (2026-11-11)
+`go test ./internal/api/` on commit 68ae4ea6: `ok github.com/audspect/bas/internal/api 1391.254s`, exit 0.
