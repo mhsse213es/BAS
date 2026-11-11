@@ -25,6 +25,14 @@ BACKUP_KEY_MIN_PASSPHRASE=16
 BACKUP_KEY_PBKDF2_ITER=600000
 _bk_note() { echo "NOTICE: $*" >&2; }
 
+# _bk_options TITLE OPTION...: print a numbered list of what the operator can do next.
+_bk_options() {
+  local title="$1" n=1 o
+  shift
+  echo "$title" >&2
+  for o in "$@"; do echo "  $n. $o" >&2; n=$((n + 1)); done
+}
+
 # backup_key_provision: create the new key if absent. An existing key is never replaced.
 backup_key_provision() {
   if [[ -s "$BACKUP_KEY_FILE" ]]; then
@@ -135,7 +143,8 @@ backup_key_recovery_confirm() {
   fi
   local dest="${BAS_BACKUP_KEY_RECOVERY_PATH:-}"
   if [[ -z "$dest" || -z "${BAS_BACKUP_KEY_PASSPHRASE:-}" ]]; then
-    _bk_err "no confirmed recovery copy of the backup key. Run: sudo bash install.sh --export-backup-key <file outside this host's backups>, then retry. Non-interactive runs may set BAS_BACKUP_KEY_RECOVERY_PATH and BAS_BACKUP_KEY_PASSPHRASE."
+    _bk_err "backups cannot run: there is no confirmed recovery copy of the backup key. Nothing has been changed."
+    _bk_options "Your options:"       "Create the recovery copy now: sudo bash install.sh --export-backup-key <file outside this host's backups>. Then run the install or upgrade again."       "Non-interactive: set BAS_BACKUP_KEY_RECOVERY_PATH=<file> and BAS_BACKUP_KEY_PASSPHRASE=<16 characters or more>, then run again."       "Stop here. The recovery copy is required before any backup can be taken."
     return 1
   fi
   backup_key_export "$dest" >/dev/null || return 1

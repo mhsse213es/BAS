@@ -94,6 +94,13 @@ _backup_key_gate() {
   if backup_key_recovery_confirm 2>/dev/null; then
     return 0
   fi
+  if [[ -t 0 && -z "${BAS_BACKUP_KEY_PASSPHRASE:-}" ]]; then
+    echo "" >&2
+    echo "A verified recovery copy of the backup encryption key is required before any backup can run." >&2
+    echo "Without it, backups made with this key cannot be restored after the key is lost." >&2
+    _bk_options "Your options:"       "Enter a path outside this host's backups and a passphrase now (you will be asked for both)."       "Stop now (Ctrl-C). Create the copy with: sudo bash install.sh --export-backup-key <file>, then start this again."
+    echo "" >&2
+  fi
   _backup_key_prompt_inputs || return 1
   backup_key_recovery_confirm
 }
@@ -1311,7 +1318,7 @@ mode_install() {
   DB_KEY_MARKER="${DATA_DIR}/.db-key-issued"
   db_key_provision fresh || { err "encryption key provisioning failed; installation stopped at step 3"; exit 1; }
   DB_TLS_DIR="${DATA_DIR}/dbtls"
-  db_tls_ensure || { err "database TLS setup failed; no service was started"; exit 1; }
+  db_tls_ensure || { err "database TLS setup failed; no service was started."; _bk_options "Your options:" "Fix the file reported above, then run the install again." "Or move ${DATA_DIR}/dbtls aside so the installer regenerates it, then run again."; exit 1; }
 
   step "4/10  Loading Docker images (air-gap safe -no pull)"
   # Fail closed: every tar was verified after the prerequisite checks (a missing
@@ -1362,7 +1369,7 @@ mode_install() {
   # a copy of the backup directory cannot be decrypted with it. Losing this
   # file makes archives unrecoverable; keep an offline copy.
   backup_key_provision || { err "backup encryption key could not be created; installation stopped"; exit 1; }
-  _backup_key_gate || { err "installation stopped: no confirmed recovery copy of the backup key"; exit 1; }
+  _backup_key_gate || { err "installation stopped: no confirmed recovery copy of the backup key. Nothing has been started."; exit 1; }
 
   step "6/10  Writing .env (root-readable only)"
   _write_env
@@ -1416,11 +1423,12 @@ mode_upgrade() {
   DB_KEY_MARKER="${DATA_DIR}/.db-key-issued"
   db_key_provision upgrade || { err "encryption key check failed; the upgrade was not started"; exit 1; }
   DB_TLS_DIR="${DATA_DIR}/dbtls"
-  db_tls_ensure || { err "database TLS check failed; the upgrade was not started"; exit 1; }
+  db_tls_ensure || { err "database TLS check failed; the upgrade was not started. Nothing has been changed."; _bk_options "Your options:" "Fix the file reported above, then run the upgrade again." "Or move ${DATA_DIR}/dbtls aside so the installer regenerates it, then run again."; exit 1; }
   backup_key_provision || { err "backup encryption key could not be created; the upgrade was not started"; exit 1; }
-  _backup_key_gate || { err "upgrade not started: no confirmed recovery copy of the backup key"; exit 1; }
+  _backup_key_gate || { err "upgrade not started: no confirmed recovery copy of the backup key. Nothing has been changed."; exit 1; }
   if backup_key_legacy_present; then
-    warn "Legacy backup key ${BACKUP_KEY_LEGACY} is still present. It opens only older archives. Keep it until the historical-backup cleanup in docs/security/req-039-customer-managed-keys.md is complete."
+    warn "Legacy backup key ${BACKUP_KEY_LEGACY} is still present. It opens only archives made before this version."
+    _bk_options "Your options for the legacy key:"       "Keep it. Older archives still restore with it. It is not used for new archives."       "Remove it only after: a new backup has restored successfully on a clean host, and every older archive has been removed by secure erasure. The steps are in docs/security/req-039-customer-managed-keys.md (historical cleanup)."
   fi
 
   # Detect an upgrade FROM a pre-mTLS install: BAS_ENROLL_PORT's absence
@@ -2217,7 +2225,7 @@ mode_restore() {
   if [[ ! -s "$BACKUP_KEY_FILE" ]]; then
     info "No backup key on this host. Restoring it from the recovery copy."
     _backup_key_prompt_inputs || exit 1
-    backup_key_import "${BAS_BACKUP_KEY_RECOVERY_PATH:-}"       || { err "Restore stopped before any change: the backup key could not be imported. Pass --import-backup-key <file> first, or set BAS_BACKUP_KEY_RECOVERY_PATH and BAS_BACKUP_KEY_PASSPHRASE."; exit 1; }
+    backup_key_import "${BAS_BACKUP_KEY_RECOVERY_PATH:-}"       || { err "Restore stopped before any change: the backup key could not be imported."; _bk_options "Your options:" "Run: sudo bash install.sh --import-backup-key <recovery file>, then run the restore again." "Non-interactive: set BAS_BACKUP_KEY_RECOVERY_PATH and BAS_BACKUP_KEY_PASSPHRASE, then run the restore again." "Stop. Nothing has been changed."; exit 1; }
   fi
 
   step "2/8  Decrypting and reading manifest"
@@ -2225,7 +2233,7 @@ mode_restore() {
   work_dir=$(mktemp -d)
   tar_path="${work_dir}/archive.tar"
   backup_key_decrypt "$archive" "$tar_path" \
-    || { err "Decryption failed -- no available backup key opens this archive (backup-key.sh), or the archive is corrupt."; rm -rf "$work_dir"; exit 1; }
+    || { err "Decryption failed: no available backup key opens this archive, or the archive is corrupt. Nothing has been changed."; _bk_options "Your options:" "If the backup key is missing on this host: run sudo bash install.sh --import-backup-key <recovery file>, then restore again." "Try another archive from your backup location." "Stop."; rm -rf "$work_dir"; exit 1; }
   tar -xf "$tar_path" -C "$work_dir"
   [[ -f "${work_dir}/manifest.json" ]] || { err "Archive missing manifest.json -- refusing to restore."; rm -rf "$work_dir"; exit 1; }
   # Check the archive's CA key can be unwrapped BEFORE anything is changed (P0.2).
@@ -2233,7 +2241,7 @@ mode_restore() {
   tar -xf "${work_dir}/config.tar" -C "${work_dir}/cfg" || { err "Configuration archive unreadable -- refusing to restore."; rm -rf "$work_dir"; exit 1; }
   if [[ -f "${work_dir}/cfg/pki/ca-key.pem.wrapped" ]]; then
     cp "${work_dir}/cfg/pki/ca-key.pem.wrapped" "${work_dir}/pkicheck/"
-    ca_backup_unwrap "${work_dir}/pkicheck"       || { err "The CA key in this archive does not unwrap with this host's database encryption key. Nothing was changed. On a fresh host the installer generated a new database key, which cannot open it: move /etc/audspect/secrets/db-encryption.key aside, run install.sh --import-db-key <recovery file>, then retry the restore."; rm -rf "$work_dir"; exit 1; }
+    ca_backup_unwrap "${work_dir}/pkicheck"       || { err "Restore stopped before any change: the CA key in this archive does not unwrap with this host's database encryption key."; _bk_options "Your options:" "If this is a fresh host: the installer generated a new database key, which cannot open the archive. Move /etc/audspect/secrets/db-encryption.key aside, run: sudo bash install.sh --import-db-key <recovery file>, then run the restore again." "Restore a different archive whose key this host can open." "Stop. Nothing has been changed."; rm -rf "$work_dir"; exit 1; }
   fi
   local archive_version
   archive_version=$(grep -o '"basVersion"[^,]*' "${work_dir}/manifest.json" | grep -o '"[^"]*"$' | tr -d '"')
@@ -2264,7 +2272,7 @@ mode_restore() {
     [[ -f "${DATA_DIR}/pki/ca-key.pem" ]] && mv "${DATA_DIR}/pki/ca-key.pem" "$live_ca_bak"
     if ! ca_backup_unwrap "${DATA_DIR}/pki"; then
       [[ -f "$live_ca_bak" ]] && mv "$live_ca_bak" "${DATA_DIR}/pki/ca-key.pem"
-      err "CA key restore failed; the previous CA key was put back. Stopping before services start."; rm -rf "$work_dir"; exit 1
+      err "CA key restore failed; the previous CA key was put back. Services have not started."; _bk_options "Your options:" "Check the error above, then run the restore again. The archive is unchanged." "Stop and keep the pre-restore snapshot listed under ${DATA_DIR}/backups."; rm -rf "$work_dir"; exit 1
     fi
     rm -f "$live_ca_bak"
     if [[ "$(id -u)" == "0" ]]; then chown 65532:65532 "${DATA_DIR}/pki/ca-key.pem"; fi
