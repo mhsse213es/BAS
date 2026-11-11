@@ -2,7 +2,7 @@
 
 ## Source
 - File: MITRE D3FEND ATT&CK mapping, `d3fend-full-mappings.csv`, D3FEND 1.6.0, downloaded from `https://d3fend.mitre.org/ontologies/d3fend/1.6.0/d3fend-full-mappings.csv` (14.7 MB).
-- SHA-256 of the CSV: see the command output recorded in the commit message.
+- SHA-256 of the CSV: `\2b86a5a19de143560b75fb2b443a7ac60335d60dfb6b08a7a6e9a53a052ad79f`
 - Terms: MITRE D3FEND Terms of Use (`https://d3fend.mitre.org/tou`). Non-exclusive, royalty-free licence for research, development and commercial use, provided MITRE's copyright designation and licence are reproduced in every copy. The notice is `attackdata.D3fendAttribution` and is shown on every technique that lists countermeasures. Government contracts also cite DFARS 252.227-7014; a government-customer review is still open.
 - The repository code (`d3fend/d3fend-ontology`) is MIT.
 
