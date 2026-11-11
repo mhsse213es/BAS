@@ -316,6 +316,9 @@ const (
 	// placement as CanImportOTSafetyConfig, for the same reason.
 	CanImportTargetScope Permission = "target-scope:import"
 
+	// REQ-018 Gap 2: record a relevant/excluded decision on an advisory.
+	CanDecideAdvisoryRelevance Permission = "advisory:relevance:decide"
+
 	// Database security simulation (dbsim). CanViewDBSim (targets, settings, runs
 	// -- read only) is Analyst+Admin. Registering/deleting targets and running the
 	// read-only identity check (CanManageDBSimTargets) and switching DB client mode
@@ -400,8 +403,10 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanImportZoneIsolationConfig:       true,
 		CanManageRegulatoryObligations:     true,
 		CanImportTargetScope:               true,
+		CanDecideAdvisoryRelevance:         true,
 	},
 	RoleAnalyst: {
+		CanDecideAdvisoryRelevance: true,
 		CanVerify:            true,
 		CanUploadEvidence:    true,
 		CanReview:            true,

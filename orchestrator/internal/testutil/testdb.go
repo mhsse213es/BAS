@@ -168,6 +168,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureTCFPipelineEventsSchema: %w", err)
 	}
+	if err := db.EnsureAdvisorySchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureAdvisorySchema: %w", err)
+	}
 	if err := db.EnsureCloudRunSchema(ctx, pool); err != nil {
 		pool.Close()
 		_ = container.Terminate(context.Background())

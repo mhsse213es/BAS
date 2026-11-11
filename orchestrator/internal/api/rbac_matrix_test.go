@@ -649,6 +649,8 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/verifications", tierPermission, auth.CanVerify},
 	{http.MethodPost, "/api/verifications/{id}/evidence", tierPermission, auth.CanUploadEvidence},
 	{http.MethodDelete, "/api/evidence/{id}", tierPermission, auth.CanDeleteEvidence},
+	{http.MethodPost, "/api/advisories/{id}/decision", tierPermission, auth.CanDecideAdvisoryRelevance},
+	{http.MethodPost, "/api/advisories/{id}/reverse", tierPermission, auth.CanDecideAdvisoryRelevance},
 	{http.MethodPost, "/api/relationships", tierPermission, auth.CanCurateThreatIntel},
 	{http.MethodPut, "/api/relationships/{id}", tierPermission, auth.CanCurateThreatIntel},
 	{http.MethodPost, "/api/relationships/{id}/evidence", tierPermission, auth.CanCurateThreatIntel},

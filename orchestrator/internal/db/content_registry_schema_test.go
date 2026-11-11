@@ -194,8 +194,14 @@ func TestContentVersionEvents_ApprovalRequiresHumanActor(t *testing.T) { // A17 
 		}
 		var vid string
 		_ = pool.QueryRow(ctx, `SELECT id FROM content_versions WHERE content_id='ev'`).Scan(&vid)
+		// REJECTED rows must carry an exclusion reason (Gap 3). The actor rule
+		// is what this test checks, so supply a valid code for REJECTED.
 		ins := func(to, actor string) error {
-			_, err := pool.Exec(ctx, `INSERT INTO content_version_events (content_version_id, to_lifecycle, to_trust, actor) VALUES ($1,$2,'UNTRUSTED',$3)`, vid, to, actor)
+			var code any
+			if to == "REJECTED" {
+				code = "relevance"
+			}
+			_, err := pool.Exec(ctx, `INSERT INTO content_version_events (content_version_id, to_lifecycle, to_trust, actor, reason_code) VALUES ($1,$2,'UNTRUSTED',$3,$4)`, vid, to, actor, code)
 			return err
 		}
 		for _, to := range []string{"APPROVED", "PUBLISHED_LOCAL", "REJECTED"} {

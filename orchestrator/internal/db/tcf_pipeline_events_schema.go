@@ -37,7 +37,8 @@ var tcfPipelineEventsTables = []string{
 			'threat_observed','threat_eligible',
 			'generation_attempted','generation_failed','content_created',
 			'validation_dispatched','validation_resulted','validated_coverage',
-			'published_executable','superseded','retired','rejected')),
+			'published_executable','superseded','retired','rejected','bundle_packaged',
+			'advisory_received','advisory_classified')),
 		threat_id             text,
 		content_id            text,
 		content_version_id    text,
@@ -53,4 +54,25 @@ var tcfPipelineEventsTables = []string{
 	`CREATE INDEX IF NOT EXISTS idx_tpe_threat ON tcf_pipeline_events (threat_id, event_time)`,
 	`CREATE INDEX IF NOT EXISTS idx_tpe_version ON tcf_pipeline_events (content_version_id, event_time)`,
 	`CREATE INDEX IF NOT EXISTS idx_tpe_type_time ON tcf_pipeline_events (event_type, event_time)`,
+	// Migration for databases created before bundle_packaged existed: widen
+	// the event_type CHECK. Idempotent: it re-adds the constraint with the full
+	// value list whether or not the old one was present. The CREATE TABLE above
+	// already carries the full list, so this is a no-op on fresh databases.
+	// Acts only when the existing constraint lacks bundle_packaged, so a normal
+	// boot takes no lock and does not re-validate the ledger.
+	`DO $$
+	BEGIN
+		IF NOT EXISTS (
+			SELECT 1 FROM pg_constraint
+			WHERE conname = 'tcf_pipeline_events_event_type_check'
+			  AND pg_get_constraintdef(oid) LIKE '%advisory_classified%') THEN
+			ALTER TABLE tcf_pipeline_events DROP CONSTRAINT IF EXISTS tcf_pipeline_events_event_type_check;
+			ALTER TABLE tcf_pipeline_events ADD CONSTRAINT tcf_pipeline_events_event_type_check CHECK (event_type IN (
+				'threat_observed','threat_eligible',
+				'generation_attempted','generation_failed','content_created',
+				'validation_dispatched','validation_resulted','validated_coverage',
+				'published_executable','superseded','retired','rejected','bundle_packaged',
+				'advisory_received','advisory_classified'));
+		END IF;
+	END $$`,
 }

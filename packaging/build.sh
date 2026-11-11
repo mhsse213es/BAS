@@ -208,6 +208,14 @@ fi
 # Application assets
 log "Copying scenarios, wwwroot, and agent binaries..."
 cp -r "${REPO_ROOT}/scenarios/."   "${BUILD_DIR}/scenarios/"
+
+# Content-velocity measurement: record exactly which scenario bytes shipped.
+# The post-build ingest (cmd/tcv-ingest) reads this manifest where the database
+# is, and maps each hash to its registry content version. This build host has
+# no database access, so it only writes the file. Run after the signature gate
+# and the copy, so the manifest describes what is actually in the bundle.
+log "Writing bundle manifest (content-velocity measurement)..."
+"${REPO_ROOT}/packaging/bundle-manifest.sh" "${BUILD_DIR}/scenarios" "${BUILD_NAME}" "${BUILD_DIR}/bundle-manifest.json"
 cp -r "${REPO_ROOT}/orchestrator/wwwroot/." "${BUILD_DIR}/wwwroot/"
 
 # ART external payloads (gsecdump, etc.) staged on the build host — baked into

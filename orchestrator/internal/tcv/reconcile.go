@@ -160,20 +160,20 @@ func lifecycleEventType(to string) (EventType, bool) {
 // reconcileLifecycleEvents re-derives the lifecycle milestones from
 // content_version_events, keyed by the event row id.
 func reconcileLifecycleEvents(ctx context.Context, pool *pgxpool.Pool, since time.Time) error {
-	rows, err := pool.Query(ctx, `SELECT id, content_version_id, to_lifecycle, at
+	rows, err := pool.Query(ctx, `SELECT id, content_version_id, to_lifecycle, at, COALESCE(reason_code, '')
 		FROM content_version_events
 		WHERE to_lifecycle IN ('VALIDATING','VALIDATED','PUBLISHED','PUBLISHED_LOCAL','RETIRED','REJECTED') AND at >= $1`, since)
 	if err != nil {
 		return fmt.Errorf("tcv: reconcile lifecycle events: %w", err)
 	}
 	type rec struct {
-		id, cvid, to string
-		at           time.Time
+		id, cvid, to, code string
+		at                 time.Time
 	}
 	var recs []rec
 	for rows.Next() {
 		var r rec
-		if err := rows.Scan(&r.id, &r.cvid, &r.to, &r.at); err != nil {
+		if err := rows.Scan(&r.id, &r.cvid, &r.to, &r.at, &r.code); err != nil {
 			rows.Close()
 			return fmt.Errorf("tcv: reconcile lifecycle events: %w", err)
 		}
@@ -191,7 +191,7 @@ func reconcileLifecycleEvents(ctx context.Context, pool *pgxpool.Pool, since tim
 		if err := RecordPipelineEvent(ctx, pool, Event{
 			Type: typ, ContentVersionID: r.cvid, EventTime: r.at,
 			SourceTable: "content_version_events", SourcePK: r.id,
-			Payload: map[string]any{"to_lifecycle": r.to},
+			Payload: LifecyclePayload(r.to, r.code),
 		}); err != nil {
 			return fmt.Errorf("tcv: reconcile lifecycle events: %w", err)
 		}
