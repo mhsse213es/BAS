@@ -89,12 +89,20 @@ func TestSegmentation_PacksListedForAnalyst(t *testing.T) {
 	var out struct {
 		Packs   []map[string]any `json:"packs"`
 		Enabled bool             `json:"enabled"`
+		CanRun  bool             `json:"can_run"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatal(err)
 	}
 	if len(out.Packs) != 3 || !out.Enabled {
 		t.Fatalf("packs = %d enabled = %v", len(out.Packs), out.Enabled)
+	}
+	if out.CanRun {
+		t.Fatal("an analyst was told they can run segmentation; only admins can")
+	}
+	admin := segReq(t, segRouter(h), http.MethodGet, "/api/segmentation/packs", nil, auth.RoleAdmin, "admin1")
+	if err := json.Unmarshal(admin.Body.Bytes(), &out); err != nil || !out.CanRun {
+		t.Fatalf("admin can_run = %v, err %v", out.CanRun, err)
 	}
 }
 

@@ -9,6 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/audspect/bas/internal/auth"
+
 	"github.com/audspect/bas/internal/segprobe"
 	"github.com/audspect/bas/internal/segprobe/runstore"
 )
@@ -39,7 +41,13 @@ func (h *Handler) ListSegmentationPacks(w http.ResponseWriter, r *http.Request) 
 	for _, p := range segprobe.Packs() {
 		out = append(out, packView{ID: p.ID, Name: p.Name, Description: p.Description})
 	}
-	respond(w, map[string]any{"packs": out, "enabled": h.seg != nil})
+	// can_run lets the console show the Run control only to callers who hold the permission. The server
+	// enforces it on the run route regardless.
+	canRun := false
+	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
+		canRun = auth.HasPermission(c.Role, auth.CanRunSegmentation)
+	}
+	respond(w, map[string]any{"packs": out, "enabled": h.seg != nil, "can_run": canRun})
 }
 
 func (h *Handler) ListSegmentationRuns(w http.ResponseWriter, r *http.Request) {
