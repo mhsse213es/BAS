@@ -267,8 +267,10 @@ func parseInstalledSoftware(raw string) []endpointrisk.InstalledApp {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "|", 2)
-		if len(parts) != 2 {
+		// Name|Version is the original format. The Linux collector also emits
+		// |Architecture|Status. Only name and version are used here.
+		parts := strings.SplitN(line, "|", 4)
+		if len(parts) < 2 {
 			continue
 		}
 		name := strings.TrimSpace(parts[0])
