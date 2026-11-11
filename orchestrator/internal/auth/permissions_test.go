@@ -48,6 +48,10 @@ func TestHasPermission_FullMatrix(t *testing.T) {
 		{RoleAdmin, CanUpdateConnectorConfig, true},
 		{RoleAnalyst, CanUpdateConnectorConfig, false},
 		{RoleViewer, CanUpdateConnectorConfig, false},
+
+		{RoleAdmin, CanManageRiskInputs, true},
+		{RoleAnalyst, CanManageRiskInputs, false},
+		{RoleViewer, CanManageRiskInputs, false},
 	}
 	for _, tc := range cases {
 		if got := HasPermission(tc.role, tc.perm); got != tc.want {

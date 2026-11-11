@@ -112,8 +112,8 @@ const (
 	CanApproveK8sScenario Permission = "k8s-scenarios:approve"
 	CanExecuteK8sScenario Permission = "k8s-scenarios:execute"
 	// CanViewK8sDiscovery lets an analyst or admin read the read-only Kubernetes analysis of the lab cluster.
-	CanViewK8sDiscovery Permission = "k8s-discovery:view"
-	CanInjectExerciseEvidence  Permission = "exercises:executions:inject-evidence"
+	CanViewK8sDiscovery       Permission = "k8s-discovery:view"
+	CanInjectExerciseEvidence Permission = "exercises:executions:inject-evidence"
 
 	// Admin-only: agent state, license, connection config.
 	CanSetAgentState        Permission = "agents:set-state"
@@ -147,7 +147,11 @@ const (
 	// policies that have no safe built-in value, such as the in-process host
 	// language-mode requirement. Admin only: the default changes what every
 	// later run is judged against.
-	CanManageExecutionPolicy   Permission = "execution-policy:manage"
+	CanManageExecutionPolicy Permission = "execution-policy:manage"
+	// CanManageRiskInputs sets the customer-entered frequency and loss-per-event inputs behind the
+	// estimated annual loss figure, and the deployment currency. Admin only by default: these estimates
+	// feed a figure that goes to the board.
+	CanManageRiskInputs        Permission = "risk-inputs:manage"
 	CanDeleteConnectorScenario Permission = "connector:scenarios:delete"
 
 	// Admin-only: attack-path schedule, ART content management.
@@ -334,6 +338,7 @@ const (
 var rolePermissions = map[Role]map[Permission]bool{
 	RoleAdmin: {
 		CanManageExecutionPolicy: true,
+		CanManageRiskInputs:      true,
 
 		CanVerify:            true,
 		CanUploadEvidence:    true,
@@ -407,11 +412,11 @@ var rolePermissions = map[Role]map[Permission]bool{
 	},
 	RoleAnalyst: {
 		CanDecideAdvisoryRelevance: true,
-		CanVerify:            true,
-		CanUploadEvidence:    true,
-		CanReview:            true,
-		CanExport:            true,
-		CanCurateThreatIntel: true,
+		CanVerify:                  true,
+		CanUploadEvidence:          true,
+		CanReview:                  true,
+		CanExport:                  true,
+		CanCurateThreatIntel:       true,
 		// CanDeleteEvidence and CanReviewThreatIntel intentionally withheld —
 		// deletion and confidence review are admin-only so a single analyst
 		// cannot quietly remove audit material or self-approve their own claim.
