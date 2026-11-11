@@ -19,6 +19,7 @@ import (
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/pathcorrelation"
 	"github.com/audspect/bas/internal/reporting/attackdata"
+	"github.com/audspect/bas/internal/riskquant"
 	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/verification"
@@ -221,6 +222,9 @@ type FullReport struct {
 	// Executive-grade derivations (Cymulate-style report).
 	ExecutiveConclusion string          `json:"executiveConclusion"`
 	TopRiskDrivers      []RiskDriver    `json:"topRiskDrivers"`
+	// RiskQuantification is the estimated annual loss range for open exposures, from customer-entered
+	// inputs (see internal/riskquant). Nil until inputs are supplied; the board card then does not render.
+	RiskQuantification *riskquant.Summary `json:"riskQuantification,omitempty"`
 	Insights            Insights        `json:"insights"`
 	ActionPlan          []ActionItem    `json:"actionPlan"`
 	Reliability         Reliability     `json:"reliability"`
