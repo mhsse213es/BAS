@@ -66,7 +66,7 @@ func matchMapping(m Mapping, host Host) []Result {
 				Verdict: Unknown, Reason: "no fixed version recorded for installed package"})
 			continue
 		}
-		if !ValidVersion(installed) {
+		if installed == AmbiguousVersion || !ValidVersion(installed) {
 			out = append(out, Result{CVE: m.CVE, MappingID: m.ID, Package: pkg, Installed: installed,
 				Verdict: Unknown, Reason: "malformed installed version"})
 			continue
