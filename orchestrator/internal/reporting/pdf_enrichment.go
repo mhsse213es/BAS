@@ -64,6 +64,7 @@ func (d *rpt) threatIntel(techID string) {
 			names = append(names, c.Name+" ("+c.ID+")")
 		}
 		d.tiLine("D3FEND countermeasures", strings.Join(capStr(names, 6), "; "), cInk)
+		d.tiLine("D3FEND source", attackdata.D3fendAttribution, cMuted)
 	}
 	if v := tiVersionLine(e); v != "" {
 		d.tiLine("ATT&CK version", v, cMuted)

@@ -1,6 +1,7 @@
 package attackdata
 
 import (
+	"strings"
 	"slices"
 	"testing"
 )
@@ -237,5 +238,29 @@ func TestSubtechniqueCounts(t *testing.T) {
 	}
 	if _, exists := counts["T1055.001"]; exists {
 		t.Error("a sub-technique ID must not itself appear as a parent key")
+	}
+}
+
+// A technique in the MITRE D3FEND ATT&CK mapping carries its countermeasures, with the D3FEND ID.
+func TestLookupD3fendCountermeasures(t *testing.T) {
+	e := Lookup("T1003.001")
+	if e == nil {
+		t.Fatal("T1003.001 should resolve")
+	}
+	found := false
+	for _, c := range e.D3FEND {
+		if c.ID == "D3-ABPI" && c.Name != "" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("T1003.001 should list D3-ABPI with a name, got %+v", e.D3FEND)
+	}
+}
+
+// The D3FEND notice must name MITRE and the D3FEND terms, since the licence requires the copyright designation to be reproduced.
+func TestD3fendAttributionNamesMITRE(t *testing.T) {
+	if !strings.Contains(D3fendAttribution, "MITRE") || !strings.Contains(D3fendAttribution, "D3FEND") {
+		t.Errorf("D3fendAttribution must name MITRE and D3FEND, got %q", D3fendAttribution)
 	}
 }
