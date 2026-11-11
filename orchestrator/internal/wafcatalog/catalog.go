@@ -18,6 +18,7 @@ func AudspectWAFAttackCatalog() ([]AttackVector, error) {
 		rateLimitVectors, cacheWeaknessVectors, policyMisconfigVectors,
 		commandInjectionVectors, fileInclusionVectors, xxeVectors,
 		noSQLInjectionVectors, ldapInjectionVectors, xpathInjectionVectors,
+		jndiInjectionVectors,
 		sqlInjectionDepthVectors, xssDepthVectors, pathTraversalDepthVectors, commandInjectionDepthVectors,
 	}
 	for _, f := range families {

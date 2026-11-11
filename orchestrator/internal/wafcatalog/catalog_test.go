@@ -7,8 +7,8 @@ func TestAudspectWAFAttackCatalog_ReturnsValidatedCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AudspectWAFAttackCatalog: %v", err)
 	}
-	if len(vectors) != 73 {
-		t.Fatalf("len(vectors) = %d, want 73 (65 + 8 command-injection depth vectors CMDI-009..016)", len(vectors))
+	if len(vectors) != 82 {
+		t.Fatalf("len(vectors) = %d, want 82 (73 + PATHTRAV-009/010, SQLI-011/012, XSS-013/014, JNDI-001..003)", len(vectors))
 	}
 	if err := ValidateCatalog(vectors); err != nil {
 		t.Errorf("returned catalog fails ValidateCatalog: %v", err)
@@ -24,6 +24,7 @@ func TestAudspectWAFAttackCatalog_CoversAllFamilies(t *testing.T) {
 		FamilySQLInjection, FamilyXSS, FamilyPathTraversal, FamilySSRF, FamilyFileUpload,
 		FamilyHTTPParser, FamilyAPIAbuse, FamilyAuthAbuse, FamilyRateLimit, FamilyCacheWeakness, FamilyPolicyMisconfig,
 		FamilyCommandInjection, FamilyFileInclusion, FamilyXXE, FamilyNoSQLInjection, FamilyLDAPInjection, FamilyXPathInjection,
+		FamilyJNDIInjection,
 	}
 	seen := make(map[AttackFamily]bool)
 	for _, v := range vectors {

