@@ -15,6 +15,11 @@ while read -r id action src dst port proto; do
     -j NFLOG --nflog-group 1 --nflog-prefix "$id|$action"
   iptables -A FORWARD -s "$src" -d "$dst" -p "$proto" --dport "$port" -j "$action"
 done < "$RULES"
-iptables -A FORWARD -j NFLOG --nflog-group 1 --nflog-prefix "SEG-CATCHALL|DROP"
-iptables -A FORWARD -j DROP
+# NO_CATCHALL=1 is for tests that need an unlogged drop: the FORWARD policy
+# (DROP, set above) then drops unmatched traffic without a log record. Never
+# set in normal runs; the default catch-all logs every drop.
+if [ "${NO_CATCHALL:-0}" != "1" ]; then
+  iptables -A FORWARD -j NFLOG --nflog-group 1 --nflog-prefix "SEG-CATCHALL|DROP"
+  iptables -A FORWARD -j DROP
+fi
 echo "applied $RULES"
