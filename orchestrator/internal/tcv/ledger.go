@@ -24,6 +24,8 @@ const (
 	EventSuperseded           EventType = "superseded"
 	EventRetired              EventType = "retired"
 	EventRejected             EventType = "rejected"
+	EventAdvisoryReceived     EventType = "advisory_received"
+	EventAdvisoryClassified   EventType = "advisory_classified"
 	// EventBundlePackaged marks stage 4 (packaging) of the content-velocity
 	// clock: a registry content version shipped in a signed, verified bundle.
 	// Recorded by the post-build ingest command, not by the build itself.

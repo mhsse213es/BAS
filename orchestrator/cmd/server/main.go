@@ -334,6 +334,9 @@ func main() {
 	if err := db.EnsureTCFPipelineEventsSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] TCF pipeline events schema: %v", err)
 	}
+	if err := db.EnsureAdvisorySchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] advisory intake schema: %v", err)
+	}
 	if err := db.EnsureCloudRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] cloud run schema: %v", err)
 	}
