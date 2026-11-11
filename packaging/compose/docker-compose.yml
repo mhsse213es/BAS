@@ -16,8 +16,15 @@ services:
       POSTGRES_DB:       ${POSTGRES_DB:-bas_platform}
       POSTGRES_USER:     ${POSTGRES_USER:-bas_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # TLS on (P0.1): the server certificate and key come from DATA_DIR/dbtls,
+    # created by install.sh (db-tls.sh) before this stack starts. The key is
+    # owned by the postgres user (UID 70) and is never copied into backups.
+    command: ["postgres", "-c", "ssl=on",
+              "-c", "ssl_cert_file=/etc/audspect/dbtls/server.crt",
+              "-c", "ssl_key_file=/etc/audspect/dbtls/server.key"]
     volumes:
       - audspect-postgres-data:/var/lib/postgresql/data
+      - ./dbtls:/etc/audspect/dbtls:ro
     networks:
       - bas-internal
     restart: unless-stopped
@@ -142,16 +149,17 @@ services:
       chrome:
         condition: service_started  # orchestrator falls back to built-in PDF if chrome unhealthy
     environment:
-      # sslmode=prefer encrypts when Postgres offers TLS (default in official image).
-      # Production deployments with a certificate chain should use sslmode=require
-      # or sslmode=verify-full with PGSSLROOTCERT set.
+      # Database connections verify the server certificate and hostname
+      # (sslmode=verify-full, P0.1). The orchestrator refuses to start with any
+      # weaker mode (db.RequireVerifiedDBTLS). The root is the server certificate
+      # itself, mounted read-only below; the key is never mounted here.
       #
       # DATABASE_URL is the orchestrator's normal runtime connection -- bas_app,
       # NOSUPERUSER/NOBYPASSRLS, owns nothing. DATABASE_ADMIN_URL is used only
       # during startup schema bootstrap/bas_app provisioning, then closed. See
       # docs/superpowers/specs/2026-09-30-runtime-role-separation-design.md.
-      DATABASE_URL:       "postgres://bas_app:${BAS_APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
-      DATABASE_ADMIN_URL: "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
+      DATABASE_URL:       "postgres://bas_app:${BAS_APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=verify-full&sslrootcert=/etc/audspect/dbtls/server.crt"
+      DATABASE_ADMIN_URL: "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=verify-full&sslrootcert=/etc/audspect/dbtls/server.crt"
       # Also passed standalone (not just embedded in DATABASE_URL above) --
       # config.Load() reads BAS_APP_DB_PASSWORD directly via os.Getenv, it
       # never parses the DSN. Both references interpolate from the same
@@ -302,6 +310,8 @@ services:
       # already-issued agent certificate AND every agent's locally-cached CA
       # root fingerprint -- a fleet-wide lockout, not just data loss.
       - ./pki:/etc/audspect/pki
+      # Database TLS trust root (P0.1): the server certificate only, never the key.
+      - ./dbtls/server.crt:/etc/audspect/dbtls/server.crt:ro
       # Deployment command-signing key (B4) -- independent trust domain
       # and lifecycle from pki's CA above (never chained to it), but the
       # identical bind-mount treatment: a host path the orchestrator
@@ -423,11 +433,12 @@ services:
       caldera:
         condition: service_started
     environment:
-      DATABASE_URL: "postgres://bas_app:${BAS_APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
+      DATABASE_URL: "postgres://bas_app:${BAS_APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=verify-full&sslrootcert=/etc/audspect/dbtls/server.crt"
       CALDERA_URL: "http://caldera:8888"
       CALDERA_API_KEY: ${CALDERA_API_KEY:-BASPlatform2024}
     volumes:
       - ../..:/workspace
+      - ./dbtls/server.crt:/etc/audspect/dbtls/server.crt:ro
     working_dir: /workspace/orchestrator
     command: ["go", "run", "./cmd/auditcorpus"]
 

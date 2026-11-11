@@ -71,6 +71,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "${SCRIPT_DIR}/db-encryption-key.sh" ]] || { echo "missing ${SCRIPT_DIR}/db-encryption-key.sh" >&2; exit 1; }
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/db-encryption-key.sh"
+# Database server TLS material (db-tls.sh, P0.1) and CA key backup wrapping (ca-backup.sh, P0.2).
+[[ -f "${SCRIPT_DIR}/db-tls.sh" ]] || { echo "missing ${SCRIPT_DIR}/db-tls.sh" >&2; exit 1; }
+source "${SCRIPT_DIR}/db-tls.sh"
+[[ -f "${SCRIPT_DIR}/ca-backup.sh" ]] || { echo "missing ${SCRIPT_DIR}/ca-backup.sh" >&2; exit 1; }
+source "${SCRIPT_DIR}/ca-backup.sh"
 readonly SCRIPT_DIR
 
 # Bundled (offline) Docker installer, shared with setup.sh.
@@ -1274,6 +1279,8 @@ mode_install() {
   # Interim database encryption key, kept outside DATA_DIR so dumps and the upgrade backup do not capture it.
   DB_KEY_MARKER="${DATA_DIR}/.db-key-issued"
   db_key_provision fresh || { err "encryption key provisioning failed; installation stopped at step 3"; exit 1; }
+  DB_TLS_DIR="${DATA_DIR}/dbtls"
+  db_tls_ensure || { err "database TLS setup failed; no service was started"; exit 1; }
 
   step "4/10  Loading Docker images (air-gap safe -no pull)"
   # Fail closed: every tar was verified after the prerequisite checks (a missing
@@ -1380,6 +1387,8 @@ mode_upgrade() {
   # every stored credential unreadable.
   DB_KEY_MARKER="${DATA_DIR}/.db-key-issued"
   db_key_provision upgrade || { err "encryption key check failed; the upgrade was not started"; exit 1; }
+  DB_TLS_DIR="${DATA_DIR}/dbtls"
+  db_tls_ensure || { err "database TLS check failed; the upgrade was not started"; exit 1; }
 
   # Detect an upgrade FROM a pre-mTLS install: BAS_ENROLL_PORT's absence
   # from the existing .env means the current deployment predates the
@@ -1420,7 +1429,15 @@ mode_upgrade() {
   # Deployment CA keypair (bind-mounted ./pki -> /etc/audspect/pki). It is
   # generated once and never regenerated, so losing it forces regenerating the
   # CA and re-enrolling every agent. -a preserves the 0600 mode on ca-key.pem.
-  [[ -d "${DATA_DIR}/pki" ]] && cp -a "${DATA_DIR}/pki" "${backup_dir}/pki"
+  if [[ -d "${DATA_DIR}/pki" ]]; then
+    ca_backup_stage "${DATA_DIR}/pki" "${backup_dir}/pki"       || { err "CA key backup could not be staged safely (database encryption key missing or unusable). The upgrade was stopped before any change."; rm -rf "$backup_dir"; exit 1; }
+  fi
+  local legacy_ca
+  legacy_ca=$(ca_backup_plaintext_report "${DATA_DIR}/backups" | grep -v "^${backup_dir}$" || true)
+  if [[ -n "$legacy_ca" ]]; then
+    warn "Earlier backups still hold a plaintext CA private key (they predate this fix). Once a current backup is verified, remove them:"
+    echo "$legacy_ca" | sed 's/^/    /'
+  fi
   echo "$BAS_VERSION" > "${backup_dir}/VERSION"
   log "Backup created: ${backup_dir}"
 
@@ -1952,14 +1969,21 @@ _run_pg_dump() {
 }
 
 _package_config() {
-  local out_file="$1"
+  local out_file="$1" stage
   # LIC_PATH is never set in a backup context (no --config file is loaded
   # here) -- _resolve_license_file falls back to reading the already-
   # installed .env's own LICENSE_FILE, which is exactly what's on disk.
   _resolve_license_file
-  tar -cf "$out_file" -C "${DATA_DIR}" \
-    --ignore-failed-read \
-    .env "${LICENSE_FILE}" certs scenarios docker-compose.yml pki signing 2>/dev/null || true
+  tar -cf "$out_file" -C "${DATA_DIR}"     --ignore-failed-read     .env "${LICENSE_FILE}" certs scenarios docker-compose.yml signing 2>/dev/null || true
+  # pki is staged: the CA private key is wrapped under the database encryption
+  # key and never archived in plaintext (P0.2, ca-backup.sh).
+  if [[ -d "${DATA_DIR}/pki" ]]; then
+    stage=$(mktemp -d) || return 1
+    if ! ca_backup_stage "${DATA_DIR}/pki" "${stage}/pki"; then rm -rf "$stage"; return 1; fi
+    tar -rf "$out_file" -C "$stage" pki || { rm -rf "$stage"; return 1; }
+    rm -rf "$stage"
+  fi
+  return 0
 }
 
 _write_backup_manifest() {
@@ -2044,7 +2068,9 @@ _run_backup_engine() {
   if ! _run_pg_dump "${work_dir}/postgres/audspect.dump"; then
     echo "FAILED|||||pg_dump failed"; rm -rf "$work_dir"; return 1
   fi
-  _package_config "${work_dir}/config.tar"
+  if ! _package_config "${work_dir}/config.tar"; then
+    echo "FAILED|||||CA key backup could not be staged (database encryption key missing or unusable)"; rm -rf "$work_dir"; return 1
+  fi
   _write_backup_manifest "${work_dir}/manifest.json"
 
   tar_path="${work_dir}/audspect-backup-${ts}.tar"
@@ -2163,6 +2189,13 @@ mode_restore() {
     || { err "Decryption failed -- wrong .backup_key or corrupt archive."; rm -rf "$work_dir"; exit 1; }
   tar -xf "$tar_path" -C "$work_dir"
   [[ -f "${work_dir}/manifest.json" ]] || { err "Archive missing manifest.json -- refusing to restore."; rm -rf "$work_dir"; exit 1; }
+  # Check the archive's CA key can be unwrapped BEFORE anything is changed (P0.2).
+  mkdir -p "${work_dir}/cfg" "${work_dir}/pkicheck"
+  tar -xf "${work_dir}/config.tar" -C "${work_dir}/cfg" || { err "Configuration archive unreadable -- refusing to restore."; rm -rf "$work_dir"; exit 1; }
+  if [[ -f "${work_dir}/cfg/pki/ca-key.pem.wrapped" ]]; then
+    cp "${work_dir}/cfg/pki/ca-key.pem.wrapped" "${work_dir}/pkicheck/"
+    ca_backup_unwrap "${work_dir}/pkicheck"       || { err "The CA key in this archive does not unwrap with this host's database encryption key. Nothing was changed. Import the original database key (import-db-key) and retry."; rm -rf "$work_dir"; exit 1; }
+  fi
   local archive_version
   archive_version=$(grep -o '"basVersion"[^,]*' "${work_dir}/manifest.json" | grep -o '"[^"]*"$' | tr -d '"')
   info "Archive BAS version: ${archive_version:-unknown}. Installed: ${BAS_VERSION}."
@@ -2186,6 +2219,17 @@ mode_restore() {
 
   step "6/8  Restoring configuration"
   tar -xf "${work_dir}/config.tar" -C "${DATA_DIR}"
+  if [[ -f "${DATA_DIR}/pki/ca-key.pem.wrapped" ]]; then
+    # The archive's CA replaces the live one. The live key is held aside until the archived key is in place.
+    local live_ca_bak="${work_dir}/live-ca-key.pem"
+    [[ -f "${DATA_DIR}/pki/ca-key.pem" ]] && mv "${DATA_DIR}/pki/ca-key.pem" "$live_ca_bak"
+    if ! ca_backup_unwrap "${DATA_DIR}/pki"; then
+      [[ -f "$live_ca_bak" ]] && mv "$live_ca_bak" "${DATA_DIR}/pki/ca-key.pem"
+      err "CA key restore failed; the previous CA key was put back. Stopping before services start."; rm -rf "$work_dir"; exit 1
+    fi
+    rm -f "$live_ca_bak"
+    if [[ "$(id -u)" == "0" ]]; then chown 65532:65532 "${DATA_DIR}/pki/ca-key.pem"; fi
+  fi
 
   step "7/8  Starting services"
   (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --pull never --remove-orphans)
