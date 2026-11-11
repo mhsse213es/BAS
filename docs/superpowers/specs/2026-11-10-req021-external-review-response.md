@@ -1,3 +1,16 @@
+> **STATUS UPDATE (2026-11-11): superseded in part.** This document was written before the independent review. The current state is:
+>
+> - Independent review recorded by **Zain** (Senior Security Infrastructure Reviewer), 2026-11-11, from `Review.txt`. Source of truth: `req021-spike/reviewed_mappings.yaml`.
+> - **Approved (21 rows):** Ubuntu rows R1, R2 (focal), R3 (focal), R4-R7, R10 (focal), R11-R19 and FreeType CVE-2020-15999 (added); Windows W1-W3.
+> - **CONDITIONAL / not eligible:** R8 Redis CVE-2022-0543; O2 kernel CVE-2025-39682 (not counted).
+> - **REJECTED:** R9 Spring CVE-2022-22965 for `libspring-aop-java`.
+> - **Corrected:** R18 PHP jammy is `libapache2-mod-php8.1` (8.1.2-1ubuntu2.28). ActiveMQ jammy `~esm1` removed. CVE-2022-26486 counted for focal only.
+> - **Narrowed:** CVE-2021-1870 and CVE-2021-1871 approvals cover focal only; jammy and noble are UNVERIFIED.
+> - **Aliases:** all 25 remain UNRESOLVED.
+> - **Limit:** Zain's USN citations could not be opened from the review environment (Ubuntu returned server errors). Version strings were checked against Ubuntu's tracker.
+>
+> The sections below describe the register as it stood when this was written and are kept for the audit trail.
+
 # REQ-021: response to external technical review (AI-assisted check, not an independent review)
 
 **Date:** 2026-11-10. **Independent reviewer:** pending a human. Nothing here is an approval.
