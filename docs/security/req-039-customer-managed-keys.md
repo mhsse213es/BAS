@@ -144,17 +144,29 @@ Level 5 is not claimed until 1 through 11 pass.
 
 `packaging/build.sh` previously copied only some installer files. It did not copy `install.sh`, `db-encryption-key.sh` or `setup-install-state.sh`, which `install.sh` and `setup.sh` require. A bundle built from that script could not run the installer. It now copies all of them, plus `db-tls.sh` and `ca-backup.sh`. `packaging/compose/tests/bundle_helpers_test.sh` fails if any installer-required helper is missing from the build.
 
-## Pre-existing test failures on main (not caused by this work)
+## Test results on Linux (committed content)
 
-Both fail on `9879b740`, the commit before the P0 work. Neither is run by CI (`.github/workflows/test.yml` does not invoke `packaging/compose/tests/`). Neither assertion has been changed.
+Run in a Linux container (postgres:16 base, OpenSSL 3.5, gawk) against `git -c core.autocrlf=false archive HEAD packaging`, so the content is what git stores. Mode bits are enforced in this run.
 
-- `packaging/compose/tests/db_encryption_key_test.sh`, "fresh install did not generate a valid key". Cause: `db_key_provision` verifies the key's owner and Unix mode itself, so it refuses on a filesystem without Unix modes (NTFS under Git Bash). On Linux the check is valid. Fix: run this suite on Linux in CI, or make the mode probe explicit in the test. Not yet done.
-- `packaging/compose/tests/install_config_test.sh`, "upgrade did not keep it" (plus `command not found` for install helpers). Cause: the test runs `load_config` and other installer functions from a hand-written list of function names. That list has drifted from `install.sh`: `validate_k8s_scenario_config`, `validate_k8s_discovery_config`, `_stage_k8s_scenario`, `_stage_k8s_discovery`, `_write_aleef_secrets` and `info` are missing. Extracting every function by awk does not work, because a heredoc in `install.sh` has a line starting with `}`. The proper fix is a source guard in `install.sh` (so the test can source it) or a test that runs the installer's real entry point. Not yet done.
+| Suite | Result |
+|---|---|
+| `tests/db_tls_test.sh` | 13 pass, 0 fail |
+| `tests/ca_backup_test.sh` | 19 pass, 0 fail |
+| `tests/backup_key_test.sh` | 14 pass, 0 fail |
+| `tests/bundle_helpers_test.sh` | 9 pass, 0 fail |
+| `tests/db_encryption_key_test.sh` | 13 pass, 0 fail |
+| `tests/install_config_test.sh` | 51 pass, 0 fail |
+| `tests/offline_prereqs_test.sh` | 12 pass, 0 fail |
+| `setup-install-state.test.sh` | 5 pass, 0 fail |
+| `setup.test.sh` | 6 pass, 0 fail |
+| `uninstall.test.sh` | 34 pass, 0 fail |
+
+Earlier "pre-existing failures" are not product failures. They came from running the suites on a Windows host: Unix mode bits are not enforced by NTFS, and Git Bash's awk handles the regex escapes differently. On Linux they pass. CI does not run these suites (`.github/workflows/test.yml` does not invoke `packaging/compose/tests/`); adding a Linux CI job for them is the remaining step.
 
 ## Not verified
 
 - A real installer upgrade and rollback on a host with existing data. Only the helper functions and the compose config were exercised.
 - A restore drill, including restore onto a new host.
-- Mode-bit checks for the key files (run on Linux).
+- Real key file ownership on a populated host (mode bits are now checked in the Linux container run above).
 - Any deployment to staging. This was not approved.
 - `go test -race` for the changed packages (cgo unavailable on this host).
