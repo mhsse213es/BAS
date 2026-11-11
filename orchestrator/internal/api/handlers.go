@@ -5794,6 +5794,13 @@ func (h *Handler) GetBoardOnePager(w http.ResponseWriter, r *http.Request) {
 	}
 	h.auditLog(r, "report.export", scope, map[string]any{"format": format, "type": "board"}, "ok")
 
+	// Estimated annual loss (REQ-052): attached only when inputs exist for an open finding; otherwise the card stays hidden.
+	if rq, rerr := h.riskQuantification(r.Context(), report); rerr != nil {
+		log.Printf("[api] board loss estimate: %v — rendering without it", rerr)
+	} else {
+		report.RiskQuantification = rq
+	}
+
 	if format == "pdf" {
 		var pbuf bytes.Buffer
 		if perr := reporting.RenderBoardOnePagerPDF(r.Context(), &pbuf, report, compRows, genBy); perr != nil {

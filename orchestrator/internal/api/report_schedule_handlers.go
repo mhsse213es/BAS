@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/smtp"
@@ -303,6 +304,12 @@ func (h *Handler) generateScheduledReport(ctx context.Context, s ReportSchedule)
 		}
 		if berr != nil {
 			return "", "", nil, berr
+		}
+		// Estimated annual loss (REQ-052): see the on-demand board export for the rule.
+		if rq, rerr := h.riskQuantification(ctx, rep); rerr != nil {
+			log.Printf("[api] scheduled board loss estimate: %v — rendering without it", rerr)
+		} else {
+			rep.RiskQuantification = rq
 		}
 		return h.renderToBytes(ctx, "Board_Scorecard", scope, s.Format,
 			func(out *bytes.Buffer) error { return reporting.RenderBoardOnePager(out, rep, compRows, genBy) },

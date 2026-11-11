@@ -809,6 +809,12 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Post("/api/report/verify", h.VerifyAuditPack)
 		r.Get("/api/report/branding", h.GetReportBranding)
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Put("/api/report/branding", h.UpdateReportBranding)
+		// Estimated annual loss inputs (REQ-052). Reads are any signed-in user, as for the board figure; writes are admin only.
+		r.Get("/api/risk/inputs", h.GetRiskInputs)
+		r.Get("/api/risk/inputs/{technique}/history", h.GetRiskInputHistory)
+		r.With(auth.RequirePermission(auth.CanManageRiskInputs)).Put("/api/risk/currency", h.SetRiskCurrency)
+		r.With(auth.RequirePermission(auth.CanManageRiskInputs)).Put("/api/risk/inputs/{technique}", h.PutRiskInput)
+		r.With(auth.RequirePermission(auth.CanManageRiskInputs)).Delete("/api/risk/inputs/{technique}", h.DeleteRiskInput)
 		// Scheduled + emailed reports (admin-managed via CanUpdateConnectorConfig).
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Get("/api/report/schedules", h.ListReportSchedules)
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Post("/api/report/schedules", h.CreateReportSchedule)
