@@ -83,6 +83,11 @@ func Evaluate(expect Expect, ev Evidence) (Verdict, string) {
 	if ev.ProbeResult.Outcome == OutcomeConnected {
 		return FAIL, "prohibited connection succeeded"
 	}
+	// The firewall accepted a flow it must deny. The target may still have
+	// refused it (no listener), but the path is open: that is a breach.
+	if hasAction(ev.Events, "ACCEPT") {
+		return FAIL, "firewall accepted a prohibited flow"
+	}
 	if hasAction(ev.Events, "DROP", "REJECT") {
 		return PASS, "blocked with firewall evidence"
 	}

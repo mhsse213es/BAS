@@ -76,3 +76,17 @@ func TestEvaluate_FirewallLogUnavailable_IsUnknown(t *testing.T) {
 		t.Fatalf("got %s, want UNKNOWN", got)
 	}
 }
+
+// A prohibited flow that the firewall ACCEPTED is a breach even when the target
+// refused it (no listener at the destination). The outcome must not hide it.
+func TestEvaluate_DeniedButFirewallAccepted_IsFail(t *testing.T) {
+	ev := Evidence{
+		ProbeResult:       ProbeResult{Outcome: OutcomeRefused},
+		Events:            []FirewallEvent{{RuleID: "SEG-ALLOW-X", Action: "ACCEPT"}},
+		FirewallAvailable: true,
+	}
+	v, reason := Evaluate(ExpectDeny, ev)
+	if v != FAIL {
+		t.Fatalf("got %s (%s), want FAIL: firewall accepted a prohibited flow", v, reason)
+	}
+}
