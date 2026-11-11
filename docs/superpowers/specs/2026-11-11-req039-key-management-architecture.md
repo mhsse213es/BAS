@@ -107,4 +107,6 @@ Criteria 1 to 3 are unchanged from req-039.
 
 Connector credentials are wired. Setting `BAS_KMS=vault` (with `BAS_VAULT_ADDR`, `BAS_VAULT_KEY_NAME`, `BAS_VAULT_TOKEN_FILE`) makes new values sealed under the Vault KEK. Reads fall back to the legacy pgcrypto row only when no envelope value exists; a revoked key never falls back. `secretstore.Migrate` copies legacy values across and reads each back before counting it. Unset `BAS_KMS` keeps the existing store, unchanged. Tests: 23 secret-store tests against Postgres, plus an integration test against a real Vault that deletes the key and confirms the credential becomes unreadable.
 
-Not yet done: the migration has not been run on any database, the legacy key file is not retired, and the CA key, configurations, results, evidence and backups still use their current schemes. Level 5 is not claimed.
+Populated-host simulation (`populated_test.go`, component level): 60 credentials are written under the legacy scheme, migrated, read back with the legacy backend removed, and the envelope table is restored into a clean database that uses the same KEK. All 60 read back. With a different KEK, none read back and no value is returned. This does not run the installer, the signed bundle or a real host, so it does not close criterion 10.
+
+Not yet done: a real install-and-restore on a host with the signed bundle, the legacy key file is not retired, and the CA key, configurations, results, evidence and backups still use their current schemes. Level 5 is not claimed.
