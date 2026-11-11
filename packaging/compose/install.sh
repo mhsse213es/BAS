@@ -71,6 +71,33 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "${SCRIPT_DIR}/db-encryption-key.sh" ]] || { echo "missing ${SCRIPT_DIR}/db-encryption-key.sh" >&2; exit 1; }
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/db-encryption-key.sh"
+# _backup_key_prompt_inputs: on a terminal, ask for the recovery path and passphrase unless they are already set.
+_backup_key_prompt_inputs() {
+  if [[ -t 0 ]]; then
+    if [[ -z "${BAS_BACKUP_KEY_RECOVERY_PATH:-}" ]]; then
+      read -r -p "  Recovery copy path (must be outside ${DATA_DIR}): " BAS_BACKUP_KEY_RECOVERY_PATH
+    fi
+    if [[ -z "${BAS_BACKUP_KEY_PASSPHRASE:-}" ]]; then
+      local p1 p2
+      read -r -s -p "  Recovery passphrase (16 characters or more): " p1; echo
+      read -r -s -p "  Repeat passphrase: " p2; echo
+      [[ "$p1" == "$p2" ]] || { err "the passphrases differ"; return 1; }
+      BAS_BACKUP_KEY_PASSPHRASE="$p1"
+    fi
+    export BAS_BACKUP_KEY_RECOVERY_PATH BAS_BACKUP_KEY_PASSPHRASE
+  fi
+  return 0
+}
+
+# _backup_key_gate: backups do not run until a verified recovery copy of the backup key exists (backup-key.sh).
+_backup_key_gate() {
+  if backup_key_recovery_confirm 2>/dev/null; then
+    return 0
+  fi
+  _backup_key_prompt_inputs || return 1
+  backup_key_recovery_confirm
+}
+
 # Database server TLS material (db-tls.sh, P0.1) and CA key backup wrapping (ca-backup.sh, P0.2).
 [[ -f "${SCRIPT_DIR}/db-tls.sh" ]] || { echo "missing ${SCRIPT_DIR}/db-tls.sh" >&2; exit 1; }
 source "${SCRIPT_DIR}/db-tls.sh"
@@ -131,6 +158,7 @@ while [[ $# -gt 0 ]]; do
     --backup-worker)   MODE="backup-worker"   ;;
     --export-db-key)   MODE="export-db-key"; shift; DB_KEY_RECOVERY_PATH="${1:-}" ;;
     --import-db-key)   MODE="import-db-key"; shift; DB_KEY_RECOVERY_PATH="${1:-}" ;;
+    --export-backup-key) MODE="export-backup-key"; shift; BAS_BACKUP_KEY_RECOVERY_PATH="${1:-}" ;;
     --restore)
       MODE="restore"
       shift
@@ -1333,6 +1361,7 @@ mode_install() {
   # a copy of the backup directory cannot be decrypted with it. Losing this
   # file makes archives unrecoverable; keep an offline copy.
   backup_key_provision || { err "backup encryption key could not be created; installation stopped"; exit 1; }
+  _backup_key_gate || { err "installation stopped: no confirmed recovery copy of the backup key"; exit 1; }
 
   step "6/10  Writing .env (root-readable only)"
   _write_env
@@ -1388,6 +1417,7 @@ mode_upgrade() {
   DB_TLS_DIR="${DATA_DIR}/dbtls"
   db_tls_ensure || { err "database TLS check failed; the upgrade was not started"; exit 1; }
   backup_key_provision || { err "backup encryption key could not be created; the upgrade was not started"; exit 1; }
+  _backup_key_gate || { err "upgrade not started: no confirmed recovery copy of the backup key"; exit 1; }
   if backup_key_legacy_present; then
     warn "Legacy backup key ${BACKUP_KEY_LEGACY} is still present. It opens only older archives. Keep it until the historical-backup cleanup in docs/security/req-039-customer-managed-keys.md is complete."
   fi
@@ -2431,4 +2461,5 @@ case "$MODE" in
   restore)        mode_restore "$RESTORE_ARCHIVE" ;;
   export-db-key) db_key_export "$DB_KEY_RECOVERY_PATH" ;;
   import-db-key) db_key_import "$DB_KEY_RECOVERY_PATH" ;;
+  export-backup-key) _backup_key_prompt_inputs && backup_key_export "$BAS_BACKUP_KEY_RECOVERY_PATH" && backup_key_verify_recovery "$BAS_BACKUP_KEY_RECOVERY_PATH" && echo "Recovery copy verified." || exit 1 ;;
 esac

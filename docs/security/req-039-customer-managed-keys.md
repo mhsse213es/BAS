@@ -57,15 +57,22 @@ Current state (`packaging/compose/backup-key.sh`):
 - New archives use only that key. If it is missing, the archive is not written. There is no fallback to the co-located key.
 - Restore tries the new key first. The legacy co-located key is tried only for archives that do not open with the new key, and the restore prints a notice naming it.
 - The legacy key is never deleted by the installer. It is removed only at the end of the historical cleanup below.
-- Covered by `packaging/compose/tests/backup_key_test.sh` (13 checks): round-trip, a DATA_DIR-only copy cannot decrypt a new archive, no fallback when the new key is missing, legacy restore with notice, wrong key refused, legacy-key reporting.
+- Covered by `packaging/compose/tests/backup_key_test.sh` (30 checks, including the recovery-copy gate): round-trip, a DATA_DIR-only copy cannot decrypt a new archive, no fallback when the new key is missing, legacy restore with notice, wrong key refused, legacy-key reporting.
 
 Trade-off, accepted deliberately: a previous installer version cannot read archives made by this version, because it only knows the co-located key. Rolling back the software and then restoring an archive made after the upgrade therefore fails. To restore such an archive, use this version's installer, which keeps the new key. Do not copy the new key next to the archives to work around this.
 
 Target: the archive key is wrapped under the customer KMS (P1). The new key is still a host-local key; a root user on the host can read it.
 
+Recovery copy (gate):
+- Fresh install and upgrade do not back anything up until a verified recovery copy of the backup key exists. The installer prompts for the path and a passphrase (16 characters or more) on a terminal. Non-interactive runs set `BAS_BACKUP_KEY_RECOVERY_PATH` and `BAS_BACKUP_KEY_PASSPHRASE`. Otherwise the installer stops and prints the command to run.
+- The copy is encrypted with AES-256-CBC, PBKDF2, 600000 iterations, and is written mode 0600 outside `DATA_DIR`. The installer refuses a path inside `DATA_DIR`, and never overwrites an existing file.
+- Verification: the copy must decrypt with the passphrase and match the live key byte for byte. The installer then records `SHA-256(key)` in `DATA_DIR/.backup-key-recovery-verified`. The marker holds only the hash. Replacing the key invalidates it.
+- Command: `sudo bash install.sh --export-backup-key <file>`.
+- Store the copy encrypted and off this host, separately from the backups.
+
 Recovery if the backup key is unavailable:
-1. Restore the key from its offline copy to `/etc/audspect/secrets/backup-encryption.key` (owner root, mode 0600), then run `install.sh --restore <archive>`.
-2. If no offline copy exists, archives made with that key cannot be decrypted. There is no fallback and no plaintext path. Make the offline copy as soon as the key is provisioned, and check that it opens an archive.
+1. Restore the key from the recovery copy: decrypt it with the passphrase and write it to `/etc/audspect/secrets/backup-encryption.key` (owner root, mode 0600). Then run `install.sh --restore <archive>`.
+2. If no recovery copy exists, archives made with that key cannot be decrypted. There is no fallback and no plaintext path.
 
 Historical cleanup (not yet done). Earlier backups hold plaintext CA keys (upgrade backups as `pki/ca-key.pem`; archives inside `.tar.enc`). Do not delete them immediately:
 1. Create a new backup with this version. Verify its checksum.
