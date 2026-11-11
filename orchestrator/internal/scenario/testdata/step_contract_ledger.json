@@ -1,0 +1,4655 @@
+[
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 0,
+    "technique_id": "T1069",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 1,
+    "technique_id": "T1069",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 2,
+    "technique_id": "T1069",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 3,
+    "technique_id": "T1069",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 4,
+    "technique_id": "T1069",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 5,
+    "technique_id": "T1222",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "adcs-esc-template-exposure-audit.yaml",
+    "index": 0,
+    "technique_id": "T1649",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1021.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1135",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1003.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1021.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1135",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 8,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 9,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 10,
+    "technique_id": "T1490",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 11,
+    "technique_id": "T1490",
+    "action_key": "vss_delete",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 12,
+    "technique_id": "T1490",
+    "action_key": "survival",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 13,
+    "technique_id": "T1490",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 14,
+    "technique_id": "T1070.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 15,
+    "technique_id": "T1070.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-efficacy.yaml",
+    "index": 0,
+    "technique_id": "T1202",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-efficacy.yaml",
+    "index": 1,
+    "technique_id": "T1036",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-efficacy.yaml",
+    "index": 2,
+    "technique_id": "T1059.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-efficacy.yaml",
+    "index": 3,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-efficacy.yaml",
+    "index": 4,
+    "technique_id": "T1204.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-efficacy.yaml",
+    "index": 5,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1482",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1071.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1566.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1221",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1056.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1071.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1218.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1218.010",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-kill-chain.yaml",
+    "index": 8,
+    "technique_id": "T1071.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-kill-chain.yaml",
+    "index": 9,
+    "technique_id": "T1105",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 0,
+    "technique_id": "T1204.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 1,
+    "technique_id": "T1204.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 2,
+    "technique_id": "T1027.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 3,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 4,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 5,
+    "technique_id": "T1105",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 6,
+    "technique_id": "T1055",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 7,
+    "technique_id": "T1566.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 8,
+    "technique_id": "T1566.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 9,
+    "technique_id": "T1105",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 10,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 11,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 12,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 13,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 14,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "av-ngav-assessment.yaml",
+    "index": 15,
+    "technique_id": "T1499.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "black-basta-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1566.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "black-basta-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1003.001",
+    "action_key": "handle_probe",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "black-basta-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1562.001",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "black-basta-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1543.003",
+    "action_key": "service_create_start_stop_delete",
+    "framework": "custom",
+    "class": "potentially_destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "black-basta-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1021.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "black-basta-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "black-basta-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "black-basta-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1486",
+    "action_key": "ransomware_sim_sandboxed",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "black-basta-kill-chain.yaml",
+    "index": 8,
+    "technique_id": "T1490",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "black-basta-kill-chain.yaml",
+    "index": 9,
+    "technique_id": "T1490",
+    "action_key": "vss_delete",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "blackcat-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1087.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "blackcat-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1518.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "blackcat-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1003.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "blackcat-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "blackcat-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1543.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "blackcat-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "blackcat-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1490",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "blackcat-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1070.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "caldera-lateral-movement.yaml",
+    "index": 0,
+    "technique_id": "T1021.002",
+    "action_key": "",
+    "framework": "caldera",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "caldera-lateral-movement.yaml",
+    "index": 1,
+    "technique_id": "T1543.003",
+    "action_key": "",
+    "framework": "caldera",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "caldera-lateral-movement.yaml",
+    "index": 2,
+    "technique_id": "T1047",
+    "action_key": "",
+    "framework": "caldera",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "caldera-lateral-movement.yaml",
+    "index": 3,
+    "technique_id": "T1550.002",
+    "action_key": "",
+    "framework": "caldera",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "caldera-lateral-movement.yaml",
+    "index": 4,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "caldera",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1566.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1543.003",
+    "action_key": "service_create_start_stop_delete",
+    "framework": "custom",
+    "class": "potentially_destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1686",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1003.001",
+    "action_key": "handle_probe",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1057",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1113",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1071.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1078",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "clop-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "clop-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "clop-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "clop-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "clop-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1070.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-attack.yaml",
+    "index": 0,
+    "technique_id": "T1552.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-attack.yaml",
+    "index": 1,
+    "technique_id": "T1550.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-attack.yaml",
+    "index": 2,
+    "technique_id": "T1552.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-attack.yaml",
+    "index": 3,
+    "technique_id": "T1550.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-attack.yaml",
+    "index": 4,
+    "technique_id": "T1552.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cobalt-group-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1566.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cobalt-group-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cobalt-group-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1518.001",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cobalt-group-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1218.010",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cobalt-group-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1543.003",
+    "action_key": "service_create_start_stop_delete",
+    "framework": "custom",
+    "class": "potentially_destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cobalt-group-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1071.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cobalt-group-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1565.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "collection-staging-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-staging-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-staging-exfil.yaml",
+    "index": 2,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-staging-exfil.yaml",
+    "index": 3,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-staging-exfil.yaml",
+    "index": 4,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-staging-exfil.yaml",
+    "index": 5,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-staging-exfil.yaml",
+    "index": 6,
+    "technique_id": "T1048.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-staging-exfil.yaml",
+    "index": 7,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-staging-exfil.yaml",
+    "index": 8,
+    "technique_id": "T1048",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-staging-exfil.yaml",
+    "index": 9,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "credential-access.yaml",
+    "index": 0,
+    "technique_id": "T1003.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "credential-access.yaml",
+    "index": 1,
+    "technique_id": "T1555.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "credential-access.yaml",
+    "index": 2,
+    "technique_id": "T1003.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "credential-access.yaml",
+    "index": 3,
+    "technique_id": "T1558",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "credential-access.yaml",
+    "index": 4,
+    "technique_id": "T1550.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-drill.yaml",
+    "index": 0,
+    "technique_id": "T1046",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-drill.yaml",
+    "index": 1,
+    "technique_id": "T1110.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-drill.yaml",
+    "index": 2,
+    "technique_id": "T1082",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-drill.yaml",
+    "index": 3,
+    "technique_id": "T1562.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-drill.yaml",
+    "index": 4,
+    "technique_id": "T1069.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-drill.yaml",
+    "index": 5,
+    "technique_id": "T1136.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-drill.yaml",
+    "index": 6,
+    "technique_id": "T1021.006",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-drill.yaml",
+    "index": 7,
+    "technique_id": "T1070.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-drill.yaml",
+    "index": 8,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dbsim-db01-auth-policy.yaml",
+    "index": 0,
+    "technique_id": "T1078",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dbsim-db01-auth-policy.yaml",
+    "index": 1,
+    "technique_id": "T1087",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dbsim-db02-excessive-grants.yaml",
+    "index": 0,
+    "technique_id": "T1087",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dbsim-db02-excessive-grants.yaml",
+    "index": 1,
+    "technique_id": "T1087",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dbsim-db03-unauthorized-access.yaml",
+    "index": 0,
+    "technique_id": "T1213",
+    "action_key": "",
+    "framework": "native",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "dbsim-db04-audit-coverage.yaml",
+    "index": 0,
+    "technique_id": "T1562",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dbsim-db04-audit-coverage.yaml",
+    "index": 1,
+    "technique_id": "T1087",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dbsim-db05-suspicious-read.yaml",
+    "index": 0,
+    "technique_id": "T1213",
+    "action_key": "",
+    "framework": "native",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "dbsim-db06-account-revocation.yaml",
+    "index": 0,
+    "technique_id": "T1078",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dbsim-db07-sensitive-classification.yaml",
+    "index": 0,
+    "technique_id": "T1213",
+    "action_key": "",
+    "framework": "native",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "dbsim-db08-audit-tamper-resistance.yaml",
+    "index": 0,
+    "technique_id": "T1562",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dbsim-db09-bounded-bulk-read.yaml",
+    "index": 0,
+    "technique_id": "T1213",
+    "action_key": "",
+    "framework": "native",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "dbsim-db10-write-delete-prevention.yaml",
+    "index": 0,
+    "technique_id": "T1565.001",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dbsim-db11-backup-export-permissions.yaml",
+    "index": 0,
+    "technique_id": "T1213",
+    "action_key": "",
+    "framework": "native",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "dcsync-replication-rights-audit.yaml",
+    "index": 0,
+    "technique_id": "T1003.006",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "dcsync-replication-rights-live-verification.yaml",
+    "index": 0,
+    "technique_id": "T1003.006",
+    "action_key": "negative",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "dcsync-replication-rights-live-verification.yaml",
+    "index": 1,
+    "technique_id": "T1003.006",
+    "action_key": "positive",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "dll-hijack-execution.yaml",
+    "index": 0,
+    "technique_id": "T1574.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dll-hijack-execution.yaml",
+    "index": 1,
+    "technique_id": "T1574.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dll-hijack-execution.yaml",
+    "index": 2,
+    "technique_id": "T1574.008",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dll-hijack-execution.yaml",
+    "index": 3,
+    "technique_id": "T1574.011",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "dll-hijack-execution.yaml",
+    "index": 4,
+    "technique_id": "T1574.011",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "dll-hijack-execution.yaml",
+    "index": 5,
+    "technique_id": "T1574.012",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "dlp-exfiltration-ai-prompt.yaml",
+    "index": 0,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-ai-prompt.yaml",
+    "index": 1,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-ai-prompt.yaml",
+    "index": 2,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-ai-prompt.yaml",
+    "index": 3,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-browser-upload.yaml",
+    "index": 0,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-cloud-storage.yaml",
+    "index": 0,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-cloud-storage.yaml",
+    "index": 1,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-cloud-storage.yaml",
+    "index": 2,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-cloud-storage.yaml",
+    "index": 3,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-cloud-storage.yaml",
+    "index": 4,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-cloud-storage.yaml",
+    "index": 5,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-cloud-storage.yaml",
+    "index": 6,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-cloud-storage.yaml",
+    "index": 7,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-cloud-storage.yaml",
+    "index": 8,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-cloud-storage.yaml",
+    "index": 9,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-cloud-storage.yaml",
+    "index": 10,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-coderepo.yaml",
+    "index": 0,
+    "technique_id": "T1567.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-coderepo.yaml",
+    "index": 1,
+    "technique_id": "T1567.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-coderepo.yaml",
+    "index": 2,
+    "technique_id": "T1567.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-coderepo.yaml",
+    "index": 3,
+    "technique_id": "T1567.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-coderepo.yaml",
+    "index": 4,
+    "technique_id": "T1567.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-coderepo.yaml",
+    "index": 5,
+    "technique_id": "T1567.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-data-types.yaml",
+    "index": 0,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-data-types.yaml",
+    "index": 1,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-data-types.yaml",
+    "index": 2,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-data-types.yaml",
+    "index": 3,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-data-types.yaml",
+    "index": 4,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-data-types.yaml",
+    "index": 5,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-data-types.yaml",
+    "index": 6,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-db-export.yaml",
+    "index": 0,
+    "technique_id": "T1048.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-db-export.yaml",
+    "index": 1,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-db-export.yaml",
+    "index": 2,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-db-export.yaml",
+    "index": 3,
+    "technique_id": "T1567.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-dns-tunnel.yaml",
+    "index": 0,
+    "technique_id": "T1071.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-dns-tunnel.yaml",
+    "index": 1,
+    "technique_id": "T1071.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-dns-tunnel.yaml",
+    "index": 2,
+    "technique_id": "T1071.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-dns-tunnel.yaml",
+    "index": 3,
+    "technique_id": "T1071.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-file-carriers.yaml",
+    "index": 0,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-file-carriers.yaml",
+    "index": 1,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-file-carriers.yaml",
+    "index": 2,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-file-carriers.yaml",
+    "index": 3,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-file-carriers.yaml",
+    "index": 4,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-file-carriers.yaml",
+    "index": 5,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-file-carriers.yaml",
+    "index": 6,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-multichannel.yaml",
+    "index": 0,
+    "technique_id": "T1052.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-multichannel.yaml",
+    "index": 1,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-multichannel.yaml",
+    "index": 2,
+    "technique_id": "T1052",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-multichannel.yaml",
+    "index": 3,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-multichannel.yaml",
+    "index": 4,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-multichannel.yaml",
+    "index": 5,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-multichannel.yaml",
+    "index": 6,
+    "technique_id": "T1071.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-multichannel.yaml",
+    "index": 7,
+    "technique_id": "T1048.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-multichannel.yaml",
+    "index": 8,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-sftp.yaml",
+    "index": 0,
+    "technique_id": "T1048.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-sftp.yaml",
+    "index": 1,
+    "technique_id": "T1048.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-sftp.yaml",
+    "index": 2,
+    "technique_id": "T1048.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-sftp.yaml",
+    "index": 3,
+    "technique_id": "T1048.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-sftp.yaml",
+    "index": 4,
+    "technique_id": "T1048.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-sftp.yaml",
+    "index": 5,
+    "technique_id": "T1048.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-sink-https.yaml",
+    "index": 0,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-sink-https.yaml",
+    "index": 1,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-sink-https.yaml",
+    "index": 2,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-sink-https.yaml",
+    "index": 3,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-sink-https.yaml",
+    "index": 4,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-sink-https.yaml",
+    "index": 5,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-smtp.yaml",
+    "index": 0,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-smtp.yaml",
+    "index": 1,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-smtp.yaml",
+    "index": 2,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-smtp.yaml",
+    "index": 3,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-smtp.yaml",
+    "index": 4,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-smtp.yaml",
+    "index": 5,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-telnet.yaml",
+    "index": 0,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-telnet.yaml",
+    "index": 1,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-telnet.yaml",
+    "index": 2,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-telnet.yaml",
+    "index": 3,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-validation.yaml",
+    "index": 0,
+    "technique_id": "T1052.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-validation.yaml",
+    "index": 1,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-validation.yaml",
+    "index": 2,
+    "technique_id": "T1052",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-validation.yaml",
+    "index": 3,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-validation.yaml",
+    "index": 4,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-webhook.yaml",
+    "index": 0,
+    "technique_id": "T1567.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-webhook.yaml",
+    "index": 1,
+    "technique_id": "T1567.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-webhook.yaml",
+    "index": 2,
+    "technique_id": "T1567.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-webhook.yaml",
+    "index": 3,
+    "technique_id": "T1567.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dlp-exfiltration-webhook.yaml",
+    "index": 4,
+    "technique_id": "T1567.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 0,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 1,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 2,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 3,
+    "technique_id": "T1562.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 4,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 5,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 6,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-02-attack-behavioral-depth.yaml",
+    "index": 0,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-02-attack-behavioral-depth.yaml",
+    "index": 1,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-02-attack-behavioral-depth.yaml",
+    "index": 2,
+    "technique_id": "T1027",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-02-attack-behavioral-depth.yaml",
+    "index": 3,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-02-attack-behavioral-depth.yaml",
+    "index": 4,
+    "technique_id": "T1620",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-02-attack-behavioral-depth.yaml",
+    "index": 5,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-03-memory-attacks.yaml",
+    "index": 0,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-03-memory-attacks.yaml",
+    "index": 1,
+    "technique_id": "T1055",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-03-memory-attacks.yaml",
+    "index": 2,
+    "technique_id": "T1055",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-03-memory-attacks.yaml",
+    "index": 3,
+    "technique_id": "T1055.012",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 0,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 1,
+    "technique_id": "T1003.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 2,
+    "technique_id": "T1003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 0,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 1,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 0,
+    "technique_id": "T1218.010",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 1,
+    "technique_id": "T1105",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-07-ransomware-readiness.yaml",
+    "index": 0,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-07-ransomware-readiness.yaml",
+    "index": 1,
+    "technique_id": "T1135",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-07-ransomware-readiness.yaml",
+    "index": 2,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-07-ransomware-readiness.yaml",
+    "index": 3,
+    "technique_id": "T1070.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-07-ransomware-readiness.yaml",
+    "index": 4,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-07-ransomware-readiness.yaml",
+    "index": 5,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-07-ransomware-readiness.yaml",
+    "index": 6,
+    "technique_id": "T1490",
+    "action_key": "vss_delete",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "endpoint-mastery/em-07-ransomware-readiness.yaml",
+    "index": 7,
+    "technique_id": "T1490",
+    "action_key": "wbadmin_delete_catalog",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "endpoint-mastery/em-07-ransomware-readiness.yaml",
+    "index": 8,
+    "technique_id": "T1490",
+    "action_key": "bootloader_recovery_disable",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "endpoint-mastery/em-07-ransomware-readiness.yaml",
+    "index": 9,
+    "technique_id": "T1489",
+    "action_key": "backup_service_stop",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 0,
+    "technique_id": "T1562",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 1,
+    "technique_id": "T1562",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-09-browser-attack.yaml",
+    "index": 0,
+    "technique_id": "T1539",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-09-browser-attack.yaml",
+    "index": 1,
+    "technique_id": "T1555.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-10-endpoint-exfiltration.yaml",
+    "index": 0,
+    "technique_id": "T1071.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-11-hardening-validation.yaml",
+    "index": 0,
+    "technique_id": "T1562",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-11-hardening-validation.yaml",
+    "index": 1,
+    "technique_id": "T1562",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-12-adversary-emulation.yaml",
+    "index": 0,
+    "technique_id": "T1482",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-13-product-validation.yaml",
+    "index": 0,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-14-continuous-validation.yaml",
+    "index": 0,
+    "technique_id": "T1562",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "entra-hybrid-identity-attack.yaml",
+    "index": 0,
+    "technique_id": "T1082",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "entra-hybrid-identity-attack.yaml",
+    "index": 1,
+    "technique_id": "T1528",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "entra-hybrid-identity-attack.yaml",
+    "index": 2,
+    "technique_id": "T1539",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "entra-hybrid-identity-attack.yaml",
+    "index": 3,
+    "technique_id": "T1555.003",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "entra-hybrid-identity-attack.yaml",
+    "index": 4,
+    "technique_id": "T1550.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "entra-hybrid-identity-attack.yaml",
+    "index": 5,
+    "technique_id": "T1556.007",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "evasion-testing.yaml",
+    "index": 0,
+    "technique_id": "T1027.013",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "evasion-testing.yaml",
+    "index": 1,
+    "technique_id": "T1027",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "evasion-testing.yaml",
+    "index": 2,
+    "technique_id": "T1027.010",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "evasion-testing.yaml",
+    "index": 3,
+    "technique_id": "T1134.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "evasion-testing.yaml",
+    "index": 4,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "exposure-validation.yaml",
+    "index": 0,
+    "technique_id": "T1574.009",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "exposure-validation.yaml",
+    "index": 1,
+    "technique_id": "T1574.007",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "exposure-validation.yaml",
+    "index": 2,
+    "technique_id": "T1574.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "exposure-validation.yaml",
+    "index": 3,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "exposure-validation.yaml",
+    "index": 4,
+    "technique_id": "T1134",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "fin7-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1057",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "fin7-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1082",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "fin7-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1113",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "fin7-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1021.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "fin7-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1071.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "fin8-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1566.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "fin8-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "fin8-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1047",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "fin8-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1003.001",
+    "action_key": "handle_probe",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "fin8-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1518.001",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "fin8-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1546.003",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "fin8-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1021.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "fin8-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1083",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "fin8-kill-chain.yaml",
+    "index": 8,
+    "technique_id": "T1486",
+    "action_key": "ransomware_sim_sandboxed",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "gpo-writable-linked-exposure-audit.yaml",
+    "index": 0,
+    "technique_id": "T1484.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "hunters-international-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1190",
+    "action_key": "enumerate",
+    "framework": "native",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "hunters-international-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1505.003",
+    "action_key": "enumerate",
+    "framework": "native",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "hunters-international-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1087.002",
+    "action_key": "enumerate",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "hunters-international-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1556",
+    "action_key": "enumerate",
+    "framework": "native",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "hunters-international-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1003.006",
+    "action_key": "enumerate",
+    "framework": "native",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "hunters-international-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1021.001",
+    "action_key": "enumerate",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "hunters-international-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1020",
+    "action_key": "enumerate",
+    "framework": "native",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "hunters-international-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1490",
+    "action_key": "enumerate",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "hunters-international-kill-chain.yaml",
+    "index": 8,
+    "technique_id": "T1486",
+    "action_key": "ransomware_sim_sandboxed",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "insider-threat-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "insider-threat-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "insider-threat-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1485",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "kerberoasting-ad-drill.yaml",
+    "index": 0,
+    "technique_id": "T1558.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "kerberoasting-ad-drill.yaml",
+    "index": 1,
+    "technique_id": "T1558.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "kerberoasting-ad-drill.yaml",
+    "index": 2,
+    "technique_id": "T1558.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "kerberoasting-ad-drill.yaml",
+    "index": 3,
+    "technique_id": "T1087.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "kerberoasting-ad-drill.yaml",
+    "index": 4,
+    "technique_id": "T1482",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "kerberoasting-ad-drill.yaml",
+    "index": 5,
+    "technique_id": "T1069.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "kerberoasting-ad-drill.yaml",
+    "index": 6,
+    "technique_id": "T1615",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "kerberoasting-ad-drill.yaml",
+    "index": 7,
+    "technique_id": "T1552.006",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "kerberos-delegation-exposure-audit.yaml",
+    "index": 0,
+    "technique_id": "T1558",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lazarus-swift-heist.yaml",
+    "index": 0,
+    "technique_id": "T1566.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lazarus-swift-heist.yaml",
+    "index": 1,
+    "technique_id": "T1082",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lazarus-swift-heist.yaml",
+    "index": 2,
+    "technique_id": "T1135",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lazarus-swift-heist.yaml",
+    "index": 3,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lazarus-swift-heist.yaml",
+    "index": 4,
+    "technique_id": "T1518.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lazarus-swift-heist.yaml",
+    "index": 5,
+    "technique_id": "T1543.003",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lazarus-swift-heist.yaml",
+    "index": 6,
+    "technique_id": "T1565.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lazarus-swift-heist.yaml",
+    "index": 7,
+    "technique_id": "T1070.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lazarus-swift-heist.yaml",
+    "index": 8,
+    "technique_id": "T1071.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "linux-ransomware-drill.yaml",
+    "index": 0,
+    "technique_id": "T1490",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "linux-ransomware-drill.yaml",
+    "index": 1,
+    "technique_id": "T1490",
+    "action_key": "lvm_delete",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "linux-ransomware-drill.yaml",
+    "index": 2,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "linux-ransomware-drill.yaml",
+    "index": 3,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lockbit-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1518.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lockbit-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1490",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lockbit-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1021.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lockbit-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lockbit-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1070.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 0,
+    "technique_id": "T1059",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 1,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 2,
+    "technique_id": "T1021.006",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 3,
+    "technique_id": "T1059.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 4,
+    "technique_id": "T1204.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 5,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 6,
+    "technique_id": "T1218.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 7,
+    "technique_id": "T1218.010",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 8,
+    "technique_id": "T1218.011",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 9,
+    "technique_id": "T1218.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 10,
+    "technique_id": "T1127.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 11,
+    "technique_id": "T1047",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 12,
+    "technique_id": "T1140",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 13,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 14,
+    "technique_id": "T1059.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 15,
+    "technique_id": "T1197",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 16,
+    "technique_id": "T1218.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 17,
+    "technique_id": "T1218.010",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 18,
+    "technique_id": "T1218.011",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 19,
+    "technique_id": "T1569.002",
+    "action_key": "service_create_start_stop_delete",
+    "framework": "custom",
+    "class": "potentially_destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "lolbin-execution-coverage.yaml",
+    "index": 20,
+    "technique_id": "T1047",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution.yaml",
+    "index": 0,
+    "technique_id": "T1047",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution.yaml",
+    "index": 1,
+    "technique_id": "T1218.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution.yaml",
+    "index": 2,
+    "technique_id": "T1218.010",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution.yaml",
+    "index": 3,
+    "technique_id": "T1140",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-execution.yaml",
+    "index": 4,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-extended.yaml",
+    "index": 0,
+    "technique_id": "T1218.007",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-extended.yaml",
+    "index": 1,
+    "technique_id": "T1218.009",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-extended.yaml",
+    "index": 2,
+    "technique_id": "T1220",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-extended.yaml",
+    "index": 3,
+    "technique_id": "T1218.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "lolbin-extended.yaml",
+    "index": 4,
+    "technique_id": "T1218.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "medusa-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1190",
+    "action_key": "",
+    "framework": "native",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "medusa-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1562.001",
+    "action_key": "enumerate",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "medusa-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1047",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "medusa-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1003.001",
+    "action_key": "handle_probe",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "medusa-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1570",
+    "action_key": "",
+    "framework": "native",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "medusa-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "medusa-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1020",
+    "action_key": "",
+    "framework": "native",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "medusa-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1490",
+    "action_key": "enumerate",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "medusa-kill-chain.yaml",
+    "index": 8,
+    "technique_id": "T1489",
+    "action_key": "service_stop",
+    "framework": "native",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "medusa-kill-chain.yaml",
+    "index": 9,
+    "technique_id": "T1486",
+    "action_key": "ransomware_sim_sandboxed",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "outlook-rules-bec.yaml",
+    "index": 0,
+    "technique_id": "T1137.005",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "outlook-rules-bec.yaml",
+    "index": 1,
+    "technique_id": "T1137.005",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "outlook-rules-bec.yaml",
+    "index": 2,
+    "technique_id": "T1137.005",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "outlook-rules-bec.yaml",
+    "index": 3,
+    "technique_id": "T1137.005",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "outlook-rules-bec.yaml",
+    "index": 4,
+    "technique_id": "T1137.005",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "play-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1087.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "play-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1135",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "play-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "play-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "play-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1021.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "play-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "play-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1490",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "play-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1070.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "purplesharp-ad-drill.yaml",
+    "index": 0,
+    "technique_id": "T1087.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "purplesharp-ad-drill.yaml",
+    "index": 1,
+    "technique_id": "T1558.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "purplesharp-ad-drill.yaml",
+    "index": 2,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "purplesharp-ad-drill.yaml",
+    "index": 3,
+    "technique_id": "T1110.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "purplesharp-ad-drill.yaml",
+    "index": 4,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "purplesharp-ad-drill.yaml",
+    "index": 5,
+    "technique_id": "T1110.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomhub-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1518.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomhub-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1135",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomhub-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1003.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomhub-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomhub-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomhub-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomhub-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1490",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomhub-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1070.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-drill.yaml",
+    "index": 0,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-drill.yaml",
+    "index": 1,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-drill.yaml",
+    "index": 2,
+    "technique_id": "T1070.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-drill.yaml",
+    "index": 3,
+    "technique_id": "T1490",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-drill.yaml",
+    "index": 4,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-drill.yaml",
+    "index": 5,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-drill.yaml",
+    "index": 6,
+    "technique_id": "T1490",
+    "action_key": "vss_delete",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "ransomware-drill.yaml",
+    "index": 7,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-drill.yaml",
+    "index": 8,
+    "technique_id": "T1543.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "rbcd-configure-exposure-audit.yaml",
+    "index": 0,
+    "technique_id": "T1069",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "rhysida-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1078",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "rhysida-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1021.001",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "rhysida-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1003.001",
+    "action_key": "handle_probe",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "rhysida-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1087.002",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "rhysida-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1562.001",
+    "action_key": "enumerate",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "rhysida-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1562.008",
+    "action_key": "enumerate",
+    "framework": "native",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "rhysida-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1070.001",
+    "action_key": "enumerate",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "rhysida-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1490",
+    "action_key": "enumerate",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "rhysida-kill-chain.yaml",
+    "index": 8,
+    "technique_id": "T1490",
+    "action_key": "ransomware_sim_sandboxed",
+    "framework": "native",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "rhysida-kill-chain.yaml",
+    "index": 9,
+    "technique_id": "T1020",
+    "action_key": "",
+    "framework": "native",
+    "class": "destructive",
+    "status": "gap_no_undo"
+  },
+  {
+    "scenario": "rhysida-kill-chain.yaml",
+    "index": 10,
+    "technique_id": "T1486",
+    "action_key": "ransomware_sim_sandboxed",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "scattered-spider-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1078",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "scattered-spider-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1136.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "scattered-spider-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1021.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "scattered-spider-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1557.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "scattered-spider-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1526",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "silence-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1566.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "silence-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "silence-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1113",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "silence-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1003.001",
+    "action_key": "handle_probe",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "silence-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1018",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "silence-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "silence-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1105",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "silence-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1565.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ta505-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1566.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ta505-kill-chain.yaml",
+    "index": 1,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ta505-kill-chain.yaml",
+    "index": 2,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ta505-kill-chain.yaml",
+    "index": 3,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ta505-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1518.001",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ta505-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ta505-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ta505-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1486",
+    "action_key": "ransomware_sim_sandboxed",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ta505-kill-chain.yaml",
+    "index": 8,
+    "technique_id": "T1490",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "trust-sid-history-exposure-audit.yaml",
+    "index": 0,
+    "technique_id": "T1134.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 0,
+    "technique_id": "T1046",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 1,
+    "technique_id": "T1046",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 2,
+    "technique_id": "T1046",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 3,
+    "technique_id": "T1547.006",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 4,
+    "technique_id": "T1548.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 5,
+    "technique_id": "T1548.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 6,
+    "technique_id": "T1548.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 7,
+    "technique_id": "T1548.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 8,
+    "technique_id": "T1548.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 9,
+    "technique_id": "T1548.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 10,
+    "technique_id": "T1548.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 11,
+    "technique_id": "T1548.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 12,
+    "technique_id": "T1548.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 13,
+    "technique_id": "T1548.001",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 14,
+    "technique_id": "T1548.003",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 15,
+    "technique_id": "T1548.003",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 16,
+    "technique_id": "T1548.003",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 17,
+    "technique_id": "T1548.003",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 18,
+    "technique_id": "T1548.003",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 19,
+    "technique_id": "T1548.003",
+    "action_key": "",
+    "framework": "art",
+    "class": "destructive",
+    "status": "gap_external_cleanup_unverified"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 20,
+    "technique_id": "T1055",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 21,
+    "technique_id": "T1003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 22,
+    "technique_id": "T1562.001",
+    "action_key": "stop_auditd",
+    "framework": "custom",
+    "class": "potentially_destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 23,
+    "technique_id": "T1554",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 24,
+    "technique_id": "T1078",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 25,
+    "technique_id": "T1200",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 26,
+    "technique_id": "T1222",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ubuntu-hardening-validation.yaml",
+    "index": 27,
+    "technique_id": "T1059",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "upi-fraud-killchain.yaml",
+    "index": 0,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "upi-fraud-killchain.yaml",
+    "index": 1,
+    "technique_id": "T1113",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "upi-fraud-killchain.yaml",
+    "index": 2,
+    "technique_id": "T1555.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "upi-fraud-killchain.yaml",
+    "index": 3,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "upi-fraud-killchain.yaml",
+    "index": 4,
+    "technique_id": "T1071.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "upi-fraud-killchain.yaml",
+    "index": 5,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "upi-fraud-killchain.yaml",
+    "index": 6,
+    "technique_id": "T1113",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "upi-fraud-killchain.yaml",
+    "index": 7,
+    "technique_id": "T1056.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "upi-fraud-killchain.yaml",
+    "index": 8,
+    "technique_id": "T1071.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "volt-typhoon-lotl.yaml",
+    "index": 0,
+    "technique_id": "T1082",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "volt-typhoon-lotl.yaml",
+    "index": 1,
+    "technique_id": "T1016",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "volt-typhoon-lotl.yaml",
+    "index": 2,
+    "technique_id": "T1090.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "volt-typhoon-lotl.yaml",
+    "index": 3,
+    "technique_id": "T1087.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "volt-typhoon-lotl.yaml",
+    "index": 4,
+    "technique_id": "T1003.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "volt-typhoon-lotl.yaml",
+    "index": 5,
+    "technique_id": "T1003.003",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "volt-typhoon-lotl.yaml",
+    "index": 6,
+    "technique_id": "T1105",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "volt-typhoon-lotl.yaml",
+    "index": 7,
+    "technique_id": "T1218.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "volt-typhoon-lotl.yaml",
+    "index": 8,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "volt-typhoon-lotl.yaml",
+    "index": 9,
+    "technique_id": "T1070.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "windows-discovery-validation.yaml",
+    "index": 0,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "windows-discovery-validation.yaml",
+    "index": 1,
+    "technique_id": "T1087.002",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "windows-discovery-validation.yaml",
+    "index": 2,
+    "technique_id": "T1018",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  }
+]

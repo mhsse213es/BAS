@@ -1,6 +1,6 @@
 {
   "acl-privilege-exposure-audit.yaml": {
-    "cleanup": 1,
+    "cleanup": 0,
     "detection": 1,
     "telemetry": 1
   },
@@ -45,7 +45,7 @@
     "telemetry": 0
   },
   "caldera-lateral-movement.yaml": {
-    "cleanup": 5,
+    "cleanup": 0,
     "detection": 5,
     "telemetry": 5
   },
@@ -150,7 +150,7 @@
     "telemetry": 0
   },
   "dll-hijack-execution.yaml": {
-    "cleanup": 5,
+    "cleanup": 3,
     "detection": 5,
     "telemetry": 5
   },
@@ -240,7 +240,7 @@
     "telemetry": 0
   },
   "endpoint-mastery/em-03-memory-attacks.yaml": {
-    "cleanup": 1,
+    "cleanup": 0,
     "detection": 1,
     "telemetry": 1
   },
@@ -265,12 +265,12 @@
     "telemetry": 0
   },
   "endpoint-mastery/em-08-exploit-mitigation.yaml": {
-    "cleanup": 1,
+    "cleanup": 0,
     "detection": 2,
     "telemetry": 2
   },
   "endpoint-mastery/em-09-browser-attack.yaml": {
-    "cleanup": 1,
+    "cleanup": 0,
     "detection": 2,
     "telemetry": 1
   },
@@ -280,7 +280,7 @@
     "telemetry": 0
   },
   "endpoint-mastery/em-11-hardening-validation.yaml": {
-    "cleanup": 1,
+    "cleanup": 0,
     "detection": 2,
     "telemetry": 2
   },
@@ -300,7 +300,7 @@
     "telemetry": 1
   },
   "entra-hybrid-identity-attack.yaml": {
-    "cleanup": 2,
+    "cleanup": 0,
     "detection": 2,
     "telemetry": 2
   },
@@ -330,7 +330,7 @@
     "telemetry": 0
   },
   "hunters-international-kill-chain.yaml": {
-    "cleanup": 9,
+    "cleanup": 5,
     "detection": 9,
     "telemetry": 9
   },
@@ -350,7 +350,7 @@
     "telemetry": 0
   },
   "lazarus-swift-heist.yaml": {
-    "cleanup": 7,
+    "cleanup": 0,
     "detection": 7,
     "telemetry": 7
   },
@@ -380,7 +380,7 @@
     "telemetry": 0
   },
   "medusa-kill-chain.yaml": {
-    "cleanup": 10,
+    "cleanup": 4,
     "detection": 10,
     "telemetry": 10
   },
@@ -415,7 +415,7 @@
     "telemetry": 0
   },
   "rhysida-kill-chain.yaml": {
-    "cleanup": 11,
+    "cleanup": 3,
     "detection": 11,
     "telemetry": 11
   },
@@ -440,7 +440,7 @@
     "telemetry": 0
   },
   "ubuntu-hardening-validation.yaml": {
-    "cleanup": 20,
+    "cleanup": 17,
     "detection": 20,
     "telemetry": 20
   },

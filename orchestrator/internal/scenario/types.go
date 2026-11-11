@@ -155,11 +155,16 @@ type Step struct {
 	// These document the risk and expected detection signal of a live step so
 	// operators see the blast radius before running and SOC teams know what to
 	// look for. Surfaced in the run results; ignored in posture mode.
-	Risk        string   `yaml:"risk,omitempty"         json:"risk,omitempty"`        // low | medium | high
-	BlastRadius string   `yaml:"blast_radius,omitempty" json:"blastRadius,omitempty"` // short human label, e.g. "spawns benign child process; no persistence"
-	Reversible  bool     `yaml:"reversible,omitempty"   json:"reversible,omitempty"`  // true = self-cleaning / no residual change
-	Telemetry   []string `yaml:"telemetry,omitempty"    json:"telemetry,omitempty"`   // expected events, e.g. "Security EID 4688", "Sysmon EID 1"
-	Detection   []string `yaml:"detection,omitempty"    json:"detection,omitempty"`   // detection objectives, e.g. "EDR: WmiPrvSE child process"
+	Risk        string `yaml:"risk,omitempty"         json:"risk,omitempty"`        // low | medium | high
+	BlastRadius string `yaml:"blast_radius,omitempty" json:"blastRadius,omitempty"` // short human label, e.g. "spawns benign child process; no persistence"
+	Reversible  bool   `yaml:"reversible,omitempty"   json:"reversible,omitempty"`  // true = self-cleaning / no residual change
+	// Irreversible is the author's explicit statement that this step's effect cannot be undone
+	// (for example, deleting shadow copies). It must carry a reason of at least 20 characters.
+	// It is documentation for the step contract only: it never changes the action's execution
+	// class, and it never bypasses lab-gating or authorization requirements.
+	Irreversible string   `yaml:"irreversible,omitempty" json:"irreversible,omitempty"`
+	Telemetry    []string `yaml:"telemetry,omitempty"    json:"telemetry,omitempty"` // expected events, e.g. "Security EID 4688", "Sysmon EID 1"
+	Detection    []string `yaml:"detection,omitempty"    json:"detection,omitempty"` // detection objectives, e.g. "EDR: WmiPrvSE child process"
 
 	// ActionKey selects which catalog entry (execclass.go) classifies this
 	// step's destructiveness, alongside TechniqueID. It is a LOOKUP KEY
