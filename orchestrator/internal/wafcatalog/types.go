@@ -58,6 +58,18 @@ type StandardsMapping struct {
 	ATTACKTechniques []string
 }
 
+// Platform is the target operating system a vector's payload is written for.
+// The empty value means "not recorded": older entries predate this field and
+// are not guessed at. It describes the payload, not the product under test.
+type Platform string
+
+const (
+	PlatformUnspecified Platform = ""
+	PlatformAny         Platform = "any"
+	PlatformUnix        Platform = "unix"
+	PlatformWindows     Platform = "windows"
+)
+
 // AttackVector is one versioned catalog entry. BenignCounterpart is nil only
 // when NoBenignCounterpartReason explains why no legitimate lookalike
 // exists -- never a silent omission.
@@ -73,4 +85,5 @@ type AttackVector struct {
 	NoBenignCounterpartReason string
 	Standards                 StandardsMapping
 	Provenance                string
+	Platform                  Platform
 }

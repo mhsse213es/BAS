@@ -12,6 +12,11 @@ func ValidateCatalog(vectors []AttackVector) error {
 			return fmt.Errorf("duplicate attack vector ID %q", v.ID)
 		}
 		seen[v.ID] = true
+		switch v.Platform {
+		case PlatformUnspecified, PlatformAny, PlatformUnix, PlatformWindows:
+		default:
+			return fmt.Errorf("attack vector %q has unknown platform %q", v.ID, v.Platform)
+		}
 	}
 	return nil
 }

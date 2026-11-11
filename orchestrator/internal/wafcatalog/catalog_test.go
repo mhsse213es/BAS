@@ -7,8 +7,8 @@ func TestAudspectWAFAttackCatalog_ReturnsValidatedCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AudspectWAFAttackCatalog: %v", err)
 	}
-	if len(vectors) != 65 {
-		t.Fatalf("len(vectors) = %d, want 65", len(vectors))
+	if len(vectors) != 73 {
+		t.Fatalf("len(vectors) = %d, want 73 (65 + 8 command-injection depth vectors CMDI-009..016)", len(vectors))
 	}
 	if err := ValidateCatalog(vectors); err != nil {
 		t.Errorf("returned catalog fails ValidateCatalog: %v", err)
