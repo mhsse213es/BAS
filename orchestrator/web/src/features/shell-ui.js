@@ -8,7 +8,7 @@ import { x } from '../core/escape.js';
 var TAB_GROUP = {
   dashboard: 'Operations', scenarios: 'Operations', runs: 'Operations', 'k8s-scenarios': 'Operations', 'cloud-scenarios': 'Operations',
   'scheduled-assessments': 'Operations', initiatives: 'Operations', campaigns: 'Operations',
-  'api-inventory': 'Operations', 'factory-health': 'Operations', coverage: 'Operations', variants: 'Operations', 'ad-coverage': 'Operations',
+  'api-inventory': 'Operations', segmentation: 'Operations', 'factory-health': 'Operations', coverage: 'Operations', variants: 'Operations', 'ad-coverage': 'Operations',
   email: 'Operations', em: 'Operations',
   findings: 'Visibility', iocs: 'Visibility', remediation: 'Visibility', reports: 'Visibility',
   verification: 'Visibility', attackpath: 'Visibility', exposure: 'Visibility', recommendations: 'Visibility',

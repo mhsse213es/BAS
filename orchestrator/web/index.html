@@ -137,6 +137,10 @@
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l18-5v12L3 14z"/><path d="M11.6 16.8a3 3 0 11-5.8-1.6"/></svg>
           Campaigns
         </div>
+        <div class="nav-item" data-tab="segmentation" title="Segmentation" data-on-click="showTab" data-args="[&quot;segmentation&quot;]">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Segmentation
+        </div>
         <div class="nav-item" data-tab="api-inventory" title="API Inventory" data-on-click="showTab" data-args="[&quot;api-inventory&quot;]">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
           API Inventory
@@ -1593,6 +1597,11 @@
       </div>
 
       <!-- API Inventory -->
+      <div id="tab-segmentation" class="is-hidden">
+        <div id="seg-packs"></div>
+        <div id="seg-runs"></div>
+        <div id="seg-detail"></div>
+      </div>
       <div id="tab-api-inventory" class="is-hidden">
         <div id="hero-api-inventory"></div>
         <div id="api-inv-targets"></div>
