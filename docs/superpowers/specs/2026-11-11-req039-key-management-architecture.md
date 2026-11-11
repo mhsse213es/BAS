@@ -105,4 +105,6 @@ Criteria 1 to 3 are unchanged from req-039.
 - `internal/envelope`: sealing and opening with revocation-checked caching. Twelve tests pass.
 - `internal/kms/vault`: Vault Transit provider. Seven unit tests (fake server) and three integration tests pass against a real Vault dev server.
 
-Nothing is wired into the application yet. Connector credentials, the CA key, configurations, results, evidence and backups all still use their current schemes.
+Connector credentials are wired. Setting `BAS_KMS=vault` (with `BAS_VAULT_ADDR`, `BAS_VAULT_KEY_NAME`, `BAS_VAULT_TOKEN_FILE`) makes new values sealed under the Vault KEK. Reads fall back to the legacy pgcrypto row only when no envelope value exists; a revoked key never falls back. `secretstore.Migrate` copies legacy values across and reads each back before counting it. Unset `BAS_KMS` keeps the existing store, unchanged. Tests: 23 secret-store tests against Postgres, plus an integration test against a real Vault that deletes the key and confirms the credential becomes unreadable.
+
+Not yet done: the migration has not been run on any database, the legacy key file is not retired, and the CA key, configurations, results, evidence and backups still use their current schemes. Level 5 is not claimed.

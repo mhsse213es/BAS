@@ -17,6 +17,7 @@ var SchemaSQL = []string{
 		created_at timestamptz NOT NULL DEFAULT NOW(),
 		updated_at timestamptz NOT NULL DEFAULT NOW()
 	)`,
+	envelopeSchemaSQL,
 }
 
 // PGStore is the interim backend. Each value is encrypted by PostgreSQL with pgcrypto (pgp_sym_encrypt) under the key given
@@ -88,4 +89,22 @@ func (s *PGStore) Delete(ctx context.Context, ref string) error {
 		return errors.New("secretstore: delete failed")
 	}
 	return nil
+}
+
+// Refs lists every reference stored in the legacy table. It is used only by the migration.
+func (s *PGStore) Refs(ctx context.Context) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `SELECT ref FROM credential_secrets ORDER BY ref`)
+	if err != nil {
+		return nil, errors.New("secretstore: list failed")
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var ref string
+		if err := rows.Scan(&ref); err != nil {
+			return nil, errors.New("secretstore: list failed")
+		}
+		out = append(out, ref)
+	}
+	return out, rows.Err()
 }

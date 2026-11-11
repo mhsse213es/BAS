@@ -996,7 +996,8 @@ func main() {
 
 	// Credential store for reference columns. A missing or invalid key leaves the store nil: references then fail their own
 	// operation, and plaintext columns keep working (see secretstore.Resolve).
-	secretStore, secretErr := secretstore.OpenStore(pool, secretstore.DefaultKeyPath)
+	// BAS_KMS=vault selects the customer-controlled envelope store (REQ-039); unset keeps the existing pgcrypto store.
+	secretStore, secretErr := secretstore.OpenConfigured(pool, secretstore.DefaultKeyPath, os.Getenv)
 	if secretErr != nil {
 		log.Printf("[secretstore] credential references unavailable: %v", secretErr)
 	}
