@@ -206,6 +206,12 @@ else
   bad "a key was written after a failed import"
 fi
 
+# --- DATA_DIR is set after this file is sourced (as in install.sh): paths must follow it ---
+late=$(unset BACKUP_KEY_MARKER BACKUP_KEY_LEGACY DATA_DIR; source "$HERE/backup-key.sh"; DATA_DIR="$TESTDIR/late"; _bk_marker)
+if [[ "$late" == "$TESTDIR/late/.backup-key-recovery-verified" ]]; then ok "marker path follows DATA_DIR set after sourcing"; else bad "marker path fixed at source time: $late"; fi
+late2=$(unset BACKUP_KEY_MARKER BACKUP_KEY_LEGACY DATA_DIR; source "$HERE/backup-key.sh"; DATA_DIR="$TESTDIR/late"; _bk_legacy)
+if [[ "$late2" == "$TESTDIR/late/.backup_key" ]]; then ok "legacy path follows DATA_DIR set after sourcing"; else bad "legacy path fixed at source time: $late2"; fi
+
 echo "---"
 echo "passed: $pass  failed: $fail  skipped: $skip"
 [[ "$fail" -eq 0 ]]

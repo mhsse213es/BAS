@@ -46,6 +46,12 @@ readonly SCRIPT_DIR
 # shellcheck source=setup-install-state.sh
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/setup-install-state.sh"
+# Database encryption key, database TLS, CA backup wrapping and backup key (REQ-039). Same helpers as install.sh.
+for _helper in db-encryption-key.sh db-tls.sh ca-backup.sh backup-key.sh; do
+  [[ -f "${SCRIPT_DIR}/${_helper}" ]] || { echo "missing ${SCRIPT_DIR}/${_helper}" >&2; exit 1; }
+  # shellcheck disable=SC1090
+  source "${SCRIPT_DIR}/${_helper}"
+done
 
 # Version is read from the bundle's VERSION file (written by the packager) so the
 # .env image tag ALWAYS matches the images shipped in THIS bundle — never a
@@ -102,6 +108,7 @@ export TERM="${TERM:-xterm}"
 load_config() {
   local cfg="$1"
   [[ -f "$cfg" ]] || { err "Config file not found: $cfg"; exit 1; }
+  SETUP_CONFIG_PATH="$cfg"
 
   local key val
   while IFS='=' read -r key val; do
@@ -120,6 +127,8 @@ load_config() {
       ADMIN_EMAIL)    ADMIN_EMAIL="$val"    ;;
       ADMIN_PASSWORD) ADMIN_PASSWORD="$val" ;;
       RECOVERY_PASSPHRASE) RECOVERY_PASSPHRASE="$val" ;;
+      BAS_BACKUP_KEY_RECOVERY_PATH) BAS_BACKUP_KEY_RECOVERY_PATH="$val" ;;
+      BAS_BACKUP_KEY_PASSPHRASE)    BAS_BACKUP_KEY_PASSPHRASE="$val" ;;
       LIC_PATH)       LIC_PATH="$val"       ;;
     esac
   done < "$cfg"
@@ -939,6 +948,20 @@ EOF
   chmod 640 "${INSTALL_DIR}/.env"
   chown root:root "${INSTALL_DIR}/.env"
 
+  # Database TLS, database encryption key and backup key (REQ-039). All of it is in place, and the recovery copy of the
+  # backup key is confirmed, before any service starts.
+  DATA_DIR="${INSTALL_DIR}"
+  DB_TLS_DIR="${INSTALL_DIR}/dbtls"
+  db_tls_ensure || { err "database TLS setup failed; nothing was started."; _bk_options "Your options:" "Fix the file reported above, then run setup again." "Or move ${INSTALL_DIR}/dbtls aside so it is regenerated, then run setup again."; exit 1; }
+  db_key_provision fresh >/dev/null || { err "database encryption key provisioning failed; nothing was started."; exit 1; }
+  backup_key_provision || { err "backup encryption key could not be created; nothing was started."; exit 1; }
+  backup_key_gate || { err "installation stopped: no confirmed recovery copy of the backup key. Nothing has been started."; exit 1; }
+  # The backup passphrase was needed for the recovery copy only. Remove it from the config file.
+  if [[ -n "${SETUP_CONFIG_PATH:-}" && -f "${SETUP_CONFIG_PATH}" ]] && grep -q '^BAS_BACKUP_KEY_PASSPHRASE=' "${SETUP_CONFIG_PATH}"; then
+    sed -i '/^BAS_BACKUP_KEY_PASSPHRASE=/d' "${SETUP_CONFIG_PATH}"
+    log "Removed the backup passphrase from ${SETUP_CONFIG_PATH}."
+  fi
+
   _step 50 "Loading Docker images..."
   # Everything was verified up front (_verify_all_images). The other images are
   # loaded first, the orchestrator LAST, and after each load the tag must
@@ -1120,6 +1143,18 @@ input:disabled{opacity:.5}
       </div>
     </div>
     <hr class="sep">
+    <p class="section-title">Backup recovery copy</p>
+    <p style="color:#8b98a5;font-size:12px;margin:4px 0 10px">Backups cannot run until a recovery copy of the backup key exists. Keep the file and the passphrase off this host. Without them, backups cannot be restored after the key is lost.</p>
+    <div class="row">
+      <div class="field">
+        <label>Recovery copy path <span style="color:#4d5f72">(outside the install directory)</span></label>
+        <input type="text" name="BAS_BACKUP_KEY_RECOVERY_PATH" value="/root/audspect-backup-key-recovery.enc" required>
+      </div>
+      <div class="field">
+        <label>Recovery passphrase <span style="color:#4d5f72">(16 characters or more)</span></label>
+        <input type="password" name="BAS_BACKUP_KEY_PASSPHRASE" minlength="16" required>
+      </div>
+    </div>
     <p class="section-title">Admin Account</p>
     <div class="row">
       <div class="field">

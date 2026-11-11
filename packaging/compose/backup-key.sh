@@ -17,10 +17,11 @@
 # This file is sourced by install.sh. Functions return non-zero on failure and print a reason to stderr.
 
 BACKUP_KEY_FILE="${BACKUP_KEY_FILE:-/etc/audspect/secrets/backup-encryption.key}"
-BACKUP_KEY_LEGACY="${BACKUP_KEY_LEGACY:-${DATA_DIR:-}/.backup_key}"
+# Paths that depend on DATA_DIR are resolved when used, not when this file is sourced (DATA_DIR is set later by the installer).
+_bk_legacy() { echo "${BACKUP_KEY_LEGACY:-${DATA_DIR:-}/.backup_key}"; }
+_bk_marker() { echo "${BACKUP_KEY_MARKER:-${DATA_DIR:-}/.backup-key-recovery-verified}"; }
 
 _bk_err()  { echo "ERROR: $*" >&2; }
-BACKUP_KEY_MARKER="${BACKUP_KEY_MARKER:-${DATA_DIR:-}/.backup-key-recovery-verified}"
 BACKUP_KEY_MIN_PASSPHRASE=16
 BACKUP_KEY_PBKDF2_ITER=600000
 _bk_note() { echo "NOTICE: $*" >&2; }
@@ -56,7 +57,7 @@ backup_key_provision() {
 
 # backup_key_legacy_present: the co-located legacy key still exists.
 backup_key_legacy_present() {
-  [[ -e "$BACKUP_KEY_LEGACY" ]]
+  [[ -e "$(_bk_legacy)" ]]
 }
 
 # backup_key_encrypt IN OUT: encrypt with the new key only.
@@ -79,8 +80,8 @@ backup_key_decrypt() {
     return 0
   fi
   rm -f "$out"
-  if backup_key_legacy_present && openssl enc -d -aes-256-cbc -pbkdf2 -in "$in" -out "$out" -pass "file:${BACKUP_KEY_LEGACY}" 2>/dev/null; then
-    _bk_note "this archive was made with the legacy co-located backup key (${BACKUP_KEY_LEGACY}). Re-create backups so new archives use ${BACKUP_KEY_FILE}."
+  if backup_key_legacy_present && openssl enc -d -aes-256-cbc -pbkdf2 -in "$in" -out "$out" -pass "file:$(_bk_legacy)" 2>/dev/null; then
+    _bk_note "this archive was made with the legacy co-located backup key ($(_bk_legacy)). Re-create backups so new archives use ${BACKUP_KEY_FILE}."
     return 0
   fi
   rm -f "$out"
@@ -138,7 +139,7 @@ backup_key_verify_recovery() {
 backup_key_recovery_confirm() {
   local h
   h=$(_bk_key_hash)
-  if [[ -n "$h" && -f "$BACKUP_KEY_MARKER" ]] && [[ "$(cat "$BACKUP_KEY_MARKER" 2>/dev/null)" == "$h" ]]; then
+  if [[ -n "$h" && -f "$(_bk_marker)" ]] && [[ "$(cat "$(_bk_marker)" 2>/dev/null)" == "$h" ]]; then
     return 0
   fi
   local dest="${BAS_BACKUP_KEY_RECOVERY_PATH:-}"
@@ -152,7 +153,7 @@ backup_key_recovery_confirm() {
   local old_umask
   old_umask=$(umask); umask 077
   printf '%s
-' "$h" > "$BACKUP_KEY_MARKER"
+' "$h" > "$(_bk_marker)"
   umask "$old_umask"
   echo "Backup key recovery copy verified at ${dest}."
 }
@@ -178,11 +179,45 @@ backup_key_import() {
   if [[ "$(id -u)" == "0" ]]; then chown root:root "$tmp" || { rm -f "$tmp"; return 1; }; fi
   mv -f "$tmp" "$BACKUP_KEY_FILE" || { rm -f "$tmp"; _bk_err "could not place the backup key"; return 1; }
   h=$(_bk_key_hash)
-  if [[ -n "$h" && -d "$(dirname "$BACKUP_KEY_MARKER")" ]]; then
+  if [[ -n "$h" && -d "$(dirname "$(_bk_marker)")" ]]; then
     old_umask=$(umask); umask 077
     printf '%s
-' "$h" > "$BACKUP_KEY_MARKER"
+' "$h" > "$(_bk_marker)"
     umask "$old_umask"
   fi
   echo "Backup key restored to ${BACKUP_KEY_FILE} from the recovery copy."
+}
+
+# backup_key_prompt_inputs: on a terminal, ask for the recovery path and passphrase unless they are already set.
+backup_key_prompt_inputs() {
+  if [[ -t 0 ]]; then
+    if [[ -z "${BAS_BACKUP_KEY_RECOVERY_PATH:-}" ]]; then
+      read -r -p "  Recovery copy path (must be outside ${DATA_DIR}): " BAS_BACKUP_KEY_RECOVERY_PATH
+    fi
+    if [[ -z "${BAS_BACKUP_KEY_PASSPHRASE:-}" ]]; then
+      local p1 p2
+      read -r -s -p "  Recovery passphrase (16 characters or more): " p1; echo
+      read -r -s -p "  Repeat passphrase: " p2; echo
+      [[ "$p1" == "$p2" ]] || { _bk_err "the passphrases differ"; return 1; }
+      BAS_BACKUP_KEY_PASSPHRASE="$p1"
+    fi
+    export BAS_BACKUP_KEY_RECOVERY_PATH BAS_BACKUP_KEY_PASSPHRASE
+  fi
+  return 0
+}
+
+# backup_key_gate: backups do not run until a verified recovery copy of the backup key exists (backup-key.sh).
+backup_key_gate() {
+  if backup_key_recovery_confirm 2>/dev/null; then
+    return 0
+  fi
+  if [[ -t 0 && -z "${BAS_BACKUP_KEY_PASSPHRASE:-}" ]]; then
+    echo "" >&2
+    echo "A verified recovery copy of the backup encryption key is required before any backup can run." >&2
+    echo "Without it, backups made with this key cannot be restored after the key is lost." >&2
+    _bk_options "Your options:"       "Enter a path outside this host's backups and a passphrase now (you will be asked for both)."       "Stop now (Ctrl-C). Create the copy with: sudo bash install.sh --export-backup-key <file>, then start this again."
+    echo "" >&2
+  fi
+  backup_key_prompt_inputs || return 1
+  backup_key_recovery_confirm
 }

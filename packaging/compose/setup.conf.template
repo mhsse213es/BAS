@@ -176,6 +176,13 @@ ADMIN_PASSWORD=                   # ← REQUIRED  min 10 chars
 # and run --upgrade. Five wrong attempts lock recovery for 15 minutes.
 RECOVERY_PASSPHRASE=              # ← REQUIRED  exactly 14 letters and digits
 
+# ── [backup recovery copy] ───────────────────────────────────────────────────
+# Backups cannot run until a verified recovery copy of the backup encryption key exists. Keep the copy and its
+# passphrase OFF this host. The installer removes BAS_BACKUP_KEY_PASSPHRASE from this file once the copy is verified.
+# Leave both empty to be asked at the terminal; a non-interactive install stops with the options if they are missing.
+BAS_BACKUP_KEY_RECOVERY_PATH=         # file outside the install directory, for example /root/audspect-backup-key-recovery.enc
+BAS_BACKUP_KEY_PASSPHRASE=            # 16 characters or more
+
 # ── [licence] ──────────────────────────────────────────────────────────────────
 # Path to the Audspect licence file (.lic) delivered with the bundle -- kept
 # under its own issued filename (e.g. hdfc-prod-001.lic for customer ID

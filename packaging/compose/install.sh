@@ -71,40 +71,6 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "${SCRIPT_DIR}/db-encryption-key.sh" ]] || { echo "missing ${SCRIPT_DIR}/db-encryption-key.sh" >&2; exit 1; }
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/db-encryption-key.sh"
-# _backup_key_prompt_inputs: on a terminal, ask for the recovery path and passphrase unless they are already set.
-_backup_key_prompt_inputs() {
-  if [[ -t 0 ]]; then
-    if [[ -z "${BAS_BACKUP_KEY_RECOVERY_PATH:-}" ]]; then
-      read -r -p "  Recovery copy path (must be outside ${DATA_DIR}): " BAS_BACKUP_KEY_RECOVERY_PATH
-    fi
-    if [[ -z "${BAS_BACKUP_KEY_PASSPHRASE:-}" ]]; then
-      local p1 p2
-      read -r -s -p "  Recovery passphrase (16 characters or more): " p1; echo
-      read -r -s -p "  Repeat passphrase: " p2; echo
-      [[ "$p1" == "$p2" ]] || { err "the passphrases differ"; return 1; }
-      BAS_BACKUP_KEY_PASSPHRASE="$p1"
-    fi
-    export BAS_BACKUP_KEY_RECOVERY_PATH BAS_BACKUP_KEY_PASSPHRASE
-  fi
-  return 0
-}
-
-# _backup_key_gate: backups do not run until a verified recovery copy of the backup key exists (backup-key.sh).
-_backup_key_gate() {
-  if backup_key_recovery_confirm 2>/dev/null; then
-    return 0
-  fi
-  if [[ -t 0 && -z "${BAS_BACKUP_KEY_PASSPHRASE:-}" ]]; then
-    echo "" >&2
-    echo "A verified recovery copy of the backup encryption key is required before any backup can run." >&2
-    echo "Without it, backups made with this key cannot be restored after the key is lost." >&2
-    _bk_options "Your options:"       "Enter a path outside this host's backups and a passphrase now (you will be asked for both)."       "Stop now (Ctrl-C). Create the copy with: sudo bash install.sh --export-backup-key <file>, then start this again."
-    echo "" >&2
-  fi
-  _backup_key_prompt_inputs || return 1
-  backup_key_recovery_confirm
-}
-
 # Database server TLS material (db-tls.sh, P0.1) and CA key backup wrapping (ca-backup.sh, P0.2).
 [[ -f "${SCRIPT_DIR}/db-tls.sh" ]] || { echo "missing ${SCRIPT_DIR}/db-tls.sh" >&2; exit 1; }
 source "${SCRIPT_DIR}/db-tls.sh"
@@ -1369,7 +1335,7 @@ mode_install() {
   # a copy of the backup directory cannot be decrypted with it. Losing this
   # file makes archives unrecoverable; keep an offline copy.
   backup_key_provision || { err "backup encryption key could not be created; installation stopped"; exit 1; }
-  _backup_key_gate || { err "installation stopped: no confirmed recovery copy of the backup key. Nothing has been started."; exit 1; }
+  backup_key_gate || { err "installation stopped: no confirmed recovery copy of the backup key. Nothing has been started."; exit 1; }
 
   step "6/10  Writing .env (root-readable only)"
   _write_env
@@ -1425,9 +1391,9 @@ mode_upgrade() {
   DB_TLS_DIR="${DATA_DIR}/dbtls"
   db_tls_ensure || { err "database TLS check failed; the upgrade was not started. Nothing has been changed."; _bk_options "Your options:" "Fix the file reported above, then run the upgrade again." "Or move ${DATA_DIR}/dbtls aside so the installer regenerates it, then run again."; exit 1; }
   backup_key_provision || { err "backup encryption key could not be created; the upgrade was not started"; exit 1; }
-  _backup_key_gate || { err "upgrade not started: no confirmed recovery copy of the backup key. Nothing has been changed."; exit 1; }
+  backup_key_gate || { err "upgrade not started: no confirmed recovery copy of the backup key. Nothing has been changed."; exit 1; }
   if backup_key_legacy_present; then
-    warn "Legacy backup key ${BACKUP_KEY_LEGACY} is still present. It opens only archives made before this version."
+    warn "Legacy backup key $(_bk_legacy) is still present. It opens only archives made before this version."
     _bk_options "Your options for the legacy key:"       "Keep it. Older archives still restore with it. It is not used for new archives."       "Remove it only after: a new backup has restored successfully on a clean host, and every older archive has been removed by secure erasure. The steps are in docs/security/req-039-customer-managed-keys.md (historical cleanup)."
   fi
 
@@ -2224,7 +2190,7 @@ mode_restore() {
 
   if [[ ! -s "$BACKUP_KEY_FILE" ]]; then
     info "No backup key on this host. Restoring it from the recovery copy."
-    _backup_key_prompt_inputs || exit 1
+    backup_key_prompt_inputs || exit 1
     backup_key_import "${BAS_BACKUP_KEY_RECOVERY_PATH:-}"       || { err "Restore stopped before any change: the backup key could not be imported."; _bk_options "Your options:" "Run: sudo bash install.sh --import-backup-key <recovery file>, then run the restore again." "Non-interactive: set BAS_BACKUP_KEY_RECOVERY_PATH and BAS_BACKUP_KEY_PASSPHRASE, then run the restore again." "Stop. Nothing has been changed."; exit 1; }
   fi
 
@@ -2476,6 +2442,6 @@ case "$MODE" in
   restore)        mode_restore "$RESTORE_ARCHIVE" ;;
   export-db-key) db_key_export "$DB_KEY_RECOVERY_PATH" ;;
   import-db-key) db_key_import "$DB_KEY_RECOVERY_PATH" ;;
-  import-backup-key) _backup_key_prompt_inputs && backup_key_import "$BAS_BACKUP_KEY_RECOVERY_PATH" || exit 1 ;;
-  export-backup-key) _backup_key_prompt_inputs && backup_key_export "$BAS_BACKUP_KEY_RECOVERY_PATH" && backup_key_verify_recovery "$BAS_BACKUP_KEY_RECOVERY_PATH" && echo "Recovery copy verified." || exit 1 ;;
+  import-backup-key) backup_key_prompt_inputs && backup_key_import "$BAS_BACKUP_KEY_RECOVERY_PATH" || exit 1 ;;
+  export-backup-key) backup_key_prompt_inputs && backup_key_export "$BAS_BACKUP_KEY_RECOVERY_PATH" && backup_key_verify_recovery "$BAS_BACKUP_KEY_RECOVERY_PATH" && echo "Recovery copy verified." || exit 1 ;;
 esac
