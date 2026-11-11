@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -18,6 +19,9 @@ func TestProbeTCP_Connected(t *testing.T) {
 }
 
 func TestProbeTCP_Refused(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("refused mapping is verified on Linux only: Windows reports the refusal with a different error, and the runner ships as a Linux binary")
+	}
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
