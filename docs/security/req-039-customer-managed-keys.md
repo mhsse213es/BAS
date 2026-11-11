@@ -146,11 +146,10 @@ Level 5 is not claimed until 1 through 11 pass.
 
 ## Pre-existing test failures on main (not caused by this work)
 
-Both fail on untouched `main` (`9879b740`):
-- `packaging/compose/tests/db_encryption_key_test.sh`: "fresh install did not generate a valid key".
-- `packaging/compose/tests/install_config_test.sh`: `validate_k8s_scenario_config: command not found`, one failing check.
+Both fail on `9879b740`, the commit before the P0 work. Neither is run by CI (`.github/workflows/test.yml` does not invoke `packaging/compose/tests/`). Neither assertion has been changed.
 
-These need their own fix. They are not part of REQ-039.
+- `packaging/compose/tests/db_encryption_key_test.sh`, "fresh install did not generate a valid key". Cause: `db_key_provision` verifies the key's owner and Unix mode itself, so it refuses on a filesystem without Unix modes (NTFS under Git Bash). On Linux the check is valid. Fix: run this suite on Linux in CI, or make the mode probe explicit in the test. Not yet done.
+- `packaging/compose/tests/install_config_test.sh`, "upgrade did not keep it" (plus `command not found` for install helpers). Cause: the test runs `load_config` and other installer functions from a hand-written list of function names. That list has drifted from `install.sh`: `validate_k8s_scenario_config`, `validate_k8s_discovery_config`, `_stage_k8s_scenario`, `_stage_k8s_discovery`, `_write_aleef_secrets` and `info` are missing. Extracting every function by awk does not work, because a heredoc in `install.sh` has a line starting with `}`. The proper fix is a source guard in `install.sh` (so the test can source it) or a test that runs the installer's real entry point. Not yet done.
 
 ## Not verified
 
