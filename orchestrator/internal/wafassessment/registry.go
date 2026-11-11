@@ -208,6 +208,7 @@ var scenarioRegistry = map[string]scenarioLoader{
 	"detection-telemetry":       loadDetectionTelemetryScenario,
 	"legitimate-traffic":        loadLegitimateTrafficScenario,
 	"origin-resilience":         loadOriginResilienceScenario,
+	"command-injection-depth":   loadCommandInjectionScenario,
 }
 
 // EvaluateScenarioBySlug looks up slug in the registry and returns its
