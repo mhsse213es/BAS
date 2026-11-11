@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/config"
+	"github.com/audspect/bas/internal/advisory"
 	aleefstore "github.com/audspect/bas/internal/aleef/store"
 	"github.com/audspect/bas/internal/api"
 	"github.com/audspect/bas/internal/auth"
@@ -1062,6 +1063,7 @@ func main() {
 		WithK8sAnalysis(buildK8sAnalysisRunner()).
 		WithVerificationStore(verificationStore).
 		WithRelationshipStore(relationshipStore).
+		WithAdvisoryStore(advisory.NewStore(pool)).
 		WithRuleLibrary(rulesEngine).
 		WithVexSweep(vexSweepStore, vexSweepDispatcher).
 		WithEMSweep(emSweepStore, emSweepDispatcher).

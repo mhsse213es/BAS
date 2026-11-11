@@ -824,6 +824,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/techniques/{id}/relationships", h.ListTechniqueRelationships)
 		r.Get("/api/relationships/{id}", h.GetRelationship)
 		r.Get("/api/relationships/{id}/evidence", h.ListRelationshipEvidence)
+		r.With(auth.RequirePermission(auth.CanDecideAdvisoryRelevance)).Post("/api/advisories/{id}/decision", h.DecideAdvisory)
+		r.With(auth.RequirePermission(auth.CanDecideAdvisoryRelevance)).Post("/api/advisories/{id}/reverse", h.ReverseAdvisoryDecision)
 		r.With(auth.RequirePermission(auth.CanCurateThreatIntel)).Post("/api/relationships", h.CreateRelationship)
 		r.With(auth.RequirePermission(auth.CanCurateThreatIntel)).Put("/api/relationships/{id}", h.UpdateRelationship)
 		r.With(auth.RequirePermission(auth.CanCurateThreatIntel)).Post("/api/relationships/{id}/evidence", h.AddRelationshipEvidence)
