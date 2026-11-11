@@ -31,5 +31,11 @@ Pinned by digest, resolved on staging. Filled in when the lab first runs there.
 
 ## Bring-up (on staging only)
 
+Build the probe runner for Linux first (the binary is git-ignored):
+
+    cd orchestrator && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../lab/segmentation/bin/segprobe-runner ./cmd/segprobe-runner
+    chmod 0755 lab/segmentation/bin/segprobe-runner   # scp drops the execute bit; re-apply after copying
+
+
     docker compose -f lab/segmentation/docker-compose.yml config --quiet
     docker compose -f lab/segmentation/docker-compose.yml up -d
