@@ -1,6 +1,7 @@
 package db
 
 import (
+	"os"
 	"context"
 	"fmt"
 	"time"
@@ -10,6 +11,9 @@ import (
 
 // Connect creates a pgxpool connection and verifies reachability.
 func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
+	if err := RequireVerifiedDBTLS(dsn, os.Getenv("BAS_DB_TLS_DEV_INSECURE") == "1"); err != nil {
+		return nil, err
+	}
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("pgxpool.New: %w", err)
