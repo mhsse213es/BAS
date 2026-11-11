@@ -54,9 +54,9 @@ func TestFSThreatActorKillChains_ParseWindowsOnlyWithExpectedTechniques(t *testi
 			// Enterprise-grade reference chain (black-basta standard): full
 			// initial-access -> loader -> persistence -> discovery -> collection
 			// -> exfil -> impact -> recovery-inhibition arc, with the impact and
-			// VSS-deletion stages lab-gated.
+			// impact stage lab-gated; VSS enumeration is read-only.
 			file:       "ta505-kill-chain.yaml",
-			techniques: []string{"T1566.001", "T1059.001", "T1547.001", "T1053.005", "T1518.001", "T1560.001", "T1567.002", "T1486", "T1490", "T1490"},
+			techniques: []string{"T1566.001", "T1059.001", "T1547.001", "T1053.005", "T1518.001", "T1560.001", "T1567.002", "T1486", "T1490"},
 		},
 		{
 			// Conservative enterprise rebuild: initial-access -> encoded payload

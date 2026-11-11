@@ -2,7 +2,7 @@ id: ta505-kill-chain
 product_line: killchain
 name: TA505 / Cl0p Kill Chain — BFSI Loader, Data-Theft & Double-Extortion
 description: >
-  Ten-stage emulation of TA505 (Hive0065 / the Dridex & Cl0p operators)
+  Nine-stage emulation of TA505 (Hive0065 / the Dridex & Cl0p operators)
   tradecraft against financial institutions, from malicious-document initial
   access through loader, persistence, and the Cl0p data-theft + encryption +
   recovery-inhibition objective. Grounded in MITRE ATT&CK group G0092 (TA505)
@@ -29,7 +29,6 @@ description: >
      7. Exfiltration          -- cloud-storage egress reachability probe, NO upload (T1567.002)
      8. Impact (lab-only)     -- sandboxed Cl0p-style file-encryption simulation (T1486)
      9. Recovery Inhibition A -- VSS + backup-catalog enumeration, read-only (T1490)
-    10. Recovery Inhibition B -- vssadmin shadow-copy deletion, lab-only + env-gated (T1490)
 
   ATTRIBUTION / CONFIDENCE: per-step threat_intel_sources and
   family_attribution_confidence are set. "confirmed" means at least two
@@ -58,9 +57,7 @@ description: >
   decoy files in an isolated temp dir and deletes them). Stage 8 is lab-only
   and operates only on <=3 self-created dummy files in an isolated range dir
   with file/size caps and forced cleanup -- no real cryptography on real data.
-  Stage 10 is lab-only AND default-disabled: it requires the operator to set
-  BAS_CONFIRM_VSS_DELETE=true in an isolated lab and deletes at most ONE (the
-  oldest) C: shadow copy. Windows only. [BAS-SIM-TA505] tagged throughout.
+  Windows only. [BAS-SIM-TA505] tagged throughout.
 author: Audspect Research
 executable: true
 local_check: false
@@ -527,53 +524,4 @@ steps:
       $wbaOut = & wbadmin get versions 2>&1
       $backupCount = ([regex]::Matches(($wbaOut -join "`n"), 'Backup time')).Count
       Write-Output "EXEC T1490: VSS enumeration -- $shadowCount shadow copy/copies found; backup catalog $backupCount version(s) via wbadmin. Cl0p enumerates these before deletion. No copies removed. [BAS-SIM-TA505-S9]"
-    cleanup: ""
-
-  # ---------------------------------------------------------------------------
-  # Stage 10 -- Recovery Inhibition B: vssadmin VSS Deletion (T1490, lab-only + gated)
-  # ---------------------------------------------------------------------------
-  - name: "TA505 Stage 10 -- VSS Shadow Copy Deletion (lab -- requires BAS_CONFIRM_VSS_DELETE=true) (T1490)"
-    technique_id: T1490
-    action_key: vss_delete
-    detection_profiles:
-      - windows_vss_inhibition
-    framework: custom
-    executor: powershell
-    requires_priv: admin
-    timeout_sec: 60
-    fidelity: lab-only
-    production_safe: false
-    risk: high
-    blast_radius: "Deletes ONE oldest VSS shadow copy of C: via vssadmin.exe. Requires explicit BAS_CONFIRM_VSS_DELETE=true and verifies a snapshot exists first; default-disabled without the flag. Cl0p deletes shadow copies to inhibit recovery before extortion."
-    reversible: false
-    telemetry:
-      - "Security EID 8224 (VSS service shutdown) + EID 524 (shadow copy deletion)"
-      - "Security EID 4688 (vssadmin.exe with delete command)"
-    detection:
-      - "EDR: vssadmin.exe with 'delete shadows' argument -- #1 ransomware pre-encryption technique"
-      - "SIEM: shadow-copy count decrease; alert if the count drops to 0"
-    threat_intel_sources:
-      - reference: "CISA/FBI Advisory AA23-158A -- #StopRansomware: CL0P (inhibit recovery as part of the ransomware objective)"
-        url: "https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-158a"
-      - reference: "MITRE ATT&CK -- Clop (Software S0611): Inhibit System Recovery (T1490)"
-        url: "https://attack.mitre.org/software/S0611/"
-    last_reviewed: "2026-11-10"
-    family_attribution_confidence: reported
-    command: |
-      $ErrorActionPreference = 'SilentlyContinue'
-      $confirm = $env:BAS_CONFIRM_VSS_DELETE
-      if (-not $confirm -or $confirm -ne 'true') {
-        Write-Output "SKIP: BAS_CONFIRM_VSS_DELETE not set to 'true' -- VSS deletion skipped (default-disabled per safety policy). Set the env var explicitly in an isolated lab to enable. [BAS-SIM-TA505-S10]"
-        return
-      }
-      $shadows = Get-WmiObject Win32_ShadowCopy -EA SilentlyContinue | Where-Object { $_.VolumeName -match 'C:' }
-      if (-not $shadows -or @($shadows).Count -eq 0) {
-        Write-Output "SKIP: no C: VSS shadow copies exist -- nothing to delete. Create one first with: vssadmin create shadow /for=C:  [BAS-SIM-TA505-S10]"
-        return
-      }
-      $oldest = @($shadows | Sort-Object InstallDate)[0]
-      $id = $oldest.ID
-      & vssadmin delete shadows /Shadow=$id /Quiet 2>&1 | Out-Null
-      $remaining = @(Get-WmiObject Win32_ShadowCopy -EA SilentlyContinue | Where-Object { $_.VolumeName -match 'C:' }).Count
-      Write-Output "FAIL: VSS shadow copy $id deleted -- expect EID 8224/524. $remaining shadow copy/copies remaining on C:. Create a new snapshot to restore recovery capability. [BAS-SIM-TA505-S10]"
     cleanup: ""
