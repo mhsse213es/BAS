@@ -18,6 +18,7 @@ type fakeProvider struct {
 
 func (f *fakeProvider) Healthy(_ context.Context, z Zone) error { return f.healthyErr[z] }
 func (f *fakeProvider) Lookup(z Zone) (string, error)           { return "10.0.0." + string(z[0]), nil }
+func (f *fakeProvider) TargetIP(z Zone) (string, error)         { return "10.0.0." + string(z[0]), nil }
 func (f *fakeProvider) Probe(_ context.Context, _ ProbeRequest) (ProbeResult, error) {
 	return f.result, f.probeErr
 }

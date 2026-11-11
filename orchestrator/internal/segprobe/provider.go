@@ -16,8 +16,10 @@ type TimeWindow struct {
 type Provider interface {
 	// Healthy reports whether the zone's probe runner or target is usable.
 	Healthy(ctx context.Context, zone Zone) error
-	// Lookup returns the IP address of a zone's probe runner or target.
+	// Lookup returns the IP address of a zone's probe runner, the source address.
 	Lookup(zone Zone) (string, error)
+	// TargetIP returns the IP address of a zone's target service, the destination address.
+	TargetIP(zone Zone) (string, error)
 	// Probe performs one controlled connection attempt from the source zone.
 	Probe(ctx context.Context, req ProbeRequest) (ProbeResult, error)
 	// FirewallEvents returns firewall decisions inside the window. The bool is

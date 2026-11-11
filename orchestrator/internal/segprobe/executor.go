@@ -55,9 +55,9 @@ func runProbe(ctx context.Context, p Provider, spec ProbeSpec) ProbeOutcome {
 	if err != nil {
 		return errOutcome(fmt.Sprintf("lookup source zone %s: %v", spec.Src, err))
 	}
-	dstIP, err := p.Lookup(spec.Dst)
+	dstIP, err := p.TargetIP(spec.Dst)
 	if err != nil {
-		return errOutcome(fmt.Sprintf("lookup destination zone %s: %v", spec.Dst, err))
+		return errOutcome(fmt.Sprintf("target address for zone %s: %v", spec.Dst, err))
 	}
 
 	req := ProbeRequest{
