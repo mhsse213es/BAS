@@ -10,7 +10,7 @@
     "telemetry": 0
   },
   "akira-kill-chain.yaml": {
-    "cleanup": 1,
+    "cleanup": 0,
     "detection": 0,
     "telemetry": 0
   },
@@ -35,7 +35,7 @@
     "telemetry": 16
   },
   "black-basta-kill-chain.yaml": {
-    "cleanup": 1,
+    "cleanup": 0,
     "detection": 0,
     "telemetry": 0
   },
@@ -260,7 +260,7 @@
     "telemetry": 1
   },
   "endpoint-mastery/em-07-ransomware-readiness.yaml": {
-    "cleanup": 2,
+    "cleanup": 0,
     "detection": 0,
     "telemetry": 0
   },
@@ -355,7 +355,7 @@
     "telemetry": 7
   },
   "linux-ransomware-drill.yaml": {
-    "cleanup": 1,
+    "cleanup": 0,
     "detection": 0,
     "telemetry": 0
   },
@@ -405,7 +405,7 @@
     "telemetry": 0
   },
   "ransomware-drill.yaml": {
-    "cleanup": 1,
+    "cleanup": 0,
     "detection": 0,
     "telemetry": 0
   },

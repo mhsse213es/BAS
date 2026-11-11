@@ -540,6 +540,7 @@ steps:
   # Stage 10 — Recovery Inhibition B: vssadmin-Based VSS Deletion (T1490, lab-only)
   # ---------------------------------------------------------------------------
   - name: "VSS Shadow Copy Deletion (lab  -  requires BAS_CONFIRM_VSS_DELETE=true)"
+    irreversible: "Deleted VSS shadow copies cannot be restored by any cleanup step; recovery needs a backup taken before the run. Lab gate BAS_CONFIRM_VSS_DELETE is unchanged."
     technique_id: T1490
     action_key: vss_delete
     detection_profiles:

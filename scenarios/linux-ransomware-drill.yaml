@@ -81,6 +81,7 @@ steps:
   # Step 2 — Recovery Inhibition: LVM Snapshot Removal (T1490, lab-only)
   # ---------------------------------------------------------------------------
   - name: "LVM Snapshot Removal (lab  -  requires BAS_CONFIRM_LVM_DELETE=true)"
+    irreversible: "Removing an LVM snapshot deletes its copy of the volume; it can only be recreated from source, which is not an undo. Lab gate BAS_CONFIRM_LVM_DELETE is unchanged."
     technique_id: T1490
     action_key: lvm_delete
     detection_profiles:

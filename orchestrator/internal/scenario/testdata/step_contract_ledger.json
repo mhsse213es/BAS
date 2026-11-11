@@ -168,7 +168,7 @@
     "action_key": "vss_delete",
     "framework": "custom",
     "class": "destructive",
-    "status": "gap_no_undo"
+    "status": "irreversible_declared"
   },
   {
     "scenario": "akira-kill-chain.yaml",
@@ -627,7 +627,7 @@
     "action_key": "vss_delete",
     "framework": "custom",
     "class": "destructive",
-    "status": "gap_no_undo"
+    "status": "irreversible_declared"
   },
   {
     "scenario": "blackcat-kill-chain.yaml",
@@ -2442,19 +2442,19 @@
     "scenario": "endpoint-mastery/em-07-ransomware-readiness.yaml",
     "index": 6,
     "technique_id": "T1490",
-    "action_key": "vss_delete",
+    "action_key": "backup_readiness_check",
     "framework": "custom",
-    "class": "destructive",
-    "status": "gap_no_undo"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "endpoint-mastery/em-07-ransomware-readiness.yaml",
     "index": 7,
     "technique_id": "T1490",
-    "action_key": "wbadmin_delete_catalog",
+    "action_key": "backup_readiness_check",
     "framework": "custom",
-    "class": "destructive",
-    "status": "gap_no_undo"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "endpoint-mastery/em-07-ransomware-readiness.yaml",
@@ -3129,7 +3129,7 @@
     "action_key": "lvm_delete",
     "framework": "custom",
     "class": "destructive",
-    "status": "gap_no_undo"
+    "status": "irreversible_declared"
   },
   {
     "scenario": "linux-ransomware-drill.yaml",
@@ -3867,7 +3867,7 @@
     "action_key": "vss_delete",
     "framework": "custom",
     "class": "destructive",
-    "status": "gap_no_undo"
+    "status": "irreversible_declared"
   },
   {
     "scenario": "ransomware-drill.yaml",

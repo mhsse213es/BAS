@@ -12,15 +12,19 @@
 # largest single stage) take hours on a cache-less, memory-contended host.
 
 # ── ART Atomics (sparse clone — YAML only, ~10 MB, no binaries) ──────────────
+# Pinned to an exact commit so the build input is reproducible. The build
+# fails if the fetched revision is not exactly ART_COMMIT.
 FROM alpine AS art-fetcher
+ARG ART_COMMIT=a0e3f9bc69fed2fd711bd1f1aa87a40c33482fe6
 RUN apk add --no-cache git curl && \
     git init /art-repo && \
     cd /art-repo && \
     git remote add origin https://github.com/redcanaryco/atomic-red-team.git && \
     git sparse-checkout init --no-cone && \
     printf 'atomics/T[0-9]*/T[0-9]*.yaml\n' > .git/info/sparse-checkout && \
-    git -c protocol.version=2 fetch --depth=1 --filter=blob:none origin master && \
+    git -c protocol.version=2 fetch --depth=1 --filter=blob:none origin "${ART_COMMIT}" && \
     git checkout FETCH_HEAD && \
+    [ "$(git rev-parse HEAD)" = "${ART_COMMIT}" ] || { echo "ART revision mismatch" >&2; exit 1; } && \
     mkdir /art-atomics /art-payloads && \
     find atomics -name 'T[0-9]*.yaml' -exec cp {} /art-atomics/ \;
 

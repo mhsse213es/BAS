@@ -18,7 +18,7 @@ description: >
     Stage 1 — Recon:       BFSI file target enumeration, network share discovery
     Stage 2 — Evasion:     Defender exclusion probe, event log clear probe
     Stage 3 — Impact:      Canary XOR encryption, extension rename, ransom note drop
-    Stage 4 — Destruction: Shadow copy deletion attempt, wbadmin catalog delete probe, BCDEdit probe
+    Stage 4 — Read-only telemetry checks for shadow-copy and backup-catalog deletion, BCDEdit probe (no deletion is executed)
     Stage 5 — Persistence: Backup service stop probe, malicious service probe
 author: Audspect Research
 executable: true
@@ -249,7 +249,7 @@ steps:
 
   - name: "Stage 4A — VSS Shadow Copy Deletion Signature"
     technique_id: T1490
-    action_key: vss_delete
+    action_key: backup_readiness_check
     detection_profiles:
       - windows_vss_inhibition
     framework: custom
@@ -257,10 +257,10 @@ steps:
     requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
-    production_safe: false
-    risk: medium
+    production_safe: true
+    risk: low
     reversible: false
-    blast_radius: "Launches vssadmin.exe delete shadows /all /quiet. Expected to be blocked immediately by EDR behavioral controls. No shadow copies deleted if controls are active."
+    blast_radius: "Read-only. Reads the VSS service state, counts existing shadow copies (Win32_ShadowCopy) and checks whether Sysmon telemetry is enabled. Never runs vssadmin delete and deletes nothing. It does NOT test whether EDR blocks vssadmin; that is not exercised by this step."
     telemetry:
       - "Sysmon EID 1: vssadmin.exe delete shadows process create"
       - "Security EID 4688: vssadmin.exe with deletion arguments"
@@ -268,24 +268,26 @@ steps:
       - "EDR: vssadmin.exe with 'delete shadows' — #1 ransomware pre-encryption signal"
       - "SIEM: shadow copy count decrease alert if count drops to 0"
     command: |
-      $ErrorActionPreference = 'SilentlyContinue'
-      $p = Start-Process 'vssadmin.exe' -ArgumentList 'delete shadows /all /quiet' -PassThru -WindowStyle Hidden
-      if (-not $p) {
-        Write-Output "PASS: EDR blocked vssadmin.exe process creation for shadow deletion. [BAS-SIM]"
-        return
-      }
-      $waited = $p.WaitForExit(5000)
-      if (-not $waited) { $p.Kill(); Write-Output "FAIL: vssadmin ran unmonitored — process not killed by EDR within 5s. [BAS-SIM]"; return }
-      if ($p.ExitCode -eq 0) {
-        Write-Output "FAIL: vssadmin delete shadows returned exit 0 — shadow copies may have been deleted. Verify with: vssadmin list shadows [BAS-SIM]"
-      } else {
-        Write-Output "PASS: vssadmin delete shadows blocked or failed (exit=$($p.ExitCode)) — shadow copy protection active. [BAS-SIM]"
+      $ErrorActionPreference = 'Stop'
+      try {
+        $svc = Get-Service -Name VSS -ErrorAction Stop
+        $shadows = @(Get-CimInstance Win32_ShadowCopy -ErrorAction Stop).Count
+        $log = Get-WinEvent -ListLog 'Microsoft-Windows-Sysmon/Operational' -ErrorAction SilentlyContinue
+        $telemetry = if ($log -and $log.IsEnabled) { 'enabled' } else { 'missing' }
+        $state = "VSS service=$($svc.Status); shadow copies=$shadows; Sysmon telemetry=$telemetry"
+        if ($telemetry -eq 'enabled') {
+          Write-Output "PASS: shadow-copy deletion is observable to telemetry (read-only: $state). EDR blocking was NOT tested. [BAS-SIM]"
+        } else {
+          Write-Output "FAIL: Sysmon telemetry is not enabled, so vssadmin shadow-copy deletion would not be observed (read-only: $state). [BAS-SIM]"
+        }
+      } catch {
+        Write-Output "SKIP: could not read VSS or telemetry state: $($_.Exception.Message). Step not scored. [BAS-SIM]"
       }
     cleanup: ""
 
   - name: "Stage 4B — wbadmin Backup Catalog Delete Probe"
     technique_id: T1490
-    action_key: wbadmin_delete_catalog
+    action_key: backup_readiness_check
     detection_profiles:
       - windows_vss_inhibition
     framework: custom
@@ -293,10 +295,10 @@ steps:
     requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
-    production_safe: false
-    risk: medium
+    production_safe: true
+    risk: low
     reversible: false
-    blast_radius: "Invokes wbadmin delete catalog -quiet. Expects UAC or EDR block. No backup catalog deleted if controls active."
+    blast_radius: "Read-only. Reads the Windows Backup service state and checks whether Sysmon telemetry is enabled. Never runs wbadmin delete and deletes nothing. It does NOT test whether EDR blocks wbadmin; that is not exercised by this step."
     telemetry:
       - "Sysmon EID 1: wbadmin.exe delete catalog process create"
       - "Security EID 4688: wbadmin.exe with catalog deletion arguments"
@@ -304,18 +306,20 @@ steps:
       - "EDR: wbadmin.exe delete catalog — backup destruction pre-encryption technique"
       - "SIEM: wbadmin invocation from non-backup-service process"
     command: |
-      $ErrorActionPreference = 'SilentlyContinue'
-      $p = Start-Process 'wbadmin.exe' -ArgumentList 'delete catalog -quiet' -PassThru -WindowStyle Hidden
-      if (-not $p) {
-        Write-Output "PASS: EDR blocked wbadmin.exe catalog deletion process creation. [BAS-SIM]"
-        return
-      }
-      $waited = $p.WaitForExit(5000)
-      if (-not $waited) { $p.Kill(); Write-Output "FAIL: wbadmin ran unmonitored — process not killed by EDR within 5s. [BAS-SIM]"; return }
-      if ($p.ExitCode -eq 0) {
-        Write-Output "FAIL: wbadmin delete catalog returned exit 0 — backup catalog may have been deleted. Verify backup jobs immediately. [BAS-SIM]"
-      } else {
-        Write-Output "PASS: wbadmin delete catalog blocked or failed (exit=$($p.ExitCode)) — backup catalog protection active. [BAS-SIM]"
+      $ErrorActionPreference = 'Stop'
+      try {
+        $wb = Get-Service -Name wbengine -ErrorAction SilentlyContinue
+        $wbState = if ($wb) { $wb.Status } else { 'not installed' }
+        $log = Get-WinEvent -ListLog 'Microsoft-Windows-Sysmon/Operational' -ErrorAction SilentlyContinue
+        $telemetry = if ($log -and $log.IsEnabled) { 'enabled' } else { 'missing' }
+        $state = "Windows Backup service=$wbState; Sysmon telemetry=$telemetry"
+        if ($telemetry -eq 'enabled') {
+          Write-Output "PASS: backup-catalog deletion is observable to telemetry (read-only: $state). EDR blocking was NOT tested. [BAS-SIM]"
+        } else {
+          Write-Output "FAIL: Sysmon telemetry is not enabled, so wbadmin catalog deletion would not be observed (read-only: $state). [BAS-SIM]"
+        }
+      } catch {
+        Write-Output "SKIP: could not read backup or telemetry state: $($_.Exception.Message). Step not scored. [BAS-SIM]"
       }
     cleanup: ""
 
