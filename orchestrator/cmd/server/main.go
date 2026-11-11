@@ -28,6 +28,8 @@ import (
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
 	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
+	"github.com/audspect/bas/internal/segprobe"
+	"github.com/audspect/bas/internal/segprobe/runstore"
 	"github.com/audspect/bas/internal/secretstore"
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/dnssink"
@@ -345,6 +347,9 @@ func main() {
 	}
 	if err := db.EnsureAPIBASJobSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] apibas job schema: %v", err)
+	}
+	if err := db.EnsureSegmentationSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] segmentation schema: %v", err)
 	}
 	if err := db.EnsureSecretStoreSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] secret store schema: %v", err)
@@ -1018,9 +1023,26 @@ func main() {
 		log.Printf("[apibas] job execution disabled: set BAS_APIBAS_RUNNER and provision the encryption key to enable it")
 	}
 
+	// Segmentation lab: runs only when SEGMENTATION_LAB_DIR names a lab checkout. A run left in progress by a
+	// previous process is failed here, so the single-run guard cannot stay stuck after a crash.
+	segStore := runstore.New(pool)
+	if n, serr := segStore.FailStale(context.Background(), "interrupted by server restart"); serr != nil {
+		log.Printf("[WARN] segmentation stale-run sweep: %v", serr)
+	} else if n > 0 {
+		log.Printf("[INFO] segmentation: failed %d run(s) left in progress by a previous process", n)
+	}
+	var segService *segprobe.Service
+	if labDir := os.Getenv("SEGMENTATION_LAB_DIR"); labDir != "" {
+		compose := filepath.Join(labDir, "docker-compose.yml")
+		segService = segprobe.NewService(segStore, filepath.Join(labDir, "scenarios"), func() segprobe.LabProvider {
+			return segprobe.NewDockerProvider(compose)
+		})
+		log.Printf("[INFO] segmentation lab enabled: %s", labDir)
+	}
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithSecretStore(secretStore).
 		WithAPIBASJobs(apibasJobs).
+		WithSegmentation(segService, segStore).
 		WithCloudSettings(cloudSettings).
 		WithDeploymentClass(cfg.Classification()).
 		WithEvidenceStore(evStore).
