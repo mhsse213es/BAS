@@ -31,6 +31,8 @@ import (
 	"github.com/audspect/bas/internal/admatrix"
 	"github.com/audspect/bas/internal/analytics"
 	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
+	"github.com/audspect/bas/internal/segprobe"
+	"github.com/audspect/bas/internal/segprobe/runstore"
 	"github.com/audspect/bas/internal/artifactgen"
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/cloudgraph"
@@ -114,6 +116,9 @@ type Handler struct {
 	secrets secretstore.Store
 	// apibasJobs runs API BAS assessment jobs (nil until WithAPIBASJobs; job endpoints answer 503).
 	apibasJobs *apibasjobs.Service
+	// seg runs segmentation lab packs and segRuns reads their stored results (nil until WithSegmentation).
+	seg     *segprobe.Service
+	segRuns *runstore.Store
 	// apibasAsyncHook replaces the background start of a job. Tests set it to keep a job queued.
 	apibasAsyncHook func(func())
 	// dbsimCheckRunner dispatches the dbsim read-only identity check to an
