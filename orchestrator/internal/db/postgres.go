@@ -792,6 +792,9 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE variant_runs ADD COLUMN IF NOT EXISTS execution_mode    text NOT NULL DEFAULT 'sequential'`,
 		`ALTER TABLE variant_runs ADD COLUMN IF NOT EXISTS generator_version text NOT NULL DEFAULT ''`,
 		`ALTER TABLE payload_families ADD COLUMN IF NOT EXISTS tactic text NOT NULL DEFAULT ''`,
+		// Explicit cleanup per family. 'unverified' is the default, so a family with no cleanup decision fails closed.
+		`ALTER TABLE payload_families ADD COLUMN IF NOT EXISTS cleanup text NOT NULL DEFAULT ''`,
+		`ALTER TABLE payload_families ADD COLUMN IF NOT EXISTS cleanup_status text NOT NULL DEFAULT 'unverified'`,
 
 		// ── Seed: default payload families (with tactic) ─────────────────────────
 		// T1059.001 — PowerShell Execution — tactic: execution
@@ -856,6 +859,13 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		 ('T1016','DNS Cache','Cached DNS entries',
 		  'Get-DnsClientCache | Select-Object Entry,Data,TimeToLive','recon','SAFE','discovery')
 		 ON CONFLICT (technique_id,name) DO UPDATE SET tactic = EXCLUDED.tactic`,
+
+		// The seeded recon families only read state (whoami, systeminfo, ipconfig, route, DNS cache, WMI and
+		// registry reads), so they are read-only by inspection. 'Download Stager' writes and stays unverified. Only
+		// families still at the default are touched, so an admin's later decision is never overwritten.
+		`UPDATE payload_families SET cleanup_status = 'read_only'
+		  WHERE cleanup_status = 'unverified'
+		    AND (technique_id IN ('T1082','T1016') OR (technique_id = 'T1059.001' AND name LIKE 'Recon - %'))`,
 
 		// T1057 — Process Discovery — tactic: discovery
 		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level,tactic) VALUES
