@@ -215,6 +215,7 @@ func executePHID001(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 	outcome := phishval.Evaluate(runID, "", catalogExp, phishval.Observation{UserInteraction: u})
 	outcome.UserInteraction = behaviorDimension(u, window, closed)
 	outcome.Collection = collection
+	outcome.Provisional = !closed
 	return outcome, nil
 }
 

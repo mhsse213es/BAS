@@ -264,6 +264,9 @@ type Outcome struct {
 	// Provenance links the grade to the exact EmailGW run it was read from. It is set
 	// only for a read-back grade, and it is nil otherwise.
 	Provenance *Provenance `json:"provenance,omitempty"`
+	// Provisional is true while an observation window is still open, so the grade can still change. A run
+	// with a provisional grade is not completed yet.
+	Provisional bool `json:"provisional,omitempty"`
 	// RelayProvenance is set only for a two-leg grade (PH-EVA-002). It names the
 	// relay-path run. The direct run is in Provenance.
 	RelayProvenance *Provenance `json:"relayProvenance,omitempty"`

@@ -41,3 +41,9 @@
 .rem-dr-sum { margin-bottom: 14px; }
 .rem-dr-h { margin: 0 0 8px; font-size: 13px; }
 .rem-dr-note { margin-top: 16px; line-height: 1.5; }
+.rem-ep-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; }
+.rem-ep-tname { font-weight: 500; }
+.rem-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.rem-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted-hi); background: transparent; }
+.rem-chip-more { font-style: italic; }
+.rem-ep-f .rem-fix-acts { margin-top: 8px; }

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/pki"
 )
 
 // enrollCSRRequest is the wire shape agent/protocol's SubmitCSR (Task 9)
@@ -162,6 +163,10 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 
 	var previousCerts int64
 	superseded := false
+	// The requesting key's fingerprint. A reinstall that proves the same key as the live certificate is the same
+	// identity, so it may replace that certificate without an administrator (see alreadyValid below). A CSR that
+	// does not verify gets no fingerprint here and is rejected later by IssueClientCertificate.
+	keyFingerprint, _ := pki.CSRKeyFingerprint([]byte(req.CSRPEM))
 	if mtlsID != "" {
 		serial := r.TLS.PeerCertificates[0].SerialNumber.Text(16)
 		var revoked bool
@@ -205,7 +210,21 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 				jsonError(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			if !tokenAccepted && !gone && !approved {
+			// Same key as the live certificate: the agent is the same identity reinstalled (its key was kept
+			// across the reinstall), so the shared secret is enough to renew it. A blank recorded fingerprint
+			// (issued before the column existed) never matches, so such a host still needs approval.
+			sameKey := false
+			if keyFingerprint != "" {
+				if err := tx.QueryRow(ctx, `SELECT EXISTS (
+					SELECT 1 FROM agent_certificates
+					 WHERE agent_id = $1 AND revoked = false AND expires_at > NOW()
+					   AND public_key_sha256 <> '' AND public_key_sha256 = $2
+				)`, req.AgentID, keyFingerprint).Scan(&sameKey); err != nil {
+					jsonError(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+			}
+			if !tokenAccepted && !gone && !approved && !sameKey {
 				jsonError(w, "agent already holds a valid certificate — renew via mTLS instead of re-bootstrapping", http.StatusConflict)
 				return
 			}
@@ -280,9 +299,9 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 		signingKeyID = &id
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO agent_certificates (serial_number, agent_id, issued_at, expires_at, command_signing_key_id)
-		VALUES ($1, $2, NOW(), $3, $4)`,
-		issued.SerialNumber, req.AgentID, issued.ExpiresAt, signingKeyID,
+		INSERT INTO agent_certificates (serial_number, agent_id, issued_at, expires_at, command_signing_key_id, public_key_sha256)
+		VALUES ($1, $2, NOW(), $3, $4, $5)`,
+		issued.SerialNumber, req.AgentID, issued.ExpiresAt, signingKeyID, keyFingerprint,
 	); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
