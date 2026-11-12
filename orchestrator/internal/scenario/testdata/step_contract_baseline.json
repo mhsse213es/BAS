@@ -330,7 +330,7 @@
     "telemetry": 0
   },
   "hunters-international-kill-chain.yaml": {
-    "cleanup": 5,
+    "cleanup": 2,
     "detection": 9,
     "telemetry": 9
   },
@@ -380,7 +380,7 @@
     "telemetry": 0
   },
   "medusa-kill-chain.yaml": {
-    "cleanup": 4,
+    "cleanup": 3,
     "detection": 10,
     "telemetry": 10
   },
@@ -415,7 +415,7 @@
     "telemetry": 0
   },
   "rhysida-kill-chain.yaml": {
-    "cleanup": 3,
+    "cleanup": 2,
     "detection": 11,
     "telemetry": 11
   },

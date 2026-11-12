@@ -58,6 +58,18 @@ steps:
       Validates whether vulnerability detection and monitoring identify exposed
       WebLogic servers.
     action_key: enumerate
+    command: |
+      $ErrorActionPreference = 'Continue'
+      try {
+        $svc = @(Get-Service -ErrorAction Stop | Where-Object { $_.Name -match 'weblogic|wls' -or $_.DisplayName -match 'WebLogic' })
+        $listen = @(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object { $_.LocalPort -in 7001,7002 })
+      } catch {
+        Write-Output "SKIP: service or listener state could not be read; WebLogic exposure not assessed. [BAS-SIM-HUNTERS-S1]"
+        return
+      }
+      if ($listen.Count -gt 0) { Write-Output "FAIL: a listener is bound to WebLogic ports 7001/7002 ($($listen.Count) socket(s)). Verify CVE-2020-14644 patch level and restrict exposure. [BAS-SIM-HUNTERS-S1]" }
+      elseif ($svc.Count -gt 0) { Write-Output "SKIP: WebLogic service present but no listener on 7001/7002; patch level not verified, not scored. [BAS-SIM-HUNTERS-S1]" }
+      else { Write-Output "PASS: no WebLogic service or listener on ports 7001/7002 detected on this host. [BAS-SIM-HUNTERS-S1]" }
     threat_intel_sources:
       - reference: "Barracuda Security Blog: Hunters International"
         url: "https://blog.barracuda.com/2024/07/29/hunters-international--your-data-is-the-prey"
@@ -75,6 +87,23 @@ steps:
       Validates web-server monitoring, EDR, and SIEM detection of unauthorized
       backdoor installation.
     action_key: enumerate
+    command: |
+      $ErrorActionPreference = 'Continue'
+      $roots = @("$env:SystemDrive\inetpub\wwwroot")
+      $roots += @(Get-ChildItem -LiteralPath $env:ProgramFiles -Directory -Filter 'Apache*Tomcat*' -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'webapps' })
+      $roots = @($roots | Where-Object { Test-Path -LiteralPath $_ })
+      if ($roots.Count -eq 0) { Write-Output "SKIP: no IIS or Tomcat web root found on this host; nothing to scan. [BAS-SIM-HUNTERS-S2]"; return }
+      $hits = @()
+      $scanned = 0
+      foreach ($r in $roots) {
+        Get-ChildItem -LiteralPath $r -Recurse -File -Include *.aspx,*.asp,*.jsp,*.php -ErrorAction SilentlyContinue |
+          Where-Object { $_.Length -lt 1MB } | ForEach-Object {
+            $scanned++
+            if (Select-String -LiteralPath $_.FullName -Pattern 'eval\s*\(\s*Request' -Quiet -ErrorAction SilentlyContinue) { $hits += $_.FullName }
+          }
+      }
+      if ($hits.Count -gt 0) { Write-Output "FAIL: $($hits.Count) web-shell signature file(s) in web roots: $($hits -join '; '). Quarantine and investigate. [BAS-SIM-HUNTERS-S2]" }
+      else { Write-Output "PASS: no China Chopper-style signature found in $scanned web file(s) across $($roots.Count) web root(s). Read-only scan. [BAS-SIM-HUNTERS-S2]" }
     threat_intel_sources:
       - reference: "Barracuda Security Blog: Hunters International"
       - reference: "BlackPoint Cyber Threat Profile"
@@ -89,6 +118,11 @@ steps:
       (net group, Get-ADUser equivalent). Validates whether discovery reconnaissance
       is monitored and alerted on.
     action_key: enumerate
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      net group "Domain Admins" /domain 2>&1 | Out-Null
+      Write-Output "EXEC T1087.002: domain group enumeration executed (net group, read-only). Expect Sysmon EID 1 for net.exe. [BAS-SIM-HUNTERS-S3]"
+      Write-Output "SKIP: discovery telemetry only; no control outcome to score. Not scored. [BAS-SIM-HUNTERS-S3]"
     threat_intel_sources:
       - reference: "Forescout: Anatomy of an Attack"
       - reference: "Brandefense Technical Analysis"
@@ -102,6 +136,14 @@ steps:
       evidence. Enumeration only; no actual exploitation or DC machine-account password
       reset. Validates whether DC exposure to CVE-2020-1472 is detected.
     action_key: enumerate
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $pt = (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).ProductType
+      if ($pt -ne 2) { Write-Output "SKIP: this host is not a domain controller; Zerologon enforcement is not applicable. Not scored. [BAS-SIM-HUNTERS-S4]"; return }
+      $v = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name FullSecureChannelProtection -ErrorAction SilentlyContinue).FullSecureChannelProtection
+      if ($v -eq 1) { Write-Output "PASS: Netlogon FullSecureChannelProtection=1; enforcement mode is active (CVE-2020-1472 mitigated). Read-only check. [BAS-SIM-HUNTERS-S4]" }
+      elseif ($null -eq $v) { Write-Output "FAIL: Netlogon FullSecureChannelProtection is not set; enforcement mode (CVE-2020-1472) is not confirmed. Set it to 1. [BAS-SIM-HUNTERS-S4]" }
+      else { Write-Output "FAIL: Netlogon FullSecureChannelProtection=$v; enforcement mode is not active (CVE-2020-1472). Set it to 1. [BAS-SIM-HUNTERS-S4]" }
     threat_intel_sources:
       - reference: "Forescout: Anatomy of an Attack"
       - reference: "Orange CERT Polska CTI Report"
@@ -116,6 +158,8 @@ steps:
       No actual AD replication executed. Validates whether credential-access behavior
       (domain replication attempts) is detected without actual credentials compromised.
     action_key: enumerate
+    command: |
+      Write-Output "SKIP: DCSync replication rights are assessed read-only by the dcsync-replication-rights-audit scenario. This step performs no replication and is not scored. [BAS-SIM-HUNTERS-S5]"
     threat_intel_sources:
       - reference: "Forescout: Anatomy of an Attack"
       - reference: "Brandefense Technical Analysis"
@@ -129,6 +173,22 @@ steps:
       credentials. Validates post-compromise movement detection and remote-access
       control efficacy.
     action_key: enumerate
+    fidelity: lab-only
+    production_safe: false
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $target = $env:BAS_RDP_TARGET
+      if (-not $target) { Write-Output "SKIP: BAS_RDP_TARGET is not set; no lab secondary system is configured. No connection attempted. Not scored. [BAS-SIM-HUNTERS-S6]"; return }
+      $client = New-Object System.Net.Sockets.TcpClient
+      try {
+        $ar = $client.BeginConnect($target, 3389, $null, $null)
+        if ($ar.AsyncWaitHandle.WaitOne(3000) -and $client.Connected) { Write-Output "FAIL: RDP port 3389 on the configured secondary system is reachable from this endpoint; the lateral path is not restricted. TCP reachability only; no credentials were used. [BAS-SIM-HUNTERS-S6]" }
+        else { Write-Output "SKIP: no RDP connection to the configured secondary system (timeout or refused); not scored. No credentials were used. [BAS-SIM-HUNTERS-S6]" }
+      } catch {
+        Write-Output "SKIP: RDP reachability probe raised an error; not scored. [BAS-SIM-HUNTERS-S6]"
+      } finally {
+        $client.Close()
+      }
     threat_intel_sources:
       - reference: "Forescout: Anatomy of an Attack"
       - reference: "Barracuda Security Blog: Hunters International"
@@ -142,6 +202,8 @@ steps:
       Software Storage tool pattern. Uses synthetic data and test-controlled destination.
       No external data transmission. Validates exfiltration behavior detection.
     action_key: enumerate
+    command: |
+      Write-Output "SKIP: exfiltration simulation not run. It needs a lab-configured destination and a catalogued action key for T1020, which is not defined yet. Not scored. [BAS-SIM-HUNTERS-S7]"
     threat_intel_sources:
       - reference: "Barracuda Security Blog: Hunters International"
       - reference: "Forescout: Anatomy of an Attack"
@@ -155,6 +217,15 @@ steps:
       Enumerate shadow copies and recovery volumes without deletion. Safe step.
       Validates whether recovery volume enumeration is detected.
     action_key: enumerate
+    command: |
+      $ErrorActionPreference = 'Continue'
+      $vssOut = & vssadmin.exe list shadows 2>&1 | Out-String
+      $rc = $LASTEXITCODE
+      $count = ([regex]::Matches($vssOut, 'Shadow Copy ID')).Count
+      if ($rc -eq 0 -and $count -gt 0) { Write-Output "FAIL: $count VSS shadow copy/copies are enumerable from the endpoint; a ransomware operator could delete them before encryption. Keep backups immutable and off-host. [BAS-SIM-HUNTERS-S8]" }
+      elseif ($rc -eq 0) { Write-Output "PASS: vssadmin reports no shadow copies on this host. Positive read of the configuration. [BAS-SIM-HUNTERS-S8]" }
+      elseif ($vssOut -match 'Access is denied') { Write-Output "PASS: vssadmin shadow listing was explicitly denied (Access is denied). Positive evidence of a control denial. [BAS-SIM-HUNTERS-S8]" }
+      else { Write-Output "SKIP: vssadmin listing failed (exit=$rc); shadow state unknown, not scored. [BAS-SIM-HUNTERS-S8]" }
     threat_intel_sources:
       - reference: "Forescout: Anatomy of an Attack"
       - reference: "AttackIQ Emulation Report"
@@ -168,6 +239,39 @@ steps:
       Full recovery capability. Validates whether recovery prevention and encryption
       impact are detected in controlled environment.
     action_key: ransomware_sim_sandboxed
+    command: |
+      $ErrorActionPreference = 'Continue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $ws = Join-Path $env:TEMP "bas_hunters_ws_$runId"
+      $created = $false
+      $enc = 0; $denied = $false; $other = $false
+      try {
+        if (Test-Path -LiteralPath $ws) {
+          Write-Output "SKIP: dedicated workspace already exists; refusing to reuse it. Not scored. [BAS-SIM-HUNTERS-S9]"
+        } else {
+          New-Item -ItemType Directory -Path $ws -ErrorAction Stop | Out-Null
+          $created = $true
+          $key = 0x5A
+          foreach ($name in 'finance_q4.txt','customer_export.txt','swift_ops.txt') {
+            try {
+              $plain = [System.Text.Encoding]::UTF8.GetBytes("[BAS-SIM-HUNTERS] synthetic $name run-id=$runId")
+              $xored = $plain | ForEach-Object { $_ -bxor $key }
+              [System.IO.File]::WriteAllBytes((Join-Path $ws ($name + '.bas_locked')), [byte[]]$xored)
+              $enc++
+            } catch {
+              if ($_.Exception.Message -match 'virus|malicious|blocked|denied|policy|Access to the path') { $denied = $true } else { $other = $true }
+            }
+          }
+          if ($enc -gt 0) { Write-Output "FAIL: $enc synthetic file(s) were XOR-encrypted in the dedicated workspace without a block; encryption behaviour was not stopped. XOR stands in for ChaCha20. Shadow deletion is not performed here (see the gated ransomware-drill step). [BAS-SIM-HUNTERS-S9]" }
+          elseif ($denied -and -not $other) { Write-Output "PASS: synthetic file writes were explicitly denied by a security control. [BAS-SIM-HUNTERS-S9]" }
+          else { Write-Output "SKIP: encryption simulation outcome ambiguous; not scored. [BAS-SIM-HUNTERS-S9]" }
+        }
+      } catch {
+        if ($_.Exception.Message -match 'virus|malicious|blocked|denied|policy|Access to the path') { Write-Output "PASS: workspace creation explicitly denied by a security control. [BAS-SIM-HUNTERS-S9]" }
+        else { Write-Output "SKIP: unexpected error during the encryption simulation; not scored. [BAS-SIM-HUNTERS-S9]" }
+      } finally {
+        if ($created) { Remove-Item -LiteralPath $ws -Recurse -Force -ErrorAction SilentlyContinue }
+      }
     fidelity: lab-only
     threat_intel_sources:
       - reference: "Barracuda Security Blog: Hunters International"

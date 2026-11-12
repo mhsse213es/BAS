@@ -336,3 +336,12 @@ Score impact: many steps that previously PASSed on exit 0 can now FAIL or SKIP. 
 - **30 command-less steps (hunters-international, medusa, rhysida).** Still open: building real commands needs design.
 - **Thin scenarios (34) and detection/telemetry backfill.** Still open: these add content and need your approval per file.
 - **Platform-wide default (tokenless exit-0 = PASS).** Still open: a scoring-model decision for you.
+
+## 2026-11-12: Open decisions, taken
+
+1. **Platform default (interpreter.go `interpretCustom`). REVERTED, not shipped.** I tried changing an exit-0 step with no verdict token from PASS to SKIP. The full internal/api run showed three ransomware-evidence tests failing (TestRWContainment_ContainedVendorStatusPasses, TestRWDetection_ConfiguredConnectorVerifiesWithProvenance, TestRWDetection_FallbackTimestampIsNeverQueriedAsEventTime). The detection capability only verifies steps that reach a verdict, so telemetry-only probes would stop being checked by the connector. That is a real regression. The default is restored to HEAD. Tokenless steps are handled per step in the scenario files instead. Open: decide how telemetry-only probes should reach the detection verifier without scoring as PASS.
+2. **DLP sink steps (production_safe true).** Kept. The destination is the platform's own sink from the server-side target registry, which is the operator-configured allow-list. Akira 5b was made lab-only because its step text carried an unfilled URL, not a registry sink. Revisit if the registry can point at an external host.
+3. **Non-PowerShell steps.** The wmi steps run their command inside an inner PowerShell (agent/executor_windows.go), so they fall under decision 1 and SKIP. The mshta step (`vbscript:window.close`) runs the string as an mshta argument; it now SKIPs by default. Its payload looks like a placeholder and needs a content review.
+4. **30 command-less steps (hunters-international, medusa, rhysida).** Left as recorded gaps. Each SKIPs with "No command defined". Building real commands is attack-simulation design work that should be lab-validated, so it is not done here.
+5. **Thin scenarios and detection/telemetry backfill.** Not done. Detection and telemetry expectations describe what a SOC should see. Writing them without a source would be invented evidence, so they need a sourced reference per technique first.
+6. **Lab verification.** Not possible from this environment. Pending lab access.

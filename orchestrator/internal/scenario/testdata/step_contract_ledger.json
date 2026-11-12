@@ -2849,8 +2849,8 @@
     "technique_id": "T1190",
     "action_key": "enumerate",
     "framework": "native",
-    "class": "destructive",
-    "status": "gap_no_undo"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "hunters-international-kill-chain.yaml",
@@ -2858,8 +2858,8 @@
     "technique_id": "T1505.003",
     "action_key": "enumerate",
     "framework": "native",
-    "class": "destructive",
-    "status": "gap_no_undo"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "hunters-international-kill-chain.yaml",
@@ -2876,8 +2876,8 @@
     "technique_id": "T1556",
     "action_key": "enumerate",
     "framework": "native",
-    "class": "destructive",
-    "status": "gap_no_undo"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "hunters-international-kill-chain.yaml",
@@ -3479,8 +3479,8 @@
     "technique_id": "T1190",
     "action_key": "",
     "framework": "native",
-    "class": "destructive",
-    "status": "gap_no_undo"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "medusa-kill-chain.yaml",
@@ -3947,8 +3947,8 @@
     "technique_id": "T1562.008",
     "action_key": "enumerate",
     "framework": "native",
-    "class": "destructive",
-    "status": "gap_no_undo"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "rhysida-kill-chain.yaml",

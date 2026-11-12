@@ -405,6 +405,39 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			BlastRadius:       "net group/view, nltest /dclist, LDAP DirectorySearcher enumeration -- all read-only",
 		},
 	},
+	// Hunters International read-only checks (scenarios/hunters-international-kill-chain.yaml).
+	// Each command only reads configuration, service state, or file contents; none writes,
+	// connects to a remote host, or uses credentials.
+	// Rhysida read-only check (scenarios/rhysida-kill-chain.yaml). wevtutil gl reads channel
+	// configuration only; no channel is disabled.
+	"T1562.008": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "wevtutil gl (get-log) reads the enabled state of required log channels -- read-only, no channel is changed",
+		},
+	},
+	"T1190": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "Get-Service / Get-NetTCPConnection listener check and read-only inspection of WebLogic install state -- no request is sent to any listener",
+		},
+	},
+	"T1505.003": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "read-only scan of web-server root directories for web-shell signature strings -- files are read, never written or executed",
+		},
+	},
+	"T1556": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "reads the Netlogon FullSecureChannelProtection registry value on a domain controller -- no secure-channel traffic, no password reset",
+		},
+	},
 	"T1090": {
 		"enumerate": {
 			Class:             ClassNonDestructive,
