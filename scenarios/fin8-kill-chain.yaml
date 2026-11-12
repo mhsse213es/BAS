@@ -524,5 +524,6 @@ steps:
       Remove-Item $rangeDir -Recurse -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $rangeDir)
       Write-Output "CLEANUP: range directory removed=$cleaned. No encrypted data remains. [BAS-SIM-FIN8-S9]"
+      if ($encFiles.Count -gt 0) { Write-Output "FAIL: $($encFiles.Count) file(s) were XOR-encrypted without a block; the encryption-behaviour control did not stop the simulation. [BAS-SIM-FIN8-S9]" } else { Write-Output "SKIP: no simulated encryption completed and no explicit denial was observed; not scored. [BAS-SIM-FIN8-S9]" }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP "bas_range_*") -Recurse -Force -ErrorAction SilentlyContinue

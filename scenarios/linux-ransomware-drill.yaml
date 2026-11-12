@@ -75,6 +75,7 @@ steps:
       set +e
       snapshot_count=$(lvs --noheadings -o lv_attr 2>/dev/null | awk '$1 ~ /^s/' | wc -l)
       echo "EXEC: LVM snapshot enumeration - ${snapshot_count} snapshot(s) found. Ransomware operators enumerate these before deletion. No snapshots removed. [BAS-SIM]"
+      echo "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   # ---------------------------------------------------------------------------
@@ -190,9 +191,10 @@ steps:
       done
       enc_count=0
       for f in "${range_dir}"/*; do
-        python3 -c "data = open('${f}', 'rb').read(); xored = bytes(b ^ 0xAB for b in data); open('${f}.bas_locked', 'wb').write(xored)"
-        rm -f "${f}"
-        enc_count=$((enc_count + 1))
+        if python3 -c "data = open('${f}', 'rb').read(); xored = bytes(b ^ 0xAB for b in data); open('${f}.bas_locked', 'wb').write(xored)"; then
+          rm -f "${f}"
+          enc_count=$((enc_count + 1))
+        fi
       done
       note_file="${range_dir}/README_RESTORE_BAS_SIM.txt"
       echo "BAS-SIM RANSOM NOTE  -  run-id=${run_id}  -  THIS IS A CONTROLLED DRILL" > "${note_file}"
@@ -205,5 +207,6 @@ steps:
       rm -rf "${range_dir}"
       if [ -d "${range_dir}" ]; then cleaned=0; else cleaned=1; fi
       echo "CLEANUP: range directory removed=${cleaned}. No encrypted data remains. [BAS-SIM]"
+      if [ "${enc_count}" -gt 0 ]; then echo "FAIL: ${enc_count} file(s) were XOR-encrypted without a block; the encryption-behaviour control did not stop the simulation. [BAS-SIM]"; else echo "SKIP: no simulated encryption completed and no explicit denial was observed; not scored. [BAS-SIM]"; fi
     cleanup: |
       rm -rf /tmp/bas_range_*

@@ -524,4 +524,5 @@ steps:
       $wbaOut = & wbadmin get versions 2>&1
       $backupCount = ([regex]::Matches(($wbaOut -join "`n"), 'Backup time')).Count
       Write-Output "EXEC T1490: VSS enumeration -- $shadowCount shadow copy/copies found; backup catalog $backupCount version(s) via wbadmin. Cl0p enumerates these before deletion. No copies removed. [BAS-SIM-TA505-S9]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""

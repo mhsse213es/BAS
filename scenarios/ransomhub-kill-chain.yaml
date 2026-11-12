@@ -125,6 +125,7 @@ steps:
       $netOut = & net view \\$env:COMPUTERNAME 2>&1
       $shareCount = if ($wmiShares) { $wmiShares.Count } else { 0 }
       Write-Output "EXEC: network share discovery — $shareCount share(s) via Win32_Share. net view executed for cmdline telemetry. RansomHub affiliates use tools like Nmap/AngryIP alongside built-in share enumeration before mass encryption. [BAS-SIM-RANSOMHUB-S2]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   # ---------------------------------------------------------------------------
@@ -197,6 +198,7 @@ steps:
       $cmdLine = 'Add-MpPreference -ExclusionPath $env:TEMP'
       Write-Output "EXEC: Defender exclusion invocation probe  -  cmdline '$cmdLine' logged to EID 4104/4688. Security state NOT modified (dry-run). RansomHub disables Defender alongside its EDRKillShifter tool before encrypting. [BAS-SIM-RANSOMHUB-S4]"
       Write-Output "TELEMETRY: if ScriptBlock logging (EID 4104) captured this block, the control is detecting Defender tampering attempts correctly."
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   # ---------------------------------------------------------------------------

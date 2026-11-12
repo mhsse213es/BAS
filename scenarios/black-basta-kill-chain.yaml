@@ -233,6 +233,7 @@ steps:
       $cmdLine = 'Add-MpPreference -ExclusionPath $env:TEMP'
       Write-Output "EXEC: EDR-tampering invocation probe  -  cmdline '$cmdLine' logged to EID 4104/4688. Security state NOT modified (dry-run). Black Basta is documented using Backstab to disable EDR before encryption. [BAS-SIM-BLACKBASTA-S3]"
       Write-Output "TELEMETRY: if ScriptBlock logging (EID 4104) captured this block, the control is detecting EDR tampering attempts correctly."
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   # ---------------------------------------------------------------------------
@@ -377,6 +378,7 @@ steps:
         }
       }
       Write-Output "EXEC: BFSI file recon across Desktop/Documents/Downloads (depth=2). Found $found matching file(s). Read-only — no files opened. Black Basta enumerates files like these before encryption/exfiltration. [BAS-SIM-BLACKBASTA-S6]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   # ---------------------------------------------------------------------------
@@ -495,6 +497,7 @@ steps:
       Remove-Item $rangeDir -Recurse -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $rangeDir)
       Write-Output "CLEANUP: range directory removed=$cleaned. No encrypted data remains. [BAS-SIM-BLACKBASTA-S8]"
+      if ($encFiles.Count -gt 0) { Write-Output "FAIL: $($encFiles.Count) file(s) were XOR-encrypted without a block; the encryption-behaviour control did not stop the simulation. [BAS-SIM-BLACKBASTA-S8]" } else { Write-Output "SKIP: no simulated encryption completed and no explicit denial was observed; not scored. [BAS-SIM-BLACKBASTA-S8]" }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP "bas_range_*") -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -534,6 +537,7 @@ steps:
       $wbaOut   = & wbadmin get versions 2>&1
       $backupCount = ([regex]::Matches(($wbaOut -join "`n"), 'Backup time')).Count
       Write-Output "EXEC: VSS enumeration  -  $shadowCount shadow copy/copies found. Backup catalog: $backupCount version(s) via wbadmin. Black Basta enumerates these before vssadmin-based deletion. No copies removed. [BAS-SIM]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   # ---------------------------------------------------------------------------

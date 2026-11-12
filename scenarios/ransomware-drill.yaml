@@ -96,6 +96,7 @@ steps:
       }
       $markerNames = @('finance_q4.xlsx','customer_export.csv','swift_ops.docx')
       Write-Output "EXEC: file enumeration across Desktop/Documents/Downloads (depth=2). Found $($found.Count) BFSI-pattern file(s). UEBA/DLP marker filenames targeted: $($markerNames -join ', '). Read-only  -  no files opened. [BAS-SIM]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   - name: "Defender Exclusion Configuration Check (read-only, no state change)"
@@ -156,6 +157,7 @@ steps:
       $fakeLog = 'BAS-SIM-NonExistent-Log'
       Clear-EventLog -LogName $fakeLog -ErrorAction SilentlyContinue
       Write-Output "EXEC: Clear-EventLog invoked against nonexistent log '$fakeLog' (always fails safely). EID 4688 + EID 4104 generated. NO real log cleared  -  EID 1102 must NOT appear. [BAS-SIM]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   - name: "VSS + Backup Catalog Enumeration"

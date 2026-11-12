@@ -207,6 +207,7 @@ steps:
       $netOut = & net view \\$env:COMPUTERNAME 2>&1
       $shareCount = if ($wmiShares) { $wmiShares.Count } else { 0 }
       Write-Output "EXEC: network share discovery — $shareCount share(s) via Win32_Share. net view executed for cmdline telemetry. Akira maps shares before lateral spread and mass encryption. [BAS-SIM-AKIRA-S2]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   # ===========================================================================

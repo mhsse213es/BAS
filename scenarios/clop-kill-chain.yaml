@@ -103,6 +103,7 @@ steps:
         }
       }
       Write-Output "EXEC: BFSI file recon across Desktop/Documents/Downloads (depth=2). Found $found matching file(s). Read-only — no files opened. Cl0p's MOVEit/GoAnywhere campaigns mass-exploit file-transfer software then hunt for high-value files like these to exfiltrate. [BAS-SIM-CLOP-S1]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   # ---------------------------------------------------------------------------

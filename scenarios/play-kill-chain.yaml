@@ -127,6 +127,7 @@ steps:
       $netOut = & net view \\$env:COMPUTERNAME 2>&1
       $shareCount = if ($wmiShares) { $wmiShares.Count } else { 0 }
       Write-Output "EXEC: network share discovery — $shareCount share(s) via Win32_Share. net view executed for cmdline telemetry. Play's Grixba tool performs this same network/share scan to identify lateral-movement and security-software targets. [BAS-SIM-PLAY-S2]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   # ---------------------------------------------------------------------------
