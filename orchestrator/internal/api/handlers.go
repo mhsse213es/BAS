@@ -6669,7 +6669,15 @@ func (h *Handler) GetRunReportData(w http.ResponseWriter, r *http.Request) {
 	).Scan(&alertsTotal, &alertsHighFidelity, &noiseScore,
 		&perfCpuBefore, &perfCpuAfter, &perfRamBefore, &perfRamAfter, &perfDiskBefore, &perfDiskAfter)
 
+	// Execution coverage: how many scheduled steps ran to a result, separate from the security verdicts above. A run that
+	// cannot be read here still returns its report; the coverage field is then zero, not a guess.
+	coverage, covErr := runExecutionCoverage(r.Context(), h.db, runID)
+	if covErr != nil {
+		log.Printf("[!] execution coverage for run %s: %v", runID, covErr)
+	}
+
 	respond(w, map[string]any{
+		"executionCoverage":      coverage,
 		"topFindings":            report.TopFindings,
 		"recommendations":        report.Summary.Recommendations,
 		"killChain":              report.KillChain,
