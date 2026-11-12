@@ -31,7 +31,7 @@ func readZip(t *testing.T, b []byte) map[string]string {
 		}
 		data, _ := io.ReadAll(rc)
 		rc.Close()
-		out[f.Name] = string(data)
+		out[strings.TrimPrefix(f.Name, bundleFolder+"/")] = string(data)
 	}
 	return out
 }
@@ -193,7 +193,7 @@ func TestMSIBundle_CarriesTheFingerprintFileAndTheTokenMarkerOnlyWhenNeeded(t *t
 			rc, _ := f.Open()
 			data, _ := io.ReadAll(rc)
 			rc.Close()
-			out[f.Name] = string(data)
+			out[strings.TrimPrefix(f.Name, bundleFolder+"/")] = string(data)
 		}
 		return out
 	}
@@ -214,5 +214,25 @@ func TestMSIBundle_CarriesTheFingerprintFileAndTheTokenMarkerOnlyWhenNeeded(t *t
 	}
 	if _, ok := read(tok)["enrollment-token.required"]; !ok {
 		t.Error("a token-mode server must mark the bundle so the wizard shows the token field")
+	}
+}
+
+// Extracting the download must give one folder holding all the files, not loose files in the download directory.
+func TestMSIBundleExtractsIntoOneFolder(t *testing.T) {
+	b, err := buildMSIBundle([]byte("MSI"), []byte("{}"), testFP, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(zr.File) == 0 {
+		t.Fatal("bundle is empty")
+	}
+	for _, f := range zr.File {
+		if !strings.HasPrefix(f.Name, bundleFolder+"/") {
+			t.Errorf("%q is at the top level of the zip; it must sit inside %s/ so extraction gives one folder", f.Name, bundleFolder)
+		}
 	}
 }
