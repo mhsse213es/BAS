@@ -94,6 +94,7 @@ type Template struct {
 	VariantHash      string    `json:"variantHash"`      // sha256[:16] of TemplateID
 	GeneratorVersion string    `json:"generatorVersion"` // generator version stamp
 	CreatedAt        time.Time `json:"createdAt"`
+	Cleanup          string    `json:"cleanup,omitempty"` // base test's cleanup command, run after the variant; empty if none
 }
 
 // PayloadFamily is one named payload script body for a given technique.
