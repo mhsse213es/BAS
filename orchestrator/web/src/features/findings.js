@@ -386,16 +386,43 @@ function endpointCard(e) {
       '<span class="rem-ep-sev">' + sevLine + '</span>' +
     '</div>';
   if (open) {
-    body += '<div class="rem-ep-list">' + (e.findings || []).map(function(f) {
-      var mit = (f.mitigations && f.mitigations.length) ? f.mitigations.join('; ') : 'No ATT&CK mitigation recorded for this technique.';
-      return '<div class="rem-ep-f">' +
-        '<div><b>' + x(f.techniqueId) + '</b> ' + x(f.techniqueName || '') + ' <span class="muted">· ' + x(f.severity) + ' · ' + x(f.exposureState === 'detected_only' ? 'Detected only' : 'Missed') + '</span></div>' +
-        '<div class="muted rem-ep-mit">Recommended: ' + x(mit) + '</div>' +
-      '</div>';
-    }).join('') + '</div>';
+    var fl = e.findings || [];
+    body += '<div class="rem-ep-list"><div class="rem-ep-h">Findings on this endpoint (' + fl.length + ')</div>' +
+      fl.map(function(f) { return endpointFindingHtml(f); }).join('') + '</div>';
     if (e.requests && e.requests.length) body += endpointRequestsHtml(e.requests);
   }
   return '<section class="rk-card rem-ep">' + head + body + '</section>';
+}
+// remIndexFor: the position of a technique's remediation card in state._rems, or -1. The row actions (View,
+// Ticket) take that index, the same as the technique view's cards do.
+function remIndexFor(techniqueId) {
+  return (state._rems || []).findIndex(function(r) { return r.techniqueId === techniqueId; });
+}
+// One finding on an endpoint: what it is, how it was missed, the mitigations as chips, and the same three
+// actions the technique cards offer (View, Ticket, Re-validate).
+function endpointFindingHtml(f) {
+  var sevName = f.severity ? String(f.severity).charAt(0).toUpperCase() + String(f.severity).slice(1).toLowerCase() : '';
+  var mits = f.mitigations || [];
+  var shown = mits.slice(0, 4);
+  var chips = mits.length
+    ? '<div class="rem-chips">' + shown.map(function(m) { return '<span class="rem-chip">' + x(m) + '</span>'; }).join('') +
+      (mits.length > shown.length ? '<span class="rem-chip rem-chip-more">+' + (mits.length - shown.length) + ' more</span>' : '') + '</div>'
+    : '<div class="muted rem-ep-mit">No ATT&amp;CK mitigation recorded for this technique.</div>';
+  var idx = remIndexFor(f.techniqueId);
+  var done = !!REM_TICKETED[f.techniqueId];
+  var canTicket = ROLE === 'admin' || ROLE === 'analyst';
+  var acts = '<div class="rem-fix-acts">' +
+    (idx >= 0 ? '<button class="btn btn-outline btn-sm"' + on('click', 'openRemediation', idx) + '>View</button>' : '') +
+    (canTicket && idx >= 0 ? '<button class="btn btn-outline btn-sm"' + on('click', 'remSingleTicket', idx) + (done ? ' disabled' : '') + '>' + (done ? '&#10003; Ticketed' : '&#128279; Ticket') + '</button>' : '') +
+    '<button class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', f.techniqueId) + '>&#8635; Re-validate</button>' +
+  '</div>';
+  return '<div class="rem-ep-f">' +
+    '<div class="rem-ep-row"><span class="rem-tid">' + x(f.techniqueId) + '</span>' +
+      '<span class="rem-ep-tname">' + x(f.techniqueName || '') + '</span>' +
+      (sevName ? findingSevBadge(sevName, f.exposureState) : '') +
+    '</div>' +
+    chips + acts +
+  '</div>';
 }
 // Phase 2: remediation requests on this endpoint, newest first. Status is the mapped execution
 // status. Closure reads "verified" only when an independent verification run passed; a completed
