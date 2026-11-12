@@ -3394,6 +3394,13 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 			`UPDATE scenario_runs SET score = $1 WHERE id = $2`, scoreJSON, raw.RunID)
 	}
 
+	// A finished variant run records its cleanup outcome, stored apart from the attack verdicts above.
+	if status == "completed" || status == "partial" || status == "failed" {
+		if err := h.recordVariantCleanupState(r.Context(), raw.RunID, simResults); err != nil {
+			log.Printf("[variant] record cleanup state for run %s: %v", raw.RunID, err)
+		}
+	}
+
 	// Environment Restoration — count cleanup failures and write hygiene_score.
 	{
 		var leaked, cleanable int
