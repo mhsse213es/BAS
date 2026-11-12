@@ -166,7 +166,7 @@ func checkClockSkew(deps diagnosticsDeps) DiagnosticCheck {
 			Cause:    "This machine's clock differs from the server's by more than 5 minutes, which breaks JWT validation.",
 			Evidence: fmt.Sprintf("Measured skew: %s", skew.Round(time.Second)),
 			Action:   "Fix the system clock",
-			ActionButton: &ActionButton{Label: "Open Windows Date & Time Settings", Action: func() {
+			ActionButton: &ActionButton{Label: "Date & Time Settings", Action: func() {
 				_ = exec.Command("control.exe", "/name", "Microsoft.DateAndTime").Start()
 			}},
 		}
@@ -261,6 +261,20 @@ func realDiagnosticsDeps(client *statusclient.Client) diagnosticsDeps {
 	}
 }
 
+// statusTag is the word shown in brackets before each check's name.
+func statusTag(s CheckStatus) string {
+	switch s {
+	case CheckPass:
+		return "PASS"
+	case CheckFail:
+		return "FAIL"
+	case CheckWarn:
+		return "WARN"
+	default:
+		return "WAIT"
+	}
+}
+
 // runTroubleshootWindow opens the Troubleshoot window as a native Win32
 // window. Invoked via `bas_agent.exe --troubleshoot-window`.
 func runTroubleshootWindow() {
@@ -281,7 +295,9 @@ func runTroubleshootWindow() {
 // escalation fallback already on the tray menu -- unchanged, not
 // duplicated here.
 func showTroubleshootWindow(deps diagnosticsDeps) error {
-	cx, cy := ui.Dpi(560, 420)
+	// Wide enough for the label column and the Retry and action buttons side by side,
+	// so no control is clipped by its neighbour.
+	cx, cy := ui.Dpi(780, 500)
 	wnd := ui.NewMain(
 		ui.OptsMain().
 			Title("Audspect BAS Agent — Troubleshoot").
@@ -296,20 +312,22 @@ func showTroubleshootWindow(deps diagnosticsDeps) error {
 	}
 	rows := make([]*row, 6)
 
-	rowH := 60
+	// Fixed columns: label (wraps inside its box), then Retry, then the action.
+	// Each control has an explicit size, so text never runs under a neighbouring button.
+	rowH := 72
 	for i := 0; i < 6; i++ {
-		y := 20 + i*rowH
+		y := 16 + i*rowH
 		lx, ly := ui.Dpi(20, y)
-		lw, lh := ui.Dpi(380, rowH-10)
+		lw, lh := ui.Dpi(500, rowH-12)
 		resultLbl := ui.NewStatic(wnd, ui.OptsStatic().Position(lx, ly).Size(lw, lh))
 
-		rx, ry := ui.Dpi(410, y)
-		rw, rh := ui.Dpi(60, 24)
+		rx, ry := ui.Dpi(534, y+4)
+		rw, rh := ui.Dpi(88, 28)
 		retryBtn := ui.NewButton(wnd, ui.OptsButton().Text("Retry").Position(rx, ry).Width(rw).Height(rh))
 
-		ax, ay := ui.Dpi(480, y)
-		aw, ah := ui.Dpi(60, 24)
-		actionBtn := ui.NewButton(wnd, ui.OptsButton().Text("").Position(ax, ay).Width(aw).Height(ah))
+		ax, ay := ui.Dpi(630, y+4)
+		aw, ah := ui.Dpi(130, 28)
+		actionBtn := ui.NewButton(wnd, ui.OptsButton().Text("No action").Position(ax, ay).Width(aw).Height(ah))
 
 		rows[i] = &row{result: resultLbl, retry: retryBtn, action: actionBtn}
 	}
@@ -319,18 +337,19 @@ func showTroubleshootWindow(deps diagnosticsDeps) error {
 	// the check off the UI thread and apply only this part back on it.
 	applyCheck := func(n int, check DiagnosticCheck) {
 		rows[n].current = &check
-		text := fmt.Sprintf("%s: %s", check.Name, check.Status)
+		// A word tag, not colour: readable in any theme and in screenshots, first on the line.
+		text := fmt.Sprintf("[%s]  %s", statusTag(check.Status), check.Name)
 		if check.Cause != "" {
 			text += "\n" + check.Cause
 		}
 		if check.Evidence != "" {
 			text += "\n" + check.Evidence
 		}
-		rows[n].result.SetTextAndResize(text)
+		rows[n].result.Hwnd().SetWindowText(text)
 		if check.ActionButton != nil {
 			rows[n].action.SetText(check.ActionButton.Label)
 		} else {
-			rows[n].action.SetText("")
+			rows[n].action.SetText("No action")
 		}
 	}
 
@@ -343,7 +362,7 @@ func showTroubleshootWindow(deps diagnosticsDeps) error {
 	// in as its check finishes.
 	wnd.On().WmCreate(func(p ui.WmCreate) int {
 		for i := range rows {
-			rows[i].result.SetTextAndResize("Checking...")
+			rows[i].result.Hwnd().SetWindowText("Checking...")
 		}
 		go func() {
 			for i := range rows {
@@ -367,7 +386,7 @@ func showTroubleshootWindow(deps diagnosticsDeps) error {
 		// loop) stays synchronous: there's no running message loop to
 		// freeze yet.
 		rows[n].retry.On().BnClicked(func() {
-			rows[n].result.SetTextAndResize("Retrying...")
+			rows[n].result.Hwnd().SetWindowText("Retrying...")
 			go func() {
 				check := RunDiagnosticCheck(n+1, deps)
 				wnd.UiThread(func() { applyCheck(n, check) })
