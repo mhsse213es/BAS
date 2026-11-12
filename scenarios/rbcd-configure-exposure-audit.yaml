@@ -2,23 +2,11 @@ id: rbcd-configure-exposure-audit
 product_line: ad
 name: RBCD Configure-Surface Exposure Audit
 description: >
-  Single-stage, read-only Active Directory audit: reports the precondition
-  surface for Resource-Based Constrained Delegation (RBCD) abuse (T1069) --
-  computer objects whose DACL grants write access
-  (GenericAll/GenericWrite/WriteProperty/WriteDacl/WriteOwner) to a
-  non-tier-0 principal (who could therefore write
-  msDS-AllowedToActOnBehalfOfOtherIdentity), together with a non-zero
-  ms-DS-MachineAccountQuota (which lets any domain user create the machine
-  account used as the impersonation principal).
-
-  SAFETY: This step only READS computer-object security descriptors and the
-  domain's ms-DS-MachineAccountQuota via .NET DirectoryServices. It NEVER
-  writes the delegation attribute, creates a machine account, or
-  impersonates anyone. It proves only whether the RBCD-configure surface is
-  EXPOSED. It is narrower than the delegation audit, which reports
-  delegation attributes already SET; this reports the write-ability to set
-  them. On a non-domain host it returns a clean SKIP.
-  PRODUCTION-SAFE: runs in telemetry mode. Windows domain members only.
+  Read-only RBCD configure-surface audit, two independent steps (T1069):
+    A  machine-account quota exposure: ms-DS-MachineAccountQuota above 0. A configuration finding only; it does not show RBCD is configured or exploitable
+    B  computer objects whose DACL grants write rights to a non-tier-0 principal, evaluated only when the quota is above 0 (quota 0 is recorded as not practically reachable)
+  Not assessed: ACL analysis of msDS-AllowedToActOnBehalfOfOtherIdentity itself, and group-nested effective rights (matching is per ACE SID; group membership is not expanded).
+  SAFETY: reads configuration only. Writes no delegation attribute and impersonates no one. A FAIL shows configuration exposure, not exploitability. Windows domain members only. PRODUCTION-SAFE: telemetry mode.
 author: Audspect Research
 executable: true
 local_check: false
@@ -42,11 +30,7 @@ live_policy:
   execution_window: ""
 
 steps:
-
-  # ---------------------------------------------------------------------------
-  # Stage 1 — RBCD Configure-Surface Exposure Audit (T1069)
-  # ---------------------------------------------------------------------------
-  - name: "RBCD Stage 1 — RBCD Configure-Surface Exposure Audit (T1069)"
+  - name: "RBCD A - machine-account quota exposure: ms-DS-MachineAccountQuota above 0 (T1069)"
     technique_id: T1069
     framework: custom
     executor: powershell
@@ -58,34 +42,77 @@ steps:
     reversible: true
     blast_radius: "Reads computer-object security descriptors and the domain's ms-DS-MachineAccountQuota via System.DirectoryServices (read-only) and reports computers writable by a non-tier-0 principal when the quota is non-zero. Never writes the delegation attribute, creates a machine account, or impersonates anyone. Generates LDAP searches against the DC."
     telemetry:
-      - "DC: LDAP read of computer-object security descriptors and the domain ms-DS-MachineAccountQuota — not separately audited by default"
+      - "DC: LDAP read of computer-object security descriptors and the domain ms-DS-MachineAccountQuota \u2014 not separately audited by default"
       - "Sysmon EID 1: powershell.exe performing an LDAP computer-DACL enumeration"
     detection:
-      - "SIEM: a non-tier-0 principal holds write access over a computer object while ms-DS-MachineAccountQuota is non-zero — RBCD configure-surface exposure IOC"
-      - "SIEM: an LDAP enumeration of computer-object security descriptors from a workstation — RBCD reconnaissance IOC"
+      - "SIEM: a non-tier-0 principal holds write access over a computer object while ms-DS-MachineAccountQuota is non-zero \u2014 RBCD configure-surface exposure IOC"
+      - "SIEM: an LDAP enumeration of computer-object security descriptors from a workstation \u2014 RBCD reconnaissance IOC"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $findings = @()
+      $ok = $false
+      $maq = 0
+      try {
+        $domainDN = ([ADSI]"LDAP://RootDSE").defaultNamingContext
+        if (-not $domainDN) { throw "no domain" }
+        $domain = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domainDN")
+        $raw = $domain.Properties['ms-DS-MachineAccountQuota'].Value
+        if ($null -eq $raw) { throw "quota not readable" }
+        $maq = [int]$raw
+        $ok = $true
+      } catch {
+        $ok = $false
+      }
+      if (-not $ok) {
+        Write-Output "SKIP: ms-DS-MachineAccountQuota could not be read. Not scored, not treated as 0. [BAS-SIM-RBCD-S1A]"
+      } elseif ($maq -gt 0) {
+        Write-Output "EXEC T1069: ms-DS-MachineAccountQuota=$maq. Reads the domain attribute only. No RBCD attribute was read and no computer object was examined by this step. [BAS-SIM-RBCD-S1A]"
+        Write-Output "FAIL: machine-account quota exposure: ms-DS-MachineAccountQuota is $maq (above 0), so ordinary domain users may be able to create computer accounts. This is a domain configuration finding only. It does not show that RBCD is configured or exploitable; RBCD configuration is assessed by step B. Remediation: set ms-DS-MachineAccountQuota to 0 unless a documented exception exists. [BAS-SIM-RBCD-S1A]"
+      } else {
+        Write-Output "PASS: ms-DS-MachineAccountQuota is 0, so ordinary users cannot create the machine account RBCD needs. This step assesses the quota only. [BAS-SIM-RBCD-S1A]"
+      }
+    cleanup: ""
+
+  - name: "RBCD B - computer objects writable by non-tier-0 while quota above zero (T1069)"
+    technique_id: T1069
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads computer-object security descriptors and the domain's ms-DS-MachineAccountQuota via System.DirectoryServices (read-only) and reports computers writable by a non-tier-0 principal when the quota is non-zero. Never writes the delegation attribute, creates a machine account, or impersonates anyone. Generates LDAP searches against the DC."
+    telemetry:
+      - "DC: LDAP read of computer-object security descriptors and the domain ms-DS-MachineAccountQuota \u2014 not separately audited by default"
+      - "Sysmon EID 1: powershell.exe performing an LDAP computer-DACL enumeration"
+    detection:
+      - "SIEM: a non-tier-0 principal holds write access over a computer object while ms-DS-MachineAccountQuota is non-zero \u2014 RBCD configure-surface exposure IOC"
+      - "SIEM: an LDAP enumeration of computer-object security descriptors from a workstation \u2014 RBCD reconnaissance IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      $ok = $false
+      $maq = 0
       try {
         $rootDSE = [ADSI]"LDAP://RootDSE"
         $domainDN = $rootDSE.defaultNamingContext
         if (-not $domainDN) { throw "no domain" }
-
         $domain = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domainDN")
-        $maq = [int]($domain.Properties['ms-DS-MachineAccountQuota'].Value)
-        $quotaOpen = $maq -gt 0
-
-        $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-500','*-517','*-520')
+        $raw = $domain.Properties['ms-DS-MachineAccountQuota'].Value
+        if ($null -eq $raw) { throw "quota not readable" }
+        $maq = [int]$raw
+        $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-498','*-500','*-517')
         function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
         $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
-
         $cs = New-Object System.DirectoryServices.DirectorySearcher
         $cs.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domainDN")
         $cs.PageSize = 500
         $cs.Filter = "(objectClass=computer)"
         [void]$cs.PropertiesToLoad.Add('samAccountName')
         [void]$cs.PropertiesToLoad.Add('nTSecurityDescriptor')
-        [void]$cs.SecurityMasks = [System.DirectoryServices.SecurityMasks]'Dacl,Owner'
+        $cs.SecurityMasks = [System.DirectoryServices.SecurityMasks]'Dacl,Owner'
         foreach ($res in $cs.FindAll()) {
           $entry = $res.GetDirectoryEntry()
           $name = [string]$res.Properties['samaccountname'][0]
@@ -96,20 +123,19 @@ steps:
             if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $findings += "$name (writable by $($r.IdentityReference.Value))"; break }
           }
         }
-        $count = $findings.Count
+        $ok = $true
       } catch {
-        $count = -1
+        $ok = $false
       }
-      if ($count -lt 0) {
-        Write-Output "SKIP: RBCD configure-surface audit unavailable — host is not domain-joined or the DC is unreachable. [BAS-SIM-RBCD-S1]"
-      } elseif ($count -eq 0 -or -not $quotaOpen) {
-        if (-not $quotaOpen) {
-          Write-Output "PASS: ms-DS-MachineAccountQuota is 0 — ordinary users cannot create the machine account RBCD needs as its impersonation principal, so the configure surface is not practically reachable from this context. [BAS-SIM-RBCD-S1]"
-        } else {
-          Write-Output "PASS: no computer object is writable by a non-tier-0 principal — no RBCD configure surface exposed from this context. [BAS-SIM-RBCD-S1]"
-        }
+      if (-not $ok) {
+        Write-Output "SKIP: RBCD computer-object write exposure could not be evaluated. Not scored. [BAS-SIM-RBCD-S1B]"
+      } elseif ($maq -le 0) {
+        Write-Output "PASS: ms-DS-MachineAccountQuota is 0, so the RBCD configure surface is not practically reachable from an ordinary principal. Computer-object ACLs were not used for this verdict. [BAS-SIM-RBCD-S1B]"
+      } elseif ($findings.Count -eq 0) {
+        Write-Output "PASS: no computer object is writable by a non-tier-0 principal. This step assesses computer-object write rights only. [BAS-SIM-RBCD-S1B]"
       } else {
-        Write-Output "EXEC T1069: found $count computer(s) writable by a non-tier-0 principal with ms-DS-MachineAccountQuota=$maq (>0). Reads DACLs and the quota only — this is a detection-and-exposure probe, it writes no delegation attribute and impersonates no one. [BAS-SIM-RBCD-S1]"
-        Write-Output "FAIL: a non-tier-0 principal can write a computer's delegation attribute while ms-DS-MachineAccountQuota permits creating an impersonation principal, letting them configure Resource-Based Constrained Delegation and impersonate any user (including a privileged one) to that computer, enabling privilege escalation. Review the flagged computer(s): remove the unexpected write grant(s), restrict computer-object DACLs to tier-0 trustees, and set ms-DS-MachineAccountQuota to 0."
+        Write-Output "EXEC T1069: $($findings.Count) computer object(s) writable by a non-tier-0 principal while ms-DS-MachineAccountQuota=$maq. Reads DACLs and the quota only. [BAS-SIM-RBCD-S1B]"
+        foreach ($f in $findings) { Write-Output $f }
+        Write-Output "FAIL: a non-tier-0 principal can write a computer object while ms-DS-MachineAccountQuota permits creating an impersonation identity, so RBCD could be configured to impersonate users to that computer. Configuration exposure only. Remediation: remove the write grant(s), restrict computer-object DACLs to tier-0 trustees, and set the quota to 0. [BAS-SIM-RBCD-S1B]"
       }
     cleanup: ""

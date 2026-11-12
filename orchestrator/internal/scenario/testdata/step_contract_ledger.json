@@ -63,6 +63,87 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "adcs-esc-template-exposure-audit.yaml",
+    "index": 1,
+    "technique_id": "T1649",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "adcs-esc-template-exposure-audit.yaml",
+    "index": 2,
+    "technique_id": "T1649",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "adcs-esc-template-exposure-audit.yaml",
+    "index": 3,
+    "technique_id": "T1649",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "adcs-esc-template-exposure-audit.yaml",
+    "index": 4,
+    "technique_id": "T1649",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "adcs-esc-template-exposure-audit.yaml",
+    "index": 5,
+    "technique_id": "T1649",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "adcs-esc-template-exposure-audit.yaml",
+    "index": 6,
+    "technique_id": "T1649",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "adcs-esc-template-exposure-audit.yaml",
+    "index": 7,
+    "technique_id": "T1649",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "adcs-esc-template-exposure-audit.yaml",
+    "index": 8,
+    "technique_id": "T1649",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "adcs-esc-template-exposure-audit.yaml",
+    "index": 9,
+    "technique_id": "T1649",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "akira-kill-chain.yaml",
     "index": 0,
     "technique_id": "T1021.001",
@@ -2844,6 +2925,15 @@
     "status": "self_cleaning_declared"
   },
   {
+    "scenario": "gpo-writable-linked-exposure-audit.yaml",
+    "index": 1,
+    "technique_id": "T1484.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
     "scenario": "hunters-international-kill-chain.yaml",
     "index": 0,
     "technique_id": "T1190",
@@ -3026,6 +3116,24 @@
   {
     "scenario": "kerberos-delegation-exposure-audit.yaml",
     "index": 0,
+    "technique_id": "T1558",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "kerberos-delegation-exposure-audit.yaml",
+    "index": 1,
+    "technique_id": "T1558",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "kerberos-delegation-exposure-audit.yaml",
+    "index": 2,
     "technique_id": "T1558",
     "action_key": "",
     "framework": "custom",
@@ -3897,6 +4005,15 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "rbcd-configure-exposure-audit.yaml",
+    "index": 1,
+    "technique_id": "T1069",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "rhysida-kill-chain.yaml",
     "index": 0,
     "technique_id": "T1078",
@@ -4196,6 +4313,15 @@
   {
     "scenario": "trust-sid-history-exposure-audit.yaml",
     "index": 0,
+    "technique_id": "T1134.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "trust-sid-history-exposure-audit.yaml",
+    "index": 1,
     "technique_id": "T1134.005",
     "action_key": "",
     "framework": "custom",

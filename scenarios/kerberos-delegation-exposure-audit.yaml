@@ -2,20 +2,12 @@ id: kerberos-delegation-exposure-audit
 product_line: ad
 name: Kerberos Delegation Exposure Audit
 description: >
-  Single-stage, read-only Active Directory audit: reads the directory for
-  Kerberos delegation misconfigurations an attacker could abuse (T1558) --
-  a non-Domain-Controller account trusted for unconstrained delegation
-  (userAccountControl TRUSTED_FOR_DELEGATION), an account configured for
-  constrained delegation (msDS-AllowedToDelegateTo), or a resource that
-  names a principal in msDS-AllowedToActOnBehalfOfOtherIdentity
-  (resource-based constrained delegation).
-
-  SAFETY: This step only READS account attributes via .NET DirectoryServices
-  / LDAP. It NEVER coerces an authentication, requests or forges a ticket,
-  or modifies any delegation configuration. It proves only whether a
-  delegation misconfiguration is EXPOSED. On a non-domain host it returns a
-  clean SKIP.
-  PRODUCTION-SAFE: runs in telemetry mode. Windows domain members only.
+  Read-only Kerberos delegation exposure audit, split into three independent steps (T1558):
+    A  unconstrained delegation (TRUSTED_FOR_DELEGATION) on non-DC accounts
+    B  constrained delegation targets (msDS-AllowedToDelegateTo) configured
+    C  resource-based constrained delegation (msDS-AllowedToActOnBehalfOfOtherIdentity) set on a target
+  Not assessed by this scenario: privileged-account delegation exposure, service-account exposure, stale delegation, cross-domain delegation (no evaluation implemented); the principals permitted by step C are listed by name only, not expanded through group membership.
+  SAFETY: reads delegation attributes only. Coerces no authentication, forges no ticket. A FAIL shows configuration exposure, not exploitability. Windows domain members only. PRODUCTION-SAFE: telemetry mode.
 author: Audspect Research
 executable: true
 local_check: false
@@ -39,11 +31,7 @@ live_policy:
   execution_window: ""
 
 steps:
-
-  # ---------------------------------------------------------------------------
-  # Stage 1 — Delegation Misconfiguration Exposure Audit (T1558)
-  # ---------------------------------------------------------------------------
-  - name: "Delegation Stage 1 — Delegation Misconfiguration Exposure Audit (T1558)"
+  - name: "Delegation A - unconstrained delegation on non-DC accounts (T1558)"
     technique_id: T1558
     framework: custom
     executor: powershell
@@ -55,49 +43,149 @@ steps:
     reversible: true
     blast_radius: "Reads account delegation attributes (userAccountControl, msDS-AllowedToDelegateTo, msDS-AllowedToActOnBehalfOfOtherIdentity) from the directory via System.DirectoryServices (read-only) and reports non-DC accounts with delegation misconfigurations. Never coerces authentication, requests/forges a ticket, or modifies configuration. Generates LDAP searches against the DC."
     telemetry:
-      - "DC: LDAP read of userAccountControl / msDS-AllowedToDelegateTo / msDS-AllowedToActOnBehalfOfOtherIdentity — not separately audited by default"
+      - "DC: LDAP read of userAccountControl / msDS-AllowedToDelegateTo / msDS-AllowedToActOnBehalfOfOtherIdentity \u2014 not separately audited by default"
       - "Sysmon EID 1: powershell.exe performing an LDAP delegation enumeration"
     detection:
-      - "SIEM: a non-DC account trusted for unconstrained delegation, or a constrained/resource-based delegation configuration, is present in the directory — Kerberos delegation exposure IOC"
-      - "SIEM: an LDAP search filtering on userAccountControl delegation bits from a workstation — delegation reconnaissance IOC"
+      - "SIEM: a non-DC account trusted for unconstrained delegation, or a constrained/resource-based delegation configuration, is present in the directory \u2014 Kerberos delegation exposure IOC"
+      - "SIEM: an LDAP search filtering on userAccountControl delegation bits from a workstation \u2014 delegation reconnaissance IOC"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $findings = @()
+      $ok = $false
       try {
         $domainDN = ([ADSI]"LDAP://RootDSE").defaultNamingContext
         if (-not $domainDN) { throw "no domain" }
         $searcher = New-Object System.DirectoryServices.DirectorySearcher
         $searcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domainDN")
         $searcher.PageSize = 500
-        # TRUSTED_FOR_DELEGATION (0x80000) OR msDS-AllowedToDelegateTo present
-        # OR msDS-AllowedToActOnBehalfOfOtherIdentity present; exclude DCs
-        # (UF_SERVER_TRUST_ACCOUNT 0x2000) from the unconstrained finding.
-        $searcher.Filter = "(|(userAccountControl:1.2.840.113556.1.4.803:=524288)(msDS-AllowedToDelegateTo=*)(msDS-AllowedToActOnBehalfOfOtherIdentity=*))"
         [void]$searcher.PropertiesToLoad.Add('samAccountName')
         [void]$searcher.PropertiesToLoad.Add('userAccountControl')
         [void]$searcher.PropertiesToLoad.Add('msDS-AllowedToDelegateTo')
         [void]$searcher.PropertiesToLoad.Add('msDS-AllowedToActOnBehalfOfOtherIdentity')
+        $searcher.Filter = "(userAccountControl:1.2.840.113556.1.4.803:=524288)"
         foreach ($res in $searcher.FindAll()) {
           $p = $res.Properties
           $name = [string]$p['samaccountname'][0]
           $uac = 0; if ($p['useraccountcontrol'].Count -gt 0) { $uac = [int]$p['useraccountcontrol'][0] }
           $isDC = ($uac -band 0x2000) -ne 0
-          $kinds = @()
-          if (($uac -band 0x80000) -ne 0 -and -not $isDC) { $kinds += 'unconstrained' }
-          if ($p['msds-allowedtodelegateto'].Count -gt 0) { $kinds += 'constrained' }
-          if ($p['msds-allowedtoactonbehalfofotheridentity'].Count -gt 0) { $kinds += 'resource-based' }
-          if ($kinds.Count -gt 0) { $findings += "$name: $($kinds -join ',')" }
+          if (-not $isDC) { $findings += "${name}: unconstrained delegation (TRUSTED_FOR_DELEGATION)" }
         }
-        $count = $findings.Count
+        $ok = $true
       } catch {
-        $count = -1
+        $ok = $false
       }
-      if ($count -lt 0) {
-        Write-Output "SKIP: delegation exposure audit unavailable — host is not domain-joined or the DC is unreachable. [BAS-SIM-DEL-S1]"
-      } elseif ($count -eq 0) {
-        Write-Output "PASS: no non-DC account is trusted for unconstrained delegation and no constrained/resource-based delegation misconfiguration is exposed — no Kerberos delegation privilege-escalation path from this context. [BAS-SIM-DEL-S1]"
+      if (-not $ok) {
+        Write-Output "SKIP: unconstrained delegation on a non-DC account unavailable: host is not domain-joined or the DC is unreachable. Not scored. [BAS-SIM-DEL-S1A]"
+      } elseif ($findings.Count -eq 0) {
+        Write-Output "PASS: no non-DC account is trusted for unconstrained delegation. This step assesses unconstrained delegation only. [BAS-SIM-DEL-S1A]"
       } else {
-        Write-Output "EXEC T1558: found $count account(s) with a Kerberos delegation misconfiguration. Reads delegation attributes only — this is a detection-and-exposure probe, it coerces no authentication and forges no ticket. [BAS-SIM-DEL-S1]"
-        Write-Output "FAIL: an account's delegation configuration lets an attacker who controls it impersonate other users to its target services (unconstrained TGT capture, S4U2Proxy, or RBCD), enabling domain privilege escalation. Review the flagged account(s): remove unnecessary TRUSTED_FOR_DELEGATION, constrain delegation targets, protect sensitive accounts (Protected Users / 'account is sensitive and cannot be delegated'), and audit S4U/TGS activity (event 4769)."
+        Write-Output "EXEC T1558: found $($findings.Count) account(s) with unconstrained delegation on a non-DC account. Reads delegation attributes only; coerces no authentication and forges no ticket. [BAS-SIM-DEL-S1A]"
+        foreach ($f in $findings) { Write-Output $f }
+        Write-Output "FAIL: an account is trusted for unconstrained delegation (TRUSTED_FOR_DELEGATION). Remediation: remove the flag, protect sensitive accounts (Protected Users or account cannot be delegated), and audit TGT forwarding (event 4769). Configuration exposure only; exploitability was not tested. [BAS-SIM-DEL-S1A]"
+      }
+    cleanup: ""
+
+  - name: "Delegation B - constrained delegation targets configured (T1558)"
+    technique_id: T1558
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads account delegation attributes (userAccountControl, msDS-AllowedToDelegateTo, msDS-AllowedToActOnBehalfOfOtherIdentity) from the directory via System.DirectoryServices (read-only) and reports non-DC accounts with delegation misconfigurations. Never coerces authentication, requests/forges a ticket, or modifies configuration. Generates LDAP searches against the DC."
+    telemetry:
+      - "DC: LDAP read of userAccountControl / msDS-AllowedToDelegateTo / msDS-AllowedToActOnBehalfOfOtherIdentity \u2014 not separately audited by default"
+      - "Sysmon EID 1: powershell.exe performing an LDAP delegation enumeration"
+    detection:
+      - "SIEM: a non-DC account trusted for unconstrained delegation, or a constrained/resource-based delegation configuration, is present in the directory \u2014 Kerberos delegation exposure IOC"
+      - "SIEM: an LDAP search filtering on userAccountControl delegation bits from a workstation \u2014 delegation reconnaissance IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      $ok = $false
+      try {
+        $domainDN = ([ADSI]"LDAP://RootDSE").defaultNamingContext
+        if (-not $domainDN) { throw "no domain" }
+        $searcher = New-Object System.DirectoryServices.DirectorySearcher
+        $searcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domainDN")
+        $searcher.PageSize = 500
+        [void]$searcher.PropertiesToLoad.Add('samAccountName')
+        [void]$searcher.PropertiesToLoad.Add('userAccountControl')
+        [void]$searcher.PropertiesToLoad.Add('msDS-AllowedToDelegateTo')
+        [void]$searcher.PropertiesToLoad.Add('msDS-AllowedToActOnBehalfOfOtherIdentity')
+        $searcher.Filter = "(msDS-AllowedToDelegateTo=*)"
+        foreach ($res in $searcher.FindAll()) {
+          $p = $res.Properties
+          $name = [string]$p['samaccountname'][0]
+          $targets = @($p['msds-allowedtodelegateto'] | ForEach-Object { [string]$_ })
+          $findings += "${name}: constrained delegation to $($targets -join '; ')" 
+        }
+        $ok = $true
+      } catch {
+        $ok = $false
+      }
+      if (-not $ok) {
+        Write-Output "SKIP: constrained delegation targets configured unavailable: host is not domain-joined or the DC is unreachable. Not scored. [BAS-SIM-DEL-S1B]"
+      } elseif ($findings.Count -eq 0) {
+        Write-Output "PASS: no account has constrained delegation targets configured. This step assesses constrained delegation only. [BAS-SIM-DEL-S1B]"
+      } else {
+        Write-Output "EXEC T1558: found $($findings.Count) account(s) with constrained delegation targets configured. Reads delegation attributes only; coerces no authentication and forges no ticket. [BAS-SIM-DEL-S1B]"
+        foreach ($f in $findings) { Write-Output $f }
+        Write-Output "FAIL: an account has constrained delegation targets (msDS-AllowedToDelegateTo) listed above. Remediation: remove targets that are not required, and protect sensitive accounts from delegation. Configuration exposure only; exploitability was not tested. [BAS-SIM-DEL-S1B]"
+      }
+    cleanup: ""
+
+  - name: "Delegation C - resource-based constrained delegation set on targets (T1558)"
+    technique_id: T1558
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads account delegation attributes (userAccountControl, msDS-AllowedToDelegateTo, msDS-AllowedToActOnBehalfOfOtherIdentity) from the directory via System.DirectoryServices (read-only) and reports non-DC accounts with delegation misconfigurations. Never coerces authentication, requests/forges a ticket, or modifies configuration. Generates LDAP searches against the DC."
+    telemetry:
+      - "DC: LDAP read of userAccountControl / msDS-AllowedToDelegateTo / msDS-AllowedToActOnBehalfOfOtherIdentity \u2014 not separately audited by default"
+      - "Sysmon EID 1: powershell.exe performing an LDAP delegation enumeration"
+    detection:
+      - "SIEM: a non-DC account trusted for unconstrained delegation, or a constrained/resource-based delegation configuration, is present in the directory \u2014 Kerberos delegation exposure IOC"
+      - "SIEM: an LDAP search filtering on userAccountControl delegation bits from a workstation \u2014 delegation reconnaissance IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      $ok = $false
+      try {
+        $domainDN = ([ADSI]"LDAP://RootDSE").defaultNamingContext
+        if (-not $domainDN) { throw "no domain" }
+        $searcher = New-Object System.DirectoryServices.DirectorySearcher
+        $searcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domainDN")
+        $searcher.PageSize = 500
+        [void]$searcher.PropertiesToLoad.Add('samAccountName')
+        [void]$searcher.PropertiesToLoad.Add('userAccountControl')
+        [void]$searcher.PropertiesToLoad.Add('msDS-AllowedToDelegateTo')
+        [void]$searcher.PropertiesToLoad.Add('msDS-AllowedToActOnBehalfOfOtherIdentity')
+        $searcher.Filter = "(msDS-AllowedToActOnBehalfOfOtherIdentity=*)"
+        foreach ($res in $searcher.FindAll()) {
+          $p = $res.Properties
+          $name = [string]$p['samaccountname'][0]
+          $findings += "${name}: resource-based constrained delegation (msDS-AllowedToActOnBehalfOfOtherIdentity set)" 
+        }
+        $ok = $true
+      } catch {
+        $ok = $false
+      }
+      if (-not $ok) {
+        Write-Output "SKIP: resource-based constrained delegation set unavailable: host is not domain-joined or the DC is unreachable. Not scored. [BAS-SIM-DEL-S1C]"
+      } elseif ($findings.Count -eq 0) {
+        Write-Output "PASS: no target object has msDS-AllowedToActOnBehalfOfOtherIdentity set. This step assesses RBCD presence only; the principals permitted are not expanded. [BAS-SIM-DEL-S1C]"
+      } else {
+        Write-Output "EXEC T1558: found $($findings.Count) account(s) with resource-based constrained delegation set. Reads delegation attributes only; coerces no authentication and forges no ticket. [BAS-SIM-DEL-S1C]"
+        foreach ($f in $findings) { Write-Output $f }
+        Write-Output "FAIL: a target object has msDS-AllowedToActOnBehalfOfOtherIdentity set (RBCD). Remediation: review each permitted principal and clear the attribute where it is not required. Configuration exposure only; exploitability was not tested. [BAS-SIM-DEL-S1C]"
       }
     cleanup: ""

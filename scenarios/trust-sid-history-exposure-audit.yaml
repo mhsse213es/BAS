@@ -2,18 +2,10 @@ id: trust-sid-history-exposure-audit
 product_line: ad
 name: Trust / SID-History Exposure Audit
 description: >
-  Single-stage, read-only Active Directory audit: reads the directory for
-  trust and SID-history abuse conditions (T1134.005) -- a cross-forest
-  trustedDomain whose SID filtering / quarantine is disabled
-  (trustAttributes), and any account carrying a populated sIDHistory
-  attribute (a common privilege-escalation and persistence indicator).
-
-  SAFETY: This step only READS trustedDomain objects and account sIDHistory
-  via .NET DirectoryServices / LDAP. It NEVER forges an inter-realm ticket,
-  injects SID history, or modifies any trust configuration. It proves only
-  whether the condition is EXPOSED. On a non-domain host it returns a clean
-  SKIP.
-  PRODUCTION-SAFE: runs in telemetry mode. Windows domain members only.
+  Read-only trust and SID-history exposure audit, two independent steps (T1134.005):
+    A  a forest-transitive trust whose trustAttributes lack the quarantine bit (the attribute check used by this scenario; its meaning for forest trusts is NOT VERIFIED in a lab)
+    B  accounts carrying a populated sIDHistory
+  Not assessed: per-trust direction and type analysis, cross-domain privilege mapping, unusual-relationship detection. Reads attributes only; forges no inter-realm ticket. A FAIL shows configuration exposure, not exploitability. Windows domain members only. PRODUCTION-SAFE: telemetry mode.
 author: Audspect Research
 executable: true
 local_check: false
@@ -37,11 +29,7 @@ live_policy:
   execution_window: ""
 
 steps:
-
-  # ---------------------------------------------------------------------------
-  # Stage 1 — Trust / SID-History Exposure Audit (T1134.005)
-  # ---------------------------------------------------------------------------
-  - name: "Trust Stage 1 — Trust / SID-History Exposure Audit (T1134.005)"
+  - name: "Trust A - forest-transitive trust without quarantine bit (T1134.005)"
     technique_id: T1134.005
     framework: custom
     executor: powershell
@@ -53,23 +41,19 @@ steps:
     reversible: true
     blast_radius: "Reads trustedDomain trustAttributes and account sIDHistory from the directory via System.DirectoryServices (read-only) and reports cross-forest trusts with SID filtering disabled and accounts carrying SID history. Never forges an inter-realm ticket, injects SID history, or modifies a trust. Generates LDAP searches against the DC."
     telemetry:
-      - "DC: LDAP read of trustedDomain trustAttributes and accounts' sIDHistory — not separately audited by default"
+      - "DC: LDAP read of trustedDomain trustAttributes and accounts' sIDHistory \u2014 not separately audited by default"
       - "Sysmon EID 1: powershell.exe performing an LDAP trust / sIDHistory enumeration"
     detection:
-      - "SIEM: a cross-forest trust with SID filtering disabled, or an account carrying a populated sIDHistory, is present in the directory — trust / SID-history exposure IOC"
-      - "SIEM: an LDAP enumeration of trustedDomain objects or sIDHistory from a workstation — trust reconnaissance IOC"
+      - "SIEM: a cross-forest trust with SID filtering disabled, or an account carrying a populated sIDHistory, is present in the directory \u2014 trust / SID-history exposure IOC"
+      - "SIEM: an LDAP enumeration of trustedDomain objects or sIDHistory from a workstation \u2014 trust reconnaissance IOC"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $findings = @()
+      $ok = $false
       try {
         $rootDSE = [ADSI]"LDAP://RootDSE"
         $domainDN = $rootDSE.defaultNamingContext
         if (-not $domainDN) { throw "no domain" }
-
-        # 1) Cross-forest trusts with SID filtering / quarantine disabled.
-        #    trustAttributes bits: FOREST_TRANSITIVE 0x8, QUARANTINED_DOMAIN 0x4
-        #    (SID filtering). A forest-transitive trust WITHOUT quarantine is
-        #    the SID-filtering-disabled condition of interest.
         $ts = New-Object System.DirectoryServices.DirectorySearcher
         $ts.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://CN=System,$domainDN")
         $ts.Filter = "(objectClass=trustedDomain)"
@@ -81,10 +65,48 @@ steps:
           $attr = 0; if ($p['trustattributes'].Count -gt 0) { $attr = [int]$p['trustattributes'][0] }
           $forestTransitive = ($attr -band 0x8) -ne 0
           $quarantined = ($attr -band 0x4) -ne 0
-          if ($forestTransitive -and -not $quarantined) { $findings += "trust:$partner (forest-transitive, SID filtering not enforced)" }
+          if ($forestTransitive -and -not $quarantined) { $findings += "trust:$partner (trustAttributes=$attr; forest-transitive without quarantine bit)" }
         }
+        $ok = $true
+      } catch {
+        $ok = $false
+      }
+      if (-not $ok) {
+        Write-Output "SKIP: trust configuration could not be read: host is not domain-joined or the DC is unreachable. Not scored. [BAS-SIM-TRUST-S1A]"
+      } elseif ($findings.Count -eq 0) {
+        Write-Output "PASS: no forest-transitive trust lacks the quarantine bit in its trustAttributes. This step assesses that attribute check only. [BAS-SIM-TRUST-S1A]"
+      } else {
+        Write-Output "EXEC T1134.005: $($findings.Count) trust(s) fail the attribute check. Reads trustedDomain attributes only. [BAS-SIM-TRUST-S1A]"
+        foreach ($f in $findings) { Write-Output $f }
+        Write-Output "FAIL: a forest-transitive trust lacks the quarantine bit, so the attribute check indicates SID filtering is not enforced for that trust. Confirm on the trust object in a lab before acting (NOT VERIFIED). Remediation: enable SID filtering or quarantine on the trust. [BAS-SIM-TRUST-S1A]"
+      }
+    cleanup: ""
 
-        # 2) Accounts carrying a populated sIDHistory.
+  - name: "Trust B - accounts with populated sIDHistory (T1134.005)"
+    technique_id: T1134.005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads trustedDomain trustAttributes and account sIDHistory from the directory via System.DirectoryServices (read-only) and reports cross-forest trusts with SID filtering disabled and accounts carrying SID history. Never forges an inter-realm ticket, injects SID history, or modifies a trust. Generates LDAP searches against the DC."
+    telemetry:
+      - "DC: LDAP read of trustedDomain trustAttributes and accounts' sIDHistory \u2014 not separately audited by default"
+      - "Sysmon EID 1: powershell.exe performing an LDAP trust / sIDHistory enumeration"
+    detection:
+      - "SIEM: a cross-forest trust with SID filtering disabled, or an account carrying a populated sIDHistory, is present in the directory \u2014 trust / SID-history exposure IOC"
+      - "SIEM: an LDAP enumeration of trustedDomain objects or sIDHistory from a workstation \u2014 trust reconnaissance IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      $ok = $false
+      try {
+        $rootDSE = [ADSI]"LDAP://RootDSE"
+        $domainDN = $rootDSE.defaultNamingContext
+        if (-not $domainDN) { throw "no domain" }
         $ss = New-Object System.DirectoryServices.DirectorySearcher
         $ss.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domainDN")
         $ss.PageSize = 500
@@ -94,16 +116,17 @@ steps:
           $name = [string]$res.Properties['samaccountname'][0]
           $findings += "sidhistory:$name (populated sIDHistory)"
         }
-        $count = $findings.Count
+        $ok = $true
       } catch {
-        $count = -1
+        $ok = $false
       }
-      if ($count -lt 0) {
-        Write-Output "SKIP: trust / SID-history exposure audit unavailable — host is not domain-joined or the DC is unreachable. [BAS-SIM-TRUST-S1]"
-      } elseif ($count -eq 0) {
-        Write-Output "PASS: no cross-forest trust has SID filtering disabled and no account carries SID history — no trust / SID-history privilege-escalation path exposed from this context. [BAS-SIM-TRUST-S1]"
+      if (-not $ok) {
+        Write-Output "SKIP: sIDHistory search could not be completed: host is not domain-joined or the DC is unreachable. Not scored. [BAS-SIM-TRUST-S1B]"
+      } elseif ($findings.Count -eq 0) {
+        Write-Output "PASS: no account carries a populated sIDHistory. This step assesses sIDHistory only. [BAS-SIM-TRUST-S1B]"
       } else {
-        Write-Output "EXEC T1134.005: found $count trust / SID-history exposure condition(s). Reads trust and sIDHistory attributes only — this is a detection-and-exposure probe, it forges no inter-realm ticket. [BAS-SIM-TRUST-S1]"
-        Write-Output "FAIL: a trust lacks SID filtering or an account carries SID history, letting an attacker with domain credential material present an extra privileged SID across the boundary (SID-history injection), enabling privilege escalation. Review the flagged item(s): enable SID filtering / quarantine on external trusts (netdom trust /quarantine:yes), remove unexpected sIDHistory, and audit cross-realm TGS with unexpected SIDs (event 4769)."
+        Write-Output "EXEC T1134.005: $($findings.Count) account(s) carry a populated sIDHistory. Reads the attribute only. [BAS-SIM-TRUST-S1B]"
+        foreach ($f in $findings) { Write-Output $f }
+        Write-Output "FAIL: accounts carry a populated sIDHistory, which can present extra SIDs (possibly privileged) across a trust. Configuration exposure only. Remediation: clear sIDHistory where it is not required, and audit cross-realm TGS requests with unexpected SIDs (event 4769). [BAS-SIM-TRUST-S1B]"
       }
     cleanup: ""

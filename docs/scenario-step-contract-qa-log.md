@@ -345,3 +345,65 @@ Score impact: many steps that previously PASSed on exit 0 can now FAIL or SKIP. 
 4. **30 command-less steps (hunters-international, medusa, rhysida).** Left as recorded gaps. Each SKIPs with "No command defined". Building real commands is attack-simulation design work that should be lab-validated, so it is not done here.
 5. **Thin scenarios and detection/telemetry backfill.** Not done. Detection and telemetry expectations describe what a SOC should see. Writing them without a source would be invented evidence, so they need a sourced reference per technique first.
 6. **Lab verification.** Not possible from this environment. Pending lab access.
+
+## 2026-11-12: AD read-only vertical slice (worktree, NOT committed, NOT VERIFIED on a domain)
+
+Scope: the five read-only AD audits. DCSync audit unchanged. DCSync live verification untouched (lab approval required, deferred). ADCS ESC classes were confirmed from `orchestrator/internal/adenv/adcs_predicates.go` and the scenario's own PowerShell before splitting. Nothing was added that the code does not already evaluate.
+
+### Steps split (existing logic, no new evaluation)
+
+| File | Steps before | Steps after | Split |
+|---|---:|---:|---|
+| adcs-esc-template-exposure-audit | 1 | 10 | ESC1, ESC2, ESC3, ESC4, ESC5, ESC7, ESC9, ESC11, ESC13, ESC15 |
+| kerberos-delegation-exposure-audit | 1 | 3 | A unconstrained (non-DC), B constrained targets, C RBCD attribute set |
+| rbcd-configure-exposure-audit | 1 | 2 | A MachineAccountQuota above 0, B computer objects writable by non-tier-0 |
+| gpo-writable-linked-exposure-audit | 1 | 2 | A linked at domain root, B linked to OU or site |
+| trust-sid-history-exposure-audit | 1 | 2 | A forest-transitive trust without quarantine bit, B populated sIDHistory |
+
+Total steps in these five files: 5 to 19. Step-contract ledger 517 to 531. Contract gap counts unchanged (`step_contract_baseline.json` identical): every new step is an enumeration with no action key, so no undo is required.
+
+### Verdict changes (the score-delta record, step level)
+
+These are the verdict-level differences from the original single-step files. Customer-facing scores have NOT been measured; they change only in a real run.
+
+1. **ADCS ESC5 and ESC7, failed query: PASS to SKIP.** The original ESC7 block was inside `catch {}`, so an unreadable CA object set produced no finding and therefore PASS. Each now sets an explicit ok flag and SKIPs when the read fails or no CA objects exist.
+2. **ADCS ESC13: never FAIL.** The original counted template-level issuance-policy preconditions and OID objects toward the aggregate FAIL, but its own comment says group linkage is "verified below" when it is not. The step now SKIPs with the evidence listed and "manual correlation required".
+3. **ADCS ESC9: flag value corrected, 0x400000 to 0x80000.** CT_FLAG_NO_SECURITY_EXTENSION is 0x00080000 in msPKI-Enrollment-Flag. Source: [MS-CRTD section 2.26 msPKI-Enrollment-Flag](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-crtd/ec71fd43-61c2-407b-83c9-b52272dec8a1), the [MS-CRTD errata](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-winerrata/6898053e-8726-4209-ade2-37f8b0474c99), and the Locksmith check of 0x80000 in [Set-NoSecurityExtension.ps1](https://www.powershellgallery.com/packages/Locksmith2/2026.3.26.1044/Content/Private%5CSet%5CSet-NoSecurityExtension.ps1). This can change ESC9 verdicts on a real domain in either direction, so it needs a lab run.
+4. **RBCD quota unreadable: PASS to SKIP.** The original defaulted the quota to 0 when the attribute was unreadable, and then reported PASS. The step now SKIPs and says "not treated as 0".
+5. **RBCD A (new FAIL-capable step): quota above 0.** A domain whose quota is above 0 with no writable computers was PASS before and is FAIL now. The quota is the same attribute the original already used, but its FAIL on its own is a new verdict. Flagged for your review.
+6. **GPO: "populated scope" removed from the wording.** The original PASS text said "linked to a populated scope", but the code only checks that a link exists. The text now says only what is checked.
+7. **ADCS ESC7: ManageCA and ManageCertificates NOT evaluated.** The original comment said these were control rights, and the code checks only standard write bits. The description and PASS text now state this.
+8. **Trust A: "SID filtering" wording narrowed.** The check is the quarantine bit in trustAttributes. Its meaning for forest trusts is NOT VERIFIED in a lab.
+
+Kerberos and trust splits carry the same underlying checks as before, so the verdict on a domain is unchanged in both directions apart from the way the findings are grouped.
+
+### Verification done here
+
+- All 19 new PowerShell commands parse with the PowerShell parser (0 errors). Two parse errors found during the work (unbraced `$cn:` and `$caDN:` in double quotes) were fixed before signing.
+- All five files re-signed with `orchestrator/private_key.pem` (read from the main checkout; no key copied into the worktree). `verify-all ../scenarios`: ok=156 fail=0.
+- `go test ./internal/scenario/`: ok, including `TestVerdictTokens_ExactForm`, `TestStepContract_*` (after ledger regeneration with `STEP_CONTRACT_WRITE=1`) and `TestBuiltinScenarios_AllHaveValidProductLine`.
+- **Fail-closed on a non-domain host:** each of the 19 commands was run on this machine (not domain-joined). All 19 printed a SKIP with a reason and no PASS or FAIL.
+
+### NOT VERIFIED (requires a domain or an isolated lab)
+
+- Any FAIL or PASS on a real domain. Positive evidence (a planted misconfiguration that the step reports) has not been produced.
+- ESC9 verdicts after the flag correction (item 3).
+- Trust quarantine bit meaning for forest trusts (item 8).
+- Whether the PowerShell ADSI calls return the expected objects on a real AD CS deployment (for example `$tmpl.Properties` value types).
+- The score impact of items 1 to 5 on customer-facing scores.
+
+### Deferred within this slice (not implemented, needs a decision)
+
+- DCSync: checking non-default principals holding DS-Replication rights needs a lab-confirmed allow-list of default holders. Not added.
+- Kerberos: privileged-account, service-account, stale and cross-domain delegation (no evaluation exists).
+- GPO: ownership, security filtering, enforcement and inheritance (no evaluation exists).
+- Trust: per-trust direction and type analysis (no evaluation exists).
+- ADCS: ESC6 and ESC8 (CA host and network properties, out of scope), ESC10 (comment only, never implemented), ESC12 and ESC14 (not present in code).
+
+### Not committed
+
+The five scenario files, their `.sig` files, the regenerated ledger and this log entry are uncommitted in the worktree. Commit only when asked.
+
+### Addendum: RBCD A wording (accepted by the user)
+
+RBCD A keeps its FAIL on the quota above 0, but the title and evidence now say what was measured: a machine-account quota exposure (ms-DS-MachineAccountQuota above 0). The step reads the domain attribute only. It does not show that RBCD is configured or exploitable, and that is assessed by step B. The ESC9 flag change (0x80000, MS-CRTD §2.26) is accepted by the user.

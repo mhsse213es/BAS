@@ -2,20 +2,11 @@ id: gpo-writable-linked-exposure-audit
 product_line: ad
 name: GPO Writable-Linked Exposure Audit
 description: >
-  Single-stage, read-only Active Directory audit: reads groupPolicyContainer
-  objects for a security descriptor that grants write access
-  (GenericAll/GenericWrite/WriteDacl/WriteOwner/WriteProperty) to a
-  non-tier-0 principal AND that is linked (gPLink) to a populated scope --
-  the domain head, an organizational unit, or a site (T1484.001). A GPO
-  that is both attacker-writable and linked is an edit-to-execute path:
-  policy pushed to it runs on every object under the link.
-
-  SAFETY: This step only READS GPO security descriptors and the gPLink
-  attributes of the domain / OUs / sites via .NET DirectoryServices. It
-  NEVER modifies a GPO, pushes policy, or creates a scheduled task. It
-  proves only whether a writable-and-linked GPO is EXPOSED. On a non-domain
-  host it returns a clean SKIP.
-  PRODUCTION-SAFE: runs in telemetry mode. Windows domain members only.
+  Read-only GPO exposure audit, two independent steps (T1484.001):
+    A  a GPO linked at the domain root that grants write rights to a non-tier-0 principal
+    B  a GPO linked to an OU or site that grants write rights to a non-tier-0 principal
+  Link presence is checked; whether the linked scope contains objects is NOT evaluated. Not assessed: GPO ownership, delegated edit rights beyond the DACL, security filtering, enforcement and inheritance.
+  SAFETY: reads GPO DACLs and gPLinks only; pushes no policy. A FAIL shows configuration exposure, not exploitability. Windows domain members only. PRODUCTION-SAFE: telemetry mode.
 author: Audspect Research
 executable: true
 local_check: false
@@ -39,11 +30,7 @@ live_policy:
   execution_window: ""
 
 steps:
-
-  # ---------------------------------------------------------------------------
-  # Stage 1 — Writable-Linked GPO Exposure Audit (T1484.001)
-  # ---------------------------------------------------------------------------
-  - name: "GPO Stage 1 — Writable-Linked GPO Exposure Audit (T1484.001)"
+  - name: "GPO A - writable GPO linked at the domain root (T1484.001)"
     technique_id: T1484.001
     framework: custom
     executor: powershell
@@ -55,41 +42,51 @@ steps:
     reversible: true
     blast_radius: "Reads groupPolicyContainer security descriptors and the gPLink attributes of the domain / OUs / sites via System.DirectoryServices (read-only) and reports GPOs that are both writable by a non-tier-0 principal and linked to a populated scope. Never modifies a GPO, pushes policy, or creates a scheduled task. Generates LDAP searches against the DC."
     telemetry:
-      - "DC: LDAP read of groupPolicyContainer security descriptors and gPLink attributes — not separately audited by default"
+      - "DC: LDAP read of groupPolicyContainer security descriptors and gPLink attributes \u2014 not separately audited by default"
       - "Sysmon EID 1: powershell.exe performing an LDAP GPO / gPLink enumeration"
     detection:
-      - "SIEM: a Group Policy object writable by a non-tier-0 principal is linked to a populated scope (domain/OU/site) — GPO exposure IOC"
-      - "SIEM: an LDAP enumeration of groupPolicyContainer objects and gPLinks from a workstation — GPO reconnaissance IOC"
+      - "SIEM: a Group Policy object writable by a non-tier-0 principal is linked to a populated scope (domain/OU/site) \u2014 GPO exposure IOC"
+      - "SIEM: an LDAP enumeration of groupPolicyContainer objects and gPLinks from a workstation \u2014 GPO reconnaissance IOC"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $findings = @()
+      $ok = $false
       try {
         $rootDSE = [ADSI]"LDAP://RootDSE"
         $domainDN = $rootDSE.defaultNamingContext
         $configDN = $rootDSE.configurationNamingContext
         if (-not $domainDN) { throw "no domain" }
-
-        $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-500','*-517')
+        $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-498','*-500','*-517')
         function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
         $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
-
-        # 1) Collect all linked GPO DNs from gPLink on domain head, OUs, sites.
-        $linked = @{}
-        foreach ($base in @("LDAP://$domainDN", "LDAP://CN=Sites,$configDN")) {
-          $ls = New-Object System.DirectoryServices.DirectorySearcher
-          $ls.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry($base)
-          $ls.PageSize = 500
-          $ls.Filter = "(gPLink=*)"
-          [void]$ls.PropertiesToLoad.Add('gPLink')
-          foreach ($res in $ls.FindAll()) {
-            $gplink = [string]$res.Properties['gplink'][0]
-            foreach ($m in [regex]::Matches($gplink, '(?i)LDAP://(CN=\{[0-9A-F-]+\},CN=POLICIES,CN=SYSTEM,' + [regex]::Escape($domainDN) + ')')) {
-              $linked[$m.Groups[1].Value.ToUpper()] = $true
-            }
+        # Record where each gPLink points. Owner = the domain root, or any other container (OU or site).
+        $linkDomain = @{}
+        $linkOther = @{}
+        $ls = New-Object System.DirectoryServices.DirectorySearcher
+        $ls.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domainDN")
+        $ls.PageSize = 500
+        $ls.Filter = "(gPLink=*)"
+        [void]$ls.PropertiesToLoad.Add('gPLink')
+        [void]$ls.PropertiesToLoad.Add('distinguishedName')
+        foreach ($res in $ls.FindAll()) {
+          $owner = [string]$res.Properties['distinguishedname'][0]
+          $gplink = [string]$res.Properties['gplink'][0]
+          foreach ($m in [regex]::Matches($gplink, '(?i)LDAP://(CN=\{[0-9A-F-]+\},CN=POLICIES,CN=SYSTEM,' + [regex]::Escape($domainDN) + ')')) {
+            $key = $m.Groups[1].Value.ToUpper()
+            if ($owner -ieq $domainDN) { $linkDomain[$key] = $true } else { $linkOther[$key] = $true }
           }
         }
-
-        # 2) For each GPO that is linked, check its DACL for non-tier-0 write.
+        $sites = New-Object System.DirectoryServices.DirectorySearcher
+        $sites.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://CN=Sites,$configDN")
+        $sites.PageSize = 500
+        $sites.Filter = "(gPLink=*)"
+        [void]$sites.PropertiesToLoad.Add('gPLink')
+        foreach ($res in $sites.FindAll()) {
+          $gplink = [string]$res.Properties['gplink'][0]
+          foreach ($m in [regex]::Matches($gplink, '(?i)LDAP://(CN=\{[0-9A-F-]+\},CN=POLICIES,CN=SYSTEM,' + [regex]::Escape($domainDN) + ')')) {
+            $linkOther[$m.Groups[1].Value.ToUpper()] = $true
+          }
+        }
         $gs = New-Object System.DirectoryServices.DirectorySearcher
         $gs.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://CN=Policies,CN=System,$domainDN")
         $gs.PageSize = 500
@@ -98,7 +95,10 @@ steps:
         [void]$gs.PropertiesToLoad.Add('displayName')
         foreach ($res in $gs.FindAll()) {
           $dn = ([string]$res.Properties['distinguishedname'][0]).ToUpper()
-          if (-not $linked.ContainsKey($dn)) { continue }
+          $scopes = @()
+          if ($linkDomain.ContainsKey($dn)) { $scopes += 'domain-root' }
+          if ($linkOther.ContainsKey($dn)) { $scopes += 'OU-or-site' }
+          if ($scopes.Count -eq 0) { continue }
           $name = [string]$res.Properties['displayname'][0]
           $entry = $res.GetDirectoryEntry()
           $rules = $entry.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
@@ -108,18 +108,116 @@ steps:
             if (Is-Tier0 $r.IdentityReference.Value) { continue }
             if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $writable = $true }
           }
-          if ($writable) { $findings += "$name (writable by non-tier-0 and linked)" }
+          if ($writable) { $findings += "$name (linked: $($scopes -join ', '))" }
         }
-        $count = $findings.Count
+        $ok = $true
       } catch {
-        $count = -1
+        $ok = $false
       }
-      if ($count -lt 0) {
-        Write-Output "SKIP: GPO exposure audit unavailable — host is not domain-joined or the DC is unreachable. [BAS-SIM-GPO-S1]"
-      } elseif ($count -eq 0) {
-        Write-Output "PASS: no Group Policy object is both writable by a non-tier-0 principal and linked to a populated scope — no GPO privilege-escalation path exposed from this context. [BAS-SIM-GPO-S1]"
+      $findingsScoped = @($findings | Where-Object { $_ -match 'domain-root' })
+      if (-not $ok) {
+        Write-Output "SKIP: writable GPO linked at the domain root could not be evaluated: host is not domain-joined or the DC is unreachable. Not scored. [BAS-SIM-GPO-S1A]"
+      } elseif ($findingsScoped.Count -eq 0) {
+        Write-Output "PASS: no GPO linked at the domain root is writable by a non-tier-0 principal. This step assesses domain-root links only. [BAS-SIM-GPO-S1A]"
       } else {
-        Write-Output "EXEC T1484.001: found $count GPO(s) writable by a non-tier-0 principal and linked to a populated scope. Reads GPO DACLs and gPLinks only — this is a detection-and-exposure probe, it pushes no policy. [BAS-SIM-GPO-S1]"
-        Write-Output "FAIL: a non-tier-0 principal can edit a Group Policy object linked to a populated scope, letting them push policy (an immediate scheduled task, Restricted Groups membership) that executes as SYSTEM on every object under the link, enabling privilege escalation. Review the flagged GPO(s): restrict their DACLs to tier-0 trustees, and audit Directory Service Changes (5136) and SYSVOL GPO version changes."
+        Write-Output "EXEC T1484.001: $($findingsScoped.Count) GPO(s) writable GPO linked at the domain root. Reads GPO DACLs and gPLinks only; pushes no policy. [BAS-SIM-GPO-S1A]"
+        foreach ($f in $findingsScoped) { Write-Output $f }
+        Write-Output "FAIL: a GPO linked at the domain root is writable by a non-tier-0 principal. Such an edit reaches every object in the domain. Remediation: restrict the GPO DACL to tier-0 trustees; audit 5136 and SYSVOL changes. Configuration exposure only. [BAS-SIM-GPO-S1A]"
+      }
+    cleanup: ""
+
+  - name: "GPO B - writable GPO linked to an OU or site (T1484.001)"
+    technique_id: T1484.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads groupPolicyContainer security descriptors and the gPLink attributes of the domain / OUs / sites via System.DirectoryServices (read-only) and reports GPOs that are both writable by a non-tier-0 principal and linked to a populated scope. Never modifies a GPO, pushes policy, or creates a scheduled task. Generates LDAP searches against the DC."
+    telemetry:
+      - "DC: LDAP read of groupPolicyContainer security descriptors and gPLink attributes \u2014 not separately audited by default"
+      - "Sysmon EID 1: powershell.exe performing an LDAP GPO / gPLink enumeration"
+    detection:
+      - "SIEM: a Group Policy object writable by a non-tier-0 principal is linked to a populated scope (domain/OU/site) \u2014 GPO exposure IOC"
+      - "SIEM: an LDAP enumeration of groupPolicyContainer objects and gPLinks from a workstation \u2014 GPO reconnaissance IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      $ok = $false
+      try {
+        $rootDSE = [ADSI]"LDAP://RootDSE"
+        $domainDN = $rootDSE.defaultNamingContext
+        $configDN = $rootDSE.configurationNamingContext
+        if (-not $domainDN) { throw "no domain" }
+        $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-498','*-500','*-517')
+        function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
+        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # Record where each gPLink points. Owner = the domain root, or any other container (OU or site).
+        $linkDomain = @{}
+        $linkOther = @{}
+        $ls = New-Object System.DirectoryServices.DirectorySearcher
+        $ls.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domainDN")
+        $ls.PageSize = 500
+        $ls.Filter = "(gPLink=*)"
+        [void]$ls.PropertiesToLoad.Add('gPLink')
+        [void]$ls.PropertiesToLoad.Add('distinguishedName')
+        foreach ($res in $ls.FindAll()) {
+          $owner = [string]$res.Properties['distinguishedname'][0]
+          $gplink = [string]$res.Properties['gplink'][0]
+          foreach ($m in [regex]::Matches($gplink, '(?i)LDAP://(CN=\{[0-9A-F-]+\},CN=POLICIES,CN=SYSTEM,' + [regex]::Escape($domainDN) + ')')) {
+            $key = $m.Groups[1].Value.ToUpper()
+            if ($owner -ieq $domainDN) { $linkDomain[$key] = $true } else { $linkOther[$key] = $true }
+          }
+        }
+        $sites = New-Object System.DirectoryServices.DirectorySearcher
+        $sites.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://CN=Sites,$configDN")
+        $sites.PageSize = 500
+        $sites.Filter = "(gPLink=*)"
+        [void]$sites.PropertiesToLoad.Add('gPLink')
+        foreach ($res in $sites.FindAll()) {
+          $gplink = [string]$res.Properties['gplink'][0]
+          foreach ($m in [regex]::Matches($gplink, '(?i)LDAP://(CN=\{[0-9A-F-]+\},CN=POLICIES,CN=SYSTEM,' + [regex]::Escape($domainDN) + ')')) {
+            $linkOther[$m.Groups[1].Value.ToUpper()] = $true
+          }
+        }
+        $gs = New-Object System.DirectoryServices.DirectorySearcher
+        $gs.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://CN=Policies,CN=System,$domainDN")
+        $gs.PageSize = 500
+        $gs.Filter = "(objectClass=groupPolicyContainer)"
+        [void]$gs.PropertiesToLoad.Add('distinguishedName')
+        [void]$gs.PropertiesToLoad.Add('displayName')
+        foreach ($res in $gs.FindAll()) {
+          $dn = ([string]$res.Properties['distinguishedname'][0]).ToUpper()
+          $scopes = @()
+          if ($linkDomain.ContainsKey($dn)) { $scopes += 'domain-root' }
+          if ($linkOther.ContainsKey($dn)) { $scopes += 'OU-or-site' }
+          if ($scopes.Count -eq 0) { continue }
+          $name = [string]$res.Properties['displayname'][0]
+          $entry = $res.GetDirectoryEntry()
+          $rules = $entry.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+          $writable = $false
+          foreach ($r in $rules) {
+            if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
+            if (Is-Tier0 $r.IdentityReference.Value) { continue }
+            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $writable = $true }
+          }
+          if ($writable) { $findings += "$name (linked: $($scopes -join ', '))" }
+        }
+        $ok = $true
+      } catch {
+        $ok = $false
+      }
+      $findingsScoped = @($findings | Where-Object { $_ -match 'OU-or-site' })
+      if (-not $ok) {
+        Write-Output "SKIP: writable GPO linked to an OU or site could not be evaluated: host is not domain-joined or the DC is unreachable. Not scored. [BAS-SIM-GPO-S1B]"
+      } elseif ($findingsScoped.Count -eq 0) {
+        Write-Output "PASS: no GPO linked to an OU or site is writable by a non-tier-0 principal. This step assesses OU and site links only. [BAS-SIM-GPO-S1B]"
+      } else {
+        Write-Output "EXEC T1484.001: $($findingsScoped.Count) GPO(s) writable GPO linked to an OU or site. Reads GPO DACLs and gPLinks only; pushes no policy. [BAS-SIM-GPO-S1B]"
+        foreach ($f in $findingsScoped) { Write-Output $f }
+        Write-Output "FAIL: a GPO linked to an OU or site is writable by a non-tier-0 principal. Remediation: restrict the GPO DACL to tier-0 trustees; audit 5136 and SYSVOL changes. Configuration exposure only. [BAS-SIM-GPO-S1B]"
       }
     cleanup: ""
