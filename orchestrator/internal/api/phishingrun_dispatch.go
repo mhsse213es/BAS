@@ -222,7 +222,16 @@ func refreshPhishingDispatch(ctx context.Context, pool *pgxpool.Pool, env Phishi
 		if err != nil {
 			return run, fmt.Errorf("phishingrun: marshal outcome: %w", err)
 		}
-		return settleDispatch(ctx, pool, run, rec, raw, phishingrun.StatusCompleted, "")
+		// A grade taken while the window is open is provisional: keep the run running with that result, so
+		// the next read grades it again and settles it once the window has closed.
+		if outcome.Provisional {
+			if err := db.UpdatePhishingRunStatus(ctx, pool, run.ID, phishingrun.StatusRunning, raw, ""); err != nil {
+				return run, fmt.Errorf("phishingrun: store provisional result for run %s: %w", run.ID, err)
+			}
+			run.Result = raw
+			return run, nil
+		}
+		return settleDispatch(ctx, pool, run, rec, raw, dispatchStatusFor(outcome), "")
 	case "failed", "partial":
 		return settleDispatch(ctx, pool, run, rec, run.Result, phishingrun.StatusFailed,
 			fmt.Sprintf("the dispatched EmailGW run ended as %s, so there is no complete evidence to grade", egStatus))
@@ -245,6 +254,15 @@ func finishDispatch(ctx context.Context, pool *pgxpool.Pool, run *phishingrun.Ph
 	now := time.Now().UTC()
 	run.CompletedAt = &now
 	return run, nil
+}
+
+// dispatchStatusFor is the status a dispatched run settles to once its EmailGW run has completed and its grade
+// was read. A provisional grade (window still open) is not a completed run.
+func dispatchStatusFor(o phishval.Outcome) phishingrun.Status {
+	if o.Provisional {
+		return phishingrun.StatusRunning
+	}
+	return phishingrun.StatusCompleted
 }
 
 // dispatchOutcomeFrom decodes a settled dispatch's stored outcome.
