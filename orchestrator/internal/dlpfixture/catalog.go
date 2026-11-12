@@ -62,7 +62,7 @@ func AllFixtures() ([]Fixture, error) {
 			{scenarioMultichannel, "DLP Validation — SFTP Exfiltration (T1048.002)"},
 			{scenarioMultichannel, "DLP Validation — SMTP Exfiltration (T1048.003)"},
 			{scenarioSinkHTTPS, "DLP Validation — Sink-Verified HTTPS Exfiltration (T1567)"},
-			{scenarioBrowserUpload, "DLP Validation — Browser-Style Multipart Upload (T1567)"},
+			{scenarioBrowserUpload, "DLP Validation — Simulated Upload, browser-style multipart request (T1567) [simulated_upload]"},
 			{scenarioDNSTunnel, "DLP Validation — DNS Tunneling Exfiltration (T1071.004)"},
 			{scenarioSFTP, "DLP Validation — SFTP Exfiltration (T1048.002)"},
 			{scenarioSMTP, "DLP Validation — SMTP Exfiltration (T1048.003)"},

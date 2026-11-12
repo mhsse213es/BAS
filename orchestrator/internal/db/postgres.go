@@ -1,9 +1,9 @@
 package db
 
 import (
-	"os"
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"

@@ -1,8 +1,8 @@
 package attackdata
 
 import (
-	"strings"
 	"slices"
+	"strings"
 	"testing"
 )
 

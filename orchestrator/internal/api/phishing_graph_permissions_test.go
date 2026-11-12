@@ -65,4 +65,3 @@ func TestRecordPhishingScope_RecordsDeclaredPermissions(t *testing.T) {
 		}
 	})
 }
-

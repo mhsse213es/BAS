@@ -19,7 +19,7 @@ import (
 // where it was ever covered.
 type PolicyGapFixture struct {
 	BaselineEvidence               []wafval.CollectionResult
-	WeakenedEvidence                []wafval.CollectionResult
+	WeakenedEvidence               []wafval.CollectionResult
 	PolicyDifferentiationConfirmed bool
 	CoverageEvidence               []wafval.CollectionResult
 

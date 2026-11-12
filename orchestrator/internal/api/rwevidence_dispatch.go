@@ -9,8 +9,8 @@ import (
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/rwcontain"
 	"github.com/audspect/bas/internal/rwdetect"
-	"github.com/audspect/bas/internal/rwprevent"
 	"github.com/audspect/bas/internal/rwevidence"
+	"github.com/audspect/bas/internal/rwprevent"
 	"github.com/audspect/bas/internal/rwrecover"
 	"github.com/audspect/bas/internal/scenario"
 )

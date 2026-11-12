@@ -72,15 +72,15 @@ func main() {
 		log.Fatal(err)
 	}
 	r, err := runner.New(runner.Config{
-		BaseURL: *target,
-		Fixture: fx,
-		Secrets: secrets,
+		BaseURL:   *target,
+		Fixture:   fx,
+		Secrets:   secrets,
 		State:     admin,
 		Reporting: admin,
-		Reset:   admin,
-		Events:  admin,
-		HTTP:    &http.Client{Timeout: 10 * time.Second},
-		Machine: *machine,
+		Reset:     admin,
+		Events:    admin,
+		HTTP:      &http.Client{Timeout: 10 * time.Second},
+		Machine:   *machine,
 	})
 	if err != nil {
 		log.Fatal(err)

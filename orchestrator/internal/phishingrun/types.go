@@ -45,7 +45,7 @@ type PhishingRun struct {
 	InitiatedBy string          `json:"initiatedBy,omitempty"`
 	// ExecutionID names the exercise execution this run belongs to, when the operator
 	// linked it. Empty for an unlinked run.
-	ExecutionID string `json:"executionId,omitempty"`
-	StartedAt   time.Time       `json:"startedAt"`
-	CompletedAt *time.Time      `json:"completedAt,omitempty"`
+	ExecutionID string     `json:"executionId,omitempty"`
+	StartedAt   time.Time  `json:"startedAt"`
+	CompletedAt *time.Time `json:"completedAt,omitempty"`
 }

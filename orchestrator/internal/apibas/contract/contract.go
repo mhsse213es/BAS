@@ -10,10 +10,10 @@ package contract
 import (
 	"time"
 
-	"github.com/audspect/bas/internal/apibas/reporting"
 	"encoding/json"
 	"fmt"
 	protocolpkg "github.com/audspect/bas/internal/apibas/protocol"
+	"github.com/audspect/bas/internal/apibas/reporting"
 	"regexp"
 	"slices"
 	"strings"
@@ -157,19 +157,19 @@ type Scenario struct {
 	// stated expected result in the test table. The primary Detection sets the outcome.
 	AdditionalDetections []DetectionPolicy `yaml:"additional_detections"`
 	// Calibration declares the conditions the timing threshold was measured under.
-	Calibration       *CalibrationPolicy `yaml:"calibration"`
-	ExpectedControl   string             `yaml:"expected_control"`
-	GroundTruth       GroundTruth        `yaml:"ground_truth"`
-	DetectionAssert   DetectionAssertion `yaml:"detection_assertion"`
+	Calibration     *CalibrationPolicy `yaml:"calibration"`
+	ExpectedControl string             `yaml:"expected_control"`
+	GroundTruth     GroundTruth        `yaml:"ground_truth"`
+	DetectionAssert DetectionAssertion `yaml:"detection_assertion"`
 	// DetectionCovers names the blueprint DET IDs whose detection assertion this scenario's detection block grades.
 	// Each DET ID is covered by at most one scenario, so coverage is never counted twice (DET-003 on BIZ-012).
-	DetectionCovers []string `yaml:"detection_covers"`
-	Evidence          []string           `yaml:"evidence"`
-	SideEffectClass   string             `yaml:"side_effect_class"`
-	Cleanup           []string           `yaml:"cleanup"`
-	IndustryMapping   []string           `yaml:"industry_mapping"`
-	RegulatoryMapping []string           `yaml:"regulatory_mapping"`
-	NegativeTests     []string           `yaml:"negative_tests"`
+	DetectionCovers   []string `yaml:"detection_covers"`
+	Evidence          []string `yaml:"evidence"`
+	SideEffectClass   string   `yaml:"side_effect_class"`
+	Cleanup           []string `yaml:"cleanup"`
+	IndustryMapping   []string `yaml:"industry_mapping"`
+	RegulatoryMapping []string `yaml:"regulatory_mapping"`
+	NegativeTests     []string `yaml:"negative_tests"`
 	// Reporting declares the regulatory reporting obligations a REPORT scenario grades (package reporting).
 	Reporting *reporting.Policy `yaml:"reporting"`
 }

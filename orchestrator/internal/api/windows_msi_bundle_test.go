@@ -179,7 +179,6 @@ func TestServeWindowsMSI_RequiresManifestAndSigningKey(t *testing.T) {
 	}
 }
 
-
 // The wizard asks only for the agent secret: the signing fingerprint travels beside the MSI, and the token
 // field appears only when this server issues enrolment tokens.
 func TestMSIBundle_CarriesTheFingerprintFileAndTheTokenMarkerOnlyWhenNeeded(t *testing.T) {

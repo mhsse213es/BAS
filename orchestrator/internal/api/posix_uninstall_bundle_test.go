@@ -119,8 +119,12 @@ func keys(m map[string]string) []string {
 
 func TestServeUninstall_RefusesTamperedUnlistedMissingOrUnverifiable(t *testing.T) {
 	serve := map[string]func(*Handler, *httptest.ResponseRecorder){
-		"linux": func(h *Handler, rec *httptest.ResponseRecorder) { h.serveLinuxUninstall(rec, httptest.NewRequest(http.MethodGet, "/x", nil)) },
-		"mac":   func(h *Handler, rec *httptest.ResponseRecorder) { h.serveMacUninstall(rec, httptest.NewRequest(http.MethodGet, "/x", nil)) },
+		"linux": func(h *Handler, rec *httptest.ResponseRecorder) {
+			h.serveLinuxUninstall(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+		},
+		"mac": func(h *Handler, rec *httptest.ResponseRecorder) {
+			h.serveMacUninstall(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+		},
 	}
 	for osName, call := range serve {
 		agents := linuxAgents

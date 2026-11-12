@@ -17,9 +17,9 @@ import (
 
 // Destination kinds. Each kind has its own policy in DestinationPolicy.
 const (
-	DestRedirect = "redirect" // a post-login or return redirect target
-	DestCallback = "callback" // a webhook callback host the caller registers
-	DestWebhook  = "webhook"  // a URL the webhook test endpoint fetches
+	DestRedirect     = "redirect"      // a post-login or return redirect target
+	DestCallback     = "callback"      // a webhook callback host the caller registers
+	DestWebhook      = "webhook"       // a URL the webhook test endpoint fetches
 	DestUpstream     = "upstream"      // a URL the gateway fetches, whose certificate the gateway should verify
 	DestAuthRedirect = "auth_redirect" // an OAuth redirect_uri, which must exactly match the client's registered redirect
 )
@@ -29,14 +29,14 @@ const RegisteredRedirect = b2RegisteredRedirect
 
 // Policy verdicts recorded on the access event.
 const (
-	PolicyAllowed   = "allowed"
-	PolicyOutside   = "outside_allowlist"
-	PolicyInternal  = "internal"
+	PolicyAllowed  = "allowed"
+	PolicyOutside  = "outside_allowlist"
+	PolicyInternal = "internal"
 	// PolicyUntrustedCert is an upstream whose certificate chain does not verify, so the content relayed from it is not
 	// authenticated (GWAY-012). PolicyVerifiedCert is an upstream whose chain verifies.
 	PolicyUntrustedCert = "untrusted_certificate"
 	PolicyVerifiedCert  = "verified_certificate"
-	policyNotEvaled = "" // the route has no destination policy, so no verdict is recorded
+	policyNotEvaled     = "" // the route has no destination policy, so no verdict is recorded
 )
 
 // normalizeDestination returns scheme://host:port for an absolute URL, with the scheme and host lower-cased and the

@@ -41,8 +41,8 @@ func contractReq() detectverify.VerifyRequest {
 		RunID: "run-1", ExpectationID: "exp-1", TechniqueID: "T1005",
 		HostName: "db-01", HostIP: "10.0.0.5",
 		StepExecutedAt: t0, IncludeAlertSource: true,
-		WindowStart:    t0.Add(-time.Minute),
-		WindowEnd:      t0.Add(10 * time.Minute),
+		WindowStart: t0.Add(-time.Minute),
+		WindowEnd:   t0.Add(10 * time.Minute),
 	}
 }
 

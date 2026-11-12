@@ -1,8 +1,8 @@
 package analytics
 
 import (
-	"github.com/audspect/bas/internal/contentregistry"
 	"context"
+	"github.com/audspect/bas/internal/contentregistry"
 	"testing"
 	"time"
 

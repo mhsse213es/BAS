@@ -896,7 +896,7 @@ func TestBuildFromEMSweep_NotFound(t *testing.T) {
 			t.Fatal("expected an error for an unknown EM sweep id")
 		}
 	})
-}
+}
 
 // "Not prevented only" and "Not detected only" must list defence failures and detection gaps, not steps that never
 // produced a security outcome. A skipped step was not run and an ERROR is the BAS hitting a problem; the score already

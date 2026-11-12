@@ -96,7 +96,7 @@ func EvaluateChannelConsistency(results []ChannelResult) (ChannelConsistencyResu
 
 // Campaign02EndpointToCloudLeakage is dlp.txt §3C's Campaign 02:
 // "Endpoint-to-cloud leakage" -- place a synthetic confidential file on a
-// managed endpoint, attempt controlled USB, browser-upload and
+// managed endpoint, attempt controlled USB, simulated-upload and
 // approved-cloud-transfer variants, compare enforcement across them. This
 // function only names the 3 channel variants and delegates to
 // EvaluateChannelConsistency; it never calls any real evaluator itself.

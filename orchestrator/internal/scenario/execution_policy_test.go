@@ -26,10 +26,10 @@ func TestValidInProcessPolicy(t *testing.T) {
 // on its own.
 func TestEffectiveInProcessPolicy(t *testing.T) {
 	cases := []struct {
-		name            string
-		explicit, dflt  string
-		want            string
-		wantErr         bool
+		name           string
+		explicit, dflt string
+		want           string
+		wantErr        bool
 	}{
 		{"explicit wins over default", "unrestricted", "restricted", "unrestricted", false},
 		{"default used when no explicit value", "", "restricted", "restricted", false},

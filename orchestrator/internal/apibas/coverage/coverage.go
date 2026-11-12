@@ -40,7 +40,7 @@ type Verdicts struct {
 type Status string
 
 const (
-	Validated   Status = "validated"
+	Validated Status = "validated"
 	// Provisional: exploitability verdicts are valid, but the timing claim is not approved (contract TimingClaim).
 	// It is evaluated and never validated.
 	Provisional Status = "provisional"
@@ -48,9 +48,9 @@ const (
 	// WorkflowVerified: a reporting-obligation scenario that PASSed with control enforced in both builds, graded by the
 	// reporting adapter. Simulated; exploitability is not applicable. Never evaluated, never validated.
 	WorkflowVerified Status = "workflow_verified"
-	Unsupported Status = "unsupported"
-	Errored     Status = "error"
-	Unevaluated Status = "unevaluated"
+	Unsupported      Status = "unsupported"
+	Errored          Status = "error"
+	Unevaluated      Status = "unevaluated"
 )
 
 // Entry is one catalogued scenario and its class.
@@ -70,10 +70,10 @@ type Report struct {
 	Provisional int // evaluated, held out of Validated by an unapproved timing claim
 	// WorkflowVerified counts reporting-obligation scenarios verified as a workflow only. Not part of Evaluated or Validated.
 	WorkflowVerified int
-	Unsupported int
-	Errored     int
-	Unevaluated int
-	Entries     []Entry
+	Unsupported      int
+	Errored          int
+	Unevaluated      int
+	Entries          []Entry
 }
 
 // valid reports whether an outcome is a valid security verdict.

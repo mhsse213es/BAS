@@ -76,11 +76,11 @@ type SimulationResult struct {
 	// parser) can detect incomplete evidence rather than unknowingly working
 	// with a partial list.
 	// ExecutionFailure explains an ERROR result in normalised form (see execution_failure.go). Details keeps the raw text.
-	ExecutionFailure *ExecutionFailure `json:"executionFailure,omitempty"`
-	Truncated           bool      `json:"truncated,omitempty"`
-	OriginalOutputBytes int       `json:"originalOutputBytes,omitempty"`
-	DurationMs          int64     `json:"durationMs"`
-	ExecutedAt          time.Time `json:"executedAt"`
+	ExecutionFailure    *ExecutionFailure `json:"executionFailure,omitempty"`
+	Truncated           bool              `json:"truncated,omitempty"`
+	OriginalOutputBytes int               `json:"originalOutputBytes,omitempty"`
+	DurationMs          int64             `json:"durationMs"`
+	ExecutedAt          time.Time         `json:"executedAt"`
 	// ExecutedAtSource records who supplied ExecutedAt. Empty means unknown:
 	// results stored before this field existed never say where their timestamp
 	// came from, so they must not be read as agent-observed.

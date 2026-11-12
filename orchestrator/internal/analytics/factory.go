@@ -1,8 +1,8 @@
 package analytics
 
 import (
-	"github.com/audspect/bas/internal/contentregistry"
 	"context"
+	"github.com/audspect/bas/internal/contentregistry"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"

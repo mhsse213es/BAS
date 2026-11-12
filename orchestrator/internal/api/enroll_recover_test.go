@@ -65,16 +65,18 @@ func enrolled(t *testing.T, pool *pgxpool.Pool, agentID string) *recoverFixture 
 }
 
 // at makes the server believe it is d after the certificate's expiry.
-func (f *recoverFixture) at(d time.Duration) { f.h.now = func() time.Time { return f.cert.NotAfter.Add(d) } }
+func (f *recoverFixture) at(d time.Duration) {
+	f.h.now = func() time.Time { return f.cert.NotAfter.Add(d) }
+}
 
 type recoverOpts struct {
-	agentID    string
-	signKey    *ecdsa.PrivateKey // key that makes the proof (default: the certificate's key)
-	csrKey     *ecdsa.PrivateKey // key in the CSR (default: a fresh key)
-	proofCSR   string            // CSR text the proof covers (default: the submitted CSR)
-	signedAt   time.Time
-	certPEM    string
-	skipProof  bool
+	agentID   string
+	signKey   *ecdsa.PrivateKey // key that makes the proof (default: the certificate's key)
+	csrKey    *ecdsa.PrivateKey // key in the CSR (default: a fresh key)
+	proofCSR  string            // CSR text the proof covers (default: the submitted CSR)
+	signedAt  time.Time
+	certPEM   string
+	skipProof bool
 }
 
 func (f *recoverFixture) recover(t *testing.T, o recoverOpts) *httptest.ResponseRecorder {
@@ -137,7 +139,9 @@ func TestRecover_ExpiredWithinGraceGetsANewCertificateForTheSameAgent(t *testing
 		if rec.Code != http.StatusOK {
 			t.Fatalf("recover = %d: %s", rec.Code, rec.Body.String())
 		}
-		var resp struct{ CertPEM string `json:"certPem"` }
+		var resp struct {
+			CertPEM string `json:"certPem"`
+		}
 		json.Unmarshal(rec.Body.Bytes(), &resp)
 		blk, _ := pem.Decode([]byte(resp.CertPEM))
 		nc, err := x509.ParseCertificate(blk.Bytes)

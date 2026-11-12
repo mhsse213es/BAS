@@ -133,4 +133,3 @@ func TestGetEmailGWReport_ComposesRealDataEndToEnd(t *testing.T) {
 		}
 	})
 }
-

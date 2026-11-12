@@ -94,4 +94,3 @@ func TestRWContainment_ContainedVendorStatusPasses(t *testing.T) {
 		}
 	})
 }
-

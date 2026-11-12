@@ -46,7 +46,6 @@ var behavioralFixtures = []behavioralFixture{
 	{"alternate: renamed copy executed", altStep, "Enabled", "Running", true, 0, true, 0, "allowed_unexpectedly", "FAIL:"},
 }
 
-
 // TestAppControlBehavioral_OutcomeFromObservations drives the shipped
 // behavioral step text through each controlled observation and checks the
 // structured outcome and the verdict prefix the scoring path reads.

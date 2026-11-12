@@ -51,7 +51,7 @@ func TestCreateK8sRun_ProductionEntryIsRefusedForLabExecution(t *testing.T) {
 	if code != http.StatusForbidden {
 		t.Errorf("a production-class cluster must be refused for lab execution: %d", code)
 	}
-		if len(audit.events) != 1 || audit.events[0].Fields["profile"] != "lab" {
+	if len(audit.events) != 1 || audit.events[0].Fields["profile"] != "lab" {
 		t.Errorf("the refusal must be audited: %+v", audit.events)
 	}
 }

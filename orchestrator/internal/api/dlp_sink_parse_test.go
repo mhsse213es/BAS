@@ -82,9 +82,9 @@ func multipartRequest(t *testing.T, fields map[string]string, fileField, fileNam
 }
 
 func TestParseSinkRequest_MultipartFileUploadTakesTheFileAsThePayload(t *testing.T) {
-	r := multipartRequest(t, map[string]string{"token": "TM", "channel": "browser-upload"}, "payload", "record.csv", "CustomerID,PAN\nBAS-SIM-SINK,ABCDE1234F")
+	r := multipartRequest(t, map[string]string{"token": "TM", "channel": "simulated-upload"}, "payload", "record.csv", "CustomerID,PAN\nBAS-SIM-SINK,ABCDE1234F")
 	got := parse(t, r)
-	if got.Token != "TM" || got.Channel != "browser-upload" {
+	if got.Token != "TM" || got.Channel != "simulated-upload" {
 		t.Errorf("token or channel wrong: %+v", got)
 	}
 	if got.Payload != "CustomerID,PAN\nBAS-SIM-SINK,ABCDE1234F" {
@@ -155,7 +155,7 @@ func TestDLPSink_MultipartUploadRecordsAReceiptForTheFileBytes(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 		const content = "[BAS-SIM-DLP] browser upload record"
-		r := multipartRequest(t, map[string]string{"token": "tok-browser-upload", "channel": "browser-upload"}, "payload", "record.csv", content)
+		r := multipartRequest(t, map[string]string{"token": "tok-browser-upload", "channel": "simulated-upload"}, "payload", "record.csv", content)
 		r.RemoteAddr = "10.0.0.9:50000"
 		rec := httptest.NewRecorder()
 		h.DLPSink(rec, r)
@@ -169,8 +169,8 @@ func TestDLPSink_MultipartUploadRecordsAReceiptForTheFileBytes(t *testing.T) {
 			t.Fatalf("no receipt recorded: %v", err)
 		}
 		sum := sha256.Sum256([]byte(content))
-		if hash != hex.EncodeToString(sum[:]) || size != len(content) || channel != "browser-upload" {
-			t.Errorf("receipt hash=%s size=%d channel=%s, want hash of the file, size %d, channel browser-upload", hash, size, channel, len(content))
+		if hash != hex.EncodeToString(sum[:]) || size != len(content) || channel != "simulated-upload" {
+			t.Errorf("receipt hash=%s size=%d channel=%s, want hash of the file, size %d, channel simulated-upload", hash, size, channel, len(content))
 		}
 	})
 }

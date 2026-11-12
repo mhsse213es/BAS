@@ -29,7 +29,7 @@ type condConst bool
 
 func (c condConst) eval(map[string]bool, []string) bool { return bool(c) }
 
-func (a condAtom) eval(sel map[string]bool, _ []string) bool { return sel[string(a)] }
+func (a condAtom) eval(sel map[string]bool, _ []string) bool    { return sel[string(a)] }
 func (n condNot) eval(sel map[string]bool, names []string) bool { return !n.x.eval(sel, names) }
 func (b condBin) eval(sel map[string]bool, names []string) bool {
 	if b.and {

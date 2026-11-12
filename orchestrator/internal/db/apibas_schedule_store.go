@@ -20,8 +20,8 @@ const APIBASScheduleMaxFailures = 5
 // APIBASSchedule runs a target's stored test data on a fixed interval. One schedule per target. Runs are lab and staging only and
 // go through the same submission checks as a manual run.
 type APIBASSchedule struct {
-	TargetID            string
-	EveryHours          int
+	TargetID   string
+	EveryHours int
 	// AtTime, Timezone and Days make a time-of-day schedule: run at AtTime ("HH:MM") in Timezone on Days (comma-joined weekday names,
 	// empty for every day). When AtTime is set EveryHours is stored as 24 and not used.
 	AtTime              string

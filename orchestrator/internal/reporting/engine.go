@@ -175,15 +175,15 @@ type FullReport struct {
 	// AppControl is the Application Control Efficacy section (Section 18a).
 	// Built from this run's own results before any report filter, and
 	// hidden (HasData false) for a run with no application-control steps.
-	AppControl    AppControlSection `json:"appControl"`
+	AppControl AppControlSection `json:"appControl"`
 	// AppControlRuns holds one section per child run of a campaign, each mapped
 	// to the run that produced it. Campaign reports leave AppControl empty.
-	AppControlRuns []AppControlSection `json:"appControlRuns,omitempty"`
-	TrendAnalysis  TrendSummary        `json:"trendAnalysis"`
-	AttackPath          AttackPath                 `json:"attackPath"`
-	AttackFlow          []AttackFlowNode           `json:"attackFlow,omitempty"`
-	AttackFlowGroups   []AttackFlowGroup         `json:"attackFlowGroups,omitempty"`
-	AttackFlowSummary   AttackFlowSummary          `json:"attackFlowSummary"`
+	AppControlRuns    []AppControlSection `json:"appControlRuns,omitempty"`
+	TrendAnalysis     TrendSummary        `json:"trendAnalysis"`
+	AttackPath        AttackPath          `json:"attackPath"`
+	AttackFlow        []AttackFlowNode    `json:"attackFlow,omitempty"`
+	AttackFlowGroups  []AttackFlowGroup   `json:"attackFlowGroups,omitempty"`
+	AttackFlowSummary AttackFlowSummary   `json:"attackFlowSummary"`
 	// VariantCoverage holds multi-variant evasion analysis for the HTML/PDF report.
 	// Populated from scenario_variant_technique_summary; nil for runs with no variant depth.
 	VariantCoverage *VariantCoverageSection `json:"variantCoverage,omitempty"`
@@ -220,15 +220,15 @@ type FullReport struct {
 	// TechniqueMatrixGroups is TechniqueMatrix with adjacent steps of one technique merged (rendered per technique).
 	TechniqueMatrixGroups []TechniqueMatrixGroup `json:"techniqueMatrixGroups,omitempty"`
 	// Executive-grade derivations (Cymulate-style report).
-	ExecutiveConclusion string          `json:"executiveConclusion"`
-	TopRiskDrivers      []RiskDriver    `json:"topRiskDrivers"`
+	ExecutiveConclusion string       `json:"executiveConclusion"`
+	TopRiskDrivers      []RiskDriver `json:"topRiskDrivers"`
 	// RiskQuantification is the estimated annual loss range for open exposures, from customer-entered
 	// inputs (see internal/riskquant). Nil until inputs are supplied; the board card then does not render.
 	RiskQuantification *riskquant.Summary `json:"riskQuantification,omitempty"`
-	Insights            Insights        `json:"insights"`
-	ActionPlan          []ActionItem    `json:"actionPlan"`
-	Reliability         Reliability     `json:"reliability"`
-	Glossary            []GlossaryEntry `json:"glossary"`
+	Insights           Insights           `json:"insights"`
+	ActionPlan         []ActionItem       `json:"actionPlan"`
+	Reliability        Reliability        `json:"reliability"`
+	Glossary           []GlossaryEntry    `json:"glossary"`
 	// Scope is set for fleet-wide (campaign) reports; nil for single-agent/run
 	// reports. When present the cover and Asset Context render the campaign scope
 	// and the per-agent breakdown instead of single-agent metadata.

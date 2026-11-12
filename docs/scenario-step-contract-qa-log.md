@@ -407,3 +407,32 @@ The five scenario files, their `.sig` files, the regenerated ledger and this log
 ### Addendum: RBCD A wording (accepted by the user)
 
 RBCD A keeps its FAIL on the quota above 0, but the title and evidence now say what was measured: a machine-account quota exposure (ms-DS-MachineAccountQuota above 0). The step reads the domain attribute only. It does not show that RBCD is configured or exploitable, and that is assessed by step B. The ESC9 flag change (0x80000, MS-CRTD §2.26) is accepted by the user.
+
+## 2026-11-12: hygiene and DLP simulated-upload label (worktree, NOT committed)
+
+### Hygiene
+- gofmt: 65 committed Go files were not gofmt-clean. The other flags were CRLF working copies (`core.autocrlf=true`), not committed content. 64 files were formatted with `gofmt -w` (262 insertions, 253 deletions ignoring line endings). `orchestrator/cmd/server/main.go` was deliberately left alone because another session has uncommitted work in it on the main checkout.
+- go.mod: `go mod tidy` moved three modules that the code imports directly from indirect to direct (`github.com/aws/aws-sdk-go-v2/service/organizations`, `github.com/aws/smithy-go`, `go.opentelemetry.io/otel/trace`). go.sum unchanged.
+
+### DLP simulated upload (dlp-exfiltration-browser-upload)
+- The step name now carries `[simulated_upload]`, and the description states that this is a scripted HTTP multipart request, not a drag-and-drop or any other user gesture.
+- Both EXEC output lines carry `simulated_upload` and state that no user gesture or browser interaction occurred. The `[BAS-SIM-DLP-BROWSER-UPLOAD]` tag is kept because the fixture test requires it.
+- The sink's `channel` field still sends `browser-upload`. It is a correlation key used by `internal/dlpcorrelate` tests and the sink, so changing it is a contract change and was not done here. Reports built from that channel value may still read as a browser upload. This is recorded as an open item.
+- The fixture catalogue (`internal/dlpfixture/catalog.go`) was updated to the new step name.
+- Re-signed; verify-all ok=156 fail=0.
+
+### Tests
+- `go build ./...`, `go vet` on internal/scenario and internal/api: clean.
+- `go test` on internal/dlpfixture, internal/dlpcorrelate, internal/scenario: ok. The internal/api subset matching DLP, sink and browser: ok.
+- Full internal/api suite NOT rerun for these two batches (gofmt and labels only).
+
+### NOT VERIFIED
+- The reporting path that renders the `browser-upload` channel value (see open item above).
+
+### Addendum: DLP sink channel renamed (option 2, approved)
+
+- The scenario now sends `channel=simulated-upload` instead of `browser-upload`. The step name, description and output already say simulated upload.
+- Updated: the sink-parse test (`internal/api/dlp_sink_parse_test.go`), the correlation tests and comment (`internal/dlpcorrelate/channelconsistency*.go`). The token string `tok-browser-upload` is a test token and is unchanged.
+- Existing rows in `dlp_sink_receipts` keep `browser-upload`. The table is append-only, and no rows were rewritten. Any report built from them still shows the old value.
+- The sink does not validate the channel value, so old and new values are both accepted.
+- Targeted tests (DLP fixture, correlation, scenario, sink) pass; signatures verify 156/0. The full internal/api suite is rerun after this change.

@@ -29,10 +29,9 @@ import (
 
 	"github.com/audspect/bas/internal/actions"
 	"github.com/audspect/bas/internal/admatrix"
+	"github.com/audspect/bas/internal/advisory"
 	"github.com/audspect/bas/internal/analytics"
 	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
-	"github.com/audspect/bas/internal/segprobe"
-	"github.com/audspect/bas/internal/segprobe/runstore"
 	"github.com/audspect/bas/internal/artifactgen"
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/cloudgraph"
@@ -64,7 +63,6 @@ import (
 	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/phishbridge"
 	"github.com/audspect/bas/internal/pki"
-	"github.com/audspect/bas/internal/advisory"
 	"github.com/audspect/bas/internal/relationships"
 	"github.com/audspect/bas/internal/remediation"
 	"github.com/audspect/bas/internal/reporting"
@@ -74,6 +72,8 @@ import (
 	"github.com/audspect/bas/internal/rwprevent"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/secretstore"
+	"github.com/audspect/bas/internal/segprobe"
+	"github.com/audspect/bas/internal/segprobe/runstore"
 	"github.com/audspect/bas/internal/taxii"
 	"github.com/audspect/bas/internal/threatcontent"
 	"github.com/audspect/bas/internal/threatpriority"
@@ -176,7 +176,7 @@ type Handler struct {
 	exerciseChain        *exercise.EvidenceChain
 	verification         *verification.Store    // nil when not loaded — SP2 verification store
 	relationships        *relationships.Store   // nil when not loaded — CVE-ATT&CK Relationship Store
-	advisories           *advisory.Store       // nil when not loaded — REQ-018 Gap 2 advisory relevance
+	advisories           *advisory.Store        // nil when not loaded — REQ-018 Gap 2 advisory relevance
 	rules                *rulelib.Engine        // nil when not loaded — Detection Rule Library
 	threatPriorityEngine *threatpriority.Engine // nil when not loaded — Threat Prioritization
 	vexSweep             *vexsweep.Store        // nil when not loaded — Full Variant Sweep orchestration

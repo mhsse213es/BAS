@@ -4,9 +4,9 @@ import "testing"
 
 func TestBuildInsights_LeastProtectedOnlyWhenItDiffersFromMost(t *testing.T) {
 	cases := []struct {
-		name        string
-		heatmap     []TacticEntry
-		wantLeast   bool
+		name      string
+		heatmap   []TacticEntry
+		wantLeast bool
 	}{
 		{"single tactic tested", []TacticEntry{{Tactic: "initial-access", Total: 2, PassPct: 0}}, false},
 		{"all tactics tied", []TacticEntry{{Tactic: "execution", Total: 2, PassPct: 0}, {Tactic: "persistence", Total: 2, PassPct: 0}}, false},

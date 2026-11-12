@@ -32,8 +32,8 @@ type verifyResult struct {
 	FilesChecked        int         `json:"filesChecked"`
 	FilesOK             int         `json:"filesOk"`
 	Mismatches          []fileCheck `json:"mismatches"`
-	MissingFiles        []string    `json:"missingFiles"`        // in manifest but not in pack
-	UnlistedFiles       []string    `json:"unlistedFiles"`       // in pack but not in manifest (excludes manifest/sig files)
+	MissingFiles        []string    `json:"missingFiles"`  // in manifest but not in pack
+	UnlistedFiles       []string    `json:"unlistedFiles"` // in pack but not in manifest (excludes manifest/sig files)
 	ManifestPresent     bool        `json:"manifestPresent"`
 	AttestationPresent  bool        `json:"attestationPresent"`
 	SignaturePresent    bool        `json:"signaturePresent"`

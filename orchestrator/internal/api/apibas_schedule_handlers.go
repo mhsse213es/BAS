@@ -11,8 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
 	"github.com/audspect/bas/internal/apibas/binding"
+	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
 	"github.com/audspect/bas/internal/apibas/openapi"
 	"github.com/audspect/bas/internal/apibas/runnerproto"
 	"github.com/audspect/bas/internal/db"

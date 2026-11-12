@@ -204,6 +204,7 @@ func TestDBSimProductLineTiers(t *testing.T) {
 		}
 	}
 }
+
 // Aleef is a separate product outside the three tiers: no tier table entry may include it.
 func TestNoTierIncludesAleef(t *testing.T) {
 	for tier, lines := range tierProductLines {

@@ -23,24 +23,24 @@ import (
 
 // ReportSchedule is a recurring, emailed report delivery.
 type ReportSchedule struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	ReportType  string     `json:"reportType"` // board | compliance | audit_pack
-	ScopeKind   string     `json:"scopeKind"`  // agent | campaign
-	ScopeID     string     `json:"scopeId"`
-	Framework   string     `json:"framework"` // compliance only
-	Format      string     `json:"format"`    // pdf | html (audit_pack is always zip)
-	Recipients  string     `json:"recipients"`
-	Frequency   string     `json:"frequency"` // daily | weekly | monthly
-	HourUTC     int        `json:"hourUtc"`
-	DayOfWeek   int        `json:"dayOfWeek"`  // 0=Sun..6=Sat (weekly)
-	DayOfMonth  int        `json:"dayOfMonth"` // 1..28 (monthly)
-	Enabled     bool       `json:"enabled"`
-	LastRunAt   *time.Time `json:"lastRunAt,omitempty"`
-	LastStatus  string     `json:"lastStatus"`
-	LastError   string     `json:"lastError,omitempty"`
-	CreatedBy   string     `json:"createdBy,omitempty"`
-	CreatedAt   time.Time  `json:"createdAt"`
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	ReportType string     `json:"reportType"` // board | compliance | audit_pack
+	ScopeKind  string     `json:"scopeKind"`  // agent | campaign
+	ScopeID    string     `json:"scopeId"`
+	Framework  string     `json:"framework"` // compliance only
+	Format     string     `json:"format"`    // pdf | html (audit_pack is always zip)
+	Recipients string     `json:"recipients"`
+	Frequency  string     `json:"frequency"` // daily | weekly | monthly
+	HourUTC    int        `json:"hourUtc"`
+	DayOfWeek  int        `json:"dayOfWeek"`  // 0=Sun..6=Sat (weekly)
+	DayOfMonth int        `json:"dayOfMonth"` // 1..28 (monthly)
+	Enabled    bool       `json:"enabled"`
+	LastRunAt  *time.Time `json:"lastRunAt,omitempty"`
+	LastStatus string     `json:"lastStatus"`
+	LastError  string     `json:"lastError,omitempty"`
+	CreatedBy  string     `json:"createdBy,omitempty"`
+	CreatedAt  time.Time  `json:"createdAt"`
 }
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────

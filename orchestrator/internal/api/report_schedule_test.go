@@ -40,9 +40,9 @@ func TestValidateSchedule(t *testing.T) {
 		{ReportType: "board", ScopeID: "a", Frequency: "daily"},                             // no recipients
 		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "hourly"},     // bad freq
 		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "daily", HourUTC: 25},
-		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "weekly", DayOfWeek: 7},   // out of 0-6 range
-		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "weekly", DayOfWeek: -1},  // out of 0-6 range
-		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "monthly", DayOfMonth: 0}, // unset -> never matches scheduleDue
+		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "weekly", DayOfWeek: 7},    // out of 0-6 range
+		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "weekly", DayOfWeek: -1},   // out of 0-6 range
+		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "monthly", DayOfMonth: 0},  // unset -> never matches scheduleDue
 		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "monthly", DayOfMonth: 31}, // out of 1-28 range
 		{ReportType: "compliance", ScopeID: "a", Framework: "fw", ScopeKind: "campaign", Recipients: "x@y.com", Frequency: "daily"},
 		{ReportType: "audit_pack", ScopeID: "a", ScopeKind: "campaign", Recipients: "x@y.com", Frequency: "daily"},

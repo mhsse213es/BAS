@@ -212,13 +212,13 @@ func TestServeMacSetup_TokenModeAddsTheMarker(t *testing.T) {
 func TestMacSetupScript_StaticSafetyProperties(t *testing.T) {
 	s := string(macSetupScriptSource)
 	for _, must := range []string{
-		"--secret-stdin",              // the secret goes in on stdin
-		"hidden answer",               // typed into a masked dialog
-		"administrator privileges",    // the native macOS admin prompt
-		"com.apple.quarantine",        // the unsigned agent must be runnable after the one Open Anyway
-		"--config-fingerprint",        // the signed deployment config is verified
-		"--enrollment-token-file",     // a token never goes on a command line
-		"trap ",                       // the secret file is removed however the script ends
+		"--secret-stdin",           // the secret goes in on stdin
+		"hidden answer",            // typed into a masked dialog
+		"administrator privileges", // the native macOS admin prompt
+		"com.apple.quarantine",     // the unsigned agent must be runnable after the one Open Anyway
+		"--config-fingerprint",     // the signed deployment config is verified
+		"--enrollment-token-file",  // a token never goes on a command line
+		"trap ",                    // the secret file is removed however the script ends
 	} {
 		if !strings.Contains(s, must) {
 			t.Errorf("setup script lacks %q", must)

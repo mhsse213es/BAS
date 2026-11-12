@@ -24,9 +24,9 @@ type APIBASJob struct {
 	// CredentialRefs maps each runner secret name to its D4 secret-store reference. References are stored; values never are.
 	CredentialRefs map[string]string
 	// AllowedHosts are the registered hosts (host:port) the runner may reach besides loopback. Copied from the target at submit.
-	AllowedHosts  []string
+	AllowedHosts []string
 	// AllowedPaths are the registered path prefixes the runner may request. Copied from the target at submit. Empty means no path restriction (lab only).
-	AllowedPaths []string
+	AllowedPaths  []string
 	Status        string
 	FailureReason string
 	CreatedAt     time.Time

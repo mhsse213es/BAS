@@ -1,8 +1,8 @@
 package validationlab
 
 import (
-	"fmt"
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -315,9 +315,13 @@ func mustInsertAgent(t *testing.T, pool *pgxpool.Pool, agentID string) {
 
 // executedPassResults is a results snapshot with one step that actually
 // executed (CheckResult "pass") -- the shape a genuine validation run produces.
-func executedPassResults() []byte  { return []byte(`[{"id":"s1","result":"pass"}]`) }
-func allSkippedResults() []byte    { return []byte(`[{"id":"s1","result":"skipped"},{"id":"s2","result":"skipped"}]`) }
-func erroredResults() []byte       { return []byte(`[{"id":"s1","result":"pass"},{"id":"s2","result":"error"}]`) }
+func executedPassResults() []byte { return []byte(`[{"id":"s1","result":"pass"}]`) }
+func allSkippedResults() []byte {
+	return []byte(`[{"id":"s1","result":"skipped"},{"id":"s2","result":"skipped"}]`)
+}
+func erroredResults() []byte {
+	return []byte(`[{"id":"s1","result":"pass"},{"id":"s2","result":"error"}]`)
+}
 
 func mustInsertScenarioRun(t *testing.T, pool *pgxpool.Pool, agentID, status string) string {
 	t.Helper()

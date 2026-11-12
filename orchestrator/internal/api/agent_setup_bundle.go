@@ -18,7 +18,6 @@ import (
 	"time"
 )
 
-
 // linuxSetupFileName is the name the browser saves the setup file under.
 const linuxSetupFileName = "bas-agent-setup-linux.run"
 

@@ -504,7 +504,9 @@ func TestBuildDetectionSources_NoDetectionsRanksNothing(t *testing.T) {
 }
 
 func TestBuildDetectionSources_RanksRealAlertsOnly(t *testing.T) {
-	alert := func(p string, ms int64) *models.DetectionAlert { return &models.DetectionAlert{Provider: p, MTTDMs: ms} }
+	alert := func(p string, ms int64) *models.DetectionAlert {
+		return &models.DetectionAlert{Provider: p, MTTDMs: ms}
+	}
 	results := []models.SimulationResult{
 		{Result: models.ResultFail, DetectionVerdict: "detected", DetectionAlert: alert("Defender", 2000)},
 		{Result: models.ResultFail, DetectionVerdict: "detected", DetectionAlert: alert("Defender", 4000)},

@@ -54,7 +54,7 @@ type Event struct {
 	// field names only. They never carry a value (see disclosure.go). Empty when the response emitted none.
 	DisclosedClasses []string `json:"disclosed_classes,omitempty"`
 	DisclosedFields  []string `json:"disclosed_fields,omitempty"`
-	Status        int      `json:"status"`
+	Status           int      `json:"status"`
 	// Signature lists the injection-pattern classes the request carried (see Signature* below). It holds
 	// classes only, never the text that matched, so a body is never stored through this field.
 	// ActionClass is the class of the action (see the Class* vocabulary). Empty means the action could not be classified.
@@ -73,7 +73,7 @@ type Event struct {
 	RequestBytes int64  `json:"request_bytes,omitempty"`
 	CacheControl string `json:"cache_control,omitempty"`
 	// Degraded names the controls the lab ran degraded when it served the request (see lab access events).
-	Degraded []string `json:"degraded,omitempty"`
+	Degraded  []string `json:"degraded,omitempty"`
 	Signature []string `json:"signature,omitempty"`
 }
 
@@ -438,11 +438,11 @@ const (
 // The action-class vocabulary. Each class names what an action does to the object it targets. Ownership of the object
 // never decides the class: the same method and route classify the same way for the owner and for anyone else.
 const (
-	ClassRead               = "read"                  // a GET that returns an object or a page of objects
-	ClassWrite              = "write"                 // a POST, PUT, PATCH or DELETE that changes an object
-	ClassSensitiveExport    = "sensitive_export"      // an export of an object, which may carry protected fields
-	ClassPrivilegeChange    = "privilege_change"      // an administrative route, or a change to the caller's own role
-	ClassFinancialApproval  = "financial_approval"    // approval of a payout, or a refund
+	ClassRead                  = "read"                    // a GET that returns an object or a page of objects
+	ClassWrite                 = "write"                   // a POST, PUT, PATCH or DELETE that changes an object
+	ClassSensitiveExport       = "sensitive_export"        // an export of an object, which may carry protected fields
+	ClassPrivilegeChange       = "privilege_change"        // an administrative route, or a change to the caller's own role
+	ClassFinancialApproval     = "financial_approval"      // approval of a payout, or a refund
 	ClassSecurityControlChange = "security_control_change" // rotation, status or audit of a security control
 )
 

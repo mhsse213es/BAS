@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/secretstore"
 	"github.com/audspect/bas/internal/ws"
-	"github.com/audspect/bas/internal/scenario"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

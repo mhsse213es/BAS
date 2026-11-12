@@ -6,8 +6,8 @@ import (
 
 	"github.com/audspect/bas/internal/apibas/catalog"
 	"github.com/audspect/bas/internal/apibas/contract"
-	"github.com/audspect/bas/internal/apibas/detect"
 	"github.com/audspect/bas/internal/apibas/coverage"
+	"github.com/audspect/bas/internal/apibas/detect"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/lab"
 	"github.com/audspect/bas/internal/apibas/runner"

@@ -35,9 +35,9 @@ import (
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/grade"
-	"github.com/audspect/bas/internal/apibas/scope"
 	"github.com/audspect/bas/internal/apibas/latency"
 	"github.com/audspect/bas/internal/apibas/reporting"
+	"github.com/audspect/bas/internal/apibas/scope"
 	"strconv"
 )
 

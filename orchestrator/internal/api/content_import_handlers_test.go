@@ -226,7 +226,9 @@ func TestImportChain_BuildsFromApprovedStepsOnlyAndNeedsReview(t *testing.T) {
 		a := approvedScenario(t, h, importSigma)
 		b := approvedScenario(t, h, strings.Replace(importSigma, "Certutil Download", "Second Rule", 1))
 
-		stage := func(id, runIf string) map[string]any { return map[string]any{"scenarioId": id, "stepIndex": 0, "runIf": runIf} }
+		stage := func(id, runIf string) map[string]any {
+			return map[string]any{"scenarioId": id, "stepIndex": 0, "runIf": runIf}
+		}
 		rec := postImportJSON(t, h.ImportChain, "/c", map[string]any{"name": "Two step", "stages": []any{stage(a, ""), stage(b, "prev_allowed")}}, nil)
 		var r importResp
 		_ = json.Unmarshal(rec.Body.Bytes(), &r)

@@ -73,7 +73,7 @@ var TechniqueDomain = map[string]Domain{
 	"T1556": DomainDefenseEvasion,
 	// Exfiltration to Cloud Storage
 	// Exfiltration Over Web Service / generic HTTPS staging (Akira Stage 5b, sink-backed)
-	"T1567": DomainExfiltration,
+	"T1567":     DomainExfiltration,
 	"T1567.002": DomainExfiltration,
 }
 

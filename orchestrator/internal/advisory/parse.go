@@ -32,7 +32,7 @@ var ErrNoItems = errors.New("advisory: feed contains no usable items")
 // --- CERT-In: RSS 2.0 -------------------------------------------------------
 
 type rssDoc struct {
-	XMLName xml.Name `xml:"rss"`
+	XMLName xml.Name  `xml:"rss"`
 	Items   []rssItem `xml:"channel>item"`
 }
 
@@ -110,12 +110,12 @@ type stixBundle struct {
 }
 
 type stixReport struct {
-	Type        string    `json:"type"`
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Published   string    `json:"published"`
-	Created     string    `json:"created"`
+	Type        string `json:"type"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Published   string `json:"published"`
+	Created     string `json:"created"`
 }
 
 // ParseFSISACBundle extracts advisories from a STIX 2.1 bundle. Only objects of

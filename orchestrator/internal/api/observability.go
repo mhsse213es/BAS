@@ -101,21 +101,21 @@ func isLegacyListener(r *http.Request) bool {
 // dashboard statics, and admin endpoints that say nothing about legacy
 // agent dependency.
 var legacyProtocolRoutes = map[string]bool{
-	"/api/agents/enroll":                     true,
-	"/api/agents/enroll-csr":                 true,
-	"/api/agents/unenroll":                   true,
-	"/api/agents/{agentId}/uninstall-result": true,
-	"/api/agents/events":                     true,
-	"/api/heartbeat":                         true,
-	"/api/scenarios/result":                  true,
-	"/api/scenarios/events":                  true,
-	"/api/scenarios/runs/{runId}/detections": true,
+	"/api/agents/enroll":                      true,
+	"/api/agents/enroll-csr":                  true,
+	"/api/agents/unenroll":                    true,
+	"/api/agents/{agentId}/uninstall-result":  true,
+	"/api/agents/events":                      true,
+	"/api/heartbeat":                          true,
+	"/api/scenarios/result":                   true,
+	"/api/scenarios/events":                   true,
+	"/api/scenarios/runs/{runId}/detections":  true,
 	"/api/scenarios/runs/{runId}/host-events": true,
-	"/api/attackpath/collect":                true,
-	"/api/attackpath/sharphound":             true,
-	"/api/attackpath/jobs/{id}/ack":          true,
-	"/ws/agent":                              true,
-	"/api/agents/ping":                       true,
+	"/api/attackpath/collect":                 true,
+	"/api/attackpath/sharphound":              true,
+	"/api/attackpath/jobs/{id}/ack":           true,
+	"/ws/agent":                               true,
+	"/api/agents/ping":                        true,
 }
 
 // legacyBodyAgentID is the minimal shape needed to opportunistically read

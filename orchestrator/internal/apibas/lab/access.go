@@ -42,9 +42,9 @@ type accessEvent struct {
 	PageSize         int    `json:"page_size,omitempty"`
 	RequestBytes     int64  `json:"request_bytes,omitempty"`
 	CacheControl     string `json:"cache_control,omitempty"`
-	Outcome       string `json:"outcome"`
-	Identity      string `json:"identity"`
-	Status        int    `json:"status"`
+	Outcome          string `json:"outcome"`
+	Identity         string `json:"identity"`
+	Status           int    `json:"status"`
 	// ObjectOwner is the first owner the request named. It is kept for consumers that read one owner;
 	// ObjectOwners carries every distinct owner named by the path, the query and (with extraction on)
 	// the body, in that order. ObjectOwner is always ObjectOwners[0] when the latter is set.
@@ -198,29 +198,29 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 		s.evMu.Lock()
 		s.eventSeq++
 		s.events = append(s.events, accessEvent{
-			Seq:           s.eventSeq,
-			CorrelationID: r.Header.Get("X-BAS-Run"),
-			Action:        r.Method + " " + r.URL.Path,
-			ActionClass:   detect.ActionClass(r.Method + " " + r.URL.Path),
+			Seq:               s.eventSeq,
+			CorrelationID:     r.Header.Get("X-BAS-Run"),
+			Action:            r.Method + " " + r.URL.Path,
+			ActionClass:       detect.ActionClass(r.Method + " " + r.URL.Path),
 			VerifiedIdentity:  s.verifiedIdentity(r),
 			PageSize:          requestPageSize(r),
 			RequestBytes:      requestBytes(r),
 			CacheControl:      rec.Header().Get("Cache-Control"),
 			Destination:       dest.destination,
 			DestinationPolicy: dest.policy,
-			Outcome:       outcomeFor(rec.status),
-			Identity:      identity,
-			IdentityBasis:   auth.Basis,
-			ClaimedIdentity: auth.Claimed,
-			ActorRole:     s.actorRole(identity),
-			DisclosedClasses: disclosureClasses(ro.disclosed),
-			DisclosedFields:  ro.disclosed,
-			Status:        rec.status,
-			Degraded:      s.degradedDependencies(),
-			ObjectOwner:   owner,
-			ObjectOwners:  owners,
-			At:            time.Now(),
-			Signature:     append(injectionClasses(requestTargetText(r.URL.Path, r.URL.Query())), bodySignatureFromContext(r.Context())...),
+			Outcome:           outcomeFor(rec.status),
+			Identity:          identity,
+			IdentityBasis:     auth.Basis,
+			ClaimedIdentity:   auth.Claimed,
+			ActorRole:         s.actorRole(identity),
+			DisclosedClasses:  disclosureClasses(ro.disclosed),
+			DisclosedFields:   ro.disclosed,
+			Status:            rec.status,
+			Degraded:          s.degradedDependencies(),
+			ObjectOwner:       owner,
+			ObjectOwners:      owners,
+			At:                time.Now(),
+			Signature:         append(injectionClasses(requestTargetText(r.URL.Path, r.URL.Query())), bodySignatureFromContext(r.Context())...),
 		})
 		s.evMu.Unlock()
 	})

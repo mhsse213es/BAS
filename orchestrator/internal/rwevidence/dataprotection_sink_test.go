@@ -15,11 +15,11 @@ import "testing"
 //   - Zero tokens means the step never used the sink and returns "".
 func TestSinkDataProtectionStatus(t *testing.T) {
 	cases := []struct {
-		name     string
-		tokens   int
-		data     int
-		probe    int
-		want     string
+		name   string
+		tokens int
+		data   int
+		probe  int
+		want   string
 	}{
 		{"no sink token means the step did not use the sink", 0, 0, 0, ""},
 		{"data receipt means the payload reached the sink", 1, 1, 0, "NotDetected"},

@@ -14,11 +14,11 @@ import (
 // APIBASTarget is a registered assessment target. Scope lives here, not in the request: a job can only name a target and
 // scenarios, and the target decides the base URL, environment, allowed hosts, allowed scenarios and credential references.
 type APIBASTarget struct {
-	ID               string
-	Name             string
-	BaseURL          string
-	Environment      string // lab, staging or production; production is registrable but never executed in this release
-	AllowedHosts     []string
+	ID           string
+	Name         string
+	BaseURL      string
+	Environment  string // lab, staging or production; production is registrable but never executed in this release
+	AllowedHosts []string
 	// AllowedPaths are the path prefixes (whole segments) the runner may request. Required for staging and production.
 	AllowedPaths     []string
 	AllowedScenarios []string
@@ -39,7 +39,7 @@ type APIBASApproval struct {
 	ApprovedAt  *time.Time
 	CreatedAt   time.Time
 	// ExpiresAt is set when the approval is granted. An approval is unusable at or after it.
-	ExpiresAt *time.Time
+	ExpiresAt    *time.Time
 	RevokedBy    string
 	RevokedAt    *time.Time
 	RevokeReason string
