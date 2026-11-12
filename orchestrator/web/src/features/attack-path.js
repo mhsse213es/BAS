@@ -20,7 +20,7 @@ import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
 import { describePhishingRun } from './phishing-run-view.js';
 import { LIBRARY_TYPE_PHISHING, buildDispatchFields, buildPhishingRunRequest, withExecutionLink, libraryEntryRoute, phishingLibraryCounts, showNoScenariosMessage } from './scenario-library-route.js';
 import { ROLE, setAgentsView, showTab } from './shell.js';
-import { skippedNote as scnSkippedNote, allView as scnAllView, sourceOf as scnSourceOf, heroStats as scnHeroStats, filterList as scnFilterList, sortList as scnSortList, categoryRows as scnCategoryRows, showing as scnShowing } from './scn-model.js';
+import { skippedNote as scnSkippedNote, allView as scnAllView, sourceOf as scnSourceOf, heroStats as scnHeroStats, filterList as scnFilterList, sortList as scnSortList, categoryRows as scnCategoryRows, showing as scnShowing, breakdownItems as scnBreakdownItems } from './scn-model.js';
 import { catsHtml as scnCatsHtml, toolbarHtml as scnToolbarHtml, gridHtml as scnGridHtml, emptyHtml as scnEmptyHtml, scnUi, setScenarioViewMode, setScenarioSortMode, setScenarioCatOffMode, hideFilterSelects, openDrawer as openScnDrawer, closeDrawer as closeScnDrawer, drawerTab, drawerScenarioId, paintDrawer, bindApproveButton, runById as scnRunById } from './scn-rich.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
@@ -1728,7 +1728,11 @@ function paintScenarios() {
   var list = scnSortList(viewList, scnUi().sort);
   var skipNote = view === 'intel' ? scnSkippedNote(_intelSkipped) : '';
   grid.innerHTML = (skipNote ? '<div class="alert-info sc-skip-note" role="note">' + x(skipNote) + '</div>' : '') + (list.length ? scnGridHtml(list) : scnEmptyHtml());
-  if (foot && list.length) foot.textContent = scnShowing(list.length, viewList.length);
+  if (foot && list.length) {
+    var bd = scnBreakdownItems(rows);
+    foot.innerHTML = x(scnShowing(list.length, viewList.length)) +
+      (bd.length ? '<div class="scn-breakdown">' + bd.map(function(i) { return '<span class="scn-bd-item">' + x(i.label) + ' <b>' + i.n + '</b></span>'; }).join('<span class="scn-bd-sep">·</span>') + '</div>' : '');
+  }
 }
 
 // renderScenarios reloads the phishing library and redraws; the toolbar and sidebar call paintScenarios
