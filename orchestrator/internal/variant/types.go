@@ -1,6 +1,9 @@
 package variant
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // ── Encoding ─────────────────────────────────────────────────────────────────
 
@@ -94,7 +97,8 @@ type Template struct {
 	VariantHash      string    `json:"variantHash"`      // sha256[:16] of TemplateID
 	GeneratorVersion string    `json:"generatorVersion"` // generator version stamp
 	CreatedAt        time.Time `json:"createdAt"`
-	Cleanup          string    `json:"cleanup,omitempty"` // base test's cleanup command, run after the variant; empty if none
+	Cleanup          string    `json:"cleanup,omitempty"`       // cleanup command run after the variant; empty if none
+	CleanupStatus    string    `json:"cleanupStatus,omitempty"` // CleanupReadOnly | CleanupVerified | CleanupUnverified
 }
 
 // PayloadFamily is one named payload script body for a given technique.
@@ -112,6 +116,29 @@ type PayloadFamily struct {
 	Platform    string    `json:"platform"`
 	Executor    string    `json:"executor"`
 	CreatedAt   time.Time `json:"createdAt"`
+	// Cleanup is this family's own cleanup command. CleanupStatus says whether it may be trusted (see CleanupEligible).
+	Cleanup       string `json:"cleanup,omitempty"`
+	CleanupStatus string `json:"cleanupStatus,omitempty"`
+}
+
+// Cleanup statuses. A variant may run on an endpoint outside the lab only when its status is one of these and the
+// rule in CleanupEligible holds.
+const (
+	CleanupReadOnly   = "read_only"  // the command changes no system state, so nothing needs reverting
+	CleanupVerified   = "verified"   // a cleanup command exists for the command's side effects
+	CleanupUnverified = "unverified" // no cleanup is known or validated; the default
+)
+
+// CleanupEligible reports whether a variant with this cleanup and status may run outside a lab. An unknown status
+// fails closed. A verified status needs a non-blank cleanup command.
+func CleanupEligible(cleanup, status string) bool {
+	switch status {
+	case CleanupReadOnly:
+		return true
+	case CleanupVerified:
+		return strings.TrimSpace(cleanup) != ""
+	}
+	return false
 }
 
 // Run is the server-side record of a dispatched variant execution set.
@@ -128,6 +155,11 @@ type Run struct {
 	GeneratorVersion string     `json:"generatorVersion"`
 	CreatedAt        time.Time  `json:"createdAt"`
 	CompletedAt      *time.Time `json:"completedAt,omitempty"`
+	// Cleanup outcome, recorded beside the attack verdict. A failed cleanup never changes the verdict.
+	CleanupStatus       string     `json:"cleanupStatus"`
+	CleanupError        string     `json:"cleanupError,omitempty"`
+	RemediationRequired bool       `json:"remediationRequired"`
+	CleanupCompletedAt  *time.Time `json:"cleanupCompletedAt,omitempty"`
 }
 
 // StepRecord maps a dispatched step's TaskID to its variant dimensions.

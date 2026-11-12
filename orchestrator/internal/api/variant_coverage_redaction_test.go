@@ -22,7 +22,7 @@ func TestGetVariantCoverage_CredentialAccessBypassDetailWithheld(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		agentID := "vc-redact-agent"
-		seedActiveAgent(t, pool, agentID, "Windows")
+		seedLabAgent(t, pool, agentID, "Windows")
 		h := variantHandler(t, pool)
 		fake := startFakeAgent(t, h.hub, agentID)
 		defer fake.Disconnect(t)

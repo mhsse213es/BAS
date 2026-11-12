@@ -144,6 +144,12 @@ export function categoryRows(cats, total, count, subs) {
   return rows;
 }
 
+// breakdownItems: the per-category counts shown under the footer count. Takes the sidebar rows, drops "All" and any
+// empty category, and keeps the sidebar's order so the two lists always agree.
+export function breakdownItems(rows) {
+  return arr(rows).filter(function(r) { return r.key !== 'all' && r.n > 0; }).map(function(r) { return { label: r.label, n: r.n }; });
+}
+
 // A page title for the breadcrumb/footer line: "Showing N of M scenarios".
 export function showing(n, m) { return 'Showing ' + n + ' of ' + m + ' scenario' + (m === 1 ? '' : 's'); }
 

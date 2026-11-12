@@ -14,6 +14,7 @@ import { kpi, grid, chip, hbars, empty } from '../core/kit.js';
 import * as M from './var-model.js';
 import { setHeroStat } from './shell-ui.js';
 import { noteRefreshFailure } from '../core/refresh.js';
+import { cleanupBanner } from './var-model.js';
 
 
 // ── Run Variants reload-survival ────────────────────────────────────────────
@@ -895,7 +896,10 @@ function renderVariantRun(detail) {
   var run = detail.run || {};
   var results = detail.results || [];
   var summary = detail.summary || {};
-  var statusCol = run.status === 'completed' ? 'var(--success)' :
+  var cleanup = cleanupBanner(run);
+  // A completed run whose cleanup failed is not shown in the success colour.
+  var statusCol = cleanup.tone === 'danger' ? 'var(--danger)' :
+                  run.status === 'completed' ? 'var(--success)' :
                   run.status === 'failed' ? 'var(--danger)' : 'var(--warning)';
 
   var panel = document.getElementById('vex-result-panel');
@@ -910,6 +914,12 @@ function renderVariantRun(detail) {
   }
   wrapperHtml += '</span>';
   wrapperHtml += '</div>';
+  // Cleanup is reported beside the attack verdict and never replaces it.
+  var cleanupCol = cleanup.tone === 'danger' ? 'var(--danger)' : cleanup.tone === 'success' ? 'var(--success)' : cleanup.tone === 'warning' ? 'var(--warning)' : 'var(--muted)';
+  wrapperHtml += '<div style="margin:0.4rem 0;font-size:0.8rem;color:' + cleanupCol + '">' + x(cleanup.label) + '</div>';
+  if (cleanup.error) {
+    wrapperHtml += '<div class="tiny" style="margin-bottom:0.5rem;color:var(--danger)">' + x(cleanup.error) + '</div>';
+  }
 
   // Report actions -- this variant run is a real scenario_runs row underneath
   // (see dispatchVariantRun), so it already has full report data behind it
