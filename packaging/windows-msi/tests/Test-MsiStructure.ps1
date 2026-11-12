@@ -92,6 +92,9 @@ Check (@($reg | Where-Object { $_[0] -eq 'ProductCode' -and $_[1] -eq '[ProductC
 
 $upg = Query 'SELECT `UpgradeCode`, `Attributes` FROM `Upgrade`'
 Check ($upg.Count -ge 1) 'a major-upgrade entry exists'
+# Same-version reinstall must replace the installed copy. Without VersionMaxInclusive (0x200) on the Upgrade row, Windows
+# Installer treats a rebuild of the same version as a second product and the Apps list shows two "Audspect Agent" entries.
+Check (@($upg | Where-Object { ([int]$_[1] -band 0x200) -ne 0 }).Count -ge 1) 'same-version reinstalls replace the installed copy (AllowSameVersionUpgrades), no duplicate entry'
 
 # The custom action package must carry its runtime config, or the installer binds CLR 2.0 and cannot load the .NET 4.7.2
 # assembly (BadImageFormatException, install fails with 1603 on a machine that has only .NET 4.x).

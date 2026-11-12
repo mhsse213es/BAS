@@ -126,3 +126,8 @@ orchestrator/internal/aleef/bank/sealed/sealed_defects.go
 /clean_logo.png
 !orchestrator/internal/emailgwefficacy/testdata/eicar-protected.zip
 bin/segprobe-runner
+
+# Offline prerequisites (cosign, Docker, Compose). Binaries are fetched and checksum-verified on the build machine
+# (packaging/fetch-docker-static.ps1, packaging/appliance/fetch-cosign.sh), never committed: they are too large for git.
+packaging/tools/*
+!packaging/tools/README.md

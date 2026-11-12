@@ -15,7 +15,9 @@
   <Package Name="Audspect Agent" Manufacturer="Audspect" Version="$(Version)"
            UpgradeCode="{7F82553E-E3B9-4686-A1EF-A8AE8723AD37}" Scope="perMachine" InstallerVersion="500" Compressed="yes">
     <SummaryInformation Description="Audspect Agent installer" />
-    <MajorUpgrade DowngradeErrorMessage="A newer version of the Audspect Agent is already installed." />
+    <!-- AllowSameVersionUpgrades: a rebuilt package with the same version replaces the installed copy. Without it,
+         Windows Installer keeps both and Apps & Features lists two "Audspect Agent" entries. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of the Audspect Agent is already installed." AllowSameVersionUpgrades="yes" />
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="AudspectAgent.ico" SourceFile="$(sys.SOURCEFILEDIR)assets/AudspectAgent.ico" />
     <Property Id="ARPPRODUCTICON" Value="AudspectAgent.ico" />

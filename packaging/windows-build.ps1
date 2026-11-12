@@ -935,6 +935,14 @@ $ComposeDir = Join-Path $RepoRoot "packaging\compose"
 Copy-Item "$ComposeDir\install.sh"              "$OutDir\install.sh"
 Copy-Item "$ComposeDir\uninstall.sh"            "$OutDir\uninstall.sh"
 Copy-Item "$ComposeDir\docker-offline-lib.sh"    "$OutDir\docker-offline-lib.sh"
+# Helpers install.sh and setup.sh source or require from SCRIPT_DIR. build.sh copies the same set; a missing one
+# makes the shipped installer refuse to run.
+Copy-Item "$ComposeDir\setup.sh"  "$OutDir\setup.sh"
+Copy-Item "$ComposeDir\db-encryption-key.sh"  "$OutDir\db-encryption-key.sh"
+Copy-Item "$ComposeDir\db-tls.sh"  "$OutDir\db-tls.sh"
+Copy-Item "$ComposeDir\ca-backup.sh"  "$OutDir\ca-backup.sh"
+Copy-Item "$ComposeDir\backup-key.sh"  "$OutDir\backup-key.sh"
+Copy-Item "$ComposeDir\setup-install-state.sh"  "$OutDir\setup-install-state.sh"
 Copy-Item "$ComposeDir\setup.conf.template"     "$OutDir\setup.conf.template"
 # Ship setup.conf as a ready-to-edit copy of the template so operators can
 # run 'nano setup.conf' immediately without a manual cp step first.
@@ -955,9 +963,18 @@ foreach ($pl in (Get-Content -LiteralPath (Join-Path $RepoRoot "packaging\docker
     if ($pl -cmatch '^([A-Z0-9_]+)=(\S+)$') { $dockerPin[$Matches[1]] = $Matches[2] }
 }
 $dv = $dockerPin.DOCKER_VERSION
+# cosign hashes come from the appliance pin (same release as the appliance build), so a substituted binary is refused.
+$cosignPin = @{}
+foreach ($pl in (Get-Content -LiteralPath (Join-Path $RepoRoot "packaging\appliance\cosign.pin"))) {
+    if ($pl -match '^\s*#' -or $pl.Trim() -eq "") { continue }
+    if ($pl -cmatch '^([A-Z0-9_]+)=(\S+)$') { $cosignPin[$Matches[1]] = $Matches[2] }
+}
+foreach ($k in "COSIGN_SHA256_LINUX_AMD64","COSIGN_SHA256_LINUX_ARM64") {
+    if (-not $cosignPin.ContainsKey($k)) { Err "packaging\appliance\cosign.pin is missing $k" }
+}
 $offlineFiles = @(
-    @{ Rel = "cosign-linux-amd64";                 Sha = $null },
-    @{ Rel = "cosign-linux-arm64";                 Sha = $null },
+    @{ Rel = "cosign-linux-amd64";                 Sha = $cosignPin.COSIGN_SHA256_LINUX_AMD64 },
+    @{ Rel = "cosign-linux-arm64";                 Sha = $cosignPin.COSIGN_SHA256_LINUX_ARM64 },
     @{ Rel = "docker\docker-$dv-x86_64.tgz";       Sha = $dockerPin.DOCKER_SHA256_X86_64 },
     @{ Rel = "docker\docker-$dv-aarch64.tgz";      Sha = $dockerPin.DOCKER_SHA256_AARCH64 },
     @{ Rel = "docker\docker-compose-linux-x86_64";  Sha = $dockerPin.COMPOSE_SHA256_X86_64 },
@@ -969,7 +986,7 @@ foreach ($f in $offlineFiles) {
     if (-not (Test-Path -LiteralPath $src -PathType Leaf)) { $offlineMissing += $f.Rel; continue }
     if ($f.Sha) {
         $got = (Get-FileHash -LiteralPath $src -Algorithm SHA256).Hash.ToLower()
-        if ($got -ne $f.Sha) { Err "packaging\tools\$($f.Rel) does not match the SHA-256 pinned in packaging\docker-static.pin. Re-run packaging\fetch-docker-static.ps1." }
+        if ($got -ne $f.Sha) { Err "packaging\tools\$($f.Rel) does not match its SHA-256 pin (packaging\docker-static.pin or packaging\appliance\cosign.pin). Re-fetch it with the fetch script." }
     }
     Copy-Item -LiteralPath $src -Destination (Join-Path $ToolsOut $f.Rel) -Force
 }
