@@ -795,6 +795,14 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// Explicit cleanup per family. 'unverified' is the default, so a family with no cleanup decision fails closed.
 		`ALTER TABLE payload_families ADD COLUMN IF NOT EXISTS cleanup text NOT NULL DEFAULT ''`,
 		`ALTER TABLE payload_families ADD COLUMN IF NOT EXISTS cleanup_status text NOT NULL DEFAULT 'unverified'`,
+		// Cleanup outcome of a variant run, kept apart from its attack verdict. Blank means not recorded (older runs).
+		`ALTER TABLE variant_runs ADD COLUMN IF NOT EXISTS cleanup_status text NOT NULL DEFAULT ''`,
+		`ALTER TABLE variant_runs ADD COLUMN IF NOT EXISTS cleanup_error text NOT NULL DEFAULT ''`,
+		`ALTER TABLE variant_runs ADD COLUMN IF NOT EXISTS remediation_required boolean NOT NULL DEFAULT false`,
+		`ALTER TABLE variant_runs ADD COLUMN IF NOT EXISTS cleanup_completed_at timestamptz`,
+		// Per step: whether the variant carried a cleanup command, and its cleanup status when dispatched.
+		`ALTER TABLE variant_run_steps ADD COLUMN IF NOT EXISTS has_cleanup boolean NOT NULL DEFAULT false`,
+		`ALTER TABLE variant_run_steps ADD COLUMN IF NOT EXISTS cleanup_status text NOT NULL DEFAULT ''`,
 
 		// ── Seed: default payload families (with tactic) ─────────────────────────
 		// T1059.001 — PowerShell Execution — tactic: execution

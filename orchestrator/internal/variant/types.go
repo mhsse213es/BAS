@@ -155,6 +155,11 @@ type Run struct {
 	GeneratorVersion string     `json:"generatorVersion"`
 	CreatedAt        time.Time  `json:"createdAt"`
 	CompletedAt      *time.Time `json:"completedAt,omitempty"`
+	// Cleanup outcome, recorded beside the attack verdict. A failed cleanup never changes the verdict.
+	CleanupStatus       string     `json:"cleanupStatus"`
+	CleanupError        string     `json:"cleanupError,omitempty"`
+	RemediationRequired bool       `json:"remediationRequired"`
+	CleanupCompletedAt  *time.Time `json:"cleanupCompletedAt,omitempty"`
 }
 
 // StepRecord maps a dispatched step's TaskID to its variant dimensions.

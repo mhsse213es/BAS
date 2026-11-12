@@ -186,11 +186,12 @@ func (h *Handler) GetVariantRun(w http.ResponseWriter, r *http.Request) {
 	err := h.db.QueryRow(ctx,
 		`SELECT id, agent_id, technique_id, base_type, base_id, scenario_run_id,
 		        total_variants, status, execution_mode, generator_version,
-		        created_at, completed_at
+		        created_at, completed_at, cleanup_status, cleanup_error, remediation_required, cleanup_completed_at
 		   FROM variant_runs WHERE id = $1`, vrID,
 	).Scan(&vr.ID, &vr.AgentID, &vr.TechniqueID, &vr.BaseType, &vr.BaseID,
 		&vr.ScenarioRunID, &vr.TotalVariants, &vr.Status, &vr.ExecutionMode,
-		&vr.GeneratorVersion, &vr.CreatedAt, &completedAt)
+		&vr.GeneratorVersion, &vr.CreatedAt, &completedAt,
+		&vr.CleanupStatus, &vr.CleanupError, &vr.RemediationRequired, &vr.CleanupCompletedAt)
 	if err != nil {
 		jsonError(w, "variant run not found", http.StatusNotFound)
 		return
@@ -233,6 +234,15 @@ func (h *Handler) GetVariantRun(w http.ResponseWriter, r *http.Request) {
 	srMap := make(map[string]models.SimulationResult, len(simResults))
 	for _, sr := range simResults {
 		srMap[sr.ID] = sr
+	}
+	if vr.Status == "completed" || vr.Status == "failed" || vr.Status == "partial" {
+		if err := h.recordVariantCleanupState(ctx, vr.ScenarioRunID, simResults); err != nil {
+			log.Printf("[variant] record cleanup state for run %s: %v", vrID, err)
+		} else {
+			h.db.QueryRow(ctx,
+				`SELECT cleanup_status, cleanup_error, remediation_required, cleanup_completed_at FROM variant_runs WHERE id = $1`, vrID,
+			).Scan(&vr.CleanupStatus, &vr.CleanupError, &vr.RemediationRequired, &vr.CleanupCompletedAt)
+		}
 	}
 
 	// Live per-step verdicts from run_events, for while the run is still in
@@ -591,7 +601,12 @@ func (h *Handler) resolveTemplates(
 	// Explicit override: use exactly what the caller provided.
 	if cmdOverride != "" && execOverride != "" {
 		bid := coalesce(baseID, "custom")
-		return variant.Generate(techniqueID, baseType, bid, cmdOverride, execOverride, includeAdvanced), bid, nil
+		// A custom command has no base test, so it has no cleanup and is unverified.
+		overrides := variant.Generate(techniqueID, baseType, bid, cmdOverride, execOverride, includeAdvanced)
+		for i := range overrides {
+			overrides[i] = variant.WithCleanup(overrides[i], "", variant.CleanupUnverified)
+		}
+		return overrides, bid, nil
 	}
 
 	// Auto-load payload families when no override is given.
@@ -611,8 +626,7 @@ func (h *Handler) resolveTemplates(
 	cleanup := h.baseCleanup(techniqueID, baseType, bid)
 	status := cleanupStatusFor(cleanup, baseType)
 	for i := range templates {
-		templates[i].Cleanup = cleanup
-		templates[i].CleanupStatus = status
+		templates[i] = variant.WithCleanup(templates[i], cleanup, status)
 	}
 	return templates, bid, nil
 }
@@ -868,11 +882,11 @@ func (h *Handler) dispatchVariantRun(
 		if _, insErr := h.db.Exec(ctx,
 			`INSERT INTO variant_run_steps
 				(variant_run_id, task_id, technique_id, encoding, exec_context, evasion,
-				 executor, cmd_preview, risk_level, variant_hash)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+				 executor, cmd_preview, risk_level, variant_hash, has_cleanup, cleanup_status)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
 			variantRunID, taskID, t.TechniqueID,
 			t.Encoding, t.ExecContext, t.Evasion, t.Executor,
-			cmdPreview(t.Command), t.RiskLevel, t.VariantHash,
+			cmdPreview(t.Command), t.RiskLevel, t.VariantHash, t.Cleanup != "", t.CleanupStatus,
 		); insErr != nil {
 			log.Printf("[variant] insert step record %s: %v", taskID, insErr)
 		}

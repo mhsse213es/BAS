@@ -37,6 +37,13 @@ func TestGenerateFromFamilies_CarriesEachFamiliesCleanup(t *testing.T) {
 	seen := map[string]bool{}
 	for _, tpl := range templates {
 		seen[tpl.BaseID] = true
+		if tpl.ExecContext == CtxSchedTask {
+			// A scheduled-task variant creates a task, so it is never read-only; it is covered by its own test.
+			if tpl.CleanupStatus != CleanupUnverified {
+				t.Errorf("%s schtasks variant status = %q, want unverified", tpl.BaseID, tpl.CleanupStatus)
+			}
+			continue
+		}
 		switch tpl.BaseID {
 		case "Recon":
 			if tpl.CleanupStatus != CleanupReadOnly || tpl.Cleanup != "" {

@@ -37,3 +37,17 @@ export function heroStats(rows) {
     bypassed: allowed,
   };
 }
+
+// cleanupBanner turns a variant run's recorded cleanup state into what the console shows beside the run's status.
+// It reads only the cleanup fields, never the attack verdict. A failed cleanup is never shown as complete.
+export function cleanupBanner(run) {
+  var r = run || {};
+  var status = r.cleanupStatus || '';
+  if (status === 'FAILED' || r.remediationRequired) {
+    return { tone: 'danger', label: 'Cleanup failed: remediation required', error: r.cleanupError || '' };
+  }
+  if (status === 'PENDING') return { tone: 'warning', label: 'Cleanup pending', error: '' };
+  if (status === 'SUCCEEDED') return { tone: 'success', label: 'Cleanup completed', error: '' };
+  if (status === 'NOT_REQUIRED') return { tone: 'muted', label: 'No cleanup needed', error: '' };
+  return { tone: 'muted', label: 'Cleanup not recorded for this run', error: '' };
+}
