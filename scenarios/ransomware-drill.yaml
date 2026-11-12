@@ -98,7 +98,7 @@ steps:
       Write-Output "EXEC: file enumeration across Desktop/Documents/Downloads (depth=2). Found $($found.Count) BFSI-pattern file(s). UEBA/DLP marker filenames targeted: $($markerNames -join ', '). Read-only  -  no files opened. [BAS-SIM]"
     cleanup: ""
 
-  - name: "Defender Exclusion Invocation (cmdline probe  -  no state change)"
+  - name: "Defender Exclusion Configuration Check (read-only, no state change)"
     technique_id: T1562.001
     detection_profiles:
       - windows_defender_tampering
@@ -109,19 +109,27 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Invokes Add-MpPreference cmdline in a dry-run context that exits before modifying any exclusion. Security state is NOT changed."
+    blast_radius: "Reads Defender exclusion preferences with Get-MpPreference. Read-only; changes nothing. Checks configuration state only. It does not test whether Defender logs an exclusion modification."
     reversible: true
     telemetry:
-      - "Security EID 4688 (powershell.exe with Add-MpPreference -ExclusionPath in command line)"
-      - "PowerShell EID 4104 (script block: Add-MpPreference invocation) if ScriptBlock logging enabled"
+      - "Expected: none. A read-only Get-MpPreference query generates no exclusion-change telemetry."
     detection:
-      - "EDR: PowerShell invoking Add-MpPreference  -  primary Defender tampering signal"
-      - "SIEM: cmdline containing Add-MpPreference and ExclusionPath from a non-management process"
+      - "Configuration exposure: $env:TEMP excluded from Defender scanning (FAIL)"
     command: |
-      $ErrorActionPreference = 'SilentlyContinue'
-      $cmdLine = 'Add-MpPreference -ExclusionPath $env:TEMP'
-      Write-Output "EXEC: Defender exclusion invocation probe  -  cmdline '$cmdLine' logged to EID 4104/4688. Security state NOT modified (dry-run). [BAS-SIM]"
-      Write-Output "TELEMETRY: if ScriptBlock logging (EID 4104) captured this block, the control is detecting Defender tampering attempts correctly."
+      $ErrorActionPreference = "Stop"
+      try {
+        $prefs = Get-MpPreference -ErrorAction Stop
+        $excl = @($prefs.ExclusionPath) | Where-Object { $_ }
+        $tmp = $env:TEMP.TrimEnd("\")
+        $tempExcluded = @($excl | Where-Object { $tmp.StartsWith($_.TrimEnd("\"), [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
+        if ($tempExcluded) {
+          Write-Output "FAIL: $env:TEMP is excluded from Defender scanning. Read-only configuration check; Security state NOT changed. [BAS-SIM]"
+        } else {
+          Write-Output "PASS: $env:TEMP is not excluded from Defender scanning. Read-only configuration check. [BAS-SIM]"
+        }
+      } catch {
+        Write-Output "SKIP: Defender preferences could not be read ($($_.Exception.Message)); configuration state unknown, step not scored. [BAS-SIM]"
+      }
     cleanup: ""
 
   - name: "Event Log Clear Probe (nonexistent log  -  process telemetry only)"
@@ -203,16 +211,28 @@ steps:
       $runId  = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
       $orig   = Join-Path $env:TEMP "bas_ransom_probe_$runId.txt"
       $locked = Join-Path $env:TEMP "bas_ransom_probe_$runId.bas_locked"
-      Set-Content -Path $orig -Value "BAS-SIM T1486 rename probe run-id=$runId" -Encoding UTF8
+      $probeOk = $false
+      try {
+        Set-Content -Path $orig -Value "BAS-SIM T1486 rename probe run-id=$runId" -Encoding UTF8 -ErrorAction Stop
+        $probeOk = Test-Path $orig
+      } catch { $probeOk = $false }
+      if (-not $probeOk) {
+        Write-Output "SKIP: probe file could not be created, so the rename outcome cannot be verified; step not scored. [BAS-SIM]"
+        return
+      }
       Rename-Item -Path $orig -NewName $locked -ErrorAction SilentlyContinue
-      $renamed = Test-Path $locked
-      Rename-Item -Path $locked -NewName $orig -ErrorAction SilentlyContinue
+      $lockedExists = Test-Path $locked
+      $origStillThere = Test-Path $orig
+      if ($lockedExists) { Rename-Item -Path $locked -NewName $orig -ErrorAction SilentlyContinue }
       Remove-Item $orig -Force -ErrorAction SilentlyContinue
+      Remove-Item $locked -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $orig) -and -not (Test-Path $locked)
-      if ($renamed) {
-        Write-Output "EXEC: file renamed to .bas_locked extension (run-id=$runId, cleanup=$cleaned)  -  expect Sysmon EID 11 rename event. [BAS-SIM]"
+      if ($lockedExists) {
+        Write-Output "FAIL: file renamed to .bas_locked extension (run-id=$runId, cleanup=$cleaned). The ransomware extension change was not blocked. [BAS-SIM]"
+      } elseif ($origStillThere) {
+        Write-Output "PASS: file rename blocked - Controlled Folder Access or WDAC/EDR prevented the .bas_locked extension rename. [BAS-SIM]"
       } else {
-        Write-Output "PASS: file rename blocked  -  Controlled Folder Access or WDAC/EDR prevented .bas_locked extension rename."
+        Write-Output "SKIP: neither the original nor the renamed file is present afterwards, so the outcome is inconclusive; step not scored. [BAS-SIM]"
       }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP "bas_ransom_probe_*.txt")      -Force -ErrorAction SilentlyContinue
@@ -241,7 +261,9 @@ steps:
       - "EDR: rapid sequential file modification pattern across multiple files  -  encryption behaviour"
       - "SIEM: high file-modify rate from powershell.exe on %TEMP% path  -  ransomware staging signal"
     command: |
-      $ErrorActionPreference = 'SilentlyContinue'
+      $encFiles = @()
+      $ErrorActionPreference = 'Stop'
+      try {
       $runId   = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
       $maxFiles = 3
       $maxBytes = 10240
@@ -277,6 +299,21 @@ steps:
       Remove-Item $rangeDir -Recurse -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $rangeDir)
       Write-Output "CLEANUP: range directory removed=$cleaned. No encrypted data remains. [BAS-SIM]"
+      if (@($encFiles).Count -gt 0) {
+        Write-Output "FAIL: $(@($encFiles).Count) file(s) were XOR-encrypted during the controlled drill. No control blocked the encryption behaviour. [BAS-SIM]"
+      } else {
+        Write-Output "SKIP: no files were encrypted, so the outcome is not scored. [BAS-SIM]"
+      }
+      } catch {
+        $msg = $_.Exception.Message
+        if (@($encFiles).Count -gt 0) {
+          Write-Output "FAIL: $(@($encFiles).Count) file(s) were XOR-encrypted during the controlled drill before an error occurred. No control blocked the encryption behaviour. [BAS-SIM]"
+        } elseif ($msg -match 'Access is denied|UnauthorizedAccess|Access to the path') {
+          Write-Output "PASS: encryption behaviour blocked - access denied before any file was encrypted. [BAS-SIM]"
+        } else {
+          Write-Output "SKIP: unexpected error during the encryption drill, so the outcome is unverifiable; step not scored. [BAS-SIM]"
+        }
+      }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP "bas_range_*") -Recurse -Force -ErrorAction SilentlyContinue
 

@@ -888,7 +888,7 @@ func TestParseYAML_RansomwareScenariosDetectionProfilesWired(t *testing.T) {
 		{"../../../scenarios/lockbit-kill-chain.yaml", "LockBit Stage 5 — Event Log Clearing Attempt (T1070.001)", "windows_log_manipulation"},
 
 		{"../../../scenarios/ransomware-drill.yaml", "File Enumeration (BFSI high-value filename markers)", "windows_file_discovery"},
-		{"../../../scenarios/ransomware-drill.yaml", "Defender Exclusion Invocation (cmdline probe  -  no state change)", "windows_defender_tampering"},
+		{"../../../scenarios/ransomware-drill.yaml", "Defender Exclusion Configuration Check (read-only, no state change)", "windows_defender_tampering"},
 		{"../../../scenarios/ransomware-drill.yaml", "Event Log Clear Probe (nonexistent log  -  process telemetry only)", "windows_log_manipulation"},
 		{"../../../scenarios/ransomware-drill.yaml", "VSS + Backup Catalog Enumeration", "windows_vss_inhibition"},
 		{"../../../scenarios/ransomware-drill.yaml", "Benign File Rename Probe (.bas_locked extension)", "windows_ransomware_encryption"},
@@ -962,7 +962,7 @@ func TestParseYAML_NewRansomwareFamiliesDetectionProfilesWired(t *testing.T) {
 		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 1 — RDP / NLA Exposure Posture Check (T1021.001)", "windows_rdp_nla_posture"},
 		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 2 — Network Share Discovery (T1135)", "windows_network_share_discovery"},
 		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 3 — SAM & SYSTEM Hive Theft via reg save (T1003.002)", "windows_sam_theft"},
-		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 4 — Defender Exclusion Invocation (cmdline probe  -  no state change) (T1562.001)", "windows_defender_tampering"},
+		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 4 — Defender Exclusion Configuration Check (read-only, no state change) (T1562.001)", "windows_defender_tampering"},
 		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 5 — SMB Admin Share Lateral Movement Probe (T1021.002)", "windows_smb_lateral_probe"},
 		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 6 — Ransomware Payload Simulation (T1486)", "windows_ransomware_encryption"},
 		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 7 — VSS Snapshot Enumeration (T1490)", "windows_vss_inhibition"},
