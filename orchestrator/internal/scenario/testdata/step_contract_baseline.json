@@ -386,8 +386,8 @@
   },
   "outlook-rules-bec.yaml": {
     "cleanup": 5,
-    "detection": 5,
-    "telemetry": 5
+    "detection": 0,
+    "telemetry": 0
   },
   "play-kill-chain.yaml": {
     "cleanup": 0,

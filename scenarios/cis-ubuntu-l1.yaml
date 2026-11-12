@@ -181,7 +181,15 @@ steps:
     technique_id: T1110
     framework: custom
     executor: local
-    command: "grep -i '^Protocol' /etc/ssh/sshd_config || echo 'not set (defaults to 2)'"
+    command: |
+      if [ ! -r /etc/ssh/sshd_config ]; then echo "SKIP: /etc/ssh/sshd_config not readable; not scored"; exit 0; fi
+      v=$(grep -i '^Protocol' /etc/ssh/sshd_config | tail -1 | awk '{print $2}')
+      case "$v" in
+        "") echo "PASS: no Protocol directive; OpenSSH defaults to protocol 2" ;;
+        2) echo "PASS: Protocol 2 only" ;;
+        *1*) echo "FAIL: Protocol $v permits SSH protocol 1" ;;
+        *) echo "SKIP: unrecognised Protocol value '$v'; not scored" ;;
+      esac
     timeout_sec: 10
 
   # -- Services ----------------------------------------------------------------
@@ -189,21 +197,31 @@ steps:
     technique_id: T1078
     framework: custom
     executor: local
-    command: "dpkg -s telnetd 2>&1 || echo 'not installed'"
+    command: |
+      if ! command -v dpkg >/dev/null 2>&1; then echo "SKIP: dpkg not available; package state not checked"; exit 0; fi
+      if dpkg -s telnetd 2>/dev/null | grep -q '^Status: install ok installed'; then echo "FAIL: telnetd is installed"; else echo "PASS: telnetd is not installed"; fi
     timeout_sec: 10
 
   - name: "rsh/rlogin Services Not Installed"
     technique_id: T1078
     framework: custom
     executor: local
-    command: "dpkg -s rsh-server 2>&1 || echo 'not installed'"
+    command: |
+      if ! command -v dpkg >/dev/null 2>&1; then echo "SKIP: dpkg not available; package state not checked"; exit 0; fi
+      if dpkg -s rsh-server 2>/dev/null | grep -q '^Status: install ok installed'; then echo "FAIL: rsh-server is installed"; else echo "PASS: rsh-server is not installed"; fi
     timeout_sec: 10
 
   - name: "TFTP Not Running"
     technique_id: T1105
     framework: custom
     executor: local
-    command: "systemctl is-active tftpd-hpa 2>&1 || echo 'not active'"
+    command: |
+      if ! command -v systemctl >/dev/null 2>&1; then echo "SKIP: systemctl not available; service state not checked"; exit 0; fi
+      s=$(systemctl is-active tftpd-hpa 2>/dev/null)
+      case "$s" in
+        active|activating|reloading) echo "FAIL: tftpd-hpa is $s" ;;
+        *) echo "PASS: tftpd-hpa is not active ($s)" ;;
+      esac
     timeout_sec: 10
 
   - name: "SSH Daemon Running (sshd)"
@@ -287,7 +305,9 @@ steps:
     technique_id: T1548
     framework: custom
     executor: local
-    command: "grep -r 'logfile' /etc/sudoers /etc/sudoers.d/ 2>/dev/null || echo 'not configured'"
+    command: |
+      if [ ! -r /etc/sudoers ]; then echo "SKIP: /etc/sudoers not readable (requires root); not scored"; exit 0; fi
+      if grep -rqsE '^[[:space:]]*Defaults[^#]*logfile' /etc/sudoers /etc/sudoers.d/ 2>/dev/null; then echo "PASS: sudo logfile is configured"; else echo "FAIL: no sudo logfile configured (CIS requires Defaults logfile)"; fi
     timeout_sec: 10
 
   - name: "No Accounts with Empty Passwords (/etc/shadow)"
@@ -295,5 +315,8 @@ steps:
     technique_id: T1110
     framework: custom
     executor: local
-    command: "awk -F: '($2==\"\"){print $1}' /etc/shadow 2>/dev/null || echo 'requires root'"
+    command: |
+      if [ ! -r /etc/shadow ]; then echo "SKIP: /etc/shadow not readable (requires root); not scored"; exit 0; fi
+      e=$(awk -F: '($2==""){print $1}' /etc/shadow)
+      if [ -n "$e" ]; then echo "FAIL: accounts with empty password: $(echo $e | tr '\n' ' ')"; else echo "PASS: no accounts with empty passwords"; fi
     timeout_sec: 10

@@ -149,7 +149,7 @@ steps:
       $totalWritable = $writableSys.Count + $writableUser.Count
       Write-Output "EXEC T1574.007: PATH hijack surface scan. $($allPaths.Count) directories checked. $($writableSys.Count) SYSTEM PATH + $($writableUser.Count) USER PATH directories writable by non-admin identities. [BAS-SIM-EXPOSURE-S2]"
       if ($writableSys.Count -gt 0) {
-        Write-Output "FAIL (CRITICAL): $($writableSys.Count) SYSTEM PATH director(ies) are world-writable — any process can shadow system binaries:"
+        Write-Output "FAIL: (CRITICAL) $($writableSys.Count) SYSTEM PATH director(ies) are world-writable — any process can shadow system binaries:"
         $writableSys | ForEach-Object { Write-Output "  CRITICAL: $_" }
         Write-Output "  Fix: remove Write/Modify/FullControl from Users/Everyone/Authenticated Users on all SYSTEM PATH directories. Only SYSTEM and Administrators should have write access."
       }
@@ -214,7 +214,7 @@ steps:
       $safeDll = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name 'SafeDllSearchMode' -EA SilentlyContinue).SafeDllSearchMode
       Write-Output "EXEC T1574.001: DLL search order hijack surface scan. $($dllSearchDirs.Count) system DLL directories checked. Writable by non-admin: $($writableDirs.Count). SafeDllSearchMode=$safeDll (should be 1). [BAS-SIM-EXPOSURE-S3]"
       if ($writableDirs.Count -gt 0) {
-        Write-Output "FAIL (CRITICAL): $($writableDirs.Count) DLL search order director(ies) writable by non-admin:"
+        Write-Output "FAIL: (CRITICAL) $($writableDirs.Count) DLL search order director(ies) writable by non-admin:"
         $writableDirs | ForEach-Object { Write-Output "  CRITICAL: $_" }
         Write-Output "  Fix: restrict write permissions on all System32/SysWOW64/Windows directories to SYSTEM + Administrators only."
       }
@@ -309,7 +309,7 @@ steps:
       if ($findings.Count -gt 0) {
         $findings | ForEach-Object { Write-Output "  $_" }
         if ($critical.Count -gt 0) {
-          Write-Output "FAIL (CRITICAL): $($critical.Count) Defender exclusion(s) create a blind spot that attackers can park malware in without detection. Review and remove all exclusions not documented in a change-management ticket. SEBI CSCRF requires documented justification for each exclusion."
+          Write-Output "FAIL: (CRITICAL) $($critical.Count) Defender exclusion(s) create a blind spot that attackers can park malware in without detection. Review and remove all exclusions not documented in a change-management ticket. SEBI CSCRF requires documented justification for each exclusion."
         } elseif ($high.Count -gt 0) {
           Write-Output "FAIL: $($high.Count) high-risk Defender exclusion(s) found. Writable or user-accessible excluded directories allow attackers to place payloads that bypass AV entirely."
         }
@@ -370,7 +370,7 @@ steps:
         Write-Output "  [$($f.Status)] $($f.Priv) — $($f.Risk)"
       }
       if ($enabled.Count -gt 0 -and -not $isAdmin) {
-        Write-Output "FAIL (CRITICAL): Non-admin user [$currentUser] holds $($enabled.Count) ENABLED dangerous privilege(s): [$($enabled -join ', ')]. This is a direct privilege escalation path. Review local group membership, service account assignments, and user-rights policy (secpol.msc > Local Policies > User Rights Assignment)."
+        Write-Output "FAIL: (CRITICAL) Non-admin user [$currentUser] holds $($enabled.Count) ENABLED dangerous privilege(s): [$($enabled -join ', ')]. This is a direct privilege escalation path. Review local group membership, service account assignments, and user-rights policy (secpol.msc > Local Policies > User Rights Assignment)."
       } elseif ($enabled.Count -gt 0 -and $isAdmin) {
         Write-Output "INFO: Admin account [$currentUser] holds $($enabled.Count) dangerous privilege(s) (expected for admin). Verify this account is not used for daily user tasks. BFSI best practice: daily use accounts must NOT be local admins."
       } elseif ($findings.Count -gt 0) {

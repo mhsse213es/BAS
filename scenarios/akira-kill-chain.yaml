@@ -312,10 +312,10 @@ steps:
       ) -join "`n"
       if (-not ('BAS.LsassProbe' -as [type])) {
         try { Add-Type -Namespace BAS -Name LsassProbe -MemberDefinition $lsassSig -ErrorAction Stop }
-        catch { Write-Output "SKIP T1003.001: could not compile the access-check helper; outcome unverifiable, step not scored. [BAS-SIM-AKIRA-S3B]"; return }
+        catch { Write-Output "SKIP: T1003.001 could not compile the access-check helper; outcome unverifiable, step not scored. [BAS-SIM-AKIRA-S3B]"; return }
       }
       $lsass = Get-Process -Name lsass -ErrorAction SilentlyContinue | Select-Object -First 1
-      if (-not $lsass) { Write-Output "SKIP T1003.001: lsass.exe not found; step not scored. [BAS-SIM-AKIRA-S3B]"; return }
+      if (-not $lsass) { Write-Output "SKIP: T1003.001 lsass.exe not found; step not scored. [BAS-SIM-AKIRA-S3B]"; return }
       # 0x0010 = PROCESS_VM_READ. The handle is opened and closed at once; no memory is read.
       $h = [BAS.LsassProbe]::OpenProcess(0x0010, $false, $lsass.Id)
       if ($h -ne [IntPtr]::Zero) {
@@ -766,14 +766,19 @@ steps:
     references: ["MITRE T1490", "Sigma proc_creation_win_vssadmin_susp_commands.yml"]
     evidence: ["Emit shadow_count."]
     command: |
-      $ErrorActionPreference = 'SilentlyContinue'
+      $ErrorActionPreference = 'Continue'
       $vssOut = & vssadmin.exe list shadows 2>&1 | Out-String
+      $rc = $LASTEXITCODE
       $shadowCount = ([regex]::Matches($vssOut, 'Shadow Copy ID')).Count
-      if ($shadowCount -gt 0) {
+      if ($rc -eq 0 -and $shadowCount -gt 0) {
         Write-Output "EXEC T1490: $shadowCount VSS shadow copy(ies) enumerated. Akira would now delete these via WMI Win32_ShadowCopy.Delete() to destroy backups. Sysmon EID 1 vssadmin.exe logged. [BAS-SIM-AKIRA-S7]"
-        Write-Output "FAIL: VSS snapshots exist and are enumerable ($shadowCount found). If Akira reached this stage, backups would be destroyed before encryption. Ensure immutable cloud backup or Veeam hardened repo is NOT reachable from endpoint."
+        Write-Output "FAIL: VSS snapshots exist and are enumerable ($shadowCount found). If Akira reached this stage, backups would be destroyed before encryption. Ensure immutable cloud backup or Veeam hardened repo is NOT reachable from endpoint. [BAS-SIM-AKIRA-S7]"
+      } elseif ($rc -eq 0) {
+        Write-Output "PASS: vssadmin reports no shadow copies; the recovery inhibition surface is reduced on this host. Positive read of the configuration. [BAS-SIM-AKIRA-S7]"
+      } elseif ($vssOut -match 'Access is denied') {
+        Write-Output "PASS: vssadmin shadow listing was explicitly denied (Access is denied). Positive evidence of a control denial. [BAS-SIM-AKIRA-S7]"
       } else {
-        Write-Output "PASS: No VSS shadow copies found or vssadmin blocked  -  recovery inhibition surface is reduced. [BAS-SIM-AKIRA-S7]"
+        Write-Output "SKIP: vssadmin listing failed (exit=$rc); shadow state unknown, not scored. [BAS-SIM-AKIRA-S7]"
       }
     cleanup: ""
 
@@ -872,7 +877,7 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $vssOut = & vssadmin.exe list shadows 2>&1 | Out-String
       if ($LASTEXITCODE -ne 0) {
-        Write-Output "SKIP T1490: survival check could not read VSS state (vssadmin exit $LASTEXITCODE). [BAS-SIM-AKIRA-S8B]"
+        Write-Output "SKIP: T1490 survival check could not read VSS state (vssadmin exit $LASTEXITCODE). [BAS-SIM-AKIRA-S8B]"
         return
       }
       $count = ([regex]::Matches($vssOut, 'Shadow Copy ID')).Count

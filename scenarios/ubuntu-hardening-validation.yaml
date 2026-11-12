@@ -245,7 +245,7 @@ steps:
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Attempts a single 1-byte read from /proc/1/mem (PID 1's memory). No writes, no process creation, no state change of any kind."
+    blast_radius: "Attempts a single 1-byte read from /proc/1/mem (PID 1's memory). No writes, no process creation, no state change of any kind. Scope: PID 1 is root-owned, so a non-root denial comes from file ownership as well as Yama ptrace_scope; the verdict only reports that access was denied, not which control denied it."
     telemetry:
       - "auditd: SYSCALL ptrace/openat on /proc/1/mem"
       - "AppArmor/SELinux: ptrace denial, if a MAC policy also gates this"
@@ -253,10 +253,14 @@ steps:
       - "EDR: unprivileged process reading another process's memory via /proc/<pid>/mem"
     command: |
       set -u
-      if dd if=/proc/1/mem of=/dev/null bs=1 count=1 skip=0 2>/dev/null; then
-        echo "FAIL: read access to another process's memory (/proc/1/mem) succeeded — Yama ptrace_scope hardening did not prevent it"
+      ERR=$(dd if=/proc/1/mem of=/dev/null bs=1 count=1 skip=0 2>&1 >/dev/null)
+      RC=$?
+      if [ $RC -eq 0 ]; then
+        echo "FAIL: read access to another process's memory (/proc/1/mem) succeeded; ptrace restrictions did not prevent it"
+      elif printf '%s' "$ERR" | grep -qiE 'Permission denied|Operation not permitted'; then
+        echo "PASS: read access to another process's memory (/proc/1/mem) was explicitly denied by the kernel"
       else
-        echo "PASS: read access to another process's memory (/proc/1/mem) was denied — Yama ptrace_scope hardening is effective"
+        echo "SKIP: /proc/1/mem probe did not reach a denial decision (exit=$RC: $ERR); not scored"
       fi
 
   # ── T1003 — OS Credential Dumping (no Linux ART atomic; hand-authored) ────
@@ -325,14 +329,16 @@ steps:
         echo "SKIP: auditd is not running on this host, cannot test tamper resistance"
         exit 0
       fi
-      systemctl stop auditd >/dev/null 2>&1
+      ERR=$(systemctl stop auditd 2>&1 >/dev/null)
       RC=$?
       sleep 0.5
       AFTER=$(systemctl is-active auditd 2>/dev/null || echo "unknown")
-      if [ "$AFTER" != "active" ]; then
-        echo "FAIL: auditd was stopped — audit tamper hardening did not prevent it (stop exit code $RC)"
+      if [ "$AFTER" != "active" ] && [ "$RC" -eq 0 ]; then
+        echo "FAIL: auditd was stopped; audit tamper hardening did not prevent it (stop exit code $RC)"
+      elif [ "$RC" -ne 0 ] && printf '%s' "$ERR" | grep -qiE 'Access denied|Permission denied|Interactive authentication required|not authorized|Operation not permitted'; then
+        echo "PASS: systemctl stop auditd was explicitly denied (exit $RC: $ERR)"
       else
-        echo "PASS: auditd could not be stopped — immutable audit config, PAM/sudo restriction, or another control blocked it"
+        echo "SKIP: auditd stop outcome is ambiguous (exit $RC, service $AFTER: $ERR); not scored"
       fi
     cleanup: "systemctl start auditd >/dev/null 2>&1 || true"
 
@@ -454,18 +460,20 @@ steps:
         rm -f "$IMG"; rmdir "$MNT" 2>/dev/null
         exit 0
       fi
-      mount "$LOOPDEV" "$MNT" 2>/dev/null
+      ERR=$(mount "$LOOPDEV" "$MNT" 2>&1 >/dev/null)
       RC=$?
       if [ $RC -eq 0 ]; then
         echo "FAIL: a removable-media-style filesystem mounted without restriction"
         umount "$MNT" 2>/dev/null
+      elif printf '%s' "$ERR" | grep -qiE 'Permission denied|Operation not permitted|must be superuser|not permitted'; then
+        echo "PASS: mounting a removable-media-style filesystem was explicitly denied by the mount policy"
       else
-        echo "PASS: mounting a removable-media-style filesystem was blocked"
+        echo "SKIP: mount outcome is ambiguous (exit=$RC: $ERR); not scored"
       fi
       losetup -d "$LOOPDEV" 2>/dev/null
       rm -f "$IMG"
       rmdir "$MNT" 2>/dev/null
-    cleanup: "losetup -D 2>/dev/null; rm -f /tmp/bas_usbsim_*.img 2>/dev/null; rm -rf /tmp/bas_usbsim_mnt_* 2>/dev/null || true"
+    cleanup: "losetup -a 2>/dev/null | grep 'bas_usbsim_' | cut -d: -f1 | xargs -r losetup -d 2>/dev/null; rm -f /tmp/bas_usbsim_*.img 2>/dev/null; rm -rf /tmp/bas_usbsim_mnt_* 2>/dev/null || true"
 
   # ── T1222 — File and Directory Permissions Modification (no Linux ART atomic; hand-authored) ──
   - name: "Unauthorized write into /etc (filesystem permission hardening)"

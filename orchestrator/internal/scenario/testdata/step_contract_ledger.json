@@ -1182,10 +1182,10 @@
     "scenario": "cscrf-mii-drill.yaml",
     "index": 7,
     "technique_id": "T1070.001",
-    "action_key": "",
+    "action_key": "clear_real_security_log_gated",
     "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
+    "class": "destructive",
+    "status": "irreversible_declared"
   },
   {
     "scenario": "cscrf-mii-drill.yaml",

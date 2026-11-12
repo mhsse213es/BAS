@@ -239,9 +239,9 @@ steps:
       Remove-LocalUser -Name $acct -ErrorAction SilentlyContinue
       $gone = (Get-LocalUser -Name $acct -ErrorAction SilentlyContinue) -eq $null
       if ($created) {
-        Write-Output "FAIL [CSCRF-2.1]: local account '$acct' created+disabled+deleted (removed=$gone). Expect EID 4720+4725+4726. Password randomised, never used. No orphan. [BAS-SIM]"
+        Write-Output "FAIL: [CSCRF-2.1] local account '$acct' created+disabled+deleted (removed=$gone). Expect EID 4720+4725+4726. Password randomised, never used. No orphan. [BAS-SIM]"
       } else {
-        Write-Output "PASS [CSCRF-2.1]: local account creation blocked  -  restricted token or policy prevented account creation."
+        Write-Output "PASS: [CSCRF-2.1] local account creation blocked  -  restricted token or policy prevented account creation."
       }
     cleanup: |
       Remove-LocalUser -Name "BAS-SIM-*" -ErrorAction SilentlyContinue
@@ -274,12 +274,12 @@ steps:
       if ($wsmanOk) {
         try {
           $result = Invoke-Command -ComputerName localhost -ScriptBlock { "BAS-SIM-CSCRF-WINRM" } -ErrorAction Stop
-          Write-Output "FAIL [CSCRF-1.1]: WinRM lateral movement probe succeeded  -  Invoke-Command to localhost returned '$result'. WinRM is reachable and executable. Expect WSMan + EID 3. [BAS-SIM]"
+          Write-Output "FAIL: [CSCRF-1.1] WinRM lateral movement probe succeeded  -  Invoke-Command to localhost returned '$result'. WinRM is reachable and executable. Expect WSMan + EID 3. [BAS-SIM]"
         } catch {
           Write-Output "EXEC [CSCRF-1.1]: WinRM reachable (Test-WSMan OK) but Invoke-Command failed (auth/policy)  -  partial surface exposed. Expect EID 3 + WSMan event. [BAS-SIM]"
         }
       } else {
-        Write-Output "PASS [CSCRF-1.1]: WinRM not reachable on localhost  -  remote PSRemoting surface closed. SEBI CSCRF management-port control effective."
+        Write-Output "PASS: [CSCRF-1.1] WinRM not reachable on localhost  -  remote PSRemoting surface closed. SEBI CSCRF management-port control effective."
       }
     cleanup: ""
 
@@ -292,11 +292,13 @@ steps:
     fidelity: lab-only
     production_safe: false
     risk: high
-    blast_radius: "Invokes wevtutil cl Security as a command-telemetry probe only. Actual log clear requires BAS_CONFIRM_LOG_CLEAR=true. Focus on privilege attempt + tamper detection, not log destruction."
-    reversible: true
+    action_key: clear_real_security_log_gated
+    blast_radius: "Lab-gated. Without BAS_CONFIRM_LOG_CLEAR=true the step runs nothing and reports SKIP (no telemetry is generated and none is claimed). With the flag set, it runs wevtutil cl Security, which irreversibly erases the Windows Security event log on this host. A clear is verified only by exit code 0 plus a Security EID 1102 written in the last two minutes; an explicit access denial is PASS; anything else is SKIP."
+    reversible: false
+    irreversible: "Clearing the Security event log destroys audit evidence that no cleanup step can restore. Recovery requires a copy taken before the run (SIEM/WEF forwarding or a backup). Lab-only; requires explicit lab authorization. The BAS_CONFIRM_LOG_CLEAR gate is unchanged."
     telemetry:
-      - "Security EID 4688 (wevtutil.exe with cl Security argument)"
-      - "Sysmon EID 1 (wevtutil.exe process create with command line)"
+      - "Security EID 4688 (wevtutil.exe with cl Security argument), only when the clear is executed"
+      - "Sysmon EID 1 (wevtutil.exe process create with command line), only when the clear is executed"
       - "Security EID 1102 (log cleared) ONLY if BAS_CONFIRM_LOG_CLEAR=true and Tamper Protection inactive"
     detection:
       - "SIEM: wevtutil.exe cl Security from non-maintenance process  -  CSCRF-3.1 log-tampering detection"
@@ -305,16 +307,27 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $confirm = $env:BAS_CONFIRM_LOG_CLEAR
       if ($confirm -ne 'true') {
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = 'wevtutil.exe'
-        $psi.Arguments = 'cl Security'
-        $psi.CreateNoWindow = $true
-        $psi.UseShellExecute = $false
-        Write-Output "EXEC [CSCRF-3.1]: wevtutil cl Security process created for telemetry  -  command line logged to EID 4688. Execution NOT allowed (BAS_CONFIRM_LOG_CLEAR not set). SIEM must detect this cmdline pattern. [BAS-SIM]"
+        Write-Output "SKIP: BAS_CONFIRM_LOG_CLEAR is not 'true'. Nothing was run and no telemetry was generated; this step is not scored. [BAS-SIM]"
         return
       }
-      & wevtutil cl Security 2>&1 | Out-Null
-      Write-Output "EXEC [CSCRF-3.1]: Security log clear attempted with BAS_CONFIRM_LOG_CLEAR=true. Expect EID 1102 if Tamper Protection inactive. SEBI CSCRF-3.1 log-protection validation complete. [BAS-SIM]"
+      $startTime = Get-Date
+      $clOut = & wevtutil.exe cl Security 2>&1 | Out-String
+      $rc = $LASTEXITCODE
+      $cleared = $false
+      if ($rc -eq 0) {
+        $since = $startTime.AddMinutes(-2)
+        $evt = Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = 1102; StartTime = $since } -ErrorAction SilentlyContinue
+        $cleared = [bool]$evt
+      }
+      if ($rc -eq 0 -and $cleared) {
+        Write-Output "FAIL: Security event log cleared (exit 0, EID 1102 confirmed). Tamper protection did not block the clear. Alert on wevtutil cl Security and restore audit forwarding. [BAS-SIM]"
+      } elseif ($rc -eq 0) {
+        Write-Output "SKIP: wevtutil exited 0 but EID 1102 could not be confirmed; clear outcome not scored. [BAS-SIM]"
+      } elseif ($clOut -match 'Access is denied') {
+        Write-Output "PASS: wevtutil cl Security explicitly denied (Access is denied, exit=$rc). Positive evidence of a control denial. [BAS-SIM]"
+      } else {
+        Write-Output "SKIP: wevtutil cl Security outcome is ambiguous (exit=$rc); not scored. [BAS-SIM]"
+      }
     cleanup: ""
 
   - name: "SYSTEM Scheduled Task (CSCRF-2.x  -  privileged execution + lineage metadata)"
@@ -351,9 +364,9 @@ steps:
         $taskFolder = $created.TaskPath
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
         $gone = (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) -eq $null
-        Write-Output "FAIL [CSCRF-2.x]: SYSTEM task '$taskName' created in '$taskFolder' (removed=$gone). Parent=$parentImg PID=$parentPid. RunLevel=Highest. Expect EID 4698+4699. [BAS-SIM]"
+        Write-Output "FAIL: [CSCRF-2.x] SYSTEM task '$taskName' created in '$taskFolder' (removed=$gone). Parent=$parentImg PID=$parentPid. RunLevel=Highest. Expect EID 4698+4699. [BAS-SIM]"
       } else {
-        Write-Output "PASS [CSCRF-2.x]: SYSTEM scheduled task creation blocked  -  restricted token or policy prevented privileged task registration."
+        Write-Output "PASS: [CSCRF-2.x] SYSTEM scheduled task creation blocked  -  restricted token or policy prevented privileged task registration."
       }
     cleanup: |
       Unregister-ScheduledTask -TaskName "BAS-SIM-CSCRF-*" -Confirm:$false -ErrorAction SilentlyContinue

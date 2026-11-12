@@ -178,12 +178,23 @@ steps:
       - "SIEM: vssadmin list shadows from a non-backup process  -  ransomware pre-deletion recon"
       - "EDR: wbadmin get versions invocation  -  backup catalog discovery before destruction"
     command: |
-      $ErrorActionPreference = 'SilentlyContinue'
+      $ErrorActionPreference = 'Continue'
       $vssOut   = & vssadmin list shadows 2>&1
-      $shadowCount = ([regex]::Matches(($vssOut -join "`n"), 'Shadow Copy ID')).Count
+      $vssRc    = $LASTEXITCODE
+      $vssText  = $vssOut -join "`n"
+      $shadowCount = ([regex]::Matches($vssText, 'Shadow Copy ID')).Count
       $wbaOut   = & wbadmin get versions 2>&1
       $backupCount = ([regex]::Matches(($wbaOut -join "`n"), 'Backup time')).Count
       Write-Output "EXEC: VSS enumeration  -  $shadowCount shadow copy/copies found. Backup catalog: $backupCount version(s) via wbadmin. Ransomware operators enumerate these before deletion. No copies removed. [BAS-SIM]"
+      if ($vssRc -eq 0 -and $shadowCount -gt 0) {
+        Write-Output "FAIL: $shadowCount VSS shadow copy/copies are enumerable from the endpoint; a ransomware operator could delete them before encryption. [BAS-SIM]"
+      } elseif ($vssRc -eq 0) {
+        Write-Output "PASS: vssadmin reports no shadow copies on this host. Positive read of the configuration. [BAS-SIM]"
+      } elseif ($vssText -match 'Access is denied') {
+        Write-Output "PASS: vssadmin shadow listing was explicitly denied (Access is denied). Positive evidence of a control denial. [BAS-SIM]"
+      } else {
+        Write-Output "SKIP: vssadmin listing failed (exit=$vssRc); shadow state unknown, not scored. [BAS-SIM]"
+      }
     cleanup: ""
 
   - name: "Benign File Rename Probe (.bas_locked extension)"

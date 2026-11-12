@@ -82,19 +82,19 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $cfgPath = 'C:\ProgramData\Audspect\lab\dcsync-verification.json'
       if (-not (Test-Path $cfgPath)) {
-        Write-Output "SKIP T1003.006: no local lab configuration found at $cfgPath. [BAS-SIM-DCSYNC-NEG]"
+        Write-Output "SKIP: T1003.006 no local lab configuration found at $cfgPath. [BAS-SIM-DCSYNC-NEG]"
         exit 0
       }
       try { $cfg = Get-Content -Raw $cfgPath | ConvertFrom-Json } catch {
-        Write-Output "SKIP T1003.006: local lab configuration could not be parsed. [BAS-SIM-DCSYNC-NEG]"
+        Write-Output "SKIP: T1003.006 local lab configuration could not be parsed. [BAS-SIM-DCSYNC-NEG]"
         exit 0
       }
       if (-not $cfg.dcTarget -or -not $cfg.negative.username -or -not $cfg.negative.password) {
-        Write-Output "SKIP T1003.006: local lab configuration is missing dcTarget or negative.username/password. [BAS-SIM-DCSYNC-NEG]"
+        Write-Output "SKIP: T1003.006 local lab configuration is missing dcTarget or negative.username/password. [BAS-SIM-DCSYNC-NEG]"
         exit 0
       }
       if (-not (Get-Module -ListAvailable -Name DSInternals)) {
-        Write-Output "SKIP T1003.006: the DSInternals PowerShell module is not installed on this host. [BAS-SIM-DCSYNC-NEG]"
+        Write-Output "SKIP: T1003.006 the DSInternals PowerShell module is not installed on this host. [BAS-SIM-DCSYNC-NEG]"
         exit 0
       }
       Import-Module DSInternals -ErrorAction Stop
@@ -140,19 +140,19 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $cfgPath = 'C:\ProgramData\Audspect\lab\dcsync-verification.json'
       if (-not (Test-Path $cfgPath)) {
-        Write-Output "SKIP T1003.006: no local lab configuration found at $cfgPath. [BAS-SIM-DCSYNC-POS]"
+        Write-Output "SKIP: T1003.006 no local lab configuration found at $cfgPath. [BAS-SIM-DCSYNC-POS]"
         exit 0
       }
       try { $cfg = Get-Content -Raw $cfgPath | ConvertFrom-Json } catch {
-        Write-Output "SKIP T1003.006: local lab configuration could not be parsed. [BAS-SIM-DCSYNC-POS]"
+        Write-Output "SKIP: T1003.006 local lab configuration could not be parsed. [BAS-SIM-DCSYNC-POS]"
         exit 0
       }
       if (-not $cfg.dcTarget -or -not $cfg.positive.username -or -not $cfg.positive.password) {
-        Write-Output "SKIP T1003.006: local lab configuration is missing dcTarget or positive.username/password. [BAS-SIM-DCSYNC-POS]"
+        Write-Output "SKIP: T1003.006 local lab configuration is missing dcTarget or positive.username/password. [BAS-SIM-DCSYNC-POS]"
         exit 0
       }
       if (-not (Get-Module -ListAvailable -Name DSInternals)) {
-        Write-Output "SKIP T1003.006: the DSInternals PowerShell module is not installed on this host. [BAS-SIM-DCSYNC-POS]"
+        Write-Output "SKIP: T1003.006 the DSInternals PowerShell module is not installed on this host. [BAS-SIM-DCSYNC-POS]"
         exit 0
       }
       Import-Module DSInternals -ErrorAction Stop

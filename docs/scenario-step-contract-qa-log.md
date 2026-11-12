@@ -297,3 +297,23 @@ Unchanged. Its PASS branch also covers a failed `vssadmin` call, which is the sa
 - Both commands parse as PowerShell.
 - The contract tests, the scenario package, the build and the 14 related API tests pass.
 - Not run on any host.
+
+## 2026-11-12: Remediation batch (worktree, NOT committed, NOT VERIFIED on a lab host)
+
+Each change was re-signed with the release key; `verify-all` ok=156 fail=0. Score impact is listed per change, since these steps' customer-facing verdicts move.
+
+1. **cscrf-mii-drill step 8 (Security log clear).** Now `action_key: clear_real_security_log_gated` (already destructive in the catalog). `reversible: false` with an `irreversible` reason. Flag unset: SKIP and runs nothing (the old output claimed telemetry that was never generated). Flag set: FAIL only if exit 0 and an EID 1102 is confirmed; explicit denial PASS; otherwise SKIP. Score impact: previously PASS-by-default; now FAIL when the clear actually happens.
+   - Ledger regenerated with STEP_CONTRACT_WRITE=1. Baseline also changed for outlook-rules-bec (detection/telemetry 5 to 0), a recorded improvement from the earlier approved detection/telemetry change.
+2. **full-scan steps 15-17.** Previously always PASS. Run key: FAIL if a value points into a user-writable path (AppData, Temp, Downloads, Public). Startup folder: FAIL if any item is present (review). Non-system services: FAIL if any are running (review). Score impact: these can now fail. Decision: conservative FAIL-for-review, my recommendation.
+3. **Verdict-token form (21 lines, 4 files).** `SKIP T...:`, `FAIL [CSCRF-x]:` and `FAIL (CRITICAL):` do not match the interpreter's `WORD:` form, so with exit 0 they scored PASS. Rewritten to `WORD: ID ...`. Affects dcsync (8 SKIP lines, now SKIP instead of PASS), cscrf-mii-drill (6 lines, now FAIL/PASS as written), exposure-validation (4 FAIL lines, now FAIL instead of PASS), akira (3 SKIP lines). Regression test `TestVerdictTokens_ExactForm` added.
+4. **ubuntu-hardening-validation.** Step 21 (/proc/1/mem): read at offset 0 normally fails with I/O error, so any failure was PASS. Now FAIL on success, PASS only on explicit Permission denied / Operation not permitted, else SKIP. Scope note: PID 1 is root-owned, so the denial may come from file ownership rather than Yama ptrace_scope; the verdict does not claim which control. Step 23 (auditd stop): PASS only on an explicit denial message; the old PASS claimed specific controls with no evidence. Step 26 (mount): same rule. Cleanup previously ran `losetup -D` (every loop device on the host); now detaches only devices backed by bas_usbsim_ images.
+5. **cis-ubuntu-l1, six checks** (SSH Protocol, telnetd, rsh-server, tftpd-hpa, sudo logfile, empty passwords). Each had no verdict logic: its `|| echo` fallback guaranteed exit 0, so every one scored PASS. Each now decides PASS/FAIL from the state; unreadable or missing tools SKIP. Score impact: these can now FAIL. Sudo logfile FAIL follows the CIS definition (Ubuntu sudo otherwise logs to syslog).
+6. **Command-less steps.** hunters-international (9), medusa (10), rhysida (11) have no command, so each SKIPs with "No command defined". Left `executable: true`: setting it false would remove 30 gaps from the step-contract measurement without any coverage change. Open gap: build real commands or retire these steps.
+7. **VSS enumeration (held item, resolved).** akira Stage 7 and ransomware-drill "VSS + Backup Catalog Enumeration": shadows present with exit 0 = FAIL (posture finding); none = PASS; explicit denial = PASS; other = SKIP. The ransomware-drill step previously printed no verdict at all and always scored PASS. Medusa and rhysida VSS steps are command-less (see 6).
+
+### Still open
+- Ransomware group: blackcat, ransomhub, volt, black-basta, fin8, apt29, clop (not reviewed in this batch).
+- AV/NGAV (22 files), common/cloud (24), endpoint-mastery (14), detection profiles.
+- dlp-exfiltration-multichannel archive/shared/HTTPS/DNS/SFTP/SMTP steps.
+- Thin scenarios (34) and detection/telemetry backfill (40/39 files), which needs per-file approval.
+- Lab verification of every changed step.
