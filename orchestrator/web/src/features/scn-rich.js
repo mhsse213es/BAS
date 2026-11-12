@@ -11,6 +11,7 @@ import { icon, bar, tabs as kitTabs, empty } from '../core/kit.js';
 import { chartSlot } from '../core/charts.js';
 import { setDisplay } from '../core/inline-style.js';
 import { fmtDate } from '../core/util.js';
+import { parseDescription } from './scn-describe.js';
 import { ROLE } from './shell.js';
 import * as M from './scn-model.js';
 
@@ -127,13 +128,31 @@ function relHtml(s) {
   }).join('') + '</div>';
 }
 
+// The overview's description: an intro, then each headed section as its own block. Numbered sections render as
+// ordered stages with the technique IDs marked; anything else renders as plain paragraphs.
+function describeHtml(text) {
+  var d = parseDescription(text);
+  var out = d.intro ? '<p class="sc-ov">' + x(d.intro) + '</p>' : '';
+  d.sections.forEach(function(sec) {
+    out += '<h4 class="sc-h4">' + x(sec.title.charAt(0) + sec.title.slice(1).toLowerCase()) + '</h4>';
+    if (sec.items) {
+      out += '<ol class="sc-stages">' + sec.items.map(function(it) {
+        return '<li><b>' + x(it.title) + '</b>' + (it.detail ? '<span>' + x(it.detail).replace(/(T\d{4}(?:\.\d{3})?)/g, '<code class="sc-tech">$1</code>') + '</span>' : '') + '</li>';
+      }).join('') + '</ol>';
+    } else {
+      out += sec.paragraphs.map(function(p) { return '<p class="sc-ov">' + x(p) + '</p>'; }).join('');
+    }
+  });
+  return out;
+}
+
 function overviewHtml(s) {
   var rows = [['Author', s.author || '—'], ['Signature', registryLabel(s)], ['Source', M.SOURCE_LABEL[M.sourceOf(s)] || M.sourceOf(s)],
     ['Platform', M.osLabel(s.supportedOs)], ['Run mode', M.modeLabel(s, catalogs())], ['Steps', String((s.steps || []).length)]];
   var tech = M.techniquesOf(s);
   rows.push(['Techniques', tech.length ? tech.join(', ') : '—', true]);
   if (s.intelSource) { rows.push(['Intel actor', s.intelActor || '—']); rows.push(['Intel feed', String(s.intelSource).toUpperCase() + (s.intelConfidence ? ' · ' + s.intelConfidence + ' confidence' : '')]); }
-  return '<p class="sc-ov">' + x(s.description) + '</p>' + kvRows(rows) +
+  return describeHtml(s.description) + kvRows(rows) +
     '<h4 class="sc-h4">Requirements</h4><ul class="sc-reqs-plain">' + requirementsOf(s).map(function(p) { return '<li>' + x(p) + '</li>'; }).join('') + '</ul>' +
     '<div id="sc-drawer-rel">' + relHtml(s) + '</div>';
 }
