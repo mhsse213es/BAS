@@ -1723,10 +1723,12 @@ function paintScenarios() {
     renderTemplateGrid();
     return;
   }
-  var list = scnSortList(view === 'all' ? allList : pool.filter(function(s) { return scenarioProductOf(s) === view; }), scnUi().sort);
+  // The footer's total must be the same set the sidebar count and the grid come from, not the whole catalogue.
+  var viewList = view === 'all' ? allList : pool.filter(function(s) { return scenarioProductOf(s) === view; });
+  var list = scnSortList(viewList, scnUi().sort);
   var skipNote = view === 'intel' ? scnSkippedNote(_intelSkipped) : '';
   grid.innerHTML = (skipNote ? '<div class="alert-info sc-skip-note" role="note">' + x(skipNote) + '</div>' : '') + (list.length ? scnGridHtml(list) : scnEmptyHtml());
-  if (foot && list.length) foot.textContent = scnShowing(list.length, all.length);
+  if (foot && list.length) foot.textContent = scnShowing(list.length, viewList.length);
 }
 
 // renderScenarios reloads the phishing library and redraws; the toolbar and sidebar call paintScenarios
