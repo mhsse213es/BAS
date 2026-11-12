@@ -328,6 +328,26 @@ export function topRisks(findings, n) {
     .slice(0, n || 4);
 }
 
+// domainBreakdown: open findings grouped by their control class (Identity, Network, DNS, Cloud, Endpoint, set by
+// findings.ControlClass from each technique's data sources). Largest open count first, then the worst severity
+// present, then name. A finding with no control class is shown as Unclassified, so no open finding is dropped.
+export function domainBreakdown(findings) {
+  var rank = { critical: 0, high: 1, medium: 2, low: 3 };
+  var by = {};
+  arr(findings).forEach(function(f) {
+    if (f.status !== 'open') return;
+    var d = f.controlClass || 'Unclassified';
+    var s = String(f.severity || '').toLowerCase();
+    var r = by[d] || (by[d] = { domain: d, open: 0, worst: 'unknown', worstRank: 99 });
+    r.open++;
+    var rk = rank[s] !== undefined ? rank[s] : 4;
+    if (rk < r.worstRank) { r.worstRank = rk; r.worst = s || 'unknown'; }
+  });
+  return Object.keys(by).map(function(k) { return by[k]; })
+    .sort(function(a, b) { return (b.open - a.open) || (a.worstRank - b.worstRank) || a.domain.localeCompare(b.domain); })
+    .map(function(r) { return { domain: r.domain, open: r.open, worst: r.worst }; });
+}
+
 // ── Weekly trend series for the KPI tiles ───────────────────────────────────
 // weekBoundaries: n timestamps, one per week, oldest first; the last one is `nowMs`.
 function weekBoundaries(nowMs, n) {

@@ -38,6 +38,19 @@ func (h *Handler) vexAgentOSCompatibilityError(ctx context.Context, agentID stri
 	return fmt.Errorf("this technique requires a Windows agent -- agent %s is running %s", agentID, osVersion)
 }
 
+// vexAgentProductionError blocks a Full Variant Sweep on an endpoint labelled Production. The sweep runs every ART
+// technique in sequence on that endpoint. An agent with no record is not blocked here; the sweep fails on its own.
+func (h *Handler) vexAgentProductionError(ctx context.Context, agentID string) error {
+	var envLabel string
+	if err := h.db.QueryRow(ctx, `SELECT env_label FROM agents WHERE agent_id = $1`, agentID).Scan(&envLabel); err != nil {
+		return nil
+	}
+	if strings.EqualFold(strings.TrimSpace(envLabel), "production") {
+		return fmt.Errorf("a full variant sweep is blocked on production endpoints -- agent %s is labelled %q", agentID, envLabel)
+	}
+	return nil
+}
+
 // cmdPreview returns the first 120 chars of a command for UI display.
 func cmdPreview(s string) string {
 	if len(s) <= 120 {
@@ -567,7 +580,36 @@ func (h *Handler) resolveTemplates(
 	if ferr != nil {
 		return nil, "", ferr
 	}
-	return variant.Generate(techniqueID, baseType, bid, cmd, exec, includeAdvanced), bid, nil
+	templates = variant.Generate(techniqueID, baseType, bid, cmd, exec, includeAdvanced)
+	// Every variant of a base test reverts that test's changes, so it inherits the base test's cleanup.
+	cleanup := h.baseCleanup(techniqueID, baseType, bid)
+	for i := range templates {
+		templates[i].Cleanup = cleanup
+	}
+	return templates, bid, nil
+}
+
+// baseCleanup is the cleanup command of the base test a variant was built from. Caldera abilities carry none in this
+// store, so Caldera variants stay without cleanup until one is added there.
+func (h *Handler) baseCleanup(techniqueID, baseType, baseID string) string {
+	if baseType == variant.SourceCaldera || h.artStore == nil {
+		return ""
+	}
+	return baseCleanupFor(h.artStore.GetSteps(strings.ToUpper(strings.TrimSpace(techniqueID))), baseID)
+}
+
+// baseCleanupFor returns the cleanup of the named test. An empty or unknown name gives no cleanup, because a guessed
+// cleanup could revert the wrong thing.
+func baseCleanupFor(steps []scenario.ScenarioStep, baseID string) string {
+	if baseID == "" {
+		return ""
+	}
+	for _, s := range steps {
+		if s.Name == baseID {
+			return s.Cleanup
+		}
+	}
+	return ""
 }
 
 // loadPayloadFamilies loads all payload families for a technique from the DB.
@@ -686,6 +728,7 @@ func buildVariantSteps(templates []variant.Template) []scenario.ScenarioStep {
 			Framework:   "variant",
 			Executor:    t.Executor,
 			Command:     t.Command,
+			Cleanup:     t.Cleanup,
 			TimeoutSec:  30,
 		})
 	}

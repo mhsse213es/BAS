@@ -1,6 +1,7 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { executionCoverageHtml } from './execution-coverage.js';
 
 
 // ── Variant Coverage Report rendering ────────────────────────────────────────
@@ -341,7 +342,7 @@ export function renderRunReportExtra(rep) {
   rep = rep || {};
   var panel = 'background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.6rem 0.75rem;margin-bottom:0.75rem';
   var hdr = 'font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.45rem';
-  var html = '';
+  var html = executionCoverageHtml(rep.executionCoverage);
 
   // Dual-rail kill chain — each adversary action paired with the defensive
   // outcome (Prevented / Detected / Missed), ordered by ATT&CK kill-chain phase.

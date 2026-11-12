@@ -22,6 +22,9 @@ const (
 	// windowsMSIFile is the generic, signed MSI as staged in the agents directory and
 	// listed in the signed integrity manifest.
 	windowsMSIFile = "AudspectAgent-x64.msi"
+	// bundleFolder is the single folder the zip extracts to. Every file sits inside it, so extracting the download
+	// never scatters the files into the download directory.
+	bundleFolder = "AudspectAgent-x64"
 )
 
 // agentArtifactDir is where agent artifacts live. A variable so tests can point it elsewhere.
@@ -104,7 +107,7 @@ func buildMSIBundle(msi, deploymentJSON []byte, fingerprint string, tokenRequire
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	add := func(name string, data []byte) error {
-		f, err := zw.Create(name)
+		f, err := zw.Create(bundleFolder + "/" + name)
 		if err != nil {
 			return err
 		}
