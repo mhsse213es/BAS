@@ -2275,8 +2275,8 @@ func GetComplianceScores(ctx context.Context, pool *pgxpool.Pool, agentID string
 	return out, nil
 }
 
-// GetFleetComplianceScores returns the worst-case (minimum) compliance percentage
-// per framework aggregated across all agents — the fleet-wide CISO view.
+// GetFleetComplianceScores returns, per framework, the snapshot of the agent with the most completed runs (the most
+// evidence), so a barely tested endpoint never sets the fleet figure. Each figure is that one agent's own, not a blend.
 func GetFleetComplianceScores(ctx context.Context, pool *pgxpool.Pool) ([]ComplianceSnapshot, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT DISTINCT ON (framework_id)
@@ -2286,7 +2286,7 @@ func GetFleetComplianceScores(ctx context.Context, pool *pgxpool.Pool) ([]Compli
 		       passing_controls, failing_controls, manual_controls,
 		       COUNT(*) OVER (PARTITION BY framework_id) AS enrolled_agent_count
 		FROM compliance_snapshots
-		ORDER BY framework_id, compliance_pct ASC, snapshot_at DESC`)
+		ORDER BY framework_id, run_count DESC, snapshot_at DESC`)
 	if err != nil {
 		return nil, err
 	}
