@@ -15,11 +15,23 @@ bad() { echo "FAIL: $1"; fail=$((fail + 1)); }
 # Helpers the installers need at runtime: anything they source or test with -f "${SCRIPT_DIR}/...".
 required=$(cat "$HERE/install.sh" "$HERE/setup.sh" "$HERE/uninstall.sh"   | grep -oE '[$][{]SCRIPT_DIR[}]/[A-Za-z0-9_.-]+'   | sed 's#.*/##' | grep -E '[.]sh$' | sort -u || true)
 
-for f in $required; do
+for f in $required setup.sh; do
   if grep -qE "cp \"\\\$\{REPO_ROOT\}/packaging/compose/${f}\"" "$BUILD"; then
     ok "bundle copies ${f}"
   else
     bad "bundle does not copy ${f}, which the installers require"
+  fi
+done
+
+# The Windows build (packaging/windows-build.ps1) produces the bundle that is actually shipped. It must copy the same
+# files as build.sh, or the shipped installer refuses to run. setup.sh is the fresh-install entry point that the
+# bundle's own verify.sh tells operators to run, so it is required as well.
+WINBUILD="$HERE/../windows-build.ps1"
+for f in $required setup.sh; do
+  if grep -qF "\\${f}\"" "$WINBUILD"; then
+    ok "windows build copies ${f}"
+  else
+    bad "windows build does not copy ${f}, which the shipped installer requires"
   fi
 done
 

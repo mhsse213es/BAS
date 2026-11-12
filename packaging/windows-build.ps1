@@ -935,6 +935,14 @@ $ComposeDir = Join-Path $RepoRoot "packaging\compose"
 Copy-Item "$ComposeDir\install.sh"              "$OutDir\install.sh"
 Copy-Item "$ComposeDir\uninstall.sh"            "$OutDir\uninstall.sh"
 Copy-Item "$ComposeDir\docker-offline-lib.sh"    "$OutDir\docker-offline-lib.sh"
+# Helpers install.sh and setup.sh source or require from SCRIPT_DIR. build.sh copies the same set; a missing one
+# makes the shipped installer refuse to run.
+Copy-Item "$ComposeDir\setup.sh"  "$OutDir\setup.sh"
+Copy-Item "$ComposeDir\db-encryption-key.sh"  "$OutDir\db-encryption-key.sh"
+Copy-Item "$ComposeDir\db-tls.sh"  "$OutDir\db-tls.sh"
+Copy-Item "$ComposeDir\ca-backup.sh"  "$OutDir\ca-backup.sh"
+Copy-Item "$ComposeDir\backup-key.sh"  "$OutDir\backup-key.sh"
+Copy-Item "$ComposeDir\setup-install-state.sh"  "$OutDir\setup-install-state.sh"
 Copy-Item "$ComposeDir\setup.conf.template"     "$OutDir\setup.conf.template"
 # Ship setup.conf as a ready-to-edit copy of the template so operators can
 # run 'nano setup.conf' immediately without a manual cp step first.
