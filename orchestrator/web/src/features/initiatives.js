@@ -9,6 +9,7 @@ import { kpi, grid, bar, hbars, chip, pill, seg, empty, icon } from '../core/kit
 import { setHeroStat } from './shell-ui.js';
 import { fmtStamp } from './sched-model.js';
 import * as M from './init-model.js';
+import { EMPTY_TITLE, EMPTY_BODY, DRAWER_EMPTY } from './initiative-copy.js';
 
 
 // ── Initiative Layer ─────────────────────────────────────────────────────
@@ -161,7 +162,7 @@ function renderInitiativesList() {
       emp.hidden = false;
       emp.innerHTML = all.length
         ? empty('search', 'No initiatives match', 'Clear the filters to see everything.') + '<div class="init-empty-act"><button class="btn btn-outline btn-sm"' + on('click', 'initiativeClearFilters') + '>Clear filters</button></div>'
-        : empty('flag', 'No initiatives yet', 'An initiative groups related remediation jobs and tracks their overall progress.');
+        : empty('flag', EMPTY_TITLE, EMPTY_BODY);
     }
     return;
   }
@@ -204,7 +205,7 @@ function renderInitiativeDrawer(it, progress, jobs) {
           '<td class="init-jact">' + (canDetach ? '<button class="btn btn-outline btn-sm"' + on('click', 'initiativeDetachJob', j.id) + '>Detach</button>' : '') + '</td>' +
         '</tr>';
       }).join('')
-    : '<tr><td colspan="4" class="empty">No jobs attached yet. This initiative tracks related remediation jobs and their overall progress.</td></tr>';
+    : '<tr><td colspan="4" class="empty">' + x(DRAWER_EMPTY) + '</td></tr>';
 
   var rows = M.stateRows(f);
   document.getElementById('init-drawer-body').innerHTML =

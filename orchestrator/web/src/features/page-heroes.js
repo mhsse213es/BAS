@@ -1,4 +1,5 @@
 import { mountHero } from './shell-ui.js';
+import { HERO_SUB } from './initiative-copy.js';
 
 // One place for the banner at the top of every page: icon, title, subtitle, actions and the stat
 // chips. A page's own loader fills the chips (setHeroStat) from data it already fetched, so a banner
@@ -176,7 +177,7 @@ var HEROES = {
   'hero-initiatives': {
     icon: ICON.flag,
     title: 'Initiatives',
-    sub: 'Programmes that group validation jobs into measurable remediation goals.',
+    sub: HERO_SUB,
     actions:
       '<button type="button" class="btn btn-outline" data-on-click="loadInitiatives">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh</button>' +
       '<button type="button" class="btn btn-primary" data-on-click="openInitiativeCreateDrawer">' + svg('<path d="M12 5v14M5 12h14"/>') + 'New Initiative</button>',
