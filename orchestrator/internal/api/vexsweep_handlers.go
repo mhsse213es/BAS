@@ -73,8 +73,9 @@ func (h *Handler) CreateVexSweep(w http.ResponseWriter, r *http.Request) {
 	total := 0
 	// One sweep entry per (technique, atomic test/ability) pair, not one per
 	// technique -- see sweepEntriesForTechnique's doc comment.
+	envLabel, _ := h.agentEnvLabel(ctx, req.AgentID)
 	for _, m := range metas {
-		ids, cnts, bts, bids, t := h.sweepEntriesForTechnique(ctx, m.ID, "art", h.artStore.GetSteps(m.ID), req.IncludeAdvanced)
+		ids, cnts, bts, bids, t := h.sweepEntriesForTechnique(ctx, m.ID, "art", h.artStore.GetSteps(m.ID), req.IncludeAdvanced, envLabel)
 		techniques = append(techniques, ids...)
 		counts = append(counts, cnts...)
 		baseTypes = append(baseTypes, bts...)
@@ -84,7 +85,7 @@ func (h *Handler) CreateVexSweep(w http.ResponseWriter, r *http.Request) {
 	// Append Caldera abilities after every ART technique -- a combined
 	// sweep runs ART first, then Caldera, per technique-index order.
 	for _, techID := range h.calderaStore.ListTechniqueIDs() {
-		ids, cnts, bts, bids, t := h.sweepEntriesForTechnique(ctx, techID, "caldera", h.calderaStore.GetAbilities(techID), req.IncludeAdvanced)
+		ids, cnts, bts, bids, t := h.sweepEntriesForTechnique(ctx, techID, "caldera", h.calderaStore.GetAbilities(techID), req.IncludeAdvanced, envLabel)
 		techniques = append(techniques, ids...)
 		counts = append(counts, cnts...)
 		baseTypes = append(baseTypes, bts...)

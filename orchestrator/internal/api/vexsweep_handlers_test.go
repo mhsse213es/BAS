@@ -161,6 +161,7 @@ func TestCreateVexSweep_CombinesARTAndCalderaTechniques(t *testing.T) {
 			WithART(artStore).
 			WithCalderaStore(calderaStore)
 		userID := seedUser(t, pool, "sweep-combined-user", "password123", "admin", true)
+		seedLabAgent(t, pool, "agent-combined", "Windows Server 2022")
 		body, _ := json.Marshal(map[string]string{"agentId": "agent-combined", "mode": "sequential"})
 		req := authedRequest(t, http.MethodPost, "/api/vex/sweeps", bytes.NewReader(body), auth.RoleAdmin, userID)
 		rec := callAuthed(h.CreateVexSweep, req)
@@ -227,6 +228,7 @@ func TestCreateVexSweep_MultiAtomicTestTechnique_OneEntryPerTest(t *testing.T) {
 			WithVexSweep(store, testVexSweepDispatcher(store)).
 			WithART(artStore)
 		userID := seedUser(t, pool, "sweep-multiatomic-user", "password123", "admin", true)
+		seedLabAgent(t, pool, "agent-multiatomic", "Windows Server 2022")
 		body, _ := json.Marshal(map[string]string{"agentId": "agent-multiatomic", "mode": "sequential"})
 		req := authedRequest(t, http.MethodPost, "/api/vex/sweeps", bytes.NewReader(body), auth.RoleAdmin, userID)
 		rec := callAuthed(h.CreateVexSweep, req)
@@ -299,6 +301,7 @@ func TestCreateVexSweep_TechniqueWithPayloadFamilies_NotDuplicatedPerAtomicTest(
 			WithVexSweep(store, testVexSweepDispatcher(store)).
 			WithART(artStore)
 		userID := seedUser(t, pool, "sweep-family-user", "password123", "admin", true)
+		seedLabAgent(t, pool, "agent-family", "Windows Server 2022")
 		body, _ := json.Marshal(map[string]string{"agentId": "agent-family", "mode": "sequential"})
 		req := authedRequest(t, http.MethodPost, "/api/vex/sweeps", bytes.NewReader(body), auth.RoleAdmin, userID)
 		rec := callAuthed(h.CreateVexSweep, req)

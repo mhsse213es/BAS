@@ -377,7 +377,7 @@ func TestRunVariants_AgentOffline(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		seedActiveAgent(t, pool, "rv-offline-agent", "Windows")
+		seedLabAgent(t, pool, "rv-offline-agent", "Windows")
 		h := variantHandler(t, pool)
 		rec := httptest.NewRecorder()
 		h.RunVariants(rec, variantsRunReq(map[string]any{
@@ -399,7 +399,7 @@ func TestRunVariants_SuccessDispatchesAndPersists(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		agentID := "rv-ok-agent"
-		seedActiveAgent(t, pool, agentID, "Windows")
+		seedLabAgent(t, pool, agentID, "Windows")
 		h := variantHandler(t, pool)
 		fake := startFakeAgent(t, h.hub, agentID)
 		defer fake.Disconnect(t)
@@ -470,7 +470,7 @@ func TestRunVariants_CalderaSourceDispatchesAndPersistsBaseType(t *testing.T) {
 		store := scenario.NewCalderaStore(srv.URL, "")
 
 		agentID := "rv-caldera-agent"
-		seedActiveAgent(t, pool, agentID, "Windows")
+		seedLabAgent(t, pool, agentID, "Windows")
 		h := variantHandler(t, pool).WithCalderaStore(store)
 		fake := startFakeAgent(t, h.hub, agentID)
 		defer fake.Disconnect(t)
@@ -534,7 +534,7 @@ func TestGetVariantRun_JoinsResultsIntoVerdicts(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		agentID := "gvr-agent"
-		seedActiveAgent(t, pool, agentID, "Windows")
+		seedLabAgent(t, pool, agentID, "Windows")
 		h := variantHandler(t, pool)
 		fake := startFakeAgent(t, h.hub, agentID)
 		defer fake.Disconnect(t)
@@ -613,7 +613,7 @@ func TestGetVariantRun_ReturnsLiveStepsDoneWhileRunning(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		agentID := "gvr-live-agent"
-		seedActiveAgent(t, pool, agentID, "Windows")
+		seedLabAgent(t, pool, agentID, "Windows")
 		h := variantHandler(t, pool)
 		fake := startFakeAgent(t, h.hub, agentID)
 		defer fake.Disconnect(t)
@@ -677,7 +677,7 @@ func TestGetVariantRun_LiveVerdictFromRunEventsWhileRunning(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		agentID := "gvr-liveverdict-agent"
-		seedActiveAgent(t, pool, agentID, "Windows")
+		seedLabAgent(t, pool, agentID, "Windows")
 		h := variantHandler(t, pool)
 		fake := startFakeAgent(t, h.hub, agentID)
 		defer fake.Disconnect(t)

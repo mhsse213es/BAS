@@ -425,7 +425,7 @@ func TestGetVariantStats_ReflectsSeededCounts(t *testing.T) {
 			"techniqueId": "T1021.001", "name": "stats-family", "payload": "echo hi",
 		}))
 		agentID := "gvs-agent"
-		seedActiveAgent(t, pool, agentID, "Windows")
+		seedLabAgent(t, pool, agentID, "Windows")
 		fake := startFakeAgent(t, h.hub, agentID)
 		h.RunVariants(httptest.NewRecorder(), variantsRunReq(map[string]any{
 			"agentId": agentID, "techniqueId": "T1059.001", "command": "whoami", "executor": "powershell",

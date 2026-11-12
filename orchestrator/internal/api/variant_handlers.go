@@ -143,6 +143,13 @@ func (h *Handler) RunVariants(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "no variants generated — technique may use an unsupported executor or script is empty", http.StatusUnprocessableEntity)
 		return
 	}
+	// Fail closed: outside a lab, a variant without an eligible cleanup is refused rather than run unchecked.
+	if label, _ := h.agentEnvLabel(ctx, req.AgentID); !isLabEndpoint(label) {
+		if _, blocked := splitByCleanup(templates, label); len(blocked) > 0 {
+			jsonError(w, fmt.Sprintf("%d variant(s) of %s have no verified cleanup and may run only on a Lab endpoint; agent %s is labelled %q", len(blocked), req.TechniqueID, req.AgentID, label), http.StatusUnprocessableEntity)
+			return
+		}
+	}
 
 	mode := coalesce(req.ExecutionMode, variant.ExecutionSequential)
 	runID, vrID, err := h.dispatchVariantRun(ctx, "", req.AgentID, req.TechniqueID,
@@ -445,7 +452,8 @@ func (h *Handler) GetVariantStats(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetPayloadFamilies(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	rows, err := h.db.Query(ctx,
-		`SELECT id, technique_id, name, description, payload, purpose, risk_level, platform, executor, created_at
+		`SELECT id, technique_id, name, description, payload, purpose, risk_level, platform, executor, created_at,
+		        cleanup, cleanup_status
 		   FROM payload_families ORDER BY technique_id, name`)
 	if err != nil {
 		jsonError(w, "db error", http.StatusInternalServerError)
@@ -456,7 +464,7 @@ func (h *Handler) GetPayloadFamilies(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var f variant.PayloadFamily
 		if err := rows.Scan(&f.ID, &f.TechniqueID, &f.Name, &f.Description, &f.Payload,
-			&f.Purpose, &f.RiskLevel, &f.Platform, &f.Executor, &f.CreatedAt); err == nil {
+			&f.Purpose, &f.RiskLevel, &f.Platform, &f.Executor, &f.CreatedAt, &f.Cleanup, &f.CleanupStatus); err == nil {
 			families = append(families, f)
 		}
 	}
@@ -469,7 +477,8 @@ func (h *Handler) GetTechniqueFamilies(w http.ResponseWriter, r *http.Request) {
 	techID := chi.URLParam(r, "techniqueId")
 	ctx := r.Context()
 	rows, err := h.db.Query(ctx,
-		`SELECT id, technique_id, name, description, payload, purpose, risk_level, platform, executor, created_at
+		`SELECT id, technique_id, name, description, payload, purpose, risk_level, platform, executor, created_at,
+		        cleanup, cleanup_status
 		   FROM payload_families WHERE technique_id = $1 ORDER BY name`,
 		strings.ToUpper(strings.TrimSpace(techID)))
 	if err != nil {
@@ -481,7 +490,7 @@ func (h *Handler) GetTechniqueFamilies(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var f variant.PayloadFamily
 		if err := rows.Scan(&f.ID, &f.TechniqueID, &f.Name, &f.Description, &f.Payload,
-			&f.Purpose, &f.RiskLevel, &f.Platform, &f.Executor, &f.CreatedAt); err == nil {
+			&f.Purpose, &f.RiskLevel, &f.Platform, &f.Executor, &f.CreatedAt, &f.Cleanup, &f.CleanupStatus); err == nil {
 			families = append(families, f)
 		}
 	}
@@ -499,6 +508,9 @@ func (h *Handler) CreatePayloadFamily(w http.ResponseWriter, r *http.Request) {
 		Purpose     string `json:"purpose"`
 		RiskLevel   string `json:"riskLevel"`
 		Executor    string `json:"executor"`
+		Cleanup     string `json:"cleanup"`
+		// CleanupStatus: read_only | verified | unverified (default). A verified family must name its cleanup.
+		CleanupStatus string `json:"cleanupStatus"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid JSON", http.StatusBadRequest)
@@ -506,6 +518,20 @@ func (h *Handler) CreatePayloadFamily(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.TechniqueID == "" || req.Name == "" || req.Payload == "" {
 		jsonError(w, "techniqueId, name, and payload are required", http.StatusBadRequest)
+		return
+	}
+	if req.CleanupStatus == "" {
+		req.CleanupStatus = variant.CleanupUnverified
+	}
+	switch req.CleanupStatus {
+	case variant.CleanupReadOnly, variant.CleanupUnverified:
+	case variant.CleanupVerified:
+		if strings.TrimSpace(req.Cleanup) == "" {
+			jsonError(w, "a verified family needs a cleanup command", http.StatusBadRequest)
+			return
+		}
+	default:
+		jsonError(w, "cleanupStatus must be read_only, verified or unverified", http.StatusBadRequest)
 		return
 	}
 	if req.RiskLevel == "" {
@@ -517,10 +543,10 @@ func (h *Handler) CreatePayloadFamily(w http.ResponseWriter, r *http.Request) {
 
 	var id string
 	err := h.db.QueryRow(r.Context(),
-		`INSERT INTO payload_families (technique_id, name, description, payload, purpose, risk_level, executor)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+		`INSERT INTO payload_families (technique_id, name, description, payload, purpose, risk_level, executor, cleanup, cleanup_status)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
 		strings.ToUpper(strings.TrimSpace(req.TechniqueID)), req.Name, req.Description,
-		req.Payload, coalesce(req.Purpose, "recon"), req.RiskLevel, req.Executor,
+		req.Payload, coalesce(req.Purpose, "recon"), req.RiskLevel, req.Executor, req.Cleanup, req.CleanupStatus,
 	).Scan(&id)
 	if err != nil {
 		if strings.Contains(err.Error(), "uq_payload_family") {
@@ -583,10 +609,48 @@ func (h *Handler) resolveTemplates(
 	templates = variant.Generate(techniqueID, baseType, bid, cmd, exec, includeAdvanced)
 	// Every variant of a base test reverts that test's changes, so it inherits the base test's cleanup.
 	cleanup := h.baseCleanup(techniqueID, baseType, bid)
+	status := cleanupStatusFor(cleanup, baseType)
 	for i := range templates {
 		templates[i].Cleanup = cleanup
+		templates[i].CleanupStatus = status
 	}
 	return templates, bid, nil
+}
+
+// cleanupStatusFor gives a base-test variant its cleanup status. An ART cleanup is taken as authored upstream, not
+// independently validated. Caldera has no cleanup in this store, so its variants stay unverified.
+func cleanupStatusFor(cleanup, baseType string) string {
+	if baseType == variant.SourceCaldera || strings.TrimSpace(cleanup) == "" {
+		return variant.CleanupUnverified
+	}
+	return variant.CleanupVerified
+}
+
+// agentEnvLabel returns the endpoint's environment label, or "" when the agent has no record.
+func (h *Handler) agentEnvLabel(ctx context.Context, agentID string) (string, error) {
+	var label string
+	if err := h.db.QueryRow(ctx, `SELECT env_label FROM agents WHERE agent_id = $1`, agentID).Scan(&label); err != nil {
+		return "", nil
+	}
+	return label, nil
+}
+
+// isLabEndpoint reports whether a label marks a lab endpoint. Only a lab may run variants without a verified cleanup.
+func isLabEndpoint(label string) bool {
+	return strings.EqualFold(strings.TrimSpace(label), "lab")
+}
+
+// splitByCleanup separates the variants an endpoint may run from those it may not. On a lab endpoint all may run.
+// Elsewhere only a variant with an eligible cleanup may run; the rest are returned as blocked.
+func splitByCleanup(templates []variant.Template, envLabel string) (runnable, blocked []variant.Template) {
+	for _, t := range templates {
+		if isLabEndpoint(envLabel) || variant.CleanupEligible(t.Cleanup, t.CleanupStatus) {
+			runnable = append(runnable, t)
+		} else {
+			blocked = append(blocked, t)
+		}
+	}
+	return runnable, blocked
 }
 
 // baseCleanup is the cleanup command of the base test a variant was built from. Caldera abilities carry none in this
@@ -615,7 +679,8 @@ func baseCleanupFor(steps []scenario.ScenarioStep, baseID string) string {
 // loadPayloadFamilies loads all payload families for a technique from the DB.
 func (h *Handler) loadPayloadFamilies(ctx context.Context, techniqueID string) ([]variant.PayloadFamily, error) {
 	rows, err := h.db.Query(ctx,
-		`SELECT id, technique_id, name, description, payload, purpose, risk_level, platform, executor, created_at
+		`SELECT id, technique_id, name, description, payload, purpose, risk_level, platform, executor, created_at,
+		        cleanup, cleanup_status
 		   FROM payload_families WHERE technique_id = $1 ORDER BY name`,
 		strings.ToUpper(strings.TrimSpace(techniqueID)))
 	if err != nil {
@@ -626,7 +691,7 @@ func (h *Handler) loadPayloadFamilies(ctx context.Context, techniqueID string) (
 	for rows.Next() {
 		var f variant.PayloadFamily
 		if err := rows.Scan(&f.ID, &f.TechniqueID, &f.Name, &f.Description, &f.Payload,
-			&f.Purpose, &f.RiskLevel, &f.Platform, &f.Executor, &f.CreatedAt); err == nil {
+			&f.Purpose, &f.RiskLevel, &f.Platform, &f.Executor, &f.CreatedAt, &f.Cleanup, &f.CleanupStatus); err == nil {
 			out = append(out, f)
 		}
 	}
@@ -683,25 +748,33 @@ func (h *Handler) resolveBaseCommand(techniqueID, baseType, baseID, cmdOverride,
 // would dispatch identical duplicates -- that case collapses to the single
 // pre-fan-out entry instead, exactly like the family branch already behaves
 // for RunVariants/dispatchVariantForSweep.
-func (h *Handler) sweepEntriesForTechnique(ctx context.Context, techID, baseType string, steps []scenario.ScenarioStep, includeAdvanced bool) (techIDs []string, counts []int, baseTypes, baseIDs []string, total int) {
+func (h *Handler) sweepEntriesForTechnique(ctx context.Context, techID, baseType string, steps []scenario.ScenarioStep, includeAdvanced bool, envLabel string) (techIDs []string, counts []int, baseTypes, baseIDs []string, total int) {
 	families, _ := h.loadPayloadFamilies(ctx, techID)
 	if len(families) > 0 {
 		templates, _, err := h.resolveTemplates(ctx, techID, baseType, "", "", "", includeAdvanced)
-		if err != nil || len(templates) == 0 {
+		if err != nil {
 			return nil, nil, nil, nil, 0
 		}
-		return []string{techID}, []int{len(templates)}, []string{baseType}, []string{""}, len(templates)
+		runnable, _ := splitByCleanup(templates, envLabel)
+		if len(runnable) == 0 {
+			return nil, nil, nil, nil, 0
+		}
+		return []string{techID}, []int{len(runnable)}, []string{baseType}, []string{""}, len(runnable)
 	}
 	for _, step := range steps {
 		templates, resolvedBaseID, err := h.resolveTemplates(ctx, techID, baseType, step.Name, "", "", includeAdvanced)
-		if err != nil || len(templates) == 0 {
+		if err != nil {
+			continue
+		}
+		runnable, _ := splitByCleanup(templates, envLabel)
+		if len(runnable) == 0 {
 			continue
 		}
 		techIDs = append(techIDs, techID)
-		counts = append(counts, len(templates))
+		counts = append(counts, len(runnable))
 		baseTypes = append(baseTypes, baseType)
 		baseIDs = append(baseIDs, resolvedBaseID)
-		total += len(templates)
+		total += len(runnable)
 	}
 	return
 }
@@ -846,8 +919,11 @@ func (h *Handler) dispatchVariantForSweep(ctx context.Context, sweepID, agentID,
 	if err != nil {
 		return "", "", 0, err
 	}
+	// Same rule the sweep applied when it built its entries: only variants this endpoint may run.
+	envLabel, _ := h.agentEnvLabel(ctx, agentID)
+	templates, _ = splitByCleanup(templates, envLabel)
 	if len(templates) == 0 {
-		return "", "", 0, fmt.Errorf("no variants generated for %s", techniqueID)
+		return "", "", 0, fmt.Errorf("no variants may run on agent %s: none has a verified cleanup", agentID)
 	}
 	sweepFinal := techniqueIndex == totalTechniques-1
 	scenarioRunID, variantRunID, err = h.dispatchVariantRun(ctx, sweepID, agentID, techniqueID, baseType, baseID, mode, templates, "Variant Full Sweep", techniqueID, sweepFinal)
