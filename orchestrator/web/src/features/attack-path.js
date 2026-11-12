@@ -109,7 +109,7 @@ export function loadExecDashboard() {
     setHeroStat('hs-exec-exposure', hero.exposure);
     setHeroStat('hs-exec-detect', hero.detection);
     setHeroStat('hs-exec-fleet', cur.assetCount != null ? cur.assetCount : '—');
-    renderExecAll({ current: cur, trends: res[1], predict: res[2], findings: Array.isArray(res[3]) ? res[3] : [], days: days });
+    renderExecAll({ current: cur, trends: res[1], predict: res[2], findings: Array.isArray(res[3]) ? res[3] : null, days: days });
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
