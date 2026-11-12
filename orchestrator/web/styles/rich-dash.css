@@ -156,6 +156,14 @@ td.num, th.num { text-align: right; }
 #tab-dashboard .legend.dp-center { justify-content: center; margin-top: 8px; }
 .dl-sw { display: inline-block; width: 9px; height: 9px; border-radius: 3px; }
 .dp-center { display: flex; flex-direction: column; align-items: center; }
+/* Overall posture card: gauge beside the 30-day trend and the open findings per domain. Stacks when narrow. */
+.dp-posture { display: grid; grid-template-columns: minmax(150px, 200px) 1fr; gap: 20px; align-items: center; }
+.dp-posture-side { min-width: 0; }
+.dp-dom-h { margin: 10px 0 4px; }
+.dp-dom { display: grid; grid-template-columns: 96px 1fr 64px auto; gap: 10px; align-items: center; margin: 6px 0; font-size: 12.5px; }
+.dp-dom-c { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted-hi); }
+.dp-dom .rk-bar { min-width: 0; }
+@media (max-width: 700px) { .dp-posture { grid-template-columns: 1fr; } }
 .rk-hd-t { display: inline-flex; align-items: center; gap: 8px; }
 .dot-live.idle { background: var(--muted); box-shadow: none; animation: none; }
 

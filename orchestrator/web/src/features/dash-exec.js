@@ -6,7 +6,7 @@ import { chartSlot, CHART_COLORS } from '../core/charts.js';
 import { kpi, grid, card, chip, empty, icon, seg } from '../core/kit.js';
 import { sevTone } from './rich-g3.js';
 import { toneGauge } from './dash-rich.js';
-import { execInsights, riskBand, topRisks, trendDelta, riskKpi, exposureKpi, detectionKpi } from './dash-model.js';
+import { execInsights, riskBand, topRisks, trendDelta, riskKpi, exposureKpi, detectionKpi, domainBreakdown } from './dash-model.js';
 
 function cell(id, html) { var el = document.getElementById(id); if (el) el.innerHTML = html; }
 
@@ -55,12 +55,31 @@ export function renderExecForecast(fc) {
   cell('ed-forecast', '<section class="rk-card"><div class="rk-hd"><h2>Risk-score forecast</h2>' + chip(dir.charAt(0).toUpperCase() + dir.slice(1), dirTone(dir)) + '<div class="rk-hd-actions">' + lg + '</div></div>' + body + '</section>');
 }
 
-export function renderExecPosture(current) {
-  if (!current) { cell('ed-posture', card('Overall risk', empty('shield', 'No data yet'))); return; }
-  if (current.riskMeasurable !== true) { cell('ed-posture', card('Overall risk', empty('shield', 'Not measurable', 'No scored runs in the last 30 days.'), { sub: 'Risk score — lower is better' })); return; }
+// Overall posture: the gauge (mean of the last 30 days' scored runs, the backend's avgRiskScore), the daily risk
+// trend from the same forecast history the forecast card uses, and open findings per domain (controlClass).
+export function renderExecPosture(current, forecast, findings) {
+  var title = 'Overall posture', sub = 'Risk score — lower is better';
+  if (!current) { cell('ed-posture', card(title, empty('shield', 'No data yet'))); return; }
+  if (current.riskMeasurable !== true) { cell('ed-posture', card(title, empty('shield', 'Not measurable', 'No scored runs in the last 30 days.'), { sub: sub })); return; }
   var score = Number(current.avgRiskScore) || 0, band = riskBand(score);
-  cell('ed-posture', card('Overall risk', '<div class="dp-center dp-risk">' + toneGauge(score, band.tone, band.label + ' risk', 'Risk score, out of 100. Lower is better.') +
-    '<p class="muted tiny dp-risk-note">Average risk score over the last 30 days. The ring fills as risk rises.</p></div>', { sub: 'Risk score — lower is better' }));
+  var hist = ((forecast && forecast.history) || []).slice(-30);
+  var trend = hist.length >= 2
+    ? chartSlot({ type: 'line', labels: hist.map(function(p) { return 'd' + p.dayIndex; }), series: [{ name: 'Risk score', data: hist.map(function(p) { return p.score; }), color: CHART_COLORS.warn }], h: 150, area: true })
+    : empty('trend', 'Not enough history for a trend', 'A trend needs a few daily snapshots.');
+  var doms = domainBreakdown(findings), max = doms.reduce(function(m, d) { return Math.max(m, d.open); }, 0);
+  var domHtml = !findings ? empty('layers', 'Loading…')
+    : !doms.length ? empty('check', 'No open findings', 'Nothing is open in any domain.')
+    : doms.map(function(d) {
+        return '<div class="dp-dom"><span class="dp-dom-n">' + x(d.domain) + '</span>' +
+          '<div class="rk-bar"><i style="width:' + Math.round(100 * d.open / max) + '%"></i></div>' +
+          '<span class="dp-dom-c">' + d.open + ' open</span>' + chip(d.worst, sevTone(d.worst)) + '</div>';
+      }).join('');
+  cell('ed-posture', card(title,
+    '<div class="dp-posture"><div class="dp-center dp-risk">' + toneGauge(score, band.tone, band.label + ' risk', 'Risk score, out of 100. Lower is better.') +
+    '<p class="muted tiny dp-risk-note">Average risk score over the last 30 days.</p></div>' +
+    '<div class="dp-posture-side"><div class="muted tiny">Risk score, last 30 days</div>' + trend +
+    '<div class="muted tiny dp-dom-h">Open findings by domain</div>' + domHtml + '</div></div>',
+    { sub: sub }));
 }
 
 export function renderExecExposure(exp) {
@@ -86,9 +105,6 @@ export function renderExecChanges(trends, current, exposure, days) {
   }).join(''), { sub: sub }));
 }
 
-export function renderExecDomains() {
-  cell('ed-domains', card('Posture by domain', empty('layers', 'No data yet', 'A per-domain roll-up is not recorded. Per-tactic coverage is on the Operational view and per-framework scores on Compliance.')));
-}
 export function renderExecRisks(findings) {
   var r = topRisks(findings, 4);
   if (!r.length) { cell('ed-risks', card('Top business risks', empty('check', findings ? 'No open critical or high findings' : 'Loading…'))); return; }
@@ -101,9 +117,8 @@ export function renderExecRisks(findings) {
 export function renderExecAll(o) {
   renderExecKpis(o.current, o.trends);
   renderExecForecast(o.predict && o.predict.forecast);
-  renderExecPosture(o.current);
+  renderExecPosture(o.current, o.predict && o.predict.forecast, o.findings);
   renderExecExposure(o.predict && o.predict.exposure);
   renderExecChanges(o.trends, o.current, o.predict && o.predict.exposure, o.days);
-  renderExecDomains();
   renderExecRisks(o.findings);
 }
