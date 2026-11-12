@@ -72,6 +72,9 @@
 .sc-empty-act { margin-top: 4px; }
 .scn-showing { margin-top: 10px; font-size: 12px; color: var(--muted); }
 .scn-showing:empty { display: none; }
+.scn-breakdown { margin-top: 4px; font-size: 11px; line-height: 1.7; color: var(--muted); }
+.scn-bd-item b { font-weight: 600; color: inherit; }
+.scn-bd-sep { margin: 0 6px; opacity: .6; }
 
 /* List view: one row per scenario */
 .sc-grid.sc-list { grid-template-columns: minmax(0, 1fr); }
