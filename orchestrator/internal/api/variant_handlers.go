@@ -38,6 +38,19 @@ func (h *Handler) vexAgentOSCompatibilityError(ctx context.Context, agentID stri
 	return fmt.Errorf("this technique requires a Windows agent -- agent %s is running %s", agentID, osVersion)
 }
 
+// vexAgentProductionError blocks a Full Variant Sweep on an endpoint labelled Production. The sweep runs every ART
+// technique in sequence on that endpoint. An agent with no record is not blocked here; the sweep fails on its own.
+func (h *Handler) vexAgentProductionError(ctx context.Context, agentID string) error {
+	var envLabel string
+	if err := h.db.QueryRow(ctx, `SELECT env_label FROM agents WHERE agent_id = $1`, agentID).Scan(&envLabel); err != nil {
+		return nil
+	}
+	if strings.EqualFold(strings.TrimSpace(envLabel), "production") {
+		return fmt.Errorf("a full variant sweep is blocked on production endpoints -- agent %s is labelled %q", agentID, envLabel)
+	}
+	return nil
+}
+
 // cmdPreview returns the first 120 chars of a command for UI display.
 func cmdPreview(s string) string {
 	if len(s) <= 120 {

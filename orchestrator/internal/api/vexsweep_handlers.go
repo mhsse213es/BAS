@@ -46,6 +46,10 @@ func (h *Handler) CreateVexSweep(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if err := h.vexAgentProductionError(r.Context(), req.AgentID); err != nil {
+		jsonError(w, err.Error(), http.StatusForbidden)
+		return
+	}
 	if h.artStore == nil {
 		jsonError(w, "ART content not loaded", http.StatusServiceUnavailable)
 		return
