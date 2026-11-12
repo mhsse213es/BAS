@@ -194,9 +194,11 @@ func (h *Handler) RecoverCSR(w http.ResponseWriter, r *http.Request) {
 		id := h.signingKey.KeyID()
 		signingKeyID = &id
 	}
+	// Recorded like a bootstrap issuance, so a later reinstall with this key is recognised as the same identity.
+	keyFingerprint, _ := pki.CSRKeyFingerprint([]byte(req.CSRPEM))
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO agent_certificates (serial_number, agent_id, issued_at, expires_at, command_signing_key_id)
-		VALUES ($1, $2, NOW(), $3, $4)`, issued.SerialNumber, req.AgentID, issued.ExpiresAt, signingKeyID); err != nil {
+		INSERT INTO agent_certificates (serial_number, agent_id, issued_at, expires_at, command_signing_key_id, public_key_sha256)
+		VALUES ($1, $2, NOW(), $3, $4, $5)`, issued.SerialNumber, req.AgentID, issued.ExpiresAt, signingKeyID, keyFingerprint); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -86,7 +86,9 @@ func TestClearStaleIdentity_DifferentCAMovesIdentityAside(t *testing.T) {
 	if !moved {
 		t.Fatal("identity issued by CA A was not moved when CA B is installed")
 	}
-	for _, name := range identityFiles {
+	// The private key stays in place (see TestClearStaleIdentity_KeepsPrivateKeyInPlace); the certificate and
+	// enrolment marker are the parts that must not be trusted any more.
+	for _, name := range []string{"agent-cert.pem", "enrollment-state"} {
 		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
 			t.Fatalf("%s is still in the certificate directory", name)
 		}

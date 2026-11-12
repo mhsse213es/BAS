@@ -33,3 +33,19 @@ func GenerateTestCSR(commonName string) ([]byte, error) {
 	}
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: der}), nil
 }
+
+// NewTestKey generates an ECDSA P-256 private key for tests that need to reuse one key across requests.
+func NewTestKey() (*ecdsa.PrivateKey, error) {
+	return ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+}
+
+// GenerateTestCSRWith returns a CSR for the given key, so a test can present the same key again.
+func GenerateTestCSRWith(key *ecdsa.PrivateKey, commonName string) ([]byte, error) {
+	der, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
+		Subject: pkix.Name{CommonName: commonName},
+	}, key)
+	if err != nil {
+		return nil, err
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: der}), nil
+}
