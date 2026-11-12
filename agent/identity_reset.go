@@ -14,8 +14,11 @@ import (
 	"audspect/agent/preflight"
 )
 
-// identityFiles are the enrollment files the agent keeps in its certificate directory.
-var identityFiles = []string{"agent-cert.pem", "agent-key.pem", "enrollment-state"}
+// staleIdentityFiles are moved aside when the certificate was not issued by the CA being installed. The private
+// key is deliberately NOT here: it is kept in place, so a reinstall can prove it is the same identity by signing
+// its new request with that key (the server re-issues only for a matching key). The certificate and the
+// enrolment marker are what stop being trusted.
+var staleIdentityFiles = []string{"agent-cert.pem", "enrollment-state"}
 
 // clearStaleIdentity moves the agent's enrollment identity aside when its certificate was not
 // issued by the deployment CA being installed. The server never accepts a certificate from another
@@ -33,7 +36,7 @@ func clearStaleIdentity(caPEM []byte) (bool, error) {
 	if err := os.MkdirAll(backup, 0o700); err != nil {
 		return false, fmt.Errorf("create %s: %w", backup, err)
 	}
-	for _, name := range identityFiles {
+	for _, name := range staleIdentityFiles {
 		src := filepath.Join(dir, name)
 		if _, err := os.Stat(src); err != nil {
 			continue

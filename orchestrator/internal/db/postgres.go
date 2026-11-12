@@ -129,6 +129,9 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// Populated going forward by internal/api/enroll_csr_handlers.go;
 		// read by cmd/server's checkSigningKeyNotSilentlyRotated.
 		`ALTER TABLE agent_certificates ADD COLUMN IF NOT EXISTS command_signing_key_id text`,
+		// SHA-256 of the certificate's public key. Blank for certificates issued before this column existed; those
+		// cannot be proven to belong to a reinstalling agent, so they still need an administrator's approval.
+		`ALTER TABLE agent_certificates ADD COLUMN IF NOT EXISTS public_key_sha256 text NOT NULL DEFAULT ''`,
 		// Single-use enrolment tokens (audit F-03). Only the SHA-256 of a token is stored.
 		`CREATE TABLE IF NOT EXISTS agent_enrollment_tokens (
 			id         text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
