@@ -85,6 +85,7 @@ steps:
       Remove-Item $file -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $file)
       Write-Output "EXEC T1027.013: base64 blob decoded at runtime from disk (cleaned=$cleaned). Content: $decoded. Sysmon EID 11 + ScriptBlock EID 4104 expected. [BAS-SIM-B64]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_b64_*.dat') -Force -ErrorAction SilentlyContinue
 
@@ -118,6 +119,7 @@ steps:
       # Simulate the decode step an adversary loader performs:
       $decoded = [System.Text.Encoding]::UTF8.GetString(($xored | ForEach-Object { $_ -bxor $key }))
       Write-Output "EXEC T1027: XOR decode loop ran (key=0x$($key.ToString('X2'))). Decoded: $decoded. ScriptBlock EID 4104 + AMSI -bxor heuristic expected. [BAS-SIM-XOR]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   # ---------------------------------------------------------------------------

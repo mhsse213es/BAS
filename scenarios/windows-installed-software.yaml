@@ -19,10 +19,11 @@ steps:
     framework: custom
     executor: local
     max_output_bytes: 20000
-    command: >-
+    command: |-
       $apps = @();
       $apps += Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue;
       $apps += Get-ItemProperty 'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue;
       $apps | Where-Object { $_.DisplayName } | Sort-Object DisplayName -Unique |
         ForEach-Object { "$($_.DisplayName)|$($_.DisplayVersion)" }
+      Write-Output "SKIP: software inventory only; it lists installed programs and has no control outcome to score. Not scored."
     timeout_sec: 30

@@ -424,6 +424,7 @@ steps:
       Remove-Item $src,$enc,$dec -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $src) -and -not (Test-Path $enc)
       Write-Output "EXEC T1140: certutil -encode/-decode/-hashfile ran (cleaned=$cleaned, hash=$hash)  -  3x Sysmon EID 1 certutil.exe invocations. [BAS-SIM]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_cert_*') -Force -ErrorAction SilentlyContinue
 
@@ -520,6 +521,7 @@ steps:
         & bitsadmin.exe /cancel $jobName 2>&1 | Out-Null
         Write-Output "EXEC T1197: bitsadmin job '$jobName' created+cancelled  -  Sysmon EID 1 bitsadmin.exe + EID 3 network. [BAS-SIM]"
       }
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: |
       Get-BitsTransfer -Name "BAS-SIM-BITS-*" -ErrorAction SilentlyContinue | Remove-BitsTransfer -ErrorAction SilentlyContinue
       Remove-Item (Join-Path $env:TEMP 'bas_bits_*.txt') -Force -ErrorAction SilentlyContinue
@@ -628,6 +630,7 @@ steps:
       Remove-Item $file -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $file)
       Write-Output "EXEC LAB T1218.011+ADS: ADS created (exists=$adsExists), rundll32 invoked with ADS path, file removed (cleaned=$cleaned)  -  Sysmon EID 15 + EID 1. [BAS-SIM]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_ads_lolbin_*.txt') -Force -ErrorAction SilentlyContinue
 

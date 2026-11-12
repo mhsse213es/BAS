@@ -74,6 +74,7 @@ steps:
         $foundCount += @(Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue -File).Count
       }
       Write-Output "BAS-SIM: File discovery completed - enumerated $foundCount files"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
 
   - name: "Windows Domain Account Discovery (T1087.002) - LDAP Query"
     technique_id: T1087.002
@@ -109,6 +110,7 @@ steps:
       } catch {
         Write-Output "BAS-SIM: Domain account discovery skipped - not in domain or insufficient permissions"
       }
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
 
   - name: "Windows Remote System Discovery (T1018) - Network Sweep"
     technique_id: T1018
@@ -150,3 +152,4 @@ steps:
       } catch {
         Write-Output "BAS-SIM: Network discovery skipped - unable to determine local subnet"
       }
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."

@@ -90,6 +90,7 @@ steps:
         }
       }
       Write-Output "EXEC: sensitive-file search across Desktop/Documents/Downloads (depth=2). Found $found matching file(s). Read-only — no files opened. A departing/malicious insider searches for high-value files outside their normal job scope this same way before exfiltrating them. [BAS-SIM-INSIDER-S1]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   # ---------------------------------------------------------------------------

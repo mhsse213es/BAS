@@ -19,5 +19,7 @@ steps:
     framework: custom
     executor: local
     max_output_bytes: 1048576
-    command: "dpkg-query -W -f='${Package}|${Version}|${Architecture}|${db:Status-Status}\\n' 2>/dev/null"
+    command: |
+      dpkg-query -W -f='${Package}|${Version}|${Architecture}|${db:Status-Status}\n' 2>/dev/null
+      echo "SKIP: software inventory only; it lists packages and has no control outcome to score. Not scored."
     timeout_sec: 30

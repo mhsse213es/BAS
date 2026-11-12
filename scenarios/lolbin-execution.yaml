@@ -93,6 +93,7 @@ steps:
       & regsvr32.exe /s /n /u /i:$sct scrobj.dll
       Remove-Item $sct -Force -ErrorAction SilentlyContinue
       Write-Output "EXEC: regsvr32 Squiblydoo (/i with scrobj.dll) ran against a benign empty local scriptlet  -  expect regsvr32.exe -> scrobj.dll telemetry (T1218.010). AppLocker/WDAC bypass path is unrestricted if this ran."
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_squiblydoo_*.sct') -Force -ErrorAction SilentlyContinue
 

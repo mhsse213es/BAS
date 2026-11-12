@@ -22,28 +22,40 @@ steps:
     technique_id: T1055
     framework: custom
     executor: local
-    command: "sysctl kernel.randomize_va_space"
+    command: |
+      v=$(sysctl -n kernel.randomize_va_space 2>/dev/null)
+      [ -z "$v" ] && { echo "SKIP: kernel.randomize_va_space not readable; not scored"; exit 0; }
+      [ "$v" = "2" ] || { echo "FAIL: ASLR fully enabled (kernel.randomize_va_space=$v, expected 2)"; exit 0; }
+      echo "PASS: ASLR fully enabled (kernel.randomize_va_space=2)"
     timeout_sec: 10
 
   - name: "Core Dumps Restricted (fs.suid_dumpable)"
     technique_id: T1003
     framework: custom
     executor: local
-    command: "sysctl fs.suid_dumpable"
+    command: |
+      v=$(sysctl -n fs.suid_dumpable 2>/dev/null)
+      [ -z "$v" ] && { echo "SKIP: fs.suid_dumpable not readable; not scored"; exit 0; }
+      [ "$v" = "0" ] || { echo "FAIL: setuid core dumps disabled (fs.suid_dumpable=$v, expected 0)"; exit 0; }
+      echo "PASS: setuid core dumps disabled (fs.suid_dumpable=0)"
     timeout_sec: 10
 
   - name: "Ptrace Scope (kernel.yama.ptrace_scope)"
     technique_id: T1055
     framework: custom
     executor: local
-    command: "sysctl kernel.yama.ptrace_scope"
+    command: |
+      v=$(sysctl -n kernel.yama.ptrace_scope 2>/dev/null)
+      [ -z "$v" ] && { echo "SKIP: kernel.yama.ptrace_scope not readable; not scored"; exit 0; }
+      if [ "$v" -ge 1 ] 2>/dev/null; then echo "PASS: ptrace restricted (kernel.yama.ptrace_scope=$v)"; else echo "FAIL: ptrace restricted (kernel.yama.ptrace_scope=$v, expected >= 1)"; fi
     timeout_sec: 10
 
   - name: "NX/Execute Disable Bit"
     technique_id: T1055
     framework: custom
     executor: local
-    command: "grep -m1 ' nx ' /proc/cpuinfo"
+    command: |
+      if grep -qw nx /proc/cpuinfo 2>/dev/null; then echo "PASS: NX (execute disable) supported by CPU"; else echo "FAIL: NX flag not present in /proc/cpuinfo"; fi
     timeout_sec: 10
 
   # -- Filesystem Hardening ----------------------------------------------------
@@ -51,42 +63,54 @@ steps:
     technique_id: T1059
     framework: custom
     executor: local
-    command: "grep -E '\\s/tmp\\s' /proc/mounts"
+    command: |
+      line=$(grep -E "[[:space:]]/tmp[[:space:]]" /proc/mounts | head -1)
+      if [ -z "$line" ]; then echo "FAIL: /tmp is not a separate mount, so noexec cannot be enforced"; elif echo "$line" | grep -q "noexec"; then echo "PASS: /tmp mounted noexec"; else echo "FAIL: /tmp is mounted without noexec"; fi
     timeout_sec: 10
 
   - name: "/tmp Mounted nosuid"
     technique_id: T1548
     framework: custom
     executor: local
-    command: "grep -E '\\s/tmp\\s' /proc/mounts"
+    command: |
+      line=$(grep -E "[[:space:]]/tmp[[:space:]]" /proc/mounts | head -1)
+      if [ -z "$line" ]; then echo "FAIL: /tmp is not a separate mount, so nosuid cannot be enforced"; elif echo "$line" | grep -q "nosuid"; then echo "PASS: /tmp mounted nosuid"; else echo "FAIL: /tmp is mounted without nosuid"; fi
     timeout_sec: 10
 
   - name: "/tmp Mounted nodev"
     technique_id: T1083
     framework: custom
     executor: local
-    command: "grep -E '\\s/tmp\\s' /proc/mounts"
+    command: |
+      line=$(grep -E "[[:space:]]/tmp[[:space:]]" /proc/mounts | head -1)
+      if [ -z "$line" ]; then echo "FAIL: /tmp is not a separate mount, so nodev cannot be enforced"; elif echo "$line" | grep -q "nodev"; then echo "PASS: /tmp mounted nodev"; else echo "FAIL: /tmp is mounted without nodev"; fi
     timeout_sec: 10
 
   - name: "/dev/shm Mounted noexec"
     technique_id: T1059
     framework: custom
     executor: local
-    command: "grep -E '\\s/dev/shm\\s' /proc/mounts"
+    command: |
+      line=$(grep -E "[[:space:]]/dev/shm[[:space:]]" /proc/mounts | head -1)
+      if [ -z "$line" ]; then echo "FAIL: /dev/shm is not a separate mount, so noexec cannot be enforced"; elif echo "$line" | grep -q "noexec"; then echo "PASS: /dev/shm mounted noexec"; else echo "FAIL: /dev/shm is mounted without noexec"; fi
     timeout_sec: 10
 
   - name: "/dev/shm Mounted nosuid"
     technique_id: T1548
     framework: custom
     executor: local
-    command: "grep -E '\\s/dev/shm\\s' /proc/mounts"
+    command: |
+      line=$(grep -E "[[:space:]]/dev/shm[[:space:]]" /proc/mounts | head -1)
+      if [ -z "$line" ]; then echo "FAIL: /dev/shm is not a separate mount, so nosuid cannot be enforced"; elif echo "$line" | grep -q "nosuid"; then echo "PASS: /dev/shm mounted nosuid"; else echo "FAIL: /dev/shm is mounted without nosuid"; fi
     timeout_sec: 10
 
   - name: "Sticky Bit on World-Writable Directories"
     technique_id: T1083
     framework: custom
     executor: local
-    command: "find / -xdev -type d -perm -0002 ! -perm -1000"
+    command: |
+      n=$(find / -xdev -type d -perm -0002 ! -perm -1000 2>/dev/null | wc -l)
+      if [ "$n" -eq 0 ]; then echo "PASS: all world-writable directories have the sticky bit"; else echo "FAIL: $n world-writable director(ies) without the sticky bit"; fi
     timeout_sec: 30
 
   # -- Network Hardening -------------------------------------------------------
@@ -94,42 +118,78 @@ steps:
     technique_id: T1090
     framework: custom
     executor: local
-    command: "sysctl net.ipv4.ip_forward"
+    command: |
+      v=$(sysctl -n net.ipv4.ip_forward 2>/dev/null)
+      [ -z "$v" ] && { echo "SKIP: net.ipv4.ip_forward not readable; not scored"; exit 0; }
+      [ "$v" = "0" ] || { echo "FAIL: IP forwarding disabled (net.ipv4.ip_forward=$v, expected 0)"; exit 0; }
+      echo "PASS: IP forwarding disabled (net.ipv4.ip_forward=0)"
     timeout_sec: 10
 
   - name: "ICMP Redirects Not Accepted"
     technique_id: T1562
     framework: custom
     executor: local
-    command: "sysctl net.ipv4.conf.all.accept_redirects net.ipv4.conf.default.accept_redirects"
+    command: |
+      v=$(sysctl -n net.ipv4.conf.all.accept_redirects 2>/dev/null)
+      [ -z "$v" ] && { echo "SKIP: net.ipv4.conf.all.accept_redirects not readable; not scored"; exit 0; }
+      [ "$v" = "0" ] || { echo "FAIL: ICMP redirects not accepted (net.ipv4.conf.all.accept_redirects=$v, expected 0)"; exit 0; }
+      v=$(sysctl -n net.ipv4.conf.default.accept_redirects 2>/dev/null)
+      [ -z "$v" ] && { echo "SKIP: net.ipv4.conf.default.accept_redirects not readable; not scored"; exit 0; }
+      [ "$v" = "0" ] || { echo "FAIL: ICMP redirects not accepted (net.ipv4.conf.default.accept_redirects=$v, expected 0)"; exit 0; }
+      echo "PASS: ICMP redirects not accepted (net.ipv4.conf.all.accept_redirects, net.ipv4.conf.default.accept_redirects=0)"
     timeout_sec: 10
 
   - name: "ICMP Redirects Not Sent"
     technique_id: T1562
     framework: custom
     executor: local
-    command: "sysctl net.ipv4.conf.all.send_redirects net.ipv4.conf.default.send_redirects"
+    command: |
+      v=$(sysctl -n net.ipv4.conf.all.send_redirects 2>/dev/null)
+      [ -z "$v" ] && { echo "SKIP: net.ipv4.conf.all.send_redirects not readable; not scored"; exit 0; }
+      [ "$v" = "0" ] || { echo "FAIL: ICMP redirects not sent (net.ipv4.conf.all.send_redirects=$v, expected 0)"; exit 0; }
+      v=$(sysctl -n net.ipv4.conf.default.send_redirects 2>/dev/null)
+      [ -z "$v" ] && { echo "SKIP: net.ipv4.conf.default.send_redirects not readable; not scored"; exit 0; }
+      [ "$v" = "0" ] || { echo "FAIL: ICMP redirects not sent (net.ipv4.conf.default.send_redirects=$v, expected 0)"; exit 0; }
+      echo "PASS: ICMP redirects not sent (net.ipv4.conf.all.send_redirects, net.ipv4.conf.default.send_redirects=0)"
     timeout_sec: 10
 
   - name: "Martian Packet Logging Enabled"
     technique_id: T1562
     framework: custom
     executor: local
-    command: "sysctl net.ipv4.conf.all.log_martians net.ipv4.conf.default.log_martians"
+    command: |
+      v=$(sysctl -n net.ipv4.conf.all.log_martians 2>/dev/null)
+      [ -z "$v" ] && { echo "SKIP: net.ipv4.conf.all.log_martians not readable; not scored"; exit 0; }
+      [ "$v" = "1" ] || { echo "FAIL: martian packets logged (net.ipv4.conf.all.log_martians=$v, expected 1)"; exit 0; }
+      v=$(sysctl -n net.ipv4.conf.default.log_martians 2>/dev/null)
+      [ -z "$v" ] && { echo "SKIP: net.ipv4.conf.default.log_martians not readable; not scored"; exit 0; }
+      [ "$v" = "1" ] || { echo "FAIL: martian packets logged (net.ipv4.conf.default.log_martians=$v, expected 1)"; exit 0; }
+      echo "PASS: martian packets logged (net.ipv4.conf.all.log_martians, net.ipv4.conf.default.log_martians=1)"
     timeout_sec: 10
 
   - name: "TCP SYN Cookies Enabled (net.ipv4.tcp_syncookies)"
     technique_id: T1046
     framework: custom
     executor: local
-    command: "sysctl net.ipv4.tcp_syncookies"
+    command: |
+      v=$(sysctl -n net.ipv4.tcp_syncookies 2>/dev/null)
+      [ -z "$v" ] && { echo "SKIP: net.ipv4.tcp_syncookies not readable; not scored"; exit 0; }
+      [ "$v" = "1" ] || { echo "FAIL: TCP SYN cookies enabled (net.ipv4.tcp_syncookies=$v, expected 1)"; exit 0; }
+      echo "PASS: TCP SYN cookies enabled (net.ipv4.tcp_syncookies=1)"
     timeout_sec: 10
 
   - name: "IPv6 Router Advertisements Ignored"
     technique_id: T1090
     framework: custom
     executor: local
-    command: "sysctl net.ipv6.conf.all.accept_ra net.ipv6.conf.default.accept_ra"
+    command: |
+      v=$(sysctl -n net.ipv6.conf.all.accept_ra 2>/dev/null)
+      [ -z "$v" ] && { echo "SKIP: net.ipv6.conf.all.accept_ra not readable; not scored"; exit 0; }
+      [ "$v" = "0" ] || { echo "FAIL: IPv6 router advertisements ignored (net.ipv6.conf.all.accept_ra=$v, expected 0)"; exit 0; }
+      v=$(sysctl -n net.ipv6.conf.default.accept_ra 2>/dev/null)
+      [ -z "$v" ] && { echo "SKIP: net.ipv6.conf.default.accept_ra not readable; not scored"; exit 0; }
+      [ "$v" = "0" ] || { echo "FAIL: IPv6 router advertisements ignored (net.ipv6.conf.default.accept_ra=$v, expected 0)"; exit 0; }
+      echo "PASS: IPv6 router advertisements ignored (net.ipv6.conf.all.accept_ra, net.ipv6.conf.default.accept_ra=0)"
     timeout_sec: 10
 
   # -- SSH Hardening -----------------------------------------------------------
@@ -138,14 +198,21 @@ steps:
     technique_id: T1078
     framework: custom
     executor: local
-    command: "sshd -T 2>/dev/null | grep -i permitrootlogin"
+    command: |
+      out=$(sshd -T 2>/dev/null | grep -i "^permitrootlogin ")
+      [ -z "$out" ] && { echo "SKIP: sshd effective config not readable (requires root); not scored"; exit 0; }
+      if echo "$out" | grep -Eiq "^permitrootlogin (no)$"; then echo "PASS: SSH root login disabled ($out)"; else echo "FAIL: SSH root login disabled ($out)"; fi
     timeout_sec: 10
 
   - name: "SSH MaxAuthTries <= 4"
     technique_id: T1110
     framework: custom
     executor: local
-    command: "sshd -T 2>/dev/null | grep -i maxauthtries"
+    command: |
+      out=$(sshd -T 2>/dev/null | grep -i "^maxauthtries ")
+      [ -z "$out" ] && { echo "SKIP: sshd effective config not readable (requires root); not scored"; exit 0; }
+      n=$(echo "$out" | awk '{print $2}')
+      if [ "$n" -le 4 ] 2>/dev/null; then echo "PASS: SSH MaxAuthTries <= 4 ($out)"; else echo "FAIL: SSH MaxAuthTries too high ($out)"; fi
     timeout_sec: 10
 
   - name: "SSH Empty Passwords Forbidden (PermitEmptyPasswords no)"
@@ -153,28 +220,40 @@ steps:
     technique_id: T1110
     framework: custom
     executor: local
-    command: "sshd -T 2>/dev/null | grep -i permitemptypasswords"
+    command: |
+      out=$(sshd -T 2>/dev/null | grep -i "^permitemptypasswords ")
+      [ -z "$out" ] && { echo "SKIP: sshd effective config not readable (requires root); not scored"; exit 0; }
+      if echo "$out" | grep -Eiq "^permitemptypasswords (no)$"; then echo "PASS: SSH empty passwords forbidden ($out)"; else echo "FAIL: SSH empty passwords forbidden ($out)"; fi
     timeout_sec: 10
 
   - name: "SSH Ignores .rhosts Files (IgnoreRhosts yes)"
     technique_id: T1078
     framework: custom
     executor: local
-    command: "sshd -T 2>/dev/null | grep -i ignorerhosts"
+    command: |
+      out=$(sshd -T 2>/dev/null | grep -i "^ignorerhosts ")
+      [ -z "$out" ] && { echo "SKIP: sshd effective config not readable (requires root); not scored"; exit 0; }
+      if echo "$out" | grep -Eiq "^ignorerhosts (yes)$"; then echo "PASS: SSH ignores .rhosts ($out)"; else echo "FAIL: SSH ignores .rhosts ($out)"; fi
     timeout_sec: 10
 
   - name: "SSH Host-Based Authentication Disabled"
     technique_id: T1078
     framework: custom
     executor: local
-    command: "sshd -T 2>/dev/null | grep -i hostbasedauthentication"
+    command: |
+      out=$(sshd -T 2>/dev/null | grep -i "^hostbasedauthentication ")
+      [ -z "$out" ] && { echo "SKIP: sshd effective config not readable (requires root); not scored"; exit 0; }
+      if echo "$out" | grep -Eiq "^hostbasedauthentication (no)$"; then echo "PASS: SSH host-based authentication disabled ($out)"; else echo "FAIL: SSH host-based authentication disabled ($out)"; fi
     timeout_sec: 10
 
   - name: "SSH User Environment Variables Forbidden"
     technique_id: T1548
     framework: custom
     executor: local
-    command: "sshd -T 2>/dev/null | grep -i permituserenvironment"
+    command: |
+      out=$(sshd -T 2>/dev/null | grep -i "^permituserenvironment ")
+      [ -z "$out" ] && { echo "SKIP: sshd effective config not readable (requires root); not scored"; exit 0; }
+      if echo "$out" | grep -Eiq "^permituserenvironment (no)$"; then echo "PASS: SSH user environment forbidden ($out)"; else echo "FAIL: SSH user environment forbidden ($out)"; fi
     timeout_sec: 10
 
   - name: "SSH Protocol 2 Only"
@@ -228,7 +307,9 @@ steps:
     technique_id: T1078
     framework: custom
     executor: local
-    command: "systemctl is-active ssh"
+    command: |
+      a=$(systemctl is-active ssh 2>/dev/null || systemctl is-active sshd 2>/dev/null)
+      if [ "$a" = "active" ]; then echo "PASS: SSH daemon running"; else echo "FAIL: SSH daemon not active ($a)"; fi
     timeout_sec: 10
 
   # -- Access Control ----------------------------------------------------------
@@ -236,35 +317,45 @@ steps:
     technique_id: T1053
     framework: custom
     executor: local
-    command: "ls /etc/cron.allow /etc/cron.deny 2>&1"
+    command: |
+      if [ -f /etc/cron.allow ]; then echo "PASS: /etc/cron.allow present (cron access restricted)"; else echo "FAIL: /etc/cron.allow missing; cron access is not restricted to authorised users"; fi
     timeout_sec: 10
 
   - name: "Auditd Running and Enabled"
     technique_id: T1070
     framework: custom
     executor: local
-    command: "systemctl is-active auditd && systemctl is-enabled auditd"
+    command: |
+      command -v systemctl >/dev/null 2>&1 || { echo "SKIP: systemctl not available; not scored"; exit 0; }
+      a=$(systemctl is-active auditd 2>/dev/null); e=$(systemctl is-enabled auditd 2>/dev/null)
+      if [ "$a" = "active" ] && [ "$e" = "enabled" ]; then echo "PASS: auditd running and enabled (active, enabled)"; else echo "FAIL: auditd running and enabled (active=$a, enabled=$e)"; fi
     timeout_sec: 10
 
   - name: "Rsyslog Running and Enabled"
     technique_id: T1070
     framework: custom
     executor: local
-    command: "systemctl is-active rsyslog && systemctl is-enabled rsyslog"
+    command: |
+      command -v systemctl >/dev/null 2>&1 || { echo "SKIP: systemctl not available; not scored"; exit 0; }
+      a=$(systemctl is-active rsyslog 2>/dev/null); e=$(systemctl is-enabled rsyslog 2>/dev/null)
+      if [ "$a" = "active" ] && [ "$e" = "enabled" ]; then echo "PASS: rsyslog running and enabled (active, enabled)"; else echo "FAIL: rsyslog running and enabled (active=$a, enabled=$e)"; fi
     timeout_sec: 10
 
   - name: "Journald Persistent Storage Enabled"
     technique_id: T1070
     framework: custom
     executor: local
-    command: "grep -i 'storage' /etc/systemd/journald.conf || ls /var/log/journal 2>&1"
+    command: |
+      if grep -Eiq "^[[:space:]]*Storage[[:space:]]*=[[:space:]]*persistent" /etc/systemd/journald.conf 2>/dev/null || [ -d /var/log/journal ]; then echo "PASS: journald persistent storage enabled"; else echo "FAIL: journald storage is volatile"; fi
     timeout_sec: 10
 
   - name: "Log Files Not World-Readable (/var/log)"
     technique_id: T1070
     framework: custom
     executor: local
-    command: "find /var/log -type f -perm /o+r ! -name '*.gz' -maxdepth 4"
+    command: |
+      n=$(find /var/log -type f -perm /o+r ! -name "*.gz" -maxdepth 4 2>/dev/null | wc -l)
+      if [ "$n" -eq 0 ]; then echo "PASS: no world-readable files in /var/log"; else echo "FAIL: $n world-readable file(s) in /var/log"; fi
     timeout_sec: 15
 
   # -- Security Tools ----------------------------------------------------------
@@ -273,7 +364,9 @@ steps:
     technique_id: T1046
     framework: custom
     executor: local
-    command: "ufw status 2>&1"
+    command: |
+      command -v ufw >/dev/null 2>&1 || { echo "SKIP: ufw not installed; not scored"; exit 0; }
+      if ufw status 2>/dev/null | grep -q "Status: active"; then echo "PASS: UFW firewall active"; else echo "FAIL: UFW firewall is not active"; fi
     timeout_sec: 10
 
   - name: "AppArmor Enabled and Enforcing"
@@ -281,7 +374,9 @@ steps:
     technique_id: T1068
     framework: custom
     executor: local
-    command: "aa-status 2>/dev/null || apparmor_status 2>&1"
+    command: |
+      command -v aa-status >/dev/null 2>&1 || command -v apparmor_status >/dev/null 2>&1 || { echo "SKIP: AppArmor tools not available; not scored"; exit 0; }
+      (aa-status 2>/dev/null || apparmor_status 2>/dev/null) | grep -q "profiles are in enforce mode" && echo "PASS: AppArmor profiles enforcing" || echo "FAIL: no AppArmor profiles in enforce mode"
     timeout_sec: 10
 
   # -- Password Policy ---------------------------------------------------------
@@ -290,7 +385,10 @@ steps:
     technique_id: T1110
     framework: custom
     executor: local
-    command: "grep PASS_MIN_LEN /etc/login.defs"
+    command: |
+      n=$(grep -E "^[[:space:]]*PASS_MIN_LEN" /etc/login.defs 2>/dev/null | awk '{print $2}' | tail -1)
+      [ -z "$n" ] && { echo "FAIL: PASS_MIN_LEN not set in /etc/login.defs"; exit 0; }
+      if [ "$n" -ge 12 ] 2>/dev/null; then echo "PASS: PASS_MIN_LEN=$n (>= 12)"; else echo "FAIL: PASS_MIN_LEN=$n (expected >= 12)"; fi
     timeout_sec: 10
 
   - name: "Password Maximum Age <= 365 Days (PASS_MAX_DAYS)"
@@ -298,7 +396,10 @@ steps:
     technique_id: T1110
     framework: custom
     executor: local
-    command: "grep PASS_MAX_DAYS /etc/login.defs"
+    command: |
+      n=$(grep -E "^[[:space:]]*PASS_MAX_DAYS" /etc/login.defs 2>/dev/null | awk '{print $2}' | tail -1)
+      [ -z "$n" ] && { echo "FAIL: PASS_MAX_DAYS not set in /etc/login.defs"; exit 0; }
+      if [ "$n" -le 365 ] 2>/dev/null; then echo "PASS: PASS_MAX_DAYS=$n (<= 365)"; else echo "FAIL: PASS_MAX_DAYS=$n (expected <= 365)"; fi
     timeout_sec: 10
 
   - name: "Sudo Usage Logged"

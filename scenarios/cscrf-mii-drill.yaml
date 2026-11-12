@@ -95,6 +95,7 @@ steps:
         if ($r) { $open += "$($p.Name)/$($p.Port)" } else { $closed += "$($p.Name)/$($p.Port)" }
       }
       Write-Output "EXEC [CSCRF-1.1]: management-port scan  -  OPEN: $($open -join ', '); CLOSED: $($closed -join ', '). Localhost-only. Expect Sysmon EID 3. [BAS-SIM]"
+      if ($open.Count -gt 0) { Write-Output ("FAIL: management port(s) reachable on localhost: " + (($open | ForEach-Object { $_ }) -join ", ") + ". Restrict management interfaces. [CSCRF-1.1]") } else { Write-Output "PASS: no management ports reachable on localhost. [CSCRF-1.1]" }
     cleanup: ""
 
   - name: "Failed Auth Probe (CSCRF-2.3  -  BAS-NONEXISTENT-USER, lockout-safe)"
@@ -123,6 +124,7 @@ steps:
         [void]$ctx.ValidateCredentials($probe, 'BAS-WrongPass-1!')
       } catch {}
       Write-Output "EXEC [CSCRF-2.3]: one failed auth for '$probe'  -  expect Security EID 4625. Account cannot exist = zero lockout risk. Validates SEBI lockout-alert chain. [BAS-SIM]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   - name: "System Discovery Recon (CSCRF-4.1  -  OS, EDR, patch, virtualisation)"
@@ -153,6 +155,7 @@ steps:
       $defOn    = (Get-MpComputerStatus -ErrorAction SilentlyContinue).RealTimeProtectionEnabled
       $sysmonOn = (Get-Service Sysmon64 -ErrorAction SilentlyContinue).Status -eq 'Running' -or (Get-Service Sysmon -ErrorAction SilentlyContinue).Status -eq 'Running'
       Write-Output "EXEC [CSCRF-4.1]: OS='$ver' hostname=$env:COMPUTERNAME domain=$env:USERDOMAIN patchAgeDays=$patchAge virtualised=$isVirt DefenderRTP=$defOn Sysmon=$sysmonOn. UEBA/SIEM should detect this recon burst. [BAS-SIM]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   - name: "Audit Policy Enumeration (CSCRF-3.1  -  control-validation opportunity)"
@@ -177,6 +180,7 @@ steps:
       $out = & auditpol /get /category:* 2>&1
       $enabled = ([regex]::Matches(($out -join ' '), 'Success and Failure|Success|Failure')).Count
       Write-Output "EXEC [CSCRF-3.1]: audit policy enumeration  -  $enabled audit subcategory/categories with non-'No Auditing' settings found. Expect EID 4688 + Sysmon EID 1 for auditpol.exe. Policy read does not fire EID 4719  -  validate process telemetry coverage. [BAS-SIM]"
+      if ($enabled -gt 0) { Write-Output "PASS: audit policy has $enabled enabled audit setting(s). [CSCRF-3.1]" } else { Write-Output "FAIL: no audit subcategory is enabled; security events will not be recorded. [CSCRF-3.1]" }
     cleanup: ""
 
   - name: "Local Group Enumeration (CSCRF-2.1  -  Sysmon EID 1 + EID 4798)"
@@ -202,6 +206,7 @@ steps:
       $netOut = & net localgroup Administrators 2>&1
       $count  = (Get-LocalGroupMember -Group 'Administrators' -ErrorAction SilentlyContinue | Measure-Object).Count
       Write-Output "EXEC [CSCRF-2.1]: local Administrators group enumerated  -  $count member(s). Expect Sysmon EID 1 (net.exe) + EID 4688. EID 4798 may not fire in all environments  -  validate via process telemetry. [BAS-SIM]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   # -- Lab-only steps ---------------------------------------------------------

@@ -317,3 +317,22 @@ Each change was re-signed with the release key; `verify-all` ok=156 fail=0. Scor
 - dlp-exfiltration-multichannel archive/shared/HTTPS/DNS/SFTP/SMTP steps.
 - Thin scenarios (34) and detection/telemetry backfill (40/39 files), which needs per-file approval.
 - Lab verification of every changed step.
+
+## 2026-11-12: Tokenless verdict sweep (worktree, NOT committed, NOT VERIFIED on a lab host)
+
+Method: every executable or local_check step whose command prints no PASS/FAIL/SKIP/ERROR token scores PASS on exit 0. Each was given a verdict or an explicit SKIP reason. Re-signed; verify-all ok=156 fail=0; scenario tests pass.
+
+- **av-ngav-assessment (15 steps).** Primary steps: FAIL if the test artifact is retained; PASS only on an explicit block or a Defender detection record for that path; otherwise SKIP. Counterpart steps: FAIL on a false positive (benign artifact blocked or removed), PASS when not blocked. Run-key, scheduled-task and high-I/O steps follow the same rules.
+- **Telemetry-only probes (apt36, evasion, insider, lolbin-coverage, upi, windows-discovery, acl context).** SKIP with a reason. No control outcome exists to score.
+- **cscrf-mii-drill steps 1 and 4.** Real posture verdicts: management ports reachable on localhost is FAIL; no audit subcategory enabled is FAIL.
+- **cis-ubuntu-l1 (32 checks).** Each compares the live value to the CIS value (sysctl, mount options, sshd -T, services, login.defs, cron.allow, journald, /var/log permissions, UFW, AppArmor). Unreadable values SKIP.
+- **Inventory (linux/windows-installed-software).** SKIP: inventory only.
+
+Score impact: many steps that previously PASSed on exit 0 can now FAIL or SKIP. This is intentional and must be reviewed before the next build.
+
+### Not changed, with reasons
+- **DLP sink-verified steps (about 61).** Their grade is server-side: `dlpVerifier` (internal/reporting/dlp.go) uses `SinkTokenObserved` as authoritative. Their missing token is by design, not a false PASS. Their `production_safe: true` label is a separate question: they POST synthetic regulated-shaped data to the registered sink. Akira 5b was made lab-only with an allow-list guard. Decide whether the same applies here.
+- **lolbin-execution-coverage #12 and lolbin-execution #1 (wmi executor), lolbin-execution #2 (mshta).** Their executor is not PowerShell, so the verdict path is unconfirmed. The mshta payload `vbscript:window.close` looks malformed. Left as open.
+- **30 command-less steps (hunters-international, medusa, rhysida).** Still open: building real commands needs design.
+- **Thin scenarios (34) and detection/telemetry backfill.** Still open: these add content and need your approval per file.
+- **Platform-wide default (tokenless exit-0 = PASS).** Still open: a scoring-model decision for you.
