@@ -104,3 +104,9 @@ export function scenarioSub(art) {
 }
 
 export { pageCount, rangeText, csvText } from './runs-model.js';
+
+// canRevalidate: re-validate runs the scenario that covers one ATT&CK technique, so it needs a real technique ID.
+// Custom or empty IDs have no scenario to run.
+export function canRevalidate(t) {
+  return /^T\d{4}(\.\d{3})?$/i.test(String((t && t.techniqueId) || ''));
+}
