@@ -518,3 +518,12 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
   - ESC6, ESC10, ESC12 exploitation not tested.
 - Baseline unchanged; ledger gained three entries. Scenario tests pass; 156 signatures verify.
 - NOT VERIFIED on a domain. Lab probe required before a kit run is trusted.
+
+### ESC10 corrected to SKIP-only (2026-11-13, approved)
+
+- Reason: Microsoft KB5014754 (https://support.microsoft.com/help/5014754) states the StrongCertificateBindingEnforcement registry value is no longer supported after the September 9, 2025 update. The earlier PASS on value 2 and FAIL on value 0 rested on a key the DC no longer reads.
+- Change: ESC10 step now always SKIP, stating the reason. No PASS path. No FAIL path.
+- Customer-visible score delta: DCs that previously PASSed on value 2 move to SKIP. Any FAIL on value 0 is removed.
+- Not changed: certificate-mapping methods (CertificateMappingMethods, Schannel key, bit 0x4 UPN) remain unassessed. The KB does not state the KDC reads it.
+- Lab: ESC10 result was already SKIP (value unset). No lab change made; setting value 2 was rejected because it has no effect after the 2025 update.
+- Tests: scenario tests pass; 156 signatures verify.

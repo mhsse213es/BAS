@@ -965,7 +965,7 @@ steps:
       }
     cleanup: ""
 
-  - name: "ADCS ESC10 - DC certificate binding enforcement disabled (T1649)"
+  - name: "ADCS ESC10 - DC certificate binding enforcement (not assessable after 2025 update) (T1649)"
     technique_id: T1649
     framework: custom
     executor: powershell
@@ -989,46 +989,8 @@ steps:
       - "SIEM: template with msPKI-RA-Application-Policies issuance-policy OID linked to a group with non-tier-0 members \u2014 ESC13 exposure IOC"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $findings = @()
-      $dcCount = 0
-      $fullCount = 0
-      $ok = $false
-      try {
-        $domainDN = ([ADSI]"LDAP://RootDSE").defaultNamingContext
-        if (-not $domainDN) { throw "no domain" }
-        $ds = New-Object System.DirectoryServices.DirectorySearcher
-        $ds.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domainDN")
-        $ds.Filter = "(&(objectClass=computer)(userAccountControl:1.2.840.113556.1.4.803:=8192))"
-        [void]$ds.PropertiesToLoad.Add('dNSHostName')
-        foreach ($res in @($ds.FindAll())) {
-          $dcCount++
-          $dc = [string]$res.Properties['dnshostname'][0]
-          if (-not $dc) { continue }
-          try {
-            $reg = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $dc)
-            $k = $reg.OpenSubKey('SYSTEM\CurrentControlSet\Services\Kdc')
-            if ($k) {
-              $v = $k.GetValue('StrongCertificateBindingEnforcement')
-              if ($null -ne $v) {
-                if ([int]$v -eq 0) { $findings += "$dc (StrongCertificateBindingEnforcement=0)" }
-                if ([int]$v -eq 2) { $fullCount++ }
-              }
-            }
-          } catch { }
-        }
-        $ok = ($dcCount -gt 0 -and $fullCount -eq $dcCount)
-      } catch {
-        $ok = $false
-      }
-      if ($findings.Count -gt 0) {
-        Write-Output "EXEC T1649: $($findings.Count) domain controller(s) have certificate binding enforcement disabled. Reads the Kerberos KDC registry value only; no authentication is attempted. [BAS-SIM-ADCS-ESC10]"
-        foreach ($f in $findings) { Write-Output "DC $f" }
-        Write-Output "FAIL: a domain controller accepts weakly bound certificates (ESC10, enforcement disabled). Configuration exposure only; exploitability was not tested. Remediation: set StrongCertificateBindingEnforcement to 2 on every DC and review certificate mapping. [BAS-SIM-ADCS-ESC10]"
-      } elseif ($ok) {
-        Write-Output "PASS: every domain controller reports StrongCertificateBindingEnforcement=2 (full enforcement). This step assesses that KDC value only; certificate-mapping methods are not assessed. [BAS-SIM-ADCS-ESC10]"
-      } else {
-        Write-Output "SKIP: ESC10 check unavailable: binding enforcement is not set to 2 on every DC, or a DC registry could not be read (Remote Registry, reachability or permissions). Not scored; enforcement mode 1 or unset is not treated as PASS. [BAS-SIM-ADCS-ESC10]"
-      }
+      Write-Output "SKIP: ESC10 cannot be scored from the registry. The StrongCertificateBindingEnforcement key is no longer supported after the September 2025 Windows update (KB5014754), so domain controller enforcement state cannot be verified this way. Certificate-mapping methods are not assessed. Not scored; not treated as PASS. [BAS-SIM-ADCS-ESC10]"
+
     cleanup: ""
 
   - name: "ADCS ESC12 - CA signing key in software provider, posture only (T1649)"
