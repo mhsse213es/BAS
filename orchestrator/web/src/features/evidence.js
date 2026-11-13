@@ -461,14 +461,13 @@ export function triggerDownload(href, filename) {
 // (internal/api/handlers.go) so every downloaded report -- whether the
 // server streams it directly or the browser saves it via an <a download>
 // link -- gets the same consistent, sortable, self-explanatory name:
-// Audspect_<ReportType>_<Scope>_<YYYY-MM-DD_HH-mm-ss>.<ext>.
+// Audspect_<ReportType>_<Scope>_<YYYY-MM-DD>.<ext>.
 export function buildReportFilename(reportType, scope, ext) {
   var safe = (scope || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
   if (!safe) safe = 'report';
   var d = new Date();
   var pad = function(n) { return String(n).padStart(2, '0'); };
-  var ts = d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) +
-    '_' + pad(d.getUTCHours()) + '-' + pad(d.getUTCMinutes()) + '-' + pad(d.getUTCSeconds());
+  var ts = d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
   return 'Audspect_' + reportType + '_' + safe + '_' + ts + '.' + ext;
 }
 
