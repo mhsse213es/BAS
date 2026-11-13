@@ -60,7 +60,7 @@ func (o *Orchestrator) mayAttempt(versionID string) bool {
 	if a.n >= maxValidationAttempts {
 		return false
 	}
-	return a.n == 0 || time.Since(a.last) >= o.retryBackoff
+	return a.last.IsZero() || time.Since(a.last) >= o.retryBackoff
 }
 
 // noteAttempt records a dispatch of the version.
@@ -135,7 +135,9 @@ func (o *Orchestrator) selectEligible(ctx context.Context) ([]string, error) {
 		              SELECT 1 FROM content_version_threats t
 		               WHERE t.content_version_id = cv.id AND t.relationship_kind = 'generated_for') ) )
 		    AND (SELECT COUNT(*) FROM content_validations v
-		          WHERE v.content_version_id = cv.id AND v.level = 'EXECUTION') < $3
+		          WHERE v.content_version_id = cv.id AND v.level = 'EXECUTION'
+		            AND NOT (v.outcome = 'ERROR' AND (v.detail->>'dispatch_failure' = 'offline'
+		                 OR v.detail->>'dispatch_failure' LIKE 'agent %'))) < $3
 		    AND NOT EXISTS (SELECT 1 FROM content_validations v
 		          WHERE v.content_version_id = cv.id AND v.level = 'EXECUTION'
 		            AND v.created_at > NOW() - make_interval(secs => $4))
@@ -229,6 +231,9 @@ func (o *Orchestrator) dispatchAndResolve(ctx context.Context, versionID string,
 			reason = err.Error()
 		}
 		o.recordExecutionOutcome(ctx, versionID, "", "ERROR", map[string]any{"dispatch_failure": reason})
+		if isEnvironmentalDispatchFailure(reason) {
+			o.refundAttempt(versionID)
+		}
 		_ = o.reg.Transition(ctx, versionID, contentregistry.LifecycleDraft, contentregistry.ActorValidationLab, "dispatch failed: "+reason)
 		return
 	}
