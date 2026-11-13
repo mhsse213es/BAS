@@ -539,3 +539,13 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
     - entra-hybrid-identity-attack.yaml T1539 index 3: only 5 Windows tests exist.
     - ubuntu-hardening-validation.yaml T1046 index 11: only 13 Linux tests exist, but the platform filter leaves fewer.
 - Not changed: scenario test indexes; the runtime silent fallback in builder.go (a change to execution behaviour, needs approval).
+
+### ART out-of-range index no longer falls back to test 0 (approved 2026-11-13)
+
+- Change: orchestrator/internal/scenario/builder.go. An out-of-range test_index leaves the step without a command, so the existing SKIP fallback reports it. Previously it silently ran the first platform test.
+- Execution behaviour change, approved by the user.
+- Tests: scenario package passes. No new test was added for this case.
+- Broken steps now SKIP until fixed:
+  - ubuntu-hardening-validation T1046 "Test 12: Port Scan using nmap (Port range)": test_index 11 is the RAW position of that test in T1046.yaml. The runtime index is platform-filtered, where that test is index 2. The step name identifies the intended test; the fix is test_index 2.
+  - entra-hybrid-identity-attack T1539 "Stage 3 - Browser-Cached M365 Session Cookie Theft": index 3 does not exist. Windows options: 0 Firefox cookies, 1 Chrome cookies, 2 Chrome v127+ remote debugging. Needs the user's choice.
+- Also to audit: any other ART step whose index is in range but was copied from the raw position may run the wrong test. Not yet checked by name.

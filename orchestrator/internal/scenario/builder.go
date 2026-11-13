@@ -298,8 +298,10 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore, agentO
 		if artStore != nil {
 			artSteps := artStore.GetStepsByPlatform(s.TechniqueID, agentOS)
 			idx := s.TestIndex
+			// An out-of-range test_index is not replaced with test 0: the step is left
+			// without a command, so the SKIP fallback below reports it.
 			if idx < 0 || idx >= len(artSteps) {
-				idx = 0
+				artSteps = nil
 			}
 			if len(artSteps) > 0 {
 				m := artStore.materialize(artSteps[idx])
