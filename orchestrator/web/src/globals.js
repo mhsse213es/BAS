@@ -39,6 +39,7 @@ import { abortExecution, abortExecutionStop, approveExStep, closeExerciseDetail,
 import { runRansomwareDrill } from './features/ransomware.js';
 import { addStep, addlSelChange, loadStepScript, applyPicker, clearSelection, cloneScenario, closeBuilder, closeBuilderOnBackdrop, closeModal, closePicker, closeReportGen, deleteCustomScenario, downloadBuilderYaml, genAgentReport, loadRuns, moveStepBy, openBuilder, openBuilderARTPicker, openBuilderCalderaPicker, openDetailedViewForScenario, openModal, openPicker, openPickerFromModal, openReportGen, pickScenarioUploadFile, pickerSelectAll, pickerToggle, removeStep, renderBuilderMode, renderPickerList, renderRunMode, runGroupChange, saveScenario, selectAllAdditionalAgents, setPF, setTargetMode, submitReport, switchRunTab, techChangeSelection, techCopyId, techKeydown, techOnBlur, techOnInput, techSelectRow, updateVariantDepthNote, uploadScenarioFile, viewRunResults, wizardNav } from './features/reports.js';
 import { closeRerunReview, closeRerunReviewOnBackdrop, openCampaignRerunReview, openRerunReview, startRerunFromReview } from './features/rerun-review.js';
+import { blackoutCreate, blackoutDelete, blackoutKindChange } from './features/blackouts.js';
 import { cancelScheduledAssessment, closeSchedWizard, loadScheduledAssessments, openSchedWizard, openSchedWizardForEdit, schedAuthCheckChange, schedOnModeChange, schedOnRecurrenceChange, schedToggleAgentFromChecked, schedToggleGroupFromChecked, schedWizardNav, setSchedFilter, submitScheduledAssessment, schedSearch, schedClearFilters, schedTableQuery, setSchedPer, schedPage, schedSortBy, toggleSchedCols, schedColToggle, schedSelectRow, schedSelectAll, clearSchedSelection, exportSchedCsv, exportSchedSelected, schedOpen, schedRowKeydown, closeSchedDrawer, closeSchedDrawerOnBackdrop, schedEditFromDrawer, schedCancelFromDrawer } from './features/scheduled.js';
 import { toggleNavPin } from './features/nav-extras.js';
 import { cloudPickScenario, cloudSubmitRun, cloudSubmitDiscovery, cloudRefreshRuns } from './features/cloud-scenarios.js';
@@ -420,6 +421,9 @@ export const ACTIONS = {
   loadSLAReport,
   loadScenarios,
   loadScheduledAssessments,
+  blackoutCreate,
+  blackoutDelete,
+  blackoutKindChange,
   loadTAXIIConnectors,
   loadVariantMatrixFromButton,
   refreshVariantTab,
