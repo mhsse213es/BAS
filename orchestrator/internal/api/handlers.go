@@ -6101,7 +6101,7 @@ func sanitizeFilename(s string) string {
 
 // buildReportFilename produces every downloadable report/export's filename
 // in one consistent, sortable, self-explanatory shape:
-// Audspect_<ReportType>_<Scope>_<YYYY-MM-DD_HH-mm-ss>.<ext> -- so a
+// Audspect_<ReportType>_<Scope>_<YYYY-MM-DD>.<ext> -- so a
 // customer's Downloads folder stays identifiable even with hundreds of
 // reports accumulated, and files from the same moment sort together
 // regardless of report type. reportType is passed pre-formatted (e.g.
@@ -6132,7 +6132,7 @@ func buildReportFilename(reportType, scope, ext string) string {
 	if safeScope == "" {
 		safeScope = "report"
 	}
-	ts := time.Now().UTC().Format("2006-01-02_15-04-05")
+	ts := time.Now().UTC().Format("2006-01-02")
 	return fmt.Sprintf("Audspect_%s_%s_%s.%s", reportType, safeScope, ts, ext)
 }
 

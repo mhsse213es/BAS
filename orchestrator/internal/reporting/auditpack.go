@@ -81,7 +81,7 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 	if scope == "" {
 		scope = agentID
 	}
-	dirName := fmt.Sprintf("Audspect_Audit_Pack_%s_%s", sanitize(scope), time.Now().UTC().Format("2006-01-02_15-04-05"))
+	dirName := fmt.Sprintf("Audspect_Audit_Pack_%s_%s", sanitize(scope), time.Now().UTC().Format("2006-01-02"))
 	prefix := dirName + "/"
 
 	// add writes one pack file and records its SHA-256 in the manifest. Every
