@@ -80,3 +80,24 @@ test('nothing is fetched while signed out, and a bad or failed answer changes no
   await nav.refreshBadgeData(() => Promise.reject(new Error('down')), st, () => true);
   assert.equal(st._findings.length, 1, 'a failed request keeps the last known list');
 });
+
+// The Live Runs nav badge counts the runs the Live Runs page calls "in flight": running or queued, excluding the
+// sweep child rows that the page groups. It is read from the same list the page loads.
+test('navBadgeCounts: Live Runs shows the running and queued count', async () => {
+  const { navBadgeCounts } = await import('../../src/features/nav-extras.js');
+  const runs = [
+    { id: 'a', status: 'running' },
+    { id: 'b', status: 'queued' },
+    { id: 'c', status: 'completed' },
+    { id: 'd', status: 'running', sweepId: 'sw1' },
+  ];
+  const out = navBadgeCounts({ _liveRuns: runs });
+  assert.equal(out.runs && out.runs.n, 2);
+  assert.match(out.runs.label, /2 running or queued/);
+});
+
+test('navBadgeCounts: Live Runs has no badge when nothing is in flight', async () => {
+  const { navBadgeCounts } = await import('../../src/features/nav-extras.js');
+  const out = navBadgeCounts({ _liveRuns: [{ id: 'c', status: 'completed' }] });
+  assert.equal(out.runs, undefined);
+});

@@ -1,4 +1,5 @@
 import { state } from '../core/state.js';
+import { liveRuns } from './runs-model.js';
 
 // Sidebar extras that need no server support:
 //  - count badges on a few nav items, computed from data the pages already loaded (state), so a badge
@@ -40,6 +41,12 @@ export function navBadgeCounts(st) {
       var crit = open.some(function(r) { return r.severity === 'critical'; });
       out.findings = { n: open.length, tone: crit ? 'bad' : 'warn', label: open.length + ' open findings' };
     }
+  }
+  // Live Runs: the same running-or-queued set the page shows, read from the list it loads.
+  var lr = st && st._liveRuns;
+  if (Array.isArray(lr)) {
+    var live = liveRuns(lr).length;
+    if (live) out.runs = { n: live, tone: 'accent', label: live + ' running or queued' };
   }
   var c = st && st._campaigns;
   if (Array.isArray(c)) {
@@ -191,11 +198,23 @@ export function refreshBadgeData(fetchJson, st, isActive) {
 }
 
 var badgeDataTimer = null;
+var liveRunsTimer = null;
+// refreshLiveRuns re-reads the scenario run list for the Live Runs badge every 15 seconds. The list carries full run
+// rows, so it is not polled faster. It is the list the Live Runs page reads; the server leaves factory-lab runs out.
+export function refreshLiveRuns(fetchJson, st, isActive) {
+  if (!isActive()) return Promise.resolve();
+  return fetchJson('/api/scenarios/runs').then(function(list) {
+    if (Array.isArray(list)) st._liveRuns = list;
+    refreshNavBadges();
+  }).catch(function() { /* keep the last known list */ });
+}
 // startBadgeDataRefresh loads the badge data now and then once a minute. Safe to call on every sign-in.
 export function startBadgeDataRefresh(fetchJson) {
   var active = function() { var app = document.getElementById('app'); return !!app && app.style.display !== 'none'; };
   refreshBadgeData(fetchJson, state, active);
   if (!badgeDataTimer) badgeDataTimer = setInterval(function() { refreshBadgeData(fetchJson, state, active); }, 60000);
+  refreshLiveRuns(fetchJson, state, active);
+  if (!liveRunsTimer) liveRunsTimer = setInterval(function() { refreshLiveRuns(fetchJson, state, active); }, 15000);
 }
 
 // startNavBadgePolling re-reads the badges every few seconds. Called from main.js only, so it never
