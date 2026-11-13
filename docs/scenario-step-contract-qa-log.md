@@ -436,3 +436,40 @@ RBCD A keeps its FAIL on the quota above 0, but the title and evidence now say w
 - Existing rows in `dlp_sink_receipts` keep `browser-upload`. The table is append-only, and no rows were rewritten. Any report built from them still shows the old value.
 - The sink does not validate the channel value, so old and new values are both accepted.
 - Targeted tests (DLP fixture, correlation, scenario, sink) pass; signatures verify 156/0. The full internal/api suite is rerun after this change.
+
+## 2026-11-13: AD check hotfix from the lab baseline (worktree, NOT verified on a domain)
+
+Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing planted). Fixes are in the generator and the scenario files.
+
+### Defects fixed
+
+| # | Defect | Effect before | Fix |
+|---|---|---|---|
+| 1 | The write mask included read bits (ReadControl), so any read ACE matched | False FAILs: ESC4 (33 templates), ESC5 (5 PKS objects), ESC7 (Authenticated Users), GPO-A, GPO-B | Mask set to write bits only: 0x500C0020 (GenericAll, GenericWrite, WriteDacl, WriteOwner, WriteProperty) |
+| 2 | RBCD-B matched every write ACE, including default SELF ACEs on other attributes | False FAILs on WS01 and the DC computer object | Counted only when the ACE covers all attributes or msDS-AllowedToActOnBehalfOfOtherIdentity |
+| 3 | ESC4 finding named no principal | Could not be checked against the evidence rule | Finding now lists the write-holding SIDs (`write-by=`) |
+| 4 | ESC11 FAILed on the template RA-signature count, which is not the ESC11 weakness (that is the CA-level RPC enforcement state) | False FAILs on 8 default templates | Now SKIP when the template precondition is present; never FAIL. Not scored |
+| 5 | ESC13 EXEC line said "precondition present" when only OID objects were found | Overstated wording | Wording changed to "review" |
+| 6 | DCSync audit command did not parse (em-dash inside a double-quoted string, which PowerShell 5.1 reads as a smart quote) | Step could not run | Em-dashes in the command replaced with hyphens |
+| 7 | exposure-validation step 0 had `\"` inside a double-quoted string, which ended the string early | Step could not run | Changed to `""` (PowerShell escape). Pre-existing, not from this branch |
+
+### Verdict changes (step level)
+
+- ESC4, ESC5, ESC7, GPO-A, GPO-B, RBCD-B: FAIL to PASS on the lab baseline. Real exposures are still reported as FAIL, with the principal named.
+- ESC11: FAIL to SKIP when the template precondition is present.
+- DCSync: no verdict (parse error) to a verdict.
+- exposure-validation step 0: no verdict (parse error) to a verdict.
+
+### Verification
+
+- Write mask checked with a harness on synthetic ACE rights: GenericRead, ReadProperty+ReadControl and ExtendedRight do not match; WriteProperty, WriteDacl, GenericWrite and GenericAll do. Note: the first harness run was invalid, because `[ActiveDirectoryRights]0x500C0020` throws in PowerShell 5.1 and the variable came back empty. Fixed by using a plain integer.
+- Parse check of all 436 PowerShell steps in the scenarios, with a UTF-8 BOM (matching the Windows agent, which writes BOM for steps): 435 parse. The one exception, exposure-validation step 0, is now fixed.
+- Without a BOM, 41 steps fail to parse. That is an artifact of writing the files without one. The agent writes BOM for Windows steps, so those are not customer-facing defects.
+- Signatures: 7 changed files re-signed; verify-all ok=156 fail=0. Ledger regenerated. Scenario and DLP fixture tests pass.
+- Lab rerun of the fixed checks: NOT YET DONE. Needs the rebuilt kit copied to AD-DC-01 (`C:\bas\ad-lab-kit`).
+
+### Still open
+
+- ESC7 orphaned ACE on the CA object (SID ...-1000 does not resolve to an account). It is a real FAIL, pending cleanup decision.
+- ESC7 does not evaluate ManageCA or ManageCertificates.
+- ESC9 flag change (0x80000) still needs a domain-side check.

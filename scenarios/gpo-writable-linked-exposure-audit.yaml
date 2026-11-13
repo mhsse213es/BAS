@@ -58,7 +58,8 @@ steps:
         if (-not $domainDN) { throw "no domain" }
         $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-498','*-500','*-517')
         function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
-        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # write bits only: GenericAll 0x10000000, GenericWrite 0x40000000, WriteDacl 0x40000, WriteOwner 0x80000, WriteProperty 0x20 (read bits excluded)
+        $writeRights = 0x500C0020
         # Record where each gPLink points. Owner = the domain root, or any other container (OU or site).
         $linkDomain = @{}
         $linkOther = @{}
@@ -154,7 +155,8 @@ steps:
         if (-not $domainDN) { throw "no domain" }
         $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-498','*-500','*-517')
         function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
-        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # write bits only: GenericAll 0x10000000, GenericWrite 0x40000000, WriteDacl 0x40000, WriteOwner 0x80000, WriteProperty 0x20 (read bits excluded)
+        $writeRights = 0x500C0020
         # Record where each gPLink points. Owner = the domain root, or any other container (OU or site).
         $linkDomain = @{}
         $linkOther = @{}

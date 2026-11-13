@@ -89,7 +89,7 @@ steps:
           Write-Output "  VULN: $($svc.Name) | StartMode=$($svc.StartMode) State=$($svc.State) | Path: $($svc.PathName)"
           Write-Output "  HIJACK TARGET: plant binary at [$prefix.exe] to execute as $($svc.Name) service account on next start"
         }
-        Write-Output "FAIL: $count service(s) have unquoted paths with spaces. An attacker with write access to a path prefix can achieve privilege escalation to SYSTEM or a service account. Fix: wrap all service ImagePath values in double quotes (sc config <name> binpath= '\"<quoted path>\"')."
+        Write-Output "FAIL: $count service(s) have unquoted paths with spaces. An attacker with write access to a path prefix can achieve privilege escalation to SYSTEM or a service account. Fix: wrap all service ImagePath values in double quotes (sc config <name> binpath= '""<quoted path>""')."
       } else {
         Write-Output "PASS: No unquoted service paths with spaces found outside Windows core directories. T1574.009 hijack surface is minimal. [BAS-SIM-EXPOSURE-S1]"
       }

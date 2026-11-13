@@ -11,7 +11,7 @@ description: >
     ESC5  Public Key Services container objects writable by a non-tier-0 principal
     ESC7  CA object standard write rights granted to a non-tier-0 principal (ManageCA and ManageCertificates NOT evaluated)
     ESC9  no-security-extension flag with low-priv enrollment (UPN/SAM write-exposure NOT evaluated)
-    ESC11 RA signature count 0 with low-priv enrollment (inferred from configuration)
+    ESC11 template RA-signature precondition (SKIP on finding: the CA-level RPC enforcement state is not evaluated)
     ESC13 issuance-policy precondition; reported as SKIP, never FAIL, because group linkage needs manual correlation
     ESC15 schema-version-1 template, enrollee-supplied subject, Application Policy in place of EKU
   Not assessed by this scenario: ESC6 and ESC8 (CA host and network properties), ESC10 (no evaluation implemented), ESC12 and ESC14.
@@ -93,7 +93,8 @@ steps:
         $anyEKU   = '2.5.29.37.0'
         $enrollRight = [guid]'0e10c968-78fb-11d2-90d4-00c04f79dc55'
         $autoEnroll  = [guid]'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
-        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # write bits only: GenericAll 0x10000000, GenericWrite 0x40000000, WriteDacl 0x40000, WriteOwner 0x80000, WriteProperty 0x20 (read bits excluded)
+        $writeRights = 0x500C0020
         foreach ($tmpl in $container.Children) {
           if ($tmpl.SchemaClassName -ne 'pKICertificateTemplate') { continue }
           $name        = [string]$tmpl.Properties['cn'].Value
@@ -111,15 +112,16 @@ steps:
           $hasAnyOrNoEKU = ($ekus.Count -eq 0) -or ($ekus -contains $anyEKU)
           $lowPrivEnroll = $false
           $nonTier0Write = $false
+          $writers = @()
           $rules = $tmpl.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
           foreach ($r in $rules) {
             if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true }
+            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
           }
-          if ($suppliesSubject -and $hasAuthEKU -and (-not $mgrApproval) -and $lowPrivEnroll) { $findings += "TEMPLATE $name" }
+          if ($suppliesSubject -and $hasAuthEKU -and (-not $mgrApproval) -and $lowPrivEnroll) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
         $ok = $true
       } catch {
@@ -178,7 +180,8 @@ steps:
         $anyEKU   = '2.5.29.37.0'
         $enrollRight = [guid]'0e10c968-78fb-11d2-90d4-00c04f79dc55'
         $autoEnroll  = [guid]'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
-        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # write bits only: GenericAll 0x10000000, GenericWrite 0x40000000, WriteDacl 0x40000, WriteOwner 0x80000, WriteProperty 0x20 (read bits excluded)
+        $writeRights = 0x500C0020
         foreach ($tmpl in $container.Children) {
           if ($tmpl.SchemaClassName -ne 'pKICertificateTemplate') { continue }
           $name        = [string]$tmpl.Properties['cn'].Value
@@ -196,15 +199,16 @@ steps:
           $hasAnyOrNoEKU = ($ekus.Count -eq 0) -or ($ekus -contains $anyEKU)
           $lowPrivEnroll = $false
           $nonTier0Write = $false
+          $writers = @()
           $rules = $tmpl.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
           foreach ($r in $rules) {
             if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true }
+            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
           }
-          if ($hasAnyOrNoEKU -and $lowPrivEnroll -and (-not $mgrApproval)) { $findings += "TEMPLATE $name" }
+          if ($hasAnyOrNoEKU -and $lowPrivEnroll -and (-not $mgrApproval)) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
         $ok = $true
       } catch {
@@ -263,7 +267,8 @@ steps:
         $anyEKU   = '2.5.29.37.0'
         $enrollRight = [guid]'0e10c968-78fb-11d2-90d4-00c04f79dc55'
         $autoEnroll  = [guid]'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
-        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # write bits only: GenericAll 0x10000000, GenericWrite 0x40000000, WriteDacl 0x40000, WriteOwner 0x80000, WriteProperty 0x20 (read bits excluded)
+        $writeRights = 0x500C0020
         foreach ($tmpl in $container.Children) {
           if ($tmpl.SchemaClassName -ne 'pKICertificateTemplate') { continue }
           $name        = [string]$tmpl.Properties['cn'].Value
@@ -281,15 +286,16 @@ steps:
           $hasAnyOrNoEKU = ($ekus.Count -eq 0) -or ($ekus -contains $anyEKU)
           $lowPrivEnroll = $false
           $nonTier0Write = $false
+          $writers = @()
           $rules = $tmpl.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
           foreach ($r in $rules) {
             if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true }
+            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
           }
-          if ($hasAgentEKU -and $lowPrivEnroll) { $findings += "TEMPLATE $name" }
+          if ($hasAgentEKU -and $lowPrivEnroll) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
         $ok = $true
       } catch {
@@ -348,7 +354,8 @@ steps:
         $anyEKU   = '2.5.29.37.0'
         $enrollRight = [guid]'0e10c968-78fb-11d2-90d4-00c04f79dc55'
         $autoEnroll  = [guid]'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
-        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # write bits only: GenericAll 0x10000000, GenericWrite 0x40000000, WriteDacl 0x40000, WriteOwner 0x80000, WriteProperty 0x20 (read bits excluded)
+        $writeRights = 0x500C0020
         foreach ($tmpl in $container.Children) {
           if ($tmpl.SchemaClassName -ne 'pKICertificateTemplate') { continue }
           $name        = [string]$tmpl.Properties['cn'].Value
@@ -366,15 +373,16 @@ steps:
           $hasAnyOrNoEKU = ($ekus.Count -eq 0) -or ($ekus -contains $anyEKU)
           $lowPrivEnroll = $false
           $nonTier0Write = $false
+          $writers = @()
           $rules = $tmpl.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
           foreach ($r in $rules) {
             if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true }
+            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
           }
-          if ($nonTier0Write) { $findings += "TEMPLATE $name" }
+          if ($nonTier0Write) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
         $ok = $true
       } catch {
@@ -433,7 +441,8 @@ steps:
         $anyEKU   = '2.5.29.37.0'
         $enrollRight = [guid]'0e10c968-78fb-11d2-90d4-00c04f79dc55'
         $autoEnroll  = [guid]'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
-        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # write bits only: GenericAll 0x10000000, GenericWrite 0x40000000, WriteDacl 0x40000, WriteOwner 0x80000, WriteProperty 0x20 (read bits excluded)
+        $writeRights = 0x500C0020
         foreach ($tmpl in $container.Children) {
           if ($tmpl.SchemaClassName -ne 'pKICertificateTemplate') { continue }
           $name        = [string]$tmpl.Properties['cn'].Value
@@ -451,15 +460,16 @@ steps:
           $hasAnyOrNoEKU = ($ekus.Count -eq 0) -or ($ekus -contains $anyEKU)
           $lowPrivEnroll = $false
           $nonTier0Write = $false
+          $writers = @()
           $rules = $tmpl.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
           foreach ($r in $rules) {
             if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true }
+            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
           }
-          if ($noSecExt -and $lowPrivEnroll) { $findings += "TEMPLATE $name" }
+          if ($noSecExt -and $lowPrivEnroll) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
         $ok = $true
       } catch {
@@ -476,7 +486,7 @@ steps:
       }
     cleanup: ""
 
-  - name: "ADCS ESC11 - RA signature count 0 with low-privilege enrollment (inferred from configuration) (T1649)"
+  - name: "ADCS ESC11 - template RA-signature precondition (CA-level RPC enforcement not evaluated) (T1649)"
     technique_id: T1649
     framework: custom
     executor: powershell
@@ -518,7 +528,8 @@ steps:
         $anyEKU   = '2.5.29.37.0'
         $enrollRight = [guid]'0e10c968-78fb-11d2-90d4-00c04f79dc55'
         $autoEnroll  = [guid]'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
-        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # write bits only: GenericAll 0x10000000, GenericWrite 0x40000000, WriteDacl 0x40000, WriteOwner 0x80000, WriteProperty 0x20 (read bits excluded)
+        $writeRights = 0x500C0020
         foreach ($tmpl in $container.Children) {
           if ($tmpl.SchemaClassName -ne 'pKICertificateTemplate') { continue }
           $name        = [string]$tmpl.Properties['cn'].Value
@@ -536,15 +547,16 @@ steps:
           $hasAnyOrNoEKU = ($ekus.Count -eq 0) -or ($ekus -contains $anyEKU)
           $lowPrivEnroll = $false
           $nonTier0Write = $false
+          $writers = @()
           $rules = $tmpl.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
           foreach ($r in $rules) {
             if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true }
+            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
           }
-          if ($raSig -eq 0 -and $lowPrivEnroll) { $findings += "TEMPLATE $name" }
+          if ($raSig -eq 0 -and $lowPrivEnroll) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
         $ok = $true
       } catch {
@@ -553,11 +565,11 @@ steps:
       if (-not $ok) {
         Write-Output "SKIP: ESC11 check unavailable: host is not domain-joined, the DC is unreachable, or no AD CS templates container exists. Not scored. [BAS-SIM-ADCS-ESC11]"
       } elseif ($findings.Count -eq 0) {
-        Write-Output "PASS: no certificate template exposes the ESC11 configuration to a non-tier-0 enrollee. This step assesses ESC11 only. [BAS-SIM-ADCS-ESC11]"
+        Write-Output "PASS: no template has the ESC11 template-level precondition (RA signature count 0 with low-privilege enrollment). This step assesses templates only. [BAS-SIM-ADCS-ESC11]"
       } else {
-        Write-Output "EXEC T1649: ESC11 configuration found on $($findings.Count) template(s). Reads template configuration only; no certificate is requested. [BAS-SIM-ADCS-ESC11]"
+        Write-Output "EXEC T1649: ESC11 template-level precondition on $($findings.Count) template(s). Reads template configuration only. [BAS-SIM-ADCS-ESC11]"
         foreach ($f in $findings) { Write-Output $f }
-        Write-Output "FAIL: ESC11 (RA signature count 0 with low-privilege enrollment (inferred from configuration)) is configured on the listed template(s). Configuration exposure only; exploitability was not tested. Remediation: require RA signatures on templates that issue authentication certificates. [BAS-SIM-ADCS-ESC11]"
+        Write-Output "SKIP: ESC11 cannot be scored by this step. The ESC11 weakness is the CA-level RPC enforcement state, which is not evaluated here. The template RA-signature count is informational. Not scored as FAIL. [BAS-SIM-ADCS-ESC11]"
       }
     cleanup: ""
 
@@ -603,7 +615,8 @@ steps:
         $anyEKU   = '2.5.29.37.0'
         $enrollRight = [guid]'0e10c968-78fb-11d2-90d4-00c04f79dc55'
         $autoEnroll  = [guid]'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
-        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # write bits only: GenericAll 0x10000000, GenericWrite 0x40000000, WriteDacl 0x40000, WriteOwner 0x80000, WriteProperty 0x20 (read bits excluded)
+        $writeRights = 0x500C0020
         foreach ($tmpl in $container.Children) {
           if ($tmpl.SchemaClassName -ne 'pKICertificateTemplate') { continue }
           $name        = [string]$tmpl.Properties['cn'].Value
@@ -621,15 +634,16 @@ steps:
           $hasAnyOrNoEKU = ($ekus.Count -eq 0) -or ($ekus -contains $anyEKU)
           $lowPrivEnroll = $false
           $nonTier0Write = $false
+          $writers = @()
           $rules = $tmpl.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
           foreach ($r in $rules) {
             if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true }
+            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
           }
-          if ($schemaVer -eq 1 -and $suppliesSubject -and $appPolicies.Count -gt 0 -and $ekus.Count -eq 0 -and $lowPrivEnroll) { $findings += "TEMPLATE $name" }
+          if ($schemaVer -eq 1 -and $suppliesSubject -and $appPolicies.Count -gt 0 -and $ekus.Count -eq 0 -and $lowPrivEnroll) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
         $ok = $true
       } catch {
@@ -681,7 +695,8 @@ steps:
         if (-not $pks.Name) { throw "no Public Key Services container" }
         $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-498','*-500','*-517')
         function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
-        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # write bits only: GenericAll 0x10000000, GenericWrite 0x40000000, WriteDacl 0x40000, WriteOwner 0x80000, WriteProperty 0x20 (read bits excluded)
+        $writeRights = 0x500C0020
         foreach ($child in $pks.Children) {
           $cn = [string]$child.Properties['cn'].Value
           if ($cn -notin @('NTAuthCertificates','Certification Authorities','Enrollment Services','AIA','CDP')) { continue }
@@ -741,7 +756,8 @@ steps:
         $pksDN = "CN=Public Key Services,CN=Services,$configDN"
         $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-498','*-500','*-517')
         function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
-        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # write bits only: GenericAll 0x10000000, GenericWrite 0x40000000, WriteDacl 0x40000, WriteOwner 0x80000, WriteProperty 0x20 (read bits excluded)
+        $writeRights = 0x500C0020
         $caSearcher = New-Object System.DirectoryServices.DirectorySearcher
         $caSearcher.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$pksDN")
         $caSearcher.Filter = "(objectClass=pKIEnrollmentService)"
@@ -817,7 +833,8 @@ steps:
         $anyEKU   = '2.5.29.37.0'
         $enrollRight = [guid]'0e10c968-78fb-11d2-90d4-00c04f79dc55'
         $autoEnroll  = [guid]'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
-        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # write bits only: GenericAll 0x10000000, GenericWrite 0x40000000, WriteDacl 0x40000, WriteOwner 0x80000, WriteProperty 0x20 (read bits excluded)
+        $writeRights = 0x500C0020
         foreach ($tmpl in $container.Children) {
           if ($tmpl.SchemaClassName -ne 'pKICertificateTemplate') { continue }
           $name        = [string]$tmpl.Properties['cn'].Value
@@ -835,15 +852,16 @@ steps:
           $hasAnyOrNoEKU = ($ekus.Count -eq 0) -or ($ekus -contains $anyEKU)
           $lowPrivEnroll = $false
           $nonTier0Write = $false
+          $writers = @()
           $rules = $tmpl.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
           foreach ($r in $rules) {
             if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true }
+            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
           }
-          if ($appPolicies.Count -gt 0 -and $lowPrivEnroll) { $findings += "TEMPLATE $name" }
+          if ($appPolicies.Count -gt 0 -and $lowPrivEnroll) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
         $ok = $true
       } catch {
@@ -868,7 +886,7 @@ steps:
       if (-not ($ok -and $oidOk)) {
         Write-Output "SKIP: ESC13 check unavailable: template or issuance-policy objects could not be read. Not scored. [BAS-SIM-ADCS-ESC13]"
       } elseif ($findings.Count -gt 0 -or $oids.Count -gt 0) {
-        Write-Output "EXEC T1649: ESC13 precondition present: $($findings.Count) template(s) with issuance-policy application policies and low-privilege enrollment, $($oids.Count) issuance-policy OID object(s). Group linkage is NOT evaluated. [BAS-SIM-ADCS-ESC13]"
+        Write-Output "EXEC T1649: ESC13 review: $($findings.Count) template(s) with issuance-policy application policies and low-privilege enrollment, $($oids.Count) issuance-policy OID object(s). Group linkage is NOT evaluated. [BAS-SIM-ADCS-ESC13]"
         foreach ($f in $findings) { Write-Output $f }
         foreach ($o in $oids) { Write-Output "OID $o" }
         Write-Output "SKIP: ESC13 cannot be scored by this step. Linking an issuance-policy OID to a group with non-tier-0 members requires manual correlation. Not scored as FAIL. [BAS-SIM-ADCS-ESC13]"

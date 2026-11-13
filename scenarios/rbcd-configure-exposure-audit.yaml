@@ -4,7 +4,7 @@ name: RBCD Configure-Surface Exposure Audit
 description: >
   Read-only RBCD configure-surface audit, two independent steps (T1069):
     A  machine-account quota exposure: ms-DS-MachineAccountQuota above 0. A configuration finding only; it does not show RBCD is configured or exploitable
-    B  computer objects whose DACL grants write rights to a non-tier-0 principal, evaluated only when the quota is above 0 (quota 0 is recorded as not practically reachable)
+    B  computer objects whose DACL grants write rights that reach msDS-AllowedToActOnBehalfOfOtherIdentity (an all-attribute write, or a write on that attribute only), to a non-tier-0 principal. Evaluated only when the quota is above 0 (quota 0 is recorded as not practically reachable). Default SELF ACEs on other attributes are not counted.
   Not assessed: ACL analysis of msDS-AllowedToActOnBehalfOfOtherIdentity itself, and group-nested effective rights (matching is per ACE SID; group membership is not expanded).
   SAFETY: reads configuration only. Writes no delegation attribute and impersonates no one. A FAIL shows configuration exposure, not exploitability. Windows domain members only. PRODUCTION-SAFE: telemetry mode.
 author: Audspect Research
@@ -105,7 +105,9 @@ steps:
         $maq = [int]$raw
         $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-498','*-500','*-517')
         function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
-        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # write bits only: GenericAll 0x10000000, GenericWrite 0x40000000, WriteDacl 0x40000, WriteOwner 0x80000, WriteProperty 0x20 (read bits excluded)
+        $writeRights = 0x500C0020
+        $rbcdAttr = [guid]'3f78c3e5-f79a-46bd-a0b8-9d18116ddc79'
         $cs = New-Object System.DirectoryServices.DirectorySearcher
         $cs.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domainDN")
         $cs.PageSize = 500
@@ -120,7 +122,7 @@ steps:
           foreach ($r in $rules) {
             if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
             if (Is-Tier0 $r.IdentityReference.Value) { continue }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $findings += "$name (writable by $($r.IdentityReference.Value))"; break }
+            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0 -and ($r.ObjectType -eq [guid]::Empty -or $r.ObjectType -eq $rbcdAttr)) { $findings += "$name (writable by $($r.IdentityReference.Value))"; break }
           }
         }
         $ok = $true

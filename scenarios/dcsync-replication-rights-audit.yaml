@@ -82,11 +82,11 @@ steps:
         $count = -1
       }
       if ($count -lt 0) {
-        Write-Output "SKIP: DS-Replication exposure check unavailable — host is not domain-joined or the DC is unreachable. [BAS-SIM-DCS-S1]"
+        Write-Output "SKIP: DS-Replication exposure check unavailable - host is not domain-joined or the DC is unreachable. [BAS-SIM-DCS-S1]"
       } elseif ($count -eq 0) {
-        Write-Output "PASS: the current principal does not hold DS-Replication-Get-Changes / DS-Replication-Get-Changes-All on the domain object — DCSync is not directly exploitable from this context. [BAS-SIM-DCS-S1]"
+        Write-Output "PASS: the current principal does not hold DS-Replication-Get-Changes / DS-Replication-Get-Changes-All on the domain object - DCSync is not directly exploitable from this context. [BAS-SIM-DCS-S1]"
       } else {
-        Write-Output "EXEC T1003.006: current principal holds $count DS-Replication extended-right grant(s) on the domain object (DCSync prerequisite). Does NOT request replication data — this is a detection-and-prerequisite probe only. [BAS-SIM-DCS-S1]"
+        Write-Output "EXEC T1003.006: current principal holds $count DS-Replication extended-right grant(s) on the domain object (DCSync prerequisite). Does NOT request replication data - this is a detection-and-prerequisite probe only. [BAS-SIM-DCS-S1]"
         Write-Output "FAIL: this principal can run DCSync (e.g. mimikatz lsadump::dcsync / DSInternals Get-ADReplAccount) and extract every domain account's credential material, including krbtgt. Restrict DS-Replication-Get-Changes[-All] to Domain Controllers and tier-0 admins only, and alert on DRSUAPI replication requests (4662) from non-DC sources."
       }
     cleanup: ""
