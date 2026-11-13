@@ -496,3 +496,11 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - Decision: ESC7 stays FAIL. No ACE removed. An administrator decides whether a DC machine account should hold these rights on a DC-hosted CA.
 - Not chosen: adding domain controller machine accounts to the tier-0 list in the shipped check (would change customer scores; needs separate approval).
 - RBCD-B lab kit: Account Operators treated as tier-0 in the lab kit only (`S-1-5-32-548`). Shipped scenario unchanged. Lab rerun pending.
+
+### RBCD-B: SELF exempted (decision 2026-11-13)
+
+- Principal rule, same as CREATOR OWNER: SELF (S-1-5-10) is the object's own account, which already controls that object. A SELF write is not a grant to another principal, so it is not counted.
+- Lab run before this change: WIN-TQ70FGLETIU$ and WS01$ FAILed because of SELF on msDS-AllowedToActOnBehalfOfOtherIdentity. Account Operators dropped out after the lab tier-model change.
+- Shipped scenario change: SELF exempted. Customer-visible score effect: computer objects whose only non-tier-0 write is SELF now PASS.
+- Lab-only: Account Operators as tier-0 (lab kit file, not shipped).
+- Expected lab result after rerun: RBCD-B PASS.
