@@ -487,3 +487,12 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - Expected lab change: GPO-A and GPO-B FAIL to PASS, since the owner is Domain Admins.
 - ESC7 orphaned SID (...-1000) unchanged: FAIL until an administrator approves removal and the CA ACL is re-validated.
 - RBCD-B Account Operators: NOT changed. Conditional tier-0 classification requires a lab tier-model setting that is not built yet. Current result remains FAIL.
+
+### ESC7 finding corrected and decision recorded (2026-11-13)
+
+- The earlier note calling SID `...-3848455713-1000` an orphaned, non-resolving SID was WRONG.
+- Confirmed on AD-DC-01: that SID is the domain controller's own computer account, `LAB\WIN-TQ70FGLETIU$` (`Get-ADComputer` SID check).
+- The CA object ACE is `Allow`, `983295` (CreateChild, DeleteChild, Self, WriteProperty, DeleteTree, Delete, GenericRead, WriteDacl, WriteOwner), not inherited.
+- Decision: ESC7 stays FAIL. No ACE removed. An administrator decides whether a DC machine account should hold these rights on a DC-hosted CA.
+- Not chosen: adding domain controller machine accounts to the tier-0 list in the shipped check (would change customer scores; needs separate approval).
+- RBCD-B lab kit: Account Operators treated as tier-0 in the lab kit only (`S-1-5-32-548`). Shipped scenario unchanged. Lab rerun pending.
