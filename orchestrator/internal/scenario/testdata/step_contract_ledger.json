@@ -144,6 +144,33 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "adcs-esc-template-exposure-audit.yaml",
+    "index": 10,
+    "technique_id": "T1649",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "adcs-esc-template-exposure-audit.yaml",
+    "index": 11,
+    "technique_id": "T1649",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "adcs-esc-template-exposure-audit.yaml",
+    "index": 12,
+    "technique_id": "T1649",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "akira-kill-chain.yaml",
     "index": 0,
     "technique_id": "T1021.001",

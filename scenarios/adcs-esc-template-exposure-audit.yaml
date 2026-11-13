@@ -902,3 +902,195 @@ steps:
         Write-Output "PASS: no template or issuance-policy OID shows the ESC13 precondition. This step assesses ESC13 only. [BAS-SIM-ADCS-ESC13]"
       }
     cleanup: ""
+
+  - name: "ADCS ESC6 - CA accepts requester-supplied SAN (EDITF_ATTRIBUTESUBJECTALTNAME2) (T1649)"
+    technique_id: T1649
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads pKICertificateTemplate objects, Public Key Services container objects (NTAuthCertificates, Certification Authorities, Enrollment Services, AIA, CDP), and pKIEnrollmentService objects plus their security descriptors from the AD Configuration partition via System.DirectoryServices (read-only) and reports ESC1-15-class misconfigurations reachable by non-tier-0 principals. Never requests or enrolls a certificate, modifies a template, modifies a CA object, or contacts a CA enrollment endpoint. Generates LDAP reads against the DC's Configuration partition. ESC6 (CA-host SAN flag) and ESC8 (HTTP web-enrollment) require host/network access and are out of scope."
+    telemetry:
+      - "DC: LDAP read of pKICertificateTemplate objects under CN=Certificate Templates,CN=Public Key Services,CN=Services,<Configuration NC> \u2014 not separately audited by default"
+      - "DC: LDAP read of CN=Public Key Services container objects (NTAuthCertificates, Certification Authorities, Enrollment Services, AIA, CDP)"
+      - "DC: LDAP read of pKIEnrollmentService objects for CA-object ACL assessment"
+      - "Sysmon EID 1: powershell.exe reading certificate-template / PKI-services objects via DirectoryServices"
+    detection:
+      - "SIEM: a certificate template enrollable by a non-tier-0 principal carries an ESC1-4-class misconfiguration (enrollee-supplied subject + authentication EKU, Any-Purpose/no EKU, enrollment-agent EKU, or a non-tier-0-writable template DACL) \u2014 AD CS template exposure IOC"
+      - "SIEM: a Public Key Services container object (NTAuthCertificates / Certification Authorities / Enrollment Services) has a non-tier-0-writable DACL \u2014 ESC5 exposure IOC"
+      - "SIEM: a pKIEnrollmentService object grants ManageCA (0x00000001) or ManageCertificates (0x00000002) to a non-tier-0 principal \u2014 ESC7 exposure IOC"
+      - "SIEM: an LDAP enumeration of the Certificate Templates / Public Key Services containers from a workstation \u2014 AD CS reconnaissance IOC"
+      - "SIEM: template with msPKI-RA-Application-Policies issuance-policy OID linked to a group with non-tier-0 members \u2014 ESC13 exposure IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      $casFound = 0
+      $readCount = 0
+      $ok = $false
+      try {
+        $cfgDN = ([ADSI]"LDAP://RootDSE").configurationNamingContext
+        if (-not $cfgDN) { throw "no configuration partition" }
+        $cs = New-Object System.DirectoryServices.DirectorySearcher
+        $cs.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://CN=Enrollment Services,CN=Public Key Services,CN=Services,$cfgDN")
+        $cs.Filter = "(objectClass=pKIEnrollmentService)"
+        [void]$cs.PropertiesToLoad.Add('cn')
+        [void]$cs.PropertiesToLoad.Add('dNSHostName')
+        foreach ($res in @($cs.FindAll())) {
+          $casFound++
+          $caHost = [string]$res.Properties['dnshostname'][0]
+          $caName = [string]$res.Properties['cn'][0]
+          if (-not $caHost -or -not $caName) { continue }
+          $out = (& certutil -config "$caHost\$caName" -getreg 'policy\EditFlags' 2>&1 | Out-String)
+          if ($out -match '(?i)EditFlags\s+REG_DWORD\s*=\s*([0-9a-f]+)') {
+            $readCount++
+            if (([Convert]::ToInt64($matches[1], 16) -band 0x40000) -ne 0) { $findings += "$caName (EDITF_ATTRIBUTESUBJECTALTNAME2 set)" }
+          }
+        }
+        $ok = ($casFound -gt 0 -and $readCount -eq $casFound)
+      } catch {
+        $ok = $false
+      }
+      if ($findings.Count -gt 0) {
+        Write-Output "EXEC T1649: $($findings.Count) CA(s) accept SAN from the requester (EDITF_ATTRIBUTESUBJECTALTNAME2). Reads CA policy registry only; no certificate is requested. [BAS-SIM-ADCS-ESC6]"
+        foreach ($f in $findings) { Write-Output "CA $f" }
+        Write-Output "FAIL: a certification authority accepts a requester-supplied subject alternative name on any template (ESC6). Configuration exposure only; exploitability was not tested. Remediation: clear EDITF_ATTRIBUTESUBJECTALTNAME2 with certutil -setreg policy\EditFlags, then restart certsvc. [BAS-SIM-ADCS-ESC6]"
+      } elseif ($ok) {
+        Write-Output "PASS: no certification authority has EDITF_ATTRIBUTESUBJECTALTNAME2 set. This step assesses the CA policy flag only. [BAS-SIM-ADCS-ESC6]"
+      } else {
+        Write-Output "SKIP: ESC6 check unavailable: a CA policy flag could not be read from every CA (host not domain-joined, CA unreachable, or certutil denied). Not scored. [BAS-SIM-ADCS-ESC6]"
+      }
+    cleanup: ""
+
+  - name: "ADCS ESC10 - DC certificate binding enforcement disabled (T1649)"
+    technique_id: T1649
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads pKICertificateTemplate objects, Public Key Services container objects (NTAuthCertificates, Certification Authorities, Enrollment Services, AIA, CDP), and pKIEnrollmentService objects plus their security descriptors from the AD Configuration partition via System.DirectoryServices (read-only) and reports ESC1-15-class misconfigurations reachable by non-tier-0 principals. Never requests or enrolls a certificate, modifies a template, modifies a CA object, or contacts a CA enrollment endpoint. Generates LDAP reads against the DC's Configuration partition. ESC6 (CA-host SAN flag) and ESC8 (HTTP web-enrollment) require host/network access and are out of scope."
+    telemetry:
+      - "DC: LDAP read of pKICertificateTemplate objects under CN=Certificate Templates,CN=Public Key Services,CN=Services,<Configuration NC> \u2014 not separately audited by default"
+      - "DC: LDAP read of CN=Public Key Services container objects (NTAuthCertificates, Certification Authorities, Enrollment Services, AIA, CDP)"
+      - "DC: LDAP read of pKIEnrollmentService objects for CA-object ACL assessment"
+      - "Sysmon EID 1: powershell.exe reading certificate-template / PKI-services objects via DirectoryServices"
+    detection:
+      - "SIEM: a certificate template enrollable by a non-tier-0 principal carries an ESC1-4-class misconfiguration (enrollee-supplied subject + authentication EKU, Any-Purpose/no EKU, enrollment-agent EKU, or a non-tier-0-writable template DACL) \u2014 AD CS template exposure IOC"
+      - "SIEM: a Public Key Services container object (NTAuthCertificates / Certification Authorities / Enrollment Services) has a non-tier-0-writable DACL \u2014 ESC5 exposure IOC"
+      - "SIEM: a pKIEnrollmentService object grants ManageCA (0x00000001) or ManageCertificates (0x00000002) to a non-tier-0 principal \u2014 ESC7 exposure IOC"
+      - "SIEM: an LDAP enumeration of the Certificate Templates / Public Key Services containers from a workstation \u2014 AD CS reconnaissance IOC"
+      - "SIEM: template with msPKI-RA-Application-Policies issuance-policy OID linked to a group with non-tier-0 members \u2014 ESC13 exposure IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      $dcCount = 0
+      $fullCount = 0
+      $ok = $false
+      try {
+        $domainDN = ([ADSI]"LDAP://RootDSE").defaultNamingContext
+        if (-not $domainDN) { throw "no domain" }
+        $ds = New-Object System.DirectoryServices.DirectorySearcher
+        $ds.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domainDN")
+        $ds.Filter = "(&(objectClass=computer)(userAccountControl:1.2.840.113556.1.4.803:=8192))"
+        [void]$ds.PropertiesToLoad.Add('dNSHostName')
+        foreach ($res in @($ds.FindAll())) {
+          $dcCount++
+          $dc = [string]$res.Properties['dnshostname'][0]
+          if (-not $dc) { continue }
+          try {
+            $reg = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $dc)
+            $k = $reg.OpenSubKey('SYSTEM\CurrentControlSet\Services\Kdc')
+            if ($k) {
+              $v = $k.GetValue('StrongCertificateBindingEnforcement')
+              if ($null -ne $v) {
+                if ([int]$v -eq 0) { $findings += "$dc (StrongCertificateBindingEnforcement=0)" }
+                if ([int]$v -eq 2) { $fullCount++ }
+              }
+            }
+          } catch { }
+        }
+        $ok = ($dcCount -gt 0 -and $fullCount -eq $dcCount)
+      } catch {
+        $ok = $false
+      }
+      if ($findings.Count -gt 0) {
+        Write-Output "EXEC T1649: $($findings.Count) domain controller(s) have certificate binding enforcement disabled. Reads the Kerberos KDC registry value only; no authentication is attempted. [BAS-SIM-ADCS-ESC10]"
+        foreach ($f in $findings) { Write-Output "DC $f" }
+        Write-Output "FAIL: a domain controller accepts weakly bound certificates (ESC10, enforcement disabled). Configuration exposure only; exploitability was not tested. Remediation: set StrongCertificateBindingEnforcement to 2 on every DC and review certificate mapping. [BAS-SIM-ADCS-ESC10]"
+      } elseif ($ok) {
+        Write-Output "PASS: every domain controller reports StrongCertificateBindingEnforcement=2 (full enforcement). This step assesses that KDC value only; certificate-mapping methods are not assessed. [BAS-SIM-ADCS-ESC10]"
+      } else {
+        Write-Output "SKIP: ESC10 check unavailable: binding enforcement is not set to 2 on every DC, or a DC registry could not be read (Remote Registry, reachability or permissions). Not scored; enforcement mode 1 or unset is not treated as PASS. [BAS-SIM-ADCS-ESC10]"
+      }
+    cleanup: ""
+
+  - name: "ADCS ESC12 - CA signing key in software provider, posture only (T1649)"
+    technique_id: T1649
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads pKICertificateTemplate objects, Public Key Services container objects (NTAuthCertificates, Certification Authorities, Enrollment Services, AIA, CDP), and pKIEnrollmentService objects plus their security descriptors from the AD Configuration partition via System.DirectoryServices (read-only) and reports ESC1-15-class misconfigurations reachable by non-tier-0 principals. Never requests or enrolls a certificate, modifies a template, modifies a CA object, or contacts a CA enrollment endpoint. Generates LDAP reads against the DC's Configuration partition. ESC6 (CA-host SAN flag) and ESC8 (HTTP web-enrollment) require host/network access and are out of scope."
+    telemetry:
+      - "DC: LDAP read of pKICertificateTemplate objects under CN=Certificate Templates,CN=Public Key Services,CN=Services,<Configuration NC> \u2014 not separately audited by default"
+      - "DC: LDAP read of CN=Public Key Services container objects (NTAuthCertificates, Certification Authorities, Enrollment Services, AIA, CDP)"
+      - "DC: LDAP read of pKIEnrollmentService objects for CA-object ACL assessment"
+      - "Sysmon EID 1: powershell.exe reading certificate-template / PKI-services objects via DirectoryServices"
+    detection:
+      - "SIEM: a certificate template enrollable by a non-tier-0 principal carries an ESC1-4-class misconfiguration (enrollee-supplied subject + authentication EKU, Any-Purpose/no EKU, enrollment-agent EKU, or a non-tier-0-writable template DACL) \u2014 AD CS template exposure IOC"
+      - "SIEM: a Public Key Services container object (NTAuthCertificates / Certification Authorities / Enrollment Services) has a non-tier-0-writable DACL \u2014 ESC5 exposure IOC"
+      - "SIEM: a pKIEnrollmentService object grants ManageCA (0x00000001) or ManageCertificates (0x00000002) to a non-tier-0 principal \u2014 ESC7 exposure IOC"
+      - "SIEM: an LDAP enumeration of the Certificate Templates / Public Key Services containers from a workstation \u2014 AD CS reconnaissance IOC"
+      - "SIEM: template with msPKI-RA-Application-Policies issuance-policy OID linked to a group with non-tier-0 members \u2014 ESC13 exposure IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $softProviders = @('Microsoft Software Key Storage Provider','Microsoft Strong Cryptographic Provider','Microsoft Enhanced Cryptographic Provider v1.0','Microsoft Base Cryptographic Provider v1.0','Microsoft Enhanced RSA and AES Cryptographic Provider')
+      $findings = @()
+      $casFound = 0
+      $readCount = 0
+      $ok = $false
+      try {
+        $cfgDN = ([ADSI]"LDAP://RootDSE").configurationNamingContext
+        if (-not $cfgDN) { throw "no configuration partition" }
+        $cs = New-Object System.DirectoryServices.DirectorySearcher
+        $cs.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://CN=Enrollment Services,CN=Public Key Services,CN=Services,$cfgDN")
+        $cs.Filter = "(objectClass=pKIEnrollmentService)"
+        [void]$cs.PropertiesToLoad.Add('cn')
+        [void]$cs.PropertiesToLoad.Add('dNSHostName')
+        foreach ($res in @($cs.FindAll())) {
+          $casFound++
+          $caHost = [string]$res.Properties['dnshostname'][0]
+          $caName = [string]$res.Properties['cn'][0]
+          if (-not $caHost -or -not $caName) { continue }
+          $out = (& certutil -config "$caHost\$caName" -getreg 'CA\CSP\Provider' 2>&1 | Out-String)
+          if ($out -match 'Provider\s+REG_SZ\s*=\s*([^\r\n]+)') {
+            $readCount++
+            $provider = $matches[1].Trim()
+            if ($softProviders -contains $provider) { $findings += "$caName (key provider: $provider)" }
+          }
+        }
+        $ok = ($casFound -gt 0 -and $readCount -eq $casFound)
+      } catch {
+        $ok = $false
+      }
+      if ($findings.Count -gt 0) {
+        Write-Output "EXEC T1649: $($findings.Count) CA(s) hold their signing key in a software provider. Reads the CA provider registry value only; no key is accessed. [BAS-SIM-ADCS-ESC12]"
+        foreach ($f in $findings) { Write-Output "CA $f" }
+        Write-Output "FAIL: a certification authority's signing key is held in software, not a hardware security module (ESC12 posture). Configuration exposure only; an administrator of the CA host can export a software key, and exploitation was not tested. Remediation: move the CA key to an HSM. [BAS-SIM-ADCS-ESC12]"
+      } elseif ($ok) {
+        Write-Output "PASS: no certification authority reports a software key provider. This step reads the provider name only; HSM assurance and the ESC12 exploit path are not verified. [BAS-SIM-ADCS-ESC12]"
+      } else {
+        Write-Output "SKIP: ESC12 check unavailable: a CA key provider could not be read from every CA (host not domain-joined, CA unreachable, or certutil denied). Not scored. [BAS-SIM-ADCS-ESC12]"
+      }
+    cleanup: ""

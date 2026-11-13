@@ -504,3 +504,17 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - Shipped scenario change: SELF exempted. Customer-visible score effect: computer objects whose only non-tier-0 write is SELF now PASS.
 - Lab-only: Account Operators as tier-0 (lab kit file, not shipped).
 - Expected lab result after rerun: RBCD-B PASS.
+
+### ADCS: ESC6, ESC10 (partial), ESC12 (posture) added (2026-11-13)
+
+- Added three steps to the ADCS scenario (10 to 13). Existing steps unchanged.
+- Customer-visible: these can add FAILs where present.
+  - ESC6: a CA with EDITF_ATTRIBUTESUBJECTALTNAME2 (0x40000) set in policy\EditFlags.
+  - ESC10: a DC with StrongCertificateBindingEnforcement=0 (Kdc key). Value 1 or unset is SKIP, not PASS.
+  - ESC12: a CA whose key provider is a software provider. Posture only; ESC12 exploit path not tested.
+- Coverage gaps, stated plainly:
+  - ESC10 certificate-mapping methods not checked (registry path not confirmed).
+  - ESC12 does not verify HSM assurance for non-software providers.
+  - ESC6, ESC10, ESC12 exploitation not tested.
+- Baseline unchanged; ledger gained three entries. Scenario tests pass; 156 signatures verify.
+- NOT VERIFIED on a domain. Lab probe required before a kit run is trusted.
