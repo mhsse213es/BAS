@@ -8,6 +8,9 @@ import { seg, pill, chip, bar, empty, icon } from '../core/kit.js';
 import { setHeroStat } from './shell-ui.js';
 import { recSummary } from './rich-g4.js';
 import * as M from './rec-model.js';
+import { ROLE } from './shell.js';
+import { openTechnique } from './coverage.js';
+import { revalidateRemediation } from './findings.js';
 
 var _rows = [];
 var _limit = M.DEFAULT_LIMIT;
@@ -89,6 +92,26 @@ function cellHtml(col, t) {
   }
 }
 
+// actionsCellHtml: the row's own actions. Details opens the technique; Re-validate runs that technique's scenario.
+// Re-validate needs a real ATT&CK ID and a role that can run scenarios, the same roles that see the Ticket action.
+function actionsCellHtml(i, t) {
+  var canRun = (ROLE === 'admin' || ROLE === 'analyst') && M.canRevalidate(t);
+  var details = t.techniqueId
+    ? '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'recDetails', i) + '>Details</button>'
+    : '';
+  var reval = canRun
+    ? '<button type="button" class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', t.techniqueId) + '>&#8635; Re-validate</button>'
+    : '';
+  return '<td class="rec-acts">' + ((details + reval) || '<span class="muted">—</span>') + '</td>';
+}
+
+// recDetails opens the technique's coverage detail for a row of the table.
+export function recDetails(i) {
+  var t = _rows[i];
+  if (!t || !t.techniqueId) return;
+  openTechnique(t.techniqueId);
+}
+
 function paintTable() {
   var tbody = document.getElementById('rec-table-body');
   if (!tbody) return;
@@ -103,13 +126,13 @@ function paintTable() {
   document.getElementById('rec-thead').innerHTML = '<tr><th class="dt-selcol"><input type="checkbox" class="dt-cb" id="rec-sel-all" title="Select all on this table"' + on('change', 'recSelectAll') + '></th>' +
     cols.map(function(c) {
       return '<th class="dt-th' + (c === 5 ? ' num' : '') + (T.col === c ? ' sorted' : '') + '"' + on('click', 'recSortBy', c) + '>' + x(M.COLUMNS[c]) + '<span class="dt-arrow">' + (T.col === c ? (T.dir > 0 ? '▲' : '▼') : '') + '</span></th>';
-    }).join('') + '</tr>';
+    }).join('') + '<th class="dt-th">Actions</th></tr>';
   var all = document.getElementById('rec-sel-all');
   if (all) { all.checked = list.length > 0 && onList === list.length; all.indeterminate = onList > 0 && onList < list.length; }
   tbody.innerHTML = rows.map(function(t) {
     var i = idx(t);
     return '<tr><td class="dt-selcol"><input type="checkbox" class="dt-cb" aria-label="Select technique"' + (T.sel[i] ? ' checked' : '') + on('change', 'recSelectRow', i) + '></td>' +
-      cols.map(function(c) { return cellHtml(c, t); }).join('') + '</tr>';
+      cols.map(function(c) { return cellHtml(c, t); }).join('') + actionsCellHtml(i, t) + '</tr>';
   }).join('');
   var menu = document.getElementById('rec-cols');
   if (menu) {
