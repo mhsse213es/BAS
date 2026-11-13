@@ -686,8 +686,8 @@ func TestParseYAML_EntraHybridIdentityAttack(t *testing.T) {
 	if len(sc.SupportedOS) != 1 || sc.SupportedOS[0] != "windows" {
 		t.Fatalf("supported_os = %v, want [windows]", sc.SupportedOS)
 	}
-	if len(sc.Steps) != 6 {
-		t.Fatalf("steps = %d, want 6", len(sc.Steps))
+	if len(sc.Steps) != 8 {
+		t.Fatalf("steps = %d, want 8", len(sc.Steps))
 	}
 	type wantStep struct {
 		technique   string
@@ -698,7 +698,9 @@ func TestParseYAML_EntraHybridIdentityAttack(t *testing.T) {
 	wantSteps := []wantStep{
 		{"T1082", "custom", -1, false},
 		{"T1528", "custom", -1, false},
-		{"T1539", "art", 3, true},
+		{"T1539", "art", 0, true},
+		{"T1539", "art", 1, true},
+		{"T1539", "art", 2, true},
 		{"T1555.003", "art", 0, true},
 		{"T1550.001", "custom", -1, false},
 		{"T1556.007", "custom", -1, false},

@@ -2702,7 +2702,7 @@
   {
     "scenario": "entra-hybrid-identity-attack.yaml",
     "index": 3,
-    "technique_id": "T1555.003",
+    "technique_id": "T1539",
     "action_key": "",
     "framework": "art",
     "class": "non_destructive",
@@ -2711,6 +2711,24 @@
   {
     "scenario": "entra-hybrid-identity-attack.yaml",
     "index": 4,
+    "technique_id": "T1539",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "entra-hybrid-identity-attack.yaml",
+    "index": 5,
+    "technique_id": "T1555.003",
+    "action_key": "",
+    "framework": "art",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "entra-hybrid-identity-attack.yaml",
+    "index": 6,
     "technique_id": "T1550.001",
     "action_key": "",
     "framework": "custom",
@@ -2719,7 +2737,7 @@
   },
   {
     "scenario": "entra-hybrid-identity-attack.yaml",
-    "index": 5,
+    "index": 7,
     "technique_id": "T1556.007",
     "action_key": "",
     "framework": "custom",

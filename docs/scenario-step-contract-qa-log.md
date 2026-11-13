@@ -549,3 +549,11 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
   - ubuntu-hardening-validation T1046 "Test 12: Port Scan using nmap (Port range)": test_index 11 is the RAW position of that test in T1046.yaml. The runtime index is platform-filtered, where that test is index 2. The step name identifies the intended test; the fix is test_index 2.
   - entra-hybrid-identity-attack T1539 "Stage 3 - Browser-Cached M365 Session Cookie Theft": index 3 does not exist. Windows options: 0 Firefox cookies, 1 Chrome cookies, 2 Chrome v127+ remote debugging. Needs the user's choice.
 - Also to audit: any other ART step whose index is in range but was copied from the raw position may run the wrong test. Not yet checked by name.
+
+### Entra Stage 3 split into three browser-cookie steps (approved 2026-11-13)
+
+- Replaced the broken single step (test_index 3 does not exist) with three steps: 3a Firefox cookies (index 0), 3b Chrome cookies (index 1), 3c Chrome v127+ via Remote Debugging (index 2). Windows platform list confirmed.
+- Each new step has telemetry and detection fields, so the step-contract ratchet does not regress. Baseline detection/telemetry gap for this file fell 2 to 1.
+- Customer-visible: the Entra scenario has two more executable steps. Their outcome depends on the host's browser state; a non-browser host produces a SKIP or failed-action result, not a PASS. Score effect should be reviewed before the next release.
+- Engine test updated to 8 steps; ledger regenerated; 156 signatures verify; scenario and DLP fixture tests pass.
+- Not verified on a Windows host with browsers.

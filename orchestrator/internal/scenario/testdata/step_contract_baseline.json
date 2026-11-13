@@ -301,8 +301,8 @@
   },
   "entra-hybrid-identity-attack.yaml": {
     "cleanup": 0,
-    "detection": 2,
-    "telemetry": 2
+    "detection": 1,
+    "telemetry": 1
   },
   "evasion-testing.yaml": {
     "cleanup": 0,
