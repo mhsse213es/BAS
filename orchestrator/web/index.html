@@ -1581,6 +1581,41 @@
             <div class="dt-foot" id="sched-dt-foot"><span class="dt-range muted" id="sched-dt-range"></span><div class="dt-pager" id="sched-dt-pager"></div></div>
           </div>
         </div>
+      <!-- Change-freeze windows: scheduled assessments whose time falls inside one are skipped -->
+      <div class="rk-card" id="blk-card">
+        <div class="rk-card-head"><h3>Change-freeze windows</h3></div>
+        <p class="sub2">A scheduled assessment whose time falls inside a window is skipped, not run late. Hand-started runs and scheduled reports are not affected.</p>
+        <div id="blk-body"></div>
+        <div id="blk-form" hidden>
+          <label class="modal-lbl" for="blk-name">Name</label>
+          <input id="blk-name" type="text" maxlength="120" placeholder="RBI reporting window">
+          <label class="modal-lbl" for="blk-kind">Kind</label>
+          <select id="blk-kind" data-on-change="blackoutKindChange">
+            <option value="once">Once (one start and end)</option>
+            <option value="daily">Daily (a time range each day)</option>
+          </select>
+          <div id="blk-once-fields">
+            <label class="modal-lbl" for="blk-starts">Starts</label>
+            <input id="blk-starts" type="datetime-local">
+            <label class="modal-lbl" for="blk-ends">Ends</label>
+            <input id="blk-ends" type="datetime-local">
+          </div>
+          <div id="blk-daily-fields" hidden>
+            <label class="modal-lbl" for="blk-from">From</label>
+            <input id="blk-from" type="time">
+            <label class="modal-lbl" for="blk-to">To</label>
+            <input id="blk-to" type="time">
+            <label class="modal-lbl" for="blk-tz">Timezone</label>
+            <input id="blk-tz" type="text" value="UTC" placeholder="Asia/Kolkata">
+            <label class="modal-lbl" for="blk-vfrom">Applies from (optional)</label>
+            <input id="blk-vfrom" type="date">
+            <label class="modal-lbl" for="blk-vto">Applies to (optional)</label>
+            <input id="blk-vto" type="date">
+          </div>
+          <p id="blk-err" class="sub2" role="alert"></p>
+          <button type="button" class="btn btn-primary btn-sm" data-on-click="blackoutCreate">Add window</button>
+        </div>
+      </div>
       </div>
 
       <!-- Initiatives -->

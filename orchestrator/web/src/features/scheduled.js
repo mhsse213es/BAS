@@ -9,6 +9,7 @@ import { kpi, grid, card, chip, pill, seg, empty, icon } from '../core/kit.js';
 import { chartSlot, CHART_COLORS } from '../core/charts.js';
 import { setHeroStat } from './shell-ui.js';
 import * as M from './sched-model.js';
+import { loadBlackouts } from './blackouts.js';
 
 
 // ── Scheduled Assessments ──────────────────────────────────────────────────
@@ -44,6 +45,7 @@ export function loadScheduledAssessments() {
     SCHED.groupsById = schedFlattenGroupNames(groups, {});
     renderScheduledAssessmentsList();
     loadLastRuns();
+    loadBlackouts();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
