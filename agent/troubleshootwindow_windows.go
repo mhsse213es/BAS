@@ -9,8 +9,11 @@ import (
 	"os/exec"
 	"runtime"
 	"time"
+	"unsafe"
 
+	"github.com/rodrigocfd/windigo/co"
 	"github.com/rodrigocfd/windigo/ui"
+	"github.com/rodrigocfd/windigo/win"
 
 	"audspect/agent/statusclient"
 )
@@ -295,9 +298,23 @@ func runTroubleshootWindow() {
 // escalation fallback already on the tray menu -- unchanged, not
 // duplicated here.
 func showTroubleshootWindow(deps diagnosticsDeps) error {
-	// Wide enough for the label column and the Retry and action buttons side by side,
-	// so no control is clipped by its neighbour.
-	cx, cy := ui.Dpi(780, 500)
+	// Sized to the work area, not a fixed box. On a 1280x720 screen at 150% scaling a fixed
+	// 780x500 window ran off the bottom and right edges, hiding the sixth row and the action
+	// buttons. The window is clamped to the work area, centred on it, and the rows share the
+	// height that is left. Everything here is in physical pixels (ui.Dpi scales logical units).
+	wa := workArea()
+	waW, waH := int(wa.Right-wa.Left), int(wa.Bottom-wa.Top)
+	cx, _ := ui.Dpi(780, 0)
+	_, rowWant := ui.Dpi(0, 96) // room for a three-line cause under the check name
+	_, chrome := ui.Dpi(0, 36)  // top and bottom padding; Windows adds the title bar
+	if cx > waW {
+		cx = waW
+	}
+	rowH := rowWant
+	if avail := waH - chrome - 40; 6*rowH > avail {
+		rowH = avail / 6
+	}
+	cy := chrome + 6*rowH
 	wnd := ui.NewMain(
 		ui.OptsMain().
 			Title("Audspect BAS Agent — Troubleshoot").
@@ -312,23 +329,22 @@ func showTroubleshootWindow(deps diagnosticsDeps) error {
 	}
 	rows := make([]*row, 6)
 
-	// Fixed columns: label (wraps inside its box), then Retry, then the action.
-	// Each control has an explicit size, so text never runs under a neighbouring button.
-	rowH := 72
+	// Columns, right to left: action button at the margin, Retry before it, and the
+	// result label takes everything left over, so text never runs under a button.
+	marginX, _ := ui.Dpi(20, 0)
+	gapX, _ := ui.Dpi(14, 0)
+	rw, rh := ui.Dpi(88, 28)
+	aw, _ := ui.Dpi(130, 0)
+	actionX := cx - marginX - aw
+	retryX := actionX - gapX - rw
+	labelW := retryX - gapX - marginX
+	_, top := ui.Dpi(0, 16)
 	for i := 0; i < 6; i++ {
-		y := 16 + i*rowH
-		lx, ly := ui.Dpi(20, y)
-		lw, lh := ui.Dpi(500, rowH-12)
-		resultLbl := ui.NewStatic(wnd, ui.OptsStatic().Position(lx, ly).Size(lw, lh))
-
-		rx, ry := ui.Dpi(534, y+4)
-		rw, rh := ui.Dpi(88, 28)
-		retryBtn := ui.NewButton(wnd, ui.OptsButton().Text("Retry").Position(rx, ry).Width(rw).Height(rh))
-
-		ax, ay := ui.Dpi(630, y+4)
-		aw, ah := ui.Dpi(130, 28)
-		actionBtn := ui.NewButton(wnd, ui.OptsButton().Text("No action").Position(ax, ay).Width(aw).Height(ah))
-
+		y := top + i*rowH
+		btnY := y + (rowH-rh)/2
+		resultLbl := ui.NewStatic(wnd, ui.OptsStatic().Position(marginX, y).Size(labelW, rowH-4))
+		retryBtn := ui.NewButton(wnd, ui.OptsButton().Text("Retry").Position(retryX, btnY).Width(rw).Height(rh))
+		actionBtn := ui.NewButton(wnd, ui.OptsButton().Text("No action").Position(actionX, btnY).Width(aw).Height(rh))
 		rows[i] = &row{result: resultLbl, retry: retryBtn, action: actionBtn}
 	}
 
@@ -339,11 +355,16 @@ func showTroubleshootWindow(deps diagnosticsDeps) error {
 		rows[n].current = &check
 		// A word tag, not colour: readable in any theme and in screenshots, first on the line.
 		text := fmt.Sprintf("[%s]  %s", statusTag(check.Status), check.Name)
-		if check.Cause != "" {
-			text += "\n" + check.Cause
+		// Name, then at most two lines of detail: the cause, and the raw error when it adds to it.
+		detail := check.Cause
+		if check.Evidence != "" && check.Evidence != check.Cause {
+			if detail != "" {
+				detail += " — "
+			}
+			detail += check.Evidence
 		}
-		if check.Evidence != "" {
-			text += "\n" + check.Evidence
+		if detail != "" {
+			text += "\n" + shortenForRow(detail, rowEvidenceMax)
 		}
 		rows[n].result.Hwnd().SetWindowText(text)
 		if check.ActionButton != nil {
@@ -361,6 +382,8 @@ func showTroubleshootWindow(deps diagnosticsDeps) error {
 	// run off the UI thread so the window opens at once and each row fills
 	// in as its check finishes.
 	wnd.On().WmCreate(func(p ui.WmCreate) int {
+		centreWindow(wnd.Hwnd(), wa)
+		setTroubleshootIcon(wnd.Hwnd(), loadTroubleshootIcon())
 		for i := range rows {
 			rows[i].result.Hwnd().SetWindowText("Checking...")
 		}
@@ -401,4 +424,39 @@ func showTroubleshootWindow(deps diagnosticsDeps) error {
 
 	wnd.RunAsMain()
 	return nil
+}
+
+// workArea is the usable desktop (excluding the taskbar), in physical pixels.
+func workArea() win.RECT {
+	var r win.RECT
+	if err := win.SystemParametersInfo(co.SPI_GETWORKAREA, 0, unsafe.Pointer(&r), 0); err != nil || r.Right <= r.Left {
+		r = win.RECT{Left: 0, Top: 0,
+			Right:  win.GetSystemMetrics(co.SM_CXSCREEN),
+			Bottom: win.GetSystemMetrics(co.SM_CYSCREEN)}
+	}
+	return r
+}
+
+// centreWindow moves hWnd to the middle of the work area without changing its size.
+func centreWindow(hWnd win.HWND, wa win.RECT) {
+	r, err := hWnd.GetWindowRect()
+	if err != nil {
+		return
+	}
+	w, h := r.Right-r.Left, r.Bottom-r.Top
+	x := wa.Left + (wa.Right-wa.Left-w)/2
+	y := wa.Top + (wa.Bottom-wa.Top-h)/2
+	_ = hWnd.SetWindowPos(win.HWND(0), win.POINT{X: x, Y: y}, win.SIZE{}, co.SWP_NOZORDER|co.SWP_NOSIZE)
+}
+
+// rowEvidenceMax keeps a row's raw error to about two lines at the window's width, so
+// the name, cause and evidence fit in the row. The full text is in the diagnostic bundle.
+const rowEvidenceMax = 130
+
+func shortenForRow(text string, max int) string {
+	r := []rune(text)
+	if len(r) <= max {
+		return text
+	}
+	return string(r[:max]) + "…"
 }
