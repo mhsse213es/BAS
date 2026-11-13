@@ -47,11 +47,13 @@ func tacticExposureWeight(tactic string) float64 {
 func ComputeScore(results []SimulationResult, prev *Score) Score {
 	if len(results) == 0 {
 		return Score{
+			NotAssessed:      true,
 			Trend:            "Baseline",
 			TacticBreakdown:  make(map[string]TacticScore),
 			CriticalFailures: []CriticalFailure{},
 		}
 	}
+	// Set below once a step has really executed; a run that executed nothing is not assessed.
 
 	var (
 		total    int
@@ -271,10 +273,20 @@ func ComputeScore(results []SimulationResult, prev *Score) Score {
 		VetoedTechniques:  vetoed,
 
 		RiskScore:               riskScore,
-		Classification:          classify(riskScore),
+		Classification:          classificationFor(executed, riskScore),
 		Confidence:              confidence,
 		PreventionEffectiveness: clamp(int(math.Round(preventionScore)), 0, 100),
+		NotAssessed:             executed == 0,
 	}
+}
+
+// classificationFor labels a run. With no executed step there is no measurement, so the run is "Not assessed", never
+// "Protected" from a 0 risk score.
+func classificationFor(executed, riskScore int) string {
+	if executed == 0 {
+		return "Not assessed"
+	}
+	return classify(riskScore)
 }
 
 func severityWeight(sev string) int {

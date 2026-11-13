@@ -304,6 +304,9 @@ func buildReliability(s ExecutiveSummary) Reliability {
 	switch {
 	case r.Attempted == 0:
 		r.Confidence = "No Data"
+	case r.Valid == 0:
+		// Nothing was scored, so the result cannot be called reliable or unreliable.
+		r.Confidence = "Not assessed"
 	case r.Errored*100/r.Attempted < 10:
 		r.Confidence = "High"
 	case r.Errored*100/r.Attempted < 30:

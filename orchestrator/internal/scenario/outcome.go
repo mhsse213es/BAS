@@ -249,9 +249,7 @@ func withEvidence(headline, combined string) string {
 // for errors, a reason. The returned detail is the report's "What happened" line.
 func classifyExecution(r ExecResult, combined string) (ExecutionOutcome, ErrorReason, string) {
 	if r.Vetoed {
-		return OutcomeVetoed, ErrNone, fmt.Sprintf(
-			"VETOED — Audspect prevented execution under its local destructive-action policy (action=%s, class=%s, source=%s). Customer defensive controls were not tested by this step.",
-			r.VetoedActionKey, r.VetoedExecutionClass, r.VetoedBlockSource)
+		return OutcomeVetoed, ErrNone, vetoDetail(r.VetoedActionKey, r.VetoedExecutionClass, r.VetoedBlockSource)
 	}
 
 	lower := strings.ToLower(combined)

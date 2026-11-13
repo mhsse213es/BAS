@@ -1511,7 +1511,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   <tr><td>Executed</td><td><strong>{{addInt .summary.passedTechniques .summary.failedTechniques}}</strong></td>
       <td>Succeeded</td><td style="color:#0d9488"><strong>{{.summary.passedTechniques}}</strong></td></tr>
   <tr><td>Failed</td><td style="color:#da3633"><strong>{{.summary.failedTechniques}}</strong></td>
-      <td></td><td></td></tr>
+      <td>Vetoed by Audspect policy</td><td><strong>{{.summary.vetoedTechniques}}</strong> <span style="color:#6e7681">not tested, not a failure</span></td></tr>
   <tr><td>Skipped (Policy)</td><td><strong>{{.skipBreakdown.policy}}</strong></td>
       <td>Skipped (Content)</td><td><strong>{{.skipBreakdown.content}}</strong></td></tr>
   <tr><td>Skipped (Platform)</td><td><strong>{{.skipBreakdown.platform}}</strong></td>
