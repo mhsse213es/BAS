@@ -119,7 +119,8 @@ steps:
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
+            $isRightGrant = ((($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0) -and ($r.ObjectType -ne [guid]::Empty))
+            if (-not $isRightGrant -and (($r.ActiveDirectoryRights -band $writeRights) -ne 0)) { $nonTier0Write = $true; $writers += $sid }
           }
           if ($suppliesSubject -and $hasAuthEKU -and (-not $mgrApproval) -and $lowPrivEnroll) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
@@ -206,7 +207,8 @@ steps:
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
+            $isRightGrant = ((($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0) -and ($r.ObjectType -ne [guid]::Empty))
+            if (-not $isRightGrant -and (($r.ActiveDirectoryRights -band $writeRights) -ne 0)) { $nonTier0Write = $true; $writers += $sid }
           }
           if ($hasAnyOrNoEKU -and $lowPrivEnroll -and (-not $mgrApproval)) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
@@ -293,7 +295,8 @@ steps:
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
+            $isRightGrant = ((($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0) -and ($r.ObjectType -ne [guid]::Empty))
+            if (-not $isRightGrant -and (($r.ActiveDirectoryRights -band $writeRights) -ne 0)) { $nonTier0Write = $true; $writers += $sid }
           }
           if ($hasAgentEKU -and $lowPrivEnroll) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
@@ -380,7 +383,8 @@ steps:
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
+            $isRightGrant = ((($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0) -and ($r.ObjectType -ne [guid]::Empty))
+            if (-not $isRightGrant -and (($r.ActiveDirectoryRights -band $writeRights) -ne 0)) { $nonTier0Write = $true; $writers += $sid }
           }
           if ($nonTier0Write) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
@@ -467,7 +471,8 @@ steps:
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
+            $isRightGrant = ((($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0) -and ($r.ObjectType -ne [guid]::Empty))
+            if (-not $isRightGrant -and (($r.ActiveDirectoryRights -band $writeRights) -ne 0)) { $nonTier0Write = $true; $writers += $sid }
           }
           if ($noSecExt -and $lowPrivEnroll) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
@@ -554,7 +559,8 @@ steps:
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
+            $isRightGrant = ((($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0) -and ($r.ObjectType -ne [guid]::Empty))
+            if (-not $isRightGrant -and (($r.ActiveDirectoryRights -band $writeRights) -ne 0)) { $nonTier0Write = $true; $writers += $sid }
           }
           if ($raSig -eq 0 -and $lowPrivEnroll) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
@@ -641,7 +647,8 @@ steps:
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
+            $isRightGrant = ((($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0) -and ($r.ObjectType -ne [guid]::Empty))
+            if (-not $isRightGrant -and (($r.ActiveDirectoryRights -band $writeRights) -ne 0)) { $nonTier0Write = $true; $writers += $sid }
           }
           if ($schemaVer -eq 1 -and $suppliesSubject -and $appPolicies.Count -gt 0 -and $ekus.Count -eq 0 -and $lowPrivEnroll) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }
@@ -859,7 +866,8 @@ steps:
             $sid = $r.IdentityReference.Value
             if (Is-Tier0 $sid) { continue }
             if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
-            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true; $writers += $sid }
+            $isRightGrant = ((($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0) -and ($r.ObjectType -ne [guid]::Empty))
+            if (-not $isRightGrant -and (($r.ActiveDirectoryRights -band $writeRights) -ne 0)) { $nonTier0Write = $true; $writers += $sid }
           }
           if ($appPolicies.Count -gt 0 -and $lowPrivEnroll) { $findings += ("TEMPLATE $name" + $(if ($nonTier0Write) { " write-by=" + (($writers | Select-Object -Unique) -join ',') } else { '' })) }
         }

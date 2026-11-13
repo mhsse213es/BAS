@@ -473,3 +473,10 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - ESC7 orphaned ACE on the CA object (SID ...-1000 does not resolve to an account). It is a real FAIL, pending cleanup decision.
 - ESC7 does not evaluate ManageCA or ManageCertificates.
 - ESC9 flag change (0x80000) still needs a domain-side check.
+
+### ESC4 follow-up (lab run 2)
+
+- Defect: an ExtendedRight ACE scoped to the Enroll GUID also carried WriteProperty (rights 304). The write test counted it, so Domain Users was reported on 8 templates.
+- Fix: a write bit on an ACE that grants an extended right to a specific right GUID is not counted. Whole-object writes and property writes still count.
+- Checked on the lab's exact ACE values: Enroll-scoped grant not a write; plain WriteProperty is a write.
+- Expected lab change: ESC4 FAIL to PASS. Not yet re-run on the domain.
