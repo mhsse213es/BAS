@@ -106,7 +106,9 @@ steps:
           $writable = $false
           foreach ($r in $rules) {
             if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
-            if (Is-Tier0 $r.IdentityReference.Value) { continue }
+            $effSid = $r.IdentityReference.Value
+            if ($effSid -eq 'S-1-3-0') { $effSid = $entry.ObjectSecurity.GetOwner([System.Security.Principal.SecurityIdentifier]).Value }
+            if (Is-Tier0 $effSid) { continue }
             if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $writable = $true }
           }
           if ($writable) { $findings += "$name (linked: $($scopes -join ', '))" }
@@ -203,7 +205,9 @@ steps:
           $writable = $false
           foreach ($r in $rules) {
             if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
-            if (Is-Tier0 $r.IdentityReference.Value) { continue }
+            $effSid = $r.IdentityReference.Value
+            if ($effSid -eq 'S-1-3-0') { $effSid = $entry.ObjectSecurity.GetOwner([System.Security.Principal.SecurityIdentifier]).Value }
+            if (Is-Tier0 $effSid) { continue }
             if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $writable = $true }
           }
           if ($writable) { $findings += "$name (linked: $($scopes -join ', '))" }

@@ -480,3 +480,10 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - Fix: a write bit on an ACE that grants an extended right to a specific right GUID is not counted. Whole-object writes and property writes still count.
 - Checked on the lab's exact ACE values: Enroll-scoped grant not a write; plain WriteProperty is a write.
 - Expected lab change: ESC4 FAIL to PASS. Not yet re-run on the domain.
+
+### GPO CREATOR OWNER rule (decision recorded 2026-11-13)
+
+- CREATOR OWNER (S-1-3-0) is no longer counted by itself. The ACE is evaluated against the GPO's actual owner (GetOwner). If the owner is tier-0, the ACE is not exposure. If the owner is not tier-0 and holds write, it is a FAIL.
+- Expected lab change: GPO-A and GPO-B FAIL to PASS, since the owner is Domain Admins.
+- ESC7 orphaned SID (...-1000) unchanged: FAIL until an administrator approves removal and the CA ACL is re-validated.
+- RBCD-B Account Operators: NOT changed. Conditional tier-0 classification requires a lab tier-model setting that is not built yet. Current result remains FAIL.
