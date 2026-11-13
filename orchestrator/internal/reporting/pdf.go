@@ -261,8 +261,12 @@ func (d *rpt) executiveSummary(rep *FullReport) {
 	d.text(cNavy)
 	d.pdf.SetFont("Helvetica", "B", 10)
 	d.pdf.SetXY(margin+6, y+2.5)
-	d.cellT(contentW-10, 5, fmt.Sprintf("Overall posture: %s  (risk score %d / 100, %s)",
-		emptyDash(s.Classification), s.RiskScore, s.Trend))
+	if !s.Assessed {
+		d.cellT(contentW-10, 5, fmt.Sprintf("Overall posture: not assessed (%d vetoed, %d skipped, nothing executed)", s.VetoedTechniques, s.SkippedTechniques))
+	} else {
+		d.cellT(contentW-10, 5, fmt.Sprintf("Overall posture: %s  (risk score %d / 100, %s)",
+			emptyDash(s.Classification), s.RiskScore, s.Trend))
+	}
 	d.text(cMuted)
 	d.pdf.SetFont("Helvetica", "", 8.5)
 	d.pdf.SetXY(margin+6, y+8.5)
@@ -504,6 +508,14 @@ func (d *rpt) narrative(rep *FullReport) string {
 	}
 	fmt.Fprintf(&b, " on %s. The assessment ran %d MITRE ATT&CK-aligned techniques to measure how effectively the endpoint's security controls prevent real adversary behaviour.\n\n", when, s.TotalTechniques)
 
+	if !s.Assessed {
+		// Nothing executed: say so, and say why, instead of stating a prevention rate or a risk class.
+		fmt.Fprintf(&b, "No technique was executed, so this report does not measure prevention effectiveness or state an overall risk classification. "+
+			"%d technique(s) were vetoed by Audspect's own destructive-action policy and %d were skipped because a prerequisite on this host was missing. "+
+			"A vetoed or skipped step tells you nothing about the endpoint's defences. The reasons for each step are listed in the technical findings.", s.VetoedTechniques, s.SkippedTechniques)
+		return b.String()
+	}
+
 	prevented := s.PassedTechniques
 	succeeded := s.FailedTechniques
 	fmt.Fprintf(&b, "Of the techniques executed, %d were prevented or blocked by a security control and %d executed successfully without being stopped. This yields a prevention effectiveness of %.0f%% and an overall risk classification of %s (risk score %d/100).",
@@ -544,8 +556,12 @@ func (d *rpt) scorecard(rep *FullReport) {
 		detNote = "alerts on unprevented techniques"
 		detCol = d.gradeHigh(s.DetectionScore)
 	}
+	prevVal, prevNote, prevCol := fmt.Sprintf("%.0f%%", s.PreventionScore), "techniques blocked (higher is better)", d.gradeHigh(s.PreventionScore)
+	if !s.Assessed {
+		prevVal, prevNote, prevCol = "N/A", "no technique executed — not measured", cMuted
+	}
 	cards := []card{
-		{"Prevention", fmt.Sprintf("%.0f%%", s.PreventionScore), "techniques blocked (higher is better)", d.gradeHigh(s.PreventionScore)},
+		{"Prevention", prevVal, prevNote, prevCol},
 		{"Detection", detVal, detNote, detCol},
 		{"Exposure", emptyDash(s.ExposureLevel), "posture band (lower is better)", d.exposureColor(s.ExposureLevel)},
 		{"Penetration", fmt.Sprintf("%d / %d", s.PenetrationFailed, s.PenetrationTested), fmt.Sprintf("%d%% of executed got through", s.PenetrationPct), d.gradeLow(float64(s.PenetrationPct))},
