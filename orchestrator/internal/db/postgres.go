@@ -1916,6 +1916,24 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE job_schedules ADD COLUMN IF NOT EXISTS initiative_id text NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_job_schedules_initiative_id ON job_schedules (initiative_id) WHERE initiative_id <> ''`,
 
+		// scheduled_blackouts: change-freeze windows in which scheduled assessments do not start. "once" covers
+		// [starts_at, ends_at); "daily" covers time_from..time_to in timezone, between valid_from and valid_to when set.
+		// Enforced in jobs.Dispatcher.spawnDueSchedules; validated in jobs.ValidateBlackout before insert.
+		`CREATE TABLE IF NOT EXISTS scheduled_blackouts (
+			id          text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name        text        NOT NULL,
+			kind        text        NOT NULL CHECK (kind IN ('once', 'daily')),
+			starts_at   timestamptz,
+			ends_at     timestamptz,
+			time_from   text        NOT NULL DEFAULT '',
+			time_to     text        NOT NULL DEFAULT '',
+			timezone    text        NOT NULL DEFAULT 'UTC',
+			valid_from  date,
+			valid_to    date,
+			created_by  text        NOT NULL DEFAULT '',
+			created_at  timestamptz NOT NULL DEFAULT now()
+		)`,
+
 		// fail_reason: a genuine, human-readable explanation for why a run's
 		// status became 'failed' (dispatch-time only -- e.g. agent offline,
 		// malformed scenario content, every step lab-only in a non-lab mode).
