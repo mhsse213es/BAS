@@ -1754,8 +1754,8 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 	// ── 6. Executive summary ─────────────────────────────────────────────
 	report.Summary = ExecutiveSummary{
 		RiskScore:          latestScore.RiskScore,
-		Classification:     latestScore.Classification,
-		Assessed:           !latestScore.NotAssessed,
+		Classification:     summaryClassification(latestScore),
+		Assessed:           scoreAssessed(latestScore),
 		VetoedTechniques:   latestScore.VetoedTechniques,
 		PreventionScore:    latestScore.PreventionScore,
 		ExposureScore:      latestScore.ExposureScore,
@@ -2035,8 +2035,8 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 
 	report.Summary = ExecutiveSummary{
 		RiskScore:          score.RiskScore,
-		Classification:     score.Classification,
-		Assessed:           !score.NotAssessed,
+		Classification:     summaryClassification(score),
+		Assessed:           scoreAssessed(score),
 		VetoedTechniques:   score.VetoedTechniques,
 		PreventionScore:    score.PreventionScore,
 		ExposureScore:      score.ExposureScore,
@@ -4509,4 +4509,19 @@ func (e *Engine) populateCampaignVariantCoverage(ctx context.Context, report *Fu
 	}
 
 	report.CampaignVariantCoverage = sec
+}
+
+// scoreAssessed reports whether a stored score measured anything. A run with no executed step (every step vetoed,
+// skipped or errored) has no measurement, whether or not the score carries the NotAssessed flag: scores stored before
+// that flag existed have only their counts.
+func scoreAssessed(s models.Score) bool {
+	return !s.NotAssessed && s.PassedTechniques+s.FailedTechniques > 0
+}
+
+// summaryClassification is the report's risk class for a score. An unassessed run is never "Protected".
+func summaryClassification(s models.Score) string {
+	if !scoreAssessed(s) {
+		return "Not assessed"
+	}
+	return s.Classification
 }
