@@ -117,3 +117,6 @@
 .agt-note.tone-bad { --nc: var(--danger); }
 .agt-note.tone-warn { --nc: var(--warning); }
 .agt-note.tone-info { --nc: var(--accent); }
+
+.agent-legacy-deploy { margin: 10px 0; }
+.agent-legacy-deploy > summary { cursor: pointer; font-size: 12px; color: var(--muted); padding: 4px 0; }
