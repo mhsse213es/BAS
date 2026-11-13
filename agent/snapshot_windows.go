@@ -104,7 +104,10 @@ func captureSnapshot(runID string) *SystemSnapshot {
 func captureSnapshotLite(runID string) *SystemSnapshot {
 	s := newSnapshot(runID)
 
-	if out, err := snapCmd("schtasks", "/query", "/fo", "CSV", "/nh"); err == nil {
+	if out, err := snapCmd("schtasks", "/query", "/fo", "CSV", "/nh"); err != nil {
+		s.markUnavailable("schtasks")
+	} else {
+		s.Lists["schtasks"] = []string{}
 		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" {

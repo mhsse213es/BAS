@@ -464,6 +464,10 @@ type Score struct {
 	Classification          string `json:"classification"`          // Protected | Low Risk | Medium Risk | High Risk | Critical
 	Confidence              int    `json:"confidence"`              // % of non-skipped results
 	PreventionEffectiveness int    `json:"preventionEffectiveness"` // = round(PreventionScore)
+	// NotAssessed is true when no step executed (every step was vetoed, skipped or errored). The scores are then
+	// not a measurement, and Classification reads "Not assessed". It is omitted for assessed runs, so scores stored
+	// before this field existed still read as assessed.
+	NotAssessed bool `json:"notAssessed,omitempty"`
 }
 
 // AgentState is the lifecycle state of a registered agent.

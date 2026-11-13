@@ -89,9 +89,7 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		// C1). This is server-side classification -- no agent upgrade is
 		// needed for the correction to take effect.
 		checkResult = models.ResultVetoed
-		details = fmt.Sprintf(
-			"VETOED — Audspect prevented execution under its local destructive-action policy (action=%s, class=%s, source=%s). Customer defensive controls were not tested by this step.",
-			result.VetoedActionKey, result.VetoedExecutionClass, result.VetoedBlockSource)
+		details = vetoDetail(result.VetoedActionKey, result.VetoedExecutionClass, result.VetoedBlockSource)
 	} else if result.TimedOut {
 		checkResult = models.ResultError
 		details = fmt.Sprintf(
