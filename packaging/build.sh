@@ -150,7 +150,14 @@ for m in $(ls -d "${DIST_DIR}"/bas-install-*/BINARIES.sha256 2>/dev/null | sort 
   if [[ "$(printf '%s\n%s\n' "$v" "$VERSION" | sort -V | head -1)" == "$v" ]]; then PREV_MANIFEST="$m"; fi
 done
 if [[ -n "$PREV_MANIFEST" ]]; then log "Previous release manifest: ${PREV_MANIFEST}"
-else warn "No earlier release under ${DIST_DIR} - agents on an older build will be quarantined after the upgrade."; fi
+elif [[ "${BAS_ALLOW_NO_PREVIOUS:-0}" == "1" ]]; then
+  warn "No earlier release under ${DIST_DIR}; BAS_ALLOW_NO_PREVIOUS=1, so building without it. Agents on an older build will be quarantined after the upgrade."
+else
+  # Fail closed. Without the previous release's hashes, every agent still on that release is quarantined after the upgrade.
+  # The earlier release must be under dist/ as bas-install-<version>/BINARIES.sha256; use BAS_ALLOW_NO_PREVIOUS=1 only for a first release.
+  err "No earlier release under ${DIST_DIR}. Refusing to build: agents on the release before ${VERSION} would be quarantined after the upgrade. Put that release's bas-install-<version>/BINARIES.sha256 under dist/, or set BAS_ALLOW_NO_PREVIOUS=1 for a first release."
+  exit 1
+fi
 export BAS_PREVIOUS_MANIFEST="${PREV_MANIFEST}"
 
 # ── 1c. Sign binaries if GPG key is available ─────────────────────────────────

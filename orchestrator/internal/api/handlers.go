@@ -1333,6 +1333,9 @@ func (h *Handler) SetAgentState(w http.ResponseWriter, r *http.Request) {
 	if h.refuseIfForceRemoved(w, r, agentID) {
 		return
 	}
+	if body.State == "active" && h.refuseUntrustedRestore(w, r, agentID) {
+		return
+	}
 	tag, err := h.db.Exec(r.Context(),
 		`UPDATE agents SET state = $1 WHERE agent_id = $2`, body.State, agentID)
 	if err != nil {
