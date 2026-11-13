@@ -527,3 +527,15 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - Not changed: certificate-mapping methods (CertificateMappingMethods, Schannel key, bit 0x4 UPN) remain unassessed. The KB does not state the KDC reads it.
 - Lab: ESC10 result was already SKIP (value unset). No lab change made; setting value 2 was rejected because it has no effect after the 2025 update.
 - Tests: scenario tests pass; 156 signatures verify.
+
+### Atomic Red Team pin: hard-coded check and step resolution (2026-11-13)
+
+- Pin: `orchestrator/Dockerfile` fetches redcanaryco/atomic-red-team at `a0e3f9bc69fed2fd711bd1f1aa87a40c33482fe6`. The commit exists upstream (GitHub API, 200; committed 2026-11-06).
+- Gap found: the post-fetch check compared HEAD to `ART_COMMIT`, which is the same build argument that picked the commit. `--build-arg ART_COMMIT=<any>` passed. Fixed: the RUN step now also hard-codes the expected commit and refuses an override.
+- Verified by hand: the sparse fetch of the pinned commit succeeds; 353 T*.yaml files; the pin check passes; an override is refused. The full Docker image build was NOT run.
+- Step resolution: 39 `framework: art` steps. Runtime rule (builder.go): 0-based `test_index` into the platform-filtered test list; out-of-range silently falls back to index 0.
+  - 37 resolve.
+  - UNRESOLVED, runs the wrong test silently:
+    - entra-hybrid-identity-attack.yaml T1539 index 3: only 5 Windows tests exist.
+    - ubuntu-hardening-validation.yaml T1046 index 11: only 13 Linux tests exist, but the platform filter leaves fewer.
+- Not changed: scenario test indexes; the runtime silent fallback in builder.go (a change to execution behaviour, needs approval).

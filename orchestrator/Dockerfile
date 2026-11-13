@@ -24,7 +24,8 @@ RUN apk add --no-cache git curl && \
     printf 'atomics/T[0-9]*/T[0-9]*.yaml\n' > .git/info/sparse-checkout && \
     git -c protocol.version=2 fetch --depth=1 --filter=blob:none origin "${ART_COMMIT}" && \
     git checkout FETCH_HEAD && \
-    [ "$(git rev-parse HEAD)" = "${ART_COMMIT}" ] || { echo "ART revision mismatch" >&2; exit 1; } && \
+    [ "$(git rev-parse HEAD)" = "a0e3f9bc69fed2fd711bd1f1aa87a40c33482fe6" ] || { echo "ART revision mismatch" >&2; exit 1; } && \
+    [ "${ART_COMMIT}" = "a0e3f9bc69fed2fd711bd1f1aa87a40c33482fe6" ] || { echo "ART_COMMIT override refused: pin is fixed in this Dockerfile" >&2; exit 1; } && \
     mkdir /art-atomics /art-payloads && \
     find atomics -name 'T[0-9]*.yaml' -exec cp {} /art-atomics/ \;
 
