@@ -100,3 +100,25 @@ func TestComputeExecutionCoverage_EmptyRunIsZeroNotNaN(t *testing.T) {
 		t.Errorf("empty = %+v", c)
 	}
 }
+
+func TestIsTelemetryProbe(t *testing.T) {
+	if !(SimulationResult{Result: ResultSkipped, SkipReason: SkipReasonTelemetryOnly}).IsTelemetryProbe() {
+		t.Error("a skip with the telemetry-only reason is a telemetry probe")
+	}
+	for _, r := range []SimulationResult{{Result: ResultSkipped}, {Result: ResultPass, SkipReason: SkipReasonTelemetryOnly}, {Result: ResultSkipped, SkipReason: SkipReasonMissingContent}} {
+		if r.IsTelemetryProbe() {
+			t.Errorf("%+v must not be a telemetry probe", r)
+		}
+	}
+}
+
+func TestTelemetryProbeStaysOutOfThePreventionScore(t *testing.T) {
+	probe := SimulationResult{Technique: AttackTechnique{ID: "T1135", Tactic: "discovery"}, Result: ResultSkipped, SkipReason: SkipReasonTelemetryOnly, Severity: "High"}
+	pass := SimulationResult{Technique: AttackTechnique{ID: "T1059", Tactic: "execution"}, Result: ResultBlocked, Severity: "High"}
+	fail := SimulationResult{Technique: AttackTechnique{ID: "T1003", Tactic: "credential-access"}, Result: ResultFail, Severity: "High"}
+	with := ComputeScore([]SimulationResult{pass, fail, probe}, nil)
+	without := ComputeScore([]SimulationResult{pass, fail}, nil)
+	if with.PreventionScore != without.PreventionScore {
+		t.Errorf("a telemetry probe changed the prevention score: %v vs %v", with.PreventionScore, without.PreventionScore)
+	}
+}

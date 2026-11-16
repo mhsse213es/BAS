@@ -401,6 +401,7 @@ func TestClassifySkipReason(t *testing.T) {
 		{"caldera not configured", "Caldera not configured — set CALDERA_URL to enable ability abc123", models.SkipReasonPlatformUnavailable},
 		{"caldera ability not found", "Caldera ability abc123 not found", models.SkipReasonPlatformUnavailable},
 		{"circuit breaker open", "circuit breaker open for technique:T1055, domain:registry", models.SkipReasonCircuitOpen},
+		{"telemetry-only probe", "telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored.", models.SkipReasonTelemetryOnly},
 		{"unrecognized text", "some future skip reason nobody has written yet", ""},
 	}
 	for _, c := range cases {

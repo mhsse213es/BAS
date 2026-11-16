@@ -304,6 +304,17 @@ const SkipReasonPrerequisiteMissing = "prerequisite-missing"
 // policy decision, the opposite of SkipReasonPlatformUnavailable.
 const SkipReasonCircuitOpen = "circuit-open"
 
+// SkipReasonTelemetryOnly marks a step that really ran its harmless command but has no control outcome to score, such
+// as share or file enumeration. It stays out of the prevention score (a skip is never a pass or a fail), yet it is not
+// an environment gap: the activity happened, so detection can still be graded on it, from SIEM alerts, host events or a
+// reviewed verification. See IsTelemetryProbe.
+const SkipReasonTelemetryOnly = "telemetry-only"
+
+// IsTelemetryProbe reports whether the step ran as a telemetry-only probe (see SkipReasonTelemetryOnly).
+func (r SimulationResult) IsTelemetryProbe() bool {
+	return r.Result == ResultSkipped && r.SkipReason == SkipReasonTelemetryOnly
+}
+
 // DetectionAlert is the alert record that matched this technique during the
 // post-run detection sweep. Mirrors detect.AlertRecord (server-side package)
 // but kept in models so it serialises cleanly with SimulationResult.

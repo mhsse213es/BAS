@@ -71,7 +71,13 @@ func Correlate(
 			BASVerdict:    string(res.Result),
 		}
 
-		switch res.Result {
+		// A telemetry probe ran and left real activity behind, so it is checked against alerts like an executed step
+		// even though it has no prevention verdict.
+		kind := res.Result
+		if res.IsTelemetryProbe() {
+			kind = models.ResultFail
+		}
+		switch kind {
 		case models.ResultSkipped, models.ResultError, models.ResultVetoed:
 			// ResultVetoed: Audspect's own agent refused to attempt this
 			// step under B5's destructive-action policy -- it genuinely

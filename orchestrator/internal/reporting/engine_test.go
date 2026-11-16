@@ -380,10 +380,11 @@ func TestBuildSkipBreakdown(t *testing.T) {
 		{Result: models.ResultSkipped, SkipReason: models.SkipReasonPlatformUnavailable},
 		{Result: models.ResultSkipped, SkipReason: models.SkipReasonCircuitOpen},
 		{Result: models.ResultSkipped, SkipReason: ""}, // unrecognized/legacy skip
+		{Result: models.ResultSkipped, SkipReason: models.SkipReasonTelemetryOnly}, // ran, but no control outcome to score
 		{Result: models.ResultPass}, // not a skip — must not be counted
 	}
 	got := buildSkipBreakdown(results)
-	want := SkipBreakdown{Policy: 2, Content: 1, Platform: 2, Scheduler: 1}
+	want := SkipBreakdown{Policy: 2, Content: 1, Platform: 2, Scheduler: 1, Telemetry: 1}
 	if got != want {
 		t.Errorf("buildSkipBreakdown = %+v, want %+v", got, want)
 	}

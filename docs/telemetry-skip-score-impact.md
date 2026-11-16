@@ -65,3 +65,24 @@ weight column (for example up to about 30 points for apt36 and black-basta).
 - Retire or relabel `windows-discovery-validation`.
 - Add a release note about the trend break, and do not compare pre- and post-build scores directly.
 - Run one affected scenario (for example apt36 or black-basta) on a lab host and confirm the figures above.
+
+## Update: detection grading for telemetry probes (built)
+
+A telemetry probe now has its own skip reason, `telemetry-only` (`models.SkipReasonTelemetryOnly`), recognised from the
+existing "telemetry-only probe" text, so no scenario file changed and nothing needed re-signing. The step still SKIPs
+for the prevention score. It is now treated as having run for detection:
+
+| Where | Before | Now |
+| --- | --- | --- |
+| Prevention score, compliance, execution coverage | Not counted | Unchanged: still not counted (no control outcome) |
+| SIEM correlation | `not_executed` | Checked against alerts like an executed step: `detected` or `undetected`, and part of the detection rate |
+| Detection gap report (verification store) | Skipped; a reviewed "not detected" was ignored | A reviewed "not detected" is a Detection gap; reviewed "detected" is Detected; unreviewed is Unknown, not Skipped |
+| Host-event detection (`DetectedTechniques`) | Failed steps only | Also telemetry probes |
+| Detection effectiveness analytics | Left out | Counted as detected-only when something detected it; a probe nobody saw is left out, not called a miss |
+| Report skip breakdown | Counted as Platform (an environment gap) | Own `telemetry` bucket |
+
+Deliberately not done: a probe with no alert and no reviewed verdict is not called a miss in the analytics, because
+nothing shows an alert source was watching. It is a miss only where the SIEM was queried or a reviewer said so.
+
+Still open from the list above: the trend break at the next build, `windows-discovery-validation` (now gradable on
+detection, but still never produces a prevention score), and a lab run to confirm real figures.

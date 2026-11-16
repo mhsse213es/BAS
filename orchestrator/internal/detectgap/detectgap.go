@@ -46,6 +46,9 @@ type Attestation struct {
 type Technique struct {
 	TechniqueID  string
 	Outcomes     map[models.CheckResult]int // how many steps ended in each result
+	// TelemetryProbes counts the skipped steps that ran as telemetry-only probes. They have no prevention verdict but
+	// did produce activity, so detection can be judged on them.
+	TelemetryProbes int
 	Attestations []Attestation
 }
 
@@ -73,6 +76,7 @@ func Classify(t Technique) Classification {
 		}
 	}
 	executed := t.Outcomes[models.ResultFail] > 0
+	probed := !executed && t.TelemetryProbes > 0 // only probes ran: judged on detection alone
 	blocked := t.Outcomes[models.ResultBlocked] + t.Outcomes[models.ResultPass]
 
 	switch {
@@ -80,8 +84,14 @@ func Classify(t Technique) Classification {
 		return Classification{Detected, "A reviewed verification found an alert for this technique."}
 	case executed && missed:
 		return Classification{DetectionGap, "The technique ran to completion and a reviewed verification found no alert."}
-	case executed && notApplicable:
+	case probed && missed:
+		return Classification{DetectionGap, "A telemetry probe ran and a reviewed verification found no alert."}
+	case executed && notApplicable, probed && notApplicable:
 		return Classification{Unknown, "A reviewer marked detection not applicable for this technique."}
+	case probed && unresolved:
+		return Classification{Unknown, "A telemetry probe ran, and the detection verification is still awaiting review."}
+	case probed:
+		return Classification{Unknown, "A telemetry probe ran, but no detection verification was recorded."}
 	case executed && unresolved:
 		return Classification{Unknown, "The technique ran, and the detection verification is still awaiting review."}
 	case executed:
@@ -140,6 +150,9 @@ func Assess(results []models.SimulationResult, current map[string]verification.R
 			order = append(order, id)
 		}
 		t.Outcomes[res.Result]++
+		if res.IsTelemetryProbe() {
+			t.TelemetryProbes++
+		}
 	}
 	for _, rec := range current {
 		if t := byTech[rec.TechniqueID]; t != nil {

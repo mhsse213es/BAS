@@ -211,3 +211,46 @@ func TestDeploymentStatus(t *testing.T) {
 		t.Errorf("a closed deployment must say Audspect does not confirm which rule fired: %q", closed)
 	}
 }
+
+func TestClassify_ATelemetryProbeIsGradedOnDetectionAlone(t *testing.T) {
+	probe := map[models.CheckResult]int{models.ResultSkipped: 1}
+	tp := func(atts ...Attestation) Technique {
+		return Technique{TechniqueID: "T1135", Outcomes: probe, TelemetryProbes: 1, Attestations: atts}
+	}
+	cases := []struct {
+		name string
+		in   Technique
+		want Status
+	}{
+		{"a reviewed alert is a detection", tp(approved(verification.ResultDetected)), Detected},
+		{"a reviewed miss is a detection gap: the probe ran and nothing alerted", tp(approved(verification.ResultNotDetected)), DetectionGap},
+		{"a miss awaiting review is not a gap yet", tp(Attestation{Result: verification.ResultNotDetected, State: verification.StatePending}), Unknown},
+		{"nobody verified: unknown, not skipped", tp(), Unknown},
+		{"marked not applicable", tp(approved(verification.ResultNotApplicable)), Unknown},
+		{"an ordinary skip with a miss is still just skipped", tech(probe, approved(verification.ResultNotDetected)), Skipped},
+	}
+	for _, c := range cases {
+		got := Classify(c.in)
+		if got.Status != c.want || got.Reason == "" {
+			t.Errorf("%s: got %q (%q), want %q", c.name, got.Status, got.Reason, c.want)
+		}
+	}
+	if got := Classify(tp()); !strings.Contains(got.Reason, "probe") {
+		t.Errorf("the reason should say it was a probe, got %q", got.Reason)
+	}
+}
+
+func TestAssess_CountsTelemetryProbesFromTheSkipReason(t *testing.T) {
+	results := []models.SimulationResult{
+		{Technique: models.AttackTechnique{ID: "T1135"}, Result: models.ResultSkipped, SkipReason: models.SkipReasonTelemetryOnly},
+		{Technique: models.AttackTechnique{ID: "T1003"}, Result: models.ResultSkipped, SkipReason: models.SkipReasonPlatformUnavailable},
+	}
+	cur := map[string]verification.Record{"e1": {TechniqueID: "T1135", Result: verification.ResultNotDetected, WorkflowState: verification.StateApproved}}
+	got := map[string]Status{}
+	for _, a := range Assess(results, cur) {
+		got[a.TechniqueID] = a.Status
+	}
+	if got["T1135"] != DetectionGap || got["T1003"] != Skipped {
+		t.Errorf("got %v, want T1135 detection gap and T1003 skipped", got)
+	}
+}

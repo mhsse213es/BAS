@@ -1273,6 +1273,9 @@ type SkipBreakdown struct {
 	Content   int `json:"content"`
 	Platform  int `json:"platform"`
 	Scheduler int `json:"scheduler"`
+	// Telemetry counts steps that ran but have no control outcome to score (SkipReasonTelemetryOnly). They are not an
+	// environment gap and not a policy decision, so they are kept apart from Platform.
+	Telemetry int `json:"telemetry"`
 }
 
 // buildSkipBreakdown counts skipped results by SkipReason. An empty or
@@ -1294,6 +1297,8 @@ func buildSkipBreakdown(results []models.SimulationResult) SkipBreakdown {
 			sb.Content++
 		case models.SkipReasonCircuitOpen:
 			sb.Scheduler++
+		case models.SkipReasonTelemetryOnly:
+			sb.Telemetry++
 		default:
 			sb.Platform++
 		}

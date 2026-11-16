@@ -34,7 +34,8 @@ func DetectedTechniques(detRaw []byte, results []models.SimulationResult) map[st
 		}
 	}
 	for _, res := range results {
-		if res.Result == models.ResultFail && !out[res.Technique.ID] {
+		// A telemetry probe ran, so its host events can show a detection just as a failed step's can.
+		if (res.Result == models.ResultFail || res.IsTelemetryProbe()) && !out[res.Technique.ID] {
 			if ClassifyDetectionStatus(res.Events) == "Detected" {
 				out[res.Technique.ID] = true
 			}

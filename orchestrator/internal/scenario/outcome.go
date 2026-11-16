@@ -212,6 +212,8 @@ func classifySkipReason(detail string) string {
 		return models.SkipReasonPlatformUnavailable
 	case strings.Contains(lower, "circuit breaker"):
 		return models.SkipReasonCircuitOpen
+	case strings.Contains(lower, "telemetry-only probe"):
+		return models.SkipReasonTelemetryOnly
 	}
 	return ""
 }
