@@ -577,3 +577,13 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - Description updated: ESC14 no longer listed as not assessed.
 - Baseline unchanged; ledger gained one entry; 157 signatures verify; scenario tests pass.
 - NOT VERIFIED on a domain. The lab kit was lost when the scratchpad was cleared; the check must be re-run on AD-DC-01 before its result is trusted.
+
+### AD: trust direction and type audit (new scenario, 2026-11-16)
+
+- New file scenarios/trust-direction-type-audit.yaml, two read-only steps:
+  - A: downlevel (trustType 1) trust configured. FAIL.
+  - B: external (not forest-transitive) trust with trustDirection 3 (bidirectional). FAIL for review.
+- No trust objects is PASS, stated as such. Container read failure is SKIP.
+- Customer-visible: new scenario, existing scores unchanged; domains with such trusts will FAIL when run.
+- Scenario count 128 to 129; ratchet baseline gained one file at zero gaps; 158 signatures verify; tests pass.
+- NOT VERIFIED on a domain.

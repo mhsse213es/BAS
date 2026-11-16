@@ -1,0 +1,51 @@
+id: trust-direction-type-audit
+product_line: ad
+name: Trust Direction and Type Audit
+description: "Read-only trust-configuration audit, two independent steps (T1199):\n  A  downlevel (trustType 1, NT4-style) trust configured.\n  B  external (not forest-transitive) trust with trustDirection bidirectional (3).\nNo trust objects is a PASS, stated as such. Container read failure is SKIP, never PASS.\nNot assessed: SID-filtering state beyond the existing forest-trust quarantine step, selective authentication, and the trust's remote side.\nSAFETY: reads trust objects only. Creates, changes and tests no trust. A FAIL shows configuration exposure, not exploitability. Windows domain members only."
+author: Audspect Research
+executable: true
+local_check: false
+supported_os:
+- windows
+tags:
+- active-directory
+- trust
+- hygiene
+- t1199
+- mitre
+mitre_phases:
+- discovery
+- lateral-movement
+steps:
+- name: Trust Direction and Type A - downlevel (NT4-style) trust configured (T1199)
+  technique_id: T1199
+  executor: powershell
+  requires_priv: user
+  timeout_sec: 60
+  production_safe: true
+  fidelity: telemetry-safe
+  risk: low
+  blast_radius: Reads trust objects in the System container. No trust is created, changed or tested.
+  reversible: true
+  telemetry:
+  - 'DC: LDAP search of trustedDomain objects'
+  detection:
+  - 'SIEM: LDAP enumeration of trustedDomain objects from a non-administrative workstation'
+  command: "$ErrorActionPreference = 'SilentlyContinue'\n$findings = @()\n$trustCount = 0\n$ok = $false\ntry {\n  $domainDN = ([ADSI]\"LDAP://RootDSE\").defaultNamingContext\n  if (-not $domainDN) { throw \"no domain\" }\n  $ts = New-Object System.DirectoryServices.DirectorySearcher\n  $ts.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry(\"LDAP://CN=System,$domainDN\")\n  $ts.Filter = \"(objectClass=trustedDomain)\"\n  $ts.PageSize = 500\n  [void]$ts.PropertiesToLoad.Add('cn')\n  [void]$ts.PropertiesToLoad.Add('trustDirection')\n  [void]$ts.PropertiesToLoad.Add('trustType')\n  [void]$ts.PropertiesToLoad.Add('trustAttributes')\n  $trusts = @($ts.FindAll())\n  $trustCount = $trusts.Count\n  $ok = $true\n} catch { $ok = $false }\n\nif (-not $ok) {\n  Write-Output \"SKIP: legacy trust assessment could not be evaluated: the trust container could not be read. Not scored. [BAS-SIM-TRUST-S1]\"\n} else {\n  foreach ($t in $trusts) {\n    $type = [int]$t.Properties['trusttype'][0]\n    if ($type -eq 1) { $findings += [string]$t.Properties['cn'][0] }\n  }\n  if ($findings.Count -eq 0) {\n    Write-Output \"PASS: no downlevel (NT4-style) trust is configured; $trustCount trust object(s) read. This step assesses trustType only. [BAS-SIM-TRUST-S1]\"\n  } else {\n    Write-Output \"EXEC T1199: $($findings.Count) downlevel (trustType 1) trust(s) configured. Reads trust attributes only. [BAS-SIM-TRUST-S1]\"\n    foreach ($f in $findings) { Write-Output \"LEGACY $f\" }\n    Write-Output \"FAIL: a downlevel (NT4-style) trust is configured. These trusts predate Kerberos referral and SID-filtering controls and are not covered by forest-trust protections. Configuration exposure only. Remediation: retire the trust or replace it with a forest or external trust with SID filtering. [BAS-SIM-TRUST-S1]\"\n  }\n}\n"
+  cleanup: ''
+- name: Trust Direction and Type B - external bidirectional trust (T1199)
+  technique_id: T1199
+  executor: powershell
+  requires_priv: user
+  timeout_sec: 60
+  production_safe: true
+  fidelity: telemetry-safe
+  risk: low
+  blast_radius: Reads trust objects in the System container. No trust is created, changed or tested.
+  reversible: true
+  telemetry:
+  - 'DC: LDAP search of trustedDomain objects'
+  detection:
+  - 'SIEM: LDAP enumeration of trustedDomain objects from a non-administrative workstation'
+  command: "$ErrorActionPreference = 'SilentlyContinue'\n$findings = @()\n$trustCount = 0\n$ok = $false\ntry {\n  $domainDN = ([ADSI]\"LDAP://RootDSE\").defaultNamingContext\n  if (-not $domainDN) { throw \"no domain\" }\n  $ts = New-Object System.DirectoryServices.DirectorySearcher\n  $ts.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry(\"LDAP://CN=System,$domainDN\")\n  $ts.Filter = \"(objectClass=trustedDomain)\"\n  $ts.PageSize = 500\n  [void]$ts.PropertiesToLoad.Add('cn')\n  [void]$ts.PropertiesToLoad.Add('trustDirection')\n  [void]$ts.PropertiesToLoad.Add('trustType')\n  [void]$ts.PropertiesToLoad.Add('trustAttributes')\n  $trusts = @($ts.FindAll())\n  $trustCount = $trusts.Count\n  $ok = $true\n} catch { $ok = $false }\n\nif (-not $ok) {\n  Write-Output \"SKIP: external bidirectional trust assessment could not be evaluated: the trust container could not be read. Not scored. [BAS-SIM-TRUST-S2]\"\n} else {\n  foreach ($t in $trusts) {\n    $dir = [int]$t.Properties['trustdirection'][0]\n    $attr = [int]$t.Properties['trustattributes'][0]\n    $forest = (($attr -band 0x8) -ne 0)\n    if ($dir -eq 3 -and -not $forest) { $findings += [string]$t.Properties['cn'][0] }\n  }\n  if ($findings.Count -eq 0) {\n    Write-Output \"PASS: no external bidirectional trust is configured; $trustCount trust object(s) read. This step assesses direction and forest-transitivity only. [BAS-SIM-TRUST-S2]\"\n  } else {\n    Write-Output \"EXEC T1199: $($findings.Count) external bidirectional trust(s) configured. Reads trust attributes only. [BAS-SIM-TRUST-S2]\"\n    foreach ($f in $findings) { Write-Output \"BIDI $f\" }\n    Write-Output \"FAIL: an external (non-forest) trust is bidirectional, so principals in the trusted domain can be granted access here and this domain's principals can be granted access there. Configuration exposure only. Remediation: make the trust one-way where possible, and review the grants that cross it. [BAS-SIM-TRUST-S2]\"\n  }\n}\n"
+  cleanup: ''

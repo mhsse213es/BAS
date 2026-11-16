@@ -439,6 +439,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "trust-direction-type-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "trust-sid-history-exposure-audit.yaml": {
     "cleanup": 0,
     "detection": 0,

@@ -4383,6 +4383,24 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "trust-direction-type-audit.yaml",
+    "index": 0,
+    "technique_id": "T1199",
+    "action_key": "",
+    "framework": "native",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "trust-direction-type-audit.yaml",
+    "index": 1,
+    "technique_id": "T1199",
+    "action_key": "",
+    "framework": "native",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
     "scenario": "trust-sid-history-exposure-audit.yaml",
     "index": 0,
     "technique_id": "T1134.005",
