@@ -997,6 +997,7 @@ func scanAgentRows(rows pgx.Rows, hub *ws.Hub, now time.Time, minVersion string)
 			continue
 		}
 		a.BelowMinVersion = belowMinimumAgentVersion(a.AgentVersion, minVersion)
+		a.MinAgentVersion = minVersion
 		// Connectivity is heartbeat-driven: a dead/rebooted agent stops updating
 		// last_update, so surface it as offline rather than its frozen last status.
 		a.Status = models.EffectiveAgentStatus(a.Status, a.LastUpdate, now)
@@ -1612,7 +1613,7 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 	// Verify binary hash against the manifest if one is loaded.
 	trusted := false
 	if hb.BinaryHash != "" && h.manifest != nil && h.manifest.Loaded() {
-		trusted = h.manifest.HashKnown(hb.BinaryHash)
+		trusted = h.manifest.TrustedHash(hb.BinaryHash)
 		if !trusted {
 			log.Printf("[!] agent %s binary hash MISMATCH — possible tampered binary (hash %s...)",
 				hb.AgentID, hb.BinaryHash[:16])
@@ -1759,7 +1760,7 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 
 	trusted := false
 	if req.BinaryHash != "" && h.manifest != nil && h.manifest.Loaded() {
-		trusted = h.manifest.HashKnown(req.BinaryHash)
+		trusted = h.manifest.TrustedHash(req.BinaryHash)
 		if !trusted {
 			log.Printf("[enroll] agent %s binary hash unrecognised — will enroll as active but flag untrusted", req.AgentID)
 		}

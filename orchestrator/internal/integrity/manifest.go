@@ -20,6 +20,10 @@ type Manifest struct {
 	// lines. An agent on one of these is outdated, not untrusted: it degrades until
 	// it is upgraded, and it is never counted as a current trusted hash.
 	prev map[string]bool
+	// revoked holds hashes an operator has explicitly revoked, listed on "#revoked <hash>  <file>" lines. A revoked
+	// binary is never trusted and never counts as a previous release, even if it is also listed as one. Revocation is
+	// separate from retirement: an old release stays "outdated" until someone revokes it.
+	revoked map[string]bool
 }
 
 // LoadManifest reads BINARIES.sha256 from path.
@@ -55,10 +59,17 @@ func LoadManifest(path string) *Manifest {
 //	#prev <sha256hex>  <filename>      previous signed release (outdated, not trusted)
 //	# ...                              comment
 func parseManifestLines(lines []string) *Manifest {
-	m := &Manifest{hashes: make(map[string]string), prev: make(map[string]bool)}
+	m := &Manifest{hashes: make(map[string]string), prev: make(map[string]bool), revoked: make(map[string]bool)}
 	for _, raw := range lines {
 		line := strings.TrimSpace(raw)
 		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "#revoked ") {
+			parts := strings.Fields(strings.TrimPrefix(line, "#revoked "))
+			if len(parts) >= 2 {
+				m.revoked[strings.ToLower(parts[0])] = true
+			}
 			continue
 		}
 		if strings.HasPrefix(line, "#prev ") {
@@ -86,6 +97,16 @@ func parseManifestLines(lines []string) *Manifest {
 // HashPreviousRelease reports whether hexHash is a previous signed release (outdated).
 func (m *Manifest) HashPreviousRelease(hexHash string) bool {
 	return m.prev[strings.ToLower(hexHash)]
+}
+
+// HashRevoked reports whether an operator has revoked hexHash. Revoked is checked before trust or previous release.
+func (m *Manifest) HashRevoked(hexHash string) bool {
+	return m.revoked[strings.ToLower(hexHash)]
+}
+
+// TrustedHash reports whether hexHash is a current signed release and is not revoked. This is the Verified flag.
+func (m *Manifest) TrustedHash(hexHash string) bool {
+	return m.HashKnown(hexHash) && !m.HashRevoked(hexHash)
 }
 
 // KnownHash returns the expected SHA-256 hex for a binary filename.

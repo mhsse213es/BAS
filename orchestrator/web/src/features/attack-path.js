@@ -900,7 +900,18 @@ export function loadAgents() {
 }
 // The fleet-wide tray-icon default labels the System Tree button and decides each agent's Action-menu wording.
 // A failed read leaves the last known value; it never blocks the agent list.
+// The fleet minimum agent version (P2). "" means no minimum. Only the toolbar label reads it.
+function minAgentVersionLabel(v) { return v ? 'Min agent ' + v : 'Min agent: none'; }
+function loadFleetMinAgentVersion() {
+  apicall('/api/fleet/min-agent-version').then(function(r) {
+    var v = (r && r.version) || '';
+    if (v === (state.minAgentVersion || '')) return;
+    state.minAgentVersion = v;
+    renderAgentToolbar();
+  }).catch(function() {});
+}
 function loadFleetTrayState() {
+  loadFleetMinAgentVersion();
   apicall('/api/fleet/tray-icon').then(function(r) {
     var hidden = !!(r && r.hidden);
     if (hidden === !!state.fleetTrayHidden && state.fleetTrayLoaded) return;
@@ -1004,7 +1015,8 @@ function renderAgentToolbar() {
       return '<option value="' + x(o) + '"' + (o === os ? ' selected' : '') + '>' + x(o) + '</option>';
     }).join('') + '</select>' +
     (dirty ? '<button type="button" class="btn btn-ghost btn-sm"' + on('click', 'clearAgentFilters') + '>' + kitIcon('x') + 'Clear</button>' : '') +
-    (ROLE === 'admin' ? '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'toggleFleetTrayIcon') + ' title="Windows agents only. Agents with their own setting keep it.">' + x(fleetTrayLabel(state.fleetTrayHidden)) + '</button>' : '');
+    (ROLE === 'admin' ? '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'toggleFleetTrayIcon') + ' title="Windows agents only. Agents with their own setting keep it.">' + x(fleetTrayLabel(state.fleetTrayHidden)) + '</button>' +
+    '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'toggleMinAgentVersion') + ' title="Agents below this version are flagged for upgrade. They keep running.">' + x(minAgentVersionLabel(state.minAgentVersion)) + '</button>' : '');
 }
 // Sends one tray-icon change and refreshes. `hidden` is true (hide), false (force visible) or null (follow the fleet).
 function putTrayIcon(url, hidden, okMsg) {
@@ -1018,6 +1030,18 @@ export function toggleFleetTrayIcon() {
   var hide = !state.fleetTrayHidden;
   if (!confirm(fleetTrayConfirm(hide))) return;
   putTrayIcon('/api/fleet/tray-icon', hide, hide ? 'Tray icon hidden on all Windows agents' : 'Tray icon shown on all Windows agents');
+}
+// Sets the fleet minimum agent version. Empty clears it. The server validates the format.
+export function toggleMinAgentVersion() {
+  var cur = state.minAgentVersion || '';
+  var v = prompt('Minimum agent version, for example 1.9.7. Agents below it are flagged for upgrade; they keep running. Leave empty to clear the minimum.', cur);
+  if (v === null) return;
+  apicall('/api/fleet/min-agent-version', { method: 'PUT', body: JSON.stringify({ version: v.trim() }) }).then(function(r) {
+    if (r && r.error) throw new Error(r.error);
+    state.minAgentVersion = (r && r.version) || '';
+    showToast(state.minAgentVersion ? 'Minimum agent version set to ' + state.minAgentVersion : 'Minimum agent version cleared', 'ok');
+    return loadAgents();
+  }).catch(function(e) { showToast(e.message, 'err'); });
 }
 export function rowMenuTrayIcon(id, hidden) {
   closeAllRowMenus();

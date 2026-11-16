@@ -52,7 +52,7 @@ func TestNextAgentState(t *testing.T) {
 		{"restricted", false, false, "restricted", "operator restriction is not changed by binary checks"},
 	}
 	for _, c := range cases {
-		if got := NextAgentState(c.state, c.trusted, c.prev); got != c.want {
+		if got := NextAgentState(c.state, c.trusted, c.prev, false); got != c.want {
 			t.Errorf("%s (trusted=%v prev=%v): got %q want %q: %s", c.state, c.trusted, c.prev, got, c.want, c.why)
 		}
 	}

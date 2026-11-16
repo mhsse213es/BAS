@@ -593,6 +593,8 @@ type Agent struct {
 	AgentVersion string `json:"agentVersion"`
 	// BelowMinVersion is true when a fleet minimum is set and this agent's version is lower. The agent still runs.
 	BelowMinVersion bool `json:"belowMinVersion"`
+	// MinAgentVersion is the fleet minimum in force when the agent was listed ("" = no minimum). Shown in the drawer.
+	MinAgentVersion string `json:"minAgentVersion,omitempty"`
 	LastUpdate time.Time  `json:"lastUpdate"`
 	Sims       int        `json:"sims"` // scenario runs dispatched to this agent (all time)
 	// StoppedBy/StoppedAt/StopReason are set when an Admin dispatches a

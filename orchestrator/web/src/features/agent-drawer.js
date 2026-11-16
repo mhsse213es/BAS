@@ -108,7 +108,7 @@ function overviewHtml(a) {
 
   var notes = '';
   if (life === 'quarantined') notes += note('bad', '&#9888; Agent is QUARANTINED — binary hash mismatch detected. Scenario dispatch is blocked. Restore to Active once the binary is verified.');
-  if (a.belowMinVersion) notes += note('warn', '&#9888; This agent is below the fleet minimum agent version. It keeps running; upgrade it to the current release.');
+  if (a.belowMinVersion) notes += note('warn', '&#9888; This agent (' + x(a.agentVersion || 'unknown version') + ') is below the fleet minimum agent version' + (a.minAgentVersion ? ' ' + x(a.minAgentVersion) : '') + '. It keeps running; upgrade it to the current release.');
   if (life === 'restricted') notes += note('warn', '&#9888; Agent is RESTRICTED — scenario dispatch is blocked by policy. Restore to Active to re-enable.');
   if (a.forceRemoved) notes += note('bad', '&#128683; Agent was FORCE-REMOVED by an administrator. This is permanent: it cannot be restored, and no state change is possible.');
   else if (life === 'retired') notes += note('muted', '&#128683; Agent is RETIRED — decommissioned and blocked from running scenarios. Restore to Active to re-enable.');
