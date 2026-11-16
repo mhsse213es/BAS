@@ -416,11 +416,18 @@ function loadAgtRisk(agentId) {
     renderAgtRisk(d);
   }).catch(function(e) { if (panel) panel.innerHTML = '<div class="empty">' + x(e.message) + '</div>'; });
 }
-function _riskCategoryCard(c) {
+// A category's note says what its score does or does not rest on (for example compliance frameworks left out for too
+// little testing). A category that is not scored still lists its findings: a failed control is real at any coverage.
+export function _riskCategoryCard(c) {
+  var note = c.note ? '<div class="cmp-warn">' + x(c.note) + '</div>' : '';
   if (!c.collected) {
-    return '<div class="dash-panel" style="margin-bottom:0.75rem;opacity:0.6"><div class="dash-panel-body" style="padding:0.85rem">' +
+    var open = (c.findings || []).length
+      ? '<div class="tiny muted">' + c.findings.length + ' failed control finding(s) are listed below though the category is not scored.</div>' +
+        '<ul style="margin:0.3rem 0 0;padding-left:1.1rem;color:var(--muted)">' + c.findings.map(function(f) { return '<li>' + x(f.title) + ' (' + x(f.severity) + ')</li>'; }).join('') + '</ul>'
+      : '';
+    return '<div class="dash-panel" style="margin-bottom:0.75rem' + (c.note ? '' : ';opacity:0.6') + '"><div class="dash-panel-body" style="padding:0.85rem">' +
       '<div style="font-weight:700;color:var(--text)">' + x(c.name) + '</div>' +
-      '<div class="tiny muted">Not yet collected</div></div></div>';
+      '<div class="tiny muted">' + (c.note ? 'Not scored' : 'Not yet collected') + '</div>' + note + open + '</div></div>';
   }
   var findingsHtml = (c.findings || []).map(function(f) {
     return '<li><strong>' + x(f.title) + '</strong> (' + x(f.severity) + ') — ' + x(f.risk) +
@@ -433,7 +440,7 @@ function _riskCategoryCard(c) {
   return '<div class="dash-panel" style="margin-bottom:0.75rem"><div class="dash-panel-body" style="padding:0.85rem">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem">' +
     '<div style="font-weight:700;color:var(--text)">' + x(c.name) + '</div>' +
-    '<div style="color:' + _riskScoreColor(c.score) + ';font-weight:700">' + c.score + '</div></div>' +
+    '<div style="color:' + _riskScoreColor(c.score) + ';font-weight:700">' + c.score + '</div></div>' + note +
     (findingsHtml ? '<ul style="margin:0;padding-left:1.1rem;color:var(--muted);display:flex;flex-direction:column;gap:0.3rem">' + findingsHtml + '</ul>' : '<div class="tiny muted">No open findings.</div>') +
     '</div></div>';
 }

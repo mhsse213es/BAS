@@ -1,6 +1,8 @@
 package endpointrisk
 
 import (
+	"strings"
+
 	"github.com/audspect/bas/internal/exposure"
 )
 
@@ -67,8 +69,10 @@ func ComputeHealth(agentID string, profile exposure.AssetExposureProfile, now, p
 	if now.Compliance.Collected {
 		compCat.Score = round(meanOf(now.Compliance.PercentByFramework))
 		compCat.Deficit = 100 - compCat.Score
-		compCat.Findings = now.Compliance.FailedFindings
 	}
+	// A failed control is a finding whether or not the category is scored.
+	compCat.Findings = now.Compliance.FailedFindings
+	compCat.Note = complianceNote(now.Compliance)
 
 	basCat := CategoryScore{ID: CategoryBASReadiness, Name: "BAS Readiness", Collected: now.BAS.Collected}
 	if now.BAS.Collected {
@@ -124,6 +128,18 @@ func ComputeHealth(agentID string, profile exposure.AssetExposureProfile, now, p
 		AttackPathChain: buildAttackPathChain(profile),
 		Trend:           computeTrend(now, past),
 	}
+}
+
+// complianceNote says which frameworks the compliance score leaves out, and why. Empty when none were left out.
+func complianceNote(c ComplianceInput) string {
+	if len(c.InsufficientCoverage) == 0 {
+		return ""
+	}
+	names := strings.Join(c.InsufficientCoverage, ", ")
+	if !c.Collected {
+		return "Not scored: too little has been tested (a framework needs at least 50% of its testable controls tested). Not scored: " + names + "."
+	}
+	return "Scored over the frameworks tested enough to say anything about. Left out for too little testing (under 50% control coverage): " + names + "."
 }
 
 func mean2(a, b int) int { return (a + b) / 2 }

@@ -51,6 +51,9 @@ type CategoryScore struct {
 	Score     int       `json:"score,omitempty"`   // 0-100, higher = safer
 	Deficit   int       `json:"deficit,omitempty"` // 100 - Score
 	Findings  []Finding `json:"findings,omitempty"`
+	// Note explains what the score does or does not rest on, for example which frameworks were left out because too
+	// little of them was tested. Shown with the category whether or not it is scored.
+	Note string `json:"note,omitempty"`
 }
 
 // ActionItem is one row of the Recommended Action Plan: the worst finding
@@ -104,13 +107,22 @@ type EndpointHealth struct {
 	Trend           TrendDetail      `json:"trend"`
 }
 
-// ComplianceInput is the compliance rollup output: one CompliancePercent
-// per loaded framework, plus the real failed-control findings with their
-// existing remediation text.
+// ComplianceInput is the compliance rollup output: the resistance rate of
+// each framework tested enough to say anything about, plus the real
+// failed-control findings with their existing remediation text.
+//
+// A resistance rate covers only the controls that were tested, so a high rate
+// over a few controls is no evidence about the framework. PercentByFramework
+// therefore holds only frameworks whose control coverage reached
+// compliance.MinConclusiveCoveragePercent; the rest are named in
+// InsufficientCoverage and do not enter the score. Collected is true only when
+// at least one framework is scored. FailedFindings are kept either way: a
+// control that failed is a finding at any coverage.
 type ComplianceInput struct {
-	PercentByFramework map[string]float64
-	FailedFindings     []Finding
-	Collected          bool
+	PercentByFramework   map[string]float64
+	InsufficientCoverage []string
+	FailedFindings       []Finding
+	Collected            bool
 }
 
 // BASReadinessInput is the BAS readiness aggregation output.
