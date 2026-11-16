@@ -172,3 +172,11 @@ From `docs/cymulate-comparison-gap-analysis.md`, DLP gap 1 (the four missing cha
 **Verified:** the `internal/api` sink, DLP, scenario and library tests, `dlpfixture`, `dlpprofile` and `scenario` pass (121 scenarios);
 `signer verify-all` reports 150 ok, 0 failed. **Not verified:** a run against a real DLP proxy; the PowerShell step has not been executed
 on a Windows endpoint here, so please run it once on staging.
+
+## PNG carrier regenerated for OCR readability — 2026-11-16
+
+- Finding: the PNG carrier's text was about 10 px tall (480x80). OCR engines need roughly 20 px or more, so a DLP "not detected" result on that file could not be told apart from an unreadable image.
+- Change: regenerated the PNG with the same text (`[BAS-SIM-DLP-CARRIER] ABCDE1234F 123456789012`) at a 40 px font. Text is about 37 px tall; image 1089x97. The content is fabricated and unchanged.
+- New SHA-256: `bd40522f2657e703a549dd27d17d6927acbfcc62f416b0e86ba1fb6c03080480` (updated in the step's `$sha` and in the step's base64). Go test bounds updated to 1089x97.
+- Verified: `internal/dlpfixture` (SHA-256 and text tests), `dlpprofile`, `dlpreport`, `dlpcorrelate`, `scenario` pass. `signer verify-all` ok=159 fail=0 after re-signing.
+- Still NOT done: OCR positive control. Tesseract is not installed on the build host (install needs approval). The image has been checked visually only. Detection by any DLP product is still not shown.

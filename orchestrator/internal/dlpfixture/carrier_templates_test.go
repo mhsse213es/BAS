@@ -118,8 +118,9 @@ func TestCarrierTemplates_ParseAndContainExpectedText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("png: decode: %v", err)
 	}
-	if b := img.Bounds(); b.Dx() != 480 || b.Dy() != 80 {
-		t.Errorf("png: bounds = %v, want 480x80", b)
+	// 40 px font (text about 37 px tall) so OCR can read it; the previous 10 px text was not OCR-readable.
+	if b := img.Bounds(); b.Dx() != 1089 || b.Dy() != 97 {
+		t.Errorf("png: bounds = %v, want 1089x97", b)
 	}
 }
 
