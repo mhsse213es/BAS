@@ -220,7 +220,13 @@ $OrchestratorTag = "bas-orchestrator:$Version"
 . "$RepoRoot\packaging\signing\sign-orchestrator-artifacts.ps1"
 $PreviousManifestPath = Get-PreviousReleaseManifest -DistDir $DistDir -Version $Version
 if ($PreviousManifestPath) { Log "Previous release manifest: $PreviousManifestPath" }
-else { Warn "No earlier release under $DistDir - agents on an older build will be quarantined after the upgrade." }
+elseif ($env:BAS_ALLOW_NO_PREVIOUS -eq '1') { Warn "No earlier release under $DistDir; BAS_ALLOW_NO_PREVIOUS=1, so building without it. Agents on an older build will be quarantined after the upgrade." }
+else {
+    # Fail closed before the long build (matches packaging/build.sh): without the previous release's hashes, every agent
+    # still on it is quarantined after the upgrade.
+    Err "No earlier release under $DistDir. Refusing to build: agents on the release before $Version would be quarantined after the upgrade. Put that release's bas-install-<version>\BINARIES.sha256 under dist\, or set BAS_ALLOW_NO_PREVIOUS=1 for a first release."
+    exit 1
+}
 
 if (-not $SkipBuild) {
     # Obfuscation (garble -literals -tiny, scoped to our module via GOGARBLE) runs
@@ -707,16 +713,17 @@ if ($LASTEXITCODE -ne 0) {
 
         # Carry the previous signed release's hashes into the manifest (as #prev lines),
         # so agents still on it degrade to outdated instead of being quarantined. The
-        # previous manifest is the last committed one. Must run before the signing below.
-        $prevManifest = Join-Path $env:TEMP 'bas-prev-BINARIES.sha256'
-        & git -C $RepoRoot show 'HEAD:orchestrator/agents/BINARIES.sha256' | Set-Content -LiteralPath $prevManifest -Encoding ascii
-        if ($LASTEXITCODE -eq 0 -and (Test-Path $prevManifest) -and (Get-Item $prevManifest).Length -gt 0) {
-            $carriedCount = & (Join-Path $RepoRoot 'packaging\carry-previous-manifest.ps1') -Manifest $BinManifestPath -Previous $prevManifest
+        # previous manifest is the newest earlier release under dist/, the same source the bash build uses (not git
+        # HEAD: a build overwrites the committed manifest without committing it). Must run before the signing below.
+        if ($PreviousManifestPath) {
+            $carriedCount = & (Join-Path $RepoRoot 'packaging\carry-previous-manifest.ps1') -Manifest $BinManifestPath -Previous $PreviousManifestPath
             Log "  carried $carriedCount previous-release hash(es) into the manifest"
+        } elseif ($env:BAS_ALLOW_NO_PREVIOUS -eq '1') {
+            Warn "  No earlier release under $DistDir; BAS_ALLOW_NO_PREVIOUS=1, so nothing carried. Agents on an older build will be quarantined after the upgrade."
         } else {
-            Warn "  No committed BINARIES.sha256 to carry previous releases from - agents on the last release will be quarantined."
+            Err "  No earlier release under $DistDir. Refusing to build: agents on the release before $Version would be quarantined after the upgrade. Put that release's bas-install-<version>\BINARIES.sha256 under dist\, or set BAS_ALLOW_NO_PREVIOUS=1 for a first release."
+            exit 1
         }
-        Remove-Item $prevManifest -ErrorAction SilentlyContinue
 
         # RSA-sign so the orchestrator verifies the manifest was not tampered in transit.
         Push-Location $OrchestratorDir
