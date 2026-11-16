@@ -21,7 +21,7 @@ import { closeChangePassword, closeChangePasswordOnBackdrop, closeConfirmDiffMod
 import { closeCovDrawer, closeCovDrawerOnBackdrop, loadCoverageAnalytics, openTechnique, recalcCoverage, renderUTL, setCovView, setUTLFilter } from './features/coverage.js';
 import { loadADCoverage, setADFilter, exportADReportPDF, exportADReportJSON } from './features/ad-coverage.js';
 import { setReportType, pickReportFormat } from './features/reports.js';
-import { rptFilter, rptClear, toggleRepRuns } from './features/rpt-view.js';
+import { rptFilter, rptClear, toggleRepRuns, copyReportId, copyReportLink } from './features/rpt-view.js';
 import { dcAdd, dcEdit, dcTest, dcDelete, dcSave, dcCancel, dcProviderChanged } from './features/detection-connectors.js';
 import { gapSetBackend, gapCopy, gapExport, gapDeploy, gapRetest } from './features/detection-gaps.js';
 import { vfVerifyNow, vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfToggleHistory, vfUploadEvidence, vfSetStatus, vfSearch, vfClearFilters, vfTableQuery, vfClearTableQuery, vfSetPer, vfPage, vfSortBy, vfToggleCols, vfColToggle, vfSelectRow, vfSelectAll, vfClearSelection, vfRowKeydown, vfExportCsv, vfExportSelected, vfDrawerBackdrop } from './features/detection-verification.js';
@@ -323,6 +323,8 @@ export const ACTIONS = {
   downloadRunCSV,
   downloadRunReport,
   toggleRepRuns,
+  copyReportId,
+  copyReportLink,
   downloadSweepReport,
   egCancelCampaignClick,
   egLaunchCampaign,

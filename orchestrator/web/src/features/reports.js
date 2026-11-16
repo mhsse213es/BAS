@@ -30,9 +30,9 @@ export function loadReports() {
   loadReportsHero();
   // Per-agent launcher: which agents have run data we can report on.
   apicall('/api/scenarios/runs').then(function(runs) {
-    var hostOf = {};
-    (state.agents || []).forEach(function(a) { hostOf[a.agentId] = a.hostname || a.agentId; });
-    paintAvailable(agentRows(runs, hostOf));
+    var hostOf = {}, infoOf = {};
+    (state.agents || []).forEach(function(a) { hostOf[a.agentId] = a.hostname || a.agentId; infoOf[a.agentId] = { os: a.osVersion, status: a.status }; });
+    paintAvailable(agentRows(runs, hostOf, infoOf));
   }).catch(function() { paintAvailableError(); });
 }
 function renderRepHistory() {

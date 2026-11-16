@@ -40,8 +40,8 @@ test('typeOptions and filterHistory', () => {
 });
 
 test('heroStats is null until data arrives', () => {
-  assert.deepEqual(heroStats(list, [{}, {}]), { reports: 3, frameworks: 2 });
-  assert.deepEqual(heroStats(null, undefined), { reports: null, frameworks: null });
+  assert.deepEqual(heroStats(list, [{}, {}]), { reports: 3, frameworks: 2, latest: '2026-10-20T10:00:00Z' });
+  assert.deepEqual(heroStats(null, undefined), { reports: null, frameworks: null, latest: '' });
 });
 
 test('agentRows counts reportable runs per agent and lists every finished run', () => {
@@ -128,4 +128,50 @@ test('frameworkCards: a high rate on little testing is never shown as good, and 
   assert.match(c.note, /Insufficient coverage for framework-level conclusions/);
   assert.match(c.warning, /our own/);
   assert.doesNotMatch(c.detail, /compliant/i);
+});
+
+import { sortHistory, agentOptions, osKind, DATE_RANGES } from '../../src/features/rpt-model.js';
+
+const hist = historyRows([
+  { id: 'aaaaaaaa-1111-2222-3333-444444444444', reportType: 'posture', format: 'pdf', scopeLabel: 'a1', agentId: 'a1', generatedBy: 'admin', generatedAt: '2026-11-16T10:00:00Z', status: 'generated', downloadPath: '/x' },
+  { id: 'bbbbbbbb-1111-2222-3333-444444444444', reportType: 'compliance', format: 'csv', scopeLabel: 'pci · a2', generatedBy: 'analyst', generatedAt: '2026-08-01T10:00:00Z', status: 'generated', downloadPath: '/y' },
+]);
+
+test('history rows carry the agent id, from the server or from an older scope label, and a short id', () => {
+  assert.equal(hist[0].agentId, 'a1');
+  assert.equal(hist[1].agentId, 'a2');
+  assert.equal(hist[0].idShort, 'aaaaaa…4444');
+});
+
+test('the date range hides older reports, the agent filter narrows, and nothing else is dropped', () => {
+  const now = Date.parse('2026-11-16T12:00:00Z');
+  assert.deepEqual(filterHistory(hist, '', '', { days: '30', now }).map(r => r.agentId), ['a1']);
+  assert.equal(filterHistory(hist, '', '', { days: 'all', now }).length, 2);
+  assert.deepEqual(filterHistory(hist, '', '', { agent: 'a2', days: 'all', now }).map(r => r.agentId), ['a2']);
+  assert.equal(filterHistory(hist, '', '', { days: '30', now: Date.parse('2026-12-30T00:00:00Z') }).length, 0);
+  assert.deepEqual(DATE_RANGES.map(r => r[0]), ['all', '7', '30', '90']);
+});
+
+test('sorting by newest, oldest and type', () => {
+  assert.deepEqual(sortHistory(hist, 'new').map(r => r.agentId), ['a1', 'a2']);
+  assert.deepEqual(sortHistory(hist, 'old').map(r => r.agentId), ['a2', 'a1']);
+  assert.equal(sortHistory(hist, 'type').length, 2);
+});
+
+test('agent options use the host name when known and the id otherwise', () => {
+  assert.deepEqual(agentOptions(hist, { a1: 'WIN-1' }), [['a2', 'a2'], ['a1', 'WIN-1']].sort((a, b) => a[1] < b[1] ? -1 : 1));
+});
+
+test('osKind picks the icon family', () => {
+  assert.deepEqual(['Windows 11', 'Ubuntu 22.04', 'macOS 14', '', 'FreeBSD'].map(osKind), ['windows', 'linux', 'mac', 'other', 'other']);
+});
+
+test('agentRows marks online agents and a run in the last day as recent', () => {
+  const now = Date.parse('2026-11-16T12:00:00Z');
+  const r = agentRows([
+    { id: 'r1', agentId: 'a1', status: 'completed', name: 'S', completedAt: '2026-11-16T11:00:00Z' },
+    { id: 'r2', agentId: 'a2', status: 'completed', name: 'S', completedAt: '2026-11-10T11:00:00Z' },
+  ], {}, { a1: { os: 'Windows 11', status: 'idle' }, a2: { os: 'Ubuntu', status: 'offline' } }, now);
+  assert.deepEqual([r[0].os, r[0].online, r[0].recent], ['windows', true, true]);
+  assert.deepEqual([r[1].os, r[1].online, r[1].recent], ['linux', false, false]);
 });

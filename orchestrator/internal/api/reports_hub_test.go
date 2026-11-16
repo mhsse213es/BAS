@@ -157,5 +157,8 @@ func TestListReports_ReconstructsPath(t *testing.T) {
 		if !strings.Contains(dp, "/api/compliance/report") || !strings.Contains(dp, "framework=SEBI_CSCRF") {
 			t.Fatalf("reconstructed downloadPath = %q", dp)
 		}
+		if got, _ := out[0]["agentId"].(string); got != "a9" {
+			t.Fatalf("agentId = %q, want a9 (the Reports page filters history by agent)", got)
+		}
 	})
 }

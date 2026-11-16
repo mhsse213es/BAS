@@ -21,7 +21,7 @@ var TAB_GROUP = {
 
 // Pages reached from another page rather than from the sidebar.
 var TAB_PARENT = { compliance: 'reports', 'sla-report': 'reports' };
-var PARENT_LABEL = { reports: 'Reports' };
+var PARENT_LABEL = { reports: 'Reports & Analytics' };
 
 // breadcrumbFor returns the trail for a tab: [group, (parent page,) current page].
 export function breadcrumbFor(tab, title) {

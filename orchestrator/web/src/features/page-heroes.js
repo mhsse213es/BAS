@@ -49,11 +49,13 @@ export var ICON = {
 function rptHero(sfx) {
   return {
     icon: ICON.report,
-    title: 'Reports',
-    sub: 'Generate, review and share validation and compliance reports.',
+    title: 'Reports & Analytics',
+    sub: 'Security assessments, compliance and audit evidence',
     actions: '<button type="button" class="btn btn-primary" data-on-click="openReportGen">' + svg('<path d="M12 5v14M5 12h14"/>') + 'Generate report</button>',
     stats: [
-      { id: 'rpt-hs-reports' + sfx, icon: ICON.report, value: '—', label: 'Reports' },
+      { id: 'rpt-hs-reports' + sfx, icon: ICON.report, value: '—', label: 'Total Reports' },
+      { id: 'rpt-hs-agents' + sfx, icon: ICON.ok, tone: 'ok', value: '—', label: 'Agents Reporting' },
+      { id: 'rpt-hs-latest' + sfx, icon: ICON.clock, value: '—', label: 'Latest Report' },
       { id: 'rpt-hs-frameworks' + sfx, icon: ICON.check, value: '—', label: 'Frameworks tracked' },
     ],
   };

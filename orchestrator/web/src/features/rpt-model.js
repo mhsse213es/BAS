@@ -28,6 +28,10 @@ export function historyRows(list) {
       name: typeLabel(r.reportType),
       title: typeLabel(r.reportType) + (r.scopeLabel ? ' — ' + r.scopeLabel : ''),
       scope: r.scopeLabel || '—',
+      // The server sends the agent id; an older response carries it only inside the scope label ("framework · agent").
+      agentId: r.agentId || String(r.scopeLabel || '').split(' · ').pop() || '',
+      // "7f3e2d…9a4c": enough of the id to recognise a report without the full 36 characters.
+      idShort: String(r.id || '').length > 12 ? String(r.id).slice(0, 6) + '…' + String(r.id).slice(-4) : String(r.id || ''),
       at: r.generatedAt || '',
       by: r.generatedBy || '—',
       fmt: fmt ? fmt.toUpperCase() : (r.reportType === 'audit' ? 'PACKAGE' : '—'),
@@ -46,19 +50,63 @@ export function typeOptions(rows) {
   return out;
 }
 
-// filterHistory: free-text over name, type, scope and id, plus an exact type filter.
-export function filterHistory(rows, q, type) {
+// The date ranges the history can be limited to ("all" shows everything).
+export var DATE_RANGES = [['all', 'All time'], ['7', 'Last 7 days'], ['30', 'Last 30 days'], ['90', 'Last 90 days']];
+export var SORTS = [['new', 'Newest first'], ['old', 'Oldest first'], ['type', 'Type']];
+
+// filterHistory: free-text over name, type, scope and id, plus an exact type filter. opt = { agent, days, now } adds
+// an agent filter and a "last N days" window; a row with no readable date is kept rather than silently dropped.
+export function filterHistory(rows, q, type, opt) {
   var s = String(q == null ? '' : q).trim().toLowerCase();
+  var o = opt || {};
+  var days = parseInt(o.days, 10);
+  var cutoff = days > 0 ? (o.now == null ? Date.now() : o.now) - days * 86400000 : null;
   return (rows || []).filter(function(r) {
     if (type && r.type !== type) return false;
+    if (o.agent && r.agentId !== o.agent) return false;
+    if (cutoff != null) {
+      var t = Date.parse(r.at);
+      if (!isNaN(t) && t < cutoff) return false;
+    }
     if (!s) return true;
     return (r.title + ' ' + r.type + ' ' + r.scope + ' ' + r.id + ' ' + r.by).toLowerCase().indexOf(s) !== -1;
   });
 }
 
+// sortHistory returns a sorted copy: newest or oldest first by generation time, or grouped by type name.
+export function sortHistory(rows, how) {
+  var t = function(r) { var v = Date.parse(r.at); return isNaN(v) ? 0 : v; };
+  var out = (rows || []).slice();
+  if (how === 'old') out.sort(function(a, b) { return t(a) - t(b); });
+  else if (how === 'type') out.sort(function(a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : t(b) - t(a); });
+  else out.sort(function(a, b) { return t(b) - t(a); });
+  return out;
+}
+
+// agentOptions: the agents that appear in the history, as [id, label] using the host name when known.
+export function agentOptions(rows, hostOf) {
+  var seen = {}, out = [];
+  (rows || []).forEach(function(r) {
+    if (r.agentId && !seen[r.agentId]) { seen[r.agentId] = 1; out.push([r.agentId, (hostOf && hostOf[r.agentId]) || r.agentId]); }
+  });
+  return out.sort(function(a, b) { return a[1] < b[1] ? -1 : 1; });
+}
+
+// osKind groups an agent's osVersion into the icon the page shows.
+export function osKind(osVersion) {
+  var l = String(osVersion || '').toLowerCase();
+  if (l.indexOf('windows') >= 0) return 'windows';
+  if (/(linux|ubuntu|debian|centos|red hat|rhel|fedora|suse|alma|rocky|amazon)/.test(l)) return 'linux';
+  if (/(mac|darwin)/.test(l)) return 'mac';
+  return 'other';
+}
+
 // heroStats: the two banner numbers the page can back with real data.
 export function heroStats(list, frameworks) {
+  var latest = '';
+  (Array.isArray(list) ? list : []).forEach(function(r) { if (r.generatedAt && Date.parse(r.generatedAt) > (Date.parse(latest) || 0)) latest = r.generatedAt; });
   return {
+    latest: latest,
     reports: Array.isArray(list) ? list.length : null,
     frameworks: Array.isArray(frameworks) ? frameworks.length : null,
   };
@@ -72,7 +120,7 @@ export function isReportable(status) { return status === 'completed' || status =
 // agentRows: one row per agent that has finished runs, newest first. `runs` counts the runs that can be reported on and
 // `list` holds every finished run of the agent (failed ones too, marked as such) so none is hidden behind "latest".
 // Sweep rows are grouped on Live Runs and left out here.
-export function agentRows(runs, hostOf) {
+export function agentRows(runs, hostOf, infoOf, now) {
   var by = {}, order = [];
   (runs || []).forEach(function(r) {
     var id = r.agentId;
@@ -87,7 +135,15 @@ export function agentRows(runs, hostOf) {
     } else { row.failed++; }
   });
   order.forEach(function(id) { if (!by[id].lastName && by[id].list.length) { by[id].lastName = by[id].list[0].name; by[id].last = by[id].list[0].at; } });
-  return order.map(function(id) { return by[id]; });
+  var t = now == null ? Date.now() : now;
+  return order.map(function(id) {
+    var row = by[id], info = (infoOf && infoOf[id]) || {};
+    row.os = osKind(info.os);
+    row.online = !!info.status && info.status !== 'offline';
+    var last = Date.parse(row.last);
+    row.recent = !isNaN(last) && t - last >= 0 && t - last < 24 * 3600000;
+    return row;
+  });
 }
 
 // frameworkCards: one card per compliance framework from /api/compliance/scores.

@@ -15,9 +15,9 @@ test('breadcrumbFor puts every nav tab under its sidebar group', () => {
 
 test('breadcrumbFor nests the report sub-pages under Reports', () => {
   assert.deepEqual(breadcrumbFor('sla-report', 'SLA Compliance'),
-    [{ label: 'Visibility' }, { label: 'Reports', tab: 'reports' }, { label: 'SLA Compliance', current: true }]);
+    [{ label: 'Visibility' }, { label: 'Reports & Analytics', tab: 'reports' }, { label: 'SLA Compliance', current: true }]);
   assert.deepEqual(breadcrumbFor('compliance', 'Compliance'),
-    [{ label: 'Visibility' }, { label: 'Reports', tab: 'reports' }, { label: 'Compliance', current: true }]);
+    [{ label: 'Visibility' }, { label: 'Reports & Analytics', tab: 'reports' }, { label: 'Compliance', current: true }]);
 });
 
 test('breadcrumbFor falls back to just the page for an unknown tab', () => {
