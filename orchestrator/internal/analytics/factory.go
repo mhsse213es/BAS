@@ -270,7 +270,7 @@ func dataQuality(ctx context.Context, pool *pgxpool.Pool, staleAfter time.Durati
 		SELECT cv.content_id, cv.version, COUNT(*)
 		FROM content_versions cv
 		JOIN content_validations v ON v.content_version_id = cv.id AND v.level = 'EXECUTION'
-		WHERE cv.lifecycle = 'DRAFT'
+		WHERE cv.lifecycle = 'DRAFT' AND `+contentregistry.CountsAsValidationAttemptSQL+`
 		GROUP BY cv.id, cv.content_id, cv.version
 		HAVING COUNT(*) >= $1
 		ORDER BY cv.content_id, cv.version`, contentregistry.MaxValidationAttempts)
