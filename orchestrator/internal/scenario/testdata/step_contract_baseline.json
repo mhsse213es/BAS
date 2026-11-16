@@ -394,6 +394,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "privileged-account-hygiene-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "purplesharp-ad-drill.yaml": {
     "cleanup": 0,
     "detection": 0,

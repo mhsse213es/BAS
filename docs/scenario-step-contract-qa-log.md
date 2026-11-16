@@ -557,3 +557,13 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - Customer-visible: the Entra scenario has two more executable steps. Their outcome depends on the host's browser state; a non-browser host produces a SKIP or failed-action result, not a PASS. Score effect should be reviewed before the next release.
 - Engine test updated to 8 steps; ledger regenerated; 156 signatures verify; scenario and DLP fixture tests pass.
 - Not verified on a Windows host with browsers.
+
+### AD: privileged-account hygiene audit (new scenario, 2026-11-16)
+
+- New file: scenarios/privileged-account-hygiene-audit.yaml, two steps.
+  - A: enabled Domain Admins / Enterprise Admins / Schema Admins members (recursive) with no logon in 90 days, or never logged on and created more than 90 days ago. T1078.002.
+  - B: the same members with a servicePrincipalName (Kerberoastable). T1558.003.
+- Fail-closed: a missing group or a failed directory query is SKIP, never PASS.
+- Customer-visible: a new scenario. Existing scores do not change. Domains with stale or SPN-bearing privileged accounts will see new FAILs when the scenario is run.
+- Tests: scenario count 127 to 128; ratchet baseline gained one file at zero gaps; no existing entry changed; 157 signatures verify.
+- NOT VERIFIED on a domain. Run on AD-DC-01 before trusting a result.

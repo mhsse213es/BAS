@@ -3834,6 +3834,24 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "privileged-account-hygiene-audit.yaml",
+    "index": 0,
+    "technique_id": "T1078.002",
+    "action_key": "",
+    "framework": "native",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "privileged-account-hygiene-audit.yaml",
+    "index": 1,
+    "technique_id": "T1558.003",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "purplesharp-ad-drill.yaml",
     "index": 0,
     "technique_id": "T1087.002",
