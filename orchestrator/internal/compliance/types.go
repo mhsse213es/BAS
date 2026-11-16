@@ -28,6 +28,9 @@ type ControlDef struct {
 	Domain     string   `yaml:"domain"`
 	Category   string   `yaml:"category"`
 	Techniques []string `yaml:"techniques"` // MITRE technique IDs (base or sub)
+	// Reference cites where the regulator's text states the requirement, for example "¶110, ¶114". Empty when the
+	// framework's mapping has not been reviewed against the source.
+	Reference string `yaml:"reference"`
 	// Testable marks whether a control's posture can be validated by executing
 	// the mapped ATT&CK techniques. Governance/process/policy controls (board
 	// policy, asset inventory, risk-assessment cadence, data residency, IR/DR
@@ -119,11 +122,12 @@ type DomainResult struct {
 
 // ControlResult is the per-control detail with evidence from BAS results.
 type ControlResult struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Domain   string `json:"domain"`
-	Category string `json:"category"`
-	Testable bool   `json:"testable"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Domain    string `json:"domain"`
+	Category  string `json:"category"`
+	Testable  bool   `json:"testable"`
+	Reference string `json:"reference,omitempty"` // where the regulator's text states the requirement
 	// Status is derived from technique-level evidence: resisted | failed | partial | inconclusive | untested | manual.
 	Status   string              `json:"status"`
 	Tested   int                 `json:"tested"` // execution results that gave a verdict (not techniques)

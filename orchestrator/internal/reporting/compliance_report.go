@@ -431,7 +431,7 @@ tr:nth-child(even) td{background:#fafbfd}
 <div class="stag">Compliance Overview</div>
 <div class="stitle">{{.Framework.Name}}</div>
 <p class="intro">These figures show how the controls resisted simulated attack techniques. They are not a determination of compliance. A control is <em>Resisted</em> when every mapped ATT&amp;CK technique was executed and none succeeded, <em>Failed</em> when at least one executed technique succeeded, <em>Partial</em> when only some mapped techniques were executed and none succeeded, <em>Inconclusive</em> when the only attempts errored or were vetoed, and <em>Untested</em> when no mapped technique was executed. The resistance rate is taken over tested controls only, so it must be read together with control coverage. <em>Manual</em> controls are governance/process requirements that cannot be validated by simulation and are excluded from both percentages; they require manual attestation.</p>
-{{if .Framework.MappingWarning}}<div class="warnbox"><b>Mapping not verified.</b> {{.Framework.MappingWarning}}</div>{{end}}
+{{if .Framework.MappingWarning}}<div class="warnbox"><b>Mapping note.</b> {{.Framework.MappingWarning}}</div>{{end}}
 {{if .Summary.CoverageNote}}<div class="warnbox"><b>{{.Summary.CoverageNote}}.</b> {{.Summary.TestedControls}} of {{.Summary.TestableControls}} testable controls were tested ({{pct .Summary.CoveragePercent}}).</div>{{end}}
 
 <div class="cards">
@@ -504,7 +504,7 @@ tr:nth-child(even) td{background:#fafbfd}
   <div class="ctrl-h">
     <div>
       <span class="ctrl-id">{{.ID}}</span> &nbsp; <span class="ctrl-name">{{.Name}}</span>
-      <div class="ctrl-meta">{{if .Domain}}{{.Domain}}{{end}}{{if .Category}} &middot; {{.Category}}{{end}}
+      <div class="ctrl-meta">{{if .Domain}}{{.Domain}}{{end}}{{if .Category}} &middot; {{.Category}}{{end}}{{if .Reference}} &middot; Source {{.Reference}}{{end}}
         {{if .Testable}} &middot; Techniques tested {{.TechniquesTested}} of {{.TechniquesMapped}} &middot; Resisted {{.Passed}} &middot; Succeeded {{.Failed}}{{end}}</div>
     </div>
     <span class="pill" style="background:{{statusBG .Status}};color:{{statusFG .Status}}">{{statusLabel .Status}}</span>

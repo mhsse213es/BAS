@@ -279,7 +279,7 @@ func TestRenderComplianceHTML_NeverClaimsComplianceAndStatesCaveats(t *testing.T
 		t.Fatal(err)
 	}
 	out := buf.String()
-	for _, want := range []string{"not a determination of compliance", "Insufficient coverage for framework-level conclusions", "Mapping not verified", "RESISTANCE RATE"} {
+	for _, want := range []string{"not a determination of compliance", "Insufficient coverage for framework-level conclusions", "Mapping note", "RESISTANCE RATE"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("report lacks %q", want)
 		}

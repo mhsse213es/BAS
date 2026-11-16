@@ -111,7 +111,7 @@ export function complianceCard(fw) {
     (has ? '<div class="rk-reg-m">' + passing + ' resisted · ' + failing + ' failed · ' + untested + ' untested</div>' : '') +
     (has && failing > 0 ? '<div class="rk-reg-n">Any 1 executed technique that succeeds fails the control — see breakdown</div>' : '') +
     (has && !sufficient ? '<div class="rk-reg-n">' + x(fw.coverageNote || 'Insufficient coverage for framework-level conclusions') + '</div>' : '') +
-    (fw.mappingWarning ? '<div class="rk-reg-n" title="' + x(fw.mappingWarning) + '">Mapping not verified — open for detail</div>' : '') + '</div>';
+    (fw.mappingWarning ? '<div class="rk-reg-n" title="' + x(fw.mappingWarning) + '">Mapping note — open for detail</div>' : '') + '</div>';
 }
 function renderCompliance() {
   var s = D.compliance;

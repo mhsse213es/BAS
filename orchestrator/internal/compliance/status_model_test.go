@@ -230,17 +230,17 @@ func TestNarrative_NothingTestedKeepsTheOldMessage(t *testing.T) {
 	}
 }
 
-// RBI's control mapping is not verified against the 2026 directions, so the warning must travel with the framework
+// RBI's technique links are Audspect's own judgement, so the note must travel with the framework
 // and must not appear on frameworks that have no such caveat.
-func TestMappingWarning_RBIIsFlaggedUnverifiedAndOthersAreNot(t *testing.T) {
+func TestMappingWarning_RBICarriesItsCaveatAndOthersDoNot(t *testing.T) {
 	m, err := NewMapper()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, fw := range m.Frameworks() {
 		if fw.ID == "RBI_CSF" {
-			if !strings.Contains(fw.MappingWarning, "not been verified") {
-				t.Errorf("RBI_CSF mapping warning = %q, want it to say the mapping is unverified", fw.MappingWarning)
+			if !strings.Contains(fw.MappingWarning, "own judgement") {
+				t.Errorf("RBI_CSF mapping warning = %q, want it to say the technique links are our own judgement", fw.MappingWarning)
 			}
 			continue
 		}
@@ -251,5 +251,38 @@ func TestMappingWarning_RBIIsFlaggedUnverifiedAndOthersAreNot(t *testing.T) {
 	rep, err := m.GenerateReport(nil, "RBI_CSF", "a", "r", "s")
 	if err != nil || rep.Framework.MappingWarning == "" {
 		t.Fatalf("a generated RBI report must carry the warning (err=%v)", err)
+	}
+}
+
+// Every RBI control cites the paragraph of the 2026 directions it comes from, and the figures the directions do not
+// state (patch windows, log retention, algorithms, products) are not asserted in a control name.
+func TestRBIControlsCiteTheDirectionsAndAssertNoInventedFigures(t *testing.T) {
+	m, err := NewMapper()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fw := m.frameworks["RBI_CSF"]
+	if fw == nil {
+		t.Fatal("RBI_CSF not loaded")
+	}
+	banned := []string{"30 days", "7 days", "180 days", "AES-256", "TLS 1.2", "SAST", "DAST", "immutable", "session recording"}
+	for _, c := range fw.Controls {
+		if !strings.Contains(c.Reference, "¶") {
+			t.Errorf("%s has no paragraph reference (got %q)", c.ID, c.Reference)
+		}
+		for _, b := range banned {
+			if strings.Contains(c.Name, b) {
+				t.Errorf("%s asserts %q, which the directions do not state: %s", c.ID, b, c.Name)
+			}
+		}
+	}
+	rep, err := m.GenerateReport(nil, "RBI_CSF", "a", "r", "s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range rep.Controls {
+		if c.Reference == "" {
+			t.Errorf("%s: the reference does not reach the report", c.ID)
+		}
 	}
 }

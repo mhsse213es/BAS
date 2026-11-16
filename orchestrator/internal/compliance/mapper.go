@@ -147,6 +147,7 @@ func (m *Mapper) GenerateReport(
 			Domain:            ctrl.Domain,
 			Category:          ctrl.Category,
 			Testable:          testable,
+			Reference:         ctrl.Reference,
 			Status:            "untested",
 			TechniqueCoverage: []TechniqueCoverage{},
 		}
@@ -447,7 +448,7 @@ func WriteCSV(w io.Writer, r *ComplianceReport) {
 	_ = cw.Write([]string{
 		"Framework", "Version", "Control ID", "Control Name",
 		"Domain", "Category", "Validation", "Status", "Tested", "Passed", "Failed", "Failing Techniques",
-		"Techniques Tested", "Techniques Mapped",
+		"Techniques Tested", "Techniques Mapped", "Reference",
 	})
 	for _, ctrl := range r.Controls {
 		var failing []string
@@ -475,6 +476,7 @@ func WriteCSV(w io.Writer, r *ComplianceReport) {
 			strings.Join(failing, "; "),
 			strconv.Itoa(ctrl.TechniquesTested),
 			strconv.Itoa(ctrl.TechniquesMapped),
+			ctrl.Reference,
 		})
 	}
 	cw.Flush()

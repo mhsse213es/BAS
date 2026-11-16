@@ -117,7 +117,7 @@ export function paintFrameworkCards(scores) {
       '<p class="muted rpt-cdetail"><b>Resistance rate</b> · ' + x(c.detail) + '</p>' +
       (c.coverage ? '<p class="muted rpt-cdetail">' + x(c.coverage) + '</p>' : '') +
       (c.note ? '<p class="cmp-warn">' + x(c.note) + '</p>' : '') +
-      (c.warning ? '<p class="cmp-warn"><b>Mapping not verified.</b> ' + x(c.warning) + '</p>' : '') +
+      (c.warning ? '<p class="cmp-warn"><b>Mapping note.</b> ' + x(c.warning) + '</p>' : '') +
       '<div class="rpt-acts"><button class="btn btn-outline btn-sm"' + on('click', 'openReportGen', 'compliance', c.id) + '>Generate evidence pack</button></div></section>';
   }).join('') + '</div>');
 }

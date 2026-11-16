@@ -713,7 +713,7 @@ function renderComplianceReport(r) {
         '<span class="rk-hd-sub">' + x(fw.version || '') + '</span>' +
         (r.narrative ? '<p>' + x(r.narrative) + '</p>' : '') +
         (s.coverageNote ? '<p class="cmp-warn">' + x(s.coverageNote) + '</p>' : '') +
-        (fw.mappingWarning ? '<p class="cmp-warn"><b>Mapping not verified.</b> ' + x(fw.mappingWarning) + '</p>' : '') + '</div>' +
+        (fw.mappingWarning ? '<p class="cmp-warn"><b>Mapping note.</b> ' + x(fw.mappingWarning) + '</p>' : '') + '</div>' +
       '<div>' + chartSlot({ type: 'donut', h: 170, center: pct.toFixed(0) + '%', centerSub: 'resistance rate', segments: [
         { label: 'Resisted', value: resisted, color: CHART_COLORS.ok },
         { label: 'Failed', value: failed, color: CHART_COLORS.bad },
@@ -782,7 +782,7 @@ function renderControlsTable(controls, filter) {
     var expandBtn = hasEv ? '<span class="cmp-expand-btn" '+ on('click', 'toggleEvidence', evId) + '>&#9658; ' + c.evidence.length + ' tests</span>' : '';
     return '<tr><td>' + badge + '</td>' +
       '<td><span class="cmp-ctrl-id">' + x(c.id) + '</span></td>' +
-      '<td>' + x(c.name) + expandBtn + '<div class="cmp-tech-cov">' + (c.techniquesTested||0) + ' of ' + (c.techniquesMapped||0) + ' mapped techniques tested</div>' + evHtml + '</td>' +
+      '<td>' + x(c.name) + expandBtn + '<div class="cmp-tech-cov">' + (c.techniquesTested||0) + ' of ' + (c.techniquesMapped||0) + ' mapped techniques tested' + (c.reference ? ' · source ' + x(c.reference) : '') + '</div>' + evHtml + '</td>' +
       '<td><span class="cmp-domain-chip">' + x(c.domain||'') + '</span></td>' +
       '<td style="text-align:center;color:var(--text-dim)">' + (c.tested||0) + '</td>' +
       '<td style="text-align:center;color:#22d3a6;font-weight:600">' + (c.passed||0) + '</td>' +

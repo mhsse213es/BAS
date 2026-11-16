@@ -323,7 +323,7 @@ test('compliance card: a perfect rate on 1 of 117 controls is flagged, not shown
   assert.match(text, /resistance rate/i);
   assert.match(text, /Control coverage 1 of 117/);
   assert.match(text, /Insufficient coverage for framework-level conclusions/);
-  assert.match(text, /Mapping not verified/);
+  assert.match(text, /Mapping note/);
   assert.doesNotMatch(text, /compliant/i);
   assert.equal(div.querySelector('.tone-ok'), null, 'low coverage must not use the good tone');
 });

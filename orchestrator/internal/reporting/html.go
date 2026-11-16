@@ -2805,7 +2805,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <td class="comp-pct" style="color:{{compColor .compliancePct}}">{{pct .compliancePct}}</td>
     <td style="color:#2f81f7">{{pct .coveragePct}}</td>
   </tr>
-  {{if or .coverageNote .mappingWarning}}<tr><td colspan="9" style="color:#b45309;font-size:.78rem">{{if .coverageNote}}{{.coverageNote}}.{{end}} {{if .mappingWarning}}Mapping not verified: {{.mappingWarning}}{{end}}</td></tr>{{end}}
+  {{if or .coverageNote .mappingWarning}}<tr><td colspan="9" style="color:#b45309;font-size:.78rem">{{if .coverageNote}}{{.coverageNote}}.{{end}} {{if .mappingWarning}}Mapping note: {{.mappingWarning}}{{end}}</td></tr>{{end}}
   {{end}}
   </tbody>
 </table>

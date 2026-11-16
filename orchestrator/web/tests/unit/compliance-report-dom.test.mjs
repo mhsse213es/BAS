@@ -39,7 +39,7 @@ test('the report shows a resistance rate with coverage, the caveats, and never s
   assert.match(text, /Control coverage1 of 19 \(5\.3%\)|Control coverage\s*1 of 19/);
   assert.match(text, /Techniques tested\s*1 of 57/);
   assert.match(text, /Insufficient coverage for framework-level conclusions/);
-  assert.match(text, /Mapping not verified/);
+  assert.match(text, /Mapping note/);
   assert.doesNotMatch(text, /compliant/i);
 });
 
@@ -61,4 +61,18 @@ test('the filter tabs use the new statuses and filter by them', async () => {
   const rows = [...document.querySelectorAll('#cmp-controls-body tr')];
   assert.equal(rows.length, 1);
   assert.match(rows[0].textContent, /Broke/);
+});
+
+test('a control shows the paragraph of the regulator text it comes from', async () => {
+  const withRef = JSON.parse(JSON.stringify(report));
+  withRef.controls[0].reference = '¶110, ¶114';
+  setupDom();
+  globalThis.fetch = async () => ({ status: 200, ok: true, json: async () => withRef, text: async () => JSON.stringify(withRef) });
+  const fns = await load(['loadComplianceReport']);
+  document.getElementById('cmp-agent-sel').innerHTML = '<option value="agent-1">a</option>';
+  document.getElementById('cmp-fw-sel').innerHTML = '<option value="RBI_CSF">RBI</option>';
+  fns.loadComplianceReport();
+  await new Promise((r) => setTimeout(r, 20));
+  const first = document.querySelector('#cmp-controls-body tr').textContent;
+  assert.match(first, /source ¶110, ¶114/);
 });

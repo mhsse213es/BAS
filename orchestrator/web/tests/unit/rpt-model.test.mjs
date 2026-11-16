@@ -109,12 +109,12 @@ test('slaTrend sorts by month; slaTone thresholds', () => {
 test('frameworkCards: a high rate on little testing is never shown as good, and carries its caveats', () => {
   const [c] = frameworkCards([
     { frameworkId: 'rbi', frameworkName: 'RBI', compliancePct: 100, coveragePct: 0.85, testedControls: 1, passingControls: 1, failingControls: 0,
-      testableControls: 117, mappingWarning: 'Mapping not verified against the 2026 directions.' },
+      testableControls: 117, mappingWarning: 'Reviewed against the 2026 directions; technique links are our own.' },
   ]);
   assert.equal(c.pct, 100);
   assert.equal(c.tone, 'warn', 'a 100% rate over 1 of 117 controls must not be green');
   assert.match(c.coverage, /Control coverage 1 of 117/);
   assert.match(c.note, /Insufficient coverage for framework-level conclusions/);
-  assert.match(c.warning, /not verified/);
+  assert.match(c.warning, /our own/);
   assert.doesNotMatch(c.detail, /compliant/i);
 });
