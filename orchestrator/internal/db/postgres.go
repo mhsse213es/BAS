@@ -86,6 +86,9 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS policy_json    jsonb   NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS enrolled_at    timestamptz`,
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS protocol_version int  NOT NULL DEFAULT 1`,
+		// The agent's self-reported version, from enrolment and every heartbeat. Stored for the minimum-version
+		// policy; it is not a trust signal (trust comes from binary_hash against the signed manifest).
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS agent_version text NOT NULL DEFAULT ''`,
 		// TCF Phase 6: marks the single, persistent, factory-owned lab agent.
 		// Customer-facing dispatch modes (posture/telemetry/lab) refuse this
 		// agent; the new factory-validation mode requires it. See
