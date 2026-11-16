@@ -2007,6 +2007,20 @@ function onPhishingLibraryClick(event) {
   renderPhishingLibrary();
 }
 
+// focusPhishingEntry opens the Phishing category and, when the scenario can run here, its parameter form (global search).
+// Returns false when no such library entry is loaded.
+export function focusPhishingEntry(id) {
+  var idx = -1;
+  _libraryEntries.forEach(function(e, i) { if (idx < 0 && e && e.type === LIBRARY_TYPE_PHISHING && e.id === id) idx = i; });
+  if (idx < 0) return false;
+  openScenarioCategory('phishing');
+  _phishingFormIndex = libraryEntryRoute(_libraryEntries[idx]).kind === LIBRARY_TYPE_PHISHING ? idx : null;
+  renderPhishingLibrary();
+  var entryCard = document.querySelector('#sc-tile-grid [data-entry-index="' + idx + '"]');
+  if (entryCard && entryCard.scrollIntoView) entryCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return true;
+}
+
 function submitPhishingForm() {
   var entry = _libraryEntries[_phishingFormIndex];
   var el = document.getElementById('sc-tile-grid');

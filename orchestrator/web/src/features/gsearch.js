@@ -11,7 +11,7 @@ import { openRunReport } from './evidence.js';
 import { openTechnique } from './coverage.js';
 import { openFinding } from './findings.js';
 import { openAgentDetail } from './agent-drawer.js';
-import { renderScenarios, showSettingsSection, showThreatPriorityDetail } from './attack-path.js';
+import { focusPhishingEntry, renderScenarios, showSettingsSection, showThreatPriorityDetail } from './attack-path.js';
 import { openBuilder, openModal } from './reports.js';
 import { ROLE, showTab } from './shell.js';
 import { cloudFocusScenario } from './cloud-scenarios.js';
@@ -68,6 +68,7 @@ function openItem(it) {
   if (it.kind === 'agent') { showTab('agents'); setTimeout(function() { openAgentDetail(it.agentId); }, 150); return; }
   if (it.kind === 'report') { openReport(it); return; }
   if (it.kind === 'cloud') { showTab('cloud-scenarios'); setTimeout(function() { cloudFocusScenario(it.cloudId); }, 250); return; }
+  if (it.kind === 'phish') { showTab('scenarios'); setTimeout(function() { focusPhishingEntry(it.phishId); }, 200); return; }
   if (it.kind === 'scenario') { openScenarioByTitle(it.title); return; }
   var r = it.ref;
   apicall('/api/search/select', { method: 'POST', body: JSON.stringify({ docType: r.docType, sourceId: r.sourceId }) }).catch(function() {});
@@ -134,6 +135,7 @@ export function openCmdk() {
     local = local.concat(M.cloudItems(list2.map(function(s) { return { id: s.id, name: s.name || s.id, provider: s.provider, providerLabel: ({ aws: 'AWS', azure: 'Azure', gcp: 'GCP' })[s.provider] || s.provider, description: s.description }; })));
     repaint();
   }).catch(function() {});
+  apicall('/api/scenarios/library').then(function(l) { local = local.concat(M.phishingItems(l)); repaint(); }).catch(function() {});
   apicall('/api/search/recents').then(function(r) { recents = M.resultItems(Array.isArray(r) ? r : []); repaint(); }).catch(function() {});
   apicall('/api/search/operators').then(function(r) {
     var ops = (r && Array.isArray(r.operators)) ? r.operators : [];

@@ -137,7 +137,7 @@ function renderCoverageAnalytics(d) {
     var missCard = card('Missed techniques, prioritize these', missed.length
       ? tableWrap([['Technique'], ['Name'], ['Runs', 'u-center']], missRows, '', 3)
       : okState('No gaps detected', 'Every attempted technique was prevented or detected.'), { flush: missed.length > 0, sub: missed.length ? 'top ' + missed.length : '' });
-    if (root) root.innerHTML = tiles + '<div class="cov-side">' + byTac + '<div class="cov-col">' + rings + missCard + '</div></div>';
+    if (root) root.innerHTML = tiles + '<div class="cov-side">' + byTac + '<div class="cov-pair">' + rings + missCard + '</div></div>';
     if (weakest) {
       var wk = M.weakestTactics(tac, 5);
       weakest.innerHTML = card('Weakest tactics', wk.length ? hbars(wk.map(function(r) { return [r.name, r.pct, r.tone]; })) : empty('technique', 'No tactic data'));

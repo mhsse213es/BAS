@@ -13,7 +13,11 @@
 #ca-root > .rk-grid { margin-bottom: 14px; }
 
 /* By tactic beside the rings and the missed list */
-.cov-side { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
+.cov-side { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
+/* Under By tactic, side by side: the two rings, then the missed techniques. */
+.cov-pair { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.cov-pair > .rk-card { margin-bottom: 0; }
+@media (max-width: 900px) { .cov-pair { grid-template-columns: minmax(0, 1fr); } }
 .cov-side > .rk-card { margin-bottom: 0; }
 .cov-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .cov-col > .rk-card { margin-bottom: 0; }
@@ -90,5 +94,4 @@
 .cov-dr-link { margin: 14px 0 0; }
 .cov-dr-link a { color: var(--accent); }
 
-@media (max-width: 1500px) { .cov-side { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 600px) { .cov-utl-bar input, .cov-filters select { width: 100%; } }

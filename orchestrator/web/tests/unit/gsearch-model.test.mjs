@@ -35,6 +35,14 @@ test('cloud scenarios are searchable under Scenarios', () => {
   const r = M.search(items, 'backup', { scope: 'scenario' });
   assert.equal(r.sections[0].items[0].kind, 'cloud');
 });
+test('phishing scenarios from the library are searchable, under Scenarios, and non-phishing entries are ignored', () => {
+  const ph = M.phishingItems([{ type: 'phishing', id: 'PH-ID-001', name: 'Credential harvest lure', status: 'available' }, { type: 'phishing', id: 'PH-X', name: 'Old', status: 'unavailable' }, { type: 'attack', id: 'nope', name: 'Credential other' }]);
+  assert.equal(ph.length, 2);
+  const r = M.search(ph, 'credential', { scope: 'scenario' });
+  assert.deepEqual(r.sections[0].items.map((i) => i.phishId), ['PH-ID-001']);
+  assert.equal(M.search(ph, 'phishing').sections[0].items.length, 2, 'the word phishing finds them');
+  assert.match(ph[1].sub, /Unavailable/);
+});
 test('a server result replaces the local copy of the same scenario', () => {
   const server = M.resultItems([{ docType: 'scenario', sourceId: 'akira', title: 'Akira Kill Chain', description: '', favorited: true }]);
   const r = M.search(items.concat(server), 'akira', { scope: 'scenario' });

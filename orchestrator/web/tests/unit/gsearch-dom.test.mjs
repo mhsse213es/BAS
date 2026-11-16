@@ -16,6 +16,7 @@ function mockFetch(extra) {
     if (u.startsWith('/api/cloud-scenarios')) return json(CLOUD);
     if (u.startsWith('/api/cloud-runs')) return json([]);
     if (u.startsWith('/api/reports')) return json([{ id: 'rep-1', reportType: 'posture', agentId: 'ag-1', format: 'pdf', generatedBy: 'admin', generatedAt: '2026-11-10T00:00:00Z' }]);
+    if (u.startsWith('/api/scenarios/library')) return json([{ type: 'phishing', id: 'PH-ID-001', name: 'Credential harvest lure', status: 'available' }]);
     if (u.startsWith('/api/search/recents')) return json([]);
     if (u.startsWith('/api/search/operators')) return json({ operators: [{ name: 'type', values: ['scenario'] }] });
     if (u.startsWith('/api/search?')) return json(extra && extra.search && u.includes('q=ransom') ? extra.search : []);
@@ -60,6 +61,9 @@ test('the palette lists pages first, then finds cloud scenarios, reports and ser
   await type('ransom');
   assert.match(list().textContent, /Data Encrypted for Impact/);
   assert.match(list().textContent, /Technique/);
+  await type('harvest');
+  assert.match(list().textContent, /Credential harvest lure/);
+  assert.match(list().textContent, /Phishing/);
   await type('posture');
   assert.match(list().textContent, /Posture report/);
   await type('<img src=x onerror=1>');

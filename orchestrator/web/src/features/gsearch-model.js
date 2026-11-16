@@ -112,6 +112,14 @@ export function cloudItems(list) {
   });
 }
 
+// phishingItems: phishing scenarios from the scenario library (entries of type "phishing"). They count as Scenarios.
+export function phishingItems(entries) {
+  return (Array.isArray(entries) ? entries : []).filter(function(e) { return e && e.type === 'phishing' && e.id; }).map(function(e) {
+    var state = e.status === 'unavailable' ? 'Unavailable' : e.status === 'catalog_only' ? 'Catalogued only' : e.experimental || e.status === 'experimental' ? 'Experimental' : 'Available';
+    return { id: 'phish:' + e.id, kind: 'phish', scope: 'scenario', phishId: e.id, title: e.name || e.id, sub: [e.id, state, e.description].filter(Boolean).join(' · ').slice(0, 140), keywords: ['phishing', 'email', 'social engineering'].concat(e.tags || []).join(' '), badge: 'Phishing' };
+  });
+}
+
 export function scenarioItems(list) {
   return (Array.isArray(list) ? list : []).filter(function(s) { return s && s.id; }).map(function(s) {
     var tech = (s.steps || []).map(function(p) { return p && p.techniqueId; }).concat(s.artTechniques || []).filter(Boolean);
