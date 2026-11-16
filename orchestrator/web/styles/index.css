@@ -10,6 +10,8 @@
 @import "./scn-rich.css" layer(app);
 @import "./runs-rich.css" layer(app);
 @import "./k8s-rich.css" layer(app);
+@import "./cloud-rich.css" layer(app);
+@import "./gsearch.css" layer(app);
 @import "./rem-rich.css" layer(app);
 @import "./sched-rich.css" layer(app);
 @import "./init-rich.css" layer(app);

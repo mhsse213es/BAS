@@ -9,6 +9,24 @@ export function cloudProviderLabel(provider) {
   return PROVIDERS[provider] || String(provider || '');
 }
 
+// filterCards keeps the cards of one provider ('' or 'all' = every provider) whose name, description or provider
+// contains every word of the query.
+export function filterCards(cards, provider, query) {
+  var words = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+  return (cards || []).filter(function(c) {
+    if (provider && provider !== 'all' && c.provider !== provider) return false;
+    var hay = (c.name + ' ' + c.description + ' ' + c.providerLabel).toLowerCase();
+    return words.every(function(w) { return hay.indexOf(w) >= 0; });
+  });
+}
+
+// providerCounts: how many cards each provider has, plus the total.
+export function providerCounts(cards) {
+  var out = { all: 0, aws: 0, azure: 0, gcp: 0 };
+  (cards || []).forEach(function(c) { out.all++; if (c.provider in out) out[c.provider]++; });
+  return out;
+}
+
 // scenarioCards turns the catalogue into cards, grouped by provider then name. Accepts either the
 // {scenarios: [...]} envelope or a bare array.
 export function scenarioCards(catalogue) {

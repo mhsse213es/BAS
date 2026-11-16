@@ -148,6 +148,18 @@ var HEROES = {
       { id: 'runs-hs-agents', icon: ICON.agents, value: '—', label: 'Agents busy' },
     ],
   },
+  'hero-cloud': {
+    icon: ICON.globe,
+    title: 'Cloud Scenarios',
+    sub: 'Read-only checks of cloud accounts: can an identity destroy recovery points or expose data?',
+    actions: '<button type="button" class="btn btn-outline" data-on-click="loadCloudScenarios">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh</button>',
+    stats: [
+      { id: 'cloud-hs-total', icon: ICON.layers, value: '—', label: 'Scenarios' },
+      { id: 'cloud-hs-aws', icon: ICON.globe, value: '—', label: 'AWS' },
+      { id: 'cloud-hs-azure', icon: ICON.globe, value: '—', label: 'Azure' },
+      { id: 'cloud-hs-gcp', icon: ICON.globe, value: '—', label: 'GCP' },
+    ],
+  },
   'hero-k8s': {
     icon: ICON.k8s,
     title: 'Kubernetes Scenarios',

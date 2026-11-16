@@ -7,11 +7,22 @@
 
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
+import { setHeroStat } from './shell-ui.js';
 import { on } from '../core/actions.js';
 import { doLogout } from './shell.js';
 import * as M from './cloud-model.js';
 
 var catalogue = [];
+var filterProvider = 'all';
+var filterQuery = '';
+
+// Simple provider marks, drawn here so no image is fetched and they follow the page's size and colour rules.
+var MARK = {
+  aws: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 29c10 6 22 6 32 0" fill="none" stroke="#ff9900" stroke-width="3.2" stroke-linecap="round"/><path d="M34 28l6 1-2 5" fill="none" stroke="#ff9900" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><text x="24" y="22" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="15" fill="currentColor">aws</text></svg>',
+  azure: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M20 6L6 40h10l4-10 12 10h10z" fill="#0089d6"/><path d="M20 6l10 22-14 12z" fill="#50b9f0" opacity=".85"/></svg>',
+  gcp: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M17 33a7 7 0 010-14l1 0a10 10 0 0119-2 8 8 0 01-1 16z" fill="none" stroke="#4285f4" stroke-width="3.4" stroke-linejoin="round"/><path d="M17 33a7 7 0 01-5-12" fill="none" stroke="#ea4335" stroke-width="3.4" stroke-linecap="round"/><path d="M36 33a8 8 0 002-13" fill="none" stroke="#34a853" stroke-width="3.4" stroke-linecap="round"/><path d="M18 19a10 10 0 0119-2" fill="none" stroke="#fbbc05" stroke-width="3.4" stroke-linecap="round"/></svg>'
+};
+function markFor(provider) { return MARK[provider] || '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M14 32a8 8 0 010-16 10 10 0 0119 2 7 7 0 01-1 14z" fill="none" stroke="currentColor" stroke-width="3"/></svg>'; }
 
 // cloudRequest is apicall with the HTTP status kept. The status decides which refusal message to show, so it cannot
 // be dropped. A 401 ends the session exactly as apicall does.
@@ -34,6 +45,8 @@ export function loadCloudScenarios() {
   cloudRequest('/api/cloud-scenarios').then(function(r) {
     if (r.status !== 200) throw new Error(M.describeRunError(r.status, r.body && r.body.error));
     catalogue = M.scenarioCards(r.body);
+    paintHero();
+    renderChips();
     renderCards();
     populateScenarioSelect();
     loadCloudRuns();
@@ -43,18 +56,53 @@ export function loadCloudScenarios() {
   });
 }
 
+function paintHero() {
+  var n = M.providerCounts(catalogue);
+  [['cloud-hs-total', n.all], ['cloud-hs-aws', n.aws], ['cloud-hs-azure', n.azure], ['cloud-hs-gcp', n.gcp]].forEach(function(p) { setHeroStat(p[0], p[1]); });
+}
+
+function renderChips() {
+  var host = el('cloud-chips');
+  if (!host) return;
+  var n = M.providerCounts(catalogue);
+  host.innerHTML = [['all', 'All'], ['aws', 'AWS'], ['azure', 'Azure'], ['gcp', 'GCP']].filter(function(c) { return c[0] === 'all' || n[c[0]] > 0; }).map(function(c) {
+    return '<button type="button" class="cloud-chip' + (filterProvider === c[0] ? ' on' : '') + '" aria-pressed="' + (filterProvider === c[0]) + '"' + on('click', 'cloudSetProvider', c[0]) + '>' + x(c[1]) + '<em>' + n[c[0]] + '</em></button>';
+  }).join('');
+}
+
+// cloudSetProvider is the provider chips' action.
+export function cloudSetProvider(provider) { filterProvider = provider || 'all'; renderChips(); renderCards(); }
+
+// cloudFilterInput is the filter box's handler: it narrows the cards as the user types.
+export function cloudFilterInput(el0) { filterQuery = el0 && el0.value ? el0.value : ''; renderCards(); }
+
 function renderCards() {
   var host = el('cloud-scen-cards');
   if (!host) return;
   if (!catalogue.length) { host.innerHTML = '<div class="empty">No cloud scenarios are available on this server.</div>'; return; }
-  host.innerHTML = catalogue.map(function(c) {
-    return '<div class="cloud-card">' +
-      '<div class="cloud-card-h"><strong>' + x(c.name) + '</strong> <span class="cloud-prov">' + x(c.providerLabel) + '</span></div>' +
+  var shown = M.filterCards(catalogue, filterProvider, filterQuery);
+  if (!shown.length) { host.innerHTML = '<div class="empty cloud-none">No scenario matches that filter.</div>'; return; }
+  host.innerHTML = shown.map(function(c) {
+    return '<div class="cloud-card cloud-scn cloud-p-' + x(c.provider) + '" id="cloud-scn-' + x(c.id) + '">' +
+      '<div class="cloud-card-h"><strong>' + x(c.name) + '</strong><span class="cloud-mark" title="' + x(c.providerLabel) + '">' + markFor(c.provider) + '</span></div>' +
       '<p class="cloud-card-d">' + x(c.description) + '</p>' +
-      '<div class="cloud-card-m">' + x(String(c.stepCount)) + ' steps</div>' +
-      '<button type="button" class="btn btn-sm"' + on('click', 'cloudPickScenario', c.id) + '>Use in run form</button>' +
+      '<div class="cloud-card-f"><span class="cloud-card-m">' + x(String(c.stepCount)) + (c.stepCount === 1 ? ' step' : ' steps') + '</span>' +
+      '<span class="cloud-card-m ro">Read-only</span>' +
+      '<button type="button" class="btn btn-sm cloud-use"' + on('click', 'cloudPickScenario', c.id) + '>Use in run form</button></div>' +
       '</div>';
   }).join('');
+}
+
+// cloudFocusScenario brings a scenario's card into view and highlights it (used by the global search).
+export function cloudFocusScenario(id) {
+  filterProvider = 'all'; filterQuery = '';
+  var box = el('cloud-find'); if (box) box.value = '';
+  renderChips(); renderCards();
+  var card = el('cloud-scn-' + id);
+  if (!card) return;
+  if (card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  card.classList.add('flash');
+  setTimeout(function() { card.classList.remove('flash'); }, 2200);
 }
 
 function populateScenarioSelect() {

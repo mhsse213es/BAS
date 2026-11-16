@@ -246,7 +246,7 @@
       <div class="header-right">
         <button class="cmdk-launch" data-on-click="openCmdk" title="Command palette (Ctrl/Cmd-K)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-          <span class="cmdk-text">Search scenarios, techniques, agents&hellip;</span> <span class="kbd">Ctrl K</span>
+          <span class="cmdk-text">Search pages, scenarios, techniques, agents, reports&hellip;</span> <span class="kbd">Ctrl K</span>
         </button>
         <div class="ws-indicator">
           <div id="ws-dot" class="ws-dot"></div>
@@ -1362,35 +1362,40 @@
 
       <!-- Scheduled Assessments -->
       <div id="tab-cloud-scenarios" class="is-hidden">
-        <div class="rk-card">
-          <h2 class="rk-h">Cloud scenarios</h2>
-          <p class="muted">Each scenario reads the named account read-only and evaluates the configured permissions. Nothing is changed in the cloud. The server runs only accounts on its allow-list.</p>
+        <div id="hero-cloud"></div>
+        <div class="cloud-note"><span class="cloud-note-i"></span><div><b>Read-only by design.</b> Each scenario reads the named account and evaluates the configured permissions. Nothing is changed in the cloud, and the server runs only accounts on its allow-list.</div></div>
+        <div class="cloud-bar">
+          <div class="cloud-chips" id="cloud-chips" role="group" aria-label="Filter by provider"></div>
+          <label class="cloud-find"><span class="cloud-find-i"></span><input id="cloud-find" type="search" placeholder="Filter these scenarios" data-on-input="cloudFilterInput" autocomplete="off" aria-label="Filter cloud scenarios"></label>
         </div>
         <div id="cloud-scen-cards" class="cloud-grid"></div>
-        <div class="rk-card" id="cloud-run-form">
-          <h3 class="rk-h">Run a scenario</h3>
-          <label>Scenario <select id="cloud-run-scenario"><option value="">Choose a scenario</option></select></label>
-          <label>Provider <select id="cloud-run-provider"><option value="aws">AWS</option><option value="azure">Azure</option><option value="gcp">GCP</option></select></label>
-          <label>Account ID <input id="cloud-run-account" type="text" autocomplete="off"></label>
-          <label>Region (optional) <input id="cloud-run-region" type="text" autocomplete="off"></label>
-          <label>Principal <input id="cloud-run-principal" type="text" autocomplete="off"></label>
-          <label>Resource <input id="cloud-run-resource" type="text" autocomplete="off"></label>
-          <button type="button" id="cloud-run-submit" class="btn btn-primary" data-on-click="cloudSubmitRun">Run scenario</button>
+        <div class="cloud-card cloud-form" id="cloud-run-form">
+          <div class="cloud-form-h"><span class="cloud-form-i"></span><div><h3>Run a scenario</h3><p class="muted">Pick a scenario above or choose one here, then name the account to assess.</p></div></div>
+          <div class="cloud-fields">
+            <label class="cf-wide"><span>Scenario</span><select id="cloud-run-scenario"><option value="">Choose a scenario</option></select></label>
+            <label><span>Provider</span><select id="cloud-run-provider"><option value="aws">AWS</option><option value="azure">Azure</option><option value="gcp">GCP</option></select></label>
+            <label><span>Account ID</span><input id="cloud-run-account" type="text" autocomplete="off" placeholder="e.g. 123456789012"></label>
+            <label><span>Region <em>(optional)</em></span><input id="cloud-run-region" type="text" autocomplete="off" placeholder="e.g. ap-south-1"></label>
+            <label><span>Principal</span><input id="cloud-run-principal" type="text" autocomplete="off" placeholder="identity to test"></label>
+            <label><span>Resource</span><input id="cloud-run-resource" type="text" autocomplete="off" placeholder="bucket, vault or account"></label>
+          </div>
+          <button type="button" id="cloud-run-submit" class="btn btn-primary cloud-run-btn" data-on-click="cloudSubmitRun">Run scenario</button>
         </div>
         <div id="cloud-run-result" class="cloud-result-host"></div>
-        <div class="rk-card" id="cloud-disc-form">
-          <h3 class="rk-h">Discovery run</h3>
-          <p class="muted">Reads the account's permissions with a live discovery pass and asks whether the target can be reached from the held identities. Read-only.</p>
-          <label>Label <input id="cloud-disc-label" type="text" autocomplete="off"></label>
-          <label>Provider <select id="cloud-disc-provider"><option value="aws">AWS</option><option value="azure">Azure</option><option value="gcp">GCP</option></select></label>
-          <label>Account ID <input id="cloud-disc-account" type="text" autocomplete="off"></label>
-          <label>Region (optional) <input id="cloud-disc-region" type="text" autocomplete="off"></label>
-          <label>Target (identity or resource) <input id="cloud-disc-target" type="text" autocomplete="off"></label>
-          <label>Held identities (comma or space separated) <textarea id="cloud-disc-held" rows="2"></textarea></label>
-          <button type="button" id="cloud-disc-submit" class="btn btn-primary" data-on-click="cloudSubmitDiscovery">Start discovery run</button>
+        <div class="cloud-card cloud-form" id="cloud-disc-form">
+          <div class="cloud-form-h"><span class="cloud-form-i disc"></span><div><h3>Discovery run</h3><p class="muted">Reads the account's permissions with a live discovery pass and asks whether the target can be reached from the held identities. Read-only.</p></div></div>
+          <div class="cloud-fields">
+            <label><span>Label</span><input id="cloud-disc-label" type="text" autocomplete="off"></label>
+            <label><span>Provider</span><select id="cloud-disc-provider"><option value="aws">AWS</option><option value="azure">Azure</option><option value="gcp">GCP</option></select></label>
+            <label><span>Account ID</span><input id="cloud-disc-account" type="text" autocomplete="off"></label>
+            <label><span>Region <em>(optional)</em></span><input id="cloud-disc-region" type="text" autocomplete="off"></label>
+            <label class="cf-wide"><span>Target <em>(identity or resource)</em></span><input id="cloud-disc-target" type="text" autocomplete="off"></label>
+            <label class="cf-full"><span>Held identities <em>(comma or space separated)</em></span><textarea id="cloud-disc-held" rows="2"></textarea></label>
+          </div>
+          <button type="button" id="cloud-disc-submit" class="btn btn-primary cloud-run-btn" data-on-click="cloudSubmitDiscovery">Start discovery run</button>
         </div>
         <div id="cloud-disc-result" class="cloud-result-host"></div>
-        <div class="rk-card">
+        <div class="cloud-card cloud-recent">
           <div class="cloud-runs-h"><h3 class="rk-h">Recent runs</h3>
             <button type="button" class="btn btn-sm" data-on-click="cloudRefreshRuns">Refresh</button></div>
           <div id="cloud-runs-list"></div>
