@@ -32,6 +32,7 @@ import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIICo
 import { loadExecutionPolicyDefault } from './execution-policy.js';
 import { loadK8sRuns } from './k8s-scenarios.js';
 import { loadCloudScenarios } from './cloud-scenarios.js';
+import { isTyping, openPageHelp } from './page-help.js';
 import { initAleefNav, loadAleef, resetAleefState, stopAleefPolling } from './aleef.js';
 import { loadVariantTab } from './variant-executor.js';
 import { displayOf, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
@@ -410,6 +411,7 @@ function bootApp() {
     state._cmdkBound = true;
     document.addEventListener('keydown', function(e) {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openCmdk(); }
+      else if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey && !isTyping(e.target) && !document.getElementById('cmdk-input')) { e.preventDefault(); openPageHelp(); }
     });
   }
 }
