@@ -618,3 +618,11 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - After: the ACE is removed, certutil -ping succeeds against LAB-CA, and adcs-esc-template-exposure-audit_08 is PASS.
 - Scope of the PASS: the step covers standard write rights only. ManageCA and ManageCertificates (CA officer rights) are NOT evaluated by this step. Open: review the CA's officer and manager permissions in certsrv.msc (Security tab) on WIN-TQ70FGLETIU.
 - Still open in this run: ESC8 probe (SKIP, no CA reached), ESC12 (FAIL, software-held CA key, expected in this lab).
+
+### Lab run 2026-11-16: ESC8 result on LAB-CA (not applicable)
+
+- adcs-esc8-web-enrollment-probe_00 stays SKIP on the lab run. The cause is the lab CA, not the check.
+- ADCS-Web-Enrollment is Available (not installed) on WIN-TQ70FGLETIU.
+- Test-NetConnection to ports 80 and 443 on WIN-TQ70FGLETIU.lab.local: TcpTestSucceeded False on both, while ping succeeds. Manual curl requests returned no headers.
+- Conclusion: there is no web enrollment endpoint on LAB-CA, so ESC8 is not applicable to this CA. Recorded as not applicable, not as PASS: the probe never reached a web endpoint.
+- Re-test required if the web enrollment role is installed on LAB-CA later. Customer CAs still need the probe run against their own endpoints.
