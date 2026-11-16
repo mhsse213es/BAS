@@ -10,6 +10,8 @@ import (
 	"encoding/hex"
 	"log"
 	"os"
+	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -24,6 +26,9 @@ type Manifest struct {
 	// binary is never trusted and never counts as a previous release, even if it is also listed as one. Revocation is
 	// separate from retirement: an old release stays "outdated" until someone revokes it.
 	revoked map[string]bool
+	// prevVersion is the version of the release before this one, from a "#prev-version <v>" line the build writes next
+	// to the "#prev" hashes. The server uses it as the default fleet minimum agent version. Empty when not recorded.
+	prevVersion string
 }
 
 // LoadManifest reads BINARIES.sha256 from path.
@@ -57,12 +62,21 @@ func LoadManifest(path string) *Manifest {
 //
 //	<sha256hex>  <filename>            current release
 //	#prev <sha256hex>  <filename>      previous signed release (outdated, not trusted)
+//	#prev-version <version>            the previous release's version, such as 1.9.9.3
+//	#revoked <sha256hex>  <filename>   revoked binary (never trusted)
 //	# ...                              comment
 func parseManifestLines(lines []string) *Manifest {
 	m := &Manifest{hashes: make(map[string]string), prev: make(map[string]bool), revoked: make(map[string]bool)}
 	for _, raw := range lines {
 		line := strings.TrimSpace(raw)
 		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "#prev-version ") {
+			parts := strings.Fields(strings.TrimPrefix(line, "#prev-version "))
+			if len(parts) == 1 && prevVersionPattern.MatchString(parts[0]) {
+				m.prevVersion = parts[0]
+			}
 			continue
 		}
 		if strings.HasPrefix(line, "#revoked ") {
@@ -92,6 +106,21 @@ func parseManifestLines(lines []string) *Manifest {
 		m.hashes[filename] = strings.ToLower(parts[0])
 	}
 	return m
+}
+
+var prevVersionPattern = regexp.MustCompile(`^[0-9]+(\.[0-9]+){0,3}$`)
+
+// PreviousReleaseVersion returns the version of the release before this one, or "" when the manifest does not say.
+func (m *Manifest) PreviousReleaseVersion() string { return m.prevVersion }
+
+// RevokedHashes returns the hashes the signed manifest revokes, sorted. They cannot be reversed from the console.
+func (m *Manifest) RevokedHashes() []string {
+	out := make([]string, 0, len(m.revoked))
+	for h := range m.revoked {
+		out = append(out, h)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // HashPreviousRelease reports whether hexHash is a previous signed release (outdated).

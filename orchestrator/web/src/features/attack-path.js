@@ -901,17 +901,30 @@ export function loadAgents() {
 // The fleet-wide tray-icon default labels the System Tree button and decides each agent's Action-menu wording.
 // A failed read leaves the last known value; it never blocks the agent list.
 // The fleet minimum agent version (P2). "" means no minimum. Only the toolbar label reads it.
-function minAgentVersionLabel(v) { return v ? 'Min agent ' + v : 'Min agent: none'; }
+export function minAgentVersionLabel(v, source) {
+  if (!v) return 'Min agent: none';
+  return 'Min agent ' + v + (source === 'previous-release' ? ' (previous release)' : '');
+}
 function loadFleetMinAgentVersion() {
   apicall('/api/fleet/min-agent-version').then(function(r) {
-    var v = (r && r.version) || '';
-    if (v === (state.minAgentVersion || '')) return;
-    state.minAgentVersion = v;
+    var v = (r && r.version) || '', src = (r && r.source) || '', def = (r && r.default) || '';
+    if (v === (state.minAgentVersion || '') && src === (state.minAgentVersionSource || '') && def === (state.minAgentVersionDefault || '')) return;
+    state.minAgentVersion = v; state.minAgentVersionSource = src; state.minAgentVersionDefault = def;
     renderAgentToolbar();
+  }).catch(function() {});
+}
+// Revoked agent binaries, by hash: {source: 'console'|'release', reversible}. The drawer reads it to offer Revoke or
+// Un-revoke. A failed read leaves the last known list; it never blocks the agent list.
+function loadBinaryRevocations() {
+  apicall('/api/agent-binaries/revocations').then(function(r) {
+    var map = {};
+    ((r && r.items) || []).forEach(function(it) { map[it.sha256] = { source: it.source, reversible: !!it.reversible }; });
+    state.revokedBinaries = map;
   }).catch(function() {});
 }
 function loadFleetTrayState() {
   loadFleetMinAgentVersion();
+  loadBinaryRevocations();
   apicall('/api/fleet/tray-icon').then(function(r) {
     var hidden = !!(r && r.hidden);
     if (hidden === !!state.fleetTrayHidden && state.fleetTrayLoaded) return;
@@ -1016,7 +1029,7 @@ function renderAgentToolbar() {
     }).join('') + '</select>' +
     (dirty ? '<button type="button" class="btn btn-ghost btn-sm"' + on('click', 'clearAgentFilters') + '>' + kitIcon('x') + 'Clear</button>' : '') +
     (ROLE === 'admin' ? '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'toggleFleetTrayIcon') + ' title="Windows agents only. Agents with their own setting keep it.">' + x(fleetTrayLabel(state.fleetTrayHidden)) + '</button>' +
-    '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'toggleMinAgentVersion') + ' title="Agents below this version are flagged for upgrade. They keep running.">' + x(minAgentVersionLabel(state.minAgentVersion)) + '</button>' : '');
+    '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'toggleMinAgentVersion') + ' title="Agents below this version are flagged for upgrade. They keep running.">' + x(minAgentVersionLabel(state.minAgentVersion, state.minAgentVersionSource)) + '</button>' : '');
 }
 // Sends one tray-icon change and refreshes. `hidden` is true (hide), false (force visible) or null (follow the fleet).
 function putTrayIcon(url, hidden, okMsg) {
@@ -1033,23 +1046,38 @@ export function toggleFleetTrayIcon() {
 }
 // Sets the fleet minimum agent version. Empty clears it. The server validates the format.
 export function toggleMinAgentVersion() {
-  var cur = state.minAgentVersion || '';
-  var v = prompt('Minimum agent version, for example 1.9.7. Agents below it are flagged for upgrade; they keep running. Leave empty to clear the minimum.', cur);
+  var cur = state.minAgentVersion || '', def = state.minAgentVersionDefault || '';
+  var v = prompt('Minimum agent version, for example 1.9.7. Agents below it are flagged for upgrade; they keep running. Leave empty for no minimum' +
+    (def ? ', or type "default" to go back to the previous release (' + def + ').' : '.'), cur);
   if (v === null) return;
-  apicall('/api/fleet/min-agent-version', { method: 'PUT', body: JSON.stringify({ version: v.trim() }) }).then(function(r) {
+  v = v.trim();
+  var reset = v.toLowerCase() === 'default';
+  if (reset && !def) { showToast('This release does not name a previous release, so there is no default', 'warn'); return; }
+  apicall('/api/fleet/min-agent-version', reset ? { method: 'DELETE' } : { method: 'PUT', body: JSON.stringify({ version: v }) }).then(function(r) {
     if (r && r.error) throw new Error(r.error);
-    state.minAgentVersion = (r && r.version) || '';
+    state.minAgentVersion = (r && r.version) || ''; state.minAgentVersionSource = (r && r.source) || ''; state.minAgentVersionDefault = (r && r.default) || '';
     showToast(state.minAgentVersion ? 'Minimum agent version set to ' + state.minAgentVersion : 'Minimum agent version cleared', 'ok');
     return loadAgents();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
-// Revokes an agent binary hash (admin). Every agent running that exact binary is quarantined at once. There is no
-// un-revoke in the console; a revocation is reversed only by a release decision.
+// Revokes an agent binary hash (admin). Every agent running that exact binary is quarantined at once. An admin can
+// reverse a console revocation (unrevokeAgentBinary); one written into the signed release needs a new release.
 export function revokeAgentBinary(sha256) {
-  if (!confirm('Revoke this agent binary? Every agent running this exact binary will be quarantined and stop receiving scenarios until it runs a current signed release. The console cannot undo a revocation.')) return;
+  if (!confirm('Revoke this agent binary? Every agent running this exact binary will be quarantined and stop receiving scenarios until it runs a current signed release.')) return;
   apicall('/api/agent-binaries/revocations', { method: 'POST', body: JSON.stringify({ sha256: sha256, reason: 'Revoked from the agent drawer' }) }).then(function(r) {
     if (r && r.error) throw new Error(r.error);
     showToast('Binary revoked; ' + ((r && r.agentsQuarantined) || 0) + ' agent(s) quarantined', 'ok');
+    loadBinaryRevocations();
+    return loadAgents();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+// Reverses a console revocation (admin). It lifts the revocation only: agents stay quarantined until each is restored.
+export function unrevokeAgentBinary(sha256) {
+  if (!confirm('Un-revoke this agent binary? The binary is trusted again if it is a current or previous signed release. Agents that were quarantined because of the revocation stay quarantined until you restore each one.')) return;
+  apicall('/api/agent-binaries/revocations/' + encodeURIComponent(sha256), { method: 'DELETE' }).then(function(r) {
+    if (r && r.error) throw new Error(r.error);
+    showToast('Revocation lifted; ' + ((r && r.agentsStillQuarantined) || 0) + ' agent(s) still quarantined until restored', 'ok');
+    loadBinaryRevocations();
     return loadAgents();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }

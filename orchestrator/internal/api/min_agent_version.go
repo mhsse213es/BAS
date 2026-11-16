@@ -3,17 +3,21 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/models"
 )
 
-// Minimum supported agent version (P2). It is a fleet-wide setting with NO default floor: until an administrator
-// sets one, no agent is below it. An agent below the minimum is shown as below minimum with an upgrade warning, and
+// Minimum supported agent version (P2). It is a fleet-wide setting. Until an administrator sets one it defaults to the
+// previous release (the "#prev-version" line in the signed manifest), so only agents older than the release before this
+// one are flagged; an administrator's setting, including "no minimum", always wins. An agent below the minimum is shown as below minimum with an upgrade warning, and
 // it keeps running. Blocking execution is a separate, later decision (revocation, P3). This setting does not touch
 // trust: an agent's Verified / Outdated / Unverified state still comes from binary_hash against the signed manifest.
 
@@ -68,20 +72,58 @@ func belowMinimumAgentVersion(agentVersion, minVersion string) bool {
 	return false
 }
 
-// minimumAgentVersion returns the fleet minimum agent version, or "" when none is set.
-func (h *Handler) minimumAgentVersion(ctx context.Context) string {
-	var v string
-	if err := h.db.QueryRow(ctx,
-		`SELECT COALESCE((SELECT value->>'version' FROM fleet_settings WHERE key = $1), '')`,
-		fleetMinAgentVersionKey).Scan(&v); err != nil {
+// previousReleaseVersion is the version of the release before this one, from the signed manifest, or "".
+func (h *Handler) previousReleaseVersion() string {
+	if h.manifest == nil {
 		return ""
 	}
+	return h.manifest.PreviousReleaseVersion()
+}
+
+// effectiveMinimumAgentVersion resolves the fleet minimum and where it came from:
+//
+//	"setting"          an administrator set it, including setting it to "" (no minimum). The setting always wins.
+//	"previous-release" no setting exists, so the minimum is the release before this one (from the signed manifest).
+//	"none"             no setting, and the manifest does not name the previous release.
+func (h *Handler) effectiveMinimumAgentVersion(ctx context.Context) (version, source string) {
+	var v string
+	err := h.db.QueryRow(ctx, `SELECT COALESCE(value->>'version', '') FROM fleet_settings WHERE key = $1`, fleetMinAgentVersionKey).Scan(&v)
+	if err == nil {
+		return v, "setting"
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return "", "none" // an unreadable setting flags nothing; the minimum never blocks an agent
+	}
+	if pv := h.previousReleaseVersion(); pv != "" {
+		return pv, "previous-release"
+	}
+	return "", "none"
+}
+
+// minimumAgentVersion returns the fleet minimum agent version in force, or "" when none is.
+func (h *Handler) minimumAgentVersion(ctx context.Context) string {
+	v, _ := h.effectiveMinimumAgentVersion(ctx)
 	return v
 }
 
-// GET /api/fleet/min-agent-version -> {"version": "1.9.7"}; "" means no minimum is set. Any signed-in user.
+// GET /api/fleet/min-agent-version -> {"version": "1.9.9.3", "source": "previous-release", "default": "1.9.9.3"}.
+// "" means no minimum. "default" is what the setting falls back to when it is removed. Any signed-in user.
 func (h *Handler) GetFleetMinAgentVersion(w http.ResponseWriter, r *http.Request) {
-	respond(w, map[string]any{"version": h.minimumAgentVersion(r.Context())})
+	v, source := h.effectiveMinimumAgentVersion(r.Context())
+	respond(w, map[string]any{"version": v, "source": source, "default": h.previousReleaseVersion()})
+}
+
+// DELETE /api/fleet/min-agent-version removes the setting, so the minimum goes back to the previous release.
+// Admin-only (route group).
+func (h *Handler) ResetFleetMinAgentVersion(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.db.Exec(r.Context(), `DELETE FROM fleet_settings WHERE key = $1`, fleetMinAgentVersionKey); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.auditLog(r, "fleet.min_agent_version_reset", "fleet", map[string]any{"default": h.previousReleaseVersion()}, "ok")
+	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate})
+	v, source := h.effectiveMinimumAgentVersion(r.Context())
+	respond(w, map[string]any{"version": v, "source": source, "default": h.previousReleaseVersion()})
 }
 
 // PUT /api/fleet/min-agent-version   body {"version": "1.9.7"}   ("" clears the minimum). Admin-only (route group).
@@ -112,5 +154,5 @@ func (h *Handler) SetFleetMinAgentVersion(w http.ResponseWriter, r *http.Request
 	}
 	h.auditLog(r, "fleet.min_agent_version", "fleet", map[string]any{"version": version}, "ok")
 	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate})
-	respond(w, map[string]any{"version": version})
+	respond(w, map[string]any{"version": version, "source": "setting", "default": h.previousReleaseVersion()})
 }

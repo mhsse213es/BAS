@@ -12,6 +12,10 @@
 # A hash already present in the manifest, as an entry or as an earlier #prev line, is not repeated. #prev lines
 # in <previous> are carried on too, so the chain keeps growing release to release.
 #
+# The previous release's version is recorded as "#prev-version <v>", read from the bas-install-<v> folder the previous
+# manifest sits in. The server defaults the fleet minimum agent version to it. No line is written when the folder name
+# does not carry a version, and an existing line is never overwritten.
+#
 # GNU sha256sum --check (what setup.sh runs, on Ubuntu) ignores #prev lines; busybox's sha256sum -c does not, so do
 # not check this manifest with it.
 #
@@ -52,6 +56,7 @@ entries() {
 malformed_prev() {
   tr -d '\r' < "$1" | awk '
     /^#prev/ {
+      if ($1 == "#prev-version") next
       if (!($1 == "#prev" && NF == 3 && length($2) == 64 && $2 ~ /^[0-9a-f]+$/)) print
     }'
 }
@@ -67,10 +72,31 @@ awk 'NR == FNR { seen[$1] = 1; next } !($1 in seen) { seen[$1] = 1; print $1 "  
 # revoked in every later release. rev_missing: the previous release's revoked lines whose hash is not yet revoked here.
 revoked_hashes() { tr -d '\r' < "$1" | awk '/^[[:space:]]*#revoked[[:space:]]/ { print tolower($2) }'; }
 revoked_lines() { tr -d '\r' < "$1" | awk '/^[[:space:]]*#revoked[[:space:]]/ { print "#revoked " tolower($2) "  " $3 }'; }
+# A new revocation is made by listing the hash in packaging/revoked-binaries.txt (BAS_REVOKED_LIST overrides the path):
+# "<64 hex>  [file name]  [note]" per line, "#" comments. Malformed lines are skipped.
+list="${BAS_REVOKED_LIST:-$(dirname "$0")/revoked-binaries.txt}"
+list_lines() {
+  [ -f "$list" ] || return 0
+  tr -d '\r' < "$list" | awk '
+    /^[[:space:]]*(#|$)/ { next }
+    { h = tolower($1); if (length(h) != 64 || h !~ /^[0-9a-f]+$/) next
+      f = ($2 == "" ? "revoked" : $2); print "#revoked " h "  " f }'
+}
 revoked_hashes "$manifest" > "$tmp/rev_now"
-revoked_lines "$previous" > "$tmp/rev_prev"
+{ revoked_lines "$previous"; list_lines; } > "$tmp/rev_prev"
 awk 'FILENAME == ARGV[1] { now[$1] = 1; next } !($2 in now) && !($2 in seen) { seen[$2] = 1; print }' \
   "$tmp/rev_now" "$tmp/rev_prev" > "$tmp/rev_missing"
+
+# prev_version FILE: the version in the name of FILE's folder (bas-install-<version>), or nothing.
+prev_version() {
+  d="$(basename "$(cd "$(dirname "$1")" && pwd)")"
+  case "$d" in
+    bas-install-*)
+      v="${d#bas-install-}"
+      if printf '%s' "$v" | grep -Eq '^[0-9]+(\.[0-9]+){0,3}$'; then printf '%s' "$v"; fi
+      ;;
+  esac
+}
 
 case "$mode" in
   carry)
@@ -78,6 +104,8 @@ case "$mode" in
     if [ -s "$manifest" ] && [ -n "$(tail -c1 "$manifest")" ]; then printf '\n' >> "$manifest"; fi
     awk '{ print "#prev " $1 "  " $2 }' "$tmp/missing" >> "$manifest"
     cat "$tmp/rev_missing" >> "$manifest"
+    pv="$(prev_version "$previous")"
+    if [ -n "$pv" ] && ! grep -q '^#prev-version' "$manifest"; then echo "#prev-version $pv" >> "$manifest"; fi
     echo "carried $(wc -l < "$tmp/rev_missing" | tr -d ' ') revoked hash(es)" >&2
     wc -l < "$tmp/missing" | tr -d ' '
     ;;

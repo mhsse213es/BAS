@@ -893,6 +893,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanSetAgentState)).Put("/api/fleet/tray-icon", h.SetFleetTrayIcon)
 		r.With(auth.RequirePermission(auth.CanSetAgentState)).Put("/api/fleet/min-agent-version", h.SetFleetMinAgentVersion)
 		r.With(auth.RequirePermission(auth.CanSetAgentState)).Post("/api/agent-binaries/revocations", h.RevokeAgentBinary)
+		r.With(auth.RequirePermission(auth.CanSetAgentState)).Delete("/api/agent-binaries/revocations/{sha256}", h.UnrevokeAgentBinary)
+		r.With(auth.RequirePermission(auth.CanSetAgentState)).Delete("/api/fleet/min-agent-version", h.ResetFleetMinAgentVersion)
 		r.With(auth.RequirePermission(auth.CanStopAgent)).Post("/api/agents/{agentId}/stop", h.StopAgent)
 		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/agents/{agentId}/remove", h.RemoveAgent)
 		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/agents/{agentId}/uninstall", h.UninstallAgent)

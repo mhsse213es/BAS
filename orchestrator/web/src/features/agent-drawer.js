@@ -104,9 +104,15 @@ function overviewHtml(a) {
   var binaryLabel = a.binaryTrusted ? pill('Verified', 'ok')
     : (life === 'outdated' ? pill('Outdated', 'info') : pill('Unverified', 'warn'));
   // Admins can revoke the binary this agent runs (every agent on that exact hash is quarantined).
-  var revokeBtn = (ROLE === 'admin' && a.binaryHash)
-    ? ' <button type="button" class="btn btn-outline btn-sm"' + on('click', 'revokeAgentBinary', a.binaryHash) + '>Revoke binary</button>'
-    : '';
+  // A revoked binary shows as Revoked. A console revocation can be reversed; one in the signed release cannot.
+  var rev = (state.revokedBinaries || {})[a.binaryHash];
+  var revokeBtn = '';
+  if (rev) {
+    binaryLabel = pill('Revoked', 'bad') + (rev.source === 'release' ? ' <span class="muted">in the signed release; only a new release reverses it</span>' : '');
+    if (ROLE === 'admin' && rev.reversible) revokeBtn = ' <button type="button" class="btn btn-outline btn-sm"' + on('click', 'unrevokeAgentBinary', a.binaryHash) + '>Un-revoke binary</button>';
+  } else if (ROLE === 'admin' && a.binaryHash) {
+    revokeBtn = ' <button type="button" class="btn btn-outline btn-sm"' + on('click', 'revokeAgentBinary', a.binaryHash) + '>Revoke binary</button>';
+  }
   rows.push(['Binary', binaryLabel + revokeBtn]);
   rows.push(['Agent version', a.agentVersion ? '<code class="mono">' + x(a.agentVersion) + '</code>' : '&mdash;']);
 

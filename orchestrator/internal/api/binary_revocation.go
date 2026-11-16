@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/models"
 )
@@ -56,23 +58,68 @@ func (h *Handler) ListBinaryRevocations(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer rows.Close()
+	// source is "console" (stored here, reversible by an admin) or "release" (written into the signed manifest, so only a
+	// new signed release can reverse it).
 	type item struct {
-		SHA256    string `json:"sha256"`
-		Reason    string `json:"reason"`
-		RevokedBy string `json:"revokedBy"`
-		RevokedAt string `json:"revokedAt"`
+		SHA256     string `json:"sha256"`
+		Reason     string `json:"reason"`
+		RevokedBy  string `json:"revokedBy"`
+		RevokedAt  string `json:"revokedAt"`
+		Source     string `json:"source"`
+		Reversible bool   `json:"reversible"`
 	}
 	items := []item{}
+	inRelease := map[string]bool{}
+	if h.manifest != nil {
+		for _, hash := range h.manifest.RevokedHashes() {
+			inRelease[hash] = true
+			items = append(items, item{SHA256: hash, Reason: "Revoked in the signed release", RevokedBy: "release", Source: "release"})
+		}
+	}
 	for rows.Next() {
 		var it item
 		var at time.Time
 		if err := rows.Scan(&it.SHA256, &it.Reason, &it.RevokedBy, &at); err != nil {
 			continue
 		}
+		if inRelease[it.SHA256] {
+			continue // listed once, as the signed revocation, which is the one that cannot be reversed here
+		}
 		it.RevokedAt = at.UTC().Format(time.RFC3339)
+		it.Source, it.Reversible = "console", true
 		items = append(items, it)
 	}
 	respond(w, map[string]any{"items": items})
+}
+
+// DELETE /api/agent-binaries/revocations/{sha256}
+// Reverses a revocation made from the console. It lifts the revocation only: agents that were quarantined stay
+// quarantined until an operator restores them, and that restore checks trust again. A revocation written into the
+// signed release cannot be reversed here; it needs a new signed release. Admin-only (route group).
+func (h *Handler) UnrevokeAgentBinary(w http.ResponseWriter, r *http.Request) {
+	hash := strings.ToLower(strings.TrimSpace(chi.URLParam(r, "sha256")))
+	if !sha256HexPattern.MatchString(hash) {
+		jsonError(w, `the hash must be a 64-character hex SHA-256 of an agent binary`, http.StatusBadRequest)
+		return
+	}
+	if h.manifest != nil && h.manifest.HashRevoked(hash) {
+		jsonError(w, "this binary is revoked in the signed release, so the console cannot reverse it; only a new signed release can", http.StatusConflict)
+		return
+	}
+	tag, err := h.db.Exec(r.Context(), `DELETE FROM binary_revocations WHERE sha256 = $1`, hash)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		jsonError(w, "that binary is not revoked", http.StatusNotFound)
+		return
+	}
+	var held int64
+	_ = h.db.QueryRow(r.Context(), `SELECT COUNT(*) FROM agents WHERE binary_hash = $1 AND state = 'quarantined'`, hash).Scan(&held)
+	h.auditLog(r, "agent_binary.unrevoke", hash, map[string]any{"agents_still_quarantined": held}, "ok")
+	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate})
+	respond(w, map[string]any{"sha256": hash, "agentsStillQuarantined": held})
 }
 
 // POST /api/agent-binaries/revocations   body {"sha256": "<64 hex>", "reason": "..."}
