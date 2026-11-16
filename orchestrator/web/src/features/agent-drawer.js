@@ -97,7 +97,13 @@ function overviewHtml(a) {
   rows.push(['Lifecycle', pill(life, LIFE_TONE[life] || 'muted')]);
   rows.push(['Last seen', x(ago(a.lastUpdate))]);
   rows.push(['Enrolled', x(a.enrolledAt ? ago(a.enrolledAt) : '—')]);
-  rows.push(['Binary', a.binaryTrusted ? pill('Verified', 'ok') : pill('Unverified', 'warn')]);
+  // Three distinct states, from the server's trust result (not binaryTrusted alone):
+  //   Verified   = binary is the current approved release (binaryTrusted).
+  //   Outdated   = binary is a previous signed, still-trusted release (state 'outdated').
+  //   Unverified = unknown, modified or revoked binary (anything else).
+  var binaryLabel = a.binaryTrusted ? pill('Verified', 'ok')
+    : (life === 'outdated' ? pill('Outdated', 'info') : pill('Unverified', 'warn'));
+  rows.push(['Binary', binaryLabel]);
 
   var notes = '';
   if (life === 'quarantined') notes += note('bad', '&#9888; Agent is QUARANTINED — binary hash mismatch detected. Scenario dispatch is blocked. Restore to Active once the binary is verified.');
