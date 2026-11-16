@@ -626,3 +626,15 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - Test-NetConnection to ports 80 and 443 on WIN-TQ70FGLETIU.lab.local: TcpTestSucceeded False on both, while ping succeeds. Manual curl requests returned no headers.
 - Conclusion: there is no web enrollment endpoint on LAB-CA, so ESC8 is not applicable to this CA. Recorded as not applicable, not as PASS: the probe never reached a web endpoint.
 - Re-test required if the web enrollment role is installed on LAB-CA later. Customer CAs still need the probe run against their own endpoints.
+
+### Lab run 2026-11-16: CA officer rights on LAB-CA and remaining items
+
+- CA officer rights (certsrv.msc, LAB-CA Security tab): PASS.
+  - Domain Admins: Manage CA and Issue and Manage Certificates allowed.
+  - Enterprise Admins: Manage CA and Issue and Manage Certificates allowed.
+  - LAB\Administrators: Manage CA and Issue and Manage Certificates allowed. Members (Get-ADGroupMember): Domain Admins, Enterprise Admins, Administrator. All tier-0.
+  - Authenticated Users: Request Certificates only (standard enrolment).
+  - Not reviewed: the Enrollment Agents and Certificate Managers tabs.
+- ESC12 (adcs-esc-template-exposure-audit_12): FAIL, accepted for the lab. Provider certutil -getreg CA\CSP\Provider = Microsoft Software Key Storage Provider (software key). Not for production.
+- DCSync grant origin: NOT determinable. Directory Service Changes was "No Auditing" before the removal, so no 5136 events exist. Directory Service Changes auditing (success) was enabled on AD-DC-01 after the removal, so future changes are logged.
+- DCSync non-admin check (alice): NOT RUN. Logon as alice on AD-DC-01 is denied (runas error 1385); a member-machine setup was skipped because the ACL table already shows alice holds no replication right.
