@@ -44,17 +44,28 @@ test('heroStats is null until data arrives', () => {
   assert.deepEqual(heroStats(null, undefined), { reports: null, frameworks: null });
 });
 
-test('agentRows counts completed and partial runs per agent', () => {
+test('agentRows counts reportable runs per agent and lists every finished run', () => {
   const runs = [
-    { agentId: 'a1', status: 'completed', name: 'S1', completedAt: '2026-10-20T00:00:00Z' },
-    { agentId: 'a1', status: 'running', name: 'S2' },
-    { agentId: 'a1', status: 'partial', name: 'S3' },
-    { agentId: 'a2', status: 'failed' },
+    { id: 'r1', agentId: 'a1', status: 'completed', name: 'S1', completedAt: '2026-10-20T00:00:00Z' },
+    { id: 'r2', agentId: 'a1', status: 'running', name: 'S2' },
+    { id: 'r3', agentId: 'a1', status: 'partial', name: 'S3' },
+    { id: 'r4', agentId: 'a2', status: 'failed', name: 'S4' },
+    { id: 'r5', agentId: 'a1', status: 'completed', name: 'sweep step', sweepId: 'sw1' },
     { status: 'completed' },
   ];
   const r = agentRows(runs, { a1: 'host-1' });
-  assert.equal(r.length, 1);
-  assert.deepEqual([r[0].host, r[0].runs, r[0].lastName], ['host-1', 2, 'S1']);
+  assert.equal(r.length, 2, 'an agent with only a failed run is still listed');
+  assert.deepEqual([r[0].host, r[0].runs, r[0].lastName, r[0].list.map(x => x.id)], ['host-1', 2, 'S1', ['r1', 'r3']]);
+  assert.deepEqual([r[1].runs, r[1].failed, r[1].list[0].reportable], [0, 1, false]);
+});
+
+test('agentRows reports only on runs that finished, and takes the latest finished run as the headline', () => {
+  const r = agentRows([
+    { id: 'f', agentId: 'a', status: 'failed', name: 'Newest but failed' },
+    { id: 'c', agentId: 'a', status: 'completed', name: 'Latest good', completedAt: '2026-10-01T00:00:00Z' },
+  ], {});
+  assert.equal(r[0].lastName, 'Latest good');
+  assert.deepEqual(r[0].list.map(x => [x.id, x.reportable]), [['f', false], ['c', true]]);
 });
 
 test('frameworkCards: tone and honest zero state', () => {

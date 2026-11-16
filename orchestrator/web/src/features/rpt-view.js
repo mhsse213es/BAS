@@ -34,20 +34,39 @@ export function loadReportsHero() {
 }
 
 // ── Reports tab: available reports by agent ──────────────────────────────────
+var AVAIL = [];
+var OPEN = {};
+export function toggleRepRuns(agentId) { OPEN[agentId] = !OPEN[agentId]; paintAvailable(AVAIL); }
+
+// The runs of one agent: every finished run with its own report buttons. A failed run is listed but has no report.
+export function runListHtml(r) {
+  var body = r.list.map(function(run) {
+    var tone = run.reportable ? 'ok' : 'bad';
+    var acts = run.reportable
+      ? '<button class="btn btn-outline btn-sm"' + on('click', 'downloadRunReport', run.id) + '>PDF</button> ' +
+        '<button class="btn btn-outline btn-sm"' + on('click', 'openRunReport', run.id) + '>View</button>'
+      : '<span class="tiny muted">no report for a ' + x(run.status || 'unfinished') + ' run</span>';
+    return '<tr><td>' + x(run.name) + '</td><td>' + chip(run.status || '—', tone) + '</td><td class="muted">' + ago(run.at) + '</td><td class="rpt-acts">' + acts + '</td></tr>';
+  }).join('');
+  return '<tr class="rpt-runs-row"><td colspan="5"><table class="rpt-runs"><thead><tr><th>Scenario run</th><th>Result</th><th>When</th><th></th></tr></thead><tbody>' + body + '</tbody></table></td></tr>';
+}
+
 export function paintAvailable(rows) {
+  AVAIL = rows;
   if (!rows.length) {
     put('rep-available', '<tr><td colspan="5">' + empty('report', 'No agents with completed runs yet', 'Run a scenario, then generate its report here.') + '</td></tr>');
     return;
   }
   put('rep-available', rows.map(function(r) {
     return '<tr>' +
-      '<td><b>' + x(r.host) + '</b></td>' +
-      '<td>' + x(r.lastName || 'unnamed scenario') + ' <span class="muted">(latest run)</span></td>' +
-      '<td class="num">' + r.runs + '</td>' +
+      '<td><button type="button" class="rpt-toggle" aria-expanded="' + (OPEN[r.id] ? 'true' : 'false') + '"' + on('click', 'toggleRepRuns', r.id) + '>' + (OPEN[r.id] ? '&#9662;' : '&#9656;') + '</button> <b>' + x(r.host) + '</b></td>' +
+      '<td>' + x(r.lastName || 'unnamed scenario') + ' <span class="muted">(latest run' + (r.list.length > 1 ? ', ' + r.list.length + ' in all' : '') + ')</span></td>' +
+      '<td class="num">' + r.runs + (r.failed ? ' <span class="muted tiny">+ ' + r.failed + ' failed</span>' : '') + '</td>' +
       '<td class="muted">' + ago(r.last) + '</td>' +
       '<td class="rpt-acts"><button class="btn btn-outline btn-sm"' + on('click', 'genAgentReport', r.id, 'posture', 'pdf') + '>PDF Report</button> ' +
         '<button class="btn btn-outline btn-sm"' + on('click', 'genAgentReport', r.id, 'posture', 'csv') + '>CSV</button> ' +
-        '<button class="btn btn-outline btn-sm"' + on('click', 'genAgentReport', r.id, 'audit', '') + '>Audit pack</button></td></tr>';
+        '<button class="btn btn-outline btn-sm"' + on('click', 'genAgentReport', r.id, 'audit', '') + '>Audit pack</button></td></tr>' +
+      (OPEN[r.id] ? runListHtml(r) : '');
   }).join(''));
 }
 export function paintAvailableError() {

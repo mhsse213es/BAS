@@ -64,16 +64,29 @@ export function heroStats(list, frameworks) {
   };
 }
 
-// agentRows: agents with at least one completed/partial run, with the latest run's scenario name.
+// A run that is still going, or waiting to, has nothing to report on yet and is shown on Live Runs instead.
+var LIVE = { running: 1, queued: 1, pending: 1, paused: 1, dispatched: 1 };
+// A report is offered only for a run that finished and produced results.
+export function isReportable(status) { return status === 'completed' || status === 'partial'; }
+
+// agentRows: one row per agent that has finished runs, newest first. `runs` counts the runs that can be reported on and
+// `list` holds every finished run of the agent (failed ones too, marked as such) so none is hidden behind "latest".
+// Sweep rows are grouped on Live Runs and left out here.
 export function agentRows(runs, hostOf) {
   var by = {}, order = [];
   (runs || []).forEach(function(r) {
-    if (r.status !== 'completed' && r.status !== 'partial') return;
     var id = r.agentId;
-    if (!id) return;
-    if (!by[id]) { by[id] = { id: id, host: (hostOf && hostOf[id]) || id, lastName: r.name || '', last: r.completedAt || r.startedAt || '', runs: 0 }; order.push(id); }
-    by[id].runs++;
+    if (!id || r.sweepId || r.emSweepId || LIVE[r.status]) return;
+    if (!by[id]) { by[id] = { id: id, host: (hostOf && hostOf[id]) || id, lastName: '', last: '', runs: 0, failed: 0, list: [] }; order.push(id); }
+    var row = by[id], ok = isReportable(r.status);
+    var at = r.completedAt || r.startedAt || '';
+    row.list.push({ id: r.id || '', name: r.name || 'unnamed scenario', status: r.status || '', at: at, reportable: ok && !!r.id });
+    if (ok) {
+      if (!row.lastName) { row.lastName = r.name || ''; row.last = at; }
+      row.runs++;
+    } else { row.failed++; }
   });
+  order.forEach(function(id) { if (!by[id].lastName && by[id].list.length) { by[id].lastName = by[id].list[0].name; by[id].last = by[id].list[0].at; } });
   return order.map(function(id) { return by[id]; });
 }
 

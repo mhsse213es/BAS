@@ -53,3 +53,11 @@ td.rpt-acts { display: table-cell; white-space: nowrap; text-align: right; }
 .rpt-fmt b { font-weight: 600; }
 .rpt-fmt input { margin: 0; }
 #report-overlay .init-mbd select.init-field { height: auto; }
+
+/* Per-agent run list under "Available reports" */
+.rpt-toggle { width: 22px; height: 22px; margin-right: 4px; padding: 0; background: none; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); font-size: 0.7rem; line-height: 1; cursor: pointer; }
+.rpt-toggle:hover, .rpt-toggle:focus-visible { background: var(--elevated); color: var(--text); outline: none; }
+.rpt-runs-row > td { padding: 0 0 0.6rem 2.2rem; background: var(--bg); }
+.rpt-runs { width: 100%; border-collapse: collapse; }
+.rpt-runs th { text-align: left; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 0.4rem 0.6rem; }
+.rpt-runs td { padding: 0.4rem 0.6rem; border-top: 1px solid var(--border); font-size: 0.82rem; }
