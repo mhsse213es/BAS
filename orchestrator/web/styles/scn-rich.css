@@ -16,7 +16,9 @@
 .scn-layout.cat-off { grid-template-columns: minmax(0, 1fr); }
 .scn-layout.cat-off .scn-cats { display: none; }
 .scn-main { min-width: 0; }
-.scn-cats { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px; box-shadow: var(--shadow-sm); }
+/* The list follows the page as it scrolls, so a category is always one click away. It scrolls inside itself when taller than the screen. */
+.scn-cats { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px; box-shadow: var(--shadow-sm);
+  position: sticky; top: calc(var(--header-h, 0px) + var(--license-banner-h, 0px) + 1rem); max-height: calc(100vh - var(--header-h, 0px) - var(--license-banner-h, 0px) - 2rem); overflow-y: auto; overscroll-behavior: contain; }
 .scn-cats:empty { display: none; }
 .sc-cats-hd { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 8px 8px; }
 .sc-cats-hd h4 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
@@ -145,6 +147,7 @@
 /* Narrow screens */
 @media (max-width: 900px) {
   .scn-layout { grid-template-columns: minmax(0, 1fr); }
+  .scn-cats { position: static; max-height: none; overflow-y: visible; }
   .sc-cat-list { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
   .sc-cat-item { white-space: nowrap; flex: none; }
   .sc-cat-item .n { margin-left: 6px; }
