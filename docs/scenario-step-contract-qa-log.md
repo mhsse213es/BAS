@@ -609,3 +609,12 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - ESC12 (adcs-esc-template-exposure-audit_12): FAIL, expected in this lab. CA signing key is software-held, not an HSM.
 - ESC8 (adcs-esc8-web-enrollment-probe_00): SKIP. The probe did not reach a CA. Still open: manual HTTP check against the CA host.
 - Open: Event 5136 origin query for the removed grants (the removal itself is also logged).
+
+### Lab run 2026-11-16: ESC7 CA object ACE removed (decision recorded)
+
+- Before: adcs-esc-template-exposure-audit_08 was FAIL. A non-tier-0 principal held write rights on the CA object LAB-CA. The principal was the domain controller's own computer account, LAB\WIN-TQ70FGLETIU$ (non-inherited Allow ACE, rights including CreateChild, DeleteChild, WriteProperty, DeleteTree, Delete, WriteDacl, WriteOwner).
+- Decision: removed. A domain controller's computer account does not need rights on a CA object, and the lab does not depend on it. The check was not changed.
+- Backup of the CA object ACL before removal: C:\bas\ad-lab-kit\kit2\ca-object-acl-backup.sddl (453 bytes; restores with SetSecurityDescriptorSddlForm + CommitChanges).
+- After: the ACE is removed, certutil -ping succeeds against LAB-CA, and adcs-esc-template-exposure-audit_08 is PASS.
+- Scope of the PASS: the step covers standard write rights only. ManageCA and ManageCertificates (CA officer rights) are NOT evaluated by this step. Open: review the CA's officer and manager permissions in certsrv.msc (Security tab) on WIN-TQ70FGLETIU.
+- Still open in this run: ESC8 probe (SKIP, no CA reached), ESC12 (FAIL, software-held CA key, expected in this lab).
