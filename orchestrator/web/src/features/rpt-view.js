@@ -114,7 +114,10 @@ export function paintFrameworkCards(scores) {
   put('cmp-fw-cards', '<div class="rk-grid g2">' + cards.map(function(c) {
     return '<section class="rk-card"><div class="rk-hd"><h2>' + x(c.name) + '</h2><span class="mono rpt-pct">' + (c.has ? c.pct + '%' : '—') + '</span></div>' +
       '<div class="rpt-bar">' + bar(c.has ? c.pct : 0, c.tone) + '</div>' +
-      '<p class="muted rpt-cdetail">' + x(c.detail) + '</p>' +
+      '<p class="muted rpt-cdetail"><b>Resistance rate</b> · ' + x(c.detail) + '</p>' +
+      (c.coverage ? '<p class="muted rpt-cdetail">' + x(c.coverage) + '</p>' : '') +
+      (c.note ? '<p class="cmp-warn">' + x(c.note) + '</p>' : '') +
+      (c.warning ? '<p class="cmp-warn"><b>Mapping not verified.</b> ' + x(c.warning) + '</p>' : '') +
       '<div class="rpt-acts"><button class="btn btn-outline btn-sm"' + on('click', 'openReportGen', 'compliance', c.id) + '>Generate evidence pack</button></div></section>';
   }).join('') + '</div>');
 }

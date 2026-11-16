@@ -1145,6 +1145,13 @@ button:not([class]) { color:var(--text); }
 .cmp-controls-tbl tbody tr:hover td { background:var(--elevated); }
 /* Status badges */
 .cmp-badge { display:inline-flex; align-items:center; gap:3px; font-size:0.62rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; padding:2px 8px; border-radius:20px; white-space:nowrap; border:1px solid; }
+.cmp-badge.resisted { background:var(--success-dim); color:var(--success); border-color:rgba(34,211,166,0.3); }
+.cmp-badge.failed { background:var(--danger-dim); color:var(--danger); border-color:rgba(239,68,68,0.3); }
+.cmp-badge.inconclusive { background:rgba(245,158,11,0.08); color:var(--warning); border-color:rgba(245,158,11,0.3); }
+.cmp-ftab.f-partial.active { background:var(--warning-dim); color:var(--warning); border-color:rgba(245,158,11,0.4); }
+.cmp-warn { margin:8px 0 0; padding:6px 10px; border:1px solid rgba(245,158,11,0.4); border-radius:6px; background:var(--warning-dim); color:var(--warning); font-size:0.74rem; }
+.cmp-tech-cov { font-size:0.68rem; color:var(--muted); margin-top:2px; }
+.cmp-ev-badge.warn { background:var(--warning-dim); color:var(--warning); }
 .cmp-badge.pass { background:var(--success-dim); color:var(--success); border-color:rgba(34,211,166,0.3); }
 .cmp-badge.fail { background:var(--danger-dim); color:var(--danger); border-color:rgba(239,68,68,0.3); }
 .cmp-badge.partial { background:var(--warning-dim); color:var(--warning); border-color:rgba(245,158,11,0.3); }

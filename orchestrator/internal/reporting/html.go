@@ -572,8 +572,14 @@ type ComplianceSummaryRow struct {
 	Passing       int     `json:"passing"`
 	Failing       int     `json:"failing"`
 	Untested      int     `json:"untested"`
-	CompliancePct float64 `json:"compliancePct"`
+	CompliancePct float64 `json:"compliancePct"` // the resistance rate
 	CoveragePct   float64 `json:"coveragePct"`
+	// Partial is the number of tested controls where only some mapped techniques ran (included in Passing).
+	Partial int `json:"partial"`
+	// CoverageNote is set when coverage is too low for a framework-level conclusion; MappingWarning when the
+	// framework's control mapping is unverified. Both are shown beside the figures.
+	CoverageNote   string `json:"coverageNote"`
+	MappingWarning string `json:"mappingWarning"`
 }
 
 // ── Template ──────────────────────────────────────────────────────────────────
@@ -2780,11 +2786,11 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <div class="stag">Section 14</div>
 <div class="stitle" role="heading" aria-level="1">Regulatory Compliance Status</div>
 
-<p style="color:#6e7681;margin-bottom:14px">Compliance percentages are derived from BAS evidence over the <em>BAS-testable</em> control subset. A control is <em>Passing</em> when all mapped techniques passed; <em>Failing</em> when at least one failed; <em>Untested</em> when no mapped techniques were included in the run. <em>Manual</em> controls are governance/process requirements (board policy, asset inventory, risk-assessment cadence, IR/DR planning, data residency) that cannot be validated by simulation and require manual attestation — they are excluded from the Compliance and Coverage percentages.</p>
+<p style="color:#6e7681;margin-bottom:14px">These figures show how controls resisted simulated attack techniques; they are not a determination of compliance. The resistance rate is taken over tested controls only and must be read with control coverage. A control counts as <em>Resisted</em> when no executed technique succeeded (<em>Partial</em> when only some mapped techniques were executed), <em>Failing</em> when at least one succeeded, and <em>Untested</em> when no mapped technique was executed. <em>Manual</em> controls are governance/process requirements (board policy, asset inventory, risk-assessment cadence, IR/DR planning, data residency) that cannot be validated by simulation and require manual attestation — they are excluded from the resistance rate and coverage percentages.</p>
 {{if .compliance}}
 <table>
   <thead><tr>
-    <th>Framework</th><th>Total Controls</th><th>Manual</th><th>Tested</th><th>Passing</th><th>Failing</th><th>Untested</th><th>Compliance</th><th>Coverage</th>
+    <th>Framework</th><th>Total Controls</th><th>Manual</th><th>Tested</th><th>Resisted</th><th>Failing</th><th>Untested</th><th>Resistance rate</th><th>Control coverage</th>
   </tr></thead>
   <tbody>
   {{range .compliance}}
@@ -2799,6 +2805,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <td class="comp-pct" style="color:{{compColor .compliancePct}}">{{pct .compliancePct}}</td>
     <td style="color:#2f81f7">{{pct .coveragePct}}</td>
   </tr>
+  {{if or .coverageNote .mappingWarning}}<tr><td colspan="9" style="color:#b45309;font-size:.78rem">{{if .coverageNote}}{{.coverageNote}}.{{end}} {{if .mappingWarning}}Mapping not verified: {{.mappingWarning}}{{end}}</td></tr>{{end}}
   {{end}}
   </tbody>
 </table>

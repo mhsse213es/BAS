@@ -63,7 +63,9 @@ test('frameworkCards: tone and honest zero state', () => {
     { frameworkId: 'iso', frameworkName: 'ISO 27001', compliancePct: 0, testedControls: 0 },
   ]);
   assert.deepEqual([c[0].pct, c[0].tone], [86, 'ok']);
-  assert.match(c[0].detail, /12 of 14 tested controls passing · 2 failing · 6 untested/);
+  assert.match(c[0].detail, /12 of 14 tested controls resisted the executed techniques · 2 failing · 6 untested/);
+  assert.match(c[0].coverage, /Control coverage 14 of 20 \(70%\)/);
+  assert.equal(c[0].note, '');
   assert.deepEqual([c[1].pct, c[1].tone, c[1].detail], [null, 'muted', 'No controls tested yet.']);
 });
 
@@ -102,4 +104,17 @@ test('slaSeverityRows orders Critical first and keeps unresolved muted', () => {
 test('slaTrend sorts by month; slaTone thresholds', () => {
   assert.deepEqual(slaTrend([{ month: '2026-10', complianceRate: 80 }, { month: '2026-09', complianceRate: 90 }]).map(m => m.month), ['2026-09', '2026-10']);
   assert.equal(slaTone(90), 'ok'); assert.equal(slaTone(75), 'warn'); assert.equal(slaTone(74), 'bad');
+});
+
+test('frameworkCards: a high rate on little testing is never shown as good, and carries its caveats', () => {
+  const [c] = frameworkCards([
+    { frameworkId: 'rbi', frameworkName: 'RBI', compliancePct: 100, coveragePct: 0.85, testedControls: 1, passingControls: 1, failingControls: 0,
+      testableControls: 117, mappingWarning: 'Mapping not verified against the 2026 directions.' },
+  ]);
+  assert.equal(c.pct, 100);
+  assert.equal(c.tone, 'warn', 'a 100% rate over 1 of 117 controls must not be green');
+  assert.match(c.coverage, /Control coverage 1 of 117/);
+  assert.match(c.note, /Insufficient coverage for framework-level conclusions/);
+  assert.match(c.warning, /not verified/);
+  assert.doesNotMatch(c.detail, /compliant/i);
 });

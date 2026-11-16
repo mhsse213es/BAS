@@ -5878,15 +5878,18 @@ func (h *Handler) complianceRows(ctx context.Context, agentID string, filter str
 			continue
 		}
 		rows = append(rows, reporting.ComplianceSummaryRow{
-			Framework:     fw.Name + " " + fw.Version,
-			TotalControls: cr.Summary.TotalControls,
-			Manual:        cr.Summary.ManualControls,
-			Tested:        cr.Summary.TestedControls,
-			Passing:       cr.Summary.PassingControls,
-			Failing:       cr.Summary.FailingControls,
-			Untested:      cr.Summary.UntestedControls,
-			CompliancePct: cr.Summary.CompliancePercent,
-			CoveragePct:   cr.Summary.CoveragePercent,
+			Framework:      fw.Name + " " + fw.Version,
+			TotalControls:  cr.Summary.TotalControls,
+			Manual:         cr.Summary.ManualControls,
+			Tested:         cr.Summary.TestedControls,
+			Passing:        cr.Summary.PassingControls,
+			Failing:        cr.Summary.FailingControls,
+			Untested:       cr.Summary.UntestedControls,
+			CompliancePct:  cr.Summary.CompliancePercent,
+			CoveragePct:    cr.Summary.CoveragePercent,
+			Partial:        cr.Summary.PartialControls,
+			CoverageNote:   cr.Summary.CoverageNote,
+			MappingWarning: fw.MappingWarning,
 		})
 	}
 	return rows
@@ -6021,10 +6024,10 @@ func (h *Handler) GetComplianceDashboardScores(w http.ResponseWriter, r *http.Re
 	agentID := r.URL.Query().Get("agentId")
 
 	// Build framework metadata lookup for name enrichment.
-	type fwInfo struct{ name, shortName, regulator string }
+	type fwInfo struct{ name, shortName, regulator, mappingWarning string }
 	fwMeta := make(map[string]fwInfo)
 	for _, fw := range h.complianceMapper.Frameworks() {
-		fwMeta[fw.ID] = fwInfo{fw.Name, complianceShortName(fw.ID), fw.Regulator}
+		fwMeta[fw.ID] = fwInfo{fw.Name, complianceShortName(fw.ID), fw.Regulator, fw.MappingWarning}
 	}
 
 	type scoreResp struct {
@@ -6033,6 +6036,10 @@ func (h *Handler) GetComplianceDashboardScores(w http.ResponseWriter, r *http.Re
 		ShortName        string `json:"shortName"`
 		Regulator        string `json:"regulator"`
 		UntestedControls int    `json:"untestedControls"`
+		// Coverage context that must be shown beside the resistance rate (compliancePct).
+		SufficientCoverage bool   `json:"sufficientCoverage"`
+		CoverageNote       string `json:"coverageNote,omitempty"`
+		MappingWarning     string `json:"mappingWarning,omitempty"`
 	}
 
 	var snaps []db.ComplianceSnapshot
@@ -6065,9 +6072,21 @@ func (h *Handler) GetComplianceDashboardScores(w http.ResponseWriter, r *http.Re
 			ShortName:          meta.shortName,
 			Regulator:          meta.regulator,
 			UntestedControls:   s.TestableControls - s.TestedControls,
+			SufficientCoverage: s.TestedControls > 0 && s.CoveragePct >= compliance.MinConclusiveCoveragePercent,
+			CoverageNote:       coverageNoteFor(s.TestedControls, s.CoveragePct),
+			MappingWarning:     meta.mappingWarning,
 		})
 	}
 	respond(w, out)
+}
+
+// coverageNoteFor is the wording shown beside a resistance rate that rests on too little testing; empty when coverage
+// is enough. It uses the same threshold as the per-framework report.
+func coverageNoteFor(tested int, coveragePct float64) string {
+	if tested > 0 && coveragePct >= compliance.MinConclusiveCoveragePercent {
+		return ""
+	}
+	return compliance.InsufficientCoverageNote
 }
 
 // complianceShortName returns the dashboard display label for a framework ID.

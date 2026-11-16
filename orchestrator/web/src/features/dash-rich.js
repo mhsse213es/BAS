@@ -95,20 +95,23 @@ export function complianceCard(fw) {
   var passing = fw.passingControls || 0, failing = fw.failingControls || 0;
   var untested = fw.untestedControls != null ? fw.untestedControls : ((fw.testableControls || 0) - tested);
   var has = tested > 0;
-  var t = !has ? 'muted' : pct >= 75 ? 'ok' : pct >= 50 ? 'warn' : 'bad';
-  var title = fw.frameworkName + '\n' + (has ? pct + '% compliant — ' + passing + ' of ' + tested + ' tested controls passing, ' + failing + ' failing, ' + untested + ' untested.' : 'No controls tested yet.');
-  // Headline = passing ÷ tested controls. Coverage = tested ÷ testable controls, shown as its own line so the
-  // headline cannot be read as a statement about the whole framework. Manual-attestation controls are excluded.
   var testable = fw.testableControls || (tested + untested);
+  // Headline = the resistance rate: tested controls where no executed technique succeeded, over tested controls.
+  // It is not a compliance result. Coverage = tested ÷ testable controls sits right beside it, and a rate resting on
+  // too little testing is not coloured as good. Manual-attestation controls are excluded from both.
+  var sufficient = has && (fw.sufficientCoverage != null ? !!fw.sufficientCoverage : cov >= 50);
+  var t = !has ? 'muted' : !sufficient ? 'warn' : pct >= 75 ? 'ok' : pct >= 50 ? 'warn' : 'bad';
+  var title = fw.frameworkName + '\n' + (has ? 'Resistance rate ' + pct + '% — ' + passing + ' of ' + tested + ' tested controls resisted the executed techniques, ' + failing + ' failed, ' + untested + ' untested. Control coverage ' + tested + ' of ' + testable + '. This is not a compliance determination.' : 'No controls tested yet.');
   return '<div class="rk-reg rk-click tone-' + t + '"' + on('click', 'openComplianceDetail', fw.frameworkId, fw.agentId) + ' title="' + x(title) + '">' +
     '<div class="rk-reg-h"><b>' + x(String(fw.shortName || '').toUpperCase()) + '</b><span>' + x(fw.regulator) + '</span></div>' +
     '<div class="rk-reg-v">' + (has ? PCT(pct) : '—') + '</div>' +
-    '<div class="rk-reg-m">' + (has ? 'of tested controls passing' : 'No controls tested yet') + '</div>' +
+    '<div class="rk-reg-m">' + (has ? 'resistance rate (of tested controls)' : 'No controls tested yet') + '</div>' +
     (has ? bar(cov, toneOf(cov)) : bar(0, 'muted')) +
-    '<div class="rk-reg-m"><b>' + (has ? tested + ' of ' + testable + ' testable controls tested (' + PCT(cov) + ' coverage)' : '0 of ' + testable + ' testable controls tested') + '</b></div>' +
-    (has ? '<div class="rk-reg-m">' + passing + ' pass · ' + failing + ' fail · ' + untested + ' untested</div>' : '') +
-    (has && failing > 0 ? '<div class="rk-reg-n">Any 1 failed test fails the control — see breakdown</div>' : '') +
-    (has && cov < 50 ? '<div class="rk-reg-n">Only ' + PCT(cov) + ' of testable controls covered</div>' : '') + '</div>';
+    '<div class="rk-reg-m"><b>' + (has ? 'Control coverage ' + tested + ' of ' + testable + ' (' + PCT(cov) + ')' : '0 of ' + testable + ' testable controls tested') + '</b></div>' +
+    (has ? '<div class="rk-reg-m">' + passing + ' resisted · ' + failing + ' failed · ' + untested + ' untested</div>' : '') +
+    (has && failing > 0 ? '<div class="rk-reg-n">Any 1 executed technique that succeeds fails the control — see breakdown</div>' : '') +
+    (has && !sufficient ? '<div class="rk-reg-n">' + x(fw.coverageNote || 'Insufficient coverage for framework-level conclusions') + '</div>' : '') +
+    (fw.mappingWarning ? '<div class="rk-reg-n" title="' + x(fw.mappingWarning) + '">Mapping not verified — open for detail</div>' : '') + '</div>';
 }
 function renderCompliance() {
   var s = D.compliance;

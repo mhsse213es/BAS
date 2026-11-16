@@ -314,3 +314,16 @@ test('execInsights does not narrate risk when it is not measurable', () => {
   const out = M.execInsights(trends, { riskMeasurable: false }, null);
   assert.equal(out.some((i) => /Risk score/.test(i.title)), false);
 });
+
+test('compliance card: a perfect rate on 1 of 117 controls is flagged, not shown as good, and says what it is not', () => {
+  const div = document.createElement('div');
+  div.innerHTML = R.complianceCard({ frameworkId: 'rbi', agentId: 'a', frameworkName: 'RBI', shortName: 'rbi', regulator: 'RBI', testedControls: 1, passingControls: 1,
+    failingControls: 0, testableControls: 117, compliancePct: 100, coveragePct: 0.85, totalControls: 199, mappingWarning: 'Unverified mapping' });
+  const text = div.textContent;
+  assert.match(text, /resistance rate/i);
+  assert.match(text, /Control coverage 1 of 117/);
+  assert.match(text, /Insufficient coverage for framework-level conclusions/);
+  assert.match(text, /Mapping not verified/);
+  assert.doesNotMatch(text, /compliant/i);
+  assert.equal(div.querySelector('.tone-ok'), null, 'low coverage must not use the good tone');
+});

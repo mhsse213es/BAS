@@ -59,8 +59,8 @@ findTarget:
 		if cr.Tested != 0 {
 			t.Errorf("control %s: Tested=%d, want 0 (an ERROR result must not count as tested)", cr.ID, cr.Tested)
 		}
-		if cr.Status != "untested" {
-			t.Errorf("control %s: Status=%q, want \"untested\"", cr.ID, cr.Status)
+		if cr.Status != "inconclusive" {
+			t.Errorf("control %s: Status=%q, want \"inconclusive\" (it errored, so nothing was verified either way)", cr.ID, cr.Status)
 		}
 	}
 	if !found {

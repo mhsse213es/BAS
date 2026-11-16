@@ -82,16 +82,25 @@ export function frameworkCards(scores) {
   return (Array.isArray(scores) ? scores : []).map(function(s) {
     var tested = n(s.testedControls), pass = n(s.passingControls), fail = n(s.failingControls);
     var has = tested > 0, pct = n(s.compliancePct);
+    var testable = n(s.testableControls) || tested;
     var untested = s.untestedControls != null ? n(s.untestedControls) : Math.max(0, n(s.testableControls) - tested);
+    // The percentage is the resistance rate over tested controls only. It is never shown without coverage, and it
+    // is not coloured as good when too little was tested for a framework-level conclusion.
+    var cov = s.coveragePct != null ? n(s.coveragePct) : (testable > 0 ? tested / testable * 100 : 0);
+    var sufficient = has && (s.sufficientCoverage != null ? !!s.sufficientCoverage : cov >= 50);
     var detail = !has ? 'No controls tested yet.'
-      : pass + ' of ' + tested + ' tested controls passing' + (fail ? ' · ' + fail + ' failing' : '') + (untested ? ' · ' + untested + ' untested' : '');
+      : pass + ' of ' + tested + ' tested controls resisted the executed techniques' + (fail ? ' · ' + fail + ' failing' : '') + (untested ? ' · ' + untested + ' untested' : '');
     return {
       id: s.frameworkId || '',
       name: s.frameworkName || s.shortName || s.frameworkId || '',
       has: has,
       pct: has ? Math.round(pct) : null,
-      tone: !has ? 'muted' : pct >= 75 ? 'ok' : pct >= 50 ? 'warn' : 'bad',
+      tone: !has ? 'muted' : !sufficient ? 'warn' : pct >= 75 ? 'ok' : pct >= 50 ? 'warn' : 'bad',
       detail: detail,
+      coverage: has ? 'Control coverage ' + tested + ' of ' + testable + ' (' + Math.round(cov * 10) / 10 + '%)' : '',
+      sufficient: sufficient,
+      note: has && !sufficient ? (s.coverageNote || 'Insufficient coverage for framework-level conclusions') : '',
+      warning: s.mappingWarning || '',
     };
   });
 }

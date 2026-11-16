@@ -691,8 +691,12 @@ function renderComplianceReport(r) {
   var fw = r.framework || {};
   var pct = +(s.compliancePct || 0);
   var cvr = +(s.coveragePct || 0);
-  var totalControls = s.totalControls || ((s.passing||0)+(s.failing||0)+(s.partial||0)+(s.untested||0)+(s.manual||0));
-  var notTested = (s.untested||0)+(s.manual||0);
+  var totalControls = s.totalControls || 0;
+  var resisted = s.resistedControls || 0, failed = s.failingControls || 0, partial = s.partialControls || 0;
+  var inconclusive = s.inconclusiveControls || 0;
+  var untested = Math.max(0, (s.untestedControls || 0) - inconclusive);
+  var manual = s.manualControls || 0;
+  var tested = s.testedControls || 0, testable = s.testableControls || 0;
   var gen = r.generatedAt ? new Date(r.generatedAt) : null;
   var genText = gen && !isNaN(gen.getTime()) ? gen.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) : '—';
 
@@ -701,35 +705,41 @@ function renderComplianceReport(r) {
     '<section class="rk-card g3-cmp-head">' +
       '<div>' + chip(fw.id || 'Framework', 'accent') + '<h2>' + x(fw.name || '') + '</h2>' +
         '<span class="rk-hd-sub">' + x(fw.version || '') + '</span>' +
-        (r.narrative ? '<p>' + x(r.narrative) + '</p>' : '') + '</div>' +
-      '<div>' + chartSlot({ type: 'donut', h: 170, center: pct.toFixed(0) + '%', centerSub: 'compliant', segments: [
-        { label: 'Compliant', value: s.passing || 0, color: CHART_COLORS.ok },
-        { label: 'Non-compliant', value: s.failing || 0, color: CHART_COLORS.bad },
-        { label: 'Partial', value: s.partial || 0, color: CHART_COLORS.warn },
-        { label: 'Not tested', value: notTested, color: CHART_COLORS.muted }
+        (r.narrative ? '<p>' + x(r.narrative) + '</p>' : '') +
+        (s.coverageNote ? '<p class="cmp-warn">' + x(s.coverageNote) + '</p>' : '') +
+        (fw.mappingWarning ? '<p class="cmp-warn"><b>Mapping not verified.</b> ' + x(fw.mappingWarning) + '</p>' : '') + '</div>' +
+      '<div>' + chartSlot({ type: 'donut', h: 170, center: pct.toFixed(0) + '%', centerSub: 'resistance rate', segments: [
+        { label: 'Resisted', value: resisted, color: CHART_COLORS.ok },
+        { label: 'Failed', value: failed, color: CHART_COLORS.bad },
+        { label: 'Partial', value: partial, color: CHART_COLORS.warn },
+        { label: 'Inconclusive', value: inconclusive, color: CHART_COLORS.muted },
+        { label: 'Untested', value: untested, color: CHART_COLORS.muted },
+        { label: 'Manual', value: manual, color: CHART_COLORS.muted }
       ] }) + '</div>' +
       '<div>' + kitKv([
         ['Agent', r.agentId || ''], ['Generated', genText], ['Total controls', String(totalControls)],
-        ['Coverage', cvr.toFixed(0) + '%'], ['Scope', (r.scenarioName || r.runId || 'Aggregated').substring(0, 40)]
+        ['Control coverage', tested + ' of ' + testable + ' (' + cvr.toFixed(1) + '%)'],
+        ['Techniques tested', (s.techniquesTested || 0) + ' of ' + (s.techniquesMapped || 0)],
+        ['Scope', (r.scenarioName || r.runId || 'Aggregated').substring(0, 40)]
       ]) + '</div>' +
     '</section>';
 
   document.getElementById('cmp-kpi-area').innerHTML = grid(4, [
-    kpi({ label: 'Compliant', value: s.passing || 0, sub: (s.passing || 0) + ' controls passing', icon: 'ok', tone: 'ok' }),
-    kpi({ label: 'Non-Compliant', value: s.failing || 0, sub: (s.failing || 0) + ' controls failing', icon: 'warn', tone: (s.failing || 0) ? 'bad' : 'muted' }),
-    kpi({ label: 'Partial', value: s.partial || 0, sub: 'Mixed pass/fail evidence', icon: 'trend', tone: (s.partial || 0) ? 'warn' : 'muted' }),
-    kpi({ label: 'Not Tested', value: notTested, sub: (s.manual || 0) + ' manual attestation', icon: 'eye', tone: 'muted' })
+    kpi({ label: 'Resisted', value: resisted, sub: 'Every mapped technique ran; none succeeded', icon: 'ok', tone: 'ok' }),
+    kpi({ label: 'Failed', value: failed, sub: 'At least one executed technique succeeded', icon: 'warn', tone: failed ? 'bad' : 'muted' }),
+    kpi({ label: 'Partial', value: partial, sub: 'Only some mapped techniques ran; none succeeded', icon: 'trend', tone: partial ? 'warn' : 'muted' }),
+    kpi({ label: 'Not Tested', value: untested + inconclusive, sub: inconclusive + ' inconclusive · ' + manual + ' manual attestation', icon: 'eye', tone: 'muted' })
   ]);
 
   // Domain breakdown: one card per domain, bar = compliance over the tested controls only.
   var doms = r.domains || [];
   document.getElementById('cmp-domain-area').innerHTML = doms.length ? card('Domain breakdown',
     '<div class="rk-grid g3">' + doms.map(function(d) {
-      var tested = (d.passing||0) + (d.failing||0) + (d.partial||0);
-      var p = tested > 0 ? +(d.compliancePct||0) : null;
+      var dTested = (d.passing||0) + (d.failing||0);
+      var p = dTested > 0 ? +(d.compliancePct||0) : null;
       return '<div class="g3-dom"><div class="g3-dom-top"><span>' + x(d.name) + '</span><span>' + (p !== null ? p.toFixed(0) + '%' : '—') + '</span></div>' +
         kitBar(p || 0, p === null ? 'muted' : (p >= 70 ? 'ok' : p >= 40 ? 'warn' : 'bad'), true) +
-        '<div class="g3-dom-st"><span>' + (d.passing||0) + ' pass</span><span>' + (d.failing||0) + ' fail</span><span>' + (d.untested||0) + ' untested</span></div></div>';
+        '<div class="g3-dom-st"><span>' + (d.resisted||0) + ' resisted</span><span>' + (d.partial||0) + ' partial</span><span>' + (d.failing||0) + ' failed</span><span>' + (d.untested||0) + ' untested</span></div></div>';
     }).join('') + '</div>') : '';
 
   renderControlsTable(r.controls, _cmpFilter);
@@ -741,7 +751,7 @@ function renderControlsTable(controls, filter) {
     b.classList.toggle('active', (b.dataset.filter || '') === (filter || ''));
   });
 
-  var statusLabel = {pass:'✓ Compliant', fail:'✗ Non-Compliant', partial:'◑ Partial', untested:'○ Untested', manual:'✎ Manual'};
+  var statusLabel = {resisted:'✓ Resisted', failed:'✗ Failed', partial:'◑ Partial', inconclusive:'? Inconclusive', untested:'○ Untested', manual:'✎ Manual'};
   var rows = (controls || []).filter(function(c) { return !filter || c.status === filter; });
   document.getElementById('cmp-controls-body').innerHTML = rows.map(function(c, i) {
     var badge = '<span class="cmp-badge ' + c.status + '">' + (statusLabel[c.status] || c.status) + '</span>';
@@ -756,7 +766,7 @@ function renderControlsTable(controls, filter) {
     var hasEv = c.evidence && c.evidence.length > 0;
     var evHtml = hasEv ? '<div class="cmp-evidence" id="' + evId + '">' +
       (c.evidence || []).map(function(ev) {
-        var rc = (ev.result === 'pass' || ev.result === 'blocked') ? 'pass' : 'fail';
+        var rc = (ev.result === 'pass' || ev.result === 'blocked') ? 'pass' : (ev.result === 'fail' ? 'fail' : 'warn');
         return '<div class="cmp-ev-row">' +
           '<span class="cmp-ev-tech">' + x(ev.techniqueId || '') + '</span>' +
           '<span class="cmp-ev-badge ' + rc + '">' + x((ev.result || '').toUpperCase()) + '</span>' +
@@ -766,7 +776,7 @@ function renderControlsTable(controls, filter) {
     var expandBtn = hasEv ? '<span class="cmp-expand-btn" '+ on('click', 'toggleEvidence', evId) + '>&#9658; ' + c.evidence.length + ' tests</span>' : '';
     return '<tr><td>' + badge + '</td>' +
       '<td><span class="cmp-ctrl-id">' + x(c.id) + '</span></td>' +
-      '<td>' + x(c.name) + expandBtn + evHtml + '</td>' +
+      '<td>' + x(c.name) + expandBtn + '<div class="cmp-tech-cov">' + (c.techniquesTested||0) + ' of ' + (c.techniquesMapped||0) + ' mapped techniques tested</div>' + evHtml + '</td>' +
       '<td><span class="cmp-domain-chip">' + x(c.domain||'') + '</span></td>' +
       '<td style="text-align:center;color:var(--text-dim)">' + (c.tested||0) + '</td>' +
       '<td style="text-align:center;color:#22d3a6;font-weight:600">' + (c.passed||0) + '</td>' +

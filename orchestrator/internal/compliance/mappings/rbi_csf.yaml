@@ -44,6 +44,7 @@ name: RBI Cybersecurity, Technology Risk, Resilience and Assurance Framework (Co
 version: "2026 (RBI/DoS/2026-27/410, DoS.CO.CSITEG.4/31.01.015/2026-27)"
 regulator: RBI
 published_year: "2026"
+mapping_warning: "These controls were carried forward from the earlier RBI cyber security framework and have not been verified against the paragraph numbering of the 2026 directions (the primary text was not available). The 2026 directions reportedly add areas this catalog does not yet cover (data governance, cryptography, secure software development, vendor risk, cloud security, teleworking). Treat these results as indicative until the mapping is verified against the official directions."
 controls:
   # ── Identity & Access Management ─────────────────────────────────────────
   - id: IAM-01
