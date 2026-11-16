@@ -115,4 +115,6 @@ export function openTechniqueDetail(id) {
   });
 }
 
-export function techniqueBack() { if (_idx) paintList(''); }
+// Back returns to the list; when the detail was opened from elsewhere (a scenario's technique chip) there is no list to
+// return to, so it closes the panel.
+export function techniqueBack() { if (_idx) paintList(''); else closeTechniqueCatalog(); }
