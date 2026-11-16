@@ -567,3 +567,13 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - Customer-visible: a new scenario. Existing scores do not change. Domains with stale or SPN-bearing privileged accounts will see new FAILs when the scenario is run.
 - Tests: scenario count 127 to 128; ratchet baseline gained one file at zero gaps; no existing entry changed; 157 signatures verify.
 - NOT VERIFIED on a domain. Run on AD-DC-01 before trusting a result.
+
+### ADCS: ESC14 weak explicit certificate mapping added (2026-11-16)
+
+- New step 14 in scenarios/adcs-esc-template-exposure-audit.yaml. Reads altSecurityIdentities of enabled users and computers (LDAP only).
+- FAIL on a weak X509 mapping: `<RFC822>`, `<S>` (subject only), or `<I>` (issuer) with no `<SR>`, `<SKI>` or `<SHA1-PUKEY>` binding. Other formats and Kerberos entries are not counted.
+- SKIP if the directory query fails. Never PASS on error.
+- Customer-visible: can add FAILs where weak explicit mappings exist.
+- Description updated: ESC14 no longer listed as not assessed.
+- Baseline unchanged; ledger gained one entry; 157 signatures verify; scenario tests pass.
+- NOT VERIFIED on a domain. The lab kit was lost when the scratchpad was cleared; the check must be re-run on AD-DC-01 before its result is trusted.

@@ -14,7 +14,7 @@ description: >
     ESC11 template RA-signature precondition (SKIP on finding: the CA-level RPC enforcement state is not evaluated)
     ESC13 issuance-policy precondition; reported as SKIP, never FAIL, because group linkage needs manual correlation
     ESC15 schema-version-1 template, enrollee-supplied subject, Application Policy in place of EKU
-  Not assessed by this scenario: ESC6 and ESC8 (CA host and network properties), ESC10 (no evaluation implemented), ESC12 and ESC14.
+  Not assessed by this scenario: ESC6 and ESC8 (CA host and network properties), ESC10 (no evaluation implemented) and ESC12 (posture only; HSM assurance not verified).
   SAFETY: reads configuration only. Never requests or enrols a certificate, never modifies a template or CA, never contacts an enrollment endpoint. A FAIL shows configuration exposure, not that a certificate was obtained. Windows domain members only. PRODUCTION-SAFE: telemetry mode.
 author: Audspect Research
 executable: true
@@ -1056,3 +1056,20 @@ steps:
         Write-Output "SKIP: ESC12 check unavailable: a CA key provider could not be read from every CA (host not domain-joined, CA unreachable, or certutil denied). Not scored. [BAS-SIM-ADCS-ESC12]"
       }
     cleanup: ""
+  - name: ADCS ESC14 - weak explicit certificate mapping in altSecurityIdentities (T1649)
+    technique_id: T1649
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: Reads altSecurityIdentities of enabled users and computers. No changes, no certificate requests.
+    telemetry:
+    - 'DC: LDAP search of altSecurityIdentities'
+    detection:
+    - 'SIEM: bulk LDAP reads of altSecurityIdentities from a non-administrative workstation'
+    command: "$ErrorActionPreference = 'SilentlyContinue'\n$findings = @()\n$ok = $false\n$total = 0\ntry {\n  $domainDN = ([ADSI]\"LDAP://RootDSE\").defaultNamingContext\n  if (-not $domainDN) { throw \"no domain\" }\n  $s = New-Object System.DirectoryServices.DirectorySearcher\n  $s.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry(\"LDAP://$domainDN\")\n  $s.PageSize = 500\n  $s.Filter = \"(&(|(objectClass=user)(objectClass=computer))(altSecurityIdentities=*)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))\"\n  [void]$s.PropertiesToLoad.Add('sAMAccountName')\n  [void]$s.PropertiesToLoad.Add('altSecurityIdentities')\n  foreach ($res in @($s.FindAll())) {\n    $total++\n    $sam = [string]$res.Properties['samaccountname'][0]\n    foreach ($v in @($res.Properties['altsecurityidentities'])) {\n      $m = [string]$v\n      if ($m -notmatch '^(?i)X509:') { continue }\n      $weak = $false\n      if ($m -match '^(?i)X509:<RFC822>') { $weak = $true }\n      elseif ($m -match '^(?i)X509:<S>') { $weak = $true }\n      elseif ($m -match '^(?i)X509:<I>' -and $m -notmatch '(?i)<SR>|<SKI>|<SHA1-PUKEY>') { $weak = $true }\n      if ($weak) { $findings += \"$sam ($m)\"; break }\n    }\n  }\n  $ok = $true\n} catch { $ok = $false }\nif (-not $ok) {\n  Write-Output \"SKIP: ESC14 check unavailable: the directory query failed (host not domain-joined or DC unreachable). Not scored. [BAS-SIM-ADCS-ESC14]\"\n} elseif ($findings.Count -eq 0) {\n  Write-Output \"PASS: no enabled user or computer has a weak explicit certificate mapping in altSecurityIdentities (RFC822-only, subject-only, or issuer-only without serial, SKI or public-key binding). This step assesses the mapping format only. [BAS-SIM-ADCS-ESC14]\"\n} else {\n  Write-Output \"EXEC T1649: $($findings.Count) enabled account(s) have a weak explicit certificate mapping. Reads altSecurityIdentities only. [BAS-SIM-ADCS-ESC14]\"\n  foreach ($f in $findings) { Write-Output \"WEAK $f\" }\n  Write-Output \"FAIL: an account maps certificates by a weak identifier (ESC14). Anyone who can obtain a certificate that matches the weak identifier can authenticate as that account. Configuration exposure only; exploitability was not tested. Remediation: replace each mapping with X509IssuerSerialNumber, X509SKI or SHA1PublicKey. [BAS-SIM-ADCS-ESC14]\"\n}\n"
+    cleanup: ''
