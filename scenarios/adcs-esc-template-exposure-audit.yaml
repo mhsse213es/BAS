@@ -14,7 +14,7 @@ description: >
     ESC11 template RA-signature precondition (SKIP on finding: the CA-level RPC enforcement state is not evaluated)
     ESC13 issuance-policy precondition; reported as SKIP, never FAIL, because group linkage needs manual correlation
     ESC15 schema-version-1 template, enrollee-supplied subject, Application Policy in place of EKU
-  Not assessed by this scenario: ESC6 and ESC8 (CA host and network properties), ESC10 (no evaluation implemented) and ESC12 (posture only; HSM assurance not verified).
+  Not assessed by this scenario: ESC8 (see adcs-esc8-web-enrollment-probe), ESC10 (not assessable after the 2025 update; always SKIP) and ESC12 (posture only; HSM assurance not verified).
   SAFETY: reads configuration only. Never requests or enrols a certificate, never modifies a template or CA, never contacts an enrollment endpoint. A FAIL shows configuration exposure, not that a certificate was obtained. Windows domain members only. PRODUCTION-SAFE: telemetry mode.
 author: Audspect Research
 executable: true

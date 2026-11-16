@@ -587,3 +587,14 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - Customer-visible: new scenario, existing scores unchanged; domains with such trusts will FAIL when run.
 - Scenario count 128 to 129; ratchet baseline gained one file at zero gaps; 158 signatures verify; tests pass.
 - NOT VERIFIED on a domain.
+
+### ADCS ESC8 web enrollment HTTP probe (approved 2026-11-16)
+
+- New file scenarios/adcs-esc8-web-enrollment-probe.yaml, one step. For each CA: one unauthenticated HTTP GET to /certsrv/, redirects off, no credentials.
+- FAIL if the endpoint answers 401 offering NTLM or Negotiate over plain HTTP.
+- PASS only if every CA answered and none offers NTLM/Negotiate over HTTP. SKIP if any CA did not answer, or none were found.
+- Not assessed: HTTPS enrollment, Extended Protection for Authentication, and relay success.
+- Customer-visible: this sends a network request to each customer CA web endpoint. Approved by the user for the outbound probe.
+- ADCS scenario description: ESC8 reference updated; no step change.
+- Scenario count 129 to 130; baseline unchanged; 159 signatures verify; tests pass.
+- NOT RUN against any CA yet.
