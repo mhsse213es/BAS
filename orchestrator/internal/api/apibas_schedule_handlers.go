@@ -16,6 +16,7 @@ import (
 	"github.com/audspect/bas/internal/apibas/openapi"
 	"github.com/audspect/bas/internal/apibas/runnerproto"
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/notifications"
 )
 
@@ -368,8 +369,18 @@ func (h *Handler) StartAPIBASScheduler(ctx context.Context, every time.Duration)
 			case <-ctx.Done():
 				return
 			case now := <-t.C:
-				_, _ = h.RunDueAPIBASSchedules(ctx, now.UTC())
+				h.apibasSchedulerTick(ctx, now.UTC())
 			}
 		}
 	}()
+}
+
+// apibasSchedulerTick is one scheduler tick: it runs every schedule that is due at now.
+func (h *Handler) apibasSchedulerTick(ctx context.Context, now time.Time) {
+	// A change-freeze window holds the tick before any schedule is claimed, so each due schedule runs once the window
+	// ends instead of being advanced past it.
+	if jobs.HoldForFreeze(ctx, h.jobsStore, "API BAS schedules", now) {
+		return
+	}
+	_, _ = h.RunDueAPIBASSchedules(ctx, now)
 }

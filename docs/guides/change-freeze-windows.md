@@ -5,12 +5,27 @@ regulatory reporting window. Manage them on the Scheduled Assessments page, unde
 
 ## What a window blocks
 
-- A scheduled assessment whose time falls inside a window is **skipped, not delayed**. The schedule carries on at its
-  next occurrence and never fires late when the window ends.
-- Runs started by hand and scheduled reports are not blocked.
-- If the windows cannot be read, the scheduler logs it and starts no scheduled assessment until they can be read. The
-  occurrence is checked again on the next tick, so a read error never lets a run into a freeze.
-- The per-agent maintenance freeze (agents page) is a separate feature.
+A window holds every automatic starter that acts on your systems, not only scheduled assessments.
+
+| Starter | During a window | When the window ends |
+| --- | --- | --- |
+| Scheduled assessments | **Skipped**: the schedule carries on at its next occurrence | Never fires late |
+| Attack-path collection (timer) | Held | Runs at the next check, if it is still due |
+| API BAS schedules | Held, none is claimed | Each due schedule runs once |
+| Ticket revalidation (after a ticket is resolved) | Held, the ticket keeps its flag | The re-run is dispatched |
+
+A held starter asks again every tick, so nothing is lost; its work starts after the window.
+
+Not blocked, on purpose:
+- Runs an operator starts by hand, and sweeps an operator starts (they step through techniques one at a time and
+  pausing them mid-way would leave them in an odd state).
+- Scheduled reports: they read data and send email, and do not act on endpoints.
+- Validation of new content on the factory lab agent, and CI validation runs: the lab agent is not a production system.
+
+If the windows cannot be read, the scheduler logs it and starts nothing automatic until they can be read: a read error
+never lets a run into a freeze. The log line for a held starter is written once every 15 minutes, not every tick.
+
+The per-agent maintenance freeze (agents page) is a separate feature.
 
 ## Two kinds
 

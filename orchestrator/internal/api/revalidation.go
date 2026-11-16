@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
 )
@@ -50,6 +51,11 @@ type revalidationCandidate struct {
 }
 
 func (h *Handler) runRevalidationTick(ctx context.Context) {
+	// A change-freeze window holds revalidation. The tickets keep revalidation_required, so each re-run is dispatched
+	// once the window ends.
+	if jobs.HoldForFreeze(ctx, h.jobsStore, "ticket revalidation", time.Now()) {
+		return
+	}
 	rows, err := h.db.Query(ctx, `
 		SELECT ft.id, ft.finding_id,
 		       f.agent_id, f.technique_id, f.technique_name,
