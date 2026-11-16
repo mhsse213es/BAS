@@ -598,3 +598,14 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - ADCS scenario description: ESC8 reference updated; no step change.
 - Scenario count 129 to 130; baseline unchanged; 159 signatures verify; tests pass.
 - NOT RUN against any CA yet.
+
+### Lab run 2026-11-16: DCSync exposure removed, ESC7 and ESC12 status
+
+- Full kit run (kit2, 29 steps) on AD-DC-01, as Administrator: 23 PASS, 4 SKIP, 2 FAIL.
+- DCSync: the domain root held two explicit, non-inherited grants to BUILTIN\Administrators (Get-Changes and Get-Changes-All). Their origin is unknown. Decision: removed, because they are not part of the expected replication set (Domain Controllers, Enterprise Domain Controllers, Enterprise Read-only Domain Controllers).
+- Backup of the domain ACL before removal: C:\bas\ad-lab-kit\kit2\domain-acl-backup.sddl (restores with SetSecurityDescriptorSddlForm + CommitChanges).
+- Rerun: dcsync-replication-rights-audit_00 is PASS. Its verdict covers the current principal only; the ACL table is the evidence that no non-DC principal holds replication rights.
+- ESC7 (adcs-esc-template-exposure-audit_08): FAIL, unchanged. A non-tier-0 principal holds write rights on a CA object; the earlier finding is the domain controller's computer account. Open: an administrator decides whether that ACE stays.
+- ESC12 (adcs-esc-template-exposure-audit_12): FAIL, expected in this lab. CA signing key is software-held, not an HSM.
+- ESC8 (adcs-esc8-web-enrollment-probe_00): SKIP. The probe did not reach a CA. Still open: manual HTTP check against the CA host.
+- Open: Event 5136 origin query for the removed grants (the removal itself is also logged).
