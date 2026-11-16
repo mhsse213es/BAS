@@ -180,3 +180,10 @@ on a Windows endpoint here, so please run it once on staging.
 - New SHA-256: `bd40522f2657e703a549dd27d17d6927acbfcc62f416b0e86ba1fb6c03080480` (updated in the step's `$sha` and in the step's base64). Go test bounds updated to 1089x97.
 - Verified: `internal/dlpfixture` (SHA-256 and text tests), `dlpprofile`, `dlpreport`, `dlpcorrelate`, `scenario` pass. `signer verify-all` ok=159 fail=0 after re-signing.
 - Still NOT done: OCR positive control. Tesseract is not installed on the build host (install needs approval). The image has been checked visually only. Detection by any DLP product is still not shown.
+
+### OCR positive control for the PNG carrier — 2026-11-16 (closes the OCR item above)
+
+- Tool installed on the build host: Tesseract OCR 5.4.0.20240606 (UB Mannheim Windows build), installed silently to C:\Program Files\Tesseract-OCR. Installer: tesseract-ocr-w64-setup-5.4.0.20240606.exe, SHA-256 c885fff6998e0608ba4bb8ab51436e1c6775c2bafc2559a19b423e18678b60c9. The release page publishes no digest, so this value is recorded here for the record.
+- New PNG (sha256 bd40522f2657e703a549dd27d17d6927acbfcc62f416b0e86ba1fb6c03080480, 40 px text): OCR output `[BAS-SIM-DLP-CARRIER] ABCDE1234F 123456789012`. Exact match to the planted text. PASS.
+- Old PNG (sha256 cdddf4d0580a8ca69910cdda0f08ce7b3946330bab588f639b5559763e59bdba, 10 px text): OCR output `[BAS SIM-DLP-CARRIER] ABODE1234F 123456789012`. Misread. This confirms the regeneration was needed.
+- Still NOT done: any DLP product has not been run against the PNG, so detection is not shown.
