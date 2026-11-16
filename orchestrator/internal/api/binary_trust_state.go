@@ -16,7 +16,7 @@ func (h *Handler) applyBinaryTrustState(ctx context.Context, agentID, binaryHash
 	if err := h.db.QueryRow(ctx, `SELECT COALESCE(state,'active') FROM agents WHERE agent_id = $1`, agentID).Scan(&current); err != nil {
 		return
 	}
-	next := integrity.NextAgentState(current, trusted, previous, h.manifest.HashRevoked(binaryHash))
+	next := integrity.NextAgentState(current, trusted, previous, h.revokedFailClosed(ctx, binaryHash))
 	if next == current {
 		return
 	}

@@ -1043,6 +1043,16 @@ export function toggleMinAgentVersion() {
     return loadAgents();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
+// Revokes an agent binary hash (admin). Every agent running that exact binary is quarantined at once. There is no
+// un-revoke in the console; a revocation is reversed only by a release decision.
+export function revokeAgentBinary(sha256) {
+  if (!confirm('Revoke this agent binary? Every agent running this exact binary will be quarantined and stop receiving scenarios until it runs a current signed release. The console cannot undo a revocation.')) return;
+  apicall('/api/agent-binaries/revocations', { method: 'POST', body: JSON.stringify({ sha256: sha256, reason: 'Revoked from the agent drawer' }) }).then(function(r) {
+    if (r && r.error) throw new Error(r.error);
+    showToast('Binary revoked; ' + ((r && r.agentsQuarantined) || 0) + ' agent(s) quarantined', 'ok');
+    return loadAgents();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
 export function rowMenuTrayIcon(id, hidden) {
   closeAllRowMenus();
   var msg = hidden === null ? 'Tray icon follows the fleet default' : hidden ? 'Tray icon will be hidden on this agent' : 'Tray icon will be shown on this agent';

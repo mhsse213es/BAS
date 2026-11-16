@@ -63,11 +63,22 @@ entries "$previous" > "$tmp/previous"
 awk 'NR == FNR { seen[$1] = 1; next } !($1 in seen) { seen[$1] = 1; print $1 "  " $2 }' \
   "$tmp/current" "$tmp/previous" > "$tmp/missing"
 
+# Revocations: "#revoked <hash>  <file>" lines. They are carried forward automatically, so a revoked binary stays
+# revoked in every later release. rev_missing: the previous release's revoked lines whose hash is not yet revoked here.
+revoked_hashes() { tr -d '\r' < "$1" | awk '/^[[:space:]]*#revoked[[:space:]]/ { print tolower($2) }'; }
+revoked_lines() { tr -d '\r' < "$1" | awk '/^[[:space:]]*#revoked[[:space:]]/ { print "#revoked " tolower($2) "  " $3 }'; }
+revoked_hashes "$manifest" > "$tmp/rev_now"
+revoked_lines "$previous" > "$tmp/rev_prev"
+awk 'FILENAME == ARGV[1] { now[$1] = 1; next } !($2 in now) && !($2 in seen) { seen[$2] = 1; print }' \
+  "$tmp/rev_now" "$tmp/rev_prev" > "$tmp/rev_missing"
+
 case "$mode" in
   carry)
     # A manifest without a trailing newline would have the first #prev line glued onto its last entry.
     if [ -s "$manifest" ] && [ -n "$(tail -c1 "$manifest")" ]; then printf '\n' >> "$manifest"; fi
     awk '{ print "#prev " $1 "  " $2 }' "$tmp/missing" >> "$manifest"
+    cat "$tmp/rev_missing" >> "$manifest"
+    echo "carried $(wc -l < "$tmp/rev_missing" | tr -d ' ') revoked hash(es)" >&2
     wc -l < "$tmp/missing" | tr -d ' '
     ;;
   verify)
@@ -82,7 +93,12 @@ case "$mode" in
       cat "$tmp/missing" >&2
       exit 1
     fi
-    echo "ok: every previous-release hash is carried"
+    if [ -s "$tmp/rev_missing" ]; then
+      echo "$(wc -l < "$tmp/rev_missing" | tr -d ' ') revoked hash(es) of the previous release are not revoked in the manifest:" >&2
+      cat "$tmp/rev_missing" >&2
+      exit 1
+    fi
+    echo "ok: every previous-release hash is carried, and every revocation is carried"
     ;;
   *)
     echo "unknown mode: $mode (use carry or verify)" >&2

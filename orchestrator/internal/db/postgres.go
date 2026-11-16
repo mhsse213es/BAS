@@ -1420,6 +1420,16 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at timestamptz NOT NULL DEFAULT NOW()
 		)`,
 
+		// Binary revocations (P3). An administrator revokes an agent binary hash from the console; the revoked hash is never
+		// trusted, and an agent running it is quarantined. Kept in the database so a revocation takes effect at once,
+		// and also carried in the signed manifest as "#revoked" lines by the release.
+		`CREATE TABLE IF NOT EXISTS binary_revocations (
+			sha256     text        PRIMARY KEY,
+			reason     text        NOT NULL DEFAULT '',
+			revoked_by text        NOT NULL DEFAULT '',
+			revoked_at timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
 		// Phase 7 Multi-Tenancy — tenant_id on every operational table.
 		// DEFAULT 'default' backfills existing rows and covers every INSERT
 		// that doesn't specify tenant_id explicitly (matches Task 1's users.tenant_id).

@@ -103,7 +103,11 @@ function overviewHtml(a) {
   //   Unverified = unknown, modified or revoked binary (anything else).
   var binaryLabel = a.binaryTrusted ? pill('Verified', 'ok')
     : (life === 'outdated' ? pill('Outdated', 'info') : pill('Unverified', 'warn'));
-  rows.push(['Binary', binaryLabel]);
+  // Admins can revoke the binary this agent runs (every agent on that exact hash is quarantined).
+  var revokeBtn = (ROLE === 'admin' && a.binaryHash)
+    ? ' <button type="button" class="btn btn-outline btn-sm"' + on('click', 'revokeAgentBinary', a.binaryHash) + '>Revoke binary</button>'
+    : '';
+  rows.push(['Binary', binaryLabel + revokeBtn]);
   rows.push(['Agent version', a.agentVersion ? '<code class="mono">' + x(a.agentVersion) + '</code>' : '&mdash;']);
 
   var notes = '';

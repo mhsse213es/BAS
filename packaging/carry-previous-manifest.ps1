@@ -35,7 +35,11 @@ function Split-Entry([string] $line) {
 $current = @{}
 foreach ($line in (Get-Content -LiteralPath $Manifest)) {
     $t = $line.Trim()
-    if ($t -eq '' -or $t.StartsWith('#')) { continue }
+    if ($t -eq '') { continue }
+    # A "#prev" line already names a hash in the manifest, so it must not be carried again (idempotent, as the
+    # shell version is). Other comment lines, including #revoked, are not hashes here.
+    if ($t.StartsWith('#prev ')) { $t = $t.Substring(6) }
+    elseif ($t.StartsWith('#')) { continue }
     $e = Split-Entry $t
     if ($e) { $current[$e.Hash] = $true }
 }
@@ -54,7 +58,30 @@ foreach ($line in (Get-Content -LiteralPath $Previous)) {
     $add += ('#prev {0}  {1}' -f $e.Hash, $e.File)
 }
 
-if ($add.Count -gt 0) {
-    Add-Content -LiteralPath $Manifest -Value $add -Encoding ascii
+# Revocations ("#revoked <hash>  <file>") are carried forward automatically, so a revoked binary stays revoked in
+# every later release. A hash already revoked in the new manifest is not repeated.
+$revokedNow = @{}
+foreach ($line in (Get-Content -LiteralPath $Manifest)) {
+    $t = $line.Trim()
+    if ($t.StartsWith('#revoked ')) {
+        $p = $t.Split(' ', [StringSplitOptions]::RemoveEmptyEntries)
+        if ($p.Count -ge 3) { $revokedNow[$p[1].ToLowerInvariant()] = $true }
+    }
+}
+$revokeAdd = @()
+foreach ($line in (Get-Content -LiteralPath $Previous)) {
+    $t = $line.Trim()
+    if (-not $t.StartsWith('#revoked ')) { continue }
+    $p = $t.Split(' ', [StringSplitOptions]::RemoveEmptyEntries)
+    if ($p.Count -lt 3) { continue }
+    $h = $p[1].ToLowerInvariant()
+    if ($revokedNow.ContainsKey($h)) { continue }
+    $revokedNow[$h] = $true
+    $revokeAdd += ('#revoked {0}  {1}' -f $h, $p[2])
+}
+
+$toWrite = @($add) + @($revokeAdd)
+if ($toWrite.Count -gt 0) {
+    Add-Content -LiteralPath $Manifest -Value $toWrite -Encoding ascii
 }
 Write-Output $add.Count
