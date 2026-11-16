@@ -86,3 +86,11 @@ nothing shows an alert source was watching. It is a miss only where the SIEM was
 
 Still open from the list above: the trend break at the next build, `windows-discovery-validation` (now gradable on
 detection, but still never produces a prevention score), and a lab run to confirm real figures.
+
+## Update: windows-discovery-validation
+
+Now a deliberate detection-only scenario. Its three steps resolve a Defender expectation (T1083 and T1087.002 reuse
+the existing profiles; a new `windows_remote_system_discovery` profile covers T1018) and a Microsoft Sentinel / SIEM
+expectation that an analyst or connector answers in the run's verification queue. Its description no longer shows a
+PASS/FAIL legend and says that "not assessed" for prevention is expected. The scenario and the new profile were
+re-signed. It still never produces a prevention score, by design.

@@ -1,0 +1,17 @@
+# Detection Validation Profile — remote system discovery by network sweep (T1018).
+# Host and subnet enumeration before lateral movement; informational, low standalone
+# signal, but a bulk ping sweep from one workstation is a useful behavioural alert.
+profile: windows_remote_system_discovery
+version: 1
+technique_ids: [T1018]
+expected_detection:
+  - id: remote-discovery-edr
+    provider: microsoft_defender
+    confidence: optional
+    finding:
+      severity: Low
+      title: "Subnet ping sweep not observed as a distinct signal"
+      remediation: >-
+        A ping sweep alone rarely warrants standalone endpoint detection —
+        informational, correlated with later lateral-movement detections.
+      reference: "MITRE ATT&CK T1018 — Remote System Discovery"
