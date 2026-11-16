@@ -1618,8 +1618,8 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 
 	_, err := h.db.Exec(r.Context(), `
 		INSERT INTO agents (agent_id, hostname, ip_address, os_version, username, status, env_label,
-		                    binary_hash, binary_trusted, protocol_version, state, last_update)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', NOW())
+		                    binary_hash, binary_trusted, protocol_version, state, last_update, agent_version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', NOW(), $11)
 		ON CONFLICT (agent_id) DO UPDATE SET
 			hostname         = EXCLUDED.hostname,
 			ip_address       = EXCLUDED.ip_address,
@@ -1630,9 +1630,11 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 			binary_hash      = EXCLUDED.binary_hash,
 			binary_trusted   = EXCLUDED.binary_trusted,
 			protocol_version = EXCLUDED.protocol_version,
+			-- An older agent that sends no version must not blank a stored one.
+			agent_version    = COALESCE(NULLIF(EXCLUDED.agent_version, ''), agents.agent_version),
 			last_update      = NOW()`,
 		hb.AgentID, hb.Hostname, hb.IPAddr, hb.OSVer, hb.Username, hb.Status, hb.EnvLabel,
-		hb.BinaryHash, trusted, hb.ProtocolVersion,
+		hb.BinaryHash, trusted, hb.ProtocolVersion, hb.AgentVersion,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -1775,8 +1777,8 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 	_, err := h.db.Exec(r.Context(), `
 		INSERT INTO agents (agent_id, hostname, ip_address, os_version, username,
 		                    status, env_label, binary_hash, binary_trusted,
-		                    state, policy_json, posture_catalog, enrolled_at, last_update)
-		VALUES ($1, $2, $3, $4, $5, 'idle', $6, $7, $8, 'active', $9, $10, NOW(), NOW())
+		                    state, policy_json, posture_catalog, enrolled_at, last_update, agent_version)
+		VALUES ($1, $2, $3, $4, $5, 'idle', $6, $7, $8, 'active', $9, $10, NOW(), NOW(), $11)
 		ON CONFLICT (agent_id) DO UPDATE SET
 			hostname       = EXCLUDED.hostname,
 			ip_address     = EXCLUDED.ip_address,
@@ -1792,6 +1794,7 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 			policy_json    = EXCLUDED.policy_json,
 			posture_catalog = EXCLUDED.posture_catalog,
 			enrolled_at    = COALESCE(agents.enrolled_at, NOW()),
+			agent_version  = COALESCE(NULLIF(EXCLUDED.agent_version, ''), agents.agent_version),
 			-- A fresh enrollment is itself evidence someone restarted the agent —
 			-- clear any prior remote-stop record unconditionally.
 			stopped_by     = NULL,
@@ -1799,7 +1802,7 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 			stop_reason    = NULL,
 			last_update    = NOW()`,
 		req.AgentID, req.Hostname, req.IPAddress, req.OSVersion, req.Username,
-		req.EnvLabel, req.BinaryHash, trusted, policyJSON, postureCatalog,
+		req.EnvLabel, req.BinaryHash, trusted, policyJSON, postureCatalog, req.AgentVersion,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
