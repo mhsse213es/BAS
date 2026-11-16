@@ -28,6 +28,8 @@ type blackoutRequest struct {
 	Timezone  string     `json:"timezone,omitempty"`
 	ValidFrom string     `json:"validFrom,omitempty"`
 	ValidTo   string     `json:"validTo,omitempty"`
+	Weekdays  string     `json:"weekdays,omitempty"`
+	MonthDays string     `json:"monthDays,omitempty"`
 }
 
 // ListScheduledBlackouts answers GET /api/scheduled-blackouts.
@@ -62,7 +64,7 @@ func (h *Handler) CreateScheduledBlackout(w http.ResponseWriter, r *http.Request
 	created, err := h.jobsStore.CreateBlackout(r.Context(), jobs.Blackout{
 		Name: req.Name, Kind: req.Kind, StartsAt: req.StartsAt, EndsAt: req.EndsAt,
 		TimeFrom: req.TimeFrom, TimeTo: req.TimeTo, Timezone: req.Timezone,
-		ValidFrom: req.ValidFrom, ValidTo: req.ValidTo, CreatedBy: actor,
+		ValidFrom: req.ValidFrom, ValidTo: req.ValidTo, Weekdays: req.Weekdays, MonthDays: req.MonthDays, CreatedBy: actor,
 	})
 	if err != nil {
 		if errors.Is(err, jobs.ErrInvalidBlackout) {

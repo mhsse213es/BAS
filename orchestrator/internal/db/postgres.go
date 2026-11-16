@@ -1944,6 +1944,9 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			created_by  text        NOT NULL DEFAULT '',
 			created_at  timestamptz NOT NULL DEFAULT now()
 		)`,
+		// Optional day filters on a daily window: weekdays "mon,tue,..." and month_days "1,-1" (negative counts from the end).
+		`ALTER TABLE scheduled_blackouts ADD COLUMN IF NOT EXISTS weekdays   text NOT NULL DEFAULT ''`,
+		`ALTER TABLE scheduled_blackouts ADD COLUMN IF NOT EXISTS month_days text NOT NULL DEFAULT ''`,
 
 		// fail_reason: a genuine, human-readable explanation for why a run's
 		// status became 'failed' (dispatch-time only -- e.g. agent offline,

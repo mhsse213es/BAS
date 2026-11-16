@@ -15,6 +15,29 @@ export function minutesOfDay(s) {
   return parts[0] * 60 + parts[1];
 }
 
+// endMinutesOfDay is minutesOfDay for the end of a window, which may be "24:00" (the end of the day).
+export function endMinutesOfDay(s) {
+  return s === '24:00' ? 24 * 60 : minutesOfDay(s);
+}
+
+const WEEKDAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const WEEKDAY_LABEL = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
+
+// parseMonthDays reads "-2, -1, 1" into numbers (1..31, or -1..-31 from the end), or null when any part is not one.
+export function parseMonthDays(s) {
+  const text = String(s || '').trim();
+  if (!text) return [];
+  const out = [];
+  for (const tok of text.split(',')) {
+    const t = tok.trim();
+    if (!/^-?\d+$/.test(t)) return null;
+    const n = Number(t);
+    if (n === 0 || n > 31 || n < -31) return null;
+    out.push(n);
+  }
+  return out;
+}
+
 // isKnownTimezone reports whether the browser's time-zone database knows the IANA name.
 export function isKnownTimezone(tz) {
   if (typeof tz !== 'string' || !tz) return false;
@@ -51,7 +74,9 @@ export function blackoutFormToPayload(f) {
     return { payload: { name: name, kind: 'once', startsAt: startsAt, endsAt: endsAt }, error: '' };
   }
   if (kind === 'daily') {
-    if (minutesOfDay(f.timeFrom) === null || minutesOfDay(f.timeTo) === null) return refuse('Times must be HH:MM.');
+    if (minutesOfDay(f.timeFrom) === null || endMinutesOfDay(f.timeTo) === null) {
+      return refuse('Times must be HH:MM (the end may be 24:00).');
+    }
     if (f.timeFrom === f.timeTo) return refuse('The from and to times must differ.');
     const tz = String(f.timezone || '').trim();
     if (!tz) return refuse('Give a timezone, for example UTC or Asia/Kolkata.');
@@ -64,13 +89,16 @@ export function blackoutFormToPayload(f) {
       return refuse('Dates must be YYYY-MM-DD.');
     }
     if (validFrom && validTo && validTo < validFrom) return refuse('The last date is before the first.');
-    return {
-      payload: {
-        name: name, kind: 'daily', timeFrom: f.timeFrom, timeTo: f.timeTo, timezone: tz,
-        validFrom: validFrom, validTo: validTo
-      },
-      error: ''
+    const days = parseMonthDays(f.monthDays);
+    if (days === null) return refuse('Month days must be 1 to 31, or -1 to -31 counted from the end of the month.');
+    const payload = {
+      name: name, kind: 'daily', timeFrom: f.timeFrom, timeTo: f.timeTo, timezone: tz,
+      validFrom: validFrom, validTo: validTo
     };
+    const weekdays = WEEKDAY_ORDER.filter(function(d) { return (f.weekdays || []).indexOf(d) !== -1; });
+    if (weekdays.length) payload.weekdays = weekdays.join(',');
+    if (days.length) payload.monthDays = days.join(',');
+    return { payload: payload, error: '' };
   }
   return refuse('Pick once or daily.');
 }
@@ -84,10 +112,53 @@ export function describeBlackout(b) {
   if (!b) return '';
   if (b.Kind === 'once') return 'Once: ' + utcLabel(b.StartsAt) + ' to ' + utcLabel(b.EndsAt);
   if (b.Kind === 'daily') {
-    const overnight = minutesOfDay(b.TimeFrom) > minutesOfDay(b.TimeTo) ? ' (overnight)' : '';
+    const overnight = minutesOfDay(b.TimeFrom) > endMinutesOfDay(b.TimeTo) ? ' (overnight)' : '';
     let text = 'Daily ' + b.TimeFrom + ' to ' + b.TimeTo + ' ' + b.Timezone + overnight;
+    const wd = describeWeekdays(b.Weekdays);
+    if (wd) text += ', ' + wd;
+    const md = describeMonthDays(b.MonthDays);
+    if (md) text += ', ' + md;
     if (b.ValidFrom || b.ValidTo) text += ', ' + (b.ValidFrom || 'open') + ' to ' + (b.ValidTo || 'open');
     return text;
   }
   return b.Kind || '';
+}
+
+function describeWeekdays(csv) {
+  const have = String(csv || '').split(',').map(function(x) { return x.trim().toLowerCase(); }).filter(Boolean);
+  if (!have.length) return '';
+  const days = WEEKDAY_ORDER.filter(function(d) { return have.indexOf(d) !== -1; });
+  if (days.join(',') === 'mon,tue,wed,thu,fri') return 'Mon to Fri';
+  return days.map(function(d) { return WEEKDAY_LABEL[d]; }).join(', ');
+}
+
+function describeMonthDays(csv) {
+  const days = parseMonthDays(csv);
+  if (!days || !days.length) return '';
+  const names = days.map(function(n) {
+    if (n === -1) return 'last';
+    if (n === -2) return '2nd last';
+    if (n < 0) return Math.abs(n) + 'th last';
+    return String(n);
+  });
+  return 'on day ' + names.join(', ') + ' of the month';
+}
+
+// Presets are starting points for the form, not rules: every field stays editable, and none of them chooses the
+// timezone. Regulatory reporting dates change, so the reporting window is a one-time window the operator dates.
+export const PRESETS = [
+  { key: 'eod-batch', label: 'End-of-day batch (Mon to Fri)',
+    fields: { name: 'End-of-day batch', kind: 'daily', timeFrom: '18:00', timeTo: '23:00', weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'], monthDays: '' } },
+  { key: 'bod-batch', label: 'Beginning-of-day batch (Mon to Fri)',
+    fields: { name: 'Beginning-of-day batch', kind: 'daily', timeFrom: '05:00', timeTo: '09:00', weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'], monthDays: '' } },
+  { key: 'month-end', label: 'Month-end (last 2 days and the 1st)',
+    fields: { name: 'Month-end freeze', kind: 'daily', timeFrom: '00:00', timeTo: '24:00', weekdays: [], monthDays: '-2,-1,1' } },
+  { key: 'reporting-window', label: 'Regulatory reporting window (set the dates)',
+    fields: { name: 'Regulatory reporting window', kind: 'once' } },
+];
+
+// applyPreset returns the form with a preset's fields laid over it. An unknown key returns the form unchanged.
+export function applyPreset(form, key) {
+  const p = PRESETS.find(function(x) { return x.key === key; });
+  return p ? Object.assign({}, form, p.fields) : form;
 }

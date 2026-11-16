@@ -1587,6 +1587,8 @@
         <p class="sub2">A scheduled assessment whose time falls inside a window is skipped, not run late. Hand-started runs and scheduled reports are not affected.</p>
         <div id="blk-body"></div>
         <div id="blk-form" hidden>
+          <label class="modal-lbl" for="blk-preset">Start from a preset (optional)</label>
+          <select id="blk-preset" data-on-change="blackoutPreset"><option value="">Choose a preset...</option></select>
           <label class="modal-lbl" for="blk-name">Name</label>
           <input id="blk-name" type="text" maxlength="120" placeholder="RBI reporting window">
           <label class="modal-lbl" for="blk-kind">Kind</label>
@@ -1602,11 +1604,23 @@
           </div>
           <div id="blk-daily-fields" hidden>
             <label class="modal-lbl" for="blk-from">From</label>
-            <input id="blk-from" type="time">
+            <input id="blk-from" type="text" maxlength="5" placeholder="HH:MM, for example 18:00">
             <label class="modal-lbl" for="blk-to">To</label>
-            <input id="blk-to" type="time">
+            <input id="blk-to" type="text" maxlength="5" placeholder="HH:MM, or 24:00 for the end of the day">
             <label class="modal-lbl" for="blk-tz">Timezone</label>
             <input id="blk-tz" type="text" value="UTC" placeholder="Asia/Kolkata">
+            <label class="modal-lbl">Only on these weekdays (none ticked means every day)</label>
+            <div id="blk-weekdays">
+              <label><input type="checkbox" id="blk-wd-mon"> Mon</label>
+              <label><input type="checkbox" id="blk-wd-tue"> Tue</label>
+              <label><input type="checkbox" id="blk-wd-wed"> Wed</label>
+              <label><input type="checkbox" id="blk-wd-thu"> Thu</label>
+              <label><input type="checkbox" id="blk-wd-fri"> Fri</label>
+              <label><input type="checkbox" id="blk-wd-sat"> Sat</label>
+              <label><input type="checkbox" id="blk-wd-sun"> Sun</label>
+            </div>
+            <label class="modal-lbl" for="blk-mdays">Only on these days of the month (optional)</label>
+            <input id="blk-mdays" type="text" placeholder="-2,-1,1  (negative counts from the end: -1 is the last day)">
             <label class="modal-lbl" for="blk-vfrom">Applies from (optional)</label>
             <input id="blk-vfrom" type="date">
             <label class="modal-lbl" for="blk-vto">Applies to (optional)</label>

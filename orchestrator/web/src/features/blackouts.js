@@ -7,7 +7,7 @@ import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { ROLE } from './shell.js';
-import { blackoutFormToPayload, describeBlackout } from './blackout-model.js';
+import { blackoutFormToPayload, describeBlackout, PRESETS, applyPreset } from './blackout-model.js';
 
 var BLK = { list: [], error: '' };
 
@@ -17,6 +17,7 @@ function canManage() {
 }
 
 export function loadBlackouts() {
+  fillPresetOptions();
   apicall('/api/scheduled-blackouts').then(function(d) {
     if (d && d.error) {
       BLK.error = d.error;
@@ -64,8 +65,52 @@ function readForm() {
     name: fieldValue('blk-name'), kind: fieldValue('blk-kind'),
     startsAt: fieldValue('blk-starts'), endsAt: fieldValue('blk-ends'),
     timeFrom: fieldValue('blk-from'), timeTo: fieldValue('blk-to'), timezone: fieldValue('blk-tz'),
-    validFrom: fieldValue('blk-vfrom'), validTo: fieldValue('blk-vto')
+    validFrom: fieldValue('blk-vfrom'), validTo: fieldValue('blk-vto'),
+    weekdays: WEEKDAYS.filter(function(d) {
+      var el = document.getElementById('blk-wd-' + d);
+      return el && el.checked;
+    }),
+    monthDays: fieldValue('blk-mdays')
   };
+}
+
+var WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+function setField(id, value) {
+  var el = document.getElementById(id);
+  if (el) el.value = value;
+}
+
+// Writes a form object back into the inputs, then shows the fields that fit its kind.
+function writeForm(f) {
+  setField('blk-name', f.name || '');
+  setField('blk-kind', f.kind || 'once');
+  setField('blk-from', f.timeFrom || '');
+  setField('blk-to', f.timeTo || '');
+  setField('blk-mdays', f.monthDays || '');
+  WEEKDAYS.forEach(function(d) {
+    var el = document.getElementById('blk-wd-' + d);
+    if (el) el.checked = (f.weekdays || []).indexOf(d) !== -1;
+  });
+  blackoutKindChange(document.getElementById('blk-kind'));
+}
+
+function fillPresetOptions() {
+  var sel = document.getElementById('blk-preset');
+  if (!sel || sel.options.length > 1) return;
+  PRESETS.forEach(function(p) {
+    var o = document.createElement('option');
+    o.value = p.key;
+    o.textContent = p.label;
+    sel.appendChild(o);
+  });
+}
+
+// Fills the form from a preset. The timezone and dates stay as the operator set them.
+export function blackoutPreset(el) {
+  if (!el || !el.value) return;
+  writeForm(applyPreset(readForm(), el.value));
+  el.value = '';
 }
 
 // Shows the fields for the chosen kind. Called by the kind <select> on change.

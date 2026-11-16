@@ -119,3 +119,98 @@ func TestValidateBlackout(t *testing.T) {
 		t.Errorf("valid window refused: %v", err)
 	}
 }
+
+// Filters on a daily window read the day the window STARTS, so an overnight window that began on a matching day
+// still covers its after-midnight hours.
+
+func TestBlackoutCovers_DailyWeekdays(t *testing.T) {
+	w := Blackout{Kind: "daily", TimeFrom: "18:00", TimeTo: "23:00", Timezone: "UTC", Weekdays: "mon,tue,wed,thu,fri"}
+	if !w.Covers(mustTime(t, "2026-12-04T19:00:00Z")) { // Friday
+		t.Error("Friday 19:00 should be covered")
+	}
+	if w.Covers(mustTime(t, "2026-12-05T19:00:00Z")) { // Saturday
+		t.Error("Saturday 19:00 should not be covered by a weekday window")
+	}
+	if w.Covers(mustTime(t, "2026-12-06T19:00:00Z")) { // Sunday
+		t.Error("Sunday 19:00 should not be covered")
+	}
+}
+
+func TestBlackoutCovers_DailyMonthDaysCountFromTheEnd(t *testing.T) {
+	w := Blackout{Kind: "daily", TimeFrom: "00:00", TimeTo: "24:00", Timezone: "UTC", MonthDays: "-2,-1,1"}
+	covered := []string{"2026-12-30T10:00:00Z", "2026-12-31T23:59:30Z", "2027-01-01T00:00:00Z", "2027-02-27T10:00:00Z", "2027-02-28T10:00:00Z", "2028-02-29T10:00:00Z"}
+	for _, at := range covered {
+		if !w.Covers(mustTime(t, at)) {
+			t.Errorf("%s should be covered (month end or the 1st)", at)
+		}
+	}
+	for _, at := range []string{"2026-12-29T10:00:00Z", "2027-01-02T10:00:00Z", "2027-02-26T10:00:00Z", "2028-02-27T10:00:00Z"} {
+		if w.Covers(mustTime(t, at)) {
+			t.Errorf("%s should not be covered", at)
+		}
+	}
+}
+
+func TestBlackoutCovers_OvernightFilterUsesTheStartDay(t *testing.T) {
+	fri := Blackout{Kind: "daily", TimeFrom: "22:00", TimeTo: "06:00", Timezone: "UTC", Weekdays: "fri"}
+	if !fri.Covers(mustTime(t, "2026-12-04T23:00:00Z")) { // Friday night
+		t.Error("Friday 23:00 should be covered")
+	}
+	if !fri.Covers(mustTime(t, "2026-12-05T02:00:00Z")) { // Saturday 02:00 belongs to Friday's window
+		t.Error("Saturday 02:00 belongs to the window that started Friday")
+	}
+	if fri.Covers(mustTime(t, "2026-12-04T02:00:00Z")) { // Friday 02:00 belongs to Thursday's window
+		t.Error("Friday 02:00 belongs to Thursday's window and must not be covered")
+	}
+	if fri.Covers(mustTime(t, "2026-12-05T23:00:00Z")) {
+		t.Error("Saturday 23:00 starts a Saturday window and must not be covered")
+	}
+	last := Blackout{Kind: "daily", TimeFrom: "22:00", TimeTo: "06:00", Timezone: "UTC", MonthDays: "-1"}
+	if !last.Covers(mustTime(t, "2027-01-01T02:00:00Z")) { // belongs to Dec 31, the last day
+		t.Error("Jan 1 02:00 belongs to the window that started on the last day of December")
+	}
+}
+
+func TestBlackoutFilters_UseTheWindowTimezone(t *testing.T) {
+	// 20:00 UTC Friday is already Saturday 01:30 in Kolkata.
+	w := Blackout{Kind: "daily", TimeFrom: "00:00", TimeTo: "24:00", Timezone: "Asia/Kolkata", Weekdays: "fri"}
+	if w.Covers(mustTime(t, "2026-12-04T20:00:00Z")) {
+		t.Error("Friday 20:00Z is Saturday in Kolkata and must not match a Friday window")
+	}
+	if !w.Covers(mustTime(t, "2026-12-04T10:00:00Z")) {
+		t.Error("Friday 10:00Z is Friday 15:30 in Kolkata and must match")
+	}
+}
+
+func TestValidateBlackout_FilterAndAllDayRules(t *testing.T) {
+	base := func() Blackout {
+		return Blackout{Name: "n", Kind: "daily", TimeFrom: "18:00", TimeTo: "19:00", Timezone: "UTC"}
+	}
+	ok := base()
+	ok.Weekdays, ok.MonthDays, ok.TimeFrom, ok.TimeTo = "Mon, fri", "1,-1,31,-31", "00:00", "24:00"
+	if err := ValidateBlackout(ok); err != nil {
+		t.Fatalf("a valid filtered all-day window was refused: %v", err)
+	}
+	bad := map[string]func(*Blackout){
+		"unknown weekday":      func(b *Blackout) { b.Weekdays = "funday" },
+		"month day zero":       func(b *Blackout) { b.MonthDays = "0" },
+		"month day 32":         func(b *Blackout) { b.MonthDays = "32" },
+		"month day -32":        func(b *Blackout) { b.MonthDays = "-32" },
+		"month day not number": func(b *Blackout) { b.MonthDays = "last" },
+		"24:00 as the start":   func(b *Blackout) { b.TimeFrom = "24:00" },
+		"25:00 as the end":     func(b *Blackout) { b.TimeTo = "25:00" },
+	}
+	for name, mutate := range bad {
+		b := base()
+		mutate(&b)
+		if err := ValidateBlackout(b); err == nil {
+			t.Errorf("%s: window was accepted", name)
+		}
+	}
+	once := Blackout{Name: "n", Kind: "once", Weekdays: "mon"}
+	s, e := mustTime(t, "2026-12-31T00:00:00Z"), mustTime(t, "2027-01-01T00:00:00Z")
+	once.StartsAt, once.EndsAt = &s, &e
+	if err := ValidateBlackout(once); err == nil {
+		t.Error("a once window with a weekday filter was accepted, but the filter would be ignored")
+	}
+}
