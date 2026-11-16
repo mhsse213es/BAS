@@ -638,3 +638,8 @@ Found by running the AD checks on the lab DC (`lab.local`, baseline with nothing
 - ESC12 (adcs-esc-template-exposure-audit_12): FAIL, accepted for the lab. Provider certutil -getreg CA\CSP\Provider = Microsoft Software Key Storage Provider (software key). Not for production.
 - DCSync grant origin: NOT determinable. Directory Service Changes was "No Auditing" before the removal, so no 5136 events exist. Directory Service Changes auditing (success) was enabled on AD-DC-01 after the removal, so future changes are logged.
 - DCSync non-admin check (alice): NOT RUN. Logon as alice on AD-DC-01 is denied (runas error 1385); a member-machine setup was skipped because the ACL table already shows alice holds no replication right.
+
+### Decisions recorded 2026-11-16
+
+- Minimum agent version default (commit 5079e606): KEPT. With no admin-set minimum, the fleet minimum is the previous release (from the bas-install-<version> folder at build time). This supersedes the earlier "no default floor" position. An admin setting, including none, still overrides the default.
+- Entra hybrid identity scenario (entra-hybrid-identity-attack.yaml): KEPT EXECUTABLE (executable: true, no lab-only flag). Its steps run as ordinary scenario steps.
