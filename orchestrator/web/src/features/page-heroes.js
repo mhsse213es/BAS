@@ -97,7 +97,7 @@ var HEROES = {
       '<button type="button" id="sc-new-btn" class="btn btn-primary" data-on-click="openBuilder" data-args="[null]">' + svg('<path d="M12 5v14M5 12h14"/>') + 'New Scenario</button>',
     stats: [
       { id: 'sc-hs-total', icon: ICON.technique, value: '—', label: 'Total Scenarios' },
-      { id: 'sc-hs-tech', icon: ICON.mapped, value: '—', label: 'ATT&CK Techniques' },
+      { id: 'sc-hs-tech', icon: ICON.mapped, value: '—', label: 'ATT&CK Techniques', action: 'openTechniqueCatalog', hint: 'Show every ATT&CK technique your scenarios use' },
       { id: 'sc-hs-fam', icon: ICON.layers, value: '—', label: 'Product Families' },
     ],
   },

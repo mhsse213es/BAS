@@ -35,6 +35,7 @@ import { openAddConnectorFor, openAddResponseConnectorFor, refreshResponseConnec
 import { openContentImport, closeContentImport, closeContentImportOnBackdrop, ciKindChange, submitContentImport, approveImportDraft, rejectImportDraft } from './features/content-import.js';
 import { clearIOCFilters, closeIOCAddModal, closeIOCAddOnBackdrop, closeIOCDrawer, closeIOCDrawerOnBackdrop, closeIOCImportOnBackdrop, openIOCAddModal, setIOCType, submitIOCAdd, closeIOCImportModal, closeResults, closeResultsOnBackdrop, loadIOCRegistry, loadIOCRegistryOnEnter, openIOCDetail, openIOCImportModal, setRunIOCSearchFromInput, setRunIOCTypeFilter, submitIOCImport, toggleIOCSuppressed, toggleRunIOCRow } from './features/iocs.js';
 import { closeRunLive, closeRunLiveOnBackdrop, closeSweepDrilldown, closeSweepDrilldownOnBackdrop, openRunPanelAction, openRunScenarioAction, openSweepDrilldown, openSweepReport, toggleLiveStepAction } from './features/live-run.js';
+import { openTechniqueCatalog, closeTechniqueCatalog, closeTechniqueCatalogOnBackdrop, techniqueSearch, openTechniqueDetail, techniqueBack } from './features/scn-techniques.js';
 import { abortExecution, abortExecutionStop, approveExStep, closeExerciseDetail, closeExerciseDetailOnBackdrop, closeOpenAEVDetail, closeOpenAEVDetailOnBackdrop, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory, toggleAPScore } from './features/openaev.js';
 import { runRansomwareDrill } from './features/ransomware.js';
 import { addStep, addlSelChange, loadStepScript, applyPicker, clearSelection, cloneScenario, closeBuilder, closeBuilderOnBackdrop, closeModal, closePicker, closeReportGen, deleteCustomScenario, downloadBuilderYaml, genAgentReport, loadRuns, moveStepBy, openBuilder, openBuilderARTPicker, openBuilderCalderaPicker, openDetailedViewForScenario, openModal, openPicker, openPickerFromModal, openReportGen, pickScenarioUploadFile, pickerSelectAll, pickerToggle, removeStep, renderBuilderMode, renderPickerList, renderRunMode, runGroupChange, saveScenario, selectAllAdditionalAgents, setPF, setTargetMode, submitReport, switchRunTab, techChangeSelection, techCopyId, techKeydown, techOnBlur, techOnInput, techSelectRow, updateVariantDepthNote, uploadScenarioFile, viewRunResults, wizardNav } from './features/reports.js';
@@ -468,6 +469,12 @@ export const ACTIONS = {
   openEditUser,
   openEvidence,
   openExerciseDetail,
+  openTechniqueCatalog,
+  closeTechniqueCatalog,
+  closeTechniqueCatalogOnBackdrop,
+  techniqueSearch,
+  openTechniqueDetail,
+  techniqueBack,
   openExposureDetail,
   openFinding,
   openFindingFromDashboard,

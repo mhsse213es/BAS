@@ -1,4 +1,5 @@
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 
 // Shared pieces of the redesigned shell: the breadcrumb row under the header and the page-header
 // ("hero") banner every page opens with. Nothing here talks to the server -- the banner's stat
@@ -62,8 +63,13 @@ export function renderBreadcrumb(tab, title) {
 export function pageHeroHtml(o) {
   var stats = (o.stats || []).map(function(s) {
     var tone = /^(ok|warn|bad|info|muted)$/.test(s.tone) ? ' tone-' + s.tone : '';
-    return '<div class="hero-stat">' + (s.icon ? '<span class="hero-stat-ico' + tone + '">' + s.icon + '</span>' : '') +
-      '<div><b' + (s.id ? ' id="' + x(s.id) + '"' : '') + '>' + x(s.value) + '</b><span>' + x(s.label) + '</span></div></div>';
+    var inner = (s.icon ? '<span class="hero-stat-ico' + tone + '">' + s.icon + '</span>' : '') +
+      '<div><b' + (s.id ? ' id="' + x(s.id) + '"' : '') + '>' + x(s.value) + '</b><span>' + x(s.label) + '</span></div>';
+    // A stat with an action is a real button (keyboard and screen-reader reachable) that opens its detail.
+    if (s.action && /^[A-Za-z]+$/.test(s.action)) {
+      return '<button type="button" class="hero-stat hero-stat-btn"' + on('click', s.action) + ' title="' + x(s.hint || 'Show details') + '">' + inner + '<span class="hero-stat-go" aria-hidden="true">&rsaquo;</span></button>';
+    }
+    return '<div class="hero-stat">' + inner + '</div>';
   }).join('');
   return '<section class="page-hero">' +
     '<div class="hero-main">' +

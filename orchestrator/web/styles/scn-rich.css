@@ -185,3 +185,42 @@
 .ci-draft { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 0 0 10px; }
 .ci-cmd { margin: 6px 0; padding: 8px; max-height: 120px; overflow: auto; font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; background: var(--surface-2, rgba(127,127,127,0.08)); border-radius: 6px; }
 .ci-actions { display: flex; gap: 8px; margin-top: 6px; }
+
+/* ── ATT&CK technique panel (Scenarios banner) ── */
+.hero-stat-btn { background: none; border: 1px solid transparent; border-radius: var(--radius); padding: 0.25rem 0.5rem 0.25rem 0.25rem; margin: -0.25rem; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.hero-stat-btn:hover, .hero-stat-btn:focus-visible { background: var(--elevated); border-color: var(--border); outline: none; }
+.hero-stat-go { color: var(--muted); font-size: 1.1rem; margin-left: 0.2rem; }
+.hero-stat-btn:hover .hero-stat-go { color: var(--accent); }
+.tt-drawer { width: 680px; max-width: 96vw; }
+.tt-summary { font-size: 0.82rem; color: var(--muted); margin-bottom: 0.6rem; }
+.tt-summary b { color: var(--text); }
+.tt-search { width: 100%; box-sizing: border-box; margin-bottom: 1rem; padding: 0.5rem 0.7rem; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font: inherit; }
+.tt-group { margin-bottom: 1.1rem; }
+.tt-group h4 { display: flex; justify-content: space-between; margin: 0 0 0.35rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border); font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tt-group h4 span { color: var(--accent); }
+.tt-row { display: flex; align-items: center; gap: 0.7rem; width: 100%; padding: 0.45rem 0.55rem; background: none; border: 0; border-radius: var(--radius); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.tt-row:hover, .tt-row:focus-visible { background: var(--elevated); outline: none; }
+.tt-row-static { cursor: default; }
+.tt-row-static:hover { background: none; }
+.tt-id { flex: none; padding: 0.1rem 0.4rem; border-radius: 4px; background: var(--accent-dim); color: var(--accent); font: 600 0.74rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+.tt-id-lg { font-size: 0.85rem; padding: 0.2rem 0.55rem; }
+.tt-name { flex: 1; min-width: 0; font-size: 0.86rem; }
+.tt-count { flex: none; font-size: 0.72rem; color: var(--muted); }
+.tt-note { margin: 0.4rem 0 0.6rem; padding: 0.6rem 0.75rem; border-left: 3px solid var(--warning); background: var(--elevated); border-radius: 4px; font-size: 0.78rem; line-height: 1.55; color: var(--muted); }
+.tt-back { margin-bottom: 0.9rem; padding: 0.25rem 0.6rem; background: none; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); font: inherit; font-size: 0.78rem; cursor: pointer; }
+.tt-back:hover { color: var(--text); background: var(--elevated); }
+.tt-hero { margin-bottom: 1rem; padding-bottom: 0.9rem; border-bottom: 1px solid var(--border); }
+.tt-hero h3 { margin: 0.5rem 0 0.5rem; font-size: 1.15rem; letter-spacing: -0.01em; }
+.tt-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.4rem; }
+.tt-chip { padding: 0.15rem 0.55rem; border: 1px solid var(--border); border-radius: 999px; background: var(--elevated); font-size: 0.74rem; color: var(--text); }
+.tt-tactic { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.tt-sec { margin-bottom: 1rem; }
+.tt-sec h5 { margin: 0 0 0.4rem; font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.tt-sec p { margin: 0 0 0.5rem; font-size: 0.84rem; line-height: 1.65; }
+.tt-sec .tt-chip { margin: 0 0.3rem 0.3rem 0; display: inline-block; }
+.tt-list { margin: 0; padding: 0; list-style: none; }
+.tt-list li { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.45rem 0.6rem; margin-bottom: 0.35rem; background: var(--elevated); border-radius: var(--radius); font-size: 0.82rem; }
+.tt-list li span { font-size: 0.76rem; color: var(--muted); line-height: 1.5; }
+.tt-plain li { padding: 0.3rem 0.6rem; }
+.tt-link { display: inline-block; margin-top: 0.4rem; color: var(--accent); font-size: 0.82rem; text-decoration: none; }
+.tt-link:hover { text-decoration: underline; }
