@@ -243,13 +243,34 @@ export function launchExercisePrompt(planId) {
   }).catch(function(e) { showToast('Failed to load exercise plan: ' + (e.message || 'error'), 'err'); });
 }
 
+// The purple-team debrief: which of the attacks this exercise ran the defenders detected, missed, or nobody has judged
+// yet. A rate is only shown once something is resolved; absence of a verdict is never drawn as a result.
+export function purpleDebriefHtml(p) {
+  if (!p) return '';
+  var rate = p.detectionRate == null ? 'Not yet judged'
+    : Math.round(p.detectionRate) + '% (' + p.detected + ' of ' + (p.detected + p.missed) + ')';
+  var rows = (p.techniques || []).map(function(t) {
+    var col = t.outcome === 'detected' ? 'var(--success)' : t.outcome === 'missed' ? 'var(--danger)' : 'var(--muted)';
+    return '<div class="kpi-row" style="justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid var(--border)">' +
+      '<span>' + x(t.techniqueId) + (t.providers && t.providers.length ? ' <span class="tiny muted">' + x(t.providers.join(', ')) + '</span>' : '') + '</span>' +
+      '<span style="color:' + col + '">' + x(t.outcome) + '</span></div>';
+  }).join('');
+  var gaps = (p.gaps || []).length ? '<div class="tiny" style="margin-top:0.4rem;color:var(--danger)">Gaps to close: ' + p.gaps.map(x).join('; ') + '</div>' : '';
+  var none = (p.noExpectation || []).length ? '<div class="tiny muted" style="margin-top:0.4rem">No detection expectation was recorded for ' + p.noExpectation.map(x).join(', ') + ', so these were not judged either way.</div>' : '';
+  return '<div style="margin-bottom:0.75rem"><div style="font-weight:600">Purple-team debrief</div>' +
+    '<div class="tiny muted" style="margin-bottom:0.3rem">Detection rate: ' + x(rate) + '. Awaiting an approved verdict: ' + (p.unresolved || 0) + '.</div>' +
+    rows + gaps + none + '</div>';
+}
+
 var _exDetailOpenId = null;
 export function openExerciseDetail(id) {
   _exDetailOpenId = id;
   Promise.all([
     apicall('/api/exercises/executions/' + encodeURIComponent(id)),
-    apicall('/api/exercises/executions/' + encodeURIComponent(id) + '/phishing-runs').catch(function() { return []; })
+    apicall('/api/exercises/executions/' + encodeURIComponent(id) + '/phishing-runs').catch(function() { return []; }),
+    apicall('/api/exercises/executions/' + encodeURIComponent(id) + '/report.json').catch(function() { return null; })
   ]).then(function(res) {
+    var purple = res[2] && res[2].purple ? res[2].purple : null;
     var d = res[0];
     var phishing = Array.isArray(res[1]) ? res[1] : [];
     var ex = d.execution || {}, steps = d.steps || [];
@@ -336,7 +357,7 @@ export function openExerciseDetail(id) {
         return '<div style="padding:0.4rem 0;border-bottom:1px solid var(--border)"><span>' + x(v.scenarioId) + '</span> <span class="badge">' + x(v.status) + '</span>' +
           (v.note ? '<div class="tiny muted">' + x(v.note) + '</div>' : '') + rows + '</div>';
       }).join('') + '</div>' : '';
-    document.getElementById('exercise-detail-body').innerHTML = scoreHtml + stepsHtml + phishingHtml + '<div style="margin-top:0.75rem">' + actions + '</div>';
+    document.getElementById('exercise-detail-body').innerHTML = scoreHtml + purpleDebriefHtml(purple) + stepsHtml + phishingHtml + '<div style="margin-top:0.75rem">' + actions + '</div>';
     document.getElementById('exercise-detail-overlay').classList.add('open');
   }).catch(function() {});
 }

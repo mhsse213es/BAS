@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/verification"
 )
 
 // actorID extracts the authenticated username from the JWT context.
@@ -474,6 +476,7 @@ func (h *Handler) buildExerciseReport(r *http.Request, id string) (*reporting.Ex
 		ChainErr:  chainErr,
 	}
 	rep.Timeline = reporting.BuildTimeline(rep)
+	rep.Purple = h.purpleDebrief(ctx, plan, steps)
 	return rep, nil
 }
 
@@ -562,4 +565,39 @@ func (h *Handler) InjectEvidence(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, ev)
+}
+
+// purpleDebrief builds the detection debrief from the verification records of every BAS run the exercise started.
+// It returns nil when the exercise started none, or the verification store is not loaded, so a report never shows a
+// debrief it has no data for.
+func (h *Handler) purpleDebrief(ctx context.Context, plan *exercise.Plan, steps []exercise.StepExecution) *reporting.PurpleDebrief {
+	if h.verification == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var recs []verification.Record
+	for _, se := range steps {
+		runID, _ := se.Result["bas_run_id"].(string)
+		if runID == "" || seen[runID] {
+			continue
+		}
+		seen[runID] = true
+		cur, err := h.verification.CurrentForRun(ctx, runID)
+		if err != nil {
+			continue
+		}
+		for _, r := range cur {
+			recs = append(recs, r)
+		}
+	}
+	if len(seen) == 0 {
+		return nil
+	}
+	var meta exercise.TemplateMetadata
+	if plan != nil && plan.TemplateID != "" {
+		if t, err := h.exerciseStore.GetTemplate(ctx, plan.TemplateID); err == nil && t != nil {
+			meta = t.Metadata
+		}
+	}
+	return reporting.BuildPurpleDebrief(recs, meta)
 }
