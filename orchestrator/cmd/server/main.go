@@ -21,6 +21,7 @@ import (
 	aleefstore "github.com/audspect/bas/internal/aleef/store"
 	"github.com/audspect/bas/internal/api"
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/cigate"
 	"github.com/audspect/bas/internal/cmdsigning"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
@@ -1167,6 +1168,11 @@ func main() {
 	if err := validationlab.EnsureSoleFactoryLabAgent(context.Background(), pool, cfg.ValidationLabAgentID); err != nil {
 		log.Printf("[validationlab] WARNING: could not apply is_factory_lab for %q: %v", cfg.ValidationLabAgentID, err)
 	}
+	// CI validation gate (REQ-057): start one lab run and read its verdict, behind a dedicated CI token.
+	handler.SetCIGate(cigate.NewHandler(
+		cigate.NewService(pool, contentRegistry, handler, cfg.ValidationLabAgentID),
+		cigate.NewStore(pool),
+	))
 	if cfg.ValidationLabAgentID == "" {
 		log.Printf("[validationlab] disabled: VALIDATION_LAB_AGENT_ID is not set, so no agent is a factory lab")
 	}

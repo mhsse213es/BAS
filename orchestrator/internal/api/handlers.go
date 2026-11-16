@@ -34,6 +34,7 @@ import (
 	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
 	"github.com/audspect/bas/internal/artifactgen"
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/cigate"
 	"github.com/audspect/bas/internal/cloudgraph"
 	"github.com/audspect/bas/internal/cmdsigning"
 	"github.com/audspect/bas/internal/compliance"
@@ -99,6 +100,8 @@ type Handler struct {
 	// approvalClass is the deployment class for pipeline approvals, set once from startup
 	// configuration. Empty means customer.
 	approvalClass injectionapproval.Classification
+	// ci is the CI validation gate (REQ-057). nil until wired at startup; the CI routes answer 503 until then.
+	ci *cigate.Handler
 	// cloudProber builds the read-only probe executor for one provider account.
 	// nil in production (built from server configuration); tests override it.
 	cloudProber func(ctx context.Context, provider, accountID string) (cloudgraph.Prober, error)

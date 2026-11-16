@@ -614,6 +614,12 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/scheduled-assessments", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodPut, "/api/scheduled-assessments/{id}", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodPost, "/api/scheduled-assessments/{id}/cancel", tierPermission, auth.CanExecuteRemediation},
+	{http.MethodGet, "/api/scheduled-blackouts", tierPermission, auth.CanExecuteRemediation},
+	{http.MethodPost, "/api/scheduled-blackouts", tierPermission, auth.CanExecuteRemediation},
+	{http.MethodDelete, "/api/scheduled-blackouts/{id}", tierPermission, auth.CanExecuteRemediation},
+	{http.MethodGet, "/api/ci-tokens", tierPermission, auth.CanManageCITokens},
+	{http.MethodPost, "/api/ci-tokens", tierPermission, auth.CanManageCITokens},
+	{http.MethodDelete, "/api/ci-tokens/{id}", tierPermission, auth.CanManageCITokens},
 	{http.MethodPost, "/api/agents/{agentId}/maintenance-freezes", tierPermission, auth.CanApproveRemediation},
 	{http.MethodGet, "/api/agents/{agentId}/maintenance-freezes", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodDelete, "/api/maintenance-freezes/{freezeId}", tierPermission, auth.CanApproveRemediation},
@@ -694,6 +700,8 @@ var publicRoutes = map[string]bool{
 	"GET /api/agent/install-script":                true, // public Linux agent installer (no secret), downloaded by the install command
 	"POST /api/csp-report":                         true, // CSP violation reports (G1d); browsers send them unauthenticated
 	"POST /api/ingest/v1/events":                   true, // authenticated by its own shared secret (validateIngestAuth), not JWT -- outside the JWT group (added by af56e351, omitted from this list)
+	"POST /api/ci/validations":                     true, // CI pipeline start; authenticated by a dedicated CI token (cigate.Auth), not JWT
+	"GET /api/ci/validations/{runId}":              true, // CI pipeline status; same CI token auth, not JWT
 	"GET /scim/v2/ServiceProviderConfig":           true,
 	"GET /scim/v2/ResourceTypes":                   true,
 	"GET /scim/v2/Schemas":                         true,

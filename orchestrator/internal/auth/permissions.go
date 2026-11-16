@@ -261,6 +261,9 @@ const (
 	// backup for restore intent (an audit marker, not an execution trigger).
 	CanManageBackups Permission = "backups:manage"
 
+	// CanManageCITokens issues and revokes the dedicated tokens a CI pipeline uses to start validation runs (REQ-057).
+	CanManageCITokens Permission = "ci:tokens:manage"
+
 	// TCF Phase 2A: link/new/dismiss unresolved actor identities (Admin only).
 	CanResolveActorIdentity Permission = "intel:resolve-actor"
 
@@ -396,6 +399,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanManageDBSimTargets:              true,
 		CanSetDBSimClientMode:              true,
 		CanManageBackups:                   true,
+		CanManageCITokens:                  true,
 		CanResolveActorIdentity:            true,
 		CanManageSourceTrust:               true,
 		CanLinkContentThreat:               true,
@@ -497,6 +501,7 @@ func Permissions(role Role) []Permission {
 
 		CanExecuteRemediation, CanApproveRemediation,
 		CanManageBackups,
+		CanManageCITokens,
 		CanResolveActorIdentity,
 		CanManageSourceTrust,
 		CanLinkContentThreat,

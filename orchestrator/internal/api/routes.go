@@ -150,6 +150,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// ITSM inbound webhook — no JWT auth; connector validates via HMAC or IP allowlist
 	r.Post("/api/ticketing/webhook/{configId}", h.ReceiveTicketingWebhook)
 
+	// CI validation gate (REQ-057) — dedicated CI bearer token, not JWT.
+	h.registerCIValidationRoutes(r)
+
 	// SCIM (RFC 7644) — own per-tenant bearer-token auth, not JWT. See
 	// docs/superpowers/specs/2026-07-19-phase7-scim-provisioning-design.md.
 	r.Group(func(r chi.Router) {
@@ -235,6 +238,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		if rateLimit != nil {
 			r.Use(rateLimit)
 		}
+
+		// CI token management (admin, CanManageCITokens)
+		h.registerCITokenRoutes(r)
 
 		// Viewer + Analyst + Admin
 		r.Get("/api/agents", h.GetAgents)

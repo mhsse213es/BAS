@@ -161,6 +161,17 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS initiated_by text`,
+
+		// CI validation tokens (REQ-057). Only the SHA-256 of a token is stored.
+		`CREATE TABLE IF NOT EXISTS ci_tokens (
+			id           text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name         text        NOT NULL,
+			token_hash   text        NOT NULL UNIQUE,
+			created_by   text        NOT NULL DEFAULT '',
+			created_at   timestamptz NOT NULL DEFAULT NOW(),
+			last_used_at timestamptz,
+			revoked_at   timestamptz
+		)`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS score jsonb`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT ''`,
 		// step_meta: TaskID→{techniqueId,name,framework} for the steps actually

@@ -111,6 +111,7 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
 		CanExecuteRemediation: true, CanApproveRemediation: true,
 		CanManageBackups:        true,
+		CanManageCITokens:       true,
 		CanResolveActorIdentity: true,
 		CanManageSourceTrust:    true,
 		CanLinkContentThreat:    true,
@@ -172,6 +173,7 @@ func TestPermissions_Ordering(t *testing.T) {
 
 		CanExecuteRemediation, CanApproveRemediation,
 		CanManageBackups,
+		CanManageCITokens,
 		CanResolveActorIdentity,
 		CanManageSourceTrust,
 		CanLinkContentThreat,
@@ -373,5 +375,18 @@ func TestAleefPermissions(t *testing.T) {
 	}
 	if CanViewAleef != "aleef:view" || CanRunAleef != "aleef:run" {
 		t.Fatal("permission values changed")
+	}
+}
+
+// CI tokens let a pipeline start validation runs without a user session, so only an admin may issue or revoke one.
+func TestCanManageCITokens_AdminOnly(t *testing.T) {
+	if !HasPermission(RoleAdmin, CanManageCITokens) {
+		t.Error("expected RoleAdmin to hold CanManageCITokens")
+	}
+	if HasPermission(RoleAnalyst, CanManageCITokens) {
+		t.Error("expected RoleAnalyst NOT to hold CanManageCITokens")
+	}
+	if HasPermission(RoleViewer, CanManageCITokens) {
+		t.Error("expected RoleViewer NOT to hold CanManageCITokens")
 	}
 }
