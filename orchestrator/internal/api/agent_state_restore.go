@@ -26,6 +26,11 @@ func (h *Handler) refuseUntrustedRestore(w http.ResponseWriter, r *http.Request,
 		agentID).Scan(&hash, &trusted); err != nil {
 		return false
 	}
+	if h.manifest.HashRevoked(hash) {
+		jsonError(w, "cannot set active: the agent's binary has been revoked by an administrator, so the server would "+
+			"quarantine it again on its next heartbeat. Install a current signed agent release on this host.", http.StatusConflict)
+		return true
+	}
 	if !restoreRefused(hash, trusted, h.manifest.HashPreviousRelease(hash)) {
 		return false
 	}
