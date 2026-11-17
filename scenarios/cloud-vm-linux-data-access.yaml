@@ -30,6 +30,7 @@ steps:
   - id: cvl-e32
     name: "Cloud VM Linux Data 32 - Azure Blob Container Listing (T1530)"
     technique_id: T1530
+    action_key: cloud_object_list_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -147,6 +148,7 @@ steps:
   - id: cvl-e33
     name: "Cloud VM Linux Data 33 - S3 Object Metadata Access (T1530)"
     technique_id: T1530
+    action_key: cloud_object_head_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -263,6 +265,7 @@ steps:
   - id: cvl-e34
     name: "Cloud VM Linux Data 34 - Cloud Database Inventory (T1526)"
     technique_id: T1526
+    action_key: cloud_inventory_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -386,6 +389,7 @@ steps:
   - id: cvl-e35
     name: "Cloud VM Linux Data 35 - Synthetic Secret Retrieval Attempt (T1555)"
     technique_id: T1555
+    action_key: cloud_secret_value_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -517,6 +521,7 @@ steps:
   - id: cvl-e36
     name: "Cloud VM Linux Data 36 - Gated Synthetic Cloud Storage Upload (T1567.002)"
     technique_id: T1567.002
+    action_key: cloud_synthetic_upload
     framework: custom
     executor: bash
     requires_priv: user

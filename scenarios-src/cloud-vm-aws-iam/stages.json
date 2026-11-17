@@ -17,7 +17,9 @@
     "detection": [
       "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
     ],
-    "cleanup": ""
+    "cleanup": "",
+    "action_key": "cloud_imds_probe",
+    "no_default_cleanup": true
   },
   {
     "id": "cv-b15",
@@ -36,7 +38,9 @@
     "detection": [
       "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
     ],
-    "cleanup": ""
+    "cleanup": "",
+    "action_key": "cloud_identity_read",
+    "no_default_cleanup": true
   },
   {
     "id": "cv-b16",
@@ -55,7 +59,9 @@
     "detection": [
       "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
     ],
-    "cleanup": ""
+    "cleanup": "",
+    "action_key": "cloud_role_read",
+    "no_default_cleanup": true
   },
   {
     "id": "cv-b17",
@@ -74,7 +80,9 @@
     "detection": [
       "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
     ],
-    "cleanup": ""
+    "cleanup": "",
+    "action_key": "cloud_inventory_read",
+    "no_default_cleanup": true
   },
   {
     "id": "cv-b18",
@@ -93,7 +101,9 @@
     "detection": [
       "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
     ],
-    "cleanup": ""
+    "cleanup": "",
+    "action_key": "cloud_inventory_read",
+    "no_default_cleanup": true
   },
   {
     "id": "cv-b19",
@@ -112,7 +122,9 @@
     "detection": [
       "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
     ],
-    "cleanup": ""
+    "cleanup": "",
+    "action_key": "cloud_inventory_read",
+    "no_default_cleanup": true
   },
   {
     "id": "cv-b20",
@@ -131,7 +143,9 @@
     "detection": [
       "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
     ],
-    "cleanup": ""
+    "cleanup": "",
+    "action_key": "cloud_secret_name_read",
+    "no_default_cleanup": true
   },
   {
     "id": "cv-b21",
@@ -150,6 +164,8 @@
     "detection": [
       "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
     ],
-    "cleanup": ""
+    "cleanup": "",
+    "action_key": "policy_simulation_read",
+    "no_default_cleanup": true
   }
 ]

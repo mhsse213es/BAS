@@ -30,6 +30,7 @@ steps:
   - id: cv-d27
     name: "Cloud VM Lateral 27 - Role Assumption of a Test Role (T1098)"
     technique_id: T1098
+    action_key: cloud_role_assume
     framework: custom
     executor: powershell
     requires_priv: user
@@ -125,17 +126,13 @@ steps:
       $r = $null
       Write-Output 'EXEC T1098: assume-role attempted for the test role only. Any returned credentials were discarded unrecorded.'
       Complete-CvStep $res 'CV-D27'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-d28
     name: "Cloud VM Lateral 28 - Access Key Creation Attempt for a Test User (T1098.001)"
     technique_id: T1098.001
+    action_key: cloud_access_key_create
     framework: custom
     executor: powershell
     requires_priv: user
@@ -239,17 +236,13 @@ steps:
       if ($del.Code -ne 0 -or $still) { Complete-CvStep @{ Outcome = 'fail'; Reason = ('an access key was created for the test user, and cleanup was NOT verified; delete the key with id ' + $keyId + ' manually') } 'CV-D28' }
       if (Test-CvGate 'BAS_CLOUD_EXPECT_KEY_CREATE') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'access key creation succeeded and is documented as expected; cleanup verified' } 'CV-D28' }
       Complete-CvStep @{ Outcome = 'fail'; Reason = 'the workload identity could create an access key for the test user; cleanup verified' } 'CV-D28'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-d29
     name: "Cloud VM Lateral 29 - Service Principal Client Secret Addition on a Test App (T1098.001)"
     technique_id: T1098.001
+    action_key: cloud_client_secret_add
     framework: custom
     executor: powershell
     requires_priv: user
@@ -351,17 +344,13 @@ steps:
       if ($rm.Code -ne 200) { Complete-CvStep @{ Outcome = 'fail'; Reason = ('a client secret was added to the test application and cleanup was NOT verified; remove key id ' + $keyId + ' manually') } 'CV-D29' }
       if (Test-CvGate 'BAS_CLOUD_EXPECT_KEY_CREATE') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'client secret addition succeeded and is documented as expected; cleanup verified' } 'CV-D29' }
       Complete-CvStep @{ Outcome = 'fail'; Reason = 'the workload identity could add a client secret to a service principal; cleanup verified' } 'CV-D29'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-d30
     name: "Cloud VM Lateral 30 - Remote Management Exposure (T1021)"
     technique_id: T1021
+    action_key: remote_mgmt_exposure_read
     framework: custom
     executor: powershell
     requires_priv: user
@@ -454,17 +443,13 @@ steps:
       if ($listeners.Count -gt 0 -and $allow.Count -gt 0) { Complete-CvStep @{ Outcome = 'fail'; Reason = 'a WinRM listener is configured and an inbound firewall allow rule covers 5985 or 5986' } 'CV-D30' }
       if ($listeners.Count -gt 0) { Complete-CvStep @{ Outcome = 'pass'; Reason = 'a WinRM listener exists but no inbound firewall allow rule exposes it' } 'CV-D30' }
       Complete-CvStep @{ Outcome = 'pass'; Reason = 'no WinRM listener is configured on this host' } 'CV-D30'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-d31
     name: "Cloud VM Lateral 31 - Startup Location Writability (T1574)"
     technique_id: T1574
+    action_key: startup_location_read
     framework: custom
     executor: powershell
     requires_priv: user
@@ -563,9 +548,4 @@ steps:
       Write-Output ('EXEC T1574: read-only ACL check of startup script locations; locations=' + $existing.Count + ' writable_by_non_admin_group=' + $writable.Count + '. Nothing was written.')
       if ($writable.Count -gt 0) { Complete-CvStep @{ Outcome = 'fail'; Reason = ('a startup script location is writable by a non-administrative group (' + ($writable -join '; ') + ')') } 'CV-D31' }
       Complete-CvStep @{ Outcome = 'pass'; Reason = 'startup script locations are not writable by non-administrative groups' } 'CV-D31'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""

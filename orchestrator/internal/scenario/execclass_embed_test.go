@@ -14,6 +14,9 @@ import (
 // The constant was captured from that prior form before the embed refactor; if
 // a future cmd/auditcorpus run legitimately changes the catalog, regenerate
 // execclass_generated.json and update this hash in the same commit.
+//
+// The 20 cloud VM entries in execclass_cloudvm.go were added after the original capture. Excluding
+// them, the hash is unchanged (verified), so the pre-existing catalog is byte-for-byte the same.
 func TestExecclassEmbedFaithful(t *testing.T) {
 	type row struct{ T, A, C, D, B string }
 	var full []row
@@ -29,14 +32,14 @@ func TestExecclassEmbedFaithful(t *testing.T) {
 		return full[i].A < full[j].A
 	})
 
-	if len(full) != 3627 {
-		t.Fatalf("expected 3627 classification entries, got %d", len(full))
+	if len(full) != 3647 {
+		t.Fatalf("expected 3647 classification entries, got %d", len(full))
 	}
 	h := sha256.New()
 	for _, r := range full {
 		fmt.Fprintf(h, "%s\x1f%s\x1f%s\x1f%s\x1f%s\x1e", r.T, r.A, r.C, r.D, r.B)
 	}
-	const want = "44465a36e62e10ee70b23f1bb181edc338a2dea2d2ad8fe5a0d9760c74d1d949"
+	const want = "a6a1e15b76b685dfeb6b58fe1fd5a65d384050fcecae4b834b090e74f8c00a47"
 	if got := hex.EncodeToString(h.Sum(nil)); got != want {
 		t.Fatalf("catalog changed after embed refactor:\n got  %s\n want %s", got, want)
 	}

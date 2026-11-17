@@ -16,7 +16,9 @@
     "detection": [
       "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
     ],
-    "cleanup": ""
+    "cleanup": "",
+    "action_key": "local_credential_scan",
+    "no_default_cleanup": true
   },
   {
     "id": "cv-c23",
@@ -35,7 +37,9 @@
     "detection": [
       "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
     ],
-    "cleanup": ""
+    "cleanup": "",
+    "action_key": "local_credential_scan",
+    "no_default_cleanup": true
   },
   {
     "id": "cv-c24",
@@ -54,7 +58,9 @@
     "detection": [
       "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
     ],
-    "cleanup": ""
+    "cleanup": "",
+    "action_key": "local_credential_scan",
+    "no_default_cleanup": true
   },
   {
     "id": "cv-c25",
@@ -66,14 +72,16 @@
     "fidelity": "telemetry-safe",
     "production_safe": true,
     "risk": "low",
-    "blast_radius": "Searches the user profile and temp directory for Terraform state files (capped at 20) and counts secret-like attribute names. Values are never printed.",
+    "blast_radius": "Searches the user profile for Terraform state files (capped at 20) and counts secret-like attribute names. Values are never printed.",
     "telemetry": [
       "Sysmon EID 11: .tfstate reads"
     ],
     "detection": [
       "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
     ],
-    "cleanup": ""
+    "cleanup": "",
+    "action_key": "local_credential_scan",
+    "no_default_cleanup": true
   },
   {
     "id": "cv-c26",
@@ -92,6 +100,8 @@
     "detection": [
       "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
     ],
-    "cleanup": ""
+    "cleanup": "",
+    "action_key": "local_credential_scan",
+    "no_default_cleanup": true
   }
 ]

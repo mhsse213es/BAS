@@ -29,6 +29,7 @@ steps:
   - id: cvl-d27
     name: "Cloud VM Linux Lateral 27 - Role Assumption of a Test Role (T1098)"
     technique_id: T1098
+    action_key: cloud_role_assume
     framework: custom
     executor: bash
     requires_priv: user
@@ -145,6 +146,7 @@ steps:
   - id: cvl-d28
     name: "Cloud VM Linux Lateral 28 - Access Key Creation Attempt for a Test User (T1098.001)"
     technique_id: T1098.001
+    action_key: cloud_access_key_create
     framework: custom
     executor: bash
     requires_priv: user
@@ -271,6 +273,7 @@ steps:
   - id: cvl-d29
     name: "Cloud VM Linux Lateral 29 - Service Principal Client Secret Addition on a Test App (T1098.001)"
     technique_id: T1098.001
+    action_key: cloud_client_secret_add
     framework: custom
     executor: bash
     requires_priv: user
@@ -396,6 +399,7 @@ steps:
   - id: cvl-d30
     name: "Cloud VM Linux Lateral 30 - Remote Management Exposure (T1021)"
     technique_id: T1021
+    action_key: remote_mgmt_exposure_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -532,6 +536,7 @@ steps:
   - id: cvl-d31
     name: "Cloud VM Linux Lateral 31 - Startup Location Writability (T1574)"
     technique_id: T1574
+    action_key: startup_location_read
     framework: custom
     executor: bash
     requires_priv: user

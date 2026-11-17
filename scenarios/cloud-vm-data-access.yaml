@@ -33,6 +33,7 @@ steps:
   - id: cv-e32
     name: "Cloud VM Data 32 - Azure Blob Container Listing (T1530)"
     technique_id: T1530
+    action_key: cloud_object_list_read
     framework: custom
     executor: powershell
     requires_priv: user
@@ -127,17 +128,13 @@ steps:
       $n = 0; if ($res.Code -eq 200) { $n = @($res.Body.EnumerationResults.Containers.Container).Count }
       Write-Output ('EXEC T1530: blob container names listed on the test account only; http=' + $res.Code + ' containers=' + $n + '. No blob was read.')
       Complete-CvStep (Resolve-CvHttp $res 'Azure Blob container access') 'CV-E32'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-e33
     name: "Cloud VM Data 33 - S3 Object Metadata Access (T1530)"
     technique_id: T1530
+    action_key: cloud_object_head_read
     framework: custom
     executor: powershell
     requires_priv: user
@@ -232,17 +229,13 @@ steps:
       $r = Invoke-CvAws @('s3api', 'head-object', '--bucket', $bucket, '--key', $key)
       Write-Output ('EXEC T1530: metadata-only head-object on the synthetic test object; exit=' + $r.Code + '. The object body was never requested.')
       Complete-CvStep (Resolve-CvAws $r 'S3 object access') 'CV-E33'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-e34
     name: "Cloud VM Data 34 - Cloud Database Inventory (T1526)"
     technique_id: T1526
+    action_key: cloud_inventory_read
     framework: custom
     executor: powershell
     requires_priv: user
@@ -344,17 +337,13 @@ steps:
       Complete-CvStep (Resolve-CvAws $r 'cloud database discovery') 'CV-E34'
       }
       Complete-CvStep @{ Outcome = 'skip'; Reason = 'neither Azure IMDS nor the AWS instance metadata service with a CLI is available on this host' } 'CV-E34'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-e35
     name: "Cloud VM Data 35 - Synthetic Secret Retrieval Attempt (T1555)"
     technique_id: T1555
+    action_key: cloud_secret_value_read
     framework: custom
     executor: powershell
     requires_priv: user
@@ -463,17 +452,13 @@ steps:
       Complete-CvStep $res 'CV-E35'
       }
       Complete-CvStep @{ Outcome = 'skip'; Reason = 'no cloud identity path is available to retrieve the synthetic test secret on this host' } 'CV-E35'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-e36
     name: "Cloud VM Data 36 - Gated Synthetic Cloud Storage Upload (T1567.002)"
     technique_id: T1567.002
+    action_key: cloud_synthetic_upload
     framework: custom
     executor: powershell
     requires_priv: user
@@ -597,9 +582,4 @@ steps:
       Remove-Item -LiteralPath $payload -Force -ErrorAction SilentlyContinue
       if ($null -eq $outcome) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'no test storage target and identity path is configured on this host' } 'CV-E36' }
       Complete-CvStep $outcome 'CV-E36'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""

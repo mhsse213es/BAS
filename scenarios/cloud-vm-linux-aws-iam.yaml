@@ -29,6 +29,7 @@ steps:
   - id: cvl-b14
     name: "Cloud VM Linux AWS 14 - EC2 Instance Profile Presence (T1552.005)"
     technique_id: T1552.005
+    action_key: cloud_imds_probe
     framework: custom
     executor: bash
     requires_priv: user
@@ -146,6 +147,7 @@ steps:
   - id: cvl-b15
     name: "Cloud VM Linux AWS 15 - Caller Identity Discovery (T1087.004)"
     technique_id: T1087.004
+    action_key: cloud_identity_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -261,6 +263,7 @@ steps:
   - id: cvl-b16
     name: "Cloud VM Linux AWS 16 - IAM Role Policy Enumeration (T1069.003)"
     technique_id: T1069.003
+    action_key: cloud_role_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -377,6 +380,7 @@ steps:
   - id: cvl-b17
     name: "Cloud VM Linux AWS 17 - S3 Bucket Discovery (T1619)"
     technique_id: T1619
+    action_key: cloud_inventory_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -491,6 +495,7 @@ steps:
   - id: cvl-b18
     name: "Cloud VM Linux AWS 18 - Security Group and Network Inventory (T1580)"
     technique_id: T1580
+    action_key: cloud_inventory_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -605,6 +610,7 @@ steps:
   - id: cvl-b19
     name: "Cloud VM Linux AWS 19 - KMS Key Inventory (T1580)"
     technique_id: T1580
+    action_key: cloud_inventory_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -719,6 +725,7 @@ steps:
   - id: cvl-b20
     name: "Cloud VM Linux AWS 20 - Secrets Manager Name Listing (T1555)"
     technique_id: T1555
+    action_key: cloud_secret_name_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -833,6 +840,7 @@ steps:
   - id: cvl-b21
     name: "Cloud VM Linux AWS 21 - Instance Role Privilege-Escalation Policy Simulation (T1098)"
     technique_id: T1098
+    action_key: policy_simulation_read
     framework: custom
     executor: bash
     requires_priv: user

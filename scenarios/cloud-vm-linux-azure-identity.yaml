@@ -28,6 +28,7 @@ steps:
   - id: cvl-a6
     name: "Cloud VM Linux Azure 6 - IMDS Access From an Unexpected Process (T1552.005)"
     technique_id: T1552.005
+    action_key: cloud_imds_probe
     framework: custom
     executor: bash
     requires_priv: user
@@ -146,6 +147,7 @@ steps:
   - id: cvl-a7
     name: "Cloud VM Linux Azure 7 - Managed-Identity Token for Unexpected Resources (T1552.005)"
     technique_id: T1552.005
+    action_key: cloud_token_issue
     framework: custom
     executor: bash
     requires_priv: user
@@ -274,6 +276,7 @@ steps:
   - id: cvl-a8
     name: "Cloud VM Linux Azure 8 - Subscription and Resource Enumeration (T1580)"
     technique_id: T1580
+    action_key: cloud_inventory_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -388,6 +391,7 @@ steps:
   - id: cvl-a9
     name: "Cloud VM Linux Azure 9 - Role Assignment Discovery (T1069.003)"
     technique_id: T1069.003
+    action_key: cloud_role_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -502,6 +506,7 @@ steps:
   - id: cvl-a10
     name: "Cloud VM Linux Azure 10 - VM Extension Inventory (T1526)"
     technique_id: T1526
+    action_key: cloud_inventory_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -616,6 +621,7 @@ steps:
   - id: cvl-a11
     name: "Cloud VM Linux Azure 11 - Storage Account Discovery (T1580)"
     technique_id: T1580
+    action_key: cloud_inventory_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -730,6 +736,7 @@ steps:
   - id: cvl-a12
     name: "Cloud VM Linux Azure 12 - Key Vault Secret Name Listing With Managed Identity (T1555)"
     technique_id: T1555
+    action_key: cloud_secret_name_read
     framework: custom
     executor: bash
     requires_priv: user
@@ -846,6 +853,7 @@ steps:
   - id: cvl-a13
     name: "Cloud VM Linux Azure 13 - Managed-Identity Token Use Outside VM Scope (T1528)"
     technique_id: T1528
+    action_key: cloud_token_use_read
     framework: custom
     executor: bash
     requires_priv: user

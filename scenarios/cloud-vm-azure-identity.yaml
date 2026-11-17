@@ -36,6 +36,7 @@ steps:
   - id: cv-a6
     name: "Cloud VM Azure 6 - IMDS Access From an Unexpected Process (T1552.005)"
     technique_id: T1552.005
+    action_key: cloud_imds_probe
     framework: custom
     executor: powershell
     requires_priv: user
@@ -134,17 +135,13 @@ steps:
       }
       if ($childOut -match 'CV_BLOCKED') { Complete-CvStep @{ Outcome = 'pass'; Reason = 'IMDS access from a child process was blocked on the host' } 'CV-A6' }
       Complete-CvStep @{ Outcome = 'error'; Reason = 'the child process produced no classifiable result' } 'CV-A6'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-a7
     name: "Cloud VM Azure 7 - Managed-Identity Token for Unexpected Resources (T1552.005)"
     technique_id: T1552.005
+    action_key: cloud_token_issue
     framework: custom
     executor: powershell
     requires_priv: user
@@ -246,17 +243,13 @@ steps:
       if ($issued.Count -gt 0) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'tokens were issued only for resources the operator documents as expected, so no control verdict is scored' } 'CV-A7' }
       if ($refused -gt 0) { Complete-CvStep @{ Outcome = 'pass'; Reason = 'no managed-identity token was issued for any tested resource; the token endpoint refused the request (no identity attached, or issuance refused)' } 'CV-A7' }
       Complete-CvStep @{ Outcome = 'error'; Reason = 'no token request returned a classifiable answer' } 'CV-A7'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-a8
     name: "Cloud VM Azure 8 - Subscription and Resource Enumeration (T1580)"
     technique_id: T1580
+    action_key: cloud_inventory_read
     framework: custom
     executor: powershell
     requires_priv: user
@@ -350,17 +343,13 @@ steps:
       $n = 0; if ($res.Code -eq 200) { $n = @($res.Body.value).Count }
       Write-Output ('EXEC T1580: subscription enumeration via the management plane; http=' + $res.Code + ' visible_subscriptions=' + $n)
       Complete-CvStep (Resolve-CvHttp $res 'subscription and resource enumeration') 'CV-A8'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-a9
     name: "Cloud VM Azure 9 - Role Assignment Discovery (T1069.003)"
     technique_id: T1069.003
+    action_key: cloud_role_read
     framework: custom
     executor: powershell
     requires_priv: user
@@ -456,17 +445,13 @@ steps:
       $n = 0; if ($res.Code -eq 200) { $n = @($res.Body.value).Count }
       Write-Output ('EXEC T1069.003: role assignments visible at subscription scope; http=' + $res.Code + ' count=' + $n)
       Complete-CvStep (Resolve-CvHttp $res 'role assignment discovery') 'CV-A9'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-a10
     name: "Cloud VM Azure 10 - VM Extension Inventory (T1526)"
     technique_id: T1526
+    action_key: cloud_inventory_read
     framework: custom
     executor: powershell
     requires_priv: user
@@ -561,17 +546,13 @@ steps:
       $n = 0; if ($res.Code -eq 200) { $n = @($res.Body.value).Count }
       Write-Output ('EXEC T1526: VM extension inventory for this VM only; http=' + $res.Code + ' extensions=' + $n)
       Complete-CvStep (Resolve-CvHttp $res 'VM extension inventory discovery') 'CV-A10'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-a11
     name: "Cloud VM Azure 11 - Storage Account Discovery (T1580)"
     technique_id: T1580
+    action_key: cloud_inventory_read
     framework: custom
     executor: powershell
     requires_priv: user
@@ -666,17 +647,13 @@ steps:
       $n = 0; if ($res.Code -eq 200) { $n = @($res.Body.value).Count }
       Write-Output ('EXEC T1580: storage account inventory at subscription scope; http=' + $res.Code + ' accounts=' + $n)
       Complete-CvStep (Resolve-CvHttp $res 'storage account discovery') 'CV-A11'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-a12
     name: "Cloud VM Azure 12 - Key Vault Secret Name Listing With Managed Identity (T1555)"
     technique_id: T1555
+    action_key: cloud_secret_name_read
     framework: custom
     executor: powershell
     requires_priv: user
@@ -772,17 +749,13 @@ steps:
       $n = 0; if ($res.Code -eq 200) { $n = @($res.Body.value).Count }
       Write-Output ('EXEC T1555: Key Vault secret names listed with the managed identity; http=' + $res.Code + ' names=' + $n + '. Secret values were never requested.')
       Complete-CvStep (Resolve-CvHttp $res 'Key Vault access with the managed identity') 'CV-A12'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""
 
   # -------------------------------------------------------------------------
   - id: cv-a13
     name: "Cloud VM Azure 13 - Managed-Identity Token Use Outside VM Scope (T1528)"
     technique_id: T1528
+    action_key: cloud_token_use_read
     framework: custom
     executor: powershell
     requires_priv: user
@@ -879,9 +852,4 @@ steps:
       $res = Invoke-CvHttp 'GET' $uri $t.Token
       Write-Output ('EXEC T1528: a token acquired in this step was used once for a read of a resource group outside this VM''s own scope; http=' + $res.Code + '. Read-only; the token was not stored.')
       Complete-CvStep (Resolve-CvHttp $res 'token use outside the VM resource group') 'CV-A13'
-    cleanup: |
-      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
-        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      }
-      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+    cleanup: ""

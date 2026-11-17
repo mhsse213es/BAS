@@ -34,6 +34,9 @@ type Stage struct {
 	ActionKey         string   `json:"action_key"`
 	DetectionProfiles []string `json:"detection_profiles"`
 	Note              string   `json:"note"`
+	// NoDefaultCleanup marks a step that performs and verifies its own undo in-script. The generic
+	// Windows sweep (defaultCleanup) is then not attached, so the contract does not count it as an undo.
+	NoDefaultCleanup bool `json:"no_default_cleanup"`
 }
 
 func q(s string) string {
@@ -154,7 +157,9 @@ func Generate(srcDir, commonDir string) ([]byte, error) {
 		out.WriteString("    detection:" + list(s.Detection))
 		out.WriteString("    command: |\n")
 		out.WriteString(indent(libText+"\n"+minify(string(call)), 6))
-		if s.Cleanup == "" {
+		if s.Cleanup == "" && s.NoDefaultCleanup && s.CleanupExtra == "" {
+			out.WriteString("    cleanup: \"\"\n")
+		} else if s.Cleanup == "" {
 			out.WriteString("    cleanup: |\n")
 			out.WriteString(indent(defaultCleanup+s.CleanupExtra, 6))
 		} else {
