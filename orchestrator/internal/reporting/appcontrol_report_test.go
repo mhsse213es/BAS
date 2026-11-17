@@ -210,3 +210,27 @@ func TestAppControlSection_MasteryFamiliesAppearOnlyWhenRun(t *testing.T) {
 		t.Fatalf("regsvr32_proxy missing or wrong status: %+v", sec.Families)
 	}
 }
+
+// Every Application Control Mastery step must still be recognised by name when it produced no
+// APPCTL_ output at all (crash, timeout), and map to a family the report lists.
+func TestAppControlMastery_StepNameFallbackCoversEveryStep(t *testing.T) {
+	listed := map[string]bool{}
+	for _, f := range appCtlMasteryFamilies {
+		listed[f] = true
+	}
+	if len(appCtlMasteryStepFamilies) != len(appCtlMasteryFamilies) {
+		t.Fatalf("fallback has %d steps, report lists %d families", len(appCtlMasteryStepFamilies), len(appCtlMasteryFamilies))
+	}
+	for name, fam := range appCtlMasteryStepFamilies {
+		if !listed[fam] {
+			t.Errorf("step %q maps to unlisted family %q", name, fam)
+		}
+		r := models.SimulationResult{StepName: name}
+		if !isAppControlResult(r) {
+			t.Errorf("step %q with no output is not recognised as an application-control result", name)
+		}
+		if got := appCtlFamilyOf(r); got != fam {
+			t.Errorf("step %q: family %q, want %q", name, got, fam)
+		}
+	}
+}

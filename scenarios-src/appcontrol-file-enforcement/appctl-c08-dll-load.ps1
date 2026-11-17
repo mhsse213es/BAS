@@ -3,7 +3,7 @@ Invoke-AppCtlTest -Family 'dll_loading' -Collection 'Dll' -Needle $dllName -Tech
   $dll = Join-Path $script:AppCtlWork $dllName
   $src = 'public class BasLib { public static string Id() { return "' + $script:AppCtlMarker + '"; } }'
   try { Add-Type -TypeDefinition $src -OutputAssembly $dll -OutputType Library -ErrorAction Stop } catch {}
-  if (-not (Test-Path $dll)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = 'the test library could not be compiled on this host (no .NET Framework compiler)' } }
+  if (-not (Test-Path $dll)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
   $mk = Join-Path $script:AppCtlWork 'dll-marker.txt'
   $child = Join-Path $script:AppCtlWork 'load.ps1'
   Set-Content -Path $child -Value ("try { `$a = [Reflection.Assembly]::LoadFrom('" + $dll + "'); Set-Content -Path '" + $mk + "' -Value `$a.GetType('BasLib').GetMethod('Id').Invoke(`$null, `$null) } catch { }") -Encoding ASCII

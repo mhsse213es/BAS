@@ -146,6 +146,11 @@ steps:
       } catch {}
       return $r
       }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
       function New-AppCtlExe {
       param([string]$Path)
       $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
@@ -156,7 +161,7 @@ steps:
       param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
       New-Item -ItemType Directory -Path $Dir -Force | Out-Null
       $exe = Join-Path $Dir $Name
-      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = 'the test program could not be compiled on this host (no .NET Framework compiler)' } }
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
       if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
       $mk = Join-Path $Dir "$Name.marker.txt"
       $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
@@ -196,6 +201,15 @@ steps:
       } catch { return $false }
       return (Test-Path $Path)
       }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -213,10 +227,11 @@ steps:
       $state = Get-AppCtlState
       $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
       $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
       $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
       $start = Get-Date
       if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
-      try { $att = & $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
       Start-Sleep -Milliseconds 800
       }
       if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
@@ -238,6 +253,7 @@ steps:
       foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
       $cleanOk = -not (Test-Path $script:AppCtlWork)
       foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
       Write-Output "APPCTL_FAMILY: $Family"
       Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
       Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
@@ -290,11 +306,14 @@ steps:
       }
       $note = "service_status=$($svc.Status) start_type=$((Get-CimInstance Win32_Service -Filter "Name='AppIDSvc'" -ErrorAction SilentlyContinue).StartMode) non_admin_stop_rights=$($weak.Count) identity_is_admin=$isAdmin $liveNote"
       if ($weak.Count -gt 0) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = "non-administrative principals hold the stop right on AppIDSvc ($($weak -join ','))" }; Note = $note } }
-      if ($stopped) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = 'the application control service was stopped by the test identity (restored afterwards)' }; Note = $note } }
       return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = 'only SYSTEM and administrators can stop the application control service; no unprivileged stop right found' }; Note = $note }
       }
     cleanup: |
-      Remove-Item (Join-Path $env:TEMP 'bas-appctl-*') -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # -------------------------------------------------------------------------
   - id: appctl-d02-policy-write
@@ -308,7 +327,7 @@ steps:
     production_safe: false
     risk: medium
     reversible: true
-    blast_radius: "Read-only by default: reads the permissions of the local AppLocker policy registry key for unprivileged write rights. With BAS_CONFIRM_APPCONTROL_POLICY_TAMPER=true (exact, administrator only) it also re-applies the host's own effective policy unchanged, which proves the identity could modify policy without changing it."
+    blast_radius: "Read-only by default: reads the permissions of the local AppLocker policy registry key for unprivileged write rights. With BAS_CONFIRM_APPCONTROL_POLICY_TAMPER=true (exact, administrator only) it also re-applies the host's own effective policy unchanged, and records that the identity could do so as evidence only; the verdict stays based on who is permitted to write the policy store."
     telemetry:
       - "Registry events (Sysmon EID 12/13) under SrpV2"
       - "AppLocker policy change events in the AppLocker log"
@@ -413,6 +432,11 @@ steps:
       } catch {}
       return $r
       }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
       function New-AppCtlExe {
       param([string]$Path)
       $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
@@ -423,7 +447,7 @@ steps:
       param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
       New-Item -ItemType Directory -Path $Dir -Force | Out-Null
       $exe = Join-Path $Dir $Name
-      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = 'the test program could not be compiled on this host (no .NET Framework compiler)' } }
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
       if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
       $mk = Join-Path $Dir "$Name.marker.txt"
       $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
@@ -463,6 +487,15 @@ steps:
       } catch { return $false }
       return (Test-Path $Path)
       }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -480,10 +513,11 @@ steps:
       $state = Get-AppCtlState
       $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
       $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
       $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
       $start = Get-Date
       if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
-      try { $att = & $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
       Start-Sleep -Milliseconds 800
       }
       if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
@@ -505,6 +539,7 @@ steps:
       foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
       $cleanOk = -not (Test-Path $script:AppCtlWork)
       foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
       Write-Output "APPCTL_FAMILY: $Family"
       Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
       Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
@@ -555,12 +590,15 @@ steps:
       }
       $note = "policy_key_present=$keyExists unprivileged_write_principals=$($weak.Count) $live"
       if ($weak.Count -gt 0) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = "non-administrative principals can write the local AppLocker policy store ($($weak -join ','))" }; Note = $note } }
-      if ($reapplied) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = 'the test identity could re-apply the local AppLocker policy (identical content; nothing was changed)' }; Note = $note } }
       if (-not $keyExists) { return @{ NotApplicable = 'no local AppLocker policy store exists on this host, so there is no policy to tamper with'; Note = $note } }
       return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = 'the local AppLocker policy store is writable only by SYSTEM and administrators' }; Note = $note }
       }
     cleanup: |
-      Remove-Item (Join-Path $env:TEMP 'bas-appctl-*') -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # -------------------------------------------------------------------------
   - id: appctl-d03-downgrade
@@ -678,6 +716,11 @@ steps:
       } catch {}
       return $r
       }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
       function New-AppCtlExe {
       param([string]$Path)
       $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
@@ -688,7 +731,7 @@ steps:
       param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
       New-Item -ItemType Directory -Path $Dir -Force | Out-Null
       $exe = Join-Path $Dir $Name
-      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = 'the test program could not be compiled on this host (no .NET Framework compiler)' } }
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
       if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
       $mk = Join-Path $Dir "$Name.marker.txt"
       $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
@@ -728,6 +771,15 @@ steps:
       } catch { return $false }
       return (Test-Path $Path)
       }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -745,10 +797,11 @@ steps:
       $state = Get-AppCtlState
       $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
       $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
       $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
       $start = Get-Date
       if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
-      try { $att = & $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
       Start-Sleep -Milliseconds 800
       }
       if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
@@ -770,6 +823,7 @@ steps:
       foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
       $cleanOk = -not (Test-Path $script:AppCtlWork)
       foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
       Write-Output "APPCTL_FAMILY: $Family"
       Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
       Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
@@ -806,7 +860,11 @@ steps:
       return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = 'every configured collection and the WDAC user-mode policy is in enforced mode; no audit-mode downgrade found' }; Note = $note }
       }
     cleanup: |
-      Remove-Item (Join-Path $env:TEMP 'bas-appctl-*') -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # -------------------------------------------------------------------------
   - id: appctl-d04-wdac-policy-dir
@@ -925,6 +983,11 @@ steps:
       } catch {}
       return $r
       }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
       function New-AppCtlExe {
       param([string]$Path)
       $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
@@ -935,7 +998,7 @@ steps:
       param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
       New-Item -ItemType Directory -Path $Dir -Force | Out-Null
       $exe = Join-Path $Dir $Name
-      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = 'the test program could not be compiled on this host (no .NET Framework compiler)' } }
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
       if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
       $mk = Join-Path $Dir "$Name.marker.txt"
       $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
@@ -975,6 +1038,15 @@ steps:
       } catch { return $false }
       return (Test-Path $Path)
       }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -992,10 +1064,11 @@ steps:
       $state = Get-AppCtlState
       $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
       $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
       $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
       $start = Get-Date
       if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
-      try { $att = & $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
       Start-Sleep -Milliseconds 800
       }
       if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
@@ -1017,6 +1090,7 @@ steps:
       foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
       $cleanOk = -not (Test-Path $script:AppCtlWork)
       foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
       Write-Output "APPCTL_FAMILY: $Family"
       Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
       Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
@@ -1054,23 +1128,28 @@ steps:
       if ($r.FileSystemRights.ToString() -match 'FullControl|Write|CreateFiles|Modify|ChangePermissions|TakeOwnership') { $weak += $id }
       }
       }
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       $live = 'live_canary_not_attempted'; $planted = $false
       if ($env:BAS_CONFIRM_APPCONTROL_POLICY_TAMPER -ceq 'true' -and $dirExists) {
       $canary = Join-Path $dir "bas_canary_$($script:AppCtlTid.Substring(0,8)).tmp"
       try { Set-Content -Path $canary -Value 'BAS-SIM canary, not a policy' -ErrorAction Stop; $planted = Test-Path $canary } catch {}
       Remove-Item -Path $canary -Force -ErrorAction SilentlyContinue
       $gone = -not (Test-Path $canary)
-      $live = "live_canary_attempted planted=$planted removed=$gone"
+      $live = "live_canary_attempted identity_is_admin=$isAdmin planted=$planted removed=$gone"
       if (-not $gone) { Write-Output "WARNING: canary file $canary may remain in the active policy directory; delete it manually. [BAS-SIM]" }
       }
       $note = "active_dir_present=$dirExists cip_policy_files=$count legacy_sipolicy_present=$legacyPresent unprivileged_write_principals=$($weak.Count) $live. A non-policy canary file is used; no policy file is ever written. Whether a base policy accepts supplemental policies is not tested."
       if (-not $dirExists -and -not $legacyPresent) { return @{ NotApplicable = 'no WDAC policy directory or legacy policy file exists on this host, so there is no policy trust boundary to test'; Note = $note } }
-      if ($weak.Count -gt 0 -or $planted) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = "unprivileged principals can place files in the active WDAC policy directory ($($weak -join ','))" }; Note = $note } }
+      if ($weak.Count -gt 0 -or ($planted -and -not $isAdmin)) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = "unprivileged principals can place files in the active WDAC policy directory ($($weak -join ','))" }; Note = $note } }
       if (-not $dirExists) { return @{ Verdict = @{ Outcome = 'inconclusive'; Reason = 'only a legacy single-policy file exists; the multiple-policy directory is absent, so supplemental-policy placement was not tested' }; Note = $note } }
       return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = 'the active WDAC policy directory is writable only by SYSTEM, TrustedInstaller and administrators' }; Note = $note }
       }
     cleanup: |
-      Remove-Item (Join-Path $env:TEMP 'bas-appctl-*') -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # -------------------------------------------------------------------------
   - id: appctl-d05-managed-installer
@@ -1188,6 +1267,11 @@ steps:
       } catch {}
       return $r
       }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
       function New-AppCtlExe {
       param([string]$Path)
       $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
@@ -1198,7 +1282,7 @@ steps:
       param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
       New-Item -ItemType Directory -Path $Dir -Force | Out-Null
       $exe = Join-Path $Dir $Name
-      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = 'the test program could not be compiled on this host (no .NET Framework compiler)' } }
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
       if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
       $mk = Join-Path $Dir "$Name.marker.txt"
       $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
@@ -1238,6 +1322,15 @@ steps:
       } catch { return $false }
       return (Test-Path $Path)
       }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -1255,10 +1348,11 @@ steps:
       $state = Get-AppCtlState
       $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
       $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
       $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
       $start = Get-Date
       if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
-      try { $att = & $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
       Start-Sleep -Milliseconds 800
       }
       if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
@@ -1280,6 +1374,7 @@ steps:
       foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
       $cleanOk = -not (Test-Path $script:AppCtlWork)
       foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
       Write-Output "APPCTL_FAMILY: $Family"
       Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
       Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
@@ -1318,7 +1413,11 @@ steps:
       return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = "$($rules.Count) Managed Installer rule(s) are configured and none trusts a user-writable location" }; Note = $note }
       }
     cleanup: |
-      Remove-Item (Join-Path $env:TEMP 'bas-appctl-*') -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # -------------------------------------------------------------------------
   - id: appctl-d06-after-reboot
@@ -1437,6 +1536,11 @@ steps:
       } catch {}
       return $r
       }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
       function New-AppCtlExe {
       param([string]$Path)
       $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
@@ -1447,7 +1551,7 @@ steps:
       param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
       New-Item -ItemType Directory -Path $Dir -Force | Out-Null
       $exe = Join-Path $Dir $Name
-      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = 'the test program could not be compiled on this host (no .NET Framework compiler)' } }
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
       if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
       $mk = Join-Path $Dir "$Name.marker.txt"
       $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
@@ -1487,6 +1591,15 @@ steps:
       } catch { return $false }
       return (Test-Path $Path)
       }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -1504,10 +1617,11 @@ steps:
       $state = Get-AppCtlState
       $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
       $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
       $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
       $start = Get-Date
       if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
-      try { $att = & $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
       Start-Sleep -Milliseconds 800
       }
       if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
@@ -1529,6 +1643,7 @@ steps:
       foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
       $cleanOk = -not (Test-Path $script:AppCtlWork)
       foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
       Write-Output "APPCTL_FAMILY: $Family"
       Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
       Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
@@ -1570,7 +1685,11 @@ steps:
       return @{ Verdict = @{ Outcome = 'not_enforced'; Reason = 'enforcement is active now but is not shown to be stored persistently or loaded at boot; it may not survive a reboot' }; Note = $note }
       }
     cleanup: |
-      Remove-Item (Join-Path $env:TEMP 'bas-appctl-*') -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # -------------------------------------------------------------------------
   - id: appctl-d07-drift
@@ -1688,6 +1807,11 @@ steps:
       } catch {}
       return $r
       }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
       function New-AppCtlExe {
       param([string]$Path)
       $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
@@ -1698,7 +1822,7 @@ steps:
       param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
       New-Item -ItemType Directory -Path $Dir -Force | Out-Null
       $exe = Join-Path $Dir $Name
-      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = 'the test program could not be compiled on this host (no .NET Framework compiler)' } }
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
       if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
       $mk = Join-Path $Dir "$Name.marker.txt"
       $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
@@ -1738,6 +1862,15 @@ steps:
       } catch { return $false }
       return (Test-Path $Path)
       }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -1755,10 +1888,11 @@ steps:
       $state = Get-AppCtlState
       $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
       $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
       $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
       $start = Get-Date
       if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
-      try { $att = & $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
       Start-Sleep -Milliseconds 800
       }
       if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
@@ -1780,6 +1914,7 @@ steps:
       foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
       $cleanOk = -not (Test-Path $script:AppCtlWork)
       foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
       Write-Output "APPCTL_FAMILY: $Family"
       Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
       Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
@@ -1818,4 +1953,8 @@ steps:
       return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = 'the effective application control policy differs from the approved baseline; policy drift or an unreviewed update is present' }; Note = $note }
       }
     cleanup: |
-      Remove-Item (Join-Path $env:TEMP 'bas-appctl-*') -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue

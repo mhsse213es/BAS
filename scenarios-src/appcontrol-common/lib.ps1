@@ -109,6 +109,14 @@ function Invoke-AppCtlProc {
   return $r
 }
 
+# Why a test program could not be built. Under WDAC user-mode enforcement PowerShell often runs in
+# ConstrainedLanguage, which blocks Add-Type; that is a side effect of enforcement, not a missing compiler.
+function Get-AppCtlCompileReason {
+  $mode = [string]$ExecutionContext.SessionState.LanguageMode
+  if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+  return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+}
+
 # Compiles a tiny unsigned console program that writes the marker to the file named by its first argument.
 function New-AppCtlExe {
   param([string]$Path)
@@ -122,7 +130,7 @@ function Invoke-AppCtlExeAt {
   param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
   New-Item -ItemType Directory -Path $Dir -Force | Out-Null
   $exe = Join-Path $Dir $Name
-  if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = 'the test program could not be compiled on this host (no .NET Framework compiler)' } }
+  if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
   if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
   $mk = Join-Path $Dir "$Name.marker.txt"
   $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
@@ -165,6 +173,18 @@ function New-AppCtlMsi {
   return (Test-Path $Path)
 }
 
+# Runs the attempt block and keeps its returned hashtable separate from anything else it wrote,
+# so operator warnings (for example a service that could not be restored) are still printed.
+function Invoke-AppCtlAttempt {
+  param([scriptblock]$Attempt)
+  $out = @(& $Attempt)
+  $res = $null
+  $script:AppCtlExtra = @()
+  foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+  if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+  return $res
+}
+
 function Invoke-AppCtlTest {
   param(
     [Parameter(Mandatory)][string]$Family,
@@ -182,10 +202,11 @@ function Invoke-AppCtlTest {
   $state = Get-AppCtlState
   $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
   $buildOk = ($state.Build -ge $MinBuild)
+  $script:AppCtlExtra = @()
   $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
   $start = Get-Date
   if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
-    try { $att = & $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+    try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
     Start-Sleep -Milliseconds 800
   }
   if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
@@ -208,6 +229,7 @@ function Invoke-AppCtlTest {
   foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
   $cleanOk = -not (Test-Path $script:AppCtlWork)
   foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+  foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
   Write-Output "APPCTL_FAMILY: $Family"
   Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
   Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"

@@ -147,7 +147,7 @@ func Generate(srcDir, commonDir string) ([]byte, error) {
 		out.WriteString(indent(libText+"\n"+minify(string(call)), 6))
 		if s.Cleanup == "" {
 			out.WriteString("    cleanup: |\n")
-			out.WriteString(indent("Remove-Item (Join-Path $env:TEMP 'bas-appctl-*') -Recurse -Force -ErrorAction SilentlyContinue", 6))
+			out.WriteString(indent(defaultCleanup, 6))
 		} else {
 			out.WriteString("    cleanup: |\n")
 			out.WriteString(indent(s.Cleanup, 6))
@@ -156,6 +156,14 @@ func Generate(srcDir, commonDir string) ([]byte, error) {
 	}
 	return bytes.TrimRight(out.Bytes(), "\n"), nil
 }
+
+// defaultCleanup is the sweep that runs even when a step is killed before its own cleanup. It covers
+// every location the pack writes to and the temporary signing certificate, all by the BAS-only prefix.
+const defaultCleanup = `foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+  Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+}
+Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue`
 
 func main() {
 	src := flag.String("src", "", "category source directory, e.g. scenarios-src/appcontrol-proxy-execution")

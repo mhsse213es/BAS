@@ -21,7 +21,7 @@
     "name": "Application control Policy Integrity: local AppLocker policy modification (T1562.001)",
     "technique_id": "T1562.001",
     "timeout_sec": 120,
-    "blast_radius": "Read-only by default: reads the permissions of the local AppLocker policy registry key for unprivileged write rights. With BAS_CONFIRM_APPCONTROL_POLICY_TAMPER=true (exact, administrator only) it also re-applies the host's own effective policy unchanged, which proves the identity could modify policy without changing it.",
+    "blast_radius": "Read-only by default: reads the permissions of the local AppLocker policy registry key for unprivileged write rights. With BAS_CONFIRM_APPCONTROL_POLICY_TAMPER=true (exact, administrator only) it also re-applies the host's own effective policy unchanged, and records that the identity could do so as evidence only; the verdict stays based on who is permitted to write the policy store.",
     "telemetry": [
       "Registry events (Sysmon EID 12/13) under SrpV2",
       "AppLocker policy change events in the AppLocker log"

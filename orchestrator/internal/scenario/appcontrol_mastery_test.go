@@ -74,7 +74,7 @@ function Get-WinEvent { [CmdletBinding()] param($FilterHashtable)
   if (-not $global:BasLogOK) { throw 'channel disabled' }
   $n = 0
   if ($id -in 8004, 8007) { $n = $global:BlkAl } elseif ($id -in 3077, 8029) { $n = $global:BlkWd } elseif ($id -in 8003, 8006) { $n = $global:AudAl } elseif ($id -in 3076, 8028) { $n = $global:AudWd }
-  if ($n -gt 0) { return (1..$n | ForEach-Object { [pscustomobject]@{ Message = 'Blocked regsvr32.exe mshta.exe cmstp.exe rundll32.exe wmic.exe MSBuild.exe InstallUtil.exe wscript.exe cscript.exe cmd.exe powershell.exe' } }) }
+  if ($n -gt 0) { return (1..$n | ForEach-Object { [pscustomobject]@{ Message = $(if ($global:BasName) { '%OSDRIVE%\USERS\X\APPDATA\LOCAL\TEMP\' + $global:BasName.Replace('{tid8}', $script:AppCtlTid.Substring(0,8)) + ' was prevented from running.' } else { 'Blocked regsvr32.exe mshta.exe cmstp.exe rundll32.exe wmic.exe MSBuild.exe InstallUtil.exe cmd.exe' }) } }) }
   # A real Get-WinEvent throws when the filter matches nothing; that is an empty result, not an unreadable log.
   throw (New-Object Management.Automation.ErrorRecord((New-Object Exception 'No events were found that match the specified selection criteria.'), 'NoMatchingEventsFound,Microsoft.PowerShell.Commands.GetWinEventCommand', [Management.Automation.ErrorCategory]::ObjectNotFound, $null))
 }
@@ -85,16 +85,19 @@ function Get-WinEvent { [CmdletBinding()] param($FilterHashtable)
 var masterySteps = []struct {
 	file, step string
 	full       bool
+	// name, when set, is the only text a block event carries: a real AppLocker or WDAC
+	// script-block event names the script file, not the host executable.
+	name string
 }{
-	{"appcontrol-proxy-execution.yaml", "Application control Trusted Binary Proxy: Regsvr32", true},
-	{"appcontrol-proxy-execution.yaml", "Application control Trusted Binary Proxy: Mshta", true},
-	{"appcontrol-proxy-execution.yaml", "Application control Trusted Binary Proxy: CMSTP", false},
-	{"appcontrol-script-interpreter.yaml", "Application control Script Host: wscript.exe", true},
-	{"appcontrol-script-interpreter.yaml", "Application control Script Host: cmd.exe batch", false},
-	{"appcontrol-script-interpreter.yaml", "Application control Script Host: Windows Script File", false},
-	{"appcontrol-script-interpreter.yaml", "Application control Script Host: JScript", false},
-	{"appcontrol-script-interpreter.yaml", "Application control PowerShell: unsigned script", false},
-	{"appcontrol-script-interpreter.yaml", "Application control WMI: Win32_Process.Create", false},
+	{"appcontrol-proxy-execution.yaml", "Application control Trusted Binary Proxy: Regsvr32", true, ""},
+	{"appcontrol-proxy-execution.yaml", "Application control Trusted Binary Proxy: Mshta", true, ""},
+	{"appcontrol-proxy-execution.yaml", "Application control Trusted Binary Proxy: CMSTP", false, ""},
+	{"appcontrol-script-interpreter.yaml", "Application control Script Host: wscript.exe", true, "bas_{tid8}.vbs"},
+	{"appcontrol-script-interpreter.yaml", "Application control Script Host: cmd.exe batch", false, "bas_{tid8}.bat"},
+	{"appcontrol-script-interpreter.yaml", "Application control Script Host: Windows Script File", false, "bas_{tid8}.wsf"},
+	{"appcontrol-script-interpreter.yaml", "Application control Script Host: JScript", false, "bas_{tid8}.js"},
+	{"appcontrol-script-interpreter.yaml", "Application control PowerShell: unsigned script", false, "bas_{tid8}.ps1"},
+	{"appcontrol-script-interpreter.yaml", "Application control WMI: Win32_Process.Create", false, ""},
 }
 
 var masteryCore = map[string]bool{
@@ -145,6 +148,13 @@ foreach ($c in $cases) { $r = Resolve-AppCtlOutcome -Expected $c[1] -Ran $c[2] -
 	}
 }
 
+func namePrelude(name string) string {
+	if name == "" {
+		return "$global:BasName = $null\n"
+	}
+	return "$global:BasName = '" + name + "'\n"
+}
+
 func TestAppControlMastery_ProxyStepsResolveAgainstFixtures(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("behavioral steps are Windows PowerShell")
@@ -156,7 +166,7 @@ func TestAppControlMastery_ProxyStepsResolveAgainstFixtures(t *testing.T) {
 				continue
 			}
 			t.Run(ms.step+"/"+fx.name, func(t *testing.T) {
-				out := runPosturePowerShell(t, masteryPrelude(fx)+"\n"+loadStepCommand(t, path, ms.step))
+				out := runPosturePowerShell(t, masteryPrelude(fx)+"\n"+namePrelude(ms.name)+loadStepCommand(t, path, ms.step))
 				if !strings.Contains(out, "APPCTL_OUTCOME: "+fx.wantOutcome) {
 					t.Errorf("want APPCTL_OUTCOME: %s\n%s", fx.wantOutcome, out)
 				}

@@ -1,7 +1,7 @@
 $tmpName = "bas_$($script:AppCtlTid.Substring(0,8)).tmp"
 Invoke-AppCtlTest -Family 'renamed_extension' -Collection 'Exe' -Needle $tmpName -Technique 'T1036.008' -Attempt {
   $real = Join-Path $script:AppCtlWork 'bas_real.exe'
-  if (-not (New-AppCtlExe -Path $real)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = 'the test program could not be compiled on this host (no .NET Framework compiler)' } }
+  if (-not (New-AppCtlExe -Path $real)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
   $exe = Join-Path $script:AppCtlWork $tmpName
   Copy-Item -Path $real -Destination $exe -Force
   Remove-Item -Path $real -Force -ErrorAction SilentlyContinue

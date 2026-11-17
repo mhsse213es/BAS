@@ -27,7 +27,6 @@ Invoke-AppCtlTest -Family 'policy_modification' -Collection 'Exe' -Needle 'SrpV2
   }
   $note = "policy_key_present=$keyExists unprivileged_write_principals=$($weak.Count) $live"
   if ($weak.Count -gt 0) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = "non-administrative principals can write the local AppLocker policy store ($($weak -join ','))" }; Note = $note } }
-  if ($reapplied) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = 'the test identity could re-apply the local AppLocker policy (identical content; nothing was changed)' }; Note = $note } }
   if (-not $keyExists) { return @{ NotApplicable = 'no local AppLocker policy store exists on this host, so there is no policy to tamper with'; Note = $note } }
   return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = 'the local AppLocker policy store is writable only by SYSTEM and administrators' }; Note = $note }
 }

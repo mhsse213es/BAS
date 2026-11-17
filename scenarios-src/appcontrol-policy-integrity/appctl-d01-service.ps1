@@ -29,6 +29,5 @@ Invoke-AppCtlTest -Family 'policy_service_interruption' -Collection 'Exe' -Needl
   }
   $note = "service_status=$($svc.Status) start_type=$((Get-CimInstance Win32_Service -Filter "Name='AppIDSvc'" -ErrorAction SilentlyContinue).StartMode) non_admin_stop_rights=$($weak.Count) identity_is_admin=$isAdmin $liveNote"
   if ($weak.Count -gt 0) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = "non-administrative principals hold the stop right on AppIDSvc ($($weak -join ','))" }; Note = $note } }
-  if ($stopped) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = 'the application control service was stopped by the test identity (restored afterwards)' }; Note = $note } }
   return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = 'only SYSTEM and administrators can stop the application control service; no unprivileged stop right found' }; Note = $note }
 }
