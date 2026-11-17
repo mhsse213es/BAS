@@ -2,7 +2,7 @@
   "acl-privilege-exposure-audit.yaml": {
     "cleanup": 0,
     "detection": 1,
-    "telemetry": 1
+    "telemetry": 0
   },
   "adcs-esc-template-exposure-audit.yaml": {
     "cleanup": 0,

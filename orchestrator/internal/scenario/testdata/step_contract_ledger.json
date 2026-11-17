@@ -2,7 +2,7 @@
   {
     "scenario": "acl-privilege-exposure-audit.yaml",
     "index": 0,
-    "technique_id": "T1069",
+    "technique_id": "T1087.002",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -11,7 +11,7 @@
   {
     "scenario": "acl-privilege-exposure-audit.yaml",
     "index": 1,
-    "technique_id": "T1069",
+    "technique_id": "T1069.002",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -20,7 +20,7 @@
   {
     "scenario": "acl-privilege-exposure-audit.yaml",
     "index": 2,
-    "technique_id": "T1069",
+    "technique_id": "T1069.002",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -29,7 +29,7 @@
   {
     "scenario": "acl-privilege-exposure-audit.yaml",
     "index": 3,
-    "technique_id": "T1069",
+    "technique_id": "T1069.002",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -38,7 +38,61 @@
   {
     "scenario": "acl-privilege-exposure-audit.yaml",
     "index": 4,
-    "technique_id": "T1069",
+    "technique_id": "T1098",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 5,
+    "technique_id": "T1098",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 6,
+    "technique_id": "T1098",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 7,
+    "technique_id": "T1098",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 8,
+    "technique_id": "T1098",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 9,
+    "technique_id": "T1098",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 10,
+    "technique_id": "T1485",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -46,8 +100,107 @@
   },
   {
     "scenario": "acl-privilege-exposure-audit.yaml",
-    "index": 5,
-    "technique_id": "T1222",
+    "index": 11,
+    "technique_id": "T1098",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 12,
+    "technique_id": "T1098",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 13,
+    "technique_id": "T1558.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 14,
+    "technique_id": "T1098",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 15,
+    "technique_id": "T1555",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 16,
+    "technique_id": "T1555",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 17,
+    "technique_id": "T1098",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 18,
+    "technique_id": "T1003.006",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 19,
+    "technique_id": "T1098",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 20,
+    "technique_id": "T1098",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 21,
+    "technique_id": "T1484.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "acl-privilege-exposure-audit.yaml",
+    "index": 22,
+    "technique_id": "T1087.002",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
