@@ -17,22 +17,23 @@ import (
 
 // Stage is one entry in stages.json.
 type Stage struct {
-	ID             string   `json:"id"`
-	N              int      `json:"n"`
-	Name           string   `json:"name"`
-	TechniqueID    string   `json:"technique_id"`
-	TimeoutSec     int      `json:"timeout_sec"`
-	RequiresPriv   string   `json:"requires_priv"`
-	Fidelity       string   `json:"fidelity"`
-	ProductionSafe *bool    `json:"production_safe"`
-	Risk           string   `json:"risk"`
-	Blast          string   `json:"blast_radius"`
-	Telemetry      []string `json:"telemetry"`
-	Detection      []string `json:"detection"`
-	Cleanup        string   `json:"cleanup"`
-	CleanupExtra   string   `json:"cleanup_extra"`
-	ActionKey      string   `json:"action_key"`
-	Note           string   `json:"note"`
+	ID                string   `json:"id"`
+	N                 int      `json:"n"`
+	Name              string   `json:"name"`
+	TechniqueID       string   `json:"technique_id"`
+	TimeoutSec        int      `json:"timeout_sec"`
+	RequiresPriv      string   `json:"requires_priv"`
+	Fidelity          string   `json:"fidelity"`
+	ProductionSafe    *bool    `json:"production_safe"`
+	Risk              string   `json:"risk"`
+	Blast             string   `json:"blast_radius"`
+	Telemetry         []string `json:"telemetry"`
+	Detection         []string `json:"detection"`
+	Cleanup           string   `json:"cleanup"`
+	CleanupExtra      string   `json:"cleanup_extra"`
+	ActionKey         string   `json:"action_key"`
+	DetectionProfiles []string `json:"detection_profiles"`
+	Note              string   `json:"note"`
 }
 
 func q(s string) string {
@@ -137,6 +138,9 @@ func Generate(srcDir, commonDir string) ([]byte, error) {
 		fmt.Fprintf(&out, "  - id: %s\n", s.ID)
 		fmt.Fprintf(&out, "    name: %s\n", q(s.Name))
 		fmt.Fprintf(&out, "    technique_id: %s\n", s.TechniqueID)
+		if len(s.DetectionProfiles) > 0 {
+			out.WriteString("    detection_profiles:" + list(s.DetectionProfiles))
+		}
 		if s.ActionKey != "" {
 			fmt.Fprintf(&out, "    action_key: %s\n", s.ActionKey)
 		}

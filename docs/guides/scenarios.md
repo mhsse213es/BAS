@@ -38,7 +38,12 @@ The library contains 16 kill chain scenarios. Each emulates the post-access trad
 | Scenario ID | Threat | Stages |
 |---|---|---|
 | `akira-kill-chain` | Akira ransomware | 9 |
-| `apt29-kill-chain` | APT29 (Cozy Bear / NOBELIUM) | 5 |
+| `apt29-kill-chain` | APT29 (Cozy Bear / NOBELIUM) | 6 |
+| `apt29-execution-evasion` | APT29 mastery: execution and defense evasion | 9 |
+| `apt29-persistence` | APT29 mastery: persistence | 4 |
+| `apt29-credential-access` | APT29 mastery: credential access | 3 |
+| `apt29-command-control` | APT29 mastery: command and control | 3 |
+| `apt29-collection-staging` | APT29 mastery: collection and staging | 3 |
 | `apt36-kill-chain` | APT36 (Transparent Tribe) | 10 |
 | `black-basta-kill-chain` | Black Basta ransomware | 10 |
 | `blackcat-kill-chain` | BlackCat / ALPHV ransomware | 8 |

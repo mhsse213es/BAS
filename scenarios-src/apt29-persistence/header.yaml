@@ -1,0 +1,26 @@
+id: apt29-persistence
+product_line: killchain
+name: "APT29 Mastery - Persistence"
+description: >
+  Four persistence behaviors attributed to APT29 on MITRE ATT&CK group G0016: a script in the user Startup folder,
+  a Startup shortcut whose target is modified, a WMI permanent event subscription and the modification and
+  restoration of a scheduled task action. Nothing is left to execute at a later logon: every item is removed and
+  its removal verified. The WMI step is gated by an exact flag and administrator only. Verdicts follow the same
+  rule as the rest of the pack: PASS needs a block event naming the step.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - apt29
+  - cozy-bear
+  - nobelium
+  - apt29-mastery
+  - persistence
+  - t1547
+  - t1546
+  - t1053
+mitre_phases:
+  - persistence
+
+steps:

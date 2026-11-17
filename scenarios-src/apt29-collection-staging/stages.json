@@ -1,0 +1,59 @@
+[
+  {
+    "id": "apt29-o1",
+    "n": 1,
+    "name": "APT29 Collection 1 - Documents Located and Copied to a Collection Folder (T1005 / T1083)",
+    "technique_id": "T1005",
+    "timeout_sec": 60,
+    "blast_radius": "Creates a synthetic user profile of eight files in a run-tagged temp directory, finds documents by extension and copies six into a collection folder. The real profile is never searched.",
+    "telemetry": [
+      "Sysmon EID 11: file creation in the collection folder"
+    ],
+    "detection": [
+      "EDR: bulk copy of documents into one directory by a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt29-o2",
+    "n": 2,
+    "name": "APT29 Collection 2 - Remote Data Staging on the Loopback Administrative Share (T1074.002)",
+    "technique_id": "T1074.002",
+    "timeout_sec": 90,
+    "blast_radius": "Gated by BAS_CONFIRM_APT29_REMOTE_STAGING=true (exact) and administrator only. Creates a run-tagged folder under C:/Users/Public through the loopback C$ share, copies four synthetic files into it, verifies them and removes the folder.",
+    "telemetry": [
+      "Security EID 5140 and 5145: administrative share access with the run-tagged path",
+      "Sysmon EID 11"
+    ],
+    "detection": [
+      "SIEM: file writes over C$ from a non-administration host or process"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue\nGet-ChildItem -Path (Join-Path $env:PUBLIC '.') -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe",
+    "requires_priv": "admin"
+  },
+  {
+    "id": "apt29-o3",
+    "n": 3,
+    "name": "APT29 Collection 3 - Collected Files Archived with a Utility and Verified (T1560.001)",
+    "technique_id": "T1560.001",
+    "timeout_sec": 90,
+    "blast_radius": "Archives five synthetic files with tar.exe into a run-tagged zip, lists it and extracts it to confirm every hash matches. Not encrypted. Removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: tar.exe with a run-tagged archive path",
+      "Security EID 4688"
+    ],
+    "detection": [
+      "EDR: archive utility run on a collection folder by a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  }
+]

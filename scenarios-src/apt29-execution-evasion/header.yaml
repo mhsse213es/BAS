@@ -1,0 +1,32 @@
+id: apt29-execution-evasion
+product_line: killchain
+name: "APT29 Mastery - Execution and Defense Evasion"
+description: >
+  Nine behaviors attributed to APT29 on MITRE ATT&CK group G0016: WMI process creation, rundll32 and mshta
+  proxy execution, obfuscated PowerShell with deobfuscation, binary padding, a system process name run from a user
+  path, timestomping, Mark-of-the-Web removal and a controlled clear of a dedicated test event log. Each step runs
+  the behavior for real with run-tagged artifacts, verifies its own cleanup, and reports host telemetry separately
+  from prevention. A PASS means a Microsoft Defender or AppLocker block event named the step; a step that did not
+  run and has no block event is inconclusive. The event-log step is gated, administrator only, and clears only a
+  dedicated test log, never a real one. Vendor EDR other than Microsoft Defender is not queried.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - apt29
+  - cozy-bear
+  - nobelium
+  - apt29-mastery
+  - execution
+  - defense-evasion
+  - t1047
+  - t1218
+  - t1027
+  - t1070
+  - t1553
+mitre_phases:
+  - execution
+  - defense-evasion
+
+steps:

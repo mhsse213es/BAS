@@ -4593,7 +4593,7 @@ type AdversaryTemplate struct {
 var adversaryTemplates = []AdversaryTemplate{
 	{
 		ID: "apt29-quick", Name: "APT29 Quick", ShortName: "APT29",
-		Description: "Five-stage Cozy Bear / NOBELIUM post-compromise tradecraft (domain recon, encoded loader, run-key persistence, scheduled task, DNS C2 beacon). ~15 min, production-safe.",
+		Description: "Six-stage Cozy Bear / NOBELIUM post-compromise tradecraft (domain recon, encoded payload download, encoded execution, run-key persistence, scheduled task, DNS C2 beacon). ~15 min, production-safe.",
 		Category:    "apt", ThreatActor: "APT29 — Cozy Bear / NOBELIUM", MITREGroup: "G0016",
 		Tactics:       []string{"discovery", "execution", "persistence", "command-and-control"},
 		KeyTechniques: []string{"T1059.001", "T1482", "T1087.001", "T1547.001", "T1071.004"},
@@ -4605,7 +4605,7 @@ var adversaryTemplates = []AdversaryTemplate{
 	},
 	{
 		ID: "apt29-full", Name: "APT29 Full", ShortName: "APT29",
-		Description: "Extended APT29 emulation adding credential access, process injection, LOLBin proxy execution, and domain account enumeration on top of the Quick chain. ~45 min.",
+		Description: "Extended APT29 emulation: the six-stage kill chain plus ART-sourced credential access, process injection, LOLBin proxy execution and domain account enumeration. The APT29 Mastery scenarios (execution and evasion, persistence, credential access, command and control, collection) run separately. ~45 min.",
 		Category:    "apt", ThreatActor: "APT29 — Cozy Bear / NOBELIUM", MITREGroup: "G0016",
 		Tactics:       []string{"discovery", "credential-access", "execution", "defense-evasion", "persistence", "command-and-control"},
 		KeyTechniques: []string{"T1003.001", "T1059.001", "T1087.002", "T1218.011", "T1055.001", "T1482"},

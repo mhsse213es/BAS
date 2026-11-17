@@ -1,0 +1,59 @@
+[
+  {
+    "id": "apt29-k1",
+    "n": 1,
+    "name": "APT29 C2 1 - HTTP Beacons with Jitter to a Loopback Server (T1071.001)",
+    "technique_id": "T1071.001",
+    "timeout_sec": 120,
+    "blast_radius": "Runs a loopback-only HTTP server in an in-process runspace and sends five POST beacons about two seconds apart with an uncommon user agent. No traffic leaves the host.",
+    "telemetry": [
+      "Sysmon EID 3: connections to 127.0.0.1 on the beacon port"
+    ],
+    "detection": [
+      "NDR/EDR: periodic POSTs with a fixed body shape and unusual user agent"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt29-k2",
+    "n": 2,
+    "name": "APT29 C2 2 - Generated Name Burst (T1568)",
+    "technique_id": "T1568",
+    "timeout_sec": 120,
+    "blast_radius": "Resolves twelve generated base32 names under .invalid in quick succession from the PowerShell process. Queries go to the host resolver and cannot resolve.",
+    "telemetry": [
+      "Sysmon EID 22: DNS queries for the generated names",
+      "DNS-Client EID 3008 where enabled"
+    ],
+    "detection": [
+      "DNS analytics: burst of high-entropy NXDOMAIN lookups from one process"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt29-k3",
+    "n": 3,
+    "name": "APT29 C2 3 - Local Port Proxy Configured, Used Once and Removed (T1090.001)",
+    "technique_id": "T1090.001",
+    "timeout_sec": 90,
+    "blast_radius": "Gated by BAS_CONFIRM_APT29_PORTPROXY=true (exact) and administrator only. Adds a netsh port proxy from a random loopback port to the next one, connects through it once and deletes only its own rule. Existing port proxy rules are never touched.",
+    "telemetry": [
+      "Sysmon EID 1: netsh.exe interface portproxy add",
+      "Security EID 4688"
+    ],
+    "detection": [
+      "EDR: netsh portproxy add by a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue\n(netsh interface portproxy show v4tov4 | Out-String) -split [Environment]::NewLine | ForEach-Object { if ($_ -match '^\\s*127\\.0\\.0\\.1\\s+(4\\d{4})\\s+127\\.0\\.0\\.1\\s+(4\\d{4})\\s*$') { & netsh interface portproxy delete v4tov4 listenport=$($matches[1]) listenaddress=127.0.0.1 | Out-Null } }",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe",
+    "requires_priv": "admin"
+  }
+]

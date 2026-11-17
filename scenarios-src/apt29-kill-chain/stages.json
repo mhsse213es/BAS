@@ -1,0 +1,141 @@
+[
+  {
+    "id": "apt29-s1",
+    "n": 1,
+    "name": "APT29 Stage 1 - Domain Trust and Local Account Discovery (T1482 / T1087.001)",
+    "technique_id": "T1482",
+    "timeout_sec": 60,
+    "blast_radius": "Runs nltest /domain_trusts /all_trusts and net user through cmd.exe with output redirected into a run-tagged temp directory. Read-only. APT29 maps trusts with nltest before lateral movement. The temp directory is removed and removal is verified.",
+    "telemetry": [
+      "Sysmon EID 1: cmd.exe, nltest.exe and net.exe with the run-tagged output path",
+      "Security EID 4688: process creation with command line, if command-line auditing is enabled"
+    ],
+    "detection": [
+      "EDR: nltest.exe domain trust enumeration from a script host (Sigma proc_creation_win_nltest_recon)",
+      "SIEM: nltest.exe and net.exe user in one command line, the APT29 recon pattern"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low"
+  },
+  {
+    "id": "apt29-s2a",
+    "n": 2,
+    "name": "APT29 Stage 2a - Encoded PowerShell Payload Download from a Loopback Server (T1105 / T1059.001)",
+    "technique_id": "T1105",
+    "timeout_sec": 90,
+    "detection_profiles": [
+      "windows_encoded_powershell"
+    ],
+    "blast_radius": "Starts a loopback-only HTTP listener on 127.0.0.1, launches an encoded PowerShell child that downloads a short text payload and saves it to a run-tagged temp file. The payload is never executed. No traffic leaves the host. The listener is stopped and the file removed.",
+    "telemetry": [
+      "Sysmon EID 1: powershell.exe -EncodedCommand with the run-tagged working directory",
+      "PowerShell EID 4104: decoded download command in script block logging",
+      "Sysmon EID 3: connection to 127.0.0.1 on the listener port"
+    ],
+    "detection": [
+      "EDR: encoded PowerShell with a web download (Sigma proc_creation_win_powershell_encoded_cmd)",
+      "AMSI/ScriptBlock: DownloadString in a decoded command"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low"
+  },
+  {
+    "id": "apt29-s2b",
+    "n": 3,
+    "name": "APT29 Stage 2b - Layered Encoded PowerShell Executed Locally (T1059.001 / T1027 / T1140)",
+    "technique_id": "T1059.001",
+    "timeout_sec": 60,
+    "detection_profiles": [
+      "windows_encoded_powershell"
+    ],
+    "blast_radius": "Launches PowerShell with a two-layer encoded command that decodes and runs a benign command writing one marker file in a run-tagged temp directory. No network use. The directory is removed and removal is verified.",
+    "telemetry": [
+      "Sysmon EID 1: powershell.exe -EncodedCommand",
+      "PowerShell EID 4104: both decoded layers in script block logging",
+      "Security EID 4688: child powershell.exe with the encoded argument"
+    ],
+    "detection": [
+      "EDR: nested encoded PowerShell and Invoke-Expression of decoded content",
+      "AMSI: decoded second-layer script content"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low"
+  },
+  {
+    "id": "apt29-s3",
+    "n": 4,
+    "name": "APT29 Stage 3 - HKCU Run Key Persistence Write, Read-back and Removal (T1547.001)",
+    "technique_id": "T1547.001",
+    "timeout_sec": 45,
+    "detection_profiles": [
+      "windows_runkey_persistence"
+    ],
+    "blast_radius": "Writes one run-tagged value under HKCU Software Microsoft Windows CurrentVersion Run that echoes a marker, reads it back and deletes it, then verifies the value is gone. User-level only; the value is never executed by a logon.",
+    "telemetry": [
+      "Sysmon EID 13 and 14: registry value set and deleted under the Run key",
+      "Security EID 4657: registry value modified, if object-access auditing is enabled"
+    ],
+    "detection": [
+      "EDR: new HKCU Run value written by a script host (Sigma registry_set_persistence_run_key)",
+      "SIEM: Run value created and deleted within seconds"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue\n$k = 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run'; (Get-Item -Path $k -ErrorAction SilentlyContinue).Property | Where-Object { $_ -like 'bas_a29_*' } | ForEach-Object { Remove-ItemProperty -Path $k -Name $_ -ErrorAction SilentlyContinue }",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low"
+  },
+  {
+    "id": "apt29-s4",
+    "n": 5,
+    "name": "APT29 Stage 4 - Scheduled Task Created, Run Once, Queried and Deleted (T1053.005)",
+    "technique_id": "T1053.005",
+    "timeout_sec": 90,
+    "detection_profiles": [
+      "windows_schtask_persistence"
+    ],
+    "blast_radius": "Creates a one-time scheduled task with a run-tagged name whose action writes a marker file, runs it once, then deletes it and verifies deletion with a query. Current user only, no elevation, no trigger that fires later.",
+    "telemetry": [
+      "Security EID 4698 and 4699: task created and deleted, if object-access auditing is enabled",
+      "Task Scheduler EID 106 and 200: task registered and action started",
+      "Sysmon EID 1: schtasks.exe with the run-tagged task name"
+    ],
+    "detection": [
+      "EDR: schtasks.exe /create from a script host (Sigma proc_creation_win_schtasks_persistence)",
+      "SIEM: new scheduled task outside a change window"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue\nGet-ScheduledTask -TaskName 'bas_a29_*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low"
+  },
+  {
+    "id": "apt29-s5",
+    "n": 6,
+    "name": "APT29 Stage 5 - Periodic DNS Beacon Pattern to Non-resolving Names (T1071.004)",
+    "technique_id": "T1071.004",
+    "timeout_sec": 120,
+    "detection_profiles": [
+      "windows_dns_c2"
+    ],
+    "blast_radius": "Sends six DNS queries about two seconds apart, each for a unique run-tagged name under the reserved .invalid top-level domain, from the PowerShell process. Queries go to the host resolver and cannot resolve. This validates host DNS telemetry only; periodicity analytics and SIEM ingestion are not verified.",
+    "telemetry": [
+      "Sysmon EID 22: DNS query events for the run-tagged names",
+      "DNS-Client Operational EID 3008 where that channel is enabled",
+      "DNS server log: queries for the .invalid names"
+    ],
+    "detection": [
+      "DNS analytics: periodic queries with high-entropy labels to one parent domain",
+      "Resolver policy: .invalid names should never leave the resolver"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low"
+  }
+]

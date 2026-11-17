@@ -1,0 +1,57 @@
+[
+  {
+    "id": "apt29-c1",
+    "n": 1,
+    "name": "APT29 Credential Access 1 - Kerberos Ticket Cache Enumeration (T1550.003 precondition)",
+    "technique_id": "T1550.003",
+    "timeout_sec": 60,
+    "blast_radius": "Runs klist tickets and klist tgt and records only counts. No ticket is exported, saved or replayed.",
+    "telemetry": [
+      "Sysmon EID 1: klist.exe",
+      "Security EID 4688"
+    ],
+    "detection": [
+      "EDR: klist.exe from a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt29-c2",
+    "n": 2,
+    "name": "APT29 Credential Access 2 - Private Key File Search (T1552.004)",
+    "technique_id": "T1552.004",
+    "timeout_sec": 60,
+    "blast_radius": "Plants synthetic key files in a run-tagged temp profile and searches that profile recursively for key-file patterns. The real profile is never searched.",
+    "telemetry": [
+      "Sysmon EID 11: key-named files created"
+    ],
+    "detection": [
+      "EDR: recursive search for id_rsa, .pfx, .pem and .key patterns"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt29-c3",
+    "n": 3,
+    "name": "APT29 Credential Access 3 - Browser Credential Store Copy (T1555.003)",
+    "technique_id": "T1555.003",
+    "timeout_sec": 60,
+    "blast_radius": "Builds a synthetic Chrome-style profile with a Login Data file and Local State, copies the store as stealers do to avoid locks, and reads its header. The real browser profile is never touched; nothing is decrypted.",
+    "telemetry": [
+      "Sysmon EID 11: copy of a file named Login Data"
+    ],
+    "detection": [
+      "EDR: Login Data copied by a non-browser process"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  }
+]

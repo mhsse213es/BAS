@@ -1,0 +1,1772 @@
+id: apt29-execution-evasion
+product_line: killchain
+name: "APT29 Mastery - Execution and Defense Evasion"
+description: >
+  Nine behaviors attributed to APT29 on MITRE ATT&CK group G0016: WMI process creation, rundll32 and mshta
+  proxy execution, obfuscated PowerShell with deobfuscation, binary padding, a system process name run from a user
+  path, timestomping, Mark-of-the-Web removal and a controlled clear of a dedicated test event log. Each step runs
+  the behavior for real with run-tagged artifacts, verifies its own cleanup, and reports host telemetry separately
+  from prevention. A PASS means a Microsoft Defender or AppLocker block event named the step; a step that did not
+  run and has no block event is inconclusive. The event-log step is gated, administrator only, and clears only a
+  dedicated test log, never a real one. Vendor EDR other than Microsoft Defender is not queried.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - apt29
+  - cozy-bear
+  - nobelium
+  - apt29-mastery
+  - execution
+  - defense-evasion
+  - t1047
+  - t1218
+  - t1027
+  - t1070
+  - t1553
+mitre_phases:
+  - execution
+  - defense-evasion
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: apt29-x1
+    name: "APT29 Execution 1 - WMI Process Creation (T1047)"
+    technique_id: T1047
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Calls Win32_Process.Create to run cmd.exe echoing a marker into a run-tagged temp file. Benign; the file is removed and removal verified."
+    telemetry:
+      - "Sysmon EID 1: cmd.exe with WmiPrvSE.exe parent"
+      - "Security EID 4688: process creation"
+      - "WMI-Activity EID 5857"
+    detection:
+      - "EDR: process created by WmiPrvSE.exe from a script host"
+      - "SIEM: Win32_Process.Create command line"
+    command: |
+      $script:A29Run = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:A29Extra = @()
+      function Get-A29Control {
+      $r = @{ Build = [Environment]::OSVersion.Version.Build; DefenderReadable = $false; DefenderOn = $false; AsrBlock = 0; AppLocker = 'NotConfigured' }
+      try { $s = Get-MpComputerStatus -ErrorAction Stop; $r.DefenderReadable = $true; $r.DefenderOn = ([bool]$s.RealTimeProtectionEnabled -and [bool]$s.AntivirusEnabled) } catch {}
+      try { $p = Get-MpPreference -ErrorAction Stop; $r.AsrBlock = @($p.AttackSurfaceReductionRules_Actions | Where-Object { $_ -eq 1 }).Count } catch {}
+      try {
+      $svc = Get-Service -Name AppIDSvc -ErrorAction Stop
+      if ($svc.Status -eq 'Running') {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      foreach ($c in @($pol.RuleCollections)) { if ([string]$c.EnforcementMode -eq 'Enabled') { $r.AppLocker = 'Enabled' } }
+      }
+      } catch {}
+      return $r
+      }
+      function Get-A29Blocks {
+      param([datetime]$Start, [string]$Needle)
+      $r = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      $q = @(
+      @{ Key = 'Defender'; Log = 'Microsoft-Windows-Windows Defender/Operational'; Ids = @(1116, 1121) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/EXE and DLL'; Ids = @(8004) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/MSI and Script'; Ids = @(8007) }
+      )
+      foreach ($x in $q) {
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $x.Log; Id = $x.Ids; StartTime = $Start } -ErrorAction Stop)
+      $r[$x.Key] += @($ev | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch {
+      $f = [string]$_.FullyQualifiedErrorId
+      if ($f -like '*NoMatchingEventsFound*' -or $f -like '*NoMatchingLogsFound*') { continue }
+      $r.Readable = $false
+      }
+      }
+      return $r
+      }
+      function Resolve-A29Outcome {
+      param([bool]$Ran, [int]$Blocks, [bool]$Enforcing, [bool]$Readable, [bool]$BuildOk = $true)
+      if (-not $BuildOk) { return @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      if ($Ran) {
+      if ($Blocks -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed although a block event naming this test was recorded' } }
+      if ($Enforcing) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed while Microsoft Defender or AppLocker prevention was active' } }
+      return @{ Outcome = 'not_enforced'; Reason = 'the behavior executed and no Microsoft Defender or AppLocker prevention was active' }
+      }
+      if ($Blocks -gt 0) { return @{ Outcome = 'prevented'; Reason = "not executed; $Blocks block event(s) name this test" } }
+      if (-not $Readable) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, and a block log was unreadable, so the absence cannot be attributed' } }
+      return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no block event names this test, so the absence cannot be attributed to a control' }
+      }
+      function Get-A29Telemetry {
+      param([string[]]$Specs, [datetime]$Start, [string]$Needle)
+      $logs = @{ sysmon = 'Microsoft-Windows-Sysmon/Operational'; ps = 'Microsoft-Windows-PowerShell/Operational'; sec = 'Security'; wmi = 'Microsoft-Windows-WMI-Activity/Operational'; task = 'Microsoft-Windows-TaskScheduler/Operational'; sys = 'System'; dns = 'Microsoft-Windows-DNS-Client/Operational' }
+      $out = [ordered]@{}
+      foreach ($sp in @($Specs)) {
+      if (-not $sp) { continue }
+      $parts = $sp.Split(':')
+      $st = 'unavailable'
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $logs[$parts[0]]; Id = [int]$parts[1]; StartTime = $Start } -ErrorAction Stop)
+      $st = if (@($ev | Where-Object { $_.Message -like "*$Needle*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch { if ([string]$_.FullyQualifiedErrorId -like '*NoMatchingEventsFound*') { $st = 'not_visible' } }
+      $out[$sp] = $st
+      }
+      return $out
+      }
+      function Test-A29Marker {
+      param([string]$Path)
+      if (-not (Test-Path -LiteralPath $Path)) { return $false }
+      return ((Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) -join ' ') -like "*$($script:A29Marker)*"
+      }
+      function Invoke-A29Proc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Invoke-A29Attempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:A29Extra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:A29Extra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Invoke-A29Test {
+      param(
+      [Parameter(Mandatory)][string]$Id,
+      [Parameter(Mandatory)][string]$Technique,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Mode = 'Prevention',
+      [string[]]$Telemetry = @(),
+      [string[]]$Require = @(),
+      [string[]]$ExtraCleanup = @(),
+      [int]$MinBuild = 17763,
+      [string]$Summary = '',
+      [string]$Needle = ''
+      )
+      $script:A29Tag = "bas_a29_$($script:A29Run)_$Id"
+      $script:A29Work = Join-Path $env:TEMP $script:A29Tag
+      $script:A29Marker = "BAS-SIM-APT29-$($script:A29Run)-$Id"
+      $needleText = if ($Needle) { $Needle } else { $script:A29Tag }
+      New-Item -ItemType Directory -Path $script:A29Work -Force | Out-Null
+      $ctl = Get-A29Control
+      $buildOk = ($ctl.Build -ge $MinBuild)
+      $att = @{ Ran = $false; Note = ''; NotApplicable = '' }
+      $start = Get-Date
+      if ($buildOk) {
+      try { $att = Invoke-A29Attempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      $enforcing = ($ctl.DefenderOn -or $ctl.AsrBlock -gt 0 -or $ctl.AppLocker -eq 'Enabled')
+      $blocks = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      if ($Mode -eq 'Prevention' -and $buildOk) { $blocks = Get-A29Blocks -Start $start.AddSeconds(-1) -Needle $needleText }
+      $specs = @($Telemetry) + @($Require) | Where-Object { $_ } | Select-Object -Unique
+      $tele = [ordered]@{}
+      if ($buildOk -and $specs.Count -gt 0) { $tele = Get-A29Telemetry -Specs $specs -Start $start.AddSeconds(-1) -Needle $needleText }
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($Mode -eq 'Direct') {
+      $ok = @('prevented', 'allowed_unexpectedly', 'not_enforced', 'inconclusive', 'not_applicable', 'telemetry_visible', 'telemetry_not_visible')
+      if ($att.Verdict -and ($ok -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      }
+      elseif ($Mode -eq 'Telemetry') {
+      if (-not $att.Ran) { $r = @{ Outcome = 'inconclusive'; Reason = 'the behavior did not run, so its telemetry cannot be judged' } }
+      else {
+      $st = @($Require | ForEach-Object { $tele[$_] })
+      if (@($st | Where-Object { $_ -eq 'unavailable' }).Count -gt 0) { $r = @{ Outcome = 'inconclusive'; Reason = 'a required log is not available on this host, so visibility cannot be judged' } }
+      elseif (@($st | Where-Object { $_ -ne 'visible' }).Count -gt 0) { $r = @{ Outcome = 'telemetry_not_visible'; Reason = 'the behavior ran but the required host telemetry did not record it' } }
+      else { $r = @{ Outcome = 'telemetry_visible'; Reason = 'the behavior ran and the required host telemetry recorded it; forwarding to a SIEM is not verified' } }
+      }
+      }
+      else { $r = Resolve-A29Outcome -Ran ([bool]$att.Ran) -Blocks ([int]($blocks.Defender + $blocks.AppLocker)) -Enforcing $enforcing -Readable ([bool]$blocks.Readable) -BuildOk $buildOk }
+      Remove-Item -LiteralPath $script:A29Work -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path -LiteralPath $script:A29Work)
+      foreach ($x in $ExtraCleanup) { if (Test-Path -LiteralPath $x) { $cleanOk = $false } }
+      if ($att.ContainsKey('CleanupOk') -and -not [bool]$att.CleanupOk) { $cleanOk = $false }
+      foreach ($x in @($script:A29Extra)) { if ($x) { Write-Output $x } }
+      Write-Output "EXEC $($Technique): $Summary ran=$([bool]$att.Ran). [BAS-SIM-APT29-$Id]"
+      Write-Output "APT29_FAMILY: $Id"
+      Write-Output "APT29_HOST: os_build=$($ctl.Build) technique=$Technique mode=$Mode"
+      Write-Output "APT29_CONTROL: defender_on=$($ctl.DefenderOn) defender_readable=$($ctl.DefenderReadable) asr_block_rules=$($ctl.AsrBlock) applocker=$($ctl.AppLocker)"
+      Write-Output "APT29_EVIDENCE: run=$($script:A29Run) tag=$($script:A29Tag) ran=$([bool]$att.Ran) note=$($att.Note) block_events=[defender=$($blocks.Defender) applocker=$($blocks.AppLocker)] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      Write-Output "APT29_TELEMETRY: $((@($tele.GetEnumerator() | ForEach-Object { ($_.Key -replace ':', '_') + '=' + $_.Value }) -join ' '))"
+      Write-Output "APT29_OUTCOME: $($r.Outcome)"
+      $v = 'SKIP'
+      if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
+      elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
+      Write-Output "$($v): $($r.Reason). [BAS-SIM-APT29-$Id]"
+      }
+      Invoke-A29Test -Id 'x1' -Technique 'T1047' -Summary 'WMI Win32_Process.Create runs a benign command (T1047)' -Telemetry @('sysmon:1', 'sec:4688', 'wmi:5857') -Attempt {
+      $mk = Join-Path $script:A29Work 'wmi-marker.txt'
+      $cmd = 'cmd.exe /c echo ' + $script:A29Marker + '> "' + $mk + '"'
+      $r = $null
+      try { $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd } -ErrorAction Stop } catch {}
+      for ($i = 0; $i -lt 10 -and -not (Test-A29Marker $mk); $i++) { Start-Sleep -Milliseconds 300 }
+      $rv = if ($r) { [int]$r.ReturnValue } else { -1 }
+      return @{ Ran = (Test-A29Marker $mk); Note = "wmi_return_value=$rv parent_expected=WmiPrvSE.exe"; NotApplicable = '' }
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: apt29-x2
+    name: "APT29 Execution 2 - rundll32 Proxy Execution Through an INF (T1218.011)"
+    technique_id: T1218.011
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Runs rundll32.exe advpack.dll,LaunchINFSection on a run-tagged INF whose only command echoes a marker. Benign; removed and verified."
+    telemetry:
+      - "Sysmon EID 1: rundll32.exe advpack.dll"
+      - "Security EID 4688"
+    detection:
+      - "EDR: rundll32 loading advpack.dll with an INF from a user path"
+    command: |
+      $script:A29Run = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:A29Extra = @()
+      function Get-A29Control {
+      $r = @{ Build = [Environment]::OSVersion.Version.Build; DefenderReadable = $false; DefenderOn = $false; AsrBlock = 0; AppLocker = 'NotConfigured' }
+      try { $s = Get-MpComputerStatus -ErrorAction Stop; $r.DefenderReadable = $true; $r.DefenderOn = ([bool]$s.RealTimeProtectionEnabled -and [bool]$s.AntivirusEnabled) } catch {}
+      try { $p = Get-MpPreference -ErrorAction Stop; $r.AsrBlock = @($p.AttackSurfaceReductionRules_Actions | Where-Object { $_ -eq 1 }).Count } catch {}
+      try {
+      $svc = Get-Service -Name AppIDSvc -ErrorAction Stop
+      if ($svc.Status -eq 'Running') {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      foreach ($c in @($pol.RuleCollections)) { if ([string]$c.EnforcementMode -eq 'Enabled') { $r.AppLocker = 'Enabled' } }
+      }
+      } catch {}
+      return $r
+      }
+      function Get-A29Blocks {
+      param([datetime]$Start, [string]$Needle)
+      $r = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      $q = @(
+      @{ Key = 'Defender'; Log = 'Microsoft-Windows-Windows Defender/Operational'; Ids = @(1116, 1121) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/EXE and DLL'; Ids = @(8004) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/MSI and Script'; Ids = @(8007) }
+      )
+      foreach ($x in $q) {
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $x.Log; Id = $x.Ids; StartTime = $Start } -ErrorAction Stop)
+      $r[$x.Key] += @($ev | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch {
+      $f = [string]$_.FullyQualifiedErrorId
+      if ($f -like '*NoMatchingEventsFound*' -or $f -like '*NoMatchingLogsFound*') { continue }
+      $r.Readable = $false
+      }
+      }
+      return $r
+      }
+      function Resolve-A29Outcome {
+      param([bool]$Ran, [int]$Blocks, [bool]$Enforcing, [bool]$Readable, [bool]$BuildOk = $true)
+      if (-not $BuildOk) { return @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      if ($Ran) {
+      if ($Blocks -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed although a block event naming this test was recorded' } }
+      if ($Enforcing) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed while Microsoft Defender or AppLocker prevention was active' } }
+      return @{ Outcome = 'not_enforced'; Reason = 'the behavior executed and no Microsoft Defender or AppLocker prevention was active' }
+      }
+      if ($Blocks -gt 0) { return @{ Outcome = 'prevented'; Reason = "not executed; $Blocks block event(s) name this test" } }
+      if (-not $Readable) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, and a block log was unreadable, so the absence cannot be attributed' } }
+      return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no block event names this test, so the absence cannot be attributed to a control' }
+      }
+      function Get-A29Telemetry {
+      param([string[]]$Specs, [datetime]$Start, [string]$Needle)
+      $logs = @{ sysmon = 'Microsoft-Windows-Sysmon/Operational'; ps = 'Microsoft-Windows-PowerShell/Operational'; sec = 'Security'; wmi = 'Microsoft-Windows-WMI-Activity/Operational'; task = 'Microsoft-Windows-TaskScheduler/Operational'; sys = 'System'; dns = 'Microsoft-Windows-DNS-Client/Operational' }
+      $out = [ordered]@{}
+      foreach ($sp in @($Specs)) {
+      if (-not $sp) { continue }
+      $parts = $sp.Split(':')
+      $st = 'unavailable'
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $logs[$parts[0]]; Id = [int]$parts[1]; StartTime = $Start } -ErrorAction Stop)
+      $st = if (@($ev | Where-Object { $_.Message -like "*$Needle*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch { if ([string]$_.FullyQualifiedErrorId -like '*NoMatchingEventsFound*') { $st = 'not_visible' } }
+      $out[$sp] = $st
+      }
+      return $out
+      }
+      function Test-A29Marker {
+      param([string]$Path)
+      if (-not (Test-Path -LiteralPath $Path)) { return $false }
+      return ((Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) -join ' ') -like "*$($script:A29Marker)*"
+      }
+      function Invoke-A29Proc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Invoke-A29Attempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:A29Extra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:A29Extra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Invoke-A29Test {
+      param(
+      [Parameter(Mandatory)][string]$Id,
+      [Parameter(Mandatory)][string]$Technique,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Mode = 'Prevention',
+      [string[]]$Telemetry = @(),
+      [string[]]$Require = @(),
+      [string[]]$ExtraCleanup = @(),
+      [int]$MinBuild = 17763,
+      [string]$Summary = '',
+      [string]$Needle = ''
+      )
+      $script:A29Tag = "bas_a29_$($script:A29Run)_$Id"
+      $script:A29Work = Join-Path $env:TEMP $script:A29Tag
+      $script:A29Marker = "BAS-SIM-APT29-$($script:A29Run)-$Id"
+      $needleText = if ($Needle) { $Needle } else { $script:A29Tag }
+      New-Item -ItemType Directory -Path $script:A29Work -Force | Out-Null
+      $ctl = Get-A29Control
+      $buildOk = ($ctl.Build -ge $MinBuild)
+      $att = @{ Ran = $false; Note = ''; NotApplicable = '' }
+      $start = Get-Date
+      if ($buildOk) {
+      try { $att = Invoke-A29Attempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      $enforcing = ($ctl.DefenderOn -or $ctl.AsrBlock -gt 0 -or $ctl.AppLocker -eq 'Enabled')
+      $blocks = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      if ($Mode -eq 'Prevention' -and $buildOk) { $blocks = Get-A29Blocks -Start $start.AddSeconds(-1) -Needle $needleText }
+      $specs = @($Telemetry) + @($Require) | Where-Object { $_ } | Select-Object -Unique
+      $tele = [ordered]@{}
+      if ($buildOk -and $specs.Count -gt 0) { $tele = Get-A29Telemetry -Specs $specs -Start $start.AddSeconds(-1) -Needle $needleText }
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($Mode -eq 'Direct') {
+      $ok = @('prevented', 'allowed_unexpectedly', 'not_enforced', 'inconclusive', 'not_applicable', 'telemetry_visible', 'telemetry_not_visible')
+      if ($att.Verdict -and ($ok -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      }
+      elseif ($Mode -eq 'Telemetry') {
+      if (-not $att.Ran) { $r = @{ Outcome = 'inconclusive'; Reason = 'the behavior did not run, so its telemetry cannot be judged' } }
+      else {
+      $st = @($Require | ForEach-Object { $tele[$_] })
+      if (@($st | Where-Object { $_ -eq 'unavailable' }).Count -gt 0) { $r = @{ Outcome = 'inconclusive'; Reason = 'a required log is not available on this host, so visibility cannot be judged' } }
+      elseif (@($st | Where-Object { $_ -ne 'visible' }).Count -gt 0) { $r = @{ Outcome = 'telemetry_not_visible'; Reason = 'the behavior ran but the required host telemetry did not record it' } }
+      else { $r = @{ Outcome = 'telemetry_visible'; Reason = 'the behavior ran and the required host telemetry recorded it; forwarding to a SIEM is not verified' } }
+      }
+      }
+      else { $r = Resolve-A29Outcome -Ran ([bool]$att.Ran) -Blocks ([int]($blocks.Defender + $blocks.AppLocker)) -Enforcing $enforcing -Readable ([bool]$blocks.Readable) -BuildOk $buildOk }
+      Remove-Item -LiteralPath $script:A29Work -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path -LiteralPath $script:A29Work)
+      foreach ($x in $ExtraCleanup) { if (Test-Path -LiteralPath $x) { $cleanOk = $false } }
+      if ($att.ContainsKey('CleanupOk') -and -not [bool]$att.CleanupOk) { $cleanOk = $false }
+      foreach ($x in @($script:A29Extra)) { if ($x) { Write-Output $x } }
+      Write-Output "EXEC $($Technique): $Summary ran=$([bool]$att.Ran). [BAS-SIM-APT29-$Id]"
+      Write-Output "APT29_FAMILY: $Id"
+      Write-Output "APT29_HOST: os_build=$($ctl.Build) technique=$Technique mode=$Mode"
+      Write-Output "APT29_CONTROL: defender_on=$($ctl.DefenderOn) defender_readable=$($ctl.DefenderReadable) asr_block_rules=$($ctl.AsrBlock) applocker=$($ctl.AppLocker)"
+      Write-Output "APT29_EVIDENCE: run=$($script:A29Run) tag=$($script:A29Tag) ran=$([bool]$att.Ran) note=$($att.Note) block_events=[defender=$($blocks.Defender) applocker=$($blocks.AppLocker)] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      Write-Output "APT29_TELEMETRY: $((@($tele.GetEnumerator() | ForEach-Object { ($_.Key -replace ':', '_') + '=' + $_.Value }) -join ' '))"
+      Write-Output "APT29_OUTCOME: $($r.Outcome)"
+      $v = 'SKIP'
+      if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
+      elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
+      Write-Output "$($v): $($r.Reason). [BAS-SIM-APT29-$Id]"
+      }
+      Invoke-A29Test -Id 'x2' -Technique 'T1218.011' -Summary 'rundll32 proxies execution through an INF section (T1218.011)' -Telemetry @('sysmon:1', 'sec:4688') -Attempt {
+      $mk = Join-Path $script:A29Work 'rundll32-marker.txt'
+      $inf = Join-Path $script:A29Work 'proxy.inf'
+      $cmd = 'cmd.exe /c echo ' + $script:A29Marker + '> "' + $mk + '"'
+      $body = "[Version]`r`nSignature=`"`$CHICAGO`$`"`r`n[DefaultInstall]`r`nRunPostSetupCommands=RunIt`r`n[RunIt]`r`n$cmd`r`n"
+      Set-Content -Path $inf -Value $body -Encoding ASCII
+      $p = Invoke-A29Proc -File (Join-Path $env:SystemRoot 'System32\rundll32.exe') -ArgLine ('advpack.dll,LaunchINFSection "' + $inf + '",DefaultInstall,1,N')
+      for ($i = 0; $i -lt 10 -and -not (Test-A29Marker $mk); $i++) { Start-Sleep -Milliseconds 300 }
+      return @{ Ran = (Test-A29Marker $mk); Note = "rundll32_started=$($p.Started) timed_out=$($p.TimedOut) export=advpack.dll,LaunchINFSection"; NotApplicable = '' }
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: apt29-x3
+    name: "APT29 Execution 3 - mshta Runs a Script Page (T1218.005)"
+    technique_id: T1218.005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Runs mshta.exe on a run-tagged HTA whose script writes one marker file. Benign; removed and verified."
+    telemetry:
+      - "Sysmon EID 1: mshta.exe with an HTA path"
+      - "Security EID 4688"
+    detection:
+      - "EDR: mshta.exe executing a local HTA from a temp path"
+    command: |
+      $script:A29Run = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:A29Extra = @()
+      function Get-A29Control {
+      $r = @{ Build = [Environment]::OSVersion.Version.Build; DefenderReadable = $false; DefenderOn = $false; AsrBlock = 0; AppLocker = 'NotConfigured' }
+      try { $s = Get-MpComputerStatus -ErrorAction Stop; $r.DefenderReadable = $true; $r.DefenderOn = ([bool]$s.RealTimeProtectionEnabled -and [bool]$s.AntivirusEnabled) } catch {}
+      try { $p = Get-MpPreference -ErrorAction Stop; $r.AsrBlock = @($p.AttackSurfaceReductionRules_Actions | Where-Object { $_ -eq 1 }).Count } catch {}
+      try {
+      $svc = Get-Service -Name AppIDSvc -ErrorAction Stop
+      if ($svc.Status -eq 'Running') {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      foreach ($c in @($pol.RuleCollections)) { if ([string]$c.EnforcementMode -eq 'Enabled') { $r.AppLocker = 'Enabled' } }
+      }
+      } catch {}
+      return $r
+      }
+      function Get-A29Blocks {
+      param([datetime]$Start, [string]$Needle)
+      $r = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      $q = @(
+      @{ Key = 'Defender'; Log = 'Microsoft-Windows-Windows Defender/Operational'; Ids = @(1116, 1121) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/EXE and DLL'; Ids = @(8004) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/MSI and Script'; Ids = @(8007) }
+      )
+      foreach ($x in $q) {
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $x.Log; Id = $x.Ids; StartTime = $Start } -ErrorAction Stop)
+      $r[$x.Key] += @($ev | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch {
+      $f = [string]$_.FullyQualifiedErrorId
+      if ($f -like '*NoMatchingEventsFound*' -or $f -like '*NoMatchingLogsFound*') { continue }
+      $r.Readable = $false
+      }
+      }
+      return $r
+      }
+      function Resolve-A29Outcome {
+      param([bool]$Ran, [int]$Blocks, [bool]$Enforcing, [bool]$Readable, [bool]$BuildOk = $true)
+      if (-not $BuildOk) { return @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      if ($Ran) {
+      if ($Blocks -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed although a block event naming this test was recorded' } }
+      if ($Enforcing) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed while Microsoft Defender or AppLocker prevention was active' } }
+      return @{ Outcome = 'not_enforced'; Reason = 'the behavior executed and no Microsoft Defender or AppLocker prevention was active' }
+      }
+      if ($Blocks -gt 0) { return @{ Outcome = 'prevented'; Reason = "not executed; $Blocks block event(s) name this test" } }
+      if (-not $Readable) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, and a block log was unreadable, so the absence cannot be attributed' } }
+      return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no block event names this test, so the absence cannot be attributed to a control' }
+      }
+      function Get-A29Telemetry {
+      param([string[]]$Specs, [datetime]$Start, [string]$Needle)
+      $logs = @{ sysmon = 'Microsoft-Windows-Sysmon/Operational'; ps = 'Microsoft-Windows-PowerShell/Operational'; sec = 'Security'; wmi = 'Microsoft-Windows-WMI-Activity/Operational'; task = 'Microsoft-Windows-TaskScheduler/Operational'; sys = 'System'; dns = 'Microsoft-Windows-DNS-Client/Operational' }
+      $out = [ordered]@{}
+      foreach ($sp in @($Specs)) {
+      if (-not $sp) { continue }
+      $parts = $sp.Split(':')
+      $st = 'unavailable'
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $logs[$parts[0]]; Id = [int]$parts[1]; StartTime = $Start } -ErrorAction Stop)
+      $st = if (@($ev | Where-Object { $_.Message -like "*$Needle*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch { if ([string]$_.FullyQualifiedErrorId -like '*NoMatchingEventsFound*') { $st = 'not_visible' } }
+      $out[$sp] = $st
+      }
+      return $out
+      }
+      function Test-A29Marker {
+      param([string]$Path)
+      if (-not (Test-Path -LiteralPath $Path)) { return $false }
+      return ((Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) -join ' ') -like "*$($script:A29Marker)*"
+      }
+      function Invoke-A29Proc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Invoke-A29Attempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:A29Extra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:A29Extra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Invoke-A29Test {
+      param(
+      [Parameter(Mandatory)][string]$Id,
+      [Parameter(Mandatory)][string]$Technique,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Mode = 'Prevention',
+      [string[]]$Telemetry = @(),
+      [string[]]$Require = @(),
+      [string[]]$ExtraCleanup = @(),
+      [int]$MinBuild = 17763,
+      [string]$Summary = '',
+      [string]$Needle = ''
+      )
+      $script:A29Tag = "bas_a29_$($script:A29Run)_$Id"
+      $script:A29Work = Join-Path $env:TEMP $script:A29Tag
+      $script:A29Marker = "BAS-SIM-APT29-$($script:A29Run)-$Id"
+      $needleText = if ($Needle) { $Needle } else { $script:A29Tag }
+      New-Item -ItemType Directory -Path $script:A29Work -Force | Out-Null
+      $ctl = Get-A29Control
+      $buildOk = ($ctl.Build -ge $MinBuild)
+      $att = @{ Ran = $false; Note = ''; NotApplicable = '' }
+      $start = Get-Date
+      if ($buildOk) {
+      try { $att = Invoke-A29Attempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      $enforcing = ($ctl.DefenderOn -or $ctl.AsrBlock -gt 0 -or $ctl.AppLocker -eq 'Enabled')
+      $blocks = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      if ($Mode -eq 'Prevention' -and $buildOk) { $blocks = Get-A29Blocks -Start $start.AddSeconds(-1) -Needle $needleText }
+      $specs = @($Telemetry) + @($Require) | Where-Object { $_ } | Select-Object -Unique
+      $tele = [ordered]@{}
+      if ($buildOk -and $specs.Count -gt 0) { $tele = Get-A29Telemetry -Specs $specs -Start $start.AddSeconds(-1) -Needle $needleText }
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($Mode -eq 'Direct') {
+      $ok = @('prevented', 'allowed_unexpectedly', 'not_enforced', 'inconclusive', 'not_applicable', 'telemetry_visible', 'telemetry_not_visible')
+      if ($att.Verdict -and ($ok -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      }
+      elseif ($Mode -eq 'Telemetry') {
+      if (-not $att.Ran) { $r = @{ Outcome = 'inconclusive'; Reason = 'the behavior did not run, so its telemetry cannot be judged' } }
+      else {
+      $st = @($Require | ForEach-Object { $tele[$_] })
+      if (@($st | Where-Object { $_ -eq 'unavailable' }).Count -gt 0) { $r = @{ Outcome = 'inconclusive'; Reason = 'a required log is not available on this host, so visibility cannot be judged' } }
+      elseif (@($st | Where-Object { $_ -ne 'visible' }).Count -gt 0) { $r = @{ Outcome = 'telemetry_not_visible'; Reason = 'the behavior ran but the required host telemetry did not record it' } }
+      else { $r = @{ Outcome = 'telemetry_visible'; Reason = 'the behavior ran and the required host telemetry recorded it; forwarding to a SIEM is not verified' } }
+      }
+      }
+      else { $r = Resolve-A29Outcome -Ran ([bool]$att.Ran) -Blocks ([int]($blocks.Defender + $blocks.AppLocker)) -Enforcing $enforcing -Readable ([bool]$blocks.Readable) -BuildOk $buildOk }
+      Remove-Item -LiteralPath $script:A29Work -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path -LiteralPath $script:A29Work)
+      foreach ($x in $ExtraCleanup) { if (Test-Path -LiteralPath $x) { $cleanOk = $false } }
+      if ($att.ContainsKey('CleanupOk') -and -not [bool]$att.CleanupOk) { $cleanOk = $false }
+      foreach ($x in @($script:A29Extra)) { if ($x) { Write-Output $x } }
+      Write-Output "EXEC $($Technique): $Summary ran=$([bool]$att.Ran). [BAS-SIM-APT29-$Id]"
+      Write-Output "APT29_FAMILY: $Id"
+      Write-Output "APT29_HOST: os_build=$($ctl.Build) technique=$Technique mode=$Mode"
+      Write-Output "APT29_CONTROL: defender_on=$($ctl.DefenderOn) defender_readable=$($ctl.DefenderReadable) asr_block_rules=$($ctl.AsrBlock) applocker=$($ctl.AppLocker)"
+      Write-Output "APT29_EVIDENCE: run=$($script:A29Run) tag=$($script:A29Tag) ran=$([bool]$att.Ran) note=$($att.Note) block_events=[defender=$($blocks.Defender) applocker=$($blocks.AppLocker)] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      Write-Output "APT29_TELEMETRY: $((@($tele.GetEnumerator() | ForEach-Object { ($_.Key -replace ':', '_') + '=' + $_.Value }) -join ' '))"
+      Write-Output "APT29_OUTCOME: $($r.Outcome)"
+      $v = 'SKIP'
+      if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
+      elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
+      Write-Output "$($v): $($r.Reason). [BAS-SIM-APT29-$Id]"
+      }
+      Invoke-A29Test -Id 'x3' -Technique 'T1218.005' -Summary 'mshta runs an HTA script that writes one marker file (T1218.005)' -Telemetry @('sysmon:1', 'sec:4688') -Attempt {
+      $mk = Join-Path $script:A29Work 'mshta-marker.txt'
+      $hta = Join-Path $script:A29Work 'proxy.hta'
+      $body = "<html><head><script language=`"VBScript`">Sub Window_OnLoad`r`nSet f = CreateObject(`"Scripting.FileSystemObject`").CreateTextFile(`"$mk`", True)`r`nf.Write `"$($script:A29Marker)`"`r`nf.Close`r`nwindow.close`r`nEnd Sub</script></head><body></body></html>"
+      Set-Content -Path $hta -Value $body -Encoding ASCII
+      $p = Invoke-A29Proc -File (Join-Path $env:SystemRoot 'System32\mshta.exe') -ArgLine ('"' + $hta + '"')
+      return @{ Ran = (Test-A29Marker $mk); Note = "mshta_started=$($p.Started) timed_out=$($p.TimedOut)"; NotApplicable = '' }
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: apt29-x4
+    name: "APT29 Evasion 1 - Character-code Obfuscated PowerShell Is Deobfuscated and Run (T1027 / T1140)"
+    technique_id: T1027
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Runs a script file whose body is only an array of shifted character codes; it rebuilds and invokes a command that writes one marker file. Benign; removed and verified."
+    telemetry:
+      - "Sysmon EID 1: powershell.exe -File"
+      - "PowerShell EID 4104: the rebuilt script block"
+      - "Security EID 4688"
+    detection:
+      - "AMSI/ScriptBlock: runtime-built script block from a char-code array"
+    command: |
+      $script:A29Run = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:A29Extra = @()
+      function Get-A29Control {
+      $r = @{ Build = [Environment]::OSVersion.Version.Build; DefenderReadable = $false; DefenderOn = $false; AsrBlock = 0; AppLocker = 'NotConfigured' }
+      try { $s = Get-MpComputerStatus -ErrorAction Stop; $r.DefenderReadable = $true; $r.DefenderOn = ([bool]$s.RealTimeProtectionEnabled -and [bool]$s.AntivirusEnabled) } catch {}
+      try { $p = Get-MpPreference -ErrorAction Stop; $r.AsrBlock = @($p.AttackSurfaceReductionRules_Actions | Where-Object { $_ -eq 1 }).Count } catch {}
+      try {
+      $svc = Get-Service -Name AppIDSvc -ErrorAction Stop
+      if ($svc.Status -eq 'Running') {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      foreach ($c in @($pol.RuleCollections)) { if ([string]$c.EnforcementMode -eq 'Enabled') { $r.AppLocker = 'Enabled' } }
+      }
+      } catch {}
+      return $r
+      }
+      function Get-A29Blocks {
+      param([datetime]$Start, [string]$Needle)
+      $r = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      $q = @(
+      @{ Key = 'Defender'; Log = 'Microsoft-Windows-Windows Defender/Operational'; Ids = @(1116, 1121) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/EXE and DLL'; Ids = @(8004) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/MSI and Script'; Ids = @(8007) }
+      )
+      foreach ($x in $q) {
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $x.Log; Id = $x.Ids; StartTime = $Start } -ErrorAction Stop)
+      $r[$x.Key] += @($ev | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch {
+      $f = [string]$_.FullyQualifiedErrorId
+      if ($f -like '*NoMatchingEventsFound*' -or $f -like '*NoMatchingLogsFound*') { continue }
+      $r.Readable = $false
+      }
+      }
+      return $r
+      }
+      function Resolve-A29Outcome {
+      param([bool]$Ran, [int]$Blocks, [bool]$Enforcing, [bool]$Readable, [bool]$BuildOk = $true)
+      if (-not $BuildOk) { return @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      if ($Ran) {
+      if ($Blocks -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed although a block event naming this test was recorded' } }
+      if ($Enforcing) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed while Microsoft Defender or AppLocker prevention was active' } }
+      return @{ Outcome = 'not_enforced'; Reason = 'the behavior executed and no Microsoft Defender or AppLocker prevention was active' }
+      }
+      if ($Blocks -gt 0) { return @{ Outcome = 'prevented'; Reason = "not executed; $Blocks block event(s) name this test" } }
+      if (-not $Readable) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, and a block log was unreadable, so the absence cannot be attributed' } }
+      return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no block event names this test, so the absence cannot be attributed to a control' }
+      }
+      function Get-A29Telemetry {
+      param([string[]]$Specs, [datetime]$Start, [string]$Needle)
+      $logs = @{ sysmon = 'Microsoft-Windows-Sysmon/Operational'; ps = 'Microsoft-Windows-PowerShell/Operational'; sec = 'Security'; wmi = 'Microsoft-Windows-WMI-Activity/Operational'; task = 'Microsoft-Windows-TaskScheduler/Operational'; sys = 'System'; dns = 'Microsoft-Windows-DNS-Client/Operational' }
+      $out = [ordered]@{}
+      foreach ($sp in @($Specs)) {
+      if (-not $sp) { continue }
+      $parts = $sp.Split(':')
+      $st = 'unavailable'
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $logs[$parts[0]]; Id = [int]$parts[1]; StartTime = $Start } -ErrorAction Stop)
+      $st = if (@($ev | Where-Object { $_.Message -like "*$Needle*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch { if ([string]$_.FullyQualifiedErrorId -like '*NoMatchingEventsFound*') { $st = 'not_visible' } }
+      $out[$sp] = $st
+      }
+      return $out
+      }
+      function Test-A29Marker {
+      param([string]$Path)
+      if (-not (Test-Path -LiteralPath $Path)) { return $false }
+      return ((Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) -join ' ') -like "*$($script:A29Marker)*"
+      }
+      function Invoke-A29Proc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Invoke-A29Attempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:A29Extra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:A29Extra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Invoke-A29Test {
+      param(
+      [Parameter(Mandatory)][string]$Id,
+      [Parameter(Mandatory)][string]$Technique,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Mode = 'Prevention',
+      [string[]]$Telemetry = @(),
+      [string[]]$Require = @(),
+      [string[]]$ExtraCleanup = @(),
+      [int]$MinBuild = 17763,
+      [string]$Summary = '',
+      [string]$Needle = ''
+      )
+      $script:A29Tag = "bas_a29_$($script:A29Run)_$Id"
+      $script:A29Work = Join-Path $env:TEMP $script:A29Tag
+      $script:A29Marker = "BAS-SIM-APT29-$($script:A29Run)-$Id"
+      $needleText = if ($Needle) { $Needle } else { $script:A29Tag }
+      New-Item -ItemType Directory -Path $script:A29Work -Force | Out-Null
+      $ctl = Get-A29Control
+      $buildOk = ($ctl.Build -ge $MinBuild)
+      $att = @{ Ran = $false; Note = ''; NotApplicable = '' }
+      $start = Get-Date
+      if ($buildOk) {
+      try { $att = Invoke-A29Attempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      $enforcing = ($ctl.DefenderOn -or $ctl.AsrBlock -gt 0 -or $ctl.AppLocker -eq 'Enabled')
+      $blocks = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      if ($Mode -eq 'Prevention' -and $buildOk) { $blocks = Get-A29Blocks -Start $start.AddSeconds(-1) -Needle $needleText }
+      $specs = @($Telemetry) + @($Require) | Where-Object { $_ } | Select-Object -Unique
+      $tele = [ordered]@{}
+      if ($buildOk -and $specs.Count -gt 0) { $tele = Get-A29Telemetry -Specs $specs -Start $start.AddSeconds(-1) -Needle $needleText }
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($Mode -eq 'Direct') {
+      $ok = @('prevented', 'allowed_unexpectedly', 'not_enforced', 'inconclusive', 'not_applicable', 'telemetry_visible', 'telemetry_not_visible')
+      if ($att.Verdict -and ($ok -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      }
+      elseif ($Mode -eq 'Telemetry') {
+      if (-not $att.Ran) { $r = @{ Outcome = 'inconclusive'; Reason = 'the behavior did not run, so its telemetry cannot be judged' } }
+      else {
+      $st = @($Require | ForEach-Object { $tele[$_] })
+      if (@($st | Where-Object { $_ -eq 'unavailable' }).Count -gt 0) { $r = @{ Outcome = 'inconclusive'; Reason = 'a required log is not available on this host, so visibility cannot be judged' } }
+      elseif (@($st | Where-Object { $_ -ne 'visible' }).Count -gt 0) { $r = @{ Outcome = 'telemetry_not_visible'; Reason = 'the behavior ran but the required host telemetry did not record it' } }
+      else { $r = @{ Outcome = 'telemetry_visible'; Reason = 'the behavior ran and the required host telemetry recorded it; forwarding to a SIEM is not verified' } }
+      }
+      }
+      else { $r = Resolve-A29Outcome -Ran ([bool]$att.Ran) -Blocks ([int]($blocks.Defender + $blocks.AppLocker)) -Enforcing $enforcing -Readable ([bool]$blocks.Readable) -BuildOk $buildOk }
+      Remove-Item -LiteralPath $script:A29Work -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path -LiteralPath $script:A29Work)
+      foreach ($x in $ExtraCleanup) { if (Test-Path -LiteralPath $x) { $cleanOk = $false } }
+      if ($att.ContainsKey('CleanupOk') -and -not [bool]$att.CleanupOk) { $cleanOk = $false }
+      foreach ($x in @($script:A29Extra)) { if ($x) { Write-Output $x } }
+      Write-Output "EXEC $($Technique): $Summary ran=$([bool]$att.Ran). [BAS-SIM-APT29-$Id]"
+      Write-Output "APT29_FAMILY: $Id"
+      Write-Output "APT29_HOST: os_build=$($ctl.Build) technique=$Technique mode=$Mode"
+      Write-Output "APT29_CONTROL: defender_on=$($ctl.DefenderOn) defender_readable=$($ctl.DefenderReadable) asr_block_rules=$($ctl.AsrBlock) applocker=$($ctl.AppLocker)"
+      Write-Output "APT29_EVIDENCE: run=$($script:A29Run) tag=$($script:A29Tag) ran=$([bool]$att.Ran) note=$($att.Note) block_events=[defender=$($blocks.Defender) applocker=$($blocks.AppLocker)] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      Write-Output "APT29_TELEMETRY: $((@($tele.GetEnumerator() | ForEach-Object { ($_.Key -replace ':', '_') + '=' + $_.Value }) -join ' '))"
+      Write-Output "APT29_OUTCOME: $($r.Outcome)"
+      $v = 'SKIP'
+      if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
+      elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
+      Write-Output "$($v): $($r.Reason). [BAS-SIM-APT29-$Id]"
+      }
+      Invoke-A29Test -Id 'x4' -Technique 'T1027' -Summary 'character-code obfuscated PowerShell is deobfuscated and run (T1027, T1140)' -Telemetry @('sysmon:1', 'ps:4104', 'sec:4688') -Attempt {
+      $mk = Join-Path $script:A29Work 'obf-marker.txt'
+      $plain = "Set-Content -LiteralPath '" + $mk + "' -Value '" + $script:A29Marker + "'"
+      $codes = (($plain.ToCharArray() | ForEach-Object { [int]$_ + 3 }) -join ',')
+      $drv = '$c=@(' + $codes + ');$s=-join($c|%{[char]($_-3)});$b=[scriptblock]::Create($s);&$b'
+      $scriptFile = Join-Path $script:A29Work 'obf.ps1'
+      Set-Content -LiteralPath $scriptFile -Value $drv -Encoding ASCII
+      $p = Invoke-A29Proc -File (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgLine ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $scriptFile + '"') -TimeoutSec 30 -NoShell
+      $ran = Test-A29Marker $mk
+      return @{ Ran = $ran; Note = "obfuscation=char_code_offset_plus_3 plaintext_in_script_file=false deobfuscated_and_executed=$ran child_exit=$($p.Exit)"; NotApplicable = '' }
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: apt29-x5
+    name: "APT29 Evasion 2 - Binary Padding Changes a Benign Binary Hash (T1027.001)"
+    technique_id: T1027.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Copies hostname.exe to a run-tagged temp directory, appends 2 MB of zero bytes, confirms the SHA-256 changed and the program still prints the host name. Removed and verified."
+    telemetry:
+      - "Sysmon EID 1: padded binary with a new hash"
+    detection:
+      - "EDR: executable with a large trailing zero region and a modified hash"
+    command: |
+      $script:A29Run = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:A29Extra = @()
+      function Get-A29Control {
+      $r = @{ Build = [Environment]::OSVersion.Version.Build; DefenderReadable = $false; DefenderOn = $false; AsrBlock = 0; AppLocker = 'NotConfigured' }
+      try { $s = Get-MpComputerStatus -ErrorAction Stop; $r.DefenderReadable = $true; $r.DefenderOn = ([bool]$s.RealTimeProtectionEnabled -and [bool]$s.AntivirusEnabled) } catch {}
+      try { $p = Get-MpPreference -ErrorAction Stop; $r.AsrBlock = @($p.AttackSurfaceReductionRules_Actions | Where-Object { $_ -eq 1 }).Count } catch {}
+      try {
+      $svc = Get-Service -Name AppIDSvc -ErrorAction Stop
+      if ($svc.Status -eq 'Running') {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      foreach ($c in @($pol.RuleCollections)) { if ([string]$c.EnforcementMode -eq 'Enabled') { $r.AppLocker = 'Enabled' } }
+      }
+      } catch {}
+      return $r
+      }
+      function Get-A29Blocks {
+      param([datetime]$Start, [string]$Needle)
+      $r = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      $q = @(
+      @{ Key = 'Defender'; Log = 'Microsoft-Windows-Windows Defender/Operational'; Ids = @(1116, 1121) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/EXE and DLL'; Ids = @(8004) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/MSI and Script'; Ids = @(8007) }
+      )
+      foreach ($x in $q) {
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $x.Log; Id = $x.Ids; StartTime = $Start } -ErrorAction Stop)
+      $r[$x.Key] += @($ev | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch {
+      $f = [string]$_.FullyQualifiedErrorId
+      if ($f -like '*NoMatchingEventsFound*' -or $f -like '*NoMatchingLogsFound*') { continue }
+      $r.Readable = $false
+      }
+      }
+      return $r
+      }
+      function Resolve-A29Outcome {
+      param([bool]$Ran, [int]$Blocks, [bool]$Enforcing, [bool]$Readable, [bool]$BuildOk = $true)
+      if (-not $BuildOk) { return @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      if ($Ran) {
+      if ($Blocks -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed although a block event naming this test was recorded' } }
+      if ($Enforcing) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed while Microsoft Defender or AppLocker prevention was active' } }
+      return @{ Outcome = 'not_enforced'; Reason = 'the behavior executed and no Microsoft Defender or AppLocker prevention was active' }
+      }
+      if ($Blocks -gt 0) { return @{ Outcome = 'prevented'; Reason = "not executed; $Blocks block event(s) name this test" } }
+      if (-not $Readable) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, and a block log was unreadable, so the absence cannot be attributed' } }
+      return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no block event names this test, so the absence cannot be attributed to a control' }
+      }
+      function Get-A29Telemetry {
+      param([string[]]$Specs, [datetime]$Start, [string]$Needle)
+      $logs = @{ sysmon = 'Microsoft-Windows-Sysmon/Operational'; ps = 'Microsoft-Windows-PowerShell/Operational'; sec = 'Security'; wmi = 'Microsoft-Windows-WMI-Activity/Operational'; task = 'Microsoft-Windows-TaskScheduler/Operational'; sys = 'System'; dns = 'Microsoft-Windows-DNS-Client/Operational' }
+      $out = [ordered]@{}
+      foreach ($sp in @($Specs)) {
+      if (-not $sp) { continue }
+      $parts = $sp.Split(':')
+      $st = 'unavailable'
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $logs[$parts[0]]; Id = [int]$parts[1]; StartTime = $Start } -ErrorAction Stop)
+      $st = if (@($ev | Where-Object { $_.Message -like "*$Needle*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch { if ([string]$_.FullyQualifiedErrorId -like '*NoMatchingEventsFound*') { $st = 'not_visible' } }
+      $out[$sp] = $st
+      }
+      return $out
+      }
+      function Test-A29Marker {
+      param([string]$Path)
+      if (-not (Test-Path -LiteralPath $Path)) { return $false }
+      return ((Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) -join ' ') -like "*$($script:A29Marker)*"
+      }
+      function Invoke-A29Proc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Invoke-A29Attempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:A29Extra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:A29Extra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Invoke-A29Test {
+      param(
+      [Parameter(Mandatory)][string]$Id,
+      [Parameter(Mandatory)][string]$Technique,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Mode = 'Prevention',
+      [string[]]$Telemetry = @(),
+      [string[]]$Require = @(),
+      [string[]]$ExtraCleanup = @(),
+      [int]$MinBuild = 17763,
+      [string]$Summary = '',
+      [string]$Needle = ''
+      )
+      $script:A29Tag = "bas_a29_$($script:A29Run)_$Id"
+      $script:A29Work = Join-Path $env:TEMP $script:A29Tag
+      $script:A29Marker = "BAS-SIM-APT29-$($script:A29Run)-$Id"
+      $needleText = if ($Needle) { $Needle } else { $script:A29Tag }
+      New-Item -ItemType Directory -Path $script:A29Work -Force | Out-Null
+      $ctl = Get-A29Control
+      $buildOk = ($ctl.Build -ge $MinBuild)
+      $att = @{ Ran = $false; Note = ''; NotApplicable = '' }
+      $start = Get-Date
+      if ($buildOk) {
+      try { $att = Invoke-A29Attempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      $enforcing = ($ctl.DefenderOn -or $ctl.AsrBlock -gt 0 -or $ctl.AppLocker -eq 'Enabled')
+      $blocks = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      if ($Mode -eq 'Prevention' -and $buildOk) { $blocks = Get-A29Blocks -Start $start.AddSeconds(-1) -Needle $needleText }
+      $specs = @($Telemetry) + @($Require) | Where-Object { $_ } | Select-Object -Unique
+      $tele = [ordered]@{}
+      if ($buildOk -and $specs.Count -gt 0) { $tele = Get-A29Telemetry -Specs $specs -Start $start.AddSeconds(-1) -Needle $needleText }
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($Mode -eq 'Direct') {
+      $ok = @('prevented', 'allowed_unexpectedly', 'not_enforced', 'inconclusive', 'not_applicable', 'telemetry_visible', 'telemetry_not_visible')
+      if ($att.Verdict -and ($ok -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      }
+      elseif ($Mode -eq 'Telemetry') {
+      if (-not $att.Ran) { $r = @{ Outcome = 'inconclusive'; Reason = 'the behavior did not run, so its telemetry cannot be judged' } }
+      else {
+      $st = @($Require | ForEach-Object { $tele[$_] })
+      if (@($st | Where-Object { $_ -eq 'unavailable' }).Count -gt 0) { $r = @{ Outcome = 'inconclusive'; Reason = 'a required log is not available on this host, so visibility cannot be judged' } }
+      elseif (@($st | Where-Object { $_ -ne 'visible' }).Count -gt 0) { $r = @{ Outcome = 'telemetry_not_visible'; Reason = 'the behavior ran but the required host telemetry did not record it' } }
+      else { $r = @{ Outcome = 'telemetry_visible'; Reason = 'the behavior ran and the required host telemetry recorded it; forwarding to a SIEM is not verified' } }
+      }
+      }
+      else { $r = Resolve-A29Outcome -Ran ([bool]$att.Ran) -Blocks ([int]($blocks.Defender + $blocks.AppLocker)) -Enforcing $enforcing -Readable ([bool]$blocks.Readable) -BuildOk $buildOk }
+      Remove-Item -LiteralPath $script:A29Work -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path -LiteralPath $script:A29Work)
+      foreach ($x in $ExtraCleanup) { if (Test-Path -LiteralPath $x) { $cleanOk = $false } }
+      if ($att.ContainsKey('CleanupOk') -and -not [bool]$att.CleanupOk) { $cleanOk = $false }
+      foreach ($x in @($script:A29Extra)) { if ($x) { Write-Output $x } }
+      Write-Output "EXEC $($Technique): $Summary ran=$([bool]$att.Ran). [BAS-SIM-APT29-$Id]"
+      Write-Output "APT29_FAMILY: $Id"
+      Write-Output "APT29_HOST: os_build=$($ctl.Build) technique=$Technique mode=$Mode"
+      Write-Output "APT29_CONTROL: defender_on=$($ctl.DefenderOn) defender_readable=$($ctl.DefenderReadable) asr_block_rules=$($ctl.AsrBlock) applocker=$($ctl.AppLocker)"
+      Write-Output "APT29_EVIDENCE: run=$($script:A29Run) tag=$($script:A29Tag) ran=$([bool]$att.Ran) note=$($att.Note) block_events=[defender=$($blocks.Defender) applocker=$($blocks.AppLocker)] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      Write-Output "APT29_TELEMETRY: $((@($tele.GetEnumerator() | ForEach-Object { ($_.Key -replace ':', '_') + '=' + $_.Value }) -join ' '))"
+      Write-Output "APT29_OUTCOME: $($r.Outcome)"
+      $v = 'SKIP'
+      if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
+      elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
+      Write-Output "$($v): $($r.Reason). [BAS-SIM-APT29-$Id]"
+      }
+      Invoke-A29Test -Id 'x5' -Technique 'T1027.001' -Summary 'binary padding changes a benign binary hash while it still runs (T1027.001)' -Telemetry @('sysmon:1') -Attempt {
+      $src = Join-Path $env:SystemRoot 'System32\hostname.exe'
+      $dst = Join-Path $script:A29Work 'hostname_padded.exe'
+      Copy-Item -LiteralPath $src -Destination $dst -Force
+      $h1 = (Get-FileHash -LiteralPath $dst -Algorithm SHA256).Hash
+      $fs = [IO.File]::Open($dst, [IO.FileMode]::Append)
+      try { $pad = New-Object byte[] (2MB); $fs.Write($pad, 0, $pad.Length) } finally { $fs.Close() }
+      $h2 = (Get-FileHash -LiteralPath $dst -Algorithm SHA256).Hash
+      $out = Join-Path $script:A29Work 'padded-out.txt'
+      $p = Invoke-A29Proc -File (Join-Path $env:SystemRoot 'System32\cmd.exe') -ArgLine ('/c ""' + $dst + '" > "' + $out + '""') -TimeoutSec 20 -NoShell
+      $txt = [string](Get-Content -LiteralPath $out -Raw -ErrorAction SilentlyContinue)
+      $ran = ($txt.Trim().Length -gt 0 -and $h1 -ne $h2)
+      return @{ Ran = $ran; Note = "hash_changed=$($h1 -ne $h2) pad_bytes=2097152 padded_binary_ran=$($txt.Trim().Length -gt 0)"; NotApplicable = '' }
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: apt29-x6
+    name: "APT29 Evasion 3 - System Process Name Run from a User Path (T1036.005)"
+    technique_id: T1036.005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Copies hostname.exe to a run-tagged temp directory as svchost.exe and runs it. Benign; removed and verified."
+    telemetry:
+      - "Sysmon EID 1: svchost.exe whose image is outside System32"
+      - "Security EID 4688"
+    detection:
+      - "EDR: svchost.exe not under System32 or without services.exe parent"
+    command: |
+      $script:A29Run = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:A29Extra = @()
+      function Get-A29Control {
+      $r = @{ Build = [Environment]::OSVersion.Version.Build; DefenderReadable = $false; DefenderOn = $false; AsrBlock = 0; AppLocker = 'NotConfigured' }
+      try { $s = Get-MpComputerStatus -ErrorAction Stop; $r.DefenderReadable = $true; $r.DefenderOn = ([bool]$s.RealTimeProtectionEnabled -and [bool]$s.AntivirusEnabled) } catch {}
+      try { $p = Get-MpPreference -ErrorAction Stop; $r.AsrBlock = @($p.AttackSurfaceReductionRules_Actions | Where-Object { $_ -eq 1 }).Count } catch {}
+      try {
+      $svc = Get-Service -Name AppIDSvc -ErrorAction Stop
+      if ($svc.Status -eq 'Running') {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      foreach ($c in @($pol.RuleCollections)) { if ([string]$c.EnforcementMode -eq 'Enabled') { $r.AppLocker = 'Enabled' } }
+      }
+      } catch {}
+      return $r
+      }
+      function Get-A29Blocks {
+      param([datetime]$Start, [string]$Needle)
+      $r = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      $q = @(
+      @{ Key = 'Defender'; Log = 'Microsoft-Windows-Windows Defender/Operational'; Ids = @(1116, 1121) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/EXE and DLL'; Ids = @(8004) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/MSI and Script'; Ids = @(8007) }
+      )
+      foreach ($x in $q) {
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $x.Log; Id = $x.Ids; StartTime = $Start } -ErrorAction Stop)
+      $r[$x.Key] += @($ev | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch {
+      $f = [string]$_.FullyQualifiedErrorId
+      if ($f -like '*NoMatchingEventsFound*' -or $f -like '*NoMatchingLogsFound*') { continue }
+      $r.Readable = $false
+      }
+      }
+      return $r
+      }
+      function Resolve-A29Outcome {
+      param([bool]$Ran, [int]$Blocks, [bool]$Enforcing, [bool]$Readable, [bool]$BuildOk = $true)
+      if (-not $BuildOk) { return @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      if ($Ran) {
+      if ($Blocks -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed although a block event naming this test was recorded' } }
+      if ($Enforcing) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed while Microsoft Defender or AppLocker prevention was active' } }
+      return @{ Outcome = 'not_enforced'; Reason = 'the behavior executed and no Microsoft Defender or AppLocker prevention was active' }
+      }
+      if ($Blocks -gt 0) { return @{ Outcome = 'prevented'; Reason = "not executed; $Blocks block event(s) name this test" } }
+      if (-not $Readable) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, and a block log was unreadable, so the absence cannot be attributed' } }
+      return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no block event names this test, so the absence cannot be attributed to a control' }
+      }
+      function Get-A29Telemetry {
+      param([string[]]$Specs, [datetime]$Start, [string]$Needle)
+      $logs = @{ sysmon = 'Microsoft-Windows-Sysmon/Operational'; ps = 'Microsoft-Windows-PowerShell/Operational'; sec = 'Security'; wmi = 'Microsoft-Windows-WMI-Activity/Operational'; task = 'Microsoft-Windows-TaskScheduler/Operational'; sys = 'System'; dns = 'Microsoft-Windows-DNS-Client/Operational' }
+      $out = [ordered]@{}
+      foreach ($sp in @($Specs)) {
+      if (-not $sp) { continue }
+      $parts = $sp.Split(':')
+      $st = 'unavailable'
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $logs[$parts[0]]; Id = [int]$parts[1]; StartTime = $Start } -ErrorAction Stop)
+      $st = if (@($ev | Where-Object { $_.Message -like "*$Needle*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch { if ([string]$_.FullyQualifiedErrorId -like '*NoMatchingEventsFound*') { $st = 'not_visible' } }
+      $out[$sp] = $st
+      }
+      return $out
+      }
+      function Test-A29Marker {
+      param([string]$Path)
+      if (-not (Test-Path -LiteralPath $Path)) { return $false }
+      return ((Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) -join ' ') -like "*$($script:A29Marker)*"
+      }
+      function Invoke-A29Proc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Invoke-A29Attempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:A29Extra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:A29Extra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Invoke-A29Test {
+      param(
+      [Parameter(Mandatory)][string]$Id,
+      [Parameter(Mandatory)][string]$Technique,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Mode = 'Prevention',
+      [string[]]$Telemetry = @(),
+      [string[]]$Require = @(),
+      [string[]]$ExtraCleanup = @(),
+      [int]$MinBuild = 17763,
+      [string]$Summary = '',
+      [string]$Needle = ''
+      )
+      $script:A29Tag = "bas_a29_$($script:A29Run)_$Id"
+      $script:A29Work = Join-Path $env:TEMP $script:A29Tag
+      $script:A29Marker = "BAS-SIM-APT29-$($script:A29Run)-$Id"
+      $needleText = if ($Needle) { $Needle } else { $script:A29Tag }
+      New-Item -ItemType Directory -Path $script:A29Work -Force | Out-Null
+      $ctl = Get-A29Control
+      $buildOk = ($ctl.Build -ge $MinBuild)
+      $att = @{ Ran = $false; Note = ''; NotApplicable = '' }
+      $start = Get-Date
+      if ($buildOk) {
+      try { $att = Invoke-A29Attempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      $enforcing = ($ctl.DefenderOn -or $ctl.AsrBlock -gt 0 -or $ctl.AppLocker -eq 'Enabled')
+      $blocks = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      if ($Mode -eq 'Prevention' -and $buildOk) { $blocks = Get-A29Blocks -Start $start.AddSeconds(-1) -Needle $needleText }
+      $specs = @($Telemetry) + @($Require) | Where-Object { $_ } | Select-Object -Unique
+      $tele = [ordered]@{}
+      if ($buildOk -and $specs.Count -gt 0) { $tele = Get-A29Telemetry -Specs $specs -Start $start.AddSeconds(-1) -Needle $needleText }
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($Mode -eq 'Direct') {
+      $ok = @('prevented', 'allowed_unexpectedly', 'not_enforced', 'inconclusive', 'not_applicable', 'telemetry_visible', 'telemetry_not_visible')
+      if ($att.Verdict -and ($ok -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      }
+      elseif ($Mode -eq 'Telemetry') {
+      if (-not $att.Ran) { $r = @{ Outcome = 'inconclusive'; Reason = 'the behavior did not run, so its telemetry cannot be judged' } }
+      else {
+      $st = @($Require | ForEach-Object { $tele[$_] })
+      if (@($st | Where-Object { $_ -eq 'unavailable' }).Count -gt 0) { $r = @{ Outcome = 'inconclusive'; Reason = 'a required log is not available on this host, so visibility cannot be judged' } }
+      elseif (@($st | Where-Object { $_ -ne 'visible' }).Count -gt 0) { $r = @{ Outcome = 'telemetry_not_visible'; Reason = 'the behavior ran but the required host telemetry did not record it' } }
+      else { $r = @{ Outcome = 'telemetry_visible'; Reason = 'the behavior ran and the required host telemetry recorded it; forwarding to a SIEM is not verified' } }
+      }
+      }
+      else { $r = Resolve-A29Outcome -Ran ([bool]$att.Ran) -Blocks ([int]($blocks.Defender + $blocks.AppLocker)) -Enforcing $enforcing -Readable ([bool]$blocks.Readable) -BuildOk $buildOk }
+      Remove-Item -LiteralPath $script:A29Work -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path -LiteralPath $script:A29Work)
+      foreach ($x in $ExtraCleanup) { if (Test-Path -LiteralPath $x) { $cleanOk = $false } }
+      if ($att.ContainsKey('CleanupOk') -and -not [bool]$att.CleanupOk) { $cleanOk = $false }
+      foreach ($x in @($script:A29Extra)) { if ($x) { Write-Output $x } }
+      Write-Output "EXEC $($Technique): $Summary ran=$([bool]$att.Ran). [BAS-SIM-APT29-$Id]"
+      Write-Output "APT29_FAMILY: $Id"
+      Write-Output "APT29_HOST: os_build=$($ctl.Build) technique=$Technique mode=$Mode"
+      Write-Output "APT29_CONTROL: defender_on=$($ctl.DefenderOn) defender_readable=$($ctl.DefenderReadable) asr_block_rules=$($ctl.AsrBlock) applocker=$($ctl.AppLocker)"
+      Write-Output "APT29_EVIDENCE: run=$($script:A29Run) tag=$($script:A29Tag) ran=$([bool]$att.Ran) note=$($att.Note) block_events=[defender=$($blocks.Defender) applocker=$($blocks.AppLocker)] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      Write-Output "APT29_TELEMETRY: $((@($tele.GetEnumerator() | ForEach-Object { ($_.Key -replace ':', '_') + '=' + $_.Value }) -join ' '))"
+      Write-Output "APT29_OUTCOME: $($r.Outcome)"
+      $v = 'SKIP'
+      if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
+      elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
+      Write-Output "$($v): $($r.Reason). [BAS-SIM-APT29-$Id]"
+      }
+      Invoke-A29Test -Id 'x6' -Technique 'T1036.005' -Summary 'a benign binary runs from a user path under a system process name (T1036.005)' -Telemetry @('sysmon:1', 'sec:4688') -Attempt {
+      $dst = Join-Path $script:A29Work 'svchost.exe'
+      Copy-Item -LiteralPath (Join-Path $env:SystemRoot 'System32\hostname.exe') -Destination $dst -Force
+      $out = Join-Path $script:A29Work 'masq-out.txt'
+      $p = Invoke-A29Proc -File (Join-Path $env:SystemRoot 'System32\cmd.exe') -ArgLine ('/c ""' + $dst + '" > "' + $out + '""') -TimeoutSec 20 -NoShell
+      $txt = [string](Get-Content -LiteralPath $out -Raw -ErrorAction SilentlyContinue)
+      $ran = ($txt.Trim().Length -gt 0)
+      return @{ Ran = $ran; Note = "image_name=svchost.exe image_location=user_temp expected_location=System32 ran=$ran"; NotApplicable = '' }
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: apt29-x7
+    name: "APT29 Evasion 4 - File Timestamps Rewritten (T1070.006)"
+    technique_id: T1070.006
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Creates a run-tagged file and sets its creation, write and access times two years back, then reads them to confirm. Removed and verified."
+    telemetry:
+      - "Sysmon EID 2: file creation time changed"
+    detection:
+      - "EDR: timestamp change on a file the process just created"
+    command: |
+      $script:A29Run = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:A29Extra = @()
+      function Get-A29Control {
+      $r = @{ Build = [Environment]::OSVersion.Version.Build; DefenderReadable = $false; DefenderOn = $false; AsrBlock = 0; AppLocker = 'NotConfigured' }
+      try { $s = Get-MpComputerStatus -ErrorAction Stop; $r.DefenderReadable = $true; $r.DefenderOn = ([bool]$s.RealTimeProtectionEnabled -and [bool]$s.AntivirusEnabled) } catch {}
+      try { $p = Get-MpPreference -ErrorAction Stop; $r.AsrBlock = @($p.AttackSurfaceReductionRules_Actions | Where-Object { $_ -eq 1 }).Count } catch {}
+      try {
+      $svc = Get-Service -Name AppIDSvc -ErrorAction Stop
+      if ($svc.Status -eq 'Running') {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      foreach ($c in @($pol.RuleCollections)) { if ([string]$c.EnforcementMode -eq 'Enabled') { $r.AppLocker = 'Enabled' } }
+      }
+      } catch {}
+      return $r
+      }
+      function Get-A29Blocks {
+      param([datetime]$Start, [string]$Needle)
+      $r = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      $q = @(
+      @{ Key = 'Defender'; Log = 'Microsoft-Windows-Windows Defender/Operational'; Ids = @(1116, 1121) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/EXE and DLL'; Ids = @(8004) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/MSI and Script'; Ids = @(8007) }
+      )
+      foreach ($x in $q) {
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $x.Log; Id = $x.Ids; StartTime = $Start } -ErrorAction Stop)
+      $r[$x.Key] += @($ev | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch {
+      $f = [string]$_.FullyQualifiedErrorId
+      if ($f -like '*NoMatchingEventsFound*' -or $f -like '*NoMatchingLogsFound*') { continue }
+      $r.Readable = $false
+      }
+      }
+      return $r
+      }
+      function Resolve-A29Outcome {
+      param([bool]$Ran, [int]$Blocks, [bool]$Enforcing, [bool]$Readable, [bool]$BuildOk = $true)
+      if (-not $BuildOk) { return @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      if ($Ran) {
+      if ($Blocks -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed although a block event naming this test was recorded' } }
+      if ($Enforcing) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed while Microsoft Defender or AppLocker prevention was active' } }
+      return @{ Outcome = 'not_enforced'; Reason = 'the behavior executed and no Microsoft Defender or AppLocker prevention was active' }
+      }
+      if ($Blocks -gt 0) { return @{ Outcome = 'prevented'; Reason = "not executed; $Blocks block event(s) name this test" } }
+      if (-not $Readable) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, and a block log was unreadable, so the absence cannot be attributed' } }
+      return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no block event names this test, so the absence cannot be attributed to a control' }
+      }
+      function Get-A29Telemetry {
+      param([string[]]$Specs, [datetime]$Start, [string]$Needle)
+      $logs = @{ sysmon = 'Microsoft-Windows-Sysmon/Operational'; ps = 'Microsoft-Windows-PowerShell/Operational'; sec = 'Security'; wmi = 'Microsoft-Windows-WMI-Activity/Operational'; task = 'Microsoft-Windows-TaskScheduler/Operational'; sys = 'System'; dns = 'Microsoft-Windows-DNS-Client/Operational' }
+      $out = [ordered]@{}
+      foreach ($sp in @($Specs)) {
+      if (-not $sp) { continue }
+      $parts = $sp.Split(':')
+      $st = 'unavailable'
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $logs[$parts[0]]; Id = [int]$parts[1]; StartTime = $Start } -ErrorAction Stop)
+      $st = if (@($ev | Where-Object { $_.Message -like "*$Needle*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch { if ([string]$_.FullyQualifiedErrorId -like '*NoMatchingEventsFound*') { $st = 'not_visible' } }
+      $out[$sp] = $st
+      }
+      return $out
+      }
+      function Test-A29Marker {
+      param([string]$Path)
+      if (-not (Test-Path -LiteralPath $Path)) { return $false }
+      return ((Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) -join ' ') -like "*$($script:A29Marker)*"
+      }
+      function Invoke-A29Proc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Invoke-A29Attempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:A29Extra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:A29Extra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Invoke-A29Test {
+      param(
+      [Parameter(Mandatory)][string]$Id,
+      [Parameter(Mandatory)][string]$Technique,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Mode = 'Prevention',
+      [string[]]$Telemetry = @(),
+      [string[]]$Require = @(),
+      [string[]]$ExtraCleanup = @(),
+      [int]$MinBuild = 17763,
+      [string]$Summary = '',
+      [string]$Needle = ''
+      )
+      $script:A29Tag = "bas_a29_$($script:A29Run)_$Id"
+      $script:A29Work = Join-Path $env:TEMP $script:A29Tag
+      $script:A29Marker = "BAS-SIM-APT29-$($script:A29Run)-$Id"
+      $needleText = if ($Needle) { $Needle } else { $script:A29Tag }
+      New-Item -ItemType Directory -Path $script:A29Work -Force | Out-Null
+      $ctl = Get-A29Control
+      $buildOk = ($ctl.Build -ge $MinBuild)
+      $att = @{ Ran = $false; Note = ''; NotApplicable = '' }
+      $start = Get-Date
+      if ($buildOk) {
+      try { $att = Invoke-A29Attempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      $enforcing = ($ctl.DefenderOn -or $ctl.AsrBlock -gt 0 -or $ctl.AppLocker -eq 'Enabled')
+      $blocks = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      if ($Mode -eq 'Prevention' -and $buildOk) { $blocks = Get-A29Blocks -Start $start.AddSeconds(-1) -Needle $needleText }
+      $specs = @($Telemetry) + @($Require) | Where-Object { $_ } | Select-Object -Unique
+      $tele = [ordered]@{}
+      if ($buildOk -and $specs.Count -gt 0) { $tele = Get-A29Telemetry -Specs $specs -Start $start.AddSeconds(-1) -Needle $needleText }
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($Mode -eq 'Direct') {
+      $ok = @('prevented', 'allowed_unexpectedly', 'not_enforced', 'inconclusive', 'not_applicable', 'telemetry_visible', 'telemetry_not_visible')
+      if ($att.Verdict -and ($ok -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      }
+      elseif ($Mode -eq 'Telemetry') {
+      if (-not $att.Ran) { $r = @{ Outcome = 'inconclusive'; Reason = 'the behavior did not run, so its telemetry cannot be judged' } }
+      else {
+      $st = @($Require | ForEach-Object { $tele[$_] })
+      if (@($st | Where-Object { $_ -eq 'unavailable' }).Count -gt 0) { $r = @{ Outcome = 'inconclusive'; Reason = 'a required log is not available on this host, so visibility cannot be judged' } }
+      elseif (@($st | Where-Object { $_ -ne 'visible' }).Count -gt 0) { $r = @{ Outcome = 'telemetry_not_visible'; Reason = 'the behavior ran but the required host telemetry did not record it' } }
+      else { $r = @{ Outcome = 'telemetry_visible'; Reason = 'the behavior ran and the required host telemetry recorded it; forwarding to a SIEM is not verified' } }
+      }
+      }
+      else { $r = Resolve-A29Outcome -Ran ([bool]$att.Ran) -Blocks ([int]($blocks.Defender + $blocks.AppLocker)) -Enforcing $enforcing -Readable ([bool]$blocks.Readable) -BuildOk $buildOk }
+      Remove-Item -LiteralPath $script:A29Work -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path -LiteralPath $script:A29Work)
+      foreach ($x in $ExtraCleanup) { if (Test-Path -LiteralPath $x) { $cleanOk = $false } }
+      if ($att.ContainsKey('CleanupOk') -and -not [bool]$att.CleanupOk) { $cleanOk = $false }
+      foreach ($x in @($script:A29Extra)) { if ($x) { Write-Output $x } }
+      Write-Output "EXEC $($Technique): $Summary ran=$([bool]$att.Ran). [BAS-SIM-APT29-$Id]"
+      Write-Output "APT29_FAMILY: $Id"
+      Write-Output "APT29_HOST: os_build=$($ctl.Build) technique=$Technique mode=$Mode"
+      Write-Output "APT29_CONTROL: defender_on=$($ctl.DefenderOn) defender_readable=$($ctl.DefenderReadable) asr_block_rules=$($ctl.AsrBlock) applocker=$($ctl.AppLocker)"
+      Write-Output "APT29_EVIDENCE: run=$($script:A29Run) tag=$($script:A29Tag) ran=$([bool]$att.Ran) note=$($att.Note) block_events=[defender=$($blocks.Defender) applocker=$($blocks.AppLocker)] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      Write-Output "APT29_TELEMETRY: $((@($tele.GetEnumerator() | ForEach-Object { ($_.Key -replace ':', '_') + '=' + $_.Value }) -join ' '))"
+      Write-Output "APT29_OUTCOME: $($r.Outcome)"
+      $v = 'SKIP'
+      if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
+      elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
+      Write-Output "$($v): $($r.Reason). [BAS-SIM-APT29-$Id]"
+      }
+      Invoke-A29Test -Id 'x7' -Technique 'T1070.006' -Summary 'file timestamps are rewritten to an earlier date (T1070.006)' -Telemetry @('sysmon:2') -Attempt {
+      $f = Join-Path $script:A29Work 'stomped.txt'
+      Set-Content -LiteralPath $f -Value $script:A29Marker
+      $then = (Get-Date).AddDays(-730)
+      $ok = $false
+      try {
+      [IO.File]::SetCreationTime($f, $then); [IO.File]::SetLastWriteTime($f, $then); [IO.File]::SetLastAccessTime($f, $then)
+      $it = Get-Item -LiteralPath $f
+      $ok = ([Math]::Abs(($it.CreationTime - $then).TotalSeconds) -lt 5 -and [Math]::Abs(($it.LastWriteTime - $then).TotalSeconds) -lt 5)
+      } catch {}
+      return @{ Ran = $ok; Note = "created_back_dated_days=730 read_back_matches=$ok"; NotApplicable = '' }
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: apt29-x8
+    name: "APT29 Evasion 5 - Mark-of-the-Web Stream Added Then Removed (T1553.005)"
+    technique_id: T1553.005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Creates a run-tagged file, adds a Zone.Identifier stream with ZoneId 3, then removes it with Unblock-File. Stripping only, not an ISO or container bypass. Removed and verified."
+    telemetry:
+      - "Sysmon EID 15: Zone.Identifier stream created"
+    detection:
+      - "EDR: Zone.Identifier removed from a downloaded file by a script host"
+    command: |
+      $script:A29Run = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:A29Extra = @()
+      function Get-A29Control {
+      $r = @{ Build = [Environment]::OSVersion.Version.Build; DefenderReadable = $false; DefenderOn = $false; AsrBlock = 0; AppLocker = 'NotConfigured' }
+      try { $s = Get-MpComputerStatus -ErrorAction Stop; $r.DefenderReadable = $true; $r.DefenderOn = ([bool]$s.RealTimeProtectionEnabled -and [bool]$s.AntivirusEnabled) } catch {}
+      try { $p = Get-MpPreference -ErrorAction Stop; $r.AsrBlock = @($p.AttackSurfaceReductionRules_Actions | Where-Object { $_ -eq 1 }).Count } catch {}
+      try {
+      $svc = Get-Service -Name AppIDSvc -ErrorAction Stop
+      if ($svc.Status -eq 'Running') {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      foreach ($c in @($pol.RuleCollections)) { if ([string]$c.EnforcementMode -eq 'Enabled') { $r.AppLocker = 'Enabled' } }
+      }
+      } catch {}
+      return $r
+      }
+      function Get-A29Blocks {
+      param([datetime]$Start, [string]$Needle)
+      $r = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      $q = @(
+      @{ Key = 'Defender'; Log = 'Microsoft-Windows-Windows Defender/Operational'; Ids = @(1116, 1121) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/EXE and DLL'; Ids = @(8004) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/MSI and Script'; Ids = @(8007) }
+      )
+      foreach ($x in $q) {
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $x.Log; Id = $x.Ids; StartTime = $Start } -ErrorAction Stop)
+      $r[$x.Key] += @($ev | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch {
+      $f = [string]$_.FullyQualifiedErrorId
+      if ($f -like '*NoMatchingEventsFound*' -or $f -like '*NoMatchingLogsFound*') { continue }
+      $r.Readable = $false
+      }
+      }
+      return $r
+      }
+      function Resolve-A29Outcome {
+      param([bool]$Ran, [int]$Blocks, [bool]$Enforcing, [bool]$Readable, [bool]$BuildOk = $true)
+      if (-not $BuildOk) { return @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      if ($Ran) {
+      if ($Blocks -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed although a block event naming this test was recorded' } }
+      if ($Enforcing) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed while Microsoft Defender or AppLocker prevention was active' } }
+      return @{ Outcome = 'not_enforced'; Reason = 'the behavior executed and no Microsoft Defender or AppLocker prevention was active' }
+      }
+      if ($Blocks -gt 0) { return @{ Outcome = 'prevented'; Reason = "not executed; $Blocks block event(s) name this test" } }
+      if (-not $Readable) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, and a block log was unreadable, so the absence cannot be attributed' } }
+      return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no block event names this test, so the absence cannot be attributed to a control' }
+      }
+      function Get-A29Telemetry {
+      param([string[]]$Specs, [datetime]$Start, [string]$Needle)
+      $logs = @{ sysmon = 'Microsoft-Windows-Sysmon/Operational'; ps = 'Microsoft-Windows-PowerShell/Operational'; sec = 'Security'; wmi = 'Microsoft-Windows-WMI-Activity/Operational'; task = 'Microsoft-Windows-TaskScheduler/Operational'; sys = 'System'; dns = 'Microsoft-Windows-DNS-Client/Operational' }
+      $out = [ordered]@{}
+      foreach ($sp in @($Specs)) {
+      if (-not $sp) { continue }
+      $parts = $sp.Split(':')
+      $st = 'unavailable'
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $logs[$parts[0]]; Id = [int]$parts[1]; StartTime = $Start } -ErrorAction Stop)
+      $st = if (@($ev | Where-Object { $_.Message -like "*$Needle*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch { if ([string]$_.FullyQualifiedErrorId -like '*NoMatchingEventsFound*') { $st = 'not_visible' } }
+      $out[$sp] = $st
+      }
+      return $out
+      }
+      function Test-A29Marker {
+      param([string]$Path)
+      if (-not (Test-Path -LiteralPath $Path)) { return $false }
+      return ((Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) -join ' ') -like "*$($script:A29Marker)*"
+      }
+      function Invoke-A29Proc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Invoke-A29Attempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:A29Extra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:A29Extra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Invoke-A29Test {
+      param(
+      [Parameter(Mandatory)][string]$Id,
+      [Parameter(Mandatory)][string]$Technique,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Mode = 'Prevention',
+      [string[]]$Telemetry = @(),
+      [string[]]$Require = @(),
+      [string[]]$ExtraCleanup = @(),
+      [int]$MinBuild = 17763,
+      [string]$Summary = '',
+      [string]$Needle = ''
+      )
+      $script:A29Tag = "bas_a29_$($script:A29Run)_$Id"
+      $script:A29Work = Join-Path $env:TEMP $script:A29Tag
+      $script:A29Marker = "BAS-SIM-APT29-$($script:A29Run)-$Id"
+      $needleText = if ($Needle) { $Needle } else { $script:A29Tag }
+      New-Item -ItemType Directory -Path $script:A29Work -Force | Out-Null
+      $ctl = Get-A29Control
+      $buildOk = ($ctl.Build -ge $MinBuild)
+      $att = @{ Ran = $false; Note = ''; NotApplicable = '' }
+      $start = Get-Date
+      if ($buildOk) {
+      try { $att = Invoke-A29Attempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      $enforcing = ($ctl.DefenderOn -or $ctl.AsrBlock -gt 0 -or $ctl.AppLocker -eq 'Enabled')
+      $blocks = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      if ($Mode -eq 'Prevention' -and $buildOk) { $blocks = Get-A29Blocks -Start $start.AddSeconds(-1) -Needle $needleText }
+      $specs = @($Telemetry) + @($Require) | Where-Object { $_ } | Select-Object -Unique
+      $tele = [ordered]@{}
+      if ($buildOk -and $specs.Count -gt 0) { $tele = Get-A29Telemetry -Specs $specs -Start $start.AddSeconds(-1) -Needle $needleText }
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($Mode -eq 'Direct') {
+      $ok = @('prevented', 'allowed_unexpectedly', 'not_enforced', 'inconclusive', 'not_applicable', 'telemetry_visible', 'telemetry_not_visible')
+      if ($att.Verdict -and ($ok -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      }
+      elseif ($Mode -eq 'Telemetry') {
+      if (-not $att.Ran) { $r = @{ Outcome = 'inconclusive'; Reason = 'the behavior did not run, so its telemetry cannot be judged' } }
+      else {
+      $st = @($Require | ForEach-Object { $tele[$_] })
+      if (@($st | Where-Object { $_ -eq 'unavailable' }).Count -gt 0) { $r = @{ Outcome = 'inconclusive'; Reason = 'a required log is not available on this host, so visibility cannot be judged' } }
+      elseif (@($st | Where-Object { $_ -ne 'visible' }).Count -gt 0) { $r = @{ Outcome = 'telemetry_not_visible'; Reason = 'the behavior ran but the required host telemetry did not record it' } }
+      else { $r = @{ Outcome = 'telemetry_visible'; Reason = 'the behavior ran and the required host telemetry recorded it; forwarding to a SIEM is not verified' } }
+      }
+      }
+      else { $r = Resolve-A29Outcome -Ran ([bool]$att.Ran) -Blocks ([int]($blocks.Defender + $blocks.AppLocker)) -Enforcing $enforcing -Readable ([bool]$blocks.Readable) -BuildOk $buildOk }
+      Remove-Item -LiteralPath $script:A29Work -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path -LiteralPath $script:A29Work)
+      foreach ($x in $ExtraCleanup) { if (Test-Path -LiteralPath $x) { $cleanOk = $false } }
+      if ($att.ContainsKey('CleanupOk') -and -not [bool]$att.CleanupOk) { $cleanOk = $false }
+      foreach ($x in @($script:A29Extra)) { if ($x) { Write-Output $x } }
+      Write-Output "EXEC $($Technique): $Summary ran=$([bool]$att.Ran). [BAS-SIM-APT29-$Id]"
+      Write-Output "APT29_FAMILY: $Id"
+      Write-Output "APT29_HOST: os_build=$($ctl.Build) technique=$Technique mode=$Mode"
+      Write-Output "APT29_CONTROL: defender_on=$($ctl.DefenderOn) defender_readable=$($ctl.DefenderReadable) asr_block_rules=$($ctl.AsrBlock) applocker=$($ctl.AppLocker)"
+      Write-Output "APT29_EVIDENCE: run=$($script:A29Run) tag=$($script:A29Tag) ran=$([bool]$att.Ran) note=$($att.Note) block_events=[defender=$($blocks.Defender) applocker=$($blocks.AppLocker)] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      Write-Output "APT29_TELEMETRY: $((@($tele.GetEnumerator() | ForEach-Object { ($_.Key -replace ':', '_') + '=' + $_.Value }) -join ' '))"
+      Write-Output "APT29_OUTCOME: $($r.Outcome)"
+      $v = 'SKIP'
+      if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
+      elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
+      Write-Output "$($v): $($r.Reason). [BAS-SIM-APT29-$Id]"
+      }
+      Invoke-A29Test -Id 'x8' -Technique 'T1553.005' -Summary 'a Mark-of-the-Web stream is added to a file and then removed (T1553.005)' -Telemetry @('sysmon:15') -Attempt {
+      $f = Join-Path $script:A29Work 'downloaded.txt'
+      Set-Content -LiteralPath $f -Value $script:A29Marker
+      $added = $false; $stripped = $false
+      try { Set-Content -LiteralPath $f -Stream 'Zone.Identifier' -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop; $added = [bool](Get-Item -LiteralPath $f -Stream 'Zone.Identifier' -ErrorAction SilentlyContinue) } catch {}
+      try { Unblock-File -LiteralPath $f -ErrorAction Stop; $stripped = -not [bool](Get-Item -LiteralPath $f -Stream 'Zone.Identifier' -ErrorAction SilentlyContinue) } catch {}
+      return @{ Ran = ($added -and $stripped); Note = "zone_identifier_added=$added zone_identifier_removed=$stripped method=Unblock-File (stripping, not an ISO or container bypass)"; NotApplicable = '' }
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: apt29-x9
+    name: "APT29 Evasion 6 - Controlled Clear of a Dedicated Test Event Log (T1562.002; T1685.001 in ATT&CK v20)"
+    technique_id: T1562.002
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Gated by BAS_CONFIRM_APT29_TEST_LOG=true (exact) and administrator only. Registers a dedicated test event log named BASSIM_APT29, writes one entry, clears it and unregisters it. No real log is touched. The Event Log service keeps the log file open until it restarts, so one small residual .evtx file can remain; a fixed name means it is reused, never accumulated."
+    telemetry:
+      - "System EID 104: the test log was cleared"
+      - "Sysmon EID 1 where a process clears the log"
+    detection:
+      - "SIEM: log clear event (EID 104 or 1102); alert on any clear"
+    command: |
+      $script:A29Run = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:A29Extra = @()
+      function Get-A29Control {
+      $r = @{ Build = [Environment]::OSVersion.Version.Build; DefenderReadable = $false; DefenderOn = $false; AsrBlock = 0; AppLocker = 'NotConfigured' }
+      try { $s = Get-MpComputerStatus -ErrorAction Stop; $r.DefenderReadable = $true; $r.DefenderOn = ([bool]$s.RealTimeProtectionEnabled -and [bool]$s.AntivirusEnabled) } catch {}
+      try { $p = Get-MpPreference -ErrorAction Stop; $r.AsrBlock = @($p.AttackSurfaceReductionRules_Actions | Where-Object { $_ -eq 1 }).Count } catch {}
+      try {
+      $svc = Get-Service -Name AppIDSvc -ErrorAction Stop
+      if ($svc.Status -eq 'Running') {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      foreach ($c in @($pol.RuleCollections)) { if ([string]$c.EnforcementMode -eq 'Enabled') { $r.AppLocker = 'Enabled' } }
+      }
+      } catch {}
+      return $r
+      }
+      function Get-A29Blocks {
+      param([datetime]$Start, [string]$Needle)
+      $r = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      $q = @(
+      @{ Key = 'Defender'; Log = 'Microsoft-Windows-Windows Defender/Operational'; Ids = @(1116, 1121) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/EXE and DLL'; Ids = @(8004) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/MSI and Script'; Ids = @(8007) }
+      )
+      foreach ($x in $q) {
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $x.Log; Id = $x.Ids; StartTime = $Start } -ErrorAction Stop)
+      $r[$x.Key] += @($ev | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch {
+      $f = [string]$_.FullyQualifiedErrorId
+      if ($f -like '*NoMatchingEventsFound*' -or $f -like '*NoMatchingLogsFound*') { continue }
+      $r.Readable = $false
+      }
+      }
+      return $r
+      }
+      function Resolve-A29Outcome {
+      param([bool]$Ran, [int]$Blocks, [bool]$Enforcing, [bool]$Readable, [bool]$BuildOk = $true)
+      if (-not $BuildOk) { return @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      if ($Ran) {
+      if ($Blocks -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed although a block event naming this test was recorded' } }
+      if ($Enforcing) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed while Microsoft Defender or AppLocker prevention was active' } }
+      return @{ Outcome = 'not_enforced'; Reason = 'the behavior executed and no Microsoft Defender or AppLocker prevention was active' }
+      }
+      if ($Blocks -gt 0) { return @{ Outcome = 'prevented'; Reason = "not executed; $Blocks block event(s) name this test" } }
+      if (-not $Readable) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, and a block log was unreadable, so the absence cannot be attributed' } }
+      return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no block event names this test, so the absence cannot be attributed to a control' }
+      }
+      function Get-A29Telemetry {
+      param([string[]]$Specs, [datetime]$Start, [string]$Needle)
+      $logs = @{ sysmon = 'Microsoft-Windows-Sysmon/Operational'; ps = 'Microsoft-Windows-PowerShell/Operational'; sec = 'Security'; wmi = 'Microsoft-Windows-WMI-Activity/Operational'; task = 'Microsoft-Windows-TaskScheduler/Operational'; sys = 'System'; dns = 'Microsoft-Windows-DNS-Client/Operational' }
+      $out = [ordered]@{}
+      foreach ($sp in @($Specs)) {
+      if (-not $sp) { continue }
+      $parts = $sp.Split(':')
+      $st = 'unavailable'
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $logs[$parts[0]]; Id = [int]$parts[1]; StartTime = $Start } -ErrorAction Stop)
+      $st = if (@($ev | Where-Object { $_.Message -like "*$Needle*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch { if ([string]$_.FullyQualifiedErrorId -like '*NoMatchingEventsFound*') { $st = 'not_visible' } }
+      $out[$sp] = $st
+      }
+      return $out
+      }
+      function Test-A29Marker {
+      param([string]$Path)
+      if (-not (Test-Path -LiteralPath $Path)) { return $false }
+      return ((Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) -join ' ') -like "*$($script:A29Marker)*"
+      }
+      function Invoke-A29Proc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Invoke-A29Attempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:A29Extra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:A29Extra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Invoke-A29Test {
+      param(
+      [Parameter(Mandatory)][string]$Id,
+      [Parameter(Mandatory)][string]$Technique,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Mode = 'Prevention',
+      [string[]]$Telemetry = @(),
+      [string[]]$Require = @(),
+      [string[]]$ExtraCleanup = @(),
+      [int]$MinBuild = 17763,
+      [string]$Summary = '',
+      [string]$Needle = ''
+      )
+      $script:A29Tag = "bas_a29_$($script:A29Run)_$Id"
+      $script:A29Work = Join-Path $env:TEMP $script:A29Tag
+      $script:A29Marker = "BAS-SIM-APT29-$($script:A29Run)-$Id"
+      $needleText = if ($Needle) { $Needle } else { $script:A29Tag }
+      New-Item -ItemType Directory -Path $script:A29Work -Force | Out-Null
+      $ctl = Get-A29Control
+      $buildOk = ($ctl.Build -ge $MinBuild)
+      $att = @{ Ran = $false; Note = ''; NotApplicable = '' }
+      $start = Get-Date
+      if ($buildOk) {
+      try { $att = Invoke-A29Attempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      $enforcing = ($ctl.DefenderOn -or $ctl.AsrBlock -gt 0 -or $ctl.AppLocker -eq 'Enabled')
+      $blocks = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      if ($Mode -eq 'Prevention' -and $buildOk) { $blocks = Get-A29Blocks -Start $start.AddSeconds(-1) -Needle $needleText }
+      $specs = @($Telemetry) + @($Require) | Where-Object { $_ } | Select-Object -Unique
+      $tele = [ordered]@{}
+      if ($buildOk -and $specs.Count -gt 0) { $tele = Get-A29Telemetry -Specs $specs -Start $start.AddSeconds(-1) -Needle $needleText }
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($Mode -eq 'Direct') {
+      $ok = @('prevented', 'allowed_unexpectedly', 'not_enforced', 'inconclusive', 'not_applicable', 'telemetry_visible', 'telemetry_not_visible')
+      if ($att.Verdict -and ($ok -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      }
+      elseif ($Mode -eq 'Telemetry') {
+      if (-not $att.Ran) { $r = @{ Outcome = 'inconclusive'; Reason = 'the behavior did not run, so its telemetry cannot be judged' } }
+      else {
+      $st = @($Require | ForEach-Object { $tele[$_] })
+      if (@($st | Where-Object { $_ -eq 'unavailable' }).Count -gt 0) { $r = @{ Outcome = 'inconclusive'; Reason = 'a required log is not available on this host, so visibility cannot be judged' } }
+      elseif (@($st | Where-Object { $_ -ne 'visible' }).Count -gt 0) { $r = @{ Outcome = 'telemetry_not_visible'; Reason = 'the behavior ran but the required host telemetry did not record it' } }
+      else { $r = @{ Outcome = 'telemetry_visible'; Reason = 'the behavior ran and the required host telemetry recorded it; forwarding to a SIEM is not verified' } }
+      }
+      }
+      else { $r = Resolve-A29Outcome -Ran ([bool]$att.Ran) -Blocks ([int]($blocks.Defender + $blocks.AppLocker)) -Enforcing $enforcing -Readable ([bool]$blocks.Readable) -BuildOk $buildOk }
+      Remove-Item -LiteralPath $script:A29Work -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path -LiteralPath $script:A29Work)
+      foreach ($x in $ExtraCleanup) { if (Test-Path -LiteralPath $x) { $cleanOk = $false } }
+      if ($att.ContainsKey('CleanupOk') -and -not [bool]$att.CleanupOk) { $cleanOk = $false }
+      foreach ($x in @($script:A29Extra)) { if ($x) { Write-Output $x } }
+      Write-Output "EXEC $($Technique): $Summary ran=$([bool]$att.Ran). [BAS-SIM-APT29-$Id]"
+      Write-Output "APT29_FAMILY: $Id"
+      Write-Output "APT29_HOST: os_build=$($ctl.Build) technique=$Technique mode=$Mode"
+      Write-Output "APT29_CONTROL: defender_on=$($ctl.DefenderOn) defender_readable=$($ctl.DefenderReadable) asr_block_rules=$($ctl.AsrBlock) applocker=$($ctl.AppLocker)"
+      Write-Output "APT29_EVIDENCE: run=$($script:A29Run) tag=$($script:A29Tag) ran=$([bool]$att.Ran) note=$($att.Note) block_events=[defender=$($blocks.Defender) applocker=$($blocks.AppLocker)] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      Write-Output "APT29_TELEMETRY: $((@($tele.GetEnumerator() | ForEach-Object { ($_.Key -replace ':', '_') + '=' + $_.Value }) -join ' '))"
+      Write-Output "APT29_OUTCOME: $($r.Outcome)"
+      $v = 'SKIP'
+      if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
+      elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
+      Write-Output "$($v): $($r.Reason). [BAS-SIM-APT29-$Id]"
+      }
+      Invoke-A29Test -Id 'x9' -Technique 'T1562.002' -Mode Telemetry -Needle 'BASSIM_APT29' -Require @('sys:104') -Telemetry @('sysmon:1') -Summary 'a controlled clear of a dedicated test event log; no real log is touched (T1562.002, T1685.001 in ATT&CK v20)' -Attempt {
+      if ($env:BAS_CONFIRM_APT29_TEST_LOG -cne 'true') { return @{ Ran = $false; Note = 'lab_gate_not_set'; NotApplicable = 'lab gate BAS_CONFIRM_APT29_TEST_LOG is not set to true; this step creates and removes a dedicated test event log and is skipped without it' } }
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      if (-not $isAdmin) { return @{ Ran = $false; Note = 'not_admin'; NotApplicable = 'creating an event log needs an administrator identity' } }
+      $log = 'BASSIM_APT29'
+      $created = $false; $wrote = $false; $cleared = $false; $removed = $false
+      try {
+      New-EventLog -LogName $log -Source $log -ErrorAction Stop
+      $created = $true
+      Write-EventLog -LogName $log -Source $log -EventId 1 -Message ('BAS-SIM test entry ' + $script:A29Marker) -ErrorAction Stop
+      $wrote = $true
+      Clear-EventLog -LogName $log -ErrorAction Stop
+      $cleared = $true
+      } catch {} finally {
+      try { Remove-EventLog -LogName $log -ErrorAction Stop; $removed = $true } catch { $removed = -not [bool](Get-WinEvent -ListLog $log -ErrorAction SilentlyContinue) }
+      }
+      Start-Sleep -Milliseconds 800
+      $residual = Test-Path -LiteralPath (Join-Path $env:SystemRoot 'System32\winevt\Logs\BASSIM_APT29.evtx')
+      return @{ Ran = $cleared; Note = "test_log_created=$created entry_written=$wrote test_log_cleared=$cleared test_log_unregistered=$removed residual_evtx_file_until_eventlog_restart=$residual target=dedicated_test_log_only"; CleanupOk = $removed; NotApplicable = '' }
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Remove-EventLog -LogName 'BASSIM_APT29' -ErrorAction SilentlyContinue

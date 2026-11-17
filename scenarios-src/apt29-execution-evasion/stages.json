@@ -1,0 +1,174 @@
+[
+  {
+    "id": "apt29-x1",
+    "n": 1,
+    "name": "APT29 Execution 1 - WMI Process Creation (T1047)",
+    "technique_id": "T1047",
+    "timeout_sec": 60,
+    "blast_radius": "Calls Win32_Process.Create to run cmd.exe echoing a marker into a run-tagged temp file. Benign; the file is removed and removal verified.",
+    "telemetry": [
+      "Sysmon EID 1: cmd.exe with WmiPrvSE.exe parent",
+      "Security EID 4688: process creation",
+      "WMI-Activity EID 5857"
+    ],
+    "detection": [
+      "EDR: process created by WmiPrvSE.exe from a script host",
+      "SIEM: Win32_Process.Create command line"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt29-x2",
+    "n": 2,
+    "name": "APT29 Execution 2 - rundll32 Proxy Execution Through an INF (T1218.011)",
+    "technique_id": "T1218.011",
+    "timeout_sec": 60,
+    "blast_radius": "Runs rundll32.exe advpack.dll,LaunchINFSection on a run-tagged INF whose only command echoes a marker. Benign; removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: rundll32.exe advpack.dll",
+      "Security EID 4688"
+    ],
+    "detection": [
+      "EDR: rundll32 loading advpack.dll with an INF from a user path"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt29-x3",
+    "n": 3,
+    "name": "APT29 Execution 3 - mshta Runs a Script Page (T1218.005)",
+    "technique_id": "T1218.005",
+    "timeout_sec": 60,
+    "blast_radius": "Runs mshta.exe on a run-tagged HTA whose script writes one marker file. Benign; removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: mshta.exe with an HTA path",
+      "Security EID 4688"
+    ],
+    "detection": [
+      "EDR: mshta.exe executing a local HTA from a temp path"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt29-x4",
+    "n": 4,
+    "name": "APT29 Evasion 1 - Character-code Obfuscated PowerShell Is Deobfuscated and Run (T1027 / T1140)",
+    "technique_id": "T1027",
+    "timeout_sec": 60,
+    "blast_radius": "Runs a script file whose body is only an array of shifted character codes; it rebuilds and invokes a command that writes one marker file. Benign; removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: powershell.exe -File",
+      "PowerShell EID 4104: the rebuilt script block",
+      "Security EID 4688"
+    ],
+    "detection": [
+      "AMSI/ScriptBlock: runtime-built script block from a char-code array"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt29-x5",
+    "n": 5,
+    "name": "APT29 Evasion 2 - Binary Padding Changes a Benign Binary Hash (T1027.001)",
+    "technique_id": "T1027.001",
+    "timeout_sec": 60,
+    "blast_radius": "Copies hostname.exe to a run-tagged temp directory, appends 2 MB of zero bytes, confirms the SHA-256 changed and the program still prints the host name. Removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: padded binary with a new hash"
+    ],
+    "detection": [
+      "EDR: executable with a large trailing zero region and a modified hash"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt29-x6",
+    "n": 6,
+    "name": "APT29 Evasion 3 - System Process Name Run from a User Path (T1036.005)",
+    "technique_id": "T1036.005",
+    "timeout_sec": 60,
+    "blast_radius": "Copies hostname.exe to a run-tagged temp directory as svchost.exe and runs it. Benign; removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: svchost.exe whose image is outside System32",
+      "Security EID 4688"
+    ],
+    "detection": [
+      "EDR: svchost.exe not under System32 or without services.exe parent"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt29-x7",
+    "n": 7,
+    "name": "APT29 Evasion 4 - File Timestamps Rewritten (T1070.006)",
+    "technique_id": "T1070.006",
+    "timeout_sec": 60,
+    "blast_radius": "Creates a run-tagged file and sets its creation, write and access times two years back, then reads them to confirm. Removed and verified.",
+    "telemetry": [
+      "Sysmon EID 2: file creation time changed"
+    ],
+    "detection": [
+      "EDR: timestamp change on a file the process just created"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt29-x8",
+    "n": 8,
+    "name": "APT29 Evasion 5 - Mark-of-the-Web Stream Added Then Removed (T1553.005)",
+    "technique_id": "T1553.005",
+    "timeout_sec": 60,
+    "blast_radius": "Creates a run-tagged file, adds a Zone.Identifier stream with ZoneId 3, then removes it with Unblock-File. Stripping only, not an ISO or container bypass. Removed and verified.",
+    "telemetry": [
+      "Sysmon EID 15: Zone.Identifier stream created"
+    ],
+    "detection": [
+      "EDR: Zone.Identifier removed from a downloaded file by a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt29-x9",
+    "n": 9,
+    "name": "APT29 Evasion 6 - Controlled Clear of a Dedicated Test Event Log (T1562.002; T1685.001 in ATT&CK v20)",
+    "technique_id": "T1562.002",
+    "timeout_sec": 90,
+    "blast_radius": "Gated by BAS_CONFIRM_APT29_TEST_LOG=true (exact) and administrator only. Registers a dedicated test event log named BASSIM_APT29, writes one entry, clears it and unregisters it. No real log is touched. The Event Log service keeps the log file open until it restarts, so one small residual .evtx file can remain; a fixed name means it is reused, never accumulated.",
+    "telemetry": [
+      "System EID 104: the test log was cleared",
+      "Sysmon EID 1 where a process clears the log"
+    ],
+    "detection": [
+      "SIEM: log clear event (EID 104 or 1102); alert on any clear"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a29_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue\nRemove-EventLog -LogName 'BASSIM_APT29' -ErrorAction SilentlyContinue",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe",
+    "requires_priv": "admin"
+  }
+]

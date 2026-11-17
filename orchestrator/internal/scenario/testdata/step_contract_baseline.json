@@ -64,7 +64,32 @@
     "detection": 0,
     "telemetry": 0
   },
+  "apt29-collection-staging.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt29-command-control.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt29-credential-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt29-execution-evasion.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "apt29-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt29-persistence.yaml": {
     "cleanup": 0,
     "detection": 0,
     "telemetry": 0
