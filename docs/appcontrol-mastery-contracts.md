@@ -2,7 +2,7 @@
 
 Companion to `docs/appcontrol-test-contracts.md`. It covers the four scenarios added on top of `appcontrol-efficacy`:
 `appcontrol-proxy-execution` (9), `appcontrol-script-interpreter` (8), `appcontrol-file-enforcement` (10) and
-`appcontrol-policy-integrity` (7). Sources live in `scenarios-src/appcontrol-*`; the shared oracle is
+`appcontrol-policy-integrity` (7), `appcontrol-packaging-trust` (4), `appcontrol-advanced-loading` (4) and `appcontrol-operational-reliability` (3). Sources live in `scenarios-src/appcontrol-*`; the shared oracle is
 `scenarios-src/appcontrol-common/lib.ps1`; regenerate with `orchestrator/scripts/appctlgen` and re-sign.
 
 ## Shared rules (every step)
@@ -70,3 +70,35 @@ Companion to `docs/appcontrol-test-contracts.md`. It covers the four scenarios a
 | managed_installer | T1553 | Managed Installer rules trusting user-writable paths | none |
 | policy_after_reboot | T1562.001 | persistence and post-boot load evidence | none (no reboot) |
 | policy_lifecycle | T1562.001 | effective policy hash against an operator baseline | none |
+
+## appcontrol-packaging-trust (read-only, direct verdicts)
+
+| Family | Technique | Observes | Verdicts |
+|---|---|---|---|
+| packaged_app_rules | T1553 | AppLocker Appx collection mode next to the other collections | enforced = pass; audit = audited_only; missing while others enforce = not_enforced; nothing enforced = not_applicable |
+| sideloading_policy | T1553 | AllowAllTrustedApps and developer mode, only where enforcement is on | either on = allowed_unexpectedly; nothing enforced = not_applicable |
+| always_install_elevated | T1548 | AlwaysInstallElevated for machine AND user | both 1 = allowed_unexpectedly (MSI rules are not a boundary); otherwise pass; applies with or without enforcement |
+| writable_allowed_paths | T1553 | ACLs of Windows-directory subdirectories that the default path rule trusts (Tasks, Temp, tracing, spool color, System32\Tasks) | any writable by Users/Authenticated Users/Everyone = allowed_unexpectedly; AppLocker not enforced = not_applicable |
+
+Blind spots: no package is ever installed or launched, so this is posture, not an install attempt; the writable-path list is fixed and not a full ACL sweep.
+
+## appcontrol-advanced-loading
+
+| Family | Technique | Mechanism | Gate |
+|---|---|---|---|
+| dll_search_order | T1574.001 | test program loads a test DLL by bare name from its own directory | none |
+| com_activation | T1546.015 | temporary per-user COM class pointing at scrobj.dll and a scriptlet | `BAS_CONFIRM_APPCONTROL_COM_REGISTER` |
+| scheduled_task_launch | T1053.005 | temporary scheduled task for the current user runs the test program once | `BAS_CONFIRM_APPCONTROL_TASK_CREATE` |
+| service_launch | T1543.003 | temporary demand-start service runs the test program; administrator only | `BAS_CONFIRM_APPCONTROL_SERVICE_CREATE` |
+
+Without its exact flag a gated step is not_applicable and names the flag; any other value (`True`, `1`, `yes`) also skips. Each removes what it created and prints the removal, and the step cleanup also sweeps COM keys (`BasSim.*`), tasks (`BAS-SIM-APPCTL-*`) and services (`BASSIM*`). The DLL test runs its host program from the temp directory, so an Exe rule can stop it before the DLL is reached (the step note says so). The service test uses a program that is not a real service, so the service manager reports a start timeout; only the launch matters.
+
+## appcontrol-operational-reliability (read-only, direct verdicts)
+
+| Family | Technique | Observes | Verdicts |
+|---|---|---|---|
+| enforcement_log_health | T1562.002 | the AppLocker and Code Integrity channels the policy relies on | disabled or missing = allowed_unexpectedly; capped below 1 MB = inconclusive; healthy = pass; no policy = not_applicable |
+| identity_service_reliability | T1562.001 | AppIDSvc start mode and state while an AppLocker collection is enforced | disabled, absent or not running = not_enforced; running = pass; nothing enforced = not_applicable |
+| overbroad_allow_rules | T1562.001 | allow rules for Everyone or Users over a whole drive, user-writable path or network path | any = allowed_unexpectedly (count only, names not recorded); none = pass |
+
+Not tested: policy update latency and audit-to-enforce transition timing, which need a real policy apply.

@@ -163,7 +163,11 @@ const defaultCleanup = `foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path 
   Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 }
 Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue`
+Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }`
 
 func main() {
 	src := flag.String("src", "", "category source directory, e.g. scenarios-src/appcontrol-proxy-execution")

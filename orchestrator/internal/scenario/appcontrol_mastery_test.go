@@ -339,3 +339,113 @@ func TestAppControlMastery_DriftMatchesItsOwnBaseline(t *testing.T) {
 		t.Errorf("matching baseline must pass:\n%s", second)
 	}
 }
+
+// Packaging-trust and operational-reliability steps read policy, service, log and
+// registry state directly. The fixtures stub those readers so every verdict class is
+// reached without touching the host.
+func TestAppControlMastery_PackagingAndReliabilitySteps(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("behavioral steps are Windows PowerShell")
+	}
+	pkgPath := filepath.Join("..", "..", "..", "scenarios", "appcontrol-packaging-trust.yaml")
+	relPath := filepath.Join("..", "..", "..", "scenarios", "appcontrol-operational-reliability.yaml")
+	stubs := `function Get-Service { [CmdletBinding()] param([string]$Name) [pscustomobject]@{ Name = $Name; Status = 'Running' } }
+function Get-AppLockerPolicy { [CmdletBinding()] param([switch]$Effective, [switch]$Xml, [switch]$Local)
+  if ($Xml) { return $global:BasPolicyXml }
+  [pscustomobject]@{ RuleCollections = @($global:BasCols.GetEnumerator() | ForEach-Object { [pscustomobject]@{ RuleCollectionType = $_.Key; EnforcementMode = $_.Value } }) } }
+function Get-CimInstance { [CmdletBinding()] param([Parameter(Position = 0)]$Pos, $Namespace, $ClassName, $Filter)
+  $cn = if ($ClassName) { $ClassName } else { $Pos }
+  if ($cn -eq 'Win32_Service') { return [pscustomobject]@{ StartMode = $global:BasSvcMode; State = $global:BasSvcState } }
+  [pscustomobject]@{ UsermodeCodeIntegrityPolicyEnforcementStatus = 0; CodeIntegrityPolicyEnforcementStatus = 0 } }
+function Get-AppxPackage { [CmdletBinding()] param() @() }
+function Get-ItemProperty { [CmdletBinding()] param($Path, $Name)
+  $v = $null
+  if ($Name -eq 'AlwaysInstallElevated') { $v = if ([string]$Path -like 'HKLM:*') { $global:BasAieMachine } else { $global:BasAieUser } }
+  if ($null -eq $v) { throw 'not found' }
+  $o = New-Object psobject; $o | Add-Member -NotePropertyName $Name -NotePropertyValue $v; $o }
+function Get-WinEvent { [CmdletBinding()] param($ListLog, $FilterHashtable)
+  if ($ListLog) { return [pscustomobject]@{ IsEnabled = $global:BasLogEnabled; MaximumSizeInBytes = $global:BasLogSize } } }
+`
+	cols := func(m map[string]string) string {
+		var b strings.Builder
+		b.WriteString("$global:BasCols = @{}\n")
+		for k, v := range m {
+			b.WriteString("$global:BasCols['" + k + "'] = '" + v + "'\n")
+		}
+		return b.String()
+	}
+	allow := func(path string) string {
+		return `$global:BasPolicyXml = '<AppLockerPolicy Version="1"><RuleCollection Type="Exe" EnforcementMode="Enabled"><FilePathRule Id="1" Name="r1" Description="" UserOrGroupSid="S-1-1-0" Action="Allow"><Conditions><FilePathCondition Path="` + path + `"/></Conditions></FilePathRule></RuleCollection></AppLockerPolicy>'` + "\n"
+	}
+	enf := map[string]string{"Exe": "Enabled", "Script": "Enabled", "Dll": "Enabled", "Msi": "Enabled"}
+	withAppx := func(m string) map[string]string {
+		c := map[string]string{}
+		for k, v := range enf {
+			c[k] = v
+		}
+		if m != "" {
+			c["Appx"] = m
+		}
+		return c
+	}
+	none := map[string]string{}
+	cases := []struct {
+		name, file, step, prelude, wantOutcome, wantPrefix string
+	}{
+		{"appx enforced", pkgPath, "Application control Packaged App Rules", cols(withAppx("Enabled")), "blocked_as_expected", "PASS:"},
+		{"appx audit", pkgPath, "Application control Packaged App Rules", cols(withAppx("AuditOnly")), "audited_only", "FAIL:"},
+		{"appx missing while others enforce", pkgPath, "Application control Packaged App Rules", cols(withAppx("")), "not_enforced", "FAIL:"},
+		{"appx nothing enforced", pkgPath, "Application control Packaged App Rules", cols(none), "not_applicable", "SKIP:"},
+		{"aie both on", pkgPath, "Application control Installer Trust", "$global:BasAieMachine = 1; $global:BasAieUser = 1\n", "allowed_unexpectedly", "FAIL:"},
+		{"aie machine only", pkgPath, "Application control Installer Trust", "$global:BasAieMachine = 1\n", "blocked_as_expected", "PASS:"},
+		{"aie unset", pkgPath, "Application control Installer Trust", "", "blocked_as_expected", "PASS:"},
+		{"identity service running", relPath, "Application control Operational Reliability: application identity", cols(enf) + "$global:BasSvcMode = 'Manual'; $global:BasSvcState = 'Running'\n", "blocked_as_expected", "PASS:"},
+		{"identity service stopped", relPath, "Application control Operational Reliability: application identity", cols(enf) + "$global:BasSvcMode = 'Manual'; $global:BasSvcState = 'Stopped'\n", "not_enforced", "FAIL:"},
+		{"identity service disabled", relPath, "Application control Operational Reliability: application identity", cols(enf) + "$global:BasSvcMode = 'Disabled'; $global:BasSvcState = 'Stopped'\n", "not_enforced", "FAIL:"},
+		{"identity service nothing enforced", relPath, "Application control Operational Reliability: application identity", cols(none) + "$global:BasSvcMode = 'Manual'; $global:BasSvcState = 'Stopped'\n", "not_applicable", "SKIP:"},
+		{"allow rule over whole drive", relPath, "Application control Operational Reliability: allow rules", cols(enf) + allow("*"), "allowed_unexpectedly", "FAIL:"},
+		{"allow rule over user profile", relPath, "Application control Operational Reliability: allow rules", cols(enf) + allow("%USERPROFILE%\\\\*"), "allowed_unexpectedly", "FAIL:"},
+		{"allow rule over program files", relPath, "Application control Operational Reliability: allow rules", cols(enf) + allow("%PROGRAMFILES%\\\\*"), "blocked_as_expected", "PASS:"},
+		{"log healthy", relPath, "Application control Operational Reliability: enforcement log", cols(enf) + "$global:BasLogEnabled = $true; $global:BasLogSize = 20MB\n", "blocked_as_expected", "PASS:"},
+		{"log disabled", relPath, "Application control Operational Reliability: enforcement log", cols(enf) + "$global:BasLogEnabled = $false; $global:BasLogSize = 20MB\n", "allowed_unexpectedly", "FAIL:"},
+		{"log tiny", relPath, "Application control Operational Reliability: enforcement log", cols(enf) + "$global:BasLogEnabled = $true; $global:BasLogSize = 512KB\n", "inconclusive", "SKIP:"},
+		{"log no policy", relPath, "Application control Operational Reliability: enforcement log", cols(none) + "$global:BasLogEnabled = $true; $global:BasLogSize = 20MB\n", "not_applicable", "SKIP:"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out := runPosturePowerShell(t, stubs+c.prelude+loadStepCommand(t, c.file, c.step))
+			if !strings.Contains(out, "APPCTL_OUTCOME: "+c.wantOutcome) || !strings.Contains(out, c.wantPrefix) {
+				t.Errorf("want %s / %s\n%s", c.wantOutcome, c.wantPrefix, out)
+			}
+			if strings.Count(out, "APPCTL_OUTCOME:") != 1 {
+				t.Errorf("expected exactly one APPCTL_OUTCOME line\n%s", out)
+			}
+			if c.wantPrefix != "PASS:" && strings.Contains(out, "PASS:") {
+				t.Errorf("non-pass fixture emitted PASS:\n%s", out)
+			}
+		})
+	}
+}
+
+// Gated steps must refuse to run without their exact lab flag, and must say why.
+func TestAppControlMastery_GatedLoadingStepsSkipWithoutGate(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("behavioral steps are Windows PowerShell")
+	}
+	path := filepath.Join("..", "..", "..", "scenarios", "appcontrol-advanced-loading.yaml")
+	for _, step := range []struct{ name, gate string }{
+		{"Application control Advanced Loading: COM scriptlet", "BAS_CONFIRM_APPCONTROL_COM_REGISTER"},
+		{"Application control Advanced Loading: program launched by a scheduled task", "BAS_CONFIRM_APPCONTROL_TASK_CREATE"},
+		{"Application control Advanced Loading: program launched by the service manager", "BAS_CONFIRM_APPCONTROL_SERVICE_CREATE"},
+	} {
+		for _, val := range []string{"", "True", "1", "yes"} {
+			t.Run(step.gate+"="+val, func(t *testing.T) {
+				pre := "$env:" + step.gate + " = '" + val + "'\n"
+				out := runPosturePowerShell(t, pre+loadStepCommand(t, path, step.name))
+				if !strings.Contains(out, "APPCTL_OUTCOME: not_applicable") || !strings.Contains(out, "SKIP:") || !strings.Contains(out, step.gate) {
+					t.Errorf("gate value %q must skip and name %s\n%s", val, step.gate, out)
+				}
+			})
+		}
+	}
+}

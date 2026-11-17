@@ -314,6 +314,10 @@ steps:
       }
       Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }
 
   # -------------------------------------------------------------------------
   - id: appctl-d02-policy-write
@@ -599,6 +603,10 @@ steps:
       }
       Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }
 
   # -------------------------------------------------------------------------
   - id: appctl-d03-downgrade
@@ -865,6 +873,10 @@ steps:
       }
       Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }
 
   # -------------------------------------------------------------------------
   - id: appctl-d04-wdac-policy-dir
@@ -1150,6 +1162,10 @@ steps:
       }
       Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }
 
   # -------------------------------------------------------------------------
   - id: appctl-d05-managed-installer
@@ -1418,6 +1434,10 @@ steps:
       }
       Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }
 
   # -------------------------------------------------------------------------
   - id: appctl-d06-after-reboot
@@ -1690,6 +1710,10 @@ steps:
       }
       Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }
 
   # -------------------------------------------------------------------------
   - id: appctl-d07-drift
@@ -1958,3 +1982,7 @@ steps:
       }
       Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }

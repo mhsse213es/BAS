@@ -126,6 +126,9 @@ var appCtlMasteryFamilies = []string{
 	"ocx_module_loading", "msi_installation",
 	"policy_service_interruption", "policy_modification", "policy_downgrade",
 	"supplemental_policy", "managed_installer", "policy_after_reboot", "policy_lifecycle",
+	"packaged_app_rules", "sideloading_policy", "always_install_elevated", "writable_allowed_paths",
+	"dll_search_order", "com_activation", "scheduled_task_launch", "service_launch",
+	"enforcement_log_health", "identity_service_reliability", "overbroad_allow_rules",
 }
 
 func init() {

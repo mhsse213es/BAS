@@ -190,3 +190,19 @@ Scope: 34 new steps in four scenarios (`appcontrol-proxy-execution` 9, `appcontr
 ### Code review findings fixed (2026-11-17, review of `main..appcontrol-mastery`)
 Ten findings; all verified against the code. Fixed: (1) script steps b01 to b06 matched the host executable name, but AppLocker 8007 / WDAC 8029 name the script, so a working control could never score blocked; needles are now the unique script file names and the test stub emits events that name only that file. (2) the oracle swallowed non-result output from an attempt, hiding restore warnings; they are now printed. (3) gated admin actions no longer override the static verdict. (4) the report name fallback covers all 34 steps (new test). (5) c02 flipped a header byte; it now alters a resource or data section and accepts any non-Valid status (system binaries are catalog-signed, so the result reads NotSigned). (6) compile-dependent steps now say when ConstrainedLanguage is the cause. (7) b07 compared ASR GUIDs case-sensitively. (8) c03 left the CNG key container; it is now deleted and key file counts are printed (134 before, 134 after on this host). (9) c10 runs the installer in a child process with a 60 s kill; no product registration was observed. (10) the per-step cleanup sweep now covers APPDATA, Downloads, TEMP root files and the temporary certificate.
 Documented, not fixable in the test itself: steps run from a user-writable temp directory cannot separate a signature rule from a location rule (see contracts); gated paths are still never run.
+
+## Categories E to G (2026-11-17): packaging-trust (4), advanced-loading (4), operational-reliability (3)
+
+Built from the same oracle and generator; 11 new steps, 45 across the pack, scenario pin 140, 170 signed scenarios verified.
+
+### Verified
+- Every step was executed for real on this host through its shipped, generated YAML text. Read-only steps return not_applicable (no enforcement) or a real finding (e3 AlwaysInstallElevated: unset, pass). f1 executed the DLL resolved by name and reported not_enforced.
+- The gated COM scriptlet (f2) and scheduled-task (f3) paths were actually run with their flags set: each executed, removed what it created, and left no registry keys or tasks behind (checked afterwards).
+- Fixture tests drive every verdict class of the direct-verdict steps (appx enforced, audit, missing; AlwaysInstallElevated both, one, unset; identity service running, stopped, disabled; allow rules over a drive, a user path, a protected path; log healthy, disabled, tiny, no policy) and prove each gate skips for unset, `True`, `1` and `yes`.
+
+### NOT verified
+- No enforced AppLocker or WDAC host was available: no block, audit or log-health verdict on a real policy has been observed, and the packaged-app, sideloading and writable-path branches are fixture-only.
+- f4 (service launch) was never run, not even gated, because it creates a system service on the build host. Its create, start and delete sequence is untested; cleanup depends on `sc.exe delete`.
+- Whether the Windows Installer, scheduled task or service manager paths are blocked by real rules is unobserved; the only evidence is that the launch worked on an unenforcing host.
+- The writable-path list is fixed (six directories), not a complete ACL sweep; no package is installed, so packaged-app results are posture only.
+- Policy update latency and audit-to-enforce transition timing are not tested.
