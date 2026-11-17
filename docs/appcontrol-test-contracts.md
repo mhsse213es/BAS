@@ -46,7 +46,7 @@ Every contract has the same fields: family, control under test, prerequisites, e
 - **Prerequisites.** AppLocker available; Script collection readable; `cscript.exe` present.
 - **Expected-result source.** Effective Script collection mode captured immediately before the attempt.
 - **Expected outcome.** `blocked_as_expected` when Script is `Enabled` and the policy covers the file.
-- **Evidence requirements.** `APPCTL_EVIDENCE`. Attribution: exactly one `Microsoft-Windows-AppLocker/MSI and Script` event 8006 naming the unique `.vbs` file.
+- **Evidence requirements.** `APPCTL_EVIDENCE`. Attribution: exactly one `Microsoft-Windows-AppLocker/MSI and Script` event 8007 (8006 is the audit-mode event and is not prevention evidence) naming the unique `.vbs` file.
 - **Cleanup.** Removes the `.vbs` and the temp output file.
 - **Unsupported conditions.** AppLocker unavailable; event log unreadable.
 - **Known blind spots.** Covers `cscript` with `.vbs` only. Not `wscript`, `.js`, `.ps1`, or other script hosts.

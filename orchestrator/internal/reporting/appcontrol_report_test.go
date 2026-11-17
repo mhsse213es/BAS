@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/audspect/bas/internal/avval"
 	"github.com/audspect/bas/internal/models"
 )
 
@@ -176,4 +177,36 @@ func familyStatus(t *testing.T, sec AppControlSection, family string) AppControl
 	}
 	t.Fatalf("family %s not listed", family)
 	return AppControlFamilyStatus{}
+}
+
+func TestParseAppControlOutcome_AuditedOnlyIsKnownAndNeverAMatch(t *testing.T) {
+	got, ok := ParseAppControlOutcome("APPCTL_OUTCOME: audited_only\n")
+	if !ok || got != AppCtlAuditedOnly {
+		t.Fatalf("got %q ok=%v", got, ok)
+	}
+	if r := (appcontrolComparator{}).Compare(AppCtlExpectBlocked, AppCtlAuditedOnly); r != Mismatch {
+		t.Errorf("audit-mode execution must mismatch a blocked expectation, got %v", r)
+	}
+	if appControlPrevention(AppCtlAuditedOnly) != avval.PreventionAllowed {
+		t.Errorf("audit mode is not prevention")
+	}
+}
+
+func TestAppControlSection_MasteryFamiliesAppearOnlyWhenRun(t *testing.T) {
+	base := buildAppControlSection("r1", nil)
+	if len(base.Families) != 6 {
+		t.Fatalf("legacy view must keep exactly six families, got %d", len(base.Families))
+	}
+	res := models.SimulationResult{StepName: "Application control Trusted Binary Proxy: Regsvr32 scriptlet execution (T1218.010)",
+		RawOutput: "APPCTL_FAMILY: regsvr32_proxy\nAPPCTL_OUTCOME: blocked_as_expected\nAPPCTL_DETECTION: source=x result=visible\n"}
+	sec := buildAppControlSection("r1", []models.SimulationResult{res})
+	found := false
+	for _, f := range sec.Families {
+		if f.Family == "regsvr32_proxy" {
+			found = f.Status == AppCtlBlockedAsExpected
+		}
+	}
+	if !found || len(sec.Families) != 7 {
+		t.Fatalf("regsvr32_proxy missing or wrong status: %+v", sec.Families)
+	}
 }

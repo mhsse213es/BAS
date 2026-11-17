@@ -122,6 +122,11 @@ func buildAppControlSection(runID string, results []models.SimulationResult) App
 	for _, fam := range appCtlFamilyOrder {
 		sec.Families = append(sec.Families, appCtlFamilyStatusFor(fam, perFamily[fam], unverified[fam]))
 	}
+	for _, fam := range appCtlMasteryFamilies {
+		if len(perFamily[fam]) > 0 || unverified[fam] {
+			sec.Families = append(sec.Families, appCtlFamilyStatusFor(fam, perFamily[fam], unverified[fam]))
+		}
+	}
 	return sec
 }
 

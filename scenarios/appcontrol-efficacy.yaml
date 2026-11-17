@@ -244,7 +244,7 @@ steps:
     reversible: true
     blast_radius: "Writes one benign .vbs that echoes a marker, runs it under cscript.exe, deletes it. Changes no policy."
     telemetry:
-      - "AppLocker MSI and Script event 8006 (block) naming the unique .vbs, if enforced"
+      - "AppLocker MSI and Script event 8007 (block) naming the unique .vbs, if enforced"
       - "Sysmon EID 1: cscript.exe with the unique .vbs argument"
     detection:
       - "AppLocker script block event for this test's unique .vbs file"
@@ -301,7 +301,7 @@ steps:
       $logReadable = $true
       $attr = 0
       try {
-        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-AppLocker/MSI and Script'; Id = 8006; StartTime = $start } -ErrorAction Stop)
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-AppLocker/MSI and Script'; Id = 8007; StartTime = $start } -ErrorAction Stop)
         $attr = @($ev | Where-Object { $_.Message -like "*$needle*" }).Count
       } catch { $logReadable = $false }
       $r = Resolve-AppCtlOutcome -Expected $expected -Coverage $coverage -Ran $ran -AttrCount $attr -LogReadable $logReadable -ControlAvailable $control
