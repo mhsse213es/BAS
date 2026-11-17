@@ -54,7 +54,7 @@ description: >
   oldest) real C: shadow copy when enabled. Stages 3b, 4b, 8c, 9b are strictly
   read-only probes (no state change) and are production-safe. All stages are
   production-safe unless explicitly marked. Stages 21, 23 and 24 write or execute benign
-  artifacts only behind exact-match lab gates (BAS_CONFIRM_SERVICE_EXEC, BAS_CONFIRM_ACCOUNT_CREATE,
+  artifacts only behind exact-match lab gates (BAS_CONFIRM_SERVICE_EXEC, BAS_CONFIRM_ACCOUNT_CREATE, BAS_CONFIRM_DOMAIN_ACCOUNT_CREATE,
   BAS_CONFIRM_RUNKEY_WRITE, and BAS_CONFIRM_KERBEROAST_TGS for stage 22; each only the lowercase
   value true) and verify cleanup. Windows only. [BAS-SIM] tagged
   throughout. Every step is idempotent and carries its own cleanup.
@@ -398,7 +398,7 @@ steps:
   # Stage 20 - Process, System and File Discovery (T1082)
   # ===========================================================================
   - id: akira-s20-process-system-file-discovery
-    name: "Akira Stage 20 — Process, System and File Discovery (T1082)"
+    name: "Akira Stage 20 — Process, System and File Discovery (T1082 / T1057 / T1083)"
     technique_id: T1082
     detection_profiles:
       - windows_file_discovery
@@ -435,14 +435,19 @@ steps:
       }
       $sw = [Diagnostics.Stopwatch]::StartNew()
       $r = @((Invoke-Disc 'tasklist.exe' @()), (Invoke-Disc 'systeminfo.exe' @()), (Invoke-Disc 'whoami.exe' @('/all')))
+      $procs = @(Get-Process -ErrorAction SilentlyContinue)
+      $tools = '^(MsMpEng|MsSense|SenseIR|NisSrv|CSFalconService|CSFalconContainer|SentinelAgent|SentinelServiceHost|CylanceSvc|bdservicehost|SophosHealth|SophosFileScanner|cb|CarbonBlack|TaniumClient|Veeam\.Backup\.Service|VeeamDeploymentSvc|BackupExec|beremote|sqlservr|vmms|vmwp)$'
+      $seen = @($procs | Where-Object { $_.ProcessName -match $tools } | ForEach-Object { $_.ProcessName } | Sort-Object -Unique)
       $docs = [Environment]::GetFolderPath('MyDocuments')
       $files = @(Get-ChildItem -Path $docs -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 500).Count
       $sw.Stop()
       $ok = @($r | Where-Object { $_.Ok })
       $detail = ($r | ForEach-Object { "$($_.Name)=$($_.Lines)lines/ok=$($_.Ok)" }) -join ' '
-      Write-Output "EVIDENCE T1082: $detail document_files_enumerated=$files elapsed_ms=$($sw.ElapsedMilliseconds). Also covers T1057 and T1083; only counts are recorded, no file names or contents. System binaries are called by full System32 path. [BAS-SIM-AKIRA-S20]"
-      if ($ok.Count -ge 3) { Write-Output "FAIL: process, system and identity discovery all succeeded in a $($sw.ElapsedMilliseconds) ms burst, followed by file enumeration, without intervention - typical pre-ransomware reconnaissance was not blocked. [BAS-SIM-AKIRA-S20]" }
-      else { Write-Output "PASS: $(3 - $ok.Count) of 3 discovery commands failed or returned no usable output (blocked or restricted): $detail. [BAS-SIM-AKIRA-S20]" }
+      $procOk = ($procs.Count -gt 5)
+      Write-Output "EVIDENCE T1082: $detail document_files_enumerated=$files elapsed_ms=$($sw.ElapsedMilliseconds). System binaries are called by full System32 path. Only counts are recorded, no file names or contents. [BAS-SIM-AKIRA-S20]"
+      Write-Output "EVIDENCE T1057: processes_enumerated=$($procs.Count) enumeration_ok=$procOk security_or_backup_tool_processes_seen=[$($seen -join ',')]. Attackers enumerate processes to find security and backup tooling to disable before encrypting; names come from a fixed list of known products and no other process names are recorded. Also covers T1083. [BAS-SIM-AKIRA-S20]"
+      if ($ok.Count -ge 3 -and $procOk) { Write-Output "FAIL: process, system and identity discovery all succeeded in a $($sw.ElapsedMilliseconds) ms burst, with $($procs.Count) processes enumerated and $($seen.Count) security or backup tool(s) identified, followed by file enumeration, without intervention - typical pre-ransomware reconnaissance was not blocked. [BAS-SIM-AKIRA-S20]" }
+      else { Write-Output "PASS: discovery was blocked or restricted ($(3 - $ok.Count) of 3 commands failed or returned no usable output, process enumeration ok=$procOk): $detail. [BAS-SIM-AKIRA-S20]" }
     cleanup: ""
 
   # ===========================================================================
@@ -830,7 +835,7 @@ steps:
   # Stage 23 - Local and Domain Account Persistence Exposure (T1136.001)
   # ===========================================================================
   - id: akira-s23-account-persistence
-    name: "Akira Stage 23 — Local and Domain Account Persistence Exposure (T1136.001)"
+    name: "Akira Stage 23 — Local and Domain Account Persistence Exposure (T1136.001 / T1136.002)"
     technique_id: T1136.001
     framework: custom
     executor: powershell
@@ -842,7 +847,7 @@ steps:
     severity: high
     confidence: medium
     reversible: true
-    blast_radius: "Default: capability posture only. With BAS_CONFIRM_ACCOUNT_CREATE=true (exact): creates one DISABLED local account with a random password and no group membership, confirms it exists, deletes it and confirms removal. Domain account creation (T1136.002) is not simulated."
+    blast_radius: "Default: capability posture only. With BAS_CONFIRM_ACCOUNT_CREATE=true (exact): creates one DISABLED local account with a random password and no group membership, confirms it exists, deletes it and confirms removal. With BAS_CONFIRM_DOMAIN_ACCOUNT_CREATE=true (exact) on a domain-joined agent it also creates one DISABLED domain user in CN=Users with no group membership and no password, confirms it, deletes it and confirms removal. The domain path has never been run against a real domain."
     preconditions: ["Windows host."]
     postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified."]
     abort_on: []
@@ -861,27 +866,64 @@ steps:
       $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       $ao = @((& net.exe localgroup 'Account Operators' 2>&1) | Where-Object { $_ -and $_ -notmatch '^(Alias name|Comment|Members|The command|-+)' }).Count
       $adm = @((& net.exe localgroup Administrators 2>&1) | Where-Object { $_ -and $_ -notmatch '^(Alias name|Comment|Members|The command|-+)' }).Count
-      if ($env:BAS_CONFIRM_ACCOUNT_CREATE -cne 'true') {
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      # --- domain posture (T1136.002), read-only ---
+      $joined = [bool](Get-WmiObject Win32_ComputerSystem).PartOfDomain
+      $domainDN = $null; $domRights = @(); $domAo = -1
+      if ($joined) {
+        try { $domainDN = [string]([ADSI]'LDAP://RootDSE').defaultNamingContext } catch { }
+        $tokenGroups = @(([Security.Principal.WindowsIdentity]::GetCurrent()).Groups | ForEach-Object { try { $_.Translate([Security.Principal.NTAccount]).Value } catch { } })
+        $domRights = @($tokenGroups | Where-Object { $_ -match '\\(Domain Admins|Enterprise Admins|Account Operators|Administrators)$' })
+        if ($domainDN) { try { $g = [ADSI]("LDAP://CN=Account Operators,CN=Builtin,$domainDN"); $domAo = @($g.member).Count } catch { } }
+      }
+      $domPosture = if (-not $joined) { 'not_domain_joined' } elseif (-not $domainDN) { 'domain_unreachable' } else { 'assessed' }
+      Write-Output "EVIDENCE T1136.002: domain_posture=$domPosture current_identity_account_creating_groups=[$($domRights -join ',')] domain_account_operators_members=$domAo. Read-only: token groups of the running identity and the Account Operators member count; no account was created by this check. [BAS-SIM-AKIRA-S23]"
+      $localGate = ($env:BAS_CONFIRM_ACCOUNT_CREATE -ceq 'true')
+      $domGate = ($env:BAS_CONFIRM_DOMAIN_ACCOUNT_CREATE -ceq 'true')
+      if (-not $localGate -and -not $domGate) {
         Write-Output "EVIDENCE T1136.001: current_identity_can_create_local_accounts=$isAdmin local_administrators=$adm account_operators_members=$ao. Capability posture only; no account was created. [BAS-SIM-AKIRA-S23]"
-        Write-Output "SKIP: gate not confirmed (BAS_CONFIRM_ACCOUNT_CREATE is not exactly 'true') - the account-creation simulation was not run. [BAS-SIM-AKIRA-S23]"
+        Write-Output "SKIP: gate not confirmed (neither BAS_CONFIRM_ACCOUNT_CREATE nor BAS_CONFIRM_DOMAIN_ACCOUNT_CREATE is exactly 'true') - no account-creation simulation was run. [BAS-SIM-AKIRA-S23]"
         return
       }
-      if (-not $isAdmin) { Write-Output "SKIP: prerequisite missing (administrator rights required to create a local account). [BAS-SIM-AKIRA-S23]"; return }
-      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
-      $name = "bas_p_$runId"
-      $pw = ConvertTo-SecureString ("Aa1!" + [guid]::NewGuid().ToString('N')) -AsPlainText -Force
-      Remove-LocalUser -Name $name -ErrorAction SilentlyContinue
-      try { New-LocalUser -Name $name -Password $pw -Disabled -Description '[BAS-SIM-AKIRA] persistence exposure test' -ErrorAction Stop | Out-Null } catch { }
-      $u = Get-LocalUser -Name $name -ErrorAction SilentlyContinue
-      $created = [bool]$u; $disabled = ($created -and -not $u.Enabled)
-      if ($created) { Remove-LocalUser -Name $name -ErrorAction SilentlyContinue }
-      $gone = -not [bool](Get-LocalUser -Name $name -ErrorAction SilentlyContinue)
-      Write-Output "EVIDENCE T1136.001: account=$name created=$created created_disabled=$disabled removed=$gone cleanup_verified=$gone local_administrators=$adm account_operators_members=$ao. The account was disabled with a random password and was never added to any group. Domain-account creation (T1136.002) is not simulated. [BAS-SIM-AKIRA-S23]"
-      if ($created -and -not $gone) { Write-Output "WARNING: test account $name may remain; remove it with Remove-LocalUser. [BAS-SIM-AKIRA-S23]" }
-      if ($created) { Write-Output "FAIL: a local account could be created by this identity without intervention and was independently confirmed to exist - account-creation persistence is not prevented. [BAS-SIM-AKIRA-S23]" }
-      else { Write-Output "PASS: local account creation was blocked or failed (account not found after the attempt). [BAS-SIM-AKIRA-S23]" }
+      $attempted = 0; $createdAny = $false; $notGone = $false; $detail = @()
+      if ($localGate) {
+        if (-not $isAdmin) { $detail += 'local=skipped_not_admin' } else {
+          $attempted++
+          $name = "bas_p_$runId"
+          $pw = ConvertTo-SecureString ("Aa1!" + [guid]::NewGuid().ToString('N')) -AsPlainText -Force
+          Remove-LocalUser -Name $name -ErrorAction SilentlyContinue
+          try { New-LocalUser -Name $name -Password $pw -Disabled -Description '[BAS-SIM-AKIRA] persistence exposure test' -ErrorAction Stop | Out-Null } catch { }
+          $u = Get-LocalUser -Name $name -ErrorAction SilentlyContinue
+          $created = [bool]$u; $disabled = ($created -and -not $u.Enabled)
+          if ($created) { Remove-LocalUser -Name $name -ErrorAction SilentlyContinue }
+          $gone = -not [bool](Get-LocalUser -Name $name -ErrorAction SilentlyContinue)
+          if ($created) { $createdAny = $true }; if ($created -and -not $gone) { $notGone = $true }
+          $detail += "local account=$name created=$created created_disabled=$disabled removed=$gone"
+        }
+      }
+      if ($domGate) {
+        if ($domPosture -ne 'assessed') { $detail += "domain=skipped_$domPosture" } else {
+          $attempted++
+          $dn = "bas_pd_$runId"
+          $cont = [ADSI]("LDAP://CN=Users,$domainDN")
+          try { $o = $cont.Create('user', "CN=$dn"); $o.Put('sAMAccountName', $dn); $o.Put('description', '[BAS-SIM-AKIRA] persistence exposure test'); $o.SetInfo(); $o.Put('userAccountControl', 514); $o.SetInfo() } catch { }
+          $ds = New-Object DirectoryServices.DirectorySearcher([ADSI]("LDAP://$domainDN")); $ds.Filter = "(&(objectCategory=person)(sAMAccountName=$dn))"
+          $found = $ds.FindOne(); $dcreated = [bool]$found
+          $dDisabled = $false; if ($found) { $dDisabled = [bool](([int]$found.Properties['useraccountcontrol'][0]) -band 2) }
+          if ($found) { try { ([ADSI]$found.Path).DeleteTree() } catch { } }
+          $dgone = -not [bool]$ds.FindOne()
+          if ($dcreated) { $createdAny = $true }; if ($dcreated -and -not $dgone) { $notGone = $true }
+          $detail += "domain account=$dn created=$dcreated created_disabled=$dDisabled removed=$dgone"
+        }
+      }
+      Write-Output "EVIDENCE T1136.001: $($detail -join '; ') cleanup_verified=$(-not $notGone) local_administrators=$adm account_operators_members=$ao. Accounts were created disabled and never added to any group. [BAS-SIM-AKIRA-S23]"
+      if ($notGone) { Write-Output "WARNING: a test account may remain (bas_p_$runId local or bas_pd_$runId in CN=Users); remove it manually. [BAS-SIM-AKIRA-S23]" }
+      if ($attempted -eq 0) { Write-Output "SKIP: prerequisite missing (the confirmed gate(s) need administrator rights for the local test or a reachable domain for the domain test: $($detail -join '; ')). [BAS-SIM-AKIRA-S23]" }
+      elseif ($createdAny) { Write-Output "FAIL: an account could be created by this identity without intervention and was independently confirmed to exist ($($detail -join '; ')) - account-creation persistence is not prevented. [BAS-SIM-AKIRA-S23]" }
+      else { Write-Output "PASS: account creation was blocked or failed for every attempted path (accounts not found after the attempt): $($detail -join '; '). [BAS-SIM-AKIRA-S23]" }
     cleanup: |
       Get-LocalUser -Name 'bas_p_*' -ErrorAction SilentlyContinue | Remove-LocalUser -ErrorAction SilentlyContinue
+      try { $ds = New-Object DirectoryServices.DirectorySearcher; $ds.Filter = '(&(objectCategory=person)(sAMAccountName=bas_pd_*))'; foreach ($r in @($ds.FindAll())) { ([ADSI]$r.Path).DeleteTree() } } catch { }
 
   # ===========================================================================
   # Stage 24 - Registry Run Key Persistence (T1547.001)
