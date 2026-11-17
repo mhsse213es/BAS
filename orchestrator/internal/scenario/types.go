@@ -123,10 +123,18 @@ type YAMLPayload struct {
 	Content string `yaml:"content" json:"content"` // base64-encoded file content
 }
 
+// AttackGapNoCleanTechnique marks a step that deliberately has no ATT&CK technique
+// because no technique describes its behavior. Such steps are excluded from
+// technique coverage but still executed and reported.
+const AttackGapNoCleanTechnique = "no_clean_attack_technique"
+
 // Step is one ATT&CK technique in a scenario YAML file — server-side definition.
 type Step struct {
 	Name        string `yaml:"name"                  json:"name"`
 	TechniqueID string `yaml:"technique_id"          json:"techniqueId"`
+	// AttackGap explains why a step has no ATT&CK technique_id. Only
+	// AttackGapNoCleanTechnique is accepted.
+	AttackGap string `yaml:"attack_gap,omitempty"  json:"attackGap,omitempty"`
 	// CheckID is a stable, ATT&CK-independent identifier for configuration/
 	// posture checks (e.g. "windows-firewall-enabled"). technique_id stays
 	// optional metadata for checks that genuinely map to a technique;
