@@ -14,6 +14,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "akira-esxi-assessment.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "akira-kill-chain.yaml": {
     "cleanup": 0,
     "detection": 0,

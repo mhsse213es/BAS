@@ -92,6 +92,8 @@ var TechniqueDomain = map[string]Domain{
 	"T1136.001": DomainPreparationAndPersistence,
 	"T1547.001": DomainPreparationAndPersistence,
 	"T1219":     DomainPreparationAndPersistence,
+	"T1018":     DomainDataDiscoveryAndStaging,
+	"T1529":     DomainEncryptionAndDestruction,
 }
 
 // DomainFor returns techniqueID's mapped domain and true, or ("", false)
