@@ -40,6 +40,7 @@ var ransomwareScenarioIDs = map[string]bool{
 	"ransomware-backup-recovery-assurance":      true,
 	"akira-double-extortion-assessment":         true,
 	"ransomware-lateral-containment-assessment": true,
+	"akira-esxi-assessment":                     true,
 }
 
 // recordRWEvidence is additive and best-effort toward scoring (there is no
