@@ -93,14 +93,76 @@ function Test-AppCtlMarker {
 
 # Runs a process, kills it after the timeout, never leaves a dialog hanging.
 function Invoke-AppCtlProc {
-  param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25)
+  param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
   $r = @{ Started = $false; Exit = -1; TimedOut = $false }
   try {
-    $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+    if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+    } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+    }
     $r.Started = $true
     if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
   } catch {}
   return $r
+}
+
+# Compiles a tiny unsigned console program that writes the marker to the file named by its first argument.
+function New-AppCtlExe {
+  param([string]$Path)
+  $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
+  try { Add-Type -TypeDefinition $src -OutputAssembly $Path -OutputType ConsoleApplication -ErrorAction Stop } catch { return $false }
+  return (Test-Path $Path)
+}
+
+# Builds the unsigned test program in $Dir, runs it once, and returns the attempt result.
+function Invoke-AppCtlExeAt {
+  param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
+  New-Item -ItemType Directory -Path $Dir -Force | Out-Null
+  $exe = Join-Path $Dir $Name
+  if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = 'the test program could not be compiled on this host (no .NET Framework compiler)' } }
+  if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
+  $mk = Join-Path $Dir "$Name.marker.txt"
+  $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
+  return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "started=$($p.Started) timed_out=$($p.TimedOut) location=$((Split-Path $Dir -Leaf))"; NotApplicable = '' }
+}
+
+# Builds a minimal local MSI whose only action runs cmd.exe to write the marker file. It registers no product.
+function New-AppCtlMsi {
+  param([string]$Path, [string]$MarkerPath)
+  try {
+    $wi = New-Object -ComObject WindowsInstaller.Installer
+    $db = $wi.OpenDatabase($Path, 3)
+    $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+    $sql = @(
+      'CREATE TABLE `Property` (`Property` CHAR(72) NOT NULL, `Value` LONGCHAR NOT NULL LOCALIZABLE PRIMARY KEY `Property`)',
+      'CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(255) PRIMARY KEY `Action`)',
+      'CREATE TABLE `InstallExecuteSequence` (`Action` CHAR(72) NOT NULL, `Condition` CHAR(255), `Sequence` SHORT PRIMARY KEY `Action`)',
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''BASCMD'', ''' + $cmd + ''')'),
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductCode'', ''{' + [guid]::NewGuid().ToString().ToUpper() + '}'')'),
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductName'', ''BAS SIM'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductVersion'', ''1.0.0'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductLanguage'', ''1033'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''Manufacturer'', ''BAS SIM'')',
+      ('INSERT INTO `CustomAction` (`Action`, `Type`, `Source`, `Target`) VALUES (''RunIt'', 50, ''BASCMD'', ''/c echo ' + $script:AppCtlMarker + '> "' + $MarkerPath + '"'')'),
+      'INSERT INTO `InstallExecuteSequence` (`Action`, `Condition`, `Sequence`) VALUES (''RunIt'', '''', 1)'
+    )
+    foreach ($q in $sql) { $v = $db.OpenView($q); $v.Execute(); $v.Close() }
+    $si = $db.SummaryInformation(20)
+    $si.Property(2) = 'BAS SIM'
+    $si.Property(4) = 'BAS SIM'
+    $si.Property(7) = 'Intel;1033'
+    $si.Property(9) = ('{' + [guid]::NewGuid().ToString().ToUpper() + '}')
+    $si.Property(14) = 200
+    $si.Property(15) = 2
+    $si.Persist()
+    $db.Commit()
+    foreach ($o in @($si, $v, $db, $wi)) { if ($o) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($o) } }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+  } catch { return $false }
+  return (Test-Path $Path)
 }
 
 function Invoke-AppCtlTest {
@@ -112,7 +174,9 @@ function Invoke-AppCtlTest {
     [string]$Expected = 'blocked',
     [string[]]$Mechanisms = @('applocker', 'wdac'),
     [int]$MinBuild = 17763,
-    [string]$Technique = ''
+    [string]$Technique = '',
+    [string[]]$ExtraCleanup = @(),
+    [switch]$Direct
   )
   New-Item -ItemType Directory -Path $script:AppCtlWork -Force | Out-Null
   $state = Get-AppCtlState
@@ -120,18 +184,30 @@ function Invoke-AppCtlTest {
   $buildOk = ($state.Build -ge $MinBuild)
   $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
   $start = Get-Date
-  if ($buildOk -and @($mechs | Where-Object { $_.Available }).Count -gt 0) {
+  if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
     try { $att = & $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
     Start-Sleep -Milliseconds 800
   }
-  if ($att.NotApplicable) { $buildOk = $false }
+  if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
   foreach ($m in $mechs) {
+    if ($Direct) { $m.Block = 0; $m.Audit = 0; $m.Readable = $true; continue }
     $ev = Get-AppCtlEvents -Mechanism $m.Name -Collection $Collection -Start $start.AddSeconds(-1) -Needle $Needle
     $m.Block = $ev.Block; $m.Audit = $ev.Audit; $m.Readable = $ev.Readable
   }
-  $r = Resolve-AppCtlOutcome -Expected $Expected -Ran ([bool]$att.Ran) -Mechs $mechs -BuildOk $buildOk -Constrained ([bool]$att.Constrained)
+  if ($Direct) {
+    # Integrity tests observe the denial or the exposure themselves; there is no block event to count.
+    $okOut = @('blocked_as_expected', 'allowed_unexpectedly', 'not_enforced', 'audited_only', 'inconclusive', 'not_applicable')
+    if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the test floor' } }
+    elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+    elseif ($att.Verdict -and ($okOut -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+    else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+  } else {
+    $r = Resolve-AppCtlOutcome -Expected $Expected -Ran ([bool]$att.Ran) -Mechs $mechs -BuildOk $buildOk -Constrained ([bool]$att.Constrained)
+  }
   Remove-Item -Path $script:AppCtlWork -Recurse -Force -ErrorAction SilentlyContinue
+  foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
   $cleanOk = -not (Test-Path $script:AppCtlWork)
+  foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
   Write-Output "APPCTL_FAMILY: $Family"
   Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
   Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
@@ -143,7 +219,7 @@ function Invoke-AppCtlTest {
   } catch {}
   Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
   Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
-  $reason = $r.Reason; if ($att.NotApplicable) { $reason = $att.NotApplicable }
+  $reason = $r.Reason; if ($att.NotApplicable -and -not $Direct) { $reason = $att.NotApplicable }
   switch ($r.Outcome) {
     'blocked_as_expected'  { Write-Output "PASS: $reason. [BAS-SIM]" }
     'allowed_by_policy'    { Write-Output "PASS: $reason. [BAS-SIM]" }

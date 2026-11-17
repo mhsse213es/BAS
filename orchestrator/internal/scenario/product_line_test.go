@@ -15,8 +15,8 @@ func TestBuiltinScenarios_AllHaveValidProductLine(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 	list := eng.List()
-	if len(list) != 133 {
-		t.Fatalf("loaded %d scenarios, want 133", len(list))
+	if len(list) != 137 {
+		t.Fatalf("loaded %d scenarios, want 137", len(list))
 	}
 	for _, sc := range list {
 		if !license.ValidProductLine(sc.ProductLine) {

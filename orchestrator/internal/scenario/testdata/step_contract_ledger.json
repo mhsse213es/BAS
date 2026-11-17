@@ -774,6 +774,312 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "appcontrol-file-enforcement.yaml",
+    "index": 0,
+    "technique_id": "T1204.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-file-enforcement.yaml",
+    "index": 1,
+    "technique_id": "T1553.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-file-enforcement.yaml",
+    "index": 2,
+    "technique_id": "T1553.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-file-enforcement.yaml",
+    "index": 3,
+    "technique_id": "T1204.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-file-enforcement.yaml",
+    "index": 4,
+    "technique_id": "T1204.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-file-enforcement.yaml",
+    "index": 5,
+    "technique_id": "T1204.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-file-enforcement.yaml",
+    "index": 6,
+    "technique_id": "T1036.008",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-file-enforcement.yaml",
+    "index": 7,
+    "technique_id": "T1129",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-file-enforcement.yaml",
+    "index": 8,
+    "technique_id": "T1129",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-file-enforcement.yaml",
+    "index": 9,
+    "technique_id": "T1218.007",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-policy-integrity.yaml",
+    "index": 0,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-policy-integrity.yaml",
+    "index": 1,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-policy-integrity.yaml",
+    "index": 2,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-policy-integrity.yaml",
+    "index": 3,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-policy-integrity.yaml",
+    "index": 4,
+    "technique_id": "T1553",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-policy-integrity.yaml",
+    "index": 5,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-policy-integrity.yaml",
+    "index": 6,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-proxy-execution.yaml",
+    "index": 0,
+    "technique_id": "T1218.010",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-proxy-execution.yaml",
+    "index": 1,
+    "technique_id": "T1218.011",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-proxy-execution.yaml",
+    "index": 2,
+    "technique_id": "T1218.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-proxy-execution.yaml",
+    "index": 3,
+    "technique_id": "T1218.007",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-proxy-execution.yaml",
+    "index": 4,
+    "technique_id": "T1218.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-proxy-execution.yaml",
+    "index": 5,
+    "technique_id": "T1218.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-proxy-execution.yaml",
+    "index": 6,
+    "technique_id": "T1218.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-proxy-execution.yaml",
+    "index": 7,
+    "technique_id": "T1220",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-proxy-execution.yaml",
+    "index": 8,
+    "technique_id": "T1127.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-script-interpreter.yaml",
+    "index": 0,
+    "technique_id": "T1059.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-script-interpreter.yaml",
+    "index": 1,
+    "technique_id": "T1059.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-script-interpreter.yaml",
+    "index": 2,
+    "technique_id": "T1059.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-script-interpreter.yaml",
+    "index": 3,
+    "technique_id": "T1059.007",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "appcontrol-script-interpreter.yaml",
+    "index": 4,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-script-interpreter.yaml",
+    "index": 5,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-script-interpreter.yaml",
+    "index": 6,
+    "technique_id": "T1047",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "appcontrol-script-interpreter.yaml",
+    "index": 7,
+    "technique_id": "T1059",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "apt29-kill-chain.yaml",
     "index": 0,
     "technique_id": "T1482",

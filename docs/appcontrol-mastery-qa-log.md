@@ -164,3 +164,25 @@ These need a lab, a tenant, or a decision that only you can make. Nothing here c
 9. **Limitations wording.** Review the four limitation statements in Section 18a before a client sees them. Soften only if the lab run supports it.
 10. **Fix the `internal/api` build.** Another session's uncommitted `phishingrun` files stop the package compiling. Resolve that, then run its tests so the report handlers are covered.
 11. **Regenerate existing reports on staging.** Existing runs get Section 18a only when their report is regenerated. Check a run with application-control steps on staging.
+
+## Application Control Mastery expansion (2026-11-18)
+
+Scope: 34 new steps in four scenarios (`appcontrol-proxy-execution` 9, `appcontrol-script-interpreter` 8, `appcontrol-file-enforcement` 10, `appcontrol-policy-integrity` 7) next to the unchanged six in `appcontrol-efficacy`, from the approved proposal. Contracts: `docs/appcontrol-mastery-contracts.md`. Sources: `scenarios-src/appcontrol-*`, shared oracle `scenarios-src/appcontrol-common/lib.ps1`, generator `orchestrator/scripts/appctlgen`.
+
+### What changed and why
+- One shared oracle (AppLocker and WDAC) replaces per-step copies. New outcome `audited_only`: audit mode records but does not prevent. Reporting parser, comparator and the AV validation adapter know it; mastery families show in a run's report only when that run produced them, so the six-family legacy view is unchanged.
+- **Defect fixed in the shipped scenario.** `appcontrol-efficacy` script_host_proxy attributed blocks to AppLocker event 8006, which is the audit-mode event; the enforced Script/MSI block event is 8007 (Microsoft documentation). Under enforced Script rules the old step could not have reported `blocked_as_expected`. It now reads 8007 and the contract text says 8006 is not prevention evidence. Its own scenario was re-signed.
+- Merged two overlapping list items (mshta and HTA are the same technique) and used the freed slot for Windows Script Files. The alternate-interpreter step never installs anything. The Control Panel step is tested against WDAC only because AppLocker does not evaluate .cpl.
+
+### Verified on this host (Windows 10 Pro 19045, AppLocker service stopped, no WDAC user-mode policy)
+- Every one of the 34 attempts was run for real through the shipped, generated YAML text and produced its benign marker (executed path), with cleanup verified and no leftover directories, certificates, products or processes. This host enforces nothing, so the execution steps reported `not_enforced`/FAIL (correct) or a not-applicable/inconclusive reason. Final tally of the 34 generated steps: 27 not_enforced, 4 not_applicable, 1 inconclusive (no drift baseline), 2 blocked_as_expected. The two passes are read-only permission checks on the policy-integrity scenario (AppIDSvc stop rights and the WDAC policy directory ACL), which are real findings about this host, not block events.
+- Oracle decision table (21 cases), fixture runs of the shipped steps for every verdict class (including a realistic Get-WinEvent that throws when nothing matches), the ConstrainedLanguage path, integrity-step branches and the drift hash round trip all pass. `verify-all` ok=167, step-contract ledger regenerated with zero gaps for the new scenarios, destructive guard classifies every step non-destructive.
+
+### NOT verified (read before relying on this)
+- **No block was observed on a real host.** The block and audit paths are verified against stubs only. Event IDs come from Microsoft documentation (8004/8003, 8007/8006, 3077/3076, 8029/8028), not from a live enforced host; the AppLocker/WDAC message text that carries the file name is assumed to contain the unique file or binary name.
+- WDAC user-mode state is read from `Win32_DeviceGuard`; its behaviour with multiple policies, signed policies and kernel-only policies is unverified.
+- The gated paths (AppIDSvc stop/restore, identical-policy re-apply, WDAC canary file) have never run. The domain-independent integrity steps were only exercised in their read-only default.
+- RLL modules, packaged apps (MSIX/APPX), COM activation, DLL search order/side-loading, scheduled-task/service launches and the operational-reliability tests (categories E to G) are not built.
+- Some steps depend on the .NET Framework compiler (InstallUtil, unsigned executables, DLL) or on WMIC; they report not applicable where absent.
+- Not run through a real agent and orchestrator; ten of the new steps compile code on the host and could be flagged by endpoint products themselves.
+- Reported parent-spoofing mapping on the existing step 5 (T1204.002) is unchanged and still questionable (see the proposal); not touched.

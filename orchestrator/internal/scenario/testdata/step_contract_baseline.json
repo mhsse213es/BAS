@@ -29,6 +29,26 @@
     "detection": 0,
     "telemetry": 0
   },
+  "appcontrol-file-enforcement.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "appcontrol-policy-integrity.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "appcontrol-proxy-execution.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "appcontrol-script-interpreter.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "apt29-kill-chain.yaml": {
     "cleanup": 0,
     "detection": 0,

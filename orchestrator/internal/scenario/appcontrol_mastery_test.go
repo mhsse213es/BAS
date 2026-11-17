@@ -74,7 +74,9 @@ function Get-WinEvent { [CmdletBinding()] param($FilterHashtable)
   if (-not $global:BasLogOK) { throw 'channel disabled' }
   $n = 0
   if ($id -in 8004, 8007) { $n = $global:BlkAl } elseif ($id -in 3077, 8029) { $n = $global:BlkWd } elseif ($id -in 8003, 8006) { $n = $global:AudAl } elseif ($id -in 3076, 8028) { $n = $global:AudWd }
-  if ($n -gt 0) { 1..$n | ForEach-Object { [pscustomobject]@{ Message = 'Blocked regsvr32.exe mshta.exe cmstp.exe rundll32.exe wmic.exe MSBuild.exe InstallUtil.exe wscript.exe cscript.exe cmd.exe powershell.exe' } } }
+  if ($n -gt 0) { return (1..$n | ForEach-Object { [pscustomobject]@{ Message = 'Blocked regsvr32.exe mshta.exe cmstp.exe rundll32.exe wmic.exe MSBuild.exe InstallUtil.exe wscript.exe cscript.exe cmd.exe powershell.exe' } }) }
+  # A real Get-WinEvent throws when the filter matches nothing; that is an empty result, not an unreadable log.
+  throw (New-Object Management.Automation.ErrorRecord((New-Object Exception 'No events were found that match the specified selection criteria.'), 'NoMatchingEventsFound,Microsoft.PowerShell.Commands.GetWinEventCommand', [Management.Automation.ErrorCategory]::ObjectNotFound, $null))
 }
 `
 
@@ -253,5 +255,77 @@ func TestAppControlMastery_LanguageModeStep(t *testing.T) {
 				t.Errorf("want %s / %s\n%s", c.wantOutcome, c.wantPrefix, out)
 			}
 		})
+	}
+}
+
+// Integrity steps read policy state directly. Their fixtures stub the policy
+// readers so every branch, including the gated ones, is exercised without
+// touching the host.
+func TestAppControlMastery_PolicyIntegritySteps(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("behavioral steps are Windows PowerShell")
+	}
+	path := filepath.Join("..", "..", "..", "scenarios", "appcontrol-policy-integrity.yaml")
+	collections := func(modes ...string) string {
+		var b strings.Builder
+		b.WriteString("function Get-AppLockerPolicy { [CmdletBinding()] param([switch]$Effective, [switch]$Xml, [switch]$Local) $global:BasPolicyXml; if (-not $Xml) { [pscustomobject]@{ RuleCollections = @(@{ 'Exe' = '" + modes[0] + "'; 'Script' = '" + modes[1] + "'; 'Dll' = '" + modes[2] + "'; 'Msi' = '" + modes[3] + "' }.GetEnumerator() | Where-Object { $_.Value -ne 'NotConfigured' } | ForEach-Object { [pscustomobject]@{ RuleCollectionType = $_.Key; EnforcementMode = $_.Value } }) } } }\n")
+		return b.String()
+	}
+	mi := func(p string) string {
+		return `$global:BasPolicyXml = '<AppLockerPolicy Version="1"><RuleCollection Type="ManagedInstaller" EnforcementMode="Enabled"><FilePublisherRule Id="1" Name="mi1" Description="" UserOrGroupSid="S-1-1-0" Action="Allow"><Conditions><FilePathCondition Path="` + p + `"/></Conditions></FilePublisherRule></RuleCollection></AppLockerPolicy>'` + "\n"
+	}
+	svcStub := "function Get-Service { [CmdletBinding()] param([string]$Name) [pscustomobject]@{ Name = $Name; Status = 'Running' } }\n"
+	wd := func(umci int) string {
+		return fmt.Sprintf("function Get-CimInstance { [CmdletBinding()] param($Namespace, $ClassName, $Filter) if ($ClassName -eq 'Win32_DeviceGuard') { [pscustomobject]@{ UsermodeCodeIntegrityPolicyEnforcementStatus = %d; CodeIntegrityPolicyEnforcementStatus = 0 } } }\n", umci)
+	}
+	cases := []struct {
+		name, step, prelude, wantOutcome, wantPrefix string
+	}{
+		{"downgrade: everything enforced", "Application control Policy Integrity: audit-mode", svcStub + wd(0) + collections("Enabled", "Enabled", "Enabled", "Enabled"), "blocked_as_expected", "PASS:"},
+		{"downgrade: audit mode is not prevention", "Application control Policy Integrity: audit-mode", svcStub + wd(0) + collections("AuditOnly", "Enabled", "Enabled", "Enabled"), "audited_only", "FAIL:"},
+		{"downgrade: WDAC audit mode", "Application control Policy Integrity: audit-mode", svcStub + wd(1) + collections("NotConfigured", "NotConfigured", "NotConfigured", "NotConfigured"), "audited_only", "FAIL:"},
+		{"downgrade: collection without rules", "Application control Policy Integrity: audit-mode", svcStub + wd(0) + collections("Enabled", "NotConfigured", "Enabled", "Enabled"), "not_enforced", "FAIL:"},
+		{"downgrade: nothing configured is not a pass", "Application control Policy Integrity: audit-mode", svcStub + wd(0) + collections("NotConfigured", "NotConfigured", "NotConfigured", "NotConfigured"), "not_applicable", "SKIP:"},
+		{"managed installer: user-writable path", "Application control Policy Integrity: Managed Installer", svcStub + wd(0) + collections("Enabled", "Enabled", "Enabled", "Enabled") + mi("%OSDRIVE%\\Users\\*\\AppData\\*"), "allowed_unexpectedly", "FAIL:"},
+		{"managed installer: protected path", "Application control Policy Integrity: Managed Installer", svcStub + wd(0) + collections("Enabled", "Enabled", "Enabled", "Enabled") + mi("%PROGRAMFILES%\\Agent\\*"), "blocked_as_expected", "PASS:"},
+		{"managed installer: none configured", "Application control Policy Integrity: Managed Installer", svcStub + wd(0) + collections("Enabled", "Enabled", "Enabled", "Enabled") + "$global:BasPolicyXml = '<AppLockerPolicy Version=\"1\"></AppLockerPolicy>'\n", "not_applicable", "SKIP:"},
+		{"drift: no baseline is inconclusive", "Application control Policy Integrity: policy drift", svcStub + wd(0) + collections("Enabled", "Enabled", "Enabled", "Enabled") + "$global:BasPolicyXml = '<p/>'\n", "inconclusive", "SKIP:"},
+		{"drift: different baseline", "Application control Policy Integrity: policy drift", svcStub + wd(0) + collections("Enabled", "Enabled", "Enabled", "Enabled") + "$global:BasPolicyXml = '<p/>'\n$env:BAS_APPCTL_BASELINE_SHA256 = 'deadbeef'\n", "allowed_unexpectedly", "FAIL:"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out := runPosturePowerShell(t, c.prelude+loadStepCommand(t, path, c.step))
+			if !strings.Contains(out, "APPCTL_OUTCOME: "+c.wantOutcome) || !strings.Contains(out, c.wantPrefix) {
+				t.Errorf("want %s / %s\n%s", c.wantOutcome, c.wantPrefix, out)
+			}
+			if strings.Count(out, "APPCTL_OUTCOME:") != 1 {
+				t.Errorf("expected exactly one APPCTL_OUTCOME line\n%s", out)
+			}
+			if c.wantPrefix != "PASS:" && strings.Contains(out, "PASS:") {
+				t.Errorf("non-pass fixture emitted PASS:\n%s", out)
+			}
+		})
+	}
+}
+
+// With the exact baseline hash supplied, drift is absent. The hash is taken
+// from the step's own output so the test cannot drift from the algorithm.
+func TestAppControlMastery_DriftMatchesItsOwnBaseline(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("behavioral steps are Windows PowerShell")
+	}
+	path := filepath.Join("..", "..", "..", "scenarios", "appcontrol-policy-integrity.yaml")
+	step := "Application control Policy Integrity: policy drift"
+	stub := "function Get-AppLockerPolicy { [CmdletBinding()] param([switch]$Effective, [switch]$Xml) '<p/>' }\nfunction Get-CimInstance { [CmdletBinding()] param($Namespace, $ClassName, $Filter) }\n"
+	first := runPosturePowerShell(t, stub+loadStepCommand(t, path, step))
+	i := strings.Index(first, "current_policy_sha256=")
+	if i < 0 {
+		t.Fatalf("no hash in output:\n%s", first)
+	}
+	hash := first[i+len("current_policy_sha256="):]
+	hash = hash[:64]
+	second := runPosturePowerShell(t, "$env:BAS_APPCTL_BASELINE_SHA256 = '"+hash+"'\n"+stub+loadStepCommand(t, path, step))
+	if !strings.Contains(second, "APPCTL_OUTCOME: blocked_as_expected") || !strings.Contains(second, "PASS:") {
+		t.Errorf("matching baseline must pass:\n%s", second)
 	}
 }
