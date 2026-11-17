@@ -316,7 +316,7 @@ steps:
     severity: high
     confidence: medium
     reversible: true
-    blast_radius: "POSTs the synthetic archive (base64) to the platform own DLP sink over HTTPS after a reachability probe. No external destination; no real data. Unresolved sink placeholders make the step SKIP."
+    blast_radius: "POSTs the synthetic archive (base64) to the platform own DLP sink over HTTPS after a reachability probe. No external destination; no real data. Unresolved sink placeholders make the step SKIP. Cloud-storage exfiltration over a sync client (rclone or WinSCP style, T1567.002) is validated against the approved sink by the dlp-exfiltration-cloud-storage scenario and is deliberately not duplicated here."
     preconditions: ["Windows host.", "Steps D1-D5 run in order within one run."]
     postconditions: ["PASS, FAIL or SKIP with a stated reason; the BAS work directory is removed and removal verified by D5."]
     abort_on: []
