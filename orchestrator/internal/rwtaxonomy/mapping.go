@@ -72,9 +72,16 @@ var TechniqueDomain = map[string]Domain{
 	// Impair Defenses: Modify Authentication Process (CVE-2020-1472 Zerologon)
 	"T1556": DomainDefenseEvasion,
 	// Exfiltration to Cloud Storage
-	// Exfiltration Over Web Service / generic HTTPS staging (Akira Stage 5b, sink-backed)
-	"T1567": DomainExfiltration,
 	"T1567.002": DomainExfiltration,
+	// Exfiltration Over C2 Channel (Akira Stage 5b: HTTPS POST to the platform's own sink)
+	"T1041": DomainExfiltration,
+	// Data Staged: Local Data Staging (Akira Stage 5a, synthetic records in a BAS-owned directory)
+	"T1074.001": DomainDataDiscoveryAndStaging,
+	// Masquerading: Match Legitimate Resource Name or Location / file-type masquerade. Used for
+	// Akira Stage 6b (mass rename): renaming files is not encryption, so it is deliberately NOT
+	// mapped to Encryption and Destruction. Defense Evasion is the closest ATT&CK tactic; the
+	// exact sub-technique is flagged for review.
+	"T1036.008": DomainDefenseEvasion,
 }
 
 // DomainFor returns techniqueID's mapped domain and true, or ("", false)
