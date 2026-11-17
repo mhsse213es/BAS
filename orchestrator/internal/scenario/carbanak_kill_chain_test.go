@@ -112,3 +112,44 @@ func TestCarbanakDiscoveryAndCredentialStagesTask9(t *testing.T) {
 		}
 	}
 }
+
+func TestCarbanakLateralAndCollectionStagesTask10(t *testing.T) {
+	sc := loadCarbanakChain(t)
+	want := map[string]string{
+		"Carbanak Stage 19 ": "T1021.002",
+		"Carbanak Stage 20 ": "T1021.006",
+		"Carbanak Stage 21 ": "T1569.002",
+		"Carbanak Stage 22 ": "T1053.005",
+		"Carbanak Stage 29 ": "T1005",
+		"Carbanak Stage 30 ": "T1074.001",
+		"Carbanak Stage 31 ": "T1560.001",
+		"Carbanak Stage 32 ": "T1041",
+	}
+	forbidden := []string{"ReadProcessMemory", "CredRead", "CryptUnprotectData", "MiniDump", "VM_READ"}
+	for prefix, tech := range want {
+		st := carbanakStep(t, sc, prefix)
+		if st.TechniqueID != tech {
+			t.Errorf("%s technique_id = %q, want %q", prefix, st.TechniqueID, tech)
+		}
+		for _, f := range forbidden {
+			if strings.Contains(st.Command, f) {
+				t.Errorf("%s command contains forbidden %q", prefix, f)
+			}
+		}
+		if len(st.ThreatIntelSources) == 0 {
+			t.Errorf("%s has no threat_intel_sources", prefix)
+		}
+	}
+	for _, prefix := range []string{"Carbanak Stage 19 ", "Carbanak Stage 20 ", "Carbanak Stage 21 ", "Carbanak Stage 22 "} {
+		st := carbanakStep(t, sc, prefix)
+		if !strings.Contains(st.Command, "BAS_CARBANAK_TARGET_HOST") || !strings.Contains(st.Command, "SKIP") {
+			t.Errorf("%s must SKIP when BAS_CARBANAK_TARGET_HOST is unset", prefix)
+		}
+	}
+	// Stage 32 reuses the Stage 7 C2 channel (register caveat for T1041).
+	s7 := carbanakStep(t, sc, "Carbanak Stage 7 ")
+	s32 := carbanakStep(t, sc, "Carbanak Stage 32 ")
+	if !strings.Contains(s7.Command, "192.0.2.1") || !strings.Contains(s32.Command, "192.0.2.1") {
+		t.Error("stage 32 must reuse the stage 7 channel host 192.0.2.1 (non-routable, RFC 5737)")
+	}
+}
