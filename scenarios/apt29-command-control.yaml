@@ -211,7 +211,7 @@ steps:
       param($port, $n)
       $l = New-Object Net.HttpListener
       $l.Prefixes.Add("http://127.0.0.1:$port/")
-      $l.Start()
+      try { $l.Start() } catch { return -1 }
       $served = 0
       try {
       for ($i = 0; $i -lt $n; $i++) {
@@ -233,6 +233,7 @@ steps:
       [void]$ps.AddScript($server).AddArgument($port).AddArgument(5)
       $h = $ps.BeginInvoke()
       Start-Sleep -Milliseconds 700
+      if ($h.IsCompleted) { $served = [int]($ps.EndInvoke($h) | Select-Object -Last 1); try { $ps.Dispose(); $rs.Close() } catch {}; if ($served -lt 0) { return @{ Ran = $false; Note = 'listener_start_failed'; NotApplicable = 'a loopback HTTP listener could not be started on this host' } } }
       $answered = 0; $rng = New-Object Random
       for ($i = 1; $i -le 5; $i++) {
       $body = '{"id":"' + $script:A29Tag + '","seq":' + $i + ',"host":"BAS-SIM"}'
@@ -242,6 +243,7 @@ steps:
       $served = 0
       try { if ($h.AsyncWaitHandle.WaitOne(10000)) { $served = [int]($ps.EndInvoke($h) | Select-Object -Last 1) } } catch {}
       try { $ps.Dispose(); $rs.Close() } catch {}
+      if ($served -lt 0) { return @{ Ran = $false; Note = 'listener_start_failed'; NotApplicable = 'a loopback HTTP listener could not be started on this host' } }
       return @{ Ran = ($answered -eq 5 -and $served -eq 5); Note = "beacons_answered=$answered requests_served=$served interval_ms=1500-2200 destination=127.0.0.1:$port no_external_egress=true. Beacon analytics and SIEM ingestion are not verified."; NotApplicable = '' }
       }
     cleanup: |
@@ -427,7 +429,7 @@ steps:
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT29-$Id]"
       }
       Invoke-A29Test -Id 'k2' -Technique 'T1568' -Mode Telemetry -Require @('sysmon:22') -Telemetry @('dns:3008') -Summary 'a burst of generated non-resolving names, the shape of domain generation (T1568)' -Attempt {
-      $seed = [int]([Math]::Abs($script:A29Run.GetHashCode()) % 100000)
+      $seed = [int](($script:A29Run.GetHashCode() -band 0x7fffffff) % 100000)
       $rng = New-Object Random($seed)
       $alphabet = 'abcdefghijklmnopqrstuvwxyz234567'
       $sent = 0; $resolved = 0; $failed = 0

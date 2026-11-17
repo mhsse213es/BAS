@@ -5,7 +5,7 @@ Invoke-A29Test -Id 'k1' -Technique 'T1071.001' -Mode Telemetry -Needle "Destinat
     param($port, $n)
     $l = New-Object Net.HttpListener
     $l.Prefixes.Add("http://127.0.0.1:$port/")
-    $l.Start()
+    try { $l.Start() } catch { return -1 }
     $served = 0
     try {
       for ($i = 0; $i -lt $n; $i++) {
@@ -27,6 +27,7 @@ Invoke-A29Test -Id 'k1' -Technique 'T1071.001' -Mode Telemetry -Needle "Destinat
   [void]$ps.AddScript($server).AddArgument($port).AddArgument(5)
   $h = $ps.BeginInvoke()
   Start-Sleep -Milliseconds 700
+  if ($h.IsCompleted) { $served = [int]($ps.EndInvoke($h) | Select-Object -Last 1); try { $ps.Dispose(); $rs.Close() } catch {}; if ($served -lt 0) { return @{ Ran = $false; Note = 'listener_start_failed'; NotApplicable = 'a loopback HTTP listener could not be started on this host' } } }
   $answered = 0; $rng = New-Object Random
   for ($i = 1; $i -le 5; $i++) {
     $body = '{"id":"' + $script:A29Tag + '","seq":' + $i + ',"host":"BAS-SIM"}'
@@ -36,5 +37,6 @@ Invoke-A29Test -Id 'k1' -Technique 'T1071.001' -Mode Telemetry -Needle "Destinat
   $served = 0
   try { if ($h.AsyncWaitHandle.WaitOne(10000)) { $served = [int]($ps.EndInvoke($h) | Select-Object -Last 1) } } catch {}
   try { $ps.Dispose(); $rs.Close() } catch {}
+  if ($served -lt 0) { return @{ Ran = $false; Note = 'listener_start_failed'; NotApplicable = 'a loopback HTTP listener could not be started on this host' } }
   return @{ Ran = ($answered -eq 5 -and $served -eq 5); Note = "beacons_answered=$answered requests_served=$served interval_ms=1500-2200 destination=127.0.0.1:$port no_external_egress=true. Beacon analytics and SIEM ingestion are not verified."; NotApplicable = '' }
 }

@@ -33,7 +33,7 @@ Audspect BAS ships with 107 signed built-in scenarios. Every one is signature-ch
 
 ## Kill Chain Library
 
-The library contains 16 kill chain scenarios. Each emulates the post-access tradecraft of a named threat actor or ransomware family, in ordered stages. Each stage maps to one or more MITRE ATT&CK tactics. The scenarios are telemetry-safe: they are built to show whether your controls detect and block the behaviour, and they do not deliver real malware.
+The library contains 21 kill chain scenarios. Each emulates the post-access tradecraft of a named threat actor or ransomware family, in ordered stages. Each stage maps to one or more MITRE ATT&CK tactics. The scenarios are telemetry-safe: they are built to show whether your controls detect and block the behaviour, and they do not deliver real malware.
 
 | Scenario ID | Threat | Stages |
 |---|---|---|

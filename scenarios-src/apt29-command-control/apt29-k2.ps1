@@ -1,5 +1,5 @@
 Invoke-A29Test -Id 'k2' -Technique 'T1568' -Mode Telemetry -Require @('sysmon:22') -Telemetry @('dns:3008') -Summary 'a burst of generated non-resolving names, the shape of domain generation (T1568)' -Attempt {
-  $seed = [int]([Math]::Abs($script:A29Run.GetHashCode()) % 100000)
+  $seed = [int](($script:A29Run.GetHashCode() -band 0x7fffffff) % 100000)
   $rng = New-Object Random($seed)
   $alphabet = 'abcdefghijklmnopqrstuvwxyz234567'
   $sent = 0; $resolved = 0; $failed = 0
