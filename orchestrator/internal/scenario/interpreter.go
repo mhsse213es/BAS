@@ -311,14 +311,16 @@ func firstLine(s string) string {
 // real authoring pattern -- but it must have one explicit, documented answer
 // rather than an accidental one.
 //
-// Fail-safe policy: FAIL > SKIP > PASS, independent of line order. A FAIL
+// Fail-safe policy: FAIL > ERROR > SKIP > PASS, independent of line order.
+// An error: line means the check could not run; it must never fall through
+// to the exit-code default, which scores exit 0 as PASS. A FAIL
 // line is never silently suppressed by a PASS or SKIP line found elsewhere in
 // the same output -- mirroring this file's existing bias (see Interpret's
 // Vetoed/TimedOut handling) toward never overstating a defensive win when
 // there is ambiguity. Among multiple lines of the SAME winning type, the
 // first one supplies the returned text.
 func dominantVerdict(s string) (line string, result models.CheckResult, ok bool) {
-	var failLine, skipLine, passLine string
+	var failLine, errLine, skipLine, passLine string
 	for _, l := range strings.Split(s, "\n") {
 		t := strings.TrimSpace(l)
 		if t == "" {
@@ -328,6 +330,8 @@ func dominantVerdict(s string) (line string, result models.CheckResult, ok bool)
 		switch {
 		case failLine == "" && strings.HasPrefix(lower, "fail:"):
 			failLine = t
+		case errLine == "" && strings.HasPrefix(lower, "error:"):
+			errLine = t
 		case skipLine == "" && strings.HasPrefix(lower, "skip:"):
 			skipLine = t
 		case passLine == "" && strings.HasPrefix(lower, "pass:"):
@@ -337,6 +341,8 @@ func dominantVerdict(s string) (line string, result models.CheckResult, ok bool)
 	switch {
 	case failLine != "":
 		return failLine, models.ResultFail, true
+	case errLine != "":
+		return errLine, models.ResultError, true
 	case skipLine != "":
 		return skipLine, models.ResultSkipped, true
 	case passLine != "":

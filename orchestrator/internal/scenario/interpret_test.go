@@ -253,6 +253,14 @@ func TestInterpretCustomClassifiesScriptCrash(t *testing.T) {
 		{"conflicting FAIL after PASS: FAIL wins despite position", ExecResult{ExitCode: 0}, "PASS: looked clean at first\nFAIL: actually exploitable", models.ResultFail},
 		{"conflicting PASS after FAIL: FAIL still wins", ExecResult{ExitCode: 0}, "FAIL: exploitable\nPASS: contradicts the above", models.ResultFail},
 		{"conflicting SKIP and PASS (no FAIL): SKIP wins", ExecResult{ExitCode: 0}, "SKIP: not applicable here\nPASS: contradicts the above", models.ResultSkipped},
+		// ERROR verdicts: the check could not run. They must never fall through
+		// to the exit-code default, which scores exit 0 as PASS.
+		{"ERROR verdict with exit 0 is not a PASS", ExecResult{ExitCode: 0}, "ERROR: BAS_APT29_CLOUD_TENANT not set, stage not run", models.ResultError},
+		{"ERROR verdict with exit 1 is ERROR, not FAIL", ExecResult{ExitCode: 1}, "ERROR: prerequisite missing", models.ResultError},
+		{"ERROR then PASS: ERROR beats PASS", ExecResult{ExitCode: 0}, "ERROR: could not query directory\nPASS: looked clean", models.ResultError},
+		{"ERROR then SKIP: ERROR beats SKIP", ExecResult{ExitCode: 0}, "SKIP: not applicable\nERROR: call threw", models.ResultError},
+		{"FAIL then ERROR: FAIL still wins", ExecResult{ExitCode: 0}, "ERROR: call threw\nFAIL: exploitable", models.ResultFail},
+		{"informational line before ERROR verdict", ExecResult{ExitCode: 0}, "INFO: probing tenant\nERROR: graph returned 403", models.ResultError},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
