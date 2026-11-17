@@ -72,8 +72,6 @@ var TechniqueDomain = map[string]Domain{
 	// Impair Defenses: Modify Authentication Process (CVE-2020-1472 Zerologon)
 	"T1556": DomainDefenseEvasion,
 	// Exfiltration to Cloud Storage
-	// Exfiltration Over Web Service / generic HTTPS staging (Akira Stage 5b, sink-backed)
-	"T1567":     DomainExfiltration,
 	"T1567.002": DomainExfiltration,
 	// Akira Windows completeness stages and the backup, double-extortion and lateral-containment scenarios.
 	"T1021":     DomainLateralMovement,
@@ -83,6 +81,9 @@ var TechniqueDomain = map[string]Domain{
 	"T1485":     DomainEncryptionAndDestruction,
 	"T1041":     DomainExfiltration,
 	"T1074.001": DomainDataDiscoveryAndStaging,
+	// Masquerading / file-type masquerade: Akira Stage 6b (mass rename). Renaming is not encryption,
+	// so it is deliberately NOT mapped to Encryption and Destruction.
+	"T1036.008": DomainDefenseEvasion,
 	"T1657":     DomainExfiltration,
 	"T1133":     DomainInitialAccess,
 	"T1482":     DomainDataDiscoveryAndStaging,

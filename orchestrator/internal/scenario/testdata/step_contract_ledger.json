@@ -632,11 +632,11 @@
   {
     "scenario": "akira-kill-chain.yaml",
     "index": 16,
-    "technique_id": "T1567",
+    "technique_id": "T1041",
     "action_key": "",
     "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
+    "class": "destructive",
+    "status": "self_cleaning_declared"
   },
   {
     "scenario": "akira-kill-chain.yaml",
@@ -659,11 +659,11 @@
   {
     "scenario": "akira-kill-chain.yaml",
     "index": 19,
-    "technique_id": "T1486",
+    "technique_id": "T1036.008",
     "action_key": "",
     "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
   },
   {
     "scenario": "akira-kill-chain.yaml",
