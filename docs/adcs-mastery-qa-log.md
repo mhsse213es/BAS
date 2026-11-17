@@ -119,6 +119,27 @@ Still NOT shown by this run: every PASS (stages 1-7, 9, 11, 13-16) is consistent
 cannot see a defect. A deliberately vulnerable template (ESC1) or a cross-check with an independent read-only tool is
 needed before claiming detection. Stage 8 was not probed (live probe off).
 
+## Lab controls (same lab, run by the user; outputs reviewed)
+
+Each control changed the lab CA or a test template by hand, was detected by the stage, and was reverted; the stage was then
+re-run. Evidence is the pasted stage output, not a SIEM or a certificate request (nothing was requested).
+
+| ESC | Weakness introduced | With weakness | After revert |
+|---|---|---|---|
+| ESC1 | test template, enrollee-supplied subject, client-auth EKU, Domain Users enroll | stage 1 FAIL, path names Domain Users and template | stage 1 PASS |
+| ESC4 | test template, Domain Users Write | stage 4 FAIL; stage 17 latent (potential) while unpublished, path once published | stage 4 PASS |
+| ESC6 | `EDITF_ATTRIBUTESUBJECTALTNAME2` set (`11014e` to `15014e`) | stage 6 FAIL; stage 17 path via published template Machine | stage 6 PASS, value back to `11014e` |
+| ESC7 | Domain Users granted Manage this CA | stage 7 FAIL, `Domain Users -> ManageCA -> CA LAB-CA`; stage 17 path | stage 7 PASS |
+| ESC10 | none added (real DC at 20348.587) | stage 10 FAIL, then stage 17 | not applicable |
+
+Notes: the ESC6 control was set in the registry and not restarted before the first read; the scenario reads the value, not
+the running service state, and does not say so in its wording. The ESC4 path text lists all write rights rather than the
+one the ACE holds.
+
+Still not shown to find anything in a real environment: ESC2, 3, 5, 9, 11, 13, 14, 15, stage 16 (publication and trust) and
+the ESC8 live probe. Their only live result is "reads real data, finds nothing on a clean lab". The Locksmith cross-check was
+not run.
+
 ## Open
 
 - `adcs-esc8-web-enrollment-probe.yaml` was removed; stage 8 replaces it. Behaviour change: the old scenario sent its one unauthenticated HTTP GET by default, stage 8 only with `BAS_ADCS_LIVE_PROBE=true`.
