@@ -154,6 +154,8 @@ func cases() []tc {
 		{"corr esc6 on a CA that publishes nothing reachable is not a path", "CORR", "SKIP", m{"Templates": []m{tmpl("User", m{"publishedOn": []string{"OtherCA"}})}, "CAs": []m{ca(m{"editFlags": 0x40000}), ca(m{"name": "OtherCA"})}, "PkiObjects": []m{}, "Oids": []m{}, "DCs": []m{}, "Accounts": []m{}}, "no published template enrollable"},
 		{"corr clean without the live probe", "CORR", "PASS", m{"Templates": []m{tmpl("User", m{"aces": []m{adminACE()}})}, "LiveProbe": false, "CAs": []m{ca(nil)}, "PkiObjects": []m{}, "Oids": []m{}, "DCs": []m{{"name": "dc", "readable": true, "strongBinding": 2}}, "Accounts": []m{}}, ""},
 		{"corr clean", "CORR", "PASS", m{"Templates": []m{tmpl("User", m{"aces": []m{adminACE()}})}, "LiveProbe": true, "CAs": []m{ca(m{"web": m{"answered": true, "httpNtlm": false}})}, "PkiObjects": []m{}, "Oids": []m{}, "DCs": []m{{"name": "dc", "readable": true, "strongBinding": 2}}, "Accounts": []m{}}, ""},
+		{"corr a confirmed DC misconfiguration alone is not called an issuance path", "CORR", "FAIL", m{"Templates": []m{tmpl("User", m{"aces": []m{adminACE()}})}, "LiveProbe": false, "CAs": []m{ca(nil)}, "PkiObjects": []m{}, "Oids": []m{}, "DCs": []m{{"name": "dc", "readable": true, "strongBinding": nil, "build": m{"number": "20348", "ubr": 587}}}, "Accounts": []m{}}, "no complete low-privilege issuance path"},
+		{"corr a real path still says exploitable issuance path", "CORR", "FAIL", m{"Templates": []m{tmpl("Web", m{"nameFlag": 1})}, "CAs": []m{ca(nil)}, "PkiObjects": []m{}, "Oids": []m{}, "DCs": []m{}, "Accounts": []m{}}, "exploitable certificate-issuance path"},
 		{"corr unread source is never clean", "CORR", "SKIP", m{"Templates": []m{tmpl("User", m{"aces": []m{adminACE()}})}, "CAs": []m{ca(nil)}, "Errors": m{"dcs": "denied"}}, ""},
 	}
 	return cases
@@ -182,7 +184,7 @@ func harness(t *testing.T, c tc) string {
 		call = "$f = @(); if ($null -ne $ctx.Templates -and $null -ne $ctx.CAs) { $f = Get-AdcsCorrelation $ctx }\n" +
 			"$why=''; $complete=$true; foreach ($e in $ctx.Errors.Keys) { $complete=$false }\n" +
 			"if ($null -eq $ctx.Templates -or $null -eq $ctx.CAs) { $complete=$false }\n" +
-			"Write-AdcsVerdict 'correlation' 'BAS-SIM-ADCS-CORR' $f $complete $why 'clean.' 'path.'"
+			"Write-AdcsVerdict 'correlation' 'BAS-SIM-ADCS-CORR' $f $complete $why 'clean.' $script:AdcsCorrFail $script:AdcsCorrFailNoPath"
 	} else {
 		info := escTable[c.esc]
 		var needs []string

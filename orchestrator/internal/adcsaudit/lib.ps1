@@ -24,7 +24,7 @@ function New-AdcsFinding([string]$esc, [string]$state, [string]$subject, [string
   [pscustomobject]@{ Esc = $esc; State = $state; Subject = $subject; Why = $why; Path = $path }
 }
 # One verdict per stage. Only a complete, clean read is a PASS: unread or unconfirmed evidence is never clean.
-function Write-AdcsVerdict([string]$label, [string]$tag, $findings, [bool]$complete, [string]$incompleteWhy, [string]$passText, [string]$failText) {
+function Write-AdcsVerdict([string]$label, [string]$tag, $findings, [bool]$complete, [string]$incompleteWhy, [string]$passText, [string]$failText, [string]$failTextNoPath = '') {
   $f = @($findings | Where-Object { $_ })
   foreach ($x in $f) { Write-Output ("ADCS-FINDING: state=" + $x.State + " esc=" + $x.Esc + " subject=" + $x.Subject + " why=" + $x.Why + " path=" + $x.Path) }
   $hard = @($f | Where-Object { $_.State -eq 'confirmed' -or $_.State -eq 'path' })
@@ -33,6 +33,7 @@ function Write-AdcsVerdict([string]$label, [string]$tag, $findings, [bool]$compl
   if ($hard.Count -gt 0) {
     $paths = @($f | Where-Object { $_.State -eq 'path' }).Count
     Write-Output ("EXEC T1649: " + $label + ": " + $hard.Count + " confirmed finding(s), " + $paths + " exploitable issuance path(s), " + $pot.Count + " potential, " + $ins.Count + " not readable. Reads configuration only; no certificate is requested. [" + $tag + "]")
+    if ($failTextNoPath -and $paths -eq 0) { $failText = $failTextNoPath }
     Write-Output ("FAIL: " + $failText + " Configuration exposure only; no certificate was requested and exploitability was not tested. [" + $tag + "]")
   } elseif ($pot.Count -gt 0 -or $ins.Count -gt 0 -or -not $complete) {
     $why = $incompleteWhy
@@ -808,6 +809,8 @@ function Read-AdcsNtAuth {
 #endregion
 
 #region correlate needs=core,ace,tfacts,dispatch,cafield_editFlags,cafield_interfaceFlags,cafield_keyProvider,cafield_caAces,cafield_web,cafield_build,esc1,esc2,esc3,esc4,esc5,esc6,esc7,esc8,esc9,esc10,esc11,esc12,esc13,esc14,esc15,collect,part_templates,part_cas,part_pki,part_oids,part_accounts,part_dcs
+$script:AdcsCorrFail = 'at least one low-privileged principal has an exploitable certificate-issuance path to a privileged identity.'
+$script:AdcsCorrFailNoPath = 'a confirmed misconfiguration is present, but no complete low-privilege issuance path to a privileged identity was established (see the ADCS-FINDING lines).'
 function Get-AdcsCorrelation($ctx) {
   $tf = @($ctx.Templates | ForEach-Object { Get-AdcsTemplateFacts $_ })
   $out = @()
@@ -847,6 +850,6 @@ function Invoke-AdcsCorrelationStage {
   $f = @(); if ($null -ne $ctx.Templates -and $null -ne $ctx.CAs) { $f = Get-AdcsCorrelation $ctx }
   if ($null -eq $ctx.Templates -or $null -eq $ctx.CAs) { $complete = $false }
   if (-not $ctx.LiveProbe) { Write-Output 'ADCS-CONTEXT: esc8=NOT ASSESSED (BAS_ADCS_LIVE_PROBE is not true), so web enrollment relay exposure is not part of this verdict' }
-  Write-AdcsVerdict 'certificate-based privilege escalation correlation' 'BAS-SIM-ADCS-CORR' $f $complete $why 'no low-privileged principal has a path to a privileged certificate and every source was read (ESC8 web enrollment and ESC12 key posture are not part of this verdict).' 'at least one low-privileged principal has an exploitable certificate-issuance path to a privileged identity.'
+  Write-AdcsVerdict 'certificate-based privilege escalation correlation' 'BAS-SIM-ADCS-CORR' $f $complete $why 'no low-privileged principal has a path to a privileged certificate and every source was read (ESC8 web enrollment and ESC12 key posture are not part of this verdict).' $script:AdcsCorrFail $script:AdcsCorrFailNoPath
 }
 #endregion

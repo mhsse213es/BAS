@@ -111,6 +111,10 @@ four fixtures. Basis and limits: Microsoft's KB5013944 page gives the build; the
 stated on the page and are not matched. The pre-update KDC behaviour is not described on the page; "maps by UPN or SAN alone"
 is general knowledge, not taken from it.
 
+Second finding: stage 17 said "exploitable certificate-issuance path" while its own count line said 0 paths (only the DC
+finding was confirmed). The FAIL sentence now says a confirmed misconfiguration is present but no complete issuance path was
+established unless a finding is in the `path` state. Two fixtures cover both wordings.
+
 Still NOT shown by this run: every PASS (stages 1-7, 9, 11, 13-16) is consistent with a clean lab and with a collector that
 cannot see a defect. A deliberately vulnerable template (ESC1) or a cross-check with an independent read-only tool is
 needed before claiming detection. Stage 8 was not probed (live probe off).
