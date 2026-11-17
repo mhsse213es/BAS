@@ -4098,7 +4098,7 @@ steps:
         $ctx.CAs = $cas
       }
       $script:AdcsCaFields = @('build')
-      Invoke-AdcsStage '15' @('templates', 'cas') 'ESC15 (schema version 1 template, CA build checked)' 'no schema-version-1 template with an enrollee-supplied subject is exploitable: every CA that publishes one is at or above the CVE-2024-49019 fixed build. Builds are matched for Server 2016, 2019, 2022, 2022 23H2 and 2025; a CA whose build cannot be read or matched is reported as needing live verification, never as clean.' 'ESC15: a schema-version-1 template with an enrollee-supplied subject is published on a CA below the CVE-2024-49019 fixed build.' $true
+      Invoke-AdcsStage '15' @('templates', 'cas') 'ESC15 (schema version 1 template, CA build checked where published)' 'no schema-version-1 template with an enrollee-supplied subject is exploitable: every CA that publishes one is at or above the CVE-2024-49019 fixed build. Builds are matched for Server 2016, 2019, 2022, 2022 23H2 and 2025; a CA whose build cannot be read or matched is reported as needing live verification, never as clean.' 'ESC15: a schema-version-1 template with an enrollee-supplied subject is published on a CA below the CVE-2024-49019 fixed build.' $true
     cleanup: ""
 
   # -------------------------------------------------------------------------
