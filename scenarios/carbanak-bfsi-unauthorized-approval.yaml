@@ -1,0 +1,67 @@
+id: carbanak-bfsi-unauthorized-approval
+product_line: killchain
+name: Carbanak Item 25 -- Unauthorized Transaction Approval
+description: >
+  Initiates a transfer and attempts to approve it with the same operator, who has no approval rights. The ledger is expected to reject the approval.
+
+  SAFETY: runs only against the simulated banking ledger (carbanak-ledger-sim)
+  on a loopback or lab host. No real banking system, account or credential is
+  used. A fresh ledger run id is generated for this step. [BAS-SIM-CARBANAK] tagged.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - carbanak
+  - bfsi
+  - fraud-control
+  - ledger-simulation
+mitre_phases:
+  - impact
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+  - name: "Carbanak Item 25 -- Unauthorized Transaction Approval"
+    technique_id: T1078
+
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Submits requests to the simulated ledger only. Nothing leaves the lab."
+    reversible: true
+    telemetry:
+      - "Ledger audit rows for this run id"
+    detection:
+      - "Banking application fraud control for this action"
+    threat_intel_sources:
+      - reference: "Europol -- Mastermind Behind EUR 1 Billion Cyber Bank Robbery Arrested in Spain (2018)"
+        url: "https://www.europol.europa.eu/newsroom/news/mastermind-behind-eur-1-billion-cyber-bank-robbery-arrested-in-spain"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $ledger = if ($env:BAS_CARBANAK_LEDGER_URL) { $env:BAS_CARBANAK_LEDGER_URL } else { 'http://127.0.0.1:8745' }
+      function Emit($m) { Write-Output ('BAS-FRAUD-CONTROL ' + ($m | ConvertTo-Json -Compress)) }
+      $run = [guid]::NewGuid().ToString()
+      try {
+        $s = Invoke-RestMethod -Uri ($ledger.TrimEnd('/') + '/session') -Method POST -ContentType 'application/json' -TimeoutSec 5 -Body (@{identity='op1'; token='synthetic-op1'; run_id=$run; step='NUM-login'} | ConvertTo-Json -Compress)
+        $t = Invoke-RestMethod -Uri ($ledger.TrimEnd("/") + "/transfer") -Method POST -ContentType "application/json" -TimeoutSec 5 -Body (@{session_id=$s.session_id; run_id=$run; step="25"; amount=50} | ConvertTo-Json -Compress)
+        $r = Invoke-RestMethod -Uri ($ledger.TrimEnd("/") + "/approve") -Method POST -ContentType "application/json" -TimeoutSec 5 -Body (@{session_id=$s.session_id; run_id=$run; step="25"; txn_id=$t.txn_id} | ConvertTo-Json -Compress)
+        Write-Output "EXEC 25: operator attempted to approve a transaction without approval rights (decision=$($r.decision)). [BAS-SIM-CARBANAK-S25]"
+        Emit @{step="25"; expected_control='prevent'; ledger_called=$true; ledger_decision=$r.decision; rule_fired=$r.rule_fired; audit_hash=$r.audit_hash}
+      } catch {
+        Write-Output "SKIP: ledger not reachable. [BAS-SIM-CARBANAK]"
+        Emit @{step='NUM'; expected_control='CTL'; ledger_called=$false}
+        return
+      }
+    cleanup: ""
