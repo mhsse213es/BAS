@@ -94,3 +94,20 @@ Linux specifics: credentials paths are under `$HOME`; d30 reads `ss` (or `netsta
 - The Linux steps were not run on a Linux VM. The d30 and d31 logic (ss/ufw/iptables parsing, `find -perm /022`) is unverified on Linux.
 - Gated write steps (d27, d28, d29, e35, e36) have never run with gates set, on either OS.
 - Azure and AWS verdict behaviour (PASS on 401/403, FAIL on unexpected success) is covered by the classifier tests only.
+
+### Linux code review and fixes
+Ten findings. Fixed:
+- cvl-d30 returned PASS while a port could be open (any DROP rule, or default-allow ufw). PASS now needs positive evidence: ufw active with default deny and no allow rule, or an iptables block for the port or a DROP/REJECT policy. Anything else that is open is FAIL.
+- cvl-d31 only checked the top-level path and read symlink modes. It now checks the directory's children and dereferences symlinks (`find -L`).
+- cvl-d29 now refuses to call removePassword with a blank key id, and says so.
+- cvl-e36 honours `BAS_CLOUD_EXPECT_EXFIL_SIM` on both upload paths (it was FAIL regardless).
+- cvl-e35 no longer clears the AWS output before classification, so a refused read is PASS.
+- cvl-a13 compares resource-group names case-insensitively.
+- The bearer token no longer appears on the curl command line; it goes through a curl config on stdin (`cv_curl_auth` and `cv_http`). Verified against a local HTTP echo server: the header arrives, the method and x-ms-version are correct.
+- cvl-c25 searches only the operator's home directory, not shared `/tmp`.
+
+Still open:
+- The step-contract ledger's destructive/cleanup classification is inverted for some steps on the Windows and Linux packs (see the Windows section). It needs the contract classifier fixed, not these scenarios.
+- The Windows `cv-c25` also searches `%TEMP%` as well as the user profile. It is left as is and should be narrowed in the same change as the ledger fix.
+
+Re-verified after the fixes: all 31 bash steps parse; the same local verdicts as before; lib.Tests.sh 13 checks pass; verify-all ok=205.

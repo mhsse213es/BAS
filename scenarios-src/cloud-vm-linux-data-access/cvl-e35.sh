@@ -17,7 +17,6 @@ if [ -n "$(cv_aws_token)" ] && cv_have_aws; then
   cv_aws secretsmanager get-secret-value --secret-id "$secret"
   len=0
   if [ "$CV_ARC" -eq 0 ]; then v=$(printf '%s' "$CV_AOUT" | sed -n 's/.*"SecretString": *"\([^"]*\)".*/\1/p' | head -n1); len=${#v}; v=""; fi
-  CV_AOUT=""
   echo "EXEC T1555: Secrets Manager value requested for the synthetic test secret; value_length=$len. The value was discarded."
   cv_classify_aws 'Secrets Manager secret retrieval' BAS_CLOUD_EXPECT_ENUMERATION CV-LE35
 fi

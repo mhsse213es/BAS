@@ -1,6 +1,6 @@
-hits=$(find "$HOME" /tmp -maxdepth 6 -type f \( -name 'terraform.tfstate' -o -name '*.tfstate' -o -name '*.tfstate.backup' \) 2>/dev/null | head -n 20)
+hits=$(find "$HOME" -maxdepth 6 -type f \( -name 'terraform.tfstate' -o -name '*.tfstate' -o -name '*.tfstate.backup' \) 2>/dev/null | head -n 20)
 n=$(printf '%s\n' "$hits" | grep -c .)
-[ "$n" -eq 0 ] && cv_done pass "no Terraform state files were found under the home directory or /tmp" CV-LC25
+[ "$n" -eq 0 ] && cv_done pass "no Terraform state files were found under the home directory" CV-LC25
 secret=0
 while IFS= read -r h; do [ -n "$h" ] || continue; c=$(grep -Eoc '"(password|secret|access_key|private_key|client_secret)"' "$h"); secret=$((secret+c)); done <<EOF
 $hits

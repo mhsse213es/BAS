@@ -8,6 +8,7 @@ cv_http POST "https://graph.microsoft.com/v1.0/applications/$app/addPassword" "$
 [ "$CV_HCODE" = 200 ] || cv_classify_http "$CV_HCODE" 'service principal credential addition on the test application' BAS_CLOUD_EXPECT_KEY_CREATE CV-LD29
 keyid=$(printf '%s' "$CV_HBODY" | sed -n 's/.*"keyId":"\([^"]*\)".*/\1/p' | head -n1)
 CV_HBODY=""
+[ -n "$keyid" ] || cv_done fail "a client secret was added to the test application but its key id could not be parsed, so removal was NOT attempted; remove the test application secret manually" CV-LD29
 cv_http POST "https://graph.microsoft.com/v1.0/applications/$app/removePassword" "$CV_TOKEN" "{\"keyId\":\"$keyid\"}"
 rmcode=$CV_HCODE
 echo "EXEC T1098.001: client secret added to the test application and removed; remove_http=$rmcode. The secret text was never recorded."

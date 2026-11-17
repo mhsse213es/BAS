@@ -38,10 +38,11 @@ cv_az_token() { # encoded-resource -> CV_TOKEN, CV_TCODE
 }
 cv_http() { # method uri token [body] [x-ms-version] -> CV_HCODE, CV_HBODY
   local args out
-  args=(-s -m 15 -w '\n%{http_code}' -X "$1" -H "Authorization: Bearer $3")
+  args=(-s -m 15 -w '\n%{http_code}' -X "$1")
   [ -n "${5:-}" ] && args+=(-H "x-ms-version: $5")
   if [ -n "${4:-}" ]; then args+=(-H 'Content-Type: application/json' --data "$4"); fi
-  out=$(curl "${args[@]}" "$2" 2>/dev/null)
+  # the bearer token is passed through a curl config on stdin, so it never appears in the process list
+  out=$(printf 'header = "Authorization: Bearer %s"\n' "$3" | curl -K - "${args[@]}" "$2" 2>/dev/null)
   CV_HCODE=$(printf '%s' "$out" | tail -n1)
   CV_HBODY=$(printf '%s' "$out" | sed '$d')
 }
@@ -60,6 +61,10 @@ cv_classify_http() { # code what gate id
   esac
 }
 
+cv_curl_auth() { # method url token [curl args...] -> prints the HTTP code only
+  local m="$1" u="$2" t="$3"; shift 3
+  printf 'header = "Authorization: Bearer %s"\n' "$t" | curl -s -m 30 -o /dev/null -w '%{http_code}' -X "$m" -K - "$@" "$u" 2>/dev/null
+}
 cv_have_aws() { command -v aws >/dev/null 2>&1; }
 cv_aws() { CV_AOUT=$(aws "$@" --output json 2>&1); CV_ARC=$?; }
 cv_classify_aws() { # what gate id

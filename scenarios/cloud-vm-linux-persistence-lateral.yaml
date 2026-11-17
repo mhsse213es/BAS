@@ -77,10 +77,10 @@ steps:
       }
       cv_http() { # method uri token [body] [x-ms-version] -> CV_HCODE, CV_HBODY
         local args out
-        args=(-s -m 15 -w '\n%{http_code}' -X "$1" -H "Authorization: Bearer $3")
+        args=(-s -m 15 -w '\n%{http_code}' -X "$1")
         [ -n "${5:-}" ] && args+=(-H "x-ms-version: $5")
         if [ -n "${4:-}" ]; then args+=(-H 'Content-Type: application/json' --data "$4"); fi
-        out=$(curl "${args[@]}" "$2" 2>/dev/null)
+        out=$(printf 'header = "Authorization: Bearer %s"\n' "$3" | curl -K - "${args[@]}" "$2" 2>/dev/null)
         CV_HCODE=$(printf '%s' "$out" | tail -n1)
         CV_HBODY=$(printf '%s' "$out" | sed '$d')
       }
@@ -97,6 +97,10 @@ steps:
           401|403) cv_done pass "$what was refused by the cloud control (HTTP $c)" "$id" ;;
           *) cv_done error "$what returned HTTP $c, which cannot be classified as a control result" "$id" ;;
         esac
+      }
+      cv_curl_auth() { # method url token [curl args...] -> prints the HTTP code only
+        local m="$1" u="$2" t="$3"; shift 3
+        printf 'header = "Authorization: Bearer %s"\n' "$t" | curl -s -m 30 -o /dev/null -w '%{http_code}' -X "$m" -K - "$@" "$u" 2>/dev/null
       }
       cv_have_aws() { command -v aws >/dev/null 2>&1; }
       cv_aws() { CV_AOUT=$(aws "$@" --output json 2>&1); CV_ARC=$?; }
@@ -189,10 +193,10 @@ steps:
       }
       cv_http() { # method uri token [body] [x-ms-version] -> CV_HCODE, CV_HBODY
         local args out
-        args=(-s -m 15 -w '\n%{http_code}' -X "$1" -H "Authorization: Bearer $3")
+        args=(-s -m 15 -w '\n%{http_code}' -X "$1")
         [ -n "${5:-}" ] && args+=(-H "x-ms-version: $5")
         if [ -n "${4:-}" ]; then args+=(-H 'Content-Type: application/json' --data "$4"); fi
-        out=$(curl "${args[@]}" "$2" 2>/dev/null)
+        out=$(printf 'header = "Authorization: Bearer %s"\n' "$3" | curl -K - "${args[@]}" "$2" 2>/dev/null)
         CV_HCODE=$(printf '%s' "$out" | tail -n1)
         CV_HBODY=$(printf '%s' "$out" | sed '$d')
       }
@@ -209,6 +213,10 @@ steps:
           401|403) cv_done pass "$what was refused by the cloud control (HTTP $c)" "$id" ;;
           *) cv_done error "$what returned HTTP $c, which cannot be classified as a control result" "$id" ;;
         esac
+      }
+      cv_curl_auth() { # method url token [curl args...] -> prints the HTTP code only
+        local m="$1" u="$2" t="$3"; shift 3
+        printf 'header = "Authorization: Bearer %s"\n' "$t" | curl -s -m 30 -o /dev/null -w '%{http_code}' -X "$m" -K - "$@" "$u" 2>/dev/null
       }
       cv_have_aws() { command -v aws >/dev/null 2>&1; }
       cv_aws() { CV_AOUT=$(aws "$@" --output json 2>&1); CV_ARC=$?; }
@@ -311,10 +319,10 @@ steps:
       }
       cv_http() { # method uri token [body] [x-ms-version] -> CV_HCODE, CV_HBODY
         local args out
-        args=(-s -m 15 -w '\n%{http_code}' -X "$1" -H "Authorization: Bearer $3")
+        args=(-s -m 15 -w '\n%{http_code}' -X "$1")
         [ -n "${5:-}" ] && args+=(-H "x-ms-version: $5")
         if [ -n "${4:-}" ]; then args+=(-H 'Content-Type: application/json' --data "$4"); fi
-        out=$(curl "${args[@]}" "$2" 2>/dev/null)
+        out=$(printf 'header = "Authorization: Bearer %s"\n' "$3" | curl -K - "${args[@]}" "$2" 2>/dev/null)
         CV_HCODE=$(printf '%s' "$out" | tail -n1)
         CV_HBODY=$(printf '%s' "$out" | sed '$d')
       }
@@ -331,6 +339,10 @@ steps:
           401|403) cv_done pass "$what was refused by the cloud control (HTTP $c)" "$id" ;;
           *) cv_done error "$what returned HTTP $c, which cannot be classified as a control result" "$id" ;;
         esac
+      }
+      cv_curl_auth() { # method url token [curl args...] -> prints the HTTP code only
+        local m="$1" u="$2" t="$3"; shift 3
+        printf 'header = "Authorization: Bearer %s"\n' "$t" | curl -s -m 30 -o /dev/null -w '%{http_code}' -X "$m" -K - "$@" "$u" 2>/dev/null
       }
       cv_have_aws() { command -v aws >/dev/null 2>&1; }
       cv_aws() { CV_AOUT=$(aws "$@" --output json 2>&1); CV_ARC=$?; }
@@ -371,6 +383,7 @@ steps:
       [ "$CV_HCODE" = 200 ] || cv_classify_http "$CV_HCODE" 'service principal credential addition on the test application' BAS_CLOUD_EXPECT_KEY_CREATE CV-LD29
       keyid=$(printf '%s' "$CV_HBODY" | sed -n 's/.*"keyId":"\([^"]*\)".*/\1/p' | head -n1)
       CV_HBODY=""
+      [ -n "$keyid" ] || cv_done fail "a client secret was added to the test application but its key id could not be parsed, so removal was NOT attempted; remove the test application secret manually" CV-LD29
       cv_http POST "https://graph.microsoft.com/v1.0/applications/$app/removePassword" "$CV_TOKEN" "{\"keyId\":\"$keyid\"}"
       rmcode=$CV_HCODE
       echo "EXEC T1098.001: client secret added to the test application and removed; remove_http=$rmcode. The secret text was never recorded."
@@ -431,10 +444,10 @@ steps:
       }
       cv_http() { # method uri token [body] [x-ms-version] -> CV_HCODE, CV_HBODY
         local args out
-        args=(-s -m 15 -w '\n%{http_code}' -X "$1" -H "Authorization: Bearer $3")
+        args=(-s -m 15 -w '\n%{http_code}' -X "$1")
         [ -n "${5:-}" ] && args+=(-H "x-ms-version: $5")
         if [ -n "${4:-}" ]; then args+=(-H 'Content-Type: application/json' --data "$4"); fi
-        out=$(curl "${args[@]}" "$2" 2>/dev/null)
+        out=$(printf 'header = "Authorization: Bearer %s"\n' "$3" | curl -K - "${args[@]}" "$2" 2>/dev/null)
         CV_HCODE=$(printf '%s' "$out" | tail -n1)
         CV_HBODY=$(printf '%s' "$out" | sed '$d')
       }
@@ -451,6 +464,10 @@ steps:
           401|403) cv_done pass "$what was refused by the cloud control (HTTP $c)" "$id" ;;
           *) cv_done error "$what returned HTTP $c, which cannot be classified as a control result" "$id" ;;
         esac
+      }
+      cv_curl_auth() { # method url token [curl args...] -> prints the HTTP code only
+        local m="$1" u="$2" t="$3"; shift 3
+        printf 'header = "Authorization: Bearer %s"\n' "$t" | curl -s -m 30 -o /dev/null -w '%{http_code}' -X "$m" -K - "$@" "$u" 2>/dev/null
       }
       cv_have_aws() { command -v aws >/dev/null 2>&1; }
       cv_aws() { CV_AOUT=$(aws "$@" --output json 2>&1); CV_ARC=$?; }
@@ -485,21 +502,30 @@ steps:
       [ -n "$ls_out" ] || cv_done error "listening sockets could not be read (ss and netstat unavailable)" CV-LD30
       listen=$(printf '%s\n' "$ls_out" | awk '$4 ~ /:(22|5985|5986)$/' | wc -l)
       if [ "$listen" -eq 0 ]; then echo "EXEC T1021: read-only check; no SSH or WinRM listener on 22, 5985 or 5986."; cv_done pass "no remote-management listener (SSH or WinRM) is listening on this host" CV-LD30; fi
-      ufw_allow=0; ufw_active=0; ipt=""; ipt_accept=0; ipt_drop=0
+      ufw_allow=0; ufw_active=0; ufw_default_allow=0; ufw_default_deny=0
+      ipt_accept=0; ipt_block=0; ipt_policy_accept=0; ipt_policy_drop=0
       if command -v ufw >/dev/null 2>&1; then
-        st=$(ufw status 2>/dev/null)
+        st=$(ufw status verbose 2>/dev/null)
         printf '%s' "$st" | grep -q '^Status: active' && ufw_active=1
-        printf '%s' "$st" | grep -Eq '^(22|ssh|5985|5986)[^ ]*[[:space:]]+ALLOW' && ufw_allow=1
+        printf '%s' "$st" | grep -q 'Default: allow (incoming)' && ufw_default_allow=1
+        printf '%s' "$st" | grep -q 'Default: deny (incoming)' && ufw_default_deny=1
+        printf '%s' "$st" | grep -Eq '(^|[^0-9])(22|5985|5986)(/tcp)?([^0-9]|$).*ALLOW|OpenSSH.*ALLOW|WinRM.*ALLOW' && ufw_allow=1
       fi
       if command -v iptables >/dev/null 2>&1; then
         ipt=$(iptables -S INPUT 2>/dev/null)
+        printf '%s' "$ipt" | grep -Eq -- '-P INPUT ACCEPT' && ipt_policy_accept=1
+        printf '%s' "$ipt" | grep -Eq -- '-P INPUT (DROP|REJECT)' && ipt_policy_drop=1
         printf '%s' "$ipt" | grep -Eq -- '--dport (22|5985|5986) .*-j ACCEPT' && ipt_accept=1
-        printf '%s' "$ipt" | grep -Eq -- '-P INPUT (DROP|REJECT)|-j (DROP|REJECT)' && ipt_drop=1
+        printf '%s' "$ipt" | grep -Eq -- '--dport (22|5985|5986) .*-j (DROP|REJECT)' && ipt_block=1
       fi
-      echo "EXEC T1021: read-only firewall check (no rule or listener change). listeners=$listen ufw_active=$ufw_active ufw_allow=$ufw_allow iptables_accept=$ipt_accept iptables_drop=$ipt_drop"
-      if [ "$ufw_allow" -eq 1 ] || [ "$ipt_accept" -eq 1 ]; then cv_done fail "a remote-management listener is present and a firewall allow rule covers SSH or WinRM ports" CV-LD30; fi
-      if [ "$ufw_active" -eq 1 ] || [ "$ipt_drop" -eq 1 ]; then cv_done pass "a remote-management listener exists but the host firewall does not allow its port" CV-LD30; fi
-      cv_done error "a remote-management listener exists but no firewall state could be determined (ufw and iptables not readable)" CV-LD30
+      echo "EXEC T1021: read-only firewall check (no rule or listener change). listeners=$listen ufw_active=$ufw_active ufw_default_allow=$ufw_default_allow ufw_allow=$ufw_allow iptables_accept=$ipt_accept iptables_policy_accept=$ipt_policy_accept"
+      if [ "$ufw_allow" -eq 1 ] || [ "$ipt_accept" -eq 1 ] || [ "$ufw_default_allow" -eq 1 ] || { [ "$ipt_policy_accept" -eq 1 ] && [ "$ipt_block" -eq 0 ]; }; then
+        cv_done fail "a remote-management listener is present and the host firewall does not block its port (allow rule or default-accept policy)" CV-LD30
+      fi
+      if { [ "$ufw_active" -eq 1 ] && [ "$ufw_default_deny" -eq 1 ]; } || [ "$ipt_block" -eq 1 ] || [ "$ipt_policy_drop" -eq 1 ]; then
+        cv_done pass "a remote-management listener exists but the host firewall blocks its port" CV-LD30
+      fi
+      cv_done error "a remote-management listener exists but the firewall state could not be determined as blocking or allowing" CV-LD30
     cleanup: ""
 
   # -------------------------------------------------------------------------
@@ -554,10 +580,10 @@ steps:
       }
       cv_http() { # method uri token [body] [x-ms-version] -> CV_HCODE, CV_HBODY
         local args out
-        args=(-s -m 15 -w '\n%{http_code}' -X "$1" -H "Authorization: Bearer $3")
+        args=(-s -m 15 -w '\n%{http_code}' -X "$1")
         [ -n "${5:-}" ] && args+=(-H "x-ms-version: $5")
         if [ -n "${4:-}" ]; then args+=(-H 'Content-Type: application/json' --data "$4"); fi
-        out=$(curl "${args[@]}" "$2" 2>/dev/null)
+        out=$(printf 'header = "Authorization: Bearer %s"\n' "$3" | curl -K - "${args[@]}" "$2" 2>/dev/null)
         CV_HCODE=$(printf '%s' "$out" | tail -n1)
         CV_HBODY=$(printf '%s' "$out" | sed '$d')
       }
@@ -574,6 +600,10 @@ steps:
           401|403) cv_done pass "$what was refused by the cloud control (HTTP $c)" "$id" ;;
           *) cv_done error "$what returned HTTP $c, which cannot be classified as a control result" "$id" ;;
         esac
+      }
+      cv_curl_auth() { # method url token [curl args...] -> prints the HTTP code only
+        local m="$1" u="$2" t="$3"; shift 3
+        printf 'header = "Authorization: Bearer %s"\n' "$t" | curl -s -m 30 -o /dev/null -w '%{http_code}' -X "$m" -K - "$@" "$u" 2>/dev/null
       }
       cv_have_aws() { command -v aws >/dev/null 2>&1; }
       cv_aws() { CV_AOUT=$(aws "$@" --output json 2>&1); CV_ARC=$?; }
@@ -609,9 +639,9 @@ steps:
       [ "${#dirs[@]}" -gt 0 ] || cv_done pass "no standard startup script location exists on this host" CV-LD31
       writable=""
       for d in "${dirs[@]}"; do
-        if [ -z "$(find "$d" -maxdepth 0 -perm /022 2>/dev/null)" ]; then
-          [ -r "$d" ] || cv_done error "the mode of a startup location could not be read: $d" CV-LD31
-        else writable="$writable $d"; fi
+        w=$(find -L "$d" -maxdepth 1 -perm /022 2>/dev/null); rc=$?
+        [ "$rc" -eq 0 ] || cv_done error "the mode of a startup location could not be read: $d" CV-LD31
+        [ -n "$w" ] && writable="$writable $(printf '%s' "$w" | paste -sd' ' -)"
       done
       echo "EXEC T1574: read-only permission check of startup script locations; locations=${#dirs[@]} writable_by_group_or_other=$(printf '%s' "$writable" | wc -w). Nothing was written."
       [ -n "$writable" ] && cv_done fail "a startup script location is writable by a group or other user (${writable# })" CV-LD31
