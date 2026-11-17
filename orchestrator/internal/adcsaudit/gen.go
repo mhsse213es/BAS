@@ -151,15 +151,15 @@ var escTable = map[string]escInfo{
 	"7":  {"ESC7 (CA administrative rights)", "no non-tier-0 principal holds ManageCA or ManageCertificates on any CA. This step assesses CA permissions only.", "ESC7: a non-tier-0 principal holds ManageCA or ManageCertificates on a CA.", []string{"cas"}, []string{"caAces"}},
 	"8":  {"ESC8 (web enrollment relay)", "no CA web enrollment endpoint offers NTLM or Negotiate over plain HTTP. HTTPS and Extended Protection are not assessed.", "ESC8: CA web enrollment accepts integrated authentication over HTTP, which can be relayed.", []string{"cas"}, []string{"web"}},
 	"9":  {"ESC9 (no security extension)", "no enrollable template sets the no-security-extension flag. This step assesses the template flag only.", "ESC9: a template issues certificates without the security extension to a low-privileged enrollee.", []string{"templates", "cas"}, nil},
-	"10": {"ESC10 (weak certificate mapping)", "every domain controller enforces strong certificate binding. Update level is not verified.", "ESC10: a domain controller allows weak certificate-to-account mapping.", []string{"dcs"}, nil},
+	"10": {"ESC10 (weak certificate mapping)", "no domain controller allows weak certificate mapping. A DC at or above the September 9, 2025 update (matched for Server 2016, 2019 and 2022) ignores the StrongCertificateBindingEnforcement value; a DC whose build cannot be matched is reported as needing live verification.", "ESC10: a domain controller allows weak certificate-to-account mapping.", []string{"dcs"}, nil},
 	"11": {"ESC11 (RPC enrollment relay)", "every CA enforces an encrypted certificate request interface. This step reads the CA interface flag only.", "ESC11: a CA accepts unencrypted RPC certificate requests, which can be relayed.", []string{"cas"}, []string{"interfaceFlags"}},
 	"12": {"ESC12 (CA private key)", "no CA reports a software key provider. HSM assurance and the ESC12 exploit path are not verified.", "ESC12: a CA signing key is held in a software provider rather than a hardware security module.", []string{"cas"}, []string{"keyProvider"}},
 	"13": {"ESC13 (issuance policy to group)", "no enrollable template carries an issuance policy linked to a privileged group. This step assesses issuance-policy links only.", "ESC13: a template carries an issuance policy linked to a privileged group and is enrollable by a low-privileged principal.", []string{"templates", "cas", "oids"}, nil},
 	"14": {"ESC14 (weak explicit mapping)", "no enabled account has a weak explicit certificate mapping in altSecurityIdentities. This step assesses the mapping format only.", "ESC14: an account maps certificates by a weak identifier.", []string{"accounts"}, nil},
-	"15": {"ESC15 (schema version 1 template, CA patch level not read)", "no schema-version-1 template is enrollable with an enrollee-supplied subject. Whether an enrollable one is exploitable depends on the CA patch level (CVE-2024-49019), which this step does not read.", "ESC15: a schema-version-1 template with an enrollee-supplied subject is enrollable.", []string{"templates", "cas"}, nil},
+	"15": {"ESC15 (schema version 1 template, CA build checked)", "no schema-version-1 template with an enrollee-supplied subject is exploitable: every CA that publishes one is at or above the CVE-2024-49019 fixed build. Builds are matched for Server 2016, 2019, 2022, 2022 23H2 and 2025; a CA whose build cannot be read or matched is reported as needing live verification, never as clean.", "ESC15: a schema-version-1 template with an enrollee-supplied subject is published on a CA below the CVE-2024-49019 fixed build.", []string{"templates", "cas"}, []string{"build"}},
 }
 
-var allCaFieldRegions = []string{"cafield_editFlags", "cafield_interfaceFlags", "cafield_keyProvider", "cafield_caAces", "cafield_web"}
+var allCaFieldRegions = []string{"cafield_editFlags", "cafield_interfaceFlags", "cafield_keyProvider", "cafield_caAces", "cafield_web", "cafield_build"}
 
 func psq(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 
@@ -195,7 +195,7 @@ var ldapDet = "SIEM: an LDAP enumeration of the Certificate Templates or Public 
 // Stages is the stage table, in run order.
 func Stages() []Stage {
 	return []Stage{
-		{Number: "0", Title: "Build AD CS Audit Context", Technique: "T1649", Tag: "BAS-SIM-ADCS-CTX", Call: "$script:AdcsCaFields = @('editFlags', 'interfaceFlags', 'keyProvider', 'caAces', 'web')\nInvoke-AdcsContextStage", Regions: append([]string{"context_stage"}, allCaFieldRegions...), Timeout: 120,
+		{Number: "0", Title: "Build AD CS Audit Context", Technique: "T1649", Tag: "BAS-SIM-ADCS-CTX", Call: "$script:AdcsCaFields = @('editFlags', 'interfaceFlags', 'keyProvider', 'caAces', 'web', 'build')\nInvoke-AdcsContextStage", Regions: append([]string{"context_stage"}, allCaFieldRegions...), Timeout: 120,
 			Blast:     "Discovers the certification authorities, certificate templates, enrollment services and forest from the Configuration partition and reads each CA's policy values. It scores nothing; it records what later stages can and cannot read." + readOnly,
 			Telemetry: []string{ldapTel, "Sysmon EID 1: powershell.exe with certutil -getreg against each CA"},
 			Detection: []string{ldapDet}},
@@ -208,17 +208,17 @@ func Stages() []Stage {
 		escStage("7", "CA Administrative Rights", "Reads each CA's security descriptor from the CA host's remote registry and reports non-tier-0 principals holding ManageCA or ManageCertificates.", []string{"CA host: remote registry read of the CertSvc Configuration Security value"}, []string{"SIEM: a remote registry connection to a CA host from a non-administrative workstation"}),
 		escStage("8", "Web Enrollment Relay Exposure", "Off by default: reports each CA as needing live verification. When BAS_ADCS_LIVE_PROBE=true it sends one unauthenticated HTTP GET per CA to /certsrv/ with no credentials and redirects off.", []string{"CA host: one unauthenticated HTTP GET to /certsrv/ per CA, only when BAS_ADCS_LIVE_PROBE=true"}, []string{"SIEM: an unauthenticated request to /certsrv/ from a workstation"}),
 		escStage("9", "No Security Extension", "Reads template enrollment flags (no-security-extension) and the template ACL.", []string{ldapTel}, []string{ldapDet}),
-		escStage("10", "Weak Certificate Mapping", "Reads each domain controller's StrongCertificateBindingEnforcement and Schannel CertificateMappingMethods values over remote registry. The 2025 update level is not readable, so explicit weak values are reported as needing live verification.", []string{"DC: remote registry read of the Kdc and Schannel certificate-mapping values"}, []string{"SIEM: remote registry connections to several domain controllers from a workstation"}),
+		escStage("10", "Weak Certificate Mapping", "Reads each domain controller's StrongCertificateBindingEnforcement and Schannel CertificateMappingMethods values and its Windows build over remote registry. A DC at or above the September 9, 2025 update ignores the registry opt-out; a build that cannot be matched leaves explicit weak values as needing live verification.", []string{"DC: remote registry read of the Kdc and Schannel certificate-mapping values"}, []string{"SIEM: remote registry connections to several domain controllers from a workstation"}),
 		escStage("11", "RPC Enrollment Relay Exposure", "Reads each CA's InterfaceFlags value through certutil -getreg.", []string{"CA host: remote registry read of the CA InterfaceFlags value"}, []string{"SIEM: certutil -getreg against a CA from a non-administrative workstation"}),
 		escStage("12", "CA Private Key Exposure", "Reads each CA's key provider name through certutil -getreg. No key material is accessed.", []string{"CA host: remote registry read of the CA CSP provider value"}, []string{"SIEM: certutil -getreg against a CA from a non-administrative workstation"}),
 		escStage("13", "Issuance Policy / Group Mapping", "Reads template issuance policies, the issuance-policy (OID) objects with a group link, and the linked groups' privilege markers.", []string{ldapTel, "DC: LDAP read of msPKI-Enterprise-Oid objects and linked groups"}, []string{ldapDet}),
 		escStage("14", "Weak Explicit Certificate Mapping", "Reads altSecurityIdentities and adminCount on enabled user and computer accounts.", []string{"DC: LDAP search of altSecurityIdentities"}, []string{"SIEM: bulk LDAP reads of altSecurityIdentities from a non-administrative workstation"}),
-		escStage("15", "Schema Version 1 Template Abuse", "Reads template schema version, name flags, approval and RA-signature settings and the template ACL.", []string{ldapTel}, []string{ldapDet}),
+		escStage("15", "Schema Version 1 Template Abuse", "Reads template schema version, name flags, approval and RA-signature settings and the template ACL, and each publishing CA's Windows build (CurrentBuildNumber and UBR over remote registry) to compare with the CVE-2024-49019 fixed build.", []string{ldapTel}, []string{ldapDet}),
 		{Number: "16", Title: "Certificate Publication and Trust", Technique: "T1649", Tag: "BAS-SIM-ADCS-PUB", Call: "$script:AdcsCaFields = @()\nInvoke-AdcsPublicationStage", Regions: []string{"publication"}, Timeout: 120,
 			Blast:     "Reads which templates each CA publishes, the certificates in NTAuthCertificates and each CA certificate's key size, signature algorithm and expiry." + readOnly,
 			Telemetry: []string{ldapTel, "DC: LDAP read of the cACertificate attribute of NTAuthCertificates and the Enrollment Services objects"},
 			Detection: []string{ldapDet}},
-		{Number: "17", Title: "Privileged Identity Correlation", Technique: "T1649", Tag: "BAS-SIM-ADCS-CORR", Call: "$script:AdcsCaFields = @('editFlags', 'interfaceFlags', 'keyProvider', 'caAces', 'web')\nInvoke-AdcsCorrelationStage", Regions: []string{"correlate"}, Timeout: 240,
+		{Number: "17", Title: "Privileged Identity Correlation", Technique: "T1649", Tag: "BAS-SIM-ADCS-CORR", Call: "$script:AdcsCaFields = @('editFlags', 'interfaceFlags', 'keyProvider', 'caAces', 'web', 'build')\nInvoke-AdcsCorrelationStage", Regions: []string{"correlate"}, Timeout: 240,
 			Blast:     "Reads everything the earlier stages read, then joins it: a misconfiguration becomes an exploitable certificate-issuance path only when the template is published on a readable CA and a low-privileged principal can enrol." + readOnly,
 			Telemetry: []string{ldapTel, "CA host: remote registry reads of the policy and Security values"},
 			Detection: []string{ldapDet}},
@@ -251,7 +251,7 @@ Stages:
   12  ESC12 CA private key protection
   13  ESC13 issuance policy to group mapping
   14  ESC14 weak explicit certificate mapping
-  15  ESC15 schema version 1 template abuse (potential only: the CA patch level is not read)
+  15  ESC15 schema version 1 template abuse: checked against the CA Windows build (CVE-2024-49019 fix)
   16  Certificate publication and trust: published templates, CA certificates, NTAuth
   17  Privileged identity correlation: paths from low-privileged principals to privileged certificate issuance
 
@@ -265,7 +265,7 @@ How findings are classified:
 Every finding is written as: low-privileged principal -> enrollment permission -> vulnerable template or CA -> issuance conditions -> privileged identity impact.
 
 Live check: ESC8 sends one unauthenticated HTTP GET per CA only when BAS_ADCS_LIVE_PROBE=true. Without it, each CA is reported as POTENTIAL.
-Not assessed: whether a relay or enrollment would succeed, HTTPS Extended Protection, HSM assurance, CA enrollment-agent restrictions and the CA patch level.
+Not assessed: whether a relay or enrollment would succeed, HTTPS Extended Protection, HSM assurance and CA enrollment-agent restrictions. Patch levels are matched by Windows build only for the server versions named in the ESC10 and ESC15 stages; any other build is reported as needing live verification.
 SAFETY: reads configuration only. Never requests or enrols a certificate, never modifies a template, CA object or CA setting, never performs certificate-based impersonation. A FAIL shows configuration exposure or an issuance path, not that a certificate was obtained.`
 
 var tags = []string{"adcs", "active-directory", "certificate-templates", "privilege-escalation", "t1649", "mitre", "esc1", "esc2", "esc3", "esc4", "esc5", "esc6", "esc7", "esc8", "esc9", "esc10", "esc11", "esc12", "esc13", "esc14", "esc15", "attack-path", "enterprise"}

@@ -40,6 +40,31 @@ Nothing requests a certificate or changes a template, CA object, CA setting or r
   step does not read. `TestEsc15WordingNamesThePatchDependency` pins the wording.
 - Correction to an earlier note: the old ESC15 step did have a FAIL path; ESC10, ESC11 and ESC13 were the SKIP-heavy ones.
 
+## Patch-level checks for ESC10 and ESC15
+
+Both stages now read the host's Windows build (CurrentBuildNumber and UBR, remote registry) and compare it with Microsoft's
+published numbers. A build that cannot be read, or is not in the table, is unknown and stays "potential", never clean.
+Tables live in `lib.ps1` (`$script:AdcsFixBuilds`) and are pinned by `TestFixedBuildTable`.
+
+ESC15, CVE-2024-49019 fixed builds (Microsoft CSAF data as mirrored by CIRCL, https://cvepremium.circl.lu/vuln/msrc_cve-2024-49019;
+KBs agree with Rapid7): Server 2016 14393.7515 (KB5046612), 2019 17763.6532 (KB5046615), 2022 20348.2849 (KB5046616),
+2022 23H2 Core 25398.1251 (KB5046618), 2025 26100.2314 (KB5046617). Hotpatch baselines 20348.2819 and 26100.2240 are already
+fixed, so a revision between the baseline and the fixed build is reported unknown, not vulnerable. Server 2012, 2012 R2,
+2008 and 2008 R2 are in the advisory but their revision is not readable as UBR, so they stay potential.
+
+ESC10, KB5014754 (https://support.microsoft.com/en-us/topic/kb5014754-certificate-based-authentication-changes-on-windows-domain-controllers-ad2c23b0-15d8-4340-a468-4d4f3b188f16):
+Full Enforcement from February 11, 2025; the StrongCertificateBindingEnforcement opt-out is no longer honored from the
+September 9, 2025 update. September 9, 2025 builds (Microsoft KB titles): Server 2016 14393.8422 (KB5065427), 2019 17763.7792
+(KB5065428), 2022 20348.4171 (KB5065432). Only these three are matched because the KB5014754 page lists them (and 2012 R2,
+2012, 2008, whose builds are not matched). Server 2022 23H2 (25398.1849, KB5065425) and 2025 (26100.6584, KB5065426) were
+found but are not on that page's "Applies to" list, so they are not used. On a matched build at or above the update, a weak
+registry value is ignored; the Schannel CertificateMappingMethods UPN bit (0x4) is a separate setting and still counts.
+Below it, StrongCertificateBindingEnforcement=0 is confirmed and 1 (compatibility) is potential.
+
+Not verified: the numbers were taken from search results and Microsoft pages, not from running updates on hosts; the
+Microsoft Security Response Center page for CVE-2024-49019 was not read directly; the remote-registry build read has not run
+against a real CA or DC.
+
 ## Open
 
 - `adcs-esc8-web-enrollment-probe.yaml` was removed; stage 8 replaces it. Behaviour change: the old scenario sent its one unauthenticated HTTP GET by default, stage 8 only with `BAS_ADCS_LIVE_PROBE=true`.

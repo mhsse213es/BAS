@@ -118,6 +118,47 @@ function New-AdcsTemplateFinding($f, [string]$esc, [bool]$match, [string]$condit
 function Test-AdcsEnrollGate($f) { return ((-not $f.MgrApproval) -and ($f.RaSig -eq 0)) }
 #endregion
 
+#region patch needs=core
+# Windows build thresholds, each from Microsoft's own pages (see docs/adcs-mastery-qa-log.md). A build is [number, ubr].
+#  cve49019: first build that fixes CVE-2024-49019 (ESC15). The second value is a hotpatch baseline already fixed, so
+#            a revision between the two is unknown rather than vulnerable.
+#  sep2025:  September 9, 2025 update, after which StrongCertificateBindingEnforcement is no longer honored (KB5014754).
+#            Only the server versions that page lists are recognised.
+$script:AdcsFixBuilds = @{
+  cve49019 = @{ '14393' = @(7515, 0); '17763' = @(6532, 0); '20348' = @(2849, 2819); '25398' = @(1251, 0); '26100' = @(2314, 2240) }
+  sep2025 = @{ '14393' = @(8422, 0); '17763' = @(7792, 0); '20348' = @(4171, 0) }
+}
+function Format-AdcsBuild($b) { if ($null -eq $b) { return 'unknown build' }; return ('10.0.' + $b.number + '.' + $b.ubr) }
+# fixed, vulnerable or unknown. A build that cannot be read, or is not in the table, is unknown, never fixed.
+function Get-AdcsBuildState($b, [string]$kind) {
+  if ($null -eq $b -or $null -eq $b.ubr -or -not $b.number) { return 'unknown' }
+  $row = $script:AdcsFixBuilds[$kind][[string]$b.number]
+  if (-not $row) { return 'unknown' }
+  $u = [int64]$b.ubr
+  if ($u -ge $row[0]) { return 'fixed' }
+  if ($row[1] -gt 0 -and $u -ge $row[1]) { return 'unknown' }
+  return 'vulnerable'
+}
+#endregion
+
+#region readbuild needs=core
+# The Windows build of a host from its remote registry: CurrentBuildNumber and UBR. Null when it cannot be read.
+function Read-AdcsBuild([string]$hostName) {
+  try {
+    $b = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
+    $k = $b.OpenSubKey('SOFTWARE\Microsoft\Windows NT\CurrentVersion')
+    if (-not $k) { return $null }
+    $n = [string]$k.GetValue('CurrentBuildNumber'); $u = $k.GetValue('UBR')
+    if (-not $n -or $null -eq $u) { return $null }
+    return [pscustomobject]@{ number = $n; ubr = [int64]$u }
+  } catch { return $null }
+}
+#endregion
+
+#region cafield_build needs=core,readbuild
+function Read-AdcsCaField_build($ca, [string]$conf, $ctx) { return (Read-AdcsBuild $ca.host) }
+#endregion
+
 #region esc1 needs=core,ace,tfacts
 function Test-AdcsEsc1($f) {
   $m = $f.SuppliesSubject -and ($f.HasAuthEku -or $f.HasAnyOrNoEku) -and (Test-AdcsEnrollGate $f)
@@ -184,10 +225,25 @@ function Test-AdcsEsc13($f, $oids) {
 }
 #endregion
 
-#region esc15 needs=core,ace,tfacts
-function Test-AdcsEsc15($f) {
+#region esc15 needs=core,ace,tfacts,patch
+# Schema-version-1 template with an enrollee-supplied subject (CVE-2024-49019). The CA build decides it: below the fix on a
+# CA that publishes the template is confirmed; every publishing CA at or above the fix is clean; anything else is potential.
+function Test-AdcsEsc15($f, $cas) {
   $m = ($f.SchemaVersion -eq 1) -and $f.SuppliesSubject -and (Test-AdcsEnrollGate $f)
-  New-AdcsTemplateFinding $f '15' $m 'schema version 1 template with an enrollee-supplied subject: an Application Policy can be injected in place of the EKU (CVE-2024-49019). Whether it is exploitable depends on the CA patch level, which this step does not read, so treat it as exposed on an unpatched CA' 'obtain a client-authentication or enrollment-agent certificate through a template that should not allow it' 'schema-version-1 template with enrollee-supplied subject; exploitable only on a CA without the CVE-2024-49019 fix, which needs live verification' 'potential'
+  if (-not $m) { return $null }
+  $vuln = @(); $unknown = @(); $pub = @($cas | Where-Object { $f.PublishedOn -contains $_.name })
+  foreach ($c in $pub) {
+    $st = Get-AdcsBuildState $c.build 'cve49019'
+    if ($st -eq 'vulnerable') { $vuln += ([string]$c.name + ' (' + (Format-AdcsBuild $c.build) + ')') }
+    elseif ($st -ne 'fixed') { $unknown += [string]$c.name }
+  }
+  $state = 'potential'
+  $why = 'schema version 1 template with an enrollee-supplied subject: an Application Policy can be injected in place of the EKU (CVE-2024-49019). '
+  if ($vuln.Count -gt 0) { $state = 'confirmed'; $why += 'A CA that publishes it is below the fixed build: ' + ($vuln -join ', ') }
+  elseif ($pub.Count -gt 0 -and $unknown.Count -eq 0) { return $null }
+  elseif ($pub.Count -eq 0) { $why += 'It is not published on any CA, so it is latent; the CA patch level was not checked' }
+  else { $why += 'The CA build could not be matched to a fixed build for: ' + ($unknown -join ', ') + ', so it needs live verification' }
+  New-AdcsTemplateFinding $f '15' $true 'schema-version-1 template with enrollee-supplied subject, exploitable only on a CA without the CVE-2024-49019 fix' 'obtain a client-authentication or enrollment-agent certificate through a template that should not allow it' $why $state
 }
 #endregion
 
@@ -252,18 +308,30 @@ function Test-AdcsEsc8($cas, [bool]$live) {
 }
 #endregion
 
-#region esc10 needs=core
+#region esc10 needs=core,patch
+# Weak certificate mapping on a DC. After the September 9, 2025 update the KDC ignores the StrongCertificateBindingEnforcement
+# registry value, so a weak value there is not a finding on a DC at or above that build (Server 2016, 2019, 2022 are recognised).
+# The Schannel CertificateMappingMethods UPN bit (0x4) is a separate setting and still counts.
 function Test-AdcsEsc10($dcs) {
   $out = @()
   foreach ($d in @($dcs)) {
     if (-not $d.readable) { $out += (New-AdcsFinding '10' 'insufficient' ([string]$d.name) 'the domain controller certificate-mapping settings could not be read' ''); continue }
+    $bs = Get-AdcsBuildState $d.build 'sep2025'
+    $upn = ($null -ne $d.certMappingMethods) -and ((([int64]$d.certMappingMethods) -band 0x4) -ne 0)
+    $path = Format-AdcsPath @() 'change a victim UPN, then enrol' ('domain controller ' + [string]$d.name) 'weak certificate-to-account mapping' 'authenticate as another account'
+    if ($bs -eq 'fixed') {
+      if ($upn) { $out += (New-AdcsFinding '10' 'potential' ([string]$d.name) ('Schannel CertificateMappingMethods allows UPN mapping (weak); the KDC registry value is ignored on this build (' + (Format-AdcsBuild $d.build) + ')') $path) }
+      continue
+    }
     $weak = @()
     if ($null -ne $d.strongBinding -and ([int64]$d.strongBinding) -lt 2) { $weak += ('StrongCertificateBindingEnforcement=' + $d.strongBinding) }
-    if ($null -ne $d.certMappingMethods -and ((([int64]$d.certMappingMethods) -band 0x4) -ne 0)) { $weak += 'Schannel CertificateMappingMethods allows UPN mapping' }
+    if ($upn) { $weak += 'Schannel CertificateMappingMethods allows UPN mapping' }
     if ($weak.Count -gt 0) {
-      $out += (New-AdcsFinding '10' 'potential' ([string]$d.name) ('explicit weak certificate-mapping setting (' + ($weak -join '; ') + '); ignored once the DC has the 2025 binding update, whose level is not readable, so it needs live verification') (Format-AdcsPath @() 'change a victim UPN, then enrol' ('domain controller ' + [string]$d.name) 'weak certificate-to-account mapping' 'authenticate as another account'))
+      $state = 'potential'; $note = 'the DC update level could not be matched to the September 2025 build, so it needs live verification'
+      if ($bs -eq 'vulnerable') { $note = 'the DC build ' + (Format-AdcsBuild $d.build) + ' is below the September 9, 2025 update, so the value is honored'; if ($null -ne $d.strongBinding -and ([int64]$d.strongBinding) -eq 0) { $state = 'confirmed' } }
+      $out += (New-AdcsFinding '10' $state ([string]$d.name) ('explicit weak certificate-mapping setting (' + ($weak -join '; ') + '); ' + $note) $path)
     } elseif ($null -eq $d.strongBinding) {
-      $out += (New-AdcsFinding '10' 'insufficient' ([string]$d.name) 'StrongCertificateBindingEnforcement is not set; the effective default depends on the DC update level, which is not readable' '')
+      $out += (New-AdcsFinding '10' 'insufficient' ([string]$d.name) 'StrongCertificateBindingEnforcement is not set; the effective default depends on the DC update level, which could not be established' '')
     }
   }
   return $out
@@ -322,9 +390,9 @@ function Test-AdcsEsc14($accounts) {
 #endregion
 
 #region dispatch needs=core
-# What each ESC analyzer is called with: t = each template, tt = each template plus all templates, to = each template plus
+# What each ESC analyzer is called with: t = each template, tc = each template plus the CAs, tt = each template plus all templates, to = each template plus
 # the issuance-policy objects, p = PKI objects, c = CAs, cl = CAs and the live-probe flag, d = domain controllers, a = accounts.
-$script:AdcsEscKind = @{ '1' = 't'; '2' = 't'; '3' = 'tt'; '4' = 't'; '9' = 't'; '15' = 't'; '13' = 'to'; '5' = 'p'; '6' = 'c'; '7' = 'c'; '11' = 'c'; '12' = 'c'; '8' = 'cl'; '10' = 'd'; '14' = 'a' }
+$script:AdcsEscKind = @{ '1' = 't'; '2' = 't'; '3' = 'tt'; '4' = 't'; '9' = 't'; '15' = 'tc'; '13' = 'to'; '5' = 'p'; '6' = 'c'; '7' = 'c'; '11' = 'c'; '12' = 'c'; '8' = 'cl'; '10' = 'd'; '14' = 'a' }
 # Run the analyzer for one ESC number against a context.
 function Get-AdcsEscFindings([string]$esc, $ctx) {
   $fn = 'Test-AdcsEsc' + $esc
@@ -336,6 +404,7 @@ function Get-AdcsEscFindings([string]$esc, $ctx) {
     't' { foreach ($f in $tf) { $out += & $fn $f } }
     'tt' { foreach ($f in $tf) { $out += & $fn $f $tf } }
     'to' { foreach ($f in $tf) { $out += & $fn $f $ctx.Oids } }
+    'tc' { foreach ($f in $tf) { $out += & $fn $f $ctx.CAs } }
     'p' { $out += & $fn $ctx.PkiObjects }
     'c' { $out += & $fn $ctx.CAs }
     'cl' { $out += & $fn $ctx.CAs ([bool]$ctx.LiveProbe) }
@@ -591,13 +660,13 @@ function Read-AdcsPart_accounts($ctx, [string]$cfg) {
 }
 #endregion
 
-#region part_dcs needs=core,collect
+#region part_dcs needs=core,collect,readbuild
 function Read-AdcsPart_dcs($ctx, [string]$cfg) {
   $list = @([System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain().DomainControllers)
   if ($list.Count -eq 0) { $ctx.Errors['dcs'] = 'no domain controllers found'; return }
   $dcs = @()
   foreach ($dc in $list) {
-    $rec = [pscustomobject]@{ name = $dc.Name; readable = $false; strongBinding = $null; certMappingMethods = $null }
+    $rec = [pscustomobject]@{ name = $dc.Name; readable = $false; strongBinding = $null; certMappingMethods = $null; build = (Read-AdcsBuild $dc.Name) }
     try {
       $b = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $dc.Name)
       $k = $b.OpenSubKey('SYSTEM\CurrentControlSet\Services\Kdc')
@@ -612,7 +681,7 @@ function Read-AdcsPart_dcs($ctx, [string]$cfg) {
 }
 #endregion
 
-#region context_stage needs=core,collect,part_templates,part_cas,cafield_editFlags,cafield_interfaceFlags,cafield_keyProvider,cafield_caAces,cafield_web
+#region context_stage needs=core,collect,part_templates,part_cas,cafield_editFlags,cafield_interfaceFlags,cafield_keyProvider,cafield_caAces,cafield_web,cafield_build
 function Invoke-AdcsContextStage {
   $ctx = Read-AdcsContext @('templates', 'cas')
   foreach ($n in @('templates', 'cas')) { if ($ctx.Errors[$n]) { Write-Output ("ADCS-CONTEXT: " + $n + "=NOT READ (" + $ctx.Errors[$n] + ")") } }
@@ -679,7 +748,7 @@ function Read-AdcsNtAuth {
 }
 #endregion
 
-#region correlate needs=core,ace,tfacts,dispatch,cafield_editFlags,cafield_interfaceFlags,cafield_keyProvider,cafield_caAces,cafield_web,esc1,esc2,esc3,esc4,esc5,esc6,esc7,esc8,esc9,esc10,esc11,esc12,esc13,esc14,esc15,collect,part_templates,part_cas,part_pki,part_oids,part_accounts,part_dcs
+#region correlate needs=core,ace,tfacts,dispatch,cafield_editFlags,cafield_interfaceFlags,cafield_keyProvider,cafield_caAces,cafield_web,cafield_build,esc1,esc2,esc3,esc4,esc5,esc6,esc7,esc8,esc9,esc10,esc11,esc12,esc13,esc14,esc15,collect,part_templates,part_cas,part_pki,part_oids,part_accounts,part_dcs
 function Get-AdcsCorrelation($ctx) {
   $tf = @($ctx.Templates | ForEach-Object { Get-AdcsTemplateFacts $_ })
   $out = @()

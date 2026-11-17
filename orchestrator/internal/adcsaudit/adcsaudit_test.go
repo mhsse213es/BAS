@@ -38,7 +38,7 @@ func tmpl(name string, over m) m {
 }
 func ca(over m) m {
 	c := m{"name": "CorpCA", "host": "ca01.corp.test", "published": []string{"T"}, "editFlags": 0, "interfaceFlags": 0x200,
-		"keyProvider": "SafeNet Key Storage Provider", "caAces": []m{ace(domAdmins, 0x3, "", "Allow")}, "web": nil}
+		"keyProvider": "SafeNet Key Storage Provider", "caAces": []m{ace(domAdmins, 0x3, "", "Allow")}, "web": nil, "build": nil}
 	for k, v := range over {
 		c[k] = v
 	}
@@ -103,6 +103,11 @@ func cases() []tc {
 		{"esc9 with extension", "9", "PASS", T(tmpl("User", nil)), ""},
 		// ESC10
 		{"esc10 weak binding is potential", "10", "SKIP", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": 0, "certMappingMethods": nil}}}, "potential"},
+		{"esc10 patched DC ignores a weak registry value", "10", "PASS", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": 0, "certMappingMethods": nil, "build": m{"number": "17763", "ubr": 7800}}}}, ""},
+		{"esc10 patched DC still counts the Schannel UPN bit", "10", "SKIP", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": 2, "certMappingMethods": 0x1f, "build": m{"number": "17763", "ubr": 7800}}}}, "UPN mapping"},
+		{"esc10 unpatched DC with enforcement off", "10", "FAIL", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": 0, "certMappingMethods": nil, "build": m{"number": "17763", "ubr": 7000}}}}, "below the September 9, 2025 update"},
+		{"esc10 unpatched DC in compatibility mode is potential", "10", "SKIP", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": 1, "certMappingMethods": nil, "build": m{"number": "17763", "ubr": 7000}}}}, "below the September 9, 2025 update"},
+		{"esc10 Server 2025 build is not matched", "10", "SKIP", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": 0, "certMappingMethods": nil, "build": m{"number": "26100", "ubr": 6584}}}}, "could not be matched"},
 		{"esc10 enforced", "10", "PASS", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": 2, "certMappingMethods": nil}}}, ""},
 		{"esc10 unset is not clean", "10", "SKIP", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": nil, "certMappingMethods": nil}}}, ""},
 		{"esc10 unreadable dc", "10", "SKIP", m{"DCs": []m{{"name": "dc01", "readable": false, "strongBinding": nil, "certMappingMethods": nil}}}, ""},
@@ -130,6 +135,11 @@ func cases() []tc {
 		{"esc14 not read", "14", "SKIP", m{"Errors": m{"accounts": "denied"}}, ""},
 		// ESC15
 		{"esc15 v1 with enrollee subject is potential", "15", "SKIP", T(tmpl("WebV1", m{"schemaVersion": 1, "nameFlag": 1})), "potential"},
+		{"esc15 CA below the fixed build", "15", "FAIL", m{"Templates": []m{tmpl("WebV1", m{"schemaVersion": 1, "nameFlag": 1})}, "CAs": []m{ca(m{"build": m{"number": "20348", "ubr": 2000}})}}, "below the fixed build"},
+		{"esc15 CA at the fixed build", "15", "PASS", m{"Templates": []m{tmpl("WebV1", m{"schemaVersion": 1, "nameFlag": 1})}, "CAs": []m{ca(m{"build": m{"number": "20348", "ubr": 2849}})}}, ""},
+		{"esc15 hotpatch zone is not called vulnerable", "15", "SKIP", m{"Templates": []m{tmpl("WebV1", m{"schemaVersion": 1, "nameFlag": 1})}, "CAs": []m{ca(m{"build": m{"number": "20348", "ubr": 2830}})}}, "could not be matched"},
+		{"esc15 unrecognised build stays potential", "15", "SKIP", m{"Templates": []m{tmpl("WebV1", m{"schemaVersion": 1, "nameFlag": 1})}, "CAs": []m{ca(m{"build": m{"number": "9600", "ubr": 0}})}}, "could not be matched"},
+		{"esc15 unpublished v1 template is latent", "15", "SKIP", m{"Templates": []m{tmpl("WebV1", m{"schemaVersion": 1, "nameFlag": 1, "publishedOn": []string{}})}, "CAs": []m{ca(m{"build": m{"number": "20348", "ubr": 2000}})}}, "latent"},
 		{"esc15 v2", "15", "PASS", T(tmpl("WebV2", m{"schemaVersion": 2, "nameFlag": 1})), ""},
 		// Correlation
 		{"corr published esc1 is an exploitable path", "CORR", "FAIL", m{"Templates": []m{tmpl("Web", m{"nameFlag": 1})}, "CAs": []m{ca(nil)}, "PkiObjects": []m{}, "Oids": []m{}, "DCs": []m{}, "Accounts": []m{}}, "state=path"},
@@ -317,7 +327,7 @@ func TestScenarioIsReadOnly(t *testing.T) {
 // registry values, and each stage requests exactly the CA fields its analyzer reads (an unrequested field stays null,
 // which an analyzer reports as unreadable, never clean).
 func TestStagesCarryOnlyTheCollectorsTheyUse(t *testing.T) {
-	need := map[string]string{"6": "editFlags", "7": "caAces", "8": "web", "11": "interfaceFlags", "12": "keyProvider"}
+	need := map[string]string{"6": "editFlags", "7": "caAces", "8": "web", "11": "interfaceFlags", "12": "keyProvider", "15": "build"}
 	for _, s := range Stages() {
 		body, err := Library(s.Regions...)
 		if err != nil {
@@ -344,13 +354,25 @@ func TestStagesCarryOnlyTheCollectorsTheyUse(t *testing.T) {
 // ESC15 is only ever a potential finding: it must say the CA patch level decides it and that this step does not read it.
 func TestEsc15WordingNamesThePatchDependency(t *testing.T) {
 	info := escTable["15"]
-	for _, w := range []string{"CA patch level", "CVE-2024-49019", "does not read"} {
+	for _, w := range []string{"CA build", "CVE-2024-49019", "never as clean"} {
 		if !strings.Contains(info.Label+" "+info.Pass, w) {
 			t.Errorf("ESC15 stage text lacks %q", w)
 		}
 	}
 	lib, _ := FullLibrary()
-	if !strings.Contains(lib, "depends on the CA patch level, which this step does not read") {
-		t.Error("ESC15 finding text lacks the patch-level caveat")
+	if !strings.Contains(lib, "The CA build could not be matched to a fixed build") {
+		t.Error("ESC15 finding text lacks the unmatched-build caveat")
+	}
+}
+
+// The fixed builds are Microsoft's published numbers; a wrong digit would silently mislabel a patched or unpatched host.
+func TestFixedBuildTable(t *testing.T) {
+	lib, _ := FullLibrary()
+	for _, w := range []string{
+		"'14393' = @(7515, 0)", "'17763' = @(6532, 0)", "'20348' = @(2849, 2819)", "'25398' = @(1251, 0)", "'26100' = @(2314, 2240)",
+		"'14393' = @(8422, 0)", "'17763' = @(7792, 0)", "'20348' = @(4171, 0)"} {
+		if !strings.Contains(lib, w) {
+			t.Errorf("build table lacks %s", w)
+		}
 	}
 }
