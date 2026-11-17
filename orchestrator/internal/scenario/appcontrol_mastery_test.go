@@ -357,10 +357,15 @@ function Get-CimInstance { [CmdletBinding()] param([Parameter(Position = 0)]$Pos
   $cn = if ($ClassName) { $ClassName } else { $Pos }
   if ($cn -eq 'Win32_Service') { return [pscustomobject]@{ StartMode = $global:BasSvcMode; State = $global:BasSvcState } }
   [pscustomobject]@{ UsermodeCodeIntegrityPolicyEnforcementStatus = 0; CodeIntegrityPolicyEnforcementStatus = 0 } }
+function Get-Acl { [CmdletBinding()] param($LiteralPath, $Path)
+  $sid = New-Object Security.Principal.SecurityIdentifier($global:BasAclSid)
+  $rule = [pscustomobject]@{ AccessControlType = 'Allow'; IdentityReference = $sid; FileSystemRights = [Security.AccessControl.FileSystemRights]$global:BasAclRights }
+  [pscustomobject]@{ Access = @($rule) } }
 function Get-AppxPackage { [CmdletBinding()] param() @() }
 function Get-ItemProperty { [CmdletBinding()] param($Path, $Name)
   $v = $null
   if ($Name -eq 'AlwaysInstallElevated') { $v = if ([string]$Path -like 'HKLM:*') { $global:BasAieMachine } else { $global:BasAieUser } }
+  if ($global:BasReg -and $global:BasReg.ContainsKey("$Path|$Name")) { $v = $global:BasReg["$Path|$Name"] }
   if ($null -eq $v) { throw 'not found' }
   $o = New-Object psobject; $o | Add-Member -NotePropertyName $Name -NotePropertyValue $v; $o }
 function Get-WinEvent { [CmdletBinding()] param($ListLog, $FilterHashtable)
@@ -377,6 +382,16 @@ function Get-WinEvent { [CmdletBinding()] param($ListLog, $FilterHashtable)
 	allow := func(path string) string {
 		return `$global:BasPolicyXml = '<AppLockerPolicy Version="1"><RuleCollection Type="Exe" EnforcementMode="Enabled"><FilePathRule Id="1" Name="r1" Description="" UserOrGroupSid="S-1-1-0" Action="Allow"><Conditions><FilePathCondition Path="` + path + `"/></Conditions></FilePathRule></RuleCollection></AppLockerPolicy>'` + "\n"
 	}
+	polAppx := `HKLM:\SOFTWARE\Policies\Microsoft\Windows\Appx`
+	locUnlock := `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock`
+	regs := func(key, name string, v int) string {
+		return fmt.Sprintf("if (-not $global:BasReg) { $global:BasReg = @{} }\n$global:BasReg['%s|%s'] = %d\n", key, name, v)
+	}
+	acl := func(sid, rights string) string {
+		return "$global:BasAclSid = '" + sid + "'; $global:BasAclRights = '" + rights + "'\n"
+	}
+	exceptionPolicy := `$global:BasPolicyXml = '<AppLockerPolicy Version="1"><RuleCollection Type="Exe" EnforcementMode="Enabled"><FilePathRule Id="1" Name="r1" Description="" UserOrGroupSid="S-1-1-0" Action="Allow"><Conditions><FilePathCondition Path="%WINDIR%\*"/></Conditions><Exceptions><FilePathCondition Path="%OSDRIVE%\Users\*"/></Exceptions></FilePathRule></RuleCollection></AppLockerPolicy>'` + "\n"
+	anyPublisherPolicy := `$global:BasPolicyXml = '<AppLockerPolicy Version="1"><RuleCollection Type="Exe" EnforcementMode="Enabled"><FilePublisherRule Id="1" Name="r1" Description="" UserOrGroupSid="S-1-1-0" Action="Allow"><Conditions><FilePublisherCondition PublisherName="*" ProductName="*" BinaryName="*"><BinaryVersionRange LowSection="*" HighSection="*"/></FilePublisherCondition></Conditions></FilePublisherRule></RuleCollection></AppLockerPolicy>'` + "\n"
 	enf := map[string]string{"Exe": "Enabled", "Script": "Enabled", "Dll": "Enabled", "Msi": "Enabled"}
 	withAppx := func(m string) map[string]string {
 		c := map[string]string{}
@@ -410,6 +425,15 @@ function Get-WinEvent { [CmdletBinding()] param($ListLog, $FilterHashtable)
 		{"log disabled", relPath, "Application control Operational Reliability: enforcement log", cols(enf) + "$global:BasLogEnabled = $false; $global:BasLogSize = 20MB\n", "allowed_unexpectedly", "FAIL:"},
 		{"log tiny", relPath, "Application control Operational Reliability: enforcement log", cols(enf) + "$global:BasLogEnabled = $true; $global:BasLogSize = 512KB\n", "inconclusive", "SKIP:"},
 		{"log no policy", relPath, "Application control Operational Reliability: enforcement log", cols(none) + "$global:BasLogEnabled = $true; $global:BasLogSize = 20MB\n", "not_applicable", "SKIP:"},
+		{"sideload: developer mode on", pkgPath, "Application control Packaged App Trust", cols(enf) + regs(locUnlock, "AllowDevelopmentWithoutDevLicense", 1), "allowed_unexpectedly", "FAIL:"},
+		{"sideload: trusted apps on by default is not a failure", pkgPath, "Application control Packaged App Trust", cols(enf) + regs(locUnlock, "AllowAllTrustedApps", 1), "blocked_as_expected", "PASS:"},
+		{"sideload: policy key overrides the local default", pkgPath, "Application control Packaged App Trust", cols(enf) + regs(polAppx, "AllowDevelopmentWithoutDevLicense", 0) + regs(locUnlock, "AllowDevelopmentWithoutDevLicense", 1), "blocked_as_expected", "PASS:"},
+		{"writable dir: Users can write and policy trusts Windows", pkgPath, "Application control Trusted Location Trust", cols(enf) + acl("S-1-5-32-545", "Modify") + allow(`%WINDIR%\*`), "allowed_unexpectedly", "FAIL:"},
+		{"writable dir: Users can write but no rule trusts Windows", pkgPath, "Application control Trusted Location Trust", cols(enf) + acl("S-1-5-32-545", "Modify") + allow(`%PROGRAMFILES%\*`), "blocked_as_expected", "PASS:"},
+		{"writable dir: only read access for Users", pkgPath, "Application control Trusted Location Trust", cols(enf) + acl("S-1-5-32-545", "ReadAndExecute") + allow(`%WINDIR%\*`), "blocked_as_expected", "PASS:"},
+		{"writable dir: administrators may write", pkgPath, "Application control Trusted Location Trust", cols(enf) + acl("S-1-5-32-544", "FullControl") + allow(`%WINDIR%\*`), "blocked_as_expected", "PASS:"},
+		{"allow rule: exception under a safe rule does not count", relPath, "Application control Operational Reliability: allow rules", cols(enf) + exceptionPolicy, "blocked_as_expected", "PASS:"},
+		{"allow rule: any-publisher rule for everyone", relPath, "Application control Operational Reliability: allow rules", cols(enf) + anyPublisherPolicy, "allowed_unexpectedly", "FAIL:"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

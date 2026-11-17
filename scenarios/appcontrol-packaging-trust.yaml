@@ -205,6 +205,10 @@ steps:
       if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
       return $res
       }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -289,10 +293,6 @@ steps:
       }
       Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
-      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }
 
   # -------------------------------------------------------------------------
   - id: appctl-e02-sideloading
@@ -474,6 +474,10 @@ steps:
       if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
       return $res
       }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -545,17 +549,17 @@ steps:
       $vals = @{}
       foreach ($k in 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Appx', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock') {
       foreach ($n in 'AllowAllTrustedApps', 'AllowDevelopmentWithoutDevLicense') {
+      if ($vals.ContainsKey($n)) { continue }
       $v = $null; try { $v = (Get-ItemProperty -Path $k -Name $n -ErrorAction Stop).$n } catch {}
-      if ($null -ne $v) { $vals["$n"] = [int]$v }
+      if ($null -ne $v) { $vals[$n] = [int]$v }
       }
       }
       $dev = ($vals['AllowDevelopmentWithoutDevLicense'] -eq 1)
       $trusted = ($vals['AllowAllTrustedApps'] -eq 1)
-      $note = "allow_all_trusted_apps=$trusted developer_mode=$dev enforcement_present=$enforcing"
+      $note = "allow_all_trusted_apps=$trusted developer_mode=$dev enforcement_present=$enforcing. Sideloading of trusted-signed packages is on by default in current Windows, so it is recorded here but only developer mode changes the verdict; whether packaged apps are governed is judged by the packaged_app_rules step."
       if (-not $enforcing) { return @{ NotApplicable = 'no application control policy is enforcing, so the sideloading settings do not weaken anything'; Note = $note } }
       if ($dev) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = 'developer mode is on, so loose and unsigned packages can be installed while application control is enforcing' }; Note = $note } }
-      if ($trusted) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = 'sideloading of any trusted-signed package is allowed while application control is enforcing' }; Note = $note } }
-      return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = 'sideloading and developer mode are not enabled' }; Note = $note }
+      return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = 'developer mode is not enabled' }; Note = $note }
       }
     cleanup: |
       foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
@@ -563,10 +567,6 @@ steps:
       }
       Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
-      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }
 
   # -------------------------------------------------------------------------
   - id: appctl-e03-always-install-elevated
@@ -748,6 +748,10 @@ steps:
       if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
       return $res
       }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -817,7 +821,10 @@ steps:
       $m = $null; $u = $null
       try { $m = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer' -Name AlwaysInstallElevated -ErrorAction Stop).AlwaysInstallElevated } catch {}
       try { $u = (Get-ItemProperty -Path 'HKCU:\SOFTWARE\Policies\Microsoft\Windows\Installer' -Name AlwaysInstallElevated -ErrorAction Stop).AlwaysInstallElevated } catch {}
-      $note = "machine_value=$(if ($null -eq $m) { 'unset' } else { $m }) user_value=$(if ($null -eq $u) { 'unset' } else { $u })"
+      $who = [Security.Principal.WindowsIdentity]::GetCurrent()
+      $isSystem = ($who.User.Value -eq 'S-1-5-18')
+      $note = "machine_value=$(if ($null -eq $m) { 'unset' } else { $m }) user_value=$(if ($null -eq $u) { 'unset' } else { $u }) user_hive_of_identity_running_this_step=$(if ($isSystem) { 'SYSTEM' } else { 'current user' })"
+      if ($m -eq 1 -and $isSystem) { return @{ Verdict = @{ Outcome = 'inconclusive'; Reason = 'the machine setting is 1, but this step runs as SYSTEM so the per-user setting of the interactive user cannot be read from here' }; Note = $note } }
       if ($m -eq 1 -and $u -eq 1) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = 'AlwaysInstallElevated is on for both machine and user, so any MSI installs with SYSTEM rights and MSI rules are not a boundary' }; Note = $note } }
       return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = 'AlwaysInstallElevated is not enabled for both machine and user' }; Note = $note }
       }
@@ -827,10 +834,6 @@ steps:
       }
       Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
-      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }
 
   # -------------------------------------------------------------------------
   - id: appctl-e04-writable-allowed-paths
@@ -1012,6 +1015,10 @@ steps:
       if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
       return $res
       }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -1091,12 +1098,21 @@ steps:
       if (-not $acl) { continue }
       foreach ($r in $acl.Access) {
       if ($r.AccessControlType -ne 'Allow') { continue }
-      $id = [string]$r.IdentityReference
-      if ($id -notmatch '^(BUILTIN\\Users|NT AUTHORITY\\Authenticated Users|Everyone)$') { continue }
+      $id = Get-AppCtlAceSid $r
+      if ($id -notin 'S-1-1-0', 'S-1-5-32-545', 'S-1-5-11') { continue }
       if ($r.FileSystemRights.ToString() -match 'FullControl|Modify|Write|CreateFiles') { $found++; break }
       }
       }
-      $note = "directories_checked=$checked user_writable_under_windows=$found. ACLs only; nothing is written."
+      $trusted = $false
+      try {
+      $x = [xml](Get-AppLockerPolicy -Effective -Xml -ErrorAction Stop)
+      foreach ($pc in @($x.SelectNodes('//FilePathRule[@Action="Allow"]/Conditions/FilePathCondition'))) {
+      $pp = [string]$pc.Path
+      if ($pp -eq '*' -or $pp -like '%WINDIR%*' -or $pp -like '%SYSTEM32%*' -or $pp -like '%OSDRIVE%'+[string][char]92+'*') { $trusted = $true; break }
+      }
+      } catch {}
+      $note = "directories_checked=$checked user_writable_under_windows=$found windows_directory_trusted_by_path_rule=$trusted. ACLs only; nothing is written."
+      if ($found -gt 0 -and -not $trusted) { return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = "$found directory(ies) under the Windows directory are user-writable, but the effective policy has no path allow rule covering the Windows directory, so they are not a bypass under this policy" }; Note = $note } }
       if ($found -gt 0) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = "$found directory(ies) under the Windows directory are writable by ordinary users; the default path rule trusts the Windows directory, so code placed there would run" }; Note = $note } }
       return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = 'none of the checked Windows subdirectories is writable by ordinary users' }; Note = $note }
       }
@@ -1106,7 +1122,3 @@ steps:
       }
       Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
-      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }

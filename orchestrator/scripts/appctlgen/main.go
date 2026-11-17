@@ -30,6 +30,8 @@ type Stage struct {
 	Telemetry      []string `json:"telemetry"`
 	Detection      []string `json:"detection"`
 	Cleanup        string   `json:"cleanup"`
+	CleanupExtra   string   `json:"cleanup_extra"`
+	ActionKey      string   `json:"action_key"`
 	Note           string   `json:"note"`
 }
 
@@ -135,6 +137,9 @@ func Generate(srcDir, commonDir string) ([]byte, error) {
 		fmt.Fprintf(&out, "  - id: %s\n", s.ID)
 		fmt.Fprintf(&out, "    name: %s\n", q(s.Name))
 		fmt.Fprintf(&out, "    technique_id: %s\n", s.TechniqueID)
+		if s.ActionKey != "" {
+			fmt.Fprintf(&out, "    action_key: %s\n", s.ActionKey)
+		}
 		out.WriteString("    framework: custom\n    executor: powershell\n")
 		fmt.Fprintf(&out, "    requires_priv: %s\n    timeout_sec: %d\n    fidelity: %s\n    production_safe: %t\n    risk: %s\n    reversible: true\n", priv, to, fid, safe, risk)
 		fmt.Fprintf(&out, "    blast_radius: %s\n", q(s.Blast))
@@ -147,7 +152,7 @@ func Generate(srcDir, commonDir string) ([]byte, error) {
 		out.WriteString(indent(libText+"\n"+minify(string(call)), 6))
 		if s.Cleanup == "" {
 			out.WriteString("    cleanup: |\n")
-			out.WriteString(indent(defaultCleanup, 6))
+			out.WriteString(indent(defaultCleanup+s.CleanupExtra, 6))
 		} else {
 			out.WriteString("    cleanup: |\n")
 			out.WriteString(indent(s.Cleanup, 6))
@@ -163,11 +168,7 @@ const defaultCleanup = `foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path 
   Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 }
 Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
-Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
-Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }`
+Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue`
 
 func main() {
 	src := flag.String("src", "", "category source directory, e.g. scenarios-src/appcontrol-proxy-execution")

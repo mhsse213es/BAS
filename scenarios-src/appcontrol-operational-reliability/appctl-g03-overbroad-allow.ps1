@@ -7,12 +7,15 @@ Invoke-AppCtlTest -Family 'overbroad_allow_rules' -Collection 'Exe' -Needle 'All
   $risky = 0
   foreach ($r in $rules) {
     if ([string]$r.UserOrGroupSid -ne 'S-1-1-0' -and [string]$r.UserOrGroupSid -ne 'S-1-5-32-545') { continue }
-    foreach ($pc in @($r.SelectNodes('.//FilePathCondition'))) {
+    # Only the rule's own conditions: paths under Exceptions narrow the rule and must not count.
+    $wildPub = @($r.SelectNodes('./Conditions/FilePublisherCondition[@PublisherName="*"][@ProductName="*"]')).Count -gt 0
+    if ($wildPub) { $risky++; continue }
+    foreach ($pc in @($r.SelectNodes('./Conditions/FilePathCondition'))) {
       $p = [string]$pc.Path
       if ($p -eq '*' -or $p -match '(?i)^(%OSDRIVE%\\\*|[A-Z]:\\\*|%TEMP%|%TMP%|%APPDATA%|%LOCALAPPDATA%|%USERPROFILE%|%OSDRIVE%\\Users|\\\\)') { $risky++; break }
     }
   }
   $note = "allow_rules=$($rules.Count) overbroad_for_everyone_or_users=$risky rule_names_recorded=false"
-  if ($risky -gt 0) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = "$risky allow rule(s) apply to Everyone or Users and cover a whole drive, a user-writable location or a network path, so they defeat the rest of the policy" }; Note = $note } }
+  if ($risky -gt 0) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = "$risky allow rule(s) apply to Everyone or Users and cover a whole drive, a user-writable location or a network path, or that trust any publisher, so they defeat the rest of the policy" }; Note = $note } }
   return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = "none of the $($rules.Count) allow rule(s) is both open to ordinary users and over a user-writable or whole-drive path" }; Note = $note }
 }

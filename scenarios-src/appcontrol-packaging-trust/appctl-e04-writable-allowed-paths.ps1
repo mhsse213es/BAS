@@ -12,12 +12,22 @@ Invoke-AppCtlTest -Family 'writable_allowed_paths' -Collection 'Exe' -Needle 'Wi
     if (-not $acl) { continue }
     foreach ($r in $acl.Access) {
       if ($r.AccessControlType -ne 'Allow') { continue }
-      $id = [string]$r.IdentityReference
-      if ($id -notmatch '^(BUILTIN\\Users|NT AUTHORITY\\Authenticated Users|Everyone)$') { continue }
+      $id = Get-AppCtlAceSid $r
+      if ($id -notin 'S-1-1-0', 'S-1-5-32-545', 'S-1-5-11') { continue }
       if ($r.FileSystemRights.ToString() -match 'FullControl|Modify|Write|CreateFiles') { $found++; break }
     }
   }
-  $note = "directories_checked=$checked user_writable_under_windows=$found. ACLs only; nothing is written."
+  # The default AppLocker path rules trust the Windows directory; confirm this policy does before calling a writable directory a bypass.
+  $trusted = $false
+  try {
+    $x = [xml](Get-AppLockerPolicy -Effective -Xml -ErrorAction Stop)
+    foreach ($pc in @($x.SelectNodes('//FilePathRule[@Action="Allow"]/Conditions/FilePathCondition'))) {
+      $pp = [string]$pc.Path
+      if ($pp -eq '*' -or $pp -like '%WINDIR%*' -or $pp -like '%SYSTEM32%*' -or $pp -like '%OSDRIVE%'+[string][char]92+'*') { $trusted = $true; break }
+    }
+  } catch {}
+  $note = "directories_checked=$checked user_writable_under_windows=$found windows_directory_trusted_by_path_rule=$trusted. ACLs only; nothing is written."
+  if ($found -gt 0 -and -not $trusted) { return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = "$found directory(ies) under the Windows directory are user-writable, but the effective policy has no path allow rule covering the Windows directory, so they are not a bypass under this policy" }; Note = $note } }
   if ($found -gt 0) { return @{ Verdict = @{ Outcome = 'allowed_unexpectedly'; Reason = "$found directory(ies) under the Windows directory are writable by ordinary users; the default path rule trusts the Windows directory, so code placed there would run" }; Note = $note } }
   return @{ Verdict = @{ Outcome = 'blocked_as_expected'; Reason = 'none of the checked Windows subdirectories is writable by ordinary users' }; Note = $note }
 }

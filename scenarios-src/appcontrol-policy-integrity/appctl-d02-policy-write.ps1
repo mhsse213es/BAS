@@ -5,8 +5,8 @@ Invoke-AppCtlTest -Family 'policy_modification' -Collection 'Exe' -Needle 'SrpV2
   if (-not $acl) { return @{ Verdict = @{ Outcome = 'inconclusive'; Reason = 'the policy registry key permissions could not be read' }; Note = 'acl_unreadable' } }
   foreach ($r in $acl.Access) {
     if ($r.AccessControlType -ne 'Allow') { continue }
-    $id = [string]$r.IdentityReference
-    if ($id -match '^(NT AUTHORITY\\SYSTEM|BUILTIN\\Administrators|NT SERVICE\\TrustedInstaller|CREATOR OWNER)$') { continue }
+    $id = Get-AppCtlAceSid $r
+    if ($id -in 'S-1-5-18', 'S-1-5-32-544', 'S-1-3-0', 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464') { continue }
     if ($r.RegistryRights.ToString() -match 'FullControl|WriteKey|SetValue|CreateSubKey|ChangePermissions|TakeOwnership') { $weak += $id }
   }
   $live = 'live_reapply_not_attempted'

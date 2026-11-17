@@ -185,6 +185,12 @@ function Invoke-AppCtlAttempt {
   return $res
 }
 
+# The SID behind an access-control entry. Names differ by Windows language, SIDs do not.
+function Get-AppCtlAceSid {
+  param($Ace)
+  try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+}
+
 function Invoke-AppCtlTest {
   param(
     [Parameter(Mandatory)][string]$Family,

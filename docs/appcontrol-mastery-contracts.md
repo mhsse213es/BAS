@@ -76,9 +76,9 @@ Companion to `docs/appcontrol-test-contracts.md`. It covers the four scenarios a
 | Family | Technique | Observes | Verdicts |
 |---|---|---|---|
 | packaged_app_rules | T1553 | AppLocker Appx collection mode next to the other collections | enforced = pass; audit = audited_only; missing while others enforce = not_enforced; nothing enforced = not_applicable |
-| sideloading_policy | T1553 | AllowAllTrustedApps and developer mode, only where enforcement is on | either on = allowed_unexpectedly; nothing enforced = not_applicable |
-| always_install_elevated | T1548 | AlwaysInstallElevated for machine AND user | both 1 = allowed_unexpectedly (MSI rules are not a boundary); otherwise pass; applies with or without enforcement |
-| writable_allowed_paths | T1553 | ACLs of Windows-directory subdirectories that the default path rule trusts (Tasks, Temp, tracing, spool color, System32\Tasks) | any writable by Users/Authenticated Users/Everyone = allowed_unexpectedly; AppLocker not enforced = not_applicable |
+| sideloading_policy | T1553 | developer mode (policy key wins over the local setting), only where enforcement is on; AllowAllTrustedApps is recorded but is on by default in current Windows, so it does not change the verdict | developer mode on = allowed_unexpectedly; nothing enforced = not_applicable |
+| always_install_elevated | T1548 | AlwaysInstallElevated for machine AND user | both 1 = allowed_unexpectedly (MSI rules are not a boundary); machine 1 while running as SYSTEM = inconclusive (the interactive user's hive cannot be read); otherwise pass; applies with or without enforcement |
+| writable_allowed_paths | T1553 | ACLs of Windows-directory subdirectories that the default path rule trusts (Tasks, Temp, tracing, spool color, System32\Tasks) | any writable by Users, Authenticated Users or Everyone (matched by SID, so language-independent) AND a path allow rule covers the Windows directory = allowed_unexpectedly; writable but no such rule = pass with that reason; AppLocker not enforced = not_applicable |
 
 Blind spots: no package is ever installed or launched, so this is posture, not an install attempt; the writable-path list is fixed and not a full ACL sweep.
 
@@ -89,9 +89,9 @@ Blind spots: no package is ever installed or launched, so this is posture, not a
 | dll_search_order | T1574.001 | test program loads a test DLL by bare name from its own directory | none |
 | com_activation | T1546.015 | temporary per-user COM class pointing at scrobj.dll and a scriptlet | `BAS_CONFIRM_APPCONTROL_COM_REGISTER` |
 | scheduled_task_launch | T1053.005 | temporary scheduled task for the current user runs the test program once | `BAS_CONFIRM_APPCONTROL_TASK_CREATE` |
-| service_launch | T1543.003 | temporary demand-start service runs the test program; administrator only | `BAS_CONFIRM_APPCONTROL_SERVICE_CREATE` |
+| service_launch | T1543.003 | temporary demand-start service (created with New-Service so profile paths with spaces survive) runs the test program; administrator only | `BAS_CONFIRM_APPCONTROL_SERVICE_CREATE` |
 
-Without its exact flag a gated step is not_applicable and names the flag; any other value (`True`, `1`, `yes`) also skips. Each removes what it created and prints the removal, and the step cleanup also sweeps COM keys (`BasSim.*`), tasks (`BAS-SIM-APPCTL-*`) and services (`BASSIM*`). The DLL test runs its host program from the temp directory, so an Exe rule can stop it before the DLL is reached (the step note says so). The service test uses a program that is not a real service, so the service manager reports a start timeout; only the launch matters.
+Without its exact flag a gated step is not_applicable and names the flag; any other value (`True`, `1`, `yes`) also skips. Each removes what it created and prints the removal, and each gated step's own cleanup (not the shared one) also sweeps its COM keys (`BasSim.*`), tasks (`BAS-SIM-APPCTL-*`) or services (`BASSIM*`), so read-only steps never touch them. The DLL test runs its host program from the temp directory, so an Exe rule can stop it before the DLL is reached (the step note says so). The service test uses a program that is not a real service, so the service manager reports a start timeout; only the launch matters.
 
 ## appcontrol-operational-reliability (read-only, direct verdicts)
 
@@ -99,6 +99,6 @@ Without its exact flag a gated step is not_applicable and names the flag; any ot
 |---|---|---|---|
 | enforcement_log_health | T1562.002 | the AppLocker and Code Integrity channels the policy relies on | disabled or missing = allowed_unexpectedly; capped below 1 MB = inconclusive; healthy = pass; no policy = not_applicable |
 | identity_service_reliability | T1562.001 | AppIDSvc start mode and state while an AppLocker collection is enforced | disabled, absent or not running = not_enforced; running = pass; nothing enforced = not_applicable |
-| overbroad_allow_rules | T1562.001 | allow rules for Everyone or Users over a whole drive, user-writable path or network path | any = allowed_unexpectedly (count only, names not recorded); none = pass |
+| overbroad_allow_rules | T1562.001 | allow rules for Everyone or Users over a whole drive, user-writable path or network path, or that trust any publisher (only the rule's own conditions; exceptions are ignored) | any = allowed_unexpectedly (count only, names not recorded); none = pass |
 
 Not tested: policy update latency and audit-to-enforce transition timing, which need a real policy apply.

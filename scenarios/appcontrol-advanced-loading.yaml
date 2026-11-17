@@ -206,6 +206,10 @@ steps:
       if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
       return $res
       }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -291,10 +295,6 @@ steps:
       }
       Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
-      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }
 
   # -------------------------------------------------------------------------
   - id: appctl-f02-com-scriptlet
@@ -478,6 +478,10 @@ steps:
       if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
       return $res
       }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -551,14 +555,14 @@ steps:
       $cls = "HKCU:\Software\Classes\CLSID\$guid"
       $mk = Join-Path $script:AppCtlWork 'com-marker.txt'
       $sct = Join-Path $script:AppCtlWork "bas_$tid8.sct"
-      $body = "<?XML version=`"1.0`"?><scriptlet><registration progid=`"$prog`" classid=`"$guid`"/><script language=`"JScript`"><![CDATA[var f=new ActiveXObject('Scripting.FileSystemObject').CreateTextFile('" + $mk.Replace([string][char]92, '/') + "',true);f.Write('" + $script:AppCtlMarker + "');f.Close();]]></script></scriptlet>"
+      $body = "<?XML version=`"1.0`"?><scriptlet><registration progid=`"$prog`" classid=`"$guid`"/><script language=`"JScript`"><![CDATA[var f=new ActiveXObject('Scripting.FileSystemObject').CreateTextFile('" + $mk.Replace([string][char]92, '/').Replace("'", [string][char]92 + "'") + "',true);f.Write('" + $script:AppCtlMarker + "');f.Close();]]></script></scriptlet>"
       Set-Content -Path $sct -Value $body -Encoding ASCII
       $scrobj = Join-Path $env:SystemRoot 'System32\scrobj.dll'
       $ok = $false
       try {
       New-Item -Path $cls -Force | Out-Null; Set-ItemProperty -Path $cls -Name '(default)' -Value 'BAS-SIM-APPCTL'
       New-Item -Path "$cls\InprocServer32" -Force | Out-Null; Set-ItemProperty -Path "$cls\InprocServer32" -Name '(default)' -Value $scrobj; Set-ItemProperty -Path "$cls\InprocServer32" -Name ThreadingModel -Value 'Apartment'
-      New-Item -Path "$cls\ScriptletURL" -Force | Out-Null; Set-ItemProperty -Path "$cls\ScriptletURL" -Name '(default)' -Value ('file:///' + $sct.Replace([string][char]92, '/'))
+      New-Item -Path "$cls\ScriptletURL" -Force | Out-Null; Set-ItemProperty -Path "$cls\ScriptletURL" -Name '(default)' -Value ('file:///' + $sct.Replace([string][char]92, '/').Replace(' ', '%20'))
       New-Item -Path "HKCU:\Software\Classes\$prog" -Force | Out-Null; Set-ItemProperty -Path "HKCU:\Software\Classes\$prog" -Name '(default)' -Value 'BAS-SIM-APPCTL'
       New-Item -Path "HKCU:\Software\Classes\$prog\CLSID" -Force | Out-Null; Set-ItemProperty -Path "HKCU:\Software\Classes\$prog\CLSID" -Name '(default)' -Value $guid
       $ok = $true
@@ -579,13 +583,12 @@ steps:
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
       Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
-      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }
 
   # -------------------------------------------------------------------------
   - id: appctl-f03-scheduled-task
     name: "Application control Advanced Loading: program launched by a scheduled task (T1053.005)"
     technique_id: T1053.005
+    action_key: schtask_create_delete
     framework: custom
     executor: powershell
     requires_priv: user
@@ -764,6 +767,10 @@ steps:
       if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
       return $res
       }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -856,15 +863,13 @@ steps:
       }
       Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
       Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
-      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }
 
   # -------------------------------------------------------------------------
   - id: appctl-f04-service-launch
     name: "Application control Advanced Loading: program launched by the service manager (T1543.003)"
     technique_id: T1543.003
+    action_key: service_create_start_stop_delete
     framework: custom
     executor: powershell
     requires_priv: user
@@ -1043,6 +1048,10 @@ steps:
       if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
       return $res
       }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
       function Invoke-AppCtlTest {
       param(
       [Parameter(Mandatory)][string]$Family,
@@ -1121,17 +1130,18 @@ steps:
       $cmd = '"' + $exe + '" "' + $mk + '"'
       $made = $false
       try {
-      & $sc create $svc binPath= $cmd start= demand | Out-Null
-      $made = ($LASTEXITCODE -eq 0)
-      if ($made) { & $sc start $svc | Out-Null; for ($i = 0; $i -lt 25 -and -not (Test-AppCtlMarker $mk); $i++) { Start-Sleep -Milliseconds 400 } }
-      } finally {
+      New-Service -Name $svc -BinaryPathName $cmd -StartupType Manual -ErrorAction Stop | Out-Null
+      $made = $true
+      [void](Invoke-AppCtlProc -File $sc -ArgLine "start $svc" -TimeoutSec 6)
+      for ($i = 0; $i -lt 10 -and -not (Test-AppCtlMarker $mk); $i++) { Start-Sleep -Milliseconds 400 }
+      } catch {} finally {
       & $sc stop $svc 2>&1 | Out-Null
       & $sc delete $svc 2>&1 | Out-Null
       }
       Start-Sleep -Milliseconds 500
       & $sc query $svc 2>&1 | Out-Null
       $gone = ($LASTEXITCODE -eq 1060)
-      return @{ Ran = (Test-AppCtlMarker $mk); Exit = 0; Note = "service_created=$made service_removed=$gone. The program is not a real service, so the service manager reports a start timeout; only the launch matters."; NotApplicable = '' }
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = 0; Note = "service_created=$made service_removed=$gone path_with_spaces_handled=true"; NotApplicable = '' }
       }
     cleanup: |
       foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
@@ -1139,7 +1149,4 @@ steps:
       }
       Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
-      Get-ChildItem 'HKCU:\Software\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      Get-ChildItem 'HKCU:\Software\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-      Get-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
-      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }
+      Get-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\sc.exe') stop $_.Name 2>&1 | Out-Null; & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name 2>&1 | Out-Null }

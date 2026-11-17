@@ -30,7 +30,8 @@
     "detection": [
       "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
     ],
-    "risk": "medium"
+    "risk": "medium",
+    "cleanup_extra": "\nGet-ChildItem 'HKCU:\\Software\\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue\nGet-ChildItem 'HKCU:\\Software\\Classes\\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
   },
   {
     "id": "appctl-f03-scheduled-task",
@@ -47,7 +48,9 @@
     "detection": [
       "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
     ],
-    "risk": "medium"
+    "risk": "medium",
+    "cleanup_extra": "\nGet-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue",
+    "action_key": "schtask_create_delete"
   },
   {
     "id": "appctl-f04-service-launch",
@@ -64,6 +67,8 @@
     "detection": [
       "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
     ],
-    "risk": "medium"
+    "risk": "medium",
+    "cleanup_extra": "\nGet-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\\sc.exe') stop $_.Name 2>&1 | Out-Null; & (Join-Path $env:SystemRoot 'System32\\sc.exe') delete $_.Name 2>&1 | Out-Null }",
+    "action_key": "service_create_start_stop_delete"
   }
 ]

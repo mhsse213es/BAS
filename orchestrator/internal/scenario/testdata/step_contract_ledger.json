@@ -741,19 +741,19 @@
     "scenario": "appcontrol-advanced-loading.yaml",
     "index": 2,
     "technique_id": "T1053.005",
-    "action_key": "",
+    "action_key": "schtask_create_delete",
     "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
+    "class": "potentially_destructive",
+    "status": "undo_declared_in_yaml"
   },
   {
     "scenario": "appcontrol-advanced-loading.yaml",
     "index": 3,
     "technique_id": "T1543.003",
-    "action_key": "",
+    "action_key": "service_create_start_stop_delete",
     "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
+    "class": "potentially_destructive",
+    "status": "undo_declared_in_yaml"
   },
   {
     "scenario": "appcontrol-efficacy.yaml",

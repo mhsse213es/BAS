@@ -6,14 +6,14 @@ Invoke-AppCtlTest -Family 'com_activation' -Collection 'Dll' -Needle 'scrobj.dll
   $cls = "HKCU:\Software\Classes\CLSID\$guid"
   $mk = Join-Path $script:AppCtlWork 'com-marker.txt'
   $sct = Join-Path $script:AppCtlWork "bas_$tid8.sct"
-  $body = "<?XML version=`"1.0`"?><scriptlet><registration progid=`"$prog`" classid=`"$guid`"/><script language=`"JScript`"><![CDATA[var f=new ActiveXObject('Scripting.FileSystemObject').CreateTextFile('" + $mk.Replace([string][char]92, '/') + "',true);f.Write('" + $script:AppCtlMarker + "');f.Close();]]></script></scriptlet>"
+  $body = "<?XML version=`"1.0`"?><scriptlet><registration progid=`"$prog`" classid=`"$guid`"/><script language=`"JScript`"><![CDATA[var f=new ActiveXObject('Scripting.FileSystemObject').CreateTextFile('" + $mk.Replace([string][char]92, '/').Replace("'", [string][char]92 + "'") + "',true);f.Write('" + $script:AppCtlMarker + "');f.Close();]]></script></scriptlet>"
   Set-Content -Path $sct -Value $body -Encoding ASCII
   $scrobj = Join-Path $env:SystemRoot 'System32\scrobj.dll'
   $ok = $false
   try {
     New-Item -Path $cls -Force | Out-Null; Set-ItemProperty -Path $cls -Name '(default)' -Value 'BAS-SIM-APPCTL'
     New-Item -Path "$cls\InprocServer32" -Force | Out-Null; Set-ItemProperty -Path "$cls\InprocServer32" -Name '(default)' -Value $scrobj; Set-ItemProperty -Path "$cls\InprocServer32" -Name ThreadingModel -Value 'Apartment'
-    New-Item -Path "$cls\ScriptletURL" -Force | Out-Null; Set-ItemProperty -Path "$cls\ScriptletURL" -Name '(default)' -Value ('file:///' + $sct.Replace([string][char]92, '/'))
+    New-Item -Path "$cls\ScriptletURL" -Force | Out-Null; Set-ItemProperty -Path "$cls\ScriptletURL" -Name '(default)' -Value ('file:///' + $sct.Replace([string][char]92, '/').Replace(' ', '%20'))
     New-Item -Path "HKCU:\Software\Classes\$prog" -Force | Out-Null; Set-ItemProperty -Path "HKCU:\Software\Classes\$prog" -Name '(default)' -Value 'BAS-SIM-APPCTL'
     New-Item -Path "HKCU:\Software\Classes\$prog\CLSID" -Force | Out-Null; Set-ItemProperty -Path "HKCU:\Software\Classes\$prog\CLSID" -Name '(default)' -Value $guid
     $ok = $true
