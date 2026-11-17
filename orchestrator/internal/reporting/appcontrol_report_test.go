@@ -100,7 +100,7 @@ func TestBuildAppControlSection_PreventionAndVisibilityIndependent(t *testing.T)
 	blockedUnseen := "APPCTL_FAMILY: parent_child_asr\nAPPCTL_DETECTION: source=sysmon_process_create result=not_visible\nAPPCTL_OUTCOME: blocked_as_expected\n"
 	results := []models.SimulationResult{
 		appCtlResult("Application control alternate binary: renamed powershell.exe copy (T1036)", "T1036", allowedVisible),
-		appCtlResult("Application control parent-child ASR: spoofed Office parent (T1204.002)", "T1204.002", blockedUnseen),
+		appCtlResult("Application control parent-child ASR: Office-named parent image (T1036.005)", "T1036.005", blockedUnseen),
 	}
 	sec := buildAppControlSection("run-A", results)
 	got := map[string][2]string{}

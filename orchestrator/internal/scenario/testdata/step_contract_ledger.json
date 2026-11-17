@@ -758,7 +758,7 @@
   {
     "scenario": "appcontrol-efficacy.yaml",
     "index": 4,
-    "technique_id": "T1204.002",
+    "technique_id": "T1036.005",
     "action_key": "",
     "framework": "custom",
     "class": "destructive",
