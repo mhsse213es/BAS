@@ -79,6 +79,22 @@ Stage 4: FAIL, `state=confirmed`, path `Domain Users -> Write ... -> template ->
 Stage 17 unpublished: `state=potential` (latent). Published in `certsrv.msc`: `state=path`.
 Revert: untick Write (or delete the template). Stage 4: PASS.
 
+## ESC5: write access on PKI objects
+
+Change (CA host, one line): give Domain Users Write on the AIA container, e.g.
+`dsacls "CN=AIA,CN=Public Key Services,CN=Services,$cfg" /G "LAB\Domain Users:GW"` (`$cfg` = configuration naming context).
+Stage 5: FAIL, `state=confirmed`, `Domain Users -> Write -> PKI object AIA`. Stage 17 does not build a path for ESC5.
+Revert: `dsacls ... /R "LAB\Domain Users"`. Check: `dsacls ... | Select-String 'Domain Users'` prints nothing. Stage 5: PASS.
+
+## ESC13: issuance policy linked to a group
+
+Change: create universal group `ZZ-BAS-ESC13-Priv` with `adminCount=1` (stand-in for a privileged group). Duplicate **User** as
+unpublished `ZZ-BAS-ESC13-Test` (Domain Users Enroll) with a new issuance policy `ZZ-BAS-ESC13-Policy`. Link the policy object
+(`CN=OID,...`) to the group with `Set-ADObject $o -Replace @{'msDS-OIDToGroupLink'=<group DN>}`.
+Stage 13: FAIL, `state=confirmed`, `(not published on any CA)`, 0 paths.
+Revert: `Set-ADObject $o -Clear 'msDS-OIDToGroupLink'`. Stage 13: PASS. Then delete the template, the policy and the group
+and run stage 13 again.
+
 ## ESC6: EDITF_ATTRIBUTESUBJECTALTNAME2 (CA host, elevated)
 
 ```powershell
@@ -130,7 +146,7 @@ patched DC is not changed by this runbook. ESC12 reports a software key provider
 
 ## Not covered by any control yet
 
-ESC5, ESC8 (needs `BAS_ADCS_LIVE_PROBE=true` and web enrollment installed), ESC13, ESC14, ESC15, and stage 16 (publication and
+ESC8 (needs `BAS_ADCS_LIVE_PROBE=true` and web enrollment installed), ESC14, ESC15, and stage 16 (publication and
 trust). Their only live result so far is "reads real data, finds nothing on a clean lab". A Locksmith cross-check has not been run.
 
 ## Cleanup checklist (leave the lab as found)
@@ -152,5 +168,7 @@ trust). Their only live result so far is "reads real data, finds nothing on a cl
 | 7 | yes | yes |
 | 9 | yes | yes |
 | 11 | yes | yes (the before and after InterfaceFlags values were not sent, so they are not recorded here) |
+| 5 | yes (AIA, Domain Users Write) | yes |
+| 13 | yes (stand-in `adminCount=1` group) | yes after clearing the link; post-cleanup run not yet reported |
 
-All eight controls were run to a PASS after revert. The ESC11 before and after `InterfaceFlags` values were not recorded; stage 11 returned PASS after the revert.
+All ten controls were run to a PASS after revert. The ESC11 before and after `InterfaceFlags` values were not recorded; stage 11 returned PASS after the revert.
