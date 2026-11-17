@@ -81,3 +81,24 @@ func fraudDetailsPrefix(fc *FraudControl) string {
 	}
 	return "[fraud control " + fc.Verdict + ": " + reason + "] "
 }
+
+// BackfillFraudVerdicts applies ApplyFraudControl to stored results that carry a
+// fraud-control record but were written before the verdict was folded into
+// Result. It returns the rewritten slice and whether anything changed. Results
+// without a fraud record are untouched. Running it twice changes nothing.
+func BackfillFraudVerdicts(results []SimulationResult) ([]SimulationResult, bool) {
+	out := make([]SimulationResult, len(results))
+	copy(out, results)
+	changed := false
+	for i := range out {
+		if out[i].FraudControl == nil || out[i].EndpointResult != "" {
+			continue
+		}
+		before := out[i]
+		ApplyFraudControl(&out[i])
+		if out[i].Result != before.Result || out[i].Details != before.Details || out[i].EndpointResult != before.EndpointResult {
+			changed = true
+		}
+	}
+	return out, changed
+}

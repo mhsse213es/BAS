@@ -58,13 +58,13 @@ These are also in the progress ledger with their cost if wrong.
 10. **Gap steps are five, not two.** Chain steps 8b, 8f and 8g are `no_clean_attack_technique`. 8f and 8g are verification steps with no ATT&CK technique. Register rows were added for them.
 11. **Item 26 (session misuse) is gated** on `BAS_CARBANAK_LEDGER_REPLAY_URL` and SKIPs otherwise. A host mismatch is only detectable from a second host.
 12. **Items 24 and 27 use the ledger's own flag rules.** The scenario submits and reports; the ledger decides.
-13. **The scorer fix covers `ComputeScore` and the compliance report only.** About 90 other direct reads of `.Result` in reporting and the API still show the endpoint verdict. That is a follow-up.
+13. **Fraud verdict is stored in the result.** `Interpret` folds the fraud verdict into `Result`, so every reader sees it. Results stored before the fix are folded by `cmd/fraudverdictbackfill`.
 14. **No detection-profile wiring rows.** No new stage names a detection profile, so the plan's wiring condition selects none.
 
 ## Open items
 
 - **Lab validation.** No stage has run against a lab target or the ledger. Every EXEC path, SKIP path and fraud marker is unverified at runtime.
-- **Scorer migration.** Dashboards, PDF, CSV and run-list views still read the endpoint verdict (see ruling 13).
+- **Staging backfill.** Run on staging, 2026-11-17. 268 `scenario_runs` rows, none with a fraud record: the Carbanak fraud steps have not run there yet, so the dry run and apply both changed 0 rows. Backup taken: `/tmp/scenario_runs-before-fraudverdict-20261117-120335.sql` on staging (11.6 MB).
 - **Item 26 on a single-host lab** never runs.
 - **Stages 19–22** need a target host. Without one they SKIP.
 - **APT29 Phase 7 reconciliation** with the other session's APT29 files is still future work, by user decision.

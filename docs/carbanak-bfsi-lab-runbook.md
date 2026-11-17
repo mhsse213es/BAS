@@ -67,11 +67,11 @@ A fraud step has two verdicts. Confirm the combined result is correct:
 | PASS | FAIL | FAIL |
 | PASS | SKIPPED | SKIPPED (not PASS) |
 | FAIL | any | FAIL |
-
-Scope of the current fix: `ComputeScore` and the compliance report read the
-combined result. Other report views (dashboards, PDF, CSV, run lists) still read
-the endpoint verdict. Until those are migrated, check the compliance report for
-fraud steps and do not rely on the other views for fraud outcomes.
+The stored result is the combined verdict. A fraud FAIL makes the step FAIL and a
+fraud SKIPPED makes it SKIPPED, in every view: scorer, compliance, dashboards, PDF,
+CSV and run lists. The endpoint verdict is kept in `endpointResult`, and the details
+start with `[fraud control <verdict>: <reason>]`. Results stored before the fix are
+folded by `cmd/fraudverdictbackfill` (dry run by default; `-apply` after a backup).
 
 ## 5. Determinism
 
