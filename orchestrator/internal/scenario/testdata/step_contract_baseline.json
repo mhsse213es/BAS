@@ -220,7 +220,7 @@
     "telemetry": 0
   },
   "cloud-vm-data-access.yaml": {
-    "cleanup": 0,
+    "cleanup": 1,
     "detection": 0,
     "telemetry": 0
   },
@@ -240,17 +240,17 @@
     "telemetry": 0
   },
   "cloud-vm-linux-data-access.yaml": {
-    "cleanup": 0,
+    "cleanup": 1,
     "detection": 0,
     "telemetry": 0
   },
   "cloud-vm-linux-persistence-lateral.yaml": {
-    "cleanup": 0,
+    "cleanup": 2,
     "detection": 0,
     "telemetry": 0
   },
   "cloud-vm-persistence-lateral.yaml": {
-    "cleanup": 0,
+    "cleanup": 2,
     "detection": 0,
     "telemetry": 0
   },

@@ -18,7 +18,7 @@
     ],
     "cleanup": "",
     "action_key": "local_credential_scan",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-c23",
@@ -39,7 +39,7 @@
     ],
     "cleanup": "",
     "action_key": "local_credential_scan",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-c24",
@@ -60,7 +60,7 @@
     ],
     "cleanup": "",
     "action_key": "local_credential_scan",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-c25",
@@ -81,7 +81,7 @@
     ],
     "cleanup": "",
     "action_key": "local_credential_scan",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-c26",
@@ -102,6 +102,6 @@
     ],
     "cleanup": "",
     "action_key": "local_credential_scan",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   }
 ]

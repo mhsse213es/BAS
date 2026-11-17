@@ -130,7 +130,12 @@ steps:
       Write-Output 'EXEC T1552.005: an instance profile is attached. The ARN and credentials were not retrieved or recorded.'
       if (Test-CvGate 'BAS_CLOUD_EXPECT_INSTANCE_ROLE') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'an instance role is attached and the operator documents it as expected, so no control verdict is scored' } 'CV-B14' }
       Complete-CvStep @{ Outcome = 'fail'; Reason = 'an instance role is attached and its profile is readable from local IMDS by any local process' } 'CV-B14'
-    cleanup: ""
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # -------------------------------------------------------------------------
   - id: cv-b15
@@ -230,7 +235,12 @@ steps:
       $acct = ''; try { $acct = [string](($r.Text | ConvertFrom-Json).Account) } catch {}
       Write-Output ('EXEC T1087.004: caller identity resolved for account ' + $acct + '. The ARN was not recorded.')
       Complete-CvStep @{ Outcome = 'skip'; Reason = 'GetCallerIdentity is permitted to every principal, so it documents identity for the report but scores no control' } 'CV-B15'
-    cleanup: ""
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # -------------------------------------------------------------------------
   - id: cv-b16
@@ -331,7 +341,12 @@ steps:
       $n = 0; try { $n = @((($r.Text | ConvertFrom-Json).AttachedPolicies)).Count } catch {}
       if ($r.Code -eq 0) { Write-Output ('EXEC T1069.003: attached role policies visible; count=' + $n) }
       Complete-CvStep (Resolve-CvAws $r 'attached role policy enumeration') 'CV-B16'
-    cleanup: ""
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # -------------------------------------------------------------------------
   - id: cv-b17
@@ -429,7 +444,12 @@ steps:
       $r = Invoke-CvAws @('s3api', 'list-buckets')
       Write-Output ('EXEC T1619: bucket names listed (names only); exit=' + $r.Code)
       Complete-CvStep (Resolve-CvAws $r 'S3 bucket discovery') 'CV-B17'
-    cleanup: ""
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # -------------------------------------------------------------------------
   - id: cv-b18
@@ -527,7 +547,12 @@ steps:
       $r = Invoke-CvAws @('ec2', 'describe-security-groups', '--max-items', '5')
       Write-Output ('EXEC T1580: security group inventory (first page); exit=' + $r.Code)
       Complete-CvStep (Resolve-CvAws $r 'security group and network inventory discovery') 'CV-B18'
-    cleanup: ""
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # -------------------------------------------------------------------------
   - id: cv-b19
@@ -625,7 +650,12 @@ steps:
       $r = Invoke-CvAws @('kms', 'list-keys', '--limit', '5')
       Write-Output ('EXEC T1580: KMS key identifiers listed (first page); exit=' + $r.Code)
       Complete-CvStep (Resolve-CvAws $r 'KMS key inventory discovery') 'CV-B19'
-    cleanup: ""
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # -------------------------------------------------------------------------
   - id: cv-b20
@@ -723,7 +753,12 @@ steps:
       $r = Invoke-CvAws @('secretsmanager', 'list-secrets', '--max-results', '5')
       Write-Output ('EXEC T1555: secret names listed (first page only; get-secret-value was never called); exit=' + $r.Code)
       Complete-CvStep (Resolve-CvAws $r 'Secrets Manager access') 'CV-B20'
-    cleanup: ""
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # -------------------------------------------------------------------------
   - id: cv-b21
@@ -831,4 +866,9 @@ steps:
       Write-Output ('EXEC T1098: IAM policy simulation only, no change made. Actions reported allowed: ' + $allowed.Count)
       if ($allowed.Count -gt 0) { Complete-CvStep @{ Outcome = 'fail'; Reason = ('the instance role policy simulation allows privilege-escalation actions (' + ($allowed -join ', ') + '); no change was made') } 'CV-B21' }
       Complete-CvStep @{ Outcome = 'pass'; Reason = 'the instance role policy simulation denies every tested privilege-escalation action' } 'CV-B21'
-    cleanup: ""
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue

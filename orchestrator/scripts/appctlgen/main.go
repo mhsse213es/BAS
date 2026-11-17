@@ -37,6 +37,10 @@ type Stage struct {
 	// NoDefaultCleanup marks a step that performs and verifies its own undo in-script. The generic
 	// Windows sweep (defaultCleanup) is then not attached, so the contract does not count it as an undo.
 	NoDefaultCleanup bool `json:"no_default_cleanup"`
+	// Reversible, when set false, is emitted as reversible: false; nil keeps the historical default (true).
+	Reversible *bool `json:"reversible"`
+	// Irreversible is the author's reason an effect cannot be undone; emitted when set.
+	Irreversible string `json:"irreversible"`
 }
 
 func q(s string) string {
@@ -148,7 +152,10 @@ func Generate(srcDir, commonDir string) ([]byte, error) {
 			fmt.Fprintf(&out, "    action_key: %s\n", s.ActionKey)
 		}
 		out.WriteString("    framework: custom\n    executor: powershell\n")
-		fmt.Fprintf(&out, "    requires_priv: %s\n    timeout_sec: %d\n    fidelity: %s\n    production_safe: %t\n    risk: %s\n    reversible: true\n", priv, to, fid, safe, risk)
+		fmt.Fprintf(&out, "    requires_priv: %s\n    timeout_sec: %d\n    fidelity: %s\n    production_safe: %t\n    risk: %s\n    reversible: %s\n", priv, to, fid, safe, risk, reversibleText(s.Reversible))
+		if s.Irreversible != "" {
+			fmt.Fprintf(&out, "    irreversible: %s\n", q(s.Irreversible))
+		}
 		fmt.Fprintf(&out, "    blast_radius: %s\n", q(s.Blast))
 		if s.Note != "" {
 			fmt.Fprintf(&out, "    # %s\n", strings.ReplaceAll(s.Note, "\n", " "))
@@ -161,7 +168,11 @@ func Generate(srcDir, commonDir string) ([]byte, error) {
 			out.WriteString("    cleanup: \"\"\n")
 		} else if s.Cleanup == "" {
 			out.WriteString("    cleanup: |\n")
-			out.WriteString(indent(defaultCleanup+s.CleanupExtra, 6))
+			if s.NoDefaultCleanup {
+				out.WriteString(indent(s.CleanupExtra, 6))
+			} else {
+				out.WriteString(indent(defaultCleanup+s.CleanupExtra, 6))
+			}
 		} else {
 			out.WriteString("    cleanup: |\n")
 			out.WriteString(indent(s.Cleanup, 6))
@@ -169,6 +180,14 @@ func Generate(srcDir, commonDir string) ([]byte, error) {
 		out.WriteString("\n")
 	}
 	return bytes.TrimRight(out.Bytes(), "\n"), nil
+}
+
+// reversibleText renders a stage's reversible flag; nil means the historical default of true.
+func reversibleText(r *bool) string {
+	if r != nil && !*r {
+		return "false"
+	}
+	return "true"
 }
 
 // defaultCleanup is the sweep that runs even when a step is killed before its own cleanup. It covers

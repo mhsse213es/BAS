@@ -3084,7 +3084,7 @@
     "action_key": "cloud_synthetic_upload",
     "framework": "custom",
     "class": "destructive",
-    "status": "self_cleaning_declared"
+    "status": "gap_no_undo"
   },
   {
     "scenario": "cloud-vm-linux-aws-iam.yaml",
@@ -3318,7 +3318,7 @@
     "action_key": "cloud_synthetic_upload",
     "framework": "custom",
     "class": "destructive",
-    "status": "self_cleaning_declared"
+    "status": "gap_no_undo"
   },
   {
     "scenario": "cloud-vm-linux-persistence-lateral.yaml",
@@ -3327,7 +3327,7 @@
     "action_key": "cloud_role_assume",
     "framework": "custom",
     "class": "potentially_destructive",
-    "status": "self_cleaning_declared"
+    "status": "irreversible_declared"
   },
   {
     "scenario": "cloud-vm-linux-persistence-lateral.yaml",
@@ -3336,7 +3336,7 @@
     "action_key": "cloud_access_key_create",
     "framework": "custom",
     "class": "destructive",
-    "status": "self_cleaning_declared"
+    "status": "gap_no_undo"
   },
   {
     "scenario": "cloud-vm-linux-persistence-lateral.yaml",
@@ -3345,7 +3345,7 @@
     "action_key": "cloud_client_secret_add",
     "framework": "custom",
     "class": "destructive",
-    "status": "self_cleaning_declared"
+    "status": "gap_no_undo"
   },
   {
     "scenario": "cloud-vm-linux-persistence-lateral.yaml",
@@ -3372,7 +3372,7 @@
     "action_key": "cloud_role_assume",
     "framework": "custom",
     "class": "potentially_destructive",
-    "status": "self_cleaning_declared"
+    "status": "irreversible_declared"
   },
   {
     "scenario": "cloud-vm-persistence-lateral.yaml",
@@ -3381,7 +3381,7 @@
     "action_key": "cloud_access_key_create",
     "framework": "custom",
     "class": "destructive",
-    "status": "self_cleaning_declared"
+    "status": "gap_no_undo"
   },
   {
     "scenario": "cloud-vm-persistence-lateral.yaml",
@@ -3390,7 +3390,7 @@
     "action_key": "cloud_client_secret_add",
     "framework": "custom",
     "class": "destructive",
-    "status": "self_cleaning_declared"
+    "status": "gap_no_undo"
   },
   {
     "scenario": "cloud-vm-persistence-lateral.yaml",

@@ -38,7 +38,8 @@ steps:
     fidelity: telemetry-safe
     production_safe: false
     risk: medium
-    reversible: true
+    reversible: false
+    irreversible: "temporary STS session credentials expire on their own; the role assumption changes no state in the cloud"
     blast_radius: "Gated (BAS_CONFIRM_CLOUD_ROLE_ASSUME). One sts assume-role call against a designated test role. Returned credentials are discarded unrecorded."
     telemetry:
       - "CloudTrail: AssumeRole (cloud side)"
@@ -140,7 +141,7 @@ steps:
     fidelity: telemetry-safe
     production_safe: false
     risk: high
-    reversible: true
+    reversible: false
     blast_radius: "Gated (BAS_CONFIRM_CLOUD_IAM_WRITE). Creates one access key for a designated test user, deletes it, and verifies deletion. The secret is never recorded."
     telemetry:
       - "CloudTrail: CreateAccessKey / DeleteAccessKey (cloud side)"
@@ -231,9 +232,10 @@ steps:
       if ($keyId -eq '') { Complete-CvStep @{ Outcome = 'fail'; Reason = 'an access key was created for the test user but its id could not be parsed, so cleanup was NOT attempted; list and delete the test user keys manually' } 'CV-D28' }
       $del = Invoke-CvAws @('iam', 'delete-access-key', '--user-name', $user, '--access-key-id', $keyId)
       $listed = Invoke-CvAws @('iam', 'list-access-keys', '--user-name', $user)
+      $listOk = ($listed.Code -eq 0)
       $still = ($keyId -ne '' -and $listed.Text -match [regex]::Escape($keyId))
       Write-Output ('EXEC T1098.001: access key created for the test user and deleted; delete_exit=' + $del.Code + ' still_listed=' + $still + '. The secret was never recorded.')
-      if ($del.Code -ne 0 -or $still) { Complete-CvStep @{ Outcome = 'fail'; Reason = ('an access key was created for the test user, and cleanup was NOT verified; delete the key with id ' + $keyId + ' manually') } 'CV-D28' }
+      if ($del.Code -ne 0 -or -not $listOk -or $still) { Complete-CvStep @{ Outcome = 'fail'; Reason = ('an access key was created for the test user, and cleanup was NOT verified; delete the key with id ' + $keyId + ' manually') } 'CV-D28' }
       if (Test-CvGate 'BAS_CLOUD_EXPECT_KEY_CREATE') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'access key creation succeeded and is documented as expected; cleanup verified' } 'CV-D28' }
       Complete-CvStep @{ Outcome = 'fail'; Reason = 'the workload identity could create an access key for the test user; cleanup verified' } 'CV-D28'
     cleanup: ""
@@ -250,7 +252,7 @@ steps:
     fidelity: telemetry-safe
     production_safe: false
     risk: high
-    reversible: true
+    reversible: false
     blast_radius: "Gated (BAS_CONFIRM_CLOUD_IAM_WRITE). Adds one client secret to a designated test application, removes it, and verifies removal. The secret text is never recorded."
     telemetry:
       - "Entra audit: Update application - Certificates and secrets (cloud side)"
@@ -443,7 +445,12 @@ steps:
       if ($listeners.Count -gt 0 -and $allow.Count -gt 0) { Complete-CvStep @{ Outcome = 'fail'; Reason = 'a WinRM listener is configured and an inbound firewall allow rule covers 5985 or 5986' } 'CV-D30' }
       if ($listeners.Count -gt 0) { Complete-CvStep @{ Outcome = 'pass'; Reason = 'a WinRM listener exists but no inbound firewall allow rule exposes it' } 'CV-D30' }
       Complete-CvStep @{ Outcome = 'pass'; Reason = 'no WinRM listener is configured on this host' } 'CV-D30'
-    cleanup: ""
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # -------------------------------------------------------------------------
   - id: cv-d31
@@ -548,4 +555,9 @@ steps:
       Write-Output ('EXEC T1574: read-only ACL check of startup script locations; locations=' + $existing.Count + ' writable_by_non_admin_group=' + $writable.Count + '. Nothing was written.')
       if ($writable.Count -gt 0) { Complete-CvStep @{ Outcome = 'fail'; Reason = ('a startup script location is writable by a non-administrative group (' + ($writable -join '; ') + ')') } 'CV-D31' }
       Complete-CvStep @{ Outcome = 'pass'; Reason = 'startup script locations are not writable by non-administrative groups' } 'CV-D31'
-    cleanup: ""
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue

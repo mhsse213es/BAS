@@ -19,7 +19,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_imds_probe",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-b15",
@@ -40,7 +40,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_identity_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-b16",
@@ -61,7 +61,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_role_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-b17",
@@ -82,7 +82,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_inventory_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-b18",
@@ -103,7 +103,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_inventory_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-b19",
@@ -124,7 +124,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_inventory_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-b20",
@@ -145,7 +145,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_secret_name_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-b21",
@@ -166,6 +166,6 @@
     ],
     "cleanup": "",
     "action_key": "policy_simulation_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   }
 ]

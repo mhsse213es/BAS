@@ -19,7 +19,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_imds_probe",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-a7",
@@ -41,7 +41,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_token_issue",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-a8",
@@ -62,7 +62,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_inventory_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-a9",
@@ -83,7 +83,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_role_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-a10",
@@ -104,7 +104,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_inventory_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-a11",
@@ -125,7 +125,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_inventory_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-a12",
@@ -146,7 +146,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_secret_name_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-a13",
@@ -167,6 +167,6 @@
     ],
     "cleanup": "",
     "action_key": "cloud_token_use_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   }
 ]

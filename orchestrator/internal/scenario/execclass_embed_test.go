@@ -57,7 +57,8 @@ func TestExecclassEmbedPreservesHandAuthoredSplit(t *testing.T) {
 			}
 		}
 	}
-	if hand != 177 {
-		t.Fatalf("expected 177 hand-authored entries (generated must not leak into the snapshot), got %d", hand)
+	// 177 original hand-authored entries plus the 20 cloud VM entries, now written into the literal.
+	if hand != 197 {
+		t.Fatalf("expected 197 hand-authored entries (generated must not leak into the snapshot), got %d", hand)
 	}
 }

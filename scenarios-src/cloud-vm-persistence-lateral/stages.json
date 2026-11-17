@@ -18,7 +18,9 @@
     ],
     "cleanup": "",
     "action_key": "cloud_role_assume",
-    "no_default_cleanup": true
+    "no_default_cleanup": true,
+    "reversible": false,
+    "irreversible": "temporary STS session credentials expire on their own; the role assumption changes no state in the cloud"
   },
   {
     "id": "cv-d28",
@@ -39,7 +41,8 @@
     ],
     "cleanup": "",
     "action_key": "cloud_access_key_create",
-    "no_default_cleanup": true
+    "no_default_cleanup": true,
+    "reversible": false
   },
   {
     "id": "cv-d29",
@@ -60,7 +63,8 @@
     ],
     "cleanup": "",
     "action_key": "cloud_client_secret_add",
-    "no_default_cleanup": true
+    "no_default_cleanup": true,
+    "reversible": false
   },
   {
     "id": "cv-d30",
@@ -81,7 +85,7 @@
     ],
     "cleanup": "",
     "action_key": "remote_mgmt_exposure_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-d31",
@@ -102,6 +106,6 @@
     ],
     "cleanup": "",
     "action_key": "startup_location_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   }
 ]

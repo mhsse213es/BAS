@@ -529,7 +529,7 @@ steps:
     fidelity: telemetry-safe
     production_safe: false
     risk: medium
-    reversible: true
+    reversible: false
     blast_radius: "Gated (BAS_CONFIRM_CLOUD_EXFIL_SIM). Writes one 1 KB synthetic file to a designated test container or bucket, verifies, deletes it, and removes the local copy."
     telemetry:
       - "Storage analytics: PutBlob / CloudTrail: PutObject (cloud side)"

@@ -18,7 +18,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_object_list_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-e33",
@@ -39,7 +39,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_object_head_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-e34",
@@ -60,7 +60,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_inventory_read",
-    "no_default_cleanup": true
+    "no_default_cleanup": false
   },
   {
     "id": "cv-e35",
@@ -103,6 +103,7 @@
     ],
     "cleanup": "",
     "action_key": "cloud_synthetic_upload",
-    "no_default_cleanup": true
+    "no_default_cleanup": true,
+    "reversible": false
   }
 ]
