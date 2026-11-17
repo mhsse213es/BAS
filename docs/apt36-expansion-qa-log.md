@@ -8,6 +8,12 @@
 - `apt36-i2` (execution from a mounted VHD, a Mark-of-the-Web bypass route) was written and then withheld entirely after review; it never shipped.
 - Go tests: decision table, well-formedness (counts, ASCII, cleanup, technique tagging) across all 6 scenarios, four gate-skip matrices, the k4 read-only guarantee; scenario package green (292s); product_line count pin 145 -> 150; step-contract ledger regenerated; `verify-all` 180 ok.
 
+## Lateral movement step k5 (built, not tested)
+- `apt36-k5` (T1569.002, remote service execution over the Service Control Manager) was added after the 2026-11-17 verification above. It is gated by `BAS_CONFIRM_APT36_LATERAL_MOVEMENT=true` (exact), requires administrator, and acts only on hosts named in `BAS_LATERAL_TARGETS` (invalid names are ignored). Per target it creates a run-tagged demand-start service, starts and stops it, deletes it and verifies the deletion with a separate query.
+- **Status: built and statically checked only.** The Go gate test passes and the signature verifies, but the step has NOT been run against any lab target. The user has asked that it be tested after the build, so no verdict is claimed.
+- Review fixes that came with it: the `k1` listener start is now guarded; `d5` derives its pass flag from output; `i6` cleanup stops only `hh.exe` processes launched with this run's tag.
+- Review findings deliberately not acted on (duplication and tidiness, no change to behavior or gating): repeated listener and process-launch boilerplate across steps, a repeated `cmdkey` launch in `cc2`, an unconditional 800 ms sleep in every mode, and a hand-written gated-step list in the test. A shared gate check in `lib.ps1` is the one worth doing before testing.
+
 ## Honest limits
 - Same block-attribution and Defender-presence-as-failure limits documented for the APT29 pack apply here (`docs/apt29-expansion-qa-log.md`): a real block of a System32 binary may not carry the run tag, and a step that ran is scored FAIL whenever Defender is merely on, not because Defender specifically covers that behavior.
 - `k3`/lateral-movement steps only prove this host can reach itself over its own admin share and WinRM; no second host was available to test real cross-host movement.
