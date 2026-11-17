@@ -42,5 +42,5 @@ Nothing requests a certificate or changes a template, CA object, CA setting or r
 
 ## Open
 
-- Separate `adcs-esc8-web-enrollment-probe.yaml` still exists; its overlap with stage 8 is undecided.
+- `adcs-esc8-web-enrollment-probe.yaml` was removed; stage 8 replaces it. Behaviour change: the old scenario sent its one unauthenticated HTTP GET by default, stage 8 only with `BAS_ADCS_LIVE_PROBE=true`.
 - Not deployed; the console has not been checked against the new step list.

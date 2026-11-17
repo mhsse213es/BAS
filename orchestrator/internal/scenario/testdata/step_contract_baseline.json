@@ -9,11 +9,6 @@
     "detection": 0,
     "telemetry": 0
   },
-  "adcs-esc8-web-enrollment-probe.yaml": {
-    "cleanup": 0,
-    "detection": 0,
-    "telemetry": 0
-  },
   "akira-kill-chain.yaml": {
     "cleanup": 0,
     "detection": 0,

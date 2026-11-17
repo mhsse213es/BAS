@@ -216,15 +216,6 @@
     "status": "not_required_non_destructive"
   },
   {
-    "scenario": "adcs-esc8-web-enrollment-probe.yaml",
-    "index": 0,
-    "technique_id": "T1557.001",
-    "action_key": "",
-    "framework": "native",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
-  },
-  {
     "scenario": "akira-kill-chain.yaml",
     "index": 0,
     "technique_id": "T1021.001",
