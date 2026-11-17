@@ -18,7 +18,8 @@ var RR_SCENARIO_IDS = [
   'play-kill-chain', 'ransomhub-kill-chain', 'ransomware-drill', 'em-07-ransomware-readiness',
   'linux-ransomware-drill', 'black-basta-kill-chain', 'medusa-kill-chain', 'rhysida-kill-chain',
   'ransomware-backup-recovery-assurance',
-  'akira-double-extortion-assessment'
+  'akira-double-extortion-assessment',
+  'ransomware-lateral-containment-assessment'
 ];
 
 // Dimension display config: rwscore.Dimension value → { label, icon }

@@ -87,6 +87,10 @@ var TechniqueDomain = map[string]Domain{
 	"T1007": DomainDataDiscoveryAndStaging,
 	// Credentials from Password Stores (B2 backup credential exposure).
 	"T1555": DomainCredentialAccess,
+	// Remote Services (L1 remote-service authentication validation).
+	"T1021": DomainLateralMovement,
+	// System Services: Service Execution (L3 transient remote service).
+	"T1569.002": DomainLateralMovement,
 	// Financial Theft (Akira double-extortion correlation step D5: data theft used for extortion).
 	"T1657": DomainExfiltration,
 	// Data Destruction (B3-B5 backup deletion/immutability/restore).
