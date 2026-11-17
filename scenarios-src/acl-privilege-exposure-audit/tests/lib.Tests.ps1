@@ -28,6 +28,8 @@ function Reset-Env {
   $script:TargetOverride = @{}
   $script:MembersOverride = @{}
   $script:Offline = $true
+  $script:SearchOverride = @{}
+  $script:GmsaDescOverride = @{}
   $script:SidToDnOverride = @{}
   $script:TrusteeNameOverride = @{ $LowSid='LOW-user1'; $LowSid2='LOW-user2'; $GrpSid='LOW-grp'; "$DomSid-1300"='LOW-helpdesk'; "$DomSid-1401"='LOW-a'; "$DomSid-1402"='LOW-b' }
   $script:SchemaGuidOverride = @{ 'msDS-KeyCredentialLink' = [guid]'5b47d60f-6090-40b2-9f37-2a4de88f3063' }
@@ -203,6 +205,85 @@ Test-Case 'no gMSA objects is a PASS marked not deployed' {
   $r = Invoke-GmsaStage -Id 'T7' -PassThru
   Assert ($r.Verdict -eq 'PASS') "expected PASS, got $($r.Verdict)"
   $script:SearchOverride = @{}
+}
+# ---- audit-driven realism tests ----
+Test-Case 'AUDIT: Authenticated Users default read-all does not make a LAPS finding' {
+  Reset-Env
+  $script:SchemaGuidOverride['ms-Mcs-AdmPwd'] = [guid]'11111111-aaaa-bbbb-cccc-000000000001'
+  $OuDn = 'OU=Servers,DC=t,DC=local'
+  $script:TargetOverride[$OuDn] = [pscustomobject]@{ Ok=$true; Class='organizationalUnit'; ClassGuid=[guid]::Empty
+    Security = (New-Sec $DaSid @((New-Rule 'S-1-5-11' ($AD::ReadProperty -bor $AD::ListChildren -bor $AD::ListObject -bor $AD::ReadControl)))) }
+  $f = @(Find-CapabilityExposure -TargetDns @($OuDn) -CapNames @('LapsLegacyRead'))
+  Assert ($f.Count -eq 0) "default Authenticated Users read produced $($f.Count) LAPS finding(s)"
+}
+Test-Case 'AUDIT: LAPS read needs control access too (both bits => finding)' {
+  Reset-Env
+  $script:SchemaGuidOverride['ms-Mcs-AdmPwd'] = [guid]'11111111-aaaa-bbbb-cccc-000000000001'
+  $OuDn = 'OU=Servers,DC=t,DC=local'
+  $script:TargetOverride[$OuDn] = [pscustomobject]@{ Ok=$true; Class='organizationalUnit'; ClassGuid=[guid]::Empty
+    Security = (New-Sec $DaSid @((New-Rule $LowSid $AD::ReadProperty 'Allow' ([guid]'11111111-aaaa-bbbb-cccc-000000000001')), (New-Rule $LowSid $AD::ExtendedRight))) }
+  $f = @(Find-CapabilityExposure -TargetDns @($OuDn) -CapNames @('LapsLegacyRead'))
+  Assert ($f.Count -eq 1) "expected 1 LAPS finding, got $($f.Count)"
+  Assert ($f[0].Confidence -eq 'HIGH') "expected HIGH, got $($f[0].Confidence)"
+}
+Test-Case 'AUDIT: tier0-parents scope never includes the parent of the domain head' {
+  Reset-Env
+  $p = @(Scope-tier0-parents)
+  Assert (-not ($p -contains 'DC=local')) "scope includes non-object parent DC=local: $($p -join ' | ')"
+}
+Test-Case 'AUDIT: forest-root Enterprise Admins on a child-domain object is not a finding' {
+  Reset-Env
+  $script:TargetOverride[$DaDn] = [pscustomobject]@{ Ok=$true; Class='group'; ClassGuid=[guid]::Empty
+    Security = (New-Sec $DaSid @((New-Rule 'S-1-5-21-9-9-9-519' $AD::GenericAll), (New-Rule 'S-1-5-21-9-9-9-518' $AD::WriteDacl))) }
+  $f = @(Find-CapabilityExposure -TargetDns @($DaDn) -CapNames @('GenericAll','WriteDacl'))
+  Assert ($f.Count -eq 0) "forest-level EA/SA flagged: $($f.Count)"
+}
+Test-Case 'AUDIT: Protected Users is not an expected principal' {
+  Reset-Env
+  $script:TargetOverride[$DaDn] = [pscustomobject]@{ Ok=$true; Class='group'; ClassGuid=[guid]::Empty
+    Security = (New-Sec $DaSid @((New-Rule "$DomSid-525" $AD::GenericAll))) }
+  $f = @(Find-CapabilityExposure -TargetDns @($DaDn) -CapNames @('GenericAll'))
+  Assert ($f.Count -eq 1) "Protected Users hidden: $($f.Count)"
+}
+Test-Case 'AUDIT: path stage with an unreadable tier-0 object is not a PASS' {
+  Reset-Env
+  $script:TargetOverride['DC=t,DC=local'] = [pscustomobject]@{ Ok=$true; Class='domainDNS'; ClassGuid=[guid]::Empty; Security = (New-Sec $DaSid @((New-Rule $DaSid $AD::GenericAll))) }
+  $script:TargetOverride['CN=AdminSDHolder,CN=System,DC=t,DC=local'] = [pscustomobject]@{ Ok=$false; Class=''; ClassGuid=[guid]::Empty; Security=$null }
+  $out = (Invoke-PathStage -Id 'T8' | Out-String)
+  Assert ($out -notmatch '^PASS') "path stage printed PASS despite an unreadable object: $out"
+}
+Test-Case 'AUDIT: gMSA membership-descriptor write is a finding, default read is not' {
+  Reset-Env
+  $script:SchemaGuidOverride['msDS-GroupMSAMembership'] = [guid]'22222222-aaaa-bbbb-cccc-000000000002'
+  $GDn = 'CN=svc1,CN=Managed Service Accounts,DC=t,DC=local'
+  $script:TargetOverride[$GDn] = [pscustomobject]@{ Ok=$true; Class='msDS-GroupManagedServiceAccount'; ClassGuid=[guid]::Empty
+    Security = (New-Sec $DaSid @((New-Rule 'S-1-5-11' ($AD::ReadProperty -bor $AD::ListChildren)), (New-Rule $LowSid $AD::WriteProperty 'Allow' ([guid]'22222222-aaaa-bbbb-cccc-000000000002')))) }
+  $f = @(Find-CapabilityExposure -TargetDns @($GDn) -CapNames @('GmsaMembershipWrite'))
+  Assert ($f.Count -eq 1 -and $f[0].Trustee -eq $LowSid) "expected exactly the low-priv writer, got $($f.Count)"
+}
+Test-Case 'AUDIT: GPO property-specific write is a finding' {
+  Reset-Env
+  $script:SchemaGuidOverride['gPCFileSysPath'] = [guid]'33333333-aaaa-bbbb-cccc-000000000003'
+  $Gpo = 'CN={X},CN=Policies,CN=System,DC=t,DC=local'
+  $script:TargetOverride[$Gpo] = [pscustomobject]@{ Ok=$true; Class='groupPolicyContainer'; ClassGuid=[guid]::Empty
+    Security = (New-Sec $DaSid @((New-Rule $LowSid $AD::WriteProperty 'Allow' ([guid]'33333333-aaaa-bbbb-cccc-000000000003')))) }
+  $f = @(Find-CapabilityExposure -TargetDns @($Gpo) -CapNames @('GpoWrite'))
+  Assert ($f.Count -eq 1) "GPO file-path write missed: $($f.Count)"
+}
+Test-Case 'AUDIT: gMSA reader group of computers only is not a finding; with a user it is' {
+  Reset-Env
+  $GDn = 'CN=svc2,CN=Managed Service Accounts,DC=t,DC=local'; $RG = "$DomSid-2000"; $Comp = "$DomSid-3001"; $Usr = "$DomSid-3002"
+  $script:SearchOverride = @{ '(objectClass=msDS-GroupManagedServiceAccount)' = @($GDn) }
+  $script:GmsaDescOverride = @{ $GDn = @($RG) }
+  $script:KindOverride = @{ $RG = 'group'; $Comp = 'computer'; $Usr = 'user' }
+  $script:TargetOverride[$GDn] = [pscustomobject]@{ Ok=$true; Class='msDS-GroupManagedServiceAccount'; ClassGuid=[guid]::Empty; Security = (New-Sec $DaSid @()) }
+  $script:MembersOverride[$RG] = @($Comp)
+  $r = Invoke-GmsaStage -Id 'T9' -PassThru
+  Assert ($r.Verdict -eq 'PASS') "computer-only reader group: expected PASS, got $($r.Verdict)"
+  $script:MembersOverride[$RG] = @($Comp, $Usr)
+  $r = Invoke-GmsaStage -Id 'T10' -PassThru
+  Assert ($r.Verdict -eq 'FAIL') "reader group with a user: expected FAIL, got $($r.Verdict)"
+  $script:KindOverride = @{}
 }
 if ($script:fail -gt 0) { Write-Output "FAILED: $($script:fail)"; exit 1 }
 Write-Output 'ALL TESTS PASSED'

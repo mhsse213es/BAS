@@ -16,7 +16,7 @@ $script:G = @{
   GetChgFilt = [guid]'89e95b76-444d-4c62-991a-0facbeda640c'
 }
 $script:Broad = @('S-1-1-0','S-1-5-11','S-1-5-32-545')
-$script:PrivRids = @(512,516,518,519,520,521,525,526,527,498,500)
+$script:PrivRids = @(512,516,518,519,520,521,526,527,498,500)
 $script:BuiltinTier0 = @('S-1-5-18','S-1-5-9','S-1-5-10','S-1-3-0','S-1-5-32-544','S-1-5-32-548','S-1-5-32-549','S-1-5-32-550','S-1-5-32-551','S-1-5-32-552')
 $script:PrivGroupSids = @('S-1-5-32-544','S-1-5-32-548','S-1-5-32-549','S-1-5-32-550','S-1-5-32-551')
 $script:PrivGroupRids = @(512,518,519,516,520,526,527)
@@ -42,11 +42,11 @@ $script:Caps = @{
   RbcdWrite             = @{ Rights=$AdR::WriteProperty; Attrs=@('msDS-AllowedToActOnBehalfOfOtherIdentity') }
   LapsLegacyRead        = @{ Rights=$AdR::ReadProperty; Attrs=@('ms-Mcs-AdmPwd'); Companion=$true }
   LapsWindowsRead       = @{ Rights=$AdR::ReadProperty; Attrs=@('msLAPS-Password','msLAPS-EncryptedPassword'); Companion=$true }
-  GmsaPasswordRead      = @{ Rights=$AdR::ReadProperty; Attrs=@('msDS-ManagedPassword'); Companion=$true }
+  GmsaMembershipWrite   = @{ Rights=$AdR::WriteProperty; Attrs=@('msDS-GroupMSAMembership') }
   AccountRestrictions   = @{ Rights=$AdR::WriteProperty; Attrs=@('userAccountControl','msDS-AllowedToDelegateTo','msDS-SupportedEncryptionTypes','scriptPath','altSecurityIdentities','userParameters') }
   DcSync                = @{ Rights=$AdR::ExtendedRight; Guids=@('GetChanges','GetChgAll','GetChgFilt') }
   GpLinkWrite           = @{ Rights=$AdR::WriteProperty; Attrs=@('gPLink','gPOptions') }
-  GpoWrite              = @{ Rights=$AdR::WriteProperty; AllOnly=$true }
+  GpoWrite              = @{ Rights=$AdR::WriteProperty; Attrs=@('gPCFileSysPath','gPCMachineExtensionNames','gPCUserExtensionNames') }
   CreateChild           = @{ Rights=$AdR::CreateChild }
 }
 
@@ -63,7 +63,11 @@ function Get-SchemaGuid([string]$Name, [string]$Kind = 'attributeSchema') {
     [void]$s.PropertiesToLoad.Add('schemaIDGUID')
     $r = $s.FindOne()
     if ($r) { $g = [guid]([byte[]]$r.Properties['schemaidguid'][0]) }
-  } catch { }
+  } catch {
+    # a failed lookup is not proof the attribute is absent: record it and do not cache it
+    $script:AclReadErrors += "schema:$Name"
+    return $null
+  }
   $script:SchemaCache[$k] = $g
   return $g
 }
@@ -87,6 +91,9 @@ function Test-ExpectedPrincipal([string]$Sid) {
     $rid = 0
     if ([int]::TryParse($Sid.Substring($ctx.DomainSid.Length + 1), [ref]$rid) -and ($script:PrivRids -contains $rid)) { return $true }
   }
+  # Enterprise Admins (519) and Schema Admins (518) live in the forest root domain, so in a child
+  # domain their SID does not carry the local domain prefix.
+  if ($Sid -match '^S-1-5-21-\d+-\d+-\d+-(518|519)$') { return $true }
   return $false
 }
 
@@ -187,7 +194,8 @@ function Get-EffectiveMembers([string]$Sid) {
           $seen[$cur] = $true
           if ($seen.Count -gt 2000) { $res.Truncated = $true; break }
           $ce = [ADSI]"LDAP://$($cur.Replace('/', '\/'))"
-          foreach ($m in @($ce.member)) {
+          if (@($ce.member).Count -ge 1500) { $res.Truncated = $true }
+        foreach ($m in @($ce.member)) {
             $me = [ADSI]"LDAP://$($m.Replace('/', '\/'))"
             $ms = (New-Object System.Security.Principal.SecurityIdentifier([byte[]]$me.objectSid[0], 0)).Value
             $out += $ms
@@ -232,6 +240,11 @@ function Find-CapabilityExposure {
         if (-not (Test-AceGrants $a $cap $res)) { continue }
         $sid = $a.Trustee
         if (Test-ExpectedPrincipal $sid) { continue }
+        if ($cap.Companion -and ($a.Rights -band $AdR::GenericAll) -ne $AdR::GenericAll) {
+          # confidential attributes (LAPS) need ReadProperty AND control access; plain read-all is the default
+          $comp = @($allows | Where-Object { $_.Trustee -eq $sid -and (($_.Rights -band $AdR::ExtendedRight) -ne 0) -and $_.ObjectType -eq [guid]::Empty })
+          if ($comp.Count -eq 0) { continue }
+        }
         $key = "$dn|$sid|$cn"
         if ($dedupe.ContainsKey($key)) { continue }
         $mem = Get-EffectiveMembers $sid
@@ -248,10 +261,6 @@ function Find-CapabilityExposure {
         $note = ''
         $denied = @($denies | Where-Object { ($_.Trustee -eq $sid -or $script:Broad -contains $_.Trustee) -and (Test-AceGrants $_ $cap $res) })
         if ($denied.Count -gt 0) { $conf = 'MEDIUM'; $note = 'explicit Deny present for this right; effective access needs live confirmation' }
-        if ($cap.Companion) {
-          $comp = @($allows | Where-Object { $_.Trustee -eq $sid -and (($_.Rights -band $AdR::ExtendedRight) -ne 0) -and $_.ObjectType -eq [guid]::Empty })
-          if ($comp.Count -eq 0 -and ($a.Rights -band $AdR::GenericAll) -ne $AdR::GenericAll) { if ($conf -eq 'HIGH') { $conf = 'MEDIUM' }; $note = 'confidential attribute: read also needs control access, not seen' }
-        }
         $ot = 'all'; if ($a.ObjectType -ne [guid]::Empty) { $ot = [string]$a.ObjectType }
         $dedupe[$key] = $true
         $found += [pscustomobject]@{ Target=$dn; TargetClass=$t.Class; Trustee=$sid; TrusteeName=$tr.Name; Cap=$cn; Rights=[string]$a.Rights; ObjectType=$ot; Inherited=$a.IsInherited; Confidence=$conf; Via=$via; Note=$note }
@@ -336,7 +345,7 @@ function Scope-computer-parents { $c = Get-AclContext; return @($c.DomainDN) + @
 function Scope-gpo-objects { $c = Get-AclContext; $b = "CN=Policies,CN=System,$($c.DomainDN)"; return @($b) + @(Search-Ldap $b '(objectClass=groupPolicyContainer)' 'distinguishedName' 2000) }
 function Scope-gpo-link-points { $c = Get-AclContext; return @($c.DomainDN, "OU=Domain Controllers,$($c.DomainDN)") + @(Get-ParentDnsOfTier0) }
 function Scope-gmsa-objects { $c = Get-AclContext; return @(Search-Ldap $c.DomainDN '(objectClass=msDS-GroupManagedServiceAccount)' 'distinguishedName' 2000) }
-function Get-ParentDnsOfTier0 { $p = @(); foreach ($x in @(Get-Tier0ObjectDns)) { $q = Get-ParentDn $x; if ($q) { $p += $q } }; return @($p | Select-Object -Unique) }
+function Get-ParentDnsOfTier0 { $dd = (Get-AclContext).DomainDN; $p = @(); foreach ($x in @(Get-Tier0ObjectDns)) { $q = Get-ParentDn $x; if ($q -and ($q -eq $dd -or $q.EndsWith(',' + $dd))) { $p += $q } }; return @($p | Select-Object -Unique) }
 
 function Format-Finding($F) {
   $s = "  TARGET=$($F.Target) | TRUSTEE=$($F.Trustee) ($($F.TrusteeName)) | CAP=$($F.Cap) | RIGHTS=$($F.Rights) | OBJECTTYPE=$($F.ObjectType) | INHERITED=$($F.Inherited) | CONFIDENCE=$($F.Confidence)"
@@ -384,7 +393,6 @@ function Find-AttackPaths {
   for ($depth = 1; $depth -le $MaxDepth; $depth++) {
     $next = @()
     foreach ($node in $frontier) {
-      $script:AclReadErrors = @()
       $fs = @(Find-CapabilityExposure -TargetDns @($node.Dn) -CapNames $ControlCaps)
       $fs += @(Find-OwnerExposure -TargetDns @($node.Dn))
       $byKey = @{}
@@ -420,7 +428,9 @@ function Invoke-PathStage {
   if ($paths.Count -gt 0) {
     Write-Output "FAIL: $($paths.Count) permission path(s) from non-tier-0 principals to tier-0 objects. [ACL-$Id]"
     foreach ($p in ($paths | Sort-Object Hops | Select-Object -First 200)) { Write-Output "  PATH=$($p.Chain -join ' ; ') | START=$($p.Start) ($($p.StartName)) | HOPS=$($p.Hops) | BROAD=$($p.Broad) | CONFIDENCE=$($p.Confidence)" }
-  } elseif ($script:Examined -eq 0) { Write-Output "SKIP: no tier-0 object ACL could be read; no path analysis possible. [ACL-$Id]" }
+  } elseif ($script:Examined -eq 0 -or @($script:AclReadErrors | Select-Object -Unique).Count -gt 0 -or $script:Truncated.Count -gt 0) {
+    Write-Output "SKIP: path analysis incomplete (examined $($script:Examined) object ACLs, $(@($script:AclReadErrors | Select-Object -Unique).Count) unreadable); no path proven absent. [ACL-$Id]"
+  }
   else { Write-Output "PASS: no permission path from a non-tier-0 principal to a tier-0 object within $MaxDepth hop(s) ($($script:Examined) object ACLs examined). [ACL-$Id]" }
 }
 function Get-PrivilegedClosureDns {
@@ -466,14 +476,30 @@ function Get-GmsaReaderSids([string]$Dn) {
   if ($script:GmsaDescOverride -and $script:GmsaDescOverride.ContainsKey($Dn)) { return @($script:GmsaDescOverride[$Dn]) }
   $out = @()
   try {
-    $e = [ADSI]"LDAP://$($Dn.Replace('/', '\/'))"
-    $raw = $e.Properties['msDS-GroupMSAMembership'].Value
-    if ($raw) {
-      $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor([byte[]]$raw, 0)
+    # DirectorySearcher returns the security descriptor as byte[]; DirectoryEntry.Properties would hand back a COM object.
+    $s = New-Object System.DirectoryServices.DirectorySearcher((New-Object System.DirectoryServices.DirectoryEntry('LDAP://' + $Dn.Replace('/', '\/'))))
+    $s.SearchScope = 'Base'; $s.Filter = '(objectClass=*)'
+    [void]$s.PropertiesToLoad.Add('msds-groupmsamembership')
+    $r = $s.FindOne()
+    if ($r -and $r.Properties['msds-groupmsamembership'].Count -gt 0) {
+      $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor([byte[]]$r.Properties['msds-groupmsamembership'][0], 0)
       foreach ($a in $sd.DiscretionaryAcl) { if ($a.AceType -eq 'AccessAllowed') { $out += [string]$a.SecurityIdentifier.Value } }
     }
   } catch { $script:AclReadErrors += $Dn }
   return $out
+}
+# computer / group / user / unknown, from the object's own class
+function Get-SidKind([string]$Sid) {
+  if ($script:KindOverride -and $script:KindOverride.ContainsKey($Sid)) { return $script:KindOverride[$Sid] }
+  $cdn = Get-DnFromSid $Sid
+  if (-not $cdn) { return 'unknown' }
+  try {
+    $oc = @(([ADSI]"LDAP://$($cdn.Replace('/', '\/'))").objectClass)
+    if ($oc -contains 'computer') { return 'computer' }
+    if ($oc -contains 'group') { return 'group' }
+    if ($oc -contains 'user') { return 'user' }
+  } catch { }
+  return 'unknown'
 }
 function Invoke-GmsaStage {
   param([string]$Id, [switch]$PassThru)
@@ -485,20 +511,28 @@ function Invoke-GmsaStage {
     $script:Examined = [int]$script:Examined + 1
     foreach ($sid in (Get-GmsaReaderSids $dn)) {
       $broad = ($script:Broad -contains $sid) -or ($sid.StartsWith($ctx.DomainSid + '-') -and ($sid.EndsWith('-513') -or $sid.EndsWith('-515')))
-      $kind = 'unknown'; $cdn = Get-DnFromSid $sid
-      if ($cdn) { try { $oc = @(([ADSI]"LDAP://$($cdn.Replace('/', '\/'))").objectClass); if ($oc -contains 'computer') { $kind = 'computer' } elseif ($oc -contains 'group') { $kind = 'group' } elseif ($oc -contains 'user') { $kind = 'user' } } catch { } }
-      if ($broad -or $kind -eq 'user' -or $kind -eq 'group') {
+      $kind = Get-SidKind $sid
+      $bad = @(); $why = ''
+      if ($broad) { $bad = @($sid); $why = 'broad principal may retrieve the gMSA password' }
+      elseif ($kind -eq 'user') { $bad = @($sid); $why = 'user account may retrieve the gMSA password' }
+      elseif ($kind -eq 'group') {
+        # a group of computers is the normal design: report only if it contains non-computer principals
+        $mem = Get-EffectiveMembers $sid
+        $bad = @($mem.Members | Where-Object { (Get-SidKind $_) -eq 'user' } | Select-Object -First 5)
+        $why = 'group with non-computer members may retrieve the gMSA password'
+        if ($mem.Truncated) { $script:Truncated += "gMSA reader group $sid member list truncated" }
+      }
+      if ($bad.Count -gt 0) {
         $tr = Resolve-Trustee $sid
-        $conf = 'HIGH'; if ($kind -eq 'group') { $conf = 'MEDIUM' }
-        $why = 'non-computer principal may retrieve the gMSA password'; if ($broad) { $why = 'broad principal may retrieve the gMSA password' }
-        $findings += [pscustomobject]@{ Target=$dn; TargetClass='msDS-GroupManagedServiceAccount'; Trustee=$sid; TrusteeName=$tr.Name; Cap='GmsaPasswordRead'; Rights='msDS-GroupMSAMembership'; ObjectType='msDS-ManagedPassword'; Inherited=$false; Confidence=$conf; Via=$kind; Note=$why }
+        $findings += [pscustomobject]@{ Target=$dn; TargetClass='msDS-GroupManagedServiceAccount'; Trustee=$sid; TrusteeName=$tr.Name; Cap='GmsaReader'; Rights='msDS-GroupMSAMembership'; ObjectType='msDS-ManagedPassword'; Inherited=$false; Confidence='HIGH'; Via=($bad -join ','); Note=$why }
       }
     }
   }
-  $findings += @(Find-CapabilityExposure -TargetDns $gmsas -CapNames @('GmsaPasswordRead','GenericAll','WriteDacl','WriteOwner'))
+  # Who can change the reader list (and so add themselves) is the ACL-level exposure.
+  $findings += @(Find-CapabilityExposure -TargetDns $gmsas -CapNames @('GmsaMembershipWrite','GenericAll','WriteDacl','WriteOwner'))
   $errs = @($script:AclReadErrors | Select-Object -Unique)
   $verdict = 'PASS'
-  if ($findings.Count -gt 0) { $verdict = 'FAIL' } elseif ($errs.Count -gt 0) { $verdict = 'SKIP' }
+  if ($findings.Count -gt 0) { $verdict = 'FAIL' } elseif ($errs.Count -gt 0 -or $script:Truncated.Count -gt 0) { $verdict = 'SKIP' }
   if ($gmsas.Count -eq 0 -and $verdict -eq 'PASS') { Write-Output "PASS: no gMSA objects in the domain (not deployed). [ACL-$Id]" }
   elseif ($verdict -eq 'PASS') { Write-Output "PASS: only computer principals can read msDS-ManagedPassword on $($gmsas.Count) gMSA(s). [ACL-$Id]" }
   elseif ($verdict -eq 'SKIP') { Write-Output "SKIP: gMSA readers could not be fully read ($($errs.Count) unreadable); no exposure proven either way. [ACL-$Id]" }
