@@ -137,12 +137,16 @@ re-run. Evidence is the pasted stage output, not a SIEM or a certificate request
 | ESC9 | test template with the no-security-extension flag (0x80000) | stage 9 FAIL (confirmed, unpublished) | stage PASS |
 | ESC11 | `IF_ENFORCEENCRYPTICERTREQUEST` cleared | stage 11 FAIL; stage 17 FAIL with the no-path wording (live) | stage 11 PASS |
 | ESC10 | none added (real DC at 20348.587) | stage 10 FAIL, then stage 17 | not applicable |
+| ESC5 | Domain Users given Write on the `AIA` container under Public Key Services | stage 5 FAIL, confirmed, Domain Users -> Write -> PKI object AIA | `dsacls /R` removed it; stage PASS |
+| ESC13 | unpublished template `ZZ-BAS-ESC13-Test` (Domain Users Enroll) carrying issuance policy `ZZ-BAS-ESC13-Policy`, linked by `msDS-OIDToGroupLink` to a stand-in group with `adminCount=1` | stage 13 FAIL, confirmed, "(not published on any CA)", 0 paths | link cleared; stage PASS |
+
+Notes: the ESC13 group was a stand-in with `adminCount=1`, not a real tier-0 group. The post-cleanup stage 13 run (template, policy, group deleted) was not yet reported when this was written.
 
 Notes: the ESC6 control was set in the registry and not restarted before the first read; the scenario reads the value, not
 the running service state, and does not say so in its wording. The ESC4 path text lists all write rights rather than the
 one the ACE holds.
 
-Still not shown to find anything in a real environment: ESC5, 13, 14, 15, stage 16 (publication and trust) and
+Still not shown to find anything in a real environment: ESC14, 15, stage 16 (publication and trust) and
 the ESC8 live probe. Their only live result is "reads real data, finds nothing on a clean lab". The Locksmith cross-check was
 not run.
 
