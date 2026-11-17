@@ -35,3 +35,11 @@ Confidence reflects how closely the technique's description matches the simulate
 
 - **Item 17 (Kerberos enumeration)** is a weak fit. The approved tier permits SPN enumeration only, so the technique describes the precursor, not the ticket request. Decision needed before Task 9 (the chain stage) uses it.
 - **Items marked `validated-with-caveat`** keep their ID. The caveat text goes in the scenario's description.
+
+## Chain-internal gap steps (added in Task 8)
+
+| Step | Scenario | ID | Status | Confidence | Source | Notes |
+|---|---|---|---|---|---|---|
+| 8b | Beneficiary change inside the chain | none | `no_clean_attack_technique` | n/a | n/a | Same behavior as item 23; the chain copy is a stage of the sequence, the standalone file is the item. |
+| 8f | Ledger audit integrity check | none | `no_clean_attack_technique` | n/a | n/a | Verification of the simulated ledger, not an adversary behavior. No ATT&CK technique describes checking an audit chain. |
+| 8g | Fraud detection and alert check | none | `no_clean_attack_technique` | n/a | n/a | Verification that controls raised an alert. Not an adversary behavior. |
