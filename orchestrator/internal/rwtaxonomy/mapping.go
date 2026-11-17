@@ -91,6 +91,23 @@ var TechniqueDomain = map[string]Domain{
 	"T1021": DomainLateralMovement,
 	// System Services: Service Execution (L3 transient remote service).
 	"T1569.002": DomainLateralMovement,
+	// Akira Windows completeness stages 18-25.
+	// External Remote Services (S18).
+	"T1133": DomainInitialAccess,
+	// Domain Trust Discovery (S19).
+	"T1482": DomainDataDiscoveryAndStaging,
+	// System Information Discovery (S20; also carries T1057 and T1083).
+	"T1082": DomainDataDiscoveryAndStaging,
+	// PowerShell (S21; also carries T1047 and T1569.002).
+	"T1059.001": DomainPreparationAndPersistence,
+	// Kerberoasting (S22).
+	"T1558.003": DomainCredentialAccess,
+	// Create Account: Local Account (S23; the domain variant T1136.002 is not simulated).
+	"T1136.001": DomainPreparationAndPersistence,
+	// Registry Run Keys (S24).
+	"T1547.001": DomainPreparationAndPersistence,
+	// Remote Access Software (S25).
+	"T1219": DomainPreparationAndPersistence,
 	// Financial Theft (Akira double-extortion correlation step D5: data theft used for extortion).
 	"T1657": DomainExfiltration,
 	// Data Destruction (B3-B5 backup deletion/immutability/restore).

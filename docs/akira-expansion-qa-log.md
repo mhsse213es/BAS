@@ -78,3 +78,39 @@ Automated: `verify-all` ok=157 fail=0; scenario, rwevidence, rwtaxonomy, rwdetec
 - B6 only inventories VSS; B5 restores only from VSS; vendor restores are not exercised. `BAS_BACKUP_REPO_PATHS` must be supplied by the operator (no repository auto-discovery).
 - Not run through the real agent; `internal/contentregistry` corpus test and the rest of `internal/api` need Docker Postgres and were not run. `web/src/features/ransomware.js` was edited but not browser-checked (`hunters-international-kill-chain` was already missing from that list; left as is).
 - `backupassurance` engine intentionally not wired (simulated-only by design).
+
+---
+
+# Part C: Windows completeness, Akira stages 17-25 (`akira-kill-chain` v2.1.0 -> v2.2.0, 26 steps)
+
+Design: `docs/superpowers/specs/2026-11-17-akira-windows-completeness-design.md`. One technique tag per step; secondary techniques are named in evidence. Inserted in kill-chain order (list order is what the engine runs; `id`/`depends_on` are not parsed).
+
+| Stage | Tag | Behaviour | Verdict |
+|---|---|---|---|
+| 17 valid accounts | T1078 | read-only local account posture, cached-logon policy, stored-credential count | FAIL on findings |
+| 18 external remote services | T1133 | RDP/WinRM/SSH listeners, any-address firewall rules, VPN clients; internet reachability and MFA explicitly not claimed | FAIL if broadly exposed |
+| 19 remote/domain discovery | T1482 (+T1018) | arp, net view, nltest (domain only), each capped at 20 s | FAIL if results, SKIP if timed out or off-domain with nothing found |
+| 20 process/system/file discovery | T1082 (+T1057, T1083) | tasklist, systeminfo, whoami /all by full System32 path, document file count | FAIL if all three succeed |
+| 21 execution telemetry | T1059.001 (+T1047, T1569.002) | encoded PowerShell, WMI create, optional gated transient service; reads 4104/4688/Sysmon 1/7045 back | FAIL = executed but no telemetry; PASS = executed and logged, or all blocked; SKIP = logs unreadable |
+| 22 Kerberoast exposure | T1558.003 | LDAP read-only SPN accounts (privileged, RC4, stale counts); TGS only with two gates | FAIL on weak accounts; SKIP off-domain |
+| 23 account persistence | T1136.001 | posture; gated creation of a disabled random-password local account, removed and verified | gate on: FAIL if created |
+| 24 Run key | T1547.001 | inventory; gated HKCU value write, read back, removed and verified | gate on: FAIL if written |
+| 25 remote access tools | T1219 | 15-tool catalogue by service/process/installed names; allow-list env | FAIL if unsanctioned present |
+
+Tag deviation: stage 23 uses T1136.001 (local), not the requested T1136.002 (domain), because only a local account is simulated. Real detection profiles are attached only to 19, 20 and 21 (those always perform the behaviour); `windows_encoded_powershell` was added to `RansomwareRelevantProfiles`. Mappings added for T1133, T1482, T1082, T1059.001, T1558.003, T1136.001, T1547.001, T1219.
+
+## Evidence (build host: workgroup, elevated, Defender real-time off)
+
+Run for real: 17 (3 findings), 18 (RDP exposed to any address), 19 (32 ARP neighbours; `net view` hung and was cut at 20 s), 20, 21 (gate off and on; no 4104 or 4688 telemetry on this host, so FAIL; 7045 found for the gated service; service removed), 22 (SKIP, not domain joined), 23 gate off SKIP and gate on (account created disabled, removed, cleanup verified), 24 inventory SKIP and gate on (value written, read back, removed), 25 (found UltraViewer). Wrong-case gate values (`TRUE`) stayed SKIP. No residue: no `bas_p_*` user, no `BAS_Persist_*` Run value, no `BASAk21*` service. YAML commands are byte-identical to the scripts run; all parse with the UTF-8 BOM; destructive-guard classification of every new step is non-destructive; `verify-all` ok=159 fail=0; scenario, rwevidence, rwtaxonomy, rwdetect, rwrecover, admatrix tests pass; `internal/api` corpus tests pass under `-short`.
+
+Defects found by this review and fixed before commit: (1) stage 19 hung on `net view` for minutes; every discovery command now has a 20 s cap and timeouts are reported; (2) stage 20 invoked Git's `whoami.exe` found first on PATH, which returned nothing and produced a false PASS; system binaries are now called by full System32 path and judged by exit code and output.
+
+## NOT verified
+
+- Stage 22 against a real domain: only the SKIP path ran; the LDAP query, counting and the gated TGS request were never executed.
+- Stage 19 domain half (nltest trusts and DC list) never ran (workgroup host).
+- Stages 17 and 18 read a single non-domain host; domain account hygiene and internet reachability are not assessed.
+- Stage 21 service telemetry found 7045 here, but 4104/4688 absent here may differ on hosts with logging enabled (positive PASS path with all channels logged was not observed); the Sysmon path was never exercised (Sysmon not installed).
+- No control that blocks any of these behaviours exists on the host, so no blocked-branch PASS was observed for 23, 24 and 21.
+- Real agent/orchestrator not used; `contentregistry` and the rest of `internal/api` need Docker and were not run; the decorative `depends_on` references (including the pre-existing `akira-s0-preflight`) are unchanged.
+- Part B steps reference detection profiles `windows_backup_tampering` and `windows_recovery_inhibition` that have no profile file (inert, as in the Akira and Rhysida scenarios); they therefore carry no detection expectations.

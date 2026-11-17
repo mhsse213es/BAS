@@ -22,6 +22,7 @@ var RansomwareRelevantProfiles = []string{
 	"windows_backup_tampering",
 	"windows_cloud_egress",
 	"windows_defender_tampering",
+	"windows_encoded_powershell",
 	"windows_dlp_exfiltration",
 	"windows_event_log_tampering",
 	"windows_file_discovery",
