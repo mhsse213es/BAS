@@ -33,7 +33,7 @@ Before = `HEAD` of this branch (`05cd683b`). After = this change.
 | Detection declared | 6 of 6 | 22 of 22 audit stages (context stage has none) |
 | Telemetry declared | 5 of 6 | 23 of 23 |
 | MITRE mapping | T1069 x5, T1222 x1 | T1069.002 x3, T1087.002 x2, T1098 x12, T1003.006, T1484.001, T1485, T1555 x2, T1558.003 (per behaviour; see below) |
-| Tests | 1 admatrix grounding test | 29 offline tests (20 PowerShell cases, 9 Go tests) (library, generator, parse, contract, size, destructive-guard) plus the unchanged admatrix test |
+| Tests | 1 admatrix grounding test | 38 offline tests (29 PowerShell cases, 9 Go tests) (library, generator, parse, contract, size, destructive-guard) plus the unchanged admatrix test |
 | Lab canary | None | `lab/ad-canary/acl-canary.ps1` written, NOT run |
 | Writes to AD | None | None (read-only; a test forbids mutating calls in stage text) |
 
@@ -57,14 +57,15 @@ File stage N is your stage N+1 (the file keeps stage 0 as the context stage). Ma
 - **SID history is not resolved.** Foreign-domain principals are only resolved when the local DC can translate their SID; foreign group members are not expanded.
 - **AdminSDHolder/SDProp awareness is partial:** stage 3 reports stale protection and stage 19 documents that protected objects have inheritance disabled; no SDProp timing logic.
 - **Scope caps:** OU sweeps cap at 2000, tier-0 computer sweeps at 200, member expansion at 2000 nodes. A cap hit returns `SKIP` with a note when nothing was found, never a clean PASS.
-- **LAPS and gMSA reads** are reported at MEDIUM when the control-access bit is not seen, because confidential-attribute reads need both ReadProperty and control access.
+- **LAPS** findings require ReadProperty on the attribute (or all properties) AND control access; plain read-all, which is the default, is not a finding.
+- **gMSA:** msDS-ManagedPassword is a constructed attribute, so ACEs on it mean nothing. The stage checks the msDS-GroupMSAMembership reader list (a group of computers is normal; users, broad principals and groups with user members are findings) and who can write that list.
 - **Real-AD behaviour of the LDAP code (scope resolvers, schema lookup, ACL reads, group expansion) is NOT VERIFIED.** The offline tests cover the evaluation logic only.
 - **Size:** the file is about 446 KB, 6x the next-largest scenario (`dlp-exfiltration-file-carriers.yaml`, 66 KB). A shared-prelude field in the loader would cut it to roughly 40 KB but touches every YAML consumer; not done.
 - **Step-contract test:** the class-aware contract test from the 11-11 work is not on this branch's base, so it was not run here.
 - Sibling scenarios (AD CS, delegation, privileged-group paths, GPO exploitation) are untouched and are upgraded one at a time afterwards.
 
 ## Verification run (offline)
-- `go test ./scripts/aclgen/`: library tests (20 PowerShell cases), generator determinism, contract fields, no mutating calls, tree-shake integrity, PowerShell parse of all 23 commands, size budget, destructive-step guard. Pass.
+- `go test ./scripts/aclgen/`: library tests (29 PowerShell cases), generator determinism, contract fields, no mutating calls, tree-shake integrity, PowerShell parse of all 23 commands, size budget, destructive-step guard. Pass.
 - `go test ./internal/scenario/... ./internal/admatrix/... ./internal/adcoverage/... ./internal/compliance/... ./scripts/...`: pass.
 - `go run scripts/signer.go verify-all ../scenarios`: `ok=156 fail=0`, re-signed with the main checkout's release key.
 - `agent/destructiveguard.Classify` on all 23 commands: non-destructive.
@@ -72,3 +73,26 @@ File stage N is your stage N+1 (the file keeps stage 0 as the context stage). Ma
 
 ## To test when you are ready (lab)
 Run `lab/ad-canary/acl-canary.ps1 -Mode Seed` in a disposable domain, run the scenario as an ordinary domain user, compare with the expected-findings table in the script header, then `-Mode Remove`.
+
+## Code audit of this implementation (2026-11-17)
+You asked for an honest check of what I claimed. I re-read all of `lib.ps1` and wrote tests for realistic default-AD cases. Eight tests failed against the code as first delivered, so these claims were wrong or overstated:
+1. **LAPS and gMSA stages would fail on a clean default domain.** Authenticated Users has read-all on most objects by default and was reported as a LAPS exposure. Fixed: LAPS needs read plus control access. The gMSA ACE check was conceptually wrong (constructed attribute); replaced by the reader-list and reader-list-write checks.
+2. **Any stage using the tier-0 parent scope would always SKIP.** The domain head's parent DN (`DC=local`) is not an object, so it counted as unreadable. Fixed: parents must be inside the domain.
+3. **Child-domain false positives.** Enterprise and Schema Admins carry the forest-root SID, not the local domain's, so they were flagged in child domains. Fixed.
+4. **Protected Users (RID 525) was treated as an expected principal**, which could hide a real finding. Removed.
+5. **The path stage printed PASS even when a tier-0 object could not be read.** Fixed: SKIP unless every node was read.
+6. **GPO write only matched all-property writes**, missing property-specific writes such as gPCFileSysPath. Fixed.
+7. **A failed schema lookup was treated as "attribute not deployed"** (a possible false PASS). Fixed: it is recorded as unreadable and not cached. Not covered by an offline test.
+8. **gMSA reader list was read through `DirectoryEntry.Properties`**, which likely returns a COM object rather than bytes. Changed to `DirectorySearcher`. NOT VERIFIED live.
+
+Still true and still open (none of this was fixed):
+- Group member lists over 1500 entries are not range-retrieved; such a group is now marked truncated (so it is not wrongly dismissed) but never fully expanded.
+- Members whose primary group is the trustee group are not in the `member` attribute and are not seen.
+- Deny matching compares the same SID, Everyone and Authenticated Users only; a Deny on a group the trustee belongs to is not detected, so the finding stays HIGH.
+- Account, Server, Backup and Print Operators and Replicator ACEs are suppressed as expected principals (as the original did). A delegation to them on a tier-0 object is never reported.
+- In the path stage the start of a path is the trusted group, not each member.
+- Any unreadable object makes a stage SKIP when there are no findings, which may make some stages SKIP routinely in a real domain until tuned.
+- A GenericAll ACE reports once per capability checked, so one ACE can yield several lines.
+- None of the LDAP code path (scope queries, schema lookup, ACL reads, group expansion) has run against a real domain.
+
+Full `go test ./...` on this worktree: failures outside this change. `internal/killchain` signature tests fail in this worktree only (they pass on the main checkout; this branch changes no campaign or killchain files). `internal/api` needs the Docker Postgres container and cannot run here. `internal/apibas/runner` (`TestABUSE002Repeatability`) and `internal/networkefficacy` (live Suricata, 60 s timeouts) failed in the full run; I did not run them on a clean baseline. None of those packages is touched by this change.

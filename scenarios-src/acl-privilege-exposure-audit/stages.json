@@ -305,16 +305,17 @@
   "n": 16,
   "name": "ACL Stage 16 — gMSA Password Read Exposure (msDS-ManagedPassword) [P0]",
   "technique_id": "T1555",
-  "attack_note": "Reading msDS-ManagedPassword yields the gMSA secret (T1555).",
+  "attack_note": "Reading msDS-ManagedPassword yields the gMSA secret (T1555). The attribute is constructed, so access is governed by msDS-GroupMSAMembership; the audit checks that list and who can write it.",
   "timeout_sec": 180,
-  "blast_radius": "Reads gMSA objects, their msDS-GroupMSAMembership readers and DACLs. No password is read.",
+  "blast_radius": "Reads gMSA objects, the msDS-GroupMSAMembership reader list and DACLs. No password is read.",
   "telemetry": [
    "Sysmon EID 1: powershell.exe reading gMSA object ACLs via DirectoryServices",
    "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads",
    "Sysmon EID 1: powershell.exe LDAP search for msDS-GroupManagedServiceAccount"
   ],
   "detection": [
-   "SIEM: user or broad principal listed in msDS-GroupMSAMembership of a gMSA",
+   "SIEM: user, broad principal or group with non-computer members listed in msDS-GroupMSAMembership of a gMSA",
+   "SIEM: non-tier-0 WriteProperty on msDS-GroupMSAMembership (adds a reader), or Security EID 5136 on that attribute",
    "SIEM: non-computer principal reading msDS-ManagedPassword"
   ],
   "call": "Invoke-GmsaStage -Id 'S16'",
