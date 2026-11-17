@@ -45,3 +45,36 @@ Destructive-guard classification compared old vs new for every step: unchanged (
 2. Pre-existing: stages 1, 2, 3 and 4 `depends_on: akira-s0-preflight`, which does not exist. Not changed (out of scope), flagged.
 3. Re-tagging 6b away from T1486 means it no longer counts as encryption evidence in ransomware scoring (intended, but a visible scoring change). T1074.001, T1041, T1036.008 are not modeled by `rwevidence`, so 5a/5b/6b are reported but not graded as ransomware capabilities.
 4. T1036.008 is the closest available tactic mapping for a mass rename; sub-technique choice is flagged for review.
+
+---
+
+# Part B: `ransomware-backup-recovery-assurance` v1.0.0 (7 steps, Windows, vendor-neutral)
+
+Hand-written YAML (no generator). Registered in: `ransomwareScenarioIDs` (`internal/api/rwevidence_dispatch.go`), the corpus lists in `rwevidence`, `rwdetect`, `rwtaxonomy`, `contentregistry`, `internal/api/rwevidence_dispatch_corpus_test.go`, and `web/src/features/ransomware.js`. The scenario-count pin in `internal/scenario/product_line_test.go` went 127 -> 128. New mappings: T1007 (data discovery), T1555 (credential access), T1485 (encryption and destruction). Detection profiles reuse `windows_backup_tampering` and `windows_recovery_inhibition` (no new profile).
+
+Technique choice: T1490 is deliberately NOT used. `rwevidence` models T1490 and grades it from VSS enumerate/delete/survival step names; assurance steps would be misread. The new techniques are unmodeled by `rwevidence`, so they appear as not-tested evidence rows, not as graded ransomware capabilities.
+
+| Step | Verdict logic | Notes |
+|---|---|---|
+| B1 discovery | PASS if a vendor product, registry key, wbadmin backup version or shadow copy exists; FAIL if none (elevated); SKIP if none and not elevated | Windows Server Backup service alone does not count (it exists on every install) |
+| B2 credential exposure | FAIL on extra Backup Operators members, admin-level backup service accounts or broadly writable repository ACEs; SKIP if nothing to assess | Credential target names only; domain-group nesting not resolved |
+| B3 deletion resistance | Gate off: ACL approximation (deny-aware). Gate on (exact `true`): create/append/delete one canary per path | Canary may remain on retention-locked repositories (reported) |
+| B4 immutability | Only from B3's canary result (state file in %TEMP%); SKIP without gate or result | Never guesses from product names |
+| B5 restore | 3 reference files from newest C: shadow copy to scratch, hash-verified twice, scratch removed; no recovery point = FAIL | VSS only; `vendor_restore=not_exercised` |
+| B6 service impact | Volumes of running critical/non-Windows services with zero VSS recovery points = FAIL; SKIP when a third-party product is present (coverage unknown) | Volume taken from service binary path; data locations not resolved |
+| B7 RPO/RTO | RPO vs `BAS_RPO_TARGET_HOURS` (24), estimated restore vs `BAS_RTO_TARGET_MINUTES` (240); invalid values ignored with a note | Restore time is labelled ESTIMATE (64 MB sequential sample) |
+
+## Part B evidence (build host: elevated, 2 old shadow copies, no backup product, Windows Server Backup service only)
+
+Run for real: B1 (PASS via shadow copies), B2 (PASS; with a test repo granting Everyone Modify it FAILed and listed the ACE), B5 (3/3 restored and verified, cleanup verified), B6 (PASS, C: has 2 recovery points), B7 (sampled 65.6 MB at about 380 MB/s, estimate 13 min, FAIL because the newest recovery point is 491 h old vs 24 h target), B3 and B4 against throwaway folders under the scratchpad: gate wrong-case (`TRUE`) behaved as gate off; writable repo -> canary create/modify/delete ok -> FAIL, B4 FAIL; a folder with an inherited Delete deny -> modify denied, delete ok (admin) -> FAIL (partial denial detected); missing path ignored; no `bas_bra*` residue in %TEMP% afterwards.
+Defects found by this review and fixed before commit: (1) B1 counted the always-present Windows Server Backup service as a backup product; (2) B5/B7 built a wrong `\?\GLOBALROOT` path (the WMI DeviceObject already carries the prefix), so B7 sampled 0 bytes.
+Automated: `verify-all` ok=157 fail=0; scenario, rwevidence, rwtaxonomy, rwdetect, rwrecover, admatrix tests pass; `internal/api` corpus tests pass under `-short`.
+
+## Part B NOT verified
+
+- No PASS path for B3/B4 (a repository that really denies modify and delete) was observed: this host has no immutable repository and I could not construct one. Only the FAIL and gate/skip branches were exercised.
+- No third-party backup product exists on this host: product discovery by service/process/registry name patterns is untested against real Veeam/Commvault/etc. installs; the name lists are from memory of those products and unverified.
+- The B3 ACL check is an approximation (share permissions, product locks and token privileges not evaluated; the admin identity bypasses a delete denial through folder DeleteChild, as observed).
+- B6 only inventories VSS; B5 restores only from VSS; vendor restores are not exercised. `BAS_BACKUP_REPO_PATHS` must be supplied by the operator (no repository auto-discovery).
+- Not run through the real agent; `internal/contentregistry` corpus test and the rest of `internal/api` need Docker Postgres and were not run. `web/src/features/ransomware.js` was edited but not browser-checked (`hunters-international-kill-chain` was already missing from that list; left as is).
+- `backupassurance` engine intentionally not wired (simulated-only by design).

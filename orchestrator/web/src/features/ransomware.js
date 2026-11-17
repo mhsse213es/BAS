@@ -16,7 +16,8 @@ import { setDashRR } from './dash-rich.js';
 var RR_SCENARIO_IDS = [
   'akira-kill-chain', 'blackcat-kill-chain', 'clop-kill-chain', 'lockbit-kill-chain',
   'play-kill-chain', 'ransomhub-kill-chain', 'ransomware-drill', 'em-07-ransomware-readiness',
-  'linux-ransomware-drill', 'black-basta-kill-chain', 'medusa-kill-chain', 'rhysida-kill-chain'
+  'linux-ransomware-drill', 'black-basta-kill-chain', 'medusa-kill-chain', 'rhysida-kill-chain',
+  'ransomware-backup-recovery-assurance'
 ];
 
 // Dimension display config: rwscore.Dimension value → { label, icon }

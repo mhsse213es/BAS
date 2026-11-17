@@ -82,6 +82,13 @@ var TechniqueDomain = map[string]Domain{
 	// mapped to Encryption and Destruction. Defense Evasion is the closest ATT&CK tactic; the
 	// exact sub-technique is flagged for review.
 	"T1036.008": DomainDefenseEvasion,
+	// Backup assurance steps (ransomware-backup-recovery-assurance): the technique each step defends against.
+	// System Service Discovery (B1 discovery, B6/B7 recovery-point inventory).
+	"T1007": DomainDataDiscoveryAndStaging,
+	// Credentials from Password Stores (B2 backup credential exposure).
+	"T1555": DomainCredentialAccess,
+	// Data Destruction (B3-B5 backup deletion/immutability/restore).
+	"T1485": DomainEncryptionAndDestruction,
 }
 
 // DomainFor returns techniqueID's mapped domain and true, or ("", false)
