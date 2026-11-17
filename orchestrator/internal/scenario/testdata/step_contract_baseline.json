@@ -224,6 +224,31 @@
     "detection": 0,
     "telemetry": 0
   },
+  "cloud-vm-linux-aws-iam.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-linux-azure-identity.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-linux-credential-exposure.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-linux-data-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-linux-persistence-lateral.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "cloud-vm-persistence-lateral.yaml": {
     "cleanup": 0,
     "detection": 0,

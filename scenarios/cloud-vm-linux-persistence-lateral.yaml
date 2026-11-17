@@ -1,0 +1,619 @@
+id: "cloud-vm-linux-persistence-lateral"
+product_line: cloud
+name: "Cloud VM Linux Mastery - Cloud Persistence and Lateral Movement (gated)"
+description: >
+  Linux counterpart of the persistence pack. Role assumption, access key creation and client secret addition are
+  gated behind explicit lab gates, act only on operator-named test identities, verify and attempt cleanup, and
+  default to SKIP. Remote-management exposure (SSH or WinRM listener plus firewall state) and startup-location
+  writability are read-only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [linux]
+tags:
+  - cloud
+  - linux
+  - cloud-vm-mastery
+  - cloud-vm-linux
+  - persistence
+  - lateral-movement
+  - privilege-escalation
+mitre_phases:
+  - persistence
+  - lateral-movement
+  - privilege-escalation
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: cvl-d27
+    name: "Cloud VM Linux Lateral 27 - Role Assumption of a Test Role (T1098)"
+    technique_id: T1098
+    framework: custom
+    executor: bash
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Gated (BAS_CONFIRM_CLOUD_ROLE_ASSUME). One sts assume-role call against a designated test role. Returned credentials are discarded unrecorded."
+    telemetry:
+      - "CloudTrail: AssumeRole (cloud side)"
+    detection:
+      - "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    command: |
+      CV_RUN="${BAS_RUN_ID:-}"
+      CV_RUN="${CV_RUN:0:8}"
+      [ -n "$CV_RUN" ] || CV_RUN=$(printf '%08x' "$RANDOM$RANDOM")
+      CV_TAG="bas_cv_${CV_RUN}"
+      CV_RES_MGMT='https%3A%2F%2Fmanagement.azure.com%2F'
+      CV_RES_VAULT='https%3A%2F%2Fvault.azure.net'
+      CV_RES_STORAGE='https%3A%2F%2Fstorage.azure.com%2F'
+      CV_RES_GRAPH='https%3A%2F%2Fgraph.microsoft.com%2F'
+      cv_gate() { [ "${!1:-}" = "true" ]; }
+      cv_env() { printenv "$1" 2>/dev/null; }
+      cv_done() { # outcome reason id
+        local p=SKIP
+        case "$1" in pass) p=PASS ;; fail) p=FAIL ;; error) p=ERROR ;; esac
+        echo "$p: $2 [BAS-SIM-$3]"
+        exit 0
+      }
+      cv_az_instance() { curl -s -m 2 -H 'Metadata: true' 'http://169.254.169.254/metadata/instance?api-version=2021-02-01' 2>/dev/null; }
+      cv_az_present() { printf '%s' "$(cv_az_instance)" | grep -q '"compute"'; }
+      cv_az_init() { # id -> sets SUB RG VMN, or SKIPs when this is not an Azure VM
+        local inst
+        inst=$(cv_az_instance)
+        if ! printf '%s' "$inst" | grep -q '"compute"'; then cv_done skip "Azure IMDS is unreachable from this host, so this is not an Azure VM" "$1"; fi
+        SUB=$(printf '%s' "$inst" | grep -o '"subscriptionId":"[^"]*"' | head -n1 | cut -d'"' -f4)
+        RG=$(printf '%s' "$inst" | grep -o '"resourceGroupName":"[^"]*"' | head -n1 | cut -d'"' -f4)
+        VMN=$(printf '%s' "$inst" | grep -o '"name":"[^"]*"' | head -n1 | cut -d'"' -f4)
+      }
+      cv_az_token() { # encoded-resource -> CV_TOKEN, CV_TCODE
+        local out
+        out=$(curl -s -m 5 -w '\n%{http_code}' -H 'Metadata: true' "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=$1" 2>/dev/null)
+        CV_TCODE=$(printf '%s' "$out" | tail -n1)
+        CV_TOKEN=$(printf '%s' "$out" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p' | head -n1)
+      }
+      cv_http() { # method uri token [body] [x-ms-version] -> CV_HCODE, CV_HBODY
+        local args out
+        args=(-s -m 15 -w '\n%{http_code}' -X "$1" -H "Authorization: Bearer $3")
+        [ -n "${5:-}" ] && args+=(-H "x-ms-version: $5")
+        if [ -n "${4:-}" ]; then args+=(-H 'Content-Type: application/json' --data "$4"); fi
+        out=$(curl "${args[@]}" "$2" 2>/dev/null)
+        CV_HCODE=$(printf '%s' "$out" | tail -n1)
+        CV_HBODY=$(printf '%s' "$out" | sed '$d')
+      }
+      cv_count() { # jq filter -> count, or "unknown" without jq
+        if [ "$CV_HCODE" != 200 ]; then echo 0; return; fi
+        if command -v jq >/dev/null 2>&1; then printf '%s' "$CV_HBODY" | jq -r "$1" 2>/dev/null; else echo unknown; fi
+      }
+      cv_classify_http() { # code what gate id
+        local c="$1" what="$2" gate="${3:-BAS_CLOUD_EXPECT_ENUMERATION}" id="$4"
+        case "$c" in
+          2??)
+            if cv_gate "$gate"; then cv_done skip "$what succeeded, which the operator documents as expected for this workload, so no control verdict is scored" "$id"; fi
+            cv_done fail "$what succeeded for an identity the operator did not expect to have this access" "$id" ;;
+          401|403) cv_done pass "$what was refused by the cloud control (HTTP $c)" "$id" ;;
+          *) cv_done error "$what returned HTTP $c, which cannot be classified as a control result" "$id" ;;
+        esac
+      }
+      cv_have_aws() { command -v aws >/dev/null 2>&1; }
+      cv_aws() { CV_AOUT=$(aws "$@" --output json 2>&1); CV_ARC=$?; }
+      cv_classify_aws() { # what gate id
+        local what="$1" gate="${2:-BAS_CLOUD_EXPECT_ENUMERATION}" id="$3"
+        if [ "$CV_ARC" -eq 0 ]; then
+          if cv_gate "$gate"; then cv_done skip "$what succeeded, which the operator documents as expected for this workload, so no control verdict is scored" "$id"; fi
+          cv_done fail "$what succeeded for an identity the operator did not expect to have this access" "$id"
+        fi
+        if printf '%s' "$CV_AOUT" | grep -Eq 'Unable to locate credentials|NoCredentialProviders|NoCredentials'; then
+          cv_done skip "no AWS identity is available to this host, so $what was not attempted" "$id"
+        fi
+        if printf '%s' "$CV_AOUT" | grep -Eq 'AccessDenied|UnauthorizedOperation|AuthFailure|not authorized|Forbidden'; then
+          cv_done pass "$what was refused by the cloud control" "$id"
+        fi
+        cv_done error "$what failed without a classifiable control answer" "$id"
+      }
+      cv_aws_token() { curl -s -m 2 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' 'http://169.254.169.254/latest/api/token' 2>/dev/null; }
+      cv_aws_meta() { # path -> body (empty when unavailable)
+        local t
+        t=$(cv_aws_token)
+        [ -n "$t" ] || return 0
+        curl -s -m 2 -H "X-aws-ec2-metadata-token: $t" "http://169.254.169.254/latest/meta-data/$1" 2>/dev/null
+      }
+      cv_set_region() {
+        if [ -z "${AWS_DEFAULT_REGION:-}" ]; then
+          local r; r=$(cv_aws_meta placement/region)
+          [ -n "$r" ] && export AWS_DEFAULT_REGION="$r"
+        fi
+      }
+      cv_gate BAS_CONFIRM_CLOUD_ROLE_ASSUME || cv_done skip "lab gate BAS_CONFIRM_CLOUD_ROLE_ASSUME is not set to true; this step asks the cloud to issue temporary credentials for a test role" CV-LD27
+      arn=$(cv_env BAS_CLOUD_TEST_ROLE_ARN)
+      [ -n "$arn" ] || cv_done skip "no test role configured (BAS_CLOUD_TEST_ROLE_ARN)" CV-LD27
+      cv_have_aws || cv_done skip "AWS CLI is not installed on this host" CV-LD27
+      cv_set_region
+      cv_aws sts assume-role --role-arn "$arn" --role-session-name "$CV_TAG" --duration-seconds 900
+      echo "EXEC T1098: assume-role attempted for the test role only. Any returned credentials were discarded unrecorded."
+      cv_classify_aws 'role assumption of the test role' BAS_CLOUD_EXPECT_ROLE_ASSUME CV-LD27
+    cleanup: ""
+
+  # -------------------------------------------------------------------------
+  - id: cvl-d28
+    name: "Cloud VM Linux Lateral 28 - Access Key Creation Attempt for a Test User (T1098.001)"
+    technique_id: T1098.001
+    framework: custom
+    executor: bash
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: high
+    reversible: true
+    blast_radius: "Gated (BAS_CONFIRM_CLOUD_IAM_WRITE). Creates one access key for a designated test user, deletes it, and verifies deletion. The secret is never recorded."
+    telemetry:
+      - "CloudTrail: CreateAccessKey / DeleteAccessKey (cloud side)"
+    detection:
+      - "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    command: |
+      CV_RUN="${BAS_RUN_ID:-}"
+      CV_RUN="${CV_RUN:0:8}"
+      [ -n "$CV_RUN" ] || CV_RUN=$(printf '%08x' "$RANDOM$RANDOM")
+      CV_TAG="bas_cv_${CV_RUN}"
+      CV_RES_MGMT='https%3A%2F%2Fmanagement.azure.com%2F'
+      CV_RES_VAULT='https%3A%2F%2Fvault.azure.net'
+      CV_RES_STORAGE='https%3A%2F%2Fstorage.azure.com%2F'
+      CV_RES_GRAPH='https%3A%2F%2Fgraph.microsoft.com%2F'
+      cv_gate() { [ "${!1:-}" = "true" ]; }
+      cv_env() { printenv "$1" 2>/dev/null; }
+      cv_done() { # outcome reason id
+        local p=SKIP
+        case "$1" in pass) p=PASS ;; fail) p=FAIL ;; error) p=ERROR ;; esac
+        echo "$p: $2 [BAS-SIM-$3]"
+        exit 0
+      }
+      cv_az_instance() { curl -s -m 2 -H 'Metadata: true' 'http://169.254.169.254/metadata/instance?api-version=2021-02-01' 2>/dev/null; }
+      cv_az_present() { printf '%s' "$(cv_az_instance)" | grep -q '"compute"'; }
+      cv_az_init() { # id -> sets SUB RG VMN, or SKIPs when this is not an Azure VM
+        local inst
+        inst=$(cv_az_instance)
+        if ! printf '%s' "$inst" | grep -q '"compute"'; then cv_done skip "Azure IMDS is unreachable from this host, so this is not an Azure VM" "$1"; fi
+        SUB=$(printf '%s' "$inst" | grep -o '"subscriptionId":"[^"]*"' | head -n1 | cut -d'"' -f4)
+        RG=$(printf '%s' "$inst" | grep -o '"resourceGroupName":"[^"]*"' | head -n1 | cut -d'"' -f4)
+        VMN=$(printf '%s' "$inst" | grep -o '"name":"[^"]*"' | head -n1 | cut -d'"' -f4)
+      }
+      cv_az_token() { # encoded-resource -> CV_TOKEN, CV_TCODE
+        local out
+        out=$(curl -s -m 5 -w '\n%{http_code}' -H 'Metadata: true' "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=$1" 2>/dev/null)
+        CV_TCODE=$(printf '%s' "$out" | tail -n1)
+        CV_TOKEN=$(printf '%s' "$out" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p' | head -n1)
+      }
+      cv_http() { # method uri token [body] [x-ms-version] -> CV_HCODE, CV_HBODY
+        local args out
+        args=(-s -m 15 -w '\n%{http_code}' -X "$1" -H "Authorization: Bearer $3")
+        [ -n "${5:-}" ] && args+=(-H "x-ms-version: $5")
+        if [ -n "${4:-}" ]; then args+=(-H 'Content-Type: application/json' --data "$4"); fi
+        out=$(curl "${args[@]}" "$2" 2>/dev/null)
+        CV_HCODE=$(printf '%s' "$out" | tail -n1)
+        CV_HBODY=$(printf '%s' "$out" | sed '$d')
+      }
+      cv_count() { # jq filter -> count, or "unknown" without jq
+        if [ "$CV_HCODE" != 200 ]; then echo 0; return; fi
+        if command -v jq >/dev/null 2>&1; then printf '%s' "$CV_HBODY" | jq -r "$1" 2>/dev/null; else echo unknown; fi
+      }
+      cv_classify_http() { # code what gate id
+        local c="$1" what="$2" gate="${3:-BAS_CLOUD_EXPECT_ENUMERATION}" id="$4"
+        case "$c" in
+          2??)
+            if cv_gate "$gate"; then cv_done skip "$what succeeded, which the operator documents as expected for this workload, so no control verdict is scored" "$id"; fi
+            cv_done fail "$what succeeded for an identity the operator did not expect to have this access" "$id" ;;
+          401|403) cv_done pass "$what was refused by the cloud control (HTTP $c)" "$id" ;;
+          *) cv_done error "$what returned HTTP $c, which cannot be classified as a control result" "$id" ;;
+        esac
+      }
+      cv_have_aws() { command -v aws >/dev/null 2>&1; }
+      cv_aws() { CV_AOUT=$(aws "$@" --output json 2>&1); CV_ARC=$?; }
+      cv_classify_aws() { # what gate id
+        local what="$1" gate="${2:-BAS_CLOUD_EXPECT_ENUMERATION}" id="$3"
+        if [ "$CV_ARC" -eq 0 ]; then
+          if cv_gate "$gate"; then cv_done skip "$what succeeded, which the operator documents as expected for this workload, so no control verdict is scored" "$id"; fi
+          cv_done fail "$what succeeded for an identity the operator did not expect to have this access" "$id"
+        fi
+        if printf '%s' "$CV_AOUT" | grep -Eq 'Unable to locate credentials|NoCredentialProviders|NoCredentials'; then
+          cv_done skip "no AWS identity is available to this host, so $what was not attempted" "$id"
+        fi
+        if printf '%s' "$CV_AOUT" | grep -Eq 'AccessDenied|UnauthorizedOperation|AuthFailure|not authorized|Forbidden'; then
+          cv_done pass "$what was refused by the cloud control" "$id"
+        fi
+        cv_done error "$what failed without a classifiable control answer" "$id"
+      }
+      cv_aws_token() { curl -s -m 2 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' 'http://169.254.169.254/latest/api/token' 2>/dev/null; }
+      cv_aws_meta() { # path -> body (empty when unavailable)
+        local t
+        t=$(cv_aws_token)
+        [ -n "$t" ] || return 0
+        curl -s -m 2 -H "X-aws-ec2-metadata-token: $t" "http://169.254.169.254/latest/meta-data/$1" 2>/dev/null
+      }
+      cv_set_region() {
+        if [ -z "${AWS_DEFAULT_REGION:-}" ]; then
+          local r; r=$(cv_aws_meta placement/region)
+          [ -n "$r" ] && export AWS_DEFAULT_REGION="$r"
+        fi
+      }
+      cv_gate BAS_CONFIRM_CLOUD_IAM_WRITE || cv_done skip "lab gate BAS_CONFIRM_CLOUD_IAM_WRITE is not set to true; this step creates and then deletes an access key on a test user" CV-LD28
+      user=$(cv_env BAS_CLOUD_TEST_USER)
+      [ -n "$user" ] || cv_done skip "no test IAM user configured (BAS_CLOUD_TEST_USER)" CV-LD28
+      cv_have_aws || cv_done skip "AWS CLI is not installed on this host" CV-LD28
+      cv_set_region
+      cv_aws iam create-access-key --user-name "$user"
+      [ "$CV_ARC" -eq 0 ] || cv_classify_aws 'access key creation for the test user' BAS_CLOUD_EXPECT_KEY_CREATE CV-LD28
+      keyid=$(printf '%s' "$CV_AOUT" | grep -o '"AccessKeyId": *"[^"]*"' | head -n1 | cut -d'"' -f4)
+      CV_AOUT=""
+      [ -n "$keyid" ] || cv_done fail "an access key was created for the test user but its id could not be parsed, so cleanup was NOT attempted; list and delete the test user keys manually" CV-LD28
+      cv_aws iam delete-access-key --user-name "$user" --access-key-id "$keyid"; delrc=$CV_ARC
+      cv_aws iam list-access-keys --user-name "$user"; still=0
+      printf '%s' "$CV_AOUT" | grep -q "$keyid" && still=1
+      CV_AOUT=""
+      echo "EXEC T1098.001: access key created for the test user and deleted; delete_exit=$delrc still_listed=$still. The secret was never recorded."
+      if [ "$delrc" -ne 0 ] || [ "$still" -eq 1 ]; then cv_done fail "an access key was created for the test user, and cleanup was NOT verified; delete the key with id $keyid manually" CV-LD28; fi
+      cv_gate BAS_CLOUD_EXPECT_KEY_CREATE && cv_done skip "access key creation succeeded and is documented as expected; cleanup verified" CV-LD28
+      cv_done fail "the workload identity could create an access key for the test user; cleanup verified" CV-LD28
+    cleanup: ""
+
+  # -------------------------------------------------------------------------
+  - id: cvl-d29
+    name: "Cloud VM Linux Lateral 29 - Service Principal Client Secret Addition on a Test App (T1098.001)"
+    technique_id: T1098.001
+    framework: custom
+    executor: bash
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: high
+    reversible: true
+    blast_radius: "Gated (BAS_CONFIRM_CLOUD_IAM_WRITE). Adds one client secret to a designated test application, removes it, and verifies removal. The secret text is never recorded."
+    telemetry:
+      - "Entra audit: Update application - Certificates and secrets (cloud side)"
+    detection:
+      - "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    command: |
+      CV_RUN="${BAS_RUN_ID:-}"
+      CV_RUN="${CV_RUN:0:8}"
+      [ -n "$CV_RUN" ] || CV_RUN=$(printf '%08x' "$RANDOM$RANDOM")
+      CV_TAG="bas_cv_${CV_RUN}"
+      CV_RES_MGMT='https%3A%2F%2Fmanagement.azure.com%2F'
+      CV_RES_VAULT='https%3A%2F%2Fvault.azure.net'
+      CV_RES_STORAGE='https%3A%2F%2Fstorage.azure.com%2F'
+      CV_RES_GRAPH='https%3A%2F%2Fgraph.microsoft.com%2F'
+      cv_gate() { [ "${!1:-}" = "true" ]; }
+      cv_env() { printenv "$1" 2>/dev/null; }
+      cv_done() { # outcome reason id
+        local p=SKIP
+        case "$1" in pass) p=PASS ;; fail) p=FAIL ;; error) p=ERROR ;; esac
+        echo "$p: $2 [BAS-SIM-$3]"
+        exit 0
+      }
+      cv_az_instance() { curl -s -m 2 -H 'Metadata: true' 'http://169.254.169.254/metadata/instance?api-version=2021-02-01' 2>/dev/null; }
+      cv_az_present() { printf '%s' "$(cv_az_instance)" | grep -q '"compute"'; }
+      cv_az_init() { # id -> sets SUB RG VMN, or SKIPs when this is not an Azure VM
+        local inst
+        inst=$(cv_az_instance)
+        if ! printf '%s' "$inst" | grep -q '"compute"'; then cv_done skip "Azure IMDS is unreachable from this host, so this is not an Azure VM" "$1"; fi
+        SUB=$(printf '%s' "$inst" | grep -o '"subscriptionId":"[^"]*"' | head -n1 | cut -d'"' -f4)
+        RG=$(printf '%s' "$inst" | grep -o '"resourceGroupName":"[^"]*"' | head -n1 | cut -d'"' -f4)
+        VMN=$(printf '%s' "$inst" | grep -o '"name":"[^"]*"' | head -n1 | cut -d'"' -f4)
+      }
+      cv_az_token() { # encoded-resource -> CV_TOKEN, CV_TCODE
+        local out
+        out=$(curl -s -m 5 -w '\n%{http_code}' -H 'Metadata: true' "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=$1" 2>/dev/null)
+        CV_TCODE=$(printf '%s' "$out" | tail -n1)
+        CV_TOKEN=$(printf '%s' "$out" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p' | head -n1)
+      }
+      cv_http() { # method uri token [body] [x-ms-version] -> CV_HCODE, CV_HBODY
+        local args out
+        args=(-s -m 15 -w '\n%{http_code}' -X "$1" -H "Authorization: Bearer $3")
+        [ -n "${5:-}" ] && args+=(-H "x-ms-version: $5")
+        if [ -n "${4:-}" ]; then args+=(-H 'Content-Type: application/json' --data "$4"); fi
+        out=$(curl "${args[@]}" "$2" 2>/dev/null)
+        CV_HCODE=$(printf '%s' "$out" | tail -n1)
+        CV_HBODY=$(printf '%s' "$out" | sed '$d')
+      }
+      cv_count() { # jq filter -> count, or "unknown" without jq
+        if [ "$CV_HCODE" != 200 ]; then echo 0; return; fi
+        if command -v jq >/dev/null 2>&1; then printf '%s' "$CV_HBODY" | jq -r "$1" 2>/dev/null; else echo unknown; fi
+      }
+      cv_classify_http() { # code what gate id
+        local c="$1" what="$2" gate="${3:-BAS_CLOUD_EXPECT_ENUMERATION}" id="$4"
+        case "$c" in
+          2??)
+            if cv_gate "$gate"; then cv_done skip "$what succeeded, which the operator documents as expected for this workload, so no control verdict is scored" "$id"; fi
+            cv_done fail "$what succeeded for an identity the operator did not expect to have this access" "$id" ;;
+          401|403) cv_done pass "$what was refused by the cloud control (HTTP $c)" "$id" ;;
+          *) cv_done error "$what returned HTTP $c, which cannot be classified as a control result" "$id" ;;
+        esac
+      }
+      cv_have_aws() { command -v aws >/dev/null 2>&1; }
+      cv_aws() { CV_AOUT=$(aws "$@" --output json 2>&1); CV_ARC=$?; }
+      cv_classify_aws() { # what gate id
+        local what="$1" gate="${2:-BAS_CLOUD_EXPECT_ENUMERATION}" id="$3"
+        if [ "$CV_ARC" -eq 0 ]; then
+          if cv_gate "$gate"; then cv_done skip "$what succeeded, which the operator documents as expected for this workload, so no control verdict is scored" "$id"; fi
+          cv_done fail "$what succeeded for an identity the operator did not expect to have this access" "$id"
+        fi
+        if printf '%s' "$CV_AOUT" | grep -Eq 'Unable to locate credentials|NoCredentialProviders|NoCredentials'; then
+          cv_done skip "no AWS identity is available to this host, so $what was not attempted" "$id"
+        fi
+        if printf '%s' "$CV_AOUT" | grep -Eq 'AccessDenied|UnauthorizedOperation|AuthFailure|not authorized|Forbidden'; then
+          cv_done pass "$what was refused by the cloud control" "$id"
+        fi
+        cv_done error "$what failed without a classifiable control answer" "$id"
+      }
+      cv_aws_token() { curl -s -m 2 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' 'http://169.254.169.254/latest/api/token' 2>/dev/null; }
+      cv_aws_meta() { # path -> body (empty when unavailable)
+        local t
+        t=$(cv_aws_token)
+        [ -n "$t" ] || return 0
+        curl -s -m 2 -H "X-aws-ec2-metadata-token: $t" "http://169.254.169.254/latest/meta-data/$1" 2>/dev/null
+      }
+      cv_set_region() {
+        if [ -z "${AWS_DEFAULT_REGION:-}" ]; then
+          local r; r=$(cv_aws_meta placement/region)
+          [ -n "$r" ] && export AWS_DEFAULT_REGION="$r"
+        fi
+      }
+      cv_gate BAS_CONFIRM_CLOUD_IAM_WRITE || cv_done skip "lab gate BAS_CONFIRM_CLOUD_IAM_WRITE is not set to true; this step adds and then removes a client secret on a test application" CV-LD29
+      app=$(cv_env BAS_CLOUD_TEST_APP_OBJECT_ID)
+      [ -n "$app" ] || cv_done skip "no test application configured (BAS_CLOUD_TEST_APP_OBJECT_ID); use a dedicated test application" CV-LD29
+      cv_az_token "$CV_RES_GRAPH"
+      [ -n "$CV_TOKEN" ] || cv_done skip "no managed-identity token for Microsoft Graph (no identity attached to this VM)" CV-LD29
+      end=$(date -u -d '+1 hour' +%Y-%m-%dT%H:%M:%SZ)
+      cv_http POST "https://graph.microsoft.com/v1.0/applications/$app/addPassword" "$CV_TOKEN" "{\"passwordCredential\":{\"displayName\":\"$CV_TAG\",\"endDateTime\":\"$end\"}}"
+      [ "$CV_HCODE" = 200 ] || cv_classify_http "$CV_HCODE" 'service principal credential addition on the test application' BAS_CLOUD_EXPECT_KEY_CREATE CV-LD29
+      keyid=$(printf '%s' "$CV_HBODY" | sed -n 's/.*"keyId":"\([^"]*\)".*/\1/p' | head -n1)
+      CV_HBODY=""
+      cv_http POST "https://graph.microsoft.com/v1.0/applications/$app/removePassword" "$CV_TOKEN" "{\"keyId\":\"$keyid\"}"
+      rmcode=$CV_HCODE
+      echo "EXEC T1098.001: client secret added to the test application and removed; remove_http=$rmcode. The secret text was never recorded."
+      case "$rmcode" in 2??) ;; *) cv_done fail "a client secret was added to the test application and cleanup was NOT verified; remove key id $keyid manually" CV-LD29 ;; esac
+      cv_gate BAS_CLOUD_EXPECT_KEY_CREATE && cv_done skip "client secret addition succeeded and is documented as expected; cleanup verified" CV-LD29
+      cv_done fail "the workload identity could add a client secret to a service principal; cleanup verified" CV-LD29
+    cleanup: ""
+
+  # -------------------------------------------------------------------------
+  - id: cvl-d30
+    name: "Cloud VM Linux Lateral 30 - Remote Management Exposure (T1021)"
+    technique_id: T1021
+    framework: custom
+    executor: bash
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only SSH or WinRM listener and inbound firewall-rule check. Never starts, stops or reconfigures WinRM or firewall rules."
+    telemetry:
+      - "auditd execve: ss / ufw / iptables read"
+    detection:
+      - "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    command: |
+      CV_RUN="${BAS_RUN_ID:-}"
+      CV_RUN="${CV_RUN:0:8}"
+      [ -n "$CV_RUN" ] || CV_RUN=$(printf '%08x' "$RANDOM$RANDOM")
+      CV_TAG="bas_cv_${CV_RUN}"
+      CV_RES_MGMT='https%3A%2F%2Fmanagement.azure.com%2F'
+      CV_RES_VAULT='https%3A%2F%2Fvault.azure.net'
+      CV_RES_STORAGE='https%3A%2F%2Fstorage.azure.com%2F'
+      CV_RES_GRAPH='https%3A%2F%2Fgraph.microsoft.com%2F'
+      cv_gate() { [ "${!1:-}" = "true" ]; }
+      cv_env() { printenv "$1" 2>/dev/null; }
+      cv_done() { # outcome reason id
+        local p=SKIP
+        case "$1" in pass) p=PASS ;; fail) p=FAIL ;; error) p=ERROR ;; esac
+        echo "$p: $2 [BAS-SIM-$3]"
+        exit 0
+      }
+      cv_az_instance() { curl -s -m 2 -H 'Metadata: true' 'http://169.254.169.254/metadata/instance?api-version=2021-02-01' 2>/dev/null; }
+      cv_az_present() { printf '%s' "$(cv_az_instance)" | grep -q '"compute"'; }
+      cv_az_init() { # id -> sets SUB RG VMN, or SKIPs when this is not an Azure VM
+        local inst
+        inst=$(cv_az_instance)
+        if ! printf '%s' "$inst" | grep -q '"compute"'; then cv_done skip "Azure IMDS is unreachable from this host, so this is not an Azure VM" "$1"; fi
+        SUB=$(printf '%s' "$inst" | grep -o '"subscriptionId":"[^"]*"' | head -n1 | cut -d'"' -f4)
+        RG=$(printf '%s' "$inst" | grep -o '"resourceGroupName":"[^"]*"' | head -n1 | cut -d'"' -f4)
+        VMN=$(printf '%s' "$inst" | grep -o '"name":"[^"]*"' | head -n1 | cut -d'"' -f4)
+      }
+      cv_az_token() { # encoded-resource -> CV_TOKEN, CV_TCODE
+        local out
+        out=$(curl -s -m 5 -w '\n%{http_code}' -H 'Metadata: true' "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=$1" 2>/dev/null)
+        CV_TCODE=$(printf '%s' "$out" | tail -n1)
+        CV_TOKEN=$(printf '%s' "$out" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p' | head -n1)
+      }
+      cv_http() { # method uri token [body] [x-ms-version] -> CV_HCODE, CV_HBODY
+        local args out
+        args=(-s -m 15 -w '\n%{http_code}' -X "$1" -H "Authorization: Bearer $3")
+        [ -n "${5:-}" ] && args+=(-H "x-ms-version: $5")
+        if [ -n "${4:-}" ]; then args+=(-H 'Content-Type: application/json' --data "$4"); fi
+        out=$(curl "${args[@]}" "$2" 2>/dev/null)
+        CV_HCODE=$(printf '%s' "$out" | tail -n1)
+        CV_HBODY=$(printf '%s' "$out" | sed '$d')
+      }
+      cv_count() { # jq filter -> count, or "unknown" without jq
+        if [ "$CV_HCODE" != 200 ]; then echo 0; return; fi
+        if command -v jq >/dev/null 2>&1; then printf '%s' "$CV_HBODY" | jq -r "$1" 2>/dev/null; else echo unknown; fi
+      }
+      cv_classify_http() { # code what gate id
+        local c="$1" what="$2" gate="${3:-BAS_CLOUD_EXPECT_ENUMERATION}" id="$4"
+        case "$c" in
+          2??)
+            if cv_gate "$gate"; then cv_done skip "$what succeeded, which the operator documents as expected for this workload, so no control verdict is scored" "$id"; fi
+            cv_done fail "$what succeeded for an identity the operator did not expect to have this access" "$id" ;;
+          401|403) cv_done pass "$what was refused by the cloud control (HTTP $c)" "$id" ;;
+          *) cv_done error "$what returned HTTP $c, which cannot be classified as a control result" "$id" ;;
+        esac
+      }
+      cv_have_aws() { command -v aws >/dev/null 2>&1; }
+      cv_aws() { CV_AOUT=$(aws "$@" --output json 2>&1); CV_ARC=$?; }
+      cv_classify_aws() { # what gate id
+        local what="$1" gate="${2:-BAS_CLOUD_EXPECT_ENUMERATION}" id="$3"
+        if [ "$CV_ARC" -eq 0 ]; then
+          if cv_gate "$gate"; then cv_done skip "$what succeeded, which the operator documents as expected for this workload, so no control verdict is scored" "$id"; fi
+          cv_done fail "$what succeeded for an identity the operator did not expect to have this access" "$id"
+        fi
+        if printf '%s' "$CV_AOUT" | grep -Eq 'Unable to locate credentials|NoCredentialProviders|NoCredentials'; then
+          cv_done skip "no AWS identity is available to this host, so $what was not attempted" "$id"
+        fi
+        if printf '%s' "$CV_AOUT" | grep -Eq 'AccessDenied|UnauthorizedOperation|AuthFailure|not authorized|Forbidden'; then
+          cv_done pass "$what was refused by the cloud control" "$id"
+        fi
+        cv_done error "$what failed without a classifiable control answer" "$id"
+      }
+      cv_aws_token() { curl -s -m 2 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' 'http://169.254.169.254/latest/api/token' 2>/dev/null; }
+      cv_aws_meta() { # path -> body (empty when unavailable)
+        local t
+        t=$(cv_aws_token)
+        [ -n "$t" ] || return 0
+        curl -s -m 2 -H "X-aws-ec2-metadata-token: $t" "http://169.254.169.254/latest/meta-data/$1" 2>/dev/null
+      }
+      cv_set_region() {
+        if [ -z "${AWS_DEFAULT_REGION:-}" ]; then
+          local r; r=$(cv_aws_meta placement/region)
+          [ -n "$r" ] && export AWS_DEFAULT_REGION="$r"
+        fi
+      }
+      ls_out=$(ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null)
+      [ -n "$ls_out" ] || cv_done error "listening sockets could not be read (ss and netstat unavailable)" CV-LD30
+      listen=$(printf '%s\n' "$ls_out" | awk '$4 ~ /:(22|5985|5986)$/' | wc -l)
+      if [ "$listen" -eq 0 ]; then echo "EXEC T1021: read-only check; no SSH or WinRM listener on 22, 5985 or 5986."; cv_done pass "no remote-management listener (SSH or WinRM) is listening on this host" CV-LD30; fi
+      ufw_allow=0; ufw_active=0; ipt=""; ipt_accept=0; ipt_drop=0
+      if command -v ufw >/dev/null 2>&1; then
+        st=$(ufw status 2>/dev/null)
+        printf '%s' "$st" | grep -q '^Status: active' && ufw_active=1
+        printf '%s' "$st" | grep -Eq '^(22|ssh|5985|5986)[^ ]*[[:space:]]+ALLOW' && ufw_allow=1
+      fi
+      if command -v iptables >/dev/null 2>&1; then
+        ipt=$(iptables -S INPUT 2>/dev/null)
+        printf '%s' "$ipt" | grep -Eq -- '--dport (22|5985|5986) .*-j ACCEPT' && ipt_accept=1
+        printf '%s' "$ipt" | grep -Eq -- '-P INPUT (DROP|REJECT)|-j (DROP|REJECT)' && ipt_drop=1
+      fi
+      echo "EXEC T1021: read-only firewall check (no rule or listener change). listeners=$listen ufw_active=$ufw_active ufw_allow=$ufw_allow iptables_accept=$ipt_accept iptables_drop=$ipt_drop"
+      if [ "$ufw_allow" -eq 1 ] || [ "$ipt_accept" -eq 1 ]; then cv_done fail "a remote-management listener is present and a firewall allow rule covers SSH or WinRM ports" CV-LD30; fi
+      if [ "$ufw_active" -eq 1 ] || [ "$ipt_drop" -eq 1 ]; then cv_done pass "a remote-management listener exists but the host firewall does not allow its port" CV-LD30; fi
+      cv_done error "a remote-management listener exists but no firewall state could be determined (ufw and iptables not readable)" CV-LD30
+    cleanup: ""
+
+  # -------------------------------------------------------------------------
+  - id: cvl-d31
+    name: "Cloud VM Linux Lateral 31 - Startup Location Writability (T1574)"
+    technique_id: T1574
+    framework: custom
+    executor: bash
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only ACL check of the startup script locations. Nothing is written."
+    telemetry:
+      - "auditd: none (read-only stat check)"
+    detection:
+      - "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    command: |
+      CV_RUN="${BAS_RUN_ID:-}"
+      CV_RUN="${CV_RUN:0:8}"
+      [ -n "$CV_RUN" ] || CV_RUN=$(printf '%08x' "$RANDOM$RANDOM")
+      CV_TAG="bas_cv_${CV_RUN}"
+      CV_RES_MGMT='https%3A%2F%2Fmanagement.azure.com%2F'
+      CV_RES_VAULT='https%3A%2F%2Fvault.azure.net'
+      CV_RES_STORAGE='https%3A%2F%2Fstorage.azure.com%2F'
+      CV_RES_GRAPH='https%3A%2F%2Fgraph.microsoft.com%2F'
+      cv_gate() { [ "${!1:-}" = "true" ]; }
+      cv_env() { printenv "$1" 2>/dev/null; }
+      cv_done() { # outcome reason id
+        local p=SKIP
+        case "$1" in pass) p=PASS ;; fail) p=FAIL ;; error) p=ERROR ;; esac
+        echo "$p: $2 [BAS-SIM-$3]"
+        exit 0
+      }
+      cv_az_instance() { curl -s -m 2 -H 'Metadata: true' 'http://169.254.169.254/metadata/instance?api-version=2021-02-01' 2>/dev/null; }
+      cv_az_present() { printf '%s' "$(cv_az_instance)" | grep -q '"compute"'; }
+      cv_az_init() { # id -> sets SUB RG VMN, or SKIPs when this is not an Azure VM
+        local inst
+        inst=$(cv_az_instance)
+        if ! printf '%s' "$inst" | grep -q '"compute"'; then cv_done skip "Azure IMDS is unreachable from this host, so this is not an Azure VM" "$1"; fi
+        SUB=$(printf '%s' "$inst" | grep -o '"subscriptionId":"[^"]*"' | head -n1 | cut -d'"' -f4)
+        RG=$(printf '%s' "$inst" | grep -o '"resourceGroupName":"[^"]*"' | head -n1 | cut -d'"' -f4)
+        VMN=$(printf '%s' "$inst" | grep -o '"name":"[^"]*"' | head -n1 | cut -d'"' -f4)
+      }
+      cv_az_token() { # encoded-resource -> CV_TOKEN, CV_TCODE
+        local out
+        out=$(curl -s -m 5 -w '\n%{http_code}' -H 'Metadata: true' "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=$1" 2>/dev/null)
+        CV_TCODE=$(printf '%s' "$out" | tail -n1)
+        CV_TOKEN=$(printf '%s' "$out" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p' | head -n1)
+      }
+      cv_http() { # method uri token [body] [x-ms-version] -> CV_HCODE, CV_HBODY
+        local args out
+        args=(-s -m 15 -w '\n%{http_code}' -X "$1" -H "Authorization: Bearer $3")
+        [ -n "${5:-}" ] && args+=(-H "x-ms-version: $5")
+        if [ -n "${4:-}" ]; then args+=(-H 'Content-Type: application/json' --data "$4"); fi
+        out=$(curl "${args[@]}" "$2" 2>/dev/null)
+        CV_HCODE=$(printf '%s' "$out" | tail -n1)
+        CV_HBODY=$(printf '%s' "$out" | sed '$d')
+      }
+      cv_count() { # jq filter -> count, or "unknown" without jq
+        if [ "$CV_HCODE" != 200 ]; then echo 0; return; fi
+        if command -v jq >/dev/null 2>&1; then printf '%s' "$CV_HBODY" | jq -r "$1" 2>/dev/null; else echo unknown; fi
+      }
+      cv_classify_http() { # code what gate id
+        local c="$1" what="$2" gate="${3:-BAS_CLOUD_EXPECT_ENUMERATION}" id="$4"
+        case "$c" in
+          2??)
+            if cv_gate "$gate"; then cv_done skip "$what succeeded, which the operator documents as expected for this workload, so no control verdict is scored" "$id"; fi
+            cv_done fail "$what succeeded for an identity the operator did not expect to have this access" "$id" ;;
+          401|403) cv_done pass "$what was refused by the cloud control (HTTP $c)" "$id" ;;
+          *) cv_done error "$what returned HTTP $c, which cannot be classified as a control result" "$id" ;;
+        esac
+      }
+      cv_have_aws() { command -v aws >/dev/null 2>&1; }
+      cv_aws() { CV_AOUT=$(aws "$@" --output json 2>&1); CV_ARC=$?; }
+      cv_classify_aws() { # what gate id
+        local what="$1" gate="${2:-BAS_CLOUD_EXPECT_ENUMERATION}" id="$3"
+        if [ "$CV_ARC" -eq 0 ]; then
+          if cv_gate "$gate"; then cv_done skip "$what succeeded, which the operator documents as expected for this workload, so no control verdict is scored" "$id"; fi
+          cv_done fail "$what succeeded for an identity the operator did not expect to have this access" "$id"
+        fi
+        if printf '%s' "$CV_AOUT" | grep -Eq 'Unable to locate credentials|NoCredentialProviders|NoCredentials'; then
+          cv_done skip "no AWS identity is available to this host, so $what was not attempted" "$id"
+        fi
+        if printf '%s' "$CV_AOUT" | grep -Eq 'AccessDenied|UnauthorizedOperation|AuthFailure|not authorized|Forbidden'; then
+          cv_done pass "$what was refused by the cloud control" "$id"
+        fi
+        cv_done error "$what failed without a classifiable control answer" "$id"
+      }
+      cv_aws_token() { curl -s -m 2 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' 'http://169.254.169.254/latest/api/token' 2>/dev/null; }
+      cv_aws_meta() { # path -> body (empty when unavailable)
+        local t
+        t=$(cv_aws_token)
+        [ -n "$t" ] || return 0
+        curl -s -m 2 -H "X-aws-ec2-metadata-token: $t" "http://169.254.169.254/latest/meta-data/$1" 2>/dev/null
+      }
+      cv_set_region() {
+        if [ -z "${AWS_DEFAULT_REGION:-}" ]; then
+          local r; r=$(cv_aws_meta placement/region)
+          [ -n "$r" ] && export AWS_DEFAULT_REGION="$r"
+        fi
+      }
+      dirs=()
+      for d in /etc/rc.local /etc/cron.d /etc/cron.daily /etc/profile.d /etc/init.d "$HOME/.config/autostart" "$HOME/.bashrc"; do [ -e "$d" ] && dirs+=("$d"); done
+      [ "${#dirs[@]}" -gt 0 ] || cv_done pass "no standard startup script location exists on this host" CV-LD31
+      writable=""
+      for d in "${dirs[@]}"; do
+        if [ -z "$(find "$d" -maxdepth 0 -perm /022 2>/dev/null)" ]; then
+          [ -r "$d" ] || cv_done error "the mode of a startup location could not be read: $d" CV-LD31
+        else writable="$writable $d"; fi
+      done
+      echo "EXEC T1574: read-only permission check of startup script locations; locations=${#dirs[@]} writable_by_group_or_other=$(printf '%s' "$writable" | wc -w). Nothing was written."
+      [ -n "$writable" ] && cv_done fail "a startup script location is writable by a group or other user (${writable# })" CV-LD31
+      cv_done pass "startup script locations are not writable by group or other users" CV-LD31
+    cleanup: ""
