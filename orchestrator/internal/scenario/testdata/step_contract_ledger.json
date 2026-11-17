@@ -2430,6 +2430,69 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "carbanak-bfsi-amount-manipulation.yaml",
+    "index": 0,
+    "technique_id": "T1565.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "carbanak-bfsi-app-discovery.yaml",
+    "index": 0,
+    "technique_id": "T1057",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-beneficiary-creation.yaml",
+    "index": 0,
+    "technique_id": "",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-limit-modification.yaml",
+    "index": 0,
+    "technique_id": "",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-off-hours-transfer.yaml",
+    "index": 0,
+    "technique_id": "T1078",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-session-misuse.yaml",
+    "index": 0,
+    "technique_id": "T1078",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-unauthorized-approval.yaml",
+    "index": 0,
+    "technique_id": "T1078",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "carbanak-kill-chain.yaml",
     "index": 0,
     "technique_id": "T1566.001",
@@ -2554,6 +2617,150 @@
     "framework": "custom",
     "class": "non_destructive",
     "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 14,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 15,
+    "technique_id": "T1046",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 16,
+    "technique_id": "T1069.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 17,
+    "technique_id": "T1135",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 18,
+    "technique_id": "T1555.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 19,
+    "technique_id": "T1555.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 20,
+    "technique_id": "T1558.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 21,
+    "technique_id": "T1552.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 22,
+    "technique_id": "T1021.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 23,
+    "technique_id": "T1021.006",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 24,
+    "technique_id": "T1569.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 25,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 26,
+    "technique_id": "T1005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 27,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 28,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-kill-chain.yaml",
+    "index": 29,
+    "technique_id": "T1041",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
   },
   {
     "scenario": "clop-kill-chain.yaml",

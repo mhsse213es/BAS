@@ -154,6 +154,41 @@
     "detection": 5,
     "telemetry": 5
   },
+  "carbanak-bfsi-amount-manipulation.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-app-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-beneficiary-creation.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-limit-modification.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-off-hours-transfer.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-session-misuse.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-unauthorized-approval.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "carbanak-kill-chain.yaml": {
     "cleanup": 0,
     "detection": 0,
