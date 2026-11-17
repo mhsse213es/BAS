@@ -140,13 +140,18 @@ re-run. Evidence is the pasted stage output, not a SIEM or a certificate request
 | ESC5 | Domain Users given Write on the `AIA` container under Public Key Services | stage 5 FAIL, confirmed, Domain Users -> Write -> PKI object AIA | `dsacls /R` removed it; stage PASS |
 | ESC13 | unpublished template `ZZ-BAS-ESC13-Test` (Domain Users Enroll) carrying issuance policy `ZZ-BAS-ESC13-Policy`, linked by `msDS-OIDToGroupLink` to a stand-in group with `adminCount=1` | stage 13 FAIL, confirmed, "(not published on any CA)", 0 paths | link cleared; stage PASS |
 
+| ESC14 | test user with `altSecurityIdentities` = `X509:<RFC822>...` | stage 14 FAIL, confirmed, weak mapping on the account | strong mapping (`<I>...<SR>...`) then user deleted; stage PASS (one PASS pasted, not labelled which step) |
+| ESC15 | unpublished test template, schema version forced to 1 by LDAP write, subject supplied, Domain Users Enroll | stage 15 SKIP, `potential`, "latent" (unpublished) | **partial**: published case (expect confirmed on build 20348.587) and cleanup runs not reported |
+
+Notes: ESC15 was stopped by the user after the unpublished run. The `confirmed` branch (a CA below the CVE-2024-49019 build publishes the template) was not shown live, and the cleanup of `ZZ-BAS-ESC15-Test` was not confirmed. The same run found that the stage 15 headline said "CA build checked" for an unpublished template; fixed in `c480761e`. ESC8 live probe, stage 16 and the Locksmith comparison were not run.
+
 Notes: the ESC13 group was a stand-in with `adminCount=1`, not a real tier-0 group. The post-cleanup stage 13 run (template, policy, group deleted) was not yet reported when this was written.
 
 Notes: the ESC6 control was set in the registry and not restarted before the first read; the scenario reads the value, not
 the running service state, and does not say so in its wording. The ESC4 path text lists all write rights rather than the
 one the ACE holds.
 
-Still not shown to find anything in a real environment: ESC14, 15, stage 16 (publication and trust) and
+Still not shown to find anything in a real environment: ESC15 (confirmed branch), stage 16 (publication and trust) and
 the ESC8 live probe. Their only live result is "reads real data, finds nothing on a clean lab". The Locksmith cross-check was
 not run.
 

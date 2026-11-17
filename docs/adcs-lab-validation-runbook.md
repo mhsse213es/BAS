@@ -95,6 +95,22 @@ Stage 13: FAIL, `state=confirmed`, `(not published on any CA)`, 0 paths.
 Revert: `Set-ADObject $o -Clear 'msDS-OIDToGroupLink'`. Stage 13: PASS. Then delete the template, the policy and the group
 and run stage 13 again.
 
+## ESC14: weak explicit certificate mapping
+
+Change: enabled test user `ZZ-BAS-ESC14-User` (throwaway password typed at a prompt, never in chat or files);
+`Set-ADUser ... -Replace @{altSecurityIdentities='X509:<RFC822>zz-bas-esc14@lab.local'}`.
+Stage 14: FAIL, `state=confirmed`, "weak explicit certificate mapping". Disabled accounts are skipped, so the user must be enabled.
+Control: replace with a strong mapping `X509:<I>DC=local,DC=lab,CN=LAB-CA<SR>0123456789ab`. Stage 14: PASS.
+Revert: `Remove-ADUser ZZ-BAS-ESC14-User`. Stage 14: PASS.
+
+## ESC15: schema-version-1 template with a supplied subject (partly run)
+
+Change: duplicate **User** as unpublished `ZZ-BAS-ESC15-Test`, Subject Name **Supply in the request**, Domain Users Enroll.
+`certtmpl.msc` cannot make a version 1 template, so set `msPKI-Template-Schema-Version` to 1 with an LDAP write (lab only; it
+printed `1`). Unpublished, stage 15: SKIP, `state=potential`, "latent". Run live.
+Not run live: publish in `certsrv.msc`, stage 15 should be FAIL, `confirmed`, "below the fixed build" on a CA under
+20348.2849; stage 1 also flags it (ESC1). Revert: unpublish, delete the template, stages 15 and 1 PASS.
+
 ## ESC6: EDITF_ATTRIBUTESUBJECTALTNAME2 (CA host, elevated)
 
 ```powershell
@@ -146,7 +162,7 @@ patched DC is not changed by this runbook. ESC12 reports a software key provider
 
 ## Not covered by any control yet
 
-ESC8 (needs `BAS_ADCS_LIVE_PROBE=true` and web enrollment installed), ESC14, ESC15, and stage 16 (publication and
+ESC8 (needs `BAS_ADCS_LIVE_PROBE=true` and web enrollment installed), the ESC15 published/confirmed case, and stage 16 (publication and
 trust). Their only live result so far is "reads real data, finds nothing on a clean lab". A Locksmith cross-check has not been run.
 
 ## Cleanup checklist (leave the lab as found)
@@ -171,4 +187,7 @@ trust). Their only live result so far is "reads real data, finds nothing on a cl
 | 5 | yes (AIA, Domain Users Write) | yes |
 | 13 | yes (stand-in `adminCount=1` group) | yes after clearing the link; post-cleanup run not yet reported |
 
-All ten controls were run to a PASS after revert. The ESC11 before and after `InterfaceFlags` values were not recorded; stage 11 returned PASS after the revert.
+| 14 | yes (RFC822 mapping) | yes (strong mapping, then user deleted) |
+| 15 | partly: unpublished `potential` only | not run |
+
+Eleven controls were run to a PASS after revert (ESC15 was stopped part way). The ESC11 before and after `InterfaceFlags` values were not recorded; stage 11 returned PASS after the revert.
