@@ -96,6 +96,10 @@ type SimulationResult struct {
 	// FraudControl is the banking-application control verdict for a fraud step.
 	// It is independent of the endpoint result above. Nil for non-fraud steps.
 	FraudControl *FraudControl `json:"fraudControl,omitempty"`
+	// EndpointResult is the endpoint verdict before the fraud-control verdict
+	// was folded into Result (see ApplyFraudControl). Empty when there is no
+	// fraud record, in which case Result is the endpoint verdict.
+	EndpointResult CheckResult `json:"endpointResult,omitempty"`
 	// VetoedActionKey/VetoedExecutionClass/VetoedBlockSource are populated
 	// only when Result == ResultVetoed -- structured mirrors of the free-
 	// text explanation already embedded in Details, so a report/UI/export

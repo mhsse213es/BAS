@@ -112,7 +112,7 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		skipReason = classifySkipReason(details)
 	}
 
-	return models.SimulationResult{
+	sim := models.SimulationResult{
 		ID:       TaskID(step.TechniqueID, step.Name),
 		CheckID:  step.CheckID,
 		StepName: step.Name,
@@ -158,6 +158,10 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		PID:                  result.PID,
 		StartedAt:            result.StartedAt,
 	}
+	// Fold the fraud-control verdict into the stored result once, here, so every
+	// reader sees it (see models.ApplyFraudControl).
+	models.ApplyFraudControl(&sim)
+	return sim
 }
 
 // interpretART interprets raw command output from an ART atomic test.

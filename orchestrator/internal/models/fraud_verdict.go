@@ -40,3 +40,44 @@ func EffectiveResult(r SimulationResult) CheckResult {
 		return ResultSkipped
 	}
 }
+
+// ApplyFraudControl stores the combined verdict in r.Result, so every reader of
+// the result (scorer, dashboards, PDF, CSV, run lists) sees the fraud outcome.
+// The endpoint verdict is kept in r.EndpointResult. It is idempotent: it always
+// derives from the saved endpoint verdict, so applying it twice changes nothing.
+// Remediation is recomputed for the combined result, and Details gets a prefix
+// naming the fraud outcome when it is not PASS.
+func ApplyFraudControl(r *SimulationResult) {
+	if r.FraudControl == nil {
+		return
+	}
+	if r.EndpointResult == "" {
+		r.EndpointResult = r.Result
+	}
+	endpoint := r.EndpointResult
+	combined := EffectiveResult(SimulationResult{Result: endpoint, FraudControl: r.FraudControl})
+
+	// Rebuild Details from the endpoint text, not the already-prefixed text.
+	details := r.Details
+	if idx := len(fraudDetailsPrefix(r.FraudControl)); idx > 0 && len(details) >= idx && details[:idx] == fraudDetailsPrefix(r.FraudControl) {
+		details = details[idx:]
+	}
+	r.Result = combined
+	if r.FraudControl.Verdict != "PASS" && r.FraudControl.Verdict != "" {
+		r.Details = fraudDetailsPrefix(r.FraudControl) + details
+	} else {
+		r.Details = details
+	}
+	r.Remediation = Remediation(combined, r.Technique.Tactic, r.Technique.ID, r.Technique.Name)
+}
+
+func fraudDetailsPrefix(fc *FraudControl) string {
+	if fc == nil || fc.Verdict == "PASS" || fc.Verdict == "" {
+		return ""
+	}
+	reason := fc.Reason
+	if reason == "" {
+		reason = "see fraud-control record"
+	}
+	return "[fraud control " + fc.Verdict + ": " + reason + "] "
+}
