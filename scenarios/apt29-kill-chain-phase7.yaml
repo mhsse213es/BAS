@@ -121,6 +121,7 @@ steps:
       # Benign payload: writes a BAS-SIM string to a temp file (no net egress)
       $payload = 'Write-Output "[BAS-SIM-APT29-S2] encoded PS loader simulation, run ' + $runId + '" | Out-File -FilePath "' + $outFile + '" -Encoding utf8'
       $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($payload))
+      $Error.Clear()
       $child = Start-Process powershell.exe -ArgumentList "-NoProfile","-NonInteractive","-EncodedCommand",$encoded -Wait -PassThru -WindowStyle Hidden
       $landed = Test-Path $outFile
       Remove-Item $outFile -Force -ErrorAction SilentlyContinue
@@ -128,7 +129,7 @@ steps:
         Write-Output "EXEC T1059.001: -EncodedCommand child process spawned (PID=$($child.Id), exit=0), payload landed=$landed, cleaned up. APT29 SUNBURST loader pattern. Sysmon EID 1 + ScriptBlock EID 4104 expected. [BAS-SIM-APT29-S2]"
         Write-Output "FAIL: Encoded PS cradle ran without AMSI or Constrained Language Mode blocking it. Ensure AMSI logging is enabled and EID 4104 ScriptBlock logging is forwarded to SIEM."
       } elseif ($null -eq $child) {
-        Write-Output "ERROR: powershell.exe child could not be started, so the encoded cradle did not run. [BAS-SIM-APT29-S2]"
+        if ($Error.Count -gt 0 -and [string]$Error[0] -match 'blocked|denied|not allowed|policy|AppLocker|AMSI|Constrained|restricted|malicious|virus') { Write-Output "PASS: powershell.exe launch was refused by a control. [BAS-SIM-APT29-S2]" } else { Write-Output "ERROR: powershell.exe child could not be started and no control block was named, so the encoded cradle did not run. [BAS-SIM-APT29-S2]" }
       } else {
         Write-Output "PASS: Encoded PowerShell cradle blocked or failed  -  AMSI or execution policy prevented the child process (exit=$($child.ExitCode)). [BAS-SIM-APT29-S2]"
       }
@@ -251,9 +252,12 @@ steps:
       $nsOut = & nslookup.exe $beaconDomain 2>&1 | Out-String
       $resolved = $nsOut -match ('Name:\s+' + [regex]::Escape($beaconDomain))
       $timedOut = $nsOut -match 'timed out|no servers could be reached'
+      $nxdomain = $nsOut -match "can.t find|Non-existent domain"
       Write-Output "EXEC T1071.004: DNS C2 beacon simulation sent nslookup $beaconDomain. resolved=$resolved (expected: false for RFC6761 .invalid). APT29 SUNBURST used avsvmcloud.com subdomain beacons in same pattern. Sysmon EID 22 expected. [BAS-SIM-APT29-S5]"
       if ($timedOut -and -not $resolved) {
         Write-Output "ERROR: DNS server timed out; NXDOMAIN could not be judged on this host. [BAS-SIM-APT29-S5]"
+      } elseif (-not $resolved -and -not $nxdomain) {
+        Write-Output "ERROR: DNS response was neither an answer nor NXDOMAIN (for example SERVFAIL or REFUSED), so NXDOMAIN was not observed. [BAS-SIM-APT29-S5]"
       } elseif ($resolved) {
         Write-Output "FAIL: DNS query to .invalid domain resolved — DNS RPZ or NXDOMAIN filtering is NOT in place. This means a real APT29 DGA domain could succeed. Deploy DNS firewall / RPZ to block *.invalid lookups."
       } else {
@@ -457,6 +461,7 @@ steps:
       $payload = "Write-Output '[BAS-SIM-APT29-S11] wmi process execution simulation, run $runId' | Out-File -FilePath `"$outFile`" -Encoding utf8"
       $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($payload))
       $cmdLine = "powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand $encoded"
+      $Error.Clear()
       $result = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmdLine }
       Start-Sleep -Milliseconds 800
       $landed = Test-Path $outFile
@@ -464,7 +469,7 @@ steps:
       $spawned = ($result.ReturnValue -eq 0)
       Write-Output "EXEC T1047: WMI process creation (Win32_Process.Create) spawned=$spawned (PID=$($result.ProcessId)), window hidden via powershell.exe -WindowStyle Hidden, payload landed=$landed, cleaned up. Sysmon EID 1 with WmiPrvSE.exe parent expected. [BAS-SIM-APT29-S11]"
       if ($null -eq $result) {
-        Write-Output "ERROR: Win32_Process.Create could not be invoked, so the WMI stage did not run. [BAS-SIM-APT29-S11]"
+        if ($Error.Count -gt 0 -and [string]$Error[0] -match 'blocked|denied|not allowed|policy|AppLocker|AMSI|Constrained|restricted|malicious|virus') { Write-Output "PASS: Win32_Process.Create was refused by a control. [BAS-SIM-APT29-S11]" } else { Write-Output "ERROR: Win32_Process.Create failed and no control block was named, so the WMI stage did not run. [BAS-SIM-APT29-S11]" }
       } elseif ($spawned) {
         Write-Output "FAIL: WMI process execution ran without being blocked. Ensure EDR flags process creation whose parent is WmiPrvSE.exe, not just child-of-shell patterns."
       } else {
@@ -783,6 +788,7 @@ steps:
         try {
           # Query-only: PROCESS_QUERY_LIMITED_INFORMATION (0x1000). Never VM_READ (0x0010).
           $sig = '[DllImport("kernel32.dll")] public static extern IntPtr OpenProcess(uint access, bool inherit, int pid); [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h);'
+          $Error.Clear()
           Add-Type -MemberDefinition $sig -Name BasLsassQuery -Namespace Bas -ErrorAction SilentlyContinue
           $h = [Bas.BasLsassQuery]::OpenProcess(0x1000, $false, $lsass.Id)
           $handleOpened = ($h -ne [IntPtr]::Zero)
@@ -795,7 +801,7 @@ steps:
         if ($handleOpened) {
           Write-Output "FAIL: A handle to lsass.exe was opened without being blocked. Confirm whether Sysmon EID 10 captured this GrantedAccess mask; if not, process-access auditing granularity needs review (this is expected to need manual confirmation, not an assumed detection)."
         } elseif (-not $probeRan) {
-          Write-Output "ERROR: the LSASS probe could not run (Add-Type or OpenProcess failed). [BAS-SIM-APT29-S19]"
+          if ($Error.Count -gt 0 -and [string]$Error[0] -match 'blocked|denied|not allowed|policy|AppLocker|AMSI|Constrained|restricted|malicious|virus') { Write-Output "PASS: the LSASS probe was refused by a control before the handle was requested. [BAS-SIM-APT29-S19]" } else { Write-Output "ERROR: the LSASS probe could not run and no control block was named. Not scored as PASS or FAIL. [BAS-SIM-APT29-S19]" }
         } else {
           Write-Output "PASS: LSASS handle open was denied by the OS. [BAS-SIM-APT29-S19]"
         }
@@ -891,13 +897,14 @@ steps:
       - "EDR: setspn.exe invoked from PowerShell  -  Sigma rule proc_creation_win_setspn_enum.yml"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
+      $Error.Clear()
       $out = & setspn.exe -Q */* 2>&1 | Out-String
       $found = $out -match 'CN='
       Write-Output "EXEC T1558.003: Kerberos SPN enumeration via setspn -Q */* ran. spn_accounts_found=$found. No service ticket was requested or extracted. Sysmon EID 1 (setspn.exe) expected. [BAS-SIM-APT29-S22]"
       if ($found) {
         Write-Output "FAIL: SPN enumeration ran unimpeded. EDR/SIEM should alert on setspn.exe -Q */* from a non-admin workstation (classic Kerberoasting precursor)."
       } elseif ([string]::IsNullOrWhiteSpace($out)) {
-        Write-Output "ERROR: setspn produced no output, so SPN enumeration did not run on this host. [BAS-SIM-APT29-S22]"
+        if ($Error.Count -gt 0 -and [string]$Error[0] -match 'blocked|denied|not allowed|policy|AppLocker|AMSI|Constrained|restricted|malicious|virus') { Write-Output "PASS: setspn was refused by a control. [BAS-SIM-APT29-S22]" } else { Write-Output "ERROR: setspn produced no output and no control block was named, so SPN enumeration did not run. [BAS-SIM-APT29-S22]" }
       } else {
         Write-Output "PASS: SPN enumeration blocked or returned no SPN accounts. [BAS-SIM-APT29-S22]"
       }
@@ -970,7 +977,7 @@ steps:
         if ($accessible) {
           Write-Output "FAIL: Admin-share access succeeded unimpeded. SIEM should alert on C$ access from a workstation account outside normal admin activity."
         } elseif ($reach445) {
-          Write-Output "PASS: Admin-share access denied while SMB (445) is reachable, so access control blocked it. [BAS-SIM-APT29-S24]"
+          Write-Output "ERROR: admin-share access was denied while SMB 445 is reachable. Access control and misconfiguration look the same here, so this is not scored as PASS. [BAS-SIM-APT29-S24]"
         } else {
           Write-Output "ERROR: target $target is not reachable on SMB 445, so the admin-share check did not run. [BAS-SIM-APT29-S24]"
         }
@@ -1009,7 +1016,7 @@ steps:
         if ($ran) {
           Write-Output "FAIL: WinRM remote execution succeeded unimpeded. SIEM should alert on WinRM sessions to this host outside change windows."
         } elseif (Test-WSMan -ComputerName $target -ErrorAction SilentlyContinue) {
-          Write-Output "PASS: WinRM remote execution blocked while the WinRM endpoint is reachable. [BAS-SIM-APT29-S25]"
+          Write-Output "ERROR: WinRM execution was denied while the endpoint is reachable. Access control and misconfiguration look the same here, so this is not scored as PASS. [BAS-SIM-APT29-S25]"
         } else {
           Write-Output "ERROR: WinRM endpoint on $target is not reachable, so remote execution did not run. [BAS-SIM-APT29-S25]"
         }
@@ -1121,16 +1128,21 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
       $anyResolved = $false
+      $allNx = $true
+      $anyTimedOut = $false
       for ($i = 1; $i -le 3; $i++) {
         $beaconDomain = "bas-sim-apt29-$runId-$i.invalid"
         $nsOut = & nslookup.exe $beaconDomain 2>&1 | Out-String
         if ($nsOut -match ('Name:\s+' + [regex]::Escape($beaconDomain))) { $anyResolved = $true }
+        if ($nsOut -notmatch "can.t find|Non-existent domain") { $allNx = $false }
         if ($nsOut -match 'timed out|no servers could be reached') { $anyTimedOut = $true }
         if ($i -lt 3) { Start-Sleep -Seconds 2 }
       }
       Write-Output "EXEC T1071.004: periodic DNS beacon simulation sent 3 nslookup queries at a 2s interval to bas-sim-apt29-$runId-*.invalid. any_resolved=$anyResolved (expected: false). Sysmon EID 22 x3 expected  -  distinct periodicity signal from Stage 5's single query. [BAS-SIM-APT29-S28]"
       if ($anyTimedOut -and -not $anyResolved) {
         Write-Output "ERROR: DNS server timed out during the periodic beacon; NXDOMAIN could not be judged. [BAS-SIM-APT29-S28]"
+      } elseif (-not $allNx -and -not $anyResolved) {
+        Write-Output "ERROR: at least one periodic query returned neither an answer nor NXDOMAIN, so NXDOMAIN was not observed for every query. [BAS-SIM-APT29-S28]"
       } elseif ($anyResolved) {
         Write-Output "FAIL: A .invalid domain resolved during the periodic beacon  -  DNS RPZ/NXDOMAIN filtering is NOT in place."
       } else {

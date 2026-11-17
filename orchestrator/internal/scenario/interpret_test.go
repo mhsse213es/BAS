@@ -260,6 +260,7 @@ func TestInterpretCustomClassifiesScriptCrash(t *testing.T) {
 		{"ERROR then PASS: ERROR beats PASS", ExecResult{ExitCode: 0}, "ERROR: could not query directory\nPASS: looked clean", models.ResultError},
 		{"ERROR then SKIP: ERROR beats SKIP", ExecResult{ExitCode: 0}, "SKIP: not applicable\nERROR: call threw", models.ResultError},
 		{"FAIL then ERROR: FAIL still wins", ExecResult{ExitCode: 0}, "ERROR: call threw\nFAIL: exploitable", models.ResultFail},
+		{"incidental lowercase Error: diagnostic does not override PASS", ExecResult{ExitCode: 0}, "PASS: check clean\nError: access is denied to one optional path", models.ResultPass},
 		{"informational line before ERROR verdict", ExecResult{ExitCode: 0}, "INFO: probing tenant\nERROR: graph returned 403", models.ResultError},
 	}
 	for _, c := range cases {

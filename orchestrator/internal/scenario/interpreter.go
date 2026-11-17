@@ -312,7 +312,8 @@ func firstLine(s string) string {
 // rather than an accidental one.
 //
 // Fail-safe policy: FAIL > ERROR > SKIP > PASS, independent of line order.
-// An error: line means the check could not run; it must never fall through
+// An uppercase ERROR: line means the check could not run (case-sensitive, so an
+// incidental "Error:" diagnostic is never mistaken for a verdict); it must never fall through
 // to the exit-code default, which scores exit 0 as PASS. A FAIL
 // line is never silently suppressed by a PASS or SKIP line found elsewhere in
 // the same output -- mirroring this file's existing bias (see Interpret's
@@ -330,7 +331,7 @@ func dominantVerdict(s string) (line string, result models.CheckResult, ok bool)
 		switch {
 		case failLine == "" && strings.HasPrefix(lower, "fail:"):
 			failLine = t
-		case errLine == "" && strings.HasPrefix(lower, "error:"):
+		case errLine == "" && strings.HasPrefix(t, "ERROR:"):
 			errLine = t
 		case skipLine == "" && strings.HasPrefix(lower, "skip:"):
 			skipLine = t

@@ -163,17 +163,6 @@ steps:
           $headers = @{ Authorization = "Bearer $($tokenResp.access_token)" }
           Write-Output "ERROR: oauth2PermissionGrants requires service-principal object IDs and a principalId for consentType Principal. A client-credentials run cannot build a valid grant as written, so this stage did not run. Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-2]"
           return
-          $grantBody = @{ clientId = $clientId; consentType = 'Principal'; resourceId = $clientId; scope = 'User.Read' } | ConvertTo-Json
-          $grantResp = Invoke-RestMethod -Method Post -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants" -Headers $headers -Body $grantBody -ContentType 'application/json' -ErrorAction Stop
-          $grantId = $grantResp.id
-          $granted = [bool]$grantId
-          if ($granted) { Invoke-RestMethod -Method Delete -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants/$grantId" -Headers $headers -ErrorAction SilentlyContinue | Out-Null }
-          Write-Output "EXEC T1550.001: OAuth permission grant (User.Read, test-safe scope only) created=$granted, then deleted. [BAS-SIM-APT29-CLOUD-2]"
-          if ($granted) {
-            Write-Output "FAIL: OAuth permission grant creation succeeded unimpeded. Entra ID should alert on new consent grants outside a known app-review workflow."
-          } else {
-            Write-Output "PASS: OAuth permission grant creation was blocked or failed. [BAS-SIM-APT29-CLOUD-2]"
-          }
         } catch {
           Write-Output "ERROR: OAuth application permission abuse could not be evaluated  -  $($_.Exception.Message). Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-2]"
         }
