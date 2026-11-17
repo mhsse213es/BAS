@@ -87,13 +87,7 @@ func FraudVerdict(rec models.FraudControl) (string, string) {
 // verdicts. It is PASS only when both are PASS. Any FAIL makes it FAIL. Otherwise
 // it is SKIPPED, so an endpoint block with no ledger call is never an overall PASS.
 func CombinedVerdict(endpoint, fraud string) string {
-	if endpoint == "FAIL" || fraud == "FAIL" {
-		return "FAIL"
-	}
-	if endpoint == "PASS" && fraud == "PASS" {
-		return "PASS"
-	}
-	return "SKIPPED"
+	return models.CombinedVerdict(endpoint, fraud)
 }
 
 func fraudControlFromOutput(out string) *models.FraudControl {

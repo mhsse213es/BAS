@@ -92,7 +92,10 @@ func ComputeScore(results []SimulationResult, prev *Score) Score {
 		// every vetoed step, silently LOWERING preventionScore -- the
 		// opposite of the truth (verified, B5 Task 9 audit; see
 		// docs/superpowers/specs/2026-09-29-destructive-action-guardrail-b5-design.md).
-		switch r.Result {
+		// A fraud-control record can turn an endpoint PASS into FAIL or
+		// SKIPPED (see EffectiveResult). The scorer reads that verdict.
+		eff := EffectiveResult(r)
+		switch eff {
 		case ResultSkipped:
 			skipped++
 			continue
@@ -112,7 +115,7 @@ func ComputeScore(results []SimulationResult, prev *Score) Score {
 			tacticCount[tactic]++
 		}
 
-		switch r.Result {
+		switch eff {
 		case ResultPass, ResultBlocked:
 			passed++
 			weightedPassed += sw

@@ -178,20 +178,22 @@ func (m *Mapper) GenerateReport(
 
 				var tested, techFailed, errored bool
 				for _, r := range matched {
+					eff := models.EffectiveResult(r)
 					if !seen[r.ID] {
 						seen[r.ID] = true
 						cr.Evidence = append(cr.Evidence, TechniqueEvidence{
 							TechniqueID:   r.Technique.ID,
 							TechniqueName: r.Technique.Name,
-							Result:        string(r.Result),
+							Result:        string(eff),
 							Details:       r.Details,
 							Remediation:   r.Remediation,
 						})
 						// VETOED and ERROR stay in Evidence (we attempted the step) but are not evidence the control
-						// was verified, so they never count as tested. (SKIPPED never reaches here.)
-						if r.Result != models.ResultVetoed && r.Result != models.ResultError {
+						// was verified, so they never count as tested. A fraud-control SKIPPED also stays out of the
+						// tested count: the endpoint result alone is not evidence the step was verified.
+						if eff != models.ResultVetoed && eff != models.ResultError && eff != models.ResultSkipped {
 							cr.Tested++
-							switch r.Result {
+							switch eff {
 							case models.ResultPass, models.ResultBlocked:
 								cr.Passed++
 							case models.ResultFail:
