@@ -87,6 +87,8 @@ var TechniqueDomain = map[string]Domain{
 	"T1007": DomainDataDiscoveryAndStaging,
 	// Credentials from Password Stores (B2 backup credential exposure).
 	"T1555": DomainCredentialAccess,
+	// Financial Theft (Akira double-extortion correlation step D5: data theft used for extortion).
+	"T1657": DomainExfiltration,
 	// Data Destruction (B3-B5 backup deletion/immutability/restore).
 	"T1485": DomainEncryptionAndDestruction,
 }

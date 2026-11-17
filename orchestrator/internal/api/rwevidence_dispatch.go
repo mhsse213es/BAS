@@ -38,6 +38,7 @@ var ransomwareScenarioIDs = map[string]bool{
 	"rhysida-kill-chain":                   true,
 	"hunters-international-kill-chain":     true,
 	"ransomware-backup-recovery-assurance": true,
+	"akira-double-extortion-assessment":    true,
 }
 
 // recordRWEvidence is additive and best-effort toward scoring (there is no
