@@ -50,8 +50,8 @@ func TestCarbanakStage4UsesQueryOnlyLSASSAccess(t *testing.T) {
 
 func TestCarbanakFraudSequenceReplacesDecoy(t *testing.T) {
 	sc := loadCarbanakChain(t)
-	if len(sc.Steps) != 14 {
-		t.Fatalf("chain has %d steps, want 14 (stages 1-7 plus 8a-8g)", len(sc.Steps))
+	if len(sc.Steps) < 14 {
+		t.Fatalf("chain has %d steps, want at least 14 (stages 1-7 plus 8a-8g)", len(sc.Steps))
 	}
 	wantControl := map[string]string{
 		"Carbanak Stage 8a ": "evidence",
@@ -78,5 +78,37 @@ func TestCarbanakFraudSequenceReplacesDecoy(t *testing.T) {
 	}
 	if !strings.Contains(carbanakStep(t, sc, "Carbanak Stage 8a ").Command, "bas_carbanak_run") {
 		t.Error("8a must record the shared run state for 8b-8g")
+	}
+}
+
+func TestCarbanakDiscoveryAndCredentialStagesTask9(t *testing.T) {
+	sc := loadCarbanakChain(t)
+	want := map[string]string{
+		"Carbanak Stage 10 ": "T1083",
+		"Carbanak Stage 11 ": "T1046",
+		"Carbanak Stage 12 ": "T1069.002",
+		"Carbanak Stage 13 ": "T1135",
+		"Carbanak Stage 14 ": "T1555.004",
+		"Carbanak Stage 15 ": "T1555.003",
+		"Carbanak Stage 17 ": "T1558.003",
+		"Carbanak Stage 18 ": "T1552.001",
+	}
+	forbidden := []string{"ReadProcessMemory", "CredRead", "CryptUnprotectData", "MiniDump", "VM_READ"}
+	for prefix, tech := range want {
+		st := carbanakStep(t, sc, prefix)
+		if st.TechniqueID != tech {
+			t.Errorf("%s technique_id = %q, want %q", prefix, st.TechniqueID, tech)
+		}
+		for _, f := range forbidden {
+			if strings.Contains(st.Command, f) {
+				t.Errorf("%s command contains forbidden %q", prefix, f)
+			}
+		}
+		if len(st.ThreatIntelSources) == 0 {
+			t.Errorf("%s has no threat_intel_sources", prefix)
+		}
+		if !strings.Contains(st.Command, "[BAS-SIM-CARBANAK-S") {
+			t.Errorf("%s missing [BAS-SIM-CARBANAK-Sn] marker", prefix)
+		}
 	}
 }
