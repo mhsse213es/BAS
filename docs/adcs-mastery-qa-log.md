@@ -121,6 +121,8 @@ needed before claiming detection. Stage 8 was not probed (live probe off).
 
 ## Lab controls (same lab, run by the user; outputs reviewed)
 
+Repeatable steps: `docs/adcs-lab-validation-runbook.md`.
+
 Each control changed the lab CA or a test template by hand, was detected by the stage, and was reverted; the stage was then
 re-run. Evidence is the pasted stage output, not a SIEM or a certificate request (nothing was requested).
 
@@ -130,13 +132,17 @@ re-run. Evidence is the pasted stage output, not a SIEM or a certificate request
 | ESC4 | test template, Domain Users Write | stage 4 FAIL; stage 17 latent (potential) while unpublished, path once published | stage 4 PASS |
 | ESC6 | `EDITF_ATTRIBUTESUBJECTALTNAME2` set (`11014e` to `15014e`) | stage 6 FAIL; stage 17 path via published template Machine | stage 6 PASS, value back to `11014e` |
 | ESC7 | Domain Users granted Manage this CA | stage 7 FAIL, `Domain Users -> ManageCA -> CA LAB-CA`; stage 17 path | stage 7 PASS |
+| ESC2 | test template, Any Purpose EKU, Domain Users enroll | stage 2 FAIL (confirmed, unpublished) | pending |
+| ESC3 | agent template plus a template requiring an agent signature | stage 3 FAIL confirmed; with only the agent template, SKIP (potential) | pending |
+| ESC9 | test template with the no-security-extension flag (0x80000) | stage 9 FAIL (confirmed, unpublished) | pending |
+| ESC11 | `IF_ENFORCEENCRYPTICERTREQUEST` cleared | stage 11 FAIL; stage 17 FAIL with the no-path wording (live) | stage 11 PASS |
 | ESC10 | none added (real DC at 20348.587) | stage 10 FAIL, then stage 17 | not applicable |
 
 Notes: the ESC6 control was set in the registry and not restarted before the first read; the scenario reads the value, not
 the running service state, and does not say so in its wording. The ESC4 path text lists all write rights rather than the
 one the ACE holds.
 
-Still not shown to find anything in a real environment: ESC2, 3, 5, 9, 11, 13, 14, 15, stage 16 (publication and trust) and
+Still not shown to find anything in a real environment: ESC5, 13, 14, 15, stage 16 (publication and trust) and
 the ESC8 live probe. Their only live result is "reads real data, finds nothing on a clean lab". The Locksmith cross-check was
 not run.
 
