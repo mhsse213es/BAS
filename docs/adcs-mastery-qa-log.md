@@ -93,6 +93,28 @@ Not changed (decided, with reason):
 - ACEs granting WriteProperty on a *specific* property GUID still count as writers. Without a schema lookup we cannot tell a
   harmless attribute from a dangerous one (for example the template name-flag), so we stay conservative.
 
+## First lab run (lab.local, 2026-11-16) and what it changed
+
+Run by hand with the extracted stage scripts as `labdministrator` against one CA/DC host (Windows Server 2022 Standard
+Evaluation, 20348.587, `WIN-TQ70FGLETIU`, CA `LAB-CA`).
+
+Verified against a real environment: LDAP template and CA reads (33 templates, 11 published, no unreadable ACLs); CA edit
+flags, interface flags and key provider through `certutil` (the backslash fix held); CA security descriptor; remote-registry
+build read; every stage finished in 0.5-2.3 s. Stage 9 crashed once in the runner ("An error occurred while creating the
+pipeline", 0.5 s); run on its own it returned PASS, so it is recorded as an unreproduced one-off, not a code defect.
+
+Finding: stage 10 (and so stage 17) returned SKIP because the DC's StrongCertificateBindingEnforcement was unset and the
+build was not matched to a threshold. The DC was 20348.587, below the May 10, 2022 update (KB5013944, 20348.707), so it has no
+strong certificate mapping at all. Added a `may2022` threshold (Server 2022 only) and a confirmed finding below it, with
+four fixtures. Basis and limits: Microsoft's KB5013944 page gives the build; the KB5014754 page ties the changes to "the May
+10, 2022 update" but names no KB for Server 2022, so matching them is an inference by date. Server 2016 and 2019 builds are not
+stated on the page and are not matched. The pre-update KDC behaviour is not described on the page; "maps by UPN or SAN alone"
+is general knowledge, not taken from it.
+
+Still NOT shown by this run: every PASS (stages 1-7, 9, 11, 13-16) is consistent with a clean lab and with a collector that
+cannot see a defect. A deliberately vulnerable template (ESC1) or a cross-check with an independent read-only tool is
+needed before claiming detection. Stage 8 was not probed (live probe off).
+
 ## Open
 
 - `adcs-esc8-web-enrollment-probe.yaml` was removed; stage 8 replaces it. Behaviour change: the old scenario sent its one unauthenticated HTTP GET by default, stage 8 only with `BAS_ADCS_LIVE_PROBE=true`.

@@ -112,6 +112,10 @@ func cases() []tc {
 		{"esc10 Server 2025 build is not matched", "10", "SKIP", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": 0, "certMappingMethods": nil, "build": m{"number": "26100", "ubr": 6584}}}}, "could not be matched"},
 		{"esc10 enforced", "10", "PASS", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": 2, "certMappingMethods": nil}}}, ""},
 		{"esc10 unset is not clean", "10", "SKIP", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": nil, "certMappingMethods": nil}}}, ""},
+		{"esc10 Server 2022 below the May 2022 update has no strong mapping", "10", "FAIL", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": nil, "certMappingMethods": nil, "build": m{"number": "20348", "ubr": 587}}}}, "May 10, 2022"},
+		{"esc10 Server 2022 below the May 2022 update ignores a set value", "10", "FAIL", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": 2, "certMappingMethods": nil, "build": m{"number": "20348", "ubr": 587}}}}, "May 10, 2022"},
+		{"esc10 Server 2022 at the May 2022 update with the value unset is still unknown", "10", "SKIP", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": nil, "certMappingMethods": nil, "build": m{"number": "20348", "ubr": 707}}}}, ""},
+		{"esc10 Server 2019 below an unlisted threshold stays unknown", "10", "SKIP", m{"DCs": []m{{"name": "dc01", "readable": true, "strongBinding": nil, "certMappingMethods": nil, "build": m{"number": "17763", "ubr": 100}}}}, ""},
 		{"esc10 unreadable dc", "10", "SKIP", m{"DCs": []m{{"name": "dc01", "readable": false, "strongBinding": nil, "certMappingMethods": nil}}}, ""},
 		// ESC11
 		{"esc11 encryption not enforced", "11", "FAIL", m{"CAs": []m{ca(m{"interfaceFlags": 0})}}, "ESC11"},
@@ -374,7 +378,7 @@ func TestFixedBuildTable(t *testing.T) {
 	lib, _ := FullLibrary()
 	for _, w := range []string{
 		"'14393' = @(7515, 0)", "'17763' = @(6532, 0)", "'20348' = @(2849, 2819)", "'25398' = @(1251, 0)", "'26100' = @(2314, 2240)",
-		"'14393' = @(8422, 0)", "'17763' = @(7792, 0)", "'20348' = @(4171, 0)"} {
+		"'14393' = @(8422, 0)", "'17763' = @(7792, 0)", "'20348' = @(4171, 0)", "may2022 = @{ '20348' = @(707, 0) }"} {
 		if !strings.Contains(lib, w) {
 			t.Errorf("build table lacks %s", w)
 		}

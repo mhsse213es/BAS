@@ -2653,6 +2653,10 @@ steps:
       $script:AdcsFixBuilds = @{
         cve49019 = @{ '14393' = @(7515, 0); '17763' = @(6532, 0); '20348' = @(2849, 2819); '25398' = @(1251, 0); '26100' = @(2314, 2240) }
         sep2025 = @{ '14393' = @(8422, 0); '17763' = @(7792, 0); '20348' = @(4171, 0) }
+        # may2022: the May 10, 2022 update, the first to carry the KB5014754 strong certificate mapping changes. Below it a DC has
+        #          no StrongCertificateBindingEnforcement support at all. Only Server 2022 (KB5013944, 20348.707) is listed: the
+        #          KB5014754 page names no build for 2019 or 2016, and the date-match for 2022 is an inference (see the QA log).
+        may2022 = @{ '20348' = @(707, 0) }
       }
       function Format-AdcsBuild($b) { if ($null -eq $b) { return 'unknown build' }; return ('10.0.' + $b.number + '.' + $b.ubr) }
       # fixed, vulnerable or unknown. A build that cannot be read, or is not in the table, is unknown, never fixed.
@@ -2703,6 +2707,11 @@ steps:
         foreach ($d in @($dcs)) {
           if (-not $d.readable) { $out += (New-AdcsFinding '10' 'insufficient' ([string]$d.name) 'the domain controller certificate-mapping settings could not be read' ''); continue }
           $bs = Get-AdcsBuildState $d.build 'sep2025'
+          if ((Get-AdcsBuildState $d.build 'may2022') -eq 'vulnerable') {
+            $pp = Format-AdcsPath @() 'change a victim UPN, then enrol' ('domain controller ' + [string]$d.name) 'the DC predates strong certificate mapping' 'authenticate as another account'
+            $out += (New-AdcsFinding '10' 'confirmed' ([string]$d.name) ('the DC build ' + (Format-AdcsBuild $d.build) + ' is below the May 10, 2022 update (20348.707), the first with strong certificate mapping, so it has no StrongCertificateBindingEnforcement support and maps certificates by UPN or SAN alone') $pp)
+            continue
+          }
           $upn = ($null -ne $d.certMappingMethods) -and ((([int64]$d.certMappingMethods) -band 0x4) -ne 0)
           $path = Format-AdcsPath @() 'change a victim UPN, then enrol' ('domain controller ' + [string]$d.name) 'weak certificate-to-account mapping' 'authenticate as another account'
           if ($bs -eq 'fixed') {
@@ -3874,6 +3883,10 @@ steps:
       $script:AdcsFixBuilds = @{
         cve49019 = @{ '14393' = @(7515, 0); '17763' = @(6532, 0); '20348' = @(2849, 2819); '25398' = @(1251, 0); '26100' = @(2314, 2240) }
         sep2025 = @{ '14393' = @(8422, 0); '17763' = @(7792, 0); '20348' = @(4171, 0) }
+        # may2022: the May 10, 2022 update, the first to carry the KB5014754 strong certificate mapping changes. Below it a DC has
+        #          no StrongCertificateBindingEnforcement support at all. Only Server 2022 (KB5013944, 20348.707) is listed: the
+        #          KB5014754 page names no build for 2019 or 2016, and the date-match for 2022 is an inference (see the QA log).
+        may2022 = @{ '20348' = @(707, 0) }
       }
       function Format-AdcsBuild($b) { if ($null -eq $b) { return 'unknown build' }; return ('10.0.' + $b.number + '.' + $b.ubr) }
       # fixed, vulnerable or unknown. A build that cannot be read, or is not in the table, is unknown, never fixed.
@@ -4430,6 +4443,10 @@ steps:
       $script:AdcsFixBuilds = @{
         cve49019 = @{ '14393' = @(7515, 0); '17763' = @(6532, 0); '20348' = @(2849, 2819); '25398' = @(1251, 0); '26100' = @(2314, 2240) }
         sep2025 = @{ '14393' = @(8422, 0); '17763' = @(7792, 0); '20348' = @(4171, 0) }
+        # may2022: the May 10, 2022 update, the first to carry the KB5014754 strong certificate mapping changes. Below it a DC has
+        #          no StrongCertificateBindingEnforcement support at all. Only Server 2022 (KB5013944, 20348.707) is listed: the
+        #          KB5014754 page names no build for 2019 or 2016, and the date-match for 2022 is an inference (see the QA log).
+        may2022 = @{ '20348' = @(707, 0) }
       }
       function Format-AdcsBuild($b) { if ($null -eq $b) { return 'unknown build' }; return ('10.0.' + $b.number + '.' + $b.ubr) }
       # fixed, vulnerable or unknown. A build that cannot be read, or is not in the table, is unknown, never fixed.
@@ -4598,6 +4615,11 @@ steps:
         foreach ($d in @($dcs)) {
           if (-not $d.readable) { $out += (New-AdcsFinding '10' 'insufficient' ([string]$d.name) 'the domain controller certificate-mapping settings could not be read' ''); continue }
           $bs = Get-AdcsBuildState $d.build 'sep2025'
+          if ((Get-AdcsBuildState $d.build 'may2022') -eq 'vulnerable') {
+            $pp = Format-AdcsPath @() 'change a victim UPN, then enrol' ('domain controller ' + [string]$d.name) 'the DC predates strong certificate mapping' 'authenticate as another account'
+            $out += (New-AdcsFinding '10' 'confirmed' ([string]$d.name) ('the DC build ' + (Format-AdcsBuild $d.build) + ' is below the May 10, 2022 update (20348.707), the first with strong certificate mapping, so it has no StrongCertificateBindingEnforcement support and maps certificates by UPN or SAN alone') $pp)
+            continue
+          }
           $upn = ($null -ne $d.certMappingMethods) -and ((([int64]$d.certMappingMethods) -band 0x4) -ne 0)
           $path = Format-AdcsPath @() 'change a victim UPN, then enrol' ('domain controller ' + [string]$d.name) 'weak certificate-to-account mapping' 'authenticate as another account'
           if ($bs -eq 'fixed') {
