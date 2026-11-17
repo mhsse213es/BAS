@@ -1431,13 +1431,184 @@
     "status": "not_required_non_destructive"
   },
   {
-    "scenario": "apt36-kill-chain.yaml",
+    "scenario": "apt36-collection-credential.yaml",
     "index": 0,
-    "technique_id": "T1566.001",
+    "technique_id": "T1003.001",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
     "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-collection-credential.yaml",
+    "index": 1,
+    "technique_id": "T1555.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-collection-credential.yaml",
+    "index": 2,
+    "technique_id": "T1555.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-collection-credential.yaml",
+    "index": 3,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-collection-credential.yaml",
+    "index": 4,
+    "technique_id": "T1113",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-command-control.yaml",
+    "index": 0,
+    "technique_id": "T1071.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-command-control.yaml",
+    "index": 1,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-command-control.yaml",
+    "index": 2,
+    "technique_id": "T1021.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-command-control.yaml",
+    "index": 3,
+    "technique_id": "T1021.006",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-discovery.yaml",
+    "index": 0,
+    "technique_id": "T1057",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-discovery.yaml",
+    "index": 1,
+    "technique_id": "T1082",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-discovery.yaml",
+    "index": 2,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-discovery.yaml",
+    "index": 3,
+    "technique_id": "T1016",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-discovery.yaml",
+    "index": 4,
+    "technique_id": "T1135",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-initial-execution.yaml",
+    "index": 0,
+    "technique_id": "T1204.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "apt36-initial-execution.yaml",
+    "index": 1,
+    "technique_id": "T1059.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-initial-execution.yaml",
+    "index": 2,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-initial-execution.yaml",
+    "index": 3,
+    "technique_id": "T1047",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-initial-execution.yaml",
+    "index": 4,
+    "technique_id": "T1218.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-kill-chain.yaml",
+    "index": 0,
+    "technique_id": "T1204.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
   },
   {
     "scenario": "apt36-kill-chain.yaml",
@@ -1469,7 +1640,7 @@
   {
     "scenario": "apt36-kill-chain.yaml",
     "index": 4,
-    "technique_id": "T1071.001",
+    "technique_id": "T1071.004",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -1515,6 +1686,51 @@
     "scenario": "apt36-kill-chain.yaml",
     "index": 9,
     "technique_id": "T1105",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-persistence-evasion.yaml",
+    "index": 0,
+    "technique_id": "T1546.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "apt36-persistence-evasion.yaml",
+    "index": 1,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-persistence-evasion.yaml",
+    "index": 2,
+    "technique_id": "T1543.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-persistence-evasion.yaml",
+    "index": 3,
+    "technique_id": "T1546.015",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "apt36-persistence-evasion.yaml",
+    "index": 4,
+    "technique_id": "T1562.001",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
