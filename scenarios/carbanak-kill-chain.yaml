@@ -21,8 +21,8 @@ description: >
   KILL CHAIN STAGES:
      1. Initial Access       -- malspam-document child-process chain (winword.exe -> powershell.exe) (T1566.001)
      2. Persistence           -- Windows service install (Carbanak runs as a service), lab-only (T1543.003)
-     3. Defense Evasion       -- netsh firewall rule add/remove (T1686)
-     4. Credential Access     -- LSASS read-handle probe, Mimikatz-style (T1003.001)
+     3. Defense Evasion       -- netsh firewall rule add/remove (T1686.003)
+     4. Credential Access     -- LSASS query-only handle probe, Mimikatz-style (T1003.001)
      5. Discovery             -- process enumeration for CBS/payment applications (T1057)
      6. Collection            -- operator screen capture, in-memory only, NO file written (T1113)
      7. Command and Control   -- HTTPS C2 beacon to a non-routable address (T1071.001)
@@ -194,8 +194,8 @@ steps:
   # ---------------------------------------------------------------------------
   # Stage 3 -- Defense Evasion: Host Firewall Rule Manipulation (T1686)
   # ---------------------------------------------------------------------------
-  - name: "Carbanak Stage 3 -- Host Firewall Rule Manipulation via netsh (T1686)"
-    technique_id: T1686
+  - name: "Carbanak Stage 3 -- Host Firewall Rule Manipulation via netsh (T1686.003)"
+    technique_id: T1686.003
     framework: custom
     executor: powershell
     requires_priv: admin
@@ -238,7 +238,7 @@ steps:
   # ---------------------------------------------------------------------------
   # Stage 4 -- Credential Access: LSASS Read-Handle Probe (T1003.001)
   # ---------------------------------------------------------------------------
-  - name: "Carbanak Stage 4 -- LSASS Handle Access (PROCESS_VM_READ), Mimikatz-style (T1003.001)"
+  - name: "Carbanak Stage 4 -- LSASS Handle Access (PROCESS_QUERY_LIMITED_INFORMATION), Mimikatz-style (T1003.001)"
     technique_id: T1003.001
     action_key: handle_probe
     detection_profiles:
@@ -250,10 +250,10 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: medium
-    blast_radius: "Opens a read handle to lsass.exe with PROCESS_VM_READ, then immediately closes it. No memory is read or dumped. Carbanak obtains credentials with tools such as Mimikatz; this fires the LSASS handle-access telemetry (the credential-theft detection signal) without touching memory."
+    blast_radius: "Opens a query-only handle (PROCESS_QUERY_LIMITED_INFORMATION, 0x1000) to lsass.exe, then immediately closes it. No memory is read or dumped. Carbanak obtains credentials with tools such as Mimikatz; this fires the LSASS handle-access telemetry (the credential-theft detection signal) without touching memory."
     reversible: true
     telemetry:
-      - "Sysmon EID 10: SourceImage=powershell.exe TargetImage=lsass.exe GrantedAccess=0x1010"
+      - "Sysmon EID 10: SourceImage=powershell.exe TargetImage=lsass.exe GrantedAccess=0x1000"
     detection:
       - "EDR: handle to LSASS with VM_READ -- Sigma sysmon_lsass_memdump.yml family"
       - "SIEM: cross-process handle to lsass.exe from a script host -- credential-dumping IOC"
@@ -277,10 +277,10 @@ steps:
       try { Add-Type -TypeDefinition $sig -ErrorAction Stop } catch { Write-Output "SKIP: could not compile the P/Invoke probe. [BAS-SIM-CARBANAK-S4]"; return }
       $lsass = Get-Process lsass -EA SilentlyContinue | Select-Object -First 1
       if (-not $lsass) { Write-Output "SKIP: lsass.exe not found. [BAS-SIM-CARBANAK-S4]"; return }
-      $h = [BasCarb]::OpenProcess(0x1010, $false, $lsass.Id)
+      $h = [BasCarb]::OpenProcess(0x1000, $false, $lsass.Id)
       if ($h -ne [IntPtr]::Zero) {
         [void][BasCarb]::CloseHandle($h)
-        Write-Output "FAIL: opened a PROCESS_VM_READ handle to LSASS unblocked -- credential memory is reachable. Expect Sysmon EID 10 GrantedAccess=0x1010. Enable RunAsPPL / Credential Guard. [BAS-SIM-CARBANAK-S4]"
+        Write-Output "FAIL: opened a query-only handle (0x1000) to LSASS unblocked -- credential memory is reachable. Expect Sysmon EID 10 GrantedAccess=0x1000. Enable RunAsPPL / Credential Guard. [BAS-SIM-CARBANAK-S4]"
       } else {
         $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
         Write-Output "PASS: access to LSASS was DENIED (Win32 error $err) -- RunAsPPL / Credential Guard / EDR protected LSASS memory. [BAS-SIM-CARBANAK-S4]"
