@@ -47,3 +47,36 @@ func TestCarbanakStage4UsesQueryOnlyLSASSAccess(t *testing.T) {
 		t.Fatalf("stage 4 still requests PROCESS_VM_READ (0x1010)")
 	}
 }
+
+func TestCarbanakFraudSequenceReplacesDecoy(t *testing.T) {
+	sc := loadCarbanakChain(t)
+	if len(sc.Steps) != 14 {
+		t.Fatalf("chain has %d steps, want 14 (stages 1-7 plus 8a-8g)", len(sc.Steps))
+	}
+	wantControl := map[string]string{
+		"Carbanak Stage 8a ": "evidence",
+		"Carbanak Stage 8b ": "prevent",
+		"Carbanak Stage 8c ": "detect",
+		"Carbanak Stage 8d ": "prevent",
+		"Carbanak Stage 8e ": "prevent",
+		"Carbanak Stage 8f ": "verify",
+		"Carbanak Stage 8g ": "detect",
+	}
+	for prefix, control := range wantControl {
+		st := carbanakStep(t, sc, prefix)
+		if !strings.Contains(st.Command, "expected_control='"+control+"'") {
+			t.Errorf("%s: marker expected_control %q missing", prefix, control)
+		}
+		if !strings.Contains(st.Command, "BAS-FRAUD-CONTROL") {
+			t.Errorf("%s: no BAS-FRAUD-CONTROL marker printed", prefix)
+		}
+	}
+	for _, st := range sc.Steps {
+		if strings.Contains(st.Command, "bas_carbanak_fraud_") {
+			t.Errorf("step %q still writes the decoy transfer dir", st.Name)
+		}
+	}
+	if !strings.Contains(carbanakStep(t, sc, "Carbanak Stage 8a ").Command, "bas_carbanak_run") {
+		t.Error("8a must record the shared run state for 8b-8g")
+	}
+}

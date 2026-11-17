@@ -32,7 +32,7 @@ func TestFSThreatActorKillChains_ParseWindowsOnlyWithExpectedTechniques(t *testi
 			// -> payment-app discovery -> operator screen capture -> HTTPS C2
 			// -> fraudulent-transfer objective (lab-gated).
 			file:       "carbanak-kill-chain.yaml",
-			techniques: []string{"T1566.001", "T1543.003", "T1686", "T1003.001", "T1057", "T1113", "T1071.001", "T1078"},
+			techniques: []string{"T1566.001", "T1543.003", "T1686.003", "T1003.001", "T1057", "T1113", "T1071.001", "T1078", "", "T1078", "T1078", "T1078", "", ""},
 		},
 		{
 			// Enterprise-grade rebuild: initial-access -> encoded loader ->

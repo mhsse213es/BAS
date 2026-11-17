@@ -418,52 +418,285 @@ steps:
     cleanup: ""
 
   # ---------------------------------------------------------------------------
-  # Stage 8 -- Impact: Fraudulent-Transfer Simulation (T1078, lab-only)
+  # Stages 8a-8g -- Fraud sequence against the simulated banking ledger (T1078)
+  # Shared run state across 8a-8g lives in %TEMP%\bas_carbanak_run.json. Each
+  # fraud step prints one BAS-FRAUD-CONTROL marker. The ledger decides; this
+  # script only reports what the ledger returned.
   # ---------------------------------------------------------------------------
-  - name: "Carbanak Stage 8 -- Fraudulent Transfer via Valid Operator Credentials (lab) (T1078)"
+  - name: "Carbanak Stage 8a -- Valid Operator Authentication to Simulated Ledger (T1078)"
     technique_id: T1078
-    detection_profiles:
-      - windows_file_discovery
     framework: custom
     executor: powershell
     requires_priv: user
     timeout_sec: 30
     fidelity: lab-only
     production_safe: false
-    risk: high
-    blast_radius: "Writes a SINGLE decoy SWIFT MT103-style transfer record (clearly tagged BAS-SIM, fictional accounts, no real IBAN/BIC) to an isolated %TEMP%\\bas_carbanak_fraud_<id> dir to represent Carbanak's objective -- issuing a fraudulent transfer using a banking operator's valid credentials -- then reads it back and deletes the whole dir. No real transaction, no network, no credentials used."
+    risk: medium
+    blast_radius: "Logs a SYNTHETIC operator into the lab carbanak-ledger-sim service on 127.0.0.1 (or a lab host label) and records the run id in %TEMP%\\bas_carbanak_run.json. No real credential is read or used. The ledger is not a banking system."
     reversible: true
     telemetry:
-      - "Sysmon EID 11: decoy transfer file created under %TEMP%\\bas_carbanak_fraud_<id>"
-      - "PowerShell EID 4104: Set-Content writing a transaction-shaped record"
+      - "Ledger audit row: action=session, decision, run_id"
+      - "Sysmon EID 3: powershell.exe connection to the lab ledger port"
     detection:
-      - "Application/CBS audit: a SWIFT/transfer message created outside the authorized maker-checker workflow -- fraudulent-transaction signal"
-      - "SIEM: correlate operator screen-capture + credential access + an unexpected transfer record -- Carbanak fraud chain"
+      - "Identity: valid-account logon from an unusual host to the banking application"
     threat_intel_sources:
-      - reference: "MITRE ATT&CK -- Carbanak (Group G0008): Valid Accounts (T1078) -- 'used legitimate credentials of banking employees to perform operations that sent them millions of dollars'"
-        url: "https://attack.mitre.org/groups/G0008/"
       - reference: "Europol -- Mastermind Behind EUR 1 Billion Cyber Bank Robbery Arrested in Spain (2018)"
         url: "https://www.europol.europa.eu/newsroom/news/mastermind-behind-eur-1-billion-cyber-bank-robbery-arrested-in-spain"
-    last_reviewed: "2026-11-10"
-    family_attribution_confidence: confirmed
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $runId = '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF)
-      $dir = Join-Path $env:TEMP "bas_carbanak_fraud_$runId"
-      New-Item -ItemType Directory -Path $dir -Force | Out-Null
-      $rec = @(
-        "BAS-SIM-CARBANAK FRAUDULENT TRANSFER (CONTROLLED DRILL -- NOT A REAL TRANSACTION)",
-        ":20:BAS-SIM-$runId",
-        ":32A:260101BASX000000100000,00",
-        ":50K:/BAS-SIM-ORIGINATOR (fictional operator account)",
-        ":59:/BAS-SIM-MULE (fictional beneficiary)",
-        ":70:Carbanak objective -- transfer initiated with an operator's valid credentials"
-      ) -join "`n"
-      $file = Join-Path $dir 'bas-sim-mt103.txt'
-      Set-Content -Path $file -Value $rec -Encoding UTF8
-      $wrote = Test-Path $file
-      Remove-Item $dir -Recurse -Force -EA SilentlyContinue
-      $cleaned = -not (Test-Path $dir)
-      Write-Output "FAIL: a fraudulent-transfer record (SWIFT MT103-shaped, fictional) was staged to $dir to represent Carbanak's objective (wrote=$wrote). CBS/SWIFT controls must enforce maker-checker and flag any transfer created outside that workflow. Decoy removed=$cleaned, no real transaction occurred. [BAS-SIM-CARBANAK-S8]"
+      $ledger = if ($env:BAS_CARBANAK_LEDGER_URL) { $env:BAS_CARBANAK_LEDGER_URL } else { 'http://127.0.0.1:8745' }
+      $u = [Uri]$ledger
+      $isLocal = ($u.Host -eq '127.0.0.1') -or ($u.Host -eq 'localhost') -or ($u.Host -match '\.(test|invalid|lab)$')
+      $opId = if ($env:BAS_CARBANAK_OPERATOR_ID) { $env:BAS_CARBANAK_OPERATOR_ID } else { 'op1' }
+      $opTok = if ($env:BAS_CARBANAK_OPERATOR_TOKEN) { $env:BAS_CARBANAK_OPERATOR_TOKEN } else { 'synthetic-op1' }
+      $stateFile = Join-Path $env:TEMP 'bas_carbanak_run.json'
+      function Emit($m) { Write-Output ('BAS-FRAUD-CONTROL ' + ($m | ConvertTo-Json -Compress)) }
+      if (-not $isLocal) { Write-Output 'SKIP: ledger host is not loopback or a lab label (.test/.invalid/.lab). [BAS-SIM-CARBANAK-S8a]'; Emit @{step='8a'; expected_control='evidence'; ledger_called=$false}; return }
+      $runId = [guid]::NewGuid().ToString()
+      try {
+        $r = Invoke-RestMethod -Uri ($ledger.TrimEnd('/') + '/session') -Method POST -ContentType 'application/json' -TimeoutSec 5 -Body (@{identity=$opId; token=$opTok; run_id=$runId; step='8a'} | ConvertTo-Json -Compress)
+      } catch {
+        Write-Output "SKIP: ledger not reachable at $ledger ($($_.Exception.Message)). [BAS-SIM-CARBANAK-S8a]"
+        Emit @{step='8a'; expected_control='evidence'; ledger_called=$false}
+        return
+      }
+      @{run_id=$runId; session=$r.session_id; txn=$null} | ConvertTo-Json | Set-Content -Path $stateFile -Encoding UTF8
+      Write-Output "EXEC 8a: operator '$opId' authenticated to the simulated ledger (decision=$($r.decision)). [BAS-SIM-CARBANAK-S8a]"
+      Emit @{step='8a'; expected_control='evidence'; ledger_called=$true; ledger_decision=$r.decision; rule_fired=$r.rule_fired; audit_hash=$r.audit_hash}
+    cleanup: ""
+
+  - name: "Carbanak Stage 8b -- Unauthorized Payment Beneficiary Modification (no clean ATT&CK technique)"
+    attack_gap: no_clean_attack_technique
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Asks the lab ledger to add a fictional beneficiary without a second approver. The ledger is expected to reject it. Nothing leaves the lab."
+    reversible: true
+    telemetry:
+      - "Ledger audit row: action=beneficiary, decision, rule_fired"
+    detection:
+      - "Banking application: beneficiary added or changed without a second approver"
+    threat_intel_sources:
+      - reference: "Europol -- Mastermind Behind EUR 1 Billion Cyber Bank Robbery Arrested in Spain (2018)"
+        url: "https://www.europol.europa.eu/newsroom/news/mastermind-behind-eur-1-billion-cyber-bank-robbery-arrested-in-spain"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $ledger = if ($env:BAS_CARBANAK_LEDGER_URL) { $env:BAS_CARBANAK_LEDGER_URL } else { 'http://127.0.0.1:8745' }
+      $stateFile = Join-Path $env:TEMP 'bas_carbanak_run.json'
+      function Emit($m) { Write-Output ('BAS-FRAUD-CONTROL ' + ($m | ConvertTo-Json -Compress)) }
+      $s = Get-Content $stateFile -Raw | ConvertFrom-Json
+      if (-not $s) { Write-Output 'SKIP: no run state from 8a. [BAS-SIM-CARBANAK-S8b]'; Emit @{step='8b'; expected_control='prevent'; ledger_called=$false}; return }
+      try {
+        $r = Invoke-RestMethod -Uri ($ledger.TrimEnd('/') + '/beneficiary') -Method POST -ContentType 'application/json' -TimeoutSec 5 -Body (@{session_id=$s.session; run_id=$s.run_id; step='8b'; beneficiary='BAS-SIM-MULE'} | ConvertTo-Json -Compress)
+      } catch {
+        Write-Output "SKIP: ledger not reachable ($($_.Exception.Message)). [BAS-SIM-CARBANAK-S8b]"
+        Emit @{step='8b'; expected_control='prevent'; ledger_called=$false}
+        return
+      }
+      Write-Output "EXEC 8b: beneficiary change submitted without a second approver (decision=$($r.decision)). [BAS-SIM-CARBANAK-S8b]"
+      Emit @{step='8b'; expected_control='prevent'; ledger_called=$true; ledger_decision=$r.decision; rule_fired=$r.rule_fired; audit_hash=$r.audit_hash}
+    cleanup: ""
+
+  - name: "Carbanak Stage 8c -- Transaction Initiation Above Limit (T1078)"
+    technique_id: T1078
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Initiates a fictional transfer above the operator's limit on the lab ledger, using the 8a session. The ledger is expected to flag it. Nothing leaves the lab."
+    reversible: true
+    telemetry:
+      - "Ledger audit row: action=transfer, decision=flagged, rule_fired=amount_over_limit"
+    detection:
+      - "Banking application: transfer above the operator limit, flagged for review"
+    threat_intel_sources:
+      - reference: "Europol -- Mastermind Behind EUR 1 Billion Cyber Bank Robbery Arrested in Spain (2018)"
+        url: "https://www.europol.europa.eu/newsroom/news/mastermind-behind-eur-1-billion-cyber-bank-robbery-arrested-in-spain"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $ledger = if ($env:BAS_CARBANAK_LEDGER_URL) { $env:BAS_CARBANAK_LEDGER_URL } else { 'http://127.0.0.1:8745' }
+      $stateFile = Join-Path $env:TEMP 'bas_carbanak_run.json'
+      function Emit($m) { Write-Output ('BAS-FRAUD-CONTROL ' + ($m | ConvertTo-Json -Compress)) }
+      $s = Get-Content $stateFile -Raw | ConvertFrom-Json
+      if (-not $s) { Write-Output 'SKIP: no run state from 8a. [BAS-SIM-CARBANAK-S8c]'; Emit @{step='8c'; expected_control='detect'; ledger_called=$false}; return }
+      try {
+        $r = Invoke-RestMethod -Uri ($ledger.TrimEnd('/') + '/transfer') -Method POST -ContentType 'application/json' -TimeoutSec 5 -Body (@{session_id=$s.session; run_id=$s.run_id; step='8c'; amount=500} | ConvertTo-Json -Compress)
+      } catch {
+        Write-Output "SKIP: ledger not reachable ($($_.Exception.Message)). [BAS-SIM-CARBANAK-S8c]"
+        Emit @{step='8c'; expected_control='detect'; ledger_called=$false}
+        return
+      }
+      $s.txn = $r.txn_id
+      $s | ConvertTo-Json | Set-Content -Path $stateFile -Encoding UTF8
+      Write-Output "EXEC 8c: transfer initiated above limit (decision=$($r.decision), txn=$($r.txn_id)). [BAS-SIM-CARBANAK-S8c]"
+      Emit @{step='8c'; expected_control='detect'; ledger_called=$true; ledger_decision=$r.decision; rule_fired=$r.rule_fired; audit_hash=$r.audit_hash}
+    cleanup: ""
+
+  - name: "Carbanak Stage 8d -- Self-Approval of Own Transaction (T1078)"
+    technique_id: T1078
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Asks the lab ledger to let the initiating operator approve their own 8c transfer. The ledger is expected to reject it (maker-checker). Nothing leaves the lab."
+    reversible: true
+    telemetry:
+      - "Ledger audit row: action=approve, decision=rejected, rule_fired=maker_checker_self_approval"
+    detection:
+      - "Banking application: transfer approved by its own initiator (maker-checker violation)"
+    threat_intel_sources:
+      - reference: "Europol -- Mastermind Behind EUR 1 Billion Cyber Bank Robbery Arrested in Spain (2018)"
+        url: "https://www.europol.europa.eu/newsroom/news/mastermind-behind-eur-1-billion-cyber-bank-robbery-arrested-in-spain"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $ledger = if ($env:BAS_CARBANAK_LEDGER_URL) { $env:BAS_CARBANAK_LEDGER_URL } else { 'http://127.0.0.1:8745' }
+      $stateFile = Join-Path $env:TEMP 'bas_carbanak_run.json'
+      function Emit($m) { Write-Output ('BAS-FRAUD-CONTROL ' + ($m | ConvertTo-Json -Compress)) }
+      $s = Get-Content $stateFile -Raw | ConvertFrom-Json
+      if (-not $s -or -not $s.txn) { Write-Output 'SKIP: no transaction from 8c. [BAS-SIM-CARBANAK-S8d]'; Emit @{step='8d'; expected_control='prevent'; ledger_called=$false}; return }
+      try {
+        $r = Invoke-RestMethod -Uri ($ledger.TrimEnd('/') + '/approve') -Method POST -ContentType 'application/json' -TimeoutSec 5 -Body (@{session_id=$s.session; run_id=$s.run_id; step='8d'; txn_id=$s.txn} | ConvertTo-Json -Compress)
+      } catch {
+        Write-Output "SKIP: ledger not reachable ($($_.Exception.Message)). [BAS-SIM-CARBANAK-S8d]"
+        Emit @{step='8d'; expected_control='prevent'; ledger_called=$false}
+        return
+      }
+      Write-Output "EXEC 8d: initiating operator attempted to approve own transfer (decision=$($r.decision)). [BAS-SIM-CARBANAK-S8d]"
+      Emit @{step='8d'; expected_control='prevent'; ledger_called=$true; ledger_decision=$r.decision; rule_fired=$r.rule_fired; audit_hash=$r.audit_hash}
+    cleanup: ""
+
+  - name: "Carbanak Stage 8e -- Approval by a Non-Approver Identity (T1078)"
+    technique_id: T1078
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Logs a second synthetic operator WITHOUT approver rights into the lab ledger and asks it to approve the 8c transfer. The ledger is expected to reject it. Nothing leaves the lab."
+    reversible: true
+    telemetry:
+      - "Ledger audit row: action=approve, decision=rejected, rule_fired=approver_role_missing"
+    detection:
+      - "Banking application: approval by an identity with no approver role"
+    threat_intel_sources:
+      - reference: "Europol -- Mastermind Behind EUR 1 Billion Cyber Bank Robbery Arrested in Spain (2018)"
+        url: "https://www.europol.europa.eu/newsroom/news/mastermind-behind-eur-1-billion-cyber-bank-robbery-arrested-in-spain"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $ledger = if ($env:BAS_CARBANAK_LEDGER_URL) { $env:BAS_CARBANAK_LEDGER_URL } else { 'http://127.0.0.1:8745' }
+      $naId = if ($env:BAS_CARBANAK_NONAPPROVER_ID) { $env:BAS_CARBANAK_NONAPPROVER_ID } else { 'op3' }
+      $naTok = if ($env:BAS_CARBANAK_NONAPPROVER_TOKEN) { $env:BAS_CARBANAK_NONAPPROVER_TOKEN } else { 'synthetic-op3' }
+      $stateFile = Join-Path $env:TEMP 'bas_carbanak_run.json'
+      function Emit($m) { Write-Output ('BAS-FRAUD-CONTROL ' + ($m | ConvertTo-Json -Compress)) }
+      $s = Get-Content $stateFile -Raw | ConvertFrom-Json
+      if (-not $s -or -not $s.txn) { Write-Output 'SKIP: no transaction from 8c. [BAS-SIM-CARBANAK-S8e]'; Emit @{step='8e'; expected_control='prevent'; ledger_called=$false}; return }
+      try {
+        $n = Invoke-RestMethod -Uri ($ledger.TrimEnd('/') + '/session') -Method POST -ContentType 'application/json' -TimeoutSec 5 -Body (@{identity=$naId; token=$naTok; run_id=$s.run_id; step='8e-login'} | ConvertTo-Json -Compress)
+        $r = Invoke-RestMethod -Uri ($ledger.TrimEnd('/') + '/approve') -Method POST -ContentType 'application/json' -TimeoutSec 5 -Body (@{session_id=$n.session_id; run_id=$s.run_id; step='8e'; txn_id=$s.txn} | ConvertTo-Json -Compress)
+      } catch {
+        Write-Output "SKIP: ledger not reachable ($($_.Exception.Message)). [BAS-SIM-CARBANAK-S8e]"
+        Emit @{step='8e'; expected_control='prevent'; ledger_called=$false}
+        return
+      }
+      Write-Output "EXEC 8e: non-approver '$naId' attempted approval (decision=$($r.decision)). [BAS-SIM-CARBANAK-S8e]"
+      Emit @{step='8e'; expected_control='prevent'; ledger_called=$true; ledger_decision=$r.decision; rule_fired=$r.rule_fired; audit_hash=$r.audit_hash}
+    cleanup: ""
+
+  - name: "Carbanak Stage 8f -- Ledger Audit Integrity Check (no clean ATT&CK technique)"
+    attack_gap: no_clean_attack_technique
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: lab-only
+    production_safe: false
+    risk: low
+    blast_radius: "Reads the ledger audit and verifies its hash chain. Read-only."
+    reversible: true
+    telemetry:
+      - "Ledger audit row count and verification result"
+    detection:
+      - "Ledger integrity: audit chain verifies (intact) for the run"
+    threat_intel_sources:
+      - reference: "Europol -- Mastermind Behind EUR 1 Billion Cyber Bank Robbery Arrested in Spain (2018)"
+        url: "https://www.europol.europa.eu/newsroom/news/mastermind-behind-eur-1-billion-cyber-bank-robbery-arrested-in-spain"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $ledger = if ($env:BAS_CARBANAK_LEDGER_URL) { $env:BAS_CARBANAK_LEDGER_URL } else { 'http://127.0.0.1:8745' }
+      function Emit($m) { Write-Output ('BAS-FRAUD-CONTROL ' + ($m | ConvertTo-Json -Compress)) }
+      try {
+        $r = Invoke-RestMethod -Uri ($ledger.TrimEnd('/') + '/audit/verify') -Method GET -TimeoutSec 5
+      } catch {
+        Write-Output "SKIP: ledger not reachable ($($_.Exception.Message)). [BAS-SIM-CARBANAK-S8f]"
+        Emit @{step='8f'; expected_control='verify'; ledger_called=$false}
+        return
+      }
+      Write-Output "EXEC 8f: ledger audit chain verification intact=$($r.intact). [BAS-SIM-CARBANAK-S8f]"
+      Emit @{step='8f'; expected_control='verify'; ledger_called=$true; audit_intact=[bool]$r.intact}
+    cleanup: ""
+
+  - name: "Carbanak Stage 8g -- Fraud Detection and Alert Check (no clean ATT&CK technique)"
+    attack_gap: no_clean_attack_technique
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: lab-only
+    production_safe: false
+    risk: low
+    blast_radius: "Reads the ledger alert feed for the run and removes the shared run state file. Read-only on the ledger."
+    reversible: true
+    telemetry:
+      - "Ledger alert feed for the run"
+    detection:
+      - "Fraud monitoring: at least one alert raised for the run's flagged or rejected actions"
+    threat_intel_sources:
+      - reference: "Europol -- Mastermind Behind EUR 1 Billion Cyber Bank Robbery Arrested in Spain (2018)"
+        url: "https://www.europol.europa.eu/newsroom/news/mastermind-behind-eur-1-billion-cyber-bank-robbery-arrested-in-spain"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $ledger = if ($env:BAS_CARBANAK_LEDGER_URL) { $env:BAS_CARBANAK_LEDGER_URL } else { 'http://127.0.0.1:8745' }
+      $stateFile = Join-Path $env:TEMP 'bas_carbanak_run.json'
+      function Emit($m) { Write-Output ('BAS-FRAUD-CONTROL ' + ($m | ConvertTo-Json -Compress)) }
+      $s = Get-Content $stateFile -Raw | ConvertFrom-Json
+      if (-not $s) { Write-Output 'SKIP: no run state from 8a. [BAS-SIM-CARBANAK-S8g]'; Emit @{step='8g'; expected_control='detect'; ledger_called=$false}; return }
+      try {
+        $r = Invoke-RestMethod -Uri ($ledger.TrimEnd('/') + "/alerts?run_id=$($s.run_id)") -Method GET -TimeoutSec 5
+      } catch {
+        Write-Output "SKIP: ledger not reachable ($($_.Exception.Message)). [BAS-SIM-CARBANAK-S8g]"
+        Emit @{step='8g'; expected_control='detect'; ledger_called=$false}
+        return
+      }
+      $count = @($r.alerts).Count
+      $decision = if ($count -gt 0) { $r.alerts[0].decision } else { '' }
+      Remove-Item $stateFile -Force -ErrorAction SilentlyContinue
+      Write-Output "EXEC 8g: $count alert(s) raised for the run. [BAS-SIM-CARBANAK-S8g]"
+      Emit @{step='8g'; expected_control='detect'; ledger_called=$true; ledger_decision=$decision; alert_present=($count -gt 0)}
     cleanup: |
-      Remove-Item (Join-Path $env:TEMP "bas_carbanak_fraud_*") -Recurse -Force -EA SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas_carbanak_run.json') -Force -ErrorAction SilentlyContinue
