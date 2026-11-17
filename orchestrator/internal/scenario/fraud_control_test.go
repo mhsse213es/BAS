@@ -50,6 +50,12 @@ func TestFraudVerdictTable(t *testing.T) {
 			want:     "PASS",
 		},
 		{
+			name:     "evidence-only step is skipped as not a control test",
+			rec:      models.FraudControl{ExpectedControl: "evidence", LedgerCalled: true, LedgerDecision: "approved"},
+			want:     "SKIPPED",
+			wantWhat: "evidence only, not a control test",
+		},
+		{
 			name:     "verify with tampered audit fails",
 			rec:      models.FraudControl{ExpectedControl: "verify", LedgerCalled: true, AuditIntact: false},
 			want:     "FAIL",

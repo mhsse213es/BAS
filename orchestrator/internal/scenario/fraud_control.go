@@ -61,6 +61,8 @@ func FraudVerdict(rec models.FraudControl) (string, string) {
 		return "SKIPPED", "ledger not called"
 	}
 	switch rec.ExpectedControl {
+	case "evidence":
+		return "SKIPPED", "evidence only, not a control test"
 	case "prevent":
 		if rec.LedgerDecision == "rejected" {
 			return "PASS", ""
