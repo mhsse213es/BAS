@@ -1,0 +1,1066 @@
+id: apt36-persistence-evasion
+product_line: killchain
+name: "APT36 Mastery - Persistence and Defense Evasion"
+description: >
+  Five persistence and defense-evasion behaviors attributed to APT36 (Transparent Tribe) tradecraft: a WMI
+  permanent event subscription, a Startup-folder script, a Windows service created/started/stopped/deleted, a
+  per-user COM CLSID override, and a Defender exclusion add/verify/remove. The WMI, service and Defender steps
+  are gated by an exact flag and administrator only, because they touch shared subsystems (WMI, the service
+  control manager, live AV configuration) rather than only a run-tagged file or registry value; the Defender
+  step never runs live in this repo's own CI and reports the verdict from live Get-MpPreference state, not the
+  command's exit code.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - apt36
+  - transparent-tribe
+  - projectm
+  - apt36-mastery
+  - persistence
+  - defense-evasion
+  - t1546
+  - t1547
+  - t1543
+  - t1562
+mitre_phases:
+  - persistence
+  - defense-evasion
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: apt36-pe1
+    name: "APT36 Persistence 1 - WMI Permanent Event Subscription (T1546.003)"
+    technique_id: T1546.003
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Gated by BAS_CONFIRM_APT36_WMI_SUBSCRIPTION=true (exact) and administrator only. Creates a run-tagged filter, consumer and binding whose filter never fires, reads them back, then removes all three and verifies none remain."
+    telemetry:
+      - "Sysmon EID 19, 20 and 21"
+      - "WMI-Activity EID 5861"
+    detection:
+      - "EDR: new permanent WMI subscription with a command-line consumer"
+    command: |
+      $script:A36Run = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:A36Extra = @()
+      function Get-A36Control {
+      $r = @{ Build = [Environment]::OSVersion.Version.Build; DefenderReadable = $false; DefenderOn = $false; AsrBlock = 0; AppLocker = 'NotConfigured' }
+      try { $s = Get-MpComputerStatus -ErrorAction Stop; $r.DefenderReadable = $true; $r.DefenderOn = ([bool]$s.RealTimeProtectionEnabled -and [bool]$s.AntivirusEnabled) } catch {}
+      try { $p = Get-MpPreference -ErrorAction Stop; $r.AsrBlock = @($p.AttackSurfaceReductionRules_Actions | Where-Object { $_ -eq 1 }).Count } catch {}
+      try {
+      $svc = Get-Service -Name AppIDSvc -ErrorAction Stop
+      if ($svc.Status -eq 'Running') {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      foreach ($c in @($pol.RuleCollections)) { if ([string]$c.EnforcementMode -eq 'Enabled') { $r.AppLocker = 'Enabled' } }
+      }
+      } catch {}
+      return $r
+      }
+      function Get-A36Blocks {
+      param([datetime]$Start, [string]$Needle)
+      $r = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      $q = @(
+      @{ Key = 'Defender'; Log = 'Microsoft-Windows-Windows Defender/Operational'; Ids = @(1116, 1121) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/EXE and DLL'; Ids = @(8004) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/MSI and Script'; Ids = @(8007) }
+      )
+      foreach ($x in $q) {
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $x.Log; Id = $x.Ids; StartTime = $Start } -ErrorAction Stop)
+      $r[$x.Key] += @($ev | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch {
+      $f = [string]$_.FullyQualifiedErrorId
+      if ($f -like '*NoMatchingEventsFound*' -or $f -like '*NoMatchingLogsFound*') { continue }
+      $r.Readable = $false
+      }
+      }
+      return $r
+      }
+      function Resolve-A36Outcome {
+      param([bool]$Ran, [int]$Blocks, [bool]$Enforcing, [bool]$Readable, [bool]$BuildOk = $true)
+      if (-not $BuildOk) { return @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      if ($Ran) {
+      if ($Blocks -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed although a block event naming this test was recorded' } }
+      if ($Enforcing) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed while Microsoft Defender or AppLocker prevention was active' } }
+      return @{ Outcome = 'not_enforced'; Reason = 'the behavior executed and no Microsoft Defender or AppLocker prevention was active' }
+      }
+      if ($Blocks -gt 0) { return @{ Outcome = 'prevented'; Reason = "not executed; $Blocks block event(s) name this test" } }
+      if (-not $Readable) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, and a block log was unreadable, so the absence cannot be attributed' } }
+      return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no block event names this test, so the absence cannot be attributed to a control' }
+      }
+      function Get-A36Telemetry {
+      param([string[]]$Specs, [datetime]$Start, [string]$Needle)
+      $logs = @{ sysmon = 'Microsoft-Windows-Sysmon/Operational'; ps = 'Microsoft-Windows-PowerShell/Operational'; sec = 'Security'; wmi = 'Microsoft-Windows-WMI-Activity/Operational'; task = 'Microsoft-Windows-TaskScheduler/Operational'; sys = 'System'; dns = 'Microsoft-Windows-DNS-Client/Operational' }
+      $out = [ordered]@{}
+      foreach ($sp in @($Specs)) {
+      if (-not $sp) { continue }
+      $parts = $sp.Split(':')
+      $st = 'unavailable'
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $logs[$parts[0]]; Id = [int]$parts[1]; StartTime = $Start } -ErrorAction Stop)
+      $st = if (@($ev | Where-Object { $_.Message -like "*$Needle*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch { if ([string]$_.FullyQualifiedErrorId -like '*NoMatchingEventsFound*') { $st = 'not_visible' } }
+      $out[$sp] = $st
+      }
+      return $out
+      }
+      function Test-A36Marker {
+      param([string]$Path)
+      if (-not (Test-Path -LiteralPath $Path)) { return $false }
+      return ((Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) -join ' ') -like "*$($script:A36Marker)*"
+      }
+      function Invoke-A36Proc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Invoke-A36Attempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:A36Extra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:A36Extra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Invoke-A36Test {
+      param(
+      [Parameter(Mandatory)][string]$Id,
+      [Parameter(Mandatory)][string]$Technique,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Mode = 'Prevention',
+      [string[]]$Telemetry = @(),
+      [string[]]$Require = @(),
+      [string[]]$ExtraCleanup = @(),
+      [int]$MinBuild = 17763,
+      [string]$Summary = '',
+      [string]$Needle = ''
+      )
+      $script:A36Tag = "bas_a36_$($script:A36Run)_$Id"
+      $script:A36Work = Join-Path $env:TEMP $script:A36Tag
+      $script:A36Marker = "BAS-SIM-APT36-$($script:A36Run)-$Id"
+      $needleText = if ($Needle) { $Needle } else { $script:A36Tag }
+      New-Item -ItemType Directory -Path $script:A36Work -Force | Out-Null
+      $ctl = Get-A36Control
+      $buildOk = ($ctl.Build -ge $MinBuild)
+      $att = @{ Ran = $false; Note = ''; NotApplicable = '' }
+      $start = Get-Date
+      if ($buildOk) {
+      try { $att = Invoke-A36Attempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      $enforcing = ($ctl.DefenderOn -or $ctl.AsrBlock -gt 0 -or $ctl.AppLocker -eq 'Enabled')
+      $blocks = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      if ($Mode -eq 'Prevention' -and $buildOk) { $blocks = Get-A36Blocks -Start $start.AddSeconds(-1) -Needle $needleText }
+      $specs = @($Telemetry) + @($Require) | Where-Object { $_ } | Select-Object -Unique
+      $tele = [ordered]@{}
+      if ($buildOk -and $specs.Count -gt 0) { $tele = Get-A36Telemetry -Specs $specs -Start $start.AddSeconds(-1) -Needle $needleText }
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($Mode -eq 'Direct') {
+      $ok = @('prevented', 'allowed_unexpectedly', 'not_enforced', 'inconclusive', 'not_applicable', 'telemetry_visible', 'telemetry_not_visible')
+      if ($att.Verdict -and ($ok -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      }
+      elseif ($Mode -eq 'Telemetry') {
+      if (-not $att.Ran) { $r = @{ Outcome = 'inconclusive'; Reason = 'the behavior did not run, so its telemetry cannot be judged' } }
+      else {
+      $st = @($Require | ForEach-Object { $tele[$_] })
+      if (@($st | Where-Object { $_ -eq 'unavailable' }).Count -gt 0) { $r = @{ Outcome = 'inconclusive'; Reason = 'a required log is not available on this host, so visibility cannot be judged' } }
+      elseif (@($st | Where-Object { $_ -ne 'visible' }).Count -gt 0) { $r = @{ Outcome = 'telemetry_not_visible'; Reason = 'the behavior ran but the required host telemetry did not record it' } }
+      else { $r = @{ Outcome = 'telemetry_visible'; Reason = 'the behavior ran and the required host telemetry recorded it; forwarding to a SIEM is not verified' } }
+      }
+      }
+      else { $r = Resolve-A36Outcome -Ran ([bool]$att.Ran) -Blocks ([int]($blocks.Defender + $blocks.AppLocker)) -Enforcing $enforcing -Readable ([bool]$blocks.Readable) -BuildOk $buildOk }
+      Remove-Item -LiteralPath $script:A36Work -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path -LiteralPath $script:A36Work)
+      foreach ($x in $ExtraCleanup) { if (Test-Path -LiteralPath $x) { $cleanOk = $false } }
+      if ($att.ContainsKey('CleanupOk') -and -not [bool]$att.CleanupOk) { $cleanOk = $false }
+      foreach ($x in @($script:A36Extra)) { if ($x) { Write-Output $x } }
+      Write-Output "EXEC $($Technique): $Summary ran=$([bool]$att.Ran). [BAS-SIM-APT36-$Id]"
+      Write-Output "APT36_FAMILY: $Id"
+      Write-Output "APT36_HOST: os_build=$($ctl.Build) technique=$Technique mode=$Mode"
+      Write-Output "APT36_CONTROL: defender_on=$($ctl.DefenderOn) defender_readable=$($ctl.DefenderReadable) asr_block_rules=$($ctl.AsrBlock) applocker=$($ctl.AppLocker)"
+      Write-Output "APT36_EVIDENCE: run=$($script:A36Run) tag=$($script:A36Tag) ran=$([bool]$att.Ran) note=$($att.Note) block_events=[defender=$($blocks.Defender) applocker=$($blocks.AppLocker)] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      Write-Output "APT36_TELEMETRY: $((@($tele.GetEnumerator() | ForEach-Object { ($_.Key -replace ':', '_') + '=' + $_.Value }) -join ' '))"
+      Write-Output "APT36_OUTCOME: $($r.Outcome)"
+      $v = 'SKIP'
+      if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
+      elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
+      Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
+      Invoke-A36Test -Id 'pe1' -Technique 'T1546.003' -Telemetry @('sysmon:19', 'sysmon:20', 'sysmon:21', 'wmi:5861') -Summary 'a WMI permanent event subscription is created, read back and removed (T1546.003)' -Attempt {
+      if ($env:BAS_CONFIRM_APT36_WMI_SUBSCRIPTION -cne 'true') { return @{ Ran = $false; Note = 'lab_gate_not_set'; NotApplicable = 'lab gate BAS_CONFIRM_APT36_WMI_SUBSCRIPTION is not set to true; this step creates and removes a WMI permanent event subscription and is skipped without it' } }
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      if (-not $isAdmin) { return @{ Ran = $false; Note = 'not_admin'; NotApplicable = 'a WMI permanent subscription needs an administrator identity' } }
+      $ns = 'root\subscription'
+      $n = $script:A36Tag
+      $filter = $null; $consumer = $null; $bind = $null; $created = $false
+      try {
+      $filter = New-CimInstance -Namespace $ns -ClassName __EventFilter -Property @{ Name = $n; EventNamespace = 'root\cimv2'; QueryLanguage = 'WQL'; Query = "SELECT * FROM __InstanceModificationEvent WITHIN 3600 WHERE TargetInstance ISA 'Win32_LocalTime' AND TargetInstance.Year = 1999" } -ErrorAction Stop
+      $consumer = New-CimInstance -Namespace $ns -ClassName CommandLineEventConsumer -Property @{ Name = $n; CommandLineTemplate = ('cmd.exe /c echo ' + $script:A36Marker) } -ErrorAction Stop
+      $bind = New-CimInstance -Namespace $ns -ClassName __FilterToConsumerBinding -Property @{ Filter = [Ref]$filter; Consumer = [Ref]$consumer } -ErrorAction Stop
+      $created = $true
+      } catch {}
+      $readBack = ($created -and [bool](Get-CimInstance -Namespace $ns -ClassName __EventFilter -Filter "Name='$n'" -ErrorAction SilentlyContinue))
+      if ($bind) { Remove-CimInstance -InputObject $bind -ErrorAction SilentlyContinue }
+      if ($consumer) { Remove-CimInstance -InputObject $consumer -ErrorAction SilentlyContinue }
+      if ($filter) { Remove-CimInstance -InputObject $filter -ErrorAction SilentlyContinue }
+      $left = @(Get-CimInstance -Namespace $ns -ClassName __EventFilter -Filter "Name='$n'" -ErrorAction SilentlyContinue).Count + @(Get-CimInstance -Namespace $ns -ClassName CommandLineEventConsumer -Filter "Name='$n'" -ErrorAction SilentlyContinue).Count
+      return @{ Ran = $created; Note = "filter_consumer_binding_created=$created read_back=$readBack trigger=never_fires_year_1999 objects_remaining=$left"; CleanupOk = ($left -eq 0); NotApplicable = '' }
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      $ns = 'root\subscription'
+      Get-CimInstance -Namespace $ns -ClassName __FilterToConsumerBinding -ErrorAction SilentlyContinue | Where-Object { $_.Filter.Name -like 'bas_a36_*' } | Remove-CimInstance -ErrorAction SilentlyContinue
+      Get-CimInstance -Namespace $ns -ClassName CommandLineEventConsumer -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'bas_a36_*' } | Remove-CimInstance -ErrorAction SilentlyContinue
+      Get-CimInstance -Namespace $ns -ClassName __EventFilter -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'bas_a36_*' } | Remove-CimInstance -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: apt36-pe2
+    name: "APT36 Persistence 2 - Startup Folder Script (T1547.001)"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes a run-tagged .cmd into the per-user Startup folder, then removes it and verifies removal. Never run at logon."
+    telemetry:
+      - "Sysmon EID 11: file created in the Startup folder"
+    detection:
+      - "EDR: new script in the Startup folder"
+    command: |
+      $script:A36Run = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:A36Extra = @()
+      function Get-A36Control {
+      $r = @{ Build = [Environment]::OSVersion.Version.Build; DefenderReadable = $false; DefenderOn = $false; AsrBlock = 0; AppLocker = 'NotConfigured' }
+      try { $s = Get-MpComputerStatus -ErrorAction Stop; $r.DefenderReadable = $true; $r.DefenderOn = ([bool]$s.RealTimeProtectionEnabled -and [bool]$s.AntivirusEnabled) } catch {}
+      try { $p = Get-MpPreference -ErrorAction Stop; $r.AsrBlock = @($p.AttackSurfaceReductionRules_Actions | Where-Object { $_ -eq 1 }).Count } catch {}
+      try {
+      $svc = Get-Service -Name AppIDSvc -ErrorAction Stop
+      if ($svc.Status -eq 'Running') {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      foreach ($c in @($pol.RuleCollections)) { if ([string]$c.EnforcementMode -eq 'Enabled') { $r.AppLocker = 'Enabled' } }
+      }
+      } catch {}
+      return $r
+      }
+      function Get-A36Blocks {
+      param([datetime]$Start, [string]$Needle)
+      $r = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      $q = @(
+      @{ Key = 'Defender'; Log = 'Microsoft-Windows-Windows Defender/Operational'; Ids = @(1116, 1121) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/EXE and DLL'; Ids = @(8004) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/MSI and Script'; Ids = @(8007) }
+      )
+      foreach ($x in $q) {
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $x.Log; Id = $x.Ids; StartTime = $Start } -ErrorAction Stop)
+      $r[$x.Key] += @($ev | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch {
+      $f = [string]$_.FullyQualifiedErrorId
+      if ($f -like '*NoMatchingEventsFound*' -or $f -like '*NoMatchingLogsFound*') { continue }
+      $r.Readable = $false
+      }
+      }
+      return $r
+      }
+      function Resolve-A36Outcome {
+      param([bool]$Ran, [int]$Blocks, [bool]$Enforcing, [bool]$Readable, [bool]$BuildOk = $true)
+      if (-not $BuildOk) { return @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      if ($Ran) {
+      if ($Blocks -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed although a block event naming this test was recorded' } }
+      if ($Enforcing) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed while Microsoft Defender or AppLocker prevention was active' } }
+      return @{ Outcome = 'not_enforced'; Reason = 'the behavior executed and no Microsoft Defender or AppLocker prevention was active' }
+      }
+      if ($Blocks -gt 0) { return @{ Outcome = 'prevented'; Reason = "not executed; $Blocks block event(s) name this test" } }
+      if (-not $Readable) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, and a block log was unreadable, so the absence cannot be attributed' } }
+      return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no block event names this test, so the absence cannot be attributed to a control' }
+      }
+      function Get-A36Telemetry {
+      param([string[]]$Specs, [datetime]$Start, [string]$Needle)
+      $logs = @{ sysmon = 'Microsoft-Windows-Sysmon/Operational'; ps = 'Microsoft-Windows-PowerShell/Operational'; sec = 'Security'; wmi = 'Microsoft-Windows-WMI-Activity/Operational'; task = 'Microsoft-Windows-TaskScheduler/Operational'; sys = 'System'; dns = 'Microsoft-Windows-DNS-Client/Operational' }
+      $out = [ordered]@{}
+      foreach ($sp in @($Specs)) {
+      if (-not $sp) { continue }
+      $parts = $sp.Split(':')
+      $st = 'unavailable'
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $logs[$parts[0]]; Id = [int]$parts[1]; StartTime = $Start } -ErrorAction Stop)
+      $st = if (@($ev | Where-Object { $_.Message -like "*$Needle*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch { if ([string]$_.FullyQualifiedErrorId -like '*NoMatchingEventsFound*') { $st = 'not_visible' } }
+      $out[$sp] = $st
+      }
+      return $out
+      }
+      function Test-A36Marker {
+      param([string]$Path)
+      if (-not (Test-Path -LiteralPath $Path)) { return $false }
+      return ((Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) -join ' ') -like "*$($script:A36Marker)*"
+      }
+      function Invoke-A36Proc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Invoke-A36Attempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:A36Extra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:A36Extra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Invoke-A36Test {
+      param(
+      [Parameter(Mandatory)][string]$Id,
+      [Parameter(Mandatory)][string]$Technique,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Mode = 'Prevention',
+      [string[]]$Telemetry = @(),
+      [string[]]$Require = @(),
+      [string[]]$ExtraCleanup = @(),
+      [int]$MinBuild = 17763,
+      [string]$Summary = '',
+      [string]$Needle = ''
+      )
+      $script:A36Tag = "bas_a36_$($script:A36Run)_$Id"
+      $script:A36Work = Join-Path $env:TEMP $script:A36Tag
+      $script:A36Marker = "BAS-SIM-APT36-$($script:A36Run)-$Id"
+      $needleText = if ($Needle) { $Needle } else { $script:A36Tag }
+      New-Item -ItemType Directory -Path $script:A36Work -Force | Out-Null
+      $ctl = Get-A36Control
+      $buildOk = ($ctl.Build -ge $MinBuild)
+      $att = @{ Ran = $false; Note = ''; NotApplicable = '' }
+      $start = Get-Date
+      if ($buildOk) {
+      try { $att = Invoke-A36Attempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      $enforcing = ($ctl.DefenderOn -or $ctl.AsrBlock -gt 0 -or $ctl.AppLocker -eq 'Enabled')
+      $blocks = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      if ($Mode -eq 'Prevention' -and $buildOk) { $blocks = Get-A36Blocks -Start $start.AddSeconds(-1) -Needle $needleText }
+      $specs = @($Telemetry) + @($Require) | Where-Object { $_ } | Select-Object -Unique
+      $tele = [ordered]@{}
+      if ($buildOk -and $specs.Count -gt 0) { $tele = Get-A36Telemetry -Specs $specs -Start $start.AddSeconds(-1) -Needle $needleText }
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($Mode -eq 'Direct') {
+      $ok = @('prevented', 'allowed_unexpectedly', 'not_enforced', 'inconclusive', 'not_applicable', 'telemetry_visible', 'telemetry_not_visible')
+      if ($att.Verdict -and ($ok -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      }
+      elseif ($Mode -eq 'Telemetry') {
+      if (-not $att.Ran) { $r = @{ Outcome = 'inconclusive'; Reason = 'the behavior did not run, so its telemetry cannot be judged' } }
+      else {
+      $st = @($Require | ForEach-Object { $tele[$_] })
+      if (@($st | Where-Object { $_ -eq 'unavailable' }).Count -gt 0) { $r = @{ Outcome = 'inconclusive'; Reason = 'a required log is not available on this host, so visibility cannot be judged' } }
+      elseif (@($st | Where-Object { $_ -ne 'visible' }).Count -gt 0) { $r = @{ Outcome = 'telemetry_not_visible'; Reason = 'the behavior ran but the required host telemetry did not record it' } }
+      else { $r = @{ Outcome = 'telemetry_visible'; Reason = 'the behavior ran and the required host telemetry recorded it; forwarding to a SIEM is not verified' } }
+      }
+      }
+      else { $r = Resolve-A36Outcome -Ran ([bool]$att.Ran) -Blocks ([int]($blocks.Defender + $blocks.AppLocker)) -Enforcing $enforcing -Readable ([bool]$blocks.Readable) -BuildOk $buildOk }
+      Remove-Item -LiteralPath $script:A36Work -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path -LiteralPath $script:A36Work)
+      foreach ($x in $ExtraCleanup) { if (Test-Path -LiteralPath $x) { $cleanOk = $false } }
+      if ($att.ContainsKey('CleanupOk') -and -not [bool]$att.CleanupOk) { $cleanOk = $false }
+      foreach ($x in @($script:A36Extra)) { if ($x) { Write-Output $x } }
+      Write-Output "EXEC $($Technique): $Summary ran=$([bool]$att.Ran). [BAS-SIM-APT36-$Id]"
+      Write-Output "APT36_FAMILY: $Id"
+      Write-Output "APT36_HOST: os_build=$($ctl.Build) technique=$Technique mode=$Mode"
+      Write-Output "APT36_CONTROL: defender_on=$($ctl.DefenderOn) defender_readable=$($ctl.DefenderReadable) asr_block_rules=$($ctl.AsrBlock) applocker=$($ctl.AppLocker)"
+      Write-Output "APT36_EVIDENCE: run=$($script:A36Run) tag=$($script:A36Tag) ran=$([bool]$att.Ran) note=$($att.Note) block_events=[defender=$($blocks.Defender) applocker=$($blocks.AppLocker)] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      Write-Output "APT36_TELEMETRY: $((@($tele.GetEnumerator() | ForEach-Object { ($_.Key -replace ':', '_') + '=' + $_.Value }) -join ' '))"
+      Write-Output "APT36_OUTCOME: $($r.Outcome)"
+      $v = 'SKIP'
+      if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
+      elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
+      Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
+      Invoke-A36Test -Id 'pe2' -Technique 'T1547.001' -Telemetry @('sysmon:11') -Summary 'a script is dropped in the user Startup folder then removed without logging on (T1547.001)' -Attempt {
+      $dir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'
+      if (-not (Test-Path -LiteralPath $dir)) { return @{ Ran = $false; Note = 'startup_folder_missing'; NotApplicable = 'the per-user Startup folder does not exist on this host' } }
+      $f = Join-Path $dir ($script:A36Tag + '.cmd')
+      $wrote = $false
+      try { Set-Content -LiteralPath $f -Value ('@echo off' + [Environment]::NewLine + 'rem ' + $script:A36Marker + ' benign persistence test, echoes only') -Encoding ASCII -ErrorAction Stop; $wrote = (Test-Path -LiteralPath $f) } catch {}
+      Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue
+      $gone = -not (Test-Path -LiteralPath $f)
+      return @{ Ran = $wrote; Note = "startup_item_written=$wrote startup_item_removed=$gone executed_at_logon=false"; CleanupOk = $gone; NotApplicable = '' }
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ChildItem -Path (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup') -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: apt36-pe3
+    name: "APT36 Persistence 3 - Service Create/Start/Stop/Delete (T1543.003)"
+    technique_id: T1543.003
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Gated by BAS_CONFIRM_APT36_SERVICE_CREATE=true (exact) and administrator only. Creates a run-tagged service, starts and stops it, then deletes it and verifies removal with Get-Service. Only its own test service is touched."
+    telemetry:
+      - "Security EID 4697"
+      - "Sysmon EID 1"
+    detection:
+      - "EDR: new service created and started by a script host"
+    command: |
+      $script:A36Run = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:A36Extra = @()
+      function Get-A36Control {
+      $r = @{ Build = [Environment]::OSVersion.Version.Build; DefenderReadable = $false; DefenderOn = $false; AsrBlock = 0; AppLocker = 'NotConfigured' }
+      try { $s = Get-MpComputerStatus -ErrorAction Stop; $r.DefenderReadable = $true; $r.DefenderOn = ([bool]$s.RealTimeProtectionEnabled -and [bool]$s.AntivirusEnabled) } catch {}
+      try { $p = Get-MpPreference -ErrorAction Stop; $r.AsrBlock = @($p.AttackSurfaceReductionRules_Actions | Where-Object { $_ -eq 1 }).Count } catch {}
+      try {
+      $svc = Get-Service -Name AppIDSvc -ErrorAction Stop
+      if ($svc.Status -eq 'Running') {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      foreach ($c in @($pol.RuleCollections)) { if ([string]$c.EnforcementMode -eq 'Enabled') { $r.AppLocker = 'Enabled' } }
+      }
+      } catch {}
+      return $r
+      }
+      function Get-A36Blocks {
+      param([datetime]$Start, [string]$Needle)
+      $r = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      $q = @(
+      @{ Key = 'Defender'; Log = 'Microsoft-Windows-Windows Defender/Operational'; Ids = @(1116, 1121) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/EXE and DLL'; Ids = @(8004) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/MSI and Script'; Ids = @(8007) }
+      )
+      foreach ($x in $q) {
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $x.Log; Id = $x.Ids; StartTime = $Start } -ErrorAction Stop)
+      $r[$x.Key] += @($ev | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch {
+      $f = [string]$_.FullyQualifiedErrorId
+      if ($f -like '*NoMatchingEventsFound*' -or $f -like '*NoMatchingLogsFound*') { continue }
+      $r.Readable = $false
+      }
+      }
+      return $r
+      }
+      function Resolve-A36Outcome {
+      param([bool]$Ran, [int]$Blocks, [bool]$Enforcing, [bool]$Readable, [bool]$BuildOk = $true)
+      if (-not $BuildOk) { return @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      if ($Ran) {
+      if ($Blocks -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed although a block event naming this test was recorded' } }
+      if ($Enforcing) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed while Microsoft Defender or AppLocker prevention was active' } }
+      return @{ Outcome = 'not_enforced'; Reason = 'the behavior executed and no Microsoft Defender or AppLocker prevention was active' }
+      }
+      if ($Blocks -gt 0) { return @{ Outcome = 'prevented'; Reason = "not executed; $Blocks block event(s) name this test" } }
+      if (-not $Readable) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, and a block log was unreadable, so the absence cannot be attributed' } }
+      return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no block event names this test, so the absence cannot be attributed to a control' }
+      }
+      function Get-A36Telemetry {
+      param([string[]]$Specs, [datetime]$Start, [string]$Needle)
+      $logs = @{ sysmon = 'Microsoft-Windows-Sysmon/Operational'; ps = 'Microsoft-Windows-PowerShell/Operational'; sec = 'Security'; wmi = 'Microsoft-Windows-WMI-Activity/Operational'; task = 'Microsoft-Windows-TaskScheduler/Operational'; sys = 'System'; dns = 'Microsoft-Windows-DNS-Client/Operational' }
+      $out = [ordered]@{}
+      foreach ($sp in @($Specs)) {
+      if (-not $sp) { continue }
+      $parts = $sp.Split(':')
+      $st = 'unavailable'
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $logs[$parts[0]]; Id = [int]$parts[1]; StartTime = $Start } -ErrorAction Stop)
+      $st = if (@($ev | Where-Object { $_.Message -like "*$Needle*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch { if ([string]$_.FullyQualifiedErrorId -like '*NoMatchingEventsFound*') { $st = 'not_visible' } }
+      $out[$sp] = $st
+      }
+      return $out
+      }
+      function Test-A36Marker {
+      param([string]$Path)
+      if (-not (Test-Path -LiteralPath $Path)) { return $false }
+      return ((Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) -join ' ') -like "*$($script:A36Marker)*"
+      }
+      function Invoke-A36Proc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Invoke-A36Attempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:A36Extra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:A36Extra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Invoke-A36Test {
+      param(
+      [Parameter(Mandatory)][string]$Id,
+      [Parameter(Mandatory)][string]$Technique,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Mode = 'Prevention',
+      [string[]]$Telemetry = @(),
+      [string[]]$Require = @(),
+      [string[]]$ExtraCleanup = @(),
+      [int]$MinBuild = 17763,
+      [string]$Summary = '',
+      [string]$Needle = ''
+      )
+      $script:A36Tag = "bas_a36_$($script:A36Run)_$Id"
+      $script:A36Work = Join-Path $env:TEMP $script:A36Tag
+      $script:A36Marker = "BAS-SIM-APT36-$($script:A36Run)-$Id"
+      $needleText = if ($Needle) { $Needle } else { $script:A36Tag }
+      New-Item -ItemType Directory -Path $script:A36Work -Force | Out-Null
+      $ctl = Get-A36Control
+      $buildOk = ($ctl.Build -ge $MinBuild)
+      $att = @{ Ran = $false; Note = ''; NotApplicable = '' }
+      $start = Get-Date
+      if ($buildOk) {
+      try { $att = Invoke-A36Attempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      $enforcing = ($ctl.DefenderOn -or $ctl.AsrBlock -gt 0 -or $ctl.AppLocker -eq 'Enabled')
+      $blocks = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      if ($Mode -eq 'Prevention' -and $buildOk) { $blocks = Get-A36Blocks -Start $start.AddSeconds(-1) -Needle $needleText }
+      $specs = @($Telemetry) + @($Require) | Where-Object { $_ } | Select-Object -Unique
+      $tele = [ordered]@{}
+      if ($buildOk -and $specs.Count -gt 0) { $tele = Get-A36Telemetry -Specs $specs -Start $start.AddSeconds(-1) -Needle $needleText }
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($Mode -eq 'Direct') {
+      $ok = @('prevented', 'allowed_unexpectedly', 'not_enforced', 'inconclusive', 'not_applicable', 'telemetry_visible', 'telemetry_not_visible')
+      if ($att.Verdict -and ($ok -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      }
+      elseif ($Mode -eq 'Telemetry') {
+      if (-not $att.Ran) { $r = @{ Outcome = 'inconclusive'; Reason = 'the behavior did not run, so its telemetry cannot be judged' } }
+      else {
+      $st = @($Require | ForEach-Object { $tele[$_] })
+      if (@($st | Where-Object { $_ -eq 'unavailable' }).Count -gt 0) { $r = @{ Outcome = 'inconclusive'; Reason = 'a required log is not available on this host, so visibility cannot be judged' } }
+      elseif (@($st | Where-Object { $_ -ne 'visible' }).Count -gt 0) { $r = @{ Outcome = 'telemetry_not_visible'; Reason = 'the behavior ran but the required host telemetry did not record it' } }
+      else { $r = @{ Outcome = 'telemetry_visible'; Reason = 'the behavior ran and the required host telemetry recorded it; forwarding to a SIEM is not verified' } }
+      }
+      }
+      else { $r = Resolve-A36Outcome -Ran ([bool]$att.Ran) -Blocks ([int]($blocks.Defender + $blocks.AppLocker)) -Enforcing $enforcing -Readable ([bool]$blocks.Readable) -BuildOk $buildOk }
+      Remove-Item -LiteralPath $script:A36Work -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path -LiteralPath $script:A36Work)
+      foreach ($x in $ExtraCleanup) { if (Test-Path -LiteralPath $x) { $cleanOk = $false } }
+      if ($att.ContainsKey('CleanupOk') -and -not [bool]$att.CleanupOk) { $cleanOk = $false }
+      foreach ($x in @($script:A36Extra)) { if ($x) { Write-Output $x } }
+      Write-Output "EXEC $($Technique): $Summary ran=$([bool]$att.Ran). [BAS-SIM-APT36-$Id]"
+      Write-Output "APT36_FAMILY: $Id"
+      Write-Output "APT36_HOST: os_build=$($ctl.Build) technique=$Technique mode=$Mode"
+      Write-Output "APT36_CONTROL: defender_on=$($ctl.DefenderOn) defender_readable=$($ctl.DefenderReadable) asr_block_rules=$($ctl.AsrBlock) applocker=$($ctl.AppLocker)"
+      Write-Output "APT36_EVIDENCE: run=$($script:A36Run) tag=$($script:A36Tag) ran=$([bool]$att.Ran) note=$($att.Note) block_events=[defender=$($blocks.Defender) applocker=$($blocks.AppLocker)] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      Write-Output "APT36_TELEMETRY: $((@($tele.GetEnumerator() | ForEach-Object { ($_.Key -replace ':', '_') + '=' + $_.Value }) -join ' '))"
+      Write-Output "APT36_OUTCOME: $($r.Outcome)"
+      $v = 'SKIP'
+      if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
+      elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
+      Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
+      Invoke-A36Test -Id 'pe3' -Technique 'T1543.003' -Telemetry @('sec:4697', 'sysmon:1') -Summary 'a Windows service is created, started, stopped and deleted, then its removal is independently verified (T1543.003)' -Attempt {
+      if ($env:BAS_CONFIRM_APT36_SERVICE_CREATE -cne 'true') { return @{ Ran = $false; Note = 'lab_gate_not_set'; NotApplicable = 'lab gate BAS_CONFIRM_APT36_SERVICE_CREATE is not set to true; this step creates and removes a Windows service and is skipped without it' } }
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      if (-not $isAdmin) { return @{ Ran = $false; Note = 'not_admin'; NotApplicable = 'creating a service needs an administrator identity' } }
+      $name = $script:A36Tag
+      $sc = Join-Path $env:SystemRoot 'System32\sc.exe'
+      $bin = Join-Path $env:SystemRoot 'System32\cmd.exe'
+      $created = $false; $started = $false; $stopped = $false
+      [void](Invoke-A36Proc -File $sc -ArgLine ('create "' + $name + '" binPath= "' + $bin + ' /c exit" start= demand') -TimeoutSec 20 -NoShell)
+      $created = [bool](Get-Service -Name $name -ErrorAction SilentlyContinue)
+      if ($created) {
+      try { Start-Service -Name $name -ErrorAction Stop; Start-Sleep -Milliseconds 500; $started = $true } catch { $started = $false }
+      try { Stop-Service -Name $name -Force -ErrorAction SilentlyContinue } catch {}
+      Start-Sleep -Milliseconds 500
+      $stopped = ((Get-Service -Name $name -ErrorAction SilentlyContinue).Status -ne 'Running')
+      }
+      [void](Invoke-A36Proc -File $sc -ArgLine ('delete "' + $name + '"') -TimeoutSec 20 -NoShell)
+      Start-Sleep -Milliseconds 500
+      $gone = -not [bool](Get-Service -Name $name -ErrorAction SilentlyContinue)
+      return @{ Ran = $created; Note = "service_created=$created service_started=$started service_stopped=$stopped service_removed=$gone only_own_test_service_touched=true"; CleanupOk = $gone; NotApplicable = '' }
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-Service -Name 'bas_a36_*' -ErrorAction SilentlyContinue | ForEach-Object { try { Stop-Service -Name $_.Name -Force -ErrorAction SilentlyContinue } catch {}; & (Join-Path $env:SystemRoot 'System32\sc.exe') delete $_.Name | Out-Null }
+
+  # -------------------------------------------------------------------------
+  - id: apt36-pe4
+    name: "APT36 Evasion 1 - Per-User COM CLSID Override (T1546.015)"
+    technique_id: T1546.015
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes a run-tagged CLSID under HKCU Software Classes with an InprocServer32 override, reads it back, then removes the whole key and verifies removal. No existing CLSID is touched."
+    telemetry:
+      - "Sysmon EID 13 and 14: registry value set and key deleted"
+    detection:
+      - "EDR: new per-user CLSID with an InprocServer32 override"
+    command: |
+      $script:A36Run = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:A36Extra = @()
+      function Get-A36Control {
+      $r = @{ Build = [Environment]::OSVersion.Version.Build; DefenderReadable = $false; DefenderOn = $false; AsrBlock = 0; AppLocker = 'NotConfigured' }
+      try { $s = Get-MpComputerStatus -ErrorAction Stop; $r.DefenderReadable = $true; $r.DefenderOn = ([bool]$s.RealTimeProtectionEnabled -and [bool]$s.AntivirusEnabled) } catch {}
+      try { $p = Get-MpPreference -ErrorAction Stop; $r.AsrBlock = @($p.AttackSurfaceReductionRules_Actions | Where-Object { $_ -eq 1 }).Count } catch {}
+      try {
+      $svc = Get-Service -Name AppIDSvc -ErrorAction Stop
+      if ($svc.Status -eq 'Running') {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      foreach ($c in @($pol.RuleCollections)) { if ([string]$c.EnforcementMode -eq 'Enabled') { $r.AppLocker = 'Enabled' } }
+      }
+      } catch {}
+      return $r
+      }
+      function Get-A36Blocks {
+      param([datetime]$Start, [string]$Needle)
+      $r = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      $q = @(
+      @{ Key = 'Defender'; Log = 'Microsoft-Windows-Windows Defender/Operational'; Ids = @(1116, 1121) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/EXE and DLL'; Ids = @(8004) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/MSI and Script'; Ids = @(8007) }
+      )
+      foreach ($x in $q) {
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $x.Log; Id = $x.Ids; StartTime = $Start } -ErrorAction Stop)
+      $r[$x.Key] += @($ev | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch {
+      $f = [string]$_.FullyQualifiedErrorId
+      if ($f -like '*NoMatchingEventsFound*' -or $f -like '*NoMatchingLogsFound*') { continue }
+      $r.Readable = $false
+      }
+      }
+      return $r
+      }
+      function Resolve-A36Outcome {
+      param([bool]$Ran, [int]$Blocks, [bool]$Enforcing, [bool]$Readable, [bool]$BuildOk = $true)
+      if (-not $BuildOk) { return @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      if ($Ran) {
+      if ($Blocks -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed although a block event naming this test was recorded' } }
+      if ($Enforcing) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed while Microsoft Defender or AppLocker prevention was active' } }
+      return @{ Outcome = 'not_enforced'; Reason = 'the behavior executed and no Microsoft Defender or AppLocker prevention was active' }
+      }
+      if ($Blocks -gt 0) { return @{ Outcome = 'prevented'; Reason = "not executed; $Blocks block event(s) name this test" } }
+      if (-not $Readable) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, and a block log was unreadable, so the absence cannot be attributed' } }
+      return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no block event names this test, so the absence cannot be attributed to a control' }
+      }
+      function Get-A36Telemetry {
+      param([string[]]$Specs, [datetime]$Start, [string]$Needle)
+      $logs = @{ sysmon = 'Microsoft-Windows-Sysmon/Operational'; ps = 'Microsoft-Windows-PowerShell/Operational'; sec = 'Security'; wmi = 'Microsoft-Windows-WMI-Activity/Operational'; task = 'Microsoft-Windows-TaskScheduler/Operational'; sys = 'System'; dns = 'Microsoft-Windows-DNS-Client/Operational' }
+      $out = [ordered]@{}
+      foreach ($sp in @($Specs)) {
+      if (-not $sp) { continue }
+      $parts = $sp.Split(':')
+      $st = 'unavailable'
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $logs[$parts[0]]; Id = [int]$parts[1]; StartTime = $Start } -ErrorAction Stop)
+      $st = if (@($ev | Where-Object { $_.Message -like "*$Needle*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch { if ([string]$_.FullyQualifiedErrorId -like '*NoMatchingEventsFound*') { $st = 'not_visible' } }
+      $out[$sp] = $st
+      }
+      return $out
+      }
+      function Test-A36Marker {
+      param([string]$Path)
+      if (-not (Test-Path -LiteralPath $Path)) { return $false }
+      return ((Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) -join ' ') -like "*$($script:A36Marker)*"
+      }
+      function Invoke-A36Proc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Invoke-A36Attempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:A36Extra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:A36Extra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Invoke-A36Test {
+      param(
+      [Parameter(Mandatory)][string]$Id,
+      [Parameter(Mandatory)][string]$Technique,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Mode = 'Prevention',
+      [string[]]$Telemetry = @(),
+      [string[]]$Require = @(),
+      [string[]]$ExtraCleanup = @(),
+      [int]$MinBuild = 17763,
+      [string]$Summary = '',
+      [string]$Needle = ''
+      )
+      $script:A36Tag = "bas_a36_$($script:A36Run)_$Id"
+      $script:A36Work = Join-Path $env:TEMP $script:A36Tag
+      $script:A36Marker = "BAS-SIM-APT36-$($script:A36Run)-$Id"
+      $needleText = if ($Needle) { $Needle } else { $script:A36Tag }
+      New-Item -ItemType Directory -Path $script:A36Work -Force | Out-Null
+      $ctl = Get-A36Control
+      $buildOk = ($ctl.Build -ge $MinBuild)
+      $att = @{ Ran = $false; Note = ''; NotApplicable = '' }
+      $start = Get-Date
+      if ($buildOk) {
+      try { $att = Invoke-A36Attempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      $enforcing = ($ctl.DefenderOn -or $ctl.AsrBlock -gt 0 -or $ctl.AppLocker -eq 'Enabled')
+      $blocks = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      if ($Mode -eq 'Prevention' -and $buildOk) { $blocks = Get-A36Blocks -Start $start.AddSeconds(-1) -Needle $needleText }
+      $specs = @($Telemetry) + @($Require) | Where-Object { $_ } | Select-Object -Unique
+      $tele = [ordered]@{}
+      if ($buildOk -and $specs.Count -gt 0) { $tele = Get-A36Telemetry -Specs $specs -Start $start.AddSeconds(-1) -Needle $needleText }
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($Mode -eq 'Direct') {
+      $ok = @('prevented', 'allowed_unexpectedly', 'not_enforced', 'inconclusive', 'not_applicable', 'telemetry_visible', 'telemetry_not_visible')
+      if ($att.Verdict -and ($ok -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      }
+      elseif ($Mode -eq 'Telemetry') {
+      if (-not $att.Ran) { $r = @{ Outcome = 'inconclusive'; Reason = 'the behavior did not run, so its telemetry cannot be judged' } }
+      else {
+      $st = @($Require | ForEach-Object { $tele[$_] })
+      if (@($st | Where-Object { $_ -eq 'unavailable' }).Count -gt 0) { $r = @{ Outcome = 'inconclusive'; Reason = 'a required log is not available on this host, so visibility cannot be judged' } }
+      elseif (@($st | Where-Object { $_ -ne 'visible' }).Count -gt 0) { $r = @{ Outcome = 'telemetry_not_visible'; Reason = 'the behavior ran but the required host telemetry did not record it' } }
+      else { $r = @{ Outcome = 'telemetry_visible'; Reason = 'the behavior ran and the required host telemetry recorded it; forwarding to a SIEM is not verified' } }
+      }
+      }
+      else { $r = Resolve-A36Outcome -Ran ([bool]$att.Ran) -Blocks ([int]($blocks.Defender + $blocks.AppLocker)) -Enforcing $enforcing -Readable ([bool]$blocks.Readable) -BuildOk $buildOk }
+      Remove-Item -LiteralPath $script:A36Work -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path -LiteralPath $script:A36Work)
+      foreach ($x in $ExtraCleanup) { if (Test-Path -LiteralPath $x) { $cleanOk = $false } }
+      if ($att.ContainsKey('CleanupOk') -and -not [bool]$att.CleanupOk) { $cleanOk = $false }
+      foreach ($x in @($script:A36Extra)) { if ($x) { Write-Output $x } }
+      Write-Output "EXEC $($Technique): $Summary ran=$([bool]$att.Ran). [BAS-SIM-APT36-$Id]"
+      Write-Output "APT36_FAMILY: $Id"
+      Write-Output "APT36_HOST: os_build=$($ctl.Build) technique=$Technique mode=$Mode"
+      Write-Output "APT36_CONTROL: defender_on=$($ctl.DefenderOn) defender_readable=$($ctl.DefenderReadable) asr_block_rules=$($ctl.AsrBlock) applocker=$($ctl.AppLocker)"
+      Write-Output "APT36_EVIDENCE: run=$($script:A36Run) tag=$($script:A36Tag) ran=$([bool]$att.Ran) note=$($att.Note) block_events=[defender=$($blocks.Defender) applocker=$($blocks.AppLocker)] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      Write-Output "APT36_TELEMETRY: $((@($tele.GetEnumerator() | ForEach-Object { ($_.Key -replace ':', '_') + '=' + $_.Value }) -join ' '))"
+      Write-Output "APT36_OUTCOME: $($r.Outcome)"
+      $v = 'SKIP'
+      if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
+      elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
+      Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
+      Invoke-A36Test -Id 'pe4' -Technique 'T1546.015' -Telemetry @('sysmon:13', 'sec:4657') -Summary 'a per-user COM InprocServer32 override is written for a run-tagged CLSID, read back and removed; no existing CLSID is touched (T1546.015)' -Attempt {
+      $clsid = '{' + [guid]::NewGuid().ToString() + '}'
+      $key = 'HKCU:\SOFTWARE\Classes\CLSID\' + $clsid + '\InprocServer32'
+      $dll = Join-Path $script:A36Work 'bas-com-test.dll'
+      Set-Content -LiteralPath $dll -Value ($script:A36Marker + ' not a real DLL') -Encoding ASCII
+      $wrote = $false
+      try { New-Item -Path $key -Force -ErrorAction Stop | Out-Null; Set-ItemProperty -Path $key -Name '(default)' -Value $dll -ErrorAction Stop; $wrote = ((Get-ItemProperty -Path $key -Name '(default)' -ErrorAction Stop).'(default)' -eq $dll) } catch {}
+      Remove-Item -Path ('HKCU:\SOFTWARE\Classes\CLSID\' + $clsid) -Recurse -Force -ErrorAction SilentlyContinue
+      $gone = -not (Test-Path -LiteralPath $key)
+      return @{ Ran = $wrote; Note = "clsid=$clsid override_written_and_read_back=$wrote override_removed=$gone existing_clsid_touched=false"; CleanupOk = $gone; NotApplicable = '' }
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Get-ChildItem 'HKCU:\SOFTWARE\Classes\CLSID' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^\{[0-9a-fA-F-]+\}$' } | ForEach-Object { try { if ((Get-ItemProperty (Join-Path $_.PSPath 'InprocServer32') -Name '(default)' -ErrorAction SilentlyContinue).'(default)' -like '*bas_a36_*') { Remove-Item $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue } } catch {} }
+
+  # -------------------------------------------------------------------------
+  - id: apt36-pe5
+    name: "APT36 Evasion 2 - Defender Exclusion Add/Verify/Remove (T1562.001)"
+    technique_id: T1562.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Gated by BAS_CONFIRM_APT36_DEFENDER_EXCLUSION=true (exact) and administrator only, because it changes live AV configuration. Adds an exclusion for a run-tagged temp path, verifies the exclusion took effect from live Get-MpPreference state (not the command exit code), then removes it and re-verifies. Refuses to run if the path is somehow already excluded."
+    telemetry:
+      - "Sysmon EID 13: Defender exclusion registry value changed"
+    detection:
+      - "SIEM: new Defender path exclusion added outside a change window"
+    command: |
+      $script:A36Run = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:A36Extra = @()
+      function Get-A36Control {
+      $r = @{ Build = [Environment]::OSVersion.Version.Build; DefenderReadable = $false; DefenderOn = $false; AsrBlock = 0; AppLocker = 'NotConfigured' }
+      try { $s = Get-MpComputerStatus -ErrorAction Stop; $r.DefenderReadable = $true; $r.DefenderOn = ([bool]$s.RealTimeProtectionEnabled -and [bool]$s.AntivirusEnabled) } catch {}
+      try { $p = Get-MpPreference -ErrorAction Stop; $r.AsrBlock = @($p.AttackSurfaceReductionRules_Actions | Where-Object { $_ -eq 1 }).Count } catch {}
+      try {
+      $svc = Get-Service -Name AppIDSvc -ErrorAction Stop
+      if ($svc.Status -eq 'Running') {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      foreach ($c in @($pol.RuleCollections)) { if ([string]$c.EnforcementMode -eq 'Enabled') { $r.AppLocker = 'Enabled' } }
+      }
+      } catch {}
+      return $r
+      }
+      function Get-A36Blocks {
+      param([datetime]$Start, [string]$Needle)
+      $r = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      $q = @(
+      @{ Key = 'Defender'; Log = 'Microsoft-Windows-Windows Defender/Operational'; Ids = @(1116, 1121) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/EXE and DLL'; Ids = @(8004) },
+      @{ Key = 'AppLocker'; Log = 'Microsoft-Windows-AppLocker/MSI and Script'; Ids = @(8007) }
+      )
+      foreach ($x in $q) {
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $x.Log; Id = $x.Ids; StartTime = $Start } -ErrorAction Stop)
+      $r[$x.Key] += @($ev | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch {
+      $f = [string]$_.FullyQualifiedErrorId
+      if ($f -like '*NoMatchingEventsFound*' -or $f -like '*NoMatchingLogsFound*') { continue }
+      $r.Readable = $false
+      }
+      }
+      return $r
+      }
+      function Resolve-A36Outcome {
+      param([bool]$Ran, [int]$Blocks, [bool]$Enforcing, [bool]$Readable, [bool]$BuildOk = $true)
+      if (-not $BuildOk) { return @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      if ($Ran) {
+      if ($Blocks -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed although a block event naming this test was recorded' } }
+      if ($Enforcing) { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'the behavior executed while Microsoft Defender or AppLocker prevention was active' } }
+      return @{ Outcome = 'not_enforced'; Reason = 'the behavior executed and no Microsoft Defender or AppLocker prevention was active' }
+      }
+      if ($Blocks -gt 0) { return @{ Outcome = 'prevented'; Reason = "not executed; $Blocks block event(s) name this test" } }
+      if (-not $Readable) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, and a block log was unreadable, so the absence cannot be attributed' } }
+      return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no block event names this test, so the absence cannot be attributed to a control' }
+      }
+      function Get-A36Telemetry {
+      param([string[]]$Specs, [datetime]$Start, [string]$Needle)
+      $logs = @{ sysmon = 'Microsoft-Windows-Sysmon/Operational'; ps = 'Microsoft-Windows-PowerShell/Operational'; sec = 'Security'; wmi = 'Microsoft-Windows-WMI-Activity/Operational'; task = 'Microsoft-Windows-TaskScheduler/Operational'; sys = 'System'; dns = 'Microsoft-Windows-DNS-Client/Operational' }
+      $out = [ordered]@{}
+      foreach ($sp in @($Specs)) {
+      if (-not $sp) { continue }
+      $parts = $sp.Split(':')
+      $st = 'unavailable'
+      try {
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = $logs[$parts[0]]; Id = [int]$parts[1]; StartTime = $Start } -ErrorAction Stop)
+      $st = if (@($ev | Where-Object { $_.Message -like "*$Needle*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch { if ([string]$_.FullyQualifiedErrorId -like '*NoMatchingEventsFound*') { $st = 'not_visible' } }
+      $out[$sp] = $st
+      }
+      return $out
+      }
+      function Test-A36Marker {
+      param([string]$Path)
+      if (-not (Test-Path -LiteralPath $Path)) { return $false }
+      return ((Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) -join ' ') -like "*$($script:A36Marker)*"
+      }
+      function Invoke-A36Proc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Invoke-A36Attempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:A36Extra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:A36Extra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Invoke-A36Test {
+      param(
+      [Parameter(Mandatory)][string]$Id,
+      [Parameter(Mandatory)][string]$Technique,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Mode = 'Prevention',
+      [string[]]$Telemetry = @(),
+      [string[]]$Require = @(),
+      [string[]]$ExtraCleanup = @(),
+      [int]$MinBuild = 17763,
+      [string]$Summary = '',
+      [string]$Needle = ''
+      )
+      $script:A36Tag = "bas_a36_$($script:A36Run)_$Id"
+      $script:A36Work = Join-Path $env:TEMP $script:A36Tag
+      $script:A36Marker = "BAS-SIM-APT36-$($script:A36Run)-$Id"
+      $needleText = if ($Needle) { $Needle } else { $script:A36Tag }
+      New-Item -ItemType Directory -Path $script:A36Work -Force | Out-Null
+      $ctl = Get-A36Control
+      $buildOk = ($ctl.Build -ge $MinBuild)
+      $att = @{ Ran = $false; Note = ''; NotApplicable = '' }
+      $start = Get-Date
+      if ($buildOk) {
+      try { $att = Invoke-A36Attempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      $enforcing = ($ctl.DefenderOn -or $ctl.AsrBlock -gt 0 -or $ctl.AppLocker -eq 'Enabled')
+      $blocks = @{ Defender = 0; AppLocker = 0; Readable = $true }
+      if ($Mode -eq 'Prevention' -and $buildOk) { $blocks = Get-A36Blocks -Start $start.AddSeconds(-1) -Needle $needleText }
+      $specs = @($Telemetry) + @($Require) | Where-Object { $_ } | Select-Object -Unique
+      $tele = [ordered]@{}
+      if ($buildOk -and $specs.Count -gt 0) { $tele = Get-A36Telemetry -Specs $specs -Start $start.AddSeconds(-1) -Needle $needleText }
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the supported floor for this test' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($Mode -eq 'Direct') {
+      $ok = @('prevented', 'allowed_unexpectedly', 'not_enforced', 'inconclusive', 'not_applicable', 'telemetry_visible', 'telemetry_not_visible')
+      if ($att.Verdict -and ($ok -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      }
+      elseif ($Mode -eq 'Telemetry') {
+      if (-not $att.Ran) { $r = @{ Outcome = 'inconclusive'; Reason = 'the behavior did not run, so its telemetry cannot be judged' } }
+      else {
+      $st = @($Require | ForEach-Object { $tele[$_] })
+      if (@($st | Where-Object { $_ -eq 'unavailable' }).Count -gt 0) { $r = @{ Outcome = 'inconclusive'; Reason = 'a required log is not available on this host, so visibility cannot be judged' } }
+      elseif (@($st | Where-Object { $_ -ne 'visible' }).Count -gt 0) { $r = @{ Outcome = 'telemetry_not_visible'; Reason = 'the behavior ran but the required host telemetry did not record it' } }
+      else { $r = @{ Outcome = 'telemetry_visible'; Reason = 'the behavior ran and the required host telemetry recorded it; forwarding to a SIEM is not verified' } }
+      }
+      }
+      else { $r = Resolve-A36Outcome -Ran ([bool]$att.Ran) -Blocks ([int]($blocks.Defender + $blocks.AppLocker)) -Enforcing $enforcing -Readable ([bool]$blocks.Readable) -BuildOk $buildOk }
+      Remove-Item -LiteralPath $script:A36Work -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path -LiteralPath $script:A36Work)
+      foreach ($x in $ExtraCleanup) { if (Test-Path -LiteralPath $x) { $cleanOk = $false } }
+      if ($att.ContainsKey('CleanupOk') -and -not [bool]$att.CleanupOk) { $cleanOk = $false }
+      foreach ($x in @($script:A36Extra)) { if ($x) { Write-Output $x } }
+      Write-Output "EXEC $($Technique): $Summary ran=$([bool]$att.Ran). [BAS-SIM-APT36-$Id]"
+      Write-Output "APT36_FAMILY: $Id"
+      Write-Output "APT36_HOST: os_build=$($ctl.Build) technique=$Technique mode=$Mode"
+      Write-Output "APT36_CONTROL: defender_on=$($ctl.DefenderOn) defender_readable=$($ctl.DefenderReadable) asr_block_rules=$($ctl.AsrBlock) applocker=$($ctl.AppLocker)"
+      Write-Output "APT36_EVIDENCE: run=$($script:A36Run) tag=$($script:A36Tag) ran=$([bool]$att.Ran) note=$($att.Note) block_events=[defender=$($blocks.Defender) applocker=$($blocks.AppLocker)] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      Write-Output "APT36_TELEMETRY: $((@($tele.GetEnumerator() | ForEach-Object { ($_.Key -replace ':', '_') + '=' + $_.Value }) -join ' '))"
+      Write-Output "APT36_OUTCOME: $($r.Outcome)"
+      $v = 'SKIP'
+      if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
+      elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
+      Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
+      Invoke-A36Test -Id 'pe5' -Technique 'T1562.001' -Mode Direct -Telemetry @('sysmon:13') -Summary 'adding a Defender path exclusion is attempted and independently verified against live Defender state, not just the command exit code; gated because it touches live AV configuration (T1562.001)' -Attempt {
+      if ($env:BAS_CONFIRM_APT36_DEFENDER_EXCLUSION -cne 'true') { return @{ Ran = $false; Note = 'lab_gate_not_set'; Verdict = @{ Outcome = 'not_applicable'; Reason = 'lab gate BAS_CONFIRM_APT36_DEFENDER_EXCLUSION is not set to true; this step adds and removes a live Defender exclusion and is skipped without it' }; NotApplicable = '' } }
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      if (-not $isAdmin) { return @{ Ran = $false; Note = 'not_admin'; Verdict = @{ Outcome = 'not_applicable'; Reason = 'modifying Defender preferences needs an administrator identity' }; NotApplicable = '' } }
+      $path = Join-Path $script:A36Work 'excl-probe'
+      New-Item -ItemType Directory -Path $path -Force | Out-Null
+      $before = @()
+      try { $before = @((Get-MpPreference -ErrorAction Stop).ExclusionPath) } catch { return @{ Ran = $false; Note = 'defender_preference_unreadable'; Verdict = @{ Outcome = 'not_applicable'; Reason = 'Get-MpPreference is not available on this host' }; NotApplicable = '' } }
+      if ($before -contains $path) { return @{ Ran = $false; Note = 'path_already_excluded'; Verdict = @{ Outcome = 'inconclusive'; Reason = 'the run-tagged path was already in the exclusion list before this step ran, which should not happen' }; NotApplicable = '' } }
+      $invoked = $false; $err = ''
+      try { Add-MpPreference -ExclusionPath $path -ErrorAction Stop; $invoked = $true } catch { $err = ([string]$_.Exception.Message).Substring(0, [Math]::Min(80, ([string]$_.Exception.Message).Length)) }
+      Start-Sleep -Milliseconds 500
+      $after = @()
+      try { $after = @((Get-MpPreference -ErrorAction Stop).ExclusionPath) } catch {}
+      $actuallyExcluded = ($after -contains $path)
+      try { if ($actuallyExcluded) { Remove-MpPreference -ExclusionPath $path -ErrorAction SilentlyContinue } } catch {}
+      Start-Sleep -Milliseconds 500
+      $after2 = @()
+      try { $after2 = @((Get-MpPreference -ErrorAction Stop).ExclusionPath) } catch {}
+      $removed = -not ($after2 -contains $path)
+      $outcome = if ($actuallyExcluded) { 'allowed_unexpectedly' } elseif ($invoked) { 'prevented' } else { 'inconclusive' }
+      $reason = if ($actuallyExcluded) { 'the command succeeded and live Defender state confirms the exclusion took effect' } elseif ($invoked) { 'the command returned success but live Defender state shows no exclusion was added (command success is not proof of effect)' } else { "the command failed to modify Defender preferences: $err" }
+      return @{ Ran = $invoked; Note = "command_invoked=$invoked command_error=$err exclusion_confirmed_live=$actuallyExcluded exclusion_removed=$removed verification_method=Get-MpPreference_not_exit_code only_the_run_tagged_temp_path_was_ever_touched=true"; Verdict = @{ Outcome = $outcome; Reason = $reason }; CleanupOk = $removed; NotApplicable = '' }
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue

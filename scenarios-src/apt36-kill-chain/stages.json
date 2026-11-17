@@ -1,0 +1,186 @@
+[
+  {
+    "id": "apt36-s1",
+    "n": 1,
+    "name": "APT36 Stage 1 - Renamed-Binary Parent Spawns PowerShell (T1204.002)",
+    "technique_id": "T1204.002",
+    "timeout_sec": 60,
+    "blast_radius": "A copy of cmd.exe renamed winword.exe runs PowerShell to write one marker file. Microsoft Word is never opened; delivery (T1566.001) is not tested here.",
+    "telemetry": [
+      "Sysmon EID 1: ParentImage named winword.exe, not the real Word binary"
+    ],
+    "detection": [
+      "EDR: process named winword.exe spawning powershell.exe where the real parent path does not match Office"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-s2",
+    "n": 2,
+    "name": "APT36 Stage 2 - Document with a Remote Template Relationship (T1221)",
+    "technique_id": "T1221",
+    "timeout_sec": 60,
+    "blast_radius": "Builds a .docx with an attachedTemplate relationship pointing at a loopback server, fetches the template over HTTP, and verifies the relationship target and the fetched bytes. Office is never opened, so template-triggered macro execution is not tested here.",
+    "telemetry": [
+      "Sysmon EID 3: loopback connection to the template URL",
+      "Sysmon EID 11: .docx and template files created"
+    ],
+    "detection": [
+      "EDR: an OOXML relationship target pointing outside the document package"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-s3",
+    "n": 3,
+    "name": "APT36 Stage 3 - Keyboard-Hook API Capability Probe (T1056.001)",
+    "technique_id": "T1056.001",
+    "timeout_sec": 60,
+    "blast_radius": "Checks whether user32.dll (the SetWindowsHookEx surface) is loaded in the current process and whether any known security-vendor module is also loaded. No hook is installed and no keystroke is captured; a direct-mode result records this as a capability probe, not a scored technique.",
+    "telemetry": [
+      "Sysmon EID 7: module load list of the probing process"
+    ],
+    "detection": [
+      "EDR: process capability survey preceding a SetWindowsHookEx call"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-s4",
+    "n": 4,
+    "name": "APT36 Stage 4 - HKCU Run Key Persistence Write + Delete (T1547.001)",
+    "technique_id": "T1547.001",
+    "timeout_sec": 45,
+    "blast_radius": "Writes one run-tagged value under HKCU Software Microsoft Windows CurrentVersion Run, reads it back, deletes it, then verifies the value is gone.",
+    "telemetry": [
+      "Sysmon EID 13 and 14: registry value set and deleted under the Run key"
+    ],
+    "detection": [
+      "EDR: new HKCU Run value written by a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-s5",
+    "n": 5,
+    "name": "APT36 Stage 5 - DNS A-Record Beacon with Jitter (T1071.004)",
+    "technique_id": "T1071.004",
+    "timeout_sec": 90,
+    "blast_radius": "Sends five DNS A queries roughly two seconds apart, each for a unique run-tagged name under the reserved .invalid domain. Telemetry mode: validates host DNS visibility only.",
+    "telemetry": [
+      "Sysmon EID 22: DNS query events for the run-tagged names",
+      "DNS-Client Operational EID 3008"
+    ],
+    "detection": [
+      "DNS analytics: periodic queries with high-entropy labels to one parent domain"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-s6",
+    "n": 6,
+    "name": "APT36 Stage 6 - Scheduled Task Created, Run Once and Deleted (T1053.005)",
+    "technique_id": "T1053.005",
+    "timeout_sec": 90,
+    "blast_radius": "Creates a one-time scheduled task with a run-tagged name whose action writes a marker file, runs it once, then deletes it and verifies deletion with a query.",
+    "telemetry": [
+      "Security EID 4698 and 4699",
+      "Task Scheduler EID 106 and 200"
+    ],
+    "detection": [
+      "EDR: schtasks.exe /create from a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue\nGet-ScheduledTask -TaskName 'bas_a36_*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-s7",
+    "n": 7,
+    "name": "APT36 Stage 7 - mshta HTA Dropper Chain (T1218.005)",
+    "technique_id": "T1218.005",
+    "timeout_sec": 60,
+    "blast_radius": "Runs mshta.exe on a run-tagged HTA whose VBScript starts cmd.exe through WScript.Shell, which writes one marker file.",
+    "telemetry": [
+      "Sysmon EID 1: mshta.exe, then cmd.exe as its child"
+    ],
+    "detection": [
+      "EDR: mshta.exe spawning cmd.exe via WScript.Shell.Run"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-s8",
+    "n": 8,
+    "name": "APT36 Stage 8 - regsvr32 Local JScript Scriptlet Chain (T1218.010)",
+    "technique_id": "T1218.010",
+    "timeout_sec": 60,
+    "blast_radius": "Runs regsvr32.exe /u /i on a local .sct file whose JScript starts cmd.exe through WScript.Shell, the Squiblydoo pattern against a local file only (no remote fetch).",
+    "telemetry": [
+      "Sysmon EID 1: regsvr32.exe /i: with a local .sct path"
+    ],
+    "detection": [
+      "EDR: regsvr32.exe loading scrobj.dll with /i: against a non-standard file"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-s9",
+    "n": 9,
+    "name": "APT36 Stage 9 - DNS TXT Beacon (CrimsonRAT Channel Pattern) (T1071.004)",
+    "technique_id": "T1071.004",
+    "timeout_sec": 60,
+    "blast_radius": "Sends four DNS TXT queries to run-tagged .invalid names, the record type CrimsonRAT uses for channel registration. Telemetry mode: validates host DNS visibility only.",
+    "telemetry": [
+      "Sysmon EID 22: TXT-type DNS query events"
+    ],
+    "detection": [
+      "DNS analytics: TXT queries to names that never resolve"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-s10",
+    "n": 10,
+    "name": "APT36 Stage 10 - Download Cradle with Hash Verification (T1105)",
+    "technique_id": "T1105",
+    "timeout_sec": 60,
+    "blast_radius": "Fetches a payload from a loopback server through a hidden PowerShell child and verifies its SHA-256; the payload is never executed.",
+    "telemetry": [
+      "Sysmon EID 1: hidden powershell.exe child",
+      "Sysmon EID 3: loopback connection"
+    ],
+    "detection": [
+      "EDR: download cradle landing an unexecuted binary in a temp path"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  }
+]

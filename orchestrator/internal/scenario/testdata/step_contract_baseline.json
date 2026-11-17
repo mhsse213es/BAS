@@ -104,7 +104,32 @@
     "detection": 0,
     "telemetry": 0
   },
+  "apt36-collection-credential.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt36-command-control.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt36-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt36-initial-execution.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "apt36-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt36-persistence-evasion.yaml": {
     "cleanup": 0,
     "detection": 0,
     "telemetry": 0

@@ -1,0 +1,93 @@
+[
+  {
+    "id": "apt36-d1",
+    "n": 1,
+    "name": "APT36 Discovery 1 - Process Enumeration (T1057)",
+    "technique_id": "T1057",
+    "timeout_sec": 60,
+    "blast_radius": "Runs tasklist.exe and captures the process list to a run-tagged file. Read-only; removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: tasklist.exe",
+      "Security EID 4688"
+    ],
+    "detection": [
+      "EDR: tasklist.exe run by a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-d2",
+    "n": 2,
+    "name": "APT36 Discovery 2 - System and Sandbox-Indicator Enumeration (T1082)",
+    "technique_id": "T1082",
+    "timeout_sec": 60,
+    "blast_radius": "Runs systeminfo.exe and checks Win32_ComputerSystem manufacturer for common virtualization strings. Read-only; removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: systeminfo.exe"
+    ],
+    "detection": [
+      "EDR: systeminfo.exe run by a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-d3",
+    "n": 3,
+    "name": "APT36 Discovery 3 - Document Discovery in a Synthetic Profile (T1083)",
+    "technique_id": "T1083",
+    "timeout_sec": 60,
+    "blast_radius": "Creates four synthetic documents in a run-tagged temp profile and finds them by extension. The real profile is never searched. Removed and verified.",
+    "telemetry": [
+      "Sysmon EID 11: file creation in the synthetic profile"
+    ],
+    "detection": [
+      "EDR: recursive document search by extension"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-d4",
+    "n": 4,
+    "name": "APT36 Discovery 4 - Network Configuration Enumeration (T1016)",
+    "technique_id": "T1016",
+    "timeout_sec": 60,
+    "blast_radius": "Runs ipconfig /all and arp -a and captures output to a run-tagged file. Read-only; removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: ipconfig.exe, arp.exe"
+    ],
+    "detection": [
+      "EDR: network configuration enumeration by a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-d5",
+    "n": 5,
+    "name": "APT36 Discovery 5 - Reachable Share Enumeration (T1135)",
+    "technique_id": "T1135",
+    "timeout_sec": 60,
+    "blast_radius": "Runs net view \\\\localhost to list shares reachable from this host, the lateral-movement preparation step. Read-only; removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: net.exe view"
+    ],
+    "detection": [
+      "EDR: net view run by a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  }
+]

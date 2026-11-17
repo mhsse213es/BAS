@@ -1,0 +1,139 @@
+[
+  {
+    "id": "apt36-k1",
+    "n": 1,
+    "name": "APT36 C2 1 - HTTP Beacons with Jitter to a Loopback Server (T1071.001)",
+    "technique_id": "T1071.001",
+    "timeout_sec": 120,
+    "blast_radius": "Runs a loopback-only HTTP server in an in-process runspace and sends five POST beacons about two seconds apart with an uncommon user agent. No traffic leaves the host.",
+    "telemetry": [
+      "Sysmon EID 3: connections to 127.0.0.1 on the beacon port"
+    ],
+    "detection": [
+      "NDR/EDR: periodic POSTs with a fixed body shape and unusual user agent"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-k2",
+    "n": 2,
+    "name": "APT36 Collection 4 - Archive Staging with a Utility (T1560.001)",
+    "technique_id": "T1560.001",
+    "timeout_sec": 90,
+    "blast_radius": "Archives five synthetic files with tar.exe into a run-tagged zip, lists it and extracts it to confirm every hash matches. Not encrypted. Removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: tar.exe with a run-tagged archive path"
+    ],
+    "detection": [
+      "EDR: archive utility run on a collection folder by a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-k3",
+    "n": 3,
+    "name": "APT36 Lateral Movement 1 - Staging via the Loopback Administrative Share (T1021.002)",
+    "technique_id": "T1021.002",
+    "timeout_sec": 90,
+    "blast_radius": "Gated by BAS_CONFIRM_APT36_REMOTE_STAGING=true (exact) and administrator only. Creates a run-tagged folder under C:/Users/Public through the loopback C$ share, copies three synthetic files into it, verifies them and removes the folder.",
+    "telemetry": [
+      "Security EID 5140 and 5145"
+    ],
+    "detection": [
+      "SIEM: file writes over C$ from a non-administration host or process"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue\nGet-ChildItem -Path (Join-Path $env:PUBLIC '.') -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe",
+    "requires_priv": "admin"
+  },
+  {
+    "id": "apt36-k4",
+    "n": 4,
+    "name": "APT36 Lateral Movement 2 - WinRM Exposure Check (T1021.006, read-only)",
+    "technique_id": "T1021.006",
+    "timeout_sec": 60,
+    "blast_radius": "Reads whether the WinRM service is running and has a listener configured; never starts, stops or reconfigures WinRM. Entirely read-only.",
+    "telemetry": [
+      "Sysmon EID 1: wsmprovhost.exe if remote PowerShell is later used"
+    ],
+    "detection": [
+      "SIEM: WinRM listener enabled where it should not be"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-k5",
+    "n": 5,
+    "name": "APT36 Lateral Movement 3 - Remote Service Execution over SCM (T1569.002)",
+    "technique_id": "T1569.002",
+    "timeout_sec": 120,
+    "blast_radius": "Gated by BAS_CONFIRM_APT36_LATERAL_MOVEMENT=true (exact), administrator only, and run only against hosts listed in BAS_LATERAL_TARGETS. On each target it creates a run-tagged demand-start service whose binary exits immediately, starts and stops it, then deletes it and verifies removal. Writes a persistent service record until the delete completes. Current identity only; no credentials are supplied or guessed. Built but not yet run against any lab target.",
+    "telemetry": [
+      "System EID 7045: service installed on the target",
+      "Security EID 4697: service installed, if auditing is enabled",
+      "Sysmon EID 1: sc.exe with a remote \\target argument"
+    ],
+    "detection": [
+      "EDR/SIEM: service created remotely from a non-administration source (Sigma service_install remote)",
+      "SIEM: run-tagged short-lived service fan-out across several hosts in one window"
+    ],
+    "cleanup": "$tag = 'bas_a36_*'\nForEach ($t in @($env:BAS_LATERAL_TARGETS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^[A-Za-z0-9._-]{1,253}$' })) { Get-Service -ComputerName $t -Name $tag -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\\sc.exe') \"\\\\$t\" delete $_.Name | Out-Null } }",
+    "production_safe": false,
+    "risk": "high",
+    "fidelity": "lab-only",
+    "requires_priv": "admin"
+  },
+  {
+    "id": "apt36-k6",
+    "n": 6,
+    "name": "APT36 Lateral Movement 4 - Remote Scheduled Task over RPC (T1053.005)",
+    "technique_id": "T1053.005",
+    "timeout_sec": 150,
+    "blast_radius": "Gated by BAS_CONFIRM_APT36_LATERAL_MOVEMENT=true (exact), administrator only, and run only against hosts in BAS_LATERAL_TARGETS. On each target it creates a run-tagged one-time task whose action writes one marker file under C:/Users/Public, queries it, deletes it and verifies the deletion. The task is never triggered by this step. Current identity only. Built but not yet run against any target.",
+    "telemetry": [
+      "Security EID 4698 and 4699 on the target: task created and deleted",
+      "Task Scheduler EID 106 on the target",
+      "Sysmon EID 1: schtasks.exe with /s <remote host>"
+    ],
+    "detection": [
+      "SIEM: scheduled task created on a remote host by a non-administration source",
+      "EDR: schtasks /create /s from a workstation toward another workstation"
+    ],
+    "cleanup": "$st = Join-Path $env:SystemRoot 'System32\\schtasks.exe'\nForEach ($t in @($env:BAS_LATERAL_TARGETS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^[A-Za-z0-9._-]{1,253}$' })) { foreach ($line in @(& $st /query /s $t /fo csv /nh 2>$null)) { $n = ($line -split ',')[0].Trim('\"'); if ($n -like '*bas_a36_*') { & $st /delete /s $t /tn $n /f | Out-Null } } }",
+    "production_safe": false,
+    "risk": "high",
+    "fidelity": "lab-only",
+    "requires_priv": "admin"
+  },
+  {
+    "id": "apt36-k7",
+    "n": 7,
+    "name": "APT36 C2 4 - DNS Tunneling Volume Pattern (T1071.004, telemetry)",
+    "technique_id": "T1071.004",
+    "timeout_sec": 120,
+    "blast_radius": "Sends forty DNS TXT queries about 150 ms apart, each with a synthetic base32-style label under a run-tagged .invalid parent, from the PowerShell process. Queries go to the host resolver and cannot resolve. Validates host DNS telemetry for a high-volume pattern only.",
+    "telemetry": [
+      "Sysmon EID 22: forty TXT queries with run-tagged parents",
+      "DNS-Client Operational EID 3008 where enabled"
+    ],
+    "detection": [
+      "DNS analytics: burst of long high-entropy labels under one parent domain",
+      "Resolver policy: .invalid names should never leave the resolver"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  }
+]

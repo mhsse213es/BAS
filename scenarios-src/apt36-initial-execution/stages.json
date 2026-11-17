@@ -1,0 +1,99 @@
+[
+  {
+    "id": "apt36-i1",
+    "n": 1,
+    "name": "APT36 Initial Access 1 - Shortcut (.lnk) Execution (T1204.002)",
+    "technique_id": "T1204.002",
+    "timeout_sec": 60,
+    "blast_radius": "Creates a run-tagged .lnk with a double extension (Invoice_Q3.pdf.lnk) pointing at cmd.exe and opens it the way a user double-click would. Benign; removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: cmd.exe launched from explorer.exe or the shell",
+      "Sysmon EID 11: .lnk created",
+      "Security EID 4688"
+    ],
+    "detection": [
+      "EDR: double-extension shortcut launching cmd.exe from a temp path"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-i3",
+    "n": 2,
+    "name": "APT36 Execution 1 - Document-to-Script Chain via wscript.exe (T1059.005)",
+    "technique_id": "T1059.005",
+    "timeout_sec": 60,
+    "blast_radius": "Runs a run-tagged VBScript with wscript.exe //B //Nologo that writes one marker file. Benign; removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: wscript.exe with a .vbs path",
+      "Security EID 4688"
+    ],
+    "detection": [
+      "EDR: wscript.exe launched silently from a document-adjacent path"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-i4",
+    "n": 3,
+    "name": "APT36 Execution 2 - Encoded PowerShell Hidden Child (T1059.001)",
+    "technique_id": "T1059.001",
+    "timeout_sec": 60,
+    "blast_radius": "Runs PowerShell -EncodedCommand -WindowStyle Hidden as a child process that writes one marker file. Benign; removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: powershell.exe -EncodedCommand",
+      "PowerShell EID 4104",
+      "Security EID 4688"
+    ],
+    "detection": [
+      "EDR: hidden-window encoded PowerShell child process"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-i5",
+    "n": 4,
+    "name": "APT36 Execution 3 - WMI Process Creation (T1047)",
+    "technique_id": "T1047",
+    "timeout_sec": 60,
+    "blast_radius": "Calls Win32_Process.Create to run cmd.exe echoing a marker, an alternate execution path to a direct process launch. Benign; removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: cmd.exe with WmiPrvSE.exe parent",
+      "WMI-Activity EID 5857"
+    ],
+    "detection": [
+      "EDR: process created by WmiPrvSE.exe from a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-i6",
+    "n": 5,
+    "name": "APT36 Execution 4 - CHM (HTML Help) Shortcut Object Execution (T1218.001)",
+    "technique_id": "T1218.001",
+    "timeout_sec": 60,
+    "blast_radius": "Compiles a run-tagged .chm (if hhc.exe is present; otherwise not_applicable) whose embedded Shortcut object runs a command, and opens it with hh.exe. Benign; removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: hh.exe with a .chm path",
+      "Security EID 4688"
+    ],
+    "detection": [
+      "EDR: hh.exe spawning a child process via a Shortcut object"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  }
+]

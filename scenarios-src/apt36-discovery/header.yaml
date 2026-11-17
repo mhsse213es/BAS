@@ -1,0 +1,27 @@
+id: apt36-discovery
+product_line: killchain
+name: "APT36 Mastery - Discovery"
+description: >
+  Five discovery behaviors attributed to APT36 (Transparent Tribe) tradecraft, all read-only against this host:
+  process enumeration, system/sandbox-indicator enumeration, a synthetic-profile document search by extension,
+  network configuration enumeration, and reachable-share enumeration (the lateral-movement preparation step).
+  Nothing is modified; every step only reads state or writes inside its own run-tagged temp directory.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - apt36
+  - transparent-tribe
+  - projectm
+  - apt36-mastery
+  - discovery
+  - t1057
+  - t1082
+  - t1083
+  - t1016
+  - t1135
+mitre_phases:
+  - discovery
+
+steps:
