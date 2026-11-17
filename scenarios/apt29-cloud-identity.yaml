@@ -161,6 +161,8 @@ steps:
           $tokenBody = @{ grant_type = 'client_credentials'; client_id = $clientId; client_secret = $clientSecret; scope = 'https://graph.microsoft.com/.default' }
           $tokenResp = Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" -Body $tokenBody -ErrorAction Stop
           $headers = @{ Authorization = "Bearer $($tokenResp.access_token)" }
+          Write-Output "ERROR: oauth2PermissionGrants requires service-principal object IDs and a principalId for consentType Principal. A client-credentials run cannot build a valid grant as written, so this stage did not run. Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-2]"
+          return
           $grantBody = @{ clientId = $clientId; consentType = 'Principal'; resourceId = $clientId; scope = 'User.Read' } | ConvertTo-Json
           $grantResp = Invoke-RestMethod -Method Post -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants" -Headers $headers -Body $grantBody -ContentType 'application/json' -ErrorAction Stop
           $grantId = $grantResp.id
@@ -229,7 +231,7 @@ steps:
           $fedResp = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/applications/$appObjectId/federatedIdentityCredentials" -Headers $headers -ErrorAction Stop
           $credCount = @($fedResp.value).Count
           Write-Output "EXEC T1556.007: read-only federation/signing-certificate configuration check on the TEST app. federated_credential_count=$credCount. Read-only -- nothing was forged or installed. [BAS-SIM-APT29-CLOUD-3]"
-          Write-Output "PASS: Federation configuration read succeeded; no baseline comparison drift to report in this run (no expected-baseline value configured yet). [BAS-SIM-APT29-CLOUD-3]"
+          Write-Output "ERROR: federation configuration read succeeded (federated_credential_count=$credCount), but no expected baseline is configured, so drift cannot be judged. Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-3]"
         } catch {
           Write-Output "ERROR: SAML token forgery detection check could not be evaluated  -  $($_.Exception.Message). Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-3]"
         }
@@ -308,8 +310,8 @@ steps:
       $exists = Test-Path $cachePath
       Write-Output "CONDITION CHECK T1087.004: cloud account discovery  -  checked for cached M365/Entra identity artifacts at '$cachePath' (local condition check only, no Graph API call; no real atomic exists for this technique on this platform). cache_present=$exists. [BAS-SIM-APT29-CLOUD-5]"
       if ($exists) {
-        Write-Output "FAIL: Cached identity artifacts are present and were read without EDR flagging the access."
+        Write-Output "SKIP: identity-cache directory is present. This check tests presence only; no read or access event was evidenced, so nothing is scored. [BAS-SIM-APT29-CLOUD-5]"
       } else {
-        Write-Output "PASS: No cached identity artifact was found, or access was blocked. [BAS-SIM-APT29-CLOUD-5]"
+        Write-Output "SKIP: no identity-cache directory on this host, so there was nothing to evaluate. [BAS-SIM-APT29-CLOUD-5]"
       }
     cleanup: ""
