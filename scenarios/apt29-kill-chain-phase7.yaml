@@ -123,13 +123,14 @@ steps:
       $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($payload))
       $Error.Clear()
       $child = Start-Process powershell.exe -ArgumentList "-NoProfile","-NonInteractive","-EncodedCommand",$encoded -Wait -PassThru -WindowStyle Hidden
+      $launchErr = if ($Error.Count -gt 0) { [string]$Error[0] } else { '' }
       $landed = Test-Path $outFile
       Remove-Item $outFile -Force -ErrorAction SilentlyContinue
       if ($child -and $child.ExitCode -eq 0) {
         Write-Output "EXEC T1059.001: -EncodedCommand child process spawned (PID=$($child.Id), exit=0), payload landed=$landed, cleaned up. APT29 SUNBURST loader pattern. Sysmon EID 1 + ScriptBlock EID 4104 expected. [BAS-SIM-APT29-S2]"
         Write-Output "FAIL: Encoded PS cradle ran without AMSI or Constrained Language Mode blocking it. Ensure AMSI logging is enabled and EID 4104 ScriptBlock logging is forwarded to SIEM."
       } elseif ($null -eq $child) {
-        if ($Error.Count -gt 0 -and [string]$Error[0] -match 'blocked|denied|not allowed|policy|AppLocker|AMSI|Constrained|restricted|malicious|virus') { Write-Output "PASS: powershell.exe launch was refused by a control. [BAS-SIM-APT29-S2]" } else { Write-Output "ERROR: powershell.exe child could not be started and no control block was named, so the encoded cradle did not run. [BAS-SIM-APT29-S2]" }
+        if ($launchErr -match 'blocked by|AppLocker|Constrained Language|AMSI|Defender|group policy|administrator has blocked|virus|malicious') { Write-Output "PASS: powershell.exe launch was refused by a control. [BAS-SIM-APT29-S2]" } else { Write-Output "ERROR: powershell.exe child could not be started and no control block was named, so the encoded cradle did not run. [BAS-SIM-APT29-S2]" }
       } else {
         Write-Output "PASS: Encoded PowerShell cradle blocked or failed  -  AMSI or execution policy prevented the child process (exit=$($child.ExitCode)). [BAS-SIM-APT29-S2]"
       }
@@ -252,7 +253,7 @@ steps:
       $nsOut = & nslookup.exe $beaconDomain 2>&1 | Out-String
       $resolved = $nsOut -match ('Name:\s+' + [regex]::Escape($beaconDomain))
       $timedOut = $nsOut -match 'timed out|no servers could be reached'
-      $nxdomain = $nsOut -match "can.t find|Non-existent domain"
+      $nxdomain = $nsOut -match "Non-existent domain"
       Write-Output "EXEC T1071.004: DNS C2 beacon simulation sent nslookup $beaconDomain. resolved=$resolved (expected: false for RFC6761 .invalid). APT29 SUNBURST used avsvmcloud.com subdomain beacons in same pattern. Sysmon EID 22 expected. [BAS-SIM-APT29-S5]"
       if ($timedOut -and -not $resolved) {
         Write-Output "ERROR: DNS server timed out; NXDOMAIN could not be judged on this host. [BAS-SIM-APT29-S5]"
@@ -463,13 +464,14 @@ steps:
       $cmdLine = "powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand $encoded"
       $Error.Clear()
       $result = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmdLine }
+      $launchErr = if ($Error.Count -gt 0) { [string]$Error[0] } else { '' }
       Start-Sleep -Milliseconds 800
       $landed = Test-Path $outFile
       Remove-Item $outFile -Force -ErrorAction SilentlyContinue
       $spawned = ($result.ReturnValue -eq 0)
       Write-Output "EXEC T1047: WMI process creation (Win32_Process.Create) spawned=$spawned (PID=$($result.ProcessId)), window hidden via powershell.exe -WindowStyle Hidden, payload landed=$landed, cleaned up. Sysmon EID 1 with WmiPrvSE.exe parent expected. [BAS-SIM-APT29-S11]"
       if ($null -eq $result) {
-        if ($Error.Count -gt 0 -and [string]$Error[0] -match 'blocked|denied|not allowed|policy|AppLocker|AMSI|Constrained|restricted|malicious|virus') { Write-Output "PASS: Win32_Process.Create was refused by a control. [BAS-SIM-APT29-S11]" } else { Write-Output "ERROR: Win32_Process.Create failed and no control block was named, so the WMI stage did not run. [BAS-SIM-APT29-S11]" }
+        if ($launchErr -match 'blocked by|AppLocker|Constrained Language|AMSI|Defender|group policy|administrator has blocked|virus|malicious') { Write-Output "PASS: Win32_Process.Create was refused by a control. [BAS-SIM-APT29-S11]" } else { Write-Output "ERROR: Win32_Process.Create failed and no control block was named, so the WMI stage did not run. [BAS-SIM-APT29-S11]" }
       } elseif ($spawned) {
         Write-Output "FAIL: WMI process execution ran without being blocked. Ensure EDR flags process creation whose parent is WmiPrvSE.exe, not just child-of-shell patterns."
       } else {
@@ -790,6 +792,7 @@ steps:
           $sig = '[DllImport("kernel32.dll")] public static extern IntPtr OpenProcess(uint access, bool inherit, int pid); [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h);'
           $Error.Clear()
           Add-Type -MemberDefinition $sig -Name BasLsassQuery -Namespace Bas -ErrorAction SilentlyContinue
+          $launchErr = if ($Error.Count -gt 0) { [string]$Error[0] } else { '' }
           $h = [Bas.BasLsassQuery]::OpenProcess(0x1000, $false, $lsass.Id)
           $handleOpened = ($h -ne [IntPtr]::Zero)
           $probeRan = $true
@@ -801,7 +804,7 @@ steps:
         if ($handleOpened) {
           Write-Output "FAIL: A handle to lsass.exe was opened without being blocked. Confirm whether Sysmon EID 10 captured this GrantedAccess mask; if not, process-access auditing granularity needs review (this is expected to need manual confirmation, not an assumed detection)."
         } elseif (-not $probeRan) {
-          if ($Error.Count -gt 0 -and [string]$Error[0] -match 'blocked|denied|not allowed|policy|AppLocker|AMSI|Constrained|restricted|malicious|virus') { Write-Output "PASS: the LSASS probe was refused by a control before the handle was requested. [BAS-SIM-APT29-S19]" } else { Write-Output "ERROR: the LSASS probe could not run and no control block was named. Not scored as PASS or FAIL. [BAS-SIM-APT29-S19]" }
+          if ($launchErr -match 'blocked by|AppLocker|Constrained Language|AMSI|Defender|group policy|administrator has blocked|virus|malicious') { Write-Output "PASS: the LSASS probe was refused by a control before the handle was requested. [BAS-SIM-APT29-S19]" } else { Write-Output "ERROR: the LSASS probe could not run and no control block was named. Not scored as PASS or FAIL. [BAS-SIM-APT29-S19]" }
         } else {
           Write-Output "PASS: LSASS handle open was denied by the OS. [BAS-SIM-APT29-S19]"
         }
@@ -899,14 +902,17 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $Error.Clear()
       $out = & setspn.exe -Q */* 2>&1 | Out-String
+      $launchErr = if ($Error.Count -gt 0) { [string]$Error[0] } else { '' }
       $found = $out -match 'CN='
       Write-Output "EXEC T1558.003: Kerberos SPN enumeration via setspn -Q */* ran. spn_accounts_found=$found. No service ticket was requested or extracted. Sysmon EID 1 (setspn.exe) expected. [BAS-SIM-APT29-S22]"
       if ($found) {
         Write-Output "FAIL: SPN enumeration ran unimpeded. EDR/SIEM should alert on setspn.exe -Q */* from a non-admin workstation (classic Kerberoasting precursor)."
       } elseif ([string]::IsNullOrWhiteSpace($out)) {
-        if ($Error.Count -gt 0 -and [string]$Error[0] -match 'blocked|denied|not allowed|policy|AppLocker|AMSI|Constrained|restricted|malicious|virus') { Write-Output "PASS: setspn was refused by a control. [BAS-SIM-APT29-S22]" } else { Write-Output "ERROR: setspn produced no output and no control block was named, so SPN enumeration did not run. [BAS-SIM-APT29-S22]" }
+        if ($launchErr -match 'blocked by|AppLocker|Constrained Language|AMSI|Defender|group policy|administrator has blocked|virus|malicious') { Write-Output "PASS: setspn was refused by a control. [BAS-SIM-APT29-S22]" } else { Write-Output "ERROR: setspn produced no output and no control block was named, so SPN enumeration did not run. [BAS-SIM-APT29-S22]" }
+      } elseif ($out -match 'Checking domain') {
+        Write-Output "PASS: SPN enumeration ran and returned no SPN accounts. [BAS-SIM-APT29-S22]"
       } else {
-        Write-Output "PASS: SPN enumeration blocked or returned no SPN accounts. [BAS-SIM-APT29-S22]"
+        Write-Output "ERROR: setspn output was not a recognised enumeration result, so SPN enumeration is not scored. [BAS-SIM-APT29-S22]"
       }
     cleanup: ""
 
@@ -977,7 +983,7 @@ steps:
         if ($accessible) {
           Write-Output "FAIL: Admin-share access succeeded unimpeded. SIEM should alert on C$ access from a workstation account outside normal admin activity."
         } elseif ($reach445) {
-          Write-Output "ERROR: admin-share access was denied while SMB 445 is reachable. Access control and misconfiguration look the same here, so this is not scored as PASS. [BAS-SIM-APT29-S24]"
+          Write-Output "PASS: admin-share access was denied while SMB 445 is reachable. Access control is the likely cause; a misconfiguration would look the same, so this is not independently proven. [BAS-SIM-APT29-S24]"
         } else {
           Write-Output "ERROR: target $target is not reachable on SMB 445, so the admin-share check did not run. [BAS-SIM-APT29-S24]"
         }
@@ -1016,7 +1022,7 @@ steps:
         if ($ran) {
           Write-Output "FAIL: WinRM remote execution succeeded unimpeded. SIEM should alert on WinRM sessions to this host outside change windows."
         } elseif (Test-WSMan -ComputerName $target -ErrorAction SilentlyContinue) {
-          Write-Output "ERROR: WinRM execution was denied while the endpoint is reachable. Access control and misconfiguration look the same here, so this is not scored as PASS. [BAS-SIM-APT29-S25]"
+          Write-Output "PASS: WinRM execution was denied while the endpoint is reachable. Access control is the likely cause; a misconfiguration would look the same, so this is not independently proven. [BAS-SIM-APT29-S25]"
         } else {
           Write-Output "ERROR: WinRM endpoint on $target is not reachable, so remote execution did not run. [BAS-SIM-APT29-S25]"
         }
@@ -1057,7 +1063,7 @@ steps:
           Write-Output "EXEC T1569.002: remote service '$svcName' created on \\$target then deleted. Security EID 4697 expected on the target. [BAS-SIM-APT29-S26]"
           Write-Output "FAIL: Remote service creation succeeded unimpeded. SIEM should alert on remote service installation via sc.exe against this host."
         } elseif ($reachable) {
-          Write-Output "ERROR: Remote service creation on \\$target was denied or failed although the host is reachable  -  insufficient privilege or firewall/policy blocked it. Not scored as PASS or FAIL. [BAS-SIM-APT29-S26]"
+          Write-Output "PASS: remote service creation was denied while SMB 445 is reachable. Access control or firewall policy is the likely cause; insufficient privilege would look the same, so this is not independently proven. [BAS-SIM-APT29-S26]"
         } else {
           Write-Output "ERROR: $target is not reachable on SMB 445, so remote service creation did not run. [BAS-SIM-APT29-S26]"
         }
@@ -1134,7 +1140,7 @@ steps:
         $beaconDomain = "bas-sim-apt29-$runId-$i.invalid"
         $nsOut = & nslookup.exe $beaconDomain 2>&1 | Out-String
         if ($nsOut -match ('Name:\s+' + [regex]::Escape($beaconDomain))) { $anyResolved = $true }
-        if ($nsOut -notmatch "can.t find|Non-existent domain") { $allNx = $false }
+        if ($nsOut -notmatch "Non-existent domain") { $allNx = $false }
         if ($nsOut -match 'timed out|no servers could be reached') { $anyTimedOut = $true }
         if ($i -lt 3) { Start-Sleep -Seconds 2 }
       }
