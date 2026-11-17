@@ -9,6 +9,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "akira-double-extortion-assessment.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "akira-kill-chain.yaml": {
     "cleanup": 0,
     "detection": 0,
@@ -409,7 +414,17 @@
     "detection": 0,
     "telemetry": 0
   },
+  "ransomware-backup-recovery-assurance.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "ransomware-drill.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "ransomware-lateral-containment-assessment.yaml": {
     "cleanup": 0,
     "detection": 0,
     "telemetry": 0

@@ -216,9 +216,54 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "akira-double-extortion-assessment.yaml",
+    "index": 0,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-double-extortion-assessment.yaml",
+    "index": 1,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-double-extortion-assessment.yaml",
+    "index": 2,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-double-extortion-assessment.yaml",
+    "index": 3,
+    "technique_id": "T1041",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "akira-double-extortion-assessment.yaml",
+    "index": 4,
+    "technique_id": "T1657",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
     "scenario": "akira-kill-chain.yaml",
     "index": 0,
-    "technique_id": "T1021.001",
+    "technique_id": "T1078",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -227,16 +272,16 @@
   {
     "scenario": "akira-kill-chain.yaml",
     "index": 1,
-    "technique_id": "T1135",
+    "technique_id": "T1133",
     "action_key": "",
     "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
+    "class": "destructive",
+    "status": "self_cleaning_declared"
   },
   {
     "scenario": "akira-kill-chain.yaml",
     "index": 2,
-    "technique_id": "T1003.002",
+    "technique_id": "T1021.001",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -245,42 +290,6 @@
   {
     "scenario": "akira-kill-chain.yaml",
     "index": 3,
-    "technique_id": "T1003.001",
-    "action_key": "",
-    "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
-  },
-  {
-    "scenario": "akira-kill-chain.yaml",
-    "index": 4,
-    "technique_id": "T1562.001",
-    "action_key": "",
-    "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
-  },
-  {
-    "scenario": "akira-kill-chain.yaml",
-    "index": 5,
-    "technique_id": "T1021.002",
-    "action_key": "",
-    "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
-  },
-  {
-    "scenario": "akira-kill-chain.yaml",
-    "index": 6,
-    "technique_id": "T1567",
-    "action_key": "",
-    "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
-  },
-  {
-    "scenario": "akira-kill-chain.yaml",
-    "index": 7,
     "technique_id": "T1135",
     "action_key": "",
     "framework": "custom",
@@ -289,8 +298,44 @@
   },
   {
     "scenario": "akira-kill-chain.yaml",
+    "index": 4,
+    "technique_id": "T1482",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 5,
+    "technique_id": "T1082",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 6,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 7,
+    "technique_id": "T1003.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
     "index": 8,
-    "technique_id": "T1486",
+    "technique_id": "T1003.001",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -299,7 +344,7 @@
   {
     "scenario": "akira-kill-chain.yaml",
     "index": 9,
-    "technique_id": "T1486",
+    "technique_id": "T1558.003",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -308,34 +353,7 @@
   {
     "scenario": "akira-kill-chain.yaml",
     "index": 10,
-    "technique_id": "T1490",
-    "action_key": "enumerate",
-    "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
-  },
-  {
-    "scenario": "akira-kill-chain.yaml",
-    "index": 11,
-    "technique_id": "T1490",
-    "action_key": "vss_delete",
-    "framework": "custom",
-    "class": "destructive",
-    "status": "irreversible_declared"
-  },
-  {
-    "scenario": "akira-kill-chain.yaml",
-    "index": 12,
-    "technique_id": "T1490",
-    "action_key": "survival",
-    "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
-  },
-  {
-    "scenario": "akira-kill-chain.yaml",
-    "index": 13,
-    "technique_id": "T1490",
+    "technique_id": "T1562.001",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -343,8 +361,35 @@
   },
   {
     "scenario": "akira-kill-chain.yaml",
+    "index": 11,
+    "technique_id": "T1136.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 12,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 13,
+    "technique_id": "T1219",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
     "index": 14,
-    "technique_id": "T1070.001",
+    "technique_id": "T1021.002",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -353,6 +398,96 @@
   {
     "scenario": "akira-kill-chain.yaml",
     "index": 15,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 16,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 17,
+    "technique_id": "T1135",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 18,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 19,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 20,
+    "technique_id": "T1490",
+    "action_key": "enumerate",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 21,
+    "technique_id": "T1490",
+    "action_key": "vss_delete",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "irreversible_declared"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 22,
+    "technique_id": "T1490",
+    "action_key": "survival",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 23,
+    "technique_id": "T1490",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 24,
+    "technique_id": "T1070.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "akira-kill-chain.yaml",
+    "index": 25,
     "technique_id": "T1070.001",
     "action_key": "",
     "framework": "custom",
@@ -4023,6 +4158,69 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "ransomware-backup-recovery-assurance.yaml",
+    "index": 0,
+    "technique_id": "T1007",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-backup-recovery-assurance.yaml",
+    "index": 1,
+    "technique_id": "T1555",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "ransomware-backup-recovery-assurance.yaml",
+    "index": 2,
+    "technique_id": "T1485",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-backup-recovery-assurance.yaml",
+    "index": 3,
+    "technique_id": "T1485",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-backup-recovery-assurance.yaml",
+    "index": 4,
+    "technique_id": "T1485",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-backup-recovery-assurance.yaml",
+    "index": 5,
+    "technique_id": "T1007",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-backup-recovery-assurance.yaml",
+    "index": 6,
+    "technique_id": "T1007",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "ransomware-drill.yaml",
     "index": 0,
     "technique_id": "T1083",
@@ -4098,6 +4296,51 @@
     "scenario": "ransomware-drill.yaml",
     "index": 8,
     "technique_id": "T1543.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-lateral-containment-assessment.yaml",
+    "index": 0,
+    "technique_id": "T1021",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "ransomware-lateral-containment-assessment.yaml",
+    "index": 1,
+    "technique_id": "T1570",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "ransomware-lateral-containment-assessment.yaml",
+    "index": 2,
+    "technique_id": "T1569.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "ransomware-lateral-containment-assessment.yaml",
+    "index": 3,
+    "technique_id": "T1021.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ransomware-lateral-containment-assessment.yaml",
+    "index": 4,
+    "technique_id": "T1021.002",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",

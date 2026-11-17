@@ -75,6 +75,23 @@ var TechniqueDomain = map[string]Domain{
 	// Exfiltration Over Web Service / generic HTTPS staging (Akira Stage 5b, sink-backed)
 	"T1567":     DomainExfiltration,
 	"T1567.002": DomainExfiltration,
+	// Akira Windows completeness stages and the backup, double-extortion and lateral-containment scenarios.
+	"T1021":     DomainLateralMovement,
+	"T1569.002": DomainLateralMovement,
+	"T1007":     DomainDataDiscoveryAndStaging,
+	"T1555":     DomainCredentialAccess,
+	"T1485":     DomainEncryptionAndDestruction,
+	"T1041":     DomainExfiltration,
+	"T1074.001": DomainDataDiscoveryAndStaging,
+	"T1657":     DomainExfiltration,
+	"T1133":     DomainInitialAccess,
+	"T1482":     DomainDataDiscoveryAndStaging,
+	"T1082":     DomainDataDiscoveryAndStaging,
+	"T1059.001": DomainPreparationAndPersistence,
+	"T1558.003": DomainCredentialAccess,
+	"T1136.001": DomainPreparationAndPersistence,
+	"T1547.001": DomainPreparationAndPersistence,
+	"T1219":     DomainPreparationAndPersistence,
 }
 
 // DomainFor returns techniqueID's mapped domain and true, or ("", false)
