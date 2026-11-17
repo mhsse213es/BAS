@@ -187,7 +187,7 @@ function Test-AdcsEsc13($f, $oids) {
 #region esc15 needs=core,ace,tfacts
 function Test-AdcsEsc15($f) {
   $m = ($f.SchemaVersion -eq 1) -and $f.SuppliesSubject -and (Test-AdcsEnrollGate $f)
-  New-AdcsTemplateFinding $f '15' $m 'schema version 1, enrollee-supplied subject: an Application Policy can be injected in place of the EKU (CVE-2024-49019); fixed by the CA patch, whose level is not readable' 'obtain a client-authentication or enrollment-agent certificate through a template that should not allow it' 'schema-version-1 template with enrollee-supplied subject; exposure depends on the CA patch level, which needs live verification' 'potential'
+  New-AdcsTemplateFinding $f '15' $m 'schema version 1 template with an enrollee-supplied subject: an Application Policy can be injected in place of the EKU (CVE-2024-49019). Whether it is exploitable depends on the CA patch level, which this step does not read, so treat it as exposed on an unpatched CA' 'obtain a client-authentication or enrollment-agent certificate through a template that should not allow it' 'schema-version-1 template with enrollee-supplied subject; exploitable only on a CA without the CVE-2024-49019 fix, which needs live verification' 'potential'
 }
 #endregion
 
@@ -321,7 +321,7 @@ function Test-AdcsEsc14($accounts) {
 }
 #endregion
 
-#region dispatch needs=core,ace,tfacts
+#region dispatch needs=core
 # What each ESC analyzer is called with: t = each template, tt = each template plus all templates, to = each template plus
 # the issuance-policy objects, p = PKI objects, c = CAs, cl = CAs and the live-probe flag, d = domain controllers, a = accounts.
 $script:AdcsEscKind = @{ '1' = 't'; '2' = 't'; '3' = 'tt'; '4' = 't'; '9' = 't'; '15' = 't'; '13' = 'to'; '5' = 'p'; '6' = 'c'; '7' = 'c'; '11' = 'c'; '12' = 'c'; '8' = 'cl'; '10' = 'd'; '14' = 'a' }
@@ -361,7 +361,7 @@ function Invoke-AdcsStage([string]$esc, $needs, [string]$label, [string]$passTex
 }
 #endregion
 
-#region collect needs=core,collect_web
+#region collect needs=core
 function New-AdcsContext { [pscustomobject]@{ Templates = $null; CAs = $null; PkiObjects = $null; Oids = $null; DCs = $null; Accounts = $null; NtAuth = $null; LiveProbe = $false; Errors = @{} } }
 function ConvertTo-AdcsAces($rules) {
   $o = @()
@@ -449,7 +449,7 @@ function Read-AdcsPart_templates($ctx, [string]$cfg) {
 }
 #endregion
 
-#region part_cas needs=core,collect,collect_web
+#region certutil needs=core
 function Read-CertutilDword([string]$config, [string]$value, [string]$name) {
   try {
     $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
@@ -464,6 +464,21 @@ function Read-CertutilString([string]$config, [string]$value, [string]$name) {
   } catch { }
   return $null
 }
+#endregion
+
+#region cafield_editFlags needs=core,certutil
+function Read-AdcsCaField_editFlags($ca, [string]$conf, $ctx) { return (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags') }
+#endregion
+
+#region cafield_interfaceFlags needs=core,certutil
+function Read-AdcsCaField_interfaceFlags($ca, [string]$conf, $ctx) { return (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags') }
+#endregion
+
+#region cafield_keyProvider needs=core,certutil
+function Read-AdcsCaField_keyProvider($ca, [string]$conf, $ctx) { return (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider') }
+#endregion
+
+#region cafield_caAces needs=core
 function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
   try {
     $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
@@ -482,22 +497,34 @@ function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
     return $o
   } catch { return $null }
 }
+function Read-AdcsCaField_caAces($ca, [string]$conf, $ctx) { return (Read-AdcsRemoteSecurity $ca.host $ca.name) }
+#endregion
+
+#region cafield_web needs=core,collect_web
+# Only when BAS_ADCS_LIVE_PROBE=true; otherwise the field stays null and ESC8 reports the CA as needing live verification.
+function Read-AdcsCaField_web($ca, [string]$conf, $ctx) {
+  if ($env:BAS_ADCS_LIVE_PROBE -ne 'true') { return $null }
+  $ctx.LiveProbe = $true
+  return (Read-AdcsWebProbe $ca.host)
+}
+#endregion
+
+#region part_cas needs=core,collect
+# Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+# stays null, which an analyzer reports as unreadable rather than clean.
 function Read-AdcsPart_cas($ctx, [string]$cfg) {
   $svc = @(Read-AdcsEnrollmentServices $cfg)
   if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+  $fields = @($script:AdcsCaFields | Where-Object { $_ })
   $cas = @()
   foreach ($ca in $svc) {
-    $conf = $ca.host + '\' + $ca.name
-    $web = $null
-    if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-    $cas += [pscustomobject]@{
-      name = $ca.name; host = $ca.host; published = $ca.published
-      editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-      interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-      keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-      caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-      web = $web
+    $conf = $ca.host + '' + $ca.name
+    $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+    foreach ($f in $fields) {
+      $fn = 'Read-AdcsCaField_' + $f
+      if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
     }
+    $cas += [pscustomobject]$o
   }
   $ctx.CAs = $cas
 }
@@ -585,7 +612,7 @@ function Read-AdcsPart_dcs($ctx, [string]$cfg) {
 }
 #endregion
 
-#region context_stage needs=core,collect,part_templates,part_cas
+#region context_stage needs=core,collect,part_templates,part_cas,cafield_editFlags,cafield_interfaceFlags,cafield_keyProvider,cafield_caAces,cafield_web
 function Invoke-AdcsContextStage {
   $ctx = Read-AdcsContext @('templates', 'cas')
   foreach ($n in @('templates', 'cas')) { if ($ctx.Errors[$n]) { Write-Output ("ADCS-CONTEXT: " + $n + "=NOT READ (" + $ctx.Errors[$n] + ")") } }
@@ -652,7 +679,7 @@ function Read-AdcsNtAuth {
 }
 #endregion
 
-#region correlate needs=core,ace,tfacts,dispatch,esc1,esc2,esc3,esc4,esc5,esc6,esc7,esc8,esc9,esc10,esc11,esc12,esc13,esc14,esc15,collect,part_templates,part_cas,part_pki,part_oids,part_accounts,part_dcs
+#region correlate needs=core,ace,tfacts,dispatch,cafield_editFlags,cafield_interfaceFlags,cafield_keyProvider,cafield_caAces,cafield_web,esc1,esc2,esc3,esc4,esc5,esc6,esc7,esc8,esc9,esc10,esc11,esc12,esc13,esc14,esc15,collect,part_templates,part_cas,part_pki,part_oids,part_accounts,part_dcs
 function Get-AdcsCorrelation($ctx) {
   $tf = @($ctx.Templates | ForEach-Object { Get-AdcsTemplateFacts $_ })
   $out = @()

@@ -31,6 +31,15 @@ Nothing requests a certificate or changes a template, CA object, CA setting or r
 - ESC8 is POTENTIAL unless `BAS_ADCS_LIVE_PROBE=true`, so stage 17 cannot PASS without the probe.
 - Detection and telemetry text in each step is expectation, not confirmed against a SIEM.
 
+## Leaner steps and ESC15 wording (follow-up)
+
+- Each step now carries only the collectors it uses. The live web probe is in stages 0, 8 and 17 only; `certutil` only in
+  stages 0, 6, 11, 12 and 17. Each stage asks for exactly the CA fields it reads, and an unrequested field is null, which
+  an analyzer reports as unreadable, not clean. Total command size fell from 372 KB to 264 KB. `TestStagesCarryOnlyTheCollectorsTheyUse` enforces it.
+- ESC15 is always at most potential, and says so: exploitability depends on the CA patch level (CVE-2024-49019), which the
+  step does not read. `TestEsc15WordingNamesThePatchDependency` pins the wording.
+- Correction to an earlier note: the old ESC15 step did have a FAIL path; ESC10, ESC11 and ESC13 were the SKIP-heavy ones.
+
 ## Open
 
 - Separate `adcs-esc8-web-enrollment-probe.yaml` still exists; its overlap with stage 8 is undecided.

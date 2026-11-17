@@ -138,25 +138,28 @@ const readOnly = " Read-only: never requests a certificate, modifies a template 
 type escInfo struct {
 	Label, Pass, Fail string
 	Needs             []string
+	Fields            []string // CA fields the stage reads
 }
 
 var escTable = map[string]escInfo{
-	"1":  {"ESC1 (enrollee-supplied subject with a client-auth EKU)", "no certificate template combines an enrollee-supplied subject, an authentication EKU, no approval and low-privilege enrollment. This step assesses ESC1 only.", "ESC1: a template lets a low-privileged enrollee name any identity in a certificate that authenticates.", []string{"templates", "cas"}},
-	"2":  {"ESC2 (Any Purpose or no EKU)", "no template with Any Purpose or no EKU, no approval and low-privilege enrollment. This step assesses ESC2 only.", "ESC2: a template with Any Purpose or no EKU is enrollable by a low-privileged principal.", []string{"templates", "cas"}},
-	"3":  {"ESC3 (enrollment agent)", "no enrollable enrollment-agent template. This step assesses ESC3 only; CA enrollment-agent restrictions are not readable from AD.", "ESC3: an enrollment-agent template is enrollable and a second template accepts agent-signed requests.", []string{"templates", "cas"}},
-	"4":  {"ESC4 (template ACL)", "no template is writable by a non-tier-0 principal. This step assesses template ACLs only.", "ESC4: a template can be modified by a non-tier-0 principal.", []string{"templates", "cas"}},
-	"5":  {"ESC5 (PKI object ACL)", "no Public Key Services object or CA enrollment object is writable by a non-tier-0 principal. This step assesses PKI object ACLs only.", "ESC5: a PKI object that controls trust or enrollment can be modified by a non-tier-0 principal.", []string{"pki"}},
-	"6":  {"ESC6 (EDITF_ATTRIBUTESUBJECTALTNAME2)", "no CA has EDITF_ATTRIBUTESUBJECTALTNAME2 set. This step assesses the CA policy flag only.", "ESC6: a CA accepts a requester-supplied subject alternative name.", []string{"cas"}},
-	"7":  {"ESC7 (CA administrative rights)", "no non-tier-0 principal holds ManageCA or ManageCertificates on any CA. This step assesses CA permissions only.", "ESC7: a non-tier-0 principal holds ManageCA or ManageCertificates on a CA.", []string{"cas"}},
-	"8":  {"ESC8 (web enrollment relay)", "no CA web enrollment endpoint offers NTLM or Negotiate over plain HTTP. HTTPS and Extended Protection are not assessed.", "ESC8: CA web enrollment accepts integrated authentication over HTTP, which can be relayed.", []string{"cas"}},
-	"9":  {"ESC9 (no security extension)", "no enrollable template sets the no-security-extension flag. This step assesses the template flag only.", "ESC9: a template issues certificates without the security extension to a low-privileged enrollee.", []string{"templates", "cas"}},
-	"10": {"ESC10 (weak certificate mapping)", "every domain controller enforces strong certificate binding. Update level is not verified.", "ESC10: a domain controller allows weak certificate-to-account mapping.", []string{"dcs"}},
-	"11": {"ESC11 (RPC enrollment relay)", "every CA enforces an encrypted certificate request interface. This step reads the CA interface flag only.", "ESC11: a CA accepts unencrypted RPC certificate requests, which can be relayed.", []string{"cas"}},
-	"12": {"ESC12 (CA private key)", "no CA reports a software key provider. HSM assurance and the ESC12 exploit path are not verified.", "ESC12: a CA signing key is held in a software provider rather than a hardware security module.", []string{"cas"}},
-	"13": {"ESC13 (issuance policy to group)", "no enrollable template carries an issuance policy linked to a privileged group. This step assesses issuance-policy links only.", "ESC13: a template carries an issuance policy linked to a privileged group and is enrollable by a low-privileged principal.", []string{"templates", "cas", "oids"}},
-	"14": {"ESC14 (weak explicit mapping)", "no enabled account has a weak explicit certificate mapping in altSecurityIdentities. This step assesses the mapping format only.", "ESC14: an account maps certificates by a weak identifier.", []string{"accounts"}},
-	"15": {"ESC15 (schema version 1 template)", "no schema-version-1 template is enrollable with an enrollee-supplied subject. This step assesses template schema only.", "ESC15: a schema-version-1 template with an enrollee-supplied subject is enrollable.", []string{"templates", "cas"}},
+	"1":  {"ESC1 (enrollee-supplied subject with a client-auth EKU)", "no certificate template combines an enrollee-supplied subject, an authentication EKU, no approval and low-privilege enrollment. This step assesses ESC1 only.", "ESC1: a template lets a low-privileged enrollee name any identity in a certificate that authenticates.", []string{"templates", "cas"}, nil},
+	"2":  {"ESC2 (Any Purpose or no EKU)", "no template with Any Purpose or no EKU, no approval and low-privilege enrollment. This step assesses ESC2 only.", "ESC2: a template with Any Purpose or no EKU is enrollable by a low-privileged principal.", []string{"templates", "cas"}, nil},
+	"3":  {"ESC3 (enrollment agent)", "no enrollable enrollment-agent template. This step assesses ESC3 only; CA enrollment-agent restrictions are not readable from AD.", "ESC3: an enrollment-agent template is enrollable and a second template accepts agent-signed requests.", []string{"templates", "cas"}, nil},
+	"4":  {"ESC4 (template ACL)", "no template is writable by a non-tier-0 principal. This step assesses template ACLs only.", "ESC4: a template can be modified by a non-tier-0 principal.", []string{"templates", "cas"}, nil},
+	"5":  {"ESC5 (PKI object ACL)", "no Public Key Services object or CA enrollment object is writable by a non-tier-0 principal. This step assesses PKI object ACLs only.", "ESC5: a PKI object that controls trust or enrollment can be modified by a non-tier-0 principal.", []string{"pki"}, nil},
+	"6":  {"ESC6 (EDITF_ATTRIBUTESUBJECTALTNAME2)", "no CA has EDITF_ATTRIBUTESUBJECTALTNAME2 set. This step assesses the CA policy flag only.", "ESC6: a CA accepts a requester-supplied subject alternative name.", []string{"cas"}, []string{"editFlags"}},
+	"7":  {"ESC7 (CA administrative rights)", "no non-tier-0 principal holds ManageCA or ManageCertificates on any CA. This step assesses CA permissions only.", "ESC7: a non-tier-0 principal holds ManageCA or ManageCertificates on a CA.", []string{"cas"}, []string{"caAces"}},
+	"8":  {"ESC8 (web enrollment relay)", "no CA web enrollment endpoint offers NTLM or Negotiate over plain HTTP. HTTPS and Extended Protection are not assessed.", "ESC8: CA web enrollment accepts integrated authentication over HTTP, which can be relayed.", []string{"cas"}, []string{"web"}},
+	"9":  {"ESC9 (no security extension)", "no enrollable template sets the no-security-extension flag. This step assesses the template flag only.", "ESC9: a template issues certificates without the security extension to a low-privileged enrollee.", []string{"templates", "cas"}, nil},
+	"10": {"ESC10 (weak certificate mapping)", "every domain controller enforces strong certificate binding. Update level is not verified.", "ESC10: a domain controller allows weak certificate-to-account mapping.", []string{"dcs"}, nil},
+	"11": {"ESC11 (RPC enrollment relay)", "every CA enforces an encrypted certificate request interface. This step reads the CA interface flag only.", "ESC11: a CA accepts unencrypted RPC certificate requests, which can be relayed.", []string{"cas"}, []string{"interfaceFlags"}},
+	"12": {"ESC12 (CA private key)", "no CA reports a software key provider. HSM assurance and the ESC12 exploit path are not verified.", "ESC12: a CA signing key is held in a software provider rather than a hardware security module.", []string{"cas"}, []string{"keyProvider"}},
+	"13": {"ESC13 (issuance policy to group)", "no enrollable template carries an issuance policy linked to a privileged group. This step assesses issuance-policy links only.", "ESC13: a template carries an issuance policy linked to a privileged group and is enrollable by a low-privileged principal.", []string{"templates", "cas", "oids"}, nil},
+	"14": {"ESC14 (weak explicit mapping)", "no enabled account has a weak explicit certificate mapping in altSecurityIdentities. This step assesses the mapping format only.", "ESC14: an account maps certificates by a weak identifier.", []string{"accounts"}, nil},
+	"15": {"ESC15 (schema version 1 template, CA patch level not read)", "no schema-version-1 template is enrollable with an enrollee-supplied subject. Whether an enrollable one is exploitable depends on the CA patch level (CVE-2024-49019), which this step does not read.", "ESC15: a schema-version-1 template with an enrollee-supplied subject is enrollable.", []string{"templates", "cas"}, nil},
 }
+
+var allCaFieldRegions = []string{"cafield_editFlags", "cafield_interfaceFlags", "cafield_keyProvider", "cafield_caAces", "cafield_web"}
 
 func psq(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 
@@ -168,7 +171,12 @@ func escStage(n, title, what string, tel, det []string) Stage {
 		regions = append(regions, "part_"+p)
 		needs = append(needs, psq(p))
 	}
-	call := fmt.Sprintf("Invoke-AdcsStage %s @(%s) %s %s %s $true", psq(n), strings.Join(needs, ", "), psq(info.Label), psq(info.Pass), psq(info.Fail))
+	var fl []string
+	for _, f := range info.Fields {
+		regions = append(regions, "cafield_"+f)
+		fl = append(fl, psq(f))
+	}
+	call := fmt.Sprintf("$script:AdcsCaFields = @(%s)\nInvoke-AdcsStage %s @(%s) %s %s %s $true", strings.Join(fl, ", "), psq(n), strings.Join(needs, ", "), psq(info.Label), psq(info.Pass), psq(info.Fail))
 	tech := "T1649"
 	if n == "8" || n == "11" {
 		tech = "T1557.001"
@@ -187,7 +195,7 @@ var ldapDet = "SIEM: an LDAP enumeration of the Certificate Templates or Public 
 // Stages is the stage table, in run order.
 func Stages() []Stage {
 	return []Stage{
-		{Number: "0", Title: "Build AD CS Audit Context", Technique: "T1649", Tag: "BAS-SIM-ADCS-CTX", Call: "Invoke-AdcsContextStage", Regions: []string{"context_stage"}, Timeout: 120,
+		{Number: "0", Title: "Build AD CS Audit Context", Technique: "T1649", Tag: "BAS-SIM-ADCS-CTX", Call: "$script:AdcsCaFields = @('editFlags', 'interfaceFlags', 'keyProvider', 'caAces', 'web')\nInvoke-AdcsContextStage", Regions: append([]string{"context_stage"}, allCaFieldRegions...), Timeout: 120,
 			Blast:     "Discovers the certification authorities, certificate templates, enrollment services and forest from the Configuration partition and reads each CA's policy values. It scores nothing; it records what later stages can and cannot read." + readOnly,
 			Telemetry: []string{ldapTel, "Sysmon EID 1: powershell.exe with certutil -getreg against each CA"},
 			Detection: []string{ldapDet}},
@@ -206,11 +214,11 @@ func Stages() []Stage {
 		escStage("13", "Issuance Policy / Group Mapping", "Reads template issuance policies, the issuance-policy (OID) objects with a group link, and the linked groups' privilege markers.", []string{ldapTel, "DC: LDAP read of msPKI-Enterprise-Oid objects and linked groups"}, []string{ldapDet}),
 		escStage("14", "Weak Explicit Certificate Mapping", "Reads altSecurityIdentities and adminCount on enabled user and computer accounts.", []string{"DC: LDAP search of altSecurityIdentities"}, []string{"SIEM: bulk LDAP reads of altSecurityIdentities from a non-administrative workstation"}),
 		escStage("15", "Schema Version 1 Template Abuse", "Reads template schema version, name flags, approval and RA-signature settings and the template ACL.", []string{ldapTel}, []string{ldapDet}),
-		{Number: "16", Title: "Certificate Publication and Trust", Technique: "T1649", Tag: "BAS-SIM-ADCS-PUB", Call: "Invoke-AdcsPublicationStage", Regions: []string{"publication"}, Timeout: 120,
+		{Number: "16", Title: "Certificate Publication and Trust", Technique: "T1649", Tag: "BAS-SIM-ADCS-PUB", Call: "$script:AdcsCaFields = @()\nInvoke-AdcsPublicationStage", Regions: []string{"publication"}, Timeout: 120,
 			Blast:     "Reads which templates each CA publishes, the certificates in NTAuthCertificates and each CA certificate's key size, signature algorithm and expiry." + readOnly,
 			Telemetry: []string{ldapTel, "DC: LDAP read of the cACertificate attribute of NTAuthCertificates and the Enrollment Services objects"},
 			Detection: []string{ldapDet}},
-		{Number: "17", Title: "Privileged Identity Correlation", Technique: "T1649", Tag: "BAS-SIM-ADCS-CORR", Call: "Invoke-AdcsCorrelationStage", Regions: []string{"correlate"}, Timeout: 240,
+		{Number: "17", Title: "Privileged Identity Correlation", Technique: "T1649", Tag: "BAS-SIM-ADCS-CORR", Call: "$script:AdcsCaFields = @('editFlags', 'interfaceFlags', 'keyProvider', 'caAces', 'web')\nInvoke-AdcsCorrelationStage", Regions: []string{"correlate"}, Timeout: 240,
 			Blast:     "Reads everything the earlier stages read, then joins it: a misconfiguration becomes an exploitable certificate-issuance path only when the template is published on a readable CA and a low-privileged principal can enrol." + readOnly,
 			Telemetry: []string{ldapTel, "CA host: remote registry reads of the policy and Security values"},
 			Detection: []string{ldapDet}},
@@ -243,7 +251,7 @@ Stages:
   12  ESC12 CA private key protection
   13  ESC13 issuance policy to group mapping
   14  ESC14 weak explicit certificate mapping
-  15  ESC15 schema version 1 template abuse
+  15  ESC15 schema version 1 template abuse (potential only: the CA patch level is not read)
   16  Certificate publication and trust: published templates, CA certificates, NTAuth
   17  Privileged identity correlation: paths from low-privileged principals to privileged certificate issuance
 

@@ -21,7 +21,7 @@ description: |
     12  ESC12 CA private key protection
     13  ESC13 issuance policy to group mapping
     14  ESC14 weak explicit certificate mapping
-    15  ESC15 schema version 1 template abuse
+    15  ESC15 schema version 1 template abuse (potential only: the CA patch level is not read)
     16  Certificate publication and trust: published templates, CA certificates, NTAuth
     17  Privileged identity correlation: paths from low-privileged principals to privileged certificate issuance
 
@@ -234,6 +234,9 @@ steps:
         } catch { }
         return $null
       }
+      function Read-AdcsCaField_editFlags($ca, [string]$conf, $ctx) { return (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags') }
+      function Read-AdcsCaField_interfaceFlags($ca, [string]$conf, $ctx) { return (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags') }
+      function Read-AdcsCaField_keyProvider($ca, [string]$conf, $ctx) { return (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider') }
       function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
         try {
           $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
@@ -252,22 +255,28 @@ steps:
           return $o
         } catch { return $null }
       }
+      function Read-AdcsCaField_caAces($ca, [string]$conf, $ctx) { return (Read-AdcsRemoteSecurity $ca.host $ca.name) }
+      # Only when BAS_ADCS_LIVE_PROBE=true; otherwise the field stays null and ESC8 reports the CA as needing live verification.
+      function Read-AdcsCaField_web($ca, [string]$conf, $ctx) {
+        if ($env:BAS_ADCS_LIVE_PROBE -ne 'true') { return $null }
+        $ctx.LiveProbe = $true
+        return (Read-AdcsWebProbe $ca.host)
+      }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
@@ -285,6 +294,7 @@ steps:
         if (Read-AdcsConfigDN) { try { Write-Output ("ADCS-CONTEXT: forest=" + [System.DirectoryServices.ActiveDirectory.Forest]::GetCurrentForest().Name) } catch { Write-Output 'ADCS-CONTEXT: forest=NOT READ' } } else { Write-Output 'ADCS-CONTEXT: forest=NOT READ (host not domain-joined)' }
         Write-Output 'SKIP: context-only step; it builds the AD CS audit context and has no control outcome to score. Not scored. [BAS-SIM-ADCS-CTX]'
       }
+      $script:AdcsCaFields = @('editFlags', 'interfaceFlags', 'keyProvider', 'caAces', 'web')
       Invoke-AdcsContextStage
     cleanup: ""
 
@@ -503,18 +513,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
       function Read-AdcsPart_templates($ctx, [string]$cfg) {
         $pks = "CN=Public Key Services,CN=Services,$cfg"
         $svc = @()
@@ -540,57 +538,25 @@ steps:
         if ($t.Count -eq 0) { $ctx.Errors['templates'] = 'no certificate templates were returned'; return }
         $ctx.Templates = $t
       }
-      function Read-CertutilDword([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_DWORD\s*=\s*([0-9a-f]+)')) { return [Convert]::ToInt64($matches[1], 16) }
-        } catch { }
-        return $null
-      }
-      function Read-CertutilString([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_SZ\s*=\s*([^\r\n]+)')) { return $matches[1].Trim() }
-        } catch { }
-        return $null
-      }
-      function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
-        try {
-          $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
-          $key = $base.OpenSubKey('SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\' + $caName)
-          if (-not $key) { return $null }
-          $bytes = $key.GetValue('Security')
-          if (-not $bytes) { return $null }
-          $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor($bytes, 0)
-          $o = @()
-          foreach ($a in $sd.DiscretionaryAcl) {
-            $type = 'Other'
-            if ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessAllowed) { $type = 'Allow' }
-            elseif ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessDenied) { $type = 'Deny' }
-            $o += [pscustomobject]@{ sid = $a.SecurityIdentifier.Value; mask = [int64]$a.AccessMask; objectType = ''; type = $type }
-          }
-          return $o
-        } catch { return $null }
-      }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
+      $script:AdcsCaFields = @()
       Invoke-AdcsStage '1' @('templates', 'cas') 'ESC1 (enrollee-supplied subject with a client-auth EKU)' 'no certificate template combines an enrollee-supplied subject, an authentication EKU, no approval and low-privilege enrollment. This step assesses ESC1 only.' 'ESC1: a template lets a low-privileged enrollee name any identity in a certificate that authenticates.' $true
     cleanup: ""
 
@@ -808,18 +774,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
       function Read-AdcsPart_templates($ctx, [string]$cfg) {
         $pks = "CN=Public Key Services,CN=Services,$cfg"
         $svc = @()
@@ -845,57 +799,25 @@ steps:
         if ($t.Count -eq 0) { $ctx.Errors['templates'] = 'no certificate templates were returned'; return }
         $ctx.Templates = $t
       }
-      function Read-CertutilDword([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_DWORD\s*=\s*([0-9a-f]+)')) { return [Convert]::ToInt64($matches[1], 16) }
-        } catch { }
-        return $null
-      }
-      function Read-CertutilString([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_SZ\s*=\s*([^\r\n]+)')) { return $matches[1].Trim() }
-        } catch { }
-        return $null
-      }
-      function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
-        try {
-          $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
-          $key = $base.OpenSubKey('SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\' + $caName)
-          if (-not $key) { return $null }
-          $bytes = $key.GetValue('Security')
-          if (-not $bytes) { return $null }
-          $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor($bytes, 0)
-          $o = @()
-          foreach ($a in $sd.DiscretionaryAcl) {
-            $type = 'Other'
-            if ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessAllowed) { $type = 'Allow' }
-            elseif ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessDenied) { $type = 'Deny' }
-            $o += [pscustomobject]@{ sid = $a.SecurityIdentifier.Value; mask = [int64]$a.AccessMask; objectType = ''; type = $type }
-          }
-          return $o
-        } catch { return $null }
-      }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
+      $script:AdcsCaFields = @()
       Invoke-AdcsStage '2' @('templates', 'cas') 'ESC2 (Any Purpose or no EKU)' 'no template with Any Purpose or no EKU, no approval and low-privilege enrollment. This step assesses ESC2 only.' 'ESC2: a template with Any Purpose or no EKU is enrollable by a low-privileged principal.' $true
     cleanup: ""
 
@@ -1121,18 +1043,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
       function Read-AdcsPart_templates($ctx, [string]$cfg) {
         $pks = "CN=Public Key Services,CN=Services,$cfg"
         $svc = @()
@@ -1158,57 +1068,25 @@ steps:
         if ($t.Count -eq 0) { $ctx.Errors['templates'] = 'no certificate templates were returned'; return }
         $ctx.Templates = $t
       }
-      function Read-CertutilDword([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_DWORD\s*=\s*([0-9a-f]+)')) { return [Convert]::ToInt64($matches[1], 16) }
-        } catch { }
-        return $null
-      }
-      function Read-CertutilString([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_SZ\s*=\s*([^\r\n]+)')) { return $matches[1].Trim() }
-        } catch { }
-        return $null
-      }
-      function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
-        try {
-          $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
-          $key = $base.OpenSubKey('SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\' + $caName)
-          if (-not $key) { return $null }
-          $bytes = $key.GetValue('Security')
-          if (-not $bytes) { return $null }
-          $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor($bytes, 0)
-          $o = @()
-          foreach ($a in $sd.DiscretionaryAcl) {
-            $type = 'Other'
-            if ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessAllowed) { $type = 'Allow' }
-            elseif ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessDenied) { $type = 'Deny' }
-            $o += [pscustomobject]@{ sid = $a.SecurityIdentifier.Value; mask = [int64]$a.AccessMask; objectType = ''; type = $type }
-          }
-          return $o
-        } catch { return $null }
-      }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
+      $script:AdcsCaFields = @()
       Invoke-AdcsStage '3' @('templates', 'cas') 'ESC3 (enrollment agent)' 'no enrollable enrollment-agent template. This step assesses ESC3 only; CA enrollment-agent restrictions are not readable from AD.' 'ESC3: an enrollment-agent template is enrollable and a second template accepts agent-signed requests.' $true
     cleanup: ""
 
@@ -1430,18 +1308,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
       function Read-AdcsPart_templates($ctx, [string]$cfg) {
         $pks = "CN=Public Key Services,CN=Services,$cfg"
         $svc = @()
@@ -1467,57 +1333,25 @@ steps:
         if ($t.Count -eq 0) { $ctx.Errors['templates'] = 'no certificate templates were returned'; return }
         $ctx.Templates = $t
       }
-      function Read-CertutilDword([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_DWORD\s*=\s*([0-9a-f]+)')) { return [Convert]::ToInt64($matches[1], 16) }
-        } catch { }
-        return $null
-      }
-      function Read-CertutilString([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_SZ\s*=\s*([^\r\n]+)')) { return $matches[1].Trim() }
-        } catch { }
-        return $null
-      }
-      function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
-        try {
-          $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
-          $key = $base.OpenSubKey('SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\' + $caName)
-          if (-not $key) { return $null }
-          $bytes = $key.GetValue('Security')
-          if (-not $bytes) { return $null }
-          $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor($bytes, 0)
-          $o = @()
-          foreach ($a in $sd.DiscretionaryAcl) {
-            $type = 'Other'
-            if ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessAllowed) { $type = 'Allow' }
-            elseif ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessDenied) { $type = 'Deny' }
-            $o += [pscustomobject]@{ sid = $a.SecurityIdentifier.Value; mask = [int64]$a.AccessMask; objectType = ''; type = $type }
-          }
-          return $o
-        } catch { return $null }
-      }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
+      $script:AdcsCaFields = @()
       Invoke-AdcsStage '4' @('templates', 'cas') 'ESC4 (template ACL)' 'no template is writable by a non-tier-0 principal. This step assesses template ACLs only.' 'ESC4: a template can be modified by a non-tier-0 principal.' $true
     cleanup: ""
 
@@ -1611,48 +1445,6 @@ steps:
           Writers = @($writers | Select-Object -Unique)
         }
       }
-      $script:AdcsAuthEku = @('1.3.6.1.5.5.7.3.2', '1.3.6.1.4.1.311.20.2.2', '1.3.6.1.5.2.3.4', '2.5.29.37.0')
-      $script:AdcsAgentEku = '1.3.6.1.4.1.311.20.2.1'
-      $script:AdcsAnyEku = '2.5.29.37.0'
-      function Get-AdcsTemplateFacts($t) {
-        $ekus = @($t.ekus | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $apps = @($t.appPolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $nameFlag = [int64]$t.nameFlag; $enrollFlag = [int64]$t.enrollFlag
-        $hasAuth = $false
-        foreach ($e in $ekus) { if ($script:AdcsAuthEku -contains $e) { $hasAuth = $true } }
-        $af = $null
-        if ($t.aclReadable) { $af = Get-AdcsAceFacts $t.aces }
-        $enrollers = @(); $writers = @()
-        if ($af) { $enrollers = @($af.Enrollers); $writers = @($af.Writers) }
-        [pscustomobject]@{
-          Name = [string]$t.name
-          SchemaVersion = [int]$t.schemaVersion
-          SuppliesSubject = (($nameFlag -band 0x1) -ne 0)
-          MgrApproval = (($enrollFlag -band 0x2) -ne 0)
-          NoSecExt = (($enrollFlag -band 0x80000) -ne 0)
-          RaSig = [int]$t.raSignature
-          HasAuthEku = $hasAuth
-          HasAgentEku = ($ekus -contains $script:AdcsAgentEku)
-          HasAnyOrNoEku = (($ekus.Count -eq 0) -or ($ekus -contains $script:AdcsAnyEku))
-          AppPolicies = $apps
-          IssuancePolicies = @($t.issuancePolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-          AclReadable = [bool]$t.aclReadable
-          Enrollers = $enrollers
-          Writers = $writers
-          PublishedOn = @($t.publishedOn | Where-Object { $_ })
-        }
-      }
-      # A template finding: the configuration must match, then who can enroll decides whether it is real. A template whose
-      # ACL cannot be read is "insufficient" only when its configuration already matches; otherwise it is simply not a match.
-      function New-AdcsTemplateFinding($f, [string]$esc, [bool]$match, [string]$conditions, [string]$impact, [string]$why, [string]$state) {
-        if (-not $match) { return $null }
-        if (-not $f.AclReadable) { return (New-AdcsFinding $esc 'insufficient' $f.Name ("template configuration matches ESC" + $esc + " but its ACL could not be read, so enrollment rights are unknown") '') }
-        if ($f.Enrollers.Count -eq 0) { return $null }
-        $pub = 'not published on any CA'
-        if ($f.PublishedOn.Count -gt 0) { $pub = 'published on ' + ($f.PublishedOn -join ',') }
-        return (New-AdcsFinding $esc $state $f.Name ($why + ' (' + $pub + ')') (Format-AdcsPath $f.Enrollers 'Enroll' ('template ' + $f.Name) $conditions $impact))
-      }
-      function Test-AdcsEnrollGate($f) { return ((-not $f.MgrApproval) -and ($f.RaSig -eq 0)) }
       function Test-AdcsEsc5($objs) {
         $out = @()
         foreach ($o in @($objs)) {
@@ -1745,18 +1537,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
       function Read-AdcsPart_pki($ctx, [string]$cfg) {
         $pks = "CN=Public Key Services,CN=Services,$cfg"
         $objs = @()
@@ -1774,6 +1554,7 @@ steps:
         if ($objs.Count -eq 0) { $ctx.Errors['pki'] = 'no Public Key Services objects could be read'; return }
         $ctx.PkiObjects = $objs
       }
+      $script:AdcsCaFields = @()
       Invoke-AdcsStage '5' @('pki') 'ESC5 (PKI object ACL)' 'no Public Key Services object or CA enrollment object is writable by a non-tier-0 principal. This step assesses PKI object ACLs only.' 'ESC5: a PKI object that controls trust or enrollment can be modified by a non-tier-0 principal.' $true
     cleanup: ""
 
@@ -1841,74 +1622,6 @@ steps:
           Write-Output ("PASS: " + $passText + " [" + $tag + "]")
         }
       }
-      $script:AdcsEnrollGuid = '0e10c968-78fb-11d2-90d4-00c04f79dc55'
-      $script:AdcsAutoEnrollGuid = 'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
-      $script:AdcsZeroGuid = '00000000-0000-0000-0000-000000000000'
-      # Non-tier-0 principals that can enroll (Enroll, Autoenroll, all extended rights, GenericAll) and that can write
-      # (GenericAll, GenericWrite, WriteDacl, WriteOwner, WriteProperty). An explicit Deny of Enroll removes a principal.
-      function Get-AdcsAceFacts($aces) {
-        $enrollers = @(); $writers = @(); $denied = @()
-        foreach ($a in @($aces)) {
-          $sid = [string]$a.sid
-          if (Test-AdcsTier0 $sid) { continue }
-          $mask = [int64]$a.mask
-          $ot = ([string]$a.objectType).ToLower()
-          $isExt = ($mask -band 0x100) -ne 0
-          $allExt = ($ot -eq '' -or $ot -eq $script:AdcsZeroGuid)
-          $enrollRight = (($mask -band 0x10000000) -ne 0) -or ($isExt -and ($allExt -or $ot -eq $script:AdcsEnrollGuid -or $ot -eq $script:AdcsAutoEnrollGuid))
-          if ($a.type -eq 'Deny') { if ($enrollRight) { $denied += $sid }; continue }
-          if ($a.type -ne 'Allow') { continue }
-          if ($enrollRight) { $enrollers += $sid }
-          $specificExt = $isExt -and (-not $allExt)
-          if ((-not $specificExt) -and (($mask -band 0x500C0020) -ne 0)) { $writers += $sid }
-        }
-        [pscustomobject]@{
-          Enrollers = @($enrollers | Select-Object -Unique | Where-Object { $denied -notcontains $_ })
-          Writers = @($writers | Select-Object -Unique)
-        }
-      }
-      $script:AdcsAuthEku = @('1.3.6.1.5.5.7.3.2', '1.3.6.1.4.1.311.20.2.2', '1.3.6.1.5.2.3.4', '2.5.29.37.0')
-      $script:AdcsAgentEku = '1.3.6.1.4.1.311.20.2.1'
-      $script:AdcsAnyEku = '2.5.29.37.0'
-      function Get-AdcsTemplateFacts($t) {
-        $ekus = @($t.ekus | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $apps = @($t.appPolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $nameFlag = [int64]$t.nameFlag; $enrollFlag = [int64]$t.enrollFlag
-        $hasAuth = $false
-        foreach ($e in $ekus) { if ($script:AdcsAuthEku -contains $e) { $hasAuth = $true } }
-        $af = $null
-        if ($t.aclReadable) { $af = Get-AdcsAceFacts $t.aces }
-        $enrollers = @(); $writers = @()
-        if ($af) { $enrollers = @($af.Enrollers); $writers = @($af.Writers) }
-        [pscustomobject]@{
-          Name = [string]$t.name
-          SchemaVersion = [int]$t.schemaVersion
-          SuppliesSubject = (($nameFlag -band 0x1) -ne 0)
-          MgrApproval = (($enrollFlag -band 0x2) -ne 0)
-          NoSecExt = (($enrollFlag -band 0x80000) -ne 0)
-          RaSig = [int]$t.raSignature
-          HasAuthEku = $hasAuth
-          HasAgentEku = ($ekus -contains $script:AdcsAgentEku)
-          HasAnyOrNoEku = (($ekus.Count -eq 0) -or ($ekus -contains $script:AdcsAnyEku))
-          AppPolicies = $apps
-          IssuancePolicies = @($t.issuancePolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-          AclReadable = [bool]$t.aclReadable
-          Enrollers = $enrollers
-          Writers = $writers
-          PublishedOn = @($t.publishedOn | Where-Object { $_ })
-        }
-      }
-      # A template finding: the configuration must match, then who can enroll decides whether it is real. A template whose
-      # ACL cannot be read is "insufficient" only when its configuration already matches; otherwise it is simply not a match.
-      function New-AdcsTemplateFinding($f, [string]$esc, [bool]$match, [string]$conditions, [string]$impact, [string]$why, [string]$state) {
-        if (-not $match) { return $null }
-        if (-not $f.AclReadable) { return (New-AdcsFinding $esc 'insufficient' $f.Name ("template configuration matches ESC" + $esc + " but its ACL could not be read, so enrollment rights are unknown") '') }
-        if ($f.Enrollers.Count -eq 0) { return $null }
-        $pub = 'not published on any CA'
-        if ($f.PublishedOn.Count -gt 0) { $pub = 'published on ' + ($f.PublishedOn -join ',') }
-        return (New-AdcsFinding $esc $state $f.Name ($why + ' (' + $pub + ')') (Format-AdcsPath $f.Enrollers 'Enroll' ('template ' + $f.Name) $conditions $impact))
-      }
-      function Test-AdcsEnrollGate($f) { return ((-not $f.MgrApproval) -and ($f.RaSig -eq 0)) }
       function Test-AdcsEsc6($cas) {
         $out = @()
         foreach ($c in @($cas)) {
@@ -1998,18 +1711,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
       function Read-CertutilDword([string]$config, [string]$value, [string]$name) {
         try {
           $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
@@ -2024,43 +1725,26 @@ steps:
         } catch { }
         return $null
       }
-      function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
-        try {
-          $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
-          $key = $base.OpenSubKey('SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\' + $caName)
-          if (-not $key) { return $null }
-          $bytes = $key.GetValue('Security')
-          if (-not $bytes) { return $null }
-          $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor($bytes, 0)
-          $o = @()
-          foreach ($a in $sd.DiscretionaryAcl) {
-            $type = 'Other'
-            if ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessAllowed) { $type = 'Allow' }
-            elseif ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessDenied) { $type = 'Deny' }
-            $o += [pscustomobject]@{ sid = $a.SecurityIdentifier.Value; mask = [int64]$a.AccessMask; objectType = ''; type = $type }
-          }
-          return $o
-        } catch { return $null }
-      }
+      function Read-AdcsCaField_editFlags($ca, [string]$conf, $ctx) { return (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags') }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
+      $script:AdcsCaFields = @('editFlags')
       Invoke-AdcsStage '6' @('cas') 'ESC6 (EDITF_ATTRIBUTESUBJECTALTNAME2)' 'no CA has EDITF_ATTRIBUTESUBJECTALTNAME2 set. This step assesses the CA policy flag only.' 'ESC6: a CA accepts a requester-supplied subject alternative name.' $true
     cleanup: ""
 
@@ -2153,48 +1837,6 @@ steps:
           Writers = @($writers | Select-Object -Unique)
         }
       }
-      $script:AdcsAuthEku = @('1.3.6.1.5.5.7.3.2', '1.3.6.1.4.1.311.20.2.2', '1.3.6.1.5.2.3.4', '2.5.29.37.0')
-      $script:AdcsAgentEku = '1.3.6.1.4.1.311.20.2.1'
-      $script:AdcsAnyEku = '2.5.29.37.0'
-      function Get-AdcsTemplateFacts($t) {
-        $ekus = @($t.ekus | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $apps = @($t.appPolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $nameFlag = [int64]$t.nameFlag; $enrollFlag = [int64]$t.enrollFlag
-        $hasAuth = $false
-        foreach ($e in $ekus) { if ($script:AdcsAuthEku -contains $e) { $hasAuth = $true } }
-        $af = $null
-        if ($t.aclReadable) { $af = Get-AdcsAceFacts $t.aces }
-        $enrollers = @(); $writers = @()
-        if ($af) { $enrollers = @($af.Enrollers); $writers = @($af.Writers) }
-        [pscustomobject]@{
-          Name = [string]$t.name
-          SchemaVersion = [int]$t.schemaVersion
-          SuppliesSubject = (($nameFlag -band 0x1) -ne 0)
-          MgrApproval = (($enrollFlag -band 0x2) -ne 0)
-          NoSecExt = (($enrollFlag -band 0x80000) -ne 0)
-          RaSig = [int]$t.raSignature
-          HasAuthEku = $hasAuth
-          HasAgentEku = ($ekus -contains $script:AdcsAgentEku)
-          HasAnyOrNoEku = (($ekus.Count -eq 0) -or ($ekus -contains $script:AdcsAnyEku))
-          AppPolicies = $apps
-          IssuancePolicies = @($t.issuancePolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-          AclReadable = [bool]$t.aclReadable
-          Enrollers = $enrollers
-          Writers = $writers
-          PublishedOn = @($t.publishedOn | Where-Object { $_ })
-        }
-      }
-      # A template finding: the configuration must match, then who can enroll decides whether it is real. A template whose
-      # ACL cannot be read is "insufficient" only when its configuration already matches; otherwise it is simply not a match.
-      function New-AdcsTemplateFinding($f, [string]$esc, [bool]$match, [string]$conditions, [string]$impact, [string]$why, [string]$state) {
-        if (-not $match) { return $null }
-        if (-not $f.AclReadable) { return (New-AdcsFinding $esc 'insufficient' $f.Name ("template configuration matches ESC" + $esc + " but its ACL could not be read, so enrollment rights are unknown") '') }
-        if ($f.Enrollers.Count -eq 0) { return $null }
-        $pub = 'not published on any CA'
-        if ($f.PublishedOn.Count -gt 0) { $pub = 'published on ' + ($f.PublishedOn -join ',') }
-        return (New-AdcsFinding $esc $state $f.Name ($why + ' (' + $pub + ')') (Format-AdcsPath $f.Enrollers 'Enroll' ('template ' + $f.Name) $conditions $impact))
-      }
-      function Test-AdcsEnrollGate($f) { return ((-not $f.MgrApproval) -and ($f.RaSig -eq 0)) }
       # CA security-descriptor masks: ManageCA 0x1, ManageCertificates 0x2.
       function Test-AdcsEsc7($cas) {
         $out = @()
@@ -2290,32 +1932,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
-      function Read-CertutilDword([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_DWORD\s*=\s*([0-9a-f]+)')) { return [Convert]::ToInt64($matches[1], 16) }
-        } catch { }
-        return $null
-      }
-      function Read-CertutilString([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_SZ\s*=\s*([^\r\n]+)')) { return $matches[1].Trim() }
-        } catch { }
-        return $null
-      }
       function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
         try {
           $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
@@ -2334,25 +1950,26 @@ steps:
           return $o
         } catch { return $null }
       }
+      function Read-AdcsCaField_caAces($ca, [string]$conf, $ctx) { return (Read-AdcsRemoteSecurity $ca.host $ca.name) }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
+      $script:AdcsCaFields = @('caAces')
       Invoke-AdcsStage '7' @('cas') 'ESC7 (CA administrative rights)' 'no non-tier-0 principal holds ManageCA or ManageCertificates on any CA. This step assesses CA permissions only.' 'ESC7: a non-tier-0 principal holds ManageCA or ManageCertificates on a CA.' $true
     cleanup: ""
 
@@ -2419,74 +2036,6 @@ steps:
           Write-Output ("PASS: " + $passText + " [" + $tag + "]")
         }
       }
-      $script:AdcsEnrollGuid = '0e10c968-78fb-11d2-90d4-00c04f79dc55'
-      $script:AdcsAutoEnrollGuid = 'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
-      $script:AdcsZeroGuid = '00000000-0000-0000-0000-000000000000'
-      # Non-tier-0 principals that can enroll (Enroll, Autoenroll, all extended rights, GenericAll) and that can write
-      # (GenericAll, GenericWrite, WriteDacl, WriteOwner, WriteProperty). An explicit Deny of Enroll removes a principal.
-      function Get-AdcsAceFacts($aces) {
-        $enrollers = @(); $writers = @(); $denied = @()
-        foreach ($a in @($aces)) {
-          $sid = [string]$a.sid
-          if (Test-AdcsTier0 $sid) { continue }
-          $mask = [int64]$a.mask
-          $ot = ([string]$a.objectType).ToLower()
-          $isExt = ($mask -band 0x100) -ne 0
-          $allExt = ($ot -eq '' -or $ot -eq $script:AdcsZeroGuid)
-          $enrollRight = (($mask -band 0x10000000) -ne 0) -or ($isExt -and ($allExt -or $ot -eq $script:AdcsEnrollGuid -or $ot -eq $script:AdcsAutoEnrollGuid))
-          if ($a.type -eq 'Deny') { if ($enrollRight) { $denied += $sid }; continue }
-          if ($a.type -ne 'Allow') { continue }
-          if ($enrollRight) { $enrollers += $sid }
-          $specificExt = $isExt -and (-not $allExt)
-          if ((-not $specificExt) -and (($mask -band 0x500C0020) -ne 0)) { $writers += $sid }
-        }
-        [pscustomobject]@{
-          Enrollers = @($enrollers | Select-Object -Unique | Where-Object { $denied -notcontains $_ })
-          Writers = @($writers | Select-Object -Unique)
-        }
-      }
-      $script:AdcsAuthEku = @('1.3.6.1.5.5.7.3.2', '1.3.6.1.4.1.311.20.2.2', '1.3.6.1.5.2.3.4', '2.5.29.37.0')
-      $script:AdcsAgentEku = '1.3.6.1.4.1.311.20.2.1'
-      $script:AdcsAnyEku = '2.5.29.37.0'
-      function Get-AdcsTemplateFacts($t) {
-        $ekus = @($t.ekus | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $apps = @($t.appPolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $nameFlag = [int64]$t.nameFlag; $enrollFlag = [int64]$t.enrollFlag
-        $hasAuth = $false
-        foreach ($e in $ekus) { if ($script:AdcsAuthEku -contains $e) { $hasAuth = $true } }
-        $af = $null
-        if ($t.aclReadable) { $af = Get-AdcsAceFacts $t.aces }
-        $enrollers = @(); $writers = @()
-        if ($af) { $enrollers = @($af.Enrollers); $writers = @($af.Writers) }
-        [pscustomobject]@{
-          Name = [string]$t.name
-          SchemaVersion = [int]$t.schemaVersion
-          SuppliesSubject = (($nameFlag -band 0x1) -ne 0)
-          MgrApproval = (($enrollFlag -band 0x2) -ne 0)
-          NoSecExt = (($enrollFlag -band 0x80000) -ne 0)
-          RaSig = [int]$t.raSignature
-          HasAuthEku = $hasAuth
-          HasAgentEku = ($ekus -contains $script:AdcsAgentEku)
-          HasAnyOrNoEku = (($ekus.Count -eq 0) -or ($ekus -contains $script:AdcsAnyEku))
-          AppPolicies = $apps
-          IssuancePolicies = @($t.issuancePolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-          AclReadable = [bool]$t.aclReadable
-          Enrollers = $enrollers
-          Writers = $writers
-          PublishedOn = @($t.publishedOn | Where-Object { $_ })
-        }
-      }
-      # A template finding: the configuration must match, then who can enroll decides whether it is real. A template whose
-      # ACL cannot be read is "insufficient" only when its configuration already matches; otherwise it is simply not a match.
-      function New-AdcsTemplateFinding($f, [string]$esc, [bool]$match, [string]$conditions, [string]$impact, [string]$why, [string]$state) {
-        if (-not $match) { return $null }
-        if (-not $f.AclReadable) { return (New-AdcsFinding $esc 'insufficient' $f.Name ("template configuration matches ESC" + $esc + " but its ACL could not be read, so enrollment rights are unknown") '') }
-        if ($f.Enrollers.Count -eq 0) { return $null }
-        $pub = 'not published on any CA'
-        if ($f.PublishedOn.Count -gt 0) { $pub = 'published on ' + ($f.PublishedOn -join ',') }
-        return (New-AdcsFinding $esc $state $f.Name ($why + ' (' + $pub + ')') (Format-AdcsPath $f.Enrollers 'Enroll' ('template ' + $f.Name) $conditions $impact))
-      }
-      function Test-AdcsEnrollGate($f) { return ((-not $f.MgrApproval) -and ($f.RaSig -eq 0)) }
       function Test-AdcsEsc8($cas, [bool]$live) {
         $out = @()
         foreach ($c in @($cas)) {
@@ -2588,57 +2137,31 @@ steps:
           return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
         } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
       }
-      function Read-CertutilDword([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_DWORD\s*=\s*([0-9a-f]+)')) { return [Convert]::ToInt64($matches[1], 16) }
-        } catch { }
-        return $null
+      # Only when BAS_ADCS_LIVE_PROBE=true; otherwise the field stays null and ESC8 reports the CA as needing live verification.
+      function Read-AdcsCaField_web($ca, [string]$conf, $ctx) {
+        if ($env:BAS_ADCS_LIVE_PROBE -ne 'true') { return $null }
+        $ctx.LiveProbe = $true
+        return (Read-AdcsWebProbe $ca.host)
       }
-      function Read-CertutilString([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_SZ\s*=\s*([^\r\n]+)')) { return $matches[1].Trim() }
-        } catch { }
-        return $null
-      }
-      function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
-        try {
-          $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
-          $key = $base.OpenSubKey('SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\' + $caName)
-          if (-not $key) { return $null }
-          $bytes = $key.GetValue('Security')
-          if (-not $bytes) { return $null }
-          $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor($bytes, 0)
-          $o = @()
-          foreach ($a in $sd.DiscretionaryAcl) {
-            $type = 'Other'
-            if ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessAllowed) { $type = 'Allow' }
-            elseif ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessDenied) { $type = 'Deny' }
-            $o += [pscustomobject]@{ sid = $a.SecurityIdentifier.Value; mask = [int64]$a.AccessMask; objectType = ''; type = $type }
-          }
-          return $o
-        } catch { return $null }
-      }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
+      $script:AdcsCaFields = @('web')
       Invoke-AdcsStage '8' @('cas') 'ESC8 (web enrollment relay)' 'no CA web enrollment endpoint offers NTLM or Negotiate over plain HTTP. HTTPS and Extended Protection are not assessed.' 'ESC8: CA web enrollment accepts integrated authentication over HTTP, which can be relayed.' $true
     cleanup: ""
 
@@ -2856,18 +2379,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
       function Read-AdcsPart_templates($ctx, [string]$cfg) {
         $pks = "CN=Public Key Services,CN=Services,$cfg"
         $svc = @()
@@ -2893,57 +2404,25 @@ steps:
         if ($t.Count -eq 0) { $ctx.Errors['templates'] = 'no certificate templates were returned'; return }
         $ctx.Templates = $t
       }
-      function Read-CertutilDword([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_DWORD\s*=\s*([0-9a-f]+)')) { return [Convert]::ToInt64($matches[1], 16) }
-        } catch { }
-        return $null
-      }
-      function Read-CertutilString([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_SZ\s*=\s*([^\r\n]+)')) { return $matches[1].Trim() }
-        } catch { }
-        return $null
-      }
-      function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
-        try {
-          $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
-          $key = $base.OpenSubKey('SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\' + $caName)
-          if (-not $key) { return $null }
-          $bytes = $key.GetValue('Security')
-          if (-not $bytes) { return $null }
-          $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor($bytes, 0)
-          $o = @()
-          foreach ($a in $sd.DiscretionaryAcl) {
-            $type = 'Other'
-            if ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessAllowed) { $type = 'Allow' }
-            elseif ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessDenied) { $type = 'Deny' }
-            $o += [pscustomobject]@{ sid = $a.SecurityIdentifier.Value; mask = [int64]$a.AccessMask; objectType = ''; type = $type }
-          }
-          return $o
-        } catch { return $null }
-      }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
+      $script:AdcsCaFields = @()
       Invoke-AdcsStage '9' @('templates', 'cas') 'ESC9 (no security extension)' 'no enrollable template sets the no-security-extension flag. This step assesses the template flag only.' 'ESC9: a template issues certificates without the security extension to a low-privileged enrollee.' $true
     cleanup: ""
 
@@ -3010,74 +2489,6 @@ steps:
           Write-Output ("PASS: " + $passText + " [" + $tag + "]")
         }
       }
-      $script:AdcsEnrollGuid = '0e10c968-78fb-11d2-90d4-00c04f79dc55'
-      $script:AdcsAutoEnrollGuid = 'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
-      $script:AdcsZeroGuid = '00000000-0000-0000-0000-000000000000'
-      # Non-tier-0 principals that can enroll (Enroll, Autoenroll, all extended rights, GenericAll) and that can write
-      # (GenericAll, GenericWrite, WriteDacl, WriteOwner, WriteProperty). An explicit Deny of Enroll removes a principal.
-      function Get-AdcsAceFacts($aces) {
-        $enrollers = @(); $writers = @(); $denied = @()
-        foreach ($a in @($aces)) {
-          $sid = [string]$a.sid
-          if (Test-AdcsTier0 $sid) { continue }
-          $mask = [int64]$a.mask
-          $ot = ([string]$a.objectType).ToLower()
-          $isExt = ($mask -band 0x100) -ne 0
-          $allExt = ($ot -eq '' -or $ot -eq $script:AdcsZeroGuid)
-          $enrollRight = (($mask -band 0x10000000) -ne 0) -or ($isExt -and ($allExt -or $ot -eq $script:AdcsEnrollGuid -or $ot -eq $script:AdcsAutoEnrollGuid))
-          if ($a.type -eq 'Deny') { if ($enrollRight) { $denied += $sid }; continue }
-          if ($a.type -ne 'Allow') { continue }
-          if ($enrollRight) { $enrollers += $sid }
-          $specificExt = $isExt -and (-not $allExt)
-          if ((-not $specificExt) -and (($mask -band 0x500C0020) -ne 0)) { $writers += $sid }
-        }
-        [pscustomobject]@{
-          Enrollers = @($enrollers | Select-Object -Unique | Where-Object { $denied -notcontains $_ })
-          Writers = @($writers | Select-Object -Unique)
-        }
-      }
-      $script:AdcsAuthEku = @('1.3.6.1.5.5.7.3.2', '1.3.6.1.4.1.311.20.2.2', '1.3.6.1.5.2.3.4', '2.5.29.37.0')
-      $script:AdcsAgentEku = '1.3.6.1.4.1.311.20.2.1'
-      $script:AdcsAnyEku = '2.5.29.37.0'
-      function Get-AdcsTemplateFacts($t) {
-        $ekus = @($t.ekus | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $apps = @($t.appPolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $nameFlag = [int64]$t.nameFlag; $enrollFlag = [int64]$t.enrollFlag
-        $hasAuth = $false
-        foreach ($e in $ekus) { if ($script:AdcsAuthEku -contains $e) { $hasAuth = $true } }
-        $af = $null
-        if ($t.aclReadable) { $af = Get-AdcsAceFacts $t.aces }
-        $enrollers = @(); $writers = @()
-        if ($af) { $enrollers = @($af.Enrollers); $writers = @($af.Writers) }
-        [pscustomobject]@{
-          Name = [string]$t.name
-          SchemaVersion = [int]$t.schemaVersion
-          SuppliesSubject = (($nameFlag -band 0x1) -ne 0)
-          MgrApproval = (($enrollFlag -band 0x2) -ne 0)
-          NoSecExt = (($enrollFlag -band 0x80000) -ne 0)
-          RaSig = [int]$t.raSignature
-          HasAuthEku = $hasAuth
-          HasAgentEku = ($ekus -contains $script:AdcsAgentEku)
-          HasAnyOrNoEku = (($ekus.Count -eq 0) -or ($ekus -contains $script:AdcsAnyEku))
-          AppPolicies = $apps
-          IssuancePolicies = @($t.issuancePolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-          AclReadable = [bool]$t.aclReadable
-          Enrollers = $enrollers
-          Writers = $writers
-          PublishedOn = @($t.publishedOn | Where-Object { $_ })
-        }
-      }
-      # A template finding: the configuration must match, then who can enroll decides whether it is real. A template whose
-      # ACL cannot be read is "insufficient" only when its configuration already matches; otherwise it is simply not a match.
-      function New-AdcsTemplateFinding($f, [string]$esc, [bool]$match, [string]$conditions, [string]$impact, [string]$why, [string]$state) {
-        if (-not $match) { return $null }
-        if (-not $f.AclReadable) { return (New-AdcsFinding $esc 'insufficient' $f.Name ("template configuration matches ESC" + $esc + " but its ACL could not be read, so enrollment rights are unknown") '') }
-        if ($f.Enrollers.Count -eq 0) { return $null }
-        $pub = 'not published on any CA'
-        if ($f.PublishedOn.Count -gt 0) { $pub = 'published on ' + ($f.PublishedOn -join ',') }
-        return (New-AdcsFinding $esc $state $f.Name ($why + ' (' + $pub + ')') (Format-AdcsPath $f.Enrollers 'Enroll' ('template ' + $f.Name) $conditions $impact))
-      }
-      function Test-AdcsEnrollGate($f) { return ((-not $f.MgrApproval) -and ($f.RaSig -eq 0)) }
       function Test-AdcsEsc10($dcs) {
         $out = @()
         foreach ($d in @($dcs)) {
@@ -3172,18 +2583,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
       function Read-AdcsPart_dcs($ctx, [string]$cfg) {
         $list = @([System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain().DomainControllers)
         if ($list.Count -eq 0) { $ctx.Errors['dcs'] = 'no domain controllers found'; return }
@@ -3202,6 +2601,7 @@ steps:
         }
         $ctx.DCs = $dcs
       }
+      $script:AdcsCaFields = @()
       Invoke-AdcsStage '10' @('dcs') 'ESC10 (weak certificate mapping)' 'every domain controller enforces strong certificate binding. Update level is not verified.' 'ESC10: a domain controller allows weak certificate-to-account mapping.' $true
     cleanup: ""
 
@@ -3268,74 +2668,6 @@ steps:
           Write-Output ("PASS: " + $passText + " [" + $tag + "]")
         }
       }
-      $script:AdcsEnrollGuid = '0e10c968-78fb-11d2-90d4-00c04f79dc55'
-      $script:AdcsAutoEnrollGuid = 'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
-      $script:AdcsZeroGuid = '00000000-0000-0000-0000-000000000000'
-      # Non-tier-0 principals that can enroll (Enroll, Autoenroll, all extended rights, GenericAll) and that can write
-      # (GenericAll, GenericWrite, WriteDacl, WriteOwner, WriteProperty). An explicit Deny of Enroll removes a principal.
-      function Get-AdcsAceFacts($aces) {
-        $enrollers = @(); $writers = @(); $denied = @()
-        foreach ($a in @($aces)) {
-          $sid = [string]$a.sid
-          if (Test-AdcsTier0 $sid) { continue }
-          $mask = [int64]$a.mask
-          $ot = ([string]$a.objectType).ToLower()
-          $isExt = ($mask -band 0x100) -ne 0
-          $allExt = ($ot -eq '' -or $ot -eq $script:AdcsZeroGuid)
-          $enrollRight = (($mask -band 0x10000000) -ne 0) -or ($isExt -and ($allExt -or $ot -eq $script:AdcsEnrollGuid -or $ot -eq $script:AdcsAutoEnrollGuid))
-          if ($a.type -eq 'Deny') { if ($enrollRight) { $denied += $sid }; continue }
-          if ($a.type -ne 'Allow') { continue }
-          if ($enrollRight) { $enrollers += $sid }
-          $specificExt = $isExt -and (-not $allExt)
-          if ((-not $specificExt) -and (($mask -band 0x500C0020) -ne 0)) { $writers += $sid }
-        }
-        [pscustomobject]@{
-          Enrollers = @($enrollers | Select-Object -Unique | Where-Object { $denied -notcontains $_ })
-          Writers = @($writers | Select-Object -Unique)
-        }
-      }
-      $script:AdcsAuthEku = @('1.3.6.1.5.5.7.3.2', '1.3.6.1.4.1.311.20.2.2', '1.3.6.1.5.2.3.4', '2.5.29.37.0')
-      $script:AdcsAgentEku = '1.3.6.1.4.1.311.20.2.1'
-      $script:AdcsAnyEku = '2.5.29.37.0'
-      function Get-AdcsTemplateFacts($t) {
-        $ekus = @($t.ekus | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $apps = @($t.appPolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $nameFlag = [int64]$t.nameFlag; $enrollFlag = [int64]$t.enrollFlag
-        $hasAuth = $false
-        foreach ($e in $ekus) { if ($script:AdcsAuthEku -contains $e) { $hasAuth = $true } }
-        $af = $null
-        if ($t.aclReadable) { $af = Get-AdcsAceFacts $t.aces }
-        $enrollers = @(); $writers = @()
-        if ($af) { $enrollers = @($af.Enrollers); $writers = @($af.Writers) }
-        [pscustomobject]@{
-          Name = [string]$t.name
-          SchemaVersion = [int]$t.schemaVersion
-          SuppliesSubject = (($nameFlag -band 0x1) -ne 0)
-          MgrApproval = (($enrollFlag -band 0x2) -ne 0)
-          NoSecExt = (($enrollFlag -band 0x80000) -ne 0)
-          RaSig = [int]$t.raSignature
-          HasAuthEku = $hasAuth
-          HasAgentEku = ($ekus -contains $script:AdcsAgentEku)
-          HasAnyOrNoEku = (($ekus.Count -eq 0) -or ($ekus -contains $script:AdcsAnyEku))
-          AppPolicies = $apps
-          IssuancePolicies = @($t.issuancePolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-          AclReadable = [bool]$t.aclReadable
-          Enrollers = $enrollers
-          Writers = $writers
-          PublishedOn = @($t.publishedOn | Where-Object { $_ })
-        }
-      }
-      # A template finding: the configuration must match, then who can enroll decides whether it is real. A template whose
-      # ACL cannot be read is "insufficient" only when its configuration already matches; otherwise it is simply not a match.
-      function New-AdcsTemplateFinding($f, [string]$esc, [bool]$match, [string]$conditions, [string]$impact, [string]$why, [string]$state) {
-        if (-not $match) { return $null }
-        if (-not $f.AclReadable) { return (New-AdcsFinding $esc 'insufficient' $f.Name ("template configuration matches ESC" + $esc + " but its ACL could not be read, so enrollment rights are unknown") '') }
-        if ($f.Enrollers.Count -eq 0) { return $null }
-        $pub = 'not published on any CA'
-        if ($f.PublishedOn.Count -gt 0) { $pub = 'published on ' + ($f.PublishedOn -join ',') }
-        return (New-AdcsFinding $esc $state $f.Name ($why + ' (' + $pub + ')') (Format-AdcsPath $f.Enrollers 'Enroll' ('template ' + $f.Name) $conditions $impact))
-      }
-      function Test-AdcsEnrollGate($f) { return ((-not $f.MgrApproval) -and ($f.RaSig -eq 0)) }
       function Test-AdcsEsc11($cas) {
         $out = @()
         foreach ($c in @($cas)) {
@@ -3425,18 +2757,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
       function Read-CertutilDword([string]$config, [string]$value, [string]$name) {
         try {
           $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
@@ -3451,43 +2771,26 @@ steps:
         } catch { }
         return $null
       }
-      function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
-        try {
-          $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
-          $key = $base.OpenSubKey('SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\' + $caName)
-          if (-not $key) { return $null }
-          $bytes = $key.GetValue('Security')
-          if (-not $bytes) { return $null }
-          $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor($bytes, 0)
-          $o = @()
-          foreach ($a in $sd.DiscretionaryAcl) {
-            $type = 'Other'
-            if ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessAllowed) { $type = 'Allow' }
-            elseif ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessDenied) { $type = 'Deny' }
-            $o += [pscustomobject]@{ sid = $a.SecurityIdentifier.Value; mask = [int64]$a.AccessMask; objectType = ''; type = $type }
-          }
-          return $o
-        } catch { return $null }
-      }
+      function Read-AdcsCaField_interfaceFlags($ca, [string]$conf, $ctx) { return (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags') }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
+      $script:AdcsCaFields = @('interfaceFlags')
       Invoke-AdcsStage '11' @('cas') 'ESC11 (RPC enrollment relay)' 'every CA enforces an encrypted certificate request interface. This step reads the CA interface flag only.' 'ESC11: a CA accepts unencrypted RPC certificate requests, which can be relayed.' $true
     cleanup: ""
 
@@ -3554,74 +2857,6 @@ steps:
           Write-Output ("PASS: " + $passText + " [" + $tag + "]")
         }
       }
-      $script:AdcsEnrollGuid = '0e10c968-78fb-11d2-90d4-00c04f79dc55'
-      $script:AdcsAutoEnrollGuid = 'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
-      $script:AdcsZeroGuid = '00000000-0000-0000-0000-000000000000'
-      # Non-tier-0 principals that can enroll (Enroll, Autoenroll, all extended rights, GenericAll) and that can write
-      # (GenericAll, GenericWrite, WriteDacl, WriteOwner, WriteProperty). An explicit Deny of Enroll removes a principal.
-      function Get-AdcsAceFacts($aces) {
-        $enrollers = @(); $writers = @(); $denied = @()
-        foreach ($a in @($aces)) {
-          $sid = [string]$a.sid
-          if (Test-AdcsTier0 $sid) { continue }
-          $mask = [int64]$a.mask
-          $ot = ([string]$a.objectType).ToLower()
-          $isExt = ($mask -band 0x100) -ne 0
-          $allExt = ($ot -eq '' -or $ot -eq $script:AdcsZeroGuid)
-          $enrollRight = (($mask -band 0x10000000) -ne 0) -or ($isExt -and ($allExt -or $ot -eq $script:AdcsEnrollGuid -or $ot -eq $script:AdcsAutoEnrollGuid))
-          if ($a.type -eq 'Deny') { if ($enrollRight) { $denied += $sid }; continue }
-          if ($a.type -ne 'Allow') { continue }
-          if ($enrollRight) { $enrollers += $sid }
-          $specificExt = $isExt -and (-not $allExt)
-          if ((-not $specificExt) -and (($mask -band 0x500C0020) -ne 0)) { $writers += $sid }
-        }
-        [pscustomobject]@{
-          Enrollers = @($enrollers | Select-Object -Unique | Where-Object { $denied -notcontains $_ })
-          Writers = @($writers | Select-Object -Unique)
-        }
-      }
-      $script:AdcsAuthEku = @('1.3.6.1.5.5.7.3.2', '1.3.6.1.4.1.311.20.2.2', '1.3.6.1.5.2.3.4', '2.5.29.37.0')
-      $script:AdcsAgentEku = '1.3.6.1.4.1.311.20.2.1'
-      $script:AdcsAnyEku = '2.5.29.37.0'
-      function Get-AdcsTemplateFacts($t) {
-        $ekus = @($t.ekus | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $apps = @($t.appPolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $nameFlag = [int64]$t.nameFlag; $enrollFlag = [int64]$t.enrollFlag
-        $hasAuth = $false
-        foreach ($e in $ekus) { if ($script:AdcsAuthEku -contains $e) { $hasAuth = $true } }
-        $af = $null
-        if ($t.aclReadable) { $af = Get-AdcsAceFacts $t.aces }
-        $enrollers = @(); $writers = @()
-        if ($af) { $enrollers = @($af.Enrollers); $writers = @($af.Writers) }
-        [pscustomobject]@{
-          Name = [string]$t.name
-          SchemaVersion = [int]$t.schemaVersion
-          SuppliesSubject = (($nameFlag -band 0x1) -ne 0)
-          MgrApproval = (($enrollFlag -band 0x2) -ne 0)
-          NoSecExt = (($enrollFlag -band 0x80000) -ne 0)
-          RaSig = [int]$t.raSignature
-          HasAuthEku = $hasAuth
-          HasAgentEku = ($ekus -contains $script:AdcsAgentEku)
-          HasAnyOrNoEku = (($ekus.Count -eq 0) -or ($ekus -contains $script:AdcsAnyEku))
-          AppPolicies = $apps
-          IssuancePolicies = @($t.issuancePolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-          AclReadable = [bool]$t.aclReadable
-          Enrollers = $enrollers
-          Writers = $writers
-          PublishedOn = @($t.publishedOn | Where-Object { $_ })
-        }
-      }
-      # A template finding: the configuration must match, then who can enroll decides whether it is real. A template whose
-      # ACL cannot be read is "insufficient" only when its configuration already matches; otherwise it is simply not a match.
-      function New-AdcsTemplateFinding($f, [string]$esc, [bool]$match, [string]$conditions, [string]$impact, [string]$why, [string]$state) {
-        if (-not $match) { return $null }
-        if (-not $f.AclReadable) { return (New-AdcsFinding $esc 'insufficient' $f.Name ("template configuration matches ESC" + $esc + " but its ACL could not be read, so enrollment rights are unknown") '') }
-        if ($f.Enrollers.Count -eq 0) { return $null }
-        $pub = 'not published on any CA'
-        if ($f.PublishedOn.Count -gt 0) { $pub = 'published on ' + ($f.PublishedOn -join ',') }
-        return (New-AdcsFinding $esc $state $f.Name ($why + ' (' + $pub + ')') (Format-AdcsPath $f.Enrollers 'Enroll' ('template ' + $f.Name) $conditions $impact))
-      }
-      function Test-AdcsEnrollGate($f) { return ((-not $f.MgrApproval) -and ($f.RaSig -eq 0)) }
       $script:AdcsSoftProviders = @('Microsoft Software Key Storage Provider', 'Microsoft Strong Cryptographic Provider', 'Microsoft Enhanced Cryptographic Provider v1.0', 'Microsoft Base Cryptographic Provider v1.0', 'Microsoft Enhanced RSA and AES Cryptographic Provider', 'Microsoft Base DSS Cryptographic Provider')
       function Test-AdcsEsc12($cas) {
         $out = @()
@@ -3712,18 +2947,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
       function Read-CertutilDword([string]$config, [string]$value, [string]$name) {
         try {
           $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
@@ -3738,43 +2961,26 @@ steps:
         } catch { }
         return $null
       }
-      function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
-        try {
-          $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
-          $key = $base.OpenSubKey('SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\' + $caName)
-          if (-not $key) { return $null }
-          $bytes = $key.GetValue('Security')
-          if (-not $bytes) { return $null }
-          $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor($bytes, 0)
-          $o = @()
-          foreach ($a in $sd.DiscretionaryAcl) {
-            $type = 'Other'
-            if ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessAllowed) { $type = 'Allow' }
-            elseif ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessDenied) { $type = 'Deny' }
-            $o += [pscustomobject]@{ sid = $a.SecurityIdentifier.Value; mask = [int64]$a.AccessMask; objectType = ''; type = $type }
-          }
-          return $o
-        } catch { return $null }
-      }
+      function Read-AdcsCaField_keyProvider($ca, [string]$conf, $ctx) { return (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider') }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
+      $script:AdcsCaFields = @('keyProvider')
       Invoke-AdcsStage '12' @('cas') 'ESC12 (CA private key)' 'no CA reports a software key provider. HSM assurance and the ESC12 exploit path are not verified.' 'ESC12: a CA signing key is held in a software provider rather than a hardware security module.' $true
     cleanup: ""
 
@@ -4006,18 +3212,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
       function Read-AdcsPart_templates($ctx, [string]$cfg) {
         $pks = "CN=Public Key Services,CN=Services,$cfg"
         $svc = @()
@@ -4043,54 +3237,21 @@ steps:
         if ($t.Count -eq 0) { $ctx.Errors['templates'] = 'no certificate templates were returned'; return }
         $ctx.Templates = $t
       }
-      function Read-CertutilDword([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_DWORD\s*=\s*([0-9a-f]+)')) { return [Convert]::ToInt64($matches[1], 16) }
-        } catch { }
-        return $null
-      }
-      function Read-CertutilString([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_SZ\s*=\s*([^\r\n]+)')) { return $matches[1].Trim() }
-        } catch { }
-        return $null
-      }
-      function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
-        try {
-          $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
-          $key = $base.OpenSubKey('SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\' + $caName)
-          if (-not $key) { return $null }
-          $bytes = $key.GetValue('Security')
-          if (-not $bytes) { return $null }
-          $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor($bytes, 0)
-          $o = @()
-          foreach ($a in $sd.DiscretionaryAcl) {
-            $type = 'Other'
-            if ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessAllowed) { $type = 'Allow' }
-            elseif ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessDenied) { $type = 'Deny' }
-            $o += [pscustomobject]@{ sid = $a.SecurityIdentifier.Value; mask = [int64]$a.AccessMask; objectType = ''; type = $type }
-          }
-          return $o
-        } catch { return $null }
-      }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
@@ -4115,6 +3276,7 @@ steps:
         }
         $ctx.Oids = $o
       }
+      $script:AdcsCaFields = @()
       Invoke-AdcsStage '13' @('templates', 'cas', 'oids') 'ESC13 (issuance policy to group)' 'no enrollable template carries an issuance policy linked to a privileged group. This step assesses issuance-policy links only.' 'ESC13: a template carries an issuance policy linked to a privileged group and is enrollable by a low-privileged principal.' $true
     cleanup: ""
 
@@ -4181,74 +3343,6 @@ steps:
           Write-Output ("PASS: " + $passText + " [" + $tag + "]")
         }
       }
-      $script:AdcsEnrollGuid = '0e10c968-78fb-11d2-90d4-00c04f79dc55'
-      $script:AdcsAutoEnrollGuid = 'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
-      $script:AdcsZeroGuid = '00000000-0000-0000-0000-000000000000'
-      # Non-tier-0 principals that can enroll (Enroll, Autoenroll, all extended rights, GenericAll) and that can write
-      # (GenericAll, GenericWrite, WriteDacl, WriteOwner, WriteProperty). An explicit Deny of Enroll removes a principal.
-      function Get-AdcsAceFacts($aces) {
-        $enrollers = @(); $writers = @(); $denied = @()
-        foreach ($a in @($aces)) {
-          $sid = [string]$a.sid
-          if (Test-AdcsTier0 $sid) { continue }
-          $mask = [int64]$a.mask
-          $ot = ([string]$a.objectType).ToLower()
-          $isExt = ($mask -band 0x100) -ne 0
-          $allExt = ($ot -eq '' -or $ot -eq $script:AdcsZeroGuid)
-          $enrollRight = (($mask -band 0x10000000) -ne 0) -or ($isExt -and ($allExt -or $ot -eq $script:AdcsEnrollGuid -or $ot -eq $script:AdcsAutoEnrollGuid))
-          if ($a.type -eq 'Deny') { if ($enrollRight) { $denied += $sid }; continue }
-          if ($a.type -ne 'Allow') { continue }
-          if ($enrollRight) { $enrollers += $sid }
-          $specificExt = $isExt -and (-not $allExt)
-          if ((-not $specificExt) -and (($mask -band 0x500C0020) -ne 0)) { $writers += $sid }
-        }
-        [pscustomobject]@{
-          Enrollers = @($enrollers | Select-Object -Unique | Where-Object { $denied -notcontains $_ })
-          Writers = @($writers | Select-Object -Unique)
-        }
-      }
-      $script:AdcsAuthEku = @('1.3.6.1.5.5.7.3.2', '1.3.6.1.4.1.311.20.2.2', '1.3.6.1.5.2.3.4', '2.5.29.37.0')
-      $script:AdcsAgentEku = '1.3.6.1.4.1.311.20.2.1'
-      $script:AdcsAnyEku = '2.5.29.37.0'
-      function Get-AdcsTemplateFacts($t) {
-        $ekus = @($t.ekus | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $apps = @($t.appPolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        $nameFlag = [int64]$t.nameFlag; $enrollFlag = [int64]$t.enrollFlag
-        $hasAuth = $false
-        foreach ($e in $ekus) { if ($script:AdcsAuthEku -contains $e) { $hasAuth = $true } }
-        $af = $null
-        if ($t.aclReadable) { $af = Get-AdcsAceFacts $t.aces }
-        $enrollers = @(); $writers = @()
-        if ($af) { $enrollers = @($af.Enrollers); $writers = @($af.Writers) }
-        [pscustomobject]@{
-          Name = [string]$t.name
-          SchemaVersion = [int]$t.schemaVersion
-          SuppliesSubject = (($nameFlag -band 0x1) -ne 0)
-          MgrApproval = (($enrollFlag -band 0x2) -ne 0)
-          NoSecExt = (($enrollFlag -band 0x80000) -ne 0)
-          RaSig = [int]$t.raSignature
-          HasAuthEku = $hasAuth
-          HasAgentEku = ($ekus -contains $script:AdcsAgentEku)
-          HasAnyOrNoEku = (($ekus.Count -eq 0) -or ($ekus -contains $script:AdcsAnyEku))
-          AppPolicies = $apps
-          IssuancePolicies = @($t.issuancePolicies | Where-Object { $_ } | ForEach-Object { [string]$_ })
-          AclReadable = [bool]$t.aclReadable
-          Enrollers = $enrollers
-          Writers = $writers
-          PublishedOn = @($t.publishedOn | Where-Object { $_ })
-        }
-      }
-      # A template finding: the configuration must match, then who can enroll decides whether it is real. A template whose
-      # ACL cannot be read is "insufficient" only when its configuration already matches; otherwise it is simply not a match.
-      function New-AdcsTemplateFinding($f, [string]$esc, [bool]$match, [string]$conditions, [string]$impact, [string]$why, [string]$state) {
-        if (-not $match) { return $null }
-        if (-not $f.AclReadable) { return (New-AdcsFinding $esc 'insufficient' $f.Name ("template configuration matches ESC" + $esc + " but its ACL could not be read, so enrollment rights are unknown") '') }
-        if ($f.Enrollers.Count -eq 0) { return $null }
-        $pub = 'not published on any CA'
-        if ($f.PublishedOn.Count -gt 0) { $pub = 'published on ' + ($f.PublishedOn -join ',') }
-        return (New-AdcsFinding $esc $state $f.Name ($why + ' (' + $pub + ')') (Format-AdcsPath $f.Enrollers 'Enroll' ('template ' + $f.Name) $conditions $impact))
-      }
-      function Test-AdcsEnrollGate($f) { return ((-not $f.MgrApproval) -and ($f.RaSig -eq 0)) }
       function Test-AdcsEsc14($accounts) {
         $out = @()
         foreach ($a in @($accounts)) {
@@ -4349,18 +3443,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
       function Read-AdcsPart_accounts($ctx, [string]$cfg) {
         $dom = ([ADSI]'LDAP://RootDSE').defaultNamingContext
         if (-not $dom) { $ctx.Errors['accounts'] = 'no domain naming context'; return }
@@ -4375,6 +3457,7 @@ steps:
         }
         $ctx.Accounts = $acc
       }
+      $script:AdcsCaFields = @()
       Invoke-AdcsStage '14' @('accounts') 'ESC14 (weak explicit mapping)' 'no enabled account has a weak explicit certificate mapping in altSecurityIdentities. This step assesses the mapping format only.' 'ESC14: an account maps certificates by a weak identifier.' $true
     cleanup: ""
 
@@ -4511,7 +3594,7 @@ steps:
       function Test-AdcsEnrollGate($f) { return ((-not $f.MgrApproval) -and ($f.RaSig -eq 0)) }
       function Test-AdcsEsc15($f) {
         $m = ($f.SchemaVersion -eq 1) -and $f.SuppliesSubject -and (Test-AdcsEnrollGate $f)
-        New-AdcsTemplateFinding $f '15' $m 'schema version 1, enrollee-supplied subject: an Application Policy can be injected in place of the EKU (CVE-2024-49019); fixed by the CA patch, whose level is not readable' 'obtain a client-authentication or enrollment-agent certificate through a template that should not allow it' 'schema-version-1 template with enrollee-supplied subject; exposure depends on the CA patch level, which needs live verification' 'potential'
+        New-AdcsTemplateFinding $f '15' $m 'schema version 1 template with an enrollee-supplied subject: an Application Policy can be injected in place of the EKU (CVE-2024-49019). Whether it is exploitable depends on the CA patch level, which this step does not read, so treat it as exposed on an unpatched CA' 'obtain a client-authentication or enrollment-agent certificate through a template that should not allow it' 'schema-version-1 template with enrollee-supplied subject; exploitable only on a CA without the CVE-2024-49019 fix, which needs live verification' 'potential'
       }
       # What each ESC analyzer is called with: t = each template, tt = each template plus all templates, to = each template plus
       # the issuance-policy objects, p = PKI objects, c = CAs, cl = CAs and the live-probe flag, d = domain controllers, a = accounts.
@@ -4592,18 +3675,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
       function Read-AdcsPart_templates($ctx, [string]$cfg) {
         $pks = "CN=Public Key Services,CN=Services,$cfg"
         $svc = @()
@@ -4629,58 +3700,26 @@ steps:
         if ($t.Count -eq 0) { $ctx.Errors['templates'] = 'no certificate templates were returned'; return }
         $ctx.Templates = $t
       }
-      function Read-CertutilDword([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_DWORD\s*=\s*([0-9a-f]+)')) { return [Convert]::ToInt64($matches[1], 16) }
-        } catch { }
-        return $null
-      }
-      function Read-CertutilString([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_SZ\s*=\s*([^\r\n]+)')) { return $matches[1].Trim() }
-        } catch { }
-        return $null
-      }
-      function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
-        try {
-          $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
-          $key = $base.OpenSubKey('SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\' + $caName)
-          if (-not $key) { return $null }
-          $bytes = $key.GetValue('Security')
-          if (-not $bytes) { return $null }
-          $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor($bytes, 0)
-          $o = @()
-          foreach ($a in $sd.DiscretionaryAcl) {
-            $type = 'Other'
-            if ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessAllowed) { $type = 'Allow' }
-            elseif ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessDenied) { $type = 'Deny' }
-            $o += [pscustomobject]@{ sid = $a.SecurityIdentifier.Value; mask = [int64]$a.AccessMask; objectType = ''; type = $type }
-          }
-          return $o
-        } catch { return $null }
-      }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
-      Invoke-AdcsStage '15' @('templates', 'cas') 'ESC15 (schema version 1 template)' 'no schema-version-1 template is enrollable with an enrollee-supplied subject. This step assesses template schema only.' 'ESC15: a schema-version-1 template with an enrollee-supplied subject is enrollable.' $true
+      $script:AdcsCaFields = @()
+      Invoke-AdcsStage '15' @('templates', 'cas') 'ESC15 (schema version 1 template, CA patch level not read)' 'no schema-version-1 template is enrollable with an enrollee-supplied subject. Whether an enrollable one is exploitable depends on the CA patch level (CVE-2024-49019), which this step does not read.' 'ESC15: a schema-version-1 template with an enrollee-supplied subject is enrollable.' $true
     cleanup: ""
 
   # -------------------------------------------------------------------------
@@ -4789,18 +3828,6 @@ steps:
         }
         return $ctx
       }
-      # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
-      function Read-AdcsWebProbe([string]$hostName) {
-        try {
-          $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
-          $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
-          $code = $null; $auth = ''
-          try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-          catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-          if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-          return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-        } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-      }
       function Read-AdcsPart_templates($ctx, [string]$cfg) {
         $pks = "CN=Public Key Services,CN=Services,$cfg"
         $svc = @()
@@ -4826,54 +3853,21 @@ steps:
         if ($t.Count -eq 0) { $ctx.Errors['templates'] = 'no certificate templates were returned'; return }
         $ctx.Templates = $t
       }
-      function Read-CertutilDword([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_DWORD\s*=\s*([0-9a-f]+)')) { return [Convert]::ToInt64($matches[1], 16) }
-        } catch { }
-        return $null
-      }
-      function Read-CertutilString([string]$config, [string]$value, [string]$name) {
-        try {
-          $out = (& certutil -config $config -getreg $value 2>&1 | Out-String)
-          if ($out -match ('(?i)' + $name + '\s+REG_SZ\s*=\s*([^\r\n]+)')) { return $matches[1].Trim() }
-        } catch { }
-        return $null
-      }
-      function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
-        try {
-          $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
-          $key = $base.OpenSubKey('SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\' + $caName)
-          if (-not $key) { return $null }
-          $bytes = $key.GetValue('Security')
-          if (-not $bytes) { return $null }
-          $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor($bytes, 0)
-          $o = @()
-          foreach ($a in $sd.DiscretionaryAcl) {
-            $type = 'Other'
-            if ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessAllowed) { $type = 'Allow' }
-            elseif ($a.AceType -eq [System.Security.AccessControl.AceType]::AccessDenied) { $type = 'Deny' }
-            $o += [pscustomobject]@{ sid = $a.SecurityIdentifier.Value; mask = [int64]$a.AccessMask; objectType = ''; type = $type }
-          }
-          return $o
-        } catch { return $null }
-      }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
@@ -4924,6 +3918,7 @@ steps:
           return [pscustomobject]@{ unknown = $unknown; weak = $weak }
         } catch { return $null }
       }
+      $script:AdcsCaFields = @()
       Invoke-AdcsPublicationStage
     cleanup: ""
 
@@ -5109,7 +4104,7 @@ steps:
       }
       function Test-AdcsEsc15($f) {
         $m = ($f.SchemaVersion -eq 1) -and $f.SuppliesSubject -and (Test-AdcsEnrollGate $f)
-        New-AdcsTemplateFinding $f '15' $m 'schema version 1, enrollee-supplied subject: an Application Policy can be injected in place of the EKU (CVE-2024-49019); fixed by the CA patch, whose level is not readable' 'obtain a client-authentication or enrollment-agent certificate through a template that should not allow it' 'schema-version-1 template with enrollee-supplied subject; exposure depends on the CA patch level, which needs live verification' 'potential'
+        New-AdcsTemplateFinding $f '15' $m 'schema version 1 template with an enrollee-supplied subject: an Application Policy can be injected in place of the EKU (CVE-2024-49019). Whether it is exploitable depends on the CA patch level, which this step does not read, so treat it as exposed on an unpatched CA' 'obtain a client-authentication or enrollment-agent certificate through a template that should not allow it' 'schema-version-1 template with enrollee-supplied subject; exploitable only on a CA without the CVE-2024-49019 fix, which needs live verification' 'potential'
       }
       function Test-AdcsEsc5($objs) {
         $out = @()
@@ -5347,6 +4342,9 @@ steps:
         } catch { }
         return $null
       }
+      function Read-AdcsCaField_editFlags($ca, [string]$conf, $ctx) { return (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags') }
+      function Read-AdcsCaField_interfaceFlags($ca, [string]$conf, $ctx) { return (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags') }
+      function Read-AdcsCaField_keyProvider($ca, [string]$conf, $ctx) { return (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider') }
       function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
         try {
           $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
@@ -5365,22 +4363,28 @@ steps:
           return $o
         } catch { return $null }
       }
+      function Read-AdcsCaField_caAces($ca, [string]$conf, $ctx) { return (Read-AdcsRemoteSecurity $ca.host $ca.name) }
+      # Only when BAS_ADCS_LIVE_PROBE=true; otherwise the field stays null and ESC8 reports the CA as needing live verification.
+      function Read-AdcsCaField_web($ca, [string]$conf, $ctx) {
+        if ($env:BAS_ADCS_LIVE_PROBE -ne 'true') { return $null }
+        $ctx.LiveProbe = $true
+        return (Read-AdcsWebProbe $ca.host)
+      }
+      # Reads the enrolment services and only the CA fields the stage asked for in $script:AdcsCaFields; a field not requested
+      # stays null, which an analyzer reports as unreadable rather than clean.
       function Read-AdcsPart_cas($ctx, [string]$cfg) {
         $svc = @(Read-AdcsEnrollmentServices $cfg)
         if ($svc.Count -eq 0) { $ctx.Errors['cas'] = 'no enrollment service (CA) found in the Configuration partition'; return }
+        $fields = @($script:AdcsCaFields | Where-Object { $_ })
         $cas = @()
         foreach ($ca in $svc) {
-          $conf = $ca.host + '\' + $ca.name
-          $web = $null
-          if ($env:BAS_ADCS_LIVE_PROBE -eq 'true') { $ctx.LiveProbe = $true; $web = Read-AdcsWebProbe $ca.host }
-          $cas += [pscustomobject]@{
-            name = $ca.name; host = $ca.host; published = $ca.published
-            editFlags = (Read-CertutilDword $conf 'policy\EditFlags' 'EditFlags')
-            interfaceFlags = (Read-CertutilDword $conf 'CA\InterfaceFlags' 'InterfaceFlags')
-            keyProvider = (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider')
-            caAces = (Read-AdcsRemoteSecurity $ca.host $ca.name)
-            web = $web
+          $conf = $ca.host + '' + $ca.name
+          $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
+          foreach ($f in $fields) {
+            $fn = 'Read-AdcsCaField_' + $f
+            if (Get-Command $fn -ErrorAction SilentlyContinue) { $o[$f] = & $fn $ca $conf $ctx }
           }
+          $cas += [pscustomobject]$o
         }
         $ctx.CAs = $cas
       }
@@ -5491,5 +4495,6 @@ steps:
         if ($null -eq $ctx.Templates -or $null -eq $ctx.CAs) { $complete = $false }
         Write-AdcsVerdict 'certificate-based privilege escalation correlation' 'BAS-SIM-ADCS-CORR' $f $complete $why 'no low-privileged principal has a path to a privileged certificate and every source was read.' 'at least one low-privileged principal has an exploitable certificate-issuance path to a privileged identity.'
       }
+      $script:AdcsCaFields = @('editFlags', 'interfaceFlags', 'keyProvider', 'caAces', 'web')
       Invoke-AdcsCorrelationStage
     cleanup: ""

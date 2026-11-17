@@ -312,3 +312,45 @@ func TestScenarioIsReadOnly(t *testing.T) {
 		}
 	}
 }
+
+// A stage carries only the collectors it uses: the live web probe only where ESC8 needs it, certutil only for the CA
+// registry values, and each stage requests exactly the CA fields its analyzer reads (an unrequested field stays null,
+// which an analyzer reports as unreadable, never clean).
+func TestStagesCarryOnlyTheCollectorsTheyUse(t *testing.T) {
+	need := map[string]string{"6": "editFlags", "7": "caAces", "8": "web", "11": "interfaceFlags", "12": "keyProvider"}
+	for _, s := range Stages() {
+		body, err := Library(s.Regions...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		full := s.Call + "\n" + body
+		all := s.Number == "0" || s.Number == "17"
+		if got, want := strings.Contains(full, "function Read-AdcsWebProbe"), all || s.Number == "8"; got != want {
+			t.Errorf("stage %s: web probe present=%v want %v", s.Number, got, want)
+		}
+		usesCertutil := all || s.Number == "6" || s.Number == "11" || s.Number == "12"
+		if got := strings.Contains(full, "& certutil"); got != usesCertutil {
+			t.Errorf("stage %s: certutil present=%v want %v", s.Number, got, usesCertutil)
+		}
+		if f, ok := need[s.Number]; ok && !strings.Contains(s.Call, "'"+f+"'") {
+			t.Errorf("stage %s does not request CA field %s", s.Number, f)
+		}
+		if !strings.Contains(s.Call, "$script:AdcsCaFields") {
+			t.Errorf("stage %s does not set the CA field list", s.Number)
+		}
+	}
+}
+
+// ESC15 is only ever a potential finding: it must say the CA patch level decides it and that this step does not read it.
+func TestEsc15WordingNamesThePatchDependency(t *testing.T) {
+	info := escTable["15"]
+	for _, w := range []string{"CA patch level", "CVE-2024-49019", "does not read"} {
+		if !strings.Contains(info.Label+" "+info.Pass, w) {
+			t.Errorf("ESC15 stage text lacks %q", w)
+		}
+	}
+	lib, _ := FullLibrary()
+	if !strings.Contains(lib, "depends on the CA patch level, which this step does not read") {
+		t.Error("ESC15 finding text lacks the patch-level caveat")
+	}
+}
