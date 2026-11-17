@@ -5,7 +5,7 @@ Invoke-A36Test -Id 'k1' -Technique 'T1071.001' -Mode Telemetry -Needle "Destinat
     param($port, $n)
     $l = New-Object Net.HttpListener
     $l.Prefixes.Add("http://127.0.0.1:$port/")
-    $l.Start()
+    try { $l.Start() } catch { return -1 }
     $served = 0
     try {
       for ($i = 0; $i -lt $n; $i++) {

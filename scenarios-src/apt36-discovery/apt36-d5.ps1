@@ -8,5 +8,5 @@ Invoke-A36Test -Id 'd5' -Technique 'T1135' -Telemetry @('sysmon:1', 'sec:4688') 
   $out = Join-Path $script:A36Work 'shares.txt'
   Set-Content -LiteralPath $out -Value $text -Encoding ASCII
   $shares = @(($text -split "`r`n") | Where-Object { $_ -match '^\w' -and $_ -notmatch '^(Shared resources|Share name|The command)' })
-  return @{ Ran = $true; Note = "target=localhost net_view_exit=$($proc.ExitCode) lines_returned=$($shares.Count)"; NotApplicable = '' }
+  return @{ Ran = ($text.Trim().Length -gt 0); Note = "target=localhost net_view_exit=$($proc.ExitCode) lines_returned=$($shares.Count)"; NotApplicable = '' }
 }

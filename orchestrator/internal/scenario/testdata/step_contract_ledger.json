@@ -1512,6 +1512,15 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "apt36-command-control.yaml",
+    "index": 4,
+    "technique_id": "T1569.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
     "scenario": "apt36-discovery.yaml",
     "index": 0,
     "technique_id": "T1057",

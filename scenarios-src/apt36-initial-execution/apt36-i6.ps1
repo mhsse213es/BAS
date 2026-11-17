@@ -20,6 +20,6 @@ Invoke-A36Test -Id 'i6' -Technique 'T1218.001' -Telemetry @('sysmon:1', 'sec:468
   if (-not $built) { return @{ Ran = $false; Note = 'hhc_compiler_unavailable'; NotApplicable = 'the HTML Help compiler (hhc.exe) is not present, so a .chm could not be built on this host' } }
   $p = Invoke-A36Proc -File $hh -ArgLine ('"' + $chm + '"') -TimeoutSec 20
   for ($i = 0; $i -lt 15 -and -not (Test-A36Marker $mk); $i++) { Start-Sleep -Milliseconds 300 }
-  try { Get-Process -Name hh -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like '*help*' -or $_.StartTime -gt (Get-Date).AddSeconds(-30) } | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
+  try { Get-CimInstance Win32_Process -Filter "Name='hh.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like ('*' + $script:A36Tag + '*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } } catch {}
   return @{ Ran = (Test-A36Marker $mk); Note = "chm_compiled=$built hh_started=$($p.Started) shortcut_object_fired=$(Test-A36Marker $mk)"; NotApplicable = '' }
 }

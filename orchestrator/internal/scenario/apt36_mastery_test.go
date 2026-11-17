@@ -16,7 +16,7 @@ var apt36Scenarios = map[string]int{
 	"apt36-discovery":             5,
 	"apt36-collection-credential": 5,
 	"apt36-persistence-evasion":   5,
-	"apt36-command-control":       4,
+	"apt36-command-control":       5,
 }
 
 func TestAPT36_LibraryDecisionTable(t *testing.T) {
@@ -115,6 +115,7 @@ func TestAPT36_GatedStepsSkipWithoutGate(t *testing.T) {
 		{"apt36-persistence-evasion", "apt36-pe3", "BAS_CONFIRM_APT36_SERVICE_CREATE"},
 		{"apt36-persistence-evasion", "apt36-pe5", "BAS_CONFIRM_APT36_DEFENDER_EXCLUSION"},
 		{"apt36-command-control", "apt36-k3", "BAS_CONFIRM_APT36_REMOTE_STAGING"},
+		{"apt36-command-control", "apt36-k5", "BAS_CONFIRM_APT36_LATERAL_MOVEMENT"},
 	}
 	for _, c := range cases {
 		d := loadAPT36(t, c.scen)

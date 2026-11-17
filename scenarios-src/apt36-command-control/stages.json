@@ -71,5 +71,27 @@
     "production_safe": true,
     "risk": "low",
     "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-k5",
+    "n": 5,
+    "name": "APT36 Lateral Movement 3 - Remote Service Execution over SCM (T1569.002)",
+    "technique_id": "T1569.002",
+    "timeout_sec": 120,
+    "blast_radius": "Gated by BAS_CONFIRM_APT36_LATERAL_MOVEMENT=true (exact), administrator only, and run only against hosts listed in BAS_LATERAL_TARGETS. On each target it creates a run-tagged demand-start service whose binary exits immediately, starts and stops it, then deletes it and verifies removal. Writes a persistent service record until the delete completes. Current identity only; no credentials are supplied or guessed. Built but not yet run against any lab target.",
+    "telemetry": [
+      "System EID 7045: service installed on the target",
+      "Security EID 4697: service installed, if auditing is enabled",
+      "Sysmon EID 1: sc.exe with a remote \\target argument"
+    ],
+    "detection": [
+      "EDR/SIEM: service created remotely from a non-administration source (Sigma service_install remote)",
+      "SIEM: run-tagged short-lived service fan-out across several hosts in one window"
+    ],
+    "cleanup": "$tag = 'bas_a36_*'\nForEach ($t in @($env:BAS_LATERAL_TARGETS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^[A-Za-z0-9._-]{1,253}$' })) { Get-Service -ComputerName $t -Name $tag -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\\sc.exe') \"\\\\$t\" delete $_.Name | Out-Null } }",
+    "production_safe": false,
+    "risk": "high",
+    "fidelity": "lab-only",
+    "requires_priv": "admin"
   }
 ]
