@@ -204,6 +204,31 @@
     "detection": 0,
     "telemetry": 0
   },
+  "cloud-vm-aws-iam.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-azure-identity.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-credential-exposure.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-data-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-persistence-lateral.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "cobalt-group-kill-chain.yaml": {
     "cleanup": 0,
     "detection": 0,

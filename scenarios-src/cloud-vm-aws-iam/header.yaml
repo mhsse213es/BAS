@@ -1,0 +1,33 @@
+id: "cloud-vm-aws-iam"
+product_line: cloud
+name: "Cloud VM Mastery - AWS Instance Role and IAM Abuse"
+description: >
+  AWS EC2 instance-role exposure and privilege boundary checks: instance-profile presence, caller identity, IAM
+  role policy enumeration, S3, security group, KMS and Secrets Manager inventory, and an IAM policy simulation
+  for privilege-escalation actions. The simulation is read-only (no change is made). Steps return SKIP without
+  an EC2 instance or the AWS CLI, PASS when the cloud control refuses the call, FAIL when the instance identity
+  can do what the operator did not expect, and ERROR when the result cannot be classified. Secret values are
+  never retrieved; list calls return names only. Unverified until run against a dedicated AWS test account.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cloud
+  - aws
+  - imds
+  - iam
+  - instance-role
+  - cloud-vm-mastery
+  - t1552
+  - t1087
+  - t1069
+  - t1619
+  - t1098
+mitre_phases:
+  - credential-access
+  - discovery
+  - privilege-escalation
+
+steps:
+

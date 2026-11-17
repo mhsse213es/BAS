@@ -2853,6 +2853,285 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "cloud-vm-aws-iam.yaml",
+    "index": 0,
+    "technique_id": "T1552.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-aws-iam.yaml",
+    "index": 1,
+    "technique_id": "T1087.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-aws-iam.yaml",
+    "index": 2,
+    "technique_id": "T1069.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-aws-iam.yaml",
+    "index": 3,
+    "technique_id": "T1619",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-aws-iam.yaml",
+    "index": 4,
+    "technique_id": "T1580",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-aws-iam.yaml",
+    "index": 5,
+    "technique_id": "T1580",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-aws-iam.yaml",
+    "index": 6,
+    "technique_id": "T1555",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-aws-iam.yaml",
+    "index": 7,
+    "technique_id": "T1098",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-azure-identity.yaml",
+    "index": 0,
+    "technique_id": "T1552.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-azure-identity.yaml",
+    "index": 1,
+    "technique_id": "T1552.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-azure-identity.yaml",
+    "index": 2,
+    "technique_id": "T1580",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-azure-identity.yaml",
+    "index": 3,
+    "technique_id": "T1069.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-azure-identity.yaml",
+    "index": 4,
+    "technique_id": "T1526",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-azure-identity.yaml",
+    "index": 5,
+    "technique_id": "T1580",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-azure-identity.yaml",
+    "index": 6,
+    "technique_id": "T1555",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-azure-identity.yaml",
+    "index": 7,
+    "technique_id": "T1528",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-credential-exposure.yaml",
+    "index": 0,
+    "technique_id": "T1552.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-credential-exposure.yaml",
+    "index": 1,
+    "technique_id": "T1552.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-credential-exposure.yaml",
+    "index": 2,
+    "technique_id": "T1552.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-credential-exposure.yaml",
+    "index": 3,
+    "technique_id": "T1552.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-credential-exposure.yaml",
+    "index": 4,
+    "technique_id": "T1552.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-data-access.yaml",
+    "index": 0,
+    "technique_id": "T1530",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-data-access.yaml",
+    "index": 1,
+    "technique_id": "T1530",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-data-access.yaml",
+    "index": 2,
+    "technique_id": "T1526",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-data-access.yaml",
+    "index": 3,
+    "technique_id": "T1555",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-data-access.yaml",
+    "index": 4,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cloud-vm-persistence-lateral.yaml",
+    "index": 0,
+    "technique_id": "T1098",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-persistence-lateral.yaml",
+    "index": 1,
+    "technique_id": "T1098.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-persistence-lateral.yaml",
+    "index": 2,
+    "technique_id": "T1098.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-persistence-lateral.yaml",
+    "index": 3,
+    "technique_id": "T1021",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cloud-vm-persistence-lateral.yaml",
+    "index": 4,
+    "technique_id": "T1574",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
     "scenario": "cobalt-group-kill-chain.yaml",
     "index": 0,
     "technique_id": "T1566.001",
