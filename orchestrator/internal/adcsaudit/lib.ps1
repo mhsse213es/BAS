@@ -90,7 +90,8 @@ function Get-AdcsTemplateFacts($t) {
   [pscustomobject]@{
     Name = [string]$t.name
     SchemaVersion = [int]$t.schemaVersion
-    SuppliesSubject = (($nameFlag -band 0x1) -ne 0)
+    # 0x1 = enrollee supplies the subject, 0x10000 = enrollee supplies the subject alternative name; either lets the requester name any identity.
+    SuppliesSubject = (($nameFlag -band 0x10001) -ne 0)
     MgrApproval = (($enrollFlag -band 0x2) -ne 0)
     NoSecExt = (($enrollFlag -band 0x80000) -ne 0)
     RaSig = [int]$t.raSignature
@@ -141,16 +142,38 @@ function Get-AdcsBuildState($b, [string]$kind) {
 }
 #endregion
 
-#region readbuild needs=core
-# The Windows build of a host from its remote registry: CurrentBuildNumber and UBR. Null when it cannot be read.
-function Read-AdcsBuild([string]$hostName) {
+#region reach needs=core
+# A short TCP check before an SMB-based registry read: an unreachable host otherwise waits out a long RPC timeout.
+function Test-AdcsPort([string]$hostName, [int]$port = 445, [int]$ms = 3000) {
   try {
-    $b = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
-    $k = $b.OpenSubKey('SOFTWARE\Microsoft\Windows NT\CurrentVersion')
+    $c = New-Object System.Net.Sockets.TcpClient
+    $r = $c.BeginConnect($hostName, $port, $null, $null)
+    $ok = ($r.AsyncWaitHandle.WaitOne($ms, $false) -and $c.Connected)
+    $c.Close()
+    return $ok
+  } catch { return $false }
+}
+#endregion
+
+#region readbuild needs=core,reach
+# The Windows build of a host from its remote registry: CurrentBuildNumber and UBR. Null when it cannot be read.
+function Read-AdcsBuildFrom($base) {
+  try {
+    $k = $base.OpenSubKey('SOFTWARE\Microsoft\Windows NT\CurrentVersion')
     if (-not $k) { return $null }
     $n = [string]$k.GetValue('CurrentBuildNumber'); $u = $k.GetValue('UBR')
+    $k.Close()
     if (-not $n -or $null -eq $u) { return $null }
     return [pscustomobject]@{ number = $n; ubr = [int64]$u }
+  } catch { return $null }
+}
+function Read-AdcsBuild([string]$hostName) {
+  if (-not (Test-AdcsPort $hostName)) { return $null }
+  try {
+    $b = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
+    $r = Read-AdcsBuildFrom $b
+    $b.Close()
+    return $r
   } catch { return $null }
 }
 #endregion
@@ -301,7 +324,8 @@ function Test-AdcsEsc8($cas, [bool]$live) {
   foreach ($c in @($cas)) {
     if (-not $live) { $out += (New-AdcsFinding '8' 'potential' ([string]$c.name) 'web enrollment relay exposure needs a live check; set BAS_ADCS_LIVE_PROBE=true to send one unauthenticated HTTP GET per CA' ''); continue }
     $w = $c.web
-    if ($null -eq $w -or -not $w.answered) { $out += (New-AdcsFinding '8' 'insufficient' ([string]$c.name) 'no answer from the CA web enrollment endpoint (none installed, blocked or unreachable)' ''); continue }
+    if ($null -ne $w -and $w.refused) { continue }   # nothing listens on HTTP: the relayable HTTP endpoint is not offered
+    if ($null -eq $w -or -not $w.answered) { $out += (New-AdcsFinding '8' 'insufficient' ([string]$c.name) 'no answer from the CA web enrollment endpoint (timed out or filtered), so it cannot be ruled out' ''); continue }
     if ($w.httpNtlm) { $out += (New-AdcsFinding '8' 'confirmed' ([string]$c.name) 'web enrollment answers over plain HTTP and offers NTLM or Negotiate' (Format-AdcsPath @() 'relay a coerced NTLM authentication' ('CA web enrollment on ' + [string]$c.host) 'integrated authentication over HTTP, no Extended Protection' 'obtain a certificate as the relayed account, for example a domain controller')) }
   }
   return $out
@@ -358,7 +382,7 @@ function Test-AdcsEsc12($cas) {
   foreach ($c in @($cas)) {
     if (-not $c.keyProvider) { $out += (New-AdcsFinding '12' 'insufficient' ([string]$c.name) 'the CA key provider could not be read' ''); continue }
     if ($script:AdcsSoftProviders -contains [string]$c.keyProvider) {
-      $out += (New-AdcsFinding '12' 'confirmed' ([string]$c.name) ('the CA signing key is held by the software provider "' + [string]$c.keyProvider + '" (posture; HSM assurance is not verified)') (Format-AdcsPath @() 'administrator access to the CA host' ('CA ' + [string]$c.name) 'the signing key is exportable from software' 'forge certificates for any identity'))
+      $out += (New-AdcsFinding '12' 'potential' ([string]$c.name) ('the CA signing key is held by the software provider "' + [string]$c.keyProvider + '"; this is a hardening posture, not an exploitable misconfiguration, so it is not scored. A hardware security module is recommended') (Format-AdcsPath @() 'administrator access to the CA host' ('CA ' + [string]$c.name) 'the signing key is exportable from software' 'forge certificates for any identity'))
     }
   }
   return $out
@@ -444,14 +468,22 @@ function Read-AdcsAcl($entry) {
     $rules = $entry.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
     $aces = @(ConvertTo-AdcsAces $rules)
     # A DACL always has entries; none means the descriptor was not readable.
-    return [pscustomobject]@{ readable = ($aces.Count -gt 0); aces = $aces }
+    $readable = ($aces.Count -gt 0)
+    # The owner holds an implicit WriteDacl whatever the DACL says, so it counts as a writer.
+    try { $own = $entry.ObjectSecurity.GetOwner([System.Security.Principal.SecurityIdentifier]); if ($own) { $aces += [pscustomobject]@{ sid = $own.Value; mask = [int64]0x40000; objectType = ''; type = 'Allow' } } } catch { }
+    return [pscustomobject]@{ readable = $readable; aces = $aces }
   } catch { return [pscustomobject]@{ readable = $false; aces = @() } }
 }
 # Not being domain joined is answered locally and at once; an LDAP bind off-domain waits out a long network timeout.
 function Read-AdcsConfigDN {
+  if ($script:AdcsCfgChecked) { return $script:AdcsCfgDn }
+  $script:AdcsCfgChecked = $true; $script:AdcsCfgDn = $null
   try { if (-not (Get-WmiObject -Class Win32_ComputerSystem).PartOfDomain) { return $null } } catch { return $null }
-  try { $d = ([ADSI]'LDAP://RootDSE').configurationNamingContext; if ($d) { return [string]$d } } catch { }; return $null }
+  try { $d = ([ADSI]'LDAP://RootDSE').configurationNamingContext; if ($d) { $script:AdcsCfgDn = [string]$d } } catch { }
+  return $script:AdcsCfgDn
+}
 function Read-AdcsEnrollmentServices([string]$cfg) {
+  if ($script:AdcsSvcFor -eq $cfg) { return ,@($script:AdcsSvc) }
   $list = @()
   $s = New-Object System.DirectoryServices.DirectorySearcher
   $s.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://CN=Enrollment Services,CN=Public Key Services,CN=Services,$cfg")
@@ -460,6 +492,7 @@ function Read-AdcsEnrollmentServices([string]$cfg) {
   foreach ($r in @($s.FindAll())) {
     $list += [pscustomobject]@{ name = [string]$r.Properties['cn'][0]; host = [string]$r.Properties['dnshostname'][0]; dn = [string]$r.Properties['distinguishedname'][0]; published = @($r.Properties['certificatetemplates'] | ForEach-Object { [string]$_ }) }
   }
+  $script:AdcsSvc = $list; $script:AdcsSvcFor = $cfg
   return $list
 }
 # Read the named parts into one context. A part that cannot be read leaves its collection null and names the reason in
@@ -478,15 +511,19 @@ function Read-AdcsContext($needs) {
 #region collect_web needs=core
 # One unauthenticated HTTP GET per CA, only when BAS_ADCS_LIVE_PROBE=true. No credentials, no redirects, no certificate request.
 function Read-AdcsWebProbe([string]$hostName) {
+  $none = [pscustomobject]@{ answered = $false; refused = $false; httpNtlm = $false }
   try {
     $req = [System.Net.WebRequest]::Create("http://$hostName/certsrv/")
     $req.Method = 'GET'; $req.Timeout = 10000; $req.AllowAutoRedirect = $false; $req.UseDefaultCredentials = $false
     $code = $null; $auth = ''
     try { $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $auth = [string]$resp.Headers['WWW-Authenticate']; $resp.Close() }
-    catch [System.Net.WebException] { if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() } }
-    if ($null -eq $code) { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
-    return [pscustomobject]@{ answered = $true; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
-  } catch { return [pscustomobject]@{ answered = $false; httpNtlm = $false } }
+    catch [System.Net.WebException] {
+      if ($_.Exception.Response) { $r = $_.Exception.Response; $code = [int]$r.StatusCode; $auth = [string]$r.Headers['WWW-Authenticate']; $r.Close() }
+      elseif ($_.Exception.Status -eq [System.Net.WebExceptionStatus]::ConnectFailure) { return [pscustomobject]@{ answered = $false; refused = $true; httpNtlm = $false } }
+    }
+    if ($null -eq $code) { return $none }
+    return [pscustomobject]@{ answered = $true; refused = $false; httpNtlm = (($code -eq 401) -and ($auth -match '(?i)NTLM|Negotiate')) }
+  } catch { return $none }
 }
 #endregion
 
@@ -547,8 +584,9 @@ function Read-AdcsCaField_interfaceFlags($ca, [string]$conf, $ctx) { return (Rea
 function Read-AdcsCaField_keyProvider($ca, [string]$conf, $ctx) { return (Read-CertutilString $conf 'CA\CSP\Provider' 'Provider') }
 #endregion
 
-#region cafield_caAces needs=core
+#region cafield_caAces needs=core,reach
 function Read-AdcsRemoteSecurity([string]$hostName, [string]$caName) {
+  if (-not (Test-AdcsPort $hostName)) { return $null }
   try {
     $base = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $hostName)
     $key = $base.OpenSubKey('SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\' + $caName)
@@ -587,7 +625,7 @@ function Read-AdcsPart_cas($ctx, [string]$cfg) {
   $fields = @($script:AdcsCaFields | Where-Object { $_ })
   $cas = @()
   foreach ($ca in $svc) {
-    $conf = $ca.host + '' + $ca.name
+    $conf = $ca.host + '\' + $ca.name
     $o = [ordered]@{ name = $ca.name; host = $ca.host; published = $ca.published; editFlags = $null; interfaceFlags = $null; keyProvider = $null; caAces = $null; web = $null }
     foreach ($f in $fields) {
       $fn = 'Read-AdcsCaField_' + $f
@@ -660,21 +698,25 @@ function Read-AdcsPart_accounts($ctx, [string]$cfg) {
 }
 #endregion
 
-#region part_dcs needs=core,collect,readbuild
+#region part_dcs needs=core,collect,readbuild,reach
 function Read-AdcsPart_dcs($ctx, [string]$cfg) {
   $list = @([System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain().DomainControllers)
   if ($list.Count -eq 0) { $ctx.Errors['dcs'] = 'no domain controllers found'; return }
   $dcs = @()
   foreach ($dc in $list) {
-    $rec = [pscustomobject]@{ name = $dc.Name; readable = $false; strongBinding = $null; certMappingMethods = $null; build = (Read-AdcsBuild $dc.Name) }
-    try {
-      $b = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $dc.Name)
-      $k = $b.OpenSubKey('SYSTEM\CurrentControlSet\Services\Kdc')
-      $rec.readable = ($null -ne $k)
-      if ($k) { $v = $k.GetValue('StrongCertificateBindingEnforcement'); if ($null -ne $v) { $rec.strongBinding = [int64]$v } }
-      $sc = $b.OpenSubKey('SYSTEM\CurrentControlSet\Control\SecurityProviders\Schannel')
-      if ($sc) { $m = $sc.GetValue('CertificateMappingMethods'); if ($null -ne $m) { $rec.certMappingMethods = [int64]$m } }
-    } catch { $rec.readable = $false }
+    $rec = [pscustomobject]@{ name = $dc.Name; readable = $false; strongBinding = $null; certMappingMethods = $null; build = $null }
+    if (Test-AdcsPort $dc.Name) {
+      try {
+        $b = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $dc.Name)
+        $rec.build = Read-AdcsBuildFrom $b
+        $k = $b.OpenSubKey('SYSTEM\CurrentControlSet\Services\Kdc')
+        $rec.readable = ($null -ne $k)
+        if ($k) { $v = $k.GetValue('StrongCertificateBindingEnforcement'); if ($null -ne $v) { $rec.strongBinding = [int64]$v }; $k.Close() }
+        $sc = $b.OpenSubKey('SYSTEM\CurrentControlSet\Control\SecurityProviders\Schannel')
+        if ($sc) { $m = $sc.GetValue('CertificateMappingMethods'); if ($null -ne $m) { $rec.certMappingMethods = [int64]$m }; $sc.Close() }
+        $b.Close()
+      } catch { $rec.readable = $false }
+    }
     $dcs += $rec
   }
   $ctx.DCs = $dcs
@@ -738,7 +780,15 @@ function Read-AdcsNtAuth {
       $x = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(,[byte[]]$b)
       if (-not $known.ContainsKey($x.Thumbprint)) { $unknown += $x.Subject }
       $why = @()
-      if ($x.PublicKey.Key.KeySize -lt 2048) { $why += ('key size ' + $x.PublicKey.Key.KeySize) }
+      # RSA and ECDSA keys are read through the extension methods; PublicKey.Key throws for ECDSA on Windows PowerShell 5.1.
+      try {
+        $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPublicKey($x)
+        if ($rsa) { if ($rsa.KeySize -lt 2048) { $why += ('RSA key size ' + $rsa.KeySize) } }
+        else {
+          $ec = [System.Security.Cryptography.X509Certificates.ECDsaCertificateExtensions]::GetECDsaPublicKey($x)
+          if ($ec -and $ec.KeySize -lt 256) { $why += ('ECDSA key size ' + $ec.KeySize) }
+        }
+      } catch { }
       if ($x.SignatureAlgorithm.FriendlyName -match '(?i)sha1|md5') { $why += ('signature ' + $x.SignatureAlgorithm.FriendlyName) }
       if ($x.NotAfter -lt (Get-Date)) { $why += 'expired' }
       if ($why.Count -gt 0) { $weak += [pscustomobject]@{ subject = $x.Subject; why = ($why -join ', ') } }
@@ -767,13 +817,16 @@ function Get-AdcsCorrelation($ctx) {
   $reach = @($tf | Where-Object { $_.PublishedOn.Count -gt 0 -and $_.Enrollers.Count -gt 0 -and ($_.HasAuthEku -or $_.HasAnyOrNoEku) -and (Test-AdcsEnrollGate $_) })
   foreach ($f in @(Get-AdcsEscFindings '6' $ctx)) {
     if ($f.State -ne 'confirmed') { $out += $f; continue }
-    if ($reach.Count -gt 0) { $out += (New-AdcsFinding '6' 'path' $f.Subject $f.Why (Format-AdcsPath $reach[0].Enrollers 'Enroll' ('published template ' + $reach[0].Name + ' on CA ' + $f.Subject) 'the CA accepts a requester-supplied SAN' 'request a certificate for any identity, including a Domain Admin')) }
+    $here = @($reach | Where-Object { $_.PublishedOn -contains $f.Subject })
+    if ($here.Count -gt 0) { $out += (New-AdcsFinding '6' 'path' $f.Subject $f.Why (Format-AdcsPath $here[0].Enrollers 'Enroll' ('published template ' + $here[0].Name + ' on CA ' + $f.Subject) 'the CA accepts a requester-supplied SAN' 'request a certificate for any identity, including a Domain Admin')) }
     else { $out += (New-AdcsFinding '6' 'potential' $f.Subject ($f.Why + '; no published template enrollable by a low-privileged principal with an authentication EKU was found') $f.Path) }
   }
   foreach ($f in @(Get-AdcsEscFindings '7' $ctx)) {
     if ($f.State -eq 'confirmed') { $out += (New-AdcsFinding '7' 'path' $f.Subject $f.Why $f.Path) } else { $out += $f }
   }
-  foreach ($e in @('5', '8', '10', '11', '12', '14', '15')) {
+  # ESC8 is assessed only with the live probe, and ESC12 is posture, so neither decides the correlation verdict.
+  $rest = @('5', '10', '11', '14', '15'); if ($ctx.LiveProbe) { $rest += '8' }
+  foreach ($e in $rest) {
     foreach ($f in @(Get-AdcsEscFindings $e $ctx)) { $out += $f }
   }
   return $out
@@ -784,6 +837,7 @@ function Invoke-AdcsCorrelationStage {
   foreach ($n in @('templates', 'cas', 'pki', 'oids', 'dcs', 'accounts')) { if ($ctx.Errors[$n]) { $complete = $false; $why += $n + ': ' + $ctx.Errors[$n] + '; ' } }
   $f = @(); if ($null -ne $ctx.Templates -and $null -ne $ctx.CAs) { $f = Get-AdcsCorrelation $ctx }
   if ($null -eq $ctx.Templates -or $null -eq $ctx.CAs) { $complete = $false }
-  Write-AdcsVerdict 'certificate-based privilege escalation correlation' 'BAS-SIM-ADCS-CORR' $f $complete $why 'no low-privileged principal has a path to a privileged certificate and every source was read.' 'at least one low-privileged principal has an exploitable certificate-issuance path to a privileged identity.'
+  if (-not $ctx.LiveProbe) { Write-Output 'ADCS-CONTEXT: esc8=NOT ASSESSED (BAS_ADCS_LIVE_PROBE is not true), so web enrollment relay exposure is not part of this verdict' }
+  Write-AdcsVerdict 'certificate-based privilege escalation correlation' 'BAS-SIM-ADCS-CORR' $f $complete $why 'no low-privileged principal has a path to a privileged certificate and every source was read (ESC8 web enrollment and ESC12 key posture are not part of this verdict).' 'at least one low-privileged principal has an exploitable certificate-issuance path to a privileged identity.'
 }
 #endregion

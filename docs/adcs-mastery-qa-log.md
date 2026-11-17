@@ -65,6 +65,34 @@ Not verified: the numbers were taken from search results and Microsoft pages, no
 Microsoft Security Response Center page for CVE-2024-49019 was not read directly; the remote-registry build read has not run
 against a real CA or DC.
 
+## Code review (high effort, run after implementation) and what changed
+
+A review of commits `7c1bab28~1..6df1b427` found these; each was checked against the code before fixing.
+
+Fixed:
+- **certutil config lost its backslash** (`host` + `CAName` instead of `host\CAName`). ESC6, ESC11 and ESC12 could never read a CA,
+  so they always SKIPped. The offline fixtures bypass the collectors, so nothing caught it. Now covered by
+  `TestCollectorUsesHostBackslashCaNameForCertutil` (mocked certutil; verified to fail when the bug is put back).
+- **ESC1/ESC15 missed the enrollee-supplied-SAN flag** (0x10000). `SuppliesSubject` now counts 0x1 or 0x10000. This is my
+  judgement from the reviewer's point (a requester-supplied SAN is what ESC1 abuses); lab-confirm against Certipy/Locksmith.
+- **ESC12 was a confirmed FAIL for every software key provider**, inflating failures. Now "potential" (posture, not scored),
+  and excluded from the correlation verdict.
+- **Stage 17 could never PASS by default** because ESC8 is "potential" without the live probe. ESC8 is now left out of the
+  correlation verdict unless the probe ran, and the stage prints that ESC8 was not assessed.
+- **ESC8 treated "nothing listens on HTTP" as unreadable.** A refused connection is now clean for the HTTP endpoint; a
+  timeout stays insufficient. HTTPS-only web enrollment is still not assessed.
+- **ESC6 correlation attributed a path to the wrong CA** (first reachable template on any CA). Now only templates published on
+  the CA that has the flag count.
+- **NTAuth read failed on ECDSA CA certificates** (PublicKey.Key throws on PowerShell 5.1). Per-certificate, RSA/ECDSA-aware.
+- **Template and PKI object owners were ignored.** The owner holds an implicit WriteDacl, so a non-tier-0 owner is now a writer.
+- **Slow or unreachable hosts:** a short TCP check precedes each SMB registry read; one registry connection per DC (it was
+  two); keys are closed; the domain-join check and enrollment services are cached within a run.
+- **Dead `Stage.Tag`:** `TestStageTagsAreEmitted` now ties it to the code.
+
+Not changed (decided, with reason):
+- ACEs granting WriteProperty on a *specific* property GUID still count as writers. Without a schema lookup we cannot tell a
+  harmless attribute from a dangerous one (for example the template name-flag), so we stay conservative.
+
 ## Open
 
 - `adcs-esc8-web-enrollment-probe.yaml` was removed; stage 8 replaces it. Behaviour change: the old scenario sent its one unauthenticated HTTP GET by default, stage 8 only with `BAS_ADCS_LIVE_PROBE=true`.

@@ -58,6 +58,7 @@ func cases() []tc {
 	cases := []tc{
 		// ESC1
 		{"esc1 vulnerable", "1", "FAIL", T(tmpl("Web", m{"nameFlag": 1})), "Domain Users"},
+		{"esc1 enrollee supplies the SAN", "1", "FAIL", T(tmpl("SanOnly", m{"nameFlag": 0x10000})), "Domain Users"},
 		{"esc1 manager approval", "1", "PASS", T(tmpl("Web", m{"nameFlag": 1, "enrollFlag": 2})), ""},
 		{"esc1 RA signature", "1", "PASS", T(tmpl("Web", m{"nameFlag": 1, "raSignature": 1})), ""},
 		{"esc1 only tier0 can enroll", "1", "PASS", T(tmpl("Web", m{"nameFlag": 1, "aces": []m{adminACE(), enrollACE(domAdmins)}})), ""},
@@ -97,6 +98,7 @@ func cases() []tc {
 		{"esc8 not probed is potential", "8", "SKIP", m{"CAs": []m{ca(nil)}, "LiveProbe": false}, "BAS_ADCS_LIVE_PROBE"},
 		{"esc8 live ntlm over http", "8", "FAIL", m{"CAs": []m{ca(m{"web": m{"answered": true, "httpNtlm": true}})}, "LiveProbe": true}, "ESC8"},
 		{"esc8 live no web enrollment answer", "8", "SKIP", m{"CAs": []m{ca(m{"web": m{"answered": false, "httpNtlm": false}})}, "LiveProbe": true}, ""},
+		{"esc8 live nothing listens on HTTP", "8", "PASS", m{"CAs": []m{ca(m{"web": m{"answered": false, "refused": true, "httpNtlm": false}})}, "LiveProbe": true}, ""},
 		{"esc8 live answered without ntlm", "8", "PASS", m{"CAs": []m{ca(m{"web": m{"answered": true, "httpNtlm": false}})}, "LiveProbe": true}, ""},
 		// ESC9
 		{"esc9 no security extension", "9", "FAIL", T(tmpl("NoExt", m{"enrollFlag": 0x80000})), "ESC9"},
@@ -116,7 +118,7 @@ func cases() []tc {
 		{"esc11 enforced", "11", "PASS", m{"CAs": []m{ca(nil)}}, ""},
 		{"esc11 unreadable", "11", "SKIP", m{"CAs": []m{ca(m{"interfaceFlags": nil})}}, ""},
 		// ESC12
-		{"esc12 software provider", "12", "FAIL", m{"CAs": []m{ca(m{"keyProvider": "Microsoft Software Key Storage Provider"})}}, "ESC12"},
+		{"esc12 software provider is posture, not a FAIL", "12", "SKIP", m{"CAs": []m{ca(m{"keyProvider": "Microsoft Software Key Storage Provider"})}}, "ESC12"},
 		{"esc12 hsm provider", "12", "PASS", m{"CAs": []m{ca(nil)}}, ""},
 		{"esc12 unreadable", "12", "SKIP", m{"CAs": []m{ca(m{"keyProvider": nil})}}, ""},
 		// ESC13
@@ -145,6 +147,8 @@ func cases() []tc {
 		{"corr published esc1 is an exploitable path", "CORR", "FAIL", m{"Templates": []m{tmpl("Web", m{"nameFlag": 1})}, "CAs": []m{ca(nil)}, "PkiObjects": []m{}, "Oids": []m{}, "DCs": []m{}, "Accounts": []m{}}, "state=path"},
 		{"corr unpublished esc1 is latent", "CORR", "SKIP", m{"Templates": []m{tmpl("Web", m{"nameFlag": 1, "publishedOn": []string{}})}, "CAs": []m{ca(nil)}, "PkiObjects": []m{}, "Oids": []m{}, "DCs": []m{}, "Accounts": []m{}}, "latent"},
 		{"corr esc6 with a reachable template is a path", "CORR", "FAIL", m{"Templates": []m{tmpl("User", nil)}, "CAs": []m{ca(m{"editFlags": 0x40000})}, "PkiObjects": []m{}, "Oids": []m{}, "DCs": []m{}, "Accounts": []m{}}, "published template User"},
+		{"corr esc6 on a CA that publishes nothing reachable is not a path", "CORR", "SKIP", m{"Templates": []m{tmpl("User", m{"publishedOn": []string{"OtherCA"}})}, "CAs": []m{ca(m{"editFlags": 0x40000}), ca(m{"name": "OtherCA"})}, "PkiObjects": []m{}, "Oids": []m{}, "DCs": []m{}, "Accounts": []m{}}, "no published template enrollable"},
+		{"corr clean without the live probe", "CORR", "PASS", m{"Templates": []m{tmpl("User", m{"aces": []m{adminACE()}})}, "LiveProbe": false, "CAs": []m{ca(nil)}, "PkiObjects": []m{}, "Oids": []m{}, "DCs": []m{{"name": "dc", "readable": true, "strongBinding": 2}}, "Accounts": []m{}}, ""},
 		{"corr clean", "CORR", "PASS", m{"Templates": []m{tmpl("User", m{"aces": []m{adminACE()}})}, "LiveProbe": true, "CAs": []m{ca(m{"web": m{"answered": true, "httpNtlm": false}})}, "PkiObjects": []m{}, "Oids": []m{}, "DCs": []m{{"name": "dc", "readable": true, "strongBinding": 2}}, "Accounts": []m{}}, ""},
 		{"corr unread source is never clean", "CORR", "SKIP", m{"Templates": []m{tmpl("User", m{"aces": []m{adminACE()}})}, "CAs": []m{ca(nil)}, "Errors": m{"dcs": "denied"}}, ""},
 	}
@@ -373,6 +377,56 @@ func TestFixedBuildTable(t *testing.T) {
 		"'14393' = @(8422, 0)", "'17763' = @(7792, 0)", "'20348' = @(4171, 0)"} {
 		if !strings.Contains(lib, w) {
 			t.Errorf("build table lacks %s", w)
+		}
+	}
+}
+
+// The collectors build the certutil config as host\CAName and read only the requested fields. This mocks certutil and the
+// reachability check, so a lost separator (which made ESC6, ESC11 and ESC12 unreadable on every CA) is caught offline.
+func TestCollectorUsesHostBackslashCaNameForCertutil(t *testing.T) {
+	psPath(t)
+	lib, err := FullLibrary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := lib + `
+function Read-AdcsEnrollmentServices($cfg) { return ,@([pscustomobject]@{ name = 'CorpCA'; host = 'ca01.corp.test'; dn = 'x'; published = @() }) }
+function Test-AdcsPort { return $false }
+$script:log = @()
+function certutil { $script:log += ($args -join ' '); return '  EditFlags REG_DWORD = 40000 (262144)' }
+$script:AdcsCaFields = @('editFlags')
+$ctx = New-AdcsContext
+Read-AdcsPart_cas $ctx 'CN=Configuration'
+Write-Output ('LOG:' + ($script:log -join '|'))
+Write-Output ('EDIT:' + $ctx.CAs[0].editFlags)
+Write-Output ('IFACE:[' + $ctx.CAs[0].interfaceFlags + ']')
+`
+	out := runPS(t, script)
+	if !strings.Contains(out, `LOG:-config ca01.corp.test\CorpCA -getreg policy\EditFlags`) {
+		t.Fatalf("certutil not called with host-backslash-CA and the EditFlags value:\n%s", out)
+	}
+	if !strings.Contains(out, "EDIT:262144") {
+		t.Fatalf("EditFlags was not parsed:\n%s", out)
+	}
+	if !strings.Contains(out, "IFACE:[]") {
+		t.Fatalf("an unrequested CA field must stay null:\n%s", out)
+	}
+}
+
+// A stage's Tag is what the output carries: a table edit that is never emitted would drift from the library.
+func TestStageTagsAreEmitted(t *testing.T) {
+	for _, s := range Stages() {
+		body, err := Library(s.Regions...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		full := s.Call + "\n" + body
+		want := s.Tag
+		if strings.HasPrefix(want, "BAS-SIM-ADCS-ESC") {
+			want = "BAS-SIM-ADCS-ESC"
+		}
+		if !strings.Contains(full, want) {
+			t.Errorf("stage %s: tag %s is not emitted by its code", s.Number, s.Tag)
 		}
 	}
 }
