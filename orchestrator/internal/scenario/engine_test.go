@@ -1076,3 +1076,71 @@ func TestParseYAML_InsiderThreatDetectionProfilesWired(t *testing.T) {
 		}
 	}
 }
+
+func TestParseYAML_APT29Phase7DetectionProfilesWired(t *testing.T) {
+	cases := []struct {
+		file        string
+		stepName    string
+		wantProfile string
+	}{
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 6 — Domain Privileged Group Enumeration (T1069.002)", "windows_apt29_discovery"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 7 — Domain Controller Discovery (T1018)", "windows_apt29_discovery"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 8 — Remote System Discovery (T1018)", "windows_apt29_discovery"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 9 — Security Product Discovery (T1518.001)", "windows_apt29_discovery"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 10 — Network Configuration Discovery (T1016)", "windows_apt29_discovery"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 11 — WMI-Based Process Execution Simulation (T1047)", "windows_apt29_defense_evasion"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 12 — Rundll32 Proxy Execution (T1218.011)", "windows_apt29_defense_evasion"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 13 — PowerShell Obfuscation Detection (T1027)", "windows_apt29_defense_evasion"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 14 — Windows Event Logging Impairment Attempt (T1685.001)", "windows_apt29_defense_evasion"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 15 — Startup Folder Persistence Write + Delete (T1547.001)", "windows_apt29_persistence"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 16 — WMI Event Subscription Persistence (T1546.003)", "windows_apt29_persistence"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 17 — Windows Service Persistence (T1543.003)", "windows_apt29_persistence"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 18 — COM Hijacking Detection Simulation (T1546.015)", "windows_apt29_persistence"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 19 — LSASS Access Attempt (T1003.001)", "windows_credential_access"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 20 — Windows Credential Manager Access Attempt (T1555.004)", "windows_credential_access"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 21 — Browser Credential Store Access Attempt (T1555.003)", "windows_credential_access"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 22 — Kerberos Service Account Enumeration (T1558.003)", "windows_credential_access"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 23 — DPAPI Credential Access Simulation (T1555)", "windows_credential_access"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 24 — SMB Administrative Share Access (T1021.002)", "windows_apt29_lateral_movement"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 25 — WinRM Remote Execution Simulation (T1021.006)", "windows_apt29_lateral_movement"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 26 — Remote Service Execution Simulation (T1569.002)", "windows_apt29_lateral_movement"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 27 — HTTPS C2 Beacon Simulation (T1071.001)", "windows_apt29_c2_exfil"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 28 — DNS Periodic Beacon Detection (T1071.004)", "windows_dns_c2"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 29 — Sensitive File Discovery and Collection (T1005)", "windows_apt29_c2_exfil"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 30 — HTTPS Exfiltration Simulation (T1041)", "windows_apt29_c2_exfil"},
+	}
+
+	parsed := map[string]*Scenario{}
+	for _, tc := range cases {
+		if _, ok := parsed[tc.file]; ok {
+			continue
+		}
+		data, err := os.ReadFile(tc.file)
+		if err != nil {
+			t.Fatalf("read %s: %v", tc.file, err)
+		}
+		sc, err := ParseYAML(data)
+		if err != nil {
+			t.Fatalf("ParseYAML %s: %v", tc.file, err)
+		}
+		parsed[tc.file] = sc
+	}
+
+	for _, tc := range cases {
+		sc := parsed[tc.file]
+		var step *Step
+		for i := range sc.Steps {
+			if sc.Steps[i].Name == tc.stepName {
+				step = &sc.Steps[i]
+				break
+			}
+		}
+		if step == nil {
+			t.Errorf("%s: step %q not found", tc.file, tc.stepName)
+			continue
+		}
+		if len(step.DetectionProfiles) != 1 || step.DetectionProfiles[0] != tc.wantProfile {
+			t.Errorf("%s / %q: DetectionProfiles = %v, want [%s]", tc.file, tc.stepName, step.DetectionProfiles, tc.wantProfile)
+		}
+	}
+}

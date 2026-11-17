@@ -1,0 +1,35 @@
+# Detection Validation Profile — Windows HTTPS C2/exfiltration and
+# sensitive-file-collection activity exercised by APT29 Kill Chain Phase 7
+# (stages 27, 29, 30: HTTPS beacon, sensitive-file discovery/collection,
+# HTTPS exfiltration). Stage 28's DNS periodic beacon uses the existing
+# windows_dns_c2 profile instead, since it shares that profile's network
+# expectation exactly.
+profile: windows_apt29_c2_exfil
+version: 1
+technique_ids: [T1071.001, T1005, T1041]
+expected_detection:
+  - id: apt29-c2exfil-network
+    provider: microsoft_sentinel
+    type: network
+    confidence: required
+    finding:
+      severity: High
+      title: "Outbound HTTPS to an invalid/unresolvable TLD not flagged at the proxy"
+      remediation: >-
+        Deploy proxy/firewall analytics that flag any outbound HTTPS
+        request to a TLD that cannot resolve (e.g. .invalid, RFC 6761
+        reserved names) — these should never succeed, and an attempt is
+        itself a strong IOC.
+      reference: "MITRE ATT&CK T1071.001 / T1041 — Application Layer Protocol / Exfiltration Over C2 Channel"
+  - id: apt29-c2exfil-file-discovery
+    provider: microsoft_defender
+    type: endpoint
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "Sensitive-sounding recursive file search not flagged"
+      remediation: >-
+        Flag recursive file enumeration for sensitive-sounding filenames
+        or extensions from a scripting-engine process outside normal
+        backup/indexing behavior.
+      reference: "MITRE ATT&CK T1005 — Data from Local System"

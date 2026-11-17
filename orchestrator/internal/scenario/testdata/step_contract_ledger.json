@@ -1179,6 +1179,51 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "apt29-cloud-identity.yaml",
+    "index": 0,
+    "technique_id": "T1098.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "apt29-cloud-identity.yaml",
+    "index": 1,
+    "technique_id": "T1550.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-cloud-identity.yaml",
+    "index": 2,
+    "technique_id": "T1556.007",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-cloud-identity.yaml",
+    "index": 3,
+    "technique_id": "T1114",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "apt29-cloud-identity.yaml",
+    "index": 4,
+    "technique_id": "T1087.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
     "scenario": "apt29-collection-staging.yaml",
     "index": 0,
     "technique_id": "T1005",
@@ -1339,6 +1384,276 @@
     "framework": "custom",
     "class": "non_destructive",
     "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 0,
+    "technique_id": "T1482",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 1,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 2,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 3,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 4,
+    "technique_id": "T1071.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 5,
+    "technique_id": "T1069.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 6,
+    "technique_id": "T1018",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 7,
+    "technique_id": "T1018",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 8,
+    "technique_id": "T1518.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 9,
+    "technique_id": "T1016",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 10,
+    "technique_id": "T1047",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 11,
+    "technique_id": "T1218.011",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 12,
+    "technique_id": "T1027",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 13,
+    "technique_id": "T1685.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 14,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 15,
+    "technique_id": "T1546.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 16,
+    "technique_id": "T1543.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 17,
+    "technique_id": "T1546.015",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 18,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 19,
+    "technique_id": "T1555.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 20,
+    "technique_id": "T1555.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 21,
+    "technique_id": "T1558.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 22,
+    "technique_id": "T1555",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 23,
+    "technique_id": "T1021.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 24,
+    "technique_id": "T1021.006",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 25,
+    "technique_id": "T1569.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 26,
+    "technique_id": "T1071.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 27,
+    "technique_id": "T1071.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 28,
+    "technique_id": "T1005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "apt29-kill-chain-phase7.yaml",
+    "index": 29,
+    "technique_id": "T1041",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
   },
   {
     "scenario": "apt29-kill-chain.yaml",

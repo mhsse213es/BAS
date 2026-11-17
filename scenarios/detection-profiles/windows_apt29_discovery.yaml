@@ -1,0 +1,39 @@
+# Detection Validation Profile — base behavioural profile for Windows
+# discovery/recon activity exercised by APT29 Kill Chain Phase 7 (stages
+# 6-10: privileged-group enumeration, DC discovery, remote-system discovery,
+# security-product discovery, network-configuration discovery).
+#
+# Behavioural, not per-ATT&CK: it captures the SOC's baseline expectation
+# that recon commands (net.exe, nltest.exe, ipconfig.exe, arp.exe) invoked
+# from a scripting-engine parent are correlated centrally, independent of
+# the exact discovery sub-technique that produced them.
+profile: windows_apt29_discovery
+version: 1
+technique_ids: [T1069.002, T1018, T1518.001, T1016]
+expected_detection:
+  - id: apt29-disc-siem-correlation
+    provider: microsoft_sentinel
+    type: siem
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "No central recon-command correlation rule"
+      remediation: >-
+        Deploy a SIEM analytic that correlates process-creation events for
+        recon utilities (net.exe, nltest.exe, ipconfig.exe, arp.exe,
+        Get-CimInstance SecurityCenter2 queries) with a PowerShell or other
+        scripting-engine parent, and routes the result to the SOC triage
+        queue.
+      reference: "MITRE ATT&CK TA0007 — Discovery"
+  - id: apt29-disc-edr-process
+    provider: microsoft_defender
+    type: endpoint
+    confidence: recommended
+    finding:
+      severity: Low
+      title: "Recon utility invocation not flagged on the endpoint"
+      remediation: >-
+        Flag net.exe/nltest.exe invoked with a non-interactive parent
+        process (Sysmon EID 1), especially against privileged groups or
+        domain-controller enumeration.
+      reference: "MITRE ATT&CK TA0007 — Discovery"

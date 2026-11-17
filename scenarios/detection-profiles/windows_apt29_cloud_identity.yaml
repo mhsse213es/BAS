@@ -1,0 +1,51 @@
+# Detection Validation Profile — M365/Azure cloud-identity activity exercised
+# by the APT29 Cloud Identity Branch (Phase 7). Execution-unverified: no run
+# of these stages against a real tenant has confirmed these expectations.
+profile: windows_apt29_cloud_identity
+version: 1
+technique_ids: [T1098.001, T1550.001, T1556.007, T1114, T1087.004]
+expected_detection:
+  - id: apt29-cloud-sp-credential
+    provider: microsoft_defender
+    type: cloud
+    confidence: required
+    finding:
+      severity: High
+      title: "Service principal credential addition not alerted"
+      remediation: >-
+        Alert on 'Update application – Certificates and secrets management'
+        audit events outside a known CI/CD pipeline's service principal.
+      reference: "MITRE ATT&CK T1098.001 — Additional Cloud Credentials"
+  - id: apt29-cloud-oauth-consent
+    provider: microsoft_defender
+    type: cloud
+    confidence: required
+    finding:
+      severity: High
+      title: "New OAuth permission grant not alerted"
+      remediation: >-
+        Alert on new oauth2PermissionGrants outside a known app-review
+        workflow; review any grant scope broader than User.Read.
+      reference: "MITRE ATT&CK T1550.001 — Application Access Token"
+  - id: apt29-cloud-mailbox-search
+    provider: microsoft_defender
+    type: cloud
+    confidence: required
+    finding:
+      severity: High
+      title: "Application-level mailbox search not alerted"
+      remediation: >-
+        Alert on a non-interactive application token performing a mailbox
+        message search, independent of result count.
+      reference: "MITRE ATT&CK T1114 — Email Collection"
+  - id: apt29-cloud-identity-cache-access
+    provider: microsoft_defender
+    type: endpoint
+    confidence: recommended
+    finding:
+      severity: Low
+      title: "Access to the cached M365 identity artifact not flagged"
+      remediation: >-
+        Flag access to the Microsoft identity token cache from a process
+        other than a signed Microsoft 365/Office binary.
+      reference: "MITRE ATT&CK T1087.004 — Cloud Account"

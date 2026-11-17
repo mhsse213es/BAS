@@ -1,0 +1,44 @@
+# Detection Validation Profile — Windows persistence activity exercised by
+# APT29 Kill Chain Phase 7 (stages 15-18: startup-folder write, WMI event
+# subscription, service creation, COM-hijack-pattern registry write).
+profile: windows_apt29_persistence
+version: 1
+technique_ids: [T1547.001, T1546.003, T1543.003, T1546.015]
+expected_detection:
+  - id: apt29-persist-file-registry
+    provider: microsoft_defender
+    type: endpoint
+    confidence: required
+    finding:
+      severity: High
+      title: "New persistence artifact (file/registry) not flagged"
+      remediation: >-
+        Flag new files written to the Startup folder (Sysmon EID 11) and
+        new CLSID InprocServer32 values under HKCU\Software\Classes\CLSID
+        (Sysmon EID 13), independent of whether the value is later deleted.
+      reference: "MITRE ATT&CK TA0003 — Persistence"
+  - id: apt29-persist-wmi-subscription
+    provider: microsoft_defender
+    type: endpoint
+    confidence: required
+    finding:
+      severity: High
+      title: "WMI event-subscription persistence not flagged"
+      remediation: >-
+        Alert on new __EventFilter/__FilterToConsumerBinding/
+        CommandLineEventConsumer objects under root\subscription
+        (Sysmon EID 19/20/21) — this combination is rarely legitimate
+        outside of known management tooling.
+      reference: "MITRE ATT&CK T1546.003 — WMI Event Subscription"
+  - id: apt29-persist-service-install
+    provider: microsoft_sentinel
+    type: siem
+    confidence: required
+    finding:
+      severity: High
+      title: "New service installation not correlated to a change ticket"
+      remediation: >-
+        Forward Security EID 4697 (service installed) to the SOC and
+        correlate against a known-change allowlist; flag services with
+        a cmd.exe/powershell.exe binary path.
+      reference: "MITRE ATT&CK T1543.003 — Windows Service"
