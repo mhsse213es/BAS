@@ -132,9 +132,9 @@ re-run. Evidence is the pasted stage output, not a SIEM or a certificate request
 | ESC4 | test template, Domain Users Write | stage 4 FAIL; stage 17 latent (potential) while unpublished, path once published | stage 4 PASS |
 | ESC6 | `EDITF_ATTRIBUTESUBJECTALTNAME2` set (`11014e` to `15014e`) | stage 6 FAIL; stage 17 path via published template Machine | stage 6 PASS, value back to `11014e` |
 | ESC7 | Domain Users granted Manage this CA | stage 7 FAIL, `Domain Users -> ManageCA -> CA LAB-CA`; stage 17 path | stage 7 PASS |
-| ESC2 | test template, Any Purpose EKU, Domain Users enroll | stage 2 FAIL (confirmed, unpublished) | pending |
-| ESC3 | agent template plus a template requiring an agent signature | stage 3 FAIL confirmed; with only the agent template, SKIP (potential) | pending |
-| ESC9 | test template with the no-security-extension flag (0x80000) | stage 9 FAIL (confirmed, unpublished) | pending |
+| ESC2 | test template, Any Purpose EKU, Domain Users enroll | stage 2 FAIL (confirmed, unpublished) | stage PASS |
+| ESC3 | agent template plus a template requiring an agent signature | stage 3 FAIL confirmed; with only the agent template, SKIP (potential) | stage PASS |
+| ESC9 | test template with the no-security-extension flag (0x80000) | stage 9 FAIL (confirmed, unpublished) | stage PASS |
 | ESC11 | `IF_ENFORCEENCRYPTICERTREQUEST` cleared | stage 11 FAIL; stage 17 FAIL with the no-path wording (live) | stage 11 PASS |
 | ESC10 | none added (real DC at 20348.587) | stage 10 FAIL, then stage 17 | not applicable |
 

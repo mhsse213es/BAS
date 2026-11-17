@@ -58,7 +58,7 @@ Revert: unpublish (`certsrv.msc`, Delete) then Delete Template in `certtmpl.msc`
 Change: duplicate **User**, name `ZZ-BAS-ESC2-Test`, unpublished. Extensions, Application Policies: remove every policy, add
 **Any Purpose**. Security: Domain Users **Enroll**. Subject Name and Issuance Requirements at defaults.
 Stage 2: FAIL, `state=confirmed`, `(not published on any CA)`.
-Revert: Delete Template. Stage 2: PASS (pending; see Result status).
+Revert: Delete Template. Stage 2: PASS.
 
 ## ESC3: enrollment agent
 
@@ -70,7 +70,7 @@ Stage 3: FAIL, `state=confirmed`, "another enrollable template accepts agent-sig
 Control for potential: delete only `ZZ-BAS-ESC3-Target`. Stage 3: **SKIP**, `state=potential`, "no template that accepts
 agent-signed requests was found". The CA's enrollment-agent restrictions are not readable from AD, so ESC3 never reaches PASS
 while an enrollable agent template exists.
-Revert: delete the Agent template too. Stage 3: PASS (pending).
+Revert: delete the Agent template too. Stage 3: PASS.
 
 ## ESC4: template ACL
 
@@ -109,7 +109,7 @@ $cfg=([adsi]'LDAP://RootDSE').configurationNamingContext; $t=[adsi]"LDAP://CN=ZZ
 ```
 
 The printed hex has the `80000` bit set. Stage 9: FAIL, `state=confirmed`.
-Revert: Delete Template. Stage 9: PASS (pending).
+Revert: Delete Template. Stage 9: PASS.
 
 ## ESC11: RPC encryption not enforced (CA host, elevated)
 
@@ -145,13 +145,12 @@ trust). Their only live result so far is "reads real data, finds nothing on a cl
 | ESC | Weakness shown by the stage | Back to PASS after revert |
 |---|---|---|
 | 1 | yes | yes |
-| 2 | yes | pending |
-| 3 | yes (confirmed, and potential with one template) | pending |
+| 2 | yes | yes |
+| 3 | yes (confirmed, and potential with one template) | yes |
 | 4 | yes (latent, then path) | yes |
 | 6 | yes | yes |
 | 7 | yes | yes |
-| 9 | yes | pending |
+| 9 | yes | yes |
 | 11 | yes | yes (the before and after InterfaceFlags values were not sent, so they are not recorded here) |
 
-"Pending" means the stage showed the weakness but the PASS output after deleting the template had not been seen when this was
-written. Update the table when it has.
+All eight controls were run to a PASS after revert. The ESC11 before and after `InterfaceFlags` values were not recorded; stage 11 returned PASS after the revert.
