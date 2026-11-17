@@ -1,0 +1,62 @@
+id: carbanak-bfsi-app-discovery
+product_line: killchain
+name: Carbanak BFSI Banking Application Discovery (Item 9)
+description: >
+  Single-step emulation of the Carbanak operator's reconnaissance of banking
+  applications on an operator workstation: enumerating running processes whose
+  names match core banking, SWIFT, card-management and ATM-console products.
+  Kept separate from the Carbanak kill chain so Stage 5 is not modified.
+
+  SAFETY: read-only. Process names only. No process memory is read, no window
+  is captured, and no application is driven. [BAS-SIM-CARBANAK-S9] tagged.
+
+  Grounded in MITRE ATT&CK T1057 (Process Discovery) and the Carbanak
+  operator-reconnaissance behaviour in Kaspersky's "Carbanak APT: The Great
+  Bank Robbery" (2015). Windows only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - carbanak
+  - bfsi
+  - discovery
+  - t1057
+mitre_phases:
+  - discovery
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+  - name: "Carbanak Item 9 -- Banking Application Process Discovery (T1057)"
+    technique_id: T1057
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: true
+    risk: low
+    blast_radius: "Lists names of running processes matching banking-application name patterns. No process is inspected beyond its name."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1 for the enumeration process"
+    detection:
+      - "EDR: enumeration of banking application processes by a non-administrative process"
+    threat_intel_sources:
+      - reference: "Kaspersky -- Carbanak APT: The Great Bank Robbery (2015)"
+        url: "https://securelist.com/carbanak-apt-the-great-bank-robbery/68732/"
+    last_reviewed: "2026-11-17"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $patterns = '*cbs*','*swift*','*card*','*atm*','*payment*','*treasury*'
+      $names = Get-Process | Where-Object { $n = $_.ProcessName; $patterns | Where-Object { $n -like $_ } } |
+        Select-Object -ExpandProperty ProcessName -Unique
+      Write-Output "EXEC 9: $(@($names).Count) banking-application process name(s) matched: [$($names -join ', ')]. Names only. [BAS-SIM-CARBANAK-S9]"
+    cleanup: ""
