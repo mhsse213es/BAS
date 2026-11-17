@@ -1,3 +1,4 @@
+if (-not (Test-CvGate 'BAS_CONFIRM_CLOUD_SECRET_READ')) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'lab gate BAS_CONFIRM_CLOUD_SECRET_READ is not set to true; this step requests a secret value, which only a deliberate test run may do' } 'CV-E35' }
 $vault = Get-CvEnv 'BAS_CLOUD_TEST_KEYVAULT'
 $secret = Get-CvEnv 'BAS_CLOUD_TEST_SECRET_NAME'
 if ($secret -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'no synthetic test secret configured (BAS_CLOUD_TEST_SECRET_NAME); use a test secret holding synthetic data only' } 'CV-E35' }

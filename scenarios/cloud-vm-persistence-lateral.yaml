@@ -88,6 +88,11 @@ steps:
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
       }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
       $out = (& aws @CliArgs --output json 2>&1 | Out-String)
@@ -116,7 +121,7 @@ steps:
       if (-not (Test-CvAwsCli)) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS CLI is not installed on this host' } 'CV-D27' }
       Set-CvAwsRegion
       $r = Invoke-CvAws @('sts', 'assume-role', '--role-arn', $arn, '--role-session-name', $script:CvTag, '--duration-seconds', '900')
-      $res = Resolve-CvAws $r 'role assumption of the test role'
+      $res = Resolve-CvAws $r 'role assumption of the test role' 'BAS_CLOUD_EXPECT_ROLE_ASSUME'
       $r = $null
       Write-Output 'EXEC T1098: assume-role attempted for the test role only. Any returned credentials were discarded unrecorded.'
       Complete-CvStep $res 'CV-D27'
@@ -189,6 +194,11 @@ steps:
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
       }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
       $out = (& aws @CliArgs --output json 2>&1 | Out-String)
@@ -218,8 +228,10 @@ steps:
       Set-CvAwsRegion
       $r = Invoke-CvAws @('iam', 'create-access-key', '--user-name', $user)
       if ($r.Code -ne 0) { Complete-CvStep (Resolve-CvAws $r 'access key creation for the test user' 'BAS_CLOUD_EXPECT_KEY_CREATE') 'CV-D28' }
-      $keyId = ''; try { $keyId = [string](($r.Text | ConvertFrom-Json).AccessKey.AccessKeyId) } catch {}
+      $parsed = Get-CvJson $r.Text
+      $keyId = ''; if ($parsed) { $keyId = [string]$parsed.AccessKey.AccessKeyId }
       $r = $null
+      if ($keyId -eq '') { Complete-CvStep @{ Outcome = 'fail'; Reason = 'an access key was created for the test user but its id could not be parsed, so cleanup was NOT attempted; list and delete the test user keys manually' } 'CV-D28' }
       $del = Invoke-CvAws @('iam', 'delete-access-key', '--user-name', $user, '--access-key-id', $keyId)
       $listed = Invoke-CvAws @('iam', 'list-access-keys', '--user-name', $user)
       $still = ($keyId -ne '' -and $listed.Text -match [regex]::Escape($keyId))
@@ -296,6 +308,11 @@ steps:
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
       }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
       $out = (& aws @CliArgs --output json 2>&1 | Out-String)
@@ -332,6 +349,7 @@ steps:
       $rm = Invoke-CvHttp 'POST' ('https://graph.microsoft.com/v1.0/applications/' + $app + '/removePassword') $t.Token ('{"keyId":"' + $keyId + '"}')
       Write-Output ('EXEC T1098.001: client secret added to the test application and removed; remove_http=' + $rm.Code + '. The secret text was never recorded.')
       if ($rm.Code -ne 200) { Complete-CvStep @{ Outcome = 'fail'; Reason = ('a client secret was added to the test application and cleanup was NOT verified; remove key id ' + $keyId + ' manually') } 'CV-D29' }
+      if (Test-CvGate 'BAS_CLOUD_EXPECT_KEY_CREATE') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'client secret addition succeeded and is documented as expected; cleanup verified' } 'CV-D29' }
       Complete-CvStep @{ Outcome = 'fail'; Reason = 'the workload identity could add a client secret to a service principal; cleanup verified' } 'CV-D29'
     cleanup: |
       foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
@@ -401,6 +419,11 @@ steps:
       }
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
+      }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
       }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
@@ -500,6 +523,11 @@ steps:
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
       }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
       $out = (& aws @CliArgs --output json 2>&1 | Out-String)
@@ -526,7 +554,9 @@ steps:
       $existing = @($dirs | Where-Object { Test-Path -LiteralPath $_ })
       $writable = @()
       foreach ($d in $existing) {
-      $acl = Get-Acl -LiteralPath $d
+      $acl = $null
+      try { $acl = Get-Acl -LiteralPath $d -ErrorAction Stop } catch {}
+      if ($null -eq $acl) { Complete-CvStep @{ Outcome = 'error'; Reason = ('the ACL of a startup location could not be read: ' + $d) } 'CV-D31' }
       $w = @($acl.Access | Where-Object { $_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Value -match '(^|\\)(Users|Authenticated Users|Everyone)$' -and [string]$_.FileSystemRights -match 'Write|Modify|FullControl' })
       if ($w.Count -gt 0) { $writable += $d }
       }

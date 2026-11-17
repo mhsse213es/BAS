@@ -12,4 +12,5 @@ $res = $null
 $rm = Invoke-CvHttp 'POST' ('https://graph.microsoft.com/v1.0/applications/' + $app + '/removePassword') $t.Token ('{"keyId":"' + $keyId + '"}')
 Write-Output ('EXEC T1098.001: client secret added to the test application and removed; remove_http=' + $rm.Code + '. The secret text was never recorded.')
 if ($rm.Code -ne 200) { Complete-CvStep @{ Outcome = 'fail'; Reason = ('a client secret was added to the test application and cleanup was NOT verified; remove key id ' + $keyId + ' manually') } 'CV-D29' }
+if (Test-CvGate 'BAS_CLOUD_EXPECT_KEY_CREATE') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'client secret addition succeeded and is documented as expected; cleanup verified' } 'CV-D29' }
 Complete-CvStep @{ Outcome = 'fail'; Reason = 'the workload identity could add a client secret to a service principal; cleanup verified' } 'CV-D29'

@@ -95,6 +95,11 @@ steps:
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
       }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
       $out = (& aws @CliArgs --output json 2>&1 | Out-String)
@@ -198,6 +203,11 @@ steps:
       }
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
+      }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
       }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
@@ -305,6 +315,11 @@ steps:
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
       }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
       $out = (& aws @CliArgs --output json 2>&1 | Out-String)
@@ -403,6 +418,11 @@ steps:
       }
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
+      }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
       }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
@@ -505,6 +525,11 @@ steps:
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
       }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
       $out = (& aws @CliArgs --output json 2>&1 | Out-String)
@@ -604,6 +629,11 @@ steps:
       }
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
+      }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
       }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
@@ -705,6 +735,11 @@ steps:
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
       }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
       $out = (& aws @CliArgs --output json 2>&1 | Out-String)
@@ -805,6 +840,11 @@ steps:
       }
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
+      }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
       }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)

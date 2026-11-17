@@ -50,6 +50,11 @@ function Resolve-CvHttp { param($Res, [string]$What, [string]$ExpectGate = 'BAS_
   return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
 }
 
+function Get-CvJson { param([string]$Text)
+  $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+  if ($i -lt 0 -or $j -le $i) { return $null }
+  try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+}
 function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
 function Invoke-CvAws { param([string[]]$CliArgs)
   $out = (& aws @CliArgs --output json 2>&1 | Out-String)

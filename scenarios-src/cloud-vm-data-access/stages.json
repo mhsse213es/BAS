@@ -64,9 +64,9 @@
     "timeout_sec": 120,
     "requires_priv": "user",
     "fidelity": "telemetry-safe",
-    "production_safe": true,
-    "risk": "medium",
-    "blast_radius": "Requests the value of one designated synthetic test secret. Only its length is observed; the value is discarded.",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Gated (BAS_CONFIRM_CLOUD_SECRET_READ). Requests the value of one designated synthetic test secret. Only its length is observed; the value is discarded.",
     "telemetry": [
       "Key Vault audit: SecretGet / CloudTrail: GetSecretValue (cloud side)"
     ],

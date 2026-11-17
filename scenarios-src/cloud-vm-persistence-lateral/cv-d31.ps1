@@ -2,7 +2,9 @@ $dirs = @((Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Sta
 $existing = @($dirs | Where-Object { Test-Path -LiteralPath $_ })
 $writable = @()
 foreach ($d in $existing) {
-  $acl = Get-Acl -LiteralPath $d
+  $acl = $null
+  try { $acl = Get-Acl -LiteralPath $d -ErrorAction Stop } catch {}
+  if ($null -eq $acl) { Complete-CvStep @{ Outcome = 'error'; Reason = ('the ACL of a startup location could not be read: ' + $d) } 'CV-D31' }
   $w = @($acl.Access | Where-Object { $_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Value -match '(^|\\)(Users|Authenticated Users|Everyone)$' -and [string]$_.FileSystemRights -match 'Write|Modify|FullControl' })
   if ($w.Count -gt 0) { $writable += $d }
 }

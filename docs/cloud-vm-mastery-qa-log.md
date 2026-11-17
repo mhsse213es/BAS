@@ -53,3 +53,21 @@ Sources: `scenarios-src/cloud-vm-common/lib.ps1` (shared helpers), one directory
 - The `cloud-vm-attack` pack and these packs overlap at IMDS access (cv-a6 and the existing stage 1). cv-a6 adds the child-process check; it does not replace stage 1.
 - cv-c22 to cv-c26 describe this host only. A PASS means this host was checked and no exposure was found, not that the fleet is clean.
 - Stray output from a generator run with a mistyped root path was written to `C:\c\...`, outside the repository. A safety check blocked its removal; it still needs to be deleted by hand.
+
+## Code review (commit 5f660ebf) and fixes
+Ten findings. Fixed in this change:
+- cv-d27 read the wrong expectation variable; it now honours `BAS_CLOUD_EXPECT_ROLE_ASSUME`.
+- cv-d28 could not parse the created key id when CLI stderr preceded the JSON, and then attempted no cleanup. The JSON is now extracted tolerantly (`Get-CvJson`), and an unparseable id is a FAIL that says cleanup was not attempted.
+- cv-d29 ignored `BAS_CLOUD_EXPECT_KEY_CREATE` on success; it now matches cv-d28.
+- cv-e35 read a secret value with no confirm gate while marked production-safe. It now requires `BAS_CONFIRM_CLOUD_SECRET_READ`, and is marked not production-safe, high risk.
+- cv-b21 treated unparseable simulation output as zero escalation paths (a false PASS). It is now ERROR.
+- cv-b14 treated any metadata read failure as "no instance profile". Only HTTP 404 is now PASS; other failures are ERROR.
+- cv-d31 turned a failed ACL read into PASS. It is now ERROR.
+- cv-c24 flagged identifiers (AZURE_CLIENT_ID, AWS_ACCESS_KEY_ID) as secrets. It now flags only secret-bearing variables and an existing GCP credential file.
+- The classifier checks lived only in this log. They are now committed as `scenarios-src/cloud-vm-common/lib.Tests.ps1` (exit 1 on failure); 0 failures.
+
+Deferred, not changed here:
+- The generator (`appctlgen`) appends a default cleanup to every step, so the step-contract ledger counts cv-d28 and cv-d29 as having declared undo even though the undo runs only inside the script. This is generator-wide, so it belongs in its own change. Until then, treat the ledger's cleanup column as unreliable for this pack.
+- The ledger's destructive/non-destructive classification of the read-only AWS steps and cv-e36 looks inverted in places. Same owner: the contract classifier, not this pack.
+
+Re-run after the fixes: all 31 steps parse; `lib.Tests.ps1` passes; the same 31 steps run locally with the same verdicts as before (cloud and gated steps SKIP, cv-c22 FAIL on this host, cv-c23/c24/c25/c26/d30/d31 PASS); signer verify-all ok=193 fail=0; step-contract and product-line tests pass.

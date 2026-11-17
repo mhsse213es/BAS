@@ -5,8 +5,10 @@ if (-not (Test-CvAwsCli)) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS C
 Set-CvAwsRegion
 $r = Invoke-CvAws @('iam', 'create-access-key', '--user-name', $user)
 if ($r.Code -ne 0) { Complete-CvStep (Resolve-CvAws $r 'access key creation for the test user' 'BAS_CLOUD_EXPECT_KEY_CREATE') 'CV-D28' }
-$keyId = ''; try { $keyId = [string](($r.Text | ConvertFrom-Json).AccessKey.AccessKeyId) } catch {}
+$parsed = Get-CvJson $r.Text
+$keyId = ''; if ($parsed) { $keyId = [string]$parsed.AccessKey.AccessKeyId }
 $r = $null
+if ($keyId -eq '') { Complete-CvStep @{ Outcome = 'fail'; Reason = 'an access key was created for the test user but its id could not be parsed, so cleanup was NOT attempted; list and delete the test user keys manually' } 'CV-D28' }
 $del = Invoke-CvAws @('iam', 'delete-access-key', '--user-name', $user, '--access-key-id', $keyId)
 $listed = Invoke-CvAws @('iam', 'list-access-keys', '--user-name', $user)
 $still = ($keyId -ne '' -and $listed.Text -match [regex]::Escape($keyId))

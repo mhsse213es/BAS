@@ -91,6 +91,11 @@ steps:
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
       }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
       $out = (& aws @CliArgs --output json 2>&1 | Out-String)
@@ -190,6 +195,11 @@ steps:
       }
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
+      }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
       }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
@@ -291,6 +301,11 @@ steps:
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
       }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
       $out = (& aws @CliArgs --output json 2>&1 | Out-String)
@@ -345,10 +360,10 @@ steps:
     requires_priv: user
     timeout_sec: 120
     fidelity: telemetry-safe
-    production_safe: true
-    risk: medium
+    production_safe: false
+    risk: high
     reversible: true
-    blast_radius: "Requests the value of one designated synthetic test secret. Only its length is observed; the value is discarded."
+    blast_radius: "Gated (BAS_CONFIRM_CLOUD_SECRET_READ). Requests the value of one designated synthetic test secret. Only its length is observed; the value is discarded."
     telemetry:
       - "Key Vault audit: SecretGet / CloudTrail: GetSecretValue (cloud side)"
     detection:
@@ -398,6 +413,11 @@ steps:
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
       }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
       $out = (& aws @CliArgs --output json 2>&1 | Out-String)
@@ -420,6 +440,7 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      if (-not (Test-CvGate 'BAS_CONFIRM_CLOUD_SECRET_READ')) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'lab gate BAS_CONFIRM_CLOUD_SECRET_READ is not set to true; this step requests a secret value, which only a deliberate test run may do' } 'CV-E35' }
       $vault = Get-CvEnv 'BAS_CLOUD_TEST_KEYVAULT'
       $secret = Get-CvEnv 'BAS_CLOUD_TEST_SECRET_NAME'
       if ($secret -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'no synthetic test secret configured (BAS_CLOUD_TEST_SECRET_NAME); use a test secret holding synthetic data only' } 'CV-E35' }
@@ -511,6 +532,11 @@ steps:
       }
       if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
       return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
+      }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
       }
       function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
       function Invoke-CvAws { param([string[]]$CliArgs)
