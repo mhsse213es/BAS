@@ -93,6 +93,9 @@ type SimulationResult struct {
 	CleanupResidual  []string         `json:"cleanupResidual,omitempty"`  // normalized snapshot-diff keys still present after the step's own cleanup ran
 	CleanupError     string           `json:"cleanupError,omitempty"`     // the cleanup command's own stderr+exit code when CleanupVerdict is partial/leaked
 	BlockingControl  *BlockingControl `json:"blockingControl,omitempty"`  // specific control that prevented the technique (populated when DetectionVerdict=prevented)
+	// FraudControl is the banking-application control verdict for a fraud step.
+	// It is independent of the endpoint result above. Nil for non-fraud steps.
+	FraudControl *FraudControl `json:"fraudControl,omitempty"`
 	// VetoedActionKey/VetoedExecutionClass/VetoedBlockSource are populated
 	// only when Result == ResultVetoed -- structured mirrors of the free-
 	// text explanation already embedded in Details, so a report/UI/export

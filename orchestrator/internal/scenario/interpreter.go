@@ -135,6 +135,7 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		VetoedBlockSource:    result.VetoedBlockSource,
 		Remediation:          models.Remediation(checkResult, tactic, techniqueID, techniqueName),
 		RawOutput:            truncate(combined, outputLimit),
+		FraudControl:         fraudControlFromOutput(combined),
 		Truncated:            truncated,
 		OriginalOutputBytes:  len(combined),
 		ExecutionFailure:     assessExecutionFailure(checkResult, result, details),
