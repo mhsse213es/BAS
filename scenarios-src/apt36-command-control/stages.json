@@ -93,5 +93,47 @@
     "risk": "high",
     "fidelity": "lab-only",
     "requires_priv": "admin"
+  },
+  {
+    "id": "apt36-k6",
+    "n": 6,
+    "name": "APT36 Lateral Movement 4 - Remote Scheduled Task over RPC (T1053.005)",
+    "technique_id": "T1053.005",
+    "timeout_sec": 150,
+    "blast_radius": "Gated by BAS_CONFIRM_APT36_LATERAL_MOVEMENT=true (exact), administrator only, and run only against hosts in BAS_LATERAL_TARGETS. On each target it creates a run-tagged one-time task whose action writes one marker file under C:/Users/Public, queries it, deletes it and verifies the deletion. The task is never triggered by this step. Current identity only. Built but not yet run against any target.",
+    "telemetry": [
+      "Security EID 4698 and 4699 on the target: task created and deleted",
+      "Task Scheduler EID 106 on the target",
+      "Sysmon EID 1: schtasks.exe with /s <remote host>"
+    ],
+    "detection": [
+      "SIEM: scheduled task created on a remote host by a non-administration source",
+      "EDR: schtasks /create /s from a workstation toward another workstation"
+    ],
+    "cleanup": "$st = Join-Path $env:SystemRoot 'System32\\schtasks.exe'\nForEach ($t in @($env:BAS_LATERAL_TARGETS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^[A-Za-z0-9._-]{1,253}$' })) { foreach ($line in @(& $st /query /s $t /fo csv /nh 2>$null)) { $n = ($line -split ',')[0].Trim('\"'); if ($n -like '*bas_a36_*') { & $st /delete /s $t /tn $n /f | Out-Null } } }",
+    "production_safe": false,
+    "risk": "high",
+    "fidelity": "lab-only",
+    "requires_priv": "admin"
+  },
+  {
+    "id": "apt36-k7",
+    "n": 7,
+    "name": "APT36 C2 4 - DNS Tunneling Volume Pattern (T1071.004, telemetry)",
+    "technique_id": "T1071.004",
+    "timeout_sec": 120,
+    "blast_radius": "Sends forty DNS TXT queries about 150 ms apart, each with a synthetic base32-style label under a run-tagged .invalid parent, from the PowerShell process. Queries go to the host resolver and cannot resolve. Validates host DNS telemetry for a high-volume pattern only.",
+    "telemetry": [
+      "Sysmon EID 22: forty TXT queries with run-tagged parents",
+      "DNS-Client Operational EID 3008 where enabled"
+    ],
+    "detection": [
+      "DNS analytics: burst of long high-entropy labels under one parent domain",
+      "Resolver policy: .invalid names should never leave the resolver"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
   }
 ]

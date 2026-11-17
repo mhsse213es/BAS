@@ -205,6 +205,13 @@ steps:
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
       }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
       Invoke-A36Test -Id 'd1' -Technique 'T1057' -Telemetry @('sysmon:1', 'sec:4688') -Summary 'running processes are enumerated with tasklist and the output is parsed for security-product names (T1057)' -Attempt {
       $out = Join-Path $script:A36Work 'procs.txt'
       $tl = Join-Path $env:SystemRoot 'System32\tasklist.exe'
@@ -397,6 +404,13 @@ steps:
       if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       }
       Invoke-A36Test -Id 'd2' -Technique 'T1082' -Telemetry @('sysmon:1', 'sec:4688') -Summary 'system information is enumerated with systeminfo and a synthetic virtualization/sandbox check (T1082)' -Attempt {
       $si = Join-Path $env:SystemRoot 'System32\systeminfo.exe'
@@ -593,6 +607,13 @@ steps:
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
       }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
       Invoke-A36Test -Id 'd3' -Technique 'T1083' -Telemetry @('sysmon:11') -Summary 'a synthetic user profile is built and searched by extension, the discovery precondition to collection (T1083)' -Attempt {
       $prof = Join-Path $script:A36Work 'profile'
       $names = @('Documents\report.docx', 'Documents\budget.xlsx', 'Desktop\contract.pdf', 'Downloads\notes.txt')
@@ -785,6 +806,13 @@ steps:
       if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       }
       Invoke-A36Test -Id 'd4' -Technique 'T1016' -Telemetry @('sysmon:1', 'sec:4688') -Summary 'network configuration is enumerated with ipconfig and arp, output captured to a run-tagged file (T1016)' -Attempt {
       $out = Join-Path $script:A36Work 'netcfg.txt'
@@ -984,6 +1012,13 @@ steps:
       if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       }
       Invoke-A36Test -Id 'd5' -Technique 'T1135' -Telemetry @('sysmon:1', 'sec:4688') -Summary 'network shares reachable from this host are enumerated with net view, the lateral-movement preparation step (T1135)' -Attempt {
       $nv = Join-Path $env:SystemRoot 'System32\net.exe'

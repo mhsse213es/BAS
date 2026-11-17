@@ -214,6 +214,13 @@ steps:
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
       }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
       Invoke-A36Test -Id 's1' -Technique 'T1204.002' -Telemetry @('sysmon:1', 'sec:4688') -Summary 'a process named winword.exe launches PowerShell (T1204.002 execution, T1059.001); the parent is a renamed copy of cmd.exe, not Microsoft Word' -Attempt {
       $dir = Join-Path $script:A36Work 'office'
       New-Item -ItemType Directory -Path $dir -Force | Out-Null
@@ -407,6 +414,13 @@ steps:
       if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       }
       Invoke-A36Test -Id 's2' -Technique 'T1221' -Summary 'a document with a remote attachedTemplate relationship is built and its template is fetched from a loopback server (T1221); Office is not opened' -Telemetry @('sysmon:1', 'sysmon:3') -Attempt {
       $port = Get-Random -Minimum 20000 -Maximum 29999
@@ -627,6 +641,13 @@ steps:
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
       }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
       Invoke-A36Test -Id 's3' -Technique 'T1056.001' -Mode Direct -Telemetry @('sysmon:1') -Summary 'keyboard-hook API capability probe (T1056.001); it checks reachability only and installs no hook, see the controlled hook step in apt36-collection-credential' -Attempt {
       $mods = @([Diagnostics.Process]::GetCurrentProcess().Modules | ForEach-Object { $_.ModuleName.ToLower() })
       $user32 = ($mods -contains 'user32.dll')
@@ -815,6 +836,13 @@ steps:
       if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       }
       Invoke-A36Test -Id 's4' -Technique 'T1547.001' -Summary 'HKCU Run key written, read back and removed (T1547.001)' -Telemetry @('sysmon:13', 'sec:4657') -Attempt {
       $key = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
@@ -1007,6 +1035,13 @@ steps:
       if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       }
       Invoke-A36Test -Id 's5' -Technique 'T1071.004' -Mode Telemetry -Require @('sysmon:22') -Telemetry @('dns:3008') -Summary 'a DNS beacon: five A queries at jittered intervals to run-tagged .invalid names (T1071.004; the earlier mapping T1071.001 was an HTTP technique)' -Attempt {
       $rng = New-Object Random
@@ -1202,6 +1237,13 @@ steps:
       if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       }
       Invoke-A36Test -Id 's6' -Technique 'T1053.005' -Summary 'scheduled task created, run once, queried and deleted (T1053.005)' -Telemetry @('sec:4698', 'task:106', 'sysmon:1') -Attempt {
       $st = Join-Path $env:SystemRoot 'System32\schtasks.exe'
@@ -1403,6 +1445,13 @@ steps:
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
       }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
       Invoke-A36Test -Id 's7' -Technique 'T1218.005' -Summary 'mshta runs an HTA whose VBScript starts cmd.exe, which writes one marker file (T1218.005)' -Telemetry @('sysmon:1', 'sec:4688') -Attempt {
       $mk = Join-Path $script:A36Work 'hta-marker.txt'
       $hta = Join-Path $script:A36Work 'dropper.hta'
@@ -1594,6 +1643,13 @@ steps:
       if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       }
       Invoke-A36Test -Id 's8' -Technique 'T1218.010' -Summary 'regsvr32 runs a local JScript scriptlet through scrobj.dll (Squiblydoo pattern, local file only) and the script starts cmd.exe (T1218.010)' -Telemetry @('sysmon:1', 'sec:4688') -Attempt {
       $mk = Join-Path $script:A36Work 'sct-marker.txt'
@@ -1788,6 +1844,13 @@ steps:
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
       }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
       Invoke-A36Test -Id 's9' -Technique 'T1071.004' -Mode Telemetry -Require @('sysmon:22') -Telemetry @('dns:3008') -Summary 'DNS TXT queries to run-tagged .invalid names, the record type used for C2 registration (T1071.004)' -Attempt {
       $sent = 0; $answered = 0
       for ($i = 1; $i -le 4; $i++) {
@@ -1981,6 +2044,13 @@ steps:
       if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       }
       Invoke-A36Test -Id 's10' -Technique 'T1105' -Summary 'a download cradle fetches a payload from a loopback server and its SHA-256 is verified; the payload is not executed (T1105)' -Telemetry @('sysmon:1', 'sysmon:3', 'ps:4104') -Attempt {
       $port = Get-Random -Minimum 20000 -Maximum 29999

@@ -209,6 +209,13 @@ steps:
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
       }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
       Invoke-A36Test -Id 'pe1' -Technique 'T1546.003' -Telemetry @('sysmon:19', 'sysmon:20', 'sysmon:21', 'wmi:5861') -Summary 'a WMI permanent event subscription is created, read back and removed (T1546.003)' -Attempt {
       if ($env:BAS_CONFIRM_APT36_WMI_SUBSCRIPTION -cne 'true') { return @{ Ran = $false; Note = 'lab_gate_not_set'; NotApplicable = 'lab gate BAS_CONFIRM_APT36_WMI_SUBSCRIPTION is not set to true; this step creates and removes a WMI permanent event subscription and is skipped without it' } }
       $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -414,6 +421,13 @@ steps:
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
       }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
       Invoke-A36Test -Id 'pe2' -Technique 'T1547.001' -Telemetry @('sysmon:11') -Summary 'a script is dropped in the user Startup folder then removed without logging on (T1547.001)' -Attempt {
       $dir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'
       if (-not (Test-Path -LiteralPath $dir)) { return @{ Ran = $false; Note = 'startup_folder_missing'; NotApplicable = 'the per-user Startup folder does not exist on this host' } }
@@ -606,6 +620,13 @@ steps:
       if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       }
       Invoke-A36Test -Id 'pe3' -Technique 'T1543.003' -Telemetry @('sec:4697', 'sysmon:1') -Summary 'a Windows service is created, started, stopped and deleted, then its removal is independently verified (T1543.003)' -Attempt {
       if ($env:BAS_CONFIRM_APT36_SERVICE_CREATE -cne 'true') { return @{ Ran = $false; Note = 'lab_gate_not_set'; NotApplicable = 'lab gate BAS_CONFIRM_APT36_SERVICE_CREATE is not set to true; this step creates and removes a Windows service and is skipped without it' } }
@@ -810,6 +831,13 @@ steps:
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
       }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
       Invoke-A36Test -Id 'pe4' -Technique 'T1546.015' -Telemetry @('sysmon:13', 'sec:4657') -Summary 'a per-user COM InprocServer32 override is written for a run-tagged CLSID, read back and removed; no existing CLSID is touched (T1546.015)' -Attempt {
       $clsid = '{' + [guid]::NewGuid().ToString() + '}'
       $key = 'HKCU:\SOFTWARE\Classes\CLSID\' + $clsid + '\InprocServer32'
@@ -1002,6 +1030,13 @@ steps:
       if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       }
       Invoke-A36Test -Id 'pe5' -Technique 'T1562.001' -Mode Direct -Telemetry @('sysmon:13') -Summary 'adding a Defender path exclusion is attempted and independently verified against live Defender state, not just the command exit code; gated because it touches live AV configuration (T1562.001)' -Attempt {
       if ($env:BAS_CONFIRM_APT36_DEFENDER_EXCLUSION -cne 'true') { return @{ Ran = $false; Note = 'lab_gate_not_set'; Verdict = @{ Outcome = 'not_applicable'; Reason = 'lab gate BAS_CONFIRM_APT36_DEFENDER_EXCLUSION is not set to true; this step adds and removes a live Defender exclusion and is skipped without it' }; NotApplicable = '' } }

@@ -175,3 +175,12 @@ function Invoke-A36Test {
   elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
   Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
 }
+
+# Shared safety helpers for gated steps. A gate must be exactly 'true' (case-sensitive); the admin check is separate.
+function Test-A36Gate {
+  param([string]$Name)
+  return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+}
+function Test-A36Admin {
+  return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}

@@ -1521,6 +1521,24 @@
     "status": "undo_declared_in_yaml"
   },
   {
+    "scenario": "apt36-command-control.yaml",
+    "index": 5,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "apt36-command-control.yaml",
+    "index": 6,
+    "technique_id": "T1071.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "apt36-discovery.yaml",
     "index": 0,
     "technique_id": "T1057",

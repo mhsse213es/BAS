@@ -209,6 +209,13 @@ steps:
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
       }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
       Invoke-A36Test -Id 'i1' -Technique 'T1204.002' -Telemetry @('sysmon:1', 'sysmon:11', 'sec:4688') -Summary 'a shortcut file (.lnk) is created and opened the way a user would, launching cmd.exe (T1204.002)' -Attempt {
       $mk = Join-Path $script:A36Work 'lnk-marker.txt'
       $lnk = Join-Path $script:A36Work 'Invoice_Q3.pdf.lnk'
@@ -407,6 +414,13 @@ steps:
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
       }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
       Invoke-A36Test -Id 'i3' -Technique 'T1059.005' -Telemetry @('sysmon:1', 'sec:4688') -Summary 'a VBScript file is run by wscript.exe, the document-to-script step (T1059.005)' -Attempt {
       $mk = Join-Path $script:A36Work 'vbs-marker.txt'
       $vbs = Join-Path $script:A36Work 'update.vbs'
@@ -599,6 +613,13 @@ steps:
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
       }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      }
       Invoke-A36Test -Id 'i4' -Technique 'T1059.001' -Telemetry @('sysmon:1', 'ps:4104', 'sec:4688') -Summary 'encoded PowerShell is launched as a hidden child process and writes one marker file (T1059.001)' -Attempt {
       $mk = Join-Path $script:A36Work 'enc-marker.txt'
       $script1 = "Set-Content -LiteralPath '" + $mk + "' -Value '" + $script:A36Marker + "'"
@@ -788,6 +809,13 @@ steps:
       if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       }
       Invoke-A36Test -Id 'i5' -Technique 'T1047' -Telemetry @('sysmon:1', 'sec:4688', 'wmi:5857') -Summary 'WMI Win32_Process.Create runs a benign command, an alternate execution path to a direct process launch (T1047)' -Attempt {
       $mk = Join-Path $script:A36Work 'wmi-marker.txt'
@@ -979,6 +1007,13 @@ steps:
       if (@('prevented', 'telemetry_visible') -contains $r.Outcome) { $v = 'PASS' }
       elseif (@('allowed_unexpectedly', 'not_enforced', 'telemetry_not_visible') -contains $r.Outcome) { $v = 'FAIL' }
       Write-Output "$($v): $($r.Reason). [BAS-SIM-APT36-$Id]"
+      }
+      function Test-A36Gate {
+      param([string]$Name)
+      return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true')
+      }
+      function Test-A36Admin {
+      return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       }
       Invoke-A36Test -Id 'i6' -Technique 'T1218.001' -Telemetry @('sysmon:1', 'sec:4688') -Summary 'hh.exe (Microsoft HTML Help) opens a local .chm whose shortcut object runs cmd.exe (T1218.001)' -Attempt {
       $hh = Join-Path $env:SystemRoot 'hh.exe'

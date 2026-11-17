@@ -14,6 +14,14 @@
 - Review fixes that came with it: the `k1` listener start is now guarded; `d5` derives its pass flag from output; `i6` cleanup stops only `hh.exe` processes launched with this run's tag.
 - Review findings deliberately not acted on (duplication and tidiness, no change to behavior or gating): repeated listener and process-launch boilerplate across steps, a repeated `cmdkey` launch in `cc2`, an unconditional 800 ms sleep in every mode, and a hand-written gated-step list in the test. A shared gate check in `lib.ps1` is the one worth doing before testing.
 
+## Pack completion (built, NOT tested)
+- Added after the k5 entry: `apt36-k6` (T1053.005 remote scheduled task, gated like k5, targets only from `BAS_LATERAL_TARGETS`, built not run) and `apt36-k7` (T1071.004 forty-query DNS tunneling volume pattern, telemetry mode, `.invalid` names only).
+- `k7` was run once on this host with no gate (it is safe): it sent 40 queries and reported the expected SKIP because Sysmon is absent here.
+- `k6` and `k5` have NOT been run against any target. Their gate and cleanup were checked statically (gate skip tests pass; cleanup UNC path verified in the generated YAML).
+- `lib.ps1` gained `Test-A36Gate` and `Test-A36Admin`. The new steps use them. The older gated steps still carry their own inline checks; they were not refactored, to avoid changing already-verified behavior.
+- Totals: 37 steps across six scenarios (10 kill chain, 5, 5, 5, 5, 7). Go tests pass; `verify-all` 180 ok.
+- Not built, with reasons: keystroke collection, macro-enabled document chain, Android, HTTPS exfiltration (see test contracts).
+
 ## Honest limits
 - Same block-attribution and Defender-presence-as-failure limits documented for the APT29 pack apply here (`docs/apt29-expansion-qa-log.md`): a real block of a System32 binary may not carry the run tag, and a step that ran is scored FAIL whenever Defender is merely on, not because Defender specifically covers that behavior.
 - `k3`/lateral-movement steps only prove this host can reach itself over its own admin share and WinRM; no second host was available to test real cross-host movement.
