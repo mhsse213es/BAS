@@ -87,7 +87,15 @@ export function rwEfficacyModel(report) {
     })
   }));
 
-  return { label: overall.label, tone: overall.tone, summary: overall.summary, dimensions, notProven, attempts };
+  // Endpoint-only steps: the step's own check reported this, and no capability
+  // observer graded the technique. Shown apart from the statement.
+  const endpointOnly = (report.endpointOnly || []).map(s => {
+    const r = String(s.result || '').toLowerCase();
+    const tone = r === 'pass' || r === 'blocked' ? 'ok' : r === 'fail' ? 'bad' : r === 'error' ? 'warn' : 'muted';
+    return { techniqueId: s.techniqueId || '', stepName: s.stepName || '', result: s.result || '', tone };
+  });
+
+  return { label: overall.label, tone: overall.tone, summary: overall.summary, dimensions, notProven, attempts, endpointOnly };
 }
 
 // rwEfficacyHTML builds the panel markup. Every server string goes through x().
@@ -106,6 +114,15 @@ export function rwEfficacyHTML(m) {
     a.cells.map(c => x(c.capability) + ': <span style="color:' + tone(c.tone) + '">' + x(c.verdict) + '</span>').join(' &middot; ') +
     '</td></tr>'
   ).join('');
+  const endpointRows = m.endpointOnly.map(s =>
+    '<tr><td><code>' + x(s.techniqueId) + '</code></td><td>' + x(s.stepName) + '</td>' +
+    '<td style="color:' + tone(s.tone) + ';font-weight:600">' + x(s.result) + '</td></tr>'
+  ).join('');
+  const endpointSection = m.endpointOnly.length
+    ? '<details style="margin-top:8px"><summary>Endpoint result only, no capability evidence (' + m.endpointOnly.length + ')</summary>' +
+      '<div class="u-muted" style="margin-top:4px">These are what each step\'s own check reported. Nothing graded them as prevention, detection or containment, so they do not change the statement above.</div>' +
+      '<table style="margin-top:6px;width:100%"><tbody>' + endpointRows + '</tbody></table></details>'
+    : '';
   return '<div class="rw-efficacy" style="margin:10px 0;padding:10px;border:1px solid var(--border,#ccc);border-radius:6px">' +
     '<div><strong>Detection and response efficacy:</strong> ' +
     '<span style="color:' + tone(m.tone) + ';font-weight:700">' + x(m.label) + '</span></div>' +
@@ -116,6 +133,7 @@ export function rwEfficacyHTML(m) {
       ? '<details style="margin-top:8px"><summary>Attempts (' + m.attempts.length + ')</summary>' +
         '<table style="margin-top:6px;width:100%"><tbody>' + attemptRows + '</tbody></table></details>'
       : '') +
+    endpointSection +
     '</div>';
 }
 
