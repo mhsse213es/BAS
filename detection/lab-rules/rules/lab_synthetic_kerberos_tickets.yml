@@ -1,0 +1,26 @@
+title: Kerberos Ticket Activity For Lab Synthetic Accounts
+id: 6f1c2a10-5b7e-4d2a-9a51-0b1d7e3c2003
+status: experimental
+description: Kerberos TGT (4768) or service ticket (4769) requests for a lab synthetic account. Visibility rule for the pass-the-ticket scenario. It confirms ticket events are recorded; it does not detect ticket reuse.
+author: Audspect BAS lab
+date: 2026-11-18
+tags:
+    - attack.lateral_movement
+    - attack.t1550.003
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_events:
+        EventID:
+            - 4768
+            - 4769
+    selection_accounts:
+        TargetUserName:
+            - bassim1
+            - bassim2
+            - bassim3
+    condition: selection_events and selection_accounts
+falsepositives:
+    - None expected in the lab
+level: low
