@@ -292,3 +292,23 @@ This pack tests file copies only. It does not test Windows image backup (CSCRF-B
 Catalog: two entries. T1005 (`cscrf_fc_copy_manifest`, non-destructive) and T1074.001 (`cscrf_fc_synthetic_copy`, potentially destructive). Pins: 3749 to 3751 entries, 299 to 301 hand-authored, hash `cbe66df3925155c05c0b8ff58cef86c320e31e453f0b568cff4907d92ef151b4`.
 
 Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree on `origin/main` plus these changes: ok, 315.5s.
+
+## Live run on the lab VM (runbook steps 1–8)
+
+Run on the lab VM from `C:\BAS\live`. Each gated step was run with its gate set, then undone. Every undo returned PASS, and each residue check came back clean.
+
+| Step | Verdict | Notes |
+|---|---|---|
+| ir-03 outbound block rule | FAIL | no enabled outbound block rule on the VM |
+| ir-06 Security log export | PASS | 8.1 MB export; undo PASS |
+| ir-01 EICAR detection (gated) | FAIL | EICAR not removed; real-time protection is off on the VM. Detection path is therefore untested |
+| ir-04 account disablement (gated) | PASS | synthetic account disabled; no residue |
+| dp-05 marker egress to local folder (gated) | PASS | marker written and read back; DLP blocking not tested; folder empty after undo |
+| fc-02 synthetic copy (gated) | PASS | copies verified by SHA256; target empty after undo |
+| fc-01 manifest, untouched | PASS | 1 file matches |
+| fc-01 manifest, after edit | FAIL | sample.txt hash differs from manifest, as expected |
+| mii-03 named service (`Spooler`) | PASS | service running |
+
+Limits: the EICAR result says nothing about endpoint detection while real-time protection is off. The marker and file-copy steps prove only that files can be written and verified; they don't test DLP or recovery to business targets. The Windows backup checks bdr-01 and bdr-02 remain FAIL, since VSS on the lab VM is blocked (see the blocker entries above).
+
+Cleanup: `C:\BAS\live\dp-share` and `C:\BAS\live\fc-target` were removed after the run.
