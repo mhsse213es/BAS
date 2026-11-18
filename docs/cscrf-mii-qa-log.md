@@ -92,3 +92,37 @@ Ledger: the identity ledger entries were already in HEAD, committed inside `0ac1
 Working-tree note: the main working tree carried another session's uncommitted `T1187` catalog hunk in `execclass.go`. It changes the ledger class for `ad-forced-auth-attempt` from destructive to non-destructive, so the ledger test fails in the main tree. That hunk is not part of this commit. The suite was verified in a clean worktree at HEAD with only these identity changes.
 
 Suite: `go test ./internal/scenario -count=1 -timeout 420s` in the clean worktree: ok, 311.4s.
+
+## P0 Task 4: endpoint hardening and audit integrity pack (`cscrf-mii-endpoint-audit`)
+
+Ten steps, internal labels CSCRF-EA-01..10. Read-only steps ran live on this host (gate off). Gated steps ea-09 and ea-10 were **not** verified live. They need a lab VM.
+
+Live results on this host (read only):
+
+| Step | Verdict | Basis |
+|---|---|---|
+| ea-01 Security patch currency | FAIL | newest update KB5071959 is 360 days old (baseline 60) |
+| ea-02 Supported operating system | FAIL | Windows 10 Pro build 19045 past end of mainstream support (2025-10-14), no ESU recorded |
+| ea-03 Defender real-time protection | FAIL | real-time protection off; confirmed with Get-MpComputerStatus |
+| ea-04 PowerShell script block logging | FAIL | not enabled by policy |
+| ea-05 Sysmon presence and running | FAIL | Sysmon not installed |
+| ea-06 Unnecessary services | PASS | no disallowed service running (Telnet, FTP, TFTP, Remote Registry, SNMP, Simple TCP/IP) |
+| ea-07 Weak local configuration | PASS | SMB1 off, Guest disabled, UAC on |
+| ea-08 Application control presence | FAIL | no effective AppLocker rules |
+| ea-09 Unauthorised execution from temp path | SKIP | gate off; NOT verified live |
+| ea-10 Audit policy change attempt | SKIP | gate off; NOT verified live |
+
+Deferred to a lab VM (changes security tooling, not safe on the build host): real-time protection impairment, dedicated log clear, Sysmon service stop.
+
+Rulings:
+- **ea-10 restores in the same run.** The Process Creation setting is restored inside the step as well as in undo, so a failed undo cannot leave auditing off. The record stays for undo to re-apply the same value.
+- **ea-10 with auditing already off** returns ERROR and makes no change, because the baseline is unusable.
+- **ea-02 is a lifecycle baseline check.** It passes Windows 10 only with `BAS_ESU_ENROLLED=true`.
+
+Catalog: ten entries. T1082 x4 (read-only), T1562.001 x2 (read-only), T1543.003 x1 (read-only), T1562.003 new block x1 (read-only), T1562.002 x1 (`cscrf_ea_audit_policy_change`, destructive), T1204.002 new block x1 (`cscrf_ea_unauthorized_exec`, potentially destructive). Pins `execclass_embed_test.go`: 3712 to 3722 entries, 262 to 272 hand-authored, hash `52241627be3d2453f5c05217d9578d88ecbb880166d0ab43a8cfdef88925c9c6`.
+
+Ledger regenerated; diff is additions only (95 insertions, 0 deletions).
+
+Drill signature fix: see commit `5915e509` (re-signed over committed bytes).
+
+Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree at HEAD plus these changes: ok, 335.1s.

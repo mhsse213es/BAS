@@ -4779,6 +4779,96 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "cscrf-mii-endpoint-audit.yaml",
+    "index": 0,
+    "technique_id": "T1082",
+    "action_key": "cscrf_ea_patch_currency",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-endpoint-audit.yaml",
+    "index": 1,
+    "technique_id": "T1082",
+    "action_key": "cscrf_ea_os_supported",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-endpoint-audit.yaml",
+    "index": 2,
+    "technique_id": "T1562.001",
+    "action_key": "cscrf_ea_defender_status",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-endpoint-audit.yaml",
+    "index": 3,
+    "technique_id": "T1562.003",
+    "action_key": "cscrf_ea_ps_logging_config",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-endpoint-audit.yaml",
+    "index": 4,
+    "technique_id": "T1562.001",
+    "action_key": "cscrf_ea_sysmon_status",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-endpoint-audit.yaml",
+    "index": 5,
+    "technique_id": "T1543.003",
+    "action_key": "cscrf_ea_unnecessary_services",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-endpoint-audit.yaml",
+    "index": 6,
+    "technique_id": "T1082",
+    "action_key": "cscrf_ea_weak_local_config",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-endpoint-audit.yaml",
+    "index": 7,
+    "technique_id": "T1082",
+    "action_key": "cscrf_ea_app_control_status",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-endpoint-audit.yaml",
+    "index": 8,
+    "technique_id": "T1204.002",
+    "action_key": "cscrf_ea_unauthorized_exec",
+    "framework": "custom",
+    "class": "potentially_destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cscrf-mii-endpoint-audit.yaml",
+    "index": 9,
+    "technique_id": "T1562.002",
+    "action_key": "cscrf_ea_audit_policy_change",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
     "scenario": "cscrf-mii-identity.yaml",
     "index": 0,
     "technique_id": "T1098",

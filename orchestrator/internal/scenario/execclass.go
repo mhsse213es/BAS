@@ -738,6 +738,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1543.003": {
+		"cscrf_ea_unnecessary_services": catalogClass(ClassNonDestructive, "cscrf_ea_unnecessary_services", "Read-only service query"),
 		"service_create_start_stop_delete": {
 			Class:             ClassPotentiallyDestructive,
 			DestructiveAction: "",
@@ -913,6 +914,8 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1562.001": {
+		"cscrf_ea_defender_status": catalogClass(ClassNonDestructive, "cscrf_ea_defender_status", "Read-only Defender status query"),
+		"cscrf_ea_sysmon_status":   catalogClass(ClassNonDestructive, "cscrf_ea_sysmon_status", "Read-only Sysmon service query; the service is not stopped"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -1039,6 +1042,10 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1082": {
+		"cscrf_ea_patch_currency":     catalogClass(ClassNonDestructive, "cscrf_ea_patch_currency", "Read-only hotfix query"),
+		"cscrf_ea_os_supported":       catalogClass(ClassNonDestructive, "cscrf_ea_os_supported", "Read-only OS caption and build query"),
+		"cscrf_ea_weak_local_config":  catalogClass(ClassNonDestructive, "cscrf_ea_weak_local_config", "Read-only SMB1, Guest and UAC query"),
+		"cscrf_ea_app_control_status": catalogClass(ClassNonDestructive, "cscrf_ea_app_control_status", "Read-only effective AppLocker policy query"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -1046,6 +1053,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1562.002": {
+		"cscrf_ea_audit_policy_change": catalogClass(ClassDestructive, "cscrf_ea_audit_policy_change", "Sets Process Creation auditing off and restores it in the same run and in undo; a failed undo leaves auditing changed"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -1237,6 +1245,12 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 	},
 	"T1201": {
 		"cscrf_id_password_policy": catalogClass(ClassNonDestructive, "cscrf_id_password_policy", "Read-only query of the local account policy"),
+	},
+	"T1562.003": {
+		"cscrf_ea_ps_logging_config": catalogClass(ClassNonDestructive, "cscrf_ea_ps_logging_config", "Read-only registry query"),
+	},
+	"T1204.002": {
+		"cscrf_ea_unauthorized_exec": catalogClass(ClassPotentiallyDestructive, "cscrf_ea_unauthorized_exec", "Copies cmd.exe to a per-run temp folder and runs it once with a harmless echo; the folder is deleted in undo"),
 	},
 	"T1059.003": {
 		"exe_command_shell": catalogClass(ClassNonDestructive, "exe_command_shell", "Runs one harmless echo through cmd.exe; no state changed"),
