@@ -109,6 +109,9 @@ type Config struct {
 
 	// TCF Phase 6: validation lab (empty agent ID disables it entirely)
 	ValidationLabAgentID     string `json:"validation_lab_agent_id,omitempty"`
+	// SprayLabAgentID is the one agent allowed the lab-only spray and guessing exemption (is_spray_lab).
+	// Empty clears the exemption everywhere.
+	SprayLabAgentID string `json:"spray_lab_agent_id,omitempty"`
 	ValidationLabPollMinutes int    `json:"validation_lab_poll_minutes,omitempty"` // default 5
 	// ValidationLabTimeoutMinutes bounds how long the lab waits for a run to
 	// complete. 0 = default (10); clamped to a conservative hard max (30) in
@@ -377,6 +380,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("VALIDATION_LAB_AGENT_ID"); v != "" {
 		cfg.ValidationLabAgentID = v
+	}
+	if v := os.Getenv("SPRAY_LAB_AGENT_ID"); v != "" {
+		cfg.SprayLabAgentID = v
 	}
 	if v := os.Getenv("VALIDATION_LAB_POLL_MINUTES"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.ValidationLabPollMinutes)

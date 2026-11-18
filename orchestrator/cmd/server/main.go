@@ -1168,6 +1168,11 @@ func main() {
 	if err := validationlab.EnsureSoleFactoryLabAgent(context.Background(), pool, cfg.ValidationLabAgentID); err != nil {
 		log.Printf("[validationlab] WARNING: could not apply is_factory_lab for %q: %v", cfg.ValidationLabAgentID, err)
 	}
+	// Lab-only spray and guessing exemption: is_spray_lab follows SPRAY_LAB_AGENT_ID in both directions, like the
+	// factory flag. An empty value clears it, so the exemption is off unless an operator sets the variable.
+	if err := api.EnsureSoleSprayLabAgent(context.Background(), pool, cfg.SprayLabAgentID); err != nil {
+		log.Printf("[spraylab] WARNING: could not apply is_spray_lab for %q: %v", cfg.SprayLabAgentID, err)
+	}
 	// CI validation gate (REQ-057): start one lab run and read its verdict, behind a dedicated CI token.
 	handler.SetCIGate(cigate.NewHandler(
 		cigate.NewService(pool, contentRegistry, handler, cfg.ValidationLabAgentID),
