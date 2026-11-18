@@ -85,3 +85,78 @@ not replace it; `product_line: killchain` on all three new packs matches that ca
   full multi-run campaign dispatch for this pack is future work, not part of P0.
 - P1 (collection/exfiltration, defense evasion expansion) and P2 (advanced persistence/C2 variants,
   the financial-impact/ATM-cash-out simulator) are not started.
+
+---
+
+# Cobalt Group BFSI P1 - QA Log
+
+## Scope
+P1 of the Cobalt Group BFSI expansion: Phase 8 (Collection/Exfiltration), the remainder of Phase 4
+(Defense Evasion), and Phase 9 Part 2 (the financial-impact simulator). Plan:
+`docs/superpowers/plans/2026-11-18-cobalt-group-bfsi-p1.md`. Every P0 bug class (wrong `appctlgen
+-common`, `$Host`/`$host` misuse, invalid `product_line`, duplicate scenario ids) was checked against
+from the start of this work and did not recur.
+
+## What was built (2026-11-18, Windows 10 Pro build host, no EDR, no Sysmon, no enforcement)
+- `cobalt-group-bfsi-collection-exfil.yaml` (6 steps): local data collection, network share
+  collection, email-client presence check, archive creation, simulated exfil-over-C2 (posts to the
+  bfsisim ledger), DNS exfiltration probe against a `.invalid` subdomain (RFC 6761, never resolves).
+- `cobalt-group-bfsi-defense-evasion.yaml` (7 steps): security-software discovery, a gated read-only
+  Defender-preferences permission probe, PowerShell `-EncodedCommand` detection test, masquerading-
+  executable detection test, registry-modification detection test (`HKCU:\Software\BAS-SIM-Test`
+  only), non-destructive event-log clearing (a dedicated synthetic `BAS-SIM-Test` log only, never
+  Security/System/Application), process-injection detection-readiness check (no actual injection
+  performed).
+- `internal/bfsisim/ledger.go`: extends the P0 discovery simulator with a mutex-guarded in-memory
+  transaction ledger (`POST/GET/DELETE /api/ledger/transactions[/{id}]`, `POST /api/ledger/reconcile`).
+  Never connects to a real core-banking, payment, or ATM system.
+- `cobalt-group-bfsi-financial-impact.yaml` (7 steps, custom BFSI scenarios -- header notes not all
+  map to documented Cobalt Group tradecraft): transaction-record manipulation, payment-instruction
+  manipulation, ATM dispense-workflow manipulation, fraudulent transaction-pattern simulation,
+  transaction-limit bypass, financial-reconciliation manipulation, a read-only resilience check.
+- All generated via `appctlgen -common <pack's own dir>` (passed explicitly every time), signed with
+  `orchestrator/scripts/signer.go` (never cosign), `product_line: killchain` on every header.
+
+## What was verified for real
+- All 32 new PowerShell files (14 collection-exfil, 14 defense-evasion, 14 financial-impact step+undo
+  scripts) parse clean.
+- Every one of the 20 new scenarios was run end to end (lib+step concatenated exactly as `appctlgen`
+  assembles it) on this build host, not just inspected: coll-01/03/04 FAIL (ran, unenforced),
+  coll-02/05 SKIP (no target/simulator), coll-06 PASS; eva-01/03/04/05/06 FAIL (ran, unenforced),
+  eva-02 SKIP (ungated), eva-07 PASS; fin-01/02/03/04/06/07 PASS against a live `bfsisim-lab`
+  process, fin-05 honestly FAILs (the stub ledger does not itself enforce a transaction limit).
+- Ran every financial-impact undo script against the live ledger and confirmed via a live GET that
+  it ends up completely empty -- zero leftover transactions, not a wildcard sweep.
+- `internal/bfsisim`: 5 tests pass, including a full ledger CRUD+reconcile test and a 20-goroutine
+  concurrent-write test (`-count=30` stress run, no `-race` available on this host -- no cgo).
+- Added `TestCobaltBFSIFinancialImpact_LedgerManipulationDetected`: runs the real fin-01 command
+  against a live `bfsisim.Simulator`, asserts PASS and exactly one surviving transaction.
+- Full, unfiltered `go test ./internal/scenario -count=1` (not a targeted `-run`): clean pass,
+  307s, zero failures -- no "refusing to load" or "duplicate id" warnings for any
+  `cobalt-group-bfsi-*` file. `signer.go verify-all scenarios`: ok=228 fail=0.
+
+## Bugs found and fixed during this work (all confirmed via live execution)
+- `lib.ps1`'s `Invoke-EncodedCommandProbe` (defense-evasion pack) matched the live command's stdout
+  against the *command text being run* instead of its expected printed marker -- it could never
+  match, so eva-03 would always report PASS regardless of whether the encoded command actually ran.
+  Split into separate `PlainText` (what runs) and `ExpectMarker` (what to look for) parameters.
+- `eva-04.ps1` and `eva-07.ps1` both called `$proc.WaitForExit(N)` unpiped, leaking its boolean
+  return value as a stray "True" line concatenated before the verdict text. Piped both to `Out-Null`.
+  Found only by actually running the assembled scripts and reading their real stdout.
+
+## Honest limits
+- No real AD lab, Windows domain, or EDR/SIEM. All verdicts reflect this unenforced build host's
+  actual state (e.g. eva-01 correctly FAILs because Windows Defender's `MsMpEng` process is genuinely
+  running here) -- they are not simulated or hand-picked.
+- `coll-02` (network share collection) needs `BAS_TEST_HOST`; no dedicated test target was stood up.
+- The financial-impact pack's control logic is intentionally simple (409-on-duplicate-id models
+  "integrity controls reject in-place changes"; the ledger has no real limit enforcement, which
+  fin-05 surfaces honestly as a FAIL). It is not a model of any real core-banking or payment system's
+  actual fraud/limit logic -- it exists to exercise the scenario and evidence-classification layer.
+- Reconciliation-based scenarios (fin-03/04/06) compute their own pre-write ledger total dynamically
+  rather than assuming a clean ledger, since all fin-* steps in one run share the same ledger
+  instance; this makes them correct regardless of step execution order, but a scenario outside this
+  pack that also posts to `/api/ledger/transactions` without cleaning up would still be visible to
+  these totals (same caveat as any shared-fixture integration target).
+- P2 (additional persistence and C2 variants) is not started. Phase 1 (reconnaissance) and Phase 2
+  (initial access) remain out of scope, as agreed before P0.
