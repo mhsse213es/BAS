@@ -3084,7 +3084,7 @@
     "action_key": "cloud_synthetic_upload",
     "framework": "custom",
     "class": "destructive",
-    "status": "gap_no_undo"
+    "status": "undo_declared_in_yaml"
   },
   {
     "scenario": "cloud-vm-linux-aws-iam.yaml",
@@ -3318,7 +3318,7 @@
     "action_key": "cloud_synthetic_upload",
     "framework": "custom",
     "class": "destructive",
-    "status": "gap_no_undo"
+    "status": "undo_declared_in_yaml"
   },
   {
     "scenario": "cloud-vm-linux-persistence-lateral.yaml",
@@ -3336,7 +3336,7 @@
     "action_key": "cloud_access_key_create",
     "framework": "custom",
     "class": "destructive",
-    "status": "gap_no_undo"
+    "status": "undo_declared_in_yaml"
   },
   {
     "scenario": "cloud-vm-linux-persistence-lateral.yaml",
@@ -3345,7 +3345,7 @@
     "action_key": "cloud_client_secret_add",
     "framework": "custom",
     "class": "destructive",
-    "status": "gap_no_undo"
+    "status": "undo_declared_in_yaml"
   },
   {
     "scenario": "cloud-vm-linux-persistence-lateral.yaml",
@@ -3381,7 +3381,7 @@
     "action_key": "cloud_access_key_create",
     "framework": "custom",
     "class": "destructive",
-    "status": "gap_no_undo"
+    "status": "undo_declared_in_yaml"
   },
   {
     "scenario": "cloud-vm-persistence-lateral.yaml",
@@ -3390,7 +3390,7 @@
     "action_key": "cloud_client_secret_add",
     "framework": "custom",
     "class": "destructive",
-    "status": "gap_no_undo"
+    "status": "undo_declared_in_yaml"
   },
   {
     "scenario": "cloud-vm-persistence-lateral.yaml",
@@ -3406,6 +3406,168 @@
     "index": 4,
     "technique_id": "T1574",
     "action_key": "startup_location_read",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-credential-access.yaml",
+    "index": 0,
+    "technique_id": "T1003.001",
+    "action_key": "credential_lsass_simulation",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-credential-access.yaml",
+    "index": 1,
+    "technique_id": "T1003.002",
+    "action_key": "credential_sam_simulation",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-credential-access.yaml",
+    "index": 2,
+    "technique_id": "T1555.004",
+    "action_key": "credential_manager_discovery",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-credential-access.yaml",
+    "index": 3,
+    "technique_id": "T1555.003",
+    "action_key": "credential_browser_discovery",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-credential-access.yaml",
+    "index": 4,
+    "technique_id": "T1558.003",
+    "action_key": "credential_kerberoasting",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-credential-access.yaml",
+    "index": 5,
+    "technique_id": "T1558.004",
+    "action_key": "credential_asrep_roasting",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-credential-access.yaml",
+    "index": 6,
+    "technique_id": "T1110.003",
+    "action_key": "credential_password_spray",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-credential-access.yaml",
+    "index": 7,
+    "technique_id": "T1552.001",
+    "action_key": "credential_unsecured_discovery",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-discovery.yaml",
+    "index": 0,
+    "technique_id": "T1046",
+    "action_key": "bfsi_banking_app_discovery",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-discovery.yaml",
+    "index": 1,
+    "technique_id": "T1046",
+    "action_key": "bfsi_payment_gateway_discovery",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-discovery.yaml",
+    "index": 2,
+    "technique_id": "T1046",
+    "action_key": "bfsi_atm_discovery",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-discovery.yaml",
+    "index": 3,
+    "technique_id": "T1046",
+    "action_key": "bfsi_cardholder_data_discovery",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-lateral-movement.yaml",
+    "index": 0,
+    "technique_id": "T1021.001",
+    "action_key": "lateral_rdp_connectivity",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-lateral-movement.yaml",
+    "index": 1,
+    "technique_id": "T1021.002",
+    "action_key": "lateral_smb_shares",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-lateral-movement.yaml",
+    "index": 2,
+    "technique_id": "T1021.006",
+    "action_key": "lateral_winrm_session",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-lateral-movement.yaml",
+    "index": 3,
+    "technique_id": "T1569.002",
+    "action_key": "lateral_remote_service",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-lateral-movement.yaml",
+    "index": 4,
+    "technique_id": "T1018",
+    "action_key": "lateral_system_discovery",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-lateral-movement.yaml",
+    "index": 5,
+    "technique_id": "T1570",
+    "action_key": "lateral_tool_transfer",
     "framework": "custom",
     "class": "non_destructive",
     "status": "not_required_non_destructive"
@@ -3481,6 +3643,159 @@
     "framework": "custom",
     "class": "destructive",
     "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "collection-cloud-storage-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-cloud-storage-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-database-export-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-database-export-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-database-export-exfil.yaml",
+    "index": 2,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-encrypted-archive-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-encrypted-archive-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-low-and-slow-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-low-and-slow-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1029",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "collection-network-share-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1135",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-network-share-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1039",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-network-share-exfil.yaml",
+    "index": 2,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-pii-financial-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-pii-financial-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-pii-financial-exfil.yaml",
+    "index": 2,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-removable-media-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1120",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-removable-media-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1052.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "collection-staging-exfil.yaml",

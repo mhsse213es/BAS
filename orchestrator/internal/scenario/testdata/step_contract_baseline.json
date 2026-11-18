@@ -220,7 +220,7 @@
     "telemetry": 0
   },
   "cloud-vm-data-access.yaml": {
-    "cleanup": 1,
+    "cleanup": 0,
     "detection": 0,
     "telemetry": 0
   },
@@ -240,21 +240,71 @@
     "telemetry": 0
   },
   "cloud-vm-linux-data-access.yaml": {
-    "cleanup": 1,
+    "cleanup": 0,
     "detection": 0,
     "telemetry": 0
   },
   "cloud-vm-linux-persistence-lateral.yaml": {
-    "cleanup": 2,
+    "cleanup": 0,
     "detection": 0,
     "telemetry": 0
   },
   "cloud-vm-persistence-lateral.yaml": {
-    "cleanup": 2,
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-bfsi-credential-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-bfsi-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-bfsi-lateral-movement.yaml": {
+    "cleanup": 0,
     "detection": 0,
     "telemetry": 0
   },
   "cobalt-group-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-cloud-storage-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-database-export-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-encrypted-archive-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-low-and-slow-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-network-share-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-pii-financial-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-removable-media-exfil.yaml": {
     "cleanup": 0,
     "detection": 0,
     "telemetry": 0
