@@ -212,8 +212,8 @@
     "technique_id": "T1187",
     "action_key": "",
     "framework": "custom",
-    "class": "destructive",
-    "status": "self_cleaning_declared"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "ad-forged-ticket-telemetry.yaml",
@@ -221,8 +221,8 @@
     "technique_id": "T1558.001",
     "action_key": "",
     "framework": "custom",
-    "class": "destructive",
-    "status": "self_cleaning_declared"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "ad-forged-ticket-telemetry.yaml",
@@ -230,8 +230,8 @@
     "technique_id": "T1558.002",
     "action_key": "",
     "framework": "custom",
-    "class": "destructive",
-    "status": "self_cleaning_declared"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "ad-ntds-access-attempt.yaml",
@@ -284,8 +284,8 @@
     "technique_id": "T1550.003",
     "action_key": "",
     "framework": "custom",
-    "class": "destructive",
-    "status": "self_cleaning_declared"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "ad-pass-the-ticket-telemetry.yaml",
@@ -293,8 +293,44 @@
     "technique_id": "T1550.003",
     "action_key": "",
     "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ad-password-guessing-lab.yaml",
+    "index": 0,
+    "technique_id": "T1110.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ad-password-guessing-lab.yaml",
+    "index": 1,
+    "technique_id": "T1110.001",
+    "action_key": "credential_password_guess",
+    "framework": "custom",
     "class": "destructive",
     "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "ad-password-guessing-lab.yaml",
+    "index": 2,
+    "technique_id": "T1110.004",
+    "action_key": "credential_stuffing",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "ad-password-guessing-lab.yaml",
+    "index": 3,
+    "technique_id": "T1110.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "ad-password-spray-lab.yaml",
@@ -309,10 +345,10 @@
     "scenario": "ad-password-spray-lab.yaml",
     "index": 1,
     "technique_id": "T1110.003",
-    "action_key": "",
+    "action_key": "credential_password_spray",
     "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
+    "class": "destructive",
+    "status": "self_cleaning_declared"
   },
   {
     "scenario": "ad-password-spray-lab.yaml",
@@ -1400,8 +1436,8 @@
     "technique_id": "T1550.003",
     "action_key": "",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "apt29-credential-access.yaml",

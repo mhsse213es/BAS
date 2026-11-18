@@ -34,6 +34,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "ad-password-guessing-lab.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "ad-password-spray-lab.yaml": {
     "cleanup": 0,
     "detection": 0,

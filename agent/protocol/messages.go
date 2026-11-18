@@ -42,6 +42,10 @@ type LivePolicy struct {
 	MaxSprayAttempts        int      `json:"maxSprayAttempts,omitempty"`
 	SprayAccountAllowlist   []string `json:"sprayAccountAllowlist,omitempty"`
 	ExecutionWindow         string   `json:"executionWindow,omitempty"`
+	// LabException is set by the server only for the designated spray-lab agent
+	// running the lab spray scenario. It lifts the signed destructive veto for the
+	// spray action key only. See agent sprayLabExempt.
+	LabException bool `json:"labException,omitempty"`
 }
 
 type WSMessage struct {

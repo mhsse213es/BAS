@@ -94,6 +94,9 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// agent; the new factory-validation mode requires it. See
 		// docs/superpowers/specs/2026-10-14-tcf-phase6-validation-lab-design.md §2.2.
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_factory_lab boolean NOT NULL DEFAULT false`,
+		// is_spray_lab marks the one lab agent allowed to run the lab password-spray
+		// scenario with the B5 signed-destructive veto lifted. Set by an operator; never by a scenario.
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_spray_lab boolean NOT NULL DEFAULT false`,
 		// security_products: installed AV/EDR inventory reported by the agent
 		// heartbeat (presence only) — shown as the report's security context.
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS security_products jsonb NOT NULL DEFAULT '[]'`,

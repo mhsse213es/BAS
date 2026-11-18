@@ -2643,13 +2643,34 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 
 	h.persistStepMeta(ctx, runID, steps, resolved)
 
+	// Lab spray exemption (see labExceptionFor). Only the lab spray scenario, and
+	// only for the agent flagged is_spray_lab, gets LabException. A lookup error
+	// fails closed (no exemption). Every other dispatch keeps sc.LivePolicy as-is.
+	scPolicy := sc.LivePolicy
+	if labExceptionScenario(sc.ID) {
+		var isSprayLab bool
+		if qerr := h.db.QueryRow(ctx,
+			`SELECT is_spray_lab FROM agents WHERE agent_id = $1`, agentID,
+		).Scan(&isSprayLab); qerr != nil {
+			isSprayLab = false
+		}
+		if labExceptionFor(sc.ID, isSprayLab) {
+			p := &scenario.LivePolicy{}
+			if sc.LivePolicy != nil {
+				*p = *sc.LivePolicy
+			}
+			p.LabException = true
+			scPolicy = p
+		}
+	}
+
 	cmd := scenario.ScenarioCommand{
 		RunID:                runID,
 		ScenarioID:           sc.ID,
 		Name:                 sc.Name,
 		Steps:                steps,
 		Mode:                 o.Mode,
-		Policy:               sc.LivePolicy,
+		Policy:               scPolicy,
 		PreventScreenTimeout: sc.PreventScreenTimeout,
 		InProcessPolicy:      inProcessPolicy,
 		SweepID:              o.SweepID,

@@ -767,6 +767,23 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 	// dropped by the server (scenario.ExecResult has no Blocked field) and
 	// fell through to ResultFail -- a false "attack succeeded, defenses did
 	// not stop it" finding for a run that never attempted anything.
+	// Spray limits from the signed policy: refuse before any step runs when the
+	// allowlist and attempt cap are inconsistent. See sprayPolicyRefusal.
+	if reason := sprayPolicyRefusal(cmd.Policy); reason != "" {
+		log.Printf("[!] ABORT: spray policy refused (run %s): %s", cmd.RunID, reason)
+		a.submitResults(cmd, []protocol.ExecResult{{
+			ExitCode:             -1,
+			Vetoed:               true,
+			VetoedActionKey:      "live_spray_execution",
+			VetoedExecutionClass: "environment_safety_policy",
+			VetoedBlockSource:    "spray_policy_interlock",
+			ExecutedAt:           time.Now(),
+		}}, false, nil)
+		a.setStatus("idle")
+		a.sendHeartbeat("idle")
+		return
+	}
+
 	if cmd.Policy != nil && cmd.Policy.BlockOnDomainController && hostIsDomainController() {
 		log.Printf("[!] ABORT: host is a domain controller and policy blocks live execution on DCs (run %s)", cmd.RunID)
 		a.submitResults(cmd, []protocol.ExecResult{{
@@ -1008,7 +1025,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 				// Pre-execution gates: the dbsim step-shape pre-gate, then B5 (see
 				// gateStep). Both run BEFORE payload staging so nothing is written
 				// to disk for a step that is about to be vetoed.
-				if v := gateStep(step, cmd.ScenarioID); v != nil {
+				if v := gateStepExempt(step, cmd.ScenarioID, sprayLabExempt(cmd.Policy, cmd.ScenarioID, step.ActionKey)); v != nil {
 					log.Printf("[!]   [%d/%d] %s VETOED -- %s (class=%s, action=%s, source=%s)",
 						i+1, total, step.TechniqueID, v.reason, step.ExecutionClass, step.ActionKey, v.source)
 					a.logger.Sec("warn", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
@@ -1563,6 +1580,12 @@ type stepVeto struct {
 // remaining dbsim gates (policy, identity) before any probe SQL. Returns nil
 // when the step may proceed.
 func gateStep(step ScenarioStep, scenarioID string) *stepVeto {
+	return gateStepExempt(step, scenarioID, false)
+}
+
+// gateStepExempt is gateStep with the lab spray exemption applied to the B5
+// signed-class check. See sprayLabExempt.
+func gateStepExempt(step ScenarioStep, scenarioID string, labExempt bool) *stepVeto {
 	if msg := dbprobeStepShapeRefusal(step); msg != "" {
 		return &stepVeto{source: "dbsim_gate", category: "dbsim_veto", reason: "dbsim gate: " + msg,
 			result: protocol.ExecResult{
@@ -1580,7 +1603,7 @@ func gateStep(step ScenarioStep, scenarioID string) *stepVeto {
 	// Command): a compromised orchestrator controls the signed ExecutionClass
 	// and could hide a destructive action in Cleanup (which runs unconditionally
 	// after any non-vetoed step) or in a payload (final whole-branch review, C3).
-	if vetoed, source := evaluateB5Gate(protocol.ScenarioStep{
+	if vetoed, source := evaluateB5GateExempt(labExempt, protocol.ScenarioStep{
 		ExecutionClass: step.ExecutionClass,
 		Command:        step.Command,
 		Cleanup:        step.Cleanup,

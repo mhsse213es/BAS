@@ -496,12 +496,44 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			BlastRadius:       "sshd/login.defs/shadow reads, net accounts policy reads",
 		},
 	},
+	"T1550.003": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "Kerberos lifetime registry read and read-only DC event-count query; no ticket is read, exported, requested or reused",
+		},
+	},
+	"T1558.001": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "KRBTGT password-age and msDS-SupportedEncryptionTypes attribute read, plus read-only 4768/4769 event count; no key material accessed, no ticket requested",
+		},
+	},
+	"T1558.002": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "read-only count of 4768/4769 Security events in the last hour; no ticket data read",
+		},
+	},
+	"T1187": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "one Test-Path against an unresolvable .invalid UNC; name does not resolve, so no SMB session and no credential is sent",
+		},
+	},
+	"T1110.004": {
+		"credential_stuffing": catalogClass(ClassDestructive, "credential_stuffing", "Wrong-password pair attempts against named accounts; can lock out real accounts if pointed at a real domain"),
+	},
 	"T1110.001": {
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
 			BlastRadius:       "single ValidateCredentials failed-auth attempt against a guaranteed-nonexistent username -- lockout-safe by design",
 		},
+		"credential_password_guess": catalogClass(ClassDestructive, "credential_password_guess", "Wrong-password guesses against named accounts; can lock out real accounts if pointed at a real domain"),
 	},
 	"T1110.003": {
 		"enumerate": {
@@ -522,7 +554,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
-			BlastRadius:       "Set-Clipboard to synthetic DLP test data, checked, then explicitly restores the ORIGINAL clipboard value inline",
+			BlastRadius:       "Runs only when the clipboard is already empty: writes a synthetic marker, reads back only that marker, then clears it, returning the clipboard to empty. If the clipboard holds content the step skips without reading or changing it",
 		},
 	},
 	"T1127.001": {

@@ -291,6 +291,10 @@ type LivePolicy struct {
 	MaxSprayAttempts        int      `yaml:"max_spray_attempts,omitempty"          json:"maxSprayAttempts,omitempty"`
 	SprayAccountAllowlist   []string `yaml:"spray_account_allowlist,omitempty"     json:"sprayAccountAllowlist,omitempty"`
 	ExecutionWindow         string   `yaml:"execution_window,omitempty"            json:"executionWindow,omitempty"` // "HH:MM-HH:MM" local; empty = always
+	// LabException is NEVER read from a scenario file (yaml:"-"). The server sets
+	// it at dispatch only for the designated spray-lab agent and the lab spray
+	// scenario. See api.labExceptionFor.
+	LabException bool `yaml:"-" json:"labException,omitempty"`
 }
 
 // Scenario is a replayable named attack chain loaded from a YAML file.

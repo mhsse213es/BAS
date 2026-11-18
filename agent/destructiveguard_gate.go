@@ -60,6 +60,15 @@ func classRank(c string) int {
 // classified, only the step's primary action is (final whole-branch
 // review, C3).
 func evaluateB5Gate(step protocol.ScenarioStep, scenarioID string) (vetoed bool, blockSource string) {
+	return evaluateB5GateExempt(false, step, scenarioID)
+}
+
+// evaluateB5GateExempt is evaluateB5Gate with one narrow relaxation: when
+// labExempt is true, the SIGNED destructive class is not treated as a veto.
+// The local command backstop still runs unchanged, so a step whose own command
+// text is destructive is vetoed regardless. labExempt is computed by
+// sprayLabExempt, which the server gates to one agent and one scenario.
+func evaluateB5GateExempt(labExempt bool, step protocol.ScenarioStep, scenarioID string) (vetoed bool, blockSource string) {
 	signedRank := classRank(step.ExecutionClass)
 
 	localRank := classRank(string(destructiveguard.Classify(step.Command)))
@@ -72,7 +81,7 @@ func evaluateB5Gate(step protocol.ScenarioStep, scenarioID string) (vetoed bool,
 		}
 	}
 
-	signedDestructive := signedRank >= classRank("destructive")
+	signedDestructive := !labExempt && signedRank >= classRank("destructive")
 	localDestructive := localRank >= classRank("destructive")
 
 	var source string

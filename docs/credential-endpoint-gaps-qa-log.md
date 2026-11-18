@@ -215,3 +215,46 @@ Not verified: neither scenario has run on the DC. Both need a platform run on th
 - Step 2 (DC): counts 4768 (TGT), 4769 (service ticket) and 4624 (type 3, Kerberos package) in the last 30 minutes. PASS proves logging only.
 - Verified offline: schema, PowerShell parse, signature (verify-all ok=249 fail=0), ledger (no removals), tests pass.
 - Not run yet. The controlled Kerberos logon will use the DC hostname (not IP) so Windows selects Kerberos.
+
+### Catalog gap fix: B5 classification for new AD techniques, 2026-11-18
+
+- Problem: T1550.003, T1558.001, T1558.002 and T1187 had no execution-class entry. The agent's B5 gate fails closed on an unclassified step, so the platform would have vetoed these scenarios before they ran. The hand runs bypassed this gate, so they did not show it.
+- Fix: four read-only `enumerate` entries added to `orchestrator/internal/scenario/execclass.go`, each with an accurate blast radius. None of them reads, exports, forges or reuses a credential.
+- Pinned catalog tests updated for the 4 new entries: total 3712 to 3716, hand-authored 262 to 266, and the embed hash. The hash change is deliberate and is recorded in the test comment.
+- Not yet resolved, needs a decision:
+  - `ad-password-spray-lab` uses the default `enumerate` class. The catalog classes spraying as `credential_password_spray` (destructive). Setting that key would veto the spray on the platform. Leaving it is a misclassification.
+  - `collection-clipboard-exfil` uses the default `enumerate` class. Its catalog entry describes a restore of the original clipboard, which the scenario does not do (it clears to empty).
+  - `ad-password-spray-lab` declares `max_spray_attempts` and `spray_account_allowlist`. The server does not enforce either field.
+  - `recordADEvidence` records control evidence only for the DCSync scenario, so the new AD scenarios do not appear in the efficacy reports.
+
+### Gap fixes: B5 classes, spray limits, clipboard catalog text, 2026-11-18
+
+- **Spray classification (fixed).** `ad-password-spray-lab` step 2 now carries `action_key: credential_password_spray`, so the catalog classes it destructive. The platform vetoes the spray on every agent by default. Before this change the default key classed it non-destructive, which would have let the spray run unvetoed on any agent. Re-signed; ledger entry moved to destructive.
+- **Lab-only exception (NOT built, needs a decision).** Using `is_factory_lab` for the exception was wrong: that flag marks the validation lab, which is barred from ordinary scenarios. A separate lab-only flag is needed. Until it exists, the spray cannot run on the platform at all. This is the intended safe state.
+- **Spray limits (fixed on the agent).** A new interlock (`agent/spray_interlock.go`, called before any step runs) refuses a run when `max_spray_attempts` is set but the allowlist is empty, has duplicates or an empty name, or the cap is below the account count. Refusal submits a vetoed result with block source `spray_policy_interlock`. Unit-tested. The server-side policy fields remain unenforced; the agent is the enforcement point.
+- **Clipboard catalog text (corrected).** The T1115 entry said the step restores the original clipboard. The scenario only runs on an empty clipboard and clears back to empty. Text corrected; class unchanged (non-destructive). Embed hash updated.
+- **Four read-only AD catalog entries (added).** T1550.003, T1558.001, T1558.002, T1187. Previously unclassified, which the B5 gate would have vetoed.
+- **Efficacy parsers (not built, by design).** The efficacy model records whether a control detected an executed primitive. These probes show logging visibility only, so a parser would record "logged" as "detected". Efficacy for AD needs an alert source first.
+- **Agent DC interlocks.** Confirmed enforced on the agent from the signed policy (`block_on_domain_controller`, `require_dc_reachable`). Earlier finding that all four live-policy fields were unenforced was too broad; only the two spray fields were unenforced, and the spray interlock now covers them.
+
+### ad-password-guessing-lab (T1110.001, T1110.004), 2026-11-18
+
+- Scope: guessing and stuffing against `bassim1..3` only. Fixed fake values (`BAS-SIM-Guess-Wrong-1!`, `BAS-SIM-Stuff-Wrong-2!`). No breach list, no real credential.
+- Four steps: preflight, guess, stuff, telemetry. Two attempts per account per run; total cap 6; below the lockout threshold of 3. Preflight refuses within 30 minutes of any failure.
+- Classes: guess uses `credential_password_guess` and stuff uses `credential_stuffing`, both destructive. The platform vetoes both on every agent. The lab exemption is extended to these two keys on the designated lab agent only (is_spray_lab), per the user's decision.
+- Catalog: `T1110.001 credential_password_guess` and new `T1110.004 credential_stuffing` entries added. Embed pins updated (3718 entries, 268 hand-authored).
+- Verified offline: schema, PowerShell parse of all four blocks, signature (verify-all ok=251 fail=0), ledger (968 entries; only the spray's action-key identity changed plus the four new steps), targeted tests pass.
+- Not run: not on any host. Hand runs would need the same preflight conditions as the spray.
+
+### ad-pass-the-ticket-telemetry run on the DC, 2026-11-18
+
+- Controlled logon: `net use \WIN-TQ70FGLETIU.lab.local\IPC$ /user:lab\bassim1` with the synthetic password, using the DC FQDN so Kerberos is selected. Synthetic password set on `bassim1` for this test only.
+- First run, with the earlier verdict logic: PASS came from 81 background Kerberos logons for other accounts, and no `bassim1` event existed. That verdict was wrong. The controlled logon had not been run at that point (no `net use` output was reported). Scenario fixed to count events for `bassim1` only.
+- Second run, corrected verdict logic:
+  ```
+  EXEC T1550.003: for controlled account bassim1 in last 30 minutes: TGT requests (4768)=1; service-ticket requests (4769)=2; Kerberos network logons (4624, type 3)=1. Background Kerberos logons for other accounts (not counted)=82.
+  PASS: Kerberos ticket and logon events for the controlled account were recorded on the DC. Logging only.
+  ```
+- Result: **telemetry visibility PASS for the controlled account.** Logging only. Ticket-reuse alerting not checked; no SIEM in the lab.
+- Lifetime posture: `MaxTicketAge` and `MaxRenewAge` not defined (defaults apply). Observation only.
+- Cleanup pending: the synthetic password was typed into the console again. Clear the PowerShell history on the DC.

@@ -93,19 +93,25 @@ steps:
         exit 0
       }
       $since = (Get-Date).AddMinutes(-30)
-      $tgt = @(Get-WinEvent -FilterHashtable @{ LogName='Security'; Id=4768; StartTime=$since } -MaxEvents 5000 -ErrorAction SilentlyContinue).Count
-      $svc = @(Get-WinEvent -FilterHashtable @{ LogName='Security'; Id=4769; StartTime=$since } -MaxEvents 5000 -ErrorAction SilentlyContinue).Count
-      $krbLogon = 0
-      foreach ($e in @(Get-WinEvent -FilterHashtable @{ LogName='Security'; Id=4624; StartTime=$since } -MaxEvents 5000 -ErrorAction SilentlyContinue)) {
+      # Verdict counts ONLY events for the controlled account bassim1. Background
+      # Kerberos traffic on the DC must not satisfy PASS.
+      $acct = 'bassim1'
+      $tgt = 0; $svc = 0; $krbLogon = 0; $bgLogon = 0
+      foreach ($e in @(Get-WinEvent -FilterHashtable @{ LogName='Security'; Id=4768,4769,4624; StartTime=$since } -MaxEvents 5000 -ErrorAction SilentlyContinue)) {
         $x = [xml]$e.ToXml()
-        $type = ($x.Event.EventData.Data | Where-Object { $_.Name -eq 'LogonType' }).'#text'
-        $pkg  = ($x.Event.EventData.Data | Where-Object { $_.Name -eq 'AuthenticationPackageName' }).'#text'
-        if ($type -eq '3' -and $pkg -eq 'Kerberos') { $krbLogon++ }
+        $user = ($x.Event.EventData.Data | Where-Object { $_.Name -eq 'TargetUserName' }).'#text'
+        if ($e.Id -eq 4624) {
+          $type = ($x.Event.EventData.Data | Where-Object { $_.Name -eq 'LogonType' }).'#text'
+          $pkg  = ($x.Event.EventData.Data | Where-Object { $_.Name -eq 'AuthenticationPackageName' }).'#text'
+          if ($type -eq '3' -and $pkg -eq 'Kerberos') { if ($user -like "$acct*") { $krbLogon++ } else { $bgLogon++ } }
+        } elseif ($user -like "$acct*") {
+          if ($e.Id -eq 4768) { $tgt++ } else { $svc++ }
+        }
       }
-      Write-Output "EXEC T1550.003: in last 30 minutes: TGT requests (4768)=$tgt; service-ticket requests (4769)=$svc; Kerberos network logons (4624, type 3)=$krbLogon. Counts only. [BAS-SIM-PTT-S2]"
+      Write-Output "EXEC T1550.003: for controlled account $acct in last 30 minutes: TGT requests (4768)=$tgt; service-ticket requests (4769)=$svc; Kerberos network logons (4624, type 3)=$krbLogon. Background Kerberos logons for other accounts (not counted)=$bgLogon. Counts only. [BAS-SIM-PTT-S2]"
       if (($tgt + $svc + $krbLogon) -gt 0) {
-        Write-Output "PASS: Kerberos ticket and logon events are visible on the DC. Logging only; a ticket-reuse alert needs a SIEM rule and is not checked here."
+        Write-Output "PASS: Kerberos ticket and logon events for the controlled account were recorded on the DC. Logging only; a ticket-reuse alert needs a SIEM rule and is not checked here."
       } else {
-        Write-Output "SKIP: no Kerberos events in the last 30 minutes. Inconclusive. [BAS-SIM-PTT-S2]"
+        Write-Output "SKIP: no Kerberos events for $acct in the last 30 minutes. The controlled logon did not run or was not logged. Inconclusive. [BAS-SIM-PTT-S2]"
       }
     cleanup: ""
