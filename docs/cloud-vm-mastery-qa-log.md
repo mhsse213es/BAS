@@ -152,4 +152,4 @@ The first closure of these three items overstated the result (the review caught 
 
 **Caveat:** The design deletes any credential or object outside the baseline during the window the step was running. Test identities, applications, buckets and containers must be dedicated to this lab and isolated from production. Any collision with pre-existing resources outside the baseline will be deleted.
 
-**Deferred:** Creating stages.json for Linux packs to wire undo into cleanup blocks via a Linux generator (analogous to appctlgen). For now, Linux cleanup blocks remain empty. The undo scripts are written and correct but not yet embedded in YAMLs.
+**Linux cleanup wiring completed:** Created `cvlgen.go` (Linux YAML generator analogous to appctlgen), added stages.json and header.yaml for all 5 Linux cloud-vm packs, regenerated all Linux YAMLs with undo scripts now embedded in cleanup blocks. Linux parity with Windows: all 6 steps (d28/d29/e36 on each OS) now have kill-safe undo wired end-to-end.
