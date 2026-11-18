@@ -294,6 +294,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "collection-large-volume-transfer.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "collection-low-and-slow-exfil.yaml": {
     "cleanup": 0,
     "detection": 0,
