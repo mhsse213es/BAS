@@ -139,3 +139,14 @@ Not verified: neither scenario has run on the DC. Both need a platform run on th
 - **ad-forced-auth-attempt** (1 step): one Test-Path to an unresolvable `.invalid` UNC. No SMB session, no credential sent, no listener or relay. Detection verdict is not set by the probe; it needs the Sysmon or EDR record checked for the run ID.
 - Verified offline: schema, PowerShell parse, signatures (verify-all ok=245 fail=0), step-contract ledger (no removals), tests pass.
 - Not verified: neither scenario has run on a host. The forced-auth detection needs a Sysmon or EDR check on the run ID.
+
+### ad-forced-auth-attempt on the lab VM, 2026-11-18 (partial)
+
+- Host: `WIN-2IP8FNO4MAD` (member server). Sysmon: not installed (`Get-Service Sysmon64,Sysmon` empty).
+- Probe run `ff31418d`: `EXEC T1187: outbound UNC check to \bas-sim-fa-ff31418d.invalid\share. reached=False (expected False).`
+- DNS client log (enabled on this VM for the check) recorded the lookup for `bas-sim-fa-ff31418d.invalid` at 12:12:21 AM, server response status 9003 (name not found).
+- **Verified:** the name lookup reached the DNS client and server.
+- **Not observed:** no outbound SMB attempt. The name never resolved, so Windows did not open an SMB connection. The step's Sysmon EID 3 telemetry does not apply to this run.
+- **Not checked:** alerting. Nothing on the lab reads DNS or SMB events for alerts.
+- Status: lookup-level only. Not detection-verified.
+- Open: decide whether to turn the DNS client log back off (`wevtutil sl "Microsoft-Windows-DNS-Client/Operational" /e:false`).
