@@ -177,6 +177,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/scenarios/runs/{runId}/double-extortion-correlation", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/runs/{runId}/detection-response-effectiveness", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/runs/{runId}/ransomware-efficacy", tierAny, ""},
+	{http.MethodGet, "/api/scenarios/runs/{runId}/exfil-chain", tierAny, ""},
 	{http.MethodGet, "/api/campaigns", tierAny, ""},
 	{http.MethodGet, "/api/campaigns/{id}", tierAny, ""},
 	{http.MethodGet, "/api/campaigns/{id}/summary", tierAny, ""},

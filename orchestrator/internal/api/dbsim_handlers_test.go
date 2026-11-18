@@ -83,7 +83,8 @@ func TestDBSimViewClientEligibility(t *testing.T) {
 	if v := dbsimView(rec, now); v.ClientEligible || v.IdentityCheck.Reasons == nil {
 		t.Fatalf("fresh target: %+v", v)
 	}
-	rec.IdentityCheck = dbsim.IdentityCheckState{Checked: true, Passed: true, At: time.Now(), By: "u"}
+	// Stamp the check with the injected clock: a check time after now is rejected (targetreg.go).
+	rec.IdentityCheck = dbsim.IdentityCheckState{Checked: true, Passed: true, At: now, By: "u"}
 	if !dbsimView(rec, now).ClientEligible {
 		t.Fatal("a passed check must make a client target eligible")
 	}
