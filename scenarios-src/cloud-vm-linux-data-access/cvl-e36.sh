@@ -2,12 +2,18 @@ cv_gate BAS_CONFIRM_CLOUD_EXFIL_SIM || cv_done skip "lab gate BAS_CONFIRM_CLOUD_
 payload=$(mktemp "${TMPDIR:-/tmp}/${CV_TAG}.XXXXXX")
 trap 'rm -f "$payload"' EXIT
 for i in $(seq 1 40); do printf 'BAS SYNTHETIC DATA - NOT REAL. '; done > "$payload"
+# Create undo record with empty URLs; will be populated before uploads
+undo_data='{"azure_url":"","s3_bucket":"","s3_key":""}'
+cv_undo_new CV-LE36 "$undo_data" || cv_done error "undo record for CV-LE36 already exists; a previous run was not cleaned up" CV-LE36
 acct=$(cv_env BAS_CLOUD_TEST_STORAGE_ACCOUNT); bucket=$(cv_env BAS_CLOUD_TEST_BUCKET)
 key="bas-synthetic/${CV_TAG}.txt"
 if [ -n "$acct" ] && cv_az_present; then
   cv_az_token "$CV_RES_STORAGE"
   if [ -n "$CV_TOKEN" ]; then
     url="https://$acct.blob.core.windows.net/bas-synthetic/${CV_TAG}.txt"
+    # Record URL before uploading (so undo can find it if killed)
+    undo_data="{\"azure_url\":\"$url\",\"s3_bucket\":\"$bucket\",\"s3_key\":\"$key\"}"
+    cv_undo_set CV-LE36 "$undo_data"
     code=$(cv_curl_auth PUT "$url" "$CV_TOKEN" -H 'x-ms-version: 2021-08-06' -H 'x-ms-blob-type: BlockBlob' -H 'Content-Type: text/plain' --data-binary @"$payload")
     if [ "$code" = 201 ]; then
       dc=$(cv_curl_auth DELETE "$url" "$CV_TOKEN" -H 'x-ms-version: 2021-08-06')
@@ -20,6 +26,9 @@ if [ -n "$acct" ] && cv_az_present; then
 fi
 if [ -n "$bucket" ] && cv_have_aws && [ -n "$(cv_aws_token)" ]; then
   cv_set_region
+  # Record S3 location before uploading (so undo can find it if killed)
+  undo_data="{\"azure_url\":\"\",\"s3_bucket\":\"$bucket\",\"s3_key\":\"$key\"}"
+  cv_undo_set CV-LE36 "$undo_data"
   cv_aws s3 cp "$payload" "s3://$bucket/$key"
   if [ "$CV_ARC" -eq 0 ]; then
     cv_aws s3api delete-object --bucket "$bucket" --key "$key"

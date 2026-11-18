@@ -4,6 +4,8 @@ $acct = Get-CvEnv 'BAS_CLOUD_TEST_STORAGE_ACCOUNT'
 $bucket = Get-CvEnv 'BAS_CLOUD_TEST_BUCKET'
 $key = 'bas-synthetic/' + $script:CvTag + '.txt'
 $outcome = $null
+$undo = @{ azure_url = ''; s3_bucket = ''; s3_key = '' }
+try { New-CvUndoRecord 'cv-e36' $undo } catch { Complete-CvStep @{ Outcome = 'error'; Reason = 'the undo record could not be written (one from an earlier run may still be present), so nothing was uploaded' } 'CV-E36' }
 try {
   ('BAS SYNTHETIC DATA - NOT REAL. ' * 40) | Set-Content -LiteralPath $payload -Encoding ASCII
   if ($acct -ne '' -and (Get-CvAzureInstance) -ne $null) {
@@ -12,6 +14,7 @@ try {
       $code = 0
       try {
         $h = @{ Authorization = ('Bearer ' + $t.Token); 'x-ms-version' = '2021-08-06'; 'x-ms-blob-type' = 'BlockBlob' }
+        $undo.azure_url = ('https://' + $acct + '.blob.core.windows.net/bas-synthetic/' + $script:CvTag + '.txt'); Set-CvUndoRecord 'cv-e36' $undo
         $null = Invoke-RestMethod -Method Put -Uri ('https://' + $acct + '.blob.core.windows.net/bas-synthetic/' + $script:CvTag + '.txt') -Headers $h -InFile $payload -ContentType 'text/plain' -TimeoutSec 30 -ErrorAction Stop
         $code = 201
       } catch { try { $code = [int]$_.Exception.Response.StatusCode } catch {} }
@@ -29,6 +32,7 @@ try {
   }
   if ($null -eq $outcome -and $bucket -ne '' -and (Test-CvAwsCli) -and (Get-CvAwsToken) -ne '') {
     Set-CvAwsRegion
+    $undo.s3_bucket = $bucket; $undo.s3_key = $key; Set-CvUndoRecord 'cv-e36' $undo
     $up = Invoke-CvAws @('s3', 'cp', $payload, ('s3://' + $bucket + '/' + $key))
     if ($up.Code -eq 0) {
       $del = Invoke-CvAws @('s3api', 'delete-object', '--bucket', $bucket, '--key', $key)

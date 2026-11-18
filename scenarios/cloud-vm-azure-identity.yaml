@@ -123,6 +123,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       $inst = Get-CvAzureInstance
       if ($null -eq $inst) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'Azure IMDS is unreachable from this host, so this is not an Azure VM or IMDS is blocked on the host' } 'CV-A6' }
       $child = 'try { $null = Invoke-RestMethod -Headers @{ Metadata = "true" } -Uri "http://169.254.169.254/metadata/instance?api-version=2021-02-01" -UserAgent "bas-cv-a6" -TimeoutSec 3 -ErrorAction Stop; Write-Output CV_REACHED } catch { Write-Output CV_BLOCKED }'
@@ -233,6 +249,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       $inst = Get-CvAzureInstance
       if ($null -eq $inst) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'Azure IMDS is unreachable from this host, so this is not an Azure VM' } 'CV-A7' }
       $resources = @('https://management.azure.com/', 'https://vault.azure.net', 'https://storage.azure.com/', 'https://graph.microsoft.com/')
@@ -345,6 +377,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       $inst = Get-CvAzureInstance
       if ($null -eq $inst) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'Azure IMDS is unreachable from this host, so this is not an Azure VM' } 'CV-A8' }
       $t = Get-CvAzureToken 'https://management.azure.com/'
@@ -450,6 +498,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       $inst = Get-CvAzureInstance
       if ($null -eq $inst) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'Azure IMDS is unreachable from this host, so this is not an Azure VM' } 'CV-A9' }
       $t = Get-CvAzureToken 'https://management.azure.com/'
@@ -557,6 +621,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       $inst = Get-CvAzureInstance
       if ($null -eq $inst) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'Azure IMDS is unreachable from this host, so this is not an Azure VM' } 'CV-A10' }
       $t = Get-CvAzureToken 'https://management.azure.com/'
@@ -663,6 +743,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       $inst = Get-CvAzureInstance
       if ($null -eq $inst) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'Azure IMDS is unreachable from this host, so this is not an Azure VM' } 'CV-A11' }
       $t = Get-CvAzureToken 'https://management.azure.com/'
@@ -769,6 +865,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       $inst = Get-CvAzureInstance
       if ($null -eq $inst) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'Azure IMDS is unreachable from this host, so this is not an Azure VM' } 'CV-A12' }
       $vault = Get-CvEnv 'BAS_CLOUD_TEST_KEYVAULT'
@@ -876,6 +988,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       $inst = Get-CvAzureInstance
       if ($null -eq $inst) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'Azure IMDS is unreachable from this host, so this is not an Azure VM' } 'CV-A13' }
       $other = Get-CvEnv 'BAS_CLOUD_TEST_RG'

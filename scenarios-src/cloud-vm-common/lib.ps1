@@ -78,3 +78,23 @@ function Get-CvAwsMeta { param([string]$Path)
 }
 function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
 function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+
+# Undo records. A step writes its record before any cloud object is created, so a run that dies part way can still be
+# undone by the step's cleanup, which reads the record and needs nothing from the run's memory. One record per step,
+# in the TEMP directory of the run user. New-CvUndoRecord is exclusive: a record left by an earlier run blocks the step.
+function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+function New-CvUndoRecord { param([string]$Id, $Data)
+  $p = Get-CvUndoPath $Id
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+  $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+  try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+}
+function Set-CvUndoRecord { param([string]$Id, $Data)
+  [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+}
+function Read-CvUndoRecord { param([string]$Id)
+  $p = Get-CvUndoPath $Id
+  if (-not (Test-Path -LiteralPath $p)) { return $null }
+  try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+}
+function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }

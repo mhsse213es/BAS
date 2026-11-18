@@ -94,3 +94,45 @@ cv_set_region() {
     [ -n "$r" ] && export AWS_DEFAULT_REGION="$r"
   fi
 }
+
+# Undo record helpers: baseline-based kill-safe undo for cloud steps.
+cv_undo_path() { # id -> path
+  local id="$1"
+  printf '%s' "${TMPDIR:-/tmp}/bas-cv-undo/${id}.json"
+}
+
+cv_undo_new() { # id data_json -> creates record (exclusive), exits with error if already exists
+  local id="$1" data="$2"
+  local dir p
+  dir=$(dirname "$(cv_undo_path "$id")")
+  mkdir -p "$dir" 2>/dev/null || true
+  p=$(cv_undo_path "$id")
+  set -C  # noclobber: > fails if file exists
+  printf '%s' "$data" > "$p" 2>/dev/null || { set +C; return 1; }
+  set +C
+  return 0
+}
+
+cv_undo_set() { # id data_json -> updates existing record
+  local id="$1" data="$2"
+  local p
+  p=$(cv_undo_path "$id")
+  printf '%s' "$data" > "$p" 2>/dev/null || return 1
+  return 0
+}
+
+cv_undo_read() { # id -> prints JSON contents, or nothing if unreadable
+  local id="$1"
+  local p
+  p=$(cv_undo_path "$id")
+  [ -f "$p" ] || return 0
+  cat "$p" 2>/dev/null || return 0
+}
+
+cv_undo_remove() { # id -> removes record
+  local id="$1"
+  local p
+  p=$(cv_undo_path "$id")
+  rm -f "$p" 2>/dev/null || true
+  return 0
+}

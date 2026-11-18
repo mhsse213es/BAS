@@ -121,6 +121,9 @@ func Generate(srcDir, commonDir string) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("stage %s: %w", s.ID, err)
 		}
+		// Check for an undo script. If present, it will be wired into cleanup instead of defaultCleanup.
+		undo, undoErr := os.ReadFile(filepath.Join(srcDir, s.ID+".undo.ps1"))
+		hasUndo := undoErr == nil
 		to := s.TimeoutSec
 		if to == 0 {
 			to = 120
@@ -164,7 +167,12 @@ func Generate(srcDir, commonDir string) ([]byte, error) {
 		out.WriteString("    detection:" + list(s.Detection))
 		out.WriteString("    command: |\n")
 		out.WriteString(indent(libText+"\n"+minify(string(call)), 6))
-		if s.Cleanup == "" && s.NoDefaultCleanup && s.CleanupExtra == "" {
+		if hasUndo {
+			// If an undo script exists, emit it as the cleanup (with lib helpers prepended).
+			// NoDefaultCleanup semantics: no defaultCleanup sweep is attached.
+			out.WriteString("    cleanup: |\n")
+			out.WriteString(indent(libText+"\n"+minify(string(undo)), 6))
+		} else if s.Cleanup == "" && s.NoDefaultCleanup && s.CleanupExtra == "" {
 			out.WriteString("    cleanup: \"\"\n")
 		} else if s.Cleanup == "" {
 			out.WriteString("    cleanup: |\n")

@@ -122,6 +122,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       if ((Get-CvAwsToken) -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS IMDS is unreachable from this host, so this is not an EC2 instance' } 'CV-B14' }
       $prof = $null; $code = 0
       try { $prof = [string](Invoke-RestMethod -Headers @{ 'X-aws-ec2-metadata-token' = (Get-CvAwsToken) } -Uri 'http://169.254.169.254/latest/meta-data/iam/info' -TimeoutSec 3 -ErrorAction Stop) } catch { try { $code = [int]$_.Exception.Response.StatusCode } catch {} }
@@ -227,6 +243,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       if ((Get-CvAwsToken) -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS IMDS is unreachable from this host, so this is not an EC2 instance' } 'CV-B15' }
       if (-not (Test-CvAwsCli)) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS CLI is not installed on this host' } 'CV-B15' }
       Set-CvAwsRegion
@@ -332,6 +364,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       if ((Get-CvAwsToken) -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS IMDS is unreachable from this host, so this is not an EC2 instance' } 'CV-B16' }
       if (-not (Test-CvAwsCli)) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS CLI is not installed on this host' } 'CV-B16' }
       Set-CvAwsRegion
@@ -438,6 +486,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       if ((Get-CvAwsToken) -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS IMDS is unreachable from this host, so this is not an EC2 instance' } 'CV-B17' }
       if (-not (Test-CvAwsCli)) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS CLI is not installed on this host' } 'CV-B17' }
       Set-CvAwsRegion
@@ -541,6 +605,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       if ((Get-CvAwsToken) -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS IMDS is unreachable from this host, so this is not an EC2 instance' } 'CV-B18' }
       if (-not (Test-CvAwsCli)) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS CLI is not installed on this host' } 'CV-B18' }
       Set-CvAwsRegion
@@ -644,6 +724,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       if ((Get-CvAwsToken) -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS IMDS is unreachable from this host, so this is not an EC2 instance' } 'CV-B19' }
       if (-not (Test-CvAwsCli)) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS CLI is not installed on this host' } 'CV-B19' }
       Set-CvAwsRegion
@@ -747,6 +843,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       if ((Get-CvAwsToken) -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS IMDS is unreachable from this host, so this is not an EC2 instance' } 'CV-B20' }
       if (-not (Test-CvAwsCli)) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS CLI is not installed on this host' } 'CV-B20' }
       Set-CvAwsRegion
@@ -850,6 +962,22 @@ steps:
       }
       function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
       function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
       if ((Get-CvAwsToken) -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS IMDS is unreachable from this host, so this is not an EC2 instance' } 'CV-B21' }
       if (-not (Test-CvAwsCli)) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS CLI is not installed on this host' } 'CV-B21' }
       Set-CvAwsRegion
