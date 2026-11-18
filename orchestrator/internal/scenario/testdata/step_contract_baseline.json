@@ -409,6 +409,31 @@
     "detection": 0,
     "telemetry": 0
   },
+  "credential-browser-store-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "credential-dpapi-store-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "credential-files-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "credential-keys-certs-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "credential-registry-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "cscrf-mii-drill.yaml": {
     "cleanup": 0,
     "detection": 0,

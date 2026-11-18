@@ -4500,6 +4500,51 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "credential-browser-store-access.yaml",
+    "index": 0,
+    "technique_id": "T1555.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "credential-dpapi-store-discovery.yaml",
+    "index": 0,
+    "technique_id": "T1555",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "credential-files-discovery.yaml",
+    "index": 0,
+    "technique_id": "T1552.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "credential-keys-certs-discovery.yaml",
+    "index": 0,
+    "technique_id": "T1552.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "credential-registry-discovery.yaml",
+    "index": 0,
+    "technique_id": "T1552.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "cscrf-mii-drill.yaml",
     "index": 0,
     "technique_id": "T1046",
