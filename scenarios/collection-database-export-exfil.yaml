@@ -108,7 +108,7 @@ steps:
       $work = Join-Path $env:TEMP "bas_dbexp_$runId"
       $csv = Join-Path $work 'customers.csv'
       if (-not (Test-Path $csv)) {
-        Write-Output "SKIP T1560.001: no export from Stage 1 to archive. [BAS-SIM-DBX-S2]"
+        Write-Output "SKIP: T1560.001: no export from Stage 1 to archive. [BAS-SIM-DBX-S2]"
         exit 0
       }
       $zip = Join-Path $work 'customers.zip'
@@ -143,7 +143,7 @@ steps:
       $work = Join-Path $env:TEMP "bas_dbexp_$runId"
       $zip = Join-Path $work 'customers.zip'
       if (-not (Test-Path $zip)) {
-        Write-Output "SKIP T1048.003: no archive from Stage 2 to send. [BAS-SIM-DBX-S3]"
+        Write-Output "SKIP: T1048.003: no archive from Stage 2 to send. [BAS-SIM-DBX-S3]"
         exit 0
       }
       $target = "http://bas-sim-dbx-$runId.invalid/upload"

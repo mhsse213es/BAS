@@ -72,7 +72,7 @@ steps:
         "${env:ProgramFiles(x86)}\7-Zip\7z.exe"
       ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
       if (-not $sevenZip) {
-        Write-Output "SKIP T1560.001: 7-Zip is not installed, so no encrypted archive was created. [BAS-SIM-ENC-S1]"
+        Write-Output "SKIP: T1560.001: 7-Zip is not installed, so no encrypted archive was created. [BAS-SIM-ENC-S1]"
         exit 0
       }
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
@@ -116,7 +116,7 @@ steps:
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
       $archive = Join-Path $env:TEMP "bas_enc_$runId\synthetic.7z"
       if (-not (Test-Path $archive)) {
-        Write-Output "SKIP T1048.003: no encrypted archive from Stage 1 to send. [BAS-SIM-ENC-S2]"
+        Write-Output "SKIP: T1048.003: no encrypted archive from Stage 1 to send. [BAS-SIM-ENC-S2]"
         exit 0
       }
       $target = "http://bas-sim-enc-$runId.invalid/upload"

@@ -94,7 +94,7 @@ steps:
       $work = Join-Path $env:TEMP "bas_drip_$runId"
       $chunks = @(Get-ChildItem -Path $work -File -ErrorAction SilentlyContinue)
       if ($chunks.Count -eq 0) {
-        Write-Output "SKIP T1029: no drip chunks from Stage 1. [BAS-SIM-DRP-S2]"
+        Write-Output "SKIP: T1029: no drip chunks from Stage 1. [BAS-SIM-DRP-S2]"
         exit 0
       }
       $target = "http://bas-sim-drip-$runId.invalid/upload"

@@ -97,7 +97,7 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $shares = @(Get-SmbShare | Where-Object { -not $_.Special })
       if ($shares.Count -eq 0) {
-        Write-Output "SKIP T1039: no non-special shares to list. Share listing Stage 2 not applicable on this host. [BAS-SIM-SHR-S2]"
+        Write-Output "SKIP: T1039: no non-special shares to list. Share listing Stage 2 not applicable on this host. [BAS-SIM-SHR-S2]"
         exit 0
       }
       $total = 0

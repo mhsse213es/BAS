@@ -107,7 +107,7 @@ steps:
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
       $bulk = Join-Path $env:TEMP "bas_bulk_$runId\bulk_synthetic.bin"
       if (-not (Test-Path $bulk)) {
-        Write-Output "SKIP T1048.003: no bulk file from Stage 1 to send. [BAS-SIM-BLK-S2]"
+        Write-Output "SKIP: T1048.003: no bulk file from Stage 1 to send. [BAS-SIM-BLK-S2]"
         exit 0
       }
       $target = "http://bas-sim-bulk-$runId.invalid/upload"

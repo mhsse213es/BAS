@@ -100,7 +100,7 @@ steps:
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
       $file = Join-Path $env:TEMP "bas_cloud_$runId\synthetic_upload.txt"
       if (-not (Test-Path $file)) {
-        Write-Output "SKIP T1567.002: no staged file from Stage 1 to upload. [BAS-SIM-CLD-S2]"
+        Write-Output "SKIP: T1567.002: no staged file from Stage 1 to upload. [BAS-SIM-CLD-S2]"
         exit 0
       }
       $target = "http://bas-sim-bucket-$runId.invalid/objects/synthetic_upload.txt"

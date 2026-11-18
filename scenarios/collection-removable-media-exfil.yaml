@@ -91,7 +91,7 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $removable = Get-CimInstance -ClassName Win32_LogicalDisk -Filter 'DriveType=2' | Select-Object -First 1
       if (-not $removable) {
-        Write-Output "SKIP T1052.001: no removable drive is attached. [BAS-SIM-USB-S2]"
+        Write-Output "SKIP: T1052.001: no removable drive is attached. [BAS-SIM-USB-S2]"
         exit 0
       }
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }

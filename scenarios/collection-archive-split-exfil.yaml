@@ -123,7 +123,7 @@ steps:
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
       $vol = Join-Path $env:TEMP "bas_split_$runId\source.part001"
       if (-not (Test-Path $vol)) {
-        Write-Output "SKIP T1048.003: no split volume from Stage 1 to send. [BAS-SIM-SPL-S2]"
+        Write-Output "SKIP: T1048.003: no split volume from Stage 1 to send. [BAS-SIM-SPL-S2]"
         exit 0
       }
       $target = "http://bas-sim-split-$runId.invalid/upload"
