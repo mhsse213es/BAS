@@ -27,6 +27,8 @@ type Simulator struct {
 	gateways     []Service
 	atmSwitches  []Service
 	cardholderDS []Service
+
+	ledger *Ledger
 }
 
 // NewSimulator builds a Simulator with a fixed synthetic catalog. addr is the
@@ -37,12 +39,14 @@ func NewSimulator(addr string) *Simulator {
 		gateways:     []Service{{ID: "paymentgateway-us-east"}, {ID: "paymentgateway-eu-west"}},
 		atmSwitches:  []Service{{ID: "atmswitch-region1"}, {ID: "atmswitch-region2"}},
 		cardholderDS: []Service{{ID: "cardholder-vault-primary"}},
+		ledger:       newLedger(),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/banking/apps", s.handle(s.bankingApps))
 	mux.HandleFunc("/api/payments/gateways", s.handle(s.gateways))
 	mux.HandleFunc("/api/atm/switches", s.handle(s.atmSwitches))
 	mux.HandleFunc("/api/data/cardholder-locations", s.handle(s.cardholderDS))
+	s.registerLedgerRoutes(mux)
 	s.srv = &http.Server{Addr: addr, Handler: mux}
 	return s
 }
