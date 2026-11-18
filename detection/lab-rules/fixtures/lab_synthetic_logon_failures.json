@@ -1,0 +1,8 @@
+{"positive": [
+  {"EventID": "4625", "TargetUserName": "bassim1", "LogonType": "3", "Status": "0xC000006A"},
+  {"EventID": "4771", "TargetUserName": "BASSIM2", "IpAddress": "10.0.0.20"}
+],
+"negative": [
+  {"EventID": "4625", "TargetUserName": "alice.ops", "LogonType": "3"},
+  {"EventID": "4624", "TargetUserName": "bassim1", "LogonType": "3", "AuthenticationPackageName": "NTLM"}
+]}

@@ -1,0 +1,8 @@
+{"positive": [
+  {"EventID": "4624", "TargetUserName": "bassim1", "LogonType": "3", "AuthenticationPackageName": "NTLM"}
+],
+"negative": [
+  {"EventID": "4624", "TargetUserName": "bassim1", "LogonType": "3", "AuthenticationPackageName": "Kerberos"},
+  {"EventID": "4624", "TargetUserName": "alice.ops", "LogonType": "3", "AuthenticationPackageName": "NTLM"},
+  {"EventID": "4625", "TargetUserName": "bassim1", "LogonType": "3", "AuthenticationPackageName": "NTLM"}
+]}

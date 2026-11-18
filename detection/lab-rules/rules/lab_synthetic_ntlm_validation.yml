@@ -1,0 +1,24 @@
+title: NTLM Credential Validation For Lab Synthetic Accounts
+id: 6f1c2a10-5b7e-4d2a-9a51-0b1d7e3c2004
+status: experimental
+description: NTLM credential validation (4776) on the DC for a lab synthetic account. Visibility rule for the NTLM relay and pass-the-hash scenarios.
+author: Audspect BAS lab
+date: 2026-11-18
+tags:
+    - attack.credential_access
+    - attack.t1557.001
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_event:
+        EventID: 4776
+    selection_accounts:
+        TargetUserName:
+            - bassim1
+            - bassim2
+            - bassim3
+    condition: selection_event and selection_accounts
+falsepositives:
+    - None expected in the lab
+level: low

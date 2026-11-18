@@ -1,0 +1,26 @@
+title: Failed Logons Against Lab Synthetic Accounts
+id: 6f1c2a10-5b7e-4d2a-9a51-0b1d7e3c2001
+status: experimental
+description: Failed logon attempts (4625 NTLM/logon, 4771 Kerberos pre-auth) against the three lab synthetic accounts. Lab-only; the account names are the BAS synthetic set, not a generic rule. Covers the spray, guessing and stuffing scenarios.
+author: Audspect BAS lab
+date: 2026-11-18
+tags:
+    - attack.credential_access
+    - attack.t1110
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_events:
+        EventID:
+            - 4625
+            - 4771
+    selection_accounts:
+        TargetUserName:
+            - bassim1
+            - bassim2
+            - bassim3
+    condition: selection_events and selection_accounts
+falsepositives:
+    - None expected; the synthetic accounts exist only in the lab
+level: medium
