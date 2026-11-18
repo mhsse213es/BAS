@@ -254,12 +254,27 @@
     "detection": 0,
     "telemetry": 0
   },
+  "cobalt-group-bfsi-collection-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "cobalt-group-bfsi-credential-access.yaml": {
     "cleanup": 0,
     "detection": 0,
     "telemetry": 0
   },
+  "cobalt-group-bfsi-defense-evasion.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "cobalt-group-bfsi-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-bfsi-financial-impact.yaml": {
     "cleanup": 0,
     "detection": 0,
     "telemetry": 0

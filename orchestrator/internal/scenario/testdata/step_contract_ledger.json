@@ -3411,6 +3411,60 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "cobalt-group-bfsi-collection-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1005",
+    "action_key": "collection_local_data",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-collection-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1039",
+    "action_key": "collection_network_share",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-collection-exfil.yaml",
+    "index": 2,
+    "technique_id": "T1114.001",
+    "action_key": "collection_email_presence",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-collection-exfil.yaml",
+    "index": 3,
+    "technique_id": "T1560.001",
+    "action_key": "collection_archive_data",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-collection-exfil.yaml",
+    "index": 4,
+    "technique_id": "T1041",
+    "action_key": "exfil_over_c2_simulation",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-collection-exfil.yaml",
+    "index": 5,
+    "technique_id": "T1048.003",
+    "action_key": "exfil_dns_simulation",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
     "scenario": "cobalt-group-bfsi-credential-access.yaml",
     "index": 0,
     "technique_id": "T1003.001",
@@ -3483,6 +3537,69 @@
     "status": "undo_declared_in_yaml"
   },
   {
+    "scenario": "cobalt-group-bfsi-defense-evasion.yaml",
+    "index": 0,
+    "technique_id": "T1518.001",
+    "action_key": "evasion_security_software_discovery",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-defense-evasion.yaml",
+    "index": 1,
+    "technique_id": "T1562.001",
+    "action_key": "evasion_security_tool_impairment_probe",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-defense-evasion.yaml",
+    "index": 2,
+    "technique_id": "T1027",
+    "action_key": "evasion_powershell_obfuscation",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-defense-evasion.yaml",
+    "index": 3,
+    "technique_id": "T1036",
+    "action_key": "evasion_masquerading_executable",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-defense-evasion.yaml",
+    "index": 4,
+    "technique_id": "T1112",
+    "action_key": "evasion_registry_modification",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-defense-evasion.yaml",
+    "index": 5,
+    "technique_id": "T1070.001",
+    "action_key": "evasion_event_log_clearing",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-defense-evasion.yaml",
+    "index": 6,
+    "technique_id": "T1055",
+    "action_key": "evasion_process_injection_readiness",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
     "scenario": "cobalt-group-bfsi-discovery.yaml",
     "index": 0,
     "technique_id": "T1046",
@@ -3514,6 +3631,69 @@
     "index": 3,
     "technique_id": "T1046",
     "action_key": "bfsi_cardholder_data_discovery",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-financial-impact.yaml",
+    "index": 0,
+    "technique_id": "T1565.001",
+    "action_key": "financial_transaction_manipulation",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-financial-impact.yaml",
+    "index": 1,
+    "technique_id": "T1565.001",
+    "action_key": "financial_payment_instruction_manipulation",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-financial-impact.yaml",
+    "index": 2,
+    "technique_id": "T1565.001",
+    "action_key": "financial_atm_dispense_manipulation",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-financial-impact.yaml",
+    "index": 3,
+    "technique_id": "T1565.001",
+    "action_key": "financial_fraud_pattern_simulation",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-financial-impact.yaml",
+    "index": 4,
+    "technique_id": "T1565.001",
+    "action_key": "financial_transaction_limit_bypass",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-financial-impact.yaml",
+    "index": 5,
+    "technique_id": "T1565.001",
+    "action_key": "financial_reconciliation_manipulation",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-financial-impact.yaml",
+    "index": 6,
+    "technique_id": "T1499",
+    "action_key": "financial_resilience_check",
     "framework": "custom",
     "class": "destructive",
     "status": "undo_declared_in_yaml"
