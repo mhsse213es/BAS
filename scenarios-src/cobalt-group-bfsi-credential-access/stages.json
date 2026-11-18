@@ -99,7 +99,7 @@
   {
     "id": "cred-05",
     "n": 5,
-    "name": "Credential Access - Kerberoasting Against Test SPN (T1558.003)",
+    "name": "Credential Access - Cached Kerberos Ticket Check (T1558.003, not a live Kerberoast)",
     "technique_id": "T1558.003",
     "timeout_sec": 120,
     "requires_priv": "user",

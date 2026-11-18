@@ -102,10 +102,13 @@ steps:
       $stamps += (Get-Date)
       if ($i -lt 4) { Start-Sleep -Seconds 1 }
       }
-      $increasing = $true
-      for ($i = 1; $i -lt $stamps.Count; $i++) { if ($stamps[$i] -le $stamps[$i - 1]) { $increasing = $false } }
-      if ($ok -eq 5 -and $increasing) {
-      $res = @{ Outcome = 'pass'; Reason = 'Five periodic HTTP beacons succeeded with strictly increasing timestamps' }
+      $regular = $true
+      for ($i = 1; $i -lt $stamps.Count; $i++) {
+      $gap = ($stamps[$i] - $stamps[$i - 1]).TotalSeconds
+      if ($gap -lt 0.5 -or $gap -gt 3.0) { $regular = $false }
+      }
+      if ($ok -eq 5 -and $regular) {
+      $res = @{ Outcome = 'pass'; Reason = 'Five HTTP beacons succeeded at a regular interval (each gap between 0.5 and 3.0 seconds)' }
       } elseif ($ok -eq 0) {
       $res = @{ Outcome = 'error'; Reason = 'No beacon request succeeded against the simulator' }
       } else {

@@ -341,3 +341,21 @@ Checked every Phase 1 and Phase 2 technique in the spec against the scenario lib
   intended.
 - The agent's own backstop scan matches only a narrow set of destructive command patterns, so
   classification is the main gate. The backstop was not exercised against these commands live.
+
+---
+
+# Cobalt Group BFSI - Follow-up fixes
+
+- **cred-06 (AS-REP) lab-domain guard.** cred-06 queries AD, so it now runs only when
+  `BAS_LAB_DOMAIN` is set and matches `USERDNSDOMAIN`, and it queries with `-Server` set to that
+  domain. Live verdicts: unset gives SKIP ("refusing to query an unscoped domain"), and a mismatched
+  domain gives SKIP. In both cases no undo record is left behind.
+- **cred-05 relabelled.** The step runs `klist` and checks the cached ticket list for the test SPN.
+  It does not request a service ticket, so it is not a live Kerberoast. Behaviour is unchanged. The
+  stage name and the header now say "Cached Kerberos Ticket Check (not a live Kerberoast)".
+- **c2-01 timing check.** The step previously checked only that timestamps increased. It now
+  requires each gap between consecutive requests to fall between 0.5 and 3.0 seconds. Live PASS
+  verified against a running lab simulator, and live SKIP verified with the simulator down.
+- **Verification.** Both credential-access and C2 packs regenerated and signed; `verify-all` ok=241
+  fail=0. Full unfiltered `go test ./internal/scenario -count=1 -timeout 420s`: ok, zero failures,
+  302.1s.
