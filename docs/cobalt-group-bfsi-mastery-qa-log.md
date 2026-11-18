@@ -195,7 +195,7 @@ DNS). Plan: `docs/superpowers/plans/2026-11-18-cobalt-group-bfsi-p2.md`.
 - A partially failed pers-02 run left a WMI filter and its undo record behind; running its undo removed
   the filter, confirming undo handles partial state, not just complete state.
 - `go test ./internal/scenario -run TestCobaltBFSI` passes (parse test plus the c2-01 live integration test).
-- Full unfiltered `go test ./internal/scenario -count=1 -timeout 420s`: RESULT_PLACEHOLDER
+- Full unfiltered `go test ./internal/scenario -count=1 -timeout 420s`: ok, zero failures, 317s (run after the final C2 fixes, commit d507e822).
 - `signer.go verify-all scenarios`: ok=230 fail=0 with both new packs in the ok set.
 
 ## Bugs found and fixed during live verification
