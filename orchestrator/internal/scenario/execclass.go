@@ -1193,7 +1193,9 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 	// discoveryDefaultClassification.
 	"T1012": {"enumerate": discoveryDefaultClassification},
 	"T1007": {
-		"cscrf_mii_service_running": catalogClass(ClassNonDestructive, "cscrf_mii_service_running", "Read-only service lookup for the named MII services"), "enumerate": discoveryDefaultClassification},
+		"cscrf_mii_service_running": catalogClass(ClassNonDestructive, "cscrf_mii_service_running", "Read-only service lookup for the named MII services"),
+		"enumerate":                 discoveryDefaultClassification,
+	},
 	"T1518": {"enumerate": discoveryDefaultClassification},
 	"T1010": {"enumerate": discoveryDefaultClassification},
 	"T1033": {"enumerate": discoveryDefaultClassification},
