@@ -54,8 +54,8 @@ steps:
     reversible: true
     blast_radius: "One Test-Path against \\\\bas-sim-fa-<runid>.invalid\\share. The name cannot resolve, so no SMB session starts and no credential is sent. Produces a DNS query and an outbound SMB attempt."
     telemetry:
-      - "Sysmon EID 22: DNS query for the bas-sim .invalid name"
-      - "Sysmon EID 3: outbound SMB connection attempt, if the stack tries port 445"
+      - "Sysmon EID 22 or DNS-Client log: DNS query for the bas-sim .invalid name (expected)"
+      - "Sysmon EID 3: NOT expected. The name does not resolve, so no SMB connection is made."
     detection:
       - "EDR/NDR: an outbound UNC authentication attempt to an unknown host from a user process — forced-auth IOC"
     command: |
@@ -64,5 +64,5 @@ steps:
       $unc = "\\bas-sim-fa-$runId.invalid\share"
       $reached = Test-Path $unc
       Write-Output "EXEC T1187: attempted an outbound UNC path check to $unc. Name is .invalid and cannot resolve; reached=$reached (expected False). No credential sent. [BAS-SIM-FAU-S1]"
-      Write-Output "SKIP: detection is not read by this probe. Verify on the Sysmon/EDR side: an event for the DNS query and outbound SMB attempt should exist for run $runId. No verdict on detection is claimed here. [BAS-SIM-FAU-S1]"
+      Write-Output "SKIP: detection is not read by this probe. Verify on the DNS/Sysmon/EDR side that a lookup for run $runId was recorded. No SMB connection is expected for an unresolvable name, and none is claimed. No verdict on detection is set here. [BAS-SIM-FAU-S1]"
     cleanup: ""
