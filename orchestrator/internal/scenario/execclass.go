@@ -191,6 +191,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1048": {
+		"cscrf_dp_marker_egress": catalogClass(ClassPotentiallyDestructive, "cscrf_dp_marker_egress", "Writes one synthetic marker file to a named share; deleted in undo"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -411,6 +412,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1083": {
+		"cscrf_dp_data_acl": catalogClass(ClassNonDestructive, "cscrf_dp_data_acl", "Read-only ACL read of the configured data path"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -950,6 +952,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1562.001": {
+		"cscrf_dp_dlp_service":     catalogClass(ClassNonDestructive, "cscrf_dp_dlp_service", "Read-only service lookup for the named DLP agent"),
 		"cscrf_ea_defender_status": catalogClass(ClassNonDestructive, "cscrf_ea_defender_status", "Read-only Defender status query"),
 		"cscrf_ea_sysmon_status":   catalogClass(ClassNonDestructive, "cscrf_ea_sysmon_status", "Read-only Sysmon service query; the service is not stopped"),
 		"enumerate": {
@@ -1253,6 +1256,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		"c2_non_standard_port":     catalogClass(ClassNonDestructive, "c2_non_standard_port", "One GET to the lab simulator on a non-standard port; no state changed"),
 	},
 	"T1005": {
+		"cscrf_dp_bitlocker":    catalogClass(ClassNonDestructive, "cscrf_dp_bitlocker", "Read-only BitLocker status query on the system volume"),
 		"collection_local_data": catalogClass(ClassNonDestructive, "collection_local_data", "Read-only enumeration and staging copies of synthetic files"),
 	},
 	"T1039": {
@@ -1297,6 +1301,9 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 	},
 	"T1070.006": {
 		"cscrf_siem_time_sync": catalogClass(ClassNonDestructive, "cscrf_siem_time_sync", "Read-only w32tm status query"),
+	},
+	"T1040": {
+		"cscrf_dp_smb_encryption": catalogClass(ClassNonDestructive, "cscrf_dp_smb_encryption", "Read-only SMB server configuration query"),
 	},
 	"T1059.003": {
 		"exe_command_shell": catalogClass(ClassNonDestructive, "exe_command_shell", "Runs one harmless echo through cmd.exe; no state changed"),

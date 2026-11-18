@@ -208,3 +208,23 @@ Catalog: four entries. T1204.002 (`cscrf_ir_malware_detect`, potentially destruc
 Ledger regenerated; additions only.
 
 Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree at HEAD plus these changes: ok, 341.1s.
+
+## P1: data protection and DLP configuration checks (`cscrf-mii-data-protection`)
+
+Five steps, internal labels CSCRF-DP-01..06. Live results on the build host:
+
+| Step | Verdict | Basis |
+|---|---|---|
+| dp-01 volume encryption at rest | FAIL | C: is fully decrypted; BitLocker protection is off |
+| dp-02 data path ACL exposure | SKIP | `BAS_DP_PATH` unset |
+| dp-03 SMB encryption and SMB1 | FAIL | SMB encryption not required (EncryptData false) |
+| dp-04 DLP agent presence | SKIP | `BAS_DLP_SERVICE` unset; no DLP product named |
+| dp-05 marker egress to named share (gated) | SKIP | gate off; not run live (it needs a named share and `BAS_CONFIRM_DP_TEST=true`) |
+
+Deferred: DLP detection and blocking of the synthetic marker (CSCRF-DP-06). That needs a named DLP product and policy.
+
+The marker step writes one synthetic string with no real data. Its undo deletes the file. Its code is verified by reading only.
+
+Catalog: five entries. T1005 (`cscrf_dp_bitlocker`, non-destructive), T1083 (`cscrf_dp_data_acl`, non-destructive), T1040 (`cscrf_dp_smb_encryption`, non-destructive), T1562.001 (`cscrf_dp_dlp_service`, non-destructive), T1048 (`cscrf_dp_marker_egress`, potentially destructive). Pins: 3740 to 3745 entries, 290 to 295 hand-authored, hash `c89c07fef71f1e4b893d777133ce42c9c86f2242d6801c651ef613d793ade6fe`.
+
+Suite: `go test ./internal/scenario -count=1 -timeout 420s` ran ok at 413.5s on the second attempt. The first attempt hit the 7-minute timeout inside unrelated AppControl and APT36 tests with no failing assertion. The second run passed.

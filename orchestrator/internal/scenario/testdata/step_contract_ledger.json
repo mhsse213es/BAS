@@ -4779,6 +4779,51 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "cscrf-mii-data-protection.yaml",
+    "index": 0,
+    "technique_id": "T1005",
+    "action_key": "cscrf_dp_bitlocker",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-data-protection.yaml",
+    "index": 1,
+    "technique_id": "T1083",
+    "action_key": "cscrf_dp_data_acl",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-data-protection.yaml",
+    "index": 2,
+    "technique_id": "T1040",
+    "action_key": "cscrf_dp_smb_encryption",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-data-protection.yaml",
+    "index": 3,
+    "technique_id": "T1562.001",
+    "action_key": "cscrf_dp_dlp_service",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-data-protection.yaml",
+    "index": 4,
+    "technique_id": "T1048",
+    "action_key": "cscrf_dp_marker_egress",
+    "framework": "custom",
+    "class": "potentially_destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
     "scenario": "cscrf-mii-drill.yaml",
     "index": 0,
     "technique_id": "T1046",
