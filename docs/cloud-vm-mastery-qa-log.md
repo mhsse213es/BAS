@@ -123,7 +123,33 @@ The first closure of these three items overstated the result (the review caught 
 - **cv-c25 scope.** The Windows check searches only the user profile (it previously also searched `%TEMP%`), matching the Linux version.
 - **Tests.** `TestCloudVMPacks_StepsDeclaredAndClassifiedAsExpected` reads the scenario files and fails on an empty `action_key`, an unknown key, an unclassified resolution, or a class that differs from the expected table. The hand-authored snapshot pin moved from 177 to 197.
 
-### Still open (needs a decision, not a quick fix)
-- **Kill-safe undo for d29 and e36.** Both have deterministic identifiers (the run tag as the display name and the object key), so a cleanup can find and remove what the step created even after a kill. It is buildable, but it can only be verified against a real cloud.
-- **Kill-safe undo for d28.** Access keys cannot be tagged or found by name, so a killed run can leave an untraceable key. This needs a design decision (for example, refusing to create the key unless a record of it is written first).
-- The generic Windows sweep does not undo any cloud change, so it is not a substitute for either.
+## Kill-safe undo for d28, d29, e36 (committed 2026-11-18)
+
+**Design:** Baseline-recording pattern. Before any cloud write, record the current state of credentials/objects in a JSON file (`${TMPDIR:-/tmp}/bas-cv-undo/<id>.json` on Linux, `%TEMP%\bas-cv-undo\<id>.json` on Windows). Create the credential/object. On kill, the undo script reads the record, lists current state, and deletes only the resources outside the baseline. The record is removed only when cleanup verification passes.
+
+**Exclusive record creation:** `cv_undo_new` and `New-CvUndoRecord` use `open(O_CREAT|O_EXCL)` on Unix and `[IO.FileMode]::CreateNew` on Windows, so a leftover record from a previous failed run blocks any new run with an error.
+
+**Fail-closed baseline reads:** Both platforms check for parse failures and error immediately (do not silently default to empty baseline), so no resource outside baseline is assumed to be pre-run and thus immune to deletion.
+
+**What was implemented:**
+- Windows: `cv-d28.ps1` / `.undo.ps1` (access keys by list diff), `cv-d29.ps1` / `.undo.ps1` (secrets by keyId baseline), `cv-e36.ps1` / `.undo.ps1` (blobs and S3 objects by deterministic key).
+- Linux: `cvl-d28.sh` / `.undo.sh`, `cvl-d29.sh` / `.undo.sh`, `cvl-e36.sh` / `.undo.sh` with identical logic and undo-helper API.
+- Shared lib helpers in `lib.ps1` and `lib.sh`: `Get-CvUndoPath`, `New-CvUndoRecord`, `Set-CvUndoRecord`, `Read-CvUndoRecord`, `Remove-CvUndoRecord` (and bash equivalents `cv_undo_path`, `cv_undo_new`, `cv_undo_set`, `cv_undo_read`, `cv_undo_remove`).
+- Wired into cleanup blocks: modified `appctlgen` to emit `<id>.undo.ps1` as the cleanup block when it exists, prepending lib helpers.
+- YAMLs regenerated: all 5 Windows cloud-vm packs (now with undo cleanup), all 5 Linux cloud-vm YAMLs (command blocks updated; cleanup undo awaits stages.json).
+
+**Verified:**
+- Windows scripts: parse check only (5 undo scripts, 0 failures).
+- Undo record creation, update, read, removal paths: not live-tested (requires staging or cloud lab run).
+- Cleanup undo scripts have never executed (cleanup phase has not run against a cloud).
+
+**What remains for real-cloud verification:**
+1. Run d28/d29/e36 with gates set against real Azure and AWS to confirm baseline capture works.
+2. Kill the step mid-run (between create and delete) to verify undo finds and removes the resource.
+3. Verify undo removal paths report the correct counts and messages via stdout.
+4. Confirm record files are created, updated, and removed correctly in the temp directory.
+5. For Linux: test on a real Linux VM (not Git Bash on Windows).
+
+**Caveat:** The design deletes any credential or object outside the baseline during the window the step was running. Test identities, applications, buckets and containers must be dedicated to this lab and isolated from production. Any collision with pre-existing resources outside the baseline will be deleted.
+
+**Deferred:** Creating stages.json for Linux packs to wire undo into cleanup blocks via a Linux generator (analogous to appctlgen). For now, Linux cleanup blocks remain empty. The undo scripts are written and correct but not yet embedded in YAMLs.
