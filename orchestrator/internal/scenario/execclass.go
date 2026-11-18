@@ -1097,6 +1097,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1562.002": {
+		"cscrf_siem_ingestion":         catalogClass(ClassPotentiallyDestructive, "cscrf_siem_ingestion", "Writes one tagged synthetic event (ID 4242, source BAS-SIEM) to the Application log; the event is not removable"),
 		"cscrf_siem_forwarding_config": catalogClass(ClassNonDestructive, "cscrf_siem_forwarding_config", "Read-only registry query of the event forwarding subscription manager"),
 		"cscrf_ea_audit_policy_change": catalogClass(ClassDestructive, "cscrf_ea_audit_policy_change", "Sets Process Creation auditing off and restores it in the same run and in undo; a failed undo leaves auditing changed"),
 		"enumerate": {

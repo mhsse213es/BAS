@@ -312,3 +312,17 @@ Run on the lab VM from `C:\BAS\live`. Each gated step was run with its gate set,
 Limits: the EICAR result says nothing about endpoint detection while real-time protection is off. The marker and file-copy steps prove only that files can be written and verified; they don't test DLP or recovery to business targets. The Windows backup checks bdr-01 and bdr-02 remain FAIL, since VSS on the lab VM is blocked (see the blocker entries above).
 
 Cleanup: `C:\BAS\live\dp-share` and `C:\BAS\live\fc-target` were removed after the run.
+
+## P0 SIEM ingestion check: siem-03 (`cscrf-mii-siem`)
+
+Live on the build host, both SKIP paths: the gate off, and the gate on with `BAS_SIEM_ENDPOINT` unset. Neither wrote an event.
+
+Not yet exercised: the PASS and FAIL paths. Those need the lab VM and a named collector endpoint.
+
+Assumed query contract, to confirm against the real API: `GET <BAS_SIEM_ENDPOINT>?q=<tag>` returns HTTP 200 with the tag in the body once the event has been ingested.
+
+Limit: undo cannot remove the Windows event. A passing run leaves event ID 4242 (source BAS-SIEM) in the Application log, and undo records the tag as residue. Ingestion does not show that the SOC received or acted on the alert.
+
+Catalog: one entry, `cscrf_siem_ingestion` (T1562.002, potentially destructive). Pins: 3751 to 3752 entries, 301 to 302 hand-authored, hash `babbf4848de0f0bc82660f67db204c6b8873cfdcd21c160b4c65d4fd9d6f107e`.
+
+Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree on `origin/main` plus these changes: ok, 397.7s.

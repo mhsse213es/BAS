@@ -5256,6 +5256,15 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "cscrf-mii-siem.yaml",
+    "index": 3,
+    "technique_id": "T1562.002",
+    "action_key": "cscrf_siem_ingestion",
+    "framework": "custom",
+    "class": "potentially_destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
     "scenario": "dbsim-db01-auth-policy.yaml",
     "index": 0,
     "technique_id": "T1078",
