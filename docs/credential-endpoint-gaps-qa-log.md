@@ -191,3 +191,10 @@ Not verified: neither scenario has run on the DC. Both need a platform run on th
 - Step 2 (DC): counts 4624 network logons (type 3, NTLM package) and 4776 validations in the last 30 minutes. PASS proves logging only.
 - Verified offline: schema, PowerShell parse, signature (verify-all ok=248 fail=0), ledger (no removals), tests pass.
 - Not verified: not run on the DC. Pass-the-hash alerting is not checked.
+
+### ad-pass-the-hash-telemetry run on the DC, 2026-11-18
+
+- Posture (step 1): `LmCompatibilityLevel`, `RestrictSendingNTLMTraffic` and `RestrictReceivingNTLMTraffic` are all **not defined** on `WIN-TQ70FGLETIU`. NTLM is not restricted by configuration, so pass-the-hash is not blocked by policy. Observation only, no verdict.
+- Telemetry (step 2): 0 NTLM network logons (4624, type 3) and 0 NTLM validations (4776) in the last 30 minutes. SKIP, inconclusive: no NTLM activity occurred in that window, so logging could not be shown.
+- Status: not detection-verified. Telemetry visibility not yet demonstrated, because the probe needs NTLM activity in the window.
+- Open: generate NTLM logon events to show visibility. That needs a logon for a synthetic account, which needs a known synthetic password. Not done; awaiting decision.
