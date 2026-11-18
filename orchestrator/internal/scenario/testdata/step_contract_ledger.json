@@ -3416,8 +3416,8 @@
     "technique_id": "T1071.001",
     "action_key": "c2_http_beaconing",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-c2-variants.yaml",
@@ -3425,7 +3425,7 @@
     "technique_id": "T1573",
     "action_key": "c2_encrypted_channel",
     "framework": "custom",
-    "class": "destructive",
+    "class": "potentially_destructive",
     "status": "undo_declared_in_yaml"
   },
   {
@@ -3434,7 +3434,7 @@
     "technique_id": "T1105",
     "action_key": "c2_ingress_tool_transfer",
     "framework": "custom",
-    "class": "destructive",
+    "class": "potentially_destructive",
     "status": "undo_declared_in_yaml"
   },
   {
@@ -3443,8 +3443,8 @@
     "technique_id": "T1571",
     "action_key": "c2_non_standard_port",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-collection-exfil.yaml",
@@ -3452,8 +3452,8 @@
     "technique_id": "T1005",
     "action_key": "collection_local_data",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-collection-exfil.yaml",
@@ -3461,8 +3461,8 @@
     "technique_id": "T1039",
     "action_key": "collection_network_share",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-collection-exfil.yaml",
@@ -3470,8 +3470,8 @@
     "technique_id": "T1114.001",
     "action_key": "collection_email_presence",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-collection-exfil.yaml",
@@ -3479,7 +3479,7 @@
     "technique_id": "T1560.001",
     "action_key": "collection_archive_data",
     "framework": "custom",
-    "class": "destructive",
+    "class": "potentially_destructive",
     "status": "undo_declared_in_yaml"
   },
   {
@@ -3488,7 +3488,7 @@
     "technique_id": "T1041",
     "action_key": "exfil_over_c2_simulation",
     "framework": "custom",
-    "class": "destructive",
+    "class": "potentially_destructive",
     "status": "undo_declared_in_yaml"
   },
   {
@@ -3497,8 +3497,8 @@
     "technique_id": "T1048.003",
     "action_key": "exfil_dns_simulation",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-credential-access.yaml",
@@ -3506,8 +3506,8 @@
     "technique_id": "T1003.001",
     "action_key": "credential_lsass_simulation",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-credential-access.yaml",
@@ -3515,8 +3515,8 @@
     "technique_id": "T1003.002",
     "action_key": "credential_sam_simulation",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-credential-access.yaml",
@@ -3524,8 +3524,8 @@
     "technique_id": "T1555.004",
     "action_key": "credential_manager_discovery",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-credential-access.yaml",
@@ -3533,8 +3533,8 @@
     "technique_id": "T1555.003",
     "action_key": "credential_browser_discovery",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-credential-access.yaml",
@@ -3542,8 +3542,8 @@
     "technique_id": "T1558.003",
     "action_key": "credential_kerberoasting",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-credential-access.yaml",
@@ -3551,8 +3551,8 @@
     "technique_id": "T1558.004",
     "action_key": "credential_asrep_roasting",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-credential-access.yaml",
@@ -3569,8 +3569,8 @@
     "technique_id": "T1552.001",
     "action_key": "credential_unsecured_discovery",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-defense-evasion.yaml",
@@ -3578,8 +3578,8 @@
     "technique_id": "T1518.001",
     "action_key": "evasion_security_software_discovery",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-defense-evasion.yaml",
@@ -3587,8 +3587,8 @@
     "technique_id": "T1562.001",
     "action_key": "evasion_security_tool_impairment_probe",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-defense-evasion.yaml",
@@ -3596,8 +3596,8 @@
     "technique_id": "T1027",
     "action_key": "evasion_powershell_obfuscation",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-defense-evasion.yaml",
@@ -3605,7 +3605,7 @@
     "technique_id": "T1036",
     "action_key": "evasion_masquerading_executable",
     "framework": "custom",
-    "class": "destructive",
+    "class": "potentially_destructive",
     "status": "undo_declared_in_yaml"
   },
   {
@@ -3614,7 +3614,7 @@
     "technique_id": "T1112",
     "action_key": "evasion_registry_modification",
     "framework": "custom",
-    "class": "destructive",
+    "class": "potentially_destructive",
     "status": "undo_declared_in_yaml"
   },
   {
@@ -3632,8 +3632,8 @@
     "technique_id": "T1055",
     "action_key": "evasion_process_injection_readiness",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-discovery.yaml",
@@ -3641,8 +3641,8 @@
     "technique_id": "T1046",
     "action_key": "bfsi_banking_app_discovery",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-discovery.yaml",
@@ -3650,8 +3650,8 @@
     "technique_id": "T1046",
     "action_key": "bfsi_payment_gateway_discovery",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-discovery.yaml",
@@ -3659,8 +3659,8 @@
     "technique_id": "T1046",
     "action_key": "bfsi_atm_discovery",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-discovery.yaml",
@@ -3668,8 +3668,8 @@
     "technique_id": "T1046",
     "action_key": "bfsi_cardholder_data_discovery",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-financial-impact.yaml",
@@ -3677,7 +3677,7 @@
     "technique_id": "T1565.001",
     "action_key": "financial_transaction_manipulation",
     "framework": "custom",
-    "class": "destructive",
+    "class": "potentially_destructive",
     "status": "undo_declared_in_yaml"
   },
   {
@@ -3686,7 +3686,7 @@
     "technique_id": "T1565.001",
     "action_key": "financial_payment_instruction_manipulation",
     "framework": "custom",
-    "class": "destructive",
+    "class": "potentially_destructive",
     "status": "undo_declared_in_yaml"
   },
   {
@@ -3695,7 +3695,7 @@
     "technique_id": "T1565.001",
     "action_key": "financial_atm_dispense_manipulation",
     "framework": "custom",
-    "class": "destructive",
+    "class": "potentially_destructive",
     "status": "undo_declared_in_yaml"
   },
   {
@@ -3704,7 +3704,7 @@
     "technique_id": "T1565.001",
     "action_key": "financial_fraud_pattern_simulation",
     "framework": "custom",
-    "class": "destructive",
+    "class": "potentially_destructive",
     "status": "undo_declared_in_yaml"
   },
   {
@@ -3713,7 +3713,7 @@
     "technique_id": "T1565.001",
     "action_key": "financial_transaction_limit_bypass",
     "framework": "custom",
-    "class": "destructive",
+    "class": "potentially_destructive",
     "status": "undo_declared_in_yaml"
   },
   {
@@ -3722,7 +3722,7 @@
     "technique_id": "T1565.001",
     "action_key": "financial_reconciliation_manipulation",
     "framework": "custom",
-    "class": "destructive",
+    "class": "potentially_destructive",
     "status": "undo_declared_in_yaml"
   },
   {
@@ -3731,8 +3731,8 @@
     "technique_id": "T1499",
     "action_key": "financial_resilience_check",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-lateral-movement.yaml",
@@ -3740,8 +3740,8 @@
     "technique_id": "T1021.001",
     "action_key": "lateral_rdp_connectivity",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-lateral-movement.yaml",
@@ -3749,8 +3749,8 @@
     "technique_id": "T1021.002",
     "action_key": "lateral_smb_shares",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-lateral-movement.yaml",
@@ -3758,7 +3758,7 @@
     "technique_id": "T1021.006",
     "action_key": "lateral_winrm_session",
     "framework": "custom",
-    "class": "destructive",
+    "class": "potentially_destructive",
     "status": "undo_declared_in_yaml"
   },
   {
@@ -3776,8 +3776,8 @@
     "technique_id": "T1018",
     "action_key": "lateral_system_discovery",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-lateral-movement.yaml",
@@ -3794,7 +3794,7 @@
     "technique_id": "T1547.001",
     "action_key": "persistence_registry_run_key",
     "framework": "custom",
-    "class": "destructive",
+    "class": "potentially_destructive",
     "status": "undo_declared_in_yaml"
   },
   {
@@ -3830,8 +3830,8 @@
     "technique_id": "T1590.001",
     "action_key": "recon_subdomain_enumeration",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-bfsi-recon.yaml",
@@ -3839,8 +3839,8 @@
     "technique_id": "T1589.003",
     "action_key": "recon_employee_discovery",
     "framework": "custom",
-    "class": "destructive",
-    "status": "undo_declared_in_yaml"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "cobalt-group-kill-chain.yaml",

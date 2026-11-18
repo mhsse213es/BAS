@@ -296,3 +296,48 @@ Checked every Phase 1 and Phase 2 technique in the spec against the scenario lib
 - The phishing link variant (T1566.002) is not re-verified here. Its coverage comes from the
   existing phishing catalog, which this audit did not run.
 - Full unfiltered suite: ok, zero failures, 298.9s.
+
+---
+
+# Cobalt Group BFSI - Execution classification
+
+## What changed
+- The 47 BFSI (technique, action_key) pairs had no entry in the execution-class catalog, so each
+  failed closed to `destructive`. On the agent, a destructive step is vetoed unless a local policy
+  grant exists, so most BFSI steps would not have run in a real campaign.
+- All 47 pairs now have explicit entries in the hand-authored catalog (`execclass.go`), checked by
+  `TestBFSIStepsHaveExplicitClassification`:
+  - 27 `non_destructive`: read-only checks, listings, and GETs to the lab simulator.
+  - 14 `potentially_destructive`: state changes that undo removes, on the lab host or the lab simulator.
+  - 6 `destructive`, kept on purpose:
+    - cred-07 password spray: wrong-password attempts can lock out real accounts.
+    - eva-06 event-log clearing: clears a log, even though only the synthetic log is touched.
+    - lat-04 remote service: creates, starts and deletes a service on the target.
+    - pers-02 WMI subscription, pers-03 local account, pers-04 group membership: a failed undo
+      leaves real persistence or an account behind.
+- `TestExecclassEmbedFaithful` and `TestExecclassEmbedPreservesHandAuthoredSplit` updated for the
+  47 new rows: total 3647 -> 3694, hand-authored 197 -> 244, catalog hash updated to
+  `2c75bdd39b3c9411df4c2b7605b43f0f573837036e71f178380e7a2c1745c0b9`. A diff check confirmed no
+  existing entry changed; the only line changes are gofmt re-alignment of two neighbouring entries.
+- The step-contract ledger was regenerated: 41 BFSI entries changed class, and the baseline did not change.
+
+## cred-07 lab-domain guard
+- The step now refuses to run unless `BAS_LAB_DOMAIN` is set and matches `USERDNSDOMAIN`, and it
+  queries with `-Server` set to that domain.
+- Live verdicts on this host:
+  - `BAS_LAB_DOMAIN` unset: SKIP, refusing to spray an unscoped domain.
+  - Mismatched domain: SKIP, current domain does not match.
+  - No undo record is left behind on either skip.
+
+## Verification
+- `TestBFSIStepsHaveExplicitClassification`, the embed tests, and the other catalog tests pass.
+- Full unfiltered `go test ./internal/scenario -count=1 -timeout 420s`: ok, zero failures, 300.9s.
+- `signer.go verify-all scenarios`: credential-access pack re-signed; ok=239 fail=0.
+
+## Honest limits
+- The classifications are judgement calls, recorded in the test. Changing one is a one-line edit
+  and a test update.
+- The 6 destructive steps will still be vetoed on agents without a local policy grant. That is
+  intended.
+- The agent's own backstop scan matches only a narrow set of destructive command patterns, so
+  classification is the main gate. The backstop was not exercised against these commands live.
