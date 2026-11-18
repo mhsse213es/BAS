@@ -15,6 +15,13 @@ export const EXFIL_SCENARIO_IDS = [
   'collection-low-and-slow-exfil',
   'collection-removable-media-exfil',
   'collection-email-mailbox-exfil',
+  'collection-masquerade-cleanup-exfil',
+  'collection-sensitive-discovery',
+  'collection-source-code-exfil',
+  'collection-large-volume-transfer',
+  'collection-channel-variants-exfil',
+  'collection-archive-split-exfil',
+  'collection-browser-cloud-email-discovery',
 ];
 
 export function isExfilChainRun(scenarioId) {

@@ -8,6 +8,8 @@ const C = await import('../../src/features/exfil-chain.js');
 test('isExfilChainRun matches every DLP chain scenario and nothing else', () => {
   assert.equal(C.isExfilChainRun('collection-staging-exfil'), true);
   assert.equal(C.isExfilChainRun('collection-email-mailbox-exfil'), true);
+  assert.equal(C.isExfilChainRun('collection-browser-cloud-email-discovery'), true);
+  assert.equal(C.isExfilChainRun('collection-large-volume-transfer'), true);
   assert.equal(C.isExfilChainRun('akira-kill-chain'), false);
   assert.equal(C.isExfilChainRun(undefined), false);
 });
