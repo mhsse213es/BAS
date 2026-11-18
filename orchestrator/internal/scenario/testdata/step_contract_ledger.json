@@ -3753,6 +3753,33 @@
     "status": "undo_declared_in_yaml"
   },
   {
+    "scenario": "collection-masquerade-cleanup-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1036",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-masquerade-cleanup-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1070.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-masquerade-cleanup-exfil.yaml",
+    "index": 2,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "collection-network-share-exfil.yaml",
     "index": 0,
     "technique_id": "T1135",
@@ -3819,6 +3846,51 @@
     "scenario": "collection-removable-media-exfil.yaml",
     "index": 1,
     "technique_id": "T1052.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-sensitive-discovery.yaml",
+    "index": 0,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-sensitive-discovery.yaml",
+    "index": 1,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-source-code-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-source-code-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-source-code-exfil.yaml",
+    "index": 2,
+    "technique_id": "T1567.001",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",

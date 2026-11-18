@@ -299,6 +299,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "collection-masquerade-cleanup-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "collection-network-share-exfil.yaml": {
     "cleanup": 0,
     "detection": 0,
@@ -310,6 +315,16 @@
     "telemetry": 0
   },
   "collection-removable-media-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-sensitive-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-source-code-exfil.yaml": {
     "cleanup": 0,
     "detection": 0,
     "telemetry": 0
