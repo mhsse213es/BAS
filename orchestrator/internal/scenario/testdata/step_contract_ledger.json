@@ -3816,6 +3816,33 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "collection-hidden-staging-manifest-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-hidden-staging-manifest-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-hidden-staging-manifest-exfil.yaml",
+    "index": 2,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "collection-large-volume-transfer.yaml",
     "index": 0,
     "technique_id": "T1074.001",
@@ -3871,6 +3898,33 @@
   },
   {
     "scenario": "collection-masquerade-cleanup-exfil.yaml",
+    "index": 2,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-multidir-automated-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-multidir-automated-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-multidir-automated-exfil.yaml",
     "index": 2,
     "technique_id": "T1048.003",
     "action_key": "",

