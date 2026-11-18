@@ -253,3 +253,21 @@ Deferred: any live MII connection, order flow, and SOC receipt of alerts.
 Catalog: four entries. T1565.001 (`cscrf_mii_log_manifest`, `cscrf_mii_settlement_integrity`), T1007 (`cscrf_mii_service_running`), T1005 (`cscrf_mii_recon_recency`). All non-destructive. Pins: 3745 to 3749 entries, 295 to 299 hand-authored, hash `d48832546a0a69ee3e852519f6cec9f9852b4cd94192b442278601161ecb28f5`.
 
 Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree on `origin/main` plus these changes: ok, 345.4s.
+
+## P1 backup check on the lab VM: blocked by domain policy (bdr-01, bdr-02 remain FAIL)
+
+Status: bdr-01 (backup present) and bdr-02 (recovery point age) remain FAIL. No real Windows backup exists on the lab VM, so the verdicts are not a pass.
+
+What was tried, 2026-11-18:
+- A temporary SMB share was created on the build host and reached from the lab VM on port 445. The connection and authentication worked.
+- `wbadmin start backup -backupTarget:<share> -include:C:` failed with VSS error 0x80042302 before any data was written.
+- The VM's Application log shows VSS event 8193 (CoCreateInstance and OpenService on 'VSS' return 0x80070005, Access is denied) and event 13 (IVssCoordinatorEx2 cannot be started, Access is denied).
+- From an elevated session (High integrity), `sc.exe query vss` and `sc.exe sdshow vss` also return Access is denied. The VSS service is registered (Start = 3, manual), so the denial comes from its security descriptor, not from a missing service.
+- `gpresult /r` on the VM lists `Default Domain Policy` and `Local Group Policy` as applied, and the VM is domain-joined. The restriction on the VSS service is therefore set by domain policy, which can only be changed by a domain administrator.
+
+Cleanup on the build host: the share was removed and no backup data was written. The folder `C:\BASBackups` remains, empty, because removing it was blocked by a protection on that path. The lab VM still has the Windows Server Backup feature installed (installed for this attempt) and a mapped drive to the removed share, which needs `net use ... /delete` on the VM.
+
+Options, in order of preference:
+1. A domain administrator fixes the VSS service permissions for the lab VM (or exempts it from the policy). Then rerun the backup on the VM, and rerun bdr-01 and bdr-02 there.
+2. Keep both steps at FAIL until option 1 is done. This is the current state.
+3. A file-copy check instead of a Windows image backup. Not built. It would test a different control, so it is not a substitute for bdr-01 or bdr-02.
