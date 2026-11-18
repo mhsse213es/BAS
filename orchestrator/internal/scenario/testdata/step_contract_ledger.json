@@ -234,6 +234,33 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "ad-password-spray-lab.yaml",
+    "index": 0,
+    "technique_id": "T1110.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ad-password-spray-lab.yaml",
+    "index": 1,
+    "technique_id": "T1110.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ad-password-spray-lab.yaml",
+    "index": 2,
+    "technique_id": "T1110.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "adcs-esc-template-exposure-audit.yaml",
     "index": 0,
     "technique_id": "T1649",

@@ -107,3 +107,13 @@ Scenarios:
 Verified offline: schema, PowerShell parse, signatures (verify-all ok=241, fail=0), step-contract ledger (no removals), tests pass.
 
 Not verified: neither scenario has run on the DC. Both need a platform run on the lab agent. The 4662 path for ntds.dit needs a SACL on the file, which is not set.
+
+### ad-password-spray-lab (T1110.003)
+
+- Three steps: preflight, spray, telemetry visibility.
+- Guardrails enforced in the script: accounts hard-coded to `bassim1..3`; DC must be in `allowed-targets.txt`; lockout threshold must be 1 to 5 (refuses `Never`); one wrong-password attempt per account per run; refuses if any synthetic account failed in the last 30 minutes.
+- Guess is the fixed fake string `BAS-SIM-Spray-Wrong-1!`. No real credential is tested.
+- Verdicts: telemetry PASS only proves 4625/4771 logging, not alerting. Preflight refusals are SKIP.
+- `live_policy`: `max_spray_attempts: 3`, `spray_account_allowlist: [bassim1, bassim2, bassim3]`.
+- Verified offline: schema and spray-limit validation, PowerShell parse, signature (verify-all ok=242 fail=0), step-contract ledger (no removals), tests pass.
+- Not verified: not run on the DC. Lockout threshold on the lab is currently 3, set in Step 6.
