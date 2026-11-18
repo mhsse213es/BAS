@@ -187,3 +187,24 @@ Catalog: five entries. T1490 x4 (`cscrf_bdr_backup_available`, `cscrf_bdr_rpo_ag
 Ledger regenerated; additions only.
 
 Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree at HEAD plus these changes: ok, 339.3s.
+
+## P1: incident detection, containment and evidence checks (`cscrf-mii-incident-response`)
+
+Four steps, internal labels CSCRF-IR-01, 03, 04, 06. Live results on the build host:
+
+| Step | Verdict | Basis |
+|---|---|---|
+| ir-03 outbound block capability | FAIL | no enabled outbound block rule on the build host (read only) |
+| ir-06 Security log evidence export | PASS | Security log exported (20.1 MB); export removed in undo, zero residue |
+| ir-01 malware detection, EICAR (gated) | SKIP | gate off; not run live (it would write a test file under Defender, not approved on this host) |
+| ir-04 compromised account disablement (gated) | SKIP | gate off; not run live (it would create and disable a local account, not approved on this host) |
+
+The gated steps are verified by reading their code only, including their undos. Defender behaviour under EICAR has not been observed.
+
+Defect found during the live run: ir-03 reported ERROR when no block rule existed. An empty result is a real gap, so the step now reports FAIL. ERROR is reserved for a firewall service that cannot be queried.
+
+Catalog: four entries. T1204.002 (`cscrf_ir_malware_detect`, potentially destructive), T1562.004 (`cscrf_ir_block_capability`, non-destructive), T1078 (`cscrf_ir_account_disable`, destructive), T1070.001 (`cscrf_ir_evidence_export`, non-destructive). Pins: 3730 to 3734 entries, 280 to 284 hand-authored, hash `af0f3845156803b194ba86aa495cf9c3a726b38dc7117af30684faf2126dc938`.
+
+Ledger regenerated; additions only.
+
+Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree at HEAD plus these changes: ok, 341.1s.

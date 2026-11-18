@@ -5022,6 +5022,42 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "cscrf-mii-incident-response.yaml",
+    "index": 0,
+    "technique_id": "T1204.002",
+    "action_key": "cscrf_ir_malware_detect",
+    "framework": "custom",
+    "class": "potentially_destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cscrf-mii-incident-response.yaml",
+    "index": 1,
+    "technique_id": "T1562.004",
+    "action_key": "cscrf_ir_block_capability",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-incident-response.yaml",
+    "index": 2,
+    "technique_id": "T1078",
+    "action_key": "cscrf_ir_account_disable",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cscrf-mii-incident-response.yaml",
+    "index": 3,
+    "technique_id": "T1070.001",
+    "action_key": "cscrf_ir_evidence_export",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "cscrf-mii-network.yaml",
     "index": 0,
     "technique_id": "T1046",

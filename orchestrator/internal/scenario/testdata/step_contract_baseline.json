@@ -504,6 +504,11 @@
     "detection": 0,
     "telemetry": 1
   },
+  "cscrf-mii-incident-response.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "cscrf-mii-network.yaml": {
     "cleanup": 0,
     "detection": 0,

@@ -334,6 +334,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1070.001": {
+		"cscrf_ir_evidence_export": catalogClass(ClassNonDestructive, "cscrf_ir_evidence_export", "Exports the Security log to a per-run temp file; the export is deleted in undo"),
 		"cscrf_siem_log_retention": catalogClass(ClassNonDestructive, "cscrf_siem_log_retention", "Read-only Security log size and mode query"),
 		"clear_bas_owned_log": {
 			Class:             ClassNonDestructive,
@@ -387,6 +388,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1078": {
+		"cscrf_ir_account_disable":      catalogClass(ClassDestructive, "cscrf_ir_account_disable", "Creates one synthetic local account, disables it, and deletes it in undo"),
 		"cscrf_id_logon_audit_presence": catalogClass(ClassNonDestructive, "cscrf_id_logon_audit_presence", "Read-only query of recent Security log logon events"),
 		"cscrf_id_excessive_privilege":  catalogClass(ClassNonDestructive, "cscrf_id_excessive_privilege", "Read-only query of Administrators membership against an allowlist"),
 		"cscrf_id_disabled_logon":       catalogClass(ClassDestructive, "cscrf_id_disabled_logon", "Creates a synthetic account, disables it, attempts one logon, and deletes it in undo"),
@@ -1100,6 +1102,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1562.004": {
+		"cscrf_ir_block_capability":       catalogClass(ClassNonDestructive, "cscrf_ir_block_capability", "Read-only query of outbound firewall block rules"),
 		"cscrf_net_firewall_policy_state": catalogClass(ClassNonDestructive, "cscrf_net_firewall_policy_state", "Read-only firewall profile state query; no rule or profile changed"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
@@ -1289,6 +1292,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		"cscrf_ea_ps_logging_config": catalogClass(ClassNonDestructive, "cscrf_ea_ps_logging_config", "Read-only registry query"),
 	},
 	"T1204.002": {
+		"cscrf_ir_malware_detect":    catalogClass(ClassPotentiallyDestructive, "cscrf_ir_malware_detect", "Writes the EICAR test string to a per-run temp folder; the folder is deleted in undo"),
 		"cscrf_ea_unauthorized_exec": catalogClass(ClassPotentiallyDestructive, "cscrf_ea_unauthorized_exec", "Copies cmd.exe to a per-run temp folder and runs it once with a harmless echo; the folder is deleted in undo"),
 	},
 	"T1070.006": {
