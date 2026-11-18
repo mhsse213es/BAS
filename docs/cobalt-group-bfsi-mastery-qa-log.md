@@ -275,7 +275,7 @@ Checked every Phase 1 and Phase 2 technique in the spec against the scenario lib
 - recon-01 only ever queried `.test` names. The step refuses any other name, and the run's output
   confirms all eight names.
 - The undo scripts were run. Both are no-op PASSes because neither step creates state.
-- Full unfiltered `go test ./internal/scenario -count=1 -timeout 420s`: see the result line below.
+- Full unfiltered `go test ./internal/scenario -count=1 -timeout 420s`: ok, zero failures, 298.9s.
 - `signer.go verify-all scenarios`: ok=239 fail=0.
 
 ## Bug found and fixed during live verification
