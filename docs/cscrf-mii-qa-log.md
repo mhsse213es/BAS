@@ -271,3 +271,12 @@ Options, in order of preference:
 1. A domain administrator fixes the VSS service permissions for the lab VM (or exempts it from the policy). Then rerun the backup on the VM, and rerun bdr-01 and bdr-02 there.
 2. Keep both steps at FAIL until option 1 is done. This is the current state.
 3. A file-copy check instead of a Windows image backup. Not built. It would test a different control, so it is not a substitute for bdr-01 or bdr-02.
+
+### Correction to the entry above: cause not confirmed
+
+The entry above says domain policy blocks the VSS service. That was not confirmed.
+- A search of SYSVOL GptTmpl.inf files for "VSS" found no matches. No GPO template restricts the service.
+- `secedit /export` on the lab VM contains no VSS entries. The local security policy does not restrict the service.
+- `gpresult` on the VM lists Default Domain Policy and Local Group Policy as applied. Neither was shown to touch the VSS service.
+
+Working conclusion: the VSS service's own security descriptor appears to have been changed on the VM, outside any policy. This is unverified. Confirming it requires comparing `sc.exe sdshow vss` on a healthy Windows Server 2019 host with the same output on the lab VM. A fix requires an approved change to the service permissions, or a VM rollback to a snapshot taken before the change. Option 1 in the list above is still the route, with the cause corrected to "service permissions changed on the VM".
