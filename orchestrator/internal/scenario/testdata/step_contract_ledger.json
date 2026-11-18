@@ -4095,6 +4095,24 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "collection-encrypted-blob-detection.yaml",
+    "index": 0,
+    "technique_id": "T1027",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-encrypted-blob-detection.yaml",
+    "index": 1,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "collection-hidden-staging-manifest-exfil.yaml",
     "index": 0,
     "technique_id": "T1074.001",
@@ -4264,6 +4282,24 @@
     "framework": "custom",
     "class": "non_destructive",
     "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-remote-share-discovery.yaml",
+    "index": 0,
+    "technique_id": "T1135",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-remote-share-discovery.yaml",
+    "index": 1,
+    "technique_id": "T1039",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
   },
   {
     "scenario": "collection-removable-media-exfil.yaml",

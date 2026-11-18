@@ -339,6 +339,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "collection-encrypted-blob-detection.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "collection-hidden-staging-manifest-exfil.yaml": {
     "cleanup": 0,
     "detection": 0,
@@ -370,6 +375,11 @@
     "telemetry": 0
   },
   "collection-pii-financial-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-remote-share-discovery.yaml": {
     "cleanup": 0,
     "detection": 0,
     "telemetry": 0

