@@ -1,0 +1,32 @@
+id: "cobalt-group-bfsi-defense-evasion"
+product_line: killchain
+name: "Cobalt Group BFSI - Defense Evasion (P1)"
+description: >
+  Enterprise defense-evasion detection validation extending the Cobalt Group BFSI campaign. Seven
+  scenarios covering security-software discovery, a read-only security-tool-impairment permission
+  probe, PowerShell obfuscation detection, masquerading-executable detection, registry-modification
+  detection, non-destructive event-log-clearing (against a dedicated synthetic test log only), and a
+  process-injection detection readiness check. No scenario disables a real security control, clears a
+  real event log, or performs an actual injection technique. Each write scenario includes verified
+  cleanup and undo-record rollback.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cobalt-group
+  - bfsi
+  - defense-evasion
+  - p1
+  - t1518.001
+  - t1562.001
+  - t1027
+  - t1036
+  - t1112
+  - t1070.001
+  - t1055
+mitre_phases:
+  - defense-evasion
+
+steps:
+

@@ -1,0 +1,837 @@
+id: "cobalt-group-bfsi-defense-evasion"
+product_line: killchain
+name: "Cobalt Group BFSI - Defense Evasion (P1)"
+description: >
+  Enterprise defense-evasion detection validation extending the Cobalt Group BFSI campaign. Seven
+  scenarios covering security-software discovery, a read-only security-tool-impairment permission
+  probe, PowerShell obfuscation detection, masquerading-executable detection, registry-modification
+  detection, non-destructive event-log-clearing (against a dedicated synthetic test log only), and a
+  process-injection detection readiness check. No scenario disables a real security control, clears a
+  real event log, or performs an actual injection technique. Each write scenario includes verified
+  cleanup and undo-record rollback.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cobalt-group
+  - bfsi
+  - defense-evasion
+  - p1
+  - t1518.001
+  - t1562.001
+  - t1027
+  - t1036
+  - t1112
+  - t1070.001
+  - t1055
+mitre_phases:
+  - defense-evasion
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: eva-01
+    name: "Defense Evasion - Security Software Discovery (T1518.001)"
+    technique_id: T1518.001
+    action_key: evasion_security_software_discovery
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Read-only enumeration of running AV/EDR process names. No change to any process or service."
+    telemetry:
+      - "Process enumeration targeting security-product process names"
+    detection:
+      - "EDR: security-software discovery / reconnaissance detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_eva_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EVA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-EncodedCommandProbe { param([string]$PlainText, [string]$ExpectMarker)
+      $res = @{ Outcome = 'error'; Reason = 'Encoded-command probe failed to run'; Ran = $false }
+      try {
+      $bytes = [Text.Encoding]::Unicode.GetBytes($PlainText)
+      $encoded = [Convert]::ToBase64String($bytes)
+      $out = powershell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+      if ("$out" -match [regex]::Escape($ExpectMarker)) { $res.Ran = $true; $res.Outcome = 'fail'; $res.Reason = 'Encoded PowerShell command executed without being blocked or flagged' }
+      else { $res.Outcome = 'pass'; $res.Reason = 'Encoded PowerShell command was blocked or did not produce the expected marker' }
+      } catch {}
+      return $res
+      }
+      $securityProcs = @('MsMpEng', 'MSASCui', 'SenseIR', 'SenseCncProxy', 'CSFalconService', 'CylanceSvc', 'SentinelAgent')
+      $found = @()
+      foreach ($name in $securityProcs) {
+      if (Get-Process -Name $name -ErrorAction SilentlyContinue) { $found += $name }
+      }
+      if ($found.Count -gt 0) {
+      $res = @{ Outcome = 'fail'; Reason = "Security software discovery enumerated $($found.Count) running security process(es): $($found -join ', ')" }
+      } else {
+      $res = @{ Outcome = 'pass'; Reason = 'No known security-software processes were discovered on this host' }
+      }
+      Complete-CgStep $res 'EVA-01'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_eva_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EVA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-EncodedCommandProbe { param([string]$PlainText, [string]$ExpectMarker)
+      $res = @{ Outcome = 'error'; Reason = 'Encoded-command probe failed to run'; Ran = $false }
+      try {
+      $bytes = [Text.Encoding]::Unicode.GetBytes($PlainText)
+      $encoded = [Convert]::ToBase64String($bytes)
+      $out = powershell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+      if ("$out" -match [regex]::Escape($ExpectMarker)) { $res.Ran = $true; $res.Outcome = 'fail'; $res.Reason = 'Encoded PowerShell command executed without being blocked or flagged' }
+      else { $res.Outcome = 'pass'; $res.Reason = 'Encoded PowerShell command was blocked or did not produce the expected marker' }
+      } catch {}
+      return $res
+      }
+      Write-Output 'PASS: Discovery cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: eva-02
+    name: "Defense Evasion - Security Tool Impairment Permission Probe (T1562.001)"
+    technique_id: T1562.001
+    action_key: evasion_security_tool_impairment_probe
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: high
+    reversible: false
+    blast_radius: "Gated (BAS_CONFIRM_DEFENSE_EVASION_PROBE). Reads current Defender preferences only (Get-MpPreference); never calls Set-MpPreference or otherwise modifies any security control."
+    telemetry:
+      - "Get-MpPreference read access"
+    detection:
+      - "EDR: security-configuration read access patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_eva_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EVA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-EncodedCommandProbe { param([string]$PlainText, [string]$ExpectMarker)
+      $res = @{ Outcome = 'error'; Reason = 'Encoded-command probe failed to run'; Ran = $false }
+      try {
+      $bytes = [Text.Encoding]::Unicode.GetBytes($PlainText)
+      $encoded = [Convert]::ToBase64String($bytes)
+      $out = powershell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+      if ("$out" -match [regex]::Escape($ExpectMarker)) { $res.Ran = $true; $res.Outcome = 'fail'; $res.Reason = 'Encoded PowerShell command executed without being blocked or flagged' }
+      else { $res.Outcome = 'pass'; $res.Reason = 'Encoded PowerShell command was blocked or did not produce the expected marker' }
+      } catch {}
+      return $res
+      }
+      if (-not (Test-CgGate 'BAS_CONFIRM_DEFENSE_EVASION_PROBE')) {
+      Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_CONFIRM_DEFENSE_EVASION_PROBE gate not set; this probe is opt-in' } 'EVA-02'
+      }
+      $undo_data = @{ scenario = 'eva-02' }
+      try { New-CgUndoRecord 'eva-02' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'eva-02' }
+      try {
+      $prefs = Get-MpPreference -ErrorAction Stop
+      $res = @{ Outcome = 'fail'; Reason = "Current user could read Defender preferences (DisableRealtimeMonitoring=$($prefs.DisableRealtimeMonitoring)); this is a read-only probe, no setting was changed" }
+      } catch {
+      $res = @{ Outcome = 'pass'; Reason = 'Current user could not read Defender preferences' }
+      }
+      Complete-CgStep $res 'EVA-02'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_eva_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EVA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-EncodedCommandProbe { param([string]$PlainText, [string]$ExpectMarker)
+      $res = @{ Outcome = 'error'; Reason = 'Encoded-command probe failed to run'; Ran = $false }
+      try {
+      $bytes = [Text.Encoding]::Unicode.GetBytes($PlainText)
+      $encoded = [Convert]::ToBase64String($bytes)
+      $out = powershell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+      if ("$out" -match [regex]::Escape($ExpectMarker)) { $res.Ran = $true; $res.Outcome = 'fail'; $res.Reason = 'Encoded PowerShell command executed without being blocked or flagged' }
+      else { $res.Outcome = 'pass'; $res.Reason = 'Encoded PowerShell command was blocked or did not produce the expected marker' }
+      } catch {}
+      return $res
+      }
+      $rec = Read-CgUndoRecord 'eva-02'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      Remove-CgUndoRecord 'eva-02'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: eva-03
+    name: "Defense Evasion - PowerShell Obfuscation Detection Test (T1027)"
+    technique_id: T1027
+    action_key: evasion_powershell_obfuscation
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: false
+    blast_radius: "Runs one base64-encoded synthetic benign command via -EncodedCommand (prints a BAS-SIM marker string only). No system state change."
+    telemetry:
+      - "Process execution: powershell -EncodedCommand"
+    detection:
+      - "EDR/SIEM: encoded-command / obfuscation detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_eva_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EVA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-EncodedCommandProbe { param([string]$PlainText, [string]$ExpectMarker)
+      $res = @{ Outcome = 'error'; Reason = 'Encoded-command probe failed to run'; Ran = $false }
+      try {
+      $bytes = [Text.Encoding]::Unicode.GetBytes($PlainText)
+      $encoded = [Convert]::ToBase64String($bytes)
+      $out = powershell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+      if ("$out" -match [regex]::Escape($ExpectMarker)) { $res.Ran = $true; $res.Outcome = 'fail'; $res.Reason = 'Encoded PowerShell command executed without being blocked or flagged' }
+      else { $res.Outcome = 'pass'; $res.Reason = 'Encoded PowerShell command was blocked or did not produce the expected marker' }
+      } catch {}
+      return $res
+      }
+      $marker = 'bas-sim-obfuscation-test-' + $script:CgRun
+      $undo_data = @{ scenario = 'eva-03'; marker = $marker }
+      try { New-CgUndoRecord 'eva-03' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'eva-03' }
+      $res = Invoke-EncodedCommandProbe -PlainText ("Write-Output '" + $marker + "'") -ExpectMarker $marker
+      Complete-CgStep $res 'EVA-03'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_eva_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EVA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-EncodedCommandProbe { param([string]$PlainText, [string]$ExpectMarker)
+      $res = @{ Outcome = 'error'; Reason = 'Encoded-command probe failed to run'; Ran = $false }
+      try {
+      $bytes = [Text.Encoding]::Unicode.GetBytes($PlainText)
+      $encoded = [Convert]::ToBase64String($bytes)
+      $out = powershell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+      if ("$out" -match [regex]::Escape($ExpectMarker)) { $res.Ran = $true; $res.Outcome = 'fail'; $res.Reason = 'Encoded PowerShell command executed without being blocked or flagged' }
+      else { $res.Outcome = 'pass'; $res.Reason = 'Encoded PowerShell command was blocked or did not produce the expected marker' }
+      } catch {}
+      return $res
+      }
+      $rec = Read-CgUndoRecord 'eva-03'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      Remove-CgUndoRecord 'eva-03'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: eva-04
+    name: "Defense Evasion - Masquerading Executable Detection Test (T1036)"
+    technique_id: T1036
+    action_key: evasion_masquerading_executable
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: false
+    blast_radius: "Copies a benign system binary to a test directory under a misleading name tagged as BAS-SIM, checks execution, then deletes the copy."
+    telemetry:
+      - "File creation with suspicious name/location mismatch"
+      - "Process execution of the masquerading copy"
+    detection:
+      - "EDR: masquerading / name-mismatch detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_eva_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EVA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-EncodedCommandProbe { param([string]$PlainText, [string]$ExpectMarker)
+      $res = @{ Outcome = 'error'; Reason = 'Encoded-command probe failed to run'; Ran = $false }
+      try {
+      $bytes = [Text.Encoding]::Unicode.GetBytes($PlainText)
+      $encoded = [Convert]::ToBase64String($bytes)
+      $out = powershell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+      if ("$out" -match [regex]::Escape($ExpectMarker)) { $res.Ran = $true; $res.Outcome = 'fail'; $res.Reason = 'Encoded PowerShell command executed without being blocked or flagged' }
+      else { $res.Outcome = 'pass'; $res.Reason = 'Encoded PowerShell command was blocked or did not produce the expected marker' }
+      } catch {}
+      return $res
+      }
+      $testDir = Join-Path $env:TEMP ('bas_sim_eva04_' + $script:CgRun)
+      $masqPath = Join-Path $testDir 'svchost_bas_sim_test.exe'
+      $undo_data = @{ scenario = 'eva-04'; testDir = $testDir; masqPath = $masqPath }
+      try { New-CgUndoRecord 'eva-04' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'eva-04' }
+      New-Item -ItemType Directory -Force -Path $testDir | Out-Null
+      Copy-Item -Path (Join-Path $env:SystemRoot 'System32\cmd.exe') -Destination $masqPath -Force -ErrorAction SilentlyContinue
+      $copied = Test-Path -LiteralPath $masqPath
+      $proc = $null
+      if ($copied) {
+      try { $proc = Start-Process -FilePath $masqPath -ArgumentList '/c', 'exit' -PassThru -WindowStyle Hidden -ErrorAction Stop; $proc.WaitForExit(5000) | Out-Null } catch {}
+      }
+      Remove-Item -LiteralPath $testDir -Recurse -Force -ErrorAction SilentlyContinue
+      if ($copied -and $proc) {
+      $res = @{ Outcome = 'fail'; Reason = 'Masquerading executable was copied and executed without being blocked or flagged' }
+      } elseif ($copied) {
+      $res = @{ Outcome = 'pass'; Reason = 'Masquerading executable was copied but execution was blocked' }
+      } else {
+      $res = @{ Outcome = 'pass'; Reason = 'Masquerading executable copy was blocked' }
+      }
+      Complete-CgStep $res 'EVA-04'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_eva_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EVA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-EncodedCommandProbe { param([string]$PlainText, [string]$ExpectMarker)
+      $res = @{ Outcome = 'error'; Reason = 'Encoded-command probe failed to run'; Ran = $false }
+      try {
+      $bytes = [Text.Encoding]::Unicode.GetBytes($PlainText)
+      $encoded = [Convert]::ToBase64String($bytes)
+      $out = powershell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+      if ("$out" -match [regex]::Escape($ExpectMarker)) { $res.Ran = $true; $res.Outcome = 'fail'; $res.Reason = 'Encoded PowerShell command executed without being blocked or flagged' }
+      else { $res.Outcome = 'pass'; $res.Reason = 'Encoded PowerShell command was blocked or did not produce the expected marker' }
+      } catch {}
+      return $res
+      }
+      $rec = Read-CgUndoRecord 'eva-04'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      if ($rec.testDir -and (Test-Path -LiteralPath $rec.testDir)) {
+      Remove-Item -LiteralPath $rec.testDir -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Remove-CgUndoRecord 'eva-04'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: eva-05
+    name: "Defense Evasion - Registry Modification Detection Test (T1112)"
+    technique_id: T1112
+    action_key: evasion_registry_modification
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: false
+    blast_radius: "Writes and deletes one synthetic value under HKCU:\\Software\\BAS-SIM-Test only. Never touches a security-relevant or real application registry key."
+    telemetry:
+      - "Registry write under HKCU:\\Software\\BAS-SIM-Test"
+    detection:
+      - "EDR/SIEM: registry modification detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_eva_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EVA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-EncodedCommandProbe { param([string]$PlainText, [string]$ExpectMarker)
+      $res = @{ Outcome = 'error'; Reason = 'Encoded-command probe failed to run'; Ran = $false }
+      try {
+      $bytes = [Text.Encoding]::Unicode.GetBytes($PlainText)
+      $encoded = [Convert]::ToBase64String($bytes)
+      $out = powershell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+      if ("$out" -match [regex]::Escape($ExpectMarker)) { $res.Ran = $true; $res.Outcome = 'fail'; $res.Reason = 'Encoded PowerShell command executed without being blocked or flagged' }
+      else { $res.Outcome = 'pass'; $res.Reason = 'Encoded PowerShell command was blocked or did not produce the expected marker' }
+      } catch {}
+      return $res
+      }
+      $keyPath = 'HKCU:\Software\BAS-SIM-Test'
+      $undo_data = @{ scenario = 'eva-05'; keyPath = $keyPath }
+      try { New-CgUndoRecord 'eva-05' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'eva-05' }
+      try {
+      New-Item -Path $keyPath -Force -ErrorAction Stop | Out-Null
+      Set-ItemProperty -Path $keyPath -Name 'bas_sim_marker' -Value $script:CgTag -ErrorAction Stop
+      $written = (Get-ItemProperty -Path $keyPath -Name 'bas_sim_marker' -ErrorAction Stop).bas_sim_marker -eq $script:CgTag
+      } catch { $written = $false }
+      Remove-Item -Path $keyPath -Recurse -Force -ErrorAction SilentlyContinue
+      if ($written) {
+      $res = @{ Outcome = 'fail'; Reason = 'Synthetic registry value was written and read back without being blocked or flagged' }
+      } else {
+      $res = @{ Outcome = 'pass'; Reason = 'Synthetic registry write was blocked' }
+      }
+      Complete-CgStep $res 'EVA-05'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_eva_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EVA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-EncodedCommandProbe { param([string]$PlainText, [string]$ExpectMarker)
+      $res = @{ Outcome = 'error'; Reason = 'Encoded-command probe failed to run'; Ran = $false }
+      try {
+      $bytes = [Text.Encoding]::Unicode.GetBytes($PlainText)
+      $encoded = [Convert]::ToBase64String($bytes)
+      $out = powershell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+      if ("$out" -match [regex]::Escape($ExpectMarker)) { $res.Ran = $true; $res.Outcome = 'fail'; $res.Reason = 'Encoded PowerShell command executed without being blocked or flagged' }
+      else { $res.Outcome = 'pass'; $res.Reason = 'Encoded PowerShell command was blocked or did not produce the expected marker' }
+      } catch {}
+      return $res
+      }
+      $rec = Read-CgUndoRecord 'eva-05'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      if ($rec.keyPath -and (Test-Path -LiteralPath $rec.keyPath)) {
+      Remove-Item -Path $rec.keyPath -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Remove-CgUndoRecord 'eva-05'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: eva-06
+    name: "Defense Evasion - Event Log Clearing Attempt, Non-Destructive (T1070.001)"
+    technique_id: T1070.001
+    action_key: evasion_event_log_clearing
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: false
+    blast_radius: "Creates a dedicated synthetic event log (BAS-SIM-Test), writes one entry, clears only that log, then removes the log via undo. Never calls Clear-EventLog or wevtutil against Security, System, Application or any real log."
+    telemetry:
+      - "Event log creation and Clear-EventLog against BAS-SIM-Test only"
+    detection:
+      - "EDR/SIEM: event-log clearing detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_eva_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EVA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-EncodedCommandProbe { param([string]$PlainText, [string]$ExpectMarker)
+      $res = @{ Outcome = 'error'; Reason = 'Encoded-command probe failed to run'; Ran = $false }
+      try {
+      $bytes = [Text.Encoding]::Unicode.GetBytes($PlainText)
+      $encoded = [Convert]::ToBase64String($bytes)
+      $out = powershell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+      if ("$out" -match [regex]::Escape($ExpectMarker)) { $res.Ran = $true; $res.Outcome = 'fail'; $res.Reason = 'Encoded PowerShell command executed without being blocked or flagged' }
+      else { $res.Outcome = 'pass'; $res.Reason = 'Encoded PowerShell command was blocked or did not produce the expected marker' }
+      } catch {}
+      return $res
+      }
+      $logName = 'BAS-SIM-Test'
+      $source = 'BAS-SIM-Test-Source'
+      $undo_data = @{ scenario = 'eva-06'; logName = $logName }
+      try { New-CgUndoRecord 'eva-06' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'eva-06' }
+      try {
+      if (-not [System.Diagnostics.EventLog]::SourceExists($source)) {
+      New-EventLog -LogName $logName -Source $source -ErrorAction Stop
+      }
+      Write-EventLog -LogName $logName -Source $source -EventId 1 -Message ('BAS-SIM test entry ' + $script:CgTag) -ErrorAction Stop
+      Clear-EventLog -LogName $logName -ErrorAction Stop
+      $entries = Get-EventLog -LogName $logName -Newest 5 -ErrorAction SilentlyContinue
+      $cleared = (-not $entries) -or ($entries.Count -eq 0)
+      if ($cleared) {
+      $res = @{ Outcome = 'fail'; Reason = "Synthetic test log '$logName' was cleared without being blocked or flagged" }
+      } else {
+      $res = @{ Outcome = 'error'; Reason = "Clear-EventLog on '$logName' did not report an error but entries remain" }
+      }
+      } catch {
+      $res = @{ Outcome = 'skip'; Reason = "Could not create/write/clear the dedicated '$logName' log on this host (likely requires elevation): $($_.Exception.Message)" }
+      }
+      Remove-EventLog -LogName $logName -ErrorAction SilentlyContinue
+      Complete-CgStep $res 'EVA-06'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_eva_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EVA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-EncodedCommandProbe { param([string]$PlainText, [string]$ExpectMarker)
+      $res = @{ Outcome = 'error'; Reason = 'Encoded-command probe failed to run'; Ran = $false }
+      try {
+      $bytes = [Text.Encoding]::Unicode.GetBytes($PlainText)
+      $encoded = [Convert]::ToBase64String($bytes)
+      $out = powershell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+      if ("$out" -match [regex]::Escape($ExpectMarker)) { $res.Ran = $true; $res.Outcome = 'fail'; $res.Reason = 'Encoded PowerShell command executed without being blocked or flagged' }
+      else { $res.Outcome = 'pass'; $res.Reason = 'Encoded PowerShell command was blocked or did not produce the expected marker' }
+      } catch {}
+      return $res
+      }
+      $rec = Read-CgUndoRecord 'eva-06'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      if ($rec.logName -and $rec.logName -eq 'BAS-SIM-Test') {
+      Remove-EventLog -LogName $rec.logName -ErrorAction SilentlyContinue
+      }
+      Remove-CgUndoRecord 'eva-06'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: eva-07
+    name: "Defense Evasion - Process Injection Detection Readiness Check (T1055)"
+    technique_id: T1055
+    action_key: evasion_process_injection_readiness
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Spawns one benign, short-lived synthetic child process tagged with a BAS-SIM marker and checks whether security tooling is present to observe it. No injection technique is performed."
+    telemetry:
+      - "Process creation with BAS-SIM command-line marker"
+    detection:
+      - "EDR: process-creation telemetry readiness"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_eva_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EVA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-EncodedCommandProbe { param([string]$PlainText, [string]$ExpectMarker)
+      $res = @{ Outcome = 'error'; Reason = 'Encoded-command probe failed to run'; Ran = $false }
+      try {
+      $bytes = [Text.Encoding]::Unicode.GetBytes($PlainText)
+      $encoded = [Convert]::ToBase64String($bytes)
+      $out = powershell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+      if ("$out" -match [regex]::Escape($ExpectMarker)) { $res.Ran = $true; $res.Outcome = 'fail'; $res.Reason = 'Encoded PowerShell command executed without being blocked or flagged' }
+      else { $res.Outcome = 'pass'; $res.Reason = 'Encoded PowerShell command was blocked or did not produce the expected marker' }
+      } catch {}
+      return $res
+      }
+      $marker = 'bas-sim-injection-readiness-' + $script:CgRun
+      $proc = $null
+      try {
+      $proc = Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile', '-Command', ("Start-Sleep -Milliseconds 500 # $marker") -PassThru -WindowStyle Hidden -ErrorAction Stop
+      $proc.WaitForExit(5000) | Out-Null
+      } catch {}
+      $edrProcs = @('MsMpEng', 'SenseIR', 'CSFalconService', 'CylanceSvc', 'SentinelAgent')
+      $edrPresent = $false
+      foreach ($name in $edrProcs) { if (Get-Process -Name $name -ErrorAction SilentlyContinue) { $edrPresent = $true } }
+      if ($proc -and $edrPresent) {
+      $res = @{ Outcome = 'pass'; Reason = 'A marked benign process was spawned and EDR/security tooling is present to observe process-creation telemetry' }
+      } elseif ($proc) {
+      $res = @{ Outcome = 'fail'; Reason = 'A marked benign process was spawned but no EDR/security tooling was detected to observe it' }
+      } else {
+      $res = @{ Outcome = 'error'; Reason = 'Could not spawn the marked benign test process' }
+      }
+      Complete-CgStep $res 'EVA-07'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_eva_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EVA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-EncodedCommandProbe { param([string]$PlainText, [string]$ExpectMarker)
+      $res = @{ Outcome = 'error'; Reason = 'Encoded-command probe failed to run'; Ran = $false }
+      try {
+      $bytes = [Text.Encoding]::Unicode.GetBytes($PlainText)
+      $encoded = [Convert]::ToBase64String($bytes)
+      $out = powershell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+      if ("$out" -match [regex]::Escape($ExpectMarker)) { $res.Ran = $true; $res.Outcome = 'fail'; $res.Reason = 'Encoded PowerShell command executed without being blocked or flagged' }
+      else { $res.Outcome = 'pass'; $res.Reason = 'Encoded PowerShell command was blocked or did not produce the expected marker' }
+      } catch {}
+      return $res
+      }
+      Write-Output 'PASS: Discovery cleanup complete'
+      exit 0

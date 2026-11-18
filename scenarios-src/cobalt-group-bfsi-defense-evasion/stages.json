@@ -1,0 +1,157 @@
+[
+  {
+    "id": "eva-01",
+    "n": 1,
+    "name": "Defense Evasion - Security Software Discovery (T1518.001)",
+    "technique_id": "T1518.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Read-only enumeration of running AV/EDR process names. No change to any process or service.",
+    "telemetry": [
+      "Process enumeration targeting security-product process names"
+    ],
+    "detection": [
+      "EDR: security-software discovery / reconnaissance detection"
+    ],
+    "cleanup": "",
+    "action_key": "evasion_security_software_discovery",
+    "no_default_cleanup": false,
+    "reversible": true
+  },
+  {
+    "id": "eva-02",
+    "n": 2,
+    "name": "Defense Evasion - Security Tool Impairment Permission Probe (T1562.001)",
+    "technique_id": "T1562.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Gated (BAS_CONFIRM_DEFENSE_EVASION_PROBE). Reads current Defender preferences only (Get-MpPreference); never calls Set-MpPreference or otherwise modifies any security control.",
+    "telemetry": [
+      "Get-MpPreference read access"
+    ],
+    "detection": [
+      "EDR: security-configuration read access patterns"
+    ],
+    "cleanup": "",
+    "action_key": "evasion_security_tool_impairment_probe",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "eva-03",
+    "n": 3,
+    "name": "Defense Evasion - PowerShell Obfuscation Detection Test (T1027)",
+    "technique_id": "T1027",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Runs one base64-encoded synthetic benign command via -EncodedCommand (prints a BAS-SIM marker string only). No system state change.",
+    "telemetry": [
+      "Process execution: powershell -EncodedCommand"
+    ],
+    "detection": [
+      "EDR/SIEM: encoded-command / obfuscation detection"
+    ],
+    "cleanup": "",
+    "action_key": "evasion_powershell_obfuscation",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "eva-04",
+    "n": 4,
+    "name": "Defense Evasion - Masquerading Executable Detection Test (T1036)",
+    "technique_id": "T1036",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Copies a benign system binary to a test directory under a misleading name tagged as BAS-SIM, checks execution, then deletes the copy.",
+    "telemetry": [
+      "File creation with suspicious name/location mismatch",
+      "Process execution of the masquerading copy"
+    ],
+    "detection": [
+      "EDR: masquerading / name-mismatch detection"
+    ],
+    "cleanup": "",
+    "action_key": "evasion_masquerading_executable",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "eva-05",
+    "n": 5,
+    "name": "Defense Evasion - Registry Modification Detection Test (T1112)",
+    "technique_id": "T1112",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Writes and deletes one synthetic value under HKCU:\\Software\\BAS-SIM-Test only. Never touches a security-relevant or real application registry key.",
+    "telemetry": [
+      "Registry write under HKCU:\\Software\\BAS-SIM-Test"
+    ],
+    "detection": [
+      "EDR/SIEM: registry modification detection"
+    ],
+    "cleanup": "",
+    "action_key": "evasion_registry_modification",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "eva-06",
+    "n": 6,
+    "name": "Defense Evasion - Event Log Clearing Attempt, Non-Destructive (T1070.001)",
+    "technique_id": "T1070.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Creates a dedicated synthetic event log (BAS-SIM-Test), writes one entry, clears only that log, then removes the log via undo. Never calls Clear-EventLog or wevtutil against Security, System, Application or any real log.",
+    "telemetry": [
+      "Event log creation and Clear-EventLog against BAS-SIM-Test only"
+    ],
+    "detection": [
+      "EDR/SIEM: event-log clearing detection"
+    ],
+    "cleanup": "",
+    "action_key": "evasion_event_log_clearing",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "eva-07",
+    "n": 7,
+    "name": "Defense Evasion - Process Injection Detection Readiness Check (T1055)",
+    "technique_id": "T1055",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Spawns one benign, short-lived synthetic child process tagged with a BAS-SIM marker and checks whether security tooling is present to observe it. No injection technique is performed.",
+    "telemetry": [
+      "Process creation with BAS-SIM command-line marker"
+    ],
+    "detection": [
+      "EDR: process-creation telemetry readiness"
+    ],
+    "cleanup": "",
+    "action_key": "evasion_process_injection_readiness",
+    "no_default_cleanup": false,
+    "reversible": true
+  }
+]
