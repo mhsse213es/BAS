@@ -126,3 +126,18 @@ Ledger regenerated; diff is additions only (95 insertions, 0 deletions).
 Drill signature fix: see commit `5915e509` (re-signed over committed bytes).
 
 Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree at HEAD plus these changes: ok, 335.1s.
+
+## P0 Task 4: gated steps run on the lab VM
+
+Run by the operator on the lab VM (Windows, hostname WIN-2IP8FNO4MAD), in an elevated PowerShell with `BAS_CONFIRM_ENDPOINT_CHANGE=true`. Each step was followed by its undo.
+
+- **Baseline:** Process Creation auditing was `No Auditing`. The test needs a non-off baseline, so the operator enabled Success auditing first. This was an approved change for the lab run.
+- **ea-09 (unauthorised execution from temp path), gate on:** FAIL. A renamed copy of cmd.exe ran from a temp path with no execution control applied. Undo: PASS (Cleanup complete). Residue check: no `bas-ea-*` folder and no undo record left.
+- **ea-10 (audit policy change attempt), gate on:** FAIL. Disabling Process Creation auditing was not refused. The step restored the setting in the same run, and the step reports the EID 4719 alert should be verified in the SIEM. Undo: PASS (Cleanup complete).
+- **After the run:** the operator set Process Creation auditing back to `No Auditing`, the state found at the start.
+
+Rulings:
+- The ea-10 step restores the setting in-run as well as in undo. A failed undo therefore cannot leave auditing off on the lab VM.
+- The operator, not the agent, decided to switch auditing on for the test. The original state was restored after the run.
+
+Still open: the deferred lab-only steps (real-time protection impairment, dedicated log clear, Sysmon service stop). Also, the EID 4719 alert for ea-10 has not been checked in a SIEM, because this lab has none configured.
