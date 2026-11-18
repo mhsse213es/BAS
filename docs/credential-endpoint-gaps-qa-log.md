@@ -117,3 +117,18 @@ Not verified: neither scenario has run on the DC. Both need a platform run on th
 - `live_policy`: `max_spray_attempts: 3`, `spray_account_allowlist: [bassim1, bassim2, bassim3]`.
 - Verified offline: schema and spray-limit validation, PowerShell parse, signature (verify-all ok=242 fail=0), step-contract ledger (no removals), tests pass.
 - Not verified: not run on the DC. Lockout threshold on the lab is currently 3, set in Step 6.
+
+### Result: ad-password-spray-lab run on the DC, 2026-11-18
+
+- DC: `WIN-TQ70FGLETIU.lab.local`. Lockout threshold 3.
+- First attempt refused by the preflight: `found 0 of 3`. Cause: the AD filter used the unsupported `-in` operator, and the error was hidden by `SilentlyContinue`. Fixed in `40e95bba`. Nothing was sprayed in the refused run.
+- Second run output:
+  ```
+  EXEC T1110.003: preflight passed. DC=WIN-TQ70FGLETIU.lab.local, lockout threshold=3, accounts=3.
+  EXEC T1110.003: one attempt per synthetic account: bassim1=rejected, bassim2=rejected, bassim3=rejected.
+  EXEC T1110.003: failure events for synthetic accounts in last 10 minutes = 3 (expected at least 3).
+  PASS: the DC logged the spray attempts. Logging only; alerting needs a separate SIEM check.
+  ```
+- Lockout after the run: `LockedOut False` for `bassim1`, `bassim2`, `bassim3`; all `Enabled True`.
+- Status: telemetry visibility confirmed on the DC for these attempts. Alerting NOT checked (no SIEM in this lab), so the spray scenario is not detection-verified.
+- Next allowed run: not before 30 minutes after this run.
