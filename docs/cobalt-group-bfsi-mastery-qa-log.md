@@ -382,3 +382,14 @@ Checked every Phase 1 and Phase 2 technique in the spec against the scenario lib
 - The throwaway test file was deleted after the run.
 - **Not verified:** delivery through a real mail gateway, mailbox placement, and end-to-end click
   tracking. This host has no SMTP host configured, and no mail gateway address was available.
+
+# Phishing link variant, Mailpit sink check
+
+- Mailpit v1.21.8 (Docker, `axllent/mailpit`) bound to 127.0.0.1: SMTP on 1025, web UI on 8025. No
+  external account, nothing leaves the host.
+- The real exercise SMTP injector delivered one link lure to `sim.user@bas-sim.test` through Mailpit.
+  Mailpit held one message with subject "Invoice ready" and that recipient, read back through its
+  API. The tracker host is in the body and the original href is absent.
+- The throwaway test file was deleted after the run.
+- **Still not verified:** delivery through a real mail gateway, mailbox placement, and click tracking
+  end to end. Mailpit is a sink, not a gateway.
