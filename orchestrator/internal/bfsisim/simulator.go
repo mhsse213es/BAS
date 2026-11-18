@@ -46,6 +46,7 @@ func NewSimulator(addr string) *Simulator {
 	mux.HandleFunc("/api/payments/gateways", s.handle(s.gateways))
 	mux.HandleFunc("/api/atm/switches", s.handle(s.atmSwitches))
 	mux.HandleFunc("/api/data/cardholder-locations", s.handle(s.cardholderDS))
+	mux.HandleFunc("/api/directory/identities", identitiesHandler)
 	s.registerLedgerRoutes(mux)
 	s.srv = &http.Server{Addr: addr, Handler: mux}
 	return s
