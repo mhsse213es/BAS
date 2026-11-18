@@ -382,6 +382,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1074.001": {
+		"cscrf_fc_synthetic_copy": catalogClass(ClassPotentiallyDestructive, "cscrf_fc_synthetic_copy", "Copies synthetic files to the named target and removes them in undo"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -1261,6 +1262,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		"c2_non_standard_port":     catalogClass(ClassNonDestructive, "c2_non_standard_port", "One GET to the lab simulator on a non-standard port; no state changed"),
 	},
 	"T1005": {
+		"cscrf_fc_copy_manifest":  catalogClass(ClassNonDestructive, "cscrf_fc_copy_manifest", "Read-only hashing of files in the off-host copy listed in SHA256SUMS"),
 		"cscrf_mii_recon_recency": catalogClass(ClassNonDestructive, "cscrf_mii_recon_recency", "Read-only listing of the reconciliation evidence path"),
 		"cscrf_dp_bitlocker":      catalogClass(ClassNonDestructive, "cscrf_dp_bitlocker", "Read-only BitLocker status query on the system volume"),
 		"collection_local_data":   catalogClass(ClassNonDestructive, "collection_local_data", "Read-only enumeration and staging copies of synthetic files"),

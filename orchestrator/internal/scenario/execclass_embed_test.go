@@ -32,14 +32,14 @@ func TestExecclassEmbedFaithful(t *testing.T) {
 		return full[i].A < full[j].A
 	})
 
-	if len(full) != 3749 {
+	if len(full) != 3751 {
 		t.Fatalf("expected 3736 classification entries, got %d", len(full))
 	}
 	h := sha256.New()
 	for _, r := range full {
 		fmt.Fprintf(h, "%s\x1f%s\x1f%s\x1f%s\x1f%s\x1e", r.T, r.A, r.C, r.D, r.B)
 	}
-	const want = "d48832546a0a69ee3e852519f6cec9f9852b4cd94192b442278601161ecb28f5"
+	const want = "cbe66df3925155c05c0b8ff58cef86c320e31e453f0b568cff4907d92ef151b4"
 	if got := hex.EncodeToString(h.Sum(nil)); got != want {
 		t.Fatalf("catalog changed after embed refactor:\n got  %s\n want %s", got, want)
 	}
@@ -58,7 +58,7 @@ func TestExecclassEmbedPreservesHandAuthoredSplit(t *testing.T) {
 		}
 	}
 	// 177 original hand-authored entries plus the 20 cloud VM entries, now written into the literal.
-	if hand != 299 {
+	if hand != 301 {
 		t.Fatalf("expected 286 hand-authored entries (generated must not leak into the snapshot), got %d", hand)
 	}
 }

@@ -4995,6 +4995,24 @@
     "status": "undo_declared_in_yaml"
   },
   {
+    "scenario": "cscrf-mii-filecopy-recovery.yaml",
+    "index": 0,
+    "technique_id": "T1005",
+    "action_key": "cscrf_fc_copy_manifest",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-filecopy-recovery.yaml",
+    "index": 1,
+    "technique_id": "T1074.001",
+    "action_key": "cscrf_fc_synthetic_copy",
+    "framework": "custom",
+    "class": "potentially_destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
     "scenario": "cscrf-mii-identity.yaml",
     "index": 0,
     "technique_id": "T1098",

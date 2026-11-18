@@ -280,3 +280,15 @@ The entry above says domain policy blocks the VSS service. That was not confirme
 - `gpresult` on the VM lists Default Domain Policy and Local Group Policy as applied. Neither was shown to touch the VSS service.
 
 Working conclusion: the VSS service's own security descriptor appears to have been changed on the VM, outside any policy. This is unverified. Confirming it requires comparing `sc.exe sdshow vss` on a healthy Windows Server 2019 host with the same output on the lab VM. A fix requires an approved change to the service permissions, or a VM rollback to a snapshot taken before the change. Option 1 in the list above is still the route, with the cause corrected to "service permissions changed on the VM".
+## P1: file-copy recoverability checks (`cscrf-mii-filecopy-recovery`)
+
+This pack tests file copies only. It does not test Windows image backup (CSCRF-BDR-*), so it does not change bdr-01 or bdr-02.
+
+| Step | Live verdict | Other tests |
+|---|---|---|
+| fc-01 off-host copy matches manifest | SKIP (`BAS_FC_TARGET` unset) | fixture PASS for a matching copy; fixture FAIL after tampering |
+| fc-02 synthetic copy and verify (gated) | SKIP with the gate off | gated run against a temp fixture target: PASS; undo removed both sides; zero residue |
+
+Catalog: two entries. T1005 (`cscrf_fc_copy_manifest`, non-destructive) and T1074.001 (`cscrf_fc_synthetic_copy`, potentially destructive). Pins: 3749 to 3751 entries, 299 to 301 hand-authored, hash `cbe66df3925155c05c0b8ff58cef86c320e31e453f0b568cff4907d92ef151b4`.
+
+Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree on `origin/main` plus these changes: ok, 315.5s.
