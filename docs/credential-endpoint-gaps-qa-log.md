@@ -207,3 +207,11 @@ Not verified: neither scenario has run on the DC. Both need a platform run on th
 - Posture unchanged: NTLM restriction and LM compatibility values are not defined, so NTLM is not restricted by policy.
 - Not detection-verified: no SIEM or pass-the-hash rule was checked.
 - Cleanup pending: the synthetic password was typed into the console, so clear the PowerShell history on the DC.
+
+### ad-pass-the-ticket-telemetry (T1550.003), 2026-11-18
+
+- Scope: detection-visibility only. No ticket is read, exported, forged, or reused. No attack tooling.
+- Step 1 (posture): reads Kerberos MaxTicketAge and MaxRenewAge. Never PASS.
+- Step 2 (DC): counts 4768 (TGT), 4769 (service ticket) and 4624 (type 3, Kerberos package) in the last 30 minutes. PASS proves logging only.
+- Verified offline: schema, PowerShell parse, signature (verify-all ok=249 fail=0), ledger (no removals), tests pass.
+- Not run yet. The controlled Kerberos logon will use the DC hostname (not IP) so Windows selects Kerberos.

@@ -279,6 +279,24 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "ad-pass-the-ticket-telemetry.yaml",
+    "index": 0,
+    "technique_id": "T1550.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "ad-pass-the-ticket-telemetry.yaml",
+    "index": 1,
+    "technique_id": "T1550.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
     "scenario": "ad-password-spray-lab.yaml",
     "index": 0,
     "technique_id": "T1110.003",
