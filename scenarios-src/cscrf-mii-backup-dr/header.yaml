@@ -1,0 +1,23 @@
+id: "cscrf-mii-backup-dr"
+product_line: common
+name: "CSCRF-MII Backup, Recovery and DR Configuration Checks (P1)"
+description: >
+  Internal control-validation checks for backup and recovery. Verdicts are internal control references
+  (CSCRF-BDR-*), not SEBI clause identifiers. The backup and RPO checks are read only. The restore drill and
+  RTO measurement use synthetic files in a per-run temp folder with BAS_CONFIRM_BACKUP_TEST=true; they test
+  the file-level restore path, not a full system restore. DR connectivity runs only when BAS_DR_TARGET is
+  set. Deferred: DR SOC monitoring and recovery after a simulated incident. A PASS does not show that the
+  business can recover within its real targets.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - backup
+  - recovery
+  - p1
+mitre_phases:
+  - impact
+
+steps:

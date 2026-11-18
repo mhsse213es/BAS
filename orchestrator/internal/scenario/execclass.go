@@ -169,6 +169,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1046": {
+		"cscrf_bdr_dr_connectivity":     catalogClass(ClassNonDestructive, "cscrf_bdr_dr_connectivity", "One TCP connection attempt to the DR target; no state changed"),
 		"cscrf_net_subnet_reachability": catalogClass(ClassNonDestructive, "cscrf_net_subnet_reachability", "TCP connection attempts to up to 62 hosts on one private lab subnet; no state changed"),
 		"cscrf_net_listener_inventory":  catalogClass(ClassNonDestructive, "cscrf_net_listener_inventory", "Read-only query of listening TCP sockets"),
 		"cscrf_net_segmentation_probe":  catalogClass(ClassNonDestructive, "cscrf_net_segmentation_probe", "One TCP connection attempt to a second-zone target; no state changed"),
@@ -958,6 +959,10 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1490": {
+		"cscrf_bdr_backup_available":  catalogClass(ClassNonDestructive, "cscrf_bdr_backup_available", "Read-only wbadmin version query"),
+		"cscrf_bdr_rpo_age":           catalogClass(ClassNonDestructive, "cscrf_bdr_rpo_age", "Read-only wbadmin version query for the latest recovery point"),
+		"cscrf_bdr_restore_integrity": catalogClass(ClassPotentiallyDestructive, "cscrf_bdr_restore_integrity", "Writes one synthetic 1 MB file and a copy in a per-run temp folder, restores the copy, and deletes the folder in undo"),
+		"cscrf_bdr_rto_measure":       catalogClass(ClassPotentiallyDestructive, "cscrf_bdr_rto_measure", "Times one restore of a synthetic 1 MB file in a per-run temp folder; the folder is deleted in undo"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",

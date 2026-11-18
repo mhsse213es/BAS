@@ -159,3 +159,31 @@ Catalog: three entries, all non-destructive. `cscrf_siem_time_sync` (T1070.006, 
 Ledger regenerated; additions only.
 
 Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree at HEAD plus these changes: ok, 372.5s.
+
+## P1: backup, recovery and DR configuration checks (`cscrf-mii-backup-dr`)
+
+Five steps, internal labels CSCRF-BDR-01..05. Live results on the build host:
+
+| Step | Verdict | Basis |
+|---|---|---|
+| bdr-01 backup present | FAIL | no backup version on the build host (`wbadmin: No backup was found`) |
+| bdr-02 recovery point age | FAIL | no recovery point, so the RPO is undefined |
+| bdr-03 restore integrity, synthetic data (gated) | PASS | synthetic 1 MB file restored from its copy with a matching SHA256 |
+| bdr-04 restore time, synthetic data (gated) | PASS | file-level restore took 0.01 s against a 900 s budget |
+| bdr-05 DR site connectivity | SKIP | `BAS_DR_TARGET` unset |
+
+The gated steps (bdr-03, bdr-04) ran on the build host against temp files only. Their undos reported PASS, and no residue was left.
+
+**Scope of the restore checks:** file-level only. They prove that a synthetic file can be copied and restored with matching bytes. They do not prove a system restore.
+
+**Defect found and fixed during the run:** the library was missing its undo-record helpers. The step ran, but its undo record was never written, so the undo had nothing to act on and left two temp folders behind. The helpers are now in the pack, and the leftover folders were removed.
+
+Deferred: DR SOC monitoring and recovery after a simulated incident. Neither is built.
+
+Not validated: business RTO and RPO targets, a real restore of a backup set, and backup integrity beyond recovery point age.
+
+Catalog: five entries. T1490 x4 (`cscrf_bdr_backup_available`, `cscrf_bdr_rpo_age` non-destructive; `cscrf_bdr_restore_integrity`, `cscrf_bdr_rto_measure` potentially destructive) and T1046 x1 (`cscrf_bdr_dr_connectivity`, non-destructive). Pins `execclass_embed_test.go`: 3725 to 3730 entries, 275 to 280 hand-authored, hash `3c8323da5aa16bec9ad516a25eabbb6c9a1f67ca4aad7e382ef2cd3747ae812a`.
+
+Ledger regenerated; additions only.
+
+Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree at HEAD plus these changes: ok, 339.3s.

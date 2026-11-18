@@ -4698,6 +4698,51 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "cscrf-mii-backup-dr.yaml",
+    "index": 0,
+    "technique_id": "T1490",
+    "action_key": "cscrf_bdr_backup_available",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-backup-dr.yaml",
+    "index": 1,
+    "technique_id": "T1490",
+    "action_key": "cscrf_bdr_rpo_age",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-backup-dr.yaml",
+    "index": 2,
+    "technique_id": "T1490",
+    "action_key": "cscrf_bdr_restore_integrity",
+    "framework": "custom",
+    "class": "potentially_destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cscrf-mii-backup-dr.yaml",
+    "index": 3,
+    "technique_id": "T1490",
+    "action_key": "cscrf_bdr_rto_measure",
+    "framework": "custom",
+    "class": "potentially_destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cscrf-mii-backup-dr.yaml",
+    "index": 4,
+    "technique_id": "T1046",
+    "action_key": "cscrf_bdr_dr_connectivity",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "cscrf-mii-drill.yaml",
     "index": 0,
     "technique_id": "T1046",

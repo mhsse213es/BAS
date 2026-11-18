@@ -479,6 +479,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "cscrf-mii-backup-dr.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "cscrf-mii-drill.yaml": {
     "cleanup": 0,
     "detection": 0,
