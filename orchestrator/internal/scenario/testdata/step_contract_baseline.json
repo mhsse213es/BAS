@@ -274,6 +274,21 @@
     "detection": 0,
     "telemetry": 0
   },
+  "collection-archive-split-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-browser-cloud-email-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-channel-variants-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "collection-cloud-storage-exfil.yaml": {
     "cleanup": 0,
     "detection": 0,

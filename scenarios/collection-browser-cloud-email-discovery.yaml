@@ -1,0 +1,142 @@
+id: collection-browser-cloud-email-discovery
+product_line: dlp
+name: Browser, Cloud and Mailbox Discovery
+description: >
+  Telemetry-safe emulation of an adversary surveying where the user keeps data
+  outside the file system: browser profiles, cloud-sync client folders, and local
+  mail stores. Each step counts what exists and lists names only. No profile
+  database, cookie, password store, mailbox, or cloud file is opened or read. This
+  is the discovery that comes before collection, and the review found it missing.
+
+  KILL CHAIN STAGES:
+    1. Browser Profile Discovery — count browser profile folders (T1217)
+    2. Cloud Client Discovery    — list cloud-sync client folders by name (T1619)
+    3. Mailbox Store Discovery   — count local mail-store files by extension (T1114)
+
+  SAFETY: Read-only. Profile, cookie, password and mail files are counted by path
+  and extension only. Nothing is opened, copied, decrypted, or sent. Windows only.
+  Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - discovery
+  - browser
+  - cloud
+  - email
+  - dlp
+  - t1217
+  - t1619
+  - t1114
+  - mitre
+mitre_phases:
+  - discovery
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Browser Profile Discovery (T1217)
+  # ---------------------------------------------------------------------------
+  - name: "Surveyed Data 1 — Browser Profile Folder Discovery (T1217)"
+    technique_id: T1217
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Counts the profile folders for Chrome, Edge and Firefox under the current user's AppData. Only folder names are checked. No profile file is opened or read."
+    telemetry:
+      - "Sysmon EID 11: none (read-only)"
+      - "PowerShell EID 4104: Test-Path against browser profile paths"
+    detection:
+      - "EDR: browser profile paths probed from a non-browser process — credential-theft precursor"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $paths = @(
+        (Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'),
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\Edge\User Data'),
+        (Join-Path $env:APPDATA 'Mozilla\Firefox\Profiles')
+      )
+      $found = @($paths | Where-Object { Test-Path $_ }).Count
+      Write-Output "EXEC T1217: found $found browser profile root(s) of 3 checked. No profile file was opened. Survey Stage 1. [BAS-SIM-SRV-S1]"
+      if ($found -gt 0) {
+        Write-Output "FAIL: Browser profile locations were surveyed from a non-browser context with no alert. Probing profile stores is a precursor to credential and cookie theft."
+      } else {
+        Write-Output "PASS: No browser profile roots were present to survey."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Cloud Client Discovery (T1619)
+  # ---------------------------------------------------------------------------
+  - name: "Surveyed Data 2 — Cloud-Sync Client Folder Discovery (T1619)"
+    technique_id: T1619
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Checks for OneDrive, Dropbox and Google Drive sync folders under the user profile and lists their names. No cloud file is listed, opened, or synced."
+    telemetry:
+      - "PowerShell EID 4104: Test-Path and Get-ChildItem on sync-folder names"
+    detection:
+      - "CASB/EDR: enumeration of cloud-sync folders, precursor to upload"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $roots = @($env:USERPROFILE, $env:OneDrive, (Join-Path $env:USERPROFILE 'Dropbox'), (Join-Path $env:USERPROFILE 'Google Drive')) | Where-Object { $_ -and (Test-Path $_) }
+      $names = @()
+      foreach ($r in $roots) { $names += Get-ChildItem -Path $r -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'OneDrive|Dropbox|Google Drive' } | ForEach-Object { $_.Name } }
+      Write-Output "EXEC T1619: found $(@($names).Count) cloud-sync folder(s): $((@($names) -join ', ')). No cloud file was listed or opened. Survey Stage 2. [BAS-SIM-SRV-S2]"
+      if (@($names).Count -gt 0) {
+        Write-Output "FAIL: Cloud-sync folders were enumerated with no alert. Surveying sync destinations is a precursor to upload."
+      } else {
+        Write-Output "PASS: No cloud-sync folders were present."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Mailbox Store Discovery (T1114)
+  # ---------------------------------------------------------------------------
+  - name: "Surveyed Data 3 — Local Mail-Store Discovery (T1114)"
+    technique_id: T1114
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 45
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Counts .pst and .ost files under the user's AppData and Documents, to depth three and 1,000 files. Only the count is recorded. No mailbox is opened, read, or copied."
+    telemetry:
+      - "Sysmon EID 1: powershell.exe with a recursive search for .pst/.ost"
+    detection:
+      - "EDR/DLP: search for local mail stores from a non-mail process — collection precursor"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $roots = @($env:APPDATA, (Join-Path $env:USERPROFILE 'Documents')) | Where-Object { $_ -and (Test-Path $_) }
+      $stores = @()
+      foreach ($r in $roots) {
+        $stores += Get-ChildItem -Path $r -File -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 1000 | Where-Object { $_.Extension -in @('.pst','.ost') }
+      }
+      Write-Output "EXEC T1114: found $(@($stores).Count) local mail-store file(s). No mailbox was opened or read. Survey Stage 3. [BAS-SIM-SRV-S3]"
+      if (@($stores).Count -gt 0) {
+        Write-Output "FAIL: Local mail stores were located from a non-mail process with no alert. Locating mailboxes ahead of collection should be visible."
+      } else {
+        Write-Output "PASS: No local mail stores were present."
+      }
+    cleanup: ""

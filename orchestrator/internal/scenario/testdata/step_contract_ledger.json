@@ -3645,6 +3645,87 @@
     "status": "undo_declared_in_yaml"
   },
   {
+    "scenario": "collection-archive-split-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-archive-split-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-browser-cloud-email-discovery.yaml",
+    "index": 0,
+    "technique_id": "T1217",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-browser-cloud-email-discovery.yaml",
+    "index": 1,
+    "technique_id": "T1619",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-browser-cloud-email-discovery.yaml",
+    "index": 2,
+    "technique_id": "T1114",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1048.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 2,
+    "technique_id": "T1041",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 3,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "collection-cloud-storage-exfil.yaml",
     "index": 0,
     "technique_id": "T1074.001",
