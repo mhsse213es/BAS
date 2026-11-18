@@ -160,3 +160,65 @@ from the start of this work and did not recur.
   these totals (same caveat as any shared-fixture integration target).
 - P2 (additional persistence and C2 variants) is not started. Phase 1 (reconnaissance) and Phase 2
   (initial access) remain out of scope, as agreed before P0.
+
+---
+
+# Cobalt Group BFSI P2 - QA Log
+
+## Scope
+P2 of the Cobalt Group BFSI expansion: additional persistence and C2 technique variants beyond the
+campaign's existing coverage (persistence: T1543.003 service, T1053.005 scheduled task; C2: T1071.004
+DNS). Plan: `docs/superpowers/plans/2026-11-18-cobalt-group-bfsi-p2.md`.
+
+## What was built (2026-11-18, Windows 10 Pro build host, no EDR, no Sysmon, no enforcement, run as Administrator)
+- `cobalt-group-bfsi-persistence-variants.yaml` (4 steps): registry Run key value (T1547.001), WMI event
+  subscription filter/consumer/binding under `root\subscription` (T1546.003), local account creation
+  (T1136.001), account membership change limited to the built-in Users group (T1098).
+- `cobalt-group-bfsi-c2-variants.yaml` (4 steps): HTTP/S periodic beaconing to the lab simulator
+  (T1071.001), encrypted channel over a loopback TLS session with a CurrentUser\My self-signed cert
+  (T1573), ingress tool transfer from the simulator into a per-run temp dir (T1105), traffic on the
+  simulator's non-standard port (T1571).
+- Generated via `appctlgen -common <pack's own dir>`, signed with `orchestrator/scripts/signer.go`,
+  `product_line: killchain` on every header.
+- Integration tests: `TestCobaltBFSICSVariants_BeaconPatternAgainstLiveSimulator` runs the real c2-01
+  command against a live `bfsisim.Simulator`; the parse test's `want` map covers both packs.
+
+## What was verified for real
+- All 16 new PowerShell files (8 persistence, 8 C2 step/undo... plus lib) parse clean.
+- Every step was run for real on this host, not inspected: pers-01/03/04 PASS; pers-02 PASS after a fix
+  (see below); c2-01/03/04 PASS against a live `bfsisim-lab`; c2-02 PASS after a fix.
+- Every undo was run, then residue was checked directly on the host:
+  - persistence: no `BAS-SIM-pers-*` Run values, no `bas-pers-*` local accounts, no `bas-pers-*`
+    Users group members, zero `BAS-SIM-pers-*` WMI filters/consumers/bindings.
+  - C2: no loopback localhost certs with a short NotAfter in CurrentUser\My, no `bas-sim-c2` temp dir.
+- A partially failed pers-02 run left a WMI filter and its undo record behind; running its undo removed
+  the filter, confirming undo handles partial state, not just complete state.
+- `go test ./internal/scenario -run TestCobaltBFSI*` passes, and the full unfiltered
+  `go test ./internal/scenario -count=1 -timeout 420s` run is recorded in the P2 commit history.
+- `signer.go verify-all scenarios`: ok=230 fail=0 with both new packs in the ok set.
+
+## Bugs found and fixed during live verification
+- pers-02 (WMI): `Set-WmiInstance` returns an object with an empty `__PATH`, so the
+  `__FilterToConsumerBinding` was built from null references and threw "Illegal null value". Fixed by
+  re-reading the created filter and consumer by name and binding with `__RELPATH`.
+- c2-02 (loopback TLS): the certificate-validation callback was a PowerShell scriptblock, which throws
+  when invoked on the .NET thread-pool thread (no runspace). Fixed with a compiled `Add-Type` delegate
+  that accepts the loopback test certificate. The client handshake is now async with a synchronous
+  server-side auth, avoiding `Task.Run` over a scriptblock.
+- c2-03 (tool transfer): the undo removed the per-run directory but left its empty parent
+  `bas-sim-c2` behind. Fixed by also removing the parent when empty, as the plan specified.
+
+## Honest limits
+- No AD lab, no EDR, no Sysmon. These verdicts reflect this host's actual unenforced state, not a
+  controlled detection test. A PASS for pers-02 means the WMI subscription was created, not that any
+  monitoring saw it.
+- pers-02 uses a `CommandLineEventConsumer` (the plan left the consumer type open). Its trigger
+  (`Win32_LocalTime` modification every 60 seconds) only fires if the consumer is bound, and the
+  consumer runs a no-op `exit`, so the subscription has no effect beyond existing.
+- c2-02 accepts any server certificate (validation callback returns true). This is deliberate: the
+  listener is loopback-only and the cert is the step's own ephemeral one. It is not a model of any
+  real TLS trust decision.
+- c2-01 and c2-03 target the lab simulator, not a real C2 infrastructure. Beaconing detection depends
+  on a periodic pattern, not on realistic C2 traffic shape.
+- P2 is complete for the four persistence and four C2 variants in the plan. Reconnaissance and initial
+  access remain out of scope, as agreed before P0.

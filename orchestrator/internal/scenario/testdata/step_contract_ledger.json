@@ -3411,6 +3411,42 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "cobalt-group-bfsi-c2-variants.yaml",
+    "index": 0,
+    "technique_id": "T1071.001",
+    "action_key": "c2_http_beaconing",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-c2-variants.yaml",
+    "index": 1,
+    "technique_id": "T1573",
+    "action_key": "c2_encrypted_channel",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-c2-variants.yaml",
+    "index": 2,
+    "technique_id": "T1105",
+    "action_key": "c2_ingress_tool_transfer",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-c2-variants.yaml",
+    "index": 3,
+    "technique_id": "T1571",
+    "action_key": "c2_non_standard_port",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
     "scenario": "cobalt-group-bfsi-collection-exfil.yaml",
     "index": 0,
     "technique_id": "T1005",
@@ -3753,6 +3789,42 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "cobalt-group-bfsi-persistence-variants.yaml",
+    "index": 0,
+    "technique_id": "T1547.001",
+    "action_key": "persistence_registry_run_key",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-persistence-variants.yaml",
+    "index": 1,
+    "technique_id": "T1546.003",
+    "action_key": "persistence_wmi_event_subscription",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-persistence-variants.yaml",
+    "index": 2,
+    "technique_id": "T1136.001",
+    "action_key": "persistence_local_account_creation",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-persistence-variants.yaml",
+    "index": 3,
+    "technique_id": "T1098",
+    "action_key": "persistence_account_manipulation",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
     "scenario": "cobalt-group-kill-chain.yaml",
     "index": 0,
     "technique_id": "T1566.001",
@@ -3900,6 +3972,33 @@
     "scenario": "collection-channel-variants-exfil.yaml",
     "index": 3,
     "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 2,
+    "technique_id": "T1048.003",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",

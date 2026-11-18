@@ -254,6 +254,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "cobalt-group-bfsi-c2-variants.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "cobalt-group-bfsi-collection-exfil.yaml": {
     "cleanup": 0,
     "detection": 0,
@@ -284,6 +289,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "cobalt-group-bfsi-persistence-variants.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "cobalt-group-kill-chain.yaml": {
     "cleanup": 0,
     "detection": 0,
@@ -300,6 +310,11 @@
     "telemetry": 0
   },
   "collection-channel-variants-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-clipboard-exfil.yaml": {
     "cleanup": 0,
     "detection": 0,
     "telemetry": 0
