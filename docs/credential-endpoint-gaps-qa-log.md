@@ -167,3 +167,10 @@ Not verified: neither scenario has run on the DC. Both need a platform run on th
   - LDAP channel binding is not set on the DC.
 - 4776 count of 0: consistent with no NTLM validations in the window. The earlier spray used Kerberos-based validation. Credential Validation auditing was `Success` at the last check. Not a logging fault.
 - Status: posture recorded. No detection verdict. Relay detection is not verified.
+
+### LDAP signing change tested and reverted, 2026-11-18
+
+- Set `LDAPServerIntegrity` to `2` on `WIN-TQ70FGLETIU`, verified it read `2`, then set it back to `1`.
+- Current state: `LDAPServerIntegrity=1` (signing negotiated, not required). **Open gap:** LDAP relay is not blocked by configuration.
+- Decision: leave as is. Channel binding remains unset.
+- The posture re-run after a change was not done, since the value was reverted.
