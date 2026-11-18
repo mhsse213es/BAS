@@ -15,12 +15,13 @@ import (
 
 func TestCobaltBFSIPacks_ParseWithCommandAndCleanup(t *testing.T) {
 	want := map[string]int{
-		"cobalt-group-bfsi-credential-access": 8,
-		"cobalt-group-bfsi-lateral-movement":  6,
-		"cobalt-group-bfsi-discovery":         4,
-		"cobalt-group-bfsi-collection-exfil":  6,
-		"cobalt-group-bfsi-defense-evasion":   7,
-		"cobalt-group-bfsi-financial-impact":  7,
+		"cobalt-group-bfsi-credential-access":    8,
+		"cobalt-group-bfsi-lateral-movement":     6,
+		"cobalt-group-bfsi-discovery":            4,
+		"cobalt-group-bfsi-collection-exfil":     6,
+		"cobalt-group-bfsi-defense-evasion":      7,
+		"cobalt-group-bfsi-financial-impact":     7,
+		"cobalt-group-bfsi-persistence-variants": 4,
 	}
 	for pack, n := range want {
 		b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", pack+".yaml"))

@@ -1,0 +1,512 @@
+id: "cobalt-group-bfsi-persistence-variants"
+product_line: killchain
+name: "Cobalt Group BFSI - Additional Persistence Variants (P2)"
+description: >
+  Extends scenarios/cobalt-group-kill-chain.yaml's existing persistence coverage (T1543.003 Windows
+  service, T1053.005 scheduled task) with four variant persistence techniques not yet represented
+  in that campaign: registry run keys, WMI event subscription, local account creation, and account
+  manipulation via group membership. All state is tagged with a per-run synthetic identifier and
+  removed by the matching undo script; no production-sensitive registry key, WMI class, or group is
+  ever touched (Run-key value only, never the key itself; root\subscription test objects only;
+  built-in Users group only, never Administrators or any admin-equivalent group).
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cobalt-group
+  - bfsi
+  - persistence
+  - p2
+mitre_phases:
+  - persistence
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: pers-01
+    name: "Persistence - Registry Run Key (Custom)"
+    technique_id: T1547.001
+    action_key: persistence_registry_run_key
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates one named value under HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run pointing at a harmless no-op command. Removes only that named value, never the Run key itself."
+    telemetry:
+      - "Registry value creation under HKCU Run key"
+    detection:
+      - "Registry Run Key / Startup Folder monitoring"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'BAS-SIM-pers-' + $script:CgRun
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-PERS-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function New-CgTestAccountName { param([string]$Suffix)
+      $name = 'bas-pers-' + $script:CgRun + '-' + $Suffix
+      if ($name.Length -gt 20) { $name = $name.Substring(0, 20) }
+      return $name
+      }
+      function Test-CgRunKeyExists { param([string]$Name)
+      $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+      $v = (Get-ItemProperty -Path $p -Name $Name -ErrorAction SilentlyContinue)
+      return ($v -ne $null)
+      }
+      function Test-CgWmiSubscriptionExists { param([string]$Tag)
+      $filter = Get-WmiObject -Namespace 'root\subscription' -Class '__EventFilter' -Filter "Name='$Tag-filter'" -ErrorAction SilentlyContinue
+      $consumer = Get-WmiObject -Namespace 'root\subscription' -Class 'CommandLineEventConsumer' -Filter "Name='$Tag-consumer'" -ErrorAction SilentlyContinue
+      $binding = Get-WmiObject -Namespace 'root\subscription' -Class '__FilterToConsumerBinding' -ErrorAction SilentlyContinue | Where-Object { $_.Filter -like "*$Tag-filter*" }
+      return @{ Filter = ($filter -ne $null); Consumer = ($consumer -ne $null); Binding = ($binding -ne $null) }
+      }
+      $valueName = $script:CgTag + '-run'
+      $undo_data = @{ scenario = 'pers-01'; valueName = $valueName }
+      try { New-CgUndoRecord 'pers-01' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'pers-01' }
+      $runPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+      try {
+      New-ItemProperty -Path $runPath -Name $valueName -Value 'powershell.exe -NoProfile -Command exit' -PropertyType String -Force -ErrorAction Stop | Out-Null
+      } catch {
+      Complete-CgStep @{ Outcome = 'error'; Reason = "Could not write Run key value: $($_.Exception.Message)" } 'pers-01'
+      }
+      if (Test-CgRunKeyExists -Name $valueName) {
+      $res = @{ Outcome = 'pass'; Reason = 'Registry Run Key persistence value was created and confirmed present' }
+      } else {
+      $res = @{ Outcome = 'fail'; Reason = 'Registry Run Key write did not take effect' }
+      }
+      Complete-CgStep $res 'pers-01'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'BAS-SIM-pers-' + $script:CgRun
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-PERS-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function New-CgTestAccountName { param([string]$Suffix)
+      $name = 'bas-pers-' + $script:CgRun + '-' + $Suffix
+      if ($name.Length -gt 20) { $name = $name.Substring(0, 20) }
+      return $name
+      }
+      function Test-CgRunKeyExists { param([string]$Name)
+      $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+      $v = (Get-ItemProperty -Path $p -Name $Name -ErrorAction SilentlyContinue)
+      return ($v -ne $null)
+      }
+      function Test-CgWmiSubscriptionExists { param([string]$Tag)
+      $filter = Get-WmiObject -Namespace 'root\subscription' -Class '__EventFilter' -Filter "Name='$Tag-filter'" -ErrorAction SilentlyContinue
+      $consumer = Get-WmiObject -Namespace 'root\subscription' -Class 'CommandLineEventConsumer' -Filter "Name='$Tag-consumer'" -ErrorAction SilentlyContinue
+      $binding = Get-WmiObject -Namespace 'root\subscription' -Class '__FilterToConsumerBinding' -ErrorAction SilentlyContinue | Where-Object { $_.Filter -like "*$Tag-filter*" }
+      return @{ Filter = ($filter -ne $null); Consumer = ($consumer -ne $null); Binding = ($binding -ne $null) }
+      }
+      $rec = Read-CgUndoRecord 'pers-01'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name $rec.valueName -ErrorAction SilentlyContinue
+      Remove-CgUndoRecord 'pers-01'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: pers-02
+    name: "Persistence - WMI Event Subscription (Custom)"
+    technique_id: T1546.003
+    action_key: persistence_wmi_event_subscription
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates one synthetic __EventFilter, __EventConsumer, and __FilterToConsumerBinding under root\\subscription, filtering on a synthetic Win32_LocalTime interval class, never a sensitive event class. Removes all three in reverse creation order."
+    telemetry:
+      - "WMI subscription object creation under root\\subscription"
+    detection:
+      - "WMI event subscription monitoring (Sysmon event ID 19/20/21 or equivalent)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'BAS-SIM-pers-' + $script:CgRun
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-PERS-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function New-CgTestAccountName { param([string]$Suffix)
+      $name = 'bas-pers-' + $script:CgRun + '-' + $Suffix
+      if ($name.Length -gt 20) { $name = $name.Substring(0, 20) }
+      return $name
+      }
+      function Test-CgRunKeyExists { param([string]$Name)
+      $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+      $v = (Get-ItemProperty -Path $p -Name $Name -ErrorAction SilentlyContinue)
+      return ($v -ne $null)
+      }
+      function Test-CgWmiSubscriptionExists { param([string]$Tag)
+      $filter = Get-WmiObject -Namespace 'root\subscription' -Class '__EventFilter' -Filter "Name='$Tag-filter'" -ErrorAction SilentlyContinue
+      $consumer = Get-WmiObject -Namespace 'root\subscription' -Class 'CommandLineEventConsumer' -Filter "Name='$Tag-consumer'" -ErrorAction SilentlyContinue
+      $binding = Get-WmiObject -Namespace 'root\subscription' -Class '__FilterToConsumerBinding' -ErrorAction SilentlyContinue | Where-Object { $_.Filter -like "*$Tag-filter*" }
+      return @{ Filter = ($filter -ne $null); Consumer = ($consumer -ne $null); Binding = ($binding -ne $null) }
+      }
+      $tag = $script:CgTag + '-wmi'
+      $undo_data = @{ scenario = 'pers-02'; tag = $tag }
+      try { New-CgUndoRecord 'pers-02' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'pers-02' }
+      try {
+      $filterArgs = @{ Name = "$tag-filter"; EventNamespace = 'root\cimv2'; QueryLanguage = 'WQL'; Query = "SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_LocalTime'" }
+      Set-WmiInstance -Namespace 'root\subscription' -Class '__EventFilter' -Arguments $filterArgs -ErrorAction Stop | Out-Null
+      Set-WmiInstance -Namespace 'root\subscription' -Class 'CommandLineEventConsumer' -Arguments @{ Name = "$tag-consumer"; CommandLineTemplate = 'powershell.exe -NoProfile -Command exit' } -ErrorAction Stop | Out-Null
+      $filter = Get-WmiObject -Namespace 'root\subscription' -Class '__EventFilter' -Filter "Name='$tag-filter'" -ErrorAction Stop
+      $consumer = Get-WmiObject -Namespace 'root\subscription' -Class 'CommandLineEventConsumer' -Filter "Name='$tag-consumer'" -ErrorAction Stop
+      Set-WmiInstance -Namespace 'root\subscription' -Class '__FilterToConsumerBinding' -Arguments @{ Filter = $filter.__RELPATH; Consumer = $consumer.__RELPATH } -ErrorAction Stop | Out-Null
+      } catch {
+      Complete-CgStep @{ Outcome = 'error'; Reason = "Could not create WMI subscription: $($_.Exception.Message)" } 'pers-02'
+      }
+      $state = Test-CgWmiSubscriptionExists -Tag $tag
+      if ($state.Filter -and $state.Consumer -and $state.Binding) {
+      $res = @{ Outcome = 'pass'; Reason = 'WMI event subscription filter, consumer, and binding were all created and confirmed present' }
+      } else {
+      $res = @{ Outcome = 'fail'; Reason = "WMI subscription incomplete (filter=$($state.Filter) consumer=$($state.Consumer) binding=$($state.Binding))" }
+      }
+      Complete-CgStep $res 'pers-02'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'BAS-SIM-pers-' + $script:CgRun
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-PERS-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function New-CgTestAccountName { param([string]$Suffix)
+      $name = 'bas-pers-' + $script:CgRun + '-' + $Suffix
+      if ($name.Length -gt 20) { $name = $name.Substring(0, 20) }
+      return $name
+      }
+      function Test-CgRunKeyExists { param([string]$Name)
+      $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+      $v = (Get-ItemProperty -Path $p -Name $Name -ErrorAction SilentlyContinue)
+      return ($v -ne $null)
+      }
+      function Test-CgWmiSubscriptionExists { param([string]$Tag)
+      $filter = Get-WmiObject -Namespace 'root\subscription' -Class '__EventFilter' -Filter "Name='$Tag-filter'" -ErrorAction SilentlyContinue
+      $consumer = Get-WmiObject -Namespace 'root\subscription' -Class 'CommandLineEventConsumer' -Filter "Name='$Tag-consumer'" -ErrorAction SilentlyContinue
+      $binding = Get-WmiObject -Namespace 'root\subscription' -Class '__FilterToConsumerBinding' -ErrorAction SilentlyContinue | Where-Object { $_.Filter -like "*$Tag-filter*" }
+      return @{ Filter = ($filter -ne $null); Consumer = ($consumer -ne $null); Binding = ($binding -ne $null) }
+      }
+      $rec = Read-CgUndoRecord 'pers-02'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      $tag = $rec.tag
+      Get-WmiObject -Namespace 'root\subscription' -Class '__FilterToConsumerBinding' -ErrorAction SilentlyContinue | Where-Object { $_.Filter -like "*$tag-filter*" } | Remove-WmiObject -ErrorAction SilentlyContinue
+      Get-WmiObject -Namespace 'root\subscription' -Class 'CommandLineEventConsumer' -Filter "Name='$tag-consumer'" -ErrorAction SilentlyContinue | Remove-WmiObject -ErrorAction SilentlyContinue
+      Get-WmiObject -Namespace 'root\subscription' -Class '__EventFilter' -Filter "Name='$tag-filter'" -ErrorAction SilentlyContinue | Remove-WmiObject -ErrorAction SilentlyContinue
+      $state = Test-CgWmiSubscriptionExists -Tag $tag
+      Remove-CgUndoRecord 'pers-02'
+      if ($state.Filter -or $state.Consumer -or $state.Binding) {
+      Write-Output "FAIL: WMI subscription objects still present after undo (filter=$($state.Filter) consumer=$($state.Consumer) binding=$($state.Binding))"
+      exit 0
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: pers-03
+    name: "Persistence - Local Account Creation (Custom)"
+    technique_id: T1136.001
+    action_key: persistence_local_account_creation
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates one local user account with a random password and a per-run synthetic name. Removed by undo; undo tolerates the account already being absent."
+    telemetry:
+      - "Local user account creation"
+    detection:
+      - "Local account creation monitoring (Windows event 4720 or equivalent)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'BAS-SIM-pers-' + $script:CgRun
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-PERS-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function New-CgTestAccountName { param([string]$Suffix)
+      $name = 'bas-pers-' + $script:CgRun + '-' + $Suffix
+      if ($name.Length -gt 20) { $name = $name.Substring(0, 20) }
+      return $name
+      }
+      function Test-CgRunKeyExists { param([string]$Name)
+      $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+      $v = (Get-ItemProperty -Path $p -Name $Name -ErrorAction SilentlyContinue)
+      return ($v -ne $null)
+      }
+      function Test-CgWmiSubscriptionExists { param([string]$Tag)
+      $filter = Get-WmiObject -Namespace 'root\subscription' -Class '__EventFilter' -Filter "Name='$Tag-filter'" -ErrorAction SilentlyContinue
+      $consumer = Get-WmiObject -Namespace 'root\subscription' -Class 'CommandLineEventConsumer' -Filter "Name='$Tag-consumer'" -ErrorAction SilentlyContinue
+      $binding = Get-WmiObject -Namespace 'root\subscription' -Class '__FilterToConsumerBinding' -ErrorAction SilentlyContinue | Where-Object { $_.Filter -like "*$Tag-filter*" }
+      return @{ Filter = ($filter -ne $null); Consumer = ($consumer -ne $null); Binding = ($binding -ne $null) }
+      }
+      $accountName = New-CgTestAccountName 'a'
+      $undo_data = @{ scenario = 'pers-03'; accountName = $accountName }
+      try { New-CgUndoRecord 'pers-03' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'pers-03' }
+      $password = ConvertTo-SecureString -String ([Guid]::NewGuid().ToString('N') + 'Aa1!') -AsPlainText -Force
+      try {
+      New-LocalUser -Name $accountName -Password $password -AccountNeverExpires -PasswordNeverExpires -ErrorAction Stop | Out-Null
+      } catch {
+      Complete-CgStep @{ Outcome = 'error'; Reason = "Could not create local account: $($_.Exception.Message)" } 'pers-03'
+      }
+      if (Get-LocalUser -Name $accountName -ErrorAction SilentlyContinue) {
+      $res = @{ Outcome = 'pass'; Reason = 'Local persistence account was created and confirmed present' }
+      } else {
+      $res = @{ Outcome = 'fail'; Reason = 'Local account creation did not take effect' }
+      }
+      Complete-CgStep $res 'pers-03'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'BAS-SIM-pers-' + $script:CgRun
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-PERS-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function New-CgTestAccountName { param([string]$Suffix)
+      $name = 'bas-pers-' + $script:CgRun + '-' + $Suffix
+      if ($name.Length -gt 20) { $name = $name.Substring(0, 20) }
+      return $name
+      }
+      function Test-CgRunKeyExists { param([string]$Name)
+      $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+      $v = (Get-ItemProperty -Path $p -Name $Name -ErrorAction SilentlyContinue)
+      return ($v -ne $null)
+      }
+      function Test-CgWmiSubscriptionExists { param([string]$Tag)
+      $filter = Get-WmiObject -Namespace 'root\subscription' -Class '__EventFilter' -Filter "Name='$Tag-filter'" -ErrorAction SilentlyContinue
+      $consumer = Get-WmiObject -Namespace 'root\subscription' -Class 'CommandLineEventConsumer' -Filter "Name='$Tag-consumer'" -ErrorAction SilentlyContinue
+      $binding = Get-WmiObject -Namespace 'root\subscription' -Class '__FilterToConsumerBinding' -ErrorAction SilentlyContinue | Where-Object { $_.Filter -like "*$Tag-filter*" }
+      return @{ Filter = ($filter -ne $null); Consumer = ($consumer -ne $null); Binding = ($binding -ne $null) }
+      }
+      $rec = Read-CgUndoRecord 'pers-03'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      Remove-LocalUser -Name $rec.accountName -ErrorAction SilentlyContinue
+      Remove-CgUndoRecord 'pers-03'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: pers-04
+    name: "Persistence - Account Manipulation via Group Membership (Custom)"
+    technique_id: T1098
+    action_key: persistence_account_manipulation
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates its own local user account (independent of pers-03) and adds it to the built-in Users group only -- never Administrators or any admin-equivalent group. Undo removes group membership then deletes the account; tolerates either already being absent."
+    telemetry:
+      - "Local group membership change"
+    detection:
+      - "Account manipulation / group membership change monitoring (Windows event 4732 or equivalent)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'BAS-SIM-pers-' + $script:CgRun
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-PERS-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function New-CgTestAccountName { param([string]$Suffix)
+      $name = 'bas-pers-' + $script:CgRun + '-' + $Suffix
+      if ($name.Length -gt 20) { $name = $name.Substring(0, 20) }
+      return $name
+      }
+      function Test-CgRunKeyExists { param([string]$Name)
+      $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+      $v = (Get-ItemProperty -Path $p -Name $Name -ErrorAction SilentlyContinue)
+      return ($v -ne $null)
+      }
+      function Test-CgWmiSubscriptionExists { param([string]$Tag)
+      $filter = Get-WmiObject -Namespace 'root\subscription' -Class '__EventFilter' -Filter "Name='$Tag-filter'" -ErrorAction SilentlyContinue
+      $consumer = Get-WmiObject -Namespace 'root\subscription' -Class 'CommandLineEventConsumer' -Filter "Name='$Tag-consumer'" -ErrorAction SilentlyContinue
+      $binding = Get-WmiObject -Namespace 'root\subscription' -Class '__FilterToConsumerBinding' -ErrorAction SilentlyContinue | Where-Object { $_.Filter -like "*$Tag-filter*" }
+      return @{ Filter = ($filter -ne $null); Consumer = ($consumer -ne $null); Binding = ($binding -ne $null) }
+      }
+      $accountName = New-CgTestAccountName 'b'
+      $undo_data = @{ scenario = 'pers-04'; accountName = $accountName; groupName = 'Users' }
+      try { New-CgUndoRecord 'pers-04' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'pers-04' }
+      $password = ConvertTo-SecureString -String ([Guid]::NewGuid().ToString('N') + 'Aa1!') -AsPlainText -Force
+      try {
+      New-LocalUser -Name $accountName -Password $password -AccountNeverExpires -PasswordNeverExpires -ErrorAction Stop | Out-Null
+      Add-LocalGroupMember -Group 'Users' -Member $accountName -ErrorAction Stop
+      } catch {
+      Complete-CgStep @{ Outcome = 'error'; Reason = "Could not create account or add group membership: $($_.Exception.Message)" } 'pers-04'
+      }
+      $member = Get-LocalGroupMember -Group 'Users' -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*\$accountName" }
+      if ($member) {
+      $res = @{ Outcome = 'pass'; Reason = 'Synthetic account was added to the built-in Users group and membership confirmed' }
+      } else {
+      $res = @{ Outcome = 'fail'; Reason = 'Group membership change did not take effect' }
+      }
+      Complete-CgStep $res 'pers-04'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'BAS-SIM-pers-' + $script:CgRun
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-PERS-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function New-CgTestAccountName { param([string]$Suffix)
+      $name = 'bas-pers-' + $script:CgRun + '-' + $Suffix
+      if ($name.Length -gt 20) { $name = $name.Substring(0, 20) }
+      return $name
+      }
+      function Test-CgRunKeyExists { param([string]$Name)
+      $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+      $v = (Get-ItemProperty -Path $p -Name $Name -ErrorAction SilentlyContinue)
+      return ($v -ne $null)
+      }
+      function Test-CgWmiSubscriptionExists { param([string]$Tag)
+      $filter = Get-WmiObject -Namespace 'root\subscription' -Class '__EventFilter' -Filter "Name='$Tag-filter'" -ErrorAction SilentlyContinue
+      $consumer = Get-WmiObject -Namespace 'root\subscription' -Class 'CommandLineEventConsumer' -Filter "Name='$Tag-consumer'" -ErrorAction SilentlyContinue
+      $binding = Get-WmiObject -Namespace 'root\subscription' -Class '__FilterToConsumerBinding' -ErrorAction SilentlyContinue | Where-Object { $_.Filter -like "*$Tag-filter*" }
+      return @{ Filter = ($filter -ne $null); Consumer = ($consumer -ne $null); Binding = ($binding -ne $null) }
+      }
+      $rec = Read-CgUndoRecord 'pers-04'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      Remove-LocalGroupMember -Group $rec.groupName -Member $rec.accountName -ErrorAction SilentlyContinue
+      Remove-LocalUser -Name $rec.accountName -ErrorAction SilentlyContinue
+      Remove-CgUndoRecord 'pers-04'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
