@@ -1,0 +1,31 @@
+id: "cobalt-group-bfsi-collection-exfil"
+product_line: killchain
+name: "Cobalt Group BFSI - Collection and Exfiltration (P1)"
+description: >
+  Enterprise collection-and-exfiltration detection validation extending the Cobalt Group BFSI campaign.
+  Six scenarios covering local data collection, network share collection, email-client presence checks,
+  archive creation, simulated exfiltration-over-C2, and DNS exfiltration probing. All synthetic
+  [BAS-SIM] data only; exfiltration destinations use RFC 6761 .invalid hostnames and never leave the
+  lab. Each write scenario includes verified cleanup and undo-record rollback.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cobalt-group
+  - bfsi
+  - collection
+  - exfiltration
+  - p1
+  - t1005
+  - t1039
+  - t1114.001
+  - t1560.001
+  - t1041
+  - t1048.003
+mitre_phases:
+  - collection
+  - exfiltration
+
+steps:
+
