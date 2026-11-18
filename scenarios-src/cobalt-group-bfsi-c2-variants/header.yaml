@@ -1,0 +1,24 @@
+id: "cobalt-group-bfsi-c2-variants"
+product_line: killchain
+name: "Cobalt Group BFSI - Additional C2 Variants (P2)"
+description: >
+  Extends scenarios/cobalt-group-kill-chain.yaml's existing DNS C2 coverage (T1071.004) with four
+  variant command-and-control techniques: HTTP/S application-layer beaconing (T1071.001), encrypted
+  channel over a loopback TLS session (T1573), ingress tool transfer (T1105), and communication over
+  a non-standard port (T1571). Traffic targets only the lab-local bfsisim simulator or a 127.0.0.1
+  loopback listener; nothing leaves the host. The encrypted-channel step's self-signed certificate is
+  created in CurrentUser\My, never a trusted store, and removed by its undo.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cobalt-group
+  - bfsi
+  - c2
+  - p2
+mitre_phases:
+  - command-and-control
+
+steps:
+

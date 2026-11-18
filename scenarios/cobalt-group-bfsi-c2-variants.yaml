@@ -1,0 +1,544 @@
+id: "cobalt-group-bfsi-c2-variants"
+product_line: killchain
+name: "Cobalt Group BFSI - Additional C2 Variants (P2)"
+description: >
+  Extends scenarios/cobalt-group-kill-chain.yaml's existing DNS C2 coverage (T1071.004) with four
+  variant command-and-control techniques: HTTP/S application-layer beaconing (T1071.001), encrypted
+  channel over a loopback TLS session (T1573), ingress tool transfer (T1105), and communication over
+  a non-standard port (T1571). Traffic targets only the lab-local bfsisim simulator or a 127.0.0.1
+  loopback listener; nothing leaves the host. The encrypted-channel step's self-signed certificate is
+  created in CurrentUser\My, never a trusted store, and removed by its undo.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cobalt-group
+  - bfsi
+  - c2
+  - p2
+mitre_phases:
+  - command-and-control
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: c2-01
+    name: "C2 - HTTP/S Application-Layer Beaconing (Custom)"
+    technique_id: T1071.001
+    action_key: c2_http_beaconing
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: low
+    reversible: true
+    blast_radius: "Issues five periodic HTTP GET requests to the lab-local bfsisim simulator. No state is created on the host. SKIP when the simulator is unreachable."
+    telemetry:
+      - "Periodic HTTP GET beacon pattern to lab-local simulator"
+    detection:
+      - "Periodic application-layer beacon detection (interval and regularity analysis)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-C2-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function New-CgLoopbackTlsCertificate {
+      $cert = New-SelfSignedCertificate -DnsName 'localhost' -CertStoreLocation 'Cert:\CurrentUser\My' -NotAfter (Get-Date).AddMinutes(10) -KeyExportPolicy NonExportable
+      return $cert.Thumbprint
+      }
+      function Remove-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      Remove-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -Force -ErrorAction SilentlyContinue
+      }
+      function Test-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      return ((Get-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -ErrorAction SilentlyContinue) -ne $null)
+      }
+      if (-not (Test-BfsiSimulatorConnectivity)) {
+      Complete-CgStep @{ Outcome = 'skip'; Reason = 'BFSI simulator not reachable - prerequisite not met' } 'C2-01'
+      }
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      $uri = "http://${simHost}:${port}/api/banking/apps"
+      $stamps = @()
+      $ok = 0
+      for ($i = 0; $i -lt 5; $i++) {
+      try {
+      $r = Invoke-WebRequest -Method GET -Uri $uri -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+      if ([int]$r.StatusCode -eq 200) { $ok++ }
+      } catch {}
+      $stamps += (Get-Date)
+      if ($i -lt 4) { Start-Sleep -Seconds 1 }
+      }
+      $increasing = $true
+      for ($i = 1; $i -lt $stamps.Count; $i++) { if ($stamps[$i] -le $stamps[$i - 1]) { $increasing = $false } }
+      if ($ok -eq 5 -and $increasing) {
+      $res = @{ Outcome = 'pass'; Reason = 'Five periodic HTTP beacons succeeded with strictly increasing timestamps' }
+      } elseif ($ok -eq 0) {
+      $res = @{ Outcome = 'error'; Reason = 'No beacon request succeeded against the simulator' }
+      } else {
+      $res = @{ Outcome = 'fail'; Reason = "Only $ok of 5 beacons succeeded or timestamps were not periodic" }
+      }
+      Complete-CgStep $res 'C2-01'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-C2-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function New-CgLoopbackTlsCertificate {
+      $cert = New-SelfSignedCertificate -DnsName 'localhost' -CertStoreLocation 'Cert:\CurrentUser\My' -NotAfter (Get-Date).AddMinutes(10) -KeyExportPolicy NonExportable
+      return $cert.Thumbprint
+      }
+      function Remove-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      Remove-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -Force -ErrorAction SilentlyContinue
+      }
+      function Test-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      return ((Get-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -ErrorAction SilentlyContinue) -ne $null)
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: c2-02
+    name: "C2 - Encrypted Channel over Loopback TLS (Custom)"
+    technique_id: T1573
+    action_key: c2_encrypted_channel
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates a short-lived self-signed certificate in CurrentUser\\My and a loopback-only TLS listener on 127.0.0.1. Both are removed before the step returns and again by undo. The certificate is never installed in a trusted store."
+    telemetry:
+      - "Loopback TLS handshake"
+      - "Self-signed certificate creation in CurrentUser\\My"
+    detection:
+      - "Encrypted channel detection on unexpected local listeners"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-C2-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function New-CgLoopbackTlsCertificate {
+      $cert = New-SelfSignedCertificate -DnsName 'localhost' -CertStoreLocation 'Cert:\CurrentUser\My' -NotAfter (Get-Date).AddMinutes(10) -KeyExportPolicy NonExportable
+      return $cert.Thumbprint
+      }
+      function Remove-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      Remove-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -Force -ErrorAction SilentlyContinue
+      }
+      function Test-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      return ((Get-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -ErrorAction SilentlyContinue) -ne $null)
+      }
+      $thumb = New-CgLoopbackTlsCertificate
+      if (-not $thumb) {
+      Complete-CgStep @{ Outcome = 'error'; Reason = 'Could not create loopback self-signed certificate' } 'C2-02'
+      }
+      $undo_data = @{ scenario = 'c2-02'; thumbprint = $thumb }
+      try { New-CgUndoRecord 'c2-02' $undo_data } catch { Remove-CgLoopbackTlsCertificate -Thumbprint $thumb; Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'C2-02' }
+      $res = @{ Outcome = 'error'; Reason = 'TLS round trip did not run' }
+      $listener = $null; $server = $null; $client = $null; $tcpClient = $null
+      try {
+      $listener = New-Object -TypeName Net.Sockets.TcpListener -ArgumentList ([Net.IPAddress]::Loopback), 0
+      $listener.Start()
+      $port = ([Net.IPEndPoint]$listener.LocalEndpoint).Port
+      $cert = Get-Item -LiteralPath ('Cert:\CurrentUser\My\' + $thumb)
+      $tcpClient = New-Object Net.Sockets.TcpClient
+      $connectTask = $tcpClient.ConnectAsync([Net.IPAddress]::Loopback, $port)
+      $acceptedSocket = $listener.AcceptTcpClient()
+      $connectTask.Wait(5000) | Out-Null
+      $server = New-Object Net.Security.SslStream($acceptedSocket.GetStream(), $false)
+      Add-Type -TypeDefinition 'public static class BasLoopbackCertAccept { public static bool Accept(object s, System.Security.Cryptography.X509Certificates.X509Certificate c, System.Security.Cryptography.X509Certificates.X509Chain ch, System.Net.Security.SslPolicyErrors e) { return true; } }'
+      $acceptCb = [Delegate]::CreateDelegate([Net.Security.RemoteCertificateValidationCallback], [BasLoopbackCertAccept].GetMethod('Accept'))
+      $client = New-Object Net.Security.SslStream($tcpClient.GetStream(), $false, $acceptCb)
+      $clientAuth = $client.AuthenticateAsClientAsync('localhost')
+      $server.AuthenticateAsServer($cert, $false, [Security.Authentication.SslProtocols]::Tls12, $false)
+      $clientAuth.Wait(5000) | Out-Null
+      $payload = [Text.Encoding]::ASCII.GetBytes('BAS-SIM-c2-02-ping')
+      $client.Write($payload, 0, $payload.Length)
+      $client.Flush()
+      $buf = New-Object byte[] 64
+      $n = $server.Read($buf, 0, $buf.Length)
+      $received = [Text.Encoding]::ASCII.GetString($buf, 0, $n)
+      if ($received -eq 'BAS-SIM-c2-02-ping') {
+      $res = @{ Outcome = 'pass'; Reason = 'Encrypted loopback TLS session established and payload round-tripped' }
+      } else {
+      $res = @{ Outcome = 'fail'; Reason = 'TLS session established but payload did not round-trip' }
+      }
+      } catch {
+      $res = @{ Outcome = 'error'; Reason = "Loopback TLS session failed: $($_.Exception.Message)" }
+      } finally {
+      foreach ($o in @($client, $server, $tcpClient, $listener)) { if ($o) { try { $o.Dispose() } catch {} } }
+      try { if ($listener) { $listener.Stop() } } catch {}
+      Remove-CgLoopbackTlsCertificate -Thumbprint $thumb
+      }
+      Complete-CgStep $res 'C2-02'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-C2-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function New-CgLoopbackTlsCertificate {
+      $cert = New-SelfSignedCertificate -DnsName 'localhost' -CertStoreLocation 'Cert:\CurrentUser\My' -NotAfter (Get-Date).AddMinutes(10) -KeyExportPolicy NonExportable
+      return $cert.Thumbprint
+      }
+      function Remove-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      Remove-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -Force -ErrorAction SilentlyContinue
+      }
+      function Test-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      return ((Get-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -ErrorAction SilentlyContinue) -ne $null)
+      }
+      $rec = Read-CgUndoRecord 'c2-02'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      Remove-CgLoopbackTlsCertificate -Thumbprint $rec.thumbprint
+      if (Test-CgLoopbackTlsCertificate -Thumbprint $rec.thumbprint) {
+      Write-Output 'FAIL: Loopback TLS certificate still present after undo'
+      exit 0
+      }
+      Remove-CgUndoRecord 'c2-02'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: c2-03
+    name: "C2 - Ingress Tool Transfer (Custom)"
+    technique_id: T1105
+    action_key: c2_ingress_tool_transfer
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Downloads one response body from the lab-local simulator into a per-run directory under the temp folder. Removes only that file and its directory. SKIP when the simulator is unreachable."
+    telemetry:
+      - "HTTP GET of a payload-shaped response from lab-local simulator"
+      - "File write under temp"
+    detection:
+      - "Ingress tool transfer detection (download followed by file write)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-C2-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function New-CgLoopbackTlsCertificate {
+      $cert = New-SelfSignedCertificate -DnsName 'localhost' -CertStoreLocation 'Cert:\CurrentUser\My' -NotAfter (Get-Date).AddMinutes(10) -KeyExportPolicy NonExportable
+      return $cert.Thumbprint
+      }
+      function Remove-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      Remove-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -Force -ErrorAction SilentlyContinue
+      }
+      function Test-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      return ((Get-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -ErrorAction SilentlyContinue) -ne $null)
+      }
+      if (-not (Test-BfsiSimulatorConnectivity)) {
+      Complete-CgStep @{ Outcome = 'skip'; Reason = 'BFSI simulator not reachable - prerequisite not met' } 'C2-03'
+      }
+      $dir = Join-Path $env:TEMP ('bas-sim-c2\' + $script:CgRun)
+      $file = Join-Path $dir 'payload.bin'
+      $undo_data = @{ scenario = 'c2-03'; dir = $dir; file = $file }
+      try { New-CgUndoRecord 'c2-03' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'C2-03' }
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try {
+      New-Item -ItemType Directory -Force -Path $dir | Out-Null
+      Invoke-WebRequest -Method GET -Uri ("http://${simHost}:${port}/api/banking/apps") -OutFile $file -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+      } catch {
+      Complete-CgStep @{ Outcome = 'error'; Reason = "Tool download failed: $($_.Exception.Message)" } 'C2-03'
+      }
+      if ((Test-Path -LiteralPath $file) -and ((Get-Item -LiteralPath $file).Length -gt 0)) {
+      $res = @{ Outcome = 'pass'; Reason = 'Tool payload was downloaded and written to disk with non-zero length' }
+      } else {
+      $res = @{ Outcome = 'fail'; Reason = 'Downloaded payload was not written or was empty' }
+      }
+      Complete-CgStep $res 'C2-03'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-C2-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function New-CgLoopbackTlsCertificate {
+      $cert = New-SelfSignedCertificate -DnsName 'localhost' -CertStoreLocation 'Cert:\CurrentUser\My' -NotAfter (Get-Date).AddMinutes(10) -KeyExportPolicy NonExportable
+      return $cert.Thumbprint
+      }
+      function Remove-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      Remove-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -Force -ErrorAction SilentlyContinue
+      }
+      function Test-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      return ((Get-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -ErrorAction SilentlyContinue) -ne $null)
+      }
+      $rec = Read-CgUndoRecord 'c2-03'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      Remove-Item -LiteralPath $rec.file -Force -ErrorAction SilentlyContinue
+      Remove-Item -LiteralPath $rec.dir -Force -ErrorAction SilentlyContinue
+      Remove-Item -LiteralPath (Split-Path -Parent $rec.dir) -Force -ErrorAction SilentlyContinue
+      Remove-CgUndoRecord 'c2-03'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: c2-04
+    name: "C2 - Communication over Non-Standard Port (Custom)"
+    technique_id: T1571
+    action_key: c2_non_standard_port
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: low
+    reversible: true
+    blast_radius: "Issues one GET request to the lab-local simulator on its configured non-standard port. No state is created. Fails loudly if the configured port is a well-known one. SKIP when the simulator is unreachable."
+    telemetry:
+      - "HTTP GET to lab-local simulator on a non-standard port"
+    detection:
+      - "Protocol-on-unexpected-port detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-C2-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function New-CgLoopbackTlsCertificate {
+      $cert = New-SelfSignedCertificate -DnsName 'localhost' -CertStoreLocation 'Cert:\CurrentUser\My' -NotAfter (Get-Date).AddMinutes(10) -KeyExportPolicy NonExportable
+      return $cert.Thumbprint
+      }
+      function Remove-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      Remove-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -Force -ErrorAction SilentlyContinue
+      }
+      function Test-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      return ((Get-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -ErrorAction SilentlyContinue) -ne $null)
+      }
+      if (-not (Test-BfsiSimulatorConnectivity)) {
+      Complete-CgStep @{ Outcome = 'skip'; Reason = 'BFSI simulator not reachable - prerequisite not met' } 'C2-04'
+      }
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      if (@(80, 443, 53) -contains $port) {
+      Complete-CgStep @{ Outcome = 'fail'; Reason = "Simulator is bound to well-known port $port, so this step cannot exercise a non-standard port" } 'C2-04'
+      }
+      try {
+      $r = Invoke-WebRequest -Method GET -Uri ("http://${simHost}:${port}/api/banking/apps") -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+      if ([int]$r.StatusCode -eq 200) {
+      $res = @{ Outcome = 'pass'; Reason = "Traffic succeeded over non-standard port $port" }
+      } else {
+      $res = @{ Outcome = 'fail'; Reason = "Non-standard port responded with HTTP $($r.StatusCode)" }
+      }
+      } catch {
+      $res = @{ Outcome = 'error'; Reason = "Non-standard port request failed: $($_.Exception.Message)" }
+      }
+      Complete-CgStep $res 'C2-04'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-C2-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function New-CgLoopbackTlsCertificate {
+      $cert = New-SelfSignedCertificate -DnsName 'localhost' -CertStoreLocation 'Cert:\CurrentUser\My' -NotAfter (Get-Date).AddMinutes(10) -KeyExportPolicy NonExportable
+      return $cert.Thumbprint
+      }
+      function Remove-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      Remove-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -Force -ErrorAction SilentlyContinue
+      }
+      function Test-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+      return ((Get-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -ErrorAction SilentlyContinue) -ne $null)
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0

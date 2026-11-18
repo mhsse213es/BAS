@@ -1,0 +1,90 @@
+[
+  {
+    "id": "c2-01",
+    "n": 1,
+    "name": "C2 - HTTP/S Application-Layer Beaconing (Custom)",
+    "technique_id": "T1071.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "low",
+    "blast_radius": "Issues five periodic HTTP GET requests to the lab-local bfsisim simulator. No state is created on the host. SKIP when the simulator is unreachable.",
+    "telemetry": [
+      "Periodic HTTP GET beacon pattern to lab-local simulator"
+    ],
+    "detection": [
+      "Periodic application-layer beacon detection (interval and regularity analysis)"
+    ],
+    "cleanup": "",
+    "action_key": "c2_http_beaconing",
+    "no_default_cleanup": false,
+    "reversible": true
+  },
+  {
+    "id": "c2-02",
+    "n": 2,
+    "name": "C2 - Encrypted Channel over Loopback TLS (Custom)",
+    "technique_id": "T1573",
+    "timeout_sec": 90,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Creates a short-lived self-signed certificate in CurrentUser\\My and a loopback-only TLS listener on 127.0.0.1. Both are removed before the step returns and again by undo. The certificate is never installed in a trusted store.",
+    "telemetry": [
+      "Loopback TLS handshake", "Self-signed certificate creation in CurrentUser\\My"
+    ],
+    "detection": [
+      "Encrypted channel detection on unexpected local listeners"
+    ],
+    "cleanup": "",
+    "action_key": "c2_encrypted_channel",
+    "no_default_cleanup": true,
+    "reversible": true
+  },
+  {
+    "id": "c2-03",
+    "n": 3,
+    "name": "C2 - Ingress Tool Transfer (Custom)",
+    "technique_id": "T1105",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Downloads one response body from the lab-local simulator into a per-run directory under the temp folder. Removes only that file and its directory. SKIP when the simulator is unreachable.",
+    "telemetry": [
+      "HTTP GET of a payload-shaped response from lab-local simulator", "File write under temp"
+    ],
+    "detection": [
+      "Ingress tool transfer detection (download followed by file write)"
+    ],
+    "cleanup": "",
+    "action_key": "c2_ingress_tool_transfer",
+    "no_default_cleanup": true,
+    "reversible": true
+  },
+  {
+    "id": "c2-04",
+    "n": 4,
+    "name": "C2 - Communication over Non-Standard Port (Custom)",
+    "technique_id": "T1571",
+    "timeout_sec": 60,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "low",
+    "blast_radius": "Issues one GET request to the lab-local simulator on its configured non-standard port. No state is created. Fails loudly if the configured port is a well-known one. SKIP when the simulator is unreachable.",
+    "telemetry": [
+      "HTTP GET to lab-local simulator on a non-standard port"
+    ],
+    "detection": [
+      "Protocol-on-unexpected-port detection"
+    ],
+    "cleanup": "",
+    "action_key": "c2_non_standard_port",
+    "no_default_cleanup": false,
+    "reversible": true
+  }
+]
