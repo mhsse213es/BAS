@@ -4743,6 +4743,78 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "cscrf-mii-network.yaml",
+    "index": 0,
+    "technique_id": "T1046",
+    "action_key": "cscrf_net_subnet_reachability",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-network.yaml",
+    "index": 1,
+    "technique_id": "T1016",
+    "action_key": "cscrf_net_firewall_inventory",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-network.yaml",
+    "index": 2,
+    "technique_id": "T1562.004",
+    "action_key": "cscrf_net_firewall_policy_state",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-network.yaml",
+    "index": 3,
+    "technique_id": "T1046",
+    "action_key": "cscrf_net_listener_inventory",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-network.yaml",
+    "index": 4,
+    "technique_id": "T1016",
+    "action_key": "cscrf_net_dns_config",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-network.yaml",
+    "index": 5,
+    "technique_id": "T1046",
+    "action_key": "cscrf_net_segmentation_probe",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-network.yaml",
+    "index": 6,
+    "technique_id": "T1571",
+    "action_key": "cscrf_net_inbound_probe",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-network.yaml",
+    "index": 7,
+    "technique_id": "T1571",
+    "action_key": "cscrf_net_outbound_probe",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "dbsim-db01-auth-policy.yaml",
     "index": 0,
     "technique_id": "T1078",

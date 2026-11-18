@@ -474,6 +474,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "cscrf-mii-network.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "dbsim-db01-auth-policy.yaml": {
     "cleanup": 0,
     "detection": 2,

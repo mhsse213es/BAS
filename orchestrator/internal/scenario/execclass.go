@@ -169,6 +169,9 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1046": {
+		"cscrf_net_subnet_reachability": catalogClass(ClassNonDestructive, "cscrf_net_subnet_reachability", "TCP connection attempts to up to 62 hosts on one private lab subnet; no state changed"),
+		"cscrf_net_listener_inventory":  catalogClass(ClassNonDestructive, "cscrf_net_listener_inventory", "Read-only query of listening TCP sockets"),
+		"cscrf_net_segmentation_probe":  catalogClass(ClassNonDestructive, "cscrf_net_segmentation_probe", "One TCP connection attempt to a second-zone target; no state changed"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -1006,6 +1009,8 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1016": {
+		"cscrf_net_firewall_inventory": catalogClass(ClassNonDestructive, "cscrf_net_firewall_inventory", "Read-only firewall rule query"),
+		"cscrf_net_dns_config":         catalogClass(ClassNonDestructive, "cscrf_net_dns_config", "Read-only DNS client configuration query"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -1042,6 +1047,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1562.004": {
+		"cscrf_net_firewall_policy_state": catalogClass(ClassNonDestructive, "cscrf_net_firewall_policy_state", "Read-only firewall profile state query; no rule or profile changed"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -1185,7 +1191,9 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		"c2_encrypted_channel": catalogClass(ClassPotentiallyDestructive, "c2_encrypted_channel", "Loopback TLS session; self-signed cert in CurrentUser\\My, removed by step and undo"),
 	},
 	"T1571": {
-		"c2_non_standard_port": catalogClass(ClassNonDestructive, "c2_non_standard_port", "One GET to the lab simulator on a non-standard port; no state changed"),
+		"cscrf_net_inbound_probe":  catalogClass(ClassNonDestructive, "cscrf_net_inbound_probe", "One TCP connection attempt to a lab target on port 23; no state changed"),
+		"cscrf_net_outbound_probe": catalogClass(ClassNonDestructive, "cscrf_net_outbound_probe", "One TCP connection attempt to a non-routed documentation address; no state changed"),
+		"c2_non_standard_port":     catalogClass(ClassNonDestructive, "c2_non_standard_port", "One GET to the lab simulator on a non-standard port; no state changed"),
 	},
 	"T1005": {
 		"collection_local_data": catalogClass(ClassNonDestructive, "collection_local_data", "Read-only enumeration and staging copies of synthetic files"),

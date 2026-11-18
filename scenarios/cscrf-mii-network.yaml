@@ -1,0 +1,649 @@
+id: "cscrf-mii-network"
+product_line: common
+name: "CSCRF-MII Network and Infrastructure Control Validation (P0)"
+description: >
+  Internal control-validation checks for network and infrastructure controls. Verdicts are internal
+  control references (CSCRF-NET-*), not SEBI clause identifiers. Read-only checks run anywhere. Probes that
+  reach another host run only when an explicit lab variable names the target, and SKIP otherwise.
+  No firewall rule is changed by this pack. Passing a check does not establish CSCRF compliance.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - network
+  - p0
+mitre_phases:
+  - discovery
+  - defense-evasion
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: net-01
+    name: "Lab Subnet Management-Port Reachability (T1046, internal ref CSCRF-NET-01)"
+    technique_id: T1046
+    action_key: cscrf_net_subnet_reachability
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 240
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: low
+    reversible: true
+    blast_radius: "TCP connection attempts to up to 64 hosts on one lab subnet, three management ports each. Runs only when BAS_LAB_SUBNET is set to a private /26-/30."
+    telemetry:
+      - "Outbound TCP connection attempts"
+    detection:
+      - "Port scan detection from the probing host"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      $cidr = $env:BAS_LAB_SUBNET
+      if (-not $cidr) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_LAB_SUBNET not set; no subnet probed [CSCRF-NET-01]' } 'net-01' }
+      $parts = $cidr -split '/'
+      $bits = 0
+      if ($parts.Count -ne 2 -or -not [int]::TryParse($parts[1], [ref]$bits) -or -not (Test-CgPrivateIPv4 $parts[0]) -or $bits -lt 26 -or $bits -gt 30) {
+      Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_LAB_SUBNET must be a private IPv4 /26 to /30 (at most 62 hosts) [CSCRF-NET-01]' } 'net-01'
+      }
+      $base = [System.Net.IPAddress]::Parse($parts[0]).GetAddressBytes()
+      $hosts = 1..([int]([Math]::Pow(2, 32 - $bits)) - 2)
+      $exposed = @()
+      $ports = @(445, 3389, 5985)
+      foreach ($h in $hosts) {
+      $b = $base.Clone(); $b[3] = [byte](($base[3] -band (256 - [int][Math]::Pow(2, 32 - $bits))) + $h)
+      $ip = ($b -join '.')
+      foreach ($p in $ports) { if ((Test-CgTcpPort $ip $p 300) -eq 'open') { $exposed += "$ip`:$p" } }
+      }
+      if ($exposed.Count -gt 0) {
+      Complete-CgStep @{ Outcome = 'fail'; Reason = ('management port(s) reachable from lab subnet: ' + ($exposed -join ', ') + ' [CSCRF-NET-01]') } 'net-01'
+      }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = 'no SMB, RDP or WinRM listener reachable from the lab subnet [CSCRF-NET-01]' } 'net-01'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: net-02
+    name: "Firewall Rule Inventory (T1016, internal ref CSCRF-NET-02)"
+    technique_id: T1016
+    action_key: cscrf_net_firewall_inventory
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of firewall rules."
+    telemetry:
+      - "Firewall cmdlet process telemetry"
+    detection:
+      - "Firewall enumeration monitoring"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      try {
+      $rules = Get-NetFirewallRule -Enabled True -ErrorAction Stop
+      $inAllow = @($rules | Where-Object { $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' }).Count
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "firewall inventory read: $($rules.Count) enabled rules, $inAllow inbound allow rules [CSCRF-NET-02]" } 'net-02'
+      } catch {
+      Complete-CgStep @{ Outcome = 'error'; Reason = 'firewall rules could not be read; the control cannot be evaluated [CSCRF-NET-02]' } 'net-02'
+      }
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: net-03
+    name: "Firewall Profile Policy State (T1562.004, internal ref CSCRF-NET-03)"
+    technique_id: T1562.004
+    action_key: cscrf_net_firewall_policy_state
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of firewall profile state. No rule or profile is modified."
+    telemetry:
+      - "Firewall profile query"
+    detection:
+      - "Firewall policy change detection (baseline comparison)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      try {
+      $profiles = Get-NetFirewallProfile -ErrorAction Stop
+      } catch {
+      Complete-CgStep @{ Outcome = 'error'; Reason = 'firewall profile state could not be read [CSCRF-NET-03]' } 'net-03'
+      }
+      $bad = @($profiles | Where-Object { -not $_.Enabled -or $_.DefaultInboundAction -eq 'Allow' } | ForEach-Object { $_.Name })
+      if ($bad.Count -gt 0) {
+      Complete-CgStep @{ Outcome = 'fail'; Reason = ('profile(s) disabled or explicitly allowing inbound by default: ' + ($bad -join ', ') + ' [CSCRF-NET-03]') } 'net-03'
+      }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = 'all firewall profiles enabled and none explicitly allows inbound by default [CSCRF-NET-03]' } 'net-03'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: net-04
+    name: "Listening Service Inventory (T1046, internal ref CSCRF-NET-04)"
+    technique_id: T1046
+    action_key: cscrf_net_listener_inventory
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of listening TCP sockets."
+    telemetry:
+      - "Socket state query"
+    detection:
+      - "Unexpected listener detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      try {
+      $listeners = Get-NetTCPConnection -State Listen -ErrorAction Stop
+      } catch {
+      Complete-CgStep @{ Outcome = 'error'; Reason = 'listening sockets could not be read [CSCRF-NET-04]' } 'net-04'
+      }
+      $legacy = @(21, 23)
+      $hit = @($listeners | Where-Object { $legacy -contains $_.LocalPort -and ($_.LocalAddress -eq '0.0.0.0' -or $_.LocalAddress -eq '::') } | ForEach-Object { "$($_.LocalAddress):$($_.LocalPort)" })
+      if ($hit.Count -gt 0) {
+      Complete-CgStep @{ Outcome = 'fail'; Reason = ('clear-text listener(s) on all interfaces: ' + ($hit -join ', ') + ' [CSCRF-NET-04]') } 'net-04'
+      }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "no FTP or Telnet listener on all interfaces ($($listeners.Count) listeners inventoried) [CSCRF-NET-04]" } 'net-04'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: net-05
+    name: "DNS Resolver Configuration (T1016, internal ref CSCRF-NET-05)"
+    technique_id: T1016
+    action_key: cscrf_net_dns_config
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of resolver settings on up adapters."
+    telemetry:
+      - "DNS client configuration query"
+    detection:
+      - "Resolver configuration change monitoring"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      try {
+      $up = Get-NetAdapter -Physical -ErrorAction Stop | Where-Object { $_.Status -eq 'Up' }
+      $dns = Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction Stop | Where-Object { $_.InterfaceAlias -in $up.Name }
+      } catch {
+      Complete-CgStep @{ Outcome = 'error'; Reason = 'DNS configuration could not be read [CSCRF-NET-05]' } 'net-05'
+      }
+      $missing = @($dns | Where-Object { -not $_.ServerAddresses -or $_.ServerAddresses.Count -eq 0 } | ForEach-Object { $_.InterfaceAlias })
+      if ($missing.Count -gt 0) {
+      Complete-CgStep @{ Outcome = 'fail'; Reason = ('no DNS resolver on up adapter(s): ' + ($missing -join ', ') + ' [CSCRF-NET-05]') } 'net-05'
+      }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = 'resolver configured on every up adapter; approved-resolver baseline not compared [CSCRF-NET-05]' } 'net-05'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: net-06
+    name: "Cross-Zone Segmentation Probe (T1046, internal ref CSCRF-NET-06)"
+    technique_id: T1046
+    action_key: cscrf_net_segmentation_probe
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: low
+    reversible: true
+    blast_radius: "One TCP connection attempt to BAS_ZONE2_TARGET on one port. Runs only when that variable is set."
+    telemetry:
+      - "Outbound TCP connection attempt"
+    detection:
+      - "Cross-zone connection monitoring"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      $target = $env:BAS_ZONE2_TARGET
+      if (-not $target) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_ZONE2_TARGET not set; no second zone available [CSCRF-NET-06]' } 'net-06' }
+      if (-not (Test-CgPrivateIPv4 $target)) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_ZONE2_TARGET must be a private IPv4 address [CSCRF-NET-06]' } 'net-06' }
+      $port = 445
+      if ($env:BAS_ZONE2_PORT -and [int]::TryParse($env:BAS_ZONE2_PORT, [ref]$port)) { } else { $port = 445 }
+      $r = Test-CgTcpPort $target $port 3000
+      if ($r -eq 'open') { Complete-CgStep @{ Outcome = 'fail'; Reason = "zone 1 reached zone 2 at $target`:$port; segmentation not enforced [CSCRF-NET-06]" } 'net-06' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "zone 2 $target`:$port not reachable from zone 1 [CSCRF-NET-06]" } 'net-06'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: net-07
+    name: "Unauthorised Telnet Connection Attempt to Lab Target (T1571, internal ref CSCRF-NET-07)"
+    technique_id: T1571
+    action_key: cscrf_net_inbound_probe
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: low
+    reversible: true
+    blast_radius: "One TCP connection attempt to port 23 on BAS_LAB_TARGET. Runs only when that variable is set and private."
+    telemetry:
+      - "Outbound TCP connection attempt"
+    detection:
+      - "Disallowed-port connection monitoring"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      $target = $env:BAS_LAB_TARGET
+      if (-not $target) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_LAB_TARGET not set; no lab target probed [CSCRF-NET-07]' } 'net-07' }
+      if (-not (Test-CgPrivateIPv4 $target)) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_LAB_TARGET must be a private IPv4 address [CSCRF-NET-07]' } 'net-07' }
+      $r = Test-CgTcpPort $target 23 3000
+      if ($r -eq 'open') { Complete-CgStep @{ Outcome = 'fail'; Reason = "Telnet accepted by lab target $target; disallowed clear-text service reachable [CSCRF-NET-07]" } 'net-07' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "Telnet to lab target $target refused or filtered [CSCRF-NET-07]" } 'net-07'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: net-08
+    name: "Unauthorised Egress Attempt to Documentation Address (T1571, internal ref CSCRF-NET-08)"
+    technique_id: T1571
+    action_key: cscrf_net_outbound_probe
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "One TCP connection attempt to 192.0.2.1 (RFC 5737 documentation range, not routed). Reaches no real destination."
+    telemetry:
+      - "Outbound TCP connection attempt"
+    detection:
+      - "Egress filtering and proxy-interception monitoring"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      $r = Test-CgTcpPort '192.0.2.1' 443 3000
+      if ($r -eq 'open') { Complete-CgStep @{ Outcome = 'fail'; Reason = 'connection to 192.0.2.1:443 succeeded; egress filtering or interception is absent [CSCRF-NET-08]' } 'net-08' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = 'egress to 192.0.2.1:443 not established [CSCRF-NET-08]' } 'net-08'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-NET-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgPrivateIPv4 { param([string]$Ip)
+      $addr = $null
+      if (-not [System.Net.IPAddress]::TryParse($Ip, [ref]$addr)) { return $false }
+      if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+      $b = $addr.GetAddressBytes()
+      return ($b[0] -eq 10) -or ($b[0] -eq 172 -and $b[1] -ge 16 -and $b[1] -le 31) -or ($b[0] -eq 192 -and $b[1] -eq 168)
+      }
+      function Test-CgTcpPort { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 1500)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try {
+      $ar = $c.BeginConnect($Ip, $Port, $null, $null)
+      if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { $c.EndConnect($ar); return 'open' }
+      return 'closed'
+      } catch { return 'closed' } finally { $c.Close() }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
