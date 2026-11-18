@@ -333,6 +333,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1070.001": {
+		"cscrf_siem_log_retention": catalogClass(ClassNonDestructive, "cscrf_siem_log_retention", "Read-only Security log size and mode query"),
 		"clear_bas_owned_log": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -1053,6 +1054,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1562.002": {
+		"cscrf_siem_forwarding_config": catalogClass(ClassNonDestructive, "cscrf_siem_forwarding_config", "Read-only registry query of the event forwarding subscription manager"),
 		"cscrf_ea_audit_policy_change": catalogClass(ClassDestructive, "cscrf_ea_audit_policy_change", "Sets Process Creation auditing off and restores it in the same run and in undo; a failed undo leaves auditing changed"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
@@ -1251,6 +1253,9 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 	},
 	"T1204.002": {
 		"cscrf_ea_unauthorized_exec": catalogClass(ClassPotentiallyDestructive, "cscrf_ea_unauthorized_exec", "Copies cmd.exe to a per-run temp folder and runs it once with a harmless echo; the folder is deleted in undo"),
+	},
+	"T1070.006": {
+		"cscrf_siem_time_sync": catalogClass(ClassNonDestructive, "cscrf_siem_time_sync", "Read-only w32tm status query"),
 	},
 	"T1059.003": {
 		"exe_command_shell": catalogClass(ClassNonDestructive, "exe_command_shell", "Runs one harmless echo through cmd.exe; no state changed"),

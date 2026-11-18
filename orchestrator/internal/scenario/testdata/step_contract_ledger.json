@@ -5013,6 +5013,33 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "cscrf-mii-siem.yaml",
+    "index": 0,
+    "technique_id": "T1070.006",
+    "action_key": "cscrf_siem_time_sync",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-siem.yaml",
+    "index": 1,
+    "technique_id": "T1562.002",
+    "action_key": "cscrf_siem_forwarding_config",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-siem.yaml",
+    "index": 2,
+    "technique_id": "T1070.001",
+    "action_key": "cscrf_siem_log_retention",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "dbsim-db01-auth-policy.yaml",
     "index": 0,
     "technique_id": "T1078",

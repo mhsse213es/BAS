@@ -141,3 +141,21 @@ Rulings:
 - The operator, not the agent, decided to switch auditing on for the test. The original state was restored after the run.
 
 Still open: the deferred lab-only steps (real-time protection impairment, dedicated log clear, Sysmon service stop). Also, the EID 4719 alert for ea-10 has not been checked in a SIEM, because this lab has none configured.
+
+## P0 Task 5: SIEM telemetry pipeline configuration checks (`cscrf-mii-siem`)
+
+Three configuration checks, internal labels CSCRF-SIEM-01, 02 and 04. All read only. Each raw value was confirmed directly on the build host (w32tm, the policy registry key, and `Get-WinEvent -ListLog Security`).
+
+| Step | Verdict | Basis |
+|---|---|---|
+| siem-01 time source | FAIL | source is `Local CMOS Clock`, not a network source |
+| siem-02 Windows Event Forwarding subscription manager | FAIL | no subscription manager configured |
+| siem-04 Security log retention | FAIL | 20 MB in circular mode; baseline is at least 1 GB and not circular |
+
+Deferred: **siem-03 ingestion verification.** It needs a named collector endpoint and its query API. Until then, nothing here shows that an event reached the SOC or was acted on. The lab VM (192.168.10.150) is the endpoint these checks describe; it has not been run there yet.
+
+Catalog: three entries, all non-destructive. `cscrf_siem_time_sync` (T1070.006, new block), `cscrf_siem_log_retention` (T1070.001), `cscrf_siem_forwarding_config` (T1562.002). Pins `execclass_embed_test.go`: 3722 to 3725 entries, 272 to 275 hand-authored, hash `9185f4d80e1cd33397f1671f7d71b538f2757be175bdf858c98bbbd91f570102`.
+
+Ledger regenerated; additions only.
+
+Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree at HEAD plus these changes: ok, 372.5s.
