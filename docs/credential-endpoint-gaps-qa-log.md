@@ -198,3 +198,12 @@ Not verified: neither scenario has run on the DC. Both need a platform run on th
 - Telemetry (step 2): 0 NTLM network logons (4624, type 3) and 0 NTLM validations (4776) in the last 30 minutes. SKIP, inconclusive: no NTLM activity occurred in that window, so logging could not be shown.
 - Status: not detection-verified. Telemetry visibility not yet demonstrated, because the probe needs NTLM activity in the window.
 - Open: generate NTLM logon events to show visibility. That needs a logon for a synthetic account, which needs a known synthetic password. Not done; awaiting decision.
+
+### ad-pass-the-hash-telemetry re-run with a controlled NTLM logon, 2026-11-18
+
+- Set a known synthetic password on `bassim1` (lab only), then made one NTLM logon with `net use \127.0.0.1\IPC$ /user:lab\bassim1 ...`, followed by `/delete`. The logon used a normal password, not a hash.
+- Re-run output, stage 2: NTLM network logons (4624, type 3, NTLM) = 1; NTLM validations (4776) = 1.
+- Result: **PASS, telemetry visibility**. The DC logs the NTLM logon and validation events. This proves logging only, not alerting.
+- Posture unchanged: NTLM restriction and LM compatibility values are not defined, so NTLM is not restricted by policy.
+- Not detection-verified: no SIEM or pass-the-hash rule was checked.
+- Cleanup pending: the synthetic password was typed into the console, so clear the PowerShell history on the DC.
