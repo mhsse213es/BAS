@@ -514,6 +514,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "cscrf-mii-mii-controls.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "cscrf-mii-network.yaml": {
     "cleanup": 0,
     "detection": 0,

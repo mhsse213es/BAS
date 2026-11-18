@@ -1114,9 +1114,11 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1565.001": {
-		"dbprobe_read_only":         dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1565.001"),
-		"dbprobe_bounded_synthetic": dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (writes only fixture-tagged synthetic rows/roles) -- T1565.001"),
-		"dbprobe_mutation":          dbprobeClass(ClassDestructive, "dbprobe_mutation", "mutation database probe (changes real database state) -- T1565.001"),
+		"cscrf_mii_log_manifest":         catalogClass(ClassNonDestructive, "cscrf_mii_log_manifest", "Read-only hashing of sealed trade logs under the named log path"),
+		"cscrf_mii_settlement_integrity": catalogClass(ClassNonDestructive, "cscrf_mii_settlement_integrity", "Read-only hashing of settlement files listed in SHA256SUMS"),
+		"dbprobe_read_only":              dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1565.001"),
+		"dbprobe_bounded_synthetic":      dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (writes only fixture-tagged synthetic rows/roles) -- T1565.001"),
+		"dbprobe_mutation":               dbprobeClass(ClassDestructive, "dbprobe_mutation", "mutation database probe (changes real database state) -- T1565.001"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -1190,7 +1192,8 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 	// entries above. T1120 is deliberately absent: see
 	// discoveryDefaultClassification.
 	"T1012": {"enumerate": discoveryDefaultClassification},
-	"T1007": {"enumerate": discoveryDefaultClassification},
+	"T1007": {
+		"cscrf_mii_service_running": catalogClass(ClassNonDestructive, "cscrf_mii_service_running", "Read-only service lookup for the named MII services"), "enumerate": discoveryDefaultClassification},
 	"T1518": {"enumerate": discoveryDefaultClassification},
 	"T1010": {"enumerate": discoveryDefaultClassification},
 	"T1033": {"enumerate": discoveryDefaultClassification},
@@ -1256,8 +1259,9 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		"c2_non_standard_port":     catalogClass(ClassNonDestructive, "c2_non_standard_port", "One GET to the lab simulator on a non-standard port; no state changed"),
 	},
 	"T1005": {
-		"cscrf_dp_bitlocker":    catalogClass(ClassNonDestructive, "cscrf_dp_bitlocker", "Read-only BitLocker status query on the system volume"),
-		"collection_local_data": catalogClass(ClassNonDestructive, "collection_local_data", "Read-only enumeration and staging copies of synthetic files"),
+		"cscrf_mii_recon_recency": catalogClass(ClassNonDestructive, "cscrf_mii_recon_recency", "Read-only listing of the reconciliation evidence path"),
+		"cscrf_dp_bitlocker":      catalogClass(ClassNonDestructive, "cscrf_dp_bitlocker", "Read-only BitLocker status query on the system volume"),
+		"collection_local_data":   catalogClass(ClassNonDestructive, "collection_local_data", "Read-only enumeration and staging copies of synthetic files"),
 	},
 	"T1039": {
 		"collection_network_share": catalogClass(ClassNonDestructive, "collection_network_share", "Read-only enumeration of a lab share"),

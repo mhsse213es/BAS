@@ -228,3 +228,28 @@ The marker step writes one synthetic string with no real data. Its undo deletes 
 Catalog: five entries. T1005 (`cscrf_dp_bitlocker`, non-destructive), T1083 (`cscrf_dp_data_acl`, non-destructive), T1040 (`cscrf_dp_smb_encryption`, non-destructive), T1562.001 (`cscrf_dp_dlp_service`, non-destructive), T1048 (`cscrf_dp_marker_egress`, potentially destructive). Pins: 3740 to 3745 entries, 290 to 295 hand-authored, hash `c89c07fef71f1e4b893d777133ce42c9c86f2242d6801c651ef613d793ade6fe`.
 
 Suite: `go test ./internal/scenario -count=1 -timeout 420s` ran ok at 413.5s on the second attempt. The first attempt hit the 7-minute timeout inside unrelated AppControl and APT36 tests with no failing assertion. The second run passed.
+
+## P2: MII trading, clearing and settlement host controls (`cscrf-mii-mii-controls`)
+
+This pack checks host-side controls only. It does not connect to any market, exchange, clearing corporation or settlement system, and every step is read only.
+
+| Step | Live verdict (inputs unset) | Fixture tests |
+|---|---|---|
+| mii-01 sealed trade log manifests | SKIP (`BAS_MII_LOG_PATH` unset) | PASS when the manifest matches; FAIL after tampering |
+| mii-02 settlement file integrity baseline | SKIP (`BAS_MII_SETTLEMENT_PATH` unset) | PASS when the baseline matches; FAIL after tampering |
+| mii-03 named MII services running | SKIP (`BAS_MII_SERVICES` unset) | not exercised |
+| mii-04 reconciliation evidence recency | SKIP (`BAS_MII_RECON_PATH` unset) | PASS for a fresh report |
+
+The fixtures were built in a temp folder and removed afterwards. mii-03 has no fixture test yet.
+
+Overlapping checks, covered elsewhere and not repeated here:
+- ledger backup: bdr-01 and bdr-02
+- privileged access to the host: id-04
+- clock accuracy for trade timestamps: siem-01
+- settlement-path ACLs: dp-02
+
+Deferred: any live MII connection, order flow, and SOC receipt of alerts.
+
+Catalog: four entries. T1565.001 (`cscrf_mii_log_manifest`, `cscrf_mii_settlement_integrity`), T1007 (`cscrf_mii_service_running`), T1005 (`cscrf_mii_recon_recency`). All non-destructive. Pins: 3745 to 3749 entries, 295 to 299 hand-authored, hash `d48832546a0a69ee3e852519f6cec9f9852b4cd94192b442278601161ecb28f5`.
+
+Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree on `origin/main` plus these changes: ok, 345.4s.

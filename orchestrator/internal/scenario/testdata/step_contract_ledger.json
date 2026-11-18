@@ -5103,6 +5103,42 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "cscrf-mii-mii-controls.yaml",
+    "index": 0,
+    "technique_id": "T1565.001",
+    "action_key": "cscrf_mii_log_manifest",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-mii-controls.yaml",
+    "index": 1,
+    "technique_id": "T1565.001",
+    "action_key": "cscrf_mii_settlement_integrity",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-mii-controls.yaml",
+    "index": 2,
+    "technique_id": "T1007",
+    "action_key": "cscrf_mii_service_running",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-mii-controls.yaml",
+    "index": 3,
+    "technique_id": "T1005",
+    "action_key": "cscrf_mii_recon_recency",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "cscrf-mii-network.yaml",
     "index": 0,
     "technique_id": "T1046",

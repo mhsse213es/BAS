@@ -1,0 +1,26 @@
+id: "cscrf-mii-mii-controls"
+product_line: common
+name: "CSCRF-MII Trading, Clearing and Settlement Host Controls (P2)"
+description: >
+  Internal control-validation checks for host-side controls on MII trading, clearing and settlement systems.
+  Verdicts are internal control references (CSCRF-MII-*), not SEBI clause identifiers. This pack does not
+  connect to any market, exchange, clearing corporation or settlement system; it checks only the host
+  configuration and files an operator names through environment variables. All steps are read only, and each
+  SKIPs when its input is unset. Overlapping checks (ledger backup, privileged access, clock accuracy,
+  settlement-path ACLs) live in the existing BDR, ID, SIEM and DP packs. Deferred: any check that needs a live
+  MII connection, order flow or SOC receipt.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - mii
+  - trading
+  - clearing
+  - settlement
+  - p2
+mitre_phases:
+  - impact
+
+steps:
