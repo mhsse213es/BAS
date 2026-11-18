@@ -174,3 +174,12 @@ Not verified: neither scenario has run on the DC. Both need a platform run on th
 - Current state: `LDAPServerIntegrity=1` (signing negotiated, not required). **Open gap:** LDAP relay is not blocked by configuration.
 - Decision: leave as is. Channel binding remains unset.
 - The posture re-run after a change was not done, since the value was reverted.
+
+### ad-forced-auth-attempt: Sysmon telemetry on the lab VM, 2026-11-18
+
+- Sysmon64 installed on `WIN-2IP8FNO4MAD` with a minimal config (DnsQuery and NetworkConnect, both `onmatch="exclude"`, meaning log all). Service Running.
+- Probe run `741f6602`: `reached=False`.
+- Sysmon EID 22 recorded `QueryName: bas-sim-fa-741f6602.invalid` at 12:43:57 AM. **Image: `C:\Windows\System32\svchost.exe`.**
+- **Finding:** the lookup is attributed to the DNS Client service (svchost), not to the PowerShell process that started it. A rule that matches on the image name alone would miss this. Linking the query to PowerShell needs the parent process or the time window.
+- No SMB attempt, as expected for an unresolvable name. Sysmon EID 3 is not expected.
+- Status: DNS lookup verified with process attribution, to svchost. **Alerting still not checked**; no SIEM or EDR rule was read. Detection not verified.
