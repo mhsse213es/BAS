@@ -1,0 +1,46 @@
+[
+  {
+    "id": "recon-01",
+    "n": 1,
+    "name": "Reconnaissance - Subdomain Enumeration (Custom)",
+    "technique_id": "T1590.001",
+    "timeout_sec": 60,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "low",
+    "blast_radius": "Issues eight DNS A-record queries for names under bas-sim.test, a reserved TLD that never resolves on the public internet. No state is created on the host.",
+    "telemetry": [
+      "DNS A-record queries for bas-sim.test subdomains"
+    ],
+    "detection": [
+      "Subdomain enumeration detection (burst of DNS queries for sequential service names)"
+    ],
+    "cleanup": "",
+    "action_key": "recon_subdomain_enumeration",
+    "no_default_cleanup": false,
+    "reversible": true
+  },
+  {
+    "id": "recon-02",
+    "n": 2,
+    "name": "Reconnaissance - Employee and Identity Discovery (Custom)",
+    "technique_id": "T1589.003",
+    "timeout_sec": 60,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "low",
+    "blast_radius": "Reads the synthetic identity directory from the lab simulator. No real directory is queried. SKIP when the simulator is unreachable.",
+    "telemetry": [
+      "HTTP GET to lab-local simulator identity directory"
+    ],
+    "detection": [
+      "Directory enumeration detection"
+    ],
+    "cleanup": "",
+    "action_key": "recon_employee_discovery",
+    "no_default_cleanup": false,
+    "reversible": true
+  }
+]

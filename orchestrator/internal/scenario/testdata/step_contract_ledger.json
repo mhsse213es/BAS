@@ -3825,6 +3825,24 @@
     "status": "undo_declared_in_yaml"
   },
   {
+    "scenario": "cobalt-group-bfsi-recon.yaml",
+    "index": 0,
+    "technique_id": "T1590.001",
+    "action_key": "recon_subdomain_enumeration",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-recon.yaml",
+    "index": 1,
+    "technique_id": "T1589.003",
+    "action_key": "recon_employee_discovery",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
     "scenario": "cobalt-group-kill-chain.yaml",
     "index": 0,
     "technique_id": "T1566.001",

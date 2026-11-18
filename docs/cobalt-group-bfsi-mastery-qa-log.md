@@ -238,3 +238,61 @@ DNS). Plan: `docs/superpowers/plans/2026-11-18-cobalt-group-bfsi-p2.md`.
   on a periodic pattern, not on realistic C2 traffic shape.
 - P2 is complete for the four persistence and four C2 variants in the plan. Reconnaissance and initial
   access remain out of scope, as agreed before P0.
+
+---
+
+# Cobalt Group BFSI P3 - QA Log
+
+## Scope
+P3: the reconnaissance gap in the campaign's Phase 1. Plan:
+`docs/superpowers/plans/2026-11-18-cobalt-group-bfsi-p3-recon.md`.
+
+## Audit (what was already covered before P3)
+Checked every Phase 1 and Phase 2 technique in the spec against the scenario library and the repo:
+- Covered by existing scenarios: T1016, T1018, T1087.002, T1069.002, T1046, T1204.002, T1190,
+  T1218.005, T1218.011.
+- Covered, but thinly: T1078.002 (only in a privileged-account audit scenario) and T1059.003 (one
+  AppControl scenario).
+- Covered by the phishing catalog, not the scenario library: T1566.002 (spearphishing link), in
+  `orchestrator/internal/phishcatalog`. An earlier audit that searched only `scenarios/*.yaml`
+  wrongly listed it as missing.
+- Missing as executable scenarios: T1590.001 (subdomain reconnaissance) and T1589.003 (employee
+  identity discovery). They appeared only as ATT&CK metadata.
+
+## What was built (2026-11-18, Windows 10 Pro build host)
+- `internal/bfsisim/directory.go`: `GET /api/directory/identities`, six fixed synthetic identities
+  with `bas-sim-` prefixes. Covered by `TestSimulator_DirectoryListsSyntheticIdentities`.
+- `cobalt-group-bfsi-recon.yaml` (2 steps):
+  - recon-01 (T1590.001): eight A-record queries for names under `bas-sim.test`, the reserved
+    `.test` TLD.
+  - recon-02 (T1589.003): reads the synthetic identity directory from the lab simulator. SKIPs when
+    the simulator is down.
+
+## What was verified for real
+- Both steps ran on this host against a live `bfsisim-lab`.
+  - recon-01: PASS, 8 of 8 queries attempted, all NXDOMAIN.
+  - recon-02: PASS, 6 identities. With the simulator's port closed, SKIP.
+- recon-01 only ever queried `.test` names. The step refuses any other name, and the run's output
+  confirms all eight names.
+- The undo scripts were run. Both are no-op PASSes because neither step creates state.
+- Full unfiltered `go test ./internal/scenario -count=1 -timeout 420s`: see the result line below.
+- `signer.go verify-all scenarios`: ok=239 fail=0.
+
+## Bug found and fixed during live verification
+- recon-02 returned FAIL with "only 1 identities" against an endpoint that returns six. The cause
+  was `$ids = @(Invoke-RestMethod ...)`. `Invoke-RestMethod` emits the JSON array as one object, so
+  the `@(...)` wrapper produced a one-element array containing the whole array. Fixed by assigning
+  the call to a variable first, then reading `.Count`.
+- The same wrapping pattern exists in the financial-impact library's `Get-CgLedgerTransactions`,
+  which assigns the call to `$r` before `@($r)`. That is correct. A direct test confirmed the pre-write
+  total is 300 for two known transactions, so the financial pack's reconciliation is not affected.
+
+## Honest limits
+- recon-02 queries only the synthetic simulator directory. A real Active Directory user enumeration
+  (LDAP or ADSI against a lab domain) is not covered. It needs a domain-joined lab host.
+- recon-01 depends on the local resolver handling `.test` names as NXDOMAIN. A resolver that
+  forwards them upstream would make the queries leave the host, though they would still never
+  resolve to a real domain.
+- The phishing link variant (T1566.002) is not re-verified here. Its coverage comes from the
+  existing phishing catalog, which this audit did not run.
+- Full unfiltered suite: ok, zero failures, 298.9s.

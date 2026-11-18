@@ -294,6 +294,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "cobalt-group-bfsi-recon.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "cobalt-group-kill-chain.yaml": {
     "cleanup": 0,
     "detection": 0,

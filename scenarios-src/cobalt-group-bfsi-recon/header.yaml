@@ -1,0 +1,23 @@
+id: "cobalt-group-bfsi-recon"
+product_line: killchain
+name: "Cobalt Group BFSI - Reconnaissance Gap (P3)"
+description: >
+  Closes the two reconnaissance techniques from the campaign's Phase 1 that had no executable
+  scenario: subdomain enumeration (T1590.001) and employee/identity discovery (T1589.003). Subdomain
+  queries use a synthetic wordlist under the reserved .test TLD (RFC 6761) and cannot reach a real
+  domain. Identity discovery queries only the lab simulator's synthetic directory. No real domain
+  or directory is queried.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cobalt-group
+  - bfsi
+  - reconnaissance
+  - p3
+mitre_phases:
+  - reconnaissance
+
+steps:
+
