@@ -261,6 +261,24 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "ad-pass-the-hash-telemetry.yaml",
+    "index": 0,
+    "technique_id": "T1550.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ad-pass-the-hash-telemetry.yaml",
+    "index": 1,
+    "technique_id": "T1550.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "ad-password-spray-lab.yaml",
     "index": 0,
     "technique_id": "T1110.003",
@@ -4738,6 +4756,78 @@
     "index": 8,
     "technique_id": "T1053.005",
     "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-identity.yaml",
+    "index": 0,
+    "technique_id": "T1098",
+    "action_key": "cscrf_id_priv_group_change",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cscrf-mii-identity.yaml",
+    "index": 1,
+    "technique_id": "T1136.001",
+    "action_key": "cscrf_id_local_admin_create",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cscrf-mii-identity.yaml",
+    "index": 2,
+    "technique_id": "T1078",
+    "action_key": "cscrf_id_logon_audit_presence",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-identity.yaml",
+    "index": 3,
+    "technique_id": "T1078",
+    "action_key": "cscrf_id_excessive_privilege",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-identity.yaml",
+    "index": 4,
+    "technique_id": "T1078",
+    "action_key": "cscrf_id_disabled_logon",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cscrf-mii-identity.yaml",
+    "index": 5,
+    "technique_id": "T1201",
+    "action_key": "cscrf_id_password_policy",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-identity.yaml",
+    "index": 6,
+    "technique_id": "T1078",
+    "action_key": "cscrf_id_mfa_enforcement",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cscrf-mii-identity.yaml",
+    "index": 7,
+    "technique_id": "T1078.003",
+    "action_key": "cscrf_id_service_account_admin",
     "framework": "custom",
     "class": "non_destructive",
     "status": "not_required_non_destructive"

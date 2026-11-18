@@ -1,0 +1,114 @@
+id: ad-pass-the-hash-telemetry
+product_line: ad
+name: Pass-the-Hash Detection Telemetry Probe
+description: >
+  Read-only visibility probe for Pass-the-Hash detection. It does NOT use any NT hash,
+  does not authenticate with a hash, and carries no attack tooling. It checks two things
+  that a Pass-the-Hash detection depends on:
+    1. NTLM restriction posture on the host: the outgoing and incoming NTLM restriction
+       settings and the LAN Manager compatibility level (observation only).
+    2. NTLM logon visibility on the domain controller: whether network logons that use
+       the NTLM package (4624, LogonType 3) and the NTLM validation events (4776) are
+       being recorded in the last 30 minutes.
+  A posture observation is never PASS. The telemetry stage reports PASS only when the
+  events are visible, which proves logging, not that a pass-the-hash would be alerted on.
+
+  KILL CHAIN STAGES:
+    1. NTLM restriction and compatibility posture (T1550.002)
+    2. NTLM logon event visibility on the DC (T1550.002)
+
+  SAFETY: Read-only. No hash is read, created, or used. No authentication is attempted.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - pass-the-hash
+  - ntlm
+  - active-directory
+  - detection
+  - t1550
+  - mitre
+mitre_phases:
+  - lateral-movement
+  - defense-evasion
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: true
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — NTLM restriction posture (T1550.002)
+  # ---------------------------------------------------------------------------
+  - name: "PtH 1 — NTLM Restriction and LM Compatibility Posture (T1550.002)"
+    technique_id: T1550.002
+    framework: custom
+    executor: powershell
+    requires_priv: domain_admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads three registry values under HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa and its MSV1_0 subkey: LmCompatibilityLevel, RestrictSendingNTLMTraffic, RestrictReceivingNTLMTraffic. Changes nothing."
+    telemetry:
+      - "PowerShell EID 4104 for the registry reads"
+    detection:
+      - "Config-audit: reads of NTLM policy values — not an attack indicator on its own"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $lsa = 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa'
+      $msv = 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0'
+      $lm = (Get-ItemProperty -Path $lsa -Name 'LmCompatibilityLevel').LmCompatibilityLevel
+      $out = (Get-ItemProperty -Path $msv -Name 'RestrictSendingNTLMTraffic').RestrictSendingNTLMTraffic
+      $in = (Get-ItemProperty -Path $msv -Name 'RestrictReceivingNTLMTraffic').RestrictReceivingNTLMTraffic
+      Write-Output "EXEC T1550.002: LmCompatibilityLevel=$lm (5 = NTLMv2 only); RestrictSendingNTLMTraffic=$out (2 = deny all); RestrictReceivingNTLMTraffic=$in (2 = deny all). Values read only. [BAS-SIM-PTH-S1]"
+      Write-Output "SKIP: posture observation only. A setting does not prove pass-the-hash was blocked or detected, so no verdict on detection is claimed. [BAS-SIM-PTH-S1]"
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — NTLM logon event visibility on the DC (T1550.002)
+  # ---------------------------------------------------------------------------
+  - name: "PtH 2 — NTLM Network Logon Events Visible on the DC (T1550.002)"
+    technique_id: T1550.002
+    framework: custom
+    executor: powershell
+    requires_priv: domain_admin
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads Security log events 4624 and 4776 from the last 30 minutes and counts those that use NTLM. Changes nothing."
+    telemetry:
+      - "Security EID 4624 (LogonType 3, NTLM package) and 4776 on the DC: the events this stage counts"
+    detection:
+      - "SIEM: NTLM network logon from an unexpected source host, or NTLM to a sensitive account — pass-the-hash indicator"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ((Get-CimInstance Win32_ComputerSystem).DomainRole -lt 4) {
+        Write-Output "SKIP: not a domain controller. Events not read. [BAS-SIM-PTH-S2]"
+        exit 0
+      }
+      $since = (Get-Date).AddMinutes(-30)
+      $logons = @(Get-WinEvent -FilterHashtable @{ LogName='Security'; Id=4624; StartTime=$since } -MaxEvents 5000 -ErrorAction SilentlyContinue)
+      $ntlm = 0
+      foreach ($e in $logons) {
+        $x = [xml]$e.ToXml()
+        $type = ($x.Event.EventData.Data | Where-Object { $_.Name -eq 'LogonType' }).'#text'
+        $pkg  = ($x.Event.EventData.Data | Where-Object { $_.Name -eq 'AuthenticationPackageName' }).'#text'
+        if ($type -eq '3' -and $pkg -eq 'NTLM') { $ntlm++ }
+      }
+      $v = @(Get-WinEvent -FilterHashtable @{ LogName='Security'; Id=4776; StartTime=$since } -MaxEvents 5000 -ErrorAction SilentlyContinue).Count
+      Write-Output "EXEC T1550.002: in last 30 minutes: NTLM network logons (4624, type 3, NTLM)=$ntlm; NTLM validations (4776)=$v. Counts only. [BAS-SIM-PTH-S2]"
+      if (($ntlm + $v) -gt 0) {
+        Write-Output "PASS: NTLM logon events are visible on the DC. Logging only; a pass-the-hash alert needs a SIEM rule and is not checked here."
+      } else {
+        Write-Output "SKIP: no NTLM logon or validation events in the last 30 minutes. Inconclusive. [BAS-SIM-PTH-S2]"
+      }
+    cleanup: ""

@@ -183,3 +183,11 @@ Not verified: neither scenario has run on the DC. Both need a platform run on th
 - **Finding:** the lookup is attributed to the DNS Client service (svchost), not to the PowerShell process that started it. A rule that matches on the image name alone would miss this. Linking the query to PowerShell needs the parent process or the time window.
 - No SMB attempt, as expected for an unresolvable name. Sysmon EID 3 is not expected.
 - Status: DNS lookup verified with process attribution, to svchost. **Alerting still not checked**; no SIEM or EDR rule was read. Detection not verified.
+
+### ad-pass-the-hash-telemetry (T1550.002), 2026-11-18
+
+- Scope: detection-visibility only. No NT hash is read, created, or used, and no authentication is attempted. Building a real pass-the-hash emulation needs a hash-using tool, which is an attack primitive and was not built.
+- Step 1 (posture, any host): reads LmCompatibilityLevel, RestrictSendingNTLMTraffic, RestrictReceivingNTLMTraffic. Never PASS.
+- Step 2 (DC): counts 4624 network logons (type 3, NTLM package) and 4776 validations in the last 30 minutes. PASS proves logging only.
+- Verified offline: schema, PowerShell parse, signature (verify-all ok=248 fail=0), ledger (no removals), tests pass.
+- Not verified: not run on the DC. Pass-the-hash alerting is not checked.
