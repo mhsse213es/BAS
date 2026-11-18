@@ -150,3 +150,20 @@ Not verified: neither scenario has run on the DC. Both need a platform run on th
 - **Not checked:** alerting. Nothing on the lab reads DNS or SMB events for alerts.
 - Status: lookup-level only. Not detection-verified.
 - Open: decide whether to turn the DNS client log back off (`wevtutil sl "Microsoft-Windows-DNS-Client/Operational" /e:false`).
+
+### ad-ntlm-relay-posture run on the DC, 2026-11-18
+
+- DC: `WIN-TQ70FGLETIU`, DomainRole 4 or 5 (ran).
+- Output:
+  ```
+  EXEC T1557.001: SMB RequireSecuritySignature=True; LDAPServerIntegrity=1 (2 = required); LdapEnforceChannelBinding= (2 = always).
+  SKIP: configuration observation only ...
+  EXEC T1557.001: NTLM validation events (4776) in last hour = 0.
+  SKIP: no 4776 events in the last hour. Inconclusive.
+  ```
+- Posture findings (observed, not a detection result):
+  - SMB signing is required. Relay to SMB is blocked by configuration.
+  - LDAP signing is negotiated but not required (`LDAPServerIntegrity=1`). LDAP relay is not blocked by configuration. This is a gap.
+  - LDAP channel binding is not set on the DC.
+- 4776 count of 0: consistent with no NTLM validations in the window. The earlier spray used Kerberos-based validation. Credential Validation auditing was `Success` at the last check. Not a logging fault.
+- Status: posture recorded. No detection verdict. Relay detection is not verified.
