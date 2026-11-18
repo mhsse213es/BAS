@@ -11,6 +11,7 @@ import { covStatusMap } from './coverage.js';
 import { vfStatusColor } from './detection-verification.js';
 import { gaugeSVG, showDownloadOptions, triggerDownload } from './evidence.js';
 import { renderRunIOCList, renderRunIOCToolbar } from './iocs.js';
+import { isRansomwareRun, renderRwEfficacyPanel } from './rw-efficacy.js';
 import { rerunSubset } from './rerun-review.js';
 import { ROLE, _artCatalogByPlatform, _riskScoreColor } from './shell.js';
 import { renderAttackFlow, renderRunFindings, renderRunRecommendations, renderRunReportExtra, renderVariantCoverage } from './variant-report.js';
@@ -2210,6 +2211,16 @@ export function viewRunResults(run) {
       el.textContent = 'Content: ' + c.label;
       titleEl.insertAdjacentElement('afterend', el);
     }).catch(function() {});
+  }
+  // Detection and response efficacy statement for ransomware runs. The host
+  // sits under the summary line; a previous run's panel is removed first.
+  var oldEff = document.getElementById('rw-efficacy-host');
+  if (oldEff) oldEff.remove();
+  if (runId && isRansomwareRun(run.scenarioId)) {
+    var effHost = document.createElement('div');
+    effHost.id = 'rw-efficacy-host';
+    document.getElementById('results-summary').insertAdjacentElement('afterend', effHost);
+    renderRwEfficacyPanel(effHost, runId);
   }
   var hasOutput = runId && (run.status === 'completed' || run.status === 'partial');
   document.getElementById('results-export').innerHTML = '';

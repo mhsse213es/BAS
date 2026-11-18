@@ -369,7 +369,13 @@ export function renderRansomwareCard(m) {
     cell('dop-rr', card(title, empty('shield', msg, !m || m.phase === 'none' ? 'Run the Ransomware Drill to see your readiness score.' : '') + btn));
     return;
   }
-  cell('dop-rr', card(title, '<div class="dp-rr"><div class="dp-rr-s tone-' + m.tone + '">' + x(m.score) + '<small>/100</small></div><div class="muted tiny">' + x(m.desc) + '</div></div>' +
+  // One efficacy line for the same run, linking to its results view. The
+  // full statement lives on the run, not on this card.
+  var effLine = m.efficacy
+    ? '<div class="muted tiny">Efficacy: <span class="tone-' + m.efficacy.tone + '">' + x(m.efficacy.label) + '</span> &middot; ' +
+      '<a class="rk-click"' + on('click', 'openDashRun', m.efficacy.runId) + '>View run</a></div>'
+    : '';
+  cell('dop-rr', card(title, '<div class="dp-rr"><div class="dp-rr-s tone-' + m.tone + '">' + x(m.score) + '<small>/100</small></div><div class="muted tiny">' + x(m.desc) + '</div>' + effLine + '</div>' +
     m.rows.map(function(r) { return checkRow(r.state, r.title, '', pill(r.text, r.state)); }).join('') +
     (m.gate ? '<div class="rk-note dp-bad">⚠ ' + x(m.gate) + '</div>' : '') + btn, { actions: m.label ? chip(m.label, m.tone) : '' }));
 }

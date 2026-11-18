@@ -4,6 +4,7 @@ import { openModal } from './reports.js';
 import { showTab } from './shell.js';
 import { apicall } from '../core/api.js';
 import { setDashRR } from './dash-rich.js';
+import { RW_SCENARIO_IDS, rwEfficacyModel } from './rw-efficacy.js';
 
 
 // ── Ransomware Readiness Module ───────────────────────────────────────────────
@@ -12,13 +13,6 @@ import { setDashRR } from './dash-rich.js';
 // the ransomware-mastery roadmap) and fetched from GET
 // /api/scenarios/runs/{runId}/rw-score -- this module never recomputes or
 // blends a score client-side.
-
-var RR_SCENARIO_IDS = [
-  'akira-kill-chain', 'blackcat-kill-chain', 'clop-kill-chain', 'lockbit-kill-chain',
-  'play-kill-chain', 'ransomhub-kill-chain', 'ransomware-drill', 'em-07-ransomware-readiness',
-  'linux-ransomware-drill', 'black-basta-kill-chain', 'medusa-kill-chain', 'rhysida-kill-chain',
-  'ransomware-backup-recovery-assurance', 'akira-double-extortion-assessment', 'ransomware-lateral-containment-assessment', 'akira-esxi-assessment'
-];
 
 // Dimension display config: rwscore.Dimension value → { label, icon }
 var RW_DIMENSIONS = {
@@ -35,20 +29,29 @@ export function loadRansomwareReadiness(runs) {
   var rrRun = null;
   for (var i = 0; i < runs.length; i++) {
     var r = runs[i];
-    if (RR_SCENARIO_IDS.indexOf(r.scenarioId) !== -1 && (r.results || []).length) {
+    // Read the shared list at call time, not at module load: rw-efficacy.js
+    // and this module can import each other, so a top-level read can run
+    // before the list is initialized.
+    if (RW_SCENARIO_IDS.indexOf(r.scenarioId) !== -1 && (r.results || []).length) {
       rrRun = r; break;
     }
   }
   if (!rrRun) { setDashRR({ phase: 'none' }); return; }
   setDashRR({ phase: 'loading' });
-  apicall('/api/scenarios/runs/' + encodeURIComponent(rrRun.id) + '/rw-score').then(function(score) {
-    setDashRR(ransomwareModel(rrRun, score));
+  var base = '/api/scenarios/runs/' + encodeURIComponent(rrRun.id);
+  // The efficacy line is best-effort: if it fails, the score card still shows.
+  var efficacy = apicall(base + '/ransomware-efficacy').then(function(report) {
+    var m = rwEfficacyModel(report);
+    return { label: m.label, tone: m.tone, runId: rrRun.id };
+  }).catch(function() { return null; });
+  apicall(base + '/rw-score').then(function(score) {
+    return efficacy.then(function(eff) { setDashRR(ransomwareModel(rrRun, score, eff)); });
   }).catch(function() { setDashRR({ phase: 'error' }); });
 }
 
 // ransomwareModel turns the server's rw-score into what the dashboard card shows. No number is
 // recomputed: the overall score and every dimension rate come straight from the response.
-export function ransomwareModel(rrRun, score) {
+export function ransomwareModel(rrRun, score, efficacy) {
   var TIER = { protected: ['Protected', 'ok'], at_risk: ['At Risk', 'warn'], vulnerable: ['Vulnerable', 'bad'] };
   var tier = TIER[score.rating] || [score.rating || 'Unknown', 'muted'];
   var overall = Math.round(score.overall);
@@ -66,7 +69,9 @@ export function ransomwareModel(rrRun, score) {
     phase: 'ok', score: overall, tone: overall >= 80 ? 'ok' : overall >= 50 ? 'warn' : 'bad', label: tier[0],
     desc: 'Readiness from the latest ransomware drill (' + (rrRun.name || rrRun.scenarioId) + (ts ? ', ' + ago(ts) : '') + ').' + (weakest ? ' Weakest point: ' + weakest.label + '.' : ''),
     rows: rows,
-    gate: score.gateTriggered && (score.criticalFailures || []).length ? score.criticalFailures.join('; ') : ''
+    gate: score.gateTriggered && (score.criticalFailures || []).length ? score.criticalFailures.join('; ') : '',
+    // Run-level efficacy for the same run, or null when it could not be loaded.
+    efficacy: efficacy || null
   };
 }
 
