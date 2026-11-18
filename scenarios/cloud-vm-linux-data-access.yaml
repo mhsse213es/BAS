@@ -1,6 +1,6 @@
-id: "cloud-vm-data-access"
+id: "cloud-vm-linux-data-access"
 product_line: cloud
-name: "Cloud VM Mastery - Cloud Data Access and Exfiltration (gated)"
+name: "Cloud VM Mastery - Cloud Data Access and Exfiltration (Linux, gated)"
 description: >
   Cloud data access and egress from a workload VM: Azure Blob container listing, S3 object metadata, cloud
   database inventory, synthetic secret retrieval, and a gated upload of a synthetic object with verified
@@ -10,7 +10,7 @@ description: >
 author: Audspect Research
 executable: true
 local_check: false
-supported_os: [windows]
+supported_os: [linux]
 tags:
   - cloud
   - data-access

@@ -1,5 +1,5 @@
 id: "cobalt-group-bfsi-discovery"
-product_line: bfsi
+product_line: killchain
 name: "Cobalt Group BFSI - Service Discovery (P0)"
 description: >
   BFSI-specific reconnaissance and service discovery detection validation. Four read-only scenarios

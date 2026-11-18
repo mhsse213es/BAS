@@ -1,6 +1,6 @@
-id: "cloud-vm-azure-identity"
+id: "cloud-vm-linux-azure-identity"
 product_line: cloud
-name: "Cloud VM Mastery - Azure Identity Abuse"
+name: "Cloud VM Mastery - Azure Identity Abuse (Linux)"
 description: >
   Azure VM identity exposure and what the managed identity can reach after a workload obtains it: IMDS access
   from an unexpected process, token issuance for resources outside the expected list, subscription and role-
@@ -14,7 +14,7 @@ description: >
 author: Audspect Research
 executable: true
 local_check: false
-supported_os: [windows]
+supported_os: [linux]
 tags:
   - cloud
   - azure

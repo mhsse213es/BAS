@@ -1,5 +1,5 @@
 id: "cobalt-group-bfsi-lateral-movement"
-product_line: bfsi
+product_line: killchain
 name: "Cobalt Group BFSI - Lateral Movement (P0)"
 description: >
   Enterprise lateral-movement detection validation for BFSI environments. Six scenarios covering
