@@ -1,0 +1,105 @@
+id: ad-ntlm-relay-posture
+product_line: ad
+name: NTLM Relay Exposure Posture and Visibility Probe
+description: >
+  Read-only assessment of whether a domain controller is exposed to NTLM relay, plus a
+  check that NTLM validation is visible in the logs. It does NOT relay, capture, or
+  replay any authentication. It reads configuration values and counts events.
+  Posture observations are never PASS: a signing setting does not prove relay was
+  blocked or detected.
+
+  KILL CHAIN STAGES:
+    1. SMB and LDAP signing and channel-binding posture on the DC (T1557.001)
+    2. NTLM validation event visibility on the DC (T1557.001)
+
+  SAFETY: Read-only. Runs only on a domain controller. No authentication is initiated,
+  captured, or relayed.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - ntlm
+  - relay
+  - signing
+  - active-directory
+  - detection
+  - t1557
+  - mitre
+mitre_phases:
+  - credential-access
+  - lateral-movement
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: true
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Signing and channel-binding posture (T1557.001)
+  # ---------------------------------------------------------------------------
+  - name: "NTLM Relay 1 — SMB/LDAP Signing and Channel-Binding Posture (T1557.001)"
+    technique_id: T1557.001
+    framework: custom
+    executor: powershell
+    requires_priv: domain_admin
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the SMB server signing setting and two NTDS registry values (LDAPServerIntegrity, LdapEnforceChannelBinding). Changes nothing."
+    telemetry:
+      - "Sysmon EID 1 / PowerShell EID 4104 for the configuration reads"
+    detection:
+      - "Config-audit: reads of relay-relevant settings on a DC — not an attack indicator on its own"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ((Get-CimInstance Win32_ComputerSystem).DomainRole -lt 4) {
+        Write-Output "SKIP: not a domain controller. Posture not read. [BAS-SIM-RLY-S1]"
+        exit 0
+      }
+      $smbSign = (Get-SmbServerConfiguration).RequireSecuritySignature
+      $ntds = 'HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters'
+      $ldapSign = (Get-ItemProperty -Path $ntds -Name 'LDAPServerIntegrity').LDAPServerIntegrity
+      $cbt = (Get-ItemProperty -Path $ntds -Name 'LdapEnforceChannelBinding').LdapEnforceChannelBinding
+      Write-Output "EXEC T1557.001: SMB RequireSecuritySignature=$smbSign; LDAPServerIntegrity=$ldapSign (2 = required); LdapEnforceChannelBinding=$cbt (2 = always). Values read only. [BAS-SIM-RLY-S1]"
+      Write-Output "SKIP: configuration observation only. A setting does not prove relay was blocked or detected, so no verdict on detection is claimed. [BAS-SIM-RLY-S1]"
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — NTLM validation visibility (T1557.001)
+  # ---------------------------------------------------------------------------
+  - name: "NTLM Relay 2 — NTLM Credential Validation Events Visible on the DC (T1557.001)"
+    technique_id: T1557.001
+    framework: custom
+    executor: powershell
+    requires_priv: domain_admin
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads Security log event 4776 (NTLM credential validation) from the last hour and counts it. Changes nothing."
+    telemetry:
+      - "Security EID 4776 on the DC: the events this stage counts"
+    detection:
+      - "SIEM: NTLM from unexpected hosts or to unexpected services — relay indicator"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ((Get-CimInstance Win32_ComputerSystem).DomainRole -lt 4) {
+        Write-Output "SKIP: not a domain controller. Events not read. [BAS-SIM-RLY-S2]"
+        exit 0
+      }
+      $n = @(Get-WinEvent -FilterHashtable @{ LogName='Security'; Id=4776; StartTime=(Get-Date).AddHours(-1) } -MaxEvents 5000 -ErrorAction SilentlyContinue).Count
+      Write-Output "EXEC T1557.001: NTLM validation events (4776) in last hour = $n. Counts only. [BAS-SIM-RLY-S2]"
+      if ($n -gt 0) {
+        Write-Output "PASS: NTLM validation is logged on the DC. Logging only; relay detection needs a SIEM rule and is not checked here."
+      } else {
+        Write-Output "SKIP: no 4776 events in the last hour. Credential Validation auditing may be off or no NTLM was used. Inconclusive. [BAS-SIM-RLY-S2]"
+      }
+    cleanup: ""

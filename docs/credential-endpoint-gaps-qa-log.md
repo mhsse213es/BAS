@@ -132,3 +132,10 @@ Not verified: neither scenario has run on the DC. Both need a platform run on th
 - Lockout after the run: `LockedOut False` for `bassim1`, `bassim2`, `bassim3`; all `Enabled True`.
 - Status: telemetry visibility confirmed on the DC for these attempts. Alerting NOT checked (no SIEM in this lab), so the spray scenario is not detection-verified.
 - Next allowed run: not before 30 minutes after this run.
+
+### NTLM relay posture and forced authentication (T1557.001, T1187), 2026-11-18
+
+- **ad-ntlm-relay-posture** (2 steps): reads SMB RequireSecuritySignature, NTDS LDAPServerIntegrity and LdapEnforceChannelBinding (DC only; values read, nothing changed). Counts 4776 NTLM validation events in the last hour. Posture is never PASS. Visibility PASS proves logging only.
+- **ad-forced-auth-attempt** (1 step): one Test-Path to an unresolvable `.invalid` UNC. No SMB session, no credential sent, no listener or relay. Detection verdict is not set by the probe; it needs the Sysmon or EDR record checked for the run ID.
+- Verified offline: schema, PowerShell parse, signatures (verify-all ok=245 fail=0), step-contract ledger (no removals), tests pass.
+- Not verified: neither scenario has run on a host. The forced-auth detection needs a Sysmon or EDR check on the run ID.

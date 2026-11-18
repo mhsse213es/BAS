@@ -1,0 +1,68 @@
+id: ad-forced-auth-attempt
+product_line: ad
+name: Forced Authentication Attempt Probe
+description: >
+  Telemetry-safe emulation of forced authentication, where a host is made to start an
+  outbound SMB authentication toward an attacker-chosen name. The probe makes one
+  path check to an RFC-6761 .invalid name. That name cannot resolve, so no SMB session
+  is established and no credential is sent. Its only purpose is to create the outbound
+  SMB and DNS attempt that a detection control should see. It does not capture, relay,
+  or listen for authentication.
+
+  KILL CHAIN STAGES:
+    1. Outbound UNC Path Check to an Unresolvable Name (T1187)
+
+  SAFETY: No responder, listener, or relay is involved. The target name is .invalid and
+  cannot resolve. Telemetry mode. The verdict cannot be set here, because detection
+  lives in Sysmon, EDR, or the network sensor, which this probe does not read.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - forced-authentication
+  - smb
+  - ntlm
+  - active-directory
+  - detection
+  - t1187
+  - mitre
+mitre_phases:
+  - credential-access
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Outbound UNC path check (T1187)
+  # ---------------------------------------------------------------------------
+  - name: "Forced Auth 1 — Outbound UNC Path Check to .invalid (T1187)"
+    technique_id: T1187
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "One Test-Path against \\\\bas-sim-fa-<runid>.invalid\\share. The name cannot resolve, so no SMB session starts and no credential is sent. Produces a DNS query and an outbound SMB attempt."
+    telemetry:
+      - "Sysmon EID 22: DNS query for the bas-sim .invalid name"
+      - "Sysmon EID 3: outbound SMB connection attempt, if the stack tries port 445"
+    detection:
+      - "EDR/NDR: an outbound UNC authentication attempt to an unknown host from a user process — forced-auth IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $unc = "\\bas-sim-fa-$runId.invalid\share"
+      $reached = Test-Path $unc
+      Write-Output "EXEC T1187: attempted an outbound UNC path check to $unc. Name is .invalid and cannot resolve; reached=$reached (expected False). No credential sent. [BAS-SIM-FAU-S1]"
+      Write-Output "SKIP: detection is not read by this probe. Verify on the Sysmon/EDR side: an event for the DNS query and outbound SMB attempt should exist for run $runId. No verdict on detection is claimed here. [BAS-SIM-FAU-S1]"
+    cleanup: ""

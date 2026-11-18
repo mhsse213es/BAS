@@ -207,6 +207,15 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "ad-forced-auth-attempt.yaml",
+    "index": 0,
+    "technique_id": "T1187",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
     "scenario": "ad-forged-ticket-telemetry.yaml",
     "index": 0,
     "technique_id": "T1558.001",
@@ -228,6 +237,24 @@
     "scenario": "ad-ntds-access-attempt.yaml",
     "index": 0,
     "technique_id": "T1003.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ad-ntlm-relay-posture.yaml",
+    "index": 0,
+    "technique_id": "T1557.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "ad-ntlm-relay-posture.yaml",
+    "index": 1,
+    "technique_id": "T1557.001",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -3460,6 +3487,24 @@
     "index": 4,
     "technique_id": "T1574",
     "action_key": "startup_location_read",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-access-execution.yaml",
+    "index": 0,
+    "technique_id": "T1078.002",
+    "action_key": "access_valid_account_logon",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "cobalt-group-bfsi-access-execution.yaml",
+    "index": 1,
+    "technique_id": "T1059.003",
+    "action_key": "exe_command_shell",
     "framework": "custom",
     "class": "non_destructive",
     "status": "not_required_non_destructive"
