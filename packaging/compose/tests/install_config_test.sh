@@ -84,6 +84,10 @@ grep -q '^VALIDATION_LAB_AGENT_ID=$' <<<"$out" && pass "VALIDATION_LAB_AGENT_ID 
 
 out="$(run_case 'VALIDATION_LAB_POLL_MINUTES=10')"
 grep -q '^VALIDATION_LAB_POLL_MINUTES=10$' <<<"$out" && pass "VALIDATION_LAB_POLL_MINUTES reaches .env" || fail "poll set: $out"
+out="$(run_case 'SPRAY_LAB_AGENT_ID=agent-spray-9')"
+grep -q '^SPRAY_LAB_AGENT_ID=agent-spray-9$' <<<"$out" && pass "SPRAY_LAB_AGENT_ID reaches .env" || fail "SPRAY_LAB_AGENT_ID set: $out"
+out="$(run_case '')"
+grep -q '^SPRAY_LAB_AGENT_ID=$' <<<"$out" && pass "SPRAY_LAB_AGENT_ID blank -> empty (exemption off)" || fail "SPRAY_LAB_AGENT_ID default: $out"
 
 # Installation-wide phishing target allowlists (see orchestrator phishscope).
 # Empty means unconfigured. A malformed value refuses the install.

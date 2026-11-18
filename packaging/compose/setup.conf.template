@@ -192,6 +192,13 @@ BAS_BACKUP_KEY_PASSPHRASE=            # 16 characters or more
 
 LIC_PATH=                         # ← REQUIRED  e.g. /home/ubuntu/hdfc-prod-001.lic
 
+# ── [spray-lab] ──────────────────────────────────────────────────────────────────
+# Lab-only exemption for the password-spray and guessing lab scenarios. Leave blank
+# (the default) so nothing gets the exemption. Set to the agent_id of the ONE dedicated
+# lab agent, then re-run --upgrade. The server sets is_spray_lab on that agent only;
+# clearing the value turns the exemption off everywhere on the next start.
+SPRAY_LAB_AGENT_ID=
+
 # ── [validation-lab] ─────────────────────────────────────────────────────────────
 # Threat-Content-Factory Phase 6. Leave VALIDATION_LAB_AGENT_ID blank to keep
 # the validation lab disabled (the orchestrator logs "[validationlab] disabled").

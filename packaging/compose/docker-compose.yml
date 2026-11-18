@@ -243,6 +243,10 @@ services:
       # interval defaults to 5 minutes.
       VALIDATION_LAB_AGENT_ID:     ${VALIDATION_LAB_AGENT_ID:-}
       VALIDATION_LAB_POLL_MINUTES: ${VALIDATION_LAB_POLL_MINUTES:-5}
+      # Lab-only spray/guessing exemption: the one agent allowed to run the BAS lab scenarios
+      # ad-password-spray-lab and ad-password-guessing-lab with the destructive veto lifted.
+      # Empty (default) turns it off everywhere. Set to an enrolled DEDICATED lab agent_id only.
+      SPRAY_LAB_AGENT_ID:          ${SPRAY_LAB_AGENT_ID:-}
       # ── OTX IOC Enrichment (optional — leave blank to disable) ───────────────
       # Distinct from the MISP/OpenCTI connector above — enriches run_iocs
       # (extracted indicators) against LevelBLUE OTX. See internal/ioc.
