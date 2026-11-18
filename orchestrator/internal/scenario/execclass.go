@@ -1217,6 +1217,12 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 	"T1589.003": {
 		"recon_employee_discovery": catalogClass(ClassNonDestructive, "recon_employee_discovery", "Read-only GET to the lab simulator's synthetic directory"),
 	},
+	"T1078.002": {
+		"access_valid_account_logon": catalogClass(ClassDestructive, "access_valid_account_logon", "Creates a synthetic local account, logs on with it, and removes it in undo; a failed undo leaves an account"),
+	},
+	"T1059.003": {
+		"exe_command_shell": catalogClass(ClassNonDestructive, "exe_command_shell", "Runs one harmless echo through cmd.exe; no state changed"),
+	},
 }
 
 // discoveryDefaultClassification covers the read-only ATT&CK discovery

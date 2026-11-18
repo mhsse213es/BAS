@@ -359,3 +359,26 @@ Checked every Phase 1 and Phase 2 technique in the spec against the scenario lib
 - **Verification.** Both credential-access and C2 packs regenerated and signed; `verify-all` ok=241
   fail=0. Full unfiltered `go test ./internal/scenario -count=1 -timeout 420s`: ok, zero failures,
   302.1s.
+
+---
+
+# Cobalt Group BFSI - Phase 2 gap: access and execution
+
+- **acc-01 (T1078.002), valid local account logon.** Creates a synthetic local account with its own
+  random password, logs on with it through LogonUser, and removes it in undo. Classified destructive
+  because it creates an account. Live: PASS, undo PASS, no residue accounts or undo records.
+- **exe-01 (T1059.003), Windows command shell.** Runs one harmless echo through cmd.exe and checks
+  for the marker. Classified non-destructive. Live: PASS, undo PASS.
+- Catalog pins updated for the two new pairs: 3694 -> 3696 entries, 244 -> 246 hand-authored, catalog
+  hash `69c896c709d8fcfe8f9a2a7e05cc5169f309ce79bdf4531a73bdaa7937b3e827`. Diff check: additions only.
+- Full unfiltered `go test ./internal/scenario -count=1 -timeout 420s`: ok, zero failures, 317.0s.
+
+# Cobalt Group BFSI - Phishing link variant, loopback live check
+
+- Ran the real exercise SMTP injector (`NewSMTPInjector`) against a capture server on
+  127.0.0.1:2525 with one link lure to `sim.user@bas-sim.test`.
+- Result: 1 message captured, recipient as expected, the link was rewritten to the tracker host, and
+  the original href was removed. Nothing left the loopback interface.
+- The throwaway test file was deleted after the run.
+- **Not verified:** delivery through a real mail gateway, mailbox placement, and end-to-end click
+  tracking. This host has no SMTP host configured, and no mail gateway address was available.

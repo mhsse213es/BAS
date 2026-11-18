@@ -1,0 +1,25 @@
+id: "cobalt-group-bfsi-access-execution"
+product_line: killchain
+name: "Cobalt Group BFSI - Initial Access and Execution Gap (Phase 2)"
+description: >
+  Adds BFSI-specific coverage for two Phase 2 techniques that had only one scenario each in the
+  library: valid local account logon (T1078.002) and Windows command shell execution (T1059.003).
+  The account logon uses a synthetic local account with a per-run random password, created and
+  removed within the step pair. The command shell step runs a harmless echo command and checks its
+  output for a marker. No real account or domain is touched.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cobalt-group
+  - bfsi
+  - initial-access
+  - execution
+  - phase2
+mitre_phases:
+  - initial-access
+  - execution
+
+steps:
+

@@ -24,6 +24,7 @@ func TestCobaltBFSIPacks_ParseWithCommandAndCleanup(t *testing.T) {
 		"cobalt-group-bfsi-persistence-variants": 4,
 		"cobalt-group-bfsi-c2-variants":          4,
 		"cobalt-group-bfsi-recon":                2,
+		"cobalt-group-bfsi-access-execution":     2,
 	}
 	for pack, n := range want {
 		b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", pack+".yaml"))

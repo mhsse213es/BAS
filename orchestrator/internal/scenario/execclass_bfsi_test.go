@@ -57,6 +57,8 @@ func TestBFSIStepsHaveExplicitClassification(t *testing.T) {
 		{"T1098", "persistence_account_manipulation", ClassDestructive},
 		{"T1590.001", "recon_subdomain_enumeration", ClassNonDestructive},
 		{"T1589.003", "recon_employee_discovery", ClassNonDestructive},
+		{"T1078.002", "access_valid_account_logon", ClassDestructive},
+		{"T1059.003", "exe_command_shell", ClassNonDestructive},
 	}
 	for _, c := range cases {
 		got := ResolveExecutionClass(c.tid, c.action)

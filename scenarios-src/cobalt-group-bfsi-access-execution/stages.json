@@ -1,0 +1,46 @@
+[
+  {
+    "id": "acc-01",
+    "n": 1,
+    "name": "Initial Access - Valid Local Account Logon (Custom)",
+    "technique_id": "T1078.002",
+    "timeout_sec": 90,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Creates one synthetic local account with a per-run random password, performs one logon attempt with it, and removes the account in undo. Undo tolerates the account already being absent.",
+    "telemetry": [
+      "Local account creation", "Logon event for the synthetic account"
+    ],
+    "detection": [
+      "Valid account use detection (logon by a newly created local account)"
+    ],
+    "cleanup": "",
+    "action_key": "access_valid_account_logon",
+    "no_default_cleanup": true,
+    "reversible": true
+  },
+  {
+    "id": "exe-01",
+    "n": 2,
+    "name": "Execution - Windows Command Shell (Custom)",
+    "technique_id": "T1059.003",
+    "timeout_sec": 60,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "low",
+    "blast_radius": "Runs one harmless echo command through cmd.exe and checks its output for a marker. No state is created.",
+    "telemetry": [
+      "cmd.exe process creation with a benign echo command"
+    ],
+    "detection": [
+      "Command shell execution monitoring"
+    ],
+    "cleanup": "",
+    "action_key": "exe_command_shell",
+    "no_default_cleanup": false,
+    "reversible": true
+  }
+]
