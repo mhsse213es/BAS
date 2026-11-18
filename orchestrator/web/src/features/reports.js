@@ -12,6 +12,7 @@ import { vfStatusColor } from './detection-verification.js';
 import { gaugeSVG, showDownloadOptions, triggerDownload } from './evidence.js';
 import { renderRunIOCList, renderRunIOCToolbar } from './iocs.js';
 import { isRansomwareRun, renderRwEfficacyPanel } from './rw-efficacy.js';
+import { isExfilChainRun, renderExfilChainPanel } from './exfil-chain.js';
 import { rerunSubset } from './rerun-review.js';
 import { ROLE, _artCatalogByPlatform, _riskScoreColor } from './shell.js';
 import { renderAttackFlow, renderRunFindings, renderRunRecommendations, renderRunReportExtra, renderVariantCoverage } from './variant-report.js';
@@ -2221,6 +2222,17 @@ export function viewRunResults(run) {
     effHost.id = 'rw-efficacy-host';
     document.getElementById('results-summary').insertAdjacentElement('afterend', effHost);
     renderRwEfficacyPanel(effHost, runId);
+  }
+  // Collection → exfiltration chain report for the DLP chain scenarios. Sits
+  // under the efficacy host (or the summary) and is replaced on each open.
+  var oldChain = document.getElementById('exfil-chain-host');
+  if (oldChain) oldChain.remove();
+  if (runId && isExfilChainRun(run.scenarioId)) {
+    var chainHost = document.createElement('div');
+    chainHost.id = 'exfil-chain-host';
+    var anchor = document.getElementById('rw-efficacy-host') || document.getElementById('results-summary');
+    anchor.insertAdjacentElement('afterend', chainHost);
+    renderExfilChainPanel(chainHost, runId);
   }
   var hasOutput = runId && (run.status === 'completed' || run.status === 'partial');
   document.getElementById('results-export').innerHTML = '';
