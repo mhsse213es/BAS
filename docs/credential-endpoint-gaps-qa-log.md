@@ -43,3 +43,15 @@ Golden/Silver tickets, relay, spraying) are not started and need a lab.
 - AD items (NTDS, Golden/Silver, Pass-the-Ticket, spraying, relay, forced auth): need
   an isolated AD lab, and some need explicit authorization before building.
 - Identity and session items (MFA fatigue, web sessions, cloud tokens): not started.
+
+## Detection telemetry (EID 4663)
+
+- **This dev host has File System auditing off** (`auditpol /get` reports "No
+  Auditing"), so EID 4663 cannot appear here. The check was not run, because it
+  would change this host's security configuration.
+- **Lab check script:** `docs/credential-audit-4663-check.ps1`. Run it elevated on the
+  lab VM only. It audits one synthetic temp file, reads it, looks for the 4663 event,
+  then restores the audit setting and deletes the file. Output is `EID4663_FOUND=True|False`.
+- **Still needed:** run that script on the lab VM and record its output here. Then
+  run a credential scenario with auditing on the browser store paths and confirm the
+  4663 event for `Login Data` or `logins.json`.
