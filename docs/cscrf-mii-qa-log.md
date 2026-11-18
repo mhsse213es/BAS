@@ -59,3 +59,36 @@ Step-contract ledger regenerated with `STEP_CONTRACT_WRITE=1`. The diff is addit
 Limits: net-01, net-06 and net-07 probe other hosts and run only when their env variables are set. Lab hosts are needed for those verdicts. Honest limits: no SEBI clause mapping, no second network zone, no governance validation.
 
 Suite: `go test ./internal/scenario -count=1 -timeout 420s`: ok, 294.6s.
+
+## P0 Task 3: identity and privileged access pack (`cscrf-mii-identity`)
+
+Eight steps, internal labels CSCRF-ID-01..08. id-09 (remote privileged login) is **deferred**: it needs a second lab host.
+
+Gate off (`BAS_CONFIRM_IDENTITY_CHANGE` unset) on this host:
+
+| Step | Verdict | Basis |
+|---|---|---|
+| id-01 Privileged group membership change (CSCRF-ID-01) | SKIP | gate not set |
+| id-02 Local administrator account creation (CSCRF-ID-02) | SKIP | gate not set |
+| id-03 Privileged logon monitoring (CSCRF-ID-03) | PASS | 237 logon events (EID 4624) in the last 24h |
+| id-04 Excessive Administrators membership (CSCRF-ID-04) | SKIP | `BAS_ADMIN_ALLOWLIST` unset |
+| id-05 Disabled account logon attempt (CSCRF-ID-05) | SKIP | gate not set |
+| id-06 Local password policy baseline (CSCRF-ID-06) | FAIL | minimum password length 0, baseline 12 |
+| id-07 MFA enforcement (CSCRF-ID-07) | SKIP | no identity provider integrated |
+| id-08 Service account administrator rights (CSCRF-ID-08) | PASS | no non-built-in service account is an Administrators member |
+
+Gate on (`BAS_CONFIRM_IDENTITY_CHANGE=true`), each followed by its undo:
+- id-01 FAIL: adding the synthetic account to Administrators succeeded and was reverted. Verify the EID 4732 alert in the SIEM.
+- id-02 FAIL: a new account placed in Administrators. Verify EID 4720 with 4732 in the SIEM.
+- id-05 PASS: the disabled synthetic account was refused (Win32 error 1331).
+- All three undos PASS. Zero residue users or undo records. Administrators membership unchanged.
+
+Ruling: id-01 adds an account created in the same step. It FAILs when the change succeeds, matching the drill's account-create rule.
+
+Catalog: eight entries (T1098, T1136.001, T1078 x4, T1078.003, and a new T1201 block). Destructive: `cscrf_id_priv_group_change`, `cscrf_id_local_admin_create`, `cscrf_id_disabled_logon`. Pins `execclass_embed_test.go`: 3704 to 3712 entries, 254 to 262 hand-authored, hash `df0377009a5c34407d0c6f11742a514375a38815ea66e1ec532b4a35272b2cfd`.
+
+Ledger: the identity ledger entries were already in HEAD, committed inside `0ac138ba` (another session's pass-the-hash commit, which picked up this working tree's uncommitted ledger). This commit adds the matching YAML, sources and catalog.
+
+Working-tree note: the main working tree carried another session's uncommitted `T1187` catalog hunk in `execclass.go`. It changes the ledger class for `ad-forced-auth-attempt` from destructive to non-destructive, so the ledger test fails in the main tree. That hunk is not part of this commit. The suite was verified in a clean worktree at HEAD with only these identity changes.
+
+Suite: `go test ./internal/scenario -count=1 -timeout 420s` in the clean worktree: ok, 311.4s.

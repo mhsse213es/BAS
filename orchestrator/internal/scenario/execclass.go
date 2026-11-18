@@ -385,9 +385,13 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1078": {
-		"dbprobe_read_only":         dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1078"),
-		"dbprobe_bounded_synthetic": dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (writes only fixture-tagged synthetic rows/roles) -- T1078"),
-		"dbprobe_mutation":          dbprobeClass(ClassDestructive, "dbprobe_mutation", "mutation database probe (changes real database state) -- T1078"),
+		"cscrf_id_logon_audit_presence": catalogClass(ClassNonDestructive, "cscrf_id_logon_audit_presence", "Read-only query of recent Security log logon events"),
+		"cscrf_id_excessive_privilege":  catalogClass(ClassNonDestructive, "cscrf_id_excessive_privilege", "Read-only query of Administrators membership against an allowlist"),
+		"cscrf_id_disabled_logon":       catalogClass(ClassDestructive, "cscrf_id_disabled_logon", "Creates a synthetic account, disables it, attempts one logon, and deletes it in undo"),
+		"cscrf_id_mfa_enforcement":      catalogClass(ClassNonDestructive, "cscrf_id_mfa_enforcement", "No change; reports SKIP because no identity provider is integrated"),
+		"dbprobe_read_only":             dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1078"),
+		"dbprobe_bounded_synthetic":     dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (writes only fixture-tagged synthetic rows/roles) -- T1078"),
+		"dbprobe_mutation":              dbprobeClass(ClassDestructive, "dbprobe_mutation", "mutation database probe (changes real database state) -- T1078"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -395,6 +399,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1078.003": {
+		"cscrf_id_service_account_admin": catalogClass(ClassNonDestructive, "cscrf_id_service_account_admin", "Read-only query of service accounts and Administrators membership"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -547,6 +552,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1136.001": {
+		"cscrf_id_local_admin_create": catalogClass(ClassDestructive, "cscrf_id_local_admin_create", "Creates a synthetic account placed in Administrators, deleted in undo; a failed undo leaves an admin account"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -1169,6 +1175,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		"cloud_secret_value_read": {Class: ClassPotentiallyDestructive, BlastRadius: "Requests one synthetic test secret value into memory; only its length is recorded and the value is discarded."},
 	},
 	"T1098": {
+		"cscrf_id_priv_group_change":       catalogClass(ClassDestructive, "cscrf_id_priv_group_change", "Creates a synthetic account, adds it to and removes it from Administrators, and deletes it in undo; a failed undo leaves an account"),
 		"policy_simulation_read":           {Class: ClassNonDestructive, BlastRadius: "IAM policy simulation only; no change is made."},
 		"cloud_role_assume":                {Class: ClassPotentiallyDestructive, BlastRadius: "Asks the cloud to issue temporary credentials for one operator-named test role; returned credentials are discarded."},
 		"persistence_account_manipulation": catalogClass(ClassDestructive, "persistence_account_manipulation", "Adds a local account to the built-in Users group; a failed undo leaves membership"),
@@ -1227,6 +1234,9 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 	},
 	"T1078.002": {
 		"access_valid_account_logon": catalogClass(ClassDestructive, "access_valid_account_logon", "Creates a synthetic local account, logs on with it, and removes it in undo; a failed undo leaves an account"),
+	},
+	"T1201": {
+		"cscrf_id_password_policy": catalogClass(ClassNonDestructive, "cscrf_id_password_policy", "Read-only query of the local account policy"),
 	},
 	"T1059.003": {
 		"exe_command_shell": catalogClass(ClassNonDestructive, "exe_command_shell", "Runs one harmless echo through cmd.exe; no state changed"),
