@@ -33,8 +33,7 @@ function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-
 # Credential test helpers
 function New-TestAccount { param([string]$Name, [securestring]$Password)
   try {
-    $pwd = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToCoTaskMemAnsi($Password))
-    New-LocalUser -Name $Name -Password (ConvertTo-SecureString $pwd -AsPlainText -Force) -Description 'BAS test account' -ErrorAction Stop | Out-Null
+    New-LocalUser -Name $Name -Password $Password -Description 'BAS test account' -ErrorAction Stop | Out-Null
     return @{ Created = $true; Name = $Name }
   } catch { return @{ Created = $false; Error = $_.Exception.Message } }
 }
