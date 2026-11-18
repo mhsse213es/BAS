@@ -207,6 +207,33 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "ad-forged-ticket-telemetry.yaml",
+    "index": 0,
+    "technique_id": "T1558.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "ad-forged-ticket-telemetry.yaml",
+    "index": 1,
+    "technique_id": "T1558.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "ad-ntds-access-attempt.yaml",
+    "index": 0,
+    "technique_id": "T1003.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "adcs-esc-template-exposure-audit.yaml",
     "index": 0,
     "technique_id": "T1649",

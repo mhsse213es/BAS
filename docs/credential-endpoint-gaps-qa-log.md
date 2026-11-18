@@ -68,3 +68,42 @@ Golden/Silver tickets, relay, spraying) are not started and need a lab.
   ```
 - Result: **the telemetry path works.** A read of an audited file produced event 4663 in the Security log, with the object name.
 - The script restored the audit setting to off. Manual check of the restore and leftover file: not yet recorded.
+
+### Result: browser login-store access, lab VM, 2026-11-18 (OPEN GAP)
+
+- Host: `WIN-2IP8FNO4MAD` (member server). Browser: Chrome, default profile, one synthetic login (`bas-sim-login.invalid`), Chrome closed.
+- Scenario read: `check-browser-store.ps1` (copy of `credential-browser-store-access` Stage 1) output:
+  ```
+  EXEC T1555.003: login stores present=1, opened read-only=1, locked=0. No byte was read.
+  FAIL: A non-browser process opened a browser login store with no alert.
+  ```
+- Audit rule on `Login Data`: `Everyone` / `ReadData` / `Success`, confirmed with `Get-Acl -Audit`.
+- Control, same rule method on a plain temp file: EID 4663 **was** produced.
+- Result: EID 4663 was **not** produced for the `Login Data` open, over a one-hour window, despite the rule and auditing both being on.
+- Checks ruled out: auditing off (checked, `Success`), rule not saved (confirmed present), time window (1 hour searched), the rule method (control test logged).
+- Not yet explained. Candidate causes, unverified: the browser store's ACL or SACL handling, or the open path differing from the control test.
+- Cleanup done: audit rule removed from `Login Data`; File System auditing set back to `No Auditing`; test login deleted from Chrome. (Confirm the delete step was done by hand.)
+- **Consequence:** the browser login-store probe is NOT verified as producing 4663 on this lab. Do not mark it detection-verified until this gap is closed.
+
+## Active Directory, first increment (lab.local)
+
+Scope agreed: Golden/Silver detection only (no forging); spraying limited to synthetic accounts; relay and forced authentication as detection checks only.
+
+Lab (confirmed 2026-11-18):
+- Domain `lab.local`; DC `WIN-TQ70FGLETIU.lab.local` (PDC, KDC, writable).
+- DC audit: Directory Service Access Success and Failure; Kerberos Authentication Service and Service Ticket Operations Success.
+- KRBTGT password last set 10/27/2026 (about 22 days).
+- Synthetic accounts `bassim1..3` in OU `BAS-Sim`, enabled, random unrecorded passwords.
+- Lockout threshold set to 3, window 30 min, duration 30 min (lab domain only).
+- Target list `C:\bas-lab\allowed-targets.txt` = `WIN-TQ70FGLETIU.lab.local`.
+
+Scenarios:
+
+| Scenario | Technique | What it does | Verdict rule |
+|---|---|---|---|
+| ad-forged-ticket-telemetry | T1558.001, T1558.002 | Reads KRBTGT age and encryption types (observation); counts 4768/4769 and RC4 events in the last hour | Posture never PASS. Telemetry PASS only if ticket events are visible, which proves logging, not alerting. |
+| ad-ntds-access-attempt | T1003.003 | One read-only open of ntds.dit; closed at once; no bytes read | Open succeeds = FAIL. Blocked by lock = SKIP, because blocking is access control, not detection. |
+
+Verified offline: schema, PowerShell parse, signatures (verify-all ok=241, fail=0), step-contract ledger (no removals), tests pass.
+
+Not verified: neither scenario has run on the DC. Both need a platform run on the lab agent. The 4662 path for ntds.dit needs a SACL on the file, which is not set.
