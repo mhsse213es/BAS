@@ -20,27 +20,27 @@ function Get-BankingSimulatorPort {
   return 9999
 }
 function Test-BankingSimulatorConnectivity {
-  $host = Get-BankingSimulatorHost
+  $simHost = Get-BankingSimulatorHost
   $port = Get-BankingSimulatorPort
-  $res = @{ Outcome = 'skip'; Reason = "Banking simulator not reachable at $host :$port"; Connected = $false }
+  $res = @{ Outcome = 'skip'; Reason = "Banking simulator not reachable at ${simHost}:${port}"; Connected = $false }
   try {
     $tcp = New-Object Net.Sockets.TcpClient
-    $tcp.Connect($host, $port)
+    $tcp.Connect($simHost, $port)
     $tcp.Close()
     $res.Connected = $true
     $res.Outcome = 'available'
   } catch {
     $res.Outcome = 'skip'
-    $res.Reason = "Banking simulator not reachable at $host :$port - prerequisite not met"
+    $res.Reason = "Banking simulator not reachable at ${simHost}:${port} - prerequisite not met"
   }
   return $res
 }
 function Invoke-BankingSimulatorQuery { param([string]$Endpoint)
-  $host = Get-BankingSimulatorHost
+  $simHost = Get-BankingSimulatorHost
   $port = Get-BankingSimulatorPort
   $res = @{ Code = 0; Body = $null; Error = '' }
   try {
-    $uri = "http://$host :$port$Endpoint"
+    $uri = "http://${simHost}:${port}${Endpoint}"
     $res.Body = Invoke-RestMethod -Method GET -Uri $uri -TimeoutSec 5 -ErrorAction Stop
     $res.Code = 200
   } catch {

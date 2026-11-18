@@ -31,52 +31,52 @@ function Read-CgUndoRecord { param([string]$Id)
 function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
 
 # Lateral movement helpers
-function Test-RdpConnectivity { param([string]$Host, [int]$Port = 3389)
-  $res = @{ Outcome = 'error'; Reason = "RDP connectivity test to $Host : $Port failed"; Connected = $false }
+function Test-RdpConnectivity { param([string]$TargetHost, [int]$Port = 3389)
+  $res = @{ Outcome = 'error'; Reason = "RDP connectivity test to $TargetHost : $Port failed"; Connected = $false }
   try {
     $tcp = New-Object Net.Sockets.TcpClient
-    $tcp.Connect($Host, $Port)
+    $tcp.Connect($TargetHost, $Port)
     $tcp.Close()
     $res.Connected = $true
     $res.Outcome = 'fail'
-    $res.Reason = "RDP port $Port on $Host is reachable and accepting connections"
+    $res.Reason = "RDP port $Port on $TargetHost is reachable and accepting connections"
   } catch {
     if ($_.Exception -match 'refused|timeout|not available') {
       $res.Outcome = 'pass'
-      $res.Reason = "RDP port $Port on $Host is blocked or unreachable"
+      $res.Reason = "RDP port $Port on $TargetHost is blocked or unreachable"
     }
   }
   return $res
 }
-function Test-SmbShareAccess { param([string]$Host, [string]$Share)
-  $res = @{ Outcome = 'error'; Reason = "SMB share access test to \\$Host\$Share failed"; Accessible = $false }
+function Test-SmbShareAccess { param([string]$TargetHost, [string]$Share)
+  $res = @{ Outcome = 'error'; Reason = "SMB share access test to \\$TargetHost\$Share failed"; Accessible = $false }
   try {
-    $root = "\\$Host\$Share"
+    $root = "\\$TargetHost\$Share"
     $items = Get-ChildItem -Path $root -Force -ErrorAction Stop | Select-Object -First 5
     $res.Accessible = $true
     $res.Outcome = 'fail'
-    $res.Reason = "SMB share \\$Host\$Share is accessible and contains files"
+    $res.Reason = "SMB share \\$TargetHost\$Share is accessible and contains files"
   } catch {
     if ($_.Exception -match 'Access is denied|unauthorized') {
       $res.Outcome = 'pass'
-      $res.Reason = "SMB share \\$Host\$Share access was blocked"
+      $res.Reason = "SMB share \\$TargetHost\$Share access was blocked"
     }
   }
   return $res
 }
-function Test-WinrmAvailability { param([string]$Host, [int]$Port = 5985)
-  $res = @{ Outcome = 'error'; Reason = "WinRM availability test to $Host : $Port failed"; Available = $false }
+function Test-WinrmAvailability { param([string]$TargetHost, [int]$Port = 5985)
+  $res = @{ Outcome = 'error'; Reason = "WinRM availability test to $TargetHost : $Port failed"; Available = $false }
   try {
     $tcp = New-Object Net.Sockets.TcpClient
-    $tcp.Connect($Host, $Port)
+    $tcp.Connect($TargetHost, $Port)
     $tcp.Close()
     $res.Available = $true
     $res.Outcome = 'fail'
-    $res.Reason = "WinRM port $Port on $Host is reachable"
+    $res.Reason = "WinRM port $Port on $TargetHost is reachable"
   } catch {
     if ($_.Exception -match 'refused|timeout|not available') {
       $res.Outcome = 'pass'
-      $res.Reason = "WinRM port $Port on $Host is blocked or unreachable"
+      $res.Reason = "WinRM port $Port on $TargetHost is blocked or unreachable"
     }
   }
   return $res
