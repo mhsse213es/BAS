@@ -497,7 +497,8 @@ load_config() {
   # Recovery passphrase: lets an operator who forgot the administrator password set a new one from the login page.
   # Blank on an upgrade keeps the value already installed; a fresh install must set one.
   if [[ -z "$RECOVERY_PASSPHRASE" && -f "${DATA_DIR}/.env" ]]; then
-    RECOVERY_PASSPHRASE=$(grep -oP '(?<=^BAS_RECOVERY_PASSPHRASE=).+' "${DATA_DIR}/.env" 2>/dev/null || true)
+    # sed, not grep -P: grep -P needs a UTF-8 locale and fails silently here, which dropped the kept passphrase.
+    RECOVERY_PASSPHRASE=$(sed -n 's/^BAS_RECOVERY_PASSPHRASE=//p' "${DATA_DIR}/.env" 2>/dev/null | tail -n 1 || true)
   fi
   if [[ -z "$RECOVERY_PASSPHRASE" ]]; then
     if [[ "$MODE" == "install" ]]; then

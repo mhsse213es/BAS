@@ -20,7 +20,7 @@ run_case() {
   printf 'DATA_DIR=%s\nDNS_SINK_BIND_IP=10.0.0.1\nDB_PASSWORD=db-pw-test-only\nADMIN_EMAIL=admin@example.com\nADMIN_PASSWORD=admin-pw-test-only-1\nLIC_PATH=/dev/null\n%s\n' \
     "$tmp" "$1" > "$tmp/setup.conf"
   (
-    err() { echo "ERR: $*"; }; log() { :; }; warn() { :; }
+    err() { echo "ERR: $*"; }; log() { :; }; warn() { :; }; info() { :; }
     DEFAULT_DATA_DIR="$tmp"; DEFAULT_PORT=9443; DEFAULT_ENROLL_PORT=9444
     DEFAULT_LEGACY_PORT=9000; DEFAULT_DASHBOARD_PORT=9543
     BAS_VERSION=test; COMPOSE_PROJECT=audspect
@@ -29,6 +29,12 @@ run_case() {
     eval "$(extract _write_env)"
     eval "$(extract validate_phish_scope)"
     eval "$(extract validate_emailgw_config)"
+    eval "$(extract validate_k8s_scenario_config)"
+    eval "$(extract validate_k8s_discovery_config)"
+    # Staging and secret-file helpers have side effects (chown, docker paths) outside what
+    # these cases check, so they are stubbed. _write_env calls them, so they must exist.
+    _stage_k8s_scenario() { :; }; _stage_k8s_discovery() { :; }; _write_aleef_secrets() { :; }
+    ALEEF_SECRET_LINES=()
     MODE="${RUN_MODE:-}"
     if [[ -n "${PRE_ENV:-}" ]]; then echo "$PRE_ENV" > "$tmp/.env"; fi
     load_config "$tmp/setup.conf" && validate_phish_scope && validate_emailgw_config && _write_env && cat "$tmp/.env"
