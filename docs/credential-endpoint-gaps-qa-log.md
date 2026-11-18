@@ -55,3 +55,16 @@ Golden/Silver tickets, relay, spraying) are not started and need a lab.
 - **Still needed:** run that script on the lab VM and record its output here. Then
   run a credential scenario with auditing on the browser store paths and confirm the
   4663 event for `Login Data` or `logins.json`.
+
+### Result: lab VM, 2026-11-18
+
+- Host: `WIN-2IP8FNO4MAD`. `Win32_ComputerSystem.DomainRole` = 3 (member server). Not a domain controller.
+- Starting audit state: `File System: No Auditing`.
+- Script output:
+  ```
+  EID4663_FOUND=True
+  ObjectName=C:\Users\Administrator\AppData\Local\Temp\2\bas_audit_check_9fcd96b8.txt
+  AuditRestoredToOff=True
+  ```
+- Result: **the telemetry path works.** A read of an audited file produced event 4663 in the Security log, with the object name.
+- The script restored the audit setting to off. Manual check of the restore and leftover file: not yet recorded.
