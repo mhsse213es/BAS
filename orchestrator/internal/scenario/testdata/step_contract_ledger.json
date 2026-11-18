@@ -3539,7 +3539,7 @@
   {
     "scenario": "collection-staging-exfil.yaml",
     "index": 6,
-    "technique_id": "T1048.001",
+    "technique_id": "T1048.003",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -3557,7 +3557,7 @@
   {
     "scenario": "collection-staging-exfil.yaml",
     "index": 8,
-    "technique_id": "T1048",
+    "technique_id": "T1048.003",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
