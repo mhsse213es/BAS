@@ -37,7 +37,14 @@ function New-CgLoopbackTlsCertificate {
   return $cert.Thumbprint
 }
 function Remove-CgLoopbackTlsCertificate { param([string]$Thumbprint)
+  $cert = Get-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -ErrorAction SilentlyContinue
+  if ($cert) {
+    try { [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($cert).Key.Delete() } catch {}
+  }
   Remove-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -Force -ErrorAction SilentlyContinue
+}
+function Wait-CgTask { param($Task, [int]$Ms = 5000)
+  return [bool]$Task.Wait($Ms)
 }
 function Test-CgLoopbackTlsCertificate { param([string]$Thumbprint)
   return ((Get-Item -LiteralPath ('Cert:\CurrentUser\My\' + $Thumbprint) -ErrorAction SilentlyContinue) -ne $null)

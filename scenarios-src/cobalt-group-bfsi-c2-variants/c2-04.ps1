@@ -5,7 +5,7 @@ if (-not (Test-BfsiSimulatorConnectivity)) {
 $simHost = Get-BfsiSimulatorHost
 $port = Get-BfsiSimulatorPort
 
-if (@(80, 443, 53) -contains $port) {
+if ($port -lt 1024) {
   Complete-CgStep @{ Outcome = 'fail'; Reason = "Simulator is bound to well-known port $port, so this step cannot exercise a non-standard port" } 'C2-04'
 }
 

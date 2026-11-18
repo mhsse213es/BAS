@@ -184,17 +184,18 @@ DNS). Plan: `docs/superpowers/plans/2026-11-18-cobalt-group-bfsi-p2.md`.
   command against a live `bfsisim.Simulator`; the parse test's `want` map covers both packs.
 
 ## What was verified for real
-- All 16 new PowerShell files (8 persistence, 8 C2 step/undo... plus lib) parse clean.
+- All 18 new PowerShell files (each pack: lib.ps1 plus 4 step and 4 undo scripts) parse clean.
 - Every step was run for real on this host, not inspected: pers-01/03/04 PASS; pers-02 PASS after a fix
   (see below); c2-01/03/04 PASS against a live `bfsisim-lab`; c2-02 PASS after a fix.
 - Every undo was run, then residue was checked directly on the host:
   - persistence: no `BAS-SIM-pers-*` Run values, no `bas-pers-*` local accounts, no `bas-pers-*`
     Users group members, zero `BAS-SIM-pers-*` WMI filters/consumers/bindings.
-  - C2: no loopback localhost certs with a short NotAfter in CurrentUser\My, no `bas-sim-c2` temp dir.
+  - C2: no loopback localhost certs with a short NotAfter in CurrentUser\My, no `bas-sim-c2` temp dir,
+    and the CNG key-file count under %APPDATA%\Microsoft\Crypto is unchanged across a run (before=140 after=140).
 - A partially failed pers-02 run left a WMI filter and its undo record behind; running its undo removed
   the filter, confirming undo handles partial state, not just complete state.
-- `go test ./internal/scenario -run TestCobaltBFSI*` passes, and the full unfiltered
-  `go test ./internal/scenario -count=1 -timeout 420s` run is recorded in the P2 commit history.
+- `go test ./internal/scenario -run TestCobaltBFSI` passes (parse test plus the c2-01 live integration test).
+- Full unfiltered `go test ./internal/scenario -count=1 -timeout 420s`: RESULT_PLACEHOLDER
 - `signer.go verify-all scenarios`: ok=230 fail=0 with both new packs in the ok set.
 
 ## Bugs found and fixed during live verification
@@ -205,6 +206,16 @@ DNS). Plan: `docs/superpowers/plans/2026-11-18-cobalt-group-bfsi-p2.md`.
   when invoked on the .NET thread-pool thread (no runspace). Fixed with a compiled `Add-Type` delegate
   that accepts the loopback test certificate. The client handshake is now async with a synchronous
   server-side auth, avoiding `Task.Run` over a scriptblock.
+- c2-02 (key residue): removing the certificate from `Cert:\CurrentUser\My` left its CNG private-key
+  file on disk (one per run, measured: 139 -> 140 -> 140 after remove). Fixed by deleting the key via
+  `RSACertificateExtensions.GetRSAPrivateKey(...).Key.Delete()` before removing the certificate.
+  Found by an independent review, then confirmed on this host.
+- c2-02 (blocking handshake): the server-side accept and `AuthenticateAsServer` were synchronous with no
+  timeout, so a client that never completes the handshake would hang the step and skip its `finally`
+  cleanup. Replaced with async accept, async server auth and async read, each bounded by a 5 second
+  wait, with a timeout throwing into the `finally`. Found by review. The timeout path is not exercised
+  live; the normal path was re-run after the change.
+- c2-04 (port guard): the guard covered only 80, 443 and 53. It now rejects every port below 1024.
 - c2-03 (tool transfer): the undo removed the per-run directory but left its empty parent
   `bas-sim-c2` behind. Fixed by also removing the parent when empty, as the plan specified.
 
@@ -212,9 +223,14 @@ DNS). Plan: `docs/superpowers/plans/2026-11-18-cobalt-group-bfsi-p2.md`.
 - No AD lab, no EDR, no Sysmon. These verdicts reflect this host's actual unenforced state, not a
   controlled detection test. A PASS for pers-02 means the WMI subscription was created, not that any
   monitoring saw it.
-- pers-02 uses a `CommandLineEventConsumer` (the plan left the consumer type open). Its trigger
-  (`Win32_LocalTime` modification every 60 seconds) only fires if the consumer is bound, and the
-  consumer runs a no-op `exit`, so the subscription has no effect beyond existing.
+- pers-02 uses a `CommandLineEventConsumer` (the plan left the consumer type open). It runs a no-op
+  `exit` command, so even when the filter fires the subscription does nothing harmful. It is a
+  persistence artifact only.
+- Review findings accepted as rulings, not fixed: the pers-02 WMI subscription fires every 60 seconds
+  while it exists, so it is visible if undo never runs (by design: it is a persistence artifact test).
+  The c2-01 "strictly increasing timestamps" check is nearly vacuous and does not measure interval
+  regularity or jitter; the five 1-second sleeps are the real pattern. The stale-undo-record ERROR path
+  matches the P0/P1 convention and is left as is.
 - c2-02 accepts any server certificate (validation callback returns true). This is deliberate: the
   listener is loopback-only and the cert is the step's own ephemeral one. It is not a model of any
   real TLS trust decision.

@@ -16,8 +16,9 @@ try {
 
   $tcpClient = New-Object Net.Sockets.TcpClient
   $connectTask = $tcpClient.ConnectAsync([Net.IPAddress]::Loopback, $port)
-  $acceptedSocket = $listener.AcceptTcpClient()
-  $connectTask.Wait(5000) | Out-Null
+  $acceptTask = $listener.AcceptTcpClientAsync()
+  if (-not (Wait-CgTask $connectTask) -or -not (Wait-CgTask $acceptTask)) { throw 'loopback connect/accept timed out' }
+  $acceptedSocket = $acceptTask.Result
 
   $server = New-Object Net.Security.SslStream($acceptedSocket.GetStream(), $false)
   Add-Type -TypeDefinition 'public static class BasLoopbackCertAccept { public static bool Accept(object s, System.Security.Cryptography.X509Certificates.X509Certificate c, System.Security.Cryptography.X509Certificates.X509Chain ch, System.Net.Security.SslPolicyErrors e) { return true; } }'
@@ -25,15 +26,16 @@ try {
   $client = New-Object Net.Security.SslStream($tcpClient.GetStream(), $false, $acceptCb)
 
   $clientAuth = $client.AuthenticateAsClientAsync('localhost')
-  $server.AuthenticateAsServer($cert, $false, [Security.Authentication.SslProtocols]::Tls12, $false)
-  $clientAuth.Wait(5000) | Out-Null
+  $serverAuth = $server.AuthenticateAsServerAsync($cert, $false, [Security.Authentication.SslProtocols]::Tls12, $false)
+  if (-not (Wait-CgTask $clientAuth) -or -not (Wait-CgTask $serverAuth)) { throw 'TLS handshake timed out' }
 
   $payload = [Text.Encoding]::ASCII.GetBytes('BAS-SIM-c2-02-ping')
   $client.Write($payload, 0, $payload.Length)
   $client.Flush()
   $buf = New-Object byte[] 64
-  $n = $server.Read($buf, 0, $buf.Length)
-  $received = [Text.Encoding]::ASCII.GetString($buf, 0, $n)
+  $readTask = $server.ReadAsync($buf, 0, $buf.Length)
+  if (-not (Wait-CgTask $readTask)) { throw 'TLS read timed out' }
+  $received = [Text.Encoding]::ASCII.GetString($buf, 0, $readTask.Result)
 
   if ($received -eq 'BAS-SIM-c2-02-ping') {
     $res = @{ Outcome = 'pass'; Reason = 'Encrypted loopback TLS session established and payload round-tripped' }
@@ -43,7 +45,7 @@ try {
 } catch {
   $res = @{ Outcome = 'error'; Reason = "Loopback TLS session failed: $($_.Exception.Message)" }
 } finally {
-  foreach ($o in @($client, $server, $tcpClient, $listener)) { if ($o) { try { $o.Dispose() } catch {} } }
+  foreach ($o in @($client, $server, $acceptedSocket, $tcpClient, $listener)) { if ($o) { try { $o.Dispose() } catch {} } }
   try { if ($listener) { $listener.Stop() } } catch {}
   Remove-CgLoopbackTlsCertificate -Thumbprint $thumb
 }

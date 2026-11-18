@@ -207,3 +207,41 @@ func TestCobaltBFSIFinancialImpact_LedgerManipulationDetected(t *testing.T) {
 		t.Errorf("expected exactly 1 baseline transaction left in the ledger (the tamper attempt must have been rejected, not applied), got %d: %+v", len(remaining), remaining)
 	}
 }
+
+// TestCobaltBFSICSVariants_BeaconPatternAgainstLiveSimulator runs the real c2-01 command against a
+// live bfsisim.Simulator and asserts the five periodic beacons succeed with increasing timestamps.
+func TestCobaltBFSICSVariants_BeaconPatternAgainstLiveSimulator(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("scenario steps are PowerShell")
+	}
+
+	sim := bfsisim.NewSimulator("127.0.0.1:0")
+	if err := sim.Start(); err != nil {
+		t.Fatalf("start simulator: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = sim.Stop(ctx)
+	}()
+	host, port, found := strings.Cut(sim.Addr(), ":")
+	if !found {
+		t.Fatalf("unexpected simulator addr %q", sim.Addr())
+	}
+
+	beaconCmd := findStepByActionKey(t, filepath.Join("..", "..", "..", "scenarios", "cobalt-group-bfsi-c2-variants.yaml"), "c2_http_beaconing")
+
+	os.Setenv("BFSI_SIMULATOR_HOST", host)
+	os.Setenv("BFSI_SIMULATOR_PORT", port)
+	defer os.Unsetenv("BFSI_SIMULATOR_HOST")
+	defer os.Unsetenv("BFSI_SIMULATOR_PORT")
+
+	out := runCobaltBFSIPowerShell(t, beaconCmd)
+
+	if !strings.Contains(out, "[BAS-C2-C2-01]") {
+		t.Fatalf("beacon step did not produce its verdict tag; output: %s", out)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(out), "PASS:") {
+		t.Errorf("c2-01 verdict was not PASS against a live simulator: %s", out)
+	}
+}
