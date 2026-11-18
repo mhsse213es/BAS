@@ -3690,6 +3690,33 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "collection-email-mailbox-exfil.yaml",
+    "index": 0,
+    "technique_id": "T1114.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-email-mailbox-exfil.yaml",
+    "index": 1,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-email-mailbox-exfil.yaml",
+    "index": 2,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "collection-encrypted-archive-exfil.yaml",
     "index": 0,
     "technique_id": "T1560.001",

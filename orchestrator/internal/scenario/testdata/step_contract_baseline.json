@@ -284,6 +284,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "collection-email-mailbox-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "collection-encrypted-archive-exfil.yaml": {
     "cleanup": 0,
     "detection": 0,
