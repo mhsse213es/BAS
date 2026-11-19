@@ -80,11 +80,33 @@ func qualifyingAuditStatement(stmt, marker string) bool {
 // (DB-04-03). It is never a marker match.
 const AuditBasisRoleWindow = "role_window"
 
+// AuditBasisFailedLogin is the refused-password record of the throwaway account
+// (DB-04-04), matched under the account name the probe reports.
+const AuditBasisFailedLogin = "failed_login_window"
+
+// isConnectionBasis reports whether the evidence is a connection record, which
+// is never graded as a marker match.
+func isConnectionBasis(o Outcome) bool {
+	return o.Probe.AuditBasis == AuditBasisRoleWindow || o.Probe.AuditBasis == AuditBasisFailedLogin
+}
+
+// connectionPrincipal is the account the connection record must belong to.
+func connectionPrincipal(o Outcome) string {
+	if o.Probe.AuditBasis == AuditBasisFailedLogin {
+		return o.Probe.AuditPrincipal
+	}
+	return o.Principal
+}
+
 // roleWindowLogins counts the connection events the agent reported for the
 // probe role in the window. A login by any other role is not evidence.
 func roleWindowLogins(o Outcome) (matching int) {
+	p := connectionPrincipal(o)
+	if p == "" {
+		return 0
+	}
 	for _, e := range o.Probe.AuditEvents {
-		if e.Principal == o.Principal {
+		if e.Principal == p {
 			matching++
 		}
 	}
@@ -182,7 +204,7 @@ func auditGrade(s ScenarioMeta, o Outcome) (DimensionGrade, []string) {
 	if s.ExpectAudit {
 		switch o.Probe.AuditStatus {
 		case AuditFound:
-			if o.Probe.AuditBasis == AuditBasisRoleWindow {
+			if isConnectionBasis(o) {
 				switch n := roleWindowLogins(o); {
 				case n == 1:
 					grades = append(grades, DimPass)
@@ -252,7 +274,7 @@ func auditTelemetry(s ScenarioMeta, o Outcome, alertTel dlpreport.TelemetryOutco
 	case s.ExpectAudit:
 		switch o.Probe.AuditStatus {
 		case AuditFound:
-			if o.Probe.AuditBasis == AuditBasisRoleWindow {
+			if isConnectionBasis(o) {
 				if roleWindowLogins(o) == 1 {
 					fromAudit = dlpreport.TelemetryPresent
 				} else {

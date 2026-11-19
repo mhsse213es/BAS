@@ -62,7 +62,7 @@ func (s *Scenario) ValidateDBProbeSteps() error {
 		case st.Marker != "":
 			return fmt.Errorf("step %d (%q): dbprobe step must not set a host-event marker (the builder issues the probe marker)", n, st.Name)
 		}
-		if st.DBAuditBasis != "" && st.DBAuditBasis != "role_window" {
+		if st.DBAuditBasis != "" && st.DBAuditBasis != "role_window" && st.DBAuditBasis != "failed_login_window" {
 			return fmt.Errorf("step %d (%q): db_audit_basis %q is not a known basis", n, st.Name, st.DBAuditBasis)
 		}
 		if st.DBFixture != "" && !dbFixtureNamePat.MatchString(st.DBFixture) {

@@ -1,0 +1,53 @@
+id: dbsim-db04-04-failed-login-audit
+product_line: dbsim
+name: Database Security Simulation DB-04-04 - Failed Login Audit Coverage
+description: >
+  Lab-only. Checks that a refused login is recorded by the database audit
+  trail. The agent creates a THROWAWAY login account for this run only (named
+  dbsim_<fixture id>_acct, random password, no privileges beyond defaults),
+  makes one login with a deliberately wrong password, and reports whether the
+  server refused it. The refusal must then appear in the connection log under
+  that throwaway account name. A refusal is the expected outcome; a refusal
+  that leaves no audit record is an audit gap, not a pass. The account is
+  dropped at the end of the run.
+
+  A failed login carries no SQL statement, so it cannot carry the run marker.
+  The match is by the throwaway account name and the server's refusal line,
+  and the result is reported on that basis.
+
+  ATT&CK mapping: T1110 Brute Force (the failed-authentication activity whose
+  audit record is looked for).
+
+  Requires connection logging on the target (log_connections; see the DB-04-03
+  baseline). Target details come from the server-side registry by id.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - audit
+  - authentication
+  - lab-only
+  - mitre-attack
+mitre_phases:
+  - credential-access
+
+steps:
+  - name: "DB-04-04 Wrong-password login for audit readback (T1110)"
+    technique_id: T1110
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: auth_failed_login
+    db_fixture: empty
+    db_audit_basis: failed_login_window
+    db_limits:
+      max_rows: 1
+      timeout_sec: 60
+      max_conns: 1
+    risk: high
+    blast_radius: "creates, attempts one wrong-password login as, and drops one throwaway login account (dbsim_<id>_acct) plus a per-run empty fixture schema in the lab database"
+    reversible: true
+    telemetry:
+      - "Database connection log records the refused login of the throwaway account"
+    detection:
+      - "SIEM: a failed authentication for the throwaway account"

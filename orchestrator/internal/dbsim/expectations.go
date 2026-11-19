@@ -90,6 +90,10 @@ var expectations = map[string]map[string]Expectation{
 		"read_roles":        {ExpectedPrevention: "allow", ExpectDetection: true, ExpectAudit: true},
 	},
 	// DB-04-03: a successful login must appear in the connection log for the probe role.
+	// DB-04-04: a refused wrong-password login must be recorded under the throwaway account.
+	"dbsim-db04-04-failed-login-audit": {
+		"auth_failed_login": {ExpectedPrevention: "deny", ExpectAudit: true},
+	},
 	"dbsim-db04-03-authentication-audit": {
 		"auth_check": {ExpectedPrevention: "allow", ExpectAudit: true},
 	},
