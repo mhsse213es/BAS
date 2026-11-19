@@ -40,6 +40,9 @@ type FixtureTable struct {
 	Name    string          `json:"name"`
 	Columns []FixtureColumn `json:"columns"`
 	Rows    [][]any         `json:"rows,omitempty"`
+	// Restricted tables are created with the fixture but never granted to its probe
+	// role, so a read of them must be denied by the database. DB-03 uses them.
+	Restricted bool `json:"restricted,omitempty"`
 }
 
 var fixtureIdent = regexp.MustCompile(`^[a-z][a-z0-9_]{0,30}$`)

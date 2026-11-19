@@ -636,6 +636,10 @@ func TestCapabilitiesOfferTask15Probes(t *testing.T) {
 		offered[id] = true
 	}
 	for _, id := range dbprobe.ProbeIDs() {
+		def, _ := dbprobe.LookupProbe(id)
+		if !supportsEngine(def, "mysql") {
+			continue // a PostgreSQL-only probe is not offered on MySQL
+		}
 		if !offered[id] {
 			t.Errorf("adapter does not offer catalog probe %q", id)
 		}
@@ -725,4 +729,14 @@ func TestFingerprintContextExpiryMarksAdapterBroken(t *testing.T) {
 	if res.ErrorClass != "fingerprint_failed" || !a.broken {
 		t.Fatalf("%+v broken=%v", res, a.broken)
 	}
+}
+
+// supportsEngine reports whether a catalog probe declares the engine.
+func supportsEngine(def dbprobe.ProbeDef, engine string) bool {
+	for _, e := range def.Engines {
+		if e == engine {
+			return true
+		}
+	}
+	return false
 }

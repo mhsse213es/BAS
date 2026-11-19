@@ -38,6 +38,9 @@ const (
 	KindClassifiedPII = "classified-pii"
 	KindEmpty         = "empty"
 	KindEdge          = "edge"
+	// KindAuthzRestricted holds the restricted tables DB-03 reads. Every table is
+	// created and never granted to the probe role (see FixtureTable.Restricted).
+	KindAuthzRestricted = "authz-restricted"
 )
 
 var builders = map[string]func() []dbprobe.FixtureTable{
@@ -45,6 +48,7 @@ var builders = map[string]func() []dbprobe.FixtureTable{
 	KindClassifiedPII: piiTables,
 	KindEmpty:         emptyTables,
 	KindEdge:          edgeTables,
+	KindAuthzRestricted: authzRestrictedTables,
 }
 
 // Lookup returns a fresh copy of the named catalog fixture. The data is
@@ -151,4 +155,55 @@ func edgeTables() []dbprobe.FixtureTable {
 			{5, marker("QUOTES"), "O'Brien \"quoted\" \\ back\\slash `tick` -- ; /* c */", "BAS-SIM-'; SELECT 1; --"},
 		},
 	}}
+}
+
+// authzRestrictedTables are the synthetic restricted objects DB-03 reads. None is
+// granted to the probe role, so each read must be denied. Every row carries the
+// synthetic marker; the values are fictional (example.invalid, 555-01XX).
+func authzRestrictedTables() []dbprobe.FixtureTable {
+	restricted := dbprobe.FixtureTable{
+		Name: "restricted",
+		Columns: []dbprobe.FixtureColumn{
+			{Name: "id", Type: dbprobe.FixtureColInt, PK: true},
+			{Name: "synthetic", Type: dbprobe.FixtureColText},
+			{Name: "label", Type: dbprobe.FixtureColText},
+		},
+		Restricted: true,
+	}
+	for i := 1; i <= 3; i++ {
+		restricted.Rows = append(restricted.Rows, []any{i, marker("SYNTHETIC"), fmt.Sprintf("restricted-%d", i)})
+	}
+	customers := dbprobe.FixtureTable{
+		Name: "customers",
+		Columns: []dbprobe.FixtureColumn{
+			{Name: "id", Type: dbprobe.FixtureColInt, PK: true},
+			{Name: "synthetic", Type: dbprobe.FixtureColText},
+			{Name: "tenant_id", Type: dbprobe.FixtureColText},
+			{Name: "full_name", Type: dbprobe.FixtureColText},
+			{Name: "email", Type: dbprobe.FixtureColText},
+			{Name: "phone", Type: dbprobe.FixtureColText},
+		},
+		Restricted: true,
+	}
+	for i := 1; i <= 4; i++ {
+		customers.Rows = append(customers.Rows, []any{i, marker("SYNTHETIC"), fmt.Sprintf("tenant-%d", i%2+1),
+			fmt.Sprintf("BAS-SIM Customer %02d", i), fmt.Sprintf("bas-sim-customer%02d@example.invalid", i),
+			fmt.Sprintf("+1-555-02%02d", i)})
+	}
+	transactions := dbprobe.FixtureTable{
+		Name: "transactions",
+		Columns: []dbprobe.FixtureColumn{
+			{Name: "id", Type: dbprobe.FixtureColInt, PK: true},
+			{Name: "synthetic", Type: dbprobe.FixtureColText},
+			{Name: "account_ref", Type: dbprobe.FixtureColText},
+			{Name: "amount_minor", Type: dbprobe.FixtureColInt},
+			{Name: "memo", Type: dbprobe.FixtureColText},
+		},
+		Restricted: true,
+	}
+	for i := 1; i <= 4; i++ {
+		transactions.Rows = append(transactions.Rows, []any{i, marker("SYNTHETIC"), fmt.Sprintf("BAS-SIM-ACCT-%02d", i),
+			i * 1250, fmt.Sprintf("synthetic transfer %d", i)})
+	}
+	return []dbprobe.FixtureTable{restricted, customers, transactions}
 }

@@ -908,7 +908,10 @@ func tableFixtureSQL(schema, user string, tables []dbprobe.FixtureTable) ([]mySt
 		}
 	}
 	out = append(out, myStmt{sql: "CREATE USER " + ul + " ACCOUNT LOCK"})
-	for _, q := range qualified {
+	for ti, q := range qualified {
+		if tables[ti].Restricted {
+			continue // created, never granted: the probe account must be denied
+		}
 		out = append(out, myStmt{sql: "GRANT SELECT ON " + q + " TO " + ul})
 	}
 	return out, nil

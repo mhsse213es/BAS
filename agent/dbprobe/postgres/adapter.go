@@ -381,7 +381,7 @@ func str(v any) string {
 // (SKIPPED), never as a pass. It answers from the cache; it issues no SQL.
 func (a *Adapter) Capabilities() dbprobe.Capabilities {
 	c := dbprobe.Capabilities{
-		ProbeIDs: []string{"auth_after_revoke", "auth_check", "bounded_synthetic_read", "check_export_privileges", "check_readonly_identity", "read_audit_config", "read_classified_fixture",
+		ProbeIDs: []string{"auth_after_revoke", "auth_check", "bounded_synthetic_read", "check_export_privileges", "check_readonly_identity", "read_audit_config", "read_classified_fixture", "read_customer_records", "read_financial_records",
 			"read_grants", "read_restricted_table", "read_roles", "suspicious_read", "try_disable_audit", "try_write_fixture"},
 		MarkerInAppName:   true,
 		MarkerInQueryText: true,
@@ -498,10 +498,26 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 	res.Notes = append(res.Notes, a.notes...)
 	var rows [][]any
 	readStart := time.Now()
+	// A read of a restricted fixture table runs under the fixture's read role, which
+	// holds no grant on it: the database must deny the read. SET LOCAL ends with the
+	// transaction.
+	readRole := ""
+	if isFixtureRead {
+		if fx, tbl, rerr := a.Resolve(dbprobe.FixtureTableFor(real, spec)); rerr == nil && tbl.Restricted {
+			if _, role, nerr := fixtureNames(fx.ID); nerr == nil {
+				readRole = role
+			}
+		}
+	}
 	err = a.inTxn(ctx, mode, txClass, spec.Limits, spec.Marker, func(ctx context.Context, comment string) error {
 		clk, err := a.s.Query(ctx, comment+sqlClock, 1)
 		if err != nil {
 			return err
+		}
+		if readRole != "" {
+			if err := a.s.Exec(ctx, "SET LOCAL ROLE "+pgx.Identifier{readRole}.Sanitize()); err != nil {
+				return err
+			}
 		}
 		if len(clk) != 1 || len(clk[0]) != 1 {
 			return errors.New("no clock row")
@@ -705,9 +721,41 @@ func tableFixtureStmts(schema, role string, tables []dbprobe.FixtureTable) []pgS
 		pgStmt{sql: "GRANT USAGE ON SCHEMA " + qs + " TO " + qr},
 	)
 	for _, t := range tables {
+		if t.Restricted {
+			continue // created, never granted: the probe role must be denied
+		}
 		out = append(out, pgStmt{sql: "GRANT SELECT ON " + pgx.Identifier{schema, t.Name}.Sanitize() + " TO " + qr})
 	}
+	// The seeding login owns every table it creates, and an owner can always read
+	// its own table. Restricted tables are therefore handed to a per-run owner role
+	// the login cannot read through: the probe reads them under the read role only.
+	if hasRestrictedTable(tables) {
+		qo := pgx.Identifier{ownerRoleFor(schema)}.Sanitize()
+		out = append(out,
+			pgStmt{sql: "CREATE ROLE " + qo + " NOLOGIN"},
+			pgStmt{sql: "GRANT CREATE ON SCHEMA " + qs + " TO " + qo},
+			pgStmt{sql: "GRANT " + qo + " TO CURRENT_USER"},
+			pgStmt{sql: "GRANT " + qr + " TO CURRENT_USER"},
+		)
+		for _, t := range tables {
+			if t.Restricted {
+				out = append(out, pgStmt{sql: "ALTER TABLE " + pgx.Identifier{schema, t.Name}.Sanitize() + " OWNER TO " + qo})
+			}
+		}
+	}
 	return out
+}
+
+// ownerRoleFor names the per-run role that owns a fixture's restricted tables.
+func ownerRoleFor(schema string) string { return schema + "_own" }
+
+func hasRestrictedTable(tables []dbprobe.FixtureTable) bool {
+	for _, t := range tables {
+		if t.Restricted {
+			return true
+		}
+	}
+	return false
 }
 
 // Mode reports the connection mode (dbprobe.ModeReporter); fixtures.Seed
@@ -795,9 +843,16 @@ func (a *Adapter) Cleanup(ctx context.Context, f dbprobe.Fixture) (dbprobe.Clean
 	ctx, cancel := context.WithTimeout(ctx, labOpTimeout)
 	defer cancel()
 	var errs []string
+	owner := ownerRoleFor(schema)
+	qo := pgx.Identifier{owner}.Sanitize()
+	qr := pgx.Identifier{role}.Sanitize()
 	for _, s := range []string{
 		"DROP SCHEMA IF EXISTS " + pgx.Identifier{schema}.Sanitize() + " CASCADE",
-		"DROP ROLE IF EXISTS " + pgx.Identifier{role}.Sanitize(),
+		// Memberships granted for the run are revoked before the roles are dropped.
+		"REVOKE " + qr + " FROM CURRENT_USER",
+		"REVOKE " + qo + " FROM CURRENT_USER",
+		"DROP ROLE IF EXISTS " + qr,
+		"DROP ROLE IF EXISTS " + qo,
 	} {
 		if err := a.s.Exec(ctx, s); err != nil {
 			errs = append(errs, wrapErr("cleanup", err, a.secrets...).Error())
@@ -812,6 +867,11 @@ func (a *Adapter) Cleanup(ctx context.Context, f dbprobe.Fixture) (dbprobe.Clean
 		out.Residual = append(out.Residual, "role:"+role)
 	} else {
 		out.Removed = append(out.Removed, "role:"+role)
+	}
+	if rows, err := a.s.Query(ctx, "SELECT 1 FROM pg_roles WHERE rolname = $1", 1, owner); err != nil || len(rows) > 0 {
+		out.Residual = append(out.Residual, "role:"+owner)
+	} else {
+		out.Removed = append(out.Removed, "role:"+owner)
 	}
 	if a.acct.mayExist && a.acct.name != "" {
 		// Exactly the account this adapter created for this run, by name, and only
