@@ -89,6 +89,10 @@ var expectations = map[string]map[string]Expectation{
 		"read_audit_config": {ExpectedPrevention: "allow", ExpectAuditConfig: true},
 		"read_roles":        {ExpectedPrevention: "allow", ExpectDetection: true, ExpectAudit: true},
 	},
+	// DB-04-03: a successful login must appear in the connection log for the probe role.
+	"dbsim-db04-03-authentication-audit": {
+		"auth_check": {ExpectedPrevention: "allow", ExpectAudit: true},
+	},
 	// DB-04-07: a denied sensitive read must still be recorded by the audit trail.
 	"dbsim-db04-07-sensitive-table-access": {
 		"read_restricted_table": {ExpectedPrevention: "deny", ExpectDetection: true, ExpectAudit: true},

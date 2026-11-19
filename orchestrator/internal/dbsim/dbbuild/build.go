@@ -161,6 +161,7 @@ func BuildSteps(ctx context.Context, sc *scenario.Scenario, opt Options) ([]scen
 			ExpectedIdentity: target.ExpectedIdentity, CredentialRef: target.CredentialRef,
 			RunID: runID, Marker: MarkerPrefix + mh, FixtureID: st.DBFixture,
 			Mode: target.Mode, Limits: limits, Params: copyParams(st.DBParams),
+			AuditBasis: st.DBAuditBasis,
 		}
 		raw, err := json.Marshal(spec)
 		if err != nil {

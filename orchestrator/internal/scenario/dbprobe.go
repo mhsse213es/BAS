@@ -39,7 +39,7 @@ func isDBProbeExecutor(e string) bool { return strings.EqualFold(e, ExecutorDBPr
 func (s *Scenario) ValidateDBProbeSteps() error {
 	for i, st := range s.Steps {
 		n := i + 1
-		hasDB := st.DBTarget != "" || st.DBProbe != "" || len(st.DBParams) > 0 || st.DBLimits != nil || st.DBFixture != ""
+		hasDB := st.DBTarget != "" || st.DBProbe != "" || len(st.DBParams) > 0 || st.DBLimits != nil || st.DBFixture != "" || st.DBAuditBasis != ""
 		if !isDBProbeExecutor(st.Executor) {
 			if hasDB {
 				return fmt.Errorf("step %d (%q): db_* fields are only valid with executor %q", n, st.Name, ExecutorDBProbe)
@@ -61,6 +61,9 @@ func (s *Scenario) ValidateDBProbeSteps() error {
 			return fmt.Errorf("step %d (%q): dbprobe step must not carry a cleanup script", n, st.Name)
 		case st.Marker != "":
 			return fmt.Errorf("step %d (%q): dbprobe step must not set a host-event marker (the builder issues the probe marker)", n, st.Name)
+		}
+		if st.DBAuditBasis != "" && st.DBAuditBasis != "role_window" {
+			return fmt.Errorf("step %d (%q): db_audit_basis %q is not a known basis", n, st.Name, st.DBAuditBasis)
 		}
 		if st.DBFixture != "" && !dbFixtureNamePat.MatchString(st.DBFixture) {
 			return fmt.Errorf("step %d (%q): db_fixture %q is not a valid fixture name", n, st.Name, st.DBFixture)

@@ -40,6 +40,8 @@ type DBProbeSpec struct {
 	Marker           string            `json:"marker"`
 	FixtureID        string            `json:"fixtureId,omitempty"`
 	Mode             ExecMode          `json:"mode"`
+	// AuditBasis selects the audit evidence class: "" (marker) or AuditBasisRoleWindow.
+	AuditBasis string `json:"auditBasis,omitempty"`
 	Limits           Limits            `json:"limits"`
 	Params           map[string]string `json:"params,omitempty"`
 }
@@ -55,6 +57,8 @@ type DBProbeResult struct {
 	// (agent/protocol/dbprobe.go). Empty AuditStatus means no attempt was
 	// recorded; "unsupported" and "error" must never be graded as a pass.
 	AuditStatus string              `json:"auditStatus,omitempty"`
+	// AuditBasis echoes the evidence class that produced AuditStatus.
+	AuditBasis string `json:"auditBasis,omitempty"`
 	AuditEvents []DBProbeAuditEvent `json:"auditEvents,omitempty"`
 	// CleanupStatus and SafetyIncident mirror the agent's fixture teardown
 	// report (agent/protocol/dbprobe.go). Empty status means an older agent or

@@ -76,6 +76,21 @@ func qualifyingAuditStatement(stmt, marker string) bool {
 // auditHasMarkerEvidence reports whether at least one reported audit event is
 // a qualifying statement of this run. An agent that claims "found" without such
 // an event is not believed.
+// AuditBasisRoleWindow is connection evidence matched by role and time window
+// (DB-04-03). It is never a marker match.
+const AuditBasisRoleWindow = "role_window"
+
+// roleWindowLogins counts the connection events the agent reported for the
+// probe role in the window. A login by any other role is not evidence.
+func roleWindowLogins(o Outcome) (matching int) {
+	for _, e := range o.Probe.AuditEvents {
+		if e.Principal == o.Principal {
+			matching++
+		}
+	}
+	return matching
+}
+
 func auditHasMarkerEvidence(o Outcome) bool {
 	for _, e := range o.Probe.AuditEvents {
 		if qualifyingAuditStatement(e.Statement, o.Marker) {
@@ -167,7 +182,18 @@ func auditGrade(s ScenarioMeta, o Outcome) (DimensionGrade, []string) {
 	if s.ExpectAudit {
 		switch o.Probe.AuditStatus {
 		case AuditFound:
-			if auditHasMarkerEvidence(o) {
+			if o.Probe.AuditBasis == AuditBasisRoleWindow {
+				switch n := roleWindowLogins(o); {
+				case n == 1:
+					grades = append(grades, DimPass)
+				case n > 1:
+					grades = append(grades, DimUnverifiable)
+					lims = append(lims, "More than one login by the probe role fell in the window: the connection cannot be attributed to this probe, so the result is inconclusive.")
+				default:
+					grades = append(grades, DimUnverifiable)
+					lims = append(lims, "No login by the probe role was reported in the window: connection evidence is unverifiable.")
+				}
+			} else if auditHasMarkerEvidence(o) {
 				grades = append(grades, DimPass)
 			} else {
 				grades = append(grades, DimUnverifiable)
@@ -226,7 +252,13 @@ func auditTelemetry(s ScenarioMeta, o Outcome, alertTel dlpreport.TelemetryOutco
 	case s.ExpectAudit:
 		switch o.Probe.AuditStatus {
 		case AuditFound:
-			if auditHasMarkerEvidence(o) {
+			if o.Probe.AuditBasis == AuditBasisRoleWindow {
+				if roleWindowLogins(o) == 1 {
+					fromAudit = dlpreport.TelemetryPresent
+				} else {
+					fromAudit = dlpreport.TelemetryUnverifiable
+				}
+			} else if auditHasMarkerEvidence(o) {
 				fromAudit = dlpreport.TelemetryPresent
 			} else {
 				fromAudit = dlpreport.TelemetryUnverifiable

@@ -5409,6 +5409,15 @@
     "status": "self_cleaning_declared"
   },
   {
+    "scenario": "dbsim-db04-03-authentication-audit.yaml",
+    "index": 0,
+    "technique_id": "T1078",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "dbsim-db04-07-sensitive-table-access.yaml",
     "index": 0,
     "technique_id": "T1213",
