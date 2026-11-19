@@ -1,6 +1,6 @@
 # DB-04: Database Audit and Monitoring Validation — Design
 
-Status: DRAFT for review. Nothing here is built. Test IDs and priorities come from the
+Status: APPROVED for implementation (2026-11-19). Decisions in section 11 are binding. Test IDs and priorities come from the
 requirement pasted by the product owner; the engine-specific detail, evidence rules and
 mapping proposals are this document's.
 
@@ -167,6 +167,27 @@ before it is used in a report.
 4. Is a read path from agent to audit file needed on staging, or is the database's own audit
    table enough? This decides whether the agent needs new file-read permissions.
 5. Should tests 13 and 14 exist at all in the lab, given they change audit configuration?
+
+## 11. Decisions (product owner, 2026-11-19)
+
+1. **PostgreSQL pgaudit: approved** for the dedicated lab instance only. Installation,
+   configuration and rollback are documented. Not a mandatory production dependency.
+2. **MySQL authoritative audit path: the Enterprise Audit plugin** (or an explicitly
+   supported equivalent). The general log is supplementary evidence only and never
+   counts as security audit evidence.
+3. **Test 16 timestamp tolerance: ±5 seconds** between the generated event and the
+   observed audit timestamp. Timezone normalisation and clock sync are accounted for.
+   Larger deviations are FAIL.
+4. **No new agent read path for audit files.** Use database audit tables or supported
+   database interfaces. Where an engine only exposes evidence through files, that limit is
+   documented and file collection is a separate, separately approved capability. No broad
+   filesystem permissions.
+5. **Tests 13 and 14 kept, lab-only.** Controlled, reversible configuration changes on
+   isolated lab instances; verify detection and restoration. Never run against production.
+
+Build constraints: keep the per-run fixture lifecycle, synthetic data, verified cleanup and
+explicit PASS / FAIL / ERROR / SKIPPED outcomes. Do not merge until the full validation
+suite passes.
 
 ## 10. Build order (after approval)
 
