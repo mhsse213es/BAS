@@ -133,6 +133,21 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureRecoverySchema: %w", err)
 	}
+	if err := db.EnsureDBSimRunSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureDBSimRunSchema: %w", err)
+	}
+	if err := db.EnsureDBSimTargetSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureDBSimTargetSchema: %w", err)
+	}
+	if err := db.EnsureDBSimJobSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureDBSimJobSchema: %w", err)
+	}
 	if err := db.EnsureContentRegistrySchema(ctx, pool); err != nil {
 		pool.Close()
 		_ = container.Terminate(context.Background())
