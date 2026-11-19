@@ -45,6 +45,7 @@ import (
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/dbsim/dbadmin"
 	"github.com/audspect/bas/internal/dbsim/dbjobs"
+	"github.com/audspect/bas/internal/dbsim/dbbuild"
 	"github.com/audspect/bas/internal/deployconfig"
 	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/emailgwefficacy"
@@ -3219,6 +3220,12 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	// for /ws/agent). An unknown RunID is deliberately left to the existing
 	// no-op-accept behavior below (see TestSubmitScenarioResult_UnknownRunID)
 	// rather than rejected here.
+	// Database simulation runs are graded by the dbjobs service, never by the
+	// scenario grader below. Ingest checks the agent against the job's bound agent itself.
+	if strings.HasPrefix(raw.RunID, dbbuild.RunIDPrefix) {
+		h.submitDBSimResult(r.Context(), w, body)
+		return
+	}
 	var dispatchedAgentID string
 	if err := h.db.QueryRow(r.Context(),
 		`SELECT agent_id FROM scenario_runs WHERE id = $1`, raw.RunID,

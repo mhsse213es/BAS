@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -12,6 +13,7 @@ import (
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/dbsim/dbadmin"
 	"github.com/audspect/bas/internal/dbsim/dbjobs"
+	"github.com/audspect/bas/internal/dbsim/dbrun"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
 )
@@ -65,6 +67,7 @@ func (h *Handler) dbsimRunService() *dbjobs.Service {
 			Gate:       h.DBSimClientModeGate(),
 			Audit:      dbsimAuditor{h: h},
 			Runs:       dbsimRunRecorder{h: h},
+			Sink:       dbsimRunSink{h: h},
 		}
 	})
 	return h.dbsimRunSvc
@@ -126,4 +129,36 @@ func dbsimRunError(w http.ResponseWriter, err error) {
 	default:
 		jsonError(w, "could not start the run", http.StatusInternalServerError)
 	}
+}
+
+// submitDBSimResult grades an agent's result for a database run. The dbjobs
+// service checks the agent is the one the job was bound to, grades every step,
+// and stores the rows; the scenario grader never sees these results.
+func (h *Handler) submitDBSimResult(ctx context.Context, w http.ResponseWriter, body []byte) {
+	svc := h.dbsimRunService()
+	if svc == nil {
+		jsonError(w, "database simulation runs are not configured on this server", http.StatusServiceUnavailable)
+		return
+	}
+	var sub struct {
+		RunID   string         `json:"runId"`
+		AgentID string         `json:"agentId"`
+		Partial bool           `json:"partial"`
+		Results []dbrun.AgentExec `json:"results"`
+	}
+	if err := json.Unmarshal(body, &sub); err != nil || sub.RunID == "" {
+		jsonError(w, "invalid database result payload", http.StatusBadRequest)
+		return
+	}
+	handled, err := svc.Ingest(ctx, dbjobs.Submission{RunID: sub.RunID, AgentID: sub.AgentID, Partial: sub.Partial, Results: sub.Results})
+	if !handled {
+		jsonError(w, "unknown database run", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		log.Printf("[dbsim] result for run %s not recorded: %v", sub.RunID, err)
+		jsonError(w, "the result could not be graded or stored", http.StatusInternalServerError)
+		return
+	}
+	respond(w, map[string]any{"status": "accepted", "runId": sub.RunID})
 }
