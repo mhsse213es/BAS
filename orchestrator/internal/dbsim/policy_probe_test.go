@@ -13,6 +13,13 @@ func TestGrantsFromProbeKeepsEveryGrant(t *testing.T) {
 	}
 }
 
+func TestGrantsFromProbeKeepsGrantOption(t *testing.T) {
+	got := GrantsFromProbe(DBProbeResult{Grants: []DBProbeGrant{{Role: "app", Object: "public.a", Privilege: "SELECT", GrantOption: true}}})
+	if len(got) != 1 || !got[0].GrantOption {
+		t.Fatalf("grant option dropped: %+v", got)
+	}
+}
+
 func TestPolicyFromJSONRefusesUnnamedOrEmptyPolicy(t *testing.T) {
 	cases := map[string]string{
 		"no source": `{"roles":{"app":{"allow":{"public.accounts":["SELECT"]}}}}`,

@@ -76,6 +76,8 @@ type DBProbeGrant struct {
 	Role      string `json:"role"`
 	Object    string `json:"object"`
 	Privilege string `json:"privilege"`
+	// GrantOption is true when the role may re-grant this privilege (WITH GRANT OPTION).
+	GrantOption bool `json:"grantOption,omitempty"`
 }
 
 // Cleanup status values (DBProbeResult.CleanupStatus). Mirrored by

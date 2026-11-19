@@ -68,9 +68,10 @@ type DBProbeResult struct {
 
 // DBProbeGrant mirrors agent protocol.DBProbeGrant.
 type DBProbeGrant struct {
-	Role      string `json:"role"`
-	Object    string `json:"object"`
-	Privilege string `json:"privilege"`
+	Role        string `json:"role"`
+	Object      string `json:"object"`
+	Privilege   string `json:"privilege"`
+	GrantOption bool   `json:"grantOption,omitempty"`
 }
 
 // Cleanup status values (DBProbeResult.CleanupStatus); same strings as the

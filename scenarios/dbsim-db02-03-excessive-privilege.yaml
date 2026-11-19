@@ -1,0 +1,36 @@
+id: dbsim-db02-03-excessive-privilege
+product_line: dbsim
+name: Database Security Simulation DB-02-03 - Excessive Privilege Detection
+description: >
+  Lists the table privileges held by the lab account dbsim_lab and compares
+  them with the stated grant policy. The lab grants it SELECT on the audit log,
+  which a policy that excludes it would report as a violation. Graded only when
+  a policy is configured for the target; without one the step is ERROR.
+  ATT&CK T1087 Account Discovery.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - privileges
+  - grants
+  - read-only
+  - mitre-attack
+mitre_phases:
+  - discovery
+
+steps:
+  - name: "DB-02-03 Excessive privilege detection (T1087)"
+    technique_id: T1087
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_grants
+    db_params:
+      role: dbsim_lab
+    risk: low
+    blast_radius: "read-only privilege catalog query for one role; no state changed"
+    telemetry:
+      - "PostgreSQL pg_log: the BAS-marked privilege catalog read for role dbsim_lab"
+    detection:
+      - "SIEM: privilege catalog read for a lab account, a discovery signal"
+    reversible: true
