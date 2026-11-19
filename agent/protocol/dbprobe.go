@@ -65,7 +65,17 @@ type DBProbeResult struct {
 	// verification failed or left residual objects; such a result must never be
 	// usable as a PASS, even if the probe itself succeeded.
 	CleanupStatus  string `json:"cleanupStatus,omitempty"`
+	// Grants is set only by read_grants: one catalogue grant per row (role, object,
+	// privilege). It is metadata, never row data, and feeds the DB-02 policy diff.
+	Grants []DBProbeGrant `json:"grants,omitempty"`
 	SafetyIncident bool   `json:"safetyIncident,omitempty"`
+}
+
+// DBProbeGrant is one privilege grant read from the catalogue by read_grants.
+type DBProbeGrant struct {
+	Role      string `json:"role"`
+	Object    string `json:"object"`
+	Privilege string `json:"privilege"`
 }
 
 // Cleanup status values (DBProbeResult.CleanupStatus). Mirrored by

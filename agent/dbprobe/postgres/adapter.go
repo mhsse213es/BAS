@@ -564,7 +564,41 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 		return res, nil
 	}
 	res.RowsRead = b.Used()
+	if spec.ProbeID == "read_grants" {
+		// The grant list is the policy diff's input, so a truncated or malformed list
+		// must not look complete: truncation fails the probe, a bad row is refused.
+		if len(rows) >= queryMax {
+			res.ErrorClass = "row_limit_exceeded"
+			res.Notes = append(res.Notes, "read_grants: grant list truncated; policy diff not run")
+			return res, nil
+		}
+		grants, gerr := strictGrants(rows)
+		if gerr != nil {
+			res.Notes = append(res.Notes, "read_grants: "+gerr.Error())
+			return res, nil
+		}
+		res.Grants = grants
+	}
 	return res, nil
+}
+
+// strictGrants converts read_grants rows (grantee, object, privilege) without ever
+// dropping one: a row that is not three text values is an error, not a skipped grant.
+func strictGrants(rows [][]any) ([]dbprobe.DBProbeGrant, error) {
+	out := make([]dbprobe.DBProbeGrant, 0, len(rows))
+	for i, r := range rows {
+		if len(r) != 3 {
+			return nil, fmt.Errorf("row %d has %d columns, want 3", i, len(r))
+		}
+		role, ok1 := r[0].(string)
+		obj, ok2 := r[1].(string)
+		priv, ok3 := r[2].(string)
+		if !ok1 || !ok2 || !ok3 {
+			return nil, fmt.Errorf("row %d is not three text values", i)
+		}
+		out = append(out, dbprobe.DBProbeGrant{Role: role, Object: obj, Privilege: priv})
+	}
+	return out, nil
 }
 
 func classify(res *dbprobe.ProbeResult, pe *pgconn.PgError) {

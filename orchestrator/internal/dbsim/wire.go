@@ -62,6 +62,15 @@ type DBProbeResult struct {
 	// graded as a pass.
 	CleanupStatus  string `json:"cleanupStatus,omitempty"`
 	SafetyIncident bool   `json:"safetyIncident,omitempty"`
+	// Grants mirrors agent protocol.DBProbeResult.Grants (read_grants only).
+	Grants []DBProbeGrant `json:"grants,omitempty"`
+}
+
+// DBProbeGrant mirrors agent protocol.DBProbeGrant.
+type DBProbeGrant struct {
+	Role      string `json:"role"`
+	Object    string `json:"object"`
+	Privilege string `json:"privilege"`
 }
 
 // Cleanup status values (DBProbeResult.CleanupStatus); same strings as the

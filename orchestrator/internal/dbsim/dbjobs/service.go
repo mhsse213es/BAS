@@ -159,6 +159,10 @@ type Service struct {
 	// func (or when it returns "") correlation is skipped and telemetry is
 	// Unverifiable.
 	Principal func(job dbsim.RunJob, rec dbsim.TargetRecord, res dbsim.DBProbeResult) string
+	// GrantPolicy returns the policy a read_grants step is compared against for a target.
+	// ok=false (or nil) means no policy is configured: the grants dimension stays
+	// unverifiable and never passes.
+	GrantPolicy func(job dbsim.RunJob, rec dbsim.TargetRecord) (dbsim.Policy, bool)
 	AgentIP   func(ctx context.Context, agentID string) string
 	// ConnectorTimeout bounds the connector factory call and each SIEM query
 	// (default DefaultConnectorTimeout); IngestTimeout bounds the whole grading

@@ -16,6 +16,7 @@ type (
 	ExecMode    = protocol.DBExecMode
 	Limits      = protocol.DBProbeLimits
 	ProbeResult = protocol.DBProbeResult
+	DBProbeGrant = protocol.DBProbeGrant
 )
 
 const (

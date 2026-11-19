@@ -1,6 +1,9 @@
 package dbsim
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -182,4 +185,30 @@ func objectMatches(pattern, object string) bool {
 		return strings.HasPrefix(object, strings.TrimSuffix(pattern, "*"))
 	}
 	return false
+}
+
+// GrantsFromProbe converts the grants a read_grants probe returned into the Grant
+// list Diff compares. It keeps every grant; nothing is filtered here.
+func GrantsFromProbe(res DBProbeResult) []Grant {
+	out := make([]Grant, 0, len(res.Grants))
+	for _, g := range res.Grants {
+		out = append(out, Grant{Role: g.Role, Object: g.Object, Privilege: g.Privilege})
+	}
+	return out
+}
+
+// PolicyFromJSON parses a policy file. The source must be named: a finding has to
+// trace to the yardstick it was measured against, so an unnamed policy is refused.
+func PolicyFromJSON(data []byte) (Policy, error) {
+	var p Policy
+	if err := json.Unmarshal(data, &p); err != nil {
+		return Policy{}, fmt.Errorf("policy: %w", err)
+	}
+	if strings.TrimSpace(p.Source) == "" {
+		return Policy{}, errors.New("policy: source is required")
+	}
+	if len(p.Roles) == 0 {
+		return Policy{}, errors.New("policy: no roles defined")
+	}
+	return p, nil
 }
