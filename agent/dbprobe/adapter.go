@@ -56,3 +56,9 @@ func Engines() []string {
 	sort.Strings(out)
 	return out
 }
+
+// ConnectionAuditor is the optional role+window audit collector (DB-04-03). An
+// adapter without it reports the connection basis as unsupported.
+type ConnectionAuditor interface {
+	CollectConnections(ctx context.Context, q AuditQuery) ([]AuditEvent, error)
+}

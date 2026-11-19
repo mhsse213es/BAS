@@ -480,6 +480,16 @@ func collectDBAudit(ctx context.Context, ad dbprobe.Adapter, spec protocol.DBPro
 				ev, err = nil, fmt.Errorf("audit collector panicked: %v", r)
 			}
 		}()
+		if spec.AuditBasis == protocol.DBAuditBasisRoleWindow {
+			ca, ok := ad.(dbprobe.ConnectionAuditor)
+			if !ok {
+				return nil, dbprobe.ErrAuditUnsupported
+			}
+			res.AuditBasis = protocol.DBAuditBasisRoleWindow
+			cq := q
+			cq.Marker = "" // a connection cannot carry the marker; match by role and window
+			return ca.CollectConnections(actx, cq)
+		}
 		return ad.CollectAudit(actx, q)
 	}()
 

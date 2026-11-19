@@ -235,3 +235,35 @@ func TestExecDBProbeStepCarriesAuditFields(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 }
+
+// DB-04-03: a role_window spec reads connection events, not the marker, and the
+// result says which basis produced the evidence.
+func TestDBProbeRoleWindowBasisUsesConnectionCollector(t *testing.T) {
+	fa := auditFake(t)
+	fa.connFn = func(_ context.Context, q dbprobe.AuditQuery) ([]dbprobe.AuditEvent, error) {
+		if q.Principal != "ro_user" || q.Marker != "" {
+			t.Fatalf("connection query must use the role and no marker: %+v", q)
+		}
+		return []dbprobe.AuditEvent{{Time: auditT0, Principal: "ro_user", Statement: "connection authorized: user=ro_user", Source: "dbsim_audit.pg_log"}}, nil
+	}
+	out, err := executeDBProbe(context.Background(), testDBProbeStep(func(s *protocol.DBProbeSpec) { s.AuditBasis = protocol.DBAuditBasisRoleWindow }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := out.Result
+	if r.AuditStatus != protocol.DBAuditFound || r.AuditBasis != protocol.DBAuditBasisRoleWindow || len(r.AuditEvents) != 1 {
+		t.Fatalf("result %+v", r)
+	}
+}
+
+func TestDBProbeRoleWindowBasisUnsupportedWithoutConnectionCollector(t *testing.T) {
+	fa := auditFake(t)
+	fa.connFn = nil
+	out, err := executeDBProbe(context.Background(), testDBProbeStep(func(s *protocol.DBProbeSpec) { s.AuditBasis = protocol.DBAuditBasisRoleWindow }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Result.AuditStatus != protocol.DBAuditUnsupported {
+		t.Fatalf("no connection collector must be unsupported, got %q", out.Result.AuditStatus)
+	}
+}
