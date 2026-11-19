@@ -1512,6 +1512,8 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
+	// dbsim job reaper: settles run jobs whose deadline passed or whose agent stayed offline.
+	go handler.StartDBSimReaper(context.Background(), 30*time.Second)
 	go func() {
 		log.Printf("[*] BAS Orchestrator mTLS listening on :%d", cfg.HTTPPort)
 		if err := mtlsSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {

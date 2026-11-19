@@ -44,6 +44,7 @@ import (
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/dbsim/dbadmin"
+	"github.com/audspect/bas/internal/dbsim/dbjobs"
 	"github.com/audspect/bas/internal/deployconfig"
 	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/emailgwefficacy"
@@ -129,6 +130,10 @@ type Handler struct {
 	// agent. nil in production until the dbsim run API exists (the check
 	// endpoint answers 501 and no target becomes client-eligible).
 	dbsimCheckRunner dbadmin.CheckRunner
+	// dbsimReap is the one long-lived job service the reaper uses. Its offline
+	// grace timer lives in that instance, so it must not be rebuilt per tick.
+	dbsimReapMu sync.Mutex
+	dbsimReap   *dbjobs.Service
 	// detectVerifyConnector builds a detectverify.Connector for a config.
 	// nil in production (New leaves it unset; call sites fall back to
 	// detectverify.NewConnector) — tests override it to avoid real HTTP calls.

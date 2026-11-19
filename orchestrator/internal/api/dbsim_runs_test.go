@@ -1,11 +1,14 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
+	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/dbsim/dbjobs"
 )
 
@@ -64,5 +67,49 @@ func TestDBSimIngestResultsRejectsMalformedProbe(t *testing.T) {
 	}
 	if _, err := dbsimIngestResults(wire); err == nil {
 		t.Fatal("a probe that is not an object must be rejected, not graded as absent")
+	}
+}
+
+// The offline grace timer lives in the job service, so the reaper must reuse one
+// service for its whole life, not build one per tick.
+func TestDBSimReaperIsOneServiceForLife(t *testing.T) {
+	h := &Handler{}
+	a := h.dbsimReaper()
+	b := h.dbsimReaper()
+	if a == nil || a != b {
+		t.Fatal("dbsimReaper must return the same service on every call")
+	}
+}
+
+func TestDBSimReaperStopsWhenContextIsCancelled(t *testing.T) {
+	h := &Handler{}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		h.StartDBSimReaper(ctx, time.Hour) // no tick in this test: only cancellation
+		close(done)
+	}()
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reaper did not stop after its context was cancelled")
+	}
+}
+
+func TestDBSimSummaryCountsLatestPerPairAndSkipsUndecodable(t *testing.T) {
+	good := []byte(`{"schema":1,"scenario":{"id":"dbsim-db01-auth-policy"}}`)
+	runs := []db.DBSimRun{
+		{ScenarioID: "s1", TargetID: "t1", Report: good},               // newest: counted
+		{ScenarioID: "s1", TargetID: "t1", Report: good},               // older run of the same pair: not counted
+		{ScenarioID: "s2", TargetID: "t1", Report: []byte(`not json`)}, // undecodable: skipped
+		{ScenarioID: "s3", TargetID: "t1", Report: good},               // a second pair: counted
+	}
+	_, counted, skipped := dbsimSummaryFrom(runs)
+	if counted != 2 {
+		t.Errorf("pairsCounted = %d, want 2 (one per distinct scenario and target)", counted)
+	}
+	if skipped != 1 {
+		t.Errorf("reportsSkipped = %d, want 1", skipped)
 	}
 }

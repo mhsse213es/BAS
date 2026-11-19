@@ -32,6 +32,7 @@ var productPrefixes = map[string]license.ProductLine{
 	"/api/dbsim":                            license.ProductDBSim,
 	"/api/dbsim-runs":                       license.ProductDBSim,
 	"/api/dbsim-jobs":                       license.ProductDBSim,
+	"/api/dbsim-summary":                    license.ProductDBSim,
 	"/api/dbsim-targets":                    license.ProductDBSim,
 	"/api/webgw":                            license.ProductWebGW,
 	"/api/killchain":                        license.ProductKillChain,

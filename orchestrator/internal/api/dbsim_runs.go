@@ -103,6 +103,11 @@ func (s dbsimSink) Count(ctx context.Context, runID string) (int, error) {
 // gate and the audit writer come from the same dbsim service the target
 // handlers use.
 func (h *Handler) dbsimJobService(svc *dbadmin.Service) *dbjobs.Service {
+	return h.newDBSimJobs(svc.Gate())
+}
+
+// newDBSimJobs builds the job service with the given client-mode gate (nil is off).
+func (h *Handler) newDBSimJobs(gate dbsim.ClientModeGate) *dbjobs.Service {
 	return &dbjobs.Service{
 		Targets:    db.DBSimTargetStore{Pool: h.db},
 		Scenarios:  h.engine,
@@ -110,7 +115,7 @@ func (h *Handler) dbsimJobService(svc *dbadmin.Service) *dbjobs.Service {
 		Dispatcher: dbsimDispatch{h: h},
 		Canceller:  dbsimCancel{h: h},
 		Activity:   dbsimActivity{h: h},
-		Gate:       svc.Gate(),
+		Gate:       gate,
 		Audit:      dbsimAuditor{h: h},
 		Sink:       dbsimSink{h: h},
 		Presence:   dbsimPresence{h: h},
@@ -267,4 +272,82 @@ func registerDBSimRunRoutes(r chi.Router, h *Handler) {
 	r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/dbsim-runs", h.StartDBSimRun)
 	r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/dbsim-runs/{runId}/cancel", h.CancelDBSimRun)
 	r.With(auth.RequirePermission(auth.CanViewDBSim)).Get("/api/dbsim-jobs/{runId}", h.GetDBSimJob)
+}
+
+// dbsimReaper returns the one job service the reaper uses. It is created once,
+// so the offline grace timer survives from one tick to the next.
+func (h *Handler) dbsimReaper() *dbjobs.Service {
+	h.dbsimReapMu.Lock()
+	defer h.dbsimReapMu.Unlock()
+	if h.dbsimReap == nil {
+		h.dbsimReap = h.newDBSimJobs(nil)
+	}
+	return h.dbsimReap
+}
+
+// StartDBSimReaper settles dbsim jobs that can no longer finish (deadline passed,
+// agent gone for longer than the grace period). It runs until ctx is done.
+func (h *Handler) StartDBSimReaper(ctx context.Context, every time.Duration) {
+	if every <= 0 {
+		every = 30 * time.Second
+	}
+	svc := h.dbsimReaper()
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			n, err := svc.Reap(ctx, now)
+			if err != nil {
+				log.Printf("dbsim reaper: %v", err)
+				continue
+			}
+			if n > 0 {
+				log.Printf("dbsim reaper: settled %d job(s)", n)
+			}
+		}
+	}
+}
+
+// dbsimSummaryFrom builds the summary from the latest run per scenario and
+// target. Earlier runs of the same pair are not counted again. A run whose
+// stored report cannot be decoded is counted as skipped, never as a pass.
+func dbsimSummaryFrom(runs []db.DBSimRun) (dbsim.Summary, int, int) {
+	type key struct{ scenario, target string }
+	seen := map[key]bool{}
+	var latest []dbsim.StoredReport
+	skipped := 0
+	for _, r := range runs { // runs arrive newest first
+		k := key{r.ScenarioID, r.TargetID}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		var rep dbsim.StoredReport
+		if err := json.Unmarshal(r.Report, &rep); err != nil {
+			skipped++
+			continue
+		}
+		latest = append(latest, rep)
+	}
+	return dbsim.Summarize(latest), len(latest), skipped
+}
+
+// GetDBSimSummary handles GET /api/dbsim-summary: the prevention and detection
+// counts over the latest run of each scenario and target.
+func (h *Handler) GetDBSimSummary(w http.ResponseWriter, r *http.Request) {
+	runs, err := db.ListDBSimRuns(r.Context(), h.db, "", "", 500)
+	if err != nil {
+		jsonError(w, "could not load dbsim runs", http.StatusInternalServerError)
+		return
+	}
+	sum, counted, skipped := dbsimSummaryFrom(runs)
+	respond(w, map[string]any{
+		"preventionBlocked": sum.PreventionBlocked, "preventionAssessable": sum.PreventionAssessable,
+		"detectionCaught": sum.DetectionCaught, "detectionAssessable": sum.DetectionAssessable,
+		"unableToAssess": sum.UnableToAssess, "responseTested": sum.ResponseTested,
+		"pairsCounted": counted, "reportsSkipped": skipped,
+	})
 }

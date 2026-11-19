@@ -594,6 +594,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/dbsim-runs", tierPermission, auth.CanRunScenario},
 	{http.MethodPost, "/api/dbsim-runs/{runId}/cancel", tierPermission, auth.CanRunScenario},
 	{http.MethodGet, "/api/dbsim-jobs/{runId}", tierPermission, auth.CanViewDBSim},
+	{http.MethodGet, "/api/dbsim-summary", tierPermission, auth.CanViewDBSim},
 	{http.MethodGet, "/api/dbsim-runs/{id}/report", tierPermission, auth.CanViewDBSim},
 	{http.MethodGet, "/api/actions/configs", tierPermission, auth.CanListResponseConnectors},
 	{http.MethodPost, "/api/actions/configs", tierPermission, auth.CanCreateResponseConnector},
