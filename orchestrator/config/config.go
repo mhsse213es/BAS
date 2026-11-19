@@ -381,7 +381,9 @@ func Load(path string) (*Config, error) {
 	if v := os.Getenv("VALIDATION_LAB_AGENT_ID"); v != "" {
 		cfg.ValidationLabAgentID = v
 	}
-	if v := os.Getenv("SPRAY_LAB_AGENT_ID"); v != "" {
+	// LookupEnv, not Getenv: a variable that is set but empty clears the value, even one
+	// the config file supplied. The installer always sets it, so an empty value means off.
+	if v, ok := os.LookupEnv("SPRAY_LAB_AGENT_ID"); ok {
 		cfg.SprayLabAgentID = v
 	}
 	if v := os.Getenv("VALIDATION_LAB_POLL_MINUTES"); v != "" {

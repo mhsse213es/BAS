@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"audspect/agent/protocol"
 )
@@ -52,13 +53,23 @@ var labExemptActions = map[string]map[string]bool{
 	},
 }
 
+// sprayLabHostMarker is the environment variable an operator sets in the service
+// environment of the one lab host (BAS_SPRAY_LAB=1). It lives on the host, not on the
+// server, so a compromised orchestrator cannot turn it on.
+const sprayLabHostMarker = "BAS_SPRAY_LAB"
+
+// sprayLabHost reports whether this agent process was started as the lab host.
+func sprayLabHost() bool {
+	return os.Getenv(sprayLabHostMarker) == "1"
+}
+
 // sprayLabExempt reports whether the B5 signed-destructive veto is lifted for
-// this step. It requires ALL of: the signed policy carries LabException (set by the
-// server only for the designated lab agent), the scenario is in labExemptActions,
-// and the step's action key is in that scenario's list. The local command backstop
-// still applies in every case.
-func sprayLabExempt(policy *protocol.LivePolicy, scenarioID, actionKey string) bool {
-	if policy == nil || !policy.LabException {
+// this step. It requires ALL of: this host carries the local lab marker
+// (BAS_SPRAY_LAB=1), the signed policy carries LabException, the scenario is in
+// labExemptActions, and the step's action key is in that scenario's list. The local
+// command backstop still applies in every case.
+func sprayLabExempt(localLab bool, policy *protocol.LivePolicy, scenarioID, actionKey string) bool {
+	if !localLab || policy == nil || !policy.LabException {
 		return false
 	}
 	actions, ok := labExemptActions[scenarioID]

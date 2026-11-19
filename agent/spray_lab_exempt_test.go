@@ -58,9 +58,31 @@ func TestSprayLabExempt_Predicate(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := sprayLabExempt(c.policy, c.scen, c.action); got != c.want {
+			if got := sprayLabExempt(true, c.policy, c.scen, c.action); got != c.want {
 				t.Fatalf("got %v want %v", got, c.want)
 			}
 		})
+	}
+}
+
+// Without the local lab marker on this host, the server's LabException alone never
+// lifts the veto. This is the trust boundary: a compromised orchestrator cannot grant it.
+func TestSprayLabExempt_NeedsLocalHostMarker(t *testing.T) {
+	on := &protocol.LivePolicy{LabException: true}
+	if sprayLabExempt(false, on, "ad-password-spray-lab", "credential_password_spray") {
+		t.Fatal("server exemption lifted the veto on a host without BAS_SPRAY_LAB=1")
+	}
+	if !sprayLabExempt(true, on, "ad-password-spray-lab", "credential_password_spray") {
+		t.Fatal("marked host with a server exemption should be exempt")
+	}
+}
+
+func TestSprayLabHost_ReadsOnlyTheMarkerValue(t *testing.T) {
+	cases := map[string]bool{"1": true, "": false, "0": false, "true": false, " 1": false}
+	for v, want := range cases {
+		t.Setenv(sprayLabHostMarker, v)
+		if got := sprayLabHost(); got != want {
+			t.Errorf("BAS_SPRAY_LAB=%q: got %v want %v", v, got, want)
+		}
 	}
 }

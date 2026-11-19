@@ -1025,7 +1025,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 				// Pre-execution gates: the dbsim step-shape pre-gate, then B5 (see
 				// gateStep). Both run BEFORE payload staging so nothing is written
 				// to disk for a step that is about to be vetoed.
-				if v := gateStepExempt(step, cmd.ScenarioID, sprayLabExempt(cmd.Policy, cmd.ScenarioID, step.ActionKey)); v != nil {
+				if v := gateStepExempt(step, cmd.ScenarioID, sprayLabExempt(sprayLabHost(), cmd.Policy, cmd.ScenarioID, step.ActionKey)); v != nil {
 					log.Printf("[!]   [%d/%d] %s VETOED -- %s (class=%s, action=%s, source=%s)",
 						i+1, total, step.TechniqueID, v.reason, step.ExecutionClass, step.ActionKey, v.source)
 					a.logger.Sec("warn", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,

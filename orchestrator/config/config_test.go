@@ -488,3 +488,24 @@ func TestLoad_IngestAPIKeyDefaultsEmpty(t *testing.T) {
 		t.Errorf("IngestAPIKey = %q, want empty (disabled by default)", cfg.IngestAPIKey)
 	}
 }
+
+// An empty SPRAY_LAB_AGENT_ID clears a value the config file supplied; the exemption
+// is off unless the variable names an agent.
+func TestLoad_SprayLabEmptyEnvClearsFileValue(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test")
+	t.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	t.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	t.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	path := t.TempDir() + "/config.json"
+	if err := os.WriteFile(path, []byte(`{"spray_lab_agent_id":"agent-from-file"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SPRAY_LAB_AGENT_ID", "")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SprayLabAgentID != "" {
+		t.Fatalf("empty env did not clear the file value: %q", cfg.SprayLabAgentID)
+	}
+}

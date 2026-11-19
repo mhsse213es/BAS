@@ -1,6 +1,10 @@
 package api
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/audspect/bas/internal/scenario"
+)
 
 func TestLabExceptionFor(t *testing.T) {
 	cases := []struct {
@@ -22,5 +26,27 @@ func TestLabExceptionFor(t *testing.T) {
 				t.Fatalf("labExceptionFor(%q, %v) = %v, want %v", c.scenario, c.lab, got, c.want)
 			}
 		})
+	}
+}
+
+// A scenario's own LabException value must never reach the agent: the wire value
+// always equals the server's decision.
+func TestLabExemptPolicy_WireValueFollowsDecision(t *testing.T) {
+	carried := &scenario.LivePolicy{LabException: true, MaxSprayAttempts: 3}
+	if p := labExemptPolicy(carried, false); p == nil || p.LabException {
+		t.Fatalf("scenario-carried exemption leaked through a non-exempt dispatch: %+v", p)
+	}
+	if p := labExemptPolicy(carried, true); p == nil || !p.LabException || p.MaxSprayAttempts != 3 {
+		t.Fatalf("exempt dispatch lost the exemption or the other policy fields: %+v", p)
+	}
+	if p := labExemptPolicy(nil, false); p != nil {
+		t.Fatalf("nil policy, not exempt: want nil, got %+v", p)
+	}
+	if p := labExemptPolicy(nil, true); p == nil || !p.LabException {
+		t.Fatalf("nil policy, exempt: want an exempt policy, got %+v", p)
+	}
+	// The base must not be mutated: callers keep sc.LivePolicy unchanged.
+	if carried.LabException != true {
+		t.Fatal("labExemptPolicy mutated its input")
 	}
 }

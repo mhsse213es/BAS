@@ -2646,7 +2646,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	// Lab spray exemption (see labExceptionFor). Only the lab spray scenario, and
 	// only for the agent flagged is_spray_lab, gets LabException. A lookup error
 	// fails closed (no exemption). Every other dispatch keeps sc.LivePolicy as-is.
-	scPolicy := sc.LivePolicy
+	exempt := false
 	if labExceptionScenario(sc.ID) {
 		var isSprayLab bool
 		if qerr := h.db.QueryRow(ctx,
@@ -2654,15 +2654,11 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		).Scan(&isSprayLab); qerr != nil {
 			isSprayLab = false
 		}
-		if labExceptionFor(sc.ID, isSprayLab) {
-			p := &scenario.LivePolicy{}
-			if sc.LivePolicy != nil {
-				*p = *sc.LivePolicy
-			}
-			p.LabException = true
-			scPolicy = p
-		}
+		exempt = labExceptionFor(sc.ID, isSprayLab)
 	}
+	// Always write LabException from the decision above, so a scenario's own policy
+	// value can never reach the agent as an exemption.
+	scPolicy := labExemptPolicy(sc.LivePolicy, exempt)
 
 	cmd := scenario.ScenarioCommand{
 		RunID:                runID,
