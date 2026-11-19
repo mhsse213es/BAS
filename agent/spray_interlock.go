@@ -63,6 +63,17 @@ func sprayLabHost() bool {
 	return os.Getenv(sprayLabHostMarker) == "1"
 }
 
+// sprayLabConfigLine is the line the Linux installer writes into the agent's config
+// file, so the systemd unit (EnvironmentFile=) starts the agent with the marker. It is
+// empty unless the installer ran with BAS_SPRAY_LAB=1, which the operator sets in
+// /etc/audspect-agent/enroll.env on the lab host only.
+func sprayLabConfigLine() string {
+	if sprayLabHost() {
+		return sprayLabHostMarker + "=1\n"
+	}
+	return ""
+}
+
 // sprayLabExempt reports whether the B5 signed-destructive veto is lifted for
 // this step. It requires ALL of: this host carries the local lab marker
 // (BAS_SPRAY_LAB=1), the signed policy carries LabException, the scenario is in

@@ -86,3 +86,15 @@ func TestSprayLabHost_ReadsOnlyTheMarkerValue(t *testing.T) {
 		}
 	}
 }
+
+// The installer writes the marker into the agent's config only when the operator set it.
+func TestSprayLabConfigLine(t *testing.T) {
+	t.Setenv(sprayLabHostMarker, "1")
+	if got := sprayLabConfigLine(); got != "BAS_SPRAY_LAB=1\n" {
+		t.Fatalf("marked install: got %q", got)
+	}
+	t.Setenv(sprayLabHostMarker, "")
+	if got := sprayLabConfigLine(); got != "" {
+		t.Fatalf("unmarked install wrote %q", got)
+	}
+}

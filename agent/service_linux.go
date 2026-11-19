@@ -56,7 +56,7 @@ func svcInstall(serverURL, envLabel, secret, enrollPort string) error {
 	// still takes priority when an operator sets BAS_PROXY_PASSWORD
 	// directly (not via this file).
 	proxyPasswordB64 := base64.StdEncoding.EncodeToString([]byte(proxyPassword))
-	cfg := renderPosixAgentConfig(serverURL, envLabel, secret, proxyUser, proxyPasswordB64, enrollPort)
+	cfg := renderPosixAgentConfig(serverURL, envLabel, secret, proxyUser, proxyPasswordB64, enrollPort) + sprayLabConfigLine()
 	if err := os.WriteFile(configFile, []byte(cfg), 0600); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
