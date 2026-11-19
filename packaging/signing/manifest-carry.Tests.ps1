@@ -82,6 +82,16 @@ Describe "Get-PreviousReleaseManifest" {
         Release '1.9.8'; Release 'dev'
         (Get-PreviousReleaseManifest -DistDir $script:dist -Version '1.9.9') | Should -Be (Join-Path $script:dist 'bas-install-1.9.8\BINARIES.sha256')
     }
+
+    It "bounds a suffixed build by its numeric version, not by the suffix" {
+        Release '1.9.9.3'; Release '1.9.9.4'; Release '1.9.9.5'
+        (Get-PreviousReleaseManifest -DistDir $script:dist -Version '1.9.9.4-dbsim-spike') | Should -Be (Join-Path $script:dist 'bas-install-1.9.9.4\BINARIES.sha256')
+    }
+
+    It "a plain build does not select its own numeric version" {
+        Release '1.9.9.3'; Release '1.9.9.4'
+        (Get-PreviousReleaseManifest -DistDir $script:dist -Version '1.9.9.4') | Should -Be (Join-Path $script:dist 'bas-install-1.9.9.3\BINARIES.sha256')
+    }
 }
 
 Describe "Test-ManifestCarriesPrevious" {

@@ -70,16 +70,25 @@ function Get-PreviousReleaseManifest {
         [Parameter(Mandatory)][string]$DistDir,
         [Parameter(Mandatory)][string]$Version
     )
+    # Bound by the numeric part of the version. A suffixed build (1.9.9.4-dbsim-spike) sits on top of its numeric
+    # release, so that release's manifest is the one the field is running: it is included. A plain build excludes
+    # its own numeric version.
+    $bare = ($Version -replace '^v', '')
+    $numeric = ($bare -split '-', 2)[0]
+    $suffixed = $bare -ne $numeric
     $current = $null
-    [void][version]::TryParse(($Version -replace '^v', ''), [ref]$current)
+    [void][version]::TryParse($numeric, [ref]$current)
     $best = ""
     $bestVersion = $null
     foreach ($d in @(Get-ChildItem -LiteralPath $DistDir -Directory -Filter 'bas-install-*' -ErrorAction SilentlyContinue)) {
         $name = $d.Name -replace '^bas-install-', ''
-        if ($name -eq ($Version -replace '^v', '')) { continue }                  # not the release being built
+        if ($name -eq $bare) { continue }                                          # not the release being built
         $v = $null
         if (-not [version]::TryParse($name, [ref]$v)) { continue }                 # not a numeric version directory
-        if ($null -ne $current -and $v -ge $current) { continue }                  # only earlier releases
+        if ($null -ne $current) {
+            if ($suffixed -and $v -gt $current) { continue }                      # later than the build's base
+            if (-not $suffixed -and $v -ge $current) { continue }                 # only earlier releases
+        }
         $manifest = Join-Path $d.FullName 'BINARIES.sha256'
         if (-not (Test-Path -LiteralPath $manifest)) { continue }
         if ($null -eq $bestVersion -or $v -gt $bestVersion) { $best = $manifest; $bestVersion = $v }
