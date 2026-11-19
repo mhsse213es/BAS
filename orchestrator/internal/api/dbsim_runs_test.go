@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -111,5 +112,25 @@ func TestDBSimSummaryCountsLatestPerPairAndSkipsUndecodable(t *testing.T) {
 	}
 	if skipped != 1 {
 		t.Errorf("reportsSkipped = %d, want 1", skipped)
+	}
+}
+
+type fakeActive struct {
+	busy bool
+	err  error
+}
+
+func (f fakeActive) ActiveForAgent(context.Context, string) (bool, error) { return f.busy, f.err }
+
+// A dbsim job on the agent blocks a normal run; a store error must not be read
+// as "not busy".
+func TestDBSimAgentBusyBlocksAndFailsClosed(t *testing.T) {
+	busy, err := dbsimAgentBusy(context.Background(), fakeActive{busy: true}, "a1")
+	if err != nil || !busy {
+		t.Errorf("busy agent: busy=%v err=%v, want busy=true err=nil", busy, err)
+	}
+	busy, err = dbsimAgentBusy(context.Background(), fakeActive{err: errors.New("db down")}, "a1")
+	if err == nil {
+		t.Errorf("store error must be returned, got busy=%v err=nil", busy)
 	}
 }

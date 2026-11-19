@@ -351,3 +351,14 @@ func (h *Handler) GetDBSimSummary(w http.ResponseWriter, r *http.Request) {
 		"pairsCounted": counted, "reportsSkipped": skipped,
 	})
 }
+
+// dbsimActiveChecker reports whether an agent has a pending or running dbsim job.
+type dbsimActiveChecker interface {
+	ActiveForAgent(ctx context.Context, agentID string) (bool, error)
+}
+
+// dbsimAgentBusy is the normal path's view of dbsim activity on an agent. Any
+// store error is returned, so the caller fails closed.
+func dbsimAgentBusy(ctx context.Context, s dbsimActiveChecker, agentID string) (bool, error) {
+	return s.ActiveForAgent(ctx, agentID)
+}

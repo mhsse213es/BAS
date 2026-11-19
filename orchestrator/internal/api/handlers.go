@@ -2326,6 +2326,14 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 			agentLastUpdate.UTC().Format(time.RFC3339))
 	}
 
+	// A dbsim job on this agent blocks a normal run as well. The agent runs one
+	// command at a time, and a new command_scenario cancels the job's steps.
+	if busy, bErr := dbsimAgentBusy(ctx, db.DBSimJobStore{Pool: h.db}, agentID); bErr != nil {
+		return "", "", fmt.Errorf("dbsim busy check: %w", bErr)
+	} else if busy {
+		return "", "agent busy", nil
+	}
+
 	// Create a run record in RUNNING state, stamped with the requesting user and
 	// (for fan-out) its campaign. variant_depth is recorded so the result processor
 	// can skip the scenario_variant_results write for normal (non-variant) runs.
