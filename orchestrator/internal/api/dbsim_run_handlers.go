@@ -57,17 +57,19 @@ func (h *Handler) dbsimRunService() *dbjobs.Service {
 		return nil
 	}
 	h.dbsimRunOnce.Do(func() {
+		h.dbsimGrants = loadDBSimGrantSource()
 		h.dbsimRunSvc = &dbjobs.Service{
-			Targets:    db.DBSimTargetStore{Pool: h.db},
-			Scenarios:  h.engine,
-			Jobs:       db.DBSimJobStore{Pool: h.db},
-			Dispatcher: dbsimDispatcher{h: h},
-			Canceller:  dbsimCanceller{h: h},
-			Activity:   db.DBSimAgentActivity{Pool: h.db},
-			Gate:       h.DBSimClientModeGate(),
-			Audit:      dbsimAuditor{h: h},
-			Runs:       dbsimRunRecorder{h: h},
-			Sink:       dbsimRunSink{h: h},
+			Targets:     db.DBSimTargetStore{Pool: h.db},
+			Scenarios:   h.engine,
+			Jobs:        db.DBSimJobStore{Pool: h.db},
+			Dispatcher:  dbsimDispatcher{h: h},
+			Canceller:   dbsimCanceller{h: h},
+			Activity:    db.DBSimAgentActivity{Pool: h.db},
+			Gate:        h.DBSimClientModeGate(),
+			Audit:       dbsimAuditor{h: h},
+			Runs:        dbsimRunRecorder{h: h},
+			Sink:        dbsimRunSink{h: h},
+			GrantPolicy: h.dbsimGrants.dbsimGrantPolicy,
 		}
 	})
 	return h.dbsimRunSvc
@@ -141,9 +143,9 @@ func (h *Handler) submitDBSimResult(ctx context.Context, w http.ResponseWriter, 
 		return
 	}
 	var sub struct {
-		RunID   string         `json:"runId"`
-		AgentID string         `json:"agentId"`
-		Partial bool           `json:"partial"`
+		RunID   string            `json:"runId"`
+		AgentID string            `json:"agentId"`
+		Partial bool              `json:"partial"`
 		Results []dbrun.AgentExec `json:"results"`
 	}
 	if err := json.Unmarshal(body, &sub); err != nil || sub.RunID == "" {
