@@ -18,6 +18,8 @@ var probeText = map[string]struct{ objective, action string }{
 	"read_audit_config":       {"Database auditing is configured and covers security-relevant events", "named probe read_audit_config (read-only audit configuration summary)"},
 	"suspicious_read":         {"A suspicious read of a synthetic fixture is detected", "named probe suspicious_read (read of a seeded synthetic fixture)"},
 	"auth_after_revoke":       {"A revoked account can no longer authenticate", "named probe auth_after_revoke (new login attempt after the revoke)"},
+	"read_customer_records":   {"A read of restricted customer records is denied", "named probe read_customer_records (read of a restricted customers table under a read role with no grant on it)"},
+	"read_financial_records":  {"A read of restricted financial records is denied", "named probe read_financial_records (read of a restricted transactions table under a read role with no grant on it)"},
 	"read_classified_fixture": {"A read of sensitive-looking data is recognised by data classification", "named probe read_classified_fixture (bounded read of a synthetic classified table)"},
 	"try_disable_audit":       {"A session cannot switch off or weaken database auditing", "named probe try_disable_audit (attempt to disable auditing in the session scope)"},
 	"bounded_synthetic_read":  {"A bounded bulk read of synthetic data is detected", "named probe bounded_synthetic_read (bounded read of a seeded synthetic fixture)"},
