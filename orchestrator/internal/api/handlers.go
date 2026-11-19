@@ -137,6 +137,10 @@ type Handler struct {
 	dbsimRunOnce sync.Once
 	// dbsimGrants is the DB-02 grant policy bound to one target (dbsim_grant_policy.go).
 	dbsimGrants *dbsimGrantSource
+	// dbsimReap is the one long-lived job service the reaper uses. Its offline
+	// grace timer lives in that instance, so it must not be rebuilt per tick.
+	dbsimReapMu sync.Mutex
+	dbsimReap   *dbjobs.Service
 	// detectVerifyConnector builds a detectverify.Connector for a config.
 	// nil in production (New leaves it unset; call sites fall back to
 	// detectverify.NewConnector) — tests override it to avoid real HTTP calls.
@@ -2329,6 +2333,14 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 			agentLastUpdate.UTC().Format(time.RFC3339))
 	}
 
+	// A dbsim job on this agent blocks a normal run as well. The agent runs one
+	// command at a time, and a new command_scenario cancels the job's steps.
+	if busy, bErr := dbsimAgentBusy(ctx, db.DBSimJobStore{Pool: h.db}, agentID); bErr != nil {
+		return "", "", fmt.Errorf("dbsim busy check: %w", bErr)
+	} else if busy {
+		return "", "agent busy", nil
+	}
+
 	// Create a run record in RUNNING state, stamped with the requesting user and
 	// (for fan-out) its campaign. variant_depth is recorded so the result processor
 	// can skip the scenario_variant_results write for normal (non-variant) runs.
@@ -3204,7 +3216,7 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "result MAC invalid — possible tampered payload", http.StatusUnauthorized)
 		return
 	}
-	if dbsimSpikeHook(h, w, body) { // TEMPORARY dbsim spike (Task 1); removed at Step 4
+	if h.dbsimIngestHook(w, r, body) { // dbsim job results are graded here; other runs fall through
 		return
 	}
 	var raw scenario.RawRunResult

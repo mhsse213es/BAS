@@ -21,6 +21,9 @@ type SystemSnapshot struct {
 	Files   map[string][]byte   // path (or logical key) → content at snapshot time
 	// Guard is platform-specific restore state taken with the snapshot (Windows: the registry restore guard).
 	Guard any
+	// TmpScope is the one directory this snapshot covers for temp files. Empty means the
+	// snapshot has no temp component. The machine temp directory is never a scope.
+	TmpScope string
 	// Health is the platform-specific "does Windows still open things the same way" reference taken with the snapshot.
 	Health any
 	// Procs is the platform-specific set of processes running when the snapshot was taken (Windows: for the stray-process sweep).

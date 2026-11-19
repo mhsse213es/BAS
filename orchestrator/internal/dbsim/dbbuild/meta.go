@@ -20,12 +20,19 @@ var probeText = map[string]struct{ objective, action string }{
 	"read_audit_config":       {"Database auditing is configured and covers security-relevant events", "named probe read_audit_config (read-only audit configuration summary)"},
 	"suspicious_read":         {"A suspicious read of a synthetic fixture is detected", "named probe suspicious_read (read of a seeded synthetic fixture)"},
 	"auth_after_revoke":       {"A revoked account can no longer authenticate", "named probe auth_after_revoke (new login attempt after the revoke)"},
+	"read_customer_records":   {"A read of restricted customer records is denied", "named probe read_customer_records (read of a restricted customers table under a read role with no grant on it)"},
+	"read_foreign_role_names": {"Role and account names other than the probe identity are not visible", "named probe read_foreign_role_names (count of role or account names other than the probe's own and the built-in ones)"},
+	"read_financial_records":  {"A read of restricted financial records is denied", "named probe read_financial_records (read of a restricted transactions table under a read role with no grant on it)"},
 	"read_classified_fixture": {"A read of sensitive-looking data is recognised by data classification", "named probe read_classified_fixture (bounded read of a synthetic classified table)"},
 	"try_disable_audit":       {"A session cannot switch off or weaken database auditing", "named probe try_disable_audit (attempt to disable auditing in the session scope)"},
 	"bounded_synthetic_read":  {"A bounded bulk read of synthetic data is detected", "named probe bounded_synthetic_read (bounded read of a seeded synthetic fixture)"},
 	"try_write_fixture":       {"A restricted account cannot write or delete data", "named probe try_write_fixture (attempted write against a synthetic fixture)"},
 	"check_export_privileges": {"The account does not hold backup or export privileges", "named probe check_export_privileges (read-only catalog check)"},
 }
+
+// NoScenarioVersion is recorded as the scenario version. Scenarios carry no
+// version field, so no real version can be stated; MetaFor must not invent one.
+const NoScenarioVersion = "unversioned"
 
 // MetaFor builds the report meta for one compiled probe step of a shipped
 // scenario, with the expectations from dbsim.ExpectationFor. It fails closed:
@@ -47,7 +54,7 @@ func MetaFor(sc *scenario.Scenario, spec dbsim.DBProbeSpec) (dbsim.ScenarioMeta,
 		return dbsim.ScenarioMeta{}, fmt.Errorf("dbbuild: no description for probe %q", spec.ProbeID)
 	}
 	return dbsim.ScenarioMeta{
-		ID: sc.ID, Version: "1",
+		ID: sc.ID, Version: NoScenarioVersion,
 		ControlObjective:      txt.objective,
 		Preconditions:         "Confirmed lab or approved target registered server-side; agent-local dbsim allowance in place",
 		SyntheticDataManifest: "Synthetic data only; no real data is read, written or retained",

@@ -384,6 +384,9 @@ func main() {
 	if err := db.EnsureDBSimTargetSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] dbsim target schema: %v", err)
 	}
+	if err := db.EnsureDBSimJobSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] dbsim job schema: %v", err)
+	}
 	if err := db.EnsureEmailGWCampaignSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] email gw campaign schema: %v", err)
 	}
@@ -1512,6 +1515,8 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
+	// dbsim job reaper: settles run jobs whose deadline passed or whose agent stayed offline.
+	go handler.StartDBSimReaper(context.Background(), 30*time.Second)
 	go func() {
 		log.Printf("[*] BAS Orchestrator mTLS listening on :%d", cfg.HTTPPort)
 		if err := mtlsSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {

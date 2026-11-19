@@ -10,7 +10,14 @@ import (
 	"strings"
 )
 
+// captureSnapshot captures with no temp scope.
 func captureSnapshot(runID string) *SystemSnapshot {
+	return captureSnapshotScoped(runID, "")
+}
+
+// captureSnapshotScoped captures the host state and lists temp entries only inside
+// tmpScope (see tmpScopeFor).
+func captureSnapshotScoped(runID, tmpScope string) *SystemSnapshot {
 	s := newSnapshot(runID)
 
 	// Scheduled tasks
@@ -55,14 +62,7 @@ func captureSnapshot(runID string) *SystemSnapshot {
 	}
 
 	// Temp directories (1 level)
-	tmpDirs := []string{os.TempDir(), `C:\Windows\Temp`}
-	for _, dir := range tmpDirs {
-		if entries, err := os.ReadDir(dir); err == nil {
-			for _, e := range entries {
-				s.Lists["tmp_files"] = append(s.Lists["tmp_files"], filepath.Join(dir, e.Name()))
-			}
-		}
-	}
+	s.setTmpScope(tmpScope)
 
 	// Hosts file
 	hostsPath := `C:\Windows\System32\drivers\etc\hosts`
@@ -101,7 +101,13 @@ func captureSnapshot(runID string) *SystemSnapshot {
 // and essentially never what a step's own cleanup: script targets. Used for
 // the per-step before/after bracket (see agent/executor.go), where the cost
 // is paid twice per cleanup-bearing step rather than once per run.
+// captureSnapshotLite captures with no temp scope.
 func captureSnapshotLite(runID string) *SystemSnapshot {
+	return captureSnapshotLiteScoped(runID, "")
+}
+
+// captureSnapshotLiteScoped is captureSnapshotLite with its temp scope set.
+func captureSnapshotLiteScoped(runID, tmpScope string) *SystemSnapshot {
 	s := newSnapshot(runID)
 
 	if out, err := snapCmd("schtasks", "/query", "/fo", "CSV", "/nh"); err != nil {
@@ -144,14 +150,7 @@ func captureSnapshotLite(runID string) *SystemSnapshot {
 		}
 	}
 
-	tmpDirs := []string{os.TempDir(), `C:\Windows\Temp`}
-	for _, dir := range tmpDirs {
-		if entries, err := os.ReadDir(dir); err == nil {
-			for _, e := range entries {
-				s.Lists["tmp_files"] = append(s.Lists["tmp_files"], filepath.Join(dir, e.Name()))
-			}
-		}
-	}
+	s.setTmpScope(tmpScope)
 
 	startupDirs := []string{
 		userStartupDir(),
@@ -273,21 +272,8 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 		}
 	}
 
-	// ── Temp files — remove newly added ──────────────────────────────────────
-	origTmp := toSet(s.Lists["tmp_files"])
-	tmpDirs := []string{os.TempDir(), `C:\Windows\Temp`}
-	for _, dir := range tmpDirs {
-		if entries, err := os.ReadDir(dir); err == nil {
-			for _, e := range entries {
-				full := filepath.Join(dir, e.Name())
-				if !origTmp[full] {
-					if os.Remove(full) == nil {
-						reverted = append(reverted, "tmp removed: "+full)
-					}
-				}
-			}
-		}
-	}
+	// ── Temp files — remove newly added, inside this snapshot's scope only ──
+	reverted = append(reverted, revertTmpScope(s)...)
 
 	// ── Startup folder — remove newly added files ─────────────────────────────
 	origStartup := toSet(s.Lists["startup"])
@@ -360,4 +346,28 @@ func parseRegValues(out []byte) map[string]bool {
 		}
 	}
 	return result
+}
+
+// revertTmpScope removes temp entries that appeared inside the snapshot's scope.
+// Nothing outside the scope is touched: a machine-wide sweep would delete other
+// processes' files.
+func revertTmpScope(s *SystemSnapshot) []string {
+	var reverted []string
+	if s.TmpScope == "" {
+		return reverted
+	}
+	origTmp := toSet(s.Lists["tmp_files"])
+	entries, err := os.ReadDir(s.TmpScope)
+	if err != nil {
+		return reverted
+	}
+	for _, e := range entries {
+		full := filepath.Join(s.TmpScope, e.Name())
+		if !origTmp[full] {
+			if os.Remove(full) == nil {
+				reverted = append(reverted, "tmp removed: "+full)
+			}
+		}
+	}
+	return reverted
 }

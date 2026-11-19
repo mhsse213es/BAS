@@ -5402,11 +5402,38 @@
   {
     "scenario": "dbsim-db03-unauthorized-access.yaml",
     "index": 0,
-    "technique_id": "T1213",
+    "technique_id": "T1213.006",
     "action_key": "",
     "framework": "native",
     "class": "destructive",
     "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "dbsim-db03-unauthorized-access.yaml",
+    "index": 1,
+    "technique_id": "T1213.006",
+    "action_key": "",
+    "framework": "native",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "dbsim-db03-unauthorized-access.yaml",
+    "index": 2,
+    "technique_id": "T1213.006",
+    "action_key": "",
+    "framework": "native",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "dbsim-db03-unauthorized-access.yaml",
+    "index": 3,
+    "technique_id": "T1087",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "dbsim-db04-audit-coverage.yaml",

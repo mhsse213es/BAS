@@ -9,8 +9,8 @@ description: >
   Row count is capped by the step limits and the read runs inside a READ ONLY
   transaction.
 
-  ATT&CK mapping: T1213 Data from Information Repositories (an attempt to read
-  data from a database that holds application data).
+  ATT&CK mapping: T1213.006 Data from Information Repositories: Databases (an
+  attempt to read data from a database that holds application data).
 
   The probe reads the table bas_dbsim.restricted, which the lab fixture or
   client onboarding runbook must provision with synthetic rows only (no real
@@ -29,8 +29,8 @@ mitre_phases:
   - collection
 
 steps:
-  - name: "DB-03 Restricted table read attempt (T1213)"
-    technique_id: T1213
+  - name: "DB-03 Restricted table read attempt (T1213.006)"
+    technique_id: T1213.006
     executor: dbprobe
     db_target: lab-db
     db_probe: read_restricted_table
@@ -40,6 +40,61 @@ steps:
       max_rows: 10
       timeout_sec: 30
       max_conns: 1
+    telemetry:
+      - "the database audit log: a denied read of bas_dbsim.restricted by the probe identity, carrying the run marker (expected)"
+    detection:
+      - "Database audit: a denied SELECT on a table the probe identity has no grant on, from the probe session"
     risk: low
     blast_radius: "bounded read-only SELECT inside a READ ONLY transaction; at most 10 rows; no state changed"
     reversible: true
+  - name: "DB-03 Restricted customer records read attempt (T1213.006)"
+    technique_id: T1213.006
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_customer_records
+    db_fixture: authz-restricted
+    db_limits:
+      max_rows: 10
+      timeout_sec: 30
+      max_conns: 1
+    telemetry:
+      - "the database audit log: a denied SELECT on the per-run customers table, carrying the run marker (expected)"
+    detection:
+      - "Database audit: a denied SELECT on a restricted customer table from the probe session"
+    risk: low
+    blast_radius: "bounded read-only SELECT of a per-run synthetic table under a read role with no grant on it; at most 10 rows; no state changed"
+    reversible: true
+
+  - name: "DB-03 Restricted financial records read attempt (T1213.006)"
+    technique_id: T1213.006
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_financial_records
+    db_fixture: authz-restricted
+    db_limits:
+      max_rows: 10
+      timeout_sec: 30
+      max_conns: 1
+    telemetry:
+      - "the database audit log: a denied SELECT on the per-run transactions table, carrying the run marker (expected)"
+    detection:
+      - "Database audit: a denied SELECT on a restricted financial table from the probe session"
+    risk: low
+    blast_radius: "bounded read-only SELECT of a per-run synthetic table under a read role with no grant on it; at most 10 rows; no state changed"
+    reversible: true
+  - name: "DB-03 Role and account name discovery (T1087)"
+    technique_id: T1087
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_foreign_role_names
+    db_limits:
+      max_rows: 10
+      timeout_sec: 30
+      max_conns: 1
+    risk: low
+    blast_radius: "bounded read-only catalog query of role or account names; at most 10 rows counted, no names reported; no state changed"
+    reversible: true
+    telemetry:
+      - "Database audit: a catalog read of role or account names by the probe session, carrying the run marker (expected where the engine audits catalog reads)"
+    detection:
+      - "Database audit: role and account enumeration from the probe session"

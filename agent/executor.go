@@ -185,7 +185,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 	// consume it, or a step can time out before its command has started.
 	var preCleanupSnap *SystemSnapshot
 	if step.Cleanup != "" {
-		preCleanupSnap = captureSnapshotLite(step.TaskID)
+		preCleanupSnap = captureSnapshotLiteScoped(step.TaskID, tmpScopeFor(step.PayloadDir))
 	}
 
 	ctx, cancel := context.WithTimeout(parentCtx, time.Duration(timeout)*time.Second)
@@ -203,7 +203,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 			if step.Cleanup != "" {
 				r.CleanupVerdict, r.CleanupError = runCleanup(step)
 				r.CleanupResidual, r.CleanupVerdict = reconcileCleanupVerdict(
-					preCleanupSnap, captureSnapshotLite(step.TaskID), r.CleanupVerdict)
+					preCleanupSnap, captureSnapshotLiteScoped(step.TaskID, tmpScopeFor(step.PayloadDir)), r.CleanupVerdict)
 			}
 			// Pooled steps are observation-risk discovery running in the agent's
 			// own context. Record what was requested vs what ran.
@@ -294,7 +294,9 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 	// own dbsim secrets/policy so a step that dumps its environment cannot
 	// exfiltrate them. A nil Env would have inherited everything, hence the
 	// explicit assignment above.
-	cmd.Env = childEnvironment(cmd.Env)
+	// The step gets its own temp directory, so the cleanup verdict and revert see only
+	// what this step wrote (see tmpScopeFor).
+	cmd.Env = withTempDir(childEnvironment(cmd.Env), step.PayloadDir)
 
 	// Use Start + Wait (instead of Run) so we can assign the process to a Job
 	// Object between spawn and wait.  exec.CommandContext's own context-kill
@@ -486,7 +488,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 	if step.Cleanup != "" {
 		result.CleanupVerdict, result.CleanupError = runCleanup(step)
 		result.CleanupResidual, result.CleanupVerdict = reconcileCleanupVerdict(
-			preCleanupSnap, captureSnapshotLite(step.TaskID), result.CleanupVerdict)
+			preCleanupSnap, captureSnapshotLiteScoped(step.TaskID, tmpScopeFor(step.PayloadDir)), result.CleanupVerdict)
 	}
 
 	return result

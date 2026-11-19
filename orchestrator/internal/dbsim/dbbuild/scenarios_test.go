@@ -18,7 +18,7 @@ func yamlUnmarshal(b []byte, v any) error { return yaml.Unmarshal(b, v) }
 
 const repoScenarios = "../../../../scenarios"
 
-var dbScenarioIDs = []string{"dbsim-db01-auth-policy", "dbsim-db02-excessive-grants", "dbsim-db03-unauthorized-access", "dbsim-db04-audit-coverage"}
+var dbScenarioIDs = []string{"dbsim-db01-auth-policy", "dbsim-db02-excessive-grants", "dbsim-db04-audit-coverage"}
 
 // DB-04 asks the agent for the audit configuration first and then runs one
 // marker-tagged read_roles whose statement the agent reads back from the
@@ -80,10 +80,10 @@ func stageDBScenarios(t *testing.T) string {
 	return stageScenarios(t, allDBScenarioIDs()...)
 }
 
-// dbFixtureScenarioIDs are the fixture-reading scenarios (DB-05 read_only, DB-09
+// dbFixtureScenarioIDs are the fixture-reading scenarios (DB-03 and DB-05 read_only, DB-09
 // bounded_synthetic). They are kept out of dbScenarioIDs because that list is
 // asserted to be read_only/non_destructive end to end, which DB-09 is not.
-var dbFixtureScenarioIDs = []string{"dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
+var dbFixtureScenarioIDs = []string{"dbsim-db03-unauthorized-access", "dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
 	"dbsim-db06-account-revocation", "dbsim-db07-sensitive-classification"}
 
 func allDBScenarioIDs() []string {

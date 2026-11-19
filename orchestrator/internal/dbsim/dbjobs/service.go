@@ -336,12 +336,14 @@ func (s *Service) Start(ctx context.Context, a dbadmin.Actor, req StartRequest) 
 	unlock := sync.OnceFunc(s.mu.Unlock)
 	defer unlock()
 	if err := s.checkIdle(ctx, rec); err != nil {
+		unlock()
 		return fail(err)
 	}
 
 	now := s.now()
 	runID, err := newRunID()
 	if err != nil {
+		unlock()
 		return dbsim.RunJob{}, err
 	}
 	deadline := dbsim.DeadlineFor(now, len(scs))
@@ -368,17 +370,21 @@ func (s *Service) Start(ctx context.Context, a dbadmin.Actor, req StartRequest) 
 		}
 		built, err := dbbuild.BuildSteps(ctx, &cp, opt)
 		if err != nil {
+			unlock()
 			return fail(fmt.Errorf("%w: scenario %q: %v", ErrTargetNotReady, trunc(orig.ID, 64), err))
 		}
 		for i, st := range built {
 			var spec dbsim.DBProbeSpec
 			if err := json.Unmarshal(st.DBProbe, &spec); err != nil {
+				unlock()
 				return fail(fmt.Errorf("dbsim: compiled step is not a probe spec: %w", err))
 			}
 			if _, err := dbbuild.MetaFor(orig, spec); err != nil {
+				unlock()
 				return fail(fmt.Errorf("%w: scenario %q has no grading expectations", ErrInvalidRequest, trunc(orig.ID, 64)))
 			}
 			if tasks[st.TaskID] {
+				unlock()
 				return fail(fmt.Errorf("%w: scenarios share a step (%q); select them in separate runs", ErrInvalidRequest, trunc(st.Name, 64)))
 			}
 			tasks[st.TaskID] = true
@@ -432,17 +438,20 @@ func (s *Service) StartIdentityCheck(ctx context.Context, a dbadmin.Actor, targe
 	unlock := sync.OnceFunc(s.mu.Unlock)
 	defer unlock()
 	if err := s.checkIdle(ctx, rec); err != nil {
+		unlock()
 		return fail(err)
 	}
 	now := s.now()
 	runID, err := newRunID()
 	if err != nil {
+		unlock()
 		return dbsim.RunJob{}, err
 	}
 	deadline := dbsim.DeadlineFor(now, 1)
 	step, spec, err := dbbuild.BuildIdentityCheckStep(ctx, rec.ToTargetAt(now, s.maxAge()),
 		dbbuild.Options{RunExpiry: deadline, Now: s.now, RunID: runID})
 	if err != nil {
+		unlock()
 		return fail(fmt.Errorf("%w: %v", ErrTargetNotReady, err))
 	}
 	job := dbsim.RunJob{
@@ -489,10 +498,19 @@ func (s *Service) createAndDispatch(ctx context.Context, a dbadmin.Actor, job db
 	if s.Dispatcher == nil || !s.Dispatcher.Dispatch(ctx, job.AgentID, cmd) {
 		reason := "agent is offline: the command was not delivered"
 		fa := entry(a, "dbsim.run_failed", resource, map[string]any{"runId": job.ID, "reason": reason}, "error")
-		if _, err := s.Jobs.Transition(ctx, job.ID, []dbsim.JobStatus{dbsim.JobPending}, dbsim.JobFailed, reason, fa); err != nil {
+		moved, err := s.Jobs.Transition(ctx, job.ID, []dbsim.JobStatus{dbsim.JobPending}, dbsim.JobFailed, reason, fa)
+		if err != nil {
 			return job, errors.Join(ErrAgentOffline, fmt.Errorf("dbsim: mark job failed: %w", err))
 		}
-		job.Status, job.Reason = dbsim.JobFailed, reason
+		if moved {
+			job.Status, job.Reason = dbsim.JobFailed, reason
+			return job, ErrAgentOffline
+		}
+		// The job already left pending (cancelled or reaped during the dispatch):
+		// report what the store holds. The command was still not delivered.
+		if cur, gerr := s.Jobs.Get(ctx, job.ID); gerr == nil {
+			return cur, ErrAgentOffline
+		}
 		return job, ErrAgentOffline
 	}
 	ra := entry(a, "dbsim.run_dispatched", resource, map[string]any{"runId": job.ID, "agentId": job.AgentID}, "ok")

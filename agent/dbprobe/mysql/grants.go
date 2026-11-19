@@ -19,7 +19,9 @@ const (
 	// the probe reports the denial instead of guessing.
 	sqlRoles = "SELECT `User`, `Host`, (`account_locked` = 'N'), (`Super_priv` = 'Y') " +
 		"FROM mysql.user WHERE `User` NOT LIKE 'mysql.%' ORDER BY `User`, `Host`"
-	sqlAllGrants = "SELECT GRANTEE, CONCAT(TABLE_SCHEMA, '.', TABLE_NAME), PRIVILEGE_TYPE " +
+	// Accounts other than the probe's own and the built-in mysql.* ones (DB-03 test 11).
+	sqlForeignAccounts = "SELECT `User`, `Host` FROM mysql.user WHERE `User` NOT LIKE 'mysql.%' AND `User` <> SUBSTRING_INDEX(CURRENT_USER(), '@', 1)"
+	sqlAllGrants       = "SELECT GRANTEE, CONCAT(TABLE_SCHEMA, '.', TABLE_NAME), PRIVILEGE_TYPE " +
 		"FROM information_schema.TABLE_PRIVILEGES " +
 		"WHERE TABLE_SCHEMA NOT IN ('mysql', 'sys', 'information_schema', 'performance_schema') ORDER BY 1, 2, 3"
 	sqlRoleGrants = "SELECT GRANTEE, CONCAT(TABLE_SCHEMA, '.', TABLE_NAME), PRIVILEGE_TYPE " +
@@ -132,6 +134,8 @@ func probeSQL(probeID string, params map[string]string, maxRows int) (string, []
 		return sqlRoleGrants, []any{params["role"]}, nil
 	case "auth_check":
 		return sqlAuthCheck, nil, nil
+	case "read_foreign_role_names":
+		return sqlForeignAccounts, nil, nil
 	case probeAuditConfig:
 		return sqlAuditPlugins, nil, nil
 	case "read_restricted_table":

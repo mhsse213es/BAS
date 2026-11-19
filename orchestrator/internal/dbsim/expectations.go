@@ -83,7 +83,10 @@ var expectations = map[string]map[string]Expectation{
 			RequireObservation: true, RequirePolicyDiff: true},
 	},
 	"dbsim-db03-unauthorized-access": {
-		"read_restricted_table": expDeny,
+		"read_restricted_table":   expDeny,
+		"read_customer_records":   expDeny,
+		"read_financial_records":  expDeny,
+		"read_foreign_role_names": expDeny,
 	},
 	"dbsim-db04-audit-coverage": {
 		"read_audit_config": {ExpectedPrevention: "allow", ExpectAuditConfig: true},

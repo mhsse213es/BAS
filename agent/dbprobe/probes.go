@@ -15,8 +15,19 @@ const (
 
 var bothEngines = []string{"postgresql", "mysql"}
 
+// DB-03 probe ids and the fixture kind they read.
+const (
+	ProbeReadCustomerRecords   = "read_customer_records"
+	ProbeReadFinancialRecords  = "read_financial_records"
+	AuthzRestrictedFixtureKind = "authz-restricted"
+)
+
 var catalog = map[string]ProbeDef{
 	"read_roles": {ID: "read_roles", Class: ClassReadOnly, Engines: bothEngines,
+		ParamSchema: map[string]ParamKind{}},
+	// DB-03 test 11 (T1087): counts role and account names other than the probe's own
+	// and the engine's built-in ones. Only the row count is reported, never the names.
+	"read_foreign_role_names": {ID: "read_foreign_role_names", Class: ClassReadOnly, Engines: bothEngines, LabOnly: true,
 		ParamSchema: map[string]ParamKind{}},
 	"read_grants": {ID: "read_grants", Class: ClassReadOnly, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{"role": ParamString}},
@@ -50,6 +61,15 @@ var catalog = map[string]ProbeDef{
 	// numbers only). No table param exists, so nothing else can be addressed.
 	ProbeReadClassifiedFixture: {ID: ProbeReadClassifiedFixture, Class: ClassBoundedSynthetic, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{}, RequiredFixture: ClassifiedFixtureKind, FixedTable: ClassifiedFixtureTable},
+	// DB-03 restricted reads (approved design, tests 04 and 05). Each reads one
+	// restricted table of the authz-restricted fixture under the fixture's read role,
+	// which holds no grant on it, so the database must deny the read. PostgreSQL only:
+	// a MySQL fixture read runs as the lab admin session, which keeps its own grants,
+	// so a denial cannot be produced there without a per-run login.
+	ProbeReadCustomerRecords: {ID: ProbeReadCustomerRecords, Class: ClassReadOnly, Engines: []string{"postgresql"},
+		ParamSchema: map[string]ParamKind{}, RequiredFixture: AuthzRestrictedFixtureKind, FixedTable: "customers"},
+	ProbeReadFinancialRecords: {ID: ProbeReadFinancialRecords, Class: ClassReadOnly, Engines: []string{"postgresql"},
+		ParamSchema: map[string]ParamKind{}, RequiredFixture: AuthzRestrictedFixtureKind, FixedTable: "transactions"},
 	// auth_after_revoke (DB-06): creates a throwaway login account for this run,
 	// proves it can connect, revokes its login and proves a NEW connection is then
 	// refused. Class bounded_synthetic (ruling R-AO): it only creates, locks and
