@@ -198,3 +198,40 @@ suite passes.
 5. Lab run on staging, then the findings doc, as for the dbsim run spike.
 
 Each step gets its own failing test first, as the existing dbsim work did.
+
+## 12. Existing work this design must build on (added after review, 2026-11-19)
+
+The design above was written without checking the repository. These already exist on main:
+
+- **Scenario `dbsim-db04-audit-coverage`** (commit 5b289ba9, signed): a read-only check
+  that reads audit settings with `read_audit_config`, runs one marker-tagged `read_roles`,
+  and reads the marker back from the audit source. It covers part of test 03 and the
+  general shape of 01 and 02. It is the baseline for DB-04-01 onward, not something to
+  duplicate.
+- **Probe `read_audit_config`** for PostgreSQL and MySQL (`agent/dbprobe/*/audit.go`).
+  PostgreSQL reads `log_destination`, `log_statement`, `logging_collector`, `pgaudit.log`,
+  `shared_preload_libraries`, and whether `dbsim_audit.pg_log` is readable. So pgaudit
+  coverage is already a probe output; test 02 mostly needs grading on it.
+- **Probe `try_disable_audit`** (DB-08 tamper resistance, `task15.go`): already a
+  lab-bounded tamper probe with an allowlisted statement set. Tests 13 and 14 must reuse or
+  extend it rather than add a second tamper path.
+- **Scenario `dbsim-db08-audit-tamper-resistance`**: the existing tamper scenario.
+
+**PostgreSQL audit source.** The lab exposes the csvlog through `file_fdw` as the view
+`dbsim_audit.pg_log` (operator guide section 7). The database reads its own log file; the
+agent gets no file access. This matches decision 4: it is a documented, database-provided
+interface, and the limitation (file-backed, provisioned by the operator) is recorded here.
+
+**MySQL audit source: conflict with decision 2.** The current MySQL implementation reads
+`mysql.general_log` and `performance_schema` statement history as the audit source. Decision
+2 says the general log is supplementary only and the authoritative source is the Enterprise
+Audit plugin or an explicitly supported equivalent. The lab's MySQL is Community, which has
+no Enterprise Audit plugin. This needs a product decision before MySQL audit tests (03–08
+on MySQL) are built. Options to consider: the Percona Audit Log Plugin (a supported
+equivalent for MySQL-compatible servers, needs a Percona server build in the lab), or
+restricting MySQL audit tests to SKIPPED until an audit plugin is provisioned.
+
+**Consequence for the build order.** Section 10 is revised by this section: slice 1 is
+largely present (read_audit_config and the baseline scenario). The new work is the
+remaining catalogue tests on PostgreSQL, the grading expectations for each, and the MySQL
+decision above.
