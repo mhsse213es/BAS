@@ -64,7 +64,7 @@ func TestDBSimE2EStepRunner(t *testing.T) {
 	results := make([]protocol.ExecResult, 0, len(cmd.Steps))
 	for _, w := range cmd.Steps {
 		step := decodeStep(w)
-		if v := gateStep(step); v != nil {
+		if v := gateStep(step, cmd.ScenarioID); v != nil {
 			results = append(results, v.result)
 			continue
 		}
