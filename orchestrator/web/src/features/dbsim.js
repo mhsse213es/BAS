@@ -5,12 +5,38 @@ import { showToast } from '../core/util.js';
 
 // ── Database Security Simulation (dbsim) ─────────────────
 // Console page for the DAM BAS capability. Talks only to the /api/dbsim*
-// endpoints. This first version manages targets, identity checks, the
-// client-mode setting and shows run results. Starting a run is NOT here:
-// no run-start endpoint exists yet (see the run-API decision in the project
-// notes).
+// endpoints: targets, identity checks, client read-only mode, starting and
+// cancelling runs, the live status of the active run, the summary, and stored
+// results.
 
-var state = { settings: null, targets: [], runs: [], error: '' };
+// DBSIM_CATALOG mirrors the shipped scenarios in internal/dbsim/expectations.go.
+// There is no server-side scenario list for this product, so it is kept here.
+var DBSIM_CATALOG = [
+  { id: 'dbsim-db01-auth-policy', label: 'DB-01 Authentication policy' },
+  { id: 'dbsim-db02-excessive-grants', label: 'DB-02 Excessive grants' },
+  { id: 'dbsim-db03-unauthorized-access', label: 'DB-03 Unauthorized access' },
+  { id: 'dbsim-db04-audit-coverage', label: 'DB-04 Audit coverage' },
+  { id: 'dbsim-db05-suspicious-read', label: 'DB-05 Suspicious read' },
+  { id: 'dbsim-db06-account-revocation', label: 'DB-06 Account revocation' },
+  { id: 'dbsim-db07-sensitive-classification', label: 'DB-07 Sensitive classification' },
+  { id: 'dbsim-db08-audit-tamper-resistance', label: 'DB-08 Audit tamper resistance' },
+  { id: 'dbsim-db09-bounded-bulk-read', label: 'DB-09 Bounded bulk read' },
+  { id: 'dbsim-db10-write-delete-prevention', label: 'DB-10 Write and delete prevention' },
+  { id: 'dbsim-db11-backup-export-permissions', label: 'DB-11 Backup and export permissions' }
+];
+
+// Statuses after which a job no longer changes.
+var TERMINAL = { completed: true, failed: true, partial: true, cancelled: true };
+var POLL_MS = 5000;
+
+var state = {
+  settings: null, targets: [], runs: [], summary: null, error: '',
+  selected: {},          // scenario id -> true
+  labConfirm: '',        // typed target name for a lab run
+  targetId: '',          // selected target for a new run
+  activeRun: null,       // { runId, status, reason, targetId, agentId }
+};
+var pollTimer = null;
 
 function toText(v) { return v == null ? '' : String(v); }
 
@@ -34,16 +60,36 @@ function modePill(t) {
   return t.labConfirmed ? pill('lab, confirmed', 'ok') : pill('lab, not confirmed', 'bad');
 }
 
+function statusTone(s) {
+  if (s === 'completed') return 'ok';
+  if (s === 'failed') return 'bad';
+  if (s === 'partial' || s === 'cancelled') return 'warn';
+  return 'muted';
+}
+
+function selectedIds() {
+  return DBSIM_CATALOG.map(function(c) { return c.id; }).filter(function(id) { return state.selected[id]; });
+}
+
+function selectedTarget() {
+  for (var i = 0; i < state.targets.length; i++) {
+    if (state.targets[i].id === state.targetId) return state.targets[i];
+  }
+  return null;
+}
+
 export function loadDBSimTab() {
   state.error = '';
   return Promise.all([
     apicall('/api/dbsim/settings'),
     apicall('/api/dbsim-targets'),
-    apicall('/api/dbsim-runs')
+    apicall('/api/dbsim-runs'),
+    apicall('/api/dbsim-summary')
   ]).then(function(res) {
     state.settings = res[0] || null;
     state.targets = Array.isArray(res[1]) ? res[1] : (res[1] && res[1].targets) || [];
     state.runs = Array.isArray(res[2]) ? res[2] : (res[2] && res[2].runs) || [];
+    state.summary = res[3] && !res[3].error ? res[3] : null;
     renderDBSim();
   }).catch(function(err) {
     state.error = 'Could not load dbsim data: ' + (err && err.message ? err.message : err);
@@ -52,6 +98,18 @@ export function loadDBSimTab() {
 }
 
 export function refreshDBSimTab() { return loadDBSimTab(); }
+
+function renderSummary() {
+  var s = state.summary;
+  if (!s) return '<div class="muted">Summary unavailable.</div>';
+  return '<div class="dbsim-kpis">' +
+    '<div><strong>' + x(s.preventionBlocked) + ' / ' + x(s.preventionAssessable) + '</strong><div class="muted small">prevention blocked</div></div>' +
+    '<div><strong>' + x(s.detectionCaught) + ' / ' + x(s.detectionAssessable) + '</strong><div class="muted small">detection caught</div></div>' +
+    '<div><strong>' + x(s.unableToAssess) + '</strong><div class="muted small">unable to assess</div></div>' +
+    '</div>' +
+    '<div class="muted small">Counts use the latest run of each scenario and target. Response is not tested by this product.' +
+    (s.reportsSkipped ? ' ' + x(s.reportsSkipped) + ' stored report(s) could not be read and are not counted.' : '') + '</div>';
+}
 
 function renderSettings() {
   var s = state.settings;
@@ -83,6 +141,65 @@ function renderTargets() {
   return '<table class="tbl"><thead><tr><th>Target</th><th>Host / database</th><th>Agent</th><th>Mode</th><th>Identity</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
+function renderStartRun() {
+  if (!state.targets.length) return '<div class="muted">Register a target before starting a run.</div>';
+  var t = selectedTarget();
+  var options = '<option value="">Choose a target</option>' + state.targets.map(function(tg) {
+    return '<option value="' + x(tg.id) + '"' + (tg.id === state.targetId ? ' selected' : '') + '>' + x(toText(tg.displayName) || tg.id) + ' (' + x(tg.mode) + ')</option>';
+  }).join('');
+  var boxes = DBSIM_CATALOG.map(function(c) {
+    return '<label class="dbsim-check"><input type="checkbox"' + (state.selected[c.id] ? ' checked' : '') + on('change', 'dbsimToggleScenario', c.id) + '> ' + x(c.label) + '</label>';
+  }).join('');
+  var lab = '';
+  if (t && t.mode === 'lab') {
+    lab = '<label class="dbsim-field"><span>Type the target id <code>' + x(t.id) + '</code> to confirm this lab run</span>' +
+      '<input id="dbsim-lab-confirm" type="text" value="' + x(state.labConfirm) + '"' + on('input', 'dbsimLabConfirmInput') + '></label>';
+  }
+  var canStart = !!t && selectedIds().length > 0;
+  return '<div class="dbsim-field"><span>Target</span><select id="dbsim-run-target"' + on('change', 'dbsimChooseTarget') + '>' + options + '</select></div>' +
+    '<div class="dbsim-scenarios">' + boxes + '</div>' + lab +
+    '<div class="dbsim-actions"><button type="button" class="btn btn-primary btn-sm"' +
+    (canStart ? '' : ' disabled') + on('click', 'dbsimStartRun') + '>Start run</button></div>' +
+    '<div class="muted small">A run is one job for the selected scenarios on one target. The agent runs them in order, and the results are graded on the server.</div>';
+}
+
+function renderActiveRun() {
+  var r = state.activeRun;
+  if (!r) return '<div class="muted">No run in progress. Start one above, or pick a stored run below.</div>';
+  var terminal = !!TERMINAL[r.status];
+  return '<div class="dbsim-row"><span>Run</span> <code>' + x(r.runId) + '</code> ' +
+    pill(r.status || 'pending', statusTone(r.status)) +
+    (r.reason ? ' <span class="muted small">' + x(r.reason) + '</span>' : '') +
+    (terminal ? '' : ' <button type="button" class="btn btn-outline btn-sm"' + on('click', 'dbsimCancelRun', r.runId) + '>Cancel</button>') +
+    '</div>';
+}
+
+function renderRuns() {
+  var rows = state.runs.map(function(r) {
+    return '<tr><td>' + x(toText(r.scenarioId)) + '</td><td>' + x(toText(r.engine)) + '</td><td>' + x(toText(r.result) || 'pending') +
+      '</td><td>' + x(toText(r.createdAt)) + '</td><td>' +
+      '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'dbsimViewReport', r.id) + '>View report</button></td></tr>';
+  }).join('');
+  if (!rows) rows = '<tr><td colspan="5" class="muted">No runs yet.</td></tr>';
+  return '<table class="tbl"><thead><tr><th>Scenario</th><th>Engine</th><th>Result</th><th>Created</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+function renderDBSim(reportHtml) {
+  var host = document.getElementById('tab-dbsim');
+  if (!host) return;
+  var body = '';
+  if (state.error) body += '<div class="banner banner-warn">' + x(state.error) + '</div>';
+  body += '<section class="card"><h3>Summary</h3>' + renderSummary() + '</section>';
+  body += '<section class="card"><h3>Start a run</h3>' + renderStartRun() + '</section>';
+  body += '<section class="card"><h3>Run status</h3>' + renderActiveRun() + '</section>';
+  body += '<section class="card"><h3>Settings</h3>' + renderSettings() + '</section>';
+  body += '<section class="card"><h3>Targets</h3>' + renderTargets() + '</section>';
+  body += '<section class="card"><h3>Register a target</h3>' + renderRegisterForm() + '</section>';
+  body += '<section class="card"><h3>Run results</h3>' + renderRuns() + '</section>';
+  if (reportHtml) body += '<section class="card"><h3>Report</h3>' + reportHtml + '</section>';
+  host.innerHTML = body;
+}
+
 function renderRegisterForm() {
   function field(id, label, type, extra) {
     return '<label class="dbsim-field"><span>' + x(label) + '</span><input id="' + id + '" type="' + (type || 'text') + '"' + (extra || '') + '></label>';
@@ -103,28 +220,72 @@ function renderRegisterForm() {
     '</div>';
 }
 
-function renderRuns() {
-  var rows = state.runs.map(function(r) {
-    return '<tr><td>' + x(toText(r.scenarioId)) + '</td><td>' + x(toText(r.engine)) + '</td><td>' + x(toText(r.result) || 'pending') +
-      '</td><td>' + x(toText(r.createdAt)) + '</td><td>' +
-      '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'dbsimViewReport', r.id) + '>View report</button></td></tr>';
-  }).join('');
-  if (!rows) rows = '<tr><td colspan="5" class="muted">No runs yet. Runs are started by the run API, which is not built yet.</td></tr>';
-  return '<table class="tbl"><thead><tr><th>Scenario</th><th>Engine</th><th>Result</th><th>Created</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
+// ── Run start, status and cancel ─────────────────────────
+
+export function dbsimToggleScenario(id, el) {
+  state.selected[id] = !!(el && el.checked);
+  renderDBSim();
 }
 
-function renderDBSim(reportHtml) {
-  var host = document.getElementById('tab-dbsim');
-  if (!host) return;
-  var body = '';
-  if (state.error) body += '<div class="banner banner-warn">' + x(state.error) + '</div>';
-  body += '<section class="card"><h3>Settings</h3>' + renderSettings() + '</section>';
-  body += '<section class="card"><h3>Targets</h3>' + renderTargets() + '</section>';
-  body += '<section class="card"><h3>Register a target</h3>' + renderRegisterForm() + '</section>';
-  body += '<section class="card"><h3>Run results</h3>' + renderRuns() + '</section>';
-  if (reportHtml) body += '<section class="card"><h3>Report</h3>' + reportHtml + '</section>';
-  host.innerHTML = body;
+export function dbsimChooseTarget(el) {
+  state.targetId = el ? el.value : '';
+  renderDBSim();
 }
+
+export function dbsimLabConfirmInput(el) {
+  state.labConfirm = el ? el.value.trim() : '';
+}
+
+export function dbsimStartRun() {
+  var t = selectedTarget();
+  var ids = selectedIds();
+  if (!t || !ids.length) { showToast('Choose a target and at least one scenario'); return; }
+  apicall('/api/dbsim-runs', {
+    method: 'POST',
+    body: JSON.stringify({ targetId: t.id, scenarioIds: ids, labConfirmation: state.labConfirm })
+  }).then(function(res) {
+    if (res && res.error) { showToast(errMsg(res, 'Run not started')); return; }
+    state.activeRun = { runId: res.runId, status: res.status || 'pending', reason: '', targetId: t.id };
+    showToast('Run started');
+    renderDBSim();
+    startPolling();
+  }).catch(function(err) { showToast('Run not started: ' + err.message); });
+}
+
+export function dbsimCancelRun(runId) {
+  apicall('/api/dbsim-runs/' + encodeURIComponent(runId) + '/cancel', { method: 'POST' })
+    .then(function(res) {
+      if (res && res.error) { showToast(errMsg(res, 'Run not cancelled')); return; }
+      showToast('Cancel requested');
+      return pollOnce();
+    })
+    .catch(function(err) { showToast('Run not cancelled: ' + err.message); });
+}
+
+function pollOnce() {
+  var r = state.activeRun;
+  if (!r) return Promise.resolve();
+  return apicall('/api/dbsim-jobs/' + encodeURIComponent(r.runId)).then(function(job) {
+    if (!job || job.error) return;
+    state.activeRun = { runId: job.runId, status: job.status, reason: job.reason || '', targetId: job.targetId, agentId: job.agentId };
+    if (TERMINAL[job.status]) {
+      stopPolling();
+      return loadDBSimTab();
+    }
+    renderDBSim();
+  });
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(function() { pollOnce(); }, POLL_MS);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+// ── Target and settings actions ──────────────────────────
 
 export function dbsimToggleClientMode(value) {
   var enabled = value === 'true';
