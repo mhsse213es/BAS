@@ -29,4 +29,8 @@ steps:
       role: PUBLIC
     risk: low
     blast_radius: "read-only privilege catalog query for the PUBLIC pseudo-role; no state changed"
+    telemetry:
+      - "PostgreSQL pg_log: the BAS-marked privilege catalog read for the PUBLIC pseudo-role"
+    detection:
+      - "SIEM: privilege catalog read for PUBLIC grants, a discovery signal"
     reversible: true

@@ -26,4 +26,8 @@ steps:
     db_probe: read_roles
     risk: low
     blast_radius: "read-only role catalog query; no state changed"
+    telemetry:
+      - "PostgreSQL pg_log: the BAS-marked catalog read of pg_roles for superuser flags"
+    detection:
+      - "SIEM: role catalog enumeration by the lab probe account, a discovery signal"
     reversible: true

@@ -28,4 +28,8 @@ steps:
       role: bas_dbsim_app
     risk: low
     blast_radius: "read-only privilege catalog query for one role; no state changed"
+    telemetry:
+      - "PostgreSQL pg_log: the BAS-marked privilege catalog read for role bas_dbsim_app"
+    detection:
+      - "SIEM: privilege catalog read for an application role, a discovery signal"
     reversible: true
