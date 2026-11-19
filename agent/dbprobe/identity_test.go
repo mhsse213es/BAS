@@ -37,7 +37,7 @@ func TestIdentityProbeIsPlainReadOnlyAndClientAllowed(t *testing.T) {
 // plain read_only, non-LabOnly, fixture-free probes may run. A new probe must be
 // added here deliberately.
 var clientModeAllowed = []string{
-	ProbeCheckReadOnlyIdentity, "auth_check", "read_audit_config", "read_grants", "read_restricted_table", "read_roles",
+	ProbeCheckReadOnlyIdentity, "auth_check", "read_audit_config", "read_global_privileges", "read_grants", "read_memberships", "read_restricted_table", "read_roles",
 }
 
 func TestClientModeAllowedProbeSetIsExact(t *testing.T) {

@@ -91,7 +91,7 @@ func auditHasMarkerEvidence(o Outcome) bool {
 func policyGrade(s ScenarioMeta, o Outcome) (DimensionGrade, []string) {
 	// Ruling R-AK: default-safe. The read_grants probe always needs a policy
 	// comparison, whatever the caller put in the scenario meta.
-	if !s.RequirePolicyDiff && o.ProbeID != ProbeReadGrants {
+	if !s.RequirePolicyDiff && !IsPolicyDiffProbe(o.ProbeID) {
 		return DimNotExpected, nil
 	}
 	if o.Probe.Denied {

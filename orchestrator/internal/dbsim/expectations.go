@@ -74,6 +74,14 @@ var expectations = map[string]map[string]Expectation{
 		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
 			RequireObservation: true, RequirePolicyDiff: true},
 	},
+	"dbsim-db02-05-global-grants": {
+		"read_global_privileges": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
+	"dbsim-db02-06-inheritance-chain": {
+		"read_memberships": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
 	"dbsim-db03-unauthorized-access": {
 		"read_restricted_table": expDeny,
 	},

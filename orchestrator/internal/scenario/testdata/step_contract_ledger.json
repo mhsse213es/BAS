@@ -5319,6 +5319,24 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "dbsim-db02-05-global-grants.yaml",
+    "index": 0,
+    "technique_id": "T1087",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "dbsim-db02-06-inheritance-chain.yaml",
+    "index": 0,
+    "technique_id": "T1087",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "dbsim-db02-07-grant-option.yaml",
     "index": 0,
     "technique_id": "T1087",

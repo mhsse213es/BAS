@@ -17,6 +17,8 @@ type (
 	Limits      = protocol.DBProbeLimits
 	ProbeResult = protocol.DBProbeResult
 	DBProbeGrant = protocol.DBProbeGrant
+	DBProbeGlobalGrant = protocol.DBProbeGlobalGrant
+	DBProbeMembership = protocol.DBProbeMembership
 )
 
 const (

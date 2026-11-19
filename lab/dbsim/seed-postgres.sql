@@ -104,3 +104,17 @@ REVOKE ALL ON dbsim_audit.pg_log, dbsim_audit.pg_log_raw FROM PUBLIC;
 GRANT USAGE ON SCHEMA dbsim_audit TO dbsim_test, dbsim_lab;
 -- The view runs with its owner's (superuser) rights; only the view is granted.
 GRANT SELECT ON dbsim_audit.pg_log TO dbsim_test, dbsim_lab;
+
+-- DB-02-06 inheritance chain (same as seed-inherit-chain.sql, for fresh labs). Runs as the
+-- superuser; the earlier SET ROLE dbsim_lab is reset first.
+RESET ROLE;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bas_dbsim_parent') THEN
+    CREATE ROLE bas_dbsim_parent NOLOGIN;
+  END IF;
+END
+$$;
+GRANT USAGE ON SCHEMA bas_dbsim TO bas_dbsim_parent;
+GRANT SELECT ON bas_dbsim.restricted TO bas_dbsim_parent;
+GRANT bas_dbsim_parent TO dbsim_lab;

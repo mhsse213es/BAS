@@ -68,7 +68,26 @@ type DBProbeResult struct {
 	// Grants is set only by read_grants: one catalogue grant per row (role, object,
 	// privilege). It is metadata, never row data, and feeds the DB-02 policy diff.
 	Grants []DBProbeGrant `json:"grants,omitempty"`
+	// GlobalGrants and Memberships are set only by read_global_privileges and read_memberships.
+	GlobalGrants []DBProbeGlobalGrant `json:"globalGrants,omitempty"`
+	Memberships  []DBProbeMembership  `json:"memberships,omitempty"`
 	SafetyIncident bool   `json:"safetyIncident,omitempty"`
+}
+
+// DBProbeGlobalGrant is one cluster- or database-scope privilege read by
+// read_global_privileges (DB-02-05). Scope is "cluster" or "database:<name>".
+type DBProbeGlobalGrant struct {
+	Role      string `json:"role"`
+	Scope     string `json:"scope"`
+	Privilege string `json:"privilege"`
+}
+
+// DBProbeMembership is one role membership read by read_memberships (DB-02-06).
+// Role is the granted role; Member is the account that holds it.
+type DBProbeMembership struct {
+	Role    string `json:"role"`
+	Member  string `json:"member"`
+	Inherit bool   `json:"inherit"`
 }
 
 // DBProbeGrant is one privilege grant read from the catalogue by read_grants.
