@@ -44,6 +44,7 @@ import (
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/dbsim/dbadmin"
+	"github.com/audspect/bas/internal/dbsim/dbjobs"
 	"github.com/audspect/bas/internal/deployconfig"
 	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/emailgwefficacy"
@@ -129,6 +130,10 @@ type Handler struct {
 	// agent. nil in production until the dbsim run API exists (the check
 	// endpoint answers 501 and no target becomes client-eligible).
 	dbsimCheckRunner dbadmin.CheckRunner
+	// dbsimRunSvc starts database simulation runs; built once, on first use, from
+	// this handler's own store, dispatch and engine (dbsim_run_handlers.go).
+	dbsimRunSvc  *dbjobs.Service
+	dbsimRunOnce sync.Once
 	// detectVerifyConnector builds a detectverify.Connector for a config.
 	// nil in production (New leaves it unset; call sites fall back to
 	// detectverify.NewConnector) — tests override it to avoid real HTTP calls.

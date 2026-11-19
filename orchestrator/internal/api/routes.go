@@ -1000,6 +1000,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanViewDBSim)).Get("/api/dbsim-targets/{id}", h.GetDBSimTarget)
 		r.With(auth.RequirePermission(auth.CanManageDBSimTargets)).Delete("/api/dbsim-targets/{id}", h.DeleteDBSimTarget)
 		r.With(auth.RequirePermission(auth.CanManageDBSimTargets)).Post("/api/dbsim-targets/{id}/identity-check", h.RunDBSimIdentityCheck)
+		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/dbsim-targets/{id}/runs", h.StartDBSimRun)
 		r.With(auth.RequirePermission(auth.CanViewDBSim)).Get("/api/dbsim-runs", h.ListDBSimRuns)
 		r.With(auth.RequirePermission(auth.CanViewDBSim)).Get("/api/dbsim-runs/{id}", h.GetDBSimRun)
 		r.With(auth.RequirePermission(auth.CanViewDBSim)).Get("/api/dbsim-runs/{id}/report", h.GetDBSimRunReport)

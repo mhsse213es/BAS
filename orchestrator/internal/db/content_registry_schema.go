@@ -168,12 +168,13 @@ func EnsureContentRegistrySchema(ctx context.Context, pool *pgxpool.Pool) error 
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS content_version_id text REFERENCES content_versions(id)`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS execution_kind text NOT NULL DEFAULT 'legacy'`,
 		// TCF Phase 6: 'factory_validation' added for validation-lab dispatches.
+		// dbsim: 'dbsim' added for database security simulation runs (dbjobs).
 		// Dropped and re-added (not just addConstraint'd) because an existing
 		// deployment already has this constraint under its old definition --
 		// addConstraint's IF NOT EXISTS guard would otherwise never widen it.
 		`ALTER TABLE scenario_runs DROP CONSTRAINT IF EXISTS scenario_runs_execution_kind_check`,
 		addConstraint("scenario_runs", "scenario_runs_execution_kind_check",
-			`CHECK (execution_kind IN ('content','remediation','technique_verification','variant','adhoc_adversary','legacy','factory_validation'))`),
+			`CHECK (execution_kind IN ('content','remediation','technique_verification','variant','adhoc_adversary','legacy','factory_validation','dbsim'))`),
 		addConstraint("scenario_runs", "scenario_runs_content_needs_version_check",
 			`CHECK (execution_kind <> 'content' OR content_version_id IS NOT NULL)`),
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_content_version ON scenario_runs (content_version_id) WHERE content_version_id IS NOT NULL`,

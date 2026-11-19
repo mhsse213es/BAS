@@ -589,6 +589,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/dbsim-targets/{id}", tierPermission, auth.CanViewDBSim},
 	{http.MethodDelete, "/api/dbsim-targets/{id}", tierPermission, auth.CanManageDBSimTargets},
 	{http.MethodPost, "/api/dbsim-targets/{id}/identity-check", tierPermission, auth.CanManageDBSimTargets},
+	{http.MethodPost, "/api/dbsim-targets/{id}/runs", tierPermission, auth.CanRunScenario},
 	{http.MethodGet, "/api/dbsim-runs", tierPermission, auth.CanViewDBSim},
 	{http.MethodGet, "/api/dbsim-runs/{id}", tierPermission, auth.CanViewDBSim},
 	{http.MethodGet, "/api/dbsim-runs/{id}/report", tierPermission, auth.CanViewDBSim},
