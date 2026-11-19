@@ -33,7 +33,7 @@ func TestExecclassEmbedFaithful(t *testing.T) {
 	})
 
 	if len(full) != 3752 {
-		t.Fatalf("expected 3736 classification entries, got %d", len(full))
+		t.Fatalf("classification entry count changed: got %d; update the pin deliberately", len(full))
 	}
 	h := sha256.New()
 	for _, r := range full {
