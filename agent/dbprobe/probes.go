@@ -25,6 +25,10 @@ const (
 var catalog = map[string]ProbeDef{
 	"read_roles": {ID: "read_roles", Class: ClassReadOnly, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{}},
+	// DB-03 test 11 (T1087): counts role and account names other than the probe's own
+	// and the engine's built-in ones. Only the row count is reported, never the names.
+	"read_foreign_role_names": {ID: "read_foreign_role_names", Class: ClassReadOnly, Engines: bothEngines, LabOnly: true,
+		ParamSchema: map[string]ParamKind{}},
 	"read_grants": {ID: "read_grants", Class: ClassReadOnly, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{"role": ParamString}},
 	"auth_check": {ID: "auth_check", Class: ClassReadOnly, Engines: bothEngines,

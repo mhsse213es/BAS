@@ -135,8 +135,10 @@ var probeRegistry = map[string]ProbeRegistryEntry{
 	// DB-07: the same bounded unfiltered read, fixed to the customers_pii table of the classified-pii fixture (no table param).
 	"read_classified_fixture": {ID: "read_classified_fixture", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "classified-pii", FixedTable: "customers_pii"},
 	// DB-03 (tests 04, 05): a read of one restricted table of the authz-restricted fixture under its read role, which holds no grant on it (PostgreSQL only).
-	"read_customer_records":  {ID: "read_customer_records", Class: ClassReadOnly, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}, RequiredFixture: "authz-restricted", FixedTable: "customers"},
-	"read_financial_records": {ID: "read_financial_records", Class: ClassReadOnly, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}, RequiredFixture: "authz-restricted", FixedTable: "transactions"},
+	"read_customer_records": {ID: "read_customer_records", Class: ClassReadOnly, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}, RequiredFixture: "authz-restricted", FixedTable: "customers"},
+	// DB-03 test 11 (T1087): counts role and account names other than the probe's own and the built-in ones. Counts only.
+	"read_foreign_role_names": {ID: "read_foreign_role_names", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, LabOnly: true},
+	"read_financial_records":  {ID: "read_financial_records", Class: ClassReadOnly, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}, RequiredFixture: "authz-restricted", FixedTable: "transactions"},
 	// DB-06: creates a throwaway login account for the run, proves it can log in, revokes its login and proves a NEW connection is refused (bounded_synthetic, ruling R-AO: only touches its own throwaway account; lab only and mutation-approved through its required fixture, R-AI).
 	"auth_after_revoke": {ID: "auth_after_revoke", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "empty"},
 	// DB-08: a throwaway NO-privilege account attempts ONLY a session-scoped audit change (bounded_synthetic, user decision option A: never mutation). No parameter selects a statement; no global or persistent change exists.

@@ -508,7 +508,7 @@ func truthy(v any) bool {
 func (a *Adapter) Capabilities() dbprobe.Capabilities {
 	c := dbprobe.Capabilities{
 		ProbeIDs: []string{"auth_after_revoke", "auth_check", "bounded_synthetic_read", "check_export_privileges", "check_readonly_identity", "read_audit_config", "read_classified_fixture",
-			"read_grants", "read_restricted_table", "read_roles", "suspicious_read", "try_disable_audit", "try_write_fixture"},
+			"read_foreign_role_names", "read_grants", "read_restricted_table", "read_roles", "suspicious_read", "try_disable_audit", "try_write_fixture"},
 		MarkerInAppName:   false, // no per-probe session attribute: attributes are connect-time only
 		MarkerInQueryText: true,
 		// The marker can only reach an audit record through the statement

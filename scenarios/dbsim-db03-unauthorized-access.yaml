@@ -82,3 +82,19 @@ steps:
     risk: low
     blast_radius: "bounded read-only SELECT of a per-run synthetic table under a read role with no grant on it; at most 10 rows; no state changed"
     reversible: true
+  - name: "DB-03 Role and account name discovery (T1087)"
+    technique_id: T1087
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_foreign_role_names
+    db_limits:
+      max_rows: 10
+      timeout_sec: 30
+      max_conns: 1
+    risk: low
+    blast_radius: "bounded read-only catalog query of role or account names; at most 10 rows counted, no names reported; no state changed"
+    reversible: true
+    telemetry:
+      - "Database audit: a catalog read of role or account names by the probe session, carrying the run marker (expected where the engine audits catalog reads)"
+    detection:
+      - "Database audit: role and account enumeration from the probe session"

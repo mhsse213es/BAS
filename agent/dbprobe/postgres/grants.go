@@ -23,6 +23,8 @@ const (
 		"FROM information_schema.role_table_grants " +
 		"WHERE table_schema NOT IN ('pg_catalog', 'information_schema') AND grantee::text = $1 ORDER BY 1, 2, 3"
 	sqlAuthCheck = "SELECT current_user::text, session_user::text"
+	// Role names other than the probe's own and the built-in pg_* roles (DB-03 test 11).
+	sqlForeignRoles = "SELECT rolname::text FROM pg_roles WHERE rolname NOT LIKE 'pg\\_%' AND rolname <> current_user ORDER BY rolname"
 )
 
 var (
@@ -108,6 +110,8 @@ func probeSQL(probeID string, params map[string]string, maxRows int) (string, []
 		return sqlRoleGrants, []any{params["role"]}, nil
 	case "auth_check":
 		return sqlAuthCheck, nil, nil
+	case "read_foreign_role_names":
+		return sqlForeignRoles, nil, nil
 	case probeAuditConfig:
 		return sqlAuditSettings, nil, nil
 	case "read_restricted_table":

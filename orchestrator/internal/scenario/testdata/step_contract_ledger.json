@@ -5328,6 +5328,15 @@
     "status": "self_cleaning_declared"
   },
   {
+    "scenario": "dbsim-db03-unauthorized-access.yaml",
+    "index": 3,
+    "technique_id": "T1087",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "dbsim-db04-audit-coverage.yaml",
     "index": 0,
     "technique_id": "T1562",
