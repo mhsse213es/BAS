@@ -3200,6 +3200,9 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "result MAC invalid — possible tampered payload", http.StatusUnauthorized)
 		return
 	}
+	if h.dbsimIngestHook(w, r, body) { // dbsim job results are graded here; other runs fall through
+		return
+	}
 	var raw scenario.RawRunResult
 	if e := json.Unmarshal(body, &raw); e != nil || raw.RunID == "" {
 		jsonError(w, "invalid payload — expected {runId, scenarioId, agentId, results}", http.StatusBadRequest)

@@ -1003,6 +1003,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanViewDBSim)).Get("/api/dbsim-runs", h.ListDBSimRuns)
 		r.With(auth.RequirePermission(auth.CanViewDBSim)).Get("/api/dbsim-runs/{id}", h.GetDBSimRun)
 		r.With(auth.RequirePermission(auth.CanViewDBSim)).Get("/api/dbsim-runs/{id}/report", h.GetDBSimRunReport)
+		registerDBSimRunRoutes(r, h)
 
 		// EPP Response Actions — connector management (Admin only)
 		r.With(auth.RequirePermission(auth.CanListResponseConnectors)).Get("/api/actions/configs", h.ListResponseConnectors)
