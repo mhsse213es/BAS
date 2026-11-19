@@ -193,10 +193,25 @@ BAS_BACKUP_KEY_PASSPHRASE=            # 16 characters or more
 LIC_PATH=                         # ← REQUIRED  e.g. /home/ubuntu/hdfc-prod-001.lic
 
 # ── [spray-lab] ──────────────────────────────────────────────────────────────────
-# Lab-only exemption for the password-spray and guessing lab scenarios. Leave blank
-# (the default) so nothing gets the exemption. Set to the agent_id of the ONE dedicated
-# lab agent, then re-run --upgrade. The server sets is_spray_lab on that agent only;
-# clearing the value turns the exemption off everywhere on the next start.
+# Lab-only exemption for the password-spray and guessing lab scenarios
+# (ad-password-spray-lab, ad-password-guessing-lab). It lifts the destructive veto for
+# those steps ONLY on one dedicated lab agent. Leave it blank everywhere else.
+#
+# It takes two matching settings, one on each side. Set both, or neither:
+#
+#   1. SERVER (this file): SPRAY_LAB_AGENT_ID=<agent_id of the lab VM>
+#      Then re-run --upgrade. The server flags that agent is_spray_lab on every start.
+#      Blank (or removed) turns the exemption off on the server.
+#
+#   2. LAB HOST (the lab VM, NOT this server): in /etc/audspect-agent/enroll.env, add
+#        BAS_SPRAY_LAB=1
+#      before installing the agent on that VM. This is the local trust boundary: the
+#      server cannot set it, so a compromised server cannot grant the exemption alone.
+#      Leave it commented on every other host.
+#
+# Before the lab run: confirm with
+#   SELECT agent_id, is_spray_lab FROM agents;
+# Only the lab agent should show true.
 SPRAY_LAB_AGENT_ID=
 
 # ── [validation-lab] ─────────────────────────────────────────────────────────────
