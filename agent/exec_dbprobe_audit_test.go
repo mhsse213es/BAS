@@ -267,3 +267,65 @@ func TestDBProbeRoleWindowBasisUnsupportedWithoutConnectionCollector(t *testing.
 		t.Fatalf("no connection collector must be unsupported, got %q", out.Result.AuditStatus)
 	}
 }
+
+// DB-04-04: the failed-login basis reads the refusal under the throwaway name
+// the probe reports, never under the run's own credential.
+func TestDBProbeFailedLoginBasisQueriesThrowawayRefusal(t *testing.T) {
+	ff := setupBinderFake(t)
+	t.Setenv(envDBProbeLabMutationAllows, "1")
+	ff.auditSources = []string{"dbsim_audit.pg_log"}
+	ff.probeFn = func(context.Context, dbprobe.ProbeDef, dbprobe.DBProbeSpec) (dbprobe.ProbeResult, error) {
+		return dbprobe.ProbeResult{Denied: true, DBTime: auditT0, AuditPrincipal: "dbsim_abc_acct"}, nil
+	}
+	ff.connFn = func(_ context.Context, q dbprobe.AuditQuery) ([]dbprobe.AuditEvent, error) {
+		if q.Principal != "dbsim_abc_acct" || q.Event != dbprobe.EventFailedLogin || q.Marker != "" {
+			t.Fatalf("failed-login query must use the throwaway name and the refusal event: %+v", q)
+		}
+		return []dbprobe.AuditEvent{{Time: auditT0, Principal: "dbsim_abc_acct", Statement: `password authentication failed for user "dbsim_abc_acct"`}}, nil
+	}
+	step := failedLoginStep(func(s *protocol.DBProbeSpec) { s.AuditBasis = protocol.DBAuditBasisFailedLogin })
+	out, err := executeDBProbe(context.Background(), step)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := out.Result
+	if r.AuditStatus != protocol.DBAuditFound || r.AuditBasis != protocol.DBAuditBasisFailedLogin || r.AuditPrincipal != "dbsim_abc_acct" {
+		t.Fatalf("result %+v", r)
+	}
+}
+
+// Without a reported throwaway name the failed-login basis is incomplete, never
+// a read under some other principal.
+func TestDBProbeFailedLoginBasisNeedsThrowawayName(t *testing.T) {
+	ff := setupBinderFake(t)
+	t.Setenv(envDBProbeLabMutationAllows, "1")
+	ff.auditSources = []string{"dbsim_audit.pg_log"}
+	ff.probeFn = func(context.Context, dbprobe.ProbeDef, dbprobe.DBProbeSpec) (dbprobe.ProbeResult, error) {
+		return dbprobe.ProbeResult{Denied: true, DBTime: auditT0}, nil
+	}
+	ff.connFn = func(context.Context, dbprobe.AuditQuery) ([]dbprobe.AuditEvent, error) {
+		t.Fatal("no throwaway name reported: the connection collector must not run")
+		return nil, nil
+	}
+	step := failedLoginStep(func(s *protocol.DBProbeSpec) { s.AuditBasis = protocol.DBAuditBasisFailedLogin })
+	out, err := executeDBProbe(context.Background(), step)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Result.AuditStatus != protocol.DBAuditIncomplete {
+		t.Fatalf("status %q, want incomplete", out.Result.AuditStatus)
+	}
+}
+
+// failedLoginStep is the auth_failed_login step on the bounded lab fixture.
+func failedLoginStep(mut func(*protocol.DBProbeSpec)) ScenarioStep {
+	step := testDBProbeStep(func(s *protocol.DBProbeSpec) {
+		s.ProbeID = "auth_failed_login"
+		s.FixtureID = "empty"
+		if mut != nil {
+			mut(s)
+		}
+	})
+	step.ExecutionClass = "potentially_destructive"
+	return step
+}

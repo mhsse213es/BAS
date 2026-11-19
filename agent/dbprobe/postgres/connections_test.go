@@ -68,3 +68,41 @@ func TestCollectConnectionsIncompleteWhenWindowNotCovered(t *testing.T) {
 		t.Fatalf("uncovered window must be AuditIncompleteError, got %v", err)
 	}
 }
+
+// DB-04-04: a refused password is matched by its own log line, under the
+// throwaway account's name, never as a successful connection.
+func TestCollectConnectionsFailedLoginUsesRefusalPattern(t *testing.T) {
+	ts := time.Unix(1700000000, 0).UTC()
+	var pattern string
+	f := &fakeSession{queryFn: func(sql string, args []any) ([][]any, error) {
+		switch {
+		case strings.Contains(sql, "clock_timestamp"):
+			return [][]any{{ts}}, nil
+		case strings.Contains(sql, sqlAuditCovered):
+			return [][]any{{true}}, nil
+		case strings.Contains(sql, sqlAuditEvents):
+			p, _ := args[2].(string)
+			if strings.Contains(p, "password authentication failed") {
+				pattern = p
+				return [][]any{{ts, "dbsim_abc_acct", `password authentication failed for user "dbsim_abc_acct"`}}, nil
+			}
+			return [][]any{{ts, "dbsim", "sentinel"}}, nil
+		}
+		return nil, nil
+	}}
+	a := &Adapter{s: f, mode: dbprobe.ModeLab, auditSources: []string{"x"}}
+	ev, err := a.CollectConnections(context.Background(), dbprobe.AuditQuery{
+		Principal: "dbsim_abc_acct", Event: dbprobe.EventFailedLogin, Since: ts.Add(-time.Second), Until: ts.Add(time.Second),
+	})
+	if err != nil {
+		t.Fatalf("CollectConnections: %v", err)
+	}
+	// LIKE wildcards in the name are escaped, so "_" matches only itself.
+	if !strings.Contains(pattern, `password authentication failed for user "dbsim\_abc\_acct"`) {
+		t.Fatalf("refusal pattern not used: %q", pattern)
+	}
+	if len(ev) != 1 || ev[0].Principal != "dbsim_abc_acct" {
+		t.Fatalf("events = %+v", ev)
+	}
+}
+

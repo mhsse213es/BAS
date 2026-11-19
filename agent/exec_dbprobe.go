@@ -480,14 +480,21 @@ func collectDBAudit(ctx context.Context, ad dbprobe.Adapter, spec protocol.DBPro
 				ev, err = nil, fmt.Errorf("audit collector panicked: %v", r)
 			}
 		}()
-		if spec.AuditBasis == protocol.DBAuditBasisRoleWindow {
+		if spec.AuditBasis == protocol.DBAuditBasisRoleWindow || spec.AuditBasis == protocol.DBAuditBasisFailedLogin {
 			ca, ok := ad.(dbprobe.ConnectionAuditor)
 			if !ok {
 				return nil, dbprobe.ErrAuditUnsupported
 			}
-			res.AuditBasis = protocol.DBAuditBasisRoleWindow
+			res.AuditBasis = spec.AuditBasis
 			cq := q
 			cq.Marker = "" // a connection cannot carry the marker; match by role and window
+			if spec.AuditBasis == protocol.DBAuditBasisFailedLogin {
+				if res.AuditPrincipal == "" {
+					return nil, &dbprobe.AuditIncompleteError{Reason: "the probe reported no throwaway account name to match the refusal under"}
+				}
+				cq.Principal = res.AuditPrincipal
+				cq.Event = dbprobe.EventFailedLogin
+			}
 			return ca.CollectConnections(actx, cq)
 		}
 		return ad.CollectAudit(actx, q)

@@ -119,7 +119,13 @@ type AuditQuery struct {
 	Principal string    `json:"principal,omitempty"`
 	Since     time.Time `json:"since"`
 	Until     time.Time `json:"until"`
+	// Event selects the connection-level record for CollectConnections: "" for a
+	// successful login, EventFailedLogin for a refused password (DB-04-04).
+	Event string `json:"event,omitempty"`
 }
+
+// EventFailedLogin is the connection event of a refused password login.
+const EventFailedLogin = "failed_login"
 
 // AuditEvent is one audit-source record read back from the database: the
 // time it was recorded, who ran it, the (redacted, truncated) statement text

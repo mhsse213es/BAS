@@ -55,6 +55,10 @@ func (a *Adapter) CollectConnections(ctx context.Context, q dbprobe.AuditQuery) 
 	until := q.Until.UTC().Format(time.RFC3339Nano)
 	limit := dbprobe.AuditMaxEvents + 1
 	rolePattern := "connection authorized: user=" + dbprobe.EscapeLike(q.Principal) + " %"
+	if q.Event == dbprobe.EventFailedLogin {
+		// The server's own refusal line for this account (DB-04-04).
+		rolePattern = "password authentication failed for user \"" + dbprobe.EscapeLike(q.Principal) + "\"%"
+	}
 
 	// 1. Sentinel: a marker-tagged statement run after the window closes.
 	sm := dbprobe.NewSentinelMarker()

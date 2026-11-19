@@ -37,6 +37,7 @@ func (a *Adapter) runAuthFailedLogin(ctx context.Context, def dbprobe.ProbeDef, 
 		return res, err
 	}
 	wrong := pw + "x" // differs from the real password by construction
+	res.AuditPrincipal = name // the refusal is matched under this account (DB-04-04)
 	qn := pgx.Identifier{name}.Sanitize()
 	if err := a.refuseSecondAccount(); err != nil {
 		return res, err
