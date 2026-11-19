@@ -5,10 +5,11 @@ description: >
   Lists the table privileges held by the lab account dbsim_lab with their
   WITH GRANT OPTION flag, and compares the delegated privileges with the stated
   policy. A grant option the policy does not permit lets the account pass the
-  privilege on to others, and is reported as grant_option_excessive. The lab
-  currently holds no grant option, so a clean run is an expected PASS and
-  confirms the check; it detects one only when a delegation is added. PostgreSQL
-  only. Graded only when a policy is configured; without one the step is ERROR.
+  privilege on to others, and is reported as grant_option_excessive.
+  The lab account dbsim_lab holds WITH GRANT OPTION on bas_dbsim.app_data and bas_dbsim.restricted
+  (confirmed on the staging lab, 2026-11-19), so a policy that does not permit
+  delegation reports those grants. PostgreSQL only. Graded only when a policy is
+  configured; without one the step is ERROR.
   ATT&CK T1087 Account Discovery.
 author: Audspect Research
 executable: true
