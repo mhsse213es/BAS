@@ -1,0 +1,29 @@
+id: dbsim-db02-04-dba-accounts
+product_line: dbsim
+name: Database Security Simulation DB-02-04 - Unauthorized DBA Privilege
+description: >
+  Lists every role and flags those with superuser (DBA-level) rights. This is a
+  discovery result: it reports which accounts hold superuser, and does not say
+  whether that breaches policy, since no policy comparison is made for roles.
+  ATT&CK T1087 Account Discovery.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - privileges
+  - dba
+  - read-only
+  - mitre-attack
+mitre_phases:
+  - discovery
+
+steps:
+  - name: "DB-02-04 DBA-level accounts (T1087)"
+    technique_id: T1087
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_roles
+    risk: low
+    blast_radius: "read-only role catalog query; no state changed"
+    reversible: true

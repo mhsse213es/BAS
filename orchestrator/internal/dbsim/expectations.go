@@ -40,6 +40,28 @@ var expectations = map[string]map[string]Expectation{
 		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
 			RequireObservation: true, RequirePolicyDiff: true},
 	},
+	"dbsim-db02-01-role-enumeration": {
+		"read_roles": expAllow,
+	},
+	"dbsim-db02-02-app-role-grants": {
+		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
+	"dbsim-db02-03-excessive-privilege": {
+		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
+	"dbsim-db02-04-dba-accounts": {
+		"read_roles": expAllow,
+	},
+	"dbsim-db02-08-public-grants": {
+		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
+	"dbsim-db02-11-service-account": {
+		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
 	"dbsim-db03-unauthorized-access": {
 		"read_restricted_table": expDeny,
 	},
