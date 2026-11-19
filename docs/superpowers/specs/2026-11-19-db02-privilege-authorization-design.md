@@ -1,6 +1,6 @@
 # DB-02 Privilege and Authorization Assessment: Design
 
-Status: **DRAFT for approval. Nothing here is built.**
+Status: **APPROVED 2026-11-19.** Decisions below. Build order: Phase 0, then P0, P1, P2, P3.
 
 ## Intent
 
@@ -84,17 +84,13 @@ Each engine's mapping is written and tested per engine. No cross-engine guess.
 - Real production databases. Lab targets only, per the existing dbsim target rules.
 - Cross-engine privilege equivalence. Each engine is judged by its own model.
 
-## Open questions for approval
+## Decisions (approved)
 
-1. **Lab engines.** Which engines have a lab target today? The design assumes PostgreSQL
-   first, since `lab/dbsim/seed-postgres.sql` exists. SQL Server, Oracle and MySQL need
-   their own lab targets before their mappings can be verified.
-2. **Policy format.** Keep the existing `Policy` JSON, or add privilege classes to it
-   now? Adding them now means DB-02-04 and 05 can be written in P0.
-3. **P2 approval.** Are synthetic-role privilege changes acceptable in the lab, with
-   verified undo, or should P2 stay out of scope until a dedicated lab exists?
+1. **Lab engine: PostgreSQL first.** Other engines wait for their own lab targets.
+2. **Privilege classes go into the policy now**, so DB-02-04 and DB-02-05 are built in P0.
+3. **P2 privilege changes are allowed** on a synthetic lab role, with a verified undo step
+   before the scenario reports.
 
 ## Acceptance for this design
 
-Approved when the open questions are answered. Build order then follows the phases
-above, with Phase 0 first.
+Approved. Build order follows the phases above, Phase 0 first.
