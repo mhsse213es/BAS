@@ -39,3 +39,20 @@ Staging orchestrator ran the tagged image `bas-orchestrator:dbsim-spike` (id `27
 Rows 1 to 7, 10 to 13 pass. Row 9 is information only, per the runbook: answered for normal runs, spike path not tested. Recorded as **PROCEED**. Carried forward: the spike-plus-normal-run agent behaviour, and the `tamper_detected` cause (resolved by restoring the live image, not root-caused).
 
 Done: spike endpoint and stub removed from the worktree (build and DBSim API tests pass); staging console restored to the live image `1.9.9.4` (`ed54bc7218d4`). The spike image `dbsim-spike` stays on staging for rollback reference. Not committed: this doc and the spike removal, pending approval.
+
+## Re-verification required through the product path
+
+The spike bypassed the real run path. Every item below must be re-proven on staging through the product run API (Task 6 onward), not the spike endpoint. Until then the spike results are evidence for the dispatch design only, not for the feature.
+
+| Spike shortcut | What the product path must show |
+|----------------|---------------------------------|
+| Dispatch with no `scenario_runs` row | A real run creates its `scenario_runs` row, and the dbsim job links to it |
+| No `execution_attempts` rows | Every dbsim step creates and settles an `execution_attempts` row (completed, failed or timed out) |
+| No busy check (`agent busy` refusal skipped) | A dbsim start is refused with 409 when the agent or target is busy, and the refusal is audited |
+| Results not graded | Results are graded by `dbjobs` Ingest from the stored plan, and a verdict row is written per scenario |
+| Relay shown only with the spike id | Live run events reach the console panel for the real run id |
+| MySQL audit checked by hand | The audit status is recorded in the report, and `general_log` errors appear as findings, not silent gaps |
+| Lab repair done by hand | Any lab-side repair is a documented runbook step, not an undocumented fix |
+| Credentials in a systemd drop-in | The product path must read credentials only from the agent's own environment, never from the orchestrator |
+
+Acceptance: each row above is shown with a real run id on staging, with the evidence (DB rows, events, log lines) recorded in this doc.
