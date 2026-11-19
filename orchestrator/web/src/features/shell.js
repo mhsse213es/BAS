@@ -1,4 +1,5 @@
 import { state } from '../core/state.js';
+import { loadDBSimTab } from './dbsim.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
@@ -518,7 +519,7 @@ export function doLogoutFromMenu() { closeUserMenu(); doLogout(); }
 export function activateTab(name) {
   var appEl = document.getElementById('app');
   if (appEl) appEl.classList.remove('sidebar-open');
-  ['dashboard','agents','scenarios','runs','k8s-scenarios','cloud-scenarios','aleef','scheduled-assessments','initiatives','campaigns','factory-health','api-inventory','segmentation','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','ad-coverage','email','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','k8s-scenarios','cloud-scenarios','aleef','scheduled-assessments','initiatives','campaigns','factory-health','api-inventory','segmentation','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','ad-coverage','email','dbsim','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) setDisplay(el, t === name ? '' : 'none');
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -663,6 +664,7 @@ export function showTab(name) {
   if (name === 'em') loadEmTab();
   if (name === 'ad-coverage') loadADCoverage();
   if (name === 'email') loadEmailTab();
+  if (name === 'dbsim') loadDBSimTab();
   if (name === 'scenarios') { state.scenarioView = 'landing'; closeScenarioOverlay(); if (state.scenarios.length) renderScenarios(); }
   if (name === 'dashboard') {
     setDashView(resolveDashView());

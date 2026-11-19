@@ -285,6 +285,12 @@ export var HELP = {
     steps: ['Pick the scenario you want to run.', 'Configure the target mailbox or gateway if asked.', 'Run it and watch the result.', 'Read the verdicts to see which messages were blocked, quarantined or delivered.'],
     tips: ['Test only mailboxes and domains you control.'],
     related: ['scenarios', 'findings']
+  },
+  dbsim: {
+    about: 'Database security simulation: checks how your databases control access, record activity and detect misuse, on PostgreSQL and MySQL.',
+    steps: ['Register a database target with its agent, the credential name and the expected identity.', 'Run an identity check so the console knows the target is the one you expect.', 'Keep client read-only mode off unless a customer has approved it in writing.', 'Review run results once a run is available.'],
+    tips: ['Credentials are never typed here. Only the credential name is stored; the secret stays on the agent host.', 'Lab targets must be confirmed before they can be used.'],
+    related: ['agents', 'findings']
   }
 };
 
