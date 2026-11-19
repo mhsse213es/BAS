@@ -12,6 +12,9 @@ import (
 const (
 	ProbeReadClassifiedFixture = "read_classified_fixture"
 	ProbeAuthAfterRevoke       = "auth_after_revoke"
+	// ProbeAuthFailedLogin (DB-04-04) logs in as a throwaway account with a wrong
+	// password; the refusal must reach the audit trail.
+	ProbeAuthFailedLogin = "auth_failed_login"
 
 	// ClassifiedFixtureKind / ClassifiedFixtureTable are the catalog fixture and
 	// table read_classified_fixture addresses (fixtures.KindClassifiedPII and its
