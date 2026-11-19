@@ -326,3 +326,13 @@ Limit: undo cannot remove the Windows event. A passing run leaves event ID 4242 
 Catalog: one entry, `cscrf_siem_ingestion` (T1562.002, potentially destructive). Pins: 3751 to 3752 entries, 301 to 302 hand-authored, hash `babbf4848de0f0bc82660f67db204c6b8873cfdcd21c160b4c65d4fd9d6f107e`.
 
 Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree on `origin/main` plus these changes: ok, 397.7s.
+
+## IR ir-01 live result after fix (cscrf-mii-incident-response)
+
+Lab VM, live: PASS. The EICAR file was removed within 60 s, the undo passed, and no `bas-ir-*` folder was left behind.
+
+Earlier live run: FAIL, because the step checked the file after 10 s. Defender detected the file at 4:31:02, quarantined it (cleaning action 2, status 3, action succeeded) at 4:31:23, about 21 s later. Real-time protection was off at first, and was turned on for the run.
+
+Change in this commit: the step now polls for up to 60 s, and reads Defender's detection record for the file. The reason text says when the detection record could not be matched. The verdict logic is unchanged.
+
+Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree on `origin/main` plus these changes: ok, 324.6s.
