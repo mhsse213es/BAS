@@ -63,6 +63,12 @@ test('categoryRows lists All first and hides empty categories', () => {
   assert.equal(rows[1].sub, 'sub');
 });
 
+test('categoryRows lists categories alphabetically by label, All still first', () => {
+  const cats = [{ key: 'z', label: 'Zeta' }, { key: 'a', label: 'Alpha' }, { key: 'm', label: 'Mid' }];
+  const rows = M.categoryRows(cats, 3, () => 1, {});
+  assert.deepEqual(rows.map((r) => r.key), ['all', 'a', 'm', 'z']);
+});
+
 test('historyOf filters by scenario, sorts newest first and extracts prevention', () => {
   const runs = [{ id: 'r1', scenarioId: 's', startedAt: '2026-10-01T00:00:00Z', score: { preventionScore: 40.4 } },
     { id: 'r2', scenarioId: 's', startedAt: '2026-10-03T00:00:00Z', hostname: 'h' },

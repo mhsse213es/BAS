@@ -137,7 +137,9 @@ export function heroStats(list, productOf) {
 // cats = [{key,label,icon}], count(key) -> number, subs = { key: 'text' }.
 export function categoryRows(cats, total, count, subs) {
   var rows = [{ key: 'all', label: 'All Scenarios', icon: 'layers', n: total, sub: '' }];
-  arr(cats).forEach(function(c) {
+  // Categories are listed alphabetically by label; "All Scenarios" always stays first.
+  var sorted = arr(cats).slice().sort(function(a, b) { return String(a.label).localeCompare(String(b.label)); });
+  sorted.forEach(function(c) {
     var n = count(c.key);
     if (n > 0) rows.push({ key: c.key, label: c.label, icon: c.icon, n: n, sub: (subs && subs[c.key]) || '' });
   });
