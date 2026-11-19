@@ -1,0 +1,49 @@
+id: dbsim-db04-07-sensitive-table-access
+product_line: dbsim
+name: Database Security Simulation DB-04-07 - Sensitive Table Access Auditing
+description: >
+  Attempts a bounded read of a sensitive table with a marker-tagged probe, then
+  checks that the database audit trail recorded the access attempt. The table is
+  the same restricted synthetic table DB-03 uses, so the probe identity is
+  expected to be denied. Denial is the expected outcome, and the audit trail
+  must still record the attempt: a denied access that leaves no audit record is
+  an audit gap, not a pass.
+
+  ATT&CK mapping: T1213 Data from Information Repositories (the sensitive read
+  whose audit record is looked for).
+
+  Configuration (is pgaudit or the csvlog view present) is read by the DB-04
+  baseline scenario, dbsim-db04-audit-coverage, not here. This scenario is the
+  generation check only. Target details come from the server-side registry by
+  id; the marker is issued by the orchestrator per dispatch.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - audit
+  - logging
+  - read-only
+  - mitre-attack
+mitre_phases:
+  - collection
+
+steps:
+  - name: "DB-04-07 Sensitive table read attempt for audit readback (T1213)"
+    technique_id: T1213
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_restricted_table
+    db_params:
+      table: bas_dbsim.restricted
+    db_limits:
+      max_rows: 10
+      timeout_sec: 30
+      max_conns: 1
+    risk: low
+    blast_radius: "bounded read-only SELECT inside a READ ONLY transaction; at most 10 rows; no state changed"
+    reversible: true
+    telemetry:
+      - "Database audit trail records the denied read of bas_dbsim.restricted, with the dispatch marker"
+    detection:
+      - "SIEM: a denied read of a restricted table by the probe identity"

@@ -89,6 +89,10 @@ var expectations = map[string]map[string]Expectation{
 		"read_audit_config": {ExpectedPrevention: "allow", ExpectAuditConfig: true},
 		"read_roles":        {ExpectedPrevention: "allow", ExpectDetection: true, ExpectAudit: true},
 	},
+	// DB-04-07: a denied sensitive read must still be recorded by the audit trail.
+	"dbsim-db04-07-sensitive-table-access": {
+		"read_restricted_table": {ExpectedPrevention: "deny", ExpectDetection: true, ExpectAudit: true},
+	},
 	"dbsim-db05-suspicious-read": {
 		"suspicious_read": expAllow,
 	},
